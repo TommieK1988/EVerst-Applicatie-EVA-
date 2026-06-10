@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
+import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import type { OrganisatieType } from '@everts/database'
 
 export type SyncResult = {
@@ -716,6 +717,10 @@ export async function syncProjects(): Promise<SyncResult> {
         .update({ bouw7_sync_status: 'inactief_in_bouw7' })
         .in('id', toDeactivate)
     }
+
+    // De DB-trigger heeft dossier-events ge-enqueued voor dossiers die via de sync wijzigden;
+    // evalueer alle triggers en activeer (write-path-onafhankelijk vangnet).
+    await verwerkDossierTriggers().catch(() => {})
   } catch (e: unknown) {
     result.foutMelding = e instanceof Error ? e.message : 'Onbekende fout'
     result.fouten++

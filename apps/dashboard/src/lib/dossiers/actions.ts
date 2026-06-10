@@ -4,7 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
-import { activeerSjablonenVoorStatus } from '@/app/(platform)/taken/actions/sjablonen'
+import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { Bouw7Client, type Bouw7ProjectFinancial } from '@/lib/bouw7/client'
 
 type DossierResult =
@@ -203,6 +203,8 @@ export async function updateServicedeskSubstatus(
 
   if (error) return { ok: false, error: error.message }
 
+  await verwerkDossierTriggers(id).catch(() => {})
+
   revalidatePath('/servicedesk')
   return { ok: true }
 }
@@ -272,6 +274,9 @@ export async function maakDossier(input: {
 
   if (error) return { ok: false, error: error.message }
 
+  // Nieuw dossier → INSERT-event (dossier_aangemaakt); evalueer direct.
+  await verwerkDossierTriggers(data.id).catch(() => {})
+
   revalidatePath('/aanvragen')
   return { ok: true, data: mapRij(data) }
 }
@@ -332,11 +337,8 @@ export async function updateDossierSubstatus(
 
   if (error) return { ok: false, error: error.message }
 
-  activeerSjablonenVoorStatus({
-    dossier_id:       id,
-    hoofdstatus:      huidig.hoofdstatus,
-    nieuwe_substatus: nieuweSubstatus,
-  }).catch(() => {})
+  // De DB-trigger heeft een dossier-event ge-enqueued; evalueer triggers en activeer nu direct.
+  await verwerkDossierTriggers(id).catch(() => {})
 
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
@@ -386,6 +388,9 @@ export async function updateDossierRollen(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+
+  // Rol-velden zijn gevolgde triggervelden (rol_toegewezen); evalueer direct.
+  await verwerkDossierTriggers(id).catch(() => {})
 
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
@@ -548,6 +553,10 @@ export async function updateDossierInfo(
     .update(velden)
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
+
+  // categorie is een gevolgd triggerveld (veld_waarde); evalueer direct.
+  await verwerkDossierTriggers(id).catch(() => {})
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')

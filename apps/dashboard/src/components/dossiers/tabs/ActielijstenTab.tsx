@@ -1,6 +1,7 @@
 import { getActielijstenVoorDossier, getSjablonen } from '@/lib/taken/services/taken'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import { ActielijstenKaarten } from '../ActielijstenKaarten'
+import DrainActiveringen from '../DrainActiveringen'
 
 interface Props {
   dossier_id: string
@@ -14,6 +15,8 @@ export default async function ActielijstenTab({ dossier_id }: Props) {
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 860 }}>
+      {/* Defensief: verwerk openstaande activeringen door externe DB-writes (client, na mount). */}
+      <DrainActiveringen dossier_id={dossier_id} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Actielijsten</h2>

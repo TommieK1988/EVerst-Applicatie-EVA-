@@ -66,6 +66,13 @@ export function ActielijstenKaarten({ lijsten }: Props) {
                   {voortgang === 100 && (
                     <Badge tone="success" size="sm">Afgerond</Badge>
                   )}
+                  {lijst.auto_geactiveerd_op && (
+                    <Badge tone="info" size="sm">
+                      ⚡ Automatisch geactiveerd
+                      {' '}
+                      {new Date(lijst.auto_geactiveerd_op).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                    </Badge>
+                  )}
                 </div>
                 {lijst.beschrijving && (
                   <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>{lijst.beschrijving}</div>

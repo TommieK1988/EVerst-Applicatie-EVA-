@@ -775,6 +775,8 @@ export interface ActielijstMetTaken extends DbTaskList {
   taken_count: number
   gereed_count: number
   completion_acties?: DbTaskCompletionActie[]
+  /** Gezet als deze lijst automatisch via een sjabloon-trigger is geactiveerd (ISO-datum). */
+  auto_geactiveerd_op?: string | null
 }
 
 export interface UrgenteTaak {

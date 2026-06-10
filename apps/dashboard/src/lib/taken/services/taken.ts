@@ -240,8 +240,22 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
 
   if (!lijsten?.length) return []
 
+  // Haal op welke lijsten automatisch (via trigger) zijn geactiveerd, voor de badge.
+  const { data: activeringen } = await supabase
+    .from('actielijst_activeringen')
+    .select('lijst_id, bron, verwerkt_op')
+    .eq('dossier_id', dossier_id)
+    .eq('status', 'done')
+  const activeringPerLijst = new Map<string, { bron: string; verwerkt_op: string | null }>(
+    (activeringen ?? [])
+      .filter((a: { lijst_id: string | null }) => a.lijst_id)
+      .map((a: { lijst_id: string; bron: string; verwerkt_op: string | null }) =>
+        [a.lijst_id, { bron: a.bron, verwerkt_op: a.verwerkt_op }]),
+  )
+
   const result: ActielijstMetTaken[] = []
   for (const lijst of lijsten) {
+    const activering = activeringPerLijst.get(lijst.id)
     const { data: taken } = await supabase
       .from('tasks')
       .select('*, task_assignees(*)')
@@ -260,6 +274,7 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
       })) as unknown as ActielijstMetTaken['taken'],
       taken_count:  takenArr.length,
       gereed_count: takenArr.filter((t: { status: string }) => t.status === 'gereed').length,
+      auto_geactiveerd_op: activering?.bron === 'trigger' ? activering.verwerkt_op : null,
     })
   }
   return result
