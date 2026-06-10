@@ -16,9 +16,11 @@ export async function GET(request: Request) {
         .from('medewerkers')
         .select('id, actief, gebruiker_type, auth_user_id')
         .eq('email', user.email)
+        .eq('actief', true)
+        .neq('gebruiker_type', 'geen')
         .maybeSingle()
 
-      if (medewerker?.actief && medewerker.gebruiker_type !== 'geen') {
+      if (medewerker) {
         if (!medewerker.auth_user_id) {
           await admin
             .from('medewerkers')
