@@ -59,7 +59,7 @@ export async function GET(
   }
 
   const template  = templateResult.data as { naam: string }
-  const versie    = versieResult.data as { schema: { fields: FormField[] }; versienummer: number }
+  const versie    = versieResult.data as unknown as { schema: { fields: FormField[] }; versienummer: number }
   const fields    = versie.schema.fields ?? []
   const pdfConfig = pdfConfigResult.data as {
     toon_logo: boolean; toon_invuller: boolean; toon_project_ref: boolean;

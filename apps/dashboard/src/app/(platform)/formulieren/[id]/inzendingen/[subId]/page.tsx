@@ -84,7 +84,7 @@ export default async function InzendingDetailPage({
 
   const template  = templateResult.data
   const inzending = inzendingResult.data
-  const versie    = inzending.versie as { schema: { fields: FormField[] } } | undefined
+  const versie    = inzending.versie as unknown as { schema: { fields: FormField[] } } | undefined
   const fields    = versie?.schema?.fields ?? []
   const waarden   = inzending.waarden
 
