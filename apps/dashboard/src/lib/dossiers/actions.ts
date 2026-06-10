@@ -17,10 +17,10 @@ type MaakResult =
 
 const ROL_SELECT = `
   relaties!klant_id ( naam ),
-  projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam ),
+  projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   teamleider:medewerkers!teamleider_id ( voornaam, tussenvoegsel, achternaam ),
-  werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam ),
-  calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
+  werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam, kleur ),
+  calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
   controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam ),
   contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
@@ -44,9 +44,12 @@ function mapRij(row: any): DossierRij {
     contactpersoon:   undefined,
     klant_naam:            row.relaties?.naam ?? null,
     projectleider_naam:    medNaam(row.projectleider),
+    projectleider_kleur:   row.projectleider?.kleur    ?? null,
     teamleider_naam:       medNaam(row.teamleider),
     werkvoorbereider_naam: medNaam(row.werkvoorbereider),
+    werkvoorbereider_kleur: row.werkvoorbereider?.kleur ?? null,
     calculator_naam:       medNaam(row.calculator),
+    calculator_kleur:      row.calculator?.kleur        ?? null,
     uitvoerder_naam:       medNaam(row.uitvoerder),
     controller_naam:       medNaam(row.controller),
     contactpersoon_naam:     medNaam(row.contactpersoon),

@@ -19,9 +19,12 @@ export type StatusDef<K extends string> = { key: K; label: string }
 export type DossierRij = Dossier & {
   klant_naam: string | null
   projectleider_naam: string | null
+  projectleider_kleur: string | null
   teamleider_naam: string | null
   werkvoorbereider_naam: string | null
+  werkvoorbereider_kleur: string | null
   calculator_naam: string | null
+  calculator_kleur: string | null
   uitvoerder_naam: string | null
   controller_naam: string | null
   contactpersoon_naam:     string | null

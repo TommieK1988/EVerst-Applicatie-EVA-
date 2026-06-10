@@ -45,7 +45,10 @@ export function DossierKaart({
   const persoonsNaam = toonCalculator
     ? (dossier.calculator_naam ?? dossier.werkvoorbereider_naam ?? '')
     : (dossier.projectleider_naam ?? '')
-  const persoonsKleur = persoonsNaam ? crewKleur(crewInitialen(persoonsNaam)) : 'var(--neutral-300)'
+  const persoonsDbKleur = toonCalculator
+    ? (dossier.calculator_kleur ?? dossier.werkvoorbereider_kleur ?? null)
+    : (dossier.projectleider_kleur ?? null)
+  const persoonsKleur = persoonsDbKleur ?? (persoonsNaam ? crewKleur(crewInitialen(persoonsNaam)) : 'var(--neutral-300)')
   const persoonsInit  = persoonsNaam ? crewInitialen(persoonsNaam) : ''
 
   // Kostprijs + opslag voor offertes
@@ -85,7 +88,7 @@ export function DossierKaart({
       {/* 3px linker accent-strip */}
       <span style={{
         position: 'absolute', left: 0, top: 8, bottom: 8, width: 3,
-        background: spoed ? 'var(--error-500)' : 'var(--brand-300)',
+        background: spoed ? 'var(--error-500)' : persoonsKleur,
         borderRadius: '0 2px 2px 0',
       }} />
 
