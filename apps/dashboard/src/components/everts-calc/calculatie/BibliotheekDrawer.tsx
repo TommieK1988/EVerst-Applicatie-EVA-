@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { laadBibliotheekItemsVolledig } from '@/app/(platform)/everts-calc/actions/bibliotheek'
 import { laadSchilderwerkData } from '@/app/(platform)/everts-calc/actions/schilderwerk'
@@ -54,11 +54,15 @@ export default function BibliotheekDrawer({ type, open, onClose }: Props) {
     }
   }, [type, laden, receptenData, schilderwerkData])
 
+  useEffect(() => {
+    if (open) laad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   return (
     <Drawer
       open={open}
       onOpenChange={(isOpen) => { if (!isOpen) onClose() }}
-      onOpenAutoFocus={() => { if (open) laad() }}
     >
       <DrawerContent width={560}>
         <DrawerHeader>

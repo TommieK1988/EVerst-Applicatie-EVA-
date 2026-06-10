@@ -135,7 +135,11 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
 
           {syncResult?.ok && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 14 }}>
-              <SyncCard label="Relaties"     result={syncResult.contacts}  />
+              <SyncCard label="Relaties"     result={{
+                nieuw:      syncResult.contacts.organisaties.nieuw      + syncResult.contacts.contactpersonen.nieuw,
+                bijgewerkt: syncResult.contacts.organisaties.bijgewerkt + syncResult.contacts.contactpersonen.bijgewerkt,
+                fouten:     syncResult.contacts.organisaties.fouten     + syncResult.contacts.contactpersonen.fouten,
+              }} />
               <SyncCard label="Medewerkers"  result={syncResult.employees} />
               <SyncCard label="Projecten"    result={syncResult.projects}  />
             </div>

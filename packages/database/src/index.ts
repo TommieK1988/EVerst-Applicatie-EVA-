@@ -37,6 +37,7 @@ export type {
   AanvraagSubstatus,
   OfferteSubstatus,
   OpdrachtSubstatus,
+  ServicedeskSubstatus,
   // Planning-module
   PlanningUursoort,
   PlanningWerkbegrotingRegel,

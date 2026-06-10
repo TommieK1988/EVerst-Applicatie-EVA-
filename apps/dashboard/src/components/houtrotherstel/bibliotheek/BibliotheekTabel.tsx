@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Upload, Download, FileSpreadsheet, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Upload, Download, FileSpreadsheet, ChevronDown, X, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/houtrotherstel/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog'

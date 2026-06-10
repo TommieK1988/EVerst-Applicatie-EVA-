@@ -463,7 +463,7 @@ export default function MedewerkerGegevensForm({
                 <label style={labelStyle}>Relatie (ZZP-bedrijf / uitzendbureau)</label>
                 <select className="eva-input" style={{ width: '100%' }} value={state.relatie_id} onChange={e => set('relatie_id', e.target.value)}>
                   <option value="">— Geen —</option>
-                  {relaties.map(r => <option key={r.id} value={r.id}>{r.naam} ({r.type})</option>)}
+                  {relaties.map(r => <option key={r.id} value={r.id}>{r.naam} ({r.types.join(', ')})</option>)}
                 </select>
               </div>
             )}

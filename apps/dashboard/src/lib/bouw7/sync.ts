@@ -375,7 +375,9 @@ export async function syncEmployees(): Promise<SyncResult> {
       .select('bouw7_id')
       .not('bouw7_id', 'is', null)
     const bestaandIds = new Set(
-      (bestaand ?? []).map((m: { bouw7_id: string }) => m.bouw7_id)
+      (bestaand ?? [])
+        .map((m: { bouw7_id: string | null }) => m.bouw7_id)
+        .filter((id): id is string => id != null)
     )
 
     const rows = employees.map(e => ({
@@ -646,7 +648,7 @@ export async function syncProjects(): Promise<SyncResult> {
 
       // Totaal begrote bedrag: fixedPrice (aanneemsom) > revenue.budgeted > subtotal offerte
       const kostprijs = fin?.fixedPrice
-        ?? (fin?.revenue?.budgeted != null && fin.revenue.budgeted > 0 ? fin.revenue.budgeted : null)
+        ?? (fin?.revenue?.budgeted != null && Number(fin.revenue.budgeted) > 0 ? Number(fin.revenue.budgeted) : null)
         ?? quote?.subtotal
         ?? null
 

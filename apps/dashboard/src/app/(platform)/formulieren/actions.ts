@@ -12,6 +12,7 @@ import type {
   FormTaakStatus,
 } from '@/components/formulieren/types'
 import { defaultSchema } from '@/components/formulieren/types'
+import type { Json } from '@everts/database/types'
 
 // ── Resultaat-types ──────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ export async function createFormTemplate(input: {
   const { error: versieError } = await supabase.from('form_versies').insert({
     template_id: template.id,
     versienummer: 1,
-    schema: defaultSchema(),
+    schema: defaultSchema() as unknown as Json,
     aangemaakt_door: user?.id ?? null,
   })
 
@@ -153,7 +154,7 @@ export async function getFormVersies(
     .eq('template_id', templateId)
     .order('versienummer', { ascending: false })
   if (error) return { ok: false, error: error.message }
-  return { ok: true, data: (data ?? []) as FormVersie[] }
+  return { ok: true, data: (data ?? []) as unknown as FormVersie[] }
 }
 
 export async function getLatestFormVersie(
@@ -169,7 +170,7 @@ export async function getLatestFormVersie(
     .maybeSingle()
   if (error) return { ok: false, error: error.message }
   if (!data) return { ok: false, error: 'Geen versie gevonden.' }
-  return { ok: true, data: data as FormVersie }
+  return { ok: true, data: data as unknown as FormVersie }
 }
 
 export async function saveFormVersie(
@@ -195,7 +196,7 @@ export async function saveFormVersie(
     .insert({
       template_id: templateId,
       versienummer: nieuw,
-      schema,
+      schema: schema as unknown as Json,
       wijzigingsnota: wijzigingsnota ?? null,
       aangemaakt_door: user?.id ?? null,
     })
@@ -211,7 +212,7 @@ export async function saveFormVersie(
     .eq('id', templateId)
 
   revalidatePath(`/formulieren/${templateId}/bewerken`)
-  return { ok: true, data: data as FormVersie }
+  return { ok: true, data: data as unknown as FormVersie }
 }
 
 // ── Inzendingen ───────────────────────────────────────────────────────
@@ -251,7 +252,7 @@ export async function getFormInzending(id: string): Promise<ActionResult<FormInz
     .maybeSingle()
   if (error) return { ok: false, error: error.message }
   if (!data) return { ok: false, error: 'Inzending niet gevonden.' }
-  return { ok: true, data: data as FormInzending }
+  return { ok: true, data: data as unknown as FormInzending }
 }
 
 export async function saveFormInzending(input: {
@@ -270,13 +271,13 @@ export async function saveFormInzending(input: {
     // Bijwerken
     const { data, error } = await supabase
       .from('form_inzendingen')
-      .update({ waarden: input.waarden })
+      .update({ waarden: input.waarden as unknown as Json })
       .eq('id', input.inzending_id)
       .eq('status', 'concept')
       .select()
       .single()
     if (error) return { ok: false, error: error.message }
-    return { ok: true, data: data as FormInzending }
+    return { ok: true, data: data as unknown as FormInzending }
   }
 
   // Nieuw concept
@@ -286,7 +287,7 @@ export async function saveFormInzending(input: {
       template_id: input.template_id,
       versie_id: input.versie_id,
       status: 'concept',
-      waarden: input.waarden,
+      waarden: input.waarden as unknown as Json,
       submission_uuid: input.submission_uuid ?? null,
       dossier_id: input.dossier_id ?? null,
       project_ref: input.project_ref ?? null,
@@ -297,7 +298,7 @@ export async function saveFormInzending(input: {
   if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/formulieren/${input.template_id}/inzendingen`)
-  return { ok: true, data: data as FormInzending }
+  return { ok: true, data: data as unknown as FormInzending }
 }
 
 export async function submitFormInzending(
@@ -374,7 +375,7 @@ export async function createFormTaak(input: {
       toegewezen_aan: input.toegewezen_aan ?? null,
       deadline: input.deadline ?? null,
       opmerkingen: input.opmerkingen ?? null,
-      vooringevuld: input.vooringevuld ?? {},
+      vooringevuld: (input.vooringevuld ?? {}) as unknown as Json,
       dossier_id: input.dossier_id ?? null,
       aangemaakt_door: user?.id ?? null,
     })

@@ -123,8 +123,8 @@ function fDatum(iso: string | null): string {
 
 type Tone = 'success' | 'warning' | 'error' | 'brand' | 'info' | 'neutral'
 
-function dekkingTone(v: number | null): Tone {
-  if (v == null) return 'neutral'
+function dekkingTone(v: number | null): 'success' | 'warning' | 'error' | 'info' {
+  if (v == null) return 'info'
   if (v >= 80) return 'success'
   if (v >= 50) return 'warning'
   return 'error'
