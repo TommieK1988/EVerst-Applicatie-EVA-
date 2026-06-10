@@ -1,0 +1,326 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { X, Check, ChevronRight, ChevronDown } from 'lucide-react'
+import { importeerRegels } from '@/app/actions/quotes'
+import type { QuoteType } from '@/lib/types-quotes'
+
+interface ImportRegel {
+  groep_id: string
+  groep_naam: string
+  omschrijving: string
+  werkomschrijving: string
+  werkomschrijving_afbeeldingen?: string[]
+  hoeveelheid: number
+  eenheid: string
+  eenheidsprijs: number
+  kostprijs_pe: number
+  uren_pe: number
+  calculatieregel_id: string
+}
+
+interface Groep {
+  id: string
+  naam: string
+  regels: ImportRegel[]
+}
+
+interface Props {
+  quoteId: string
+  type: QuoteType
+  projectId?: string | null
+  onClose: () => void
+}
+
+export default function QuoteImportModal({ quoteId, type, projectId, onClose }: Props) {
+  const [groepen, setGroepen] = useState<Groep[]>([])
+  const [geselecteerd, setGeselecteerd] = useState<Set<string>>(new Set())
+  const [openGroepen, setOpenGroepen] = useState<Set<string>>(new Set())
+  const [sectiePerGroep, setSectiePerGroep] = useState(true)
+  const [isPending, setIsPending] = useState(false)
+
+  useEffect(() => {
+    // Laad data vanuit localStorage (client-side only)
+    async function laad() {
+      const { getGroepen, getCalculatieregels, getComponentregels, getScenarios } = await import('@/lib/local-store')
+      const { berekenCalculatieregel } = await import('@/lib/calculations')
+
+      const alleScenarios = getScenarios()
+
+      // Filter op actief scenario van dit project
+      let actieveScenarioIds: Set<string> | null = null
+      if (projectId) {
+        const projectScenarios = alleScenarios.filter(s => s.project_id === projectId)
+        const actief = projectScenarios.find(s => s.is_standaard) ?? projectScenarios[0]
+        if (actief) {
+          actieveScenarioIds = new Set([actief.id])
+        }
+      }
+
+      const alleGroepen = getGroepen()
+      const alleRegels = getCalculatieregels()
+      const alleComps = getComponentregels()
+
+      // Groepeer calculatieregels per groep
+      const groepMap = new Map<string, Groep>()
+
+      for (const gr of alleGroepen) {
+        // Sla groepen over die niet bij het actieve scenario horen
+        if (actieveScenarioIds && !actieveScenarioIds.has(gr.scenario_id)) continue
+        const regelsBijGroep = alleRegels.filter(r => r.groep_id === gr.id)
+        if (regelsBijGroep.length === 0) continue
+
+        // Haal scenario op voor opslag
+        const scenario = alleScenarios.find(s => s.id === gr.scenario_id)
+        const opslag = scenario
+          ? scenario.opslag_algemene_kosten + scenario.opslag_winst_risico + (scenario.opslag_overhead ?? 0)
+          : 18 // fallback
+
+        const importRegels: ImportRegel[] = regelsBijGroep.map(r => {
+          const comps = alleComps.filter(c => c.calculatieregel_id === r.id)
+          const berekend = berekenCalculatieregel(r, comps, r.opslag_pct ?? opslag)
+          return {
+            groep_id: gr.id,
+            groep_naam: gr.naam,
+            omschrijving: r.omschrijving,
+            hoeveelheid: r.hoeveelheid,
+            eenheid: r.eenheid,
+            eenheidsprijs: +berekend.vp_pe.toFixed(2),
+            kostprijs_pe: +berekend.kp_pe.toFixed(2),
+            uren_pe: +berekend.uren_pe.toFixed(3),
+            calculatieregel_id: r.id,
+            werkomschrijving: r.werkomschrijving ?? '',
+            werkomschrijving_afbeeldingen: r.werkomschrijving_afbeeldingen,
+          }
+        })
+
+        groepMap.set(gr.id, {
+          id: gr.id,
+          naam: gr.naam,
+          regels: importRegels,
+        })
+      }
+
+      const groepLijst = Array.from(groepMap.values())
+      setGroepen(groepLijst)
+      // Open de eerste groep standaard
+      if (groepLijst.length > 0) {
+        setOpenGroepen(new Set([groepLijst[0].id]))
+      }
+    }
+    laad()
+  }, [])
+
+  function toggleGroep(groepId: string) {
+    setOpenGroepen(prev => {
+      const next = new Set(prev)
+      if (next.has(groepId)) next.delete(groepId)
+      else next.add(groepId)
+      return next
+    })
+  }
+
+  function toggleRegel(regelId: string) {
+    setGeselecteerd(prev => {
+      const next = new Set(prev)
+      if (next.has(regelId)) next.delete(regelId)
+      else next.add(regelId)
+      return next
+    })
+  }
+
+  function selecteerAlles() {
+    const alle = groepen.flatMap(g => g.regels.map(r => r.calculatieregel_id))
+    setGeselecteerd(new Set(alle))
+  }
+
+  function deselecteerAlles() {
+    setGeselecteerd(new Set())
+  }
+
+  async function importeer() {
+    const geselecteerdeRegels: ImportRegel[] = groepen
+      .flatMap(g => g.regels)
+      .filter(r => geselecteerd.has(r.calculatieregel_id))
+
+    if (geselecteerdeRegels.length === 0) return
+
+    setIsPending(true)
+    try {
+      await importeerRegels(
+        quoteId,
+        geselecteerdeRegels.map(r => ({
+          groep_id: r.groep_id,
+          groep_naam: r.groep_naam,
+          omschrijving: r.omschrijving,
+          hoeveelheid: r.hoeveelheid,
+          eenheid: r.eenheid,
+          eenheidsprijs: r.eenheidsprijs,
+          kostprijs_pe: r.kostprijs_pe,
+          uren_pe: r.uren_pe,
+          calculatieregel_id: r.calculatieregel_id,
+          opmerking: (() => {
+            const tekst = r.werkomschrijving || ''
+            const imgs = (r.werkomschrijving_afbeeldingen ?? []).map(src =>
+              `<img src="${src}" style="max-width:200px;max-height:150px;object-fit:contain;margin:2px 4px 2px 0;vertical-align:top" />`
+            ).join('')
+            const combined = tekst + (imgs ? (tekst ? '\n' : '') + imgs : '')
+            return combined || null
+          })(),
+        }))
+      )
+      onClose()
+    } catch (e) {
+      alert('Fout bij importeren: ' + String(e))
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  const aantalGeselecteerd = geselecteerd.size
+  const totaalRegels = groepen.flatMap(g => g.regels).length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">Importeer uit calculatie</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {totaalRegels} regels gevonden
+              {aantalGeselecteerd > 0 && ` — ${aantalGeselecteerd} geselecteerd`}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 px-5 py-2.5 border-b border-slate-100 bg-slate-50">
+          <button onClick={selecteerAlles} className="text-xs text-everts hover:underline font-medium">Alles selecteren</button>
+          <span className="text-slate-300">|</span>
+          <button onClick={deselecteerAlles} className="text-xs text-slate-400 hover:text-slate-600">Deselecteer</button>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sectiePerGroep}
+                onChange={(e) => setSectiePerGroep(e.target.checked)}
+                className="rounded border-slate-300 text-everts focus:ring-everts/30"
+              />
+              Sectie per groep aanmaken
+            </label>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {groepen.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-sm">
+              Geen calculatieregels gevonden in localStorage
+            </div>
+          ) : (
+            groepen.map((groep) => {
+              const isOpen = openGroepen.has(groep.id)
+              const alleGeselecteerd = groep.regels.every(r => geselecteerd.has(r.calculatieregel_id))
+              const deelsGeselecteerd = groep.regels.some(r => geselecteerd.has(r.calculatieregel_id)) && !alleGeselecteerd
+
+              return (
+                <div key={groep.id} className="border border-slate-200 rounded-lg overflow-hidden">
+                  {/* Groep header */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={alleGeselecteerd}
+                      ref={(el) => { if (el) el.indeterminate = deelsGeselecteerd }}
+                      onChange={() => {
+                        if (alleGeselecteerd) {
+                          setGeselecteerd(prev => {
+                            const next = new Set(prev)
+                            groep.regels.forEach(r => next.delete(r.calculatieregel_id))
+                            return next
+                          })
+                        } else {
+                          setGeselecteerd(prev => {
+                            const next = new Set(prev)
+                            groep.regels.forEach(r => next.add(r.calculatieregel_id))
+                            return next
+                          })
+                        }
+                      }}
+                      className="rounded border-slate-300 text-everts focus:ring-everts/30"
+                    />
+                    <button
+                      onClick={() => toggleGroep(groep.id)}
+                      className="flex items-center gap-2 flex-1 text-left text-sm font-medium text-slate-700"
+                    >
+                      {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
+                      {groep.naam}
+                      <span className="text-xs text-slate-400 font-normal">({groep.regels.length})</span>
+                    </button>
+                  </div>
+
+                  {/* Regels */}
+                  {isOpen && (
+                    <div className="divide-y divide-slate-50">
+                      {groep.regels.map((regel) => {
+                        const selected = geselecteerd.has(regel.calculatieregel_id)
+                        return (
+                          <label
+                            key={regel.calculatieregel_id}
+                            className={`flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors ${
+                              selected ? 'bg-everts/3' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleRegel(regel.calculatieregel_id)}
+                              className="rounded border-slate-300 text-everts focus:ring-everts/30 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm text-slate-700 truncate block">{regel.omschrijving}</span>
+                              <span className="text-xs text-slate-400">
+                                {regel.hoeveelheid} {regel.eenheid}
+                                {regel.eenheidsprijs > 0 && ` · € ${regel.eenheidsprijs.toFixed(2)}/eenh`}
+                              </span>
+                            </div>
+                            <span className="text-sm font-medium text-slate-600 flex-shrink-0">
+                              € {(regel.hoeveelheid * regel.eenheidsprijs).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
+            Annuleren
+          </button>
+          <button
+            onClick={importeer}
+            disabled={aantalGeselecteerd === 0 || isPending}
+            className="flex items-center gap-2 px-5 py-2 bg-everts text-white rounded-lg text-sm font-medium hover:bg-everts/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPending ? 'Importeren…' : (
+              <>
+                <Check className="w-4 h-4" />
+                {aantalGeselecteerd} regel{aantalGeselecteerd !== 1 ? 's' : ''} importeren
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

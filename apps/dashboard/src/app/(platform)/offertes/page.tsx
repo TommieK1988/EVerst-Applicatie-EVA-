@@ -1,0 +1,39 @@
+import type { Metadata } from 'next'
+import { createClient as createServerClient } from '@everts/database/server'
+import { laadLayouts } from '@/app/actions/layouts'
+import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
+import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
+import { OFFERTE_STATUSSEN } from '@/components/dossiers/types'
+import { getDossiersByBouw7Prefix, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
+
+export const metadata: Metadata = { title: 'Offertes' }
+
+export default async function OffertesPage() {
+  let user_id: string | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionClient = createServerClient() as any
+    const { data: { user } } = await sessionClient.auth.getUser()
+    user_id = user?.id ?? null
+  } catch {
+    // niet ingelogd of session unavailable
+  }
+
+  const [result, layouts, lasteSyncIso] = await Promise.all([
+    getDossiersByBouw7Prefix(['08.', '09.'], 'offerte'),
+    user_id ? laadLayouts(user_id, 'dossiers-offerte') : Promise.resolve([]),
+    getLastBouw7SyncTijd(),
+  ])
+  const dossiers = result.ok ? result.data : []
+
+  return (
+    <DossierViewSwitcher
+      sectie="offerte"
+      statussen={OFFERTE_STATUSSEN}
+      dossiers={dossiers}
+      layouts={layouts}
+      user_id={user_id}
+      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} />}
+    />
+  )
+}

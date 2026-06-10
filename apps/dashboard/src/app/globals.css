@@ -1,0 +1,619 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EVA Design System v0.3 · Definitieve tokenset (handoff juni 2026)
+   Bron: colors_and_type.css · Brand Identity System 2026
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+
+  /* ── Brand · Everts groen ──────────────────────────────────────────── */
+  --brand-50:   #ecfaf0;
+  --brand-100:  #d2f2dd;
+  --brand-200:  #a5e4ba;
+  --brand-300:  #6dd190;
+  --brand-400:  #28a44a;   /* official mid-green */
+  --brand-500:  #009439;   /* official primary — buttons, links, focus */
+  --brand-600:  #007530;
+  --brand-700:  #0a5e28;
+  --brand-800:  #054f2e;
+  --brand-900:  #013a20;
+  --brand-950:  #012215;
+  --brand-lime: #61ac2b;
+  --brand-dark: #1f2933;
+
+  /* ── Neutrals · Koel slate ─────────────────────────────────────────── */
+  --neutral-0:    #ffffff;
+  --neutral-50:   #f8fafa;
+  --neutral-100:  #f1f4f5;
+  --neutral-200:  #e3e8ea;
+  --neutral-300:  #cbd2d6;
+  --neutral-400:  #9aa4ab;
+  --neutral-500:  #6b757c;
+  --neutral-600:  #4d575e;
+  --neutral-700:  #364048;
+  --neutral-800:  #232a30;
+  --neutral-900:  #161b20;
+  --neutral-950:  #1f2933;   /* = brand-dark */
+
+  /* ── Status ────────────────────────────────────────────────────────── */
+  --success-50:   #ecfdf3;
+  --success-100:  #d1fadf;
+  --success-300:  #6ce9a6;
+  --success-500:  #12b76a;
+  --success-700:  #027a48;
+  --success-900:  #054f31;
+
+  --warning-50:   #fff6ec;
+  --warning-100:  #ffe6cc;
+  --warning-300:  #ffb866;
+  --warning-500:  #f08000;
+  --warning-700:  #b85a00;
+  --warning-900:  #6b3400;
+
+  --error-50:     #fef3f2;
+  --error-100:    #fee4e2;
+  --error-300:    #fda29b;
+  --error-500:    #e8453b;
+  --error-700:    #b42318;
+  --error-900:    #7a271a;
+
+  --info-50:      #eff8ff;
+  --info-100:     #d1e9ff;
+  --info-300:     #84caff;
+  --info-500:     #2e90fa;
+  --info-700:     #175cd3;
+  --info-900:     #194185;
+
+  /* ── Semantic surface tokens (light theme) ─────────────────────────── */
+  --color-bg:          var(--neutral-50);
+  --color-surface:     var(--neutral-0);
+  --color-surface-2:   var(--neutral-100);
+  --color-border:      var(--neutral-200);
+  --color-border-soft: var(--neutral-100);
+  --color-fg:          var(--neutral-900);
+  --color-fg-2:        var(--neutral-700);
+  --color-fg-muted:    var(--neutral-500);
+  --color-fg-subtle:   var(--neutral-400);
+  --color-primary:     var(--brand-500);
+  --color-primary-fg:  #ffffff;
+  --color-focus-ring:  var(--brand-100);   /* 3px box-shadow on focus */
+
+  /* ── Typografie ────────────────────────────────────────────────────── */
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale */
+  --text-hero:       44px;   /* dashboard greeting, hero headline */
+  --text-page-title: 32px;   /* page-level h1 */
+  --text-h2:         22px;   /* section title */
+  --text-h3:         16px;   /* card title */
+  --text-body:       14px;   /* default body copy */
+  --text-body-sm:    12.5px; /* secondary/meta */
+  --text-caption:    11px;   /* helper, timestamps */
+  --text-label:      10.5px; /* field label (always UPPERCASE) */
+  --text-section:    11px;   /* card section header (always UPPERCASE) */
+  --text-mono:       13px;   /* numbers, IDs, code in tables */
+  --text-mono-sm:    11px;   /* small mono values */
+
+  /* Line heights */
+  --leading-tight:   1.0;
+  --leading-snug:    1.2;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.6;
+
+  /* Font weights */
+  --weight-regular:   400;
+  --weight-medium:    500;
+  --weight-semibold:  600;
+  --weight-bold:      700;
+  --weight-extrabold: 800;
+
+  /* Letter spacing */
+  --tracking-tighter: -0.025em;  /* hero, page-title */
+  --tracking-tight:   -0.015em;  /* h2 */
+  --tracking-normal:  0;
+  --tracking-wide:    0.06em;    /* mono values */
+  --tracking-wider:   0.08em;    /* field labels */
+  --tracking-widest:  0.12em;    /* section headers, eyebrows */
+
+  /* ── Radius ────────────────────────────────────────────────────────── */
+  --radius-none: 0;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   10px;
+  --radius-2xl:  14px;
+  --radius-full: 9999px;
+
+  /* ── Elevation · border-first (light theme) ────────────────────────── */
+  --shadow-none: none;
+  --shadow-xs:   0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm:   0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04);
+  --shadow-md:   0 4px 8px -2px rgba(16,24,40,0.08), 0 2px 4px -2px rgba(16,24,40,0.04);
+  --shadow-lg:   0 12px 16px -4px rgba(16,24,40,0.10), 0 4px 6px -2px rgba(16,24,40,0.04);
+  --shadow-xl:   0 20px 24px -4px rgba(16,24,40,0.10);
+
+  /* ── Layout tokens ─────────────────────────────────────────────────── */
+  --sidebar-w-expanded:  224px;
+  --sidebar-w-collapsed: 56px;
+  --topbar-h:            60px;
+  --page-pad-x:          32px;
+  --page-pad-y:          28px;
+
+  /* ── Transitions ───────────────────────────────────────────────────── */
+  --duration-fast:  100ms;
+  --duration-base:  120ms;
+  --duration-slow:  240ms;
+  --ease-default:   ease;
+}
+
+/* ── Dark theme · semantic + elevation overrides ─────────────────────────
+   Scope: [data-theme="dark"] op het root element (html of body).
+   Gebruik naast .eva[data-theme="dark"] voor componenten buiten .eva scope.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg:          var(--neutral-950);
+  --color-surface:     var(--neutral-900);
+  --color-surface-2:   var(--neutral-800);
+  --color-border:      var(--neutral-800);
+  --color-border-soft: var(--neutral-700);
+  --color-fg:          var(--neutral-50);
+  --color-fg-2:        var(--neutral-300);
+  --color-fg-muted:    var(--neutral-400);
+  --color-fg-subtle:   var(--neutral-500);
+  --color-primary:     var(--brand-400);
+  --color-primary-fg:  var(--neutral-950);
+  --color-focus-ring:  rgba(40,164,74,0.25);
+
+  /* dark elevation — inset border trick */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.4),  inset 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5),  inset 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-md: 0 6px 14px -4px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-xl: 0 22px 34px -8px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.07);
+}
+
+/* ─── EVA Design System · CSS variabelen ──────────────────────────────
+   Tokens afgestemd op EVA Design System v0.2 (Brand Identity System 2026).
+   Alle kleurwaarden matchen de DS-spec in EVA Iconografie.html.
+   ──────────────────────────────────────────────────────────────────── */
+.eva {
+  /* Brand */
+  --brand:        #009439;   /* brand-500 — primair */
+  --brand-light:  #28a44a;   /* brand-400 — mid-groen */
+  --brand-deep:   #007530;   /* brand-600 */
+  --brand-700:    #0a5e28;   /* active tekst nav */
+  --brand-50:     #ecfaf0;   /* active achtergrond nav */
+  --brand-lime:   #61ac2b;   /* lime-accent */
+  --brand-dark:   #1f2933;   /* donker / TotalsBar */
+
+  /* Neutrals — koel slate */
+  --neutral-0:    #ffffff;
+  --neutral-50:   #f8fafa;
+  --neutral-100:  #f1f4f5;
+  --neutral-200:  #e3e8ea;
+  --neutral-300:  #cbd2d6;
+  --neutral-400:  #9aa4ab;
+  --neutral-500:  #6b757c;
+  --neutral-600:  #4d575e;
+  --neutral-700:  #364048;
+  --neutral-800:  #232a30;
+  --neutral-900:  #161b20;
+  --neutral-950:  #1f2933;   /* = brand-dark */
+
+  /* Pagina-chrome (aliases op neutrals) */
+  --bg:           var(--neutral-50);    /* paginaachtergrond */
+  --bg-elev:      var(--neutral-0);     /* elevated surface (cards, inputs) */
+  --bg-sidebar:   var(--neutral-0);     /* sidebar — wit per DS */
+  --bg-active:    var(--brand-50);      /* actieve nav-item achtergrond */
+  --fg:           var(--neutral-900);   /* primaire tekst */
+  --fg-soft:      var(--neutral-700);   /* secundaire tekst */
+  --fg-muted:     var(--neutral-500);   /* hulptekst, labels */
+  --border:       var(--neutral-200);   /* standaard rand */
+  --border-soft:  var(--neutral-100);   /* subtiele rand */
+
+  /* Accent (altijd brand-groen, geen meerdere varianten) */
+  --accent:       var(--brand);
+  --accent-2:     var(--brand-deep);
+
+  /* Typografie */
+  --font-sans:    'Montserrat', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-ui:      var(--font-sans);   /* alias — gebruik --font-sans voor nieuwe code */
+  --font-display: var(--font-sans);   /* alias */
+  --font-mono:    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radius */
+  --radius-none:  0;
+  --radius-sm:    4px;
+  --radius-md:    6px;
+  --radius-lg:    8px;
+  --radius-xl:    10px;
+  --radius-2xl:   14px;
+  --radius-full:  9999px;
+
+  /* Elevation · border-first */
+  --shadow-none: none;
+  --shadow-xs:   0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm:   0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04);
+  --shadow-md:   0 4px 8px -2px rgba(16,24,40,0.08), 0 2px 4px -2px rgba(16,24,40,0.04);
+  --shadow-lg:   0 12px 16px -4px rgba(16,24,40,0.10), 0 4px 6px -2px rgba(16,24,40,0.04);
+  --shadow-xl:   0 20px 24px -4px rgba(16,24,40,0.10);
+
+  /* Status */
+  --success-50:   #ecfdf3; --success-500: #12b76a; --success-700: #027a48;
+  --warning-50:   #fff6ec; --warning-300: #ffb866; --warning-500: #f08000; --warning-700: #b85a00;
+  --error-50:     #fef3f2; --error-300:   #fda29b; --error-500:   #e8453b; --error-700:   #b42318;
+  --info-50:      #eff8ff; --info-300:    #84caff; --info-500:    #2e90fa; --info-700:    #175cd3;
+
+  /* Domein · CalculatieGrid kolomgroepen */
+  --calc-ab:  #1f6feb;   /* AB · aanneemsom */
+  --calc-ma:  #c2185b;   /* MA · materialen */
+  --calc-oa:  #7b1fa2;   /* OA · onderaanneming */
+  --calc-kp:  #009439;   /* KP · kostprijs */
+  --calc-vp:  #057a5c;   /* VP · verkoopprijs */
+  --calc-btw: #b85a00;   /* BTW */
+
+  /* Domein · Planning entries */
+  --plan-a: #7c3aed;
+  --plan-b: #2dd4bf;
+  --plan-c: #ef4444;
+  --plan-d: #10b981;
+  --plan-e: #f59e0b;
+  --plan-f: #3b82f6;
+
+  /* Domein · Planning crew (deterministisch, hash op naam → 1 van 6) */
+  --crew-1: #7c3aed;
+  --crew-2: #0f9b8e;
+  --crew-3: #2f9e44;
+  --crew-4: #1f8a5b;
+  --crew-5: #f59e0b;
+  --crew-6: #3b82f6;
+
+  /* Chart-palet (green-forward) */
+  --chart-1: #009439;
+  --chart-2: #28a44a;
+  --chart-3: #61ac2b;
+  --chart-4: #2e90fa;
+  --chart-5: #f08000;
+  --chart-6: #e8453b;
+}
+
+/* ── Editorial thema (offertes / print, warm) ────────────────────────── */
+.eva[data-theme="editorial"] {
+  --bg:           #faf7f1;
+  --bg-elev:      #fffdf8;
+  --bg-sidebar:   #f3eee3;
+  --bg-active:    #ecfaf0;
+  --fg:           #1f2933;
+  --fg-soft:      #4d575e;
+  --fg-muted:     #857f6e;
+  --border:       #e6ddcb;
+  --border-soft:  #f0e9d9;
+}
+
+/* ── Donker thema ────────────────────────────────────────────────────── */
+.eva[data-theme="dark"] {
+  --bg:           #1f2933;   /* brand-dark */
+  --bg-elev:      #232a30;   /* neutral-800 */
+  --bg-sidebar:   #161b20;   /* neutral-900 */
+  --bg-active:    #232a30;
+  --fg:           #f8fafa;   /* neutral-50 */
+  --fg-soft:      #cbd2d6;   /* neutral-300 */
+  --fg-muted:     #9aa4ab;   /* neutral-400 */
+  --border:       #364048;   /* neutral-700 */
+  --border-soft:  #232a30;   /* neutral-800 */
+  --accent:       var(--brand-light);
+  --accent-2:     var(--brand);
+
+  /* dark elevation — inset border trick */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.4),  inset 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5),  inset 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-md: 0 6px 14px -4px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-xl: 0 22px 34px -8px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.07);
+}
+
+/* ── Animaties ───────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes evaTyping {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+  30%            { opacity: 1;   transform: translateY(-2px); }
+}
+@keyframes evaFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.eva .route-enter { animation: evaFadeIn 0.25s ease-out; }
+.eva * { box-sizing: border-box; }
+.eva button { font-family: inherit; }
+.eva ::-webkit-scrollbar { width: 10px; height: 10px; }
+.eva ::-webkit-scrollbar-track { background: transparent; }
+.eva ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+.eva ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+.eva ::selection { background: var(--accent); color: white; }
+.eva textarea::placeholder { color: var(--fg-muted); opacity: 1; }
+
+/* ── EVA herbruikbare UI-patronen ────────────────────────────────────── */
+.eva-input {
+  width: 100%; padding: 10px 14px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  color: var(--fg); font-family: var(--font-ui); font-size: 13px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.eva-input::placeholder { color: var(--fg-muted); font-style: italic; }
+.eva-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.eva-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.eva-btn-primary {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px; background: var(--accent); color: white;
+  border: none; border-radius: var(--radius-lg);
+  font-family: var(--font-ui); font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.eva-btn-primary:hover:not(:disabled) { opacity: 0.88; }
+.eva-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.eva-btn-ghost {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; background: transparent; color: var(--fg-soft);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.eva-btn-ghost:hover:not(:disabled) { background: var(--bg-active); border-color: var(--neutral-300); }
+.eva-btn-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.eva-card {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-2xl);
+  padding: 20px 24px;
+}
+.eva-card-warn {
+  background: var(--warning-50); border: 1px solid var(--warning-300); border-radius: var(--radius-2xl);
+  padding: 20px 24px;
+}
+.eva-card-error {
+  background: var(--error-50); border: 1px solid var(--error-300); border-radius: var(--radius-2xl);
+  padding: 20px 24px;
+}
+
+.eva-section-label {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  color: var(--fg-muted); letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.eva-card:hover { background: var(--bg-active); }
+a.eva-card:hover { background: var(--bg-active); }
+
+.eva-page      { padding: 28px 40px 48px; max-width: 900px;  margin: 0 auto; width: 100%; }
+.eva-page-wide { padding: 28px 40px 48px; max-width: 1100px; margin: 0 auto; width: 100%; }
+.eva-page-full { padding: 28px 40px 48px; width: 100%; }
+
+.eva-back-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+  color: var(--fg-muted); text-decoration: none; margin-bottom: 24px;
+  transition: color 0.15s;
+}
+.eva-back-link:hover { color: var(--fg); }
+
+.eva-page-header { margin-bottom: 28px; }
+.eva-page-kicker {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.eva-page-title {
+  font-family: var(--font-display); font-size: 26px; font-weight: 500;
+  letter-spacing: -0.02em; color: var(--fg); margin: 0 0 6px;
+}
+.eva-page-desc {
+  font-family: var(--font-ui); font-size: 14px; color: var(--fg-muted);
+  line-height: 1.5; margin: 0;
+}
+
+/* ── Shadcn/Radix tokens ─────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 19% 11%;          /* neutral-900 #161b20 */
+    --card: 0 0% 100%;
+    --card-foreground: 210 19% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 19% 11%;
+    --primary: 143 100% 29%;            /* brand-500 #009439 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 197 14% 90%;           /* neutral-200 */
+    --secondary-foreground: 210 19% 11%;
+    --muted: 197 10% 95%;               /* neutral-100 */
+    --muted-foreground: 201 7% 45%;     /* neutral-500 */
+    --accent: 197 10% 95%;
+    --accent-foreground: 210 19% 11%;
+    --destructive: 4 82% 57%;           /* error-500 #e8453b */
+    --destructive-foreground: 0 0% 100%;
+    --border: 197 16% 90%;              /* neutral-200 */
+    --input: 197 16% 90%;
+    --ring: 143 100% 29%;               /* brand-500 */
+    --radius: 0.5rem;
+  }
+
+  * { border-color: hsl(var(--border)); }
+}
+
+html, body { height: 100%; }
+
+body {
+  @apply antialiased;
+  background-color: #f8fafa;
+  color: #161b20;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   App-specifieke stijlen
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Geen spinner-pijltjes in getal-invoervelden ──────────────────────── */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ── Print styles ─────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  .print-break { page-break-before: always; }
+  aside, nav, header { display: none !important; }
+  main { padding: 0 !important; }
+}
+
+/* ── Data-tabel (wagenpark / houtrotherstel) ──────────────────────────── */
+.data-table {
+  @apply w-full text-sm;
+}
+.data-table th {
+  @apply text-left font-medium px-3 py-2 border-b;
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted) / 0.5);
+}
+.data-table td {
+  @apply px-3 py-3 border-b;
+  border-color: hsl(var(--border) / 0.5);
+}
+.data-table tr:last-child td { @apply border-0; }
+.data-table tr:hover td { background-color: hsl(var(--muted) / 0.3); }
+
+/* ── Foto thumbnails (houtrotherstel) ─────────────────────────────────── */
+.photo-thumbnail {
+  @apply relative overflow-hidden rounded-lg;
+  background-color: hsl(var(--muted));
+  aspect-ratio: 1;
+}
+
+/* ── Status badge animatie (houtrotherstel) ───────────────────────────── */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.status-in-uitvoering { animation: pulse-soft 2s ease-in-out infinite; }
+
+/* ── TipTap WYSIWYG editor ────────────────────────────────────────────── */
+.wysiwyg-doc-scroll {
+  background: #cbd5e1;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+}
+.wysiwyg-doc-page {
+  background: white;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.10);
+  border-radius: 2px;
+  min-height: 1123px;
+  position: relative;
+  flex-shrink: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(1123px - 1px),
+    #d1d5db calc(1123px - 1px),
+    #d1d5db 1123px
+  );
+}
+.wysiwyg-doc-page .wysiwyg-prosemirror { min-height: 800px; outline: none; line-height: 1.6; }
+.wysiwyg-doc-footer-zone { border-top: 1px dashed #cbd5e1; padding: 8px 16px 12px; background: #f8fafa; }
+.wysiwyg-doc-zone-label {
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px;
+}
+.wysiwyg-doc-zone-input {
+  width: 100%; font-size: 0.8em; color: #64748b; background: transparent;
+  border: none; outline: none; border-bottom: 1px solid transparent; padding: 2px 0;
+}
+.wysiwyg-doc-zone-input:focus { border-bottom-color: #cbd5e1; }
+.wysiwyg-page-break-view {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 4px 0; margin: 8px 0;
+  border-top: 2px dashed #94a3b8; border-bottom: 2px dashed #94a3b8;
+  cursor: default; user-select: none;
+}
+.wysiwyg-page-break-view span {
+  font-size: 10px; color: #94a3b8; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; background: white; padding: 0 8px;
+}
+.wysiwyg-page-break-view.ProseMirror-selectednode { outline: 2px solid #2563eb; border-radius: 2px; }
+.wysiwyg-calc-blok-view {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; margin: 8px 0;
+  background: #eff6ff; border: 1px dashed #93c5fd; border-radius: 6px;
+  cursor: default; user-select: none;
+}
+.wysiwyg-calc-blok-view.ProseMirror-selectednode { outline: 2px solid #2563eb; }
+.calc-blok-icon { font-size: 14px; flex-shrink: 0; }
+.calc-blok-title { font-size: 11px; font-weight: 600; color: #1d4ed8; flex-shrink: 0; }
+.calc-blok-cols { font-size: 10px; color: #3b82f6; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wysiwyg-editor-wrap .ProseMirror {
+  min-height: 400px; padding: 24px; outline: none; font-size: 14px; line-height: 1.6; color: #1e293b;
+}
+.wysiwyg-editor-wrap .ProseMirror p { margin: 0.3em 0; }
+.wysiwyg-editor-wrap .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin: 0.8em 0 0.3em; }
+.wysiwyg-editor-wrap .ProseMirror h2 { font-size: 1.25em; font-weight: 600; margin: 0.7em 0 0.3em; }
+.wysiwyg-editor-wrap .ProseMirror h3 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.2em; }
+.wysiwyg-editor-wrap .ProseMirror ul,
+.wysiwyg-editor-wrap .ProseMirror ol { padding-left: 1.5em; margin: 0.3em 0; }
+.wysiwyg-editor-wrap .ProseMirror li { margin: 0.1em 0; }
+.wysiwyg-editor-wrap .ProseMirror blockquote { border-left: 3px solid #e2e8f0; margin: 0.5em 0; padding-left: 1em; color: #64748b; }
+.wysiwyg-editor-wrap .ProseMirror hr { border: none; border-top: 1px solid #e2e8f0; margin: 1em 0; }
+.wysiwyg-editor-wrap .ProseMirror img,
+.wysiwyg-doc-page .ProseMirror img { max-width: 100%; height: auto; border-radius: 4px; cursor: pointer; }
+.wysiwyg-editor-wrap .ProseMirror img.ProseMirror-selectednode,
+.wysiwyg-doc-page .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #2563eb; border-radius: 2px; }
+.wysiwyg-prosemirror img[data-align="left"]   { float: left;  margin: 0 16px 8px 0; display: block; }
+.wysiwyg-prosemirror img[data-align="center"] { display: block; margin: 0 auto; }
+.wysiwyg-prosemirror img[data-align="right"]  { float: right; margin: 0 0 8px 16px; display: block; }
+.wysiwyg-editor-wrap .ProseMirror table { border-collapse: collapse; width: 100%; margin: 0.5em 0; table-layout: fixed; }
+.wysiwyg-editor-wrap .ProseMirror td,
+.wysiwyg-editor-wrap .ProseMirror th { border: 1px solid #e2e8f0; padding: 6px 10px; min-width: 40px; vertical-align: top; position: relative; word-wrap: break-word; }
+.wysiwyg-editor-wrap .ProseMirror th { background: #f8fafa; font-weight: 600; }
+.wysiwyg-editor-wrap .ProseMirror .selectedCell::after { background: rgba(26, 86, 219, 0.08); content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.wysiwyg-editor-wrap .ProseMirror .column-resize-handle { background: #1a56db; bottom: -2px; pointer-events: none; position: absolute; right: -2px; top: 0; width: 4px; }
+.wysiwyg-editor-wrap .ProseMirror .hb-var { display: inline-block; padding: 1px 6px; border-radius: 4px; background: #dbeafe; color: #1d4ed8; font-family: monospace; font-size: 0.82em; cursor: default; user-select: none; white-space: nowrap; border: 1px solid #bfdbfe; }
+.wysiwyg-editor-wrap .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; height: 0; float: left; }
+.wysiwyg-editor-wrap .ProseMirror a,
+.wysiwyg-editor-wrap .ProseMirror .wysiwyg-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
+.wysiwyg-editor-wrap .ProseMirror a:hover { color: #1d4ed8; }
+.wysiwyg-editor-wrap .ProseMirror mark { border-radius: 2px; padding: 0 1px; }
+.wysiwyg-editor-wrap .ProseMirror code { background: #f1f5f9; border-radius: 3px; padding: 1px 4px; font-family: 'Courier New', monospace; font-size: 0.9em; }
+.wysiwyg-editor-wrap .ProseMirror pre { background: #1e293b; color: #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 0.5em 0; overflow-x: auto; }
+.wysiwyg-editor-wrap .ProseMirror pre code { background: none; padding: 0; font-size: 0.85em; }
+
+/* ── Calculatie tabel (everts-calc) ───────────────────────────────────── */
+.calc-table { @apply w-full text-sm border-collapse; }
+.calc-table th { @apply text-left font-medium px-3 py-2 border-b text-xs uppercase tracking-wide whitespace-nowrap;
+  background: var(--neutral-50); border-color: var(--neutral-200); color: var(--neutral-500); }
+.calc-table td { @apply px-3 py-2.5 border-b align-middle; border-color: var(--neutral-100); }
+.calc-table tr:last-child td { @apply border-0; }
+.calc-table tr:hover td { background: var(--neutral-50); }
+.calc-table .row-activiteit td { background: color-mix(in srgb, var(--neutral-50) 50%, transparent); font-weight: 500; }
+.calc-table .row-lijn td { color: var(--neutral-600); padding-left: 2rem; }
+
+/* ── Projectboom (everts-calc) ────────────────────────────────────────── */
+.boom-item { @apply flex items-center gap-2 px-3 py-2 text-sm cursor-pointer rounded-lg transition-all select-none; }
+.boom-item:hover { background: var(--neutral-100); }
+.boom-item.actief { background: var(--brand-50); color: var(--brand-700); font-weight: 500; }
+
+/* ── Marge balk (everts-calc) ─────────────────────────────────────────── */
+.marge-balk { @apply h-1.5 rounded-full overflow-hidden; background: var(--neutral-200); }
+.marge-balk-inner { @apply h-full rounded-full transition-all duration-300; }
+
+/* ── Calc inputs (everts-calc) ────────────────────────────────────────── */
+.calc-input { @apply w-full px-2 py-1.5 text-sm rounded transition-colors; outline: none;
+  border: 1px solid var(--neutral-200); }
+.calc-input:focus { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 15%, transparent); }
+.calc-input-number { @apply w-full px-2 py-1.5 text-sm rounded text-right transition-colors;
+  font-family: var(--font-mono); border: 1px solid var(--neutral-200); }

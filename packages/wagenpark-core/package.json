@@ -1,0 +1,23 @@
+{
+  "name": "@everts/wagenpark-core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Kern-logica voor Wagenpark-beheer: compliance engine, ULU importers, RDW client.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./compliance": "./src/compliance/index.ts",
+    "./importers": "./src/importers/index.ts",
+    "./ulu-api": "./src/ulu-api/index.ts",
+    "./rdw": "./src/rdw/index.ts",
+    "./utils": "./src/utils/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "peerDependencies": {
+    "@everts/database": "*"
+  }
+}

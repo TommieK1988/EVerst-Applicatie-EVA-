@@ -1,0 +1,12 @@
+{
+  "name": "@everts/config",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "tailwind.config.base.js",
+    "tsconfig.base.json"
+  ],
+  "dependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  }
+}

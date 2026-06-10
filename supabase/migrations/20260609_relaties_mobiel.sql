@@ -1,0 +1,1 @@
+ALTER TABLE relaties ADD COLUMN IF NOT EXISTS mobiel text;

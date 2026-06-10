@@ -1,0 +1,383 @@
+'use server'
+
+import { createAdminClient } from '@everts/database/server'
+import { revalidatePath } from 'next/cache'
+import type {
+  Relatie,
+  RelatieFactuuradres,
+  OrganisatieType,
+  RelatieBankgegevens,
+  RelatieFacturatie,
+  RelatieInkoop,
+  RelatieVerkoopPrijsafspraak,
+  RelatieInkoopKortingsafspraak,
+  RelatieInkoopPrijsafspraak,
+  OmzetData,
+} from '@everts/database'
+
+type ActionResult = { ok: true } | { ok: false; error: string }
+
+/* ─── Organisaties ─────────────────────────────────────────────────── */
+
+export async function getRelatieById(id: string): Promise<Relatie | null> {
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('relaties')
+    .select('*')
+    .eq('id', id)
+    .single()
+  return (data ?? null) as Relatie | null
+}
+
+export async function createOrganisatie(input: {
+  naam: string
+  types: OrganisatieType[]
+  kvk_nummer?: string | null
+  btw_nummer?: string | null
+  email?: string | null
+  telefoon?: string | null
+  website?: string | null
+  adres_straat?: string | null
+  adres_postcode?: string | null
+  adres_plaats?: string | null
+  adres_land?: string | null
+  opmerkingen?: string | null
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { data, error } = await supabase
+    .from('relaties')
+    .insert({
+      ...input,
+      actief: true,
+      kenmerken: {},
+    })
+    .select('id')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/relaties')
+  return { ok: true, id: data.id }
+}
+
+export async function updateOrganisatieGegevens(
+  id: string,
+  patch: {
+    naam?: string
+    kvk_nummer?: string | null
+    btw_nummer?: string | null
+    email?: string | null
+    telefoon?: string | null
+    website?: string | null
+    adres_straat?: string | null
+    adres_postcode?: string | null
+    adres_plaats?: string | null
+    adres_land?: string | null
+    opmerkingen?: string | null
+  }
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relaties')
+    .update(patch)
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${id}`)
+  return { ok: true }
+}
+
+export async function updateOrganisatieTypes(
+  id: string,
+  types: OrganisatieType[]
+): Promise<ActionResult> {
+  if (types.length === 0) return { ok: false, error: 'Selecteer minimaal één type.' }
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relaties')
+    .update({ types })
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${id}`)
+  return { ok: true }
+}
+
+export async function toggleOrganisatieActief(
+  id: string,
+  actief: boolean
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relaties')
+    .update({ actief })
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${id}`)
+  revalidatePath('/relaties')
+  return { ok: true }
+}
+
+/* ─── Factuuradressen ─────────────────────────────────────────────── */
+
+export async function upsertFactuuradres(input: {
+  id?: string
+  relatie_id: string
+  label: string
+  straat?: string | null
+  postcode?: string | null
+  plaats?: string | null
+  land?: string | null
+  opmerkingen?: string | null
+}): Promise<{ ok: true; data: RelatieFactuuradres } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { id, ...rest } = input
+  const payload = id ? { id, ...rest } : rest
+
+  const { data, error } = await supabase
+    .from('relatie_factuuradressen')
+    .upsert(payload)
+    .select()
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${input.relatie_id}`)
+  return { ok: true, data: data as RelatieFactuuradres }
+}
+
+export async function deleteFactuuradres(
+  id: string,
+  relatieId: string
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_factuuradressen')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatieId}`)
+  return { ok: true }
+}
+
+/* ─── Bankgegevens (1:1 upsert) ──────────────────────────────────── */
+
+export async function upsertBankgegevens(
+  relatie_id: string,
+  data: Pick<RelatieBankgegevens, 'iban' | 'bic' | 'tenaamstelling' | 'opmerkingen'>
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_bankgegevens')
+    .upsert({ relatie_id, ...data }, { onConflict: 'relatie_id' })
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatie_id}`)
+  return { ok: true }
+}
+
+/* ─── Facturatie-instellingen (1:1 upsert) ───────────────────────── */
+
+export async function upsertFacturatie(
+  relatie_id: string,
+  data: Pick<RelatieFacturatie,
+    'betaaltermijn_dagen' | 'facturatie_email' | 'inkoopnummer_verplicht' | 'kredietlimiet' |
+    'g_rekening_tekst' | 'g_rekening_percentage' | 'loonkostenbestanddeel_pct' | 'n_rekening_tekst' |
+    'opmerkingen'>
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_facturatie')
+    .upsert({ relatie_id, ...data }, { onConflict: 'relatie_id' })
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatie_id}`)
+  return { ok: true }
+}
+
+/* ─── Inkoop-instellingen (1:1 upsert) ───────────────────────────── */
+
+export async function upsertInkoop(
+  relatie_id: string,
+  data: Pick<RelatieInkoop, 'leveranciernummer' | 'standaard_levertijd_dagen' | 'minimumbestelling' | 'opmerkingen'>
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_inkoop')
+    .upsert({ relatie_id, ...data }, { onConflict: 'relatie_id' })
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatie_id}`)
+  return { ok: true }
+}
+
+/* ─── Verkoop prijsafspraken (1:n) ───────────────────────────────── */
+
+export async function upsertVerkoopPrijsafspraak(input: {
+  id?: string
+  relatie_id: string
+  omschrijving: string
+  eenheid?: string | null
+  prijs?: number | null
+  geldig_vanaf?: string | null
+  geldig_tot?: string | null
+  opmerkingen?: string | null
+}): Promise<{ ok: true; data: RelatieVerkoopPrijsafspraak } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { id, ...rest } = input
+  const { data, error } = await supabase
+    .from('relatie_verkoop_prijsafspraken')
+    .upsert(id ? { id, ...rest } : rest)
+    .select()
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${input.relatie_id}`)
+  return { ok: true, data: data as RelatieVerkoopPrijsafspraak }
+}
+
+export async function deleteVerkoopPrijsafspraak(
+  id: string,
+  relatieId: string
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_verkoop_prijsafspraken')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatieId}`)
+  return { ok: true }
+}
+
+/* ─── Kortingsafspraken (1:n, leverancier) ───────────────────────── */
+
+export async function upsertKortingsafspraak(input: {
+  id?: string
+  relatie_id: string
+  categorie?: string | null
+  korting_pct?: number | null
+  geldig_vanaf?: string | null
+  geldig_tot?: string | null
+  opmerkingen?: string | null
+}): Promise<{ ok: true; data: RelatieInkoopKortingsafspraak } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { id, ...rest } = input
+  const { data, error } = await supabase
+    .from('relatie_inkoop_kortingsafspraken')
+    .upsert(id ? { id, ...rest } : rest)
+    .select()
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${input.relatie_id}`)
+  return { ok: true, data: data as RelatieInkoopKortingsafspraak }
+}
+
+export async function deleteKortingsafspraak(
+  id: string,
+  relatieId: string
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_inkoop_kortingsafspraken')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatieId}`)
+  return { ok: true }
+}
+
+/* ─── Inkoop prijsafspraken (1:n, onderaannemer) ─────────────────── */
+
+export async function upsertInkoopPrijsafspraak(input: {
+  id?: string
+  relatie_id: string
+  omschrijving: string
+  eenheid?: string | null
+  prijs?: number | null
+  geldig_vanaf?: string | null
+  geldig_tot?: string | null
+  opmerkingen?: string | null
+}): Promise<{ ok: true; data: RelatieInkoopPrijsafspraak } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { id, ...rest } = input
+  const { data, error } = await supabase
+    .from('relatie_inkoop_prijsafspraken')
+    .upsert(id ? { id, ...rest } : rest)
+    .select()
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${input.relatie_id}`)
+  return { ok: true, data: data as RelatieInkoopPrijsafspraak }
+}
+
+export async function deleteInkoopPrijsafspraak(
+  id: string,
+  relatieId: string
+): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relatie_inkoop_prijsafspraken')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${relatieId}`)
+  return { ok: true }
+}
+
+/* ─── Omzet (berekend uit dossiers) ─────────────────────────────── */
+
+export async function getOmzetVoorRelatie(relatieId: string): Promise<OmzetData> {
+  const supabase = createAdminClient() as any
+
+  const [jaarRes, openstaandRes] = await Promise.all([
+    // Gefactureerde omzet per boekjaar (opdrachten)
+    supabase
+      .from('dossiers')
+      .select('created_at, bedrag_excl_btw')
+      .eq('klant_id', relatieId)
+      .eq('hoofdstatus', 'opdracht')
+      .not('bedrag_excl_btw', 'is', null),
+
+    // Openstaande opdrachten (niet financieel afgesloten)
+    supabase
+      .from('dossiers')
+      .select('id, dossiernummer, titel, bedrag_excl_btw, opdracht_substatus')
+      .eq('klant_id', relatieId)
+      .eq('hoofdstatus', 'opdracht')
+      .not('opdracht_substatus', 'in', '("financieel_afgesloten","financieel_gereed")')
+      .not('bedrag_excl_btw', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ])
+
+  // Groepeer per jaar in JavaScript
+  const jaarMap = new Map<number, { bedrag: number; aantalDossiers: number }>()
+  for (const row of jaarRes.data ?? []) {
+    const jaar = new Date(row.created_at).getFullYear()
+    const huidig = jaarMap.get(jaar) ?? { bedrag: 0, aantalDossiers: 0 }
+    jaarMap.set(jaar, {
+      bedrag: huidig.bedrag + Number(row.bedrag_excl_btw ?? 0),
+      aantalDossiers: huidig.aantalDossiers + 1,
+    })
+  }
+  const perJaar = Array.from(jaarMap.entries())
+    .map(([jaar, v]) => ({ jaar, ...v }))
+    .sort((a, b) => b.jaar - a.jaar)
+    .slice(0, 5)
+
+  const openstaand = (openstaandRes.data ?? []).map((r: any) => ({
+    id: r.id,
+    dossiernummer: r.dossiernummer,
+    titel: r.titel,
+    bedrag: r.bedrag_excl_btw != null ? Number(r.bedrag_excl_btw) : null,
+    substatus: r.opdracht_substatus ?? '',
+  }))
+
+  return { perJaar, openstaand }
+}

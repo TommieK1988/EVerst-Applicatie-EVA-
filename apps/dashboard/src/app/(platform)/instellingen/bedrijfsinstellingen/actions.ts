@@ -1,0 +1,66 @@
+'use server'
+
+import { createAdminClient } from '@everts/database/server'
+import { revalidatePath } from 'next/cache'
+import type { Bedrijfsinstellingen, Uurtarief } from '@everts/database/platform-types'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = () => createAdminClient() as any
+
+export async function getBedrijfsinstellingen(): Promise<Bedrijfsinstellingen> {
+  const { data, error } = await db()
+    .from('bedrijfsinstellingen')
+    .select('*')
+    .eq('id', 1)
+    .single()
+
+  if (error || !data) {
+    return { id: 1, uurtarieven: [], btw_tarieven: [0, 9, 21], overige: {}, updated_at: new Date().toISOString() }
+  }
+  return data as Bedrijfsinstellingen
+}
+
+export async function updateBedrijfsinstellingen(
+  patch: Partial<Pick<Bedrijfsinstellingen, 'uurtarieven' | 'btw_tarieven' | 'overige'>>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await db()
+    .from('bedrijfsinstellingen')
+    .update(patch)
+    .eq('id', 1)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/bedrijfsinstellingen')
+  revalidatePath('/instellingen/planning')
+  return { ok: true }
+}
+
+export async function setUurtarieven(
+  uurtarieven: Uurtarief[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return updateBedrijfsinstellingen({ uurtarieven })
+}
+
+export async function setBtwTarieven(
+  btw_tarieven: number[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await updateBedrijfsinstellingen({ btw_tarieven })
+  if (result.ok) revalidatePath('/instellingen/btw-tarieven')
+  return result
+}
+
+export async function getDossierCategorieen(): Promise<string[]> {
+  const inst = await getBedrijfsinstellingen()
+  const cats = (inst.overige as any)?.dossier_categorieen
+  return Array.isArray(cats) ? cats : []
+}
+
+export async function setDossierCategorieen(
+  categorieen: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const inst = await getBedrijfsinstellingen()
+  const result = await updateBedrijfsinstellingen({
+    overige: { ...(inst.overige as any), dossier_categorieen: categorieen },
+  })
+  if (result.ok) revalidatePath('/instellingen/dossier-categorieen')
+  return result
+}

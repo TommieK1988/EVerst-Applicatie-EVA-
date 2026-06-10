@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["turbo", "run", "dev", "--filter=eva"],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "docs", "-l", "4000", "--no-clipboard"],
+      "port": 4000,
+      "autoPort": false
+    }
+  ]
+}

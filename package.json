@@ -1,0 +1,23 @@
+{
+  "name": "everts-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --filter=eva",
+    "build": "turbo run build --filter=eva",
+    "lint": "turbo run lint --filter=eva",
+    "type-check": "turbo run type-check --filter=eva",
+    "dev:eva": "turbo run dev --filter=eva",
+    "dev:everts-calc": "turbo run dev --filter=everts-calc",
+    "dev:geveltekening": "turbo run dev --filter=geveltekening-app"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "typescript": "^5"
+  },
+  "packageManager": "npm@10.0.0"
+}

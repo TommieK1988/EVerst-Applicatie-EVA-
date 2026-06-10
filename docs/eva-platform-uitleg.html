@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EVA Platform — Praktische Uitleg | Everts Onderhoud & Renovatie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      /* Everts brand kleuren */
+      --brand:       #1f7a3a;
+      --brand-deep:  #155d2b;
+      --brand-light: #2d9a4c;
+      --brand-xlight:#3daa35;
+      --brand-pale:  #f0faf3;
+      --brand-soft:  #d3f0dc;
+
+      /* UI */
+      --bg:          #fafaf8;
+      --bg-elev:     #ffffff;
+      --bg-sidebar:  #f4f3ef;
+      --border:      #e5e4dc;
+      --fg:          #13201a;
+      --fg-soft:     #3d4a44;
+      --fg-muted:    #8a8c86;
+
+      /* Status kleuren */
+      --green:       #16a34a;
+      --green-light: #dcfce7;
+      --orange:      #ea580c;
+      --orange-light:#ffedd5;
+      --red:         #dc2626;
+      --red-light:   #fee2e2;
+      --blue:        #2563eb;
+      --blue-light:  #dbeafe;
+      --purple:      #7c3aed;
+      --purple-light:#ede9fe;
+      --teal:        #0d9488;
+      --teal-light:  #ccfbf1;
+      --gold:        #c8a020;
+
+      --font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--fg); line-height: 1.7; font-size: 16px; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--brand-deep);
+      padding: 0 1.5rem;
+      display: flex; align-items: center;
+      overflow-x: auto; white-space: nowrap;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+      border-bottom: 2px solid var(--gold);
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.6rem 1.25rem 0.6rem 0;
+      border-right: 1px solid rgba(255,255,255,0.15);
+      margin-right: 0.5rem; flex-shrink: 0;
+    }
+    .nav-brand img { height: 28px; width: auto; }
+    .nav-brand span { color: white; font-weight: 800; font-size: 0.95rem; letter-spacing: -0.3px; }
+    nav a {
+      color: rgba(255,255,255,0.7); text-decoration: none;
+      padding: 1rem 0.65rem; font-size: 0.82rem; font-weight: 600;
+      transition: color 0.15s; letter-spacing: 0.01em;
+    }
+    nav a:hover { color: white; }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative; overflow: hidden;
+      background: var(--brand-deep);
+      color: white; padding: 4rem 1.5rem 3.5rem;
+      text-align: center;
+      border-bottom: 3px solid var(--gold);
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background-image: url('brand-bg.svg');
+      background-size: cover; background-position: center;
+      opacity: 0.55;
+    }
+    .hero-content { position: relative; z-index: 1; }
+    .hero-logo {
+      display: flex; align-items: center; justify-content: center; gap: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+    .hero-logo img { height: 72px; width: auto; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35)); }
+    .hero-logo-text { text-align: left; }
+    .hero-logo-text .company { font-size: 1rem; font-weight: 600; opacity: 0.85; letter-spacing: 0.05em; text-transform: uppercase; }
+    .hero-logo-text .product { font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+    .hero h2 { font-size: 1.15rem; font-weight: 500; opacity: 0.85; max-width: 620px; margin: 0 auto 1.5rem; line-height: 1.6; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 999px; padding: 0.4rem 1.1rem; font-size: 0.85rem; font-weight: 600;
+      backdrop-filter: blur(4px);
+    }
+    .hero-badge::before { content: '📖'; }
+
+    /* ── CONTAINER ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+
+    /* ── SECTION ── */
+    .section { margin-bottom: 4.5rem; }
+    .section-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      border-bottom: 3px solid var(--brand);
+      padding-bottom: 0.6rem; margin-bottom: 2rem;
+    }
+    .section-header .icon { font-size: 1.5rem; }
+    .section-header h2 { font-size: 1.6rem; font-weight: 800; color: var(--brand-deep); }
+
+    /* ── MODULE BLOCK ── */
+    .module-block {
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(21,93,43,0.07);
+      margin-bottom: 1.5rem;
+    }
+    .module-top {
+      display: flex; align-items: flex-start; gap: 1rem;
+      padding: 1.5rem; border-bottom: 1px solid var(--border);
+      background: var(--brand-pale);
+    }
+    .module-emoji { font-size: 2.5rem; line-height: 1; flex-shrink: 0; }
+    .module-top h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.25rem; color: var(--brand-deep); }
+    .module-top .doel { font-size: 0.93rem; color: var(--fg-soft); line-height: 1.65; }
+    .module-body { padding: 1.5rem; }
+
+    /* ── FEATURE LIST ── */
+    .feature-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
+    .feature-list li {
+      display: flex; gap: 0.6rem; align-items: flex-start;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.65rem 0.85rem; font-size: 0.9rem;
+    }
+    .feature-list li .fi { flex-shrink: 0; font-size: 1rem; margin-top: 0.1rem; }
+    .feature-list li strong { display: block; font-weight: 700; font-size: 0.85rem; color: var(--brand-deep); }
+    .feature-list li span { color: var(--fg-muted); font-size: 0.83rem; }
+
+    /* ── STEP FLOW ── */
+    .step-flow { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; margin: 1.25rem 0; }
+    .step {
+      flex: 1 1 110px;
+      background: var(--bg-elev); border: 2px solid var(--border);
+      border-radius: 10px; padding: 0.85rem 0.65rem; text-align: center;
+      font-size: 0.8rem; font-weight: 700; color: var(--fg-soft);
+    }
+    .step .step-num { font-size: 1.15rem; display: block; margin-bottom: 0.25rem; }
+    .step-arrow { display: flex; align-items: center; padding: 0 0.2rem; color: var(--fg-muted); font-size: 1.1rem; }
+    .step.active { background: var(--brand); border-color: var(--brand); color: white; }
+    .step.win  { background: var(--green-light); border-color: var(--green); color: var(--green); }
+    .step.lost { background: var(--red-light); border-color: var(--red); color: var(--red); }
+    .step.warm { background: var(--orange-light); border-color: var(--orange); color: var(--orange); }
+
+    /* ── CALLOUT ── */
+    .callout {
+      border-left: 4px solid; border-radius: 0 10px 10px 0;
+      padding: 1rem 1.25rem; margin: 1.25rem 0; font-size: 0.92rem;
+    }
+    .callout.brand { background: var(--brand-pale); border-color: var(--brand); }
+    .callout.green  { background: var(--green-light); border-color: var(--green); }
+    .callout.orange { background: var(--orange-light); border-color: var(--orange); }
+    .callout strong { display: block; font-weight: 700; margin-bottom: 0.2rem; color: var(--brand-deep); }
+
+    /* ── CARDS ── */
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+    .card {
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.1rem 1.2rem;
+      box-shadow: 0 1px 4px rgba(21,93,43,0.06);
+    }
+    .card h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem; color: var(--brand-deep); }
+    .card p { font-size: 0.875rem; color: var(--fg-soft); line-height: 1.55; }
+    .card.top-brand  { border-top: 4px solid var(--brand); }
+    .card.top-light  { border-top: 4px solid var(--brand-xlight); }
+    .card.top-orange { border-top: 4px solid var(--orange); }
+    .card.top-gold   { border-top: 4px solid var(--gold); }
+    .card.top-blue   { border-top: 4px solid var(--blue); }
+    .card.top-purple { border-top: 4px solid var(--purple); }
+    .card.top-teal   { border-top: 4px solid var(--teal); }
+
+    /* ── DIAGRAM ── */
+    .diagram-box {
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
+      overflow-x: auto; box-shadow: 0 1px 4px rgba(21,93,43,0.05);
+    }
+    .diagram-label {
+      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.09em; color: var(--fg-muted); margin-bottom: 1.25rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .diagram-label::before { content: ''; display: inline-block; width: 3px; height: 1em; background: var(--brand); border-radius: 2px; }
+    .diagram-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .mermaid { min-width: 480px; }
+
+    /* ── TABLE ── */
+    .data-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); margin: 1.25rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th { background: var(--brand-deep); color: white; padding: 0.65rem 1rem; text-align: left; font-weight: 700; white-space: nowrap; font-family: var(--font); }
+    td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--fg-soft); }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: var(--brand-pale); }
+    tr:hover td { background: var(--brand-soft); }
+    td strong { color: var(--fg); }
+
+    /* ── BADGE ── */
+    .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .badge-brand  { background: var(--brand-soft); color: var(--brand-deep); }
+    .badge-green  { background: var(--green-light); color: var(--green); }
+    .badge-orange { background: var(--orange-light); color: var(--orange); }
+    .badge-gray   { background: var(--bg-sidebar); color: var(--fg-muted); border: 1px solid var(--border); }
+
+    /* ── GRID ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ── ROLE LIST ── */
+    .role-row { display: flex; gap: 0.85rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+    .role-row:last-child { border-bottom: none; }
+    .role-icon { font-size: 1.5rem; flex-shrink: 0; width: 2.2rem; text-align: center; }
+    .role-name { font-weight: 700; font-size: 0.9rem; color: var(--brand-deep); margin-bottom: 0.15rem; }
+    .role-desc { font-size: 0.85rem; color: var(--fg-soft); }
+
+    hr { border: none; border-top: 2px solid var(--brand-soft); margin: 3.5rem 0; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--brand-deep);
+      border-top: 3px solid var(--gold);
+      color: rgba(255,255,255,0.55);
+      text-align: center; padding: 1.75rem 1.5rem;
+      font-size: 0.85rem; margin-top: 4rem;
+    }
+    footer .footer-brand { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+    footer .footer-brand img { height: 24px; opacity: 0.75; }
+    footer .footer-brand span { color: rgba(255,255,255,0.8); font-weight: 700; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <img src="logo-beeldmerk.svg" alt="Everts logo" />
+    <span>EVA Platform</span>
+  </div>
+  <a href="#wat-is-eva">Wat is EVA?</a>
+  <a href="#dossiers">Dossiers</a>
+  <a href="#wagenpark">Wagenpark</a>
+  <a href="#houtrotherstel">Houtrotherstel</a>
+  <a href="#calculator">Calculator</a>
+  <a href="#taken">Taken</a>
+  <a href="#planning">Planning</a>
+  <a href="#management">Management</a>
+  <a href="#informatie">Informatie</a>
+  <a href="#koppelingen">Koppelingen</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <div class="hero-logo">
+      <img src="logo-beeldmerk.svg" alt="Everts logo" />
+      <div class="hero-logo-text">
+        <div class="company">Everts Onderhoud &amp; Renovatie</div>
+        <div class="product">EVA Platform</div>
+      </div>
+    </div>
+    <h2>Alles wat het bedrijf nodig heeft op één plek — van eerste aanvraag tot afgerond project</h2>
+    <div class="hero-badge">Praktische uitleg voor dagelijks gebruik</div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ===================== WAT IS EVA ===================== -->
+<section class="section" id="wat-is-eva">
+  <div class="section-header">
+    <span class="icon">🏠</span>
+    <h2>Wat is EVA?</h2>
+  </div>
+
+  <div class="callout brand">
+    <strong>EVA is het centrale werkplatform van Everts Onderhoud &amp; Renovatie.</strong>
+    Alles wat vroeger verspreid stond over losse apps en Excel-bestanden, staat nu bij elkaar. Je werkt met klanten, projecten, medewerkers, voertuigen, offertes en planning — allemaal vanuit één omgeving, altijd actueel en voor iedereen toegankelijk.
+  </div>
+
+  <div class="diagram-box">
+    <div class="diagram-label">Wat zit er in EVA?</div>
+    <div class="mermaid">
+graph TD
+    EVA["🏠 EVA\nCentraal werkplatform"]
+
+    EVA --> DOS["📁 Dossiers\nAanvragen · Offertes · Opdrachten"]
+    EVA --> WP["🚐 Wagenpark\nVoertuigen · Ritten · Compliance"]
+    EVA --> HR["🪵 Houtrotherstel\nProjecten · Locaties · Registraties"]
+    EVA --> CALC["📐 Calculator\nOffertes · Berekeningen · Documenten"]
+    EVA --> PLAN["📅 Planning\nInroostering · Werkbonnen · Uren"]
+    EVA --> TAKEN["✅ Taken\nChecklists · Workflows · Automatisering"]
+    EVA --> MGT["📊 Management\nProjectfinanciën · Doelstellingen"]
+    EVA --> BASIS["⚙️ Basis\nMedewerkers · Relaties · Instellingen"]
+
+    style EVA fill:#155d2b,color:#fff,font-size:15px
+    style DOS fill:#d3f0dc,stroke:#1f7a3a,color:#13201a
+    style WP fill:#ffedd5,stroke:#ea580c,color:#13201a
+    style HR fill:#fef3c7,stroke:#d97706,color:#13201a
+    style CALC fill:#d3f0dc,stroke:#2d9a4c,color:#13201a
+    style PLAN fill:#ede9fe,stroke:#7c3aed,color:#13201a
+    style TAKEN fill:#ccfbf1,stroke:#0d9488,color:#13201a
+    style MGT fill:#f0faf3,stroke:#155d2b,color:#13201a
+    style BASIS fill:#f4f3ef,stroke:#8a8c86,color:#13201a
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card top-brand">
+      <h4>👤 Voor wie is EVA?</h4>
+      <p>Voor iedereen bij Everts Onderhoud &amp; Renovatie: binnendienst, calculators, uitvoerders, planners, management en monteurs in de buitendienst.</p>
+    </div>
+    <div class="card top-light">
+      <h4>🌐 Waar gebruik je het?</h4>
+      <p>Via de browser op kantoor of onderweg. Monteurs in de buitendienst vullen werkbonnen in via hun telefoon — geen app installeren nodig.</p>
+    </div>
+    <div class="card top-gold">
+      <h4>🔗 Wat maakt EVA slim?</h4>
+      <p>EVA is gekoppeld aan Bouw7, het wagenparkregistratiesysteem (ULU), het RDW en Office 365. Gegevens worden automatisch gesynchroniseerd.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DOSSIERS ===================== -->
+<section class="section" id="dossiers">
+  <div class="section-header">
+    <span class="icon">📁</span>
+    <h2>Dossiers — Van aanvraag tot opdracht</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">📁</div>
+      <div>
+        <h3>Het hart van het werk</h3>
+        <p class="doel">Een dossier volgt een project van het eerste klantcontact tot de afronding. Elke stap — aanvraag, offerte, opdracht — is zichtbaar, traceerbaar en koppelt aan de juiste medewerkers, klanten en documenten. Niets raakt meer kwijt tussen de kieren.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="callout green">
+        <strong>Zo werkt het in de praktijk</strong>
+        Een klant vraagt om een offerte. Je maakt een aanvraag aan in EVA, plant een werkopname in, werkt de begroting uit en stuurt de offerte. Zodra de klant akkoord geeft, wordt de aanvraag automatisch een opdracht — met alle informatie al ingevuld.
+      </div>
+
+      <h4 style="font-size:0.95rem;font-weight:700;margin:1.25rem 0 0.6rem;color:var(--brand-deep);">Hoe loopt een dossier?</h4>
+
+      <p style="font-size:0.82rem;color:var(--fg-muted);margin-bottom:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Fase 1 — Aanvraag</p>
+      <div class="step-flow">
+        <div class="step active"><span class="step-num">📬</span>Nieuwe aanvraag</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">📖</span>Aanvraag inlezen</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">🏗️</span>Werkopname</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">🧮</span>Begroting uitwerken</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">✔️</span>Controle</div>
+        <div class="step-arrow">→</div>
+        <div class="step warm"><span class="step-num">📤</span>Offerte verstuurd</div>
+      </div>
+
+      <p style="font-size:0.82rem;color:var(--fg-muted);margin:1rem 0 0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Fase 2 — Offerte</p>
+      <div class="step-flow">
+        <div class="step"><span class="step-num">📝</span>Concept</div>
+        <div class="step-arrow">→</div>
+        <div class="step active"><span class="step-num">📨</span>Verstuurd</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">📞</span>Nabellen</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">🤝</span>In behandeling</div>
+        <div class="step-arrow">→</div>
+        <div class="step win"><span class="step-num">🎉</span>Gewonnen!</div>
+        <div class="step-arrow"> / </div>
+        <div class="step lost"><span class="step-num">❌</span>Verloren</div>
+      </div>
+
+      <p style="font-size:0.82rem;color:var(--fg-muted);margin:1rem 0 0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Fase 3 — Opdracht</p>
+      <div class="step-flow">
+        <div class="step active"><span class="step-num">🆕</span>Nieuwe opdracht</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">🔧</span>Werkvoorbereiding</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">👷</span>Onderhanden</div>
+        <div class="step-arrow">→</div>
+        <div class="step"><span class="step-num">🏁</span>Uitvoering gereed</div>
+        <div class="step-arrow">→</div>
+        <div class="step win"><span class="step-num">💶</span>Financieel afgerond</div>
+      </div>
+
+      <h4 style="font-size:0.95rem;font-weight:700;margin:1.5rem 0 0.75rem;color:var(--brand-deep);">Wat kun je bij een dossier bijhouden?</h4>
+      <ul class="feature-list">
+        <li><span class="fi">👤</span><div><strong>Klantgegevens</strong><span>Welk bedrijf, contactpersoon, factuuradres en referentienummer</span></div></li>
+        <li><span class="fi">👥</span><div><strong>Projectteam</strong><span>Wie is projectmanager, uitvoerder, calculator en controller</span></div></li>
+        <li><span class="fi">📎</span><div><strong>Bestanden</strong><span>Foto's, tekeningen, contracten en opnamerapporten</span></div></li>
+        <li><span class="fi">📐</span><div><strong>Calculatie</strong><span>Directe koppeling met de offertecalculator</span></div></li>
+        <li><span class="fi">📅</span><div><strong>Planning</strong><span>Wanneer start het werk, wie doet wat op welke dag</span></div></li>
+        <li><span class="fi">✅</span><div><strong>Taken</strong><span>Checklists die automatisch verschijnen op de juiste stap</span></div></li>
+        <li><span class="fi">💶</span><div><strong>Meer- en minderwerk</strong><span>Wijzigingen t.o.v. de offerte vastleggen met akkoord</span></div></li>
+        <li><span class="fi">📋</span><div><strong>VCA &amp; formulieren</strong><span>Veiligheidsformulieren en inspectierapporten</span></div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== WAGENPARK ===================== -->
+<section class="section" id="wagenpark">
+  <div class="section-header">
+    <span class="icon">🚐</span>
+    <h2>Wagenpark</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">🚐</div>
+      <div>
+        <h3>Voertuigbeheer zonder Excel-gedoe</h3>
+        <p class="doel">Bijhouden wie in welk voertuig rijdt, of privékilometers binnen de fiscale limiet blijven, en of APK en lease nog actueel zijn. Ritgegevens worden automatisch ingeladen vanuit het ULU-systeem — handmatig overtikken is verleden tijd.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="diagram-box">
+        <div class="diagram-label">Hoe werkt de ritregistratie?</div>
+        <div class="mermaid">
+flowchart LR
+    ULU["📱 ULU-app\nin de auto"] -->|"Excel export"| IMP["📥 Importeren\nin EVA"]
+    IMP --> KOPPEL["🔗 Automatisch\nkoppelen aan\nvoertuig + bestuurder"]
+    KOPPEL --> CLASS["🏷️ Zakelijk of\nprivé?"]
+    CLASS -->|"Grenzen\noverschreden"| WARN["⚠️ Melding\naanmaken"]
+    CLASS -->|"Alles in orde"| OK["✅ Akkoord"]
+    WARN --> REVIEW["👀 Controleren\ndoor admin"]
+    REVIEW -->|"Uitzondering\ngoed te keuren"| OK
+
+    style ULU fill:#155d2b,color:#fff
+    style WARN fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    style OK fill:#dcfce7,stroke:#16a34a,color:#14532d
+        </div>
+      </div>
+
+      <ul class="feature-list">
+        <li><span class="fi">🚗</span><div><strong>Voertuigregister</strong><span>Type, brandstof, kleur, status en bijtellingsgegevens per voertuig</span></div></li>
+        <li><span class="fi">📋</span><div><strong>APK &amp; RDW-koppeling</strong><span>Vervaldatum en technische gegevens worden automatisch opgehaald</span></div></li>
+        <li><span class="fi">📄</span><div><strong>Leasecontract</strong><span>Maandtermijn, kilometermarge en leasemaatschappij per voertuig</span></div></li>
+        <li><span class="fi">👤</span><div><strong>Bestuurdersgeschiedenis</strong><span>Wie reed wanneer in welk voertuig — ook historisch terug te zoeken</span></div></li>
+        <li><span class="fi">🗺️</span><div><strong>Rittenregistratie</strong><span>Zakelijk/privé per rit, kilometeranalyse per bestuurder</span></div></li>
+        <li><span class="fi">🅿️</span><div><strong>Parkeerbeheer</strong><span>Parkeertransacties en parkeerkosten per voertuig bijhouden</span></div></li>
+        <li><span class="fi">⚠️</span><div><strong>Compliance-meldingen</strong><span>Automatische waarschuwingen bij privé-limietoverschrijding of verlopen APK</span></div></li>
+        <li><span class="fi">🔬</span><div><strong>Diagnose-dashboard</strong><span>Overzicht van alle aandachtspunten per voertuig of bestuurder</span></div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HOUTROTHERSTEL ===================== -->
+<section class="section" id="houtrotherstel">
+  <div class="section-header">
+    <span class="icon">🪵</span>
+    <h2>Houtrotherstel</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">🪵</div>
+      <div>
+        <h3>Gestructureerde registratie van houtrot-renovaties</h3>
+        <p class="doel">Per project houd je bij welke geveldelen zijn behandeld, op welke exacte locaties, welke reparaties zijn uitgevoerd en door wie. Dit geeft een volledig historisch beeld per pand en maakt rapportages aan opdrachtgevers eenvoudig.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="diagram-box">
+        <div class="diagram-label">Hoe is een houtrotproject opgebouwd?</div>
+        <div class="mermaid">
+graph TD
+    P["🏗️ Project\nBijv. Renovatie Dorpsstraat 12"]
+    PD["📦 Projectdeel\nBijv. Begane grond voorgevel"]
+    GD["🏠 Geveldeel\nBijv. Noord · Oost · Zuidwest"]
+    LOC["📍 Locatie\nBijv. Kozijn 3e verdieping links"]
+    REG["📝 Reparatie\nWat, door wie, welk materiaal"]
+    FOTO["📷 Foto's\nVoor en na de reparatie"]
+
+    P --> GD
+    P --> PD
+    PD --> LOC
+    LOC --> REG
+    REG --> FOTO
+
+    style P fill:#155d2b,color:#fff
+    style REG fill:#1f7a3a,color:#fff
+        </div>
+      </div>
+
+      <ul class="feature-list">
+        <li><span class="fi">📂</span><div><strong>Projectoverzicht</strong><span>Alle actieve en afgeronde houtrotprojecten op één plek</span></div></li>
+        <li><span class="fi">🗂️</span><div><strong>Geveldelen &amp; locaties</strong><span>Verfijnde structuur per gebouwdeel en specifieke locatie</span></div></li>
+        <li><span class="fi">📝</span><div><strong>Reparatieregistratie</strong><span>Type reparatie, afmetingen, materialen en uitvoerder vastleggen</span></div></li>
+        <li><span class="fi">🔧</span><div><strong>Standaardreparaties</strong><span>Herbruikbare sjablonen voor veelvoorkomende reparaties — sneller invullen</span></div></li>
+        <li><span class="fi">📊</span><div><strong>Rapportages</strong><span>Voortgang, kosten en foto-documentatie exporteren naar de opdrachtgever</span></div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CALCULATOR ===================== -->
+<section class="section" id="calculator">
+  <div class="section-header">
+    <span class="icon">📐</span>
+    <h2>EvertsCalc — Offertecalculator</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">📐</div>
+      <div>
+        <h3>Snel en nauwkeurig offertes maken</h3>
+        <p class="doel">Calculators bouwen offertes op uit een vaste bibliotheek met recepten, behandelingen en materiaalprijzen. De berekeningen kloppen automatisch, de offerte wordt als nette PDF of Word-document uitgestuurd, en de werkbegroting gaat direct naar de planning.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="diagram-box">
+        <div class="diagram-label">Van bibliotheek naar offerte-document</div>
+        <div class="mermaid">
+flowchart LR
+    BIB["📚 Bibliotheek\nRecepten · Behandelingen\nMateriaal · Schilderwerk"]
+    MAAT["📏 Maten invoeren\nOppervlak · Lengte · Aantal"]
+    EDIT["✏️ Offerte\nsamenstellen"]
+    CALC["🧮 Automatisch\nberekend"]
+    PREV["👁️ Voorbeeld\nbetijken"]
+    OUT["📄 Versturen als\nPDF of Word-doc"]
+
+    BIB --> EDIT
+    MAAT --> EDIT
+    EDIT --> CALC
+    CALC --> PREV
+    PREV --> OUT
+
+    style EDIT fill:#155d2b,color:#fff
+    style OUT fill:#1f7a3a,color:#fff
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:0.6rem;color:var(--brand-deep);">📚 De bibliotheek — je bouwstenen</h4>
+          <ul class="feature-list">
+            <li><span class="fi">🍳</span><div><strong>Recepten</strong><span>Samengestelde werkwijzen met vaste stappen en materialen</span></div></li>
+            <li><span class="fi">🎨</span><div><strong>Behandelingen</strong><span>Verfsoorten met verbruiksdata en bewerkingstijden</span></div></li>
+            <li><span class="fi">🪣</span><div><strong>Materialen</strong><span>Artikelcatalogus met actuele eenheidsprijzen</span></div></li>
+            <li><span class="fi">🏠</span><div><strong>Schilderwerk</strong><span>Oppervlaktesoorten (hout, stucwerk, metaal) met correctiefactoren</span></div></li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:0.6rem;color:var(--brand-deep);">💼 De offerte zelf</h4>
+          <ul class="feature-list">
+            <li><span class="fi">📝</span><div><strong>Meerdere versies</strong><span>Aanpassingen maken zonder de oorspronkelijke versie te overschrijven</span></div></li>
+            <li><span class="fi">📄</span><div><strong>Drie layouts</strong><span>Beknopt, standaard of uitgebreid — afhankelijk van de klant</span></div></li>
+            <li><span class="fi">🔗</span><div><strong>Koppeling met dossier</strong><span>Geaccepteerde offerte wordt automatisch de basis van de opdracht</span></div></li>
+            <li><span class="fi">💶</span><div><strong>Werkbegroting</strong><span>Gedetailleerde kostenoverzicht klaar voor planning en nacalculatie</span></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TAKEN ===================== -->
+<section class="section" id="taken">
+  <div class="section-header">
+    <span class="icon">✅</span>
+    <h2>Taken &amp; Checklists</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">✅</div>
+      <div>
+        <h3>De juiste checklist op het juiste moment</h3>
+        <p class="doel">Vergeet geen stap meer. Je maakt eenmalig een taakenlijst aan als sjabloon, en EVA activeert hem automatisch zodra een dossier een bepaalde fase bereikt. De taken verschijnen direct bij de juiste persoon — of dat nu de calculator, de uitvoerder of de projectmanager is.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="diagram-box">
+        <div class="diagram-label">Automatische taakenlijst — hoe werkt dat?</div>
+        <div class="mermaid">
+sequenceDiagram
+    actor Gebruiker
+    participant EVA as EVA
+
+    Gebruiker->>EVA: Dossier naar "Nieuwe opdracht"
+    EVA->>EVA: Zoek bijpassend sjabloon
+    EVA->>Gebruiker: ✅ Checklist "Nieuwe opdracht" verschijnt automatisch
+    Note over EVA,Gebruiker: Taken zijn toegewezen aan de juiste persoon<br/>(uitvoerder, calculator, projectmanager…)
+    Gebruiker->>EVA: Taak afvinken
+    EVA->>EVA: Kijk of er een vervolgactie is
+    EVA->>Gebruiker: 🔁 Volgende checklist activeren of<br/>dossier naar volgende stap zetten
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card top-brand">
+          <h4>📋 Sjablonen maken</h4>
+          <p>Maak eenmalig een taakenlijst aan en stel in bij welke dossierstap hij automatisch verschijnt. Iedere medewerker weet wat er van hem verwacht wordt.</p>
+        </div>
+        <div class="card top-light">
+          <h4>⚡ Workflows instellen</h4>
+          <p>Koppel acties aan het afvinken van een taak. Bijvoorbeeld: zodra "offerte verstuurd" is afgevinkt, zet EVA het dossier automatisch naar de volgende stap.</p>
+        </div>
+        <div class="card top-orange">
+          <h4>👤 Automatisch toewijzen</h4>
+          <p>Taken worden automatisch toegewezen aan de juiste persoon op basis van hun rol in het dossier — geen handmatig doorsturen meer.</p>
+        </div>
+        <div class="card top-gold">
+          <h4>⏱️ Deadlines</h4>
+          <p>Stel in hoeveel dagen iemand heeft om een taak af te ronden. EVA houdt bij of deadlines dreigen te worden overschreden.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PLANNING ===================== -->
+<section class="section" id="planning">
+  <div class="section-header">
+    <span class="icon">📅</span>
+    <h2>Planning</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">📅</div>
+      <div>
+        <h3>Van opdracht naar werkrooster en urenverantwoording</h3>
+        <p class="doel">De planningsmodule verbindt een opdracht met de mensen die het werk uitvoeren. Je plant activiteiten in, wijst medewerkers toe op specifieke dagen, en zij vullen hun werkbonnen in op locatie. Alle gewerkte uren worden automatisch geregistreerd voor de salarisadministratie.</p>
+      </div>
+    </div>
+    <div class="module-body">
+
+      <div class="diagram-box">
+        <div class="diagram-label">Stap voor stap: van begroting naar urenregistratie</div>
+        <div class="mermaid">
+flowchart TD
+    OPD["📁 Opdracht\nbinnengehaald"]
+    WB["💶 Werkbegroting\nimporteren"]
+    FAZ["📂 Fasen aanmaken\nVoorbereiding · Uitvoering · Oplevering"]
+    ACT["🔧 Activiteiten\naanmaken"]
+    ASSIGN["👤 Medewerker\nkoppelen"]
+    BON["📋 Werkbon\nautomatisch aangemaakt"]
+    EXEC["🔨 Monteur voert uit\nen vult werkbon in"]
+    UREN["⏱️ Uren geregistreerd\nvoor salarisverwerking"]
+
+    OPD --> WB --> FAZ --> ACT --> ASSIGN --> BON --> EXEC --> UREN
+
+    style OPD fill:#155d2b,color:#fff
+    style UREN fill:#1f7a3a,color:#fff
+        </div>
+      </div>
+
+      <ul class="feature-list">
+        <li><span class="fi">📊</span><div><strong>Projectplanning</strong><span>Werk indelen in fasen en activiteiten, afhankelijkheden instellen</span></div></li>
+        <li><span class="fi">👥</span><div><strong>Medewerker­planning</strong><span>Capaciteitsoverzicht per persoon, rekening houdend met verlof en contracturen</span></div></li>
+        <li><span class="fi">📅</span><div><strong>Bedrijfsagenda</strong><span>VCA-toolboxen, teamoverleggen, ATV-dagen en bedrijfsevenementen</span></div></li>
+        <li><span class="fi">📋</span><div><strong>Werkbonnen</strong><span>Per geplande dag een bon voor de monteur, inclusief opdrachtinformatie</span></div></li>
+        <li><span class="fi">📷</span><div><strong>Foto-documentatie</strong><span>Monteurs maken foto's op locatie die direct aan de werkbon hangen</span></div></li>
+        <li><span class="fi">⏱️</span><div><strong>Urenregistratie</strong><span>Gewerkte uren per medewerker, per dag, per type werk</span></div></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MANAGEMENT ===================== -->
+<section class="section" id="management">
+  <div class="section-header">
+    <span class="icon">📊</span>
+    <h2>Management</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-top">
+      <div class="module-emoji">📊</div>
+      <div>
+        <h3>Financieel overzicht per project en per filiaal</h3>
+        <p class="doel">Directie en projectleiders zien in één oogopslag hoe projecten er financieel voor staan: geboekte kosten, verwachte marge, percentage gereed. De gegevens worden automatisch gesynchroniseerd vanuit Bouw7 — altijd actueel, geen handmatige rapporten meer.</p>
+      </div>
+    </div>
+    <div class="module-body">
+      <div class="cards">
+        <div class="card top-brand">
+          <h4>💹 Projectfinanciën</h4>
+          <p>Per project: totale opdracht, geboekte kosten, prognose, verwacht resultaat en winstmarge. Direct uit Bouw7 gehaald.</p>
+        </div>
+        <div class="card top-light">
+          <h4>🎯 Doelstellingen</h4>
+          <p>Omzet- en resultaatdoelstellingen instellen per filiaal of projectleider, per jaar. Snel zien of je op koers ligt.</p>
+        </div>
+        <div class="card top-gold">
+          <h4>🏭 Algemene kosten</h4>
+          <p>AK-begroting per filiaal per jaar inregelen. Wordt meegenomen in de margeberekening per project.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ===================== INFORMATIE ===================== -->
+<section class="section" id="informatie">
+  <div class="section-header">
+    <span class="icon">🗄️</span>
+    <h2>Welke informatie bewaart EVA?</h2>
+  </div>
+
+  <div class="callout brand">
+    <strong>Alles op één plek, altijd terug te vinden</strong>
+    EVA slaat alle informatie op in een beveiligde database. Hieronder een overzicht van welke gegevens per onderdeel worden bijgehouden.
+  </div>
+
+  <div class="diagram-box">
+    <div class="diagram-label">Hoe hangen de gegevens samen?</div>
+    <div class="mermaid">
+erDiagram
+    BEDRIJF["Everts Onderhoud & Renovatie"] ||--o{ MEDEWERKER : "heeft"
+    KLANT["Klant / Relatie"] ||--o{ DOSSIER : "aanvraag van"
+    KLANT ||--o{ CONTACTPERSOON : "heeft"
+    MEDEWERKER ||--o{ PLANNING : "ingepland in"
+    DOSSIER ||--o{ PLANNING : "uitvoering via"
+    DOSSIER ||--o{ TAAK : "checklist voor"
+    PLANNING ||--o{ WERKBON : "resulteert in"
+    WERKBON ||--o{ UREN : "geregistreerde uren"
+    VOERTUIG ||--o{ RIT : "heeft"
+    VOERTUIG ||--o{ BESTUURDER : "toegewezen aan"
+
+    BEDRIJF { text naam; text logo; text huisstijlkleuren }
+    DOSSIER { text dossiernummer; text fase; numeric bedrag }
+    MEDEWERKER { text naam; text functie; numeric uurtarief }
+    VOERTUIG { text kenteken; text merk_model; date apk }
+    </div>
+  </div>
+
+  <div class="data-table-wrap">
+    <table>
+      <thead>
+        <tr><th>Wat wordt bijgehouden</th><th>Onderdeel</th><th>Voorbeelden van gegevens</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Bedrijfsgegevens</strong></td><td><span class="badge badge-gray">Instellingen</span></td><td>Naam, logo, huisstijlkleuren, KvK-nummer, werkmaatschappijen</td></tr>
+        <tr><td><strong>Klanten &amp; leveranciers</strong></td><td><span class="badge badge-brand">Relaties</span></td><td>Bedrijfsnaam, contactpersonen, adressen, factuurgegevens</td></tr>
+        <tr><td><strong>Medewerkers</strong></td><td><span class="badge badge-gray">HR</span></td><td>Persoonsgegevens, functie, afdeling, uurtarief, vaardigheden, certificaten</td></tr>
+        <tr><td><strong>Roosters &amp; afwezigheid</strong></td><td><span class="badge badge-gray">HR</span></td><td>Werkdagen, contracturen, verlof, ziekte, trainingen</td></tr>
+        <tr><td><strong>Dossiers</strong></td><td><span class="badge badge-brand">Dossiers</span></td><td>Dossiernummer, fase, klant, teamrollen, bedrag, statusgeschiedenis</td></tr>
+        <tr><td><strong>Planning &amp; activiteiten</strong></td><td><span class="badge badge-orange">Planning</span></td><td>Fasen, werkitems, wie doet wat en wanneer, afhankelijkheden</td></tr>
+        <tr><td><strong>Werkbonnen &amp; uren</strong></td><td><span class="badge badge-orange">Planning</span></td><td>Gewerkte uren per dag, type werk, opmerkingen, foto's</td></tr>
+        <tr><td><strong>Taakenlijsten</strong></td><td><span class="badge badge-green">Taken</span></td><td>Checklists, deadlines, toewijzingen, automatische vervolgacties</td></tr>
+        <tr><td><strong>Voertuigen</strong></td><td><span class="badge badge-orange">Wagenpark</span></td><td>Kenteken, APK-datum, leasecontract, huidige bestuurder</td></tr>
+        <tr><td><strong>Ritten &amp; parkeren</strong></td><td><span class="badge badge-orange">Wagenpark</span></td><td>Datum, afstand, zakelijk/privé, locaties, parkeerkosten</td></tr>
+        <tr><td><strong>Compliance-meldingen</strong></td><td><span class="badge badge-orange">Wagenpark</span></td><td>Welke regel overtreden, ernst, status afhandeling</td></tr>
+        <tr><td><strong>Projectfinanciën</strong></td><td><span class="badge badge-brand">Management</span></td><td>Geboekte kosten, omzet, marge, % gereed — uit Bouw7</td></tr>
+        <tr><td><strong>Bedrijfsagenda</strong></td><td><span class="badge badge-gray">Agenda</span></td><td>Evenementen, herhalingsregels, VCA-toolboxen, ATV-dagen</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout green">
+    <strong>Veiligheid &amp; betrouwbaarheid</strong>
+    Alle gegevens staan in een beveiligde database met automatische back-ups. Elke statuswijziging en elke aanpassing wordt gelogd — je kunt altijd terugkijken wie wat heeft gewijzigd en wanneer.
+  </div>
+</section>
+
+<hr />
+
+<!-- ===================== KOPPELINGEN ===================== -->
+<section class="section" id="koppelingen">
+  <div class="section-header">
+    <span class="icon">🔌</span>
+    <h2>Koppelingen met andere systemen</h2>
+  </div>
+
+  <div class="callout brand">
+    <strong>EVA staat niet op zichzelf</strong>
+    Gegevens die al ergens anders leven — in Bouw7, in het wagenparkregistratiesysteem of bij de RDW — hoeven niet opnieuw te worden ingevoerd. EVA synchroniseert automatisch.
+  </div>
+
+  <div class="diagram-box">
+    <div class="diagram-label">Overzicht van alle koppelingen</div>
+    <div class="mermaid">
+flowchart LR
+    subgraph EVA["🏠 EVA — Everts Onderhoud & Renovatie"]
+      direction TB
+      M["📊 Management"]
+      P["👤 Medewerkers"]
+      R["🤝 Relaties"]
+      W["🚐 Wagenpark"]
+      A["📅 Agenda & Taken"]
+      G["🏠 Geveltekening"]
+    end
+
+    B7["🏗️ Bouw7\nProjectbeheer"]
+    ULU["🚗 ULU\nRitregistratie"]
+    RDW["🚦 RDW\nVoertuigenregister"]
+    O365["📧 Microsoft 365\nOutlook & Teams"]
+    BAG["🗺️ PDOK / BAG\nGebouwdata"]
+    CL["🤖 Claude AI\nBeeldanalyse"]
+
+    M <-->|"Projectcijfers"| B7
+    P <-->|"Medewerkers sync"| B7
+    R <-->|"Klanten sync"| B7
+    W -->|"Ritdata importeren"| ULU
+    W -->|"Voertuiggegevens"| RDW
+    A <-->|"Agenda & taken"| O365
+    G -->|"Adressen opzoeken"| BAG
+    G -->|"Gevelbeoordeling"| CL
+
+    style EVA fill:#f0faf3,stroke:#1f7a3a
+    style B7 fill:#155d2b,color:#fff
+    style CL fill:#d97706,color:#fff
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card top-brand">
+      <h4>🏗️ Bouw7</h4>
+      <p><strong>Wat doet het?</strong> Bouw7 is het projectbeheer- en boekhoudingssysteem. EVA haalt automatisch projectfinanciën, klantgegevens en medewerkers op — zo zijn de cijfers altijd actueel.</p>
+    </div>
+    <div class="card top-orange">
+      <h4>🚗 ULU ritregistratie</h4>
+      <p><strong>Wat doet het?</strong> Monteurs hebben een kastje in de auto dat alle ritten registreert. Dit exporteer je als bestand naar EVA — het systeem koppelt ritten automatisch aan voertuig en medewerker.</p>
+    </div>
+    <div class="card top-light">
+      <h4>🚦 RDW</h4>
+      <p><strong>Wat doet het?</strong> Het Rijksdienstregister Wegverkeer. EVA haalt automatisch APK-datum en technische gegevens op voor elk kenteken.</p>
+    </div>
+    <div class="card top-blue">
+      <h4>📧 Microsoft Office 365</h4>
+      <p><strong>Wat doet het?</strong> Medewerkers kunnen inloggen met hun Office 365-account. Agenda-afspraken en taken worden gesynchroniseerd met Outlook.</p>
+    </div>
+    <div class="card top-teal">
+      <h4>🗺️ PDOK / BAG</h4>
+      <p><strong>Wat doet het?</strong> Alleen in de geveltekeningapp. Adresopzoek en officiële gebouwdata voor nauwkeurige geveltekeningen.</p>
+    </div>
+    <div class="card top-gold">
+      <h4>🤖 Claude AI</h4>
+      <p><strong>Wat doet het?</strong> Alleen in de geveltekeningapp. De AI analyseert gevelfoto's en beoordeelt houtrot, verfconditie en geeft reparatieaanbevelingen.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ROLLEN ===================== -->
+<section class="section" id="rollen">
+  <div class="section-header">
+    <span class="icon">👥</span>
+    <h2>Wie gebruikt EVA waarvoor?</h2>
+  </div>
+
+  <div class="module-block">
+    <div class="module-body" style="padding-top:1.25rem;">
+      <div class="role-row">
+        <div class="role-icon">📞</div>
+        <div><div class="role-name">Binnendienst / Planner</div><div class="role-desc">Aanvragen verwerken, dossiers aanmaken, planning inregelen, medewerkers inroosteren, debiteuren bewaken.</div></div>
+      </div>
+      <div class="role-row">
+        <div class="role-icon">🧮</div>
+        <div><div class="role-name">Calculator / Werkvoorbereider</div><div class="role-desc">Werkopnames uitwerken, offertes berekenen in EvertsCalc, materiaal inkopen, onderaannemers aansturen.</div></div>
+      </div>
+      <div class="role-row">
+        <div class="role-icon">👷</div>
+        <div><div class="role-name">Uitvoerder / Projectleider</div><div class="role-desc">Voortgang bewaken, meerwerk vastleggen, oplevering registreren, werkbonnen goedkeuren.</div></div>
+      </div>
+      <div class="role-row">
+        <div class="role-icon">🔨</div>
+        <div><div class="role-name">Monteur / Vakman</div><div class="role-desc">Werkbonnen invullen op locatie via mobiele browser, uren registreren, foto's maken van het uitgevoerde werk.</div></div>
+      </div>
+      <div class="role-row">
+        <div class="role-icon">📊</div>
+        <div><div class="role-name">Management / Directie</div><div class="role-desc">Projectmarges bewaken, doelstellingen volgen, rapportages bekijken, KPI's per filiaal en projectleider.</div></div>
+      </div>
+      <div class="role-row">
+        <div class="role-icon">⚙️</div>
+        <div><div class="role-name">Beheerder</div><div class="role-desc">Medewerkers aanmaken, rechten instellen, koppelingen configureren, taaksjablonen beheren, huisstijl inregelen.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /container -->
+
+<footer>
+  <div class="footer-brand">
+    <img src="logo-beeldmerk.svg" alt="Everts logo" />
+    <span>Everts Onderhoud &amp; Renovatie</span>
+  </div>
+  EVA Platform — Praktische uitleg voor dagelijks gebruik
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#1f7a3a',
+      primaryTextColor: '#ffffff',
+      primaryBorderColor: '#155d2b',
+      lineColor: '#8a8c86',
+      secondaryColor: '#d3f0dc',
+      tertiaryColor: '#fafaf8',
+      fontSize: '14px',
+      fontFamily: 'Montserrat, -apple-system, sans-serif'
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+    er:       { useMaxWidth: true },
+    sequence: { useMaxWidth: true, mirrorActors: false }
+  });
+</script>
+</body>
+</html>
