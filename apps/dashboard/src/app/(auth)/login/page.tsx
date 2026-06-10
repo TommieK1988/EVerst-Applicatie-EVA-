@@ -1,24 +1,26 @@
 'use client'
-import React from 'react'
-import { loginWithEmail } from './actions'
+import React, { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { createClient } from '@everts/database/client'
 
 const HERO_BG =
   "url(\"/polygon-bg.png\"), linear-gradient(160deg, #009439 0%, #054f2e 100%)"
 
-export default function LoginPage() {
-  const [error, setError]     = React.useState<string | null>(null)
+function LoginContent() {
+  const searchParams = useSearchParams()
+  const fout = searchParams.get('fout')
   const [loading, setLoading] = React.useState(false)
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  async function loginMetMicrosoft() {
     setLoading(true)
-    setError(null)
-    const data   = new FormData(e.currentTarget)
-    const result = await loginWithEmail(data)
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
-    }
+    const supabase = createClient()
+    await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: 'openid email profile',
+      },
+    })
   }
 
   return (
@@ -78,7 +80,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Rechts — login formulier */}
+      {/* Rechts — login */}
       <div style={{
         flex: 1,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -99,81 +101,65 @@ export default function LoginPage() {
               margin: '6px 0 0',
               fontFamily: 'var(--font-ui)', fontSize: 14,
               color: 'var(--fg-muted)',
-            }}>Voer je gegevens in om toegang te krijgen.</p>
+            }}>Gebruik je Everts Microsoft-account om in te loggen.</p>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {fout === 'geen-toegang' && (
+            <div style={{
+              marginBottom: 20,
+              padding: '12px 16px',
+              background: '#fff2f0',
+              border: '1px solid #ffc9c0',
+              borderRadius: 8,
+              fontFamily: 'var(--font-ui)', fontSize: 13,
+              color: '#c0392b',
+            }}>
+              Je account heeft geen toegang tot EVA. Neem contact op met je beheerder.
+            </div>
+          )}
 
-            <Field label="E-mailadres">
-              <input
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                placeholder="naam@everts.nl"
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Wachtwoord">
-              <input
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                placeholder="••••••••"
-                style={inputStyle}
-              />
-            </Field>
-
-            {error && (
-              <div style={{
-                padding: '10px 14px',
-                background: '#fff2f0',
-                border: '1px solid #ffc9c0',
-                borderRadius: 8,
-                fontFamily: 'var(--font-ui)', fontSize: 13,
-                color: '#c0392b',
-              }}>{error}</div>
+          <button
+            onClick={loginMetMicrosoft}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '13px 20px',
+              background: loading ? '#f0f0f0' : 'white',
+              color: loading ? '#999' : '#1a1a1a',
+              border: '1px solid #d0d0d0',
+              borderRadius: 10,
+              fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600,
+              cursor: loading ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              transition: 'background 0.15s, border-color 0.15s',
+              boxShadow: loading ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
+            }}
+          >
+            {loading ? (
+              <>
+                <span style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  border: '2px solid #ccc',
+                  borderTopColor: '#666',
+                  animation: 'spin 0.7s linear infinite',
+                  display: 'inline-block', flexShrink: 0,
+                }}/>
+                Doorsturen naar Microsoft…
+              </>
+            ) : (
+              <>
+                <MicrosoftLogo />
+                Inloggen met Microsoft
+              </>
             )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: 8,
-                padding: '13px 20px',
-                background: loading ? 'var(--fg-muted)' : 'var(--fg)',
-                color: 'var(--bg)',
-                border: 'none', borderRadius: 10,
-                fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600,
-                cursor: loading ? 'default' : 'pointer',
-                transition: 'background 0.15s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}
-            >
-              {loading ? (
-                <>
-                  <span style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    animation: 'spin 0.7s linear infinite',
-                    display: 'inline-block',
-                  }}/>
-                  Inloggen…
-                </>
-              ) : 'Inloggen'}
-            </button>
-
-          </form>
+          </button>
 
           <div style={{
             marginTop: 32,
             fontFamily: 'var(--font-ui)', fontSize: 11,
             color: 'var(--fg-muted)', textAlign: 'center',
           }}>
-            Toegang via uitnodiging van je beheerder.
+            Toegang via je @everts.chat account.
           </div>
 
         </div>
@@ -181,31 +167,26 @@ export default function LoginPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus { outline: none; border-color: var(--accent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
       `}</style>
     </div>
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function MicrosoftLogo() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{
-        fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600,
-        color: 'var(--fg-soft)', letterSpacing: '0.02em',
-      }}>{label}</label>
-      {children}
-    </div>
+    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+      <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+    </svg>
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '11px 14px',
-  background: 'var(--bg-elev)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  color: 'var(--fg)',
-  fontFamily: 'var(--font-ui)', fontSize: 14,
-  transition: 'border-color 0.15s, box-shadow 0.15s',
-  width: '100%',
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  )
 }
