@@ -37,7 +37,7 @@ export async function GET(
   }
 
   const template = inzending.template as { naam: string } | null
-  const versie   = inzending.versie   as { schema: { fields: FormField[] }; versienummer: number } | null
+  const versie   = inzending.versie   as unknown as { schema: { fields: FormField[] }; versienummer: number } | null
   const fields   = versie?.schema?.fields ?? []
   const waarden  = inzending.waarden as Record<string, unknown>
 
