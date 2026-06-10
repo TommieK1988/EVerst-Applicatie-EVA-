@@ -577,6 +577,8 @@ export async function updateDossierInfo(
     werkadres_straat?: string | null
     werkadres_postcode?: string | null
     werkadres_stad?: string | null
+    interne_opmerkingen?: string | null
+    opdracht_referentie?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
@@ -592,5 +594,65 @@ export async function updateDossierInfo(
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
+  return { ok: true }
+}
+
+// ─── Dossier-toggles ──────────────────────────────────────────────────────────
+
+export interface DossierToggle {
+  definitie_id: string
+  sleutel: string
+  label: string
+  aan: boolean
+}
+
+/** Haal de actieve toggle-definities op met hun stand voor dit dossier. */
+export async function getDossierToggles(dossier_id: string): Promise<DossierToggle[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: defs } = await supabase
+    .from('dossier_toggle_definities')
+    .select('id, sleutel, label')
+    .eq('actief', true)
+    .order('volgorde')
+  if (!defs?.length) return []
+
+  const { data: standen } = await supabase
+    .from('dossier_toggles')
+    .select('definitie_id, aan')
+    .eq('dossier_id', dossier_id)
+  const aanPerDef = new Map<string, boolean>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (standen ?? []).map((s: any) => [s.definitie_id, s.aan]),
+  )
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (defs as any[]).map(d => ({
+    definitie_id: d.id,
+    sleutel:      d.sleutel,
+    label:        d.label,
+    aan:          aanPerDef.get(d.id) ?? false,
+  }))
+}
+
+/** Zet een dossier-toggle aan/uit. De DB-trigger enqueuet een event; we evalueren direct. */
+export async function setDossierToggle(
+  dossier_id: string,
+  definitie_id: string,
+  aan: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { error } = await supabase
+    .from('dossier_toggles')
+    .upsert(
+      { dossier_id, definitie_id, aan, gewijzigd_op: new Date().toISOString() },
+      { onConflict: 'dossier_id,definitie_id' },
+    )
+  if (error) return { ok: false, error: error.message }
+
+  await verwerkDossierTriggers(dossier_id).catch(() => {})
   return { ok: true }
 }

@@ -408,6 +408,8 @@ export type Dossier = {
   servicedesk_substatus: ServicedeskSubstatus | null
   verzonden_op: string | null
   opmerkingen: string | null
+  /** EVA-eigen opmerkingen — nooit door de Bouw7-sync overschreven. */
+  interne_opmerkingen: string | null
   werkadres_straat: string | null
   werkadres_postcode: string | null
   werkadres_stad: string | null

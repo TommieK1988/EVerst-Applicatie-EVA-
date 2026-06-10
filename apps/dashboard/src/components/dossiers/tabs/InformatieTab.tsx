@@ -6,7 +6,7 @@ import { Calculator, FileText } from 'lucide-react'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN,
-  getDossierSubstatus,
+  getDossierSubstatus, isBouw7Substatus,
   type DossierSectie, type DossierRij,
 } from '../types'
 import { updateDossierSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
@@ -14,6 +14,7 @@ import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
+import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
@@ -53,6 +54,7 @@ type FormValues = {
   categorie: string
   referentie: string
   opmerkingen: string
+  interne_opmerkingen: string
   contactpersoon_id: string
   verwacht_startdatum: string
   verwacht_einddatum: string
@@ -460,6 +462,15 @@ export function InformatieTab({
     sectie === 'aanvraag' ? AANVRAAG_STATUSSEN :
     sectie === 'offerte'  ? OFFERTE_STATUSSEN  : OPDRACHT_STATUSSEN
 
+  // Velden die uit Bouw7 komen zijn niet bewerkbaar in EVA (geen terugschrijven naar Bouw7).
+  // Geldt alleen voor dossiers die daadwerkelijk uit Bouw7 komen.
+  const bouw7Vergrendeld = (dossier as any).bouw7_id != null
+  // Fase-gating: alleen EVA-eigen substatussen zijn kiesbaar; Bouw7-eigen statussen blijven
+  // zichtbaar als huidige waarde maar zijn niet selecteerbaar.
+  const kiesbareStatussen = beschikbareStatussen.filter(
+    s => !bouw7Vergrendeld || !isBouw7Substatus(sectie, s.key) || s.key === substatus
+  )
+
   const [contactpersoonOpties, setContactpersoonOpties] = React.useState<{
     id: string; naam: string; email: string | null; telefoon: string | null
   }[]>([])
@@ -474,7 +485,8 @@ export function InformatieTab({
     uiterlijkeIndiendatum:   '',
     categorie:               (dossier as any).categorie           ?? '',
     referentie:              dossier.referentie           ?? '',
-    opmerkingen:             '',
+    opmerkingen:             (dossier as any).opmerkingen          ?? '',
+    interne_opmerkingen:     (dossier as any).interne_opmerkingen ?? '',
     contactpersoon_id:       (dossier as any).contactpersoon_id  ?? '',
     verwacht_startdatum:     dossier.verwacht_startdatum         ?? '',
     verwacht_einddatum:      dossier.verwacht_einddatum          ?? '',
@@ -532,8 +544,17 @@ export function InformatieTab({
   function opslaan() {
     setOpgeslagen(form)
     setEditMode(false)
-    updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
-    updateDossierRollen(dossier.id, {
+    // Fase alleen wegschrijven als de gekozen substatus EVA-stuurbaar is (gating in de dropdown
+    // voorkomt al een Bouw7-eigen keuze, maar dubbel afdekken kan geen kwaad).
+    if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
+      updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
+    }
+    // Rollen: voor Bouw7-dossiers alleen de EVA-eigen rollen (teamleider/controller) wegschrijven;
+    // de Bouw7-rollen blijven onaangeroerd.
+    updateDossierRollen(dossier.id, bouw7Vergrendeld ? {
+      teamleider_id:       form.teamleider_id       || null,
+      controller_id:       form.controller_id       || null,
+    } : {
       project_manager_id:  form.projectleider_id   || null,
       teamleider_id:       form.teamleider_id       || null,
       werkvoorbereider_id: form.werkvoorbereider_id || null,
@@ -541,18 +562,23 @@ export function InformatieTab({
       uitvoerder_id:       form.uitvoerder_id       || null,
       controller_id:       form.controller_id       || null,
     }).catch(() => {})
+    // Inhoudsvelden: EVA-eigen velden altijd; Bouw7-bron-velden alleen voor niet-Bouw7-dossiers.
     updateDossierInfo(dossier.id, {
       referentie:           form.referentie           || null,
-      categorie:            form.categorie            || null,
-      contactpersoon_id:    form.contactpersoon_id    || null,
-      verwacht_startdatum:  form.verwacht_startdatum  || null,
-      verwacht_einddatum:   form.verwacht_einddatum   || null,
+      opdracht_referentie:  form.opdracht_referentie  || null,
       werkadres_naam:       form.werkadres_naam       || null,
       werkadres_telefoon:   form.werkadres_telefoon   || null,
       werkadres_email:      form.werkadres_email      || null,
-      werkadres_straat:     form.werkadres_straat     || null,
-      werkadres_postcode:   form.werkadres_postcode   || null,
-      werkadres_stad:       form.werkadres_stad       || null,
+      interne_opmerkingen:  form.interne_opmerkingen  || null,
+      ...(bouw7Vergrendeld ? {} : {
+        categorie:            form.categorie            || null,
+        contactpersoon_id:    form.contactpersoon_id    || null,
+        verwacht_startdatum:  form.verwacht_startdatum  || null,
+        verwacht_einddatum:   form.verwacht_einddatum   || null,
+        werkadres_straat:     form.werkadres_straat     || null,
+        werkadres_postcode:   form.werkadres_postcode   || null,
+        werkadres_stad:       form.werkadres_stad       || null,
+      }),
     }).catch(() => {})
   }
   function annuleer() { setForm(opgeslagen); setEditMode(false) }
@@ -608,7 +634,7 @@ export function InformatieTab({
               </PopoverTrigger>
               <PopoverContent align="start" className="w-[200px]">
                 <PopoverBody>
-                  {beschikbareStatussen.map(s => (
+                  {kiesbareStatussen.map(s => (
                     <PopoverItem
                       key={s.key}
                       active={s.key === substatus}
@@ -718,14 +744,16 @@ export function InformatieTab({
               />
               <InfoVeld label="Begindatum" waarde={form.verwacht_startdatum ? fmtDatum(form.verwacht_startdatum) : null} />
               <InfoVeld label="Einddatum"  waarde={form.verwacht_einddatum  ? fmtDatum(form.verwacht_einddatum)  : null} />
-              {(dossier as any).bouw7_categorie_naam && (
-                <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam} />
-              )}
-              {form.categorie && <InfoVeld label="Categorie" waarde={form.categorie} />}
+              <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
+              <InfoVeld label="Categorie" waarde={form.categorie || null} />
               <InfoVeld label="Referentie" waarde={form.referentie || null} />
+              {sectie === 'opdracht' && (
+                <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
+              )}
             </div>
 
-            {!editMode && (dossier.projectleider_naam || dossier.werkvoorbereider_naam || dossier.uitvoerder_naam) && (
+            {/* Rollen — altijd zichtbaar (lege rollen tonen "—"). */}
+            {!editMode && (
               <>
                 <Separator className="my-3" />
                 <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Rollen</p>
@@ -733,6 +761,9 @@ export function InformatieTab({
                   <InfoVeld label="Projectleider"    waarde={dossier.projectleider_naam} />
                   <InfoVeld label="Werkvoorbereider" waarde={dossier.werkvoorbereider_naam} />
                   <InfoVeld label="Uitvoerder"       waarde={dossier.uitvoerder_naam} />
+                  <InfoVeld label="Calculator"       waarde={dossier.calculator_naam} />
+                  <InfoVeld label="Teamleider"       waarde={dossier.teamleider_naam} />
+                  <InfoVeld label="Controller"       waarde={dossier.controller_naam} />
                 </div>
               </>
             )}
@@ -749,21 +780,42 @@ export function InformatieTab({
               </>
             )}
 
+            {!editMode && (
+              <>
+                <Separator className="my-3" />
+                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Opmerkingen</p>
+                <div className="grid grid-cols-1 gap-y-3">
+                  <InfoVeld label="Bouw7" waarde={(dossier as any).opmerkingen || null} />
+                  <InfoVeld label="Intern (EVA)" waarde={form.interne_opmerkingen || null} />
+                </div>
+              </>
+            )}
+
             {editMode && (
               <div className="mt-4">
+                {bouw7Vergrendeld && (
+                  <p className="mb-3 rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
+                    Velden uit Bouw7 zijn alleen-lezen en worden in Bouw7 beheerd. EVA-eigen velden
+                    (teamleider, controller, werkadres-contact, referenties, datums, interne opmerkingen) blijven bewerkbaar.
+                  </p>
+                )}
                 <FormSection title="Identificatie">
                   <FormRow cols="2">
                     <FormField upper label="Fase">
                       <DsSelect
                         value={substatus}
                         onChange={v => setSubstatus(v)}
-                        options={beschikbareStatussen.map(s => ({ value: s.key, label: s.label }))}
+                        options={kiesbareStatussen.map(s => ({ value: s.key, label: s.label }))}
                         placeholder="Selecteer fase"
                       />
                     </FormField>
-                    <FormField upper label="Categorie">
-                      <DsSelect value={form.categorie} onChange={set('categorie')} options={categorieOpties} placeholder="bijv. Schilderwerk" />
-                    </FormField>
+                    {bouw7Vergrendeld
+                      ? <InfoVeld label="Categorie" waarde={form.categorie || null} />
+                      : (
+                        <FormField upper label="Categorie">
+                          <DsSelect value={form.categorie} onChange={set('categorie')} options={categorieOpties} placeholder="bijv. Schilderwerk" />
+                        </FormField>
+                      )}
                     <FormField upper label="Referentie">
                       <Input value={form.referentie} onChange={e => set('referentie')(e.target.value)} placeholder="kenmerk van opdrachtgever" />
                     </FormField>
@@ -801,51 +853,77 @@ export function InformatieTab({
                         />
                       </FormField>
                     )}
-                    <FormField upper label="Begindatum">
-                      <DatePicker
-                        value={form.verwacht_startdatum ? new Date(form.verwacht_startdatum) : undefined}
-                        onChange={d => set('verwacht_startdatum')(d ? d.toISOString().slice(0, 10) : '')}
-                      />
-                    </FormField>
-                    <FormField upper label="Einddatum">
-                      <DatePicker
-                        value={form.verwacht_einddatum ? new Date(form.verwacht_einddatum) : undefined}
-                        onChange={d => set('verwacht_einddatum')(d ? d.toISOString().slice(0, 10) : '')}
-                      />
-                    </FormField>
-                  </FormRow>
-                </FormSection>
-
-                <FormSection title="Rollen">
-                  <FormRow cols="2">
-                    <FormField upper label="Projectleider">
-                      <DsSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
-                    </FormField>
-                    <FormField upper label="Werkvoorbereider">
-                      <DsSelect value={form.werkvoorbereider_id} onChange={set('werkvoorbereider_id')} options={medewerkersOpties} placeholder="Selecteer werkvoorbereider" />
-                    </FormField>
-                    <FormField upper label="Uitvoerder">
-                      <DsSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
-                    </FormField>
-                    {sectie === 'opdracht' && (
+                    {bouw7Vergrendeld ? (
                       <>
-                        <FormField upper label="Teamleider">
-                          <DsSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
+                        <InfoVeld label="Begindatum" waarde={form.verwacht_startdatum ? fmtDatum(form.verwacht_startdatum) : null} />
+                        <InfoVeld label="Einddatum"  waarde={form.verwacht_einddatum  ? fmtDatum(form.verwacht_einddatum)  : null} />
+                      </>
+                    ) : (
+                      <>
+                        <FormField upper label="Begindatum">
+                          <DatePicker
+                            value={form.verwacht_startdatum ? new Date(form.verwacht_startdatum) : undefined}
+                            onChange={d => set('verwacht_startdatum')(d ? d.toISOString().slice(0, 10) : '')}
+                          />
                         </FormField>
-                        <FormField upper label="Calculator">
-                          <DsSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
-                        </FormField>
-                        <FormField upper label="Controller">
-                          <DsSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
+                        <FormField upper label="Einddatum">
+                          <DatePicker
+                            value={form.verwacht_einddatum ? new Date(form.verwacht_einddatum) : undefined}
+                            onChange={d => set('verwacht_einddatum')(d ? d.toISOString().slice(0, 10) : '')}
+                          />
                         </FormField>
                       </>
                     )}
                   </FormRow>
                 </FormSection>
 
-                <FormField upper label="Opmerkingen">
-                  <Textarea value={form.opmerkingen} onChange={e => set('opmerkingen')(e.target.value)} placeholder="Interne opmerkingen" />
-                </FormField>
+                <FormSection title="Rollen">
+                  <FormRow cols="2">
+                    {bouw7Vergrendeld ? (
+                      <>
+                        <InfoVeld label="Projectleider"    waarde={dossier.projectleider_naam} />
+                        <InfoVeld label="Werkvoorbereider" waarde={dossier.werkvoorbereider_naam} />
+                        <InfoVeld label="Uitvoerder"       waarde={dossier.uitvoerder_naam} />
+                        <InfoVeld label="Calculator"       waarde={dossier.calculator_naam} />
+                      </>
+                    ) : (
+                      <>
+                        <FormField upper label="Projectleider">
+                          <DsSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
+                        </FormField>
+                        <FormField upper label="Werkvoorbereider">
+                          <DsSelect value={form.werkvoorbereider_id} onChange={set('werkvoorbereider_id')} options={medewerkersOpties} placeholder="Selecteer werkvoorbereider" />
+                        </FormField>
+                        <FormField upper label="Uitvoerder">
+                          <DsSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
+                        </FormField>
+                        {sectie === 'opdracht' && (
+                          <FormField upper label="Calculator">
+                            <DsSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
+                          </FormField>
+                        )}
+                      </>
+                    )}
+                    {/* Teamleider & Controller zijn EVA-eigen → altijd bewerkbaar. */}
+                    <FormField upper label="Teamleider">
+                      <DsSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
+                    </FormField>
+                    <FormField upper label="Controller">
+                      <DsSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
+                    </FormField>
+                  </FormRow>
+                </FormSection>
+
+                <FormSection title="Opmerkingen">
+                  {bouw7Vergrendeld && (dossier as any).opmerkingen && (
+                    <div className="mb-3">
+                      <InfoVeld label="Bouw7 (alleen-lezen)" waarde={(dossier as any).opmerkingen} />
+                    </div>
+                  )}
+                  <FormField upper label="Interne opmerkingen (EVA)">
+                    <Textarea value={form.interne_opmerkingen} onChange={e => set('interne_opmerkingen')(e.target.value)} placeholder="Interne aanvullingen — worden nooit door de Bouw7-sync overschreven" />
+                  </FormField>
+                </FormSection>
 
                 <FormSection title="Werkadres">
                   <FormRow cols="2">
@@ -858,15 +936,25 @@ export function InformatieTab({
                     <FormField upper label="E-mail">
                       <Input type="email" value={form.werkadres_email} onChange={e => set('werkadres_email')(e.target.value)} />
                     </FormField>
-                    <FormField upper label="Straat + nummer" className="col-span-2">
-                      <Input value={form.werkadres_straat} onChange={e => set('werkadres_straat')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="Postcode">
-                      <Input value={form.werkadres_postcode} onChange={e => set('werkadres_postcode')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="Stad">
-                      <Input value={form.werkadres_stad} onChange={e => set('werkadres_stad')(e.target.value)} />
-                    </FormField>
+                    {bouw7Vergrendeld ? (
+                      <>
+                        <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
+                        <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
+                        <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
+                      </>
+                    ) : (
+                      <>
+                        <FormField upper label="Straat + nummer" className="col-span-2">
+                          <Input value={form.werkadres_straat} onChange={e => set('werkadres_straat')(e.target.value)} />
+                        </FormField>
+                        <FormField upper label="Postcode">
+                          <Input value={form.werkadres_postcode} onChange={e => set('werkadres_postcode')(e.target.value)} />
+                        </FormField>
+                        <FormField upper label="Stad">
+                          <Input value={form.werkadres_stad} onChange={e => set('werkadres_stad')(e.target.value)} />
+                        </FormField>
+                      </>
+                    )}
                   </FormRow>
                 </FormSection>
               </div>
@@ -878,6 +966,9 @@ export function InformatieTab({
         <div>
           <TakenBlok dossierId={dossier.id} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
         </div>
+
+        {/* Dossier-toggles */}
+        <DossierTogglesPaneel dossierId={dossier.id} />
 
         {/* Opdrachtgever */}
         <Card>
@@ -912,7 +1003,7 @@ export function InformatieTab({
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
               Contactpersoon
             </p>
-            {editMode ? (
+            {editMode && !bouw7Vergrendeld ? (
               <FormField upper label="Contactpersoon">
                 <DsSelect
                   value={form.contactpersoon_id}

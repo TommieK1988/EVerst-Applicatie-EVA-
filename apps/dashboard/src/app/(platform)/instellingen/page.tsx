@@ -65,6 +65,13 @@ const calcOfferteItems = [
     kicker: 'Dossiers',
   },
   {
+    href: '/instellingen/dossier-toggles',
+    title: 'Dossier toggles',
+    description: 'Aan/uit-schakelaars per dossier; bruikbaar als trigger of conditie voor actielijsten.',
+    ready: true,
+    kicker: 'Dossiers',
+  },
+  {
     href: '/instellingen/btw-tarieven',
     title: 'BTW tarieven',
     description: 'Beschikbare BTW-percentages voor calculatieregels en offertes.',
