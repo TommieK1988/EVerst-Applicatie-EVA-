@@ -4,7 +4,7 @@ import { laadLayouts } from '@/app/actions/layouts'
 import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import { OFFERTE_STATUSSEN } from '@/components/dossiers/types'
-import { getDossiersByBouw7Prefix, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
+import { getDossiersVoorOffertes, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
 
 export const metadata: Metadata = { title: 'Offertes' }
 
@@ -20,7 +20,7 @@ export default async function OffertesPage() {
   }
 
   const [result, layouts, lasteSyncIso] = await Promise.all([
-    getDossiersByBouw7Prefix(['08.', '09.'], 'offerte'),
+    getDossiersVoorOffertes(),
     user_id ? laadLayouts(user_id, 'dossiers-offerte') : Promise.resolve([]),
     getLastBouw7SyncTijd(),
   ])

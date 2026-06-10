@@ -128,18 +128,26 @@ export type Bouw7Project = {
   projectNumber?: string
   fullProjectNumber?: string
   name: string
-  contact?: { id: number; name: string }
+  contact?: { id: number; name: string; type?: string; emailAddress?: string | null }
+  /** Projectcontactpersoon — staat direct op het project (niet de org-primair). */
+  contactPerson?: {
+    id: number
+    firstName?: string
+    lastName?: string
+    emailAddress?: string | null
+    phoneNumber?: string | null
+  } | null
   /** Projectstatus — in de API-response 'status' (niet 'projectStatus') */
   status?: { id: number; name: string; plansProject?: boolean; closesProject?: boolean; invoicesProject?: boolean; closesPlanning?: boolean }
   /** Projectcategorie — in de API-response 'category' (niet 'projectCategory') */
   category?: { id: number; name: string }
-  projectLeader?: { id: number; firstName: string; lastName: string }
-  workPlanner?:   { id: number; firstName: string; lastName: string }
-  executor?:      { id: number; firstName: string; lastName: string }
+  projectLeader?: { id: number; firstName?: string; lastName?: string }
+  workPlanner?:   { id: number; firstName?: string; lastName?: string }
+  executor?:      { id: number; firstName?: string; lastName?: string } | null
   branch?: { id: number; name: string }
-  street?: string
+  /** Adres — API levert `streetName` + losse `houseNumber`; géén `street`/`postCode`. */
   streetName?: string
-  postCode?: string
+  houseNumber?: string | null
   zipCode?: string
   city?: string
   startDate?: string

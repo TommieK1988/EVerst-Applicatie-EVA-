@@ -398,6 +398,8 @@ export type Dossier = {
   bouw7_projectstatus_naam: string | null
   bouw7_categorie_id: number | null
   bouw7_categorie_naam: string | null
+  /** Meest recente Bouw7-offertestatus (quotationStatus.name), bv. '04. Gewonnen'. */
+  bouw7_quotation_status: string | null
   bouw7_laatst_sync: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null

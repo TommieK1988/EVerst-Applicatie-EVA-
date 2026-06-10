@@ -35,21 +35,24 @@ Response shape: `{ items: T[], count: number, limit: number, offset: number }`.
 |---|---|---|---|
 | `/list/projects` | GET | ✓ | Alle projecten ophalen (sync) |
 
-**Velden op `Bouw7Project`:**
+**Velden op `Bouw7Project`** (geverifieerd via live `/list/projects`-response):
 ```
-id, projectCode, projectNumber, fullProjectNumber, name
-contact { id, name }
+id, projectNumber, fullProjectNumber, name
+contact { id, name, type, emailAddress }   ← de klant-organisatie
+contactPerson { id, firstName, lastName, emailAddress, phoneNumber }  ← projectcontactpersoon (kan null)
 status  { id, name, plansProject, closesProject, invoicesProject }
 category { id, name }
-projectLeader, workPlanner, executor { id, firstName, lastName }
+projectLeader, workPlanner, executor { id, firstName, lastName }   ← executor kan null
 branch { id, name }
-street, streetName, postCode, zipCode, city
-startDate, endDate
+streetName, houseNumber, zipCode, city     ← LET OP: géén `street`/`postCode`; huisnummer staat los
+startDate, endDate, deliveryDate
 totalExclVat        — omzet excl. BTW (via Heimdall; minder nauwkeurig dan Athena)
 fixedPrice          — vaste aanneemsom als string
 budgetAmount        — begroting
-notes, information, reference
+information, reference
 ```
+> Werkadres = `streetName` + losse `houseNumber` (samenvoegen, net als bij contacten).
+> Projectcontactpersoon = `contactPerson` (niet de org-primair) — map op `contactpersonen.bouw7_id`.
 
 **Status-mapping Heimdall → EVA:**
 - `01.*` → aanvraag

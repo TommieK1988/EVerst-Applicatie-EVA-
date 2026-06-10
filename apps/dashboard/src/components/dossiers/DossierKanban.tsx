@@ -5,8 +5,9 @@ import { IconPlus, IconSearch, IconDomeinOnderhoud } from '../eva/Icons'
 import { Button, Input, EmptyState } from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
 import { NieuweAanvraagModal } from './NieuweAanvraagModal'
+import toast from 'react-hot-toast'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
-import { getDossierSubstatus } from './types'
+import { getDossierSubstatus, isBouw7Substatus } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -78,6 +79,16 @@ export function DossierKanban<K extends string>({
 
   async function handleDrop(targetStatus: K) {
     if (!draggingId) return
+
+    // Bouw7-eigen substatussen zijn alleen in Bouw7 wijzigbaar. Weiger een drop op zo'n kolom
+    // voor dossiers die uit Bouw7 komen; EVA-eigen kolommen blijven vrij sleepbaar.
+    const gesleept = dossiers.find(d => d.id === draggingId)
+    if (gesleept && (gesleept as any).bouw7_id != null && isBouw7Substatus(sectie, targetStatus)) {
+      setDraggingId(null)
+      setDragOverCol(null)
+      toast.error('Deze status komt uit Bouw7 en is alleen daar te wijzigen.')
+      return
+    }
 
     if (onStatusChange) {
       // Servicedesk of andere custom update: optimistisch servicedesk_substatus bijwerken

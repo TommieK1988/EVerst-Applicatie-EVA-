@@ -86,3 +86,24 @@ export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'kosten_compleet',     label: 'Kosten compleet'               },
   { key: 'financieel_gereed',   label: 'Financieel gereed'             },
 ]
+
+/**
+ * Substatussen die de Bouw7-sync zelf zet/overschrijft (zie `mapBouw7NaarEvaStatus` +
+ * `BOUW7_NAAR_SERVICEDESK_SUBSTATUS` in `lib/bouw7/sync.ts`). Voor dossiers die uit Bouw7
+ * komen (`bouw7_id != null`) zijn deze in EVA **alleen-lezen** — je kunt een dossier wél naar
+ * EVA-eigen substatussen verplaatsen, maar niet naar een Bouw7-eigen substatus (die wijzig je
+ * in Bouw7). `aanvraag` blijft volledig EVA-stuurbaar: veel aanvraag-dossiers hebben (nog) geen
+ * Bouw7-offerte, dus handmatig naar Vervallen/Afgewezen slepen moet mogelijk blijven — de sync
+ * overschrijft alleen wanneer er wél een gemapte Bouw7-offertestatus is.
+ */
+export const BOUW7_EIGEN_SUBSTATUSSEN: Record<DossierSectie, string[]> = {
+  aanvraag:    [],
+  offerte:     ['verzonden', 'mondelinge_toezegging', 'gewonnen', 'verloren', 'vervallen'],
+  opdracht:    ['nieuwe_opdracht', 'werkvoorbereiding', 'onderhanden', 'uitvoering_gereed', 'financieel_gereed', 'financieel_afgesloten'],
+  servicedesk: ['nieuw', 'offerte_uitgebracht', 'loopt', 'uitgevoerd', 'financieel_gereed'],
+}
+
+/** True als `key` een door Bouw7 beheerde substatus is binnen de gegeven sectie. */
+export function isBouw7Substatus(sectie: DossierSectie, key: string): boolean {
+  return BOUW7_EIGEN_SUBSTATUSSEN[sectie]?.includes(key) ?? false
+}

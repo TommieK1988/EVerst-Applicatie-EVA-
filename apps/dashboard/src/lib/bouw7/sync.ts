@@ -421,6 +421,25 @@ export async function syncEmployees(): Promise<SyncResult> {
  * SYNC: Projects → Dossiers
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
+/**
+ * Haal een positief getal op uit een Bouw7 financieel veld.
+ * Het Athena-veld kan een number, een string, of een object {budgeted, prognosis, ...} zijn
+ * als de API zijn schema wijzigt. Deze helper behandelt alle drie gevallen.
+ */
+function extractFinNum(v: unknown): number | null {
+  if (v == null) return null
+  if (typeof v === 'number') return v > 0 ? v : null
+  if (typeof v === 'string') {
+    const n = parseFloat(v)
+    return !isNaN(n) && n > 0 ? n : null
+  }
+  if (typeof v === 'object') {
+    // API stuurt object met budgeted/prognosis/realised — gebruik budgeted als primaire waarde
+    return extractFinNum((v as Record<string, unknown>).budgeted)
+  }
+  return null
+}
+
 type EvaStatusVelden = {
   hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht'
   aanvraag_substatus: string | null
@@ -429,6 +448,27 @@ type EvaStatusVelden = {
   servicedesk_substatus: string | null
   verzonden_op?: string | null
 }
+
+/**
+ * Map de Bouw7-offertestatus (quotationStatus.name) naar een EVA offerte-substatus.
+ * Match op naamdeel (niet op nummerprefix) zodat hernummering in Bouw7 de mapping niet breekt.
+ * Bekende Bouw7-statussen: 01. Nieuw, 02. Onderhanden, 03. Te controleren, 03. Verstuurd,
+ * 04. Gewonnen, 05. Verloren, 06. Vervallen, 07. Mondelinge toezegging.
+ * Nieuw/Onderhanden/Te controleren → null (EVA-substatus blijft staan).
+ */
+function mapOffertestatusNaarSubstatus(naam: string | null | undefined): string | null {
+  if (!naam) return null
+  const n = naam.toLowerCase()
+  if (n.includes('gewonnen'))   return 'gewonnen'
+  if (n.includes('verloren'))   return 'verloren'
+  if (n.includes('vervallen'))  return 'vervallen'
+  if (n.includes('mondelinge')) return 'mondelinge_toezegging'
+  if (n.includes('verstuurd'))  return 'verzonden'
+  return null
+}
+
+/** De vier offertestatus-eindstatussen — deze overschrijven altijd de EVA-substatus. */
+const OFFERTE_EINDSTATUSSEN = ['gewonnen', 'verloren', 'vervallen', 'mondelinge_toezegging']
 
 // Mapping van Bouw7-projectstatusnaam naar servicedesk kanban-kolom.
 // Altijd overschreven bij sync — handmatig slepen geldt tot de volgende sync.
@@ -445,10 +485,11 @@ const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
 }
 
 /**
- * Leidt de EVA-statusvelden af uit de Bouw7 projectstatus en categorie.
+ * Leidt de EVA-statusvelden af uit de Bouw7 projectstatus, categorie en offertestatus.
  * Categorie DO/MU wint altijd — die projecten gaan naar Servicedesk.
  * Opdracht-substatussen worden altijd overschreven vanuit Bouw7.
- * Offerte-substatussen worden alleen bij nieuwe records gezet (bestaande blijven).
+ * Offerte-substatussen: de vier eindstatussen uit de Bouw7-offertestatus (gewonnen, verloren,
+ * vervallen, mondelinge toezegging) overschrijven altijd; anders blijft de bestaande staan.
  * Servicedesk-substatussen worden altijd overschreven vanuit BOUW7_NAAR_SERVICEDESK_SUBSTATUS.
  */
 function mapBouw7NaarEvaStatus(
@@ -457,9 +498,13 @@ function mapBouw7NaarEvaStatus(
   bestaandeAanvraagSub: string | null,
   bestaandeOfferteSub: string | null,
   bestaandeVerzondenOp: string | null,
+  offertestatusNaam: string | null = null,
 ): EvaStatusVelden {
   const naam = bouw7StatusNaam ?? ''
   const cat  = bouw7CategorieNaam ?? ''
+
+  const offerteSub  = mapOffertestatusNaarSubstatus(offertestatusNaam)
+  const eindstatus  = offerteSub && OFFERTE_EINDSTATUSSEN.includes(offerteSub) ? offerteSub : null
 
   // Servicedesk: LB of categorie Dagelijks onderhoud/Mutatie (categorie wint over projectstatus)
   if (naam.toUpperCase().startsWith('LB.') || cat === 'Dagelijks onderhoud' || cat === 'Mutatie') {
@@ -474,32 +519,51 @@ function mapBouw7NaarEvaStatus(
 
   // Aanvraag — 01. Offerte (aanvragen-tab, intake/calculatie-fase)
   if (naam.startsWith('01.')) {
+    // Offertestatus Gewonnen/Mondelinge toezegging: dossier verhuist naar de Offertes-tab
+    // (de Aanvragen-kanban heeft voor deze statussen geen kolom).
+    if (eindstatus === 'gewonnen' || eindstatus === 'mondelinge_toezegging') {
+      return {
+        hoofdstatus:           'offerte',
+        aanvraag_substatus:    null,
+        offerte_substatus:     eindstatus,
+        opdracht_substatus:    null,
+        servicedesk_substatus: null,
+      }
+    }
+    // Offertestatus Verstuurd/Verloren/Vervallen: in de juiste aanvraag-kolom zetten.
+    const aanvraagOverride =
+      offerteSub === 'verzonden' ? 'verzonden'
+      : eindstatus === 'verloren'  ? 'afgewezen'
+      : eindstatus === 'vervallen' ? 'vervallen'
+      : null
     return {
       hoofdstatus:           'aanvraag',
-      aanvraag_substatus:    bestaandeAanvraagSub ?? 'nieuw',
+      aanvraag_substatus:    aanvraagOverride ?? bestaandeAanvraagSub ?? 'nieuw',
       offerte_substatus:     null,
       opdracht_substatus:    null,
       servicedesk_substatus: null,
     }
   }
 
-  // Offerte — 08. Afgewezen → altijd 'verloren'
+  // Offerte — 08. Afgewezen → offertestatus-eindstatus (onderscheidt verloren/vervallen), anders 'verloren'
   if (naam.startsWith('08.')) {
     return {
       hoofdstatus:           'offerte',
       aanvraag_substatus:    null,
-      offerte_substatus:     'verloren',
+      offerte_substatus:     eindstatus ?? 'verloren',
       opdracht_substatus:    null,
       servicedesk_substatus: null,
     }
   }
 
-  // Offerte — 09. Verzonden Offertes (offertes-tab, ook 7 dagen op aanvragen-tab)
+  // Offerte — 09. Verzonden Offertes (offertes-tab, ook 7 dagen op aanvragen-tab).
+  // Alleen de vier eindstatussen overschrijven — 'Verstuurd' mag een handmatig gesleepte
+  // nabellen/in_behandeling niet terugzetten.
   if (naam.startsWith('09.')) {
     return {
       hoofdstatus:           'offerte',
       aanvraag_substatus:    null,
-      offerte_substatus:     bestaandeOfferteSub ?? 'verzonden',
+      offerte_substatus:     eindstatus ?? bestaandeOfferteSub ?? 'verzonden',
       opdracht_substatus:    null,
       servicedesk_substatus: null,
       verzonden_op:          bestaandeVerzondenOp ?? new Date().toISOString(),
@@ -629,6 +693,106 @@ export async function syncProjects(): Promise<SyncResult> {
       duur_ms: 0, fout_melding: quotationLogInfo,
     })
 
+    // ── Medewerker-stubs ──────────────────────────────────────────────
+    // Zorg dat élke door een project gerefereerde rol-medewerker een EVA-record heeft, ook als
+    // /list/employees hem niet teruggaf (bv. inactieve oud-medewerkers). De projectpayload bevat
+    // de naam embedded, dus we maken een stub aan en breiden medewerkerMap uit. Zo wordt de
+    // rolnaam ALTIJD overgenomen, onafhankelijk van of de medewerker ook een EVA-gebruiker is.
+    const medStubs = new Map<string, Record<string, unknown>>()
+    const noteMed = (emp?: { id?: number; firstName?: string; lastName?: string; prefix?: string } | null) => {
+      if (!emp?.id) return
+      const key = String(emp.id)
+      if (medewerkerMap.has(key) || medStubs.has(key)) return
+      medStubs.set(key, {
+        voornaam:          emp.firstName ?? '',
+        tussenvoegsel:     emp.prefix ?? null,
+        achternaam:        emp.lastName ?? '',
+        bouw7_id:          key,
+        actief:            true,
+        bouw7_laatst_sync: new Date().toISOString(),
+        bouw7_sync_status: 'synced',
+      })
+    }
+    for (const p of projects) {
+      noteMed(p.projectLeader)
+      noteMed(p.workPlanner)
+      noteMed(p.executor)
+      const q = quotationMap.get(String(p.id))
+      if (q?.employee) noteMed(q.employee)
+    }
+    if (medStubs.size > 0) {
+      const stubRows = [...medStubs.values()]
+      // medewerkers heeft een volledige unique constraint op bouw7_id → upsert mag
+      for (let i = 0; i < stubRows.length; i += 500) {
+        await supabase.from('medewerkers').upsert(stubRows.slice(i, i + 500), { onConflict: 'bouw7_id' })
+      }
+      const { data: med2 } = await supabase
+        .from('medewerkers')
+        .select('id, bouw7_id')
+        .in('bouw7_id', stubRows.map(r => r.bouw7_id as string))
+      for (const m of (med2 ?? []) as { id: string; bouw7_id: string }[]) medewerkerMap.set(m.bouw7_id, m.id)
+    }
+
+    // ── Projectcontactpersoon-map + stubs ─────────────────────────────
+    // Bouw7 levert de contactpersoon direct op het project (`p.contactPerson`). Map die op een
+    // EVA-contactpersoon via bouw7_id; ontbreekt hij, maak een stub (uit embedded naam/email/tel)
+    // en koppel aan de klant-organisatie. Veel betrouwbaarder dan de org-primair-gok.
+    const { data: cpAllData } = await supabase
+      .from('contactpersonen')
+      .select('id, bouw7_id')
+      .not('bouw7_id', 'is', null)
+    const cpByBouw7 = new Map<string, string>(
+      (cpAllData ?? []).map((c: { id: string; bouw7_id: string }) => [c.bouw7_id, c.id])
+    )
+
+    const cpStubs = new Map<string, { row: Record<string, unknown>; orgBouw7Id: string | null }>()
+    for (const p of projects) {
+      const cp = p.contactPerson
+      if (!cp?.id) continue
+      const key = String(cp.id)
+      if (cpByBouw7.has(key) || cpStubs.has(key)) continue
+      cpStubs.set(key, {
+        row: {
+          voornaam:          cp.firstName ?? '',
+          achternaam:        cp.lastName ?? '',
+          email:             cp.emailAddress ?? null,
+          telefoon:          cp.phoneNumber ?? null,
+          bouw7_id:          key,
+          bouw7_laatst_sync: new Date().toISOString(),
+          bouw7_sync_status: 'synced',
+        },
+        orgBouw7Id: p.contact?.id ? String(p.contact.id) : null,
+      })
+    }
+    if (cpStubs.size > 0) {
+      // contactpersonen heeft een partiële unique index op bouw7_id → geen onConflict; plain insert
+      // (stubs zijn per definitie nieuw, want ze ontbreken in cpByBouw7).
+      const stubRows = [...cpStubs.values()].map(s => s.row)
+      for (let i = 0; i < stubRows.length; i += 500) {
+        await supabase.from('contactpersonen').insert(stubRows.slice(i, i + 500))
+      }
+      const { data: cp2 } = await supabase
+        .from('contactpersonen')
+        .select('id, bouw7_id')
+        .in('bouw7_id', stubRows.map(r => r.bouw7_id as string))
+      for (const c of (cp2 ?? []) as { id: string; bouw7_id: string }[]) cpByBouw7.set(c.bouw7_id, c.id)
+
+      // Koppel nieuwe stubs aan hun klant-organisatie (voor het org-contactenoverzicht).
+      const koppels = [...cpStubs.values()]
+        .map(s => ({
+          contactpersoon_id: cpByBouw7.get(s.row.bouw7_id as string),
+          organisatie_id:    s.orgBouw7Id ? relatieMap.get(s.orgBouw7Id) : undefined,
+          is_primair:        false,
+        }))
+        .filter((k): k is { contactpersoon_id: string; organisatie_id: string; is_primair: boolean } =>
+          k.contactpersoon_id != null && k.organisatie_id != null)
+      for (let i = 0; i < koppels.length; i += 500) {
+        await supabase
+          .from('contactpersoon_organisaties')
+          .upsert(koppels.slice(i, i + 500), { onConflict: 'contactpersoon_id,organisatie_id', ignoreDuplicates: true })
+      }
+    }
+
     const bouw7IdsInResponse = new Set(projects.map(p => String(p.id)))
     const rows: Record<string, unknown>[] = []
 
@@ -636,21 +800,23 @@ export async function syncProjects(): Promise<SyncResult> {
       const bouw7IdStr = String(p.id)
       const existing = dossierMap.get(bouw7IdStr)
 
+      const quote = quotationMap.get(bouw7IdStr)
+      const fin   = financialMap.get(bouw7IdStr)
+
       const evaStatus = mapBouw7NaarEvaStatus(
         p.status?.name,
         p.category?.name,
         existing?.aanvraag_substatus ?? null,
         existing?.offerte_substatus ?? null,
         existing?.verzonden_op ?? null,
+        quote?.quotationStatus?.name ?? null,
       )
 
-      const quote = quotationMap.get(bouw7IdStr)
-      const fin   = financialMap.get(bouw7IdStr)
-
       // Totaal begrote bedrag: fixedPrice (aanneemsom) > revenue.budgeted > subtotal offerte
-      const kostprijs = fin?.fixedPrice
-        ?? (fin?.revenue?.budgeted != null && Number(fin.revenue.budgeted) > 0 ? Number(fin.revenue.budgeted) : null)
-        ?? quote?.subtotal
+      // extractFinNum() handelt het geval af dat fixedPrice een object is geworden (Athena API-wijziging)
+      const kostprijs = extractFinNum(fin?.fixedPrice)
+        ?? extractFinNum(fin?.revenue?.budgeted)
+        ?? (quote?.subtotal != null ? Number(quote.subtotal) || null : null)
         ?? null
 
       rows.push({
@@ -670,19 +836,31 @@ export async function syncProjects(): Promise<SyncResult> {
                                       ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null)
                                       : null,
         contactpersoon_id:        (() => {
+                                    // Voorkeur: de contactpersoon die direct op het Bouw7-project staat.
+                                    if (p.contactPerson?.id) {
+                                      const direct = cpByBouw7.get(String(p.contactPerson.id))
+                                      if (direct) return direct
+                                    }
+                                    // Fallback: primaire contactpersoon van de klant-organisatie.
                                     const evaKlantId = p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null
                                     return evaKlantId ? (contactpersoonMap.get(evaKlantId) ?? null) : null
                                   })(),
-        bedrag_excl_btw:          p.totalExclVat ?? (p.fixedPrice ? parseFloat(p.fixedPrice) : null) ?? quote?.total ?? null,
+        // extractFinNum() vangt het geval af dat totalExclVat/fixedPrice een Athena-object
+        // ({budgeted, prognosis, realised, …}) is geworden i.p.v. een number/string.
+        bedrag_excl_btw:          extractFinNum(p.totalExclVat)
+                                    ?? extractFinNum(p.fixedPrice)
+                                    ?? extractFinNum(quote?.total)
+                                    ?? null,
         kostprijs_excl_btw:       kostprijs,
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,
-        werkadres_straat:         p.street ?? p.streetName ?? null,
-        werkadres_postcode:       p.postCode ?? p.zipCode ?? null,
+        werkadres_straat:         [p.streetName, p.houseNumber].filter(Boolean).join(' ') || null,
+        werkadres_postcode:       p.zipCode ?? null,
         werkadres_stad:           p.city ?? null,
         opmerkingen:              p.notes ?? p.reference ?? null,
         bouw7_projectstatus_id:   p.status?.id ?? null,
         bouw7_projectstatus_naam: p.status?.name ?? null,
+        bouw7_quotation_status:   quote?.quotationStatus?.name ?? null,
         bouw7_categorie_id:       p.category?.id ?? null,
         bouw7_categorie_naam:     p.category?.name ?? null,
         categorie:                p.category?.name ?? null,

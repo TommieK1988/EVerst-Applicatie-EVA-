@@ -118,9 +118,38 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
     .from('dossiers')
     .select(`*, ${ROL_SELECT}`)
     .or(
-      `bouw7_projectstatus_naam.ilike.01.%,` +
+      // 01-dossiers die via de Bouw7-offertestatus naar hoofdstatus 'offerte' zijn verhuisd
+      // (gewonnen/mondelinge toezegging) horen op de Offertes-tab, niet hier.
+      `and(bouw7_projectstatus_naam.ilike.01.%,hoofdstatus.eq.aanvraag),` +
       `and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.aanvraag),` +
       `and(offerte_substatus.eq.verzonden,verzonden_op.gte.${cutoff})`
+    )
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
+    return { ok: false, error: error.message, missingTable }
+  }
+
+  return { ok: true, data: (data ?? []).map(mapRij) }
+}
+
+/**
+ * Haal dossiers op voor de Offertes-tab:
+ * - Bouw7-dossiers met projectstatus 08/09
+ * - Alle dossiers met hoofdstatus 'offerte' — vangt handmatige dossiers én 01-projecten
+ *   die via de Bouw7-offertestatus (gewonnen/mondelinge toezegging) zijn doorgeschoven.
+ */
+export async function getDossiersVoorOffertes(): Promise<DossierResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select(`*, ${ROL_SELECT}`)
+    .or(
+      'bouw7_projectstatus_naam.ilike.08.%,' +
+      'bouw7_projectstatus_naam.ilike.09.%,' +
+      'hoofdstatus.eq.offerte'
     )
     .order('created_at', { ascending: false })
 
