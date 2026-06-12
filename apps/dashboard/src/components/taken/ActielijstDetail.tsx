@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, List, LayoutGrid, FileText } from 'lucide-react'
+import { ChevronLeft, List, LayoutGrid, Pencil } from 'lucide-react'
 import { cn } from '@/lib/taken/utils'
 import PageHeader from '@/components/taken/shared/PageHeader'
 import TaakLijstWeergave from './TaakLijstWeergave'
@@ -11,27 +11,92 @@ import NieuweTaakDialog from './NieuweTaakDialog'
 import SjabloonTriggers from './SjabloonTriggers'
 import { updateActielijst } from '@/app/(platform)/taken/actions/taken'
 import type { ActielijstMetTaken } from '@/lib/taken/supabase/database.types'
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+  FormField,
+  Input,
+  Textarea,
+} from '@/components/ui'
 
 interface Props {
   lijst: ActielijstMetTaken
 }
 
-export default function ActielijstDetail({ lijst }: Props) {
-  const [view, setView] = useState<'lijst' | 'kanban'>('lijst')
-  const [isTemplate, setIsTemplate] = useState(lijst.is_template)
-  const [templatePending, startTemplateTrans] = useTransition()
+/** Potlood-knop + dialoog om naam en beschrijving van de lijst te bewerken. */
+function BewerkLijstDialog({ lijst }: { lijst: ActielijstMetTaken }) {
+  const [open, setOpen] = useState(false)
+  const [naam, setNaam] = useState(lijst.naam)
+  const [beschrijving, setBeschrijving] = useState(lijst.beschrijving ?? '')
+  const [pending, startTransition] = useTransition()
 
-  function toggleSjabloon() {
-    const nieuw = !isTemplate
-    setIsTemplate(nieuw)
-    startTemplateTrans(async () => {
+  function openDialog() {
+    setNaam(lijst.naam)
+    setBeschrijving(lijst.beschrijving ?? '')
+    setOpen(true)
+  }
+
+  function handleBewaar() {
+    if (!naam.trim()) return
+    startTransition(async () => {
       const fd = new FormData()
-      fd.set('naam', lijst.naam)
-      fd.set('is_template', nieuw ? 'true' : 'false')
-      if (lijst.beschrijving) fd.set('beschrijving', lijst.beschrijving)
+      fd.set('naam', naam.trim())
+      fd.set('beschrijving', beschrijving)
       await updateActielijst(lijst.id, fd)
+      setOpen(false)
     })
   }
+
+  return (
+    <>
+      <button
+        onClick={openDialog}
+        title="Naam en beschrijving bewerken"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+        Bewerken
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Actielijst bewerken</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <FormField label="Naam">
+                <Input value={naam} onChange={e => setNaam(e.target.value)} autoFocus />
+              </FormField>
+              <FormField label="Beschrijving">
+                <Textarea
+                  value={beschrijving}
+                  onChange={e => setBeschrijving(e.target.value)}
+                  placeholder="Optioneel"
+                  rows={3}
+                />
+              </FormField>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Annuleren</Button>
+            <Button variant="primary" onClick={handleBewaar} disabled={!naam.trim()} loading={pending}>
+              Opslaan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+export default function ActielijstDetail({ lijst }: Props) {
+  const [view, setView] = useState<'lijst' | 'kanban'>('lijst')
 
   const voortgang = lijst.taken_count > 0
     ? Math.round((lijst.gereed_count / lijst.taken_count) * 100)
@@ -50,21 +115,8 @@ export default function ActielijstDetail({ lijst }: Props) {
         }
         actions={
           <div className="flex items-center gap-2">
-            {isTemplate && <SjabloonTriggers templateId={lijst.id} />}
-            <button
-              onClick={toggleSjabloon}
-              disabled={templatePending}
-              title={isTemplate ? 'Terug naar gewone lijst' : 'Maak sjabloon'}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                isTemplate
-                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              )}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              {isTemplate ? 'Sjabloon' : 'Maak sjabloon'}
-            </button>
+            <BewerkLijstDialog lijst={lijst} />
+            {lijst.is_template && <SjabloonTriggers templateId={lijst.id} />}
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
               <button
                 onClick={() => setView('lijst')}
@@ -81,7 +133,7 @@ export default function ActielijstDetail({ lijst }: Props) {
                 <LayoutGrid className="w-4 h-4" />
               </button>
             </div>
-            <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={isTemplate} />
+            <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={lijst.is_template} />
           </div>
         }
       />
@@ -110,18 +162,18 @@ export default function ActielijstDetail({ lijst }: Props) {
           </div>
           <p className="text-slate-700 font-medium mb-1">Nog geen taken in deze lijst</p>
           <p className="text-slate-400 text-sm mb-4">Voeg de eerste taak toe om te beginnen.</p>
-          <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={isTemplate} />
+          <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={lijst.is_template} />
         </div>
       ) : view === 'lijst' ? (
         <TaakLijstWeergave
           taken={lijst.taken}
-          isTemplate={isTemplate}
+          isTemplate={lijst.is_template}
           takenInLijst={lijst.taken.map(t => ({ id: t.id, titel: t.titel }))}
         />
       ) : (
         <KanbanBord
           taken={lijst.taken}
-          isTemplate={isTemplate}
+          isTemplate={lijst.is_template}
           takenInLijst={lijst.taken.map(t => ({ id: t.id, titel: t.titel }))}
         />
       )}

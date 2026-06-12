@@ -25,7 +25,7 @@ export async function maakActielijst(formData: FormData): Promise<{ id: string }
       beschrijving:  (formData.get('beschrijving') as string) || null,
       entity_type:   entityType || null,
       entity_id:     entityId   || null,
-      is_template:   formData.get('is_template') === 'true',
+      is_template:   true, // actielijsten zijn altijd sjablonen (instanties ontstaan via activeerSjabloon)
       template_naam: (formData.get('template_naam') as string) || null,
       owner_id:      user.id,
     })
@@ -47,13 +47,13 @@ export async function updateActielijst(id: string, formData: FormData): Promise<
   const updateData: Record<string, unknown> = {
     naam:          formData.get('naam') as string,
     beschrijving:  (formData.get('beschrijving') as string) || null,
-    is_template:   formData.get('is_template') === 'true',
-    template_naam: (formData.get('template_naam') as string) || null,
     updated_at:    new Date().toISOString(),
   }
 
-  // Trigger-velden alleen overschrijven als ze expliciet meegegeven zijn
-  // (voorkomt dat toggle-is_template de ingestelde trigger wist)
+  // Optionele velden alleen overschrijven als ze expliciet meegegeven zijn,
+  // zodat bv. de hernoem-dialoog ze niet onbedoeld wist.
+  if (formData.has('is_template'))   updateData.is_template   = formData.get('is_template') === 'true'
+  if (formData.has('template_naam')) updateData.template_naam = (formData.get('template_naam') as string) || null
   if (formData.has('trigger_hoofdstatus') || formData.has('trigger_substatus')) {
     updateData.trigger_hoofdstatus = (formData.get('trigger_hoofdstatus') as string) || null
     updateData.trigger_substatus   = (formData.get('trigger_substatus')   as string) || null

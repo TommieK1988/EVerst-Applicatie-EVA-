@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/taken/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import type {
   CompletionActieType,
@@ -165,6 +166,114 @@ export async function activeerSjabloon(input: {
   revalidatePath(`/taken/lijsten/${nieuweLijst.id}`)
 
   return { lijst_id: nieuweLijst.id }
+}
+
+// ─── Sjabloon kopiëren ────────────────────────────────────────────────────────
+
+/**
+ * Maak een kopie van een actielijst (incl. taken, toewijzingen en voltooiingsacties).
+ * Triggers worden bewust NIET meegekopieerd: het doel van een kopie is een variant
+ * met andere triggers, en meekopiëren zou dubbel vuren op dezelfde events.
+ * blocked_by_task_id wordt geremapt naar de gekopieerde taken.
+ */
+export async function kopieerActielijst(bron_id: string): Promise<{ id: string }> {
+  const auth = await createClient()
+  const { data: { user } } = await auth.auth.getUser()
+  if (!user) throw new Error('Niet ingelogd')
+
+  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  const { data: bron, error: bronError } = await sb
+    .from('task_lists')
+    .select('*')
+    .eq('id', bron_id)
+    .single()
+  if (bronError || !bron) throw new Error('Actielijst niet gevonden')
+
+  const { data: bronTaken } = await sb
+    .from('tasks')
+    .select('*, task_assignees(*), task_completion_acties(*)')
+    .eq('lijst_id', bron_id)
+    .order('volgorde')
+
+  const { data: nieuweLijst, error: lijstError } = await sb
+    .from('task_lists')
+    .insert({
+      naam:          `${bron.naam} (kopie)`,
+      beschrijving:  bron.beschrijving,
+      is_template:   true,
+      template_naam: bron.template_naam ? `${bron.template_naam} (kopie)` : null,
+      owner_id:      user.id,
+      volgorde:      0,
+    })
+    .select('id')
+    .single()
+  if (lijstError || !nieuweLijst) throw new Error(`Fout bij kopiëren: ${lijstError?.message}`)
+
+  // Pass 1: taken kopiëren en oud→nieuw id-map opbouwen
+  const idMap = new Map<string, string>()
+  for (const taak of bronTaken ?? []) {
+    const { data: nieuweTaak, error: taakError } = await sb
+      .from('tasks')
+      .insert({
+        lijst_id:               nieuweLijst.id,
+        titel:                  taak.titel,
+        omschrijving:           taak.omschrijving,
+        status:                 'open',
+        prioriteit:             taak.prioriteit,
+        deadline:               taak.deadline,
+        geschatte_uren:         taak.geschatte_uren,
+        volgorde:               taak.volgorde,
+        assignee_type:          taak.assignee_type ?? 'direct',
+        dossier_rollen:         taak.dossier_rollen ?? [],
+        max_doorlooptijd_dagen: taak.max_doorlooptijd_dagen,
+        deadline_offset_dagen:  taak.deadline_offset_dagen,
+        formulier_template_id:  taak.formulier_template_id ?? null,
+        aangemaakt_door:        user.id,
+      })
+      .select('id')
+      .single()
+    if (taakError || !nieuweTaak) continue
+    idMap.set(taak.id, nieuweTaak.id)
+
+    const assignees = taak.task_assignees ?? []
+    if (assignees.length > 0) {
+      await sb.from('task_assignees').insert(
+        assignees.map((a: { user_id: string; rol: string }) => ({
+          task_id: nieuweTaak.id,
+          user_id: a.user_id,
+          rol:     a.rol,
+        })),
+      )
+    }
+
+    const acties = taak.task_completion_acties ?? []
+    if (acties.length > 0) {
+      await sb.from('task_completion_acties').insert(
+        acties.map((a: { actie_type: string; config: unknown; volgorde: number }) => ({
+          task_id:    nieuweTaak.id,
+          actie_type: a.actie_type,
+          config:     a.config,
+          volgorde:   a.volgorde,
+        })),
+      )
+    }
+  }
+
+  // Pass 2: taak-afhankelijkheden (blocked_by) remappen naar de nieuwe taken
+  for (const taak of bronTaken ?? []) {
+    if (!taak.blocked_by_task_id) continue
+    const nieuwId        = idMap.get(taak.id)
+    const nieuwBlockerId = idMap.get(taak.blocked_by_task_id)
+    if (nieuwId && nieuwBlockerId) {
+      await sb.from('tasks').update({ blocked_by_task_id: nieuwBlockerId }).eq('id', nieuwId)
+    }
+  }
+
+  revalidatePath('/taken/lijsten')
+  return { id: nieuweLijst.id }
 }
 
 // ─── Auto-trigger: verwerk openstaande activeringen ───────────────────────────
