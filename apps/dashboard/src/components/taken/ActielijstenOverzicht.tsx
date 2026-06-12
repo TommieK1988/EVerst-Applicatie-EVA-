@@ -6,10 +6,10 @@ import { Plus, List, FileText, Folder, Trash2, ChevronRight, Zap } from 'lucide-
 import { cn } from '@/lib/taken/utils'
 import PageHeader from '@/components/taken/shared/PageHeader'
 import { maakActielijst, verwijderActielijst } from '@/app/(platform)/taken/actions/taken'
-import type { DbTaskList } from '@/lib/taken/supabase/database.types'
+import type { ActielijstMetTriggerCount } from '@/lib/taken/services/taken'
 
 interface Props {
-  lijsten: DbTaskList[]
+  lijsten: ActielijstMetTriggerCount[]
 }
 
 export default function ActielijstenOverzicht({ lijsten }: Props) {
@@ -21,18 +21,6 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
   const standalone = lijsten.filter(l => !l.entity_type && !l.is_template)
   const templates  = lijsten.filter(l => l.is_template)
   const gekoppeld  = lijsten.filter(l => l.entity_type)
-
-  const SUBSTATUS_LABELS: Record<string, string> = {
-    nieuw: 'Nieuw', inlezen_aanvraag: 'Inlezen aanvraag', werkopname: 'Werkopname',
-    uitwerken_begroting: 'Uitwerken begroting', controle_begroting: 'Controle begroting',
-    offerte_gereed: 'Offerte gereed', verzonden: 'Verzonden', afgewezen: 'Afgewezen',
-    vervallen: 'Vervallen', concept: 'Concept', nabellen: 'Nabellen',
-    in_behandeling: 'In behandeling', mondelinge_toezegging: 'Mondelinge toezegging',
-    gewonnen: 'Gewonnen', verloren: 'Verloren', nieuwe_opdracht: 'Nieuwe opdracht',
-    werkvoorbereiding: 'Werkvoorbereiding', onderhanden: 'Onderhanden',
-    uitvoering_gereed: 'Uitvoering gereed', financieel_gereed: 'Financieel gereed',
-    financieel_afgesloten: 'Financieel afgesloten',
-  }
 
   const handleAanmaken = (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,7 +41,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
     startTransition(() => verwijderActielijst(id))
   }
 
-  const LijstKaart = ({ lijst }: { lijst: DbTaskList }) => (
+  const LijstKaart = ({ lijst }: { lijst: ActielijstMetTriggerCount }) => (
     <div className="bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-sm transition-all group">
       <div className="flex items-start justify-between gap-3">
         <Link href={`/taken/lijsten/${lijst.id}`} className="flex-1 min-w-0">
@@ -69,13 +57,13 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
             )}
             {lijst.is_template && (
               <span className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 flex-shrink-0 ${
-                lijst.trigger_substatus
+                lijst.triggers_count > 0
                   ? 'bg-blue-50 text-blue-700 border border-blue-200'
                   : 'bg-slate-100 text-slate-500 border border-slate-200'
               }`}>
                 <Zap className="w-3 h-3" />
-                {lijst.trigger_substatus
-                  ? (SUBSTATUS_LABELS[lijst.trigger_substatus] ?? lijst.trigger_substatus)
+                {lijst.triggers_count > 0
+                  ? `${lijst.triggers_count} trigger${lijst.triggers_count !== 1 ? 's' : ''}`
                   : 'Handmatig'}
               </span>
             )}
@@ -107,7 +95,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
     </div>
   )
 
-  const Sectie = ({ titel, items, icon }: { titel: string; items: DbTaskList[]; icon: React.ReactNode }) => {
+  const Sectie = ({ titel, items, icon }: { titel: string; items: ActielijstMetTriggerCount[]; icon: React.ReactNode }) => {
     if (items.length === 0) return null
     return (
       <div className="mb-6">

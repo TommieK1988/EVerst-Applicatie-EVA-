@@ -1,8 +1,16 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
-import { Plus, Trash2, Zap, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerBody,
+} from '@/components/ui'
 import {
   getTriggersVoorSjabloon, upsertTrigger, verwijderTrigger,
   type ActielijstTrigger, type TriggerConditie,
@@ -88,22 +96,29 @@ const inp = 'w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs foc
 
 export default function SjabloonTriggers({ templateId }: { templateId: string }) {
   const [open, setOpen] = useState(false)
+  const [refDataGeladen, setRefDataGeladen] = useState(false)
   const [triggers, setTriggers] = useState<DraftTrigger[]>([])
   const [categorieen, setCategorieen] = useState<string[]>([])
   const [toggles, setToggles] = useState<ToggleDefinitie[]>([])
   const [, startT] = useTransition()
 
+  // Triggers direct op mount laden zodat de knop het aantal kan tonen.
   useEffect(() => {
-    if (!open) return
     getTriggersVoorSjabloon(templateId).then(rows =>
       setTriggers(rows.map(r => ({
         id: r.id, localKey: nieuweKey(), event_type: r.event_type,
         event_config: r.event_config ?? {}, condities: r.condities ?? [], actief: r.actief,
       }))),
-    )
+    ).catch(() => {})
+  }, [templateId])
+
+  // Referentiedata (categorieën, toggles) lazy bij eerste keer openen.
+  useEffect(() => {
+    if (!open || refDataGeladen) return
+    setRefDataGeladen(true)
     getDossierCategorieen().then(setCategorieen).catch(() => {})
     getToggleDefinities().then(d => setToggles(d.filter(t => t.actief))).catch(() => {})
-  }, [open, templateId])
+  }, [open, refDataGeladen])
 
   function patch(key: string, change: Partial<DraftTrigger>) {
     setTriggers(prev => prev.map(t => t.localKey === key ? { ...t, ...change } : t))
@@ -137,46 +152,63 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
     })
   }
 
+  // Alleen opgeslagen, actieve triggers tellen mee in de knop.
+  const actieveCount = triggers.filter(t => t.id && t.actief).length
+
   return (
-    <div className="mb-5 border border-slate-200 rounded-xl overflow-hidden">
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors"
+        onClick={() => setOpen(true)}
+        title="Triggers instellen"
+        className={
+          actieveCount > 0
+            ? 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+            : 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+        }
       >
-        <Zap className="w-4 h-4 text-amber-500" />
-        <span className="flex-1 text-left">
-          Triggers
-          {triggers.length > 0 && <span className="ml-1 text-slate-400">({triggers.length})</span>}
-        </span>
-        {open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+        <Zap className="w-3.5 h-3.5 text-amber-500" />
+        Triggers
+        {actieveCount > 0 && <span className="font-semibold">· {actieveCount}</span>}
       </button>
 
-      {open && (
-        <div className="px-4 py-4 bg-white border-t border-slate-200 space-y-4">
-          <p className="text-xs text-slate-500">
-            Stel één of meer triggers in. Elke trigger activeert dit sjabloon zodra de gebeurtenis plaatsvindt
-            (en alle condities kloppen). De activatie gebeurt één keer per dossier. Let op: een status-trigger
-            vuurt op de status <em>nadat</em> het dossier die fase bereikt; condities worden gecheckt op dat moment.
-          </p>
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent width={480}>
+          <DrawerHeader>
+            <DrawerTitle>Triggers</DrawerTitle>
+            <DrawerDescription>
+              Elke trigger activeert dit sjabloon zodra de gebeurtenis plaatsvindt en alle condities kloppen —
+              één keer per dossier. Een status-trigger vuurt op de status <em>nadat</em> het dossier die fase
+              bereikt; condities worden op dat moment gecheckt.
+            </DrawerDescription>
+          </DrawerHeader>
+          <DrawerBody>
+            <div className="space-y-4">
+              {triggers.length === 0 && (
+                <p className="text-xs text-slate-400">
+                  Nog geen triggers ingesteld — dit sjabloon is alleen handmatig te activeren.
+                </p>
+              )}
 
-          {triggers.map(t => (
-            <TriggerKaart
-              key={t.localKey}
-              trigger={t}
-              categorieen={categorieen}
-              toggles={toggles}
-              onPatch={(c) => patch(t.localKey, c)}
-              onBewaar={() => bewaar(t)}
-              onVerwijder={() => verwijder(t)}
-            />
-          ))}
+              {triggers.map(t => (
+                <TriggerKaart
+                  key={t.localKey}
+                  trigger={t}
+                  categorieen={categorieen}
+                  toggles={toggles}
+                  onPatch={(c) => patch(t.localKey, c)}
+                  onBewaar={() => bewaar(t)}
+                  onVerwijder={() => verwijder(t)}
+                />
+              ))}
 
-          <button onClick={voegToe} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-            <Plus className="w-3.5 h-3.5" /> Trigger toevoegen
-          </button>
-        </div>
-      )}
-    </div>
+              <button onClick={voegToe} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Plus className="w-3.5 h-3.5" /> Trigger toevoegen
+              </button>
+            </div>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+    </>
   )
 }
 

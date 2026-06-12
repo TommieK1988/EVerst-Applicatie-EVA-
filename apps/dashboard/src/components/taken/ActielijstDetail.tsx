@@ -50,6 +50,7 @@ export default function ActielijstDetail({ lijst }: Props) {
         }
         actions={
           <div className="flex items-center gap-2">
+            {isTemplate && <SjabloonTriggers templateId={lijst.id} />}
             <button
               onClick={toggleSjabloon}
               disabled={templatePending}
@@ -84,9 +85,6 @@ export default function ActielijstDetail({ lijst }: Props) {
           </div>
         }
       />
-
-      {/* Sjabloon triggers */}
-      {isTemplate && <SjabloonTriggers templateId={lijst.id} />}
 
       {/* Voortgangsbalk */}
       {lijst.taken_count > 0 && (

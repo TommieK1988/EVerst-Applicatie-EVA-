@@ -12,7 +12,9 @@ export type { UrgenteTaak }
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
 
-export async function getActielijsten(): Promise<DbTaskList[]> {
+export type ActielijstMetTriggerCount = DbTaskList & { triggers_count: number }
+
+export async function getActielijsten(): Promise<ActielijstMetTriggerCount[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('task_lists')
@@ -22,7 +24,21 @@ export async function getActielijsten(): Promise<DbTaskList[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Fout bij ophalen actielijsten: ${error.message}`)
-  return data
+
+  // Tel actieve triggers per sjabloon. Via admin client: actielijst_triggers heeft
+  // RLS aan zonder policies en is dus alleen via service_role leesbaar.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data: trig } = await admin
+    .from('actielijst_triggers')
+    .select('template_id')
+    .eq('actief', true)
+  const counts = new Map<string, number>()
+  for (const t of (trig ?? []) as { template_id: string }[]) {
+    counts.set(t.template_id, (counts.get(t.template_id) ?? 0) + 1)
+  }
+
+  return (data ?? []).map(l => ({ ...l, triggers_count: counts.get(l.id) ?? 0 }))
 }
 
 export async function getActielijst(id: string): Promise<ActielijstMetTaken | null> {
