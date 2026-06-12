@@ -17,7 +17,7 @@ import {
 } from '@/app/(platform)/taken/actions/sjablonen'
 import { getToggleDefinities, type ToggleDefinitie } from '@/app/(platform)/instellingen/dossier-toggles/actions'
 import { getDossierCategorieen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
-import { zoekRelaties } from '@/lib/dossiers/actions'
+import { zoekRelaties, getUniekeBouw7Categorieen } from '@/lib/dossiers/actions'
 
 // ─── Statische keuzelijsten ───────────────────────────────────────────────────
 
@@ -77,6 +77,24 @@ const OP_OPTIES = [
   { value: 'lt', label: '<' }, { value: 'lte', label: '≤' },
 ]
 
+// Tekstvelden kennen alleen =/≠; de overige operatoren zijn alleen zinvol voor bedragen.
+const OP_OPTIES_TEKST = OP_OPTIES.filter(o => o.value === 'eq' || o.value === 'neq')
+
+// Alle substatussen over de fases heen, ontdubbeld op waarde (voor de Substatus-conditie).
+const ALLE_SUBSTATUSSEN: { value: string; label: string }[] = (() => {
+  const map = new Map<string, string>()
+  for (const lijst of Object.values(SUBSTATUSSEN_PER_FASE)) {
+    for (const s of lijst) if (!map.has(s.value)) map.set(s.value, s.label)
+  }
+  return Array.from(map, ([value, label]) => ({ value, label }))
+})()
+
+const FASE_OPTIES = [
+  { value: 'aanvraag', label: 'Aanvraag' },
+  { value: 'offerte',  label: 'Offerte' },
+  { value: 'opdracht', label: 'Opdracht' },
+]
+
 // ─── Lokaal draft-type ──────────────────────────────────────────────────────────
 
 interface DraftTrigger {
@@ -99,6 +117,7 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
   const [refDataGeladen, setRefDataGeladen] = useState(false)
   const [triggers, setTriggers] = useState<DraftTrigger[]>([])
   const [categorieen, setCategorieen] = useState<string[]>([])
+  const [bouw7Categorieen, setBouw7Categorieen] = useState<string[]>([])
   const [toggles, setToggles] = useState<ToggleDefinitie[]>([])
   const [, startT] = useTransition()
 
@@ -117,6 +136,7 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
     if (!open || refDataGeladen) return
     setRefDataGeladen(true)
     getDossierCategorieen().then(setCategorieen).catch(() => {})
+    getUniekeBouw7Categorieen().then(setBouw7Categorieen).catch(() => {})
     getToggleDefinities().then(d => setToggles(d.filter(t => t.actief))).catch(() => {})
   }, [open, refDataGeladen])
 
@@ -194,6 +214,7 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
                   key={t.localKey}
                   trigger={t}
                   categorieen={categorieen}
+                  bouw7Categorieen={bouw7Categorieen}
                   toggles={toggles}
                   onPatch={(c) => patch(t.localKey, c)}
                   onBewaar={() => bewaar(t)}
@@ -215,10 +236,11 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
 // ─── Eén trigger-kaart ────────────────────────────────────────────────────────
 
 function TriggerKaart({
-  trigger, categorieen, toggles, onPatch, onBewaar, onVerwijder,
+  trigger, categorieen, bouw7Categorieen, toggles, onPatch, onBewaar, onVerwijder,
 }: {
   trigger: DraftTrigger
   categorieen: string[]
+  bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
   onPatch: (c: Partial<DraftTrigger>) => void
   onBewaar: () => void
@@ -276,13 +298,16 @@ function TriggerKaart({
             <option value="">— Veld —</option>
             {VELD_OPTIES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
-          {cfg.veld === 'categorie' ? (
+          {cfg.veld === 'bouw7_categorie_naam' ? (
             <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} className={sel}>
+              <option value="">— Waarde —</option>
+              {bouw7Categorieen.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          ) : (
+            <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} disabled={!cfg.veld} className={sel}>
               <option value="">— Waarde —</option>
               {categorieen.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-          ) : (
-            <input type="text" value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} placeholder="Waarde" className={inp} />
           )}
         </div>
       )}
@@ -302,6 +327,7 @@ function TriggerKaart({
       <CondititesEditor
         condities={trigger.condities}
         categorieen={categorieen}
+        bouw7Categorieen={bouw7Categorieen}
         toggles={toggles}
         onChange={(c) => onPatch({ condities: c })}
       />
@@ -322,10 +348,11 @@ function TriggerKaart({
 // ─── Condities-editor ─────────────────────────────────────────────────────────
 
 function CondititesEditor({
-  condities, categorieen, toggles, onChange,
+  condities, categorieen, bouw7Categorieen, toggles, onChange,
 }: {
   condities: TriggerConditie[]
   categorieen: string[]
+  bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
   onChange: (c: TriggerConditie[]) => void
 }) {
@@ -358,35 +385,70 @@ function CondititesEditor({
             </select>
 
             {c.soort === 'veld' && <>
-              <select value={c.veld ?? ''} onChange={e => set(i, { ...c, veld: e.target.value })} className={sel}>
+              <select
+                value={c.veld ?? ''}
+                onChange={e => set(i, { soort: 'veld', veld: e.target.value, op: 'eq', waarde: '' })}
+                className={sel}
+              >
                 {CONDITIE_VELDEN.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
               </select>
               <div className="flex gap-1">
                 <select value={c.op ?? 'eq'} onChange={e => set(i, { ...c, op: e.target.value as TriggerConditie['op'] })} className={sel} style={{ width: 56 }}>
-                  {OP_OPTIES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {(c.veld === 'bedrag_excl_btw' ? OP_OPTIES : OP_OPTIES_TEKST).map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
-                {c.veld === 'categorie'
-                  ? <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
-                      <option value="">—</option>
-                      {categorieen.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                  : <input type="text" value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} placeholder="Waarde" className={inp} />}
+                {c.veld === 'categorie' && (
+                  <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
+                    <option value="">— Waarde —</option>
+                    {categorieen.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                )}
+                {c.veld === 'bouw7_categorie_naam' && (
+                  <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
+                    <option value="">— Waarde —</option>
+                    {bouw7Categorieen.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                )}
+                {c.veld === 'hoofdstatus' && (
+                  <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
+                    <option value="">— Fase —</option>
+                    {FASE_OPTIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                )}
+                {c.veld === 'actieve_substatus' && (
+                  <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
+                    <option value="">— Substatus —</option>
+                    {ALLE_SUBSTATUSSEN.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                )}
+                {c.veld === 'bedrag_excl_btw' && (
+                  <input
+                    type="number"
+                    value={c.waarde === '' || c.waarde == null ? '' : Number(c.waarde)}
+                    onChange={e => set(i, { ...c, waarde: e.target.value === '' ? '' : Number(e.target.value) })}
+                    placeholder="Bedrag"
+                    className={inp}
+                  />
+                )}
               </div>
             </>}
 
             {c.soort === 'klant' && (
               <div className="col-span-2">
                 {c.klant_id
-                  ? <div className="flex items-center gap-2 text-xs">
-                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">Gekozen opdrachtgever</span>
-                      <button onClick={() => set(i, { soort: 'klant', op: 'eq' })} className="text-slate-400 hover:text-red-500">wijzig</button>
+                  ? <div className="flex items-center gap-2 text-xs min-w-0">
+                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded truncate" title={c.klant_naam}>
+                        {c.klant_naam ?? 'Gekozen opdrachtgever'}
+                      </span>
+                      <button onClick={() => set(i, { soort: 'klant', op: 'eq' })} className="text-slate-400 hover:text-red-500 flex-shrink-0">wijzig</button>
                     </div>
                   : <>
                       <input type="text" value={klantZoek} onChange={e => zoek(e.target.value)} placeholder="Zoek opdrachtgever…" className={inp} />
                       {klantResultaten.length > 0 && (
                         <div className="mt-1 border border-slate-200 rounded-lg max-h-32 overflow-auto bg-white">
                           {klantResultaten.map(r => (
-                            <button key={r.id} onClick={() => { set(i, { soort: 'klant', op: 'eq', klant_id: r.id }); setKlantZoek(''); setKlantResultaten([]) }}
+                            <button key={r.id} onClick={() => { set(i, { soort: 'klant', op: 'eq', klant_id: r.id, klant_naam: r.naam }); setKlantZoek(''); setKlantResultaten([]) }}
                               className="block w-full text-left px-2 py-1.5 text-xs hover:bg-slate-50">{r.naam}</button>
                           ))}
                         </div>

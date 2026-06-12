@@ -369,6 +369,8 @@ export interface TriggerConditie {
   op?: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
   waarde?: string | number
   klant_id?: string
+  /** Alleen voor weergave in de editor; de evaluator gebruikt klant_id. */
+  klant_naam?: string
   toggle_sleutel?: string
   aan?: boolean
 }
