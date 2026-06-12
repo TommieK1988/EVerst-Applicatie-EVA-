@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import type { OrganisatieType } from '@everts/database'
 
@@ -686,6 +686,32 @@ export async function syncProjects(): Promise<SyncResult> {
     } catch (e: unknown) {
       quotationLogInfo = `Fout /list/quotations: ${e instanceof Error ? e.message : String(e)}`
     }
+
+    // Gecalculeerde kostprijs per project: som van calculationTotal over de offerteregels
+    // (detail-endpoint /quotation/{id}). 0 of niet gecalculeerd → null.
+    const kostprijsMap = new Map<string, number>()
+    {
+      const entries = [...quotationMap.entries()]
+      const QUOTE_BATCH = 10
+      for (let i = 0; i < entries.length; i += QUOTE_BATCH) {
+        const batch = entries.slice(i, i + QUOTE_BATCH)
+        const results = await Promise.allSettled(
+          batch.map(([, q]) => bouw7.get<Bouw7QuotationDetail>(`/quotation/${q.id}`))
+        )
+        for (let j = 0; j < batch.length; j++) {
+          const r = results[j]
+          if (r.status !== 'fulfilled' || !r.value?.chapters) continue
+          const kostprijs = r.value.chapters
+            .flatMap(c => c.lines ?? [])
+            .filter(l => !l.option)
+            .reduce((s, l) => {
+              const n = parseFloat(String(l.calculationTotal ?? ''))
+              return s + (isNaN(n) ? 0 : n)
+            }, 0)
+          if (kostprijs > 0) kostprijsMap.set(batch[j][0], Math.round(kostprijs * 100) / 100)
+        }
+      }
+    }
     // Log quotation-diagnose apart zodat fouten zichtbaar zijn in sync_log
     await supabase.from('sync_log').insert({
       integratie: 'bouw7', entiteit: 'quotations', richting: 'in',
@@ -812,12 +838,23 @@ export async function syncProjects(): Promise<SyncResult> {
         quote?.quotationStatus?.name ?? null,
       )
 
-      // Totaal begrote bedrag: fixedPrice (aanneemsom) > revenue.budgeted > subtotal offerte
-      // extractFinNum() handelt het geval af dat fixedPrice een object is geworden (Athena API-wijziging)
-      const kostprijs = extractFinNum(fin?.fixedPrice)
+      // Gecalculeerde kostprijs: som van calculationTotal over de offerteregels (kostprijsMap).
+      // fixedPrice, revenue.budgeted en quote.subtotal zijn verkoopprijzen — géén kostprijs.
+      const kostprijs = kostprijsMap.get(bouw7IdStr) ?? null
+
+      // Verkoopprijs excl. BTW: Athena-contractbedrag, anders het offerte-subtotaal.
+      const verkoopExcl = extractFinNum(fin?.fixedPrice)
         ?? extractFinNum(fin?.revenue?.budgeted)
-        ?? (quote?.subtotal != null ? Number(quote.subtotal) || null : null)
+        ?? extractFinNum(quote?.subtotal)
+        ?? extractFinNum(p.fixedPrice)
         ?? null
+      // Verkoopprijs incl. BTW: offerte-totaal — alleen bruikbaar als de offerte ook de bron
+      // van de excl-prijs is (zelfde offerte), anders hoort total niet bij dit bedrag.
+      const quoteSubtotal = extractFinNum(quote?.subtotal)
+      const verkoopIncl = (quoteSubtotal != null && verkoopExcl != null
+        && Math.abs(quoteSubtotal - verkoopExcl) < 0.01)
+        ? extractFinNum(quote?.total)
+        : null
 
       rows.push({
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
@@ -845,12 +882,8 @@ export async function syncProjects(): Promise<SyncResult> {
                                     const evaKlantId = p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null
                                     return evaKlantId ? (contactpersoonMap.get(evaKlantId) ?? null) : null
                                   })(),
-        // extractFinNum() vangt het geval af dat totalExclVat/fixedPrice een Athena-object
-        // ({budgeted, prognosis, realised, …}) is geworden i.p.v. een number/string.
-        bedrag_excl_btw:          extractFinNum(p.totalExclVat)
-                                    ?? extractFinNum(p.fixedPrice)
-                                    ?? extractFinNum(quote?.total)
-                                    ?? null,
+        bedrag_excl_btw:          verkoopExcl,
+        bedrag_incl_btw:          verkoopIncl,
         kostprijs_excl_btw:       kostprijs,
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,

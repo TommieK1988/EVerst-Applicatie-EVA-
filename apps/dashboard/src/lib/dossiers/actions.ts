@@ -260,6 +260,7 @@ export async function getMijnDossiers(
   medewerkerID: string,
   hoofdstatus: Hoofdstatus,
   limit = 10,
+  sorteer: { kolom: string; ascending?: boolean } = { kolom: 'updated_at', ascending: false },
 ): Promise<DossierResult> {
   const supabase = createAdminClient() as any
 
@@ -275,7 +276,7 @@ export async function getMijnDossiers(
       `uitvoerder_id.eq.${medewerkerID},` +
       `controller_id.eq.${medewerkerID}`,
     )
-    .order('updated_at', { ascending: false })
+    .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
     .limit(limit)
 
   if (error) {
@@ -284,6 +285,35 @@ export async function getMijnDossiers(
   }
 
   return { ok: true, data: (data ?? []).map(mapRij) }
+}
+
+/** Zoek dossiers op titel (voor de dossier-picker bij taken). */
+export async function zoekDossiers(query: string, limit = 10): Promise<{
+  id: string
+  titel: string
+  hoofdstatus: Hoofdstatus
+  klant_naam: string | null
+}[]> {
+  const term = query.trim()
+  if (!term) return []
+
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select('id, titel, hoofdstatus, relaties!klant_id ( naam )')
+    .ilike('titel', `%${term}%`)
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+
+  if (error) return []
+
+  return (data ?? []).map((d: any) => ({
+    id:          d.id,
+    titel:       d.titel,
+    hoofdstatus: d.hoofdstatus,
+    klant_naam:  d.relaties?.naam ?? null,
+  }))
 }
 
 /** Maak een nieuwe aanvraag aan. */

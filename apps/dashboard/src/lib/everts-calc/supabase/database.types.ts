@@ -642,6 +642,7 @@ export type Database = {
       dossiers: {
         Row: {
           bedrag_excl_btw: number | null
+          bedrag_incl_btw: number | null
           bouw7_id: string | null
           bouw7_laatst_sync: string | null
           bouw7_sync_fout: string | null
@@ -664,6 +665,7 @@ export type Database = {
         }
         Insert: {
           bedrag_excl_btw?: number | null
+          bedrag_incl_btw?: number | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
           bouw7_sync_fout?: string | null
@@ -686,6 +688,7 @@ export type Database = {
         }
         Update: {
           bedrag_excl_btw?: number | null
+          bedrag_incl_btw?: number | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
           bouw7_sync_fout?: string | null

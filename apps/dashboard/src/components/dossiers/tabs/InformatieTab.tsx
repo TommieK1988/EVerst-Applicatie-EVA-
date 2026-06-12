@@ -141,6 +141,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     prioriteit:              t.prioriteit as TaskPrioriteit,
     deadline:                t.deadline,
     lijst_id:                null,
+    dossier_id:              null,
     parent_task_id:          null,
     geschatte_uren:          null,
     volgorde:                0,
@@ -465,6 +466,9 @@ export function InformatieTab({
   // Velden die uit Bouw7 komen zijn niet bewerkbaar in EVA (geen terugschrijven naar Bouw7).
   // Geldt alleen voor dossiers die daadwerkelijk uit Bouw7 komen.
   const bouw7Vergrendeld = (dossier as any).bouw7_id != null
+  const bouw7Url = bouw7Vergrendeld
+    ? `https://start.bouw7.nl/project/view?id=${(dossier as any).bouw7_id}#/`
+    : null
   // Fase-gating: alleen EVA-eigen substatussen zijn kiesbaar; Bouw7-eigen statussen blijven
   // zichtbaar als huidige waarde maar zijn niet selecteerbaar.
   const kiesbareStatussen = beschikbareStatussen.filter(
@@ -585,15 +589,23 @@ export function InformatieTab({
 
   const heeftCalcKnoppen      = sectie === 'aanvraag' && projectId != null
   const geselecteerdFa        = factuuradressen.find(fa => fa.id === form.factuuradres_id) ?? null
-  const finAanneemsom         = quoteTotalen?.subtotaal_ex_btw ?? (dossier.bedrag_excl_btw ?? 0)
-  const finKostprijs          = quoteTotalen?.kostprijs        ?? dossier.kostprijs_excl_btw ?? 0
-  const finMargeEuro          = quoteTotalen?.marge_euro       ?? 0
-  const finMargePct           = quoteTotalen?.marge_pct        ?? 0
+  const finAanneemsom         = quoteTotalen?.subtotaal_ex_btw ?? dossier.bedrag_excl_btw ?? null
+  const finKostprijs          = quoteTotalen?.kostprijs        ?? dossier.kostprijs_excl_btw ?? null
+  // Marge alleen te bepalen als kostprijs én verkoopprijs bekend zijn — anders niet tonen.
+  const finMargeEuro          = quoteTotalen?.marge_euro
+    ?? (finAanneemsom != null && finKostprijs != null ? finAanneemsom - finKostprijs : null)
+  const finMargePct           = quoteTotalen?.marge_pct
+    ?? (finMargeEuro != null && finAanneemsom ? (finMargeEuro / finAanneemsom) * 100 : null)
   const finStelposten         = quoteTotalen?.stelposten_subtotaal ?? 0
   const finOptioneel          = quoteTotalen?.opties_subtotaal     ?? 0
-  const finBtw                = quoteTotalen?.btw_bedrag ?? Math.round(finAanneemsom * 0.21 * 100) / 100
-  const finTotaalIncl         = quoteTotalen?.totaal_incl_btw ?? (finAanneemsom + finBtw)
-  const margeKleur            = finMargePct >= 20 ? '#009439' : finMargePct >= 10 ? '#d97706' : '#d9534f'
+  // Totaal incl. BTW komt uit de calculatie of uit Bouw7 (bedrag_incl_btw) — nooit zelf 21% schatten,
+  // want er zijn ook 9%- en BTW-verlegd-projecten. BTW = incl − excl.
+  const finTotaalIncl         = quoteTotalen?.totaal_incl_btw ?? dossier.bedrag_incl_btw ?? null
+  const finBtw                = quoteTotalen?.btw_bedrag
+    ?? (finTotaalIncl != null && finAanneemsom != null
+        ? Math.round((finTotaalIncl - finAanneemsom) * 100) / 100
+        : null)
+  const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
   const categorieOpties    = (categorieen?.length ? categorieen : DEFAULT_CATEGORIEEN).map(c => ({ value: c, label: c }))
@@ -608,8 +620,26 @@ export function InformatieTab({
       {/* ── Pagina header ── */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="mb-1 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">
-            {dossier.dossiernummer}
+          <div className="mb-1 flex items-center gap-1.5">
+            <span className="font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">
+              {dossier.dossiernummer}
+            </span>
+            {bouw7Url && (
+              <a
+                href={bouw7Url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Openen in Bouw7"
+                className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-500 opacity-40 transition-opacity hover:opacity-100"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            )}
           </div>
           <h1 className="m-0 text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-neutral-900">
             {dossier.titel}
@@ -1077,29 +1107,37 @@ export function InformatieTab({
           <CardHeader>Financiële totalen</CardHeader>
           <CardBody>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <InfoVeld label="Aanneemsom excl. BTW"   waarde={fmtBedrag(finAanneemsom)} numeric />
-              <InfoVeld label="Gecalculeerde kostprijs" waarde={fmtBedrag(finKostprijs)}  numeric />
-              <div className="col-span-2">
-                <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Marge</div>
-                <div className="flex items-center gap-2.5">
-                  <span className="tabular-nums text-[13px] font-bold" style={{ color: margeKleur }}>
-                    {finMargePct.toFixed(1)}%
-                  </span>
-                  <span className="tabular-nums text-[12px] text-neutral-400">
-                    ({fmtBedrag(finMargeEuro)})
-                  </span>
-                  {!quoteTotalen && (
-                    <span className="text-[10px] italic text-neutral-400">— koppel een calculatie om te berekenen</span>
-                  )}
+              <InfoVeld label="Aanneemsom excl. BTW"   waarde={finAanneemsom != null ? fmtBedrag(finAanneemsom) : null} numeric />
+              {finKostprijs != null ? (
+                <InfoVeld label="Gecalculeerde kostprijs" waarde={fmtBedrag(finKostprijs)} numeric />
+              ) : (
+                <div>
+                  <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Gecalculeerde kostprijs</div>
+                  <div className="text-[13px] italic text-neutral-400">Geen kostprijs berekend</div>
                 </div>
-              </div>
+              )}
+              {finMargePct != null && finMargeEuro != null && (
+                <div className="col-span-2">
+                  <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Marge</div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="tabular-nums text-[13px] font-bold" style={{ color: margeKleur }}>
+                      {finMargePct.toFixed(1)}%
+                    </span>
+                    <span className="tabular-nums text-[12px] text-neutral-400">
+                      ({fmtBedrag(finMargeEuro)})
+                    </span>
+                  </div>
+                </div>
+              )}
               <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
               <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
-              <InfoVeld label="BTW"               waarde={fmtBedrag(finBtw)}        numeric />
+              <InfoVeld label="BTW"               waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
             </div>
             <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">Totaal incl. BTW</span>
-              <span className="tabular-nums text-[18px] font-bold text-neutral-900">{fmtBedrag(finTotaalIncl)}</span>
+              <span className="tabular-nums text-[18px] font-bold text-neutral-900">
+                {finTotaalIncl != null ? fmtBedrag(finTotaalIncl) : '—'}
+              </span>
             </div>
             <Separator className="my-3" />
             {editMode ? (

@@ -13,8 +13,21 @@ import {
   getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN,
 } from '@/components/dossiers/types';
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
+import { berekenWerkdagenDrempel } from '@/lib/agenda/werkdagen';
+
+/* ── Weergave-limieten ───────────────────────────────────────
+   Widgets zijn 460px hoog zonder interne scroll; deze aantallen
+   passen binnen de beschikbare contenthoogte (±373px). */
+const MAX_TAKEN         = 6;
+const MAX_HERINNERINGEN = 5;
+const MAX_DOSSIERS      = 6;
+const MAX_NIEUWS        = 4;
 
 /* ── Helpers ─────────────────────────────────────────────── */
+
+function localDateStr(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function relativeDeadline(deadline: string | null): string {
   if (!deadline) return 'Geen deadline';
@@ -131,10 +144,7 @@ export function WidgetShell({
       </div>
       <div style={{
         flex: 1,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'var(--border) transparent',
+        overflow: 'hidden',
       }}>
         {children}
       </div>
@@ -165,7 +175,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
     });
   };
 
-  const displayed = taken.slice(0, 8);
+  const displayed = taken.slice(0, MAX_TAKEN);
   const open = displayed.filter(t => !doneIds.has(t.id)).length;
 
   return (
@@ -174,6 +184,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
       subtitle={`${open} open · ${doneIds.size} afgerond`}
       actionNode={
         <NieuweTaakDialog
+          toonDossierPicker
           onSuccess={() => router.refresh()}
           trigger={
             <button style={{
@@ -260,10 +271,13 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
 /* ── RemindersWidget ─────────────────────────────────────── */
 export function RemindersWidget({ taken }: { taken: TaakMetDetails[] }) {
   const router = useRouter();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
+  // Urgente taken + taken die binnen 3 werkdagen (excl. weekend/feestdagen) verlopen.
+  // Input is al gesorteerd op deadline ASC (nulls laatst).
+  const drempel = React.useMemo(() => berekenWerkdagenDrempel(new Date(), 3), []);
   const urgent = taken
-    .filter(t => t.prioriteit === 'urgent' || (t.deadline && t.deadline <= today))
-    .slice(0, 8);
+    .filter(t => t.prioriteit === 'urgent' || (t.deadline && t.deadline <= drempel))
+    .slice(0, MAX_HERINNERINGEN);
 
   return (
     <WidgetShell
@@ -292,7 +306,7 @@ export function RemindersWidget({ taken }: { taken: TaakMetDetails[] }) {
                   {t.titel}
                 </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: overdue ? '#d04a2a' : 'var(--fg-muted)', marginTop: 2, fontWeight: 500 }}>
-                  {relativeDeadline(t.deadline)} · {t.lijst?.naam ?? 'Takenlijst'}
+                  {relativeDeadline(t.deadline)} · {t.lijst?.naam ?? t.dossier_naam ?? 'Takenlijst'}
                 </div>
               </div>
             </div>
@@ -303,97 +317,49 @@ export function RemindersWidget({ taken }: { taken: TaakMetDetails[] }) {
   );
 }
 
-/* ── ProjectsWidget ──────────────────────────────────────── */
-export function ProjectsWidget({ opdrachten }: { opdrachten: DossierRij[] }) {
-  const displayed = opdrachten.slice(0, 8);
-
-  return (
-    <WidgetShell
-      title="Mijn opdrachten"
-      subtitle={displayed.length > 0 ? `${displayed.length} lopend` : 'Geen actieve opdrachten'}
-      action="Alle"
-      Icon={IconOpdrachten}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 4 }}>
-        {displayed.length === 0 && (
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
-            Geen opdrachten gevonden.
-          </div>
-        )}
-        {displayed.map((p) => {
-          const sub = substatusLabel(p);
-          const isLaat = p.opdracht_substatus === 'uitvoering_gereed' || p.opdracht_substatus === 'financieel_gereed';
-          return (
-            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.titel}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.klant_naam ?? '—'}
-                  </div>
-                </div>
-                <span style={{
-                  flexShrink: 0,
-                  padding: '2px 7px', borderRadius: 5,
-                  fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 700,
-                  letterSpacing: '0.04em', textTransform: 'uppercase',
-                  background: isLaat ? 'rgba(208,74,42,0.12)' : 'var(--bg-active)',
-                  color: isLaat ? '#d04a2a' : 'var(--accent)',
-                }}>{sub}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </WidgetShell>
-  );
-}
-
-/* ── DossierWidget ───────────────────────────────────────── */
-export function DossierWidget({ aanvragen, offertes }: { aanvragen: DossierRij[]; offertes: DossierRij[] }) {
+/* ── DossierLijstWidget (gedeeld: opdrachten + aanvragen) ── */
+function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur }: {
+  title: string;
+  dossiers: DossierRij[];
+  sectie: 'aanvragen' | 'opdrachten';
+  Icon: React.FC<{ size?: number }>;
+  dotKleur: string;
+  moreHref: string;
+  emptyText: string;
+  countLabel: string;
+  /** Optionele kleur per dossier voor het substatus-label (bijv. rood bij actie vereist). */
+  subKleur?: (d: DossierRij) => string;
+}) {
   const router = useRouter();
-  const combined = [
-    ...aanvragen.map(d => ({ ...d, _type: 'aanvraag' as const })),
-    ...offertes.map(d =>  ({ ...d, _type: 'offerte'  as const })),
-  ].sort((a, b) => {
-    const ta = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-    const tb = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-    return tb - ta;
-  }).slice(0, 8);
-
-  const total = aanvragen.length + offertes.length;
+  const displayed = dossiers.slice(0, MAX_DOSSIERS);
 
   return (
     <WidgetShell
-      title="Aanvragen & offertes"
-      subtitle={total > 0 ? `${total} actief` : 'Geen actieve dossiers'}
-      Icon={IconAanvragen}
-      onMore={() => router.push('/aanvragen')}
+      title={title}
+      subtitle={displayed.length > 0 ? `${displayed.length} ${countLabel}` : 'Geen actieve dossiers'}
+      Icon={Icon}
+      onMore={() => router.push(moreHref)}
     >
       <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 4 }}>
-        {combined.length === 0 && (
+        {displayed.length === 0 && (
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)', padding: '8px 0' }}>
-            Geen lopende aanvragen of offertes.
+            {emptyText}
           </div>
         )}
-        {combined.map((d, i) => {
-          const isOfferte = d._type === 'offerte';
-          const dot = isOfferte ? 'var(--accent)' : '#d9a036';
+        {displayed.map((d, i) => {
           const sub = substatusLabel(d);
           return (
             <a
               key={d.id}
-              href={`/${d._type === 'aanvraag' ? 'aanvragen' : 'offertes'}/${d.id}`}
+              href={`/${sectie}/${d.id}`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 2px',
-                borderBottom: i < combined.length - 1 ? '1px solid var(--border)' : 'none',
+                borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
                 textDecoration: 'none', color: 'inherit',
               }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }}/>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotKleur, flexShrink: 0 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {d.titel}
@@ -406,13 +372,48 @@ export function DossierWidget({ aanvragen, offertes }: { aanvragen: DossierRij[]
                 flexShrink: 0,
                 fontFamily: 'var(--font-ui)', fontSize: 9, fontWeight: 700,
                 letterSpacing: '0.04em', textTransform: 'uppercase',
-                color: isOfferte ? 'var(--accent)' : '#d9a036',
+                color: subKleur?.(d) ?? dotKleur,
               }}>{sub}</span>
             </a>
           );
         })}
       </div>
     </WidgetShell>
+  );
+}
+
+/* ── ProjectsWidget ──────────────────────────────────────── */
+export function ProjectsWidget({ opdrachten }: { opdrachten: DossierRij[] }) {
+  return (
+    <DossierLijstWidget
+      title="Mijn opdrachten"
+      dossiers={opdrachten}
+      sectie="opdrachten"
+      Icon={IconOpdrachten}
+      dotKleur="var(--accent)"
+      moreHref="/opdrachten"
+      emptyText="Geen opdrachten gevonden."
+      countLabel="lopend"
+      subKleur={d => (d.opdracht_substatus === 'uitvoering_gereed' || d.opdracht_substatus === 'financieel_gereed')
+        ? '#d04a2a'
+        : 'var(--accent)'}
+    />
+  );
+}
+
+/* ── DossierWidget ───────────────────────────────────────── */
+export function DossierWidget({ aanvragen }: { aanvragen: DossierRij[] }) {
+  return (
+    <DossierLijstWidget
+      title="Mijn aanvragen"
+      dossiers={aanvragen}
+      sectie="aanvragen"
+      Icon={IconAanvragen}
+      dotKleur="#d9a036"
+      moreHref="/aanvragen"
+      emptyText="Geen lopende aanvragen."
+      countLabel="actief"
+    />
   );
 }
 
@@ -431,12 +432,13 @@ export function NewsWidget() {
   }, []);
 
   const loading = items === null && !error;
+  const displayed = items?.slice(0, MAX_NIEUWS);
 
   return (
     <WidgetShell title="Nieuws uit de sector" subtitle="NU.nl Economie · Installatie.nl · NU.nl Wonen" action="Kanalen" Icon={IconSparkle}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {loading && [0,1,2,3,4,5,6,7].map(i => (
-          <div key={i} style={{ padding: '10px 2px', borderBottom: i < 7 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 12 }}>
+        {loading && [0,1,2,3].map(i => (
+          <div key={i} style={{ padding: '10px 2px', borderBottom: i < MAX_NIEUWS - 1 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 7, background: 'var(--bg-active)', flexShrink: 0 }}/>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
               <div style={{ height: 12, borderRadius: 4, background: 'var(--bg-active)', width: '80%' }}/>
@@ -449,10 +451,10 @@ export function NewsWidget() {
             Nieuws niet beschikbaar.
           </div>
         )}
-        {items?.map((n, i) => (
+        {displayed?.map((n, i) => (
           <a key={i} href={n.link} target="_blank" rel="noopener noreferrer" style={{
             display: 'flex', gap: 12, padding: '10px 2px',
-            borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
+            borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
             textDecoration: 'none', color: 'inherit',
           }}>
             <div style={{
@@ -464,7 +466,10 @@ export function NewsWidget() {
               lineHeight: 1.2, padding: 4,
             }}>{n.source}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)', lineHeight: 1.35 }}>{n.title}</div>
+              <div style={{
+                fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)', lineHeight: 1.35,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}>{n.title}</div>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', marginTop: 3, letterSpacing: '0.04em' }}>
                 {n.source} · {relativeNewsTime(n.pubDate)} · <span style={{ color: 'var(--accent)' }}>{n.tag}</span>
               </div>
@@ -482,6 +487,7 @@ interface WeatherData {
   temp: number; feelsLike: number; windspeed: number;
   weathercode: number; emoji: string; label: string;
   tempMax: number; tempMin: number;
+  hourly?: { time: string; uur: string; temp: number; emoji: string }[];
   daily: { day: string; tempMax: number; tempMin: number; emoji: string; weathercode: number }[];
 }
 
@@ -517,7 +523,29 @@ export function WeatherWidget() {
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, opacity: 0.85 }}>Min {data?.tempMin ?? '—'}°</div>
         </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, gap: 4 }}>
+      {/* Uurverwachting — komende 6 uren */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', gap: 4,
+        marginTop: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)',
+      }}>
+        {(() => {
+          const nu = new Date();
+          const uren = (data?.hourly ?? []).filter(h => new Date(h.time) >= nu).slice(0, 6);
+          const cellen = uren.length > 0
+            ? uren
+            : Array.from({ length: 6 }, () => ({ uur: '—', emoji: '⛅', temp: null as number | null }));
+          return cellen.map((h, i) => (
+            <div key={i} style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)' }}>{h.uur}</div>
+              <div style={{ fontSize: 15, margin: '3px 0' }}>{h.emoji}</div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 700, color: 'var(--fg)' }}>
+                {h.temp !== null ? `${h.temp}°` : '—'}
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, gap: 4 }}>
         {(data?.daily ?? Array.from({ length: 7 }, (_, i) => ({
           day: i === 0 ? 'Vandaag' : i === 1 ? 'Morgen' : '—',
           tempMax: null, tempMin: null, emoji: '⛅',
@@ -604,7 +632,7 @@ export function AgendaWidget({ items = [] }: { items?: AgendaWidgetItem[] }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
         {items.length === 0 && (
           <div style={{ padding: '8px 0', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
-            Geen aankomende items in de komende 30 dagen.
+            Geen aankomende items.
           </div>
         )}
         {items.map(item => {

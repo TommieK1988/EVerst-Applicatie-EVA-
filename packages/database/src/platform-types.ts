@@ -381,6 +381,7 @@ export type Dossier = {
   offerte_substatus: OfferteSubstatus | null
   opdracht_substatus: OpdrachtSubstatus | null
   bedrag_excl_btw: number | null
+  bedrag_incl_btw: number | null
   verwacht_startdatum: string | null
   verwacht_einddatum: string | null
   project_manager_id: string | null

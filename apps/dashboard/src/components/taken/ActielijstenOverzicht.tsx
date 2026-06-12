@@ -17,6 +17,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
   const [toonNieuw, setToonNieuw]  = useState(false)
   const [naam, setNaam]            = useState('')
   const [beschrijving, setBeschrijving] = useState('')
+  const [alsTemplate, setAlsTemplate]   = useState(true)
 
   const standalone = lijsten.filter(l => !l.entity_type && !l.is_template)
   const templates  = lijsten.filter(l => l.is_template)
@@ -28,6 +29,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
     const fd = new FormData()
     fd.set('naam', naam.trim())
     fd.set('beschrijving', beschrijving)
+    fd.set('is_template', alsTemplate ? 'true' : 'false')
     startTransition(async () => {
       await maakActielijst(fd)
       setNaam('')
@@ -147,6 +149,15 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
               placeholder="Beschrijving (optioneel)"
               className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30"
             />
+            <label className="flex items-center gap-2 text-sm text-slate-600 whitespace-nowrap cursor-pointer">
+              <input
+                type="checkbox"
+                checked={alsTemplate}
+                onChange={e => setAlsTemplate(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Direct als sjabloon
+            </label>
             <div className="flex items-center gap-2">
               <button
                 type="submit"

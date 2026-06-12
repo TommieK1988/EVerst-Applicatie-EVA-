@@ -1116,6 +1116,7 @@ export type Database = {
             | Database["public"]["Enums"]["aanvraag_substatus"]
             | null
           bedrag_excl_btw: number | null
+          bedrag_incl_btw: number | null
           bouw7_categorie: string | null
           bouw7_categorie_id: number | null
           bouw7_categorie_naam: string | null
@@ -1174,6 +1175,7 @@ export type Database = {
             | Database["public"]["Enums"]["aanvraag_substatus"]
             | null
           bedrag_excl_btw?: number | null
+          bedrag_incl_btw?: number | null
           bouw7_categorie?: string | null
           bouw7_categorie_id?: number | null
           bouw7_categorie_naam?: string | null
@@ -1232,6 +1234,7 @@ export type Database = {
             | Database["public"]["Enums"]["aanvraag_substatus"]
             | null
           bedrag_excl_btw?: number | null
+          bedrag_incl_btw?: number | null
           bouw7_categorie?: string | null
           bouw7_categorie_id?: number | null
           bouw7_categorie_naam?: string | null

@@ -99,7 +99,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <ActielijstenTab dossier_id={id} />
+        <ActielijstenTab dossier_id={id} dossier_titel={dossier?.titel} />
       </>
     )
   }

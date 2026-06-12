@@ -16,10 +16,12 @@ export type ActielijstMetTriggerCount = DbTaskList & { triggers_count: number }
 
 export async function getActielijsten(): Promise<ActielijstMetTriggerCount[]> {
   const supabase = await createClient()
+  // Alles behalve dossier-instanties (gekloonde sjablonen); die staan op de
+  // Actielijsten-tab van het dossier zelf. Toont dus sjablonen én losse lijsten.
   const { data, error } = await supabase
     .from('task_lists')
     .select('*')
-    .eq('is_template', true)
+    .is('dossier_id', null)
     .order('template_naam', { ascending: true })
     .order('created_at', { ascending: false })
 
@@ -168,7 +170,8 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
       subtaken:tasks!parent_task_id ( id ),
       task_comments ( id ),
       task_attachments ( id ),
-      lijst:task_lists ( id, naam, dossier_id, dossiers ( id, titel, hoofdstatus ) )
+      lijst:task_lists ( id, naam, dossier_id, dossiers ( id, titel, hoofdstatus ) ),
+      dossier:dossiers ( id, titel, hoofdstatus )
     `)
     .in('id', taskIds)
     .is('parent_task_id', null)
@@ -178,6 +181,7 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
 
   if (error) throw new Error(`Fout bij ophalen mijn taken: ${error.message}`)
 
+  // Dossier-context: directe koppeling (losse taak) gaat vóór de koppeling via de lijst.
   return (data as any[]).map(taak => ({
     ...taak,
     assignees:         taak.task_assignees ?? [],
@@ -185,9 +189,9 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
     comments_count:    (taak.task_comments ?? []).length,
     attachments_count: (taak.task_attachments ?? []).length,
     lijst:             taak.lijst ?? undefined,
-    dossier_id:        taak.lijst?.dossier_id ?? null,
-    dossier_naam:      taak.lijst?.dossiers?.titel ?? null,
-    dossier_sectie:    hoofdstatusToSectie(taak.lijst?.dossiers?.hoofdstatus),
+    dossier_id:        taak.dossier?.id ?? taak.lijst?.dossier_id ?? null,
+    dossier_naam:      taak.dossier?.titel ?? taak.lijst?.dossiers?.titel ?? null,
+    dossier_sectie:    hoofdstatusToSectie(taak.dossier?.hoofdstatus ?? taak.lijst?.dossiers?.hoofdstatus),
   }))
 }
 
@@ -294,6 +298,29 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
     })
   }
   return result
+}
+
+/** Losse taken die direct (zonder actielijst) aan een dossier hangen. */
+export async function getLosseTakenVoorDossier(dossier_id: string): Promise<TaakMetDetails[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: taken } = await supabase
+    .from('tasks')
+    .select('*, task_assignees(*)')
+    .eq('dossier_id', dossier_id)
+    .is('lijst_id', null)
+    .is('parent_task_id', null)
+    .order('volgorde')
+    .order('created_at', { ascending: false })
+
+  return ((taken ?? []) as Record<string, unknown>[]).map(t => ({
+    ...t,
+    assignees:         t.task_assignees ?? [],
+    subtaken:          [],
+    comments_count:    0,
+    attachments_count: 0,
+  })) as unknown as TaakMetDetails[]
 }
 
 export async function getSjablonen(): Promise<DbTaskList[]> {

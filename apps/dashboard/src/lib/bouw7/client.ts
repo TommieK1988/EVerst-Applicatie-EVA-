@@ -152,7 +152,12 @@ export type Bouw7Project = {
   city?: string
   startDate?: string
   endDate?: string
+  /**
+   * Historisch veld — komt in de huidige API-response niet meer voor en bevatte
+   * bovendien de prijs ínclusief BTW (ondanks de naam). Niet meer gebruiken.
+   */
   totalExclVat?: number
+  /** Vaste aanneemsom (contractbedrag) excl. BTW. */
   fixedPrice?: string
   budgetAmount?: number
   notes?: string
@@ -175,14 +180,49 @@ export type Bouw7Quotation = {
   /** Verwijzing naar het Bouw7-project. */
   project?: { id: number; name?: string }
   contact?: { id: number; name?: string }
-  /** Subtotaal — basisbedrag vóór opslag, AK, winst/risico en commissie (= kostprijs). */
+  /**
+   * Verkoopprijs excl. BTW (geverifieerd: over alle offertes is total/subtotal exact
+   * de BTW-factor — 1,21 / 1,09 / gemengd / 1,00 bij BTW-verlegd). Dit is dus GEEN kostprijs.
+   */
   subtotal?: number
-  /** Totaal — eindbedrag incl. alle opslagen = verkoopprijs excl. BTW. */
+  /** Verkoopprijs incl. BTW. */
   total?: number
   commissionPercentage?: number | null
   quotationStatus?: { id: number; name?: string }
   createdAt?: string
   updatedAt?: string
+}
+
+/**
+ * Offerteregel uit het detail-endpoint GET /quotation/{id} (chapters[].lines[]).
+ * `subtotal` is de verkoopprijs van de regel; de calculatievelden (laborTotal,
+ * materialTotal, …, calculationTotal) bevatten de kostprijsopbouw uit de
+ * Bouw7-calculatiemodule — null als de regel niet gecalculeerd is.
+ */
+export type Bouw7QuotationLine = {
+  id: number
+  description?: string
+  quantity?: string | number
+  unit?: string
+  price?: string | number
+  subtotal?: string | number
+  vatTariffPercentage?: string | number
+  /** Optionele regel — telt niet mee in de aanneemsom. */
+  option?: boolean
+  laborTotal?: string | number | null
+  materialTotal?: string | number | null
+  equipmentTotal?: string | number | null
+  subcontractingTotal?: string | number | null
+  purchaseOrderTotal?: string | number | null
+  garbageTotal?: string | number | null
+  /** Totale gecalculeerde kostprijs van de regel (som van de deel-totalen). */
+  calculationTotal?: string | number | null
+}
+
+/** Offerte-detail — GET /quotation/{id} (enkelvoud). Alleen de velden die EVA gebruikt. */
+export type Bouw7QuotationDetail = {
+  id: number
+  chapters?: { id: number; name?: string; lines?: Bouw7QuotationLine[] }[]
 }
 
 /**

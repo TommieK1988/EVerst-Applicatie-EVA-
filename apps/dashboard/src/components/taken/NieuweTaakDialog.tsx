@@ -5,14 +5,26 @@ import { Plus, X, ChevronDown } from 'lucide-react'
 import { maakTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
+import { zoekDossiers } from '@/lib/dossiers/actions'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import type { TaskPrioriteit, DbTaskList } from '@/lib/taken/supabase/database.types'
 
 interface Props {
   lijsten?: DbTaskList[]
   defaultLijstId?: string
+  /** Toon een zoekveld om de taak (los) aan een dossier te koppelen. */
+  toonDossierPicker?: boolean
+  /** Vooraf gekoppeld dossier (bijv. vanaf de Taken-tab van een dossier). */
+  defaultDossier?: { id: string; titel: string }
   isTemplate?: boolean
   onSuccess?: (id: string) => void
   trigger?: React.ReactNode
+}
+
+const HOOFDSTATUS_BADGE: Record<string, string> = {
+  aanvraag: 'Aanvraag',
+  offerte:  'Offerte',
+  opdracht: 'Opdracht',
 }
 
 const PRIORITEITEN: { value: TaskPrioriteit; label: string }[] = [
@@ -39,13 +51,17 @@ const ASSIGNEE_ROLLEN = [
 
 type AssigneeKeuze = { user_id: string; rol: 'verantwoordelijke' | 'mede-uitvoerder' | 'reviewer' }
 
-export default function NieuweTaakDialog({ lijsten, defaultLijstId, isTemplate, onSuccess, trigger }: Props) {
+export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierPicker, defaultDossier, isTemplate, onSuccess, trigger }: Props) {
   const [open, setOpen]                     = useState(false)
   const [pending, startTransition]          = useTransition()
   const [titel, setTitel]                   = useState('')
   const [prioriteit, setPrioriteit]         = useState<TaskPrioriteit>('normaal')
   const [deadline, setDeadline]             = useState('')
   const [lijstId, setLijstId]               = useState(defaultLijstId ?? '')
+  const [dossierId, setDossierId]           = useState(defaultDossier?.id ?? '')
+  const [dossierOpties, setDossierOpties]   = useState<ComboboxOption[]>(
+    defaultDossier ? [{ value: defaultDossier.id, label: defaultDossier.titel }] : []
+  )
 
   // Template-specifieke velden
   const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol'>('direct')
@@ -82,11 +98,23 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, isTemplate, 
     )
   }
 
+  function zoekDossierOpties(query: string) {
+    if (!query.trim()) { setDossierOpties([]); return }
+    zoekDossiers(query).then(rs => setDossierOpties(rs.map(r => ({
+      value: r.id,
+      label: r.titel,
+      sub:   r.klant_naam ?? undefined,
+      badge: HOOFDSTATUS_BADGE[r.hoofdstatus] ?? undefined,
+    }))))
+  }
+
   const reset = () => {
     setTitel('')
     setPrioriteit('normaal')
     setDeadline('')
     setLijstId(defaultLijstId ?? '')
+    setDossierId(defaultDossier?.id ?? '')
+    setDossierOpties(defaultDossier ? [{ value: defaultDossier.id, label: defaultDossier.titel }] : [])
     setAssigneeType('direct')
     setGeselecteerdeAssignees([])
     setDossierRollen(['project_manager_id'])
@@ -105,6 +133,8 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, isTemplate, 
         titel:      titel.trim(),
         prioriteit,
         lijst_id:   lijstId || undefined,
+        // Bij een gekozen actielijst is de lijst leidend voor de dossier-koppeling
+        dossier_id: !isTemplate && !lijstId && dossierId ? dossierId : undefined,
         // Deadline afhankelijk van mode
         deadline: (!isTemplate && deadlineType === 'deadline' && deadline) ? deadline : undefined,
         max_doorlooptijd_dagen:
@@ -184,6 +214,36 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, isTemplate, 
                   <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 </div>
               </div>
+
+              {/* Dossier-koppeling (losse taak) */}
+              {!isTemplate && (toonDossierPicker || defaultDossier) && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    Dossier
+                    <span className="text-slate-400 font-normal ml-1">(optioneel)</span>
+                  </label>
+                  {defaultDossier ? (
+                    <div className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 bg-slate-50">
+                      {defaultDossier.titel}
+                    </div>
+                  ) : (
+                    <Combobox
+                      options={dossierOpties}
+                      value={dossierId}
+                      onChange={setDossierId}
+                      onSearch={zoekDossierOpties}
+                      placeholder="Koppel aan een dossier…"
+                      searchPlaceholder="Zoek op dossiertitel…"
+                      emptyText="Geen dossiers gevonden."
+                    />
+                  )}
+                  {lijstId && dossierId && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Er is ook een actielijst gekozen — de taak wordt aan die lijst (en het bijbehorende dossier) gekoppeld.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Toewijzing */}
               <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">

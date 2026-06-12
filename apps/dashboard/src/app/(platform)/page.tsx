@@ -30,19 +30,19 @@ export default async function HomePage() {
 
   const jaar = new Date().getFullYear()
   const vandaag = localDateStr(0)
-  const over30  = localDateStr(30)
 
   const [taken, aanvragenResult, offertesResult, opdrachtenResult, agendaRegels] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
-    medewerker ? getMijnDossiers(medewerker.id, 'aanvraag') : Promise.resolve({ ok: true as const, data: [] }),
+    // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
+    medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
     medewerker ? getMijnDossiers(medewerker.id, 'offerte')  : Promise.resolve({ ok: true as const, data: [] }),
-    medewerker ? getMijnDossiers(medewerker.id, 'opdracht') : Promise.resolve({ ok: true as const, data: [] }),
+    medewerker ? getMijnDossiers(medewerker.id, 'opdracht', 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
   ])
 
   const agendaItems: AgendaWidgetItem[] = agendaRegels
     .filter(r => {
-      if (r.eind_datum < vandaag || r.start_datum > over30) return false
+      if (r.eind_datum < vandaag) return false
       if (r.bron === 'berekend') return true
       if (r.doelgroep_afdelingen.length === 0 && r.doelgroep_medewerkers.length === 0) return true
       if (medewerker && r.doelgroep_medewerkers.includes(medewerker.id)) return true
@@ -50,7 +50,7 @@ export default async function HomePage() {
       return false
     })
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
-    .slice(0, 7)
+    .slice(0, 5)
     .map(r => ({
       id:          r.id,
       titel:       r.titel,

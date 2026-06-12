@@ -46,8 +46,8 @@ projectLeader, workPlanner, executor { id, firstName, lastName }   ← executor 
 branch { id, name }
 streetName, houseNumber, zipCode, city     ← LET OP: géén `street`/`postCode`; huisnummer staat los
 startDate, endDate, deliveryDate
-totalExclVat        — omzet excl. BTW (via Heimdall; minder nauwkeurig dan Athena)
-fixedPrice          — vaste aanneemsom als string
+totalExclVat        — HISTORISCH: komt niet meer voor in de response én bevatte incl. BTW. Niet gebruiken.
+fixedPrice          — vaste aanneemsom (excl. BTW) als string
 budgetAmount        — begroting
 information, reference
 ```
@@ -66,19 +66,24 @@ information, reference
 | Endpoint | Methode | Paginatie | Gebruik |
 |---|---|---|---|
 | `/list/quotations` | GET | ✓ | Alle offertes (sync, meest recente per project) |
+| `/quotation/{id}` | GET | — | Offerte-detail mét regels (chapters[].lines[]) — bron voor gecalculeerde kostprijs |
 
-**Velden op `Bouw7Quotation`:**
+**Velden op `Bouw7Quotation`** (lijst-endpoint):
 ```
 id, quotationNumber, subject, reference, quotationDate
 employee { id, firstName, lastName, prefix }   ← calculator
 project  { id, name }
 contact  { id, name }
-subtotal         — kostprijs (excl. opslagen)
-total            — verkoopprijs excl. BTW
+subtotal         — verkoopprijs EXCL. BTW   ← geverifieerd: total/subtotal is exact de BTW-factor
+total            — verkoopprijs INCL. BTW      (1,21 / 1,09 / gemengd / 1,00 bij BTW-verlegd)
 commissionPercentage
 quotationStatus  { id, name }
 createdAt, updatedAt
 ```
+> **LET OP:** `subtotal` is GEEN kostprijs. De gecalculeerde kostprijs zit in het
+> detail-endpoint: `chapters[].lines[].calculationTotal` (som van laborTotal,
+> materialTotal, equipmentTotal, subcontractingTotal, purchaseOrderTotal, garbageTotal).
+> Null/0 als de offerte niet via de Bouw7-calculatiemodule is opgebouwd.
 
 ### Relaties
 
@@ -187,7 +192,7 @@ Financiële data die wél in de EVA-database staat.
 
 | Wat | Server action | Tabel |
 |---|---|---|
-| Dossier bedrag + kostprijs | `getDossierById(id)` | `dossiers.bedrag_excl_btw`, `.kostprijs_excl_btw` |
+| Dossier bedragen + kostprijs | `getDossierById(id)` | `dossiers.bedrag_excl_btw` (verkoopprijs excl. BTW: Athena `fixedPrice`/`revenue.budgeted`, anders offerte-`subtotal`), `.bedrag_incl_btw` (verkoopprijs incl. BTW: offerte-`total`), `.kostprijs_excl_btw` (som `calculationTotal` van de offerteregels, anders null) |
 | Facturatie-instellingen klant | `getDossierFinancieel(id)` | `relatie_facturatie` |
 | Betalingscondities | `getBetalingscondities()` | `betalingscondities` |
 | Bankgegevens klant | via relaties join | `relatie_bankgegevens` |

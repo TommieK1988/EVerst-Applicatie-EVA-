@@ -384,7 +384,7 @@ export default function HomeView({
       case 'reminders': return <RemindersWidget taken={taken}/>;
       case 'projects': return <ProjectsWidget opdrachten={opdrachten}/>;
       case 'agenda':   return <AgendaWidget items={agendaItems}/>;
-      case 'dossier':  return <DossierWidget aanvragen={aanvragen} offertes={offertes}/>;
+      case 'dossier':  return <DossierWidget aanvragen={aanvragen}/>;
       case 'news':     return <NewsWidget/>;
       case 'summary':  return (
         <SummaryCard

@@ -2,26 +2,29 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { ActielijstMetTaken } from '@/lib/taken/supabase/database.types'
+import type { ActielijstMetTaken, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import TaakLijstWeergave from '@/components/taken/TaakLijstWeergave'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import { Badge, Card, EmptyState, Progress } from '@/components/ui'
 
 interface Props {
   lijsten: ActielijstMetTaken[]
+  /** Losse taken die direct (zonder actielijst) aan het dossier hangen. */
+  losseTaken?: TaakMetDetails[]
+  dossier?: { id: string; titel: string }
 }
 
-export function ActielijstenKaarten({ lijsten }: Props) {
+export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props) {
   const router = useRouter()
   // Standaard alle lijsten open
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
 
-  if (lijsten.length === 0) {
+  if (lijsten.length === 0 && losseTaken.length === 0) {
     return (
       <EmptyState
         icon={<span style={{ fontSize: 24 }}>☑</span>}
-        title="Geen actielijsten"
-        description="Activeer een sjabloon om een actielijst aan dit dossier te koppelen, of stel automatische triggers in via de sjablonen."
+        title="Geen taken"
+        description="Maak een losse taak aan met 'Nieuwe taak', of activeer een sjabloon om een actielijst aan dit dossier te koppelen."
       />
     )
   }
@@ -149,6 +152,107 @@ export function ActielijstenKaarten({ lijsten }: Props) {
           </Card>
         )
       })}
+
+      {/* Losse taken zonder actielijst — als eigen groep in hetzelfde overzicht */}
+      {losseTaken.length > 0 && (() => {
+        const isOpen = !ingeklapt.has('losse-taken')
+        const gereed = losseTaken.filter(t => t.status === 'gereed').length
+        const voortgang = losseTaken.length > 0 ? Math.round((gereed / losseTaken.length) * 100) : 0
+
+        return (
+          <Card>
+            <button
+              onClick={() => toggle('losse-taken')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '14px 20px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+                color: 'inherit',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>Overige taken</div>
+                  {voortgang === 100 && (
+                    <Badge tone="success" size="sm">Afgerond</Badge>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
+                  Losse taken zonder actielijst
+                </div>
+                <Progress
+                  value={voortgang}
+                  tone={voortgang === 100 ? 'success' : 'brand'}
+                  size="sm"
+                  className="mt-2 max-w-[200px]"
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: voortgang === 100 ? '#009439' : 'var(--fg-muted)',
+                }}>
+                  {gereed}/{losseTaken.length} gereed
+                </span>
+                <svg
+                  width="16" height="16" viewBox="0 0 16 16" fill="none"
+                  stroke="var(--fg-muted)" strokeWidth="1.6" strokeLinecap="round"
+                  style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}
+                >
+                  <path d="M4 6l4 4 4-4"/>
+                </svg>
+              </div>
+            </button>
+
+            {isOpen && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px' }}>
+                <TaakLijstWeergave
+                  taken={losseTaken}
+                  isTemplate={false}
+                  toonFilters={false}
+                  takenInLijst={losseTaken.map(t => ({ id: t.id, titel: t.titel }))}
+                  detailAlsDialog
+                />
+                {dossier && (
+                  <div style={{ marginTop: 12 }}>
+                    <NieuweTaakDialog
+                      defaultDossier={dossier}
+                      onSuccess={() => router.refresh()}
+                      trigger={
+                        <button style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12,
+                          color: 'var(--fg-muted)',
+                          background: 'none',
+                          border: '1px dashed var(--border)',
+                          borderRadius: 8,
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          width: '100%',
+                          justifyContent: 'center',
+                        }}>
+                          + Taak toevoegen
+                        </button>
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )
+      })()}
     </div>
   )
 }

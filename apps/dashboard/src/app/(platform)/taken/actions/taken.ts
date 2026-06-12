@@ -89,6 +89,8 @@ export async function verwijderActielijst(id: string): Promise<void> {
 export async function maakTaak(data: {
   titel: string
   lijst_id?: string
+  /** Directe dossier-koppeling voor losse taken zonder actielijst. */
+  dossier_id?: string
   beschrijving?: Record<string, unknown>
   status?: TaskStatus
   prioriteit?: TaskPrioriteit
@@ -112,6 +114,7 @@ export async function maakTaak(data: {
   const { data: taak, error } = await (supabase as any).from('tasks').insert({
       titel:                  data.titel,
       lijst_id:               data.lijst_id               ?? null,
+      dossier_id:             data.dossier_id             ?? null,
       omschrijving:           (data.beschrijving ?? null) as Json | null,
       status:                 data.status                 ?? 'open',
       prioriteit:             data.prioriteit             ?? 'normaal',
@@ -160,10 +163,10 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Niet ingelogd')
 
-  // Haal dossier_id op via de lijst zodat completion-acties het kunnen gebruiken
+  // Haal dossier_id op (direct of via de lijst) zodat completion-acties het kunnen gebruiken
   const { data: oud } = await supabase
     .from('tasks')
-    .select('status, lijst_id, blocked_by_task_id, task_lists(dossier_id)')
+    .select('status, lijst_id, dossier_id, blocked_by_task_id, task_lists(dossier_id)')
     .eq('id', id)
     .single()
 
@@ -192,8 +195,10 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
 
   // Voltooiingsacties uitvoeren bij gereed
   if (status === 'gereed') {
-    const dossierIdViaLijst = (oud?.task_lists as { dossier_id?: string } | null)?.dossier_id ?? null
-    await verwerkVoltooiingsActies(id, dossierIdViaLijst).catch(() => {})
+    const dossierId = oud?.dossier_id
+      ?? (oud?.task_lists as { dossier_id?: string } | null)?.dossier_id
+      ?? null
+    await verwerkVoltooiingsActies(id, dossierId).catch(() => {})
   }
 
   revalidatePath('/taken')

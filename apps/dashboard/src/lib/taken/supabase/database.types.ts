@@ -577,9 +577,9 @@ export type Database = {
         Relationships: []
       }
       tasks: {
-        Row: { id: string; lijst_id: string | null; parent_task_id: string | null; titel: string; omschrijving: Json | null; status: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline: string | null; geschatte_uren: number | null; volgorde: number; aangemaakt_door: string | null; assignee_type: 'direct' | 'dossier_rol'; dossier_rol: string | null; max_doorlooptijd_dagen: number | null; deadline_offset_dagen: number | null; blocked_by_task_id: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; lijst_id?: string | null; parent_task_id?: string | null; titel: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; lijst_id?: string | null; parent_task_id?: string | null; titel?: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; lijst_id: string | null; dossier_id: string | null; parent_task_id: string | null; titel: string; omschrijving: Json | null; status: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline: string | null; geschatte_uren: number | null; volgorde: number; aangemaakt_door: string | null; assignee_type: 'direct' | 'dossier_rol'; dossier_rol: string | null; max_doorlooptijd_dagen: number | null; deadline_offset_dagen: number | null; blocked_by_task_id: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel?: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       task_assignees: {
@@ -683,6 +683,8 @@ export interface DbTaskList {
 export interface DbTask {
   id: string
   lijst_id: string | null
+  /** Directe dossier-koppeling voor losse taken zonder actielijst. */
+  dossier_id: string | null
   parent_task_id: string | null
   titel: string
   omschrijving: Record<string, unknown> | null  // Tiptap JSON
@@ -765,7 +767,7 @@ export interface TaakMetDetails extends DbTask {
   comments_count: number
   attachments_count: number
   lijst?: Pick<DbTaskList, 'id' | 'naam'>
-  dossier_id?: string | null
+  // dossier_id zit al op DbTask; hier alleen de afgeleide weergavevelden
   dossier_naam?: string | null
   dossier_sectie?: string | null
 }

@@ -77,6 +77,9 @@ export async function GET() {
     url.searchParams.set('longitude', String(lon))
     url.searchParams.set('current', 'temperature_2m,weathercode,windspeed_10m,apparent_temperature,winddirection_10m')
     url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,weathercode')
+    // 18 uur als buffer: de route wordt 30 min gecachet en de widget filtert client-side op >= nu
+    url.searchParams.set('hourly', 'temperature_2m,weathercode')
+    url.searchParams.set('forecast_hours', '18')
     url.searchParams.set('forecast_days', '7')
     url.searchParams.set('timezone', 'Europe/Amsterdam')
     url.searchParams.set('wind_speed_unit', 'kmh')
@@ -97,6 +100,12 @@ export async function GET() {
       label:         wmoLabel(raw.current.weathercode),
       tempMax:       Math.round(raw.daily.temperature_2m_max[0]),
       tempMin:       Math.round(raw.daily.temperature_2m_min[0]),
+      hourly: ((raw.hourly?.time ?? []) as string[]).map((iso: string, i: number) => ({
+        time:  iso,                 // bijv. '2026-06-12T14:00'
+        uur:   iso.slice(11, 16),   // '14:00'
+        temp:  Math.round((raw.hourly.temperature_2m as number[])[i]),
+        emoji: wmoEmoji((raw.hourly.weathercode as number[])[i]),
+      })),
       daily: (raw.daily.time as string[]).map((isoDate: string, i: number) => ({
         day:         dayLabel(isoDate, i),
         tempMax:     Math.round((raw.daily.temperature_2m_max as number[])[i]),
