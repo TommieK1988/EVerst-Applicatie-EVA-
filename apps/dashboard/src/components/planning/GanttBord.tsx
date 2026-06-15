@@ -37,7 +37,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     return () => ro.disconnect()
   }, [])
 
-  const layout = usePlanningLayout({ peildatum, view, availableW })
+  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
   const { ppd, totalDays } = layout
   const vs = viewStart
   const ve = useMemo(() => addDays(viewStart, totalDays - 1), [viewStart, totalDays])

@@ -1182,7 +1182,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   }, [])
 
   // View window — aantal dagen/ppd via layout-engine, maar vs is vrij scrubbaar
-  const layout = usePlanningLayout({ peildatum, view, availableW })
+  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
   const { totalDays, ppd, totalW } = layout
   const vs       = viewStart
   const ve       = addDays(viewStart, totalDays - 1)
@@ -1556,6 +1556,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         view={view}
         onPeildatum={handlePeildatum}
         onView={handleView}
+        onVandaag={() => handlePeildatum(new Date())}
         rightSlot={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />

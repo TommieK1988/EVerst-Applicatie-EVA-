@@ -43,6 +43,7 @@ export type ManagementProject = {
   pct_marge_gereed: number | null
   verschil_pct_marge: number | null
   is_gereed: boolean
+  kosten_split: Record<string, number> | null
   bouw7_laatst_sync: string | null
 }
 
@@ -88,6 +89,14 @@ const FILIAAL_KORT: Record<string, string> = {
 function kortFiliaal(filiaal: string | null | undefined): string {
   if (!filiaal) return '?'
   return FILIAAL_KORT[filiaal] ?? filiaal.slice(0, 6)
+}
+
+/** Korte PL-naam voor grafiekassen: voornaam + 1e letter achternaam. */
+function kortNaam(naam: string | null | undefined): string {
+  if (!naam) return 'Onbekend'
+  const delen = naam.trim().split(/\s+/)
+  if (delen.length === 1) return delen[0]
+  return `${delen[0]} ${delen[delen.length - 1][0]}.`
 }
 
 /* ── Formatters ──────────────────────────────────────────────────── */
@@ -178,6 +187,144 @@ function buildPivot(projecten: ManagementProject[]): FilPivot[] {
   return [...map.values()].sort((a, b) => a.filiaal.localeCompare(b.filiaal))
 }
 
+/* ── Hiërarchische pivot: werkmaatschappij → status ──────────────── */
+
+type PivotAgg = {
+  aantal: number
+  omzetOpdracht: number
+  omzetGerealiseerd: number
+  resultaatOpdracht: number
+  resultaatGerealiseerd: number
+}
+
+function leegAgg(): PivotAgg {
+  return { aantal: 0, omzetOpdracht: 0, omzetGerealiseerd: 0, resultaatOpdracht: 0, resultaatGerealiseerd: 0 }
+}
+
+function tel(d: PivotAgg, p: ManagementProject) {
+  d.aantal++
+  if (p.is_gereed) {
+    d.omzetGerealiseerd     += p.gefactureerd     ?? 0
+    d.resultaatGerealiseerd += p.resultaat_gereed ?? 0
+  } else {
+    d.omzetOpdracht         += p.totale_opdracht    ?? 0
+    d.omzetGerealiseerd     += p.omzet_obv_pct      ?? 0
+    d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
+    d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
+  }
+}
+
+function optellen(a: PivotAgg, b: PivotAgg): PivotAgg {
+  return {
+    aantal:                a.aantal + b.aantal,
+    omzetOpdracht:         a.omzetOpdracht + b.omzetOpdracht,
+    omzetGerealiseerd:     a.omzetGerealiseerd + b.omzetGerealiseerd,
+    resultaatOpdracht:     a.resultaatOpdracht + b.resultaatOpdracht,
+    resultaatGerealiseerd: a.resultaatGerealiseerd + b.resultaatGerealiseerd,
+  }
+}
+
+/** Dekking status = gerealiseerde marge (resultaat / omzet), val terug op in-opdracht. */
+function dekkingMarge(a: PivotAgg): number | null {
+  const teller = a.resultaatGerealiseerd || a.resultaatOpdracht
+  const noemer = a.omzetGerealiseerd || a.omzetOpdracht
+  if (!noemer) return null
+  return (teller / noemer) * 100
+}
+
+/** Best-effort sorteervolgorde van statuslabels (Bouw7 status.name). */
+function statusOrde(s: string): number {
+  const t = s.toLowerCase()
+  if (t.includes('voorbereiding') || t.includes('nieuwe')) return 1
+  if (t.includes('onderhanden'))                            return 2
+  if (t.includes('uitvoering'))                             return 3
+  if (t.includes('technisch'))                              return 4
+  if (t.includes('financ'))                                 return 5
+  if (t.includes('afge') || t.includes('vervall') || t.includes('ingetrok')) return 9
+  return 6
+}
+
+type FilGroep = {
+  filiaal: string
+  totaal: PivotAgg
+  statussen: { status: string; agg: PivotAgg }[]
+}
+
+function buildHierarchie(projecten: ManagementProject[]): FilGroep[] {
+  const map = new Map<string, { totaal: PivotAgg; statusMap: Map<string, PivotAgg> }>()
+  for (const p of projecten) {
+    const fil = p.filiaal ?? 'Overig'
+    if (!map.has(fil)) map.set(fil, { totaal: leegAgg(), statusMap: new Map() })
+    const g = map.get(fil)!
+    tel(g.totaal, p)
+    const st = p.status ?? 'Onbekend'
+    if (!g.statusMap.has(st)) g.statusMap.set(st, leegAgg())
+    tel(g.statusMap.get(st)!, p)
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([filiaal, g]) => ({
+      filiaal,
+      totaal: g.totaal,
+      statussen: [...g.statusMap.entries()]
+        .sort((a, b) => statusOrde(a[0]) - statusOrde(b[0]) || a[0].localeCompare(b[0]))
+        .map(([status, agg]) => ({ status, agg })),
+    }))
+}
+
+/** Doelstelling op werkmaatschappij-niveau (projectleider leeg). */
+function doelVoorFiliaal(doelstellingen: ManagementDoelstelling[], filiaal: string): ManagementDoelstelling | undefined {
+  return doelstellingen
+    .filter(d => d.filiaal === filiaal && !d.projectleider)
+    .sort((a, b) => b.jaar - a.jaar)[0]
+}
+
+/* ── Pivot per projectleider ─────────────────────────────────────── */
+
+type PLPivot = {
+  projectleider: string
+  aantalLopend: number
+  aantalGereed: number
+  omzetOpdracht: number
+  omzetGerealiseerd: number
+  resultaatOpdracht: number
+  resultaatGerealiseerd: number
+}
+
+function buildPivotPL(projecten: ManagementProject[]): PLPivot[] {
+  const map = new Map<string, PLPivot>()
+  for (const p of projecten) {
+    const pl = p.projectleider ?? 'Onbekend'
+    if (!map.has(pl)) map.set(pl, {
+      projectleider: pl, aantalLopend: 0, aantalGereed: 0,
+      omzetOpdracht: 0, omzetGerealiseerd: 0, resultaatOpdracht: 0, resultaatGerealiseerd: 0,
+    })
+    const d = map.get(pl)!
+    if (p.is_gereed) {
+      d.aantalGereed++
+      d.omzetGerealiseerd     += p.gefactureerd     ?? 0
+      d.resultaatGerealiseerd += p.resultaat_gereed ?? 0
+    } else {
+      d.aantalLopend++
+      d.omzetOpdracht         += p.totale_opdracht    ?? 0
+      d.omzetGerealiseerd     += p.omzet_obv_pct      ?? 0
+      d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
+      d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
+    }
+  }
+  // Sorteer op omvang (meeste omzet in opdracht eerst).
+  return [...map.values()].sort((a, b) =>
+    (b.omzetOpdracht + b.omzetGerealiseerd) - (a.omzetOpdracht + a.omzetGerealiseerd),
+  )
+}
+
+/** Meest recente doelstelling voor een projectleider (over alle jaren). */
+function doelVoorPL(doelstellingen: ManagementDoelstelling[], pl: string): ManagementDoelstelling | undefined {
+  return doelstellingen
+    .filter(d => d.projectleider === pl)
+    .sort((a, b) => b.jaar - a.jaar)[0]
+}
+
 /* ── Hoofd component ─────────────────────────────────────────────── */
 
 export default function ManagementDashboard({ projecten, akData, doelstellingen, laatstGesynchroniseerd }: Props) {
@@ -185,9 +332,21 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const lopend = useMemo(() => projecten.filter(p => !p.is_gereed), [projecten])
-  const gereed = useMemo(() => projecten.filter(p =>  p.is_gereed), [projecten])
-  const pivot  = useMemo(() => buildPivot(projecten), [projecten])
+  const lopend     = useMemo(() => projecten.filter(p => !p.is_gereed), [projecten])
+  const gereed     = useMemo(() => projecten.filter(p =>  p.is_gereed), [projecten])
+  const pivot      = useMemo(() => buildPivot(projecten), [projecten])
+  const hierarchie = useMemo(() => buildHierarchie(projecten), [projecten])
+  const plPivot    = useMemo(() => buildPivotPL(projecten), [projecten])
+
+  const plResultaatData = useMemo(() => plPivot.map(pl => {
+    const doel = doelVoorPL(doelstellingen, pl.projectleider)
+    return {
+      name: kortNaam(pl.projectleider),
+      'Gerealiseerd': Math.round(pl.resultaatGerealiseerd / 1000),
+      'In opdracht':  Math.round(pl.resultaatOpdracht     / 1000),
+      'Doelstelling': doel?.resultaat_doelstelling != null ? Math.round(doel.resultaat_doelstelling / 1000) : undefined,
+    }
+  }), [plPivot, doelstellingen])
 
   const totaalResultaatGerealiseerd = pivot.reduce((s, f) => s + f.resultaatGerealiseerd, 0)
   const totaalResultaatOpdracht     = pivot.reduce((s, f) => s + f.resultaatOpdracht, 0)
@@ -197,12 +356,16 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
   const akDekkingOpdracht     = totaalAK > 0 ? ((totaalResultaatGerealiseerd + totaalResultaatOpdracht) / totaalAK) * 100 : null
 
   const jaarresultaatData = useMemo(() => pivot.map(f => {
-    const doel = doelstellingen.find(d => d.filiaal === f.filiaal && !d.projectleider)
+    const doel    = doelstellingen.find(d => d.filiaal === f.filiaal && !d.projectleider)
+    const doelRes = doel?.resultaat_doelstelling ?? 0
+    const real    = f.resultaatGerealiseerd
+    const opdracht = Math.max(0, f.resultaatOpdracht)
+    const nogBinnen = Math.max(0, doelRes - real - opdracht)
     return {
       name: kortFiliaal(f.filiaal),
-      'Gerealiseerd': Math.round(f.resultaatGerealiseerd / 1000),
-      'In opdracht':  Math.round(f.resultaatOpdracht     / 1000),
-      'Doelstelling': doel?.resultaat_doelstelling ? Math.round(doel.resultaat_doelstelling / 1000) : undefined,
+      'Realisatie':       Math.round(real / 1000),
+      'In opdracht':      Math.round(opdracht / 1000),
+      'Nog binnen halen': Math.round(nogBinnen / 1000),
     }
   }), [pivot, doelstellingen])
 
@@ -234,6 +397,22 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
     }
     return [...map.entries()]
       .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value)
+  }, [projecten])
+
+  const kostensoortData = useMemo(() => {
+    const labels: Record<string, string> = {
+      lonen: 'Lonen', onderaanneming: 'Onderaanneming', materiaal: 'Materiaal',
+      materieel: 'Materieel', inkoop: 'Inkoop', overig: 'Overig',
+    }
+    const acc: Record<string, number> = {}
+    for (const p of projecten) {
+      if (!p.kosten_split) continue
+      for (const [k, v] of Object.entries(p.kosten_split)) acc[k] = (acc[k] ?? 0) + (v ?? 0)
+    }
+    return Object.entries(acc)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => ({ name: labels[k] ?? k, value: Math.round(v) }))
       .sort((a, b) => b.value - a.value)
   }, [projecten])
 
@@ -311,16 +490,18 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
         {view === 'dashboard' && (
           <DashboardView
             projecten={projecten}
-            pivot={pivot}
-            akData={akData}
+            hierarchie={hierarchie}
+            plPivot={plPivot}
             doelstellingen={doelstellingen}
             totaalResultaatGerealiseerd={totaalResultaatGerealiseerd}
             totaalResultaatOpdracht={totaalResultaatOpdracht}
             akDekkingGerealiseerd={akDekkingGerealiseerd}
             akDekkingOpdracht={akDekkingOpdracht}
             jaarresultaatData={jaarresultaatData}
+            plResultaatData={plResultaatData}
             opdrachtgevers={opdrachtgevers}
             categorieData={categorieData}
+            kostensoortData={kostensoortData}
           />
         )}
         {view === 'lopend' && <LopendeTabel rijen={lopend} />}
@@ -334,28 +515,29 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
 
 type DashboardViewProps = {
   projecten: ManagementProject[]
-  pivot: FilPivot[]
-  akData: ManagementAK[]
+  hierarchie: FilGroep[]
+  plPivot: PLPivot[]
   doelstellingen: ManagementDoelstelling[]
   totaalResultaatGerealiseerd: number
   totaalResultaatOpdracht: number
   akDekkingGerealiseerd: number | null
   akDekkingOpdracht: number | null
-  jaarresultaatData: { name: string; Gerealiseerd: number; 'In opdracht': number; Doelstelling?: number }[]
+  jaarresultaatData: { name: string; Realisatie: number; 'In opdracht': number; 'Nog binnen halen': number }[]
+  plResultaatData: { name: string; Gerealiseerd: number; 'In opdracht': number; Doelstelling?: number }[]
   opdrachtgevers: { naam: string; omzet: number; resultaat: number; marge: number }[]
   categorieData: { name: string; value: number }[]
+  kostensoortData: { name: string; value: number }[]
 }
 
 function DashboardView({
-  projecten, pivot, akData, doelstellingen,
+  projecten, hierarchie, plPivot, doelstellingen,
   totaalResultaatGerealiseerd, totaalResultaatOpdracht,
   akDekkingGerealiseerd, akDekkingOpdracht,
-  jaarresultaatData, opdrachtgevers, categorieData,
+  jaarresultaatData, plResultaatData, opdrachtgevers, categorieData, kostensoortData,
 }: DashboardViewProps) {
-  const totaalOmzetOpdracht     = pivot.reduce((s, f) => s + f.omzetOpdracht, 0)
-  const totaalOmzetGerealiseerd = pivot.reduce((s, f) => s + f.omzetGerealiseerd, 0)
-  const totaalProjecten         = projecten.length
-  void totaalOmzetOpdracht; void totaalOmzetGerealiseerd
+  const totaalProjecten = projecten.length
+  const aantalLopend    = projecten.filter(p => !p.is_gereed).length
+  const aantalGereed    = projecten.filter(p =>  p.is_gereed).length
 
   return (
     <div className="flex flex-col gap-4 pb-6">
@@ -369,8 +551,8 @@ function DashboardView({
           tone="brand"
           trend={{
             direction: 'flat',
-            value: `${pivot.reduce((s, f) => s + f.aantalLopend, 0)} lopend`,
-            compare: `${pivot.reduce((s, f) => s + f.aantalGereed, 0)} gereed`,
+            value: `${aantalLopend} lopend`,
+            compare: `${aantalGereed} gereed`,
           }}
         />
         <StatCard
@@ -410,43 +592,94 @@ function DashboardView({
         <Card>
           <CardHeader>Overzicht per werkmaatschappij</CardHeader>
           <CardBody className="p-0">
-            <PivotTabel pivot={pivot} akData={akData} doelstellingen={doelstellingen} />
+            <PivotTabel hierarchie={hierarchie} doelstellingen={doelstellingen} />
           </CardBody>
         </Card>
 
         <ChartCard title="Jaarresultaat (×€1.000)">
           <div className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={jaarresultaatData} barGap={4} barCategoryGap="30%">
+              <BarChart data={jaarresultaatData} barCategoryGap="30%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e9eb" vertical={false} />
                 <XAxis dataKey="name" {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} />
                 <YAxis {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} width={48}
                   tickFormatter={v => v === 0 ? '0' : `${v}K`} />
                 <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                 <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Gerealiseerd" fill={C_GROEN}  radius={[3, 3, 0, 0]} />
-                <Bar dataKey="In opdracht"  fill={C_BLAUW}  radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Doelstelling" fill={C_ORANJE} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Realisatie"       stackId="r" fill={C_GROEN} />
+                <Bar dataKey="In opdracht"      stackId="r" fill={C_BLAUW} />
+                <Bar dataKey="Nog binnen halen" stackId="r" fill="#d1d5db" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </ChartCard>
       </div>
 
-      {/* Opdrachtgevers + Categorie */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 280px' }}>
+      {/* Per projectleider: pivot + resultaatgrafiek */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 360px' }}>
         <Card>
-          <CardHeader>Top opdrachtgevers</CardHeader>
+          <CardHeader>Overzicht per projectleider</CardHeader>
           <CardBody className="p-0">
-            <OpdrachtgeversTable opdrachtgevers={opdrachtgevers} />
+            <PivotTabelPL plPivot={plPivot} doelstellingen={doelstellingen} />
           </CardBody>
         </Card>
 
-        <ChartCard title="Categorie verdeling">
+        <ChartCard title="Resultaat per projectleider (×€1.000)">
+          {plResultaatData.length > 0 ? (
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={plResultaatData} barGap={4} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e9eb" vertical={false} />
+                  <XAxis dataKey="name" {...CHART_AXIS_PROPS} axisLine={false} tickLine={false}
+                    interval={0} angle={-30} textAnchor="end" height={56} />
+                  <YAxis {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} width={48}
+                    tickFormatter={v => v === 0 ? '0' : `${v}K`} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Gerealiseerd" fill={C_GROEN}  radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="In opdracht"  fill={C_BLAUW}  radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Doelstelling" fill={C_ORANJE} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyState title="Geen projectleidergegevens" tone="neutral" size="sm" />
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Top opdrachtgevers */}
+      <Card>
+        <CardHeader>Top opdrachtgevers</CardHeader>
+        <CardBody className="p-0">
+          <OpdrachtgeversTable opdrachtgevers={opdrachtgevers} />
+        </CardBody>
+      </Card>
+
+      {/* Verdelingen: Categorie / Branche / Kostensoort */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+        <ChartCard title="Categorie">
           {categorieData.length > 0 ? (
             <CategorieChart data={categorieData} />
           ) : (
             <EmptyState title="Geen categoriegegevens" tone="neutral" size="sm" />
+          )}
+        </ChartCard>
+
+        <ChartCard title="Branche">
+          <EmptyState
+            title="Geen branchegegevens"
+            description="Relaties hebben nog geen branche-/sectorveld. Koppel dit eerst om de verdeling te tonen."
+            tone="neutral"
+            size="sm"
+          />
+        </ChartCard>
+
+        <ChartCard title="Kostensoort">
+          {kostensoortData.length > 0 ? (
+            <CategorieChart data={kostensoortData} />
+          ) : (
+            <EmptyState title="Geen kostensoortgegevens" tone="neutral" size="sm" />
           )}
         </ChartCard>
       </div>
@@ -454,35 +687,150 @@ function DashboardView({
   )
 }
 
-/* ── Pivot tabel ─────────────────────────────────────────────────── */
+/* ── Pivot tabel: werkmaatschappij → status ──────────────────────── */
 
-function PivotTabel({ pivot, akData, doelstellingen }: {
-  pivot: FilPivot[]
-  akData: ManagementAK[]
+function dekkingCel(agg: PivotAgg) {
+  const v = dekkingMarge(agg)
+  if (v == null) return <span className="text-neutral-400 text-[11px]">—</span>
+  return (
+    <span className={cn('font-semibold',
+      v < 0 ? 'text-error-500' : v < 10 ? 'text-warning-700' : 'text-success-700')}>
+      {fPct(v)}
+    </span>
+  )
+}
+
+function PivotTabel({ hierarchie, doelstellingen }: {
+  hierarchie: FilGroep[]
   doelstellingen: ManagementDoelstelling[]
 }) {
-  const totaal: FilPivot = {
-    filiaal: 'Totaal',
-    aantalLopend:         pivot.reduce((s, f) => s + f.aantalLopend, 0),
-    aantalGereed:         pivot.reduce((s, f) => s + f.aantalGereed, 0),
-    omzetOpdracht:        pivot.reduce((s, f) => s + f.omzetOpdracht, 0),
-    omzetGerealiseerd:    pivot.reduce((s, f) => s + f.omzetGerealiseerd, 0),
-    resultaatOpdracht:    pivot.reduce((s, f) => s + f.resultaatOpdracht, 0),
-    resultaatGerealiseerd: pivot.reduce((s, f) => s + f.resultaatGerealiseerd, 0),
-  }
-  const rows = [...pivot, totaal]
-  const totaalAK = akData.reduce((s, a) => s + (a.bedrag_ak ?? 0), 0)
+  const eindtotaal = hierarchie.reduce((acc, g) => optellen(acc, g.totaal), leegAgg())
+  const heeftDoel  = doelstellingen.some(d => d.filiaal && !d.projectleider)
+
+  // Eindtotaal-doelstellingen = som van de filiaal-doelstellingen.
+  const doelTotaalOmzet     = hierarchie.reduce((s, g) => s + (doelVoorFiliaal(doelstellingen, g.filiaal)?.omzet_doelstelling ?? 0), 0)
+  const doelTotaalResultaat = hierarchie.reduce((s, g) => s + (doelVoorFiliaal(doelstellingen, g.filiaal)?.resultaat_doelstelling ?? 0), 0)
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr>
-            <th className={cn(pvTh, 'text-left min-w-[90px]')}>Werkmaatschappij</th>
+            <th className={cn(pvTh, 'text-left min-w-[150px]')}>Werkmaatschappij</th>
+            <th colSpan={3} className={cn(pvTh, 'bg-success-50 border-b-2 border-success-200')}>Omzet</th>
+            <th colSpan={3} className={cn(pvTh, 'bg-info-50 border-b-2 border-info-200')}>Resultaat</th>
+            <th className={cn(pvTh, 'min-w-[72px]')}>Dekking status</th>
+          </tr>
+          <tr>
+            <th className={pvTh} />
+            <th className={cn(pvTh, 'bg-success-50/50 text-[10px]')}>In opdracht</th>
+            <th className={cn(pvTh, 'bg-success-50/50 text-[10px]')}>Doelstelling</th>
+            <th className={cn(pvTh, 'bg-success-50/50 text-[10px]')}>Gerealiseerd</th>
+            <th className={cn(pvTh, 'bg-info-50/50 text-[10px]')}>In opdracht</th>
+            <th className={cn(pvTh, 'bg-info-50/50 text-[10px]')}>Doelstelling</th>
+            <th className={cn(pvTh, 'bg-info-50/50 text-[10px]')}>Gerealiseerd</th>
+            <th className={pvTh} />
+          </tr>
+        </thead>
+        <tbody>
+          {hierarchie.map(groep => {
+            const doel = doelVoorFiliaal(doelstellingen, groep.filiaal)
+            return (
+              <React.Fragment key={groep.filiaal}>
+                {/* Werkmaatschappij-totaal (bold) */}
+                <tr className="bg-success-50/30 font-bold border-t border-success-200">
+                  <td className={pvTd}>
+                    <span className="font-semibold text-neutral-900">{kortFiliaal(groep.filiaal)}</span>
+                  </td>
+                  <td className={cn(pvTd, 'text-right')}>{fEur(groep.totaal.omzetOpdracht || null)}</td>
+                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doel?.omzet_doelstelling ?? null)}</td>
+                  <td className={cn(pvTd, 'text-right')}>{fEur(groep.totaal.omzetGerealiseerd || null)}</td>
+                  <td className={cn(pvTd, 'text-right', groep.totaal.resultaatOpdracht < 0 ? 'text-error-500' : 'text-neutral-900')}>
+                    {fEur(groep.totaal.resultaatOpdracht || null)}
+                  </td>
+                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doel?.resultaat_doelstelling ?? null)}</td>
+                  <td className={cn(pvTd, 'text-right', groep.totaal.resultaatGerealiseerd < 0 ? 'text-error-500' : 'text-success-700')}>
+                    {fEur(groep.totaal.resultaatGerealiseerd || null)}
+                  </td>
+                  <td className={cn(pvTd, 'text-right')}>{dekkingCel(groep.totaal)}</td>
+                </tr>
+
+                {/* Status-subrijen */}
+                {groep.statussen.map(({ status, agg }) => (
+                  <tr key={`${groep.filiaal}|${status}`} className="bg-white">
+                    <td className={cn(pvTd, 'pl-6 text-neutral-600')}>{status}</td>
+                    <td className={cn(pvTd, 'text-right')}>{fEur(agg.omzetOpdracht || null)}</td>
+                    <td className={cn(pvTd, 'text-right')} />
+                    <td className={cn(pvTd, 'text-right')}>{fEur(agg.omzetGerealiseerd || null)}</td>
+                    <td className={cn(pvTd, 'text-right', agg.resultaatOpdracht < 0 ? 'text-error-500' : 'text-neutral-900')}>
+                      {fEur(agg.resultaatOpdracht || null)}
+                    </td>
+                    <td className={cn(pvTd, 'text-right')} />
+                    <td className={cn(pvTd, 'text-right', agg.resultaatGerealiseerd < 0 ? 'text-error-500' : 'text-neutral-900')}>
+                      {fEur(agg.resultaatGerealiseerd || null)}
+                    </td>
+                    <td className={cn(pvTd, 'text-right')}>{dekkingCel(agg)}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            )
+          })}
+
+          {/* Eindtotaal */}
+          <tr className="bg-success-50/60 font-bold border-t-2 border-success-300">
+            <td className={pvTd}><span className="font-bold text-success-700">Eindtotaal</span></td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.omzetOpdracht || null)}</td>
+            <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doelTotaalOmzet || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.omzetGerealiseerd || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.resultaatOpdracht || null)}</td>
+            <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doelTotaalResultaat || null)}</td>
+            <td className={cn(pvTd, 'text-right text-success-700')}>{fEur(eindtotaal.resultaatGerealiseerd || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{dekkingCel(eindtotaal)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {!heeftDoel && (
+        <p className="text-[11px] text-neutral-500 italic mt-2 px-[18px] pb-3">
+          Tip: stel doelstellingen per werkmaatschappij in via Instellingen om de doelstelling-kolommen te vullen.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ── Pivot tabel per projectleider ───────────────────────────────── */
+
+function PivotTabelPL({ plPivot, doelstellingen }: {
+  plPivot: PLPivot[]
+  doelstellingen: ManagementDoelstelling[]
+}) {
+  const totaal: PLPivot = {
+    projectleider: 'Totaal',
+    aantalLopend:          plPivot.reduce((s, f) => s + f.aantalLopend, 0),
+    aantalGereed:          plPivot.reduce((s, f) => s + f.aantalGereed, 0),
+    omzetOpdracht:         plPivot.reduce((s, f) => s + f.omzetOpdracht, 0),
+    omzetGerealiseerd:     plPivot.reduce((s, f) => s + f.omzetGerealiseerd, 0),
+    resultaatOpdracht:     plPivot.reduce((s, f) => s + f.resultaatOpdracht, 0),
+    resultaatGerealiseerd: plPivot.reduce((s, f) => s + f.resultaatGerealiseerd, 0),
+  }
+  const rows = [...plPivot, totaal]
+
+  if (plPivot.length === 0) {
+    return <div className="p-4"><EmptyState title="Geen projectleidergegevens" tone="neutral" size="sm" /></div>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr>
+            <th className={cn(pvTh, 'text-left min-w-[120px]')}>Projectleider</th>
             <th className={cn(pvTh, 'min-w-[40px]')}>#</th>
             <th colSpan={2} className={cn(pvTh, 'bg-success-50 border-b-2 border-success-200')}>Omzet</th>
             <th colSpan={2} className={cn(pvTh, 'bg-info-50 border-b-2 border-info-200')}>Resultaat</th>
-            <th className={cn(pvTh, 'min-w-[72px]')}>AK Dekking</th>
+            <th className={cn(pvTh, 'min-w-[80px]')}>Doel</th>
+            <th className={cn(pvTh, 'min-w-[64px]')}>% behaald</th>
           </tr>
           <tr>
             <th className={pvTh} />
@@ -491,28 +839,27 @@ function PivotTabel({ pivot, akData, doelstellingen }: {
             <th className={cn(pvTh, 'bg-success-50/50 text-[10px]')}>Gerealiseerd</th>
             <th className={cn(pvTh, 'bg-info-50/50 text-[10px]')}>In opdracht</th>
             <th className={cn(pvTh, 'bg-info-50/50 text-[10px]')}>Gerealiseerd</th>
+            <th className={cn(pvTh, 'text-[10px]')}>Resultaat</th>
             <th className={pvTh} />
           </tr>
         </thead>
         <tbody>
           {rows.map((f, i) => {
-            const isTotaal   = f.filiaal === 'Totaal'
-            const akBedrag   = akData.find(a => a.filiaal === f.filiaal)?.bedrag_ak ?? 0
-            const dekking    = akBedrag > 0 ? (f.resultaatGerealiseerd / akBedrag) * 100 : null
-            const totDekk    = isTotaal && totaalAK > 0 ? (f.resultaatGerealiseerd / totaalAK) * 100 : null
-            const dekkWaarde = isTotaal ? totDekk : dekking
-            void doelstellingen
+            const isTotaal   = f.projectleider === 'Totaal'
+            const doel       = isTotaal ? undefined : doelVoorPL(doelstellingen, f.projectleider)
+            const doelRes    = doel?.resultaat_doelstelling ?? null
+            const pctBehaald = doelRes && doelRes !== 0 ? (f.resultaatGerealiseerd / doelRes) * 100 : null
 
             return (
               <tr
-                key={f.filiaal}
+                key={f.projectleider}
                 className={cn(
                   isTotaal ? 'bg-success-50/40 font-bold' : i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60',
                 )}
               >
                 <td className={pvTd}>
                   <span className={cn('font-semibold', isTotaal ? 'text-success-700' : 'text-neutral-900')}>
-                    {isTotaal ? 'Totaal' : kortFiliaal(f.filiaal)}
+                    {f.projectleider}
                   </span>
                 </td>
                 <td className={cn(pvTd, 'text-center text-neutral-500 text-[11px]')}>
@@ -526,10 +873,13 @@ function PivotTabel({ pivot, akData, doelstellingen }: {
                 <td className={cn(pvTd, 'text-right font-semibold', f.resultaatGerealiseerd < 0 ? 'text-error-500' : 'text-success-700')}>
                   {fEur(f.resultaatGerealiseerd || null)}
                 </td>
+                <td className={cn(pvTd, 'text-right text-neutral-600')}>
+                  {doelRes != null ? fEur(doelRes) : <span className="text-neutral-400 text-[11px]">—</span>}
+                </td>
                 <td className={cn(pvTd, 'text-right')}>
-                  {dekkWaarde != null
-                    ? <span className={cn('font-semibold', dekkingTone(dekkWaarde) === 'success' ? 'text-success-700' : dekkingTone(dekkWaarde) === 'warning' ? 'text-warning-700' : 'text-error-500')}>
-                        {fPct(dekkWaarde)}
+                  {pctBehaald != null
+                    ? <span className={cn('font-semibold', dekkingTone(pctBehaald) === 'success' ? 'text-success-700' : dekkingTone(pctBehaald) === 'warning' ? 'text-warning-700' : 'text-error-500')}>
+                        {fPct(pctBehaald)}
                       </span>
                     : <span className="text-neutral-400 text-[11px]">—</span>
                   }
@@ -540,9 +890,9 @@ function PivotTabel({ pivot, akData, doelstellingen }: {
         </tbody>
       </table>
 
-      {akData.length === 0 && (
+      {doelstellingen.filter(d => d.projectleider).length === 0 && (
         <p className="text-[11px] text-neutral-500 italic mt-2 px-[18px] pb-3">
-          Tip: stel de AK-bedragen in via Instellingen om dekkingspercentages te berekenen.
+          Tip: stel doelstellingen per projectleider in via Instellingen om de %-behaald-kolom te vullen.
         </p>
       )}
     </div>

@@ -59,7 +59,7 @@ export async function logSync(
  * Als de API paginatie-info meegeeft, worden vervolgslagen opgehaald.
  * Ondersteunt ook endpoints die direct een array teruggeven.
  */
-async function fetchAllPages<T>(
+export async function fetchAllPages<T>(
   client: Bouw7Client,
   path: string,
   pageSize = 100

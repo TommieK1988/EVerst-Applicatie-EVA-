@@ -255,20 +255,30 @@ export function usePlanningLayout({
   peildatum,
   view,
   availableW,
+  viewStart,
 }: {
   peildatum:  Date
   view:       View
   availableW: number
+  /** Vrije venster-start (scrubber). Ontbreekt die → periodegrens van de peildatum. */
+  viewStart?: Date
 }): PlanningLayout {
+  const vsTime = viewStart ? startOfDay(viewStart).getTime() : null
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => {
-    const { totalDays, vs, ve } = viewBereik(view, peildatum)
+    // Periodelengte (totalDays/ppd/totalW) blijft gekoppeld aan de peildatum-periode zodat het
+    // venster een vaste breedte houdt; de venster-START is vrij verschuifbaar via viewStart.
+    // Zo zijn vs, cols, gridUnits én de vandaag-positie allemaal afgeleid van dezelfde
+    // (gescrubde) start — header, datumkolommen en body kunnen niet meer uit de pas lopen.
+    const { totalDays, vs: snapVs } = viewBereik(view, peildatum)
+    const vs     = viewStart ? startOfDay(viewStart) : snapVs
+    const ve     = addDays(vs, totalDays - 1)
     const ppd    = availableW > 0 ? Math.max(1, Math.floor(availableW / totalDays)) : 10
     const totalW = totalDays * ppd
     const { spans, cols } = buildHeader(view, vs, ve, ppd)
     const gridUnits       = buildGridUnits(view, vs, ve, ppd)
     return { ppd, totalDays, totalW, vs, ve, spans, cols, gridUnits }
-  }, [peildatum.getTime(), view, availableW]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [peildatum.getTime(), view, availableW, vsTime]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 // ─── PeriodeNav ───────────────────────────────────────────────────────────────

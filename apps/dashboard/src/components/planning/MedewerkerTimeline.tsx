@@ -837,7 +837,7 @@ export default function MedewerkerTimeline({
 
   const [kleurweergave, setKleurweergave] = useKleurweergave()
 
-  const layout = usePlanningLayout({ peildatum, view, availableW })
+  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
   const vs = viewStart
   const ve = useMemo(() => addDays(viewStart, layout.totalDays - 1), [viewStart, layout.totalDays])
   const { spans: effSpans, cols: effCols } = useMemo(
