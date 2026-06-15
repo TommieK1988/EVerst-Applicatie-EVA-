@@ -263,7 +263,7 @@ export async function getUniekeBouw7Categorieen(): Promise<string[]> {
 }
 
 /** Rol-kolommen waarop een dossier aan een medewerker gekoppeld kan zijn. */
-export const DOSSIER_ROL_KOLOMMEN = [
+const DOSSIER_ROL_KOLOMMEN = [
   'project_manager_id',
   'teamleider_id',
   'werkvoorbereider_id',
