@@ -5,7 +5,11 @@ import {
   logSync,
   type SyncResult,
 } from './sync'
-import type { Bouw7Project, Bouw7ProjectFinancial } from './client'
+import type { Bouw7Project, Bouw7ProjectFinancial, Bouw7ControlResponse } from './client'
+
+/** De 6 echte kostensoorten op de Athena `costs`. NB: de API levert daarnaast soms een
+ *  roll-up/total-key — die mag NIET meegeteld worden (anders verdubbelt de som). */
+const KOSTENSOORTEN = ['labor', 'material', 'equipment', 'subcontracting', 'purchaseOrder', 'other'] as const
 
 /**
  * Veilige nummer-conversie — de Athena-API retourneert bedragen soms als string.
@@ -29,17 +33,23 @@ function volledigeNaam(p?: { firstName?: string; lastName?: string } | null): st
   return naam || null
 }
 
-/** Som van de gerealiseerde kosten over alle kostensoorten. */
+/** Som van de kosten over de 6 echte kostensoorten (excl. eventuele total-key uit de API). */
 function somKosten(
   costs: Bouw7ProjectFinancial['costs'] | undefined,
   veld: 'budgeted' | 'prognosis' | 'realised',
 ): number {
   if (!costs) return 0
   let totaal = 0
-  for (const soort of Object.values(costs)) {
-    if (soort) totaal += toNum(soort[veld])
+  for (const k of KOSTENSOORTEN) {
+    totaal += toNum(costs[k]?.[veld])
   }
   return totaal
+}
+
+/** is_gereed o.b.v. de (verse) Bouw7-projectstatus: 06. Financieel gereed / 07. Financieel afgesloten. */
+function isGereedVanStatus(p: Bouw7Project): boolean {
+  const naam = p.status?.name ?? ''
+  return /^0[67]\./.test(naam) || p.status?.closesProject === true
 }
 
 /** Gerealiseerde kosten uitgesplitst per kostensoort (voor de Kostensoort-pie). */
@@ -57,29 +67,31 @@ function kostenSplit(costs: Bouw7ProjectFinancial['costs'] | undefined): Record<
 
 type ManagementProjectRow = Record<string, unknown>
 
-/** Koppeling naar het EVA-dossier (bron van waarheid voor sectie + gereed-status). */
+/** Koppeling naar het EVA-dossier (bron van waarheid voor de sectie/tab). */
 type DossierKoppeling = {
   id: string
   sectie: 'opdrachten' | 'servicedesk'
-  isGereed: boolean
 }
 
 function mapProject(
   p: Bouw7Project,
   fin: Bouw7ProjectFinancial | undefined,
+  progress: number | null,
   dossier: DossierKoppeling,
   nu: string,
 ): ManagementProjectRow {
-  const projectnummer = p.projectNumber ?? p.fullProjectNumber ?? p.projectCode ?? String(p.id)
+  const projectnummer = p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? String(p.id)
 
   // ── Verkoop / omzet ──
-  const totaleOpdracht  = fin ? toNum(fin.revenue?.budgeted)  : null
-  const totalePrognose  = fin ? toNum(fin.revenue?.prognosis) : null
+  // Totale opdracht = aanneemsom incl. meerwerk = omzetprognose.
+  const totaleOpdracht  = fin ? toNum(fin.revenue?.prognosis) : null
   const gefactureerd    = fin ? toNum(fin.revenue?.realised)  : null
 
   // ── Kosten ──
   const geboekteKosten  = fin ? somKosten(fin.costs, 'realised')  : null
-  const kostenPrognose  = fin ? somKosten(fin.costs, 'prognosis') : 0
+  // Prognose-kolom = prognose-KOSTEN (Σ van de 6 kostensoorten).
+  const kostenPrognose  = fin ? somKosten(fin.costs, 'prognosis') : null
+  const totalePrognose  = kostenPrognose
 
   // ── Resultaat ──
   const verwachtResultaat = fin
@@ -89,7 +101,10 @@ function mapProject(
 
   // ── Afgeleide percentages ──
   const pctMarge  = totaleOpdracht != null && verwachtResultaat != null ? pct(verwachtResultaat, totaleOpdracht) : null
-  const pctGereed = geboekteKosten != null ? pct(geboekteKosten, kostenPrognose) : null
+  // % gereed = Bouw7 project-control 'progress'; val terug op kostenratio (geboekte/prognose).
+  const pctGereed = progress != null
+    ? progress
+    : (geboekteKosten != null ? pct(geboekteKosten, kostenPrognose ?? 0) : null)
 
   const omzetObvPct     = totaleOpdracht  != null && pctGereed != null ? totaleOpdracht  * (pctGereed / 100) : null
   const resultaatObvPct = verwachtResultaat != null && pctGereed != null ? verwachtResultaat * (pctGereed / 100) : null
@@ -121,7 +136,7 @@ function mapProject(
     pct_marge_gereed:   pctMargeGereed,
     verschil_pct_marge: verschilPctMarge,
 
-    is_gereed:          dossier.isGereed,
+    is_gereed:          isGereedVanStatus(p),
     dossier_id:         dossier.id,
     dossier_sectie:     dossier.sectie,
     kosten_split:       kostenSplit(fin?.costs),
@@ -172,19 +187,27 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       .not('bouw7_id', 'is', null)
     const bestaand = new Set<string>((bestaandeData ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
 
-    // Athena project-financial parallel ophalen (batch van 10), alleen voor de doel-dossiers.
+    // Athena per project (batch van 10), alleen voor de doel-dossiers:
+    //  • /project-financial/{id}              → bedragen
+    //  • /project-control/{id}/cost-type/total → totals.progress (Bouw7's eigen % gereed)
     const financialMap = new Map<string, Bouw7ProjectFinancial>()
+    const progressMap = new Map<string, number>()
     const targetIds = doelDossiers.map(d => d.bouw7_id)
     const ATHENA_BATCH = 10
     for (let i = 0; i < targetIds.length; i += ATHENA_BATCH) {
       const batch = targetIds.slice(i, i + ATHENA_BATCH)
-      const results = await Promise.allSettled(
-        batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`)),
-      )
+      const [finResults, ctrlResults] = await Promise.all([
+        Promise.allSettled(batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`))),
+        Promise.allSettled(batch.map(id => bouw7.getAthena<Bouw7ControlResponse>(`/project-control/${id}/cost-type/total`))),
+      ])
       for (let j = 0; j < batch.length; j++) {
-        const r = results[j]
-        if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
-          financialMap.set(batch[j], r.value)
+        const fr = finResults[j]
+        if (fr.status === 'fulfilled' && fr.value && typeof fr.value === 'object') {
+          financialMap.set(batch[j], fr.value)
+        }
+        const cr = ctrlResults[j]
+        if (cr.status === 'fulfilled' && cr.value?.totals?.progress != null) {
+          progressMap.set(batch[j], toNum(cr.value.totals.progress))
         }
       }
     }
@@ -194,11 +217,8 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       const p = projectMap.get(d.bouw7_id)
       if (!p) return []  // geen Bouw7-project → niets om te tonen
       const sectie: 'opdrachten' | 'servicedesk' = d.servicedesk_substatus ? 'servicedesk' : 'opdrachten'
-      // "Financieel gereed" (en afgesloten) horen bij Gereed Werken.
-      const isGereed = d.servicedesk_substatus
-        ? d.servicedesk_substatus === 'financieel_gereed'
-        : (d.opdracht_substatus === 'financieel_gereed' || d.opdracht_substatus === 'financieel_afgesloten')
-      return [mapProject(p, financialMap.get(d.bouw7_id), { id: d.id, sectie, isGereed }, nu)]
+      const progress = progressMap.has(d.bouw7_id) ? progressMap.get(d.bouw7_id)! : null
+      return [mapProject(p, financialMap.get(d.bouw7_id), progress, { id: d.id, sectie }, nu)]
     })
 
     for (const row of rows) {

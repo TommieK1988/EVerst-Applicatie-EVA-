@@ -9,14 +9,13 @@ import Link from 'next/link'
 import { syncManagementAction } from '@/app/(platform)/management/actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
-import { Input } from '@/components/ui/input'
 import { ChartCard, CHART_COLORS, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, chartColor } from '@/components/ui/chart'
-import { Briefcase, TrendingUp, BarChart3, Search } from 'lucide-react'
+import { Briefcase, TrendingUp, BarChart3 } from 'lucide-react'
 import { cn } from '@everts/ui'
+import type { GebruikerLayout } from '@everts/database/platform-types'
+import ManagementProjectenTabel from './ManagementProjectenTabel'
 
 /* ── Types ───────────────────────────────────────────────────────── */
 
@@ -66,14 +65,22 @@ export type ManagementDoelstelling = {
   resultaat_doelstelling: number | null
 }
 
+type ManagementLayouts = {
+  lopend: GebruikerLayout[]
+  gereed: GebruikerLayout[]
+  servicedesk: GebruikerLayout[]
+}
+
 type Props = {
   projecten: ManagementProject[]
   akData: ManagementAK[]
   doelstellingen: ManagementDoelstelling[]
   laatstGesynchroniseerd: string | null
+  user_id: string | null
+  layouts: ManagementLayouts
 }
 
-type View = 'dashboard' | 'lopend' | 'gereed'
+type View = 'dashboard' | 'lopend' | 'gereed' | 'servicedesk'
 
 /* ── Chart-kleuren (DS palet, voor Recharts) ─────────────────────── */
 
@@ -130,12 +137,6 @@ function fDatum(iso: string | null): string {
   })
 }
 
-/** Open het gekoppelde dossier in een nieuw tabblad. */
-function openDossierTab(p: ManagementProject) {
-  if (!p.dossier_id || !p.dossier_sectie) return
-  window.open(`/${p.dossier_sectie}/${p.dossier_id}`, '_blank', 'noopener')
-}
-
 /* ── Tone helpers ────────────────────────────────────────────────── */
 
 type Tone = 'success' | 'warning' | 'error' | 'brand' | 'info' | 'neutral'
@@ -158,6 +159,11 @@ function resultaatClass(v: number | null | undefined): string {
   if (v == null) return 'text-neutral-400'
   return v < 0 ? 'text-error-500 font-semibold' : 'text-success-700 font-semibold'
 }
+
+/* ── Gedeelde pivot-tabelstijlen ─────────────────────────────────── */
+
+const pvTh = 'px-[10px] py-[7px] bg-neutral-50 border-b-2 border-neutral-200 text-[11px] font-bold uppercase tracking-[0.04em] text-neutral-500 text-right whitespace-nowrap'
+const pvTd = 'px-[10px] py-[8px] border-b border-neutral-100 align-middle whitespace-nowrap text-[12px] text-neutral-900'
 
 /* ── Pivot helpers ───────────────────────────────────────────────── */
 
@@ -335,13 +341,16 @@ function doelVoorPL(doelstellingen: ManagementDoelstelling[], pl: string): Manag
 
 /* ── Hoofd component ─────────────────────────────────────────────── */
 
-export default function ManagementDashboard({ projecten, akData, doelstellingen, laatstGesynchroniseerd }: Props) {
+export default function ManagementDashboard({ projecten, akData, doelstellingen, laatstGesynchroniseerd, user_id, layouts }: Props) {
   const [view, setView]             = useState<View>('dashboard')
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const lopend     = useMemo(() => projecten.filter(p => !p.is_gereed), [projecten])
-  const gereed     = useMemo(() => projecten.filter(p =>  p.is_gereed), [projecten])
+  // Lopende Werken = lopende opdrachten · Gereed Werken = financieel gereed/afgesloten (opdracht + servicedesk)
+  // · Servicedesk = lopende servicedesk-dossiers.
+  const lopend      = useMemo(() => projecten.filter(p => p.dossier_sectie === 'opdrachten' && !p.is_gereed), [projecten])
+  const gereed      = useMemo(() => projecten.filter(p => p.is_gereed), [projecten])
+  const servicedesk = useMemo(() => projecten.filter(p => p.dossier_sectie === 'servicedesk' && !p.is_gereed), [projecten])
   const pivot      = useMemo(() => buildPivot(projecten), [projecten])
   const hierarchie = useMemo(() => buildHierarchie(projecten), [projecten])
   const plPivot    = useMemo(() => buildPivotPL(projecten), [projecten])
@@ -447,9 +456,10 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
         {/* Filter-tabs (DS-patroon: pill-stijl) */}
         <div style={{ display: 'flex', gap: 4 }}>
           {([
-            { key: 'dashboard', label: 'Dashboard' },
-            { key: 'lopend',    label: `Lopende Werken (${lopend.length})` },
-            { key: 'gereed',    label: `Gereed Werken (${gereed.length})` },
+            { key: 'dashboard',   label: 'Dashboard' },
+            { key: 'lopend',      label: `Lopende Werken (${lopend.length})` },
+            { key: 'gereed',      label: `Gereed Werken (${gereed.length})` },
+            { key: 'servicedesk', label: `Servicedesk (${servicedesk.length})` },
           ] as const).map(({ key, label }) => {
             const actief = view === key
             return (
@@ -512,8 +522,18 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
             kostensoortData={kostensoortData}
           />
         )}
-        {view === 'lopend' && <LopendeTabel rijen={lopend} />}
-        {view === 'gereed' && <GereedTabel  rijen={gereed} />}
+        {view === 'lopend' && (
+          <ManagementProjectenTabel rows={lopend} variant="lopend"
+            scherm="management-lopend" layouts={layouts.lopend} user_id={user_id} />
+        )}
+        {view === 'gereed' && (
+          <ManagementProjectenTabel rows={gereed} variant="gereed"
+            scherm="management-gereed" layouts={layouts.gereed} user_id={user_id} />
+        )}
+        {view === 'servicedesk' && (
+          <ManagementProjectenTabel rows={servicedesk} variant="servicedesk"
+            scherm="management-servicedesk" layouts={layouts.servicedesk} user_id={user_id} />
+        )}
       </div>
     </div>
   )
@@ -997,293 +1017,3 @@ function BarTooltip({ active, payload, label }: any) {
     </div>
   )
 }
-
-/* ── Lopende Werken tabel ────────────────────────────────────────── */
-
-function LopendeTabel({ rijen }: { rijen: ManagementProject[] }) {
-  const [zoek, setZoek]       = useState('')
-  const [filiaal, setFiliaal] = useState('')
-  const [categorie, setCat]   = useState('')
-  const [pl, setPl]           = useState('')
-
-  const filialen    = useMemo(() => uniek(rijen.map(p => p.filiaal)),       [rijen])
-  const categorieen = useMemo(() => uniek(rijen.map(p => p.categorie)),     [rijen])
-  const pls         = useMemo(() => uniek(rijen.map(p => p.projectleider)), [rijen])
-
-  const gefilterd = useMemo(() => rijen.filter(p => {
-    if (filiaal   && p.filiaal       !== filiaal)  return false
-    if (categorie && p.categorie     !== categorie) return false
-    if (pl        && p.projectleider !== pl)        return false
-    if (zoek) {
-      const q = zoek.toLowerCase()
-      return p.projectnummer.toLowerCase().includes(q)
-        || p.projectnaam.toLowerCase().includes(q)
-        || (p.opdrachtgever ?? '').toLowerCase().includes(q)
-    }
-    return true
-  }), [rijen, filiaal, categorie, pl, zoek])
-
-  return (
-    <div className="flex flex-col gap-3 h-full">
-      <FilterBalk
-        zoek={zoek} onZoek={setZoek}
-        filiaal={filiaal} onFiliaal={setFiliaal} filialen={filialen}
-        categorie={categorie} onCategorie={setCat} categorieen={categorieen}
-        pl={pl} onPl={setPl} pls={pls}
-        totaal={rijen.length} gefilterd={gefilterd.length}
-      />
-      <div className="flex-1 overflow-auto rounded-[10px] border border-neutral-200">
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr>
-              {[
-                { l: 'Nr.' }, { l: 'Filiaal' }, { l: 'Status' }, { l: 'Opdrachtgever' }, { l: 'Project' },
-                { l: 'PL' }, { l: 'Geboekte kosten', r: true }, { l: 'Totale opdracht', r: true },
-                { l: '% gereed', r: true }, { l: 'Prognose', r: true },
-                { l: 'Verw. resultaat', r: true }, { l: '% marge', r: true },
-                { l: 'Omzet o.b.v. %', r: true }, { l: 'Res. o.b.v. %', r: true },
-              ].map(k => (
-                <th key={k.l} className={cn(tabelTh, k.r && 'text-right')}>{k.l}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {gefilterd.length === 0 && (
-              <tr>
-                <td colSpan={14}>
-                  <EmptyState title="Geen projecten gevonden" description="Pas de filters aan om projecten te tonen." tone="neutral" size="sm" />
-                </td>
-              </tr>
-            )}
-            {gefilterd.map((p, i) => (
-              <tr
-                key={p.id}
-                onClick={() => openDossierTab(p)}
-                title={p.dossier_id ? 'Open dossier in nieuw tabblad' : undefined}
-                className={cn(
-                  i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60',
-                  p.dossier_id && 'cursor-pointer hover:bg-brand-50/60',
-                )}
-              >
-                <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
-                <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
-                <td className={tabelTd}><StatusBadge tekst={p.status} /></td>
-                <td className={cn(tabelTd, 'max-w-[160px]')}><Klem>{p.opdrachtgever}</Klem></td>
-                <td className={cn(tabelTd, 'max-w-[200px]')}><Klem fontMedium>{p.projectnaam}</Klem></td>
-                <td className={tabelTd}><Klem>{p.projectleider}</Klem></td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.geboekte_kosten)}</td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.totale_opdracht)}</td>
-                <td className={cn(tabelTd, 'text-right')}><PctBar waarde={p.pct_gereed} /></td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.totale_prognose)}</td>
-                <td className={cn(tabelTd, 'text-right', resultaatClass(p.verwacht_resultaat))}>{fEur(p.verwacht_resultaat)}</td>
-                <td className={cn(tabelTd, 'text-right')}><span className={margeTone(p.pct_marge)}>{fPct(p.pct_marge)}</span></td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.omzet_obv_pct)}</td>
-                <td className={cn(tabelTd, 'text-right', resultaatClass(p.resultaat_obv_pct))}>{fEur(p.resultaat_obv_pct)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-/* ── Gereed Werken tabel ─────────────────────────────────────────── */
-
-function GereedTabel({ rijen }: { rijen: ManagementProject[] }) {
-  const [zoek, setZoek]       = useState('')
-  const [filiaal, setFiliaal] = useState('')
-  const [categorie, setCat]   = useState('')
-  const [pl, setPl]           = useState('')
-
-  const filialen    = useMemo(() => uniek(rijen.map(p => p.filiaal)),       [rijen])
-  const categorieen = useMemo(() => uniek(rijen.map(p => p.categorie)),     [rijen])
-  const pls         = useMemo(() => uniek(rijen.map(p => p.projectleider)), [rijen])
-
-  const gefilterd = useMemo(() => rijen.filter(p => {
-    if (filiaal   && p.filiaal       !== filiaal)  return false
-    if (categorie && p.categorie     !== categorie) return false
-    if (pl        && p.projectleider !== pl)        return false
-    if (zoek) {
-      const q = zoek.toLowerCase()
-      return p.projectnummer.toLowerCase().includes(q)
-        || p.projectnaam.toLowerCase().includes(q)
-        || (p.opdrachtgever ?? '').toLowerCase().includes(q)
-    }
-    return true
-  }), [rijen, filiaal, categorie, pl, zoek])
-
-  return (
-    <div className="flex flex-col gap-3 h-full">
-      <FilterBalk
-        zoek={zoek} onZoek={setZoek}
-        filiaal={filiaal} onFiliaal={setFiliaal} filialen={filialen}
-        categorie={categorie} onCategorie={setCat} categorieen={categorieen}
-        pl={pl} onPl={setPl} pls={pls}
-        totaal={rijen.length} gefilterd={gefilterd.length}
-      />
-      <div className="flex-1 overflow-auto rounded-[10px] border border-neutral-200">
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr>
-              {[
-                { l: 'Nr.' }, { l: 'Filiaal' }, { l: 'Status' }, { l: 'Opdrachtgever' }, { l: 'Project' },
-                { l: 'PL' }, { l: 'Gefactureerd', r: true }, { l: 'Geboekte kosten', r: true },
-                { l: 'Resultaat', r: true }, { l: '% marge', r: true }, { l: 'Δ marge', r: true },
-              ].map(k => (
-                <th key={k.l} className={cn(tabelTh, k.r && 'text-right')}>{k.l}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {gefilterd.length === 0 && (
-              <tr>
-                <td colSpan={11}>
-                  <EmptyState title="Geen projecten gevonden" description="Pas de filters aan om projecten te tonen." tone="neutral" size="sm" />
-                </td>
-              </tr>
-            )}
-            {gefilterd.map((p, i) => (
-              <tr
-                key={p.id}
-                onClick={() => openDossierTab(p)}
-                title={p.dossier_id ? 'Open dossier in nieuw tabblad' : undefined}
-                className={cn(
-                  i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60',
-                  p.dossier_id && 'cursor-pointer hover:bg-brand-50/60',
-                )}
-              >
-                <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
-                <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
-                <td className={tabelTd}><StatusBadge tekst={p.status} /></td>
-                <td className={cn(tabelTd, 'max-w-[160px]')}><Klem>{p.opdrachtgever}</Klem></td>
-                <td className={cn(tabelTd, 'max-w-[200px]')}><Klem fontMedium>{p.projectnaam}</Klem></td>
-                <td className={tabelTd}><Klem>{p.projectleider}</Klem></td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.gefactureerd)}</td>
-                <td className={cn(tabelTd, 'text-right')}>{fEur(p.geboekte_kosten)}</td>
-                <td className={cn(tabelTd, 'text-right', resultaatClass(p.resultaat_gereed))}>{fEur(p.resultaat_gereed)}</td>
-                <td className={cn(tabelTd, 'text-right')}><span className={margeTone(p.pct_marge_gereed)}>{fPct(p.pct_marge_gereed)}</span></td>
-                <td className={cn(tabelTd, 'text-right')}>
-                  <span className={p.verschil_pct_marge != null && p.verschil_pct_marge > 0
-                    ? 'text-success-700 font-semibold'
-                    : p.verschil_pct_marge != null && p.verschil_pct_marge < 0
-                      ? 'text-error-500 font-semibold'
-                      : 'text-neutral-400'
-                  }>
-                    {p.verschil_pct_marge != null ? (p.verschil_pct_marge > 0 ? '+' : '') + fPct(p.verschil_pct_marge) : '—'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-/* ── Filter balk ─────────────────────────────────────────────────── */
-
-function FilterBalk({ zoek, onZoek, filiaal, onFiliaal, filialen, categorie, onCategorie, categorieen, pl, onPl, pls, totaal, gefilterd }: {
-  zoek: string; onZoek: (v: string) => void
-  filiaal: string; onFiliaal: (v: string) => void; filialen: string[]
-  categorie: string; onCategorie: (v: string) => void; categorieen: string[]
-  pl: string; onPl: (v: string) => void; pls: string[]
-  totaal: number; gefilterd: number
-}) {
-  const actief = filiaal || categorie || pl || zoek
-  return (
-    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-      <Input
-        inputSize="md"
-        placeholder="Zoek project, naam, opdrachtgever…"
-        value={zoek}
-        onChange={e => onZoek(e.target.value)}
-        prefix={<Search className="h-3.5 w-3.5" />}
-        className="min-w-[220px] flex-1 max-w-[320px]"
-      />
-      <FilterSelect value={filiaal} onChange={onFiliaal} placeholder="Alle filialen"      options={filialen} />
-      <FilterSelect value={categorie} onChange={onCategorie} placeholder="Alle categorieën" options={categorieen} />
-      <FilterSelect value={pl} onChange={onPl} placeholder="Alle projectleiders"            options={pls} />
-      {actief && (
-        <Button variant="ghost" size="md" onClick={() => { onZoek(''); onFiliaal(''); onCategorie(''); onPl('') }}>
-          Wis filters
-        </Button>
-      )}
-      <span className="ml-auto text-[12px] text-neutral-500">
-        {gefilterd} van {totaal} projecten
-      </span>
-    </div>
-  )
-}
-
-function FilterSelect({ value, onChange, placeholder, options }: {
-  value: string; onChange: (v: string) => void; placeholder: string; options: string[]
-}) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-[13px] text-neutral-900 outline-none transition-[border-color,box-shadow] [transition-duration:120ms] hover:border-neutral-400 focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100"
-    >
-      <option value="">{placeholder}</option>
-      {options.map(o => <option key={o} value={o}>{o}</option>)}
-    </select>
-  )
-}
-
-/* ── Sub-componenten ─────────────────────────────────────────────── */
-
-function FiliaalbBadge({ tekst }: { tekst: string | null }) {
-  if (!tekst) return <span className="text-neutral-400 text-[11px]">—</span>
-  return <Badge tone="neutral" variant="outline">{kortFiliaal(tekst)}</Badge>
-}
-
-function StatusBadge({ tekst }: { tekst: string | null }) {
-  if (!tekst) return <span className="text-neutral-400 text-[11px]">—</span>
-  const tone: Tone =
-    tekst.toLowerCase().includes('gereed')                                               ? 'success' :
-    tekst.toLowerCase().includes('lopend') || tekst.toLowerCase().includes('onderhanden') ? 'info'    :
-    tekst.toLowerCase().includes('voorbereiding')                                         ? 'warning' :
-    'neutral'
-  return <Badge tone={tone} dot>{tekst}</Badge>
-}
-
-function Klem({ children, fontMedium = false }: { children: React.ReactNode; fontMedium?: boolean }) {
-  return (
-    <span className={cn(
-      'block overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-neutral-900',
-      fontMedium ? 'font-medium' : 'font-normal',
-    )}>
-      {children ?? <span className="text-neutral-400">—</span>}
-    </span>
-  )
-}
-
-function PctBar({ waarde }: { waarde: number | null }) {
-  if (waarde == null) return <span className="text-neutral-400">—</span>
-  const tone = waarde >= 100 ? 'success' : waarde >= 50 ? 'brand' : 'warning'
-  const kleurClass = waarde >= 100 ? 'text-success-700' : waarde >= 50 ? 'text-info-700' : 'text-warning-700'
-  return (
-    <div className="flex items-center justify-end gap-1.5">
-      <Progress value={Math.min(waarde, 100)} tone={tone} size="sm" style={{ width: 48 }} />
-      <span className={cn('text-[11px] font-semibold min-w-[32px]', kleurClass)}>
-        {waarde.toFixed(0)}%
-      </span>
-    </div>
-  )
-}
-
-/* ── Helpers ─────────────────────────────────────────────────────── */
-
-function uniek(items: (string | null)[]): string[] {
-  return [...new Set(items.filter(Boolean) as string[])].sort()
-}
-
-/* ── Gedeelde tabelstijlen (Tailwind string-constanten) ──────────── */
-
-const pvTh = 'px-[10px] py-[7px] bg-neutral-50 border-b-2 border-neutral-200 text-[11px] font-bold uppercase tracking-[0.04em] text-neutral-500 text-right whitespace-nowrap'
-const pvTd = 'px-[10px] py-[8px] border-b border-neutral-100 align-middle whitespace-nowrap text-[12px] text-neutral-900'
-
-const tabelTh = 'sticky top-0 z-[1] px-3 py-[9px] bg-neutral-50 border-b-2 border-neutral-200 text-[11px] font-bold uppercase tracking-[0.05em] text-neutral-500 whitespace-nowrap text-left'
-const tabelTd = 'px-3 py-[8px] border-b border-neutral-100 align-middle whitespace-nowrap'
