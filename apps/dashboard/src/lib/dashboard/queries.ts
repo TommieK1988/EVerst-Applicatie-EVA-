@@ -30,7 +30,7 @@ const MANAGEMENT_PROJECT_KOLOMMEN =
   'id, projectnummer, bouw7_id, filiaal, status, opdrachtgever, projectnaam, categorie, projectleider, ' +
   'geboekte_kosten, totale_opdracht, pct_gereed, totale_prognose, verwacht_resultaat, pct_marge, ' +
   'omzet_obv_pct, resultaat_obv_pct, gefactureerd, resultaat_gereed, pct_marge_gereed, verschil_pct_marge, ' +
-  'is_gereed, kosten_split, bouw7_laatst_sync'
+  'is_gereed, kosten_split, dossier_id, dossier_sectie, bouw7_laatst_sync'
 
 export async function getManagementProjecten(): Promise<ManagementProject[]> {
   const supabase = createAdminClient() as any

@@ -44,6 +44,8 @@ export type ManagementProject = {
   verschil_pct_marge: number | null
   is_gereed: boolean
   kosten_split: Record<string, number> | null
+  dossier_id: string | null
+  dossier_sectie: string | null
   bouw7_laatst_sync: string | null
 }
 
@@ -126,6 +128,12 @@ function fDatum(iso: string | null): string {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+/** Open het gekoppelde dossier in een nieuw tabblad. */
+function openDossierTab(p: ManagementProject) {
+  if (!p.dossier_id || !p.dossier_sectie) return
+  window.open(`/${p.dossier_sectie}/${p.dossier_id}`, '_blank', 'noopener')
 }
 
 /* ── Tone helpers ────────────────────────────────────────────────── */
@@ -1048,7 +1056,15 @@ function LopendeTabel({ rijen }: { rijen: ManagementProject[] }) {
               </tr>
             )}
             {gefilterd.map((p, i) => (
-              <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60'}>
+              <tr
+                key={p.id}
+                onClick={() => openDossierTab(p)}
+                title={p.dossier_id ? 'Open dossier in nieuw tabblad' : undefined}
+                className={cn(
+                  i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60',
+                  p.dossier_id && 'cursor-pointer hover:bg-brand-50/60',
+                )}
+              >
                 <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
                 <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
                 <td className={tabelTd}><StatusBadge tekst={p.status} /></td>
@@ -1128,7 +1144,15 @@ function GereedTabel({ rijen }: { rijen: ManagementProject[] }) {
               </tr>
             )}
             {gefilterd.map((p, i) => (
-              <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60'}>
+              <tr
+                key={p.id}
+                onClick={() => openDossierTab(p)}
+                title={p.dossier_id ? 'Open dossier in nieuw tabblad' : undefined}
+                className={cn(
+                  i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60',
+                  p.dossier_id && 'cursor-pointer hover:bg-brand-50/60',
+                )}
+              >
                 <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
                 <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
                 <td className={tabelTd}><StatusBadge tekst={p.status} /></td>

@@ -57,9 +57,20 @@ function kostenSplit(costs: Bouw7ProjectFinancial['costs'] | undefined): Record<
 
 type ManagementProjectRow = Record<string, unknown>
 
-function mapProject(p: Bouw7Project, fin: Bouw7ProjectFinancial | undefined, nu: string): ManagementProjectRow {
+/** Koppeling naar het EVA-dossier (bron van waarheid voor sectie + gereed-status). */
+type DossierKoppeling = {
+  id: string
+  sectie: 'opdrachten' | 'servicedesk'
+  isGereed: boolean
+}
+
+function mapProject(
+  p: Bouw7Project,
+  fin: Bouw7ProjectFinancial | undefined,
+  dossier: DossierKoppeling,
+  nu: string,
+): ManagementProjectRow {
   const projectnummer = p.projectNumber ?? p.fullProjectNumber ?? p.projectCode ?? String(p.id)
-  const isGereed = p.status?.closesProject === true
 
   // ── Verkoop / omzet ──
   const totaleOpdracht  = fin ? toNum(fin.revenue?.budgeted)  : null
@@ -110,7 +121,9 @@ function mapProject(p: Bouw7Project, fin: Bouw7ProjectFinancial | undefined, nu:
     pct_marge_gereed:   pctMargeGereed,
     verschil_pct_marge: verschilPctMarge,
 
-    is_gereed:          isGereed,
+    is_gereed:          dossier.isGereed,
+    dossier_id:         dossier.id,
+    dossier_sectie:     dossier.sectie,
     kosten_split:       kostenSplit(fin?.costs),
 
     bouw7_laatst_sync:  nu,
@@ -132,36 +145,61 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
   try {
     const bouw7 = await getBouw7Client()
     const projects = await fetchAllPages<Bouw7Project>(bouw7, '/list/projects')
+    const projectMap = new Map<string, Bouw7Project>(projects.map(p => [String(p.id), p]))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
-    // Bestaande bouw7_id's ophalen om nieuw vs. bijgewerkt te tellen.
+    // Bron van waarheid: alleen EVA-dossiers in fase 'opdracht' of 'servicedesk'.
+    type DossierRow = {
+      id: string
+      bouw7_id: string
+      hoofdstatus: string
+      opdracht_substatus: string | null
+      servicedesk_substatus: string | null
+    }
+    const { data: dossierData } = await supabase
+      .from('dossiers')
+      .select('id, bouw7_id, hoofdstatus, opdracht_substatus, servicedesk_substatus')
+      .not('bouw7_id', 'is', null)
+    const doelDossiers: DossierRow[] = (dossierData ?? []).filter((d: DossierRow) =>
+      d.servicedesk_substatus != null || d.hoofdstatus === 'opdracht',
+    )
+
+    // Bestaande bouw7_id's ophalen om nieuw vs. bijgewerkt te tellen en stale te prunen.
     const { data: bestaandeData } = await supabase
       .from('management_projecten')
       .select('bouw7_id')
       .not('bouw7_id', 'is', null)
     const bestaand = new Set<string>((bestaandeData ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
 
-    // Athena project-financial parallel ophalen (batch van 10), net als syncProjects().
+    // Athena project-financial parallel ophalen (batch van 10), alleen voor de doel-dossiers.
     const financialMap = new Map<string, Bouw7ProjectFinancial>()
+    const targetIds = doelDossiers.map(d => d.bouw7_id)
     const ATHENA_BATCH = 10
-    for (let i = 0; i < projects.length; i += ATHENA_BATCH) {
-      const batch = projects.slice(i, i + ATHENA_BATCH)
+    for (let i = 0; i < targetIds.length; i += ATHENA_BATCH) {
+      const batch = targetIds.slice(i, i + ATHENA_BATCH)
       const results = await Promise.allSettled(
-        batch.map(p => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${p.id}`)),
+        batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`)),
       )
       for (let j = 0; j < batch.length; j++) {
         const r = results[j]
         if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
-          financialMap.set(String(batch[j].id), r.value)
+          financialMap.set(batch[j], r.value)
         }
       }
     }
 
     const nu = new Date().toISOString()
-    const rows: ManagementProjectRow[] = projects.map(p =>
-      mapProject(p, financialMap.get(String(p.id)), nu),
-    )
+    const rows: ManagementProjectRow[] = doelDossiers.flatMap(d => {
+      const p = projectMap.get(d.bouw7_id)
+      if (!p) return []  // geen Bouw7-project → niets om te tonen
+      const sectie: 'opdrachten' | 'servicedesk' = d.servicedesk_substatus ? 'servicedesk' : 'opdrachten'
+      // "Financieel gereed" (en afgesloten) horen bij Gereed Werken.
+      const isGereed = d.servicedesk_substatus
+        ? d.servicedesk_substatus === 'financieel_gereed'
+        : (d.opdracht_substatus === 'financieel_gereed' || d.opdracht_substatus === 'financieel_afgesloten')
+      return [mapProject(p, financialMap.get(d.bouw7_id), { id: d.id, sectie, isGereed }, nu)]
+    })
 
     for (const row of rows) {
       if (bestaand.has(row.bouw7_id as string)) result.bijgewerkt++
@@ -177,6 +215,13 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
         result.fouten++
         result.foutMelding = error.message
       }
+    }
+
+    // Prune: rijen die niet meer in de doel-set (opdracht/servicedesk) zitten, verwijderen.
+    const behoud = new Set<string>(rows.map(r => r.bouw7_id as string))
+    const stale = [...bestaand].filter(id => !behoud.has(id))
+    for (let i = 0; i < stale.length; i += 500) {
+      await supabase.from('management_projecten').delete().in('bouw7_id', stale.slice(i, i + 500))
     }
   } catch (e: unknown) {
     result.fouten++
