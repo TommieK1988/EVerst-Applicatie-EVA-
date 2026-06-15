@@ -83,7 +83,7 @@ function MessageBubble({ role, text, cards }: Message) {
                 padding: '6px 10px',
                 border: '1px solid var(--border)', borderRadius: 6,
                 background: 'var(--bg-elev)',
-                fontFamily: 'var(--font-mono)', fontSize: 11,
+                fontSize: 11,
               }}>
                 <span style={{ color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{c.label}</span>
                 <span style={{ color: 'var(--fg)' }}>{c.value}</span>

@@ -140,7 +140,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
                 {o.titel}
               </div>
               <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10, color: KLEUR.fgMuted,
+                fontSize: 10, color: KLEUR.fgMuted,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {o.klant_naam ?? o.dossiernummer ?? '—'}
@@ -214,7 +214,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
       {legendaItems.map(({ label, kleur }) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 12, height: 12, borderRadius: 2, background: kleur }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: KLEUR.fgMuted, textTransform: 'capitalize' }}>
+          <span style={{ fontSize: 10, color: KLEUR.fgMuted, textTransform: 'capitalize' }}>
             {label}
           </span>
         </div>
@@ -229,7 +229,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
           padding: '3px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
           background: kleurModus === modus ? 'var(--accent)' : 'transparent',
           color: kleurModus === modus ? 'white' : 'var(--fg-muted)',
-          fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+          fontSize: 10, fontWeight: 700,
         }}>
           {modus === 'status' ? 'Status' : 'Medewerker'}
         </button>
@@ -248,7 +248,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
             padding: '3px 10px', borderRadius: 20, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
             background: actief ? 'var(--accent)' : 'transparent',
             color: actief ? 'white' : 'var(--fg-muted)',
-            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, cursor: 'pointer',
+            fontSize: 10, fontWeight: 600, cursor: 'pointer',
           }}>
             {cat}
           </button>
@@ -258,7 +258,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
         <button onClick={() => setGeselecteerdeCategorieen([])} style={{
           padding: '3px 8px', borderRadius: 20, border: '1px solid var(--border)',
           background: 'transparent', color: 'var(--fg-muted)',
-          fontFamily: 'var(--font-mono)', fontSize: 10, cursor: 'pointer',
+          fontSize: 10, cursor: 'pointer',
         }}>
           × wis
         </button>

@@ -62,7 +62,7 @@ export default async function GebruikersPage() {
 
       {/* Gebruikersoverzicht */}
       <section style={{ marginBottom: 40 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
           Gebruikers ({gebruikers.length})
         </div>
 
@@ -84,7 +84,7 @@ export default async function GebruikersPage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {['Naam', 'Afdeling', 'Type', 'Auth', 'O365', 'Rechten override'].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                       {h}
                     </th>
                   ))}
@@ -101,7 +101,7 @@ export default async function GebruikersPage() {
                           {naam}
                         </Link>
                         {g.email && (
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>{g.email}</div>
+                          <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>{g.email}</div>
                         )}
                       </td>
                       <td style={{ padding: '10px 16px', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
@@ -113,12 +113,12 @@ export default async function GebruikersPage() {
                         </Badge>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: g.auth_user_id ? 'var(--accent)' : 'var(--fg-muted)' }}>
+                        <span style={{ fontSize: 10, color: g.auth_user_id ? 'var(--accent)' : 'var(--fg-muted)' }}>
                           {g.auth_user_id ? '● Ja' : '○ Nee'}
                         </span>
                       </td>
                       <td style={{ padding: '10px 16px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: g.o365_email ? 'var(--accent)' : 'var(--fg-muted)' }}>
+                        <span style={{ fontSize: 10, color: g.o365_email ? 'var(--accent)' : 'var(--fg-muted)' }}>
                           {g.o365_email ? '● Gekoppeld' : '○ Nee'}
                         </span>
                       </td>
@@ -136,7 +136,7 @@ export default async function GebruikersPage() {
 
       {/* Afdeling-rechten */}
       <section>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>
           Standaard rechten per afdeling
         </div>
         <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: '0 0 12px' }}>

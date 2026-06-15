@@ -531,7 +531,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                           >
                             {activeLayoutId === l.id ? <Check size={13} color="var(--accent)" /> : <span style={{ width: 13 }} />}
                             {l.naam}
-                            {l.is_standaard && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', marginLeft: 'auto', textTransform: 'uppercase', letterSpacing: '0.06em' }}>standaard</span>}
+                            {l.is_standaard && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 'auto', textTransform: 'uppercase', letterSpacing: '0.06em' }}>standaard</span>}
                           </button>
                           <button onClick={() => handleSetStandaard(l.id)} title={l.is_standaard ? 'Is al standaard' : 'Instellen als standaard'}
                             style={{ border: 'none', background: 'none', cursor: 'pointer', color: l.is_standaard ? 'var(--accent)' : 'var(--fg-muted)', padding: '4px 5px', fontSize: 13 }}
@@ -592,7 +592,7 @@ export default function OverzichtTabel<T extends { id: string }>({
 
             {showKolomBeheer && (
               <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 300, background: 'white', border: '1px solid var(--border)', borderRadius: 8, width: 210, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '8px 0' }}>
-                <div style={{ padding: '0 12px 6px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Zichtbare kolommen</div>
+                <div style={{ padding: '0 12px 6px', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Zichtbare kolommen</div>
                 {orderedKolommen.map(k => (
                   <label key={k.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', cursor: k.vast ? 'default' : 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', opacity: k.vast ? 0.45 : 1 }}>
                     {columnVisibility[k.key] !== false ? <Eye size={13} color="var(--accent)" /> : <EyeOff size={13} color="var(--fg-muted)" />}

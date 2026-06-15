@@ -69,7 +69,7 @@ function TagInput({
             display: 'inline-flex', alignItems: 'center', gap: 4,
             background: 'var(--bg-active)', border: '1px solid var(--border)',
             borderRadius: 4, padding: '2px 8px',
-            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg)',
+            fontSize: 11, color: 'var(--fg)',
           }}>
             {tag}
             <button
@@ -118,7 +118,7 @@ function UursoortFormulier({
       <CardBody>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
-            <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
               Naam
             </label>
             <Input
@@ -131,7 +131,7 @@ function UursoortFormulier({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
               Code
             </label>
             <Input
@@ -144,7 +144,7 @@ function UursoortFormulier({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
               Kleur
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -154,14 +154,14 @@ function UursoortFormulier({
                 onChange={e => set('kleur', e.target.value)}
                 style={{ width: 36, height: 32, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', padding: 2 }}
               />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {state.kleur}
               </span>
             </div>
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>
               Everts-calc omschrijvingen (sync-koppeling)
             </label>
             <TagInput
@@ -270,7 +270,7 @@ function SortableRow({
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
           {item.naam}
         </span>
-        <span style={{ marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>
+        <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg-muted)' }}>
           {item.code}
         </span>
       </div>
@@ -280,12 +280,12 @@ function SortableRow({
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {item.everts_calc_omschrijvingen.slice(0, 3).map(tag => (
             <span key={tag} style={{
-              fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg-muted)',
+              fontSize: 9, color: 'var(--fg-muted)',
               border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px',
             }}>{tag}</span>
           ))}
           {item.everts_calc_omschrijvingen.length > 3 && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg-muted)' }}>
+            <span style={{ fontSize: 9, color: 'var(--fg-muted)' }}>
               +{item.everts_calc_omschrijvingen.length - 3}
             </span>
           )}
@@ -444,7 +444,7 @@ export default function UursoortBeheer({ initial }: { initial: PlanningUursoort[
       {/* Everts-calc sync info */}
       <Card className="mt-6">
         <CardBody>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
             Everts-calc koppeling
           </p>
           <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.5, margin: 0 }}>

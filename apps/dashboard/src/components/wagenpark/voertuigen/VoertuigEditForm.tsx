@@ -44,7 +44,7 @@ export default function VoertuigEditForm(props: Props) {
     <form onSubmit={onSubmit} className="space-y-4 text-sm">
       {/* Read-only ULU-data */}
       <div className="bg-slate-50 rounded p-3 text-xs text-slate-500 space-y-1">
-        <div><span className="font-medium">Kenteken:</span> <span className="font-mono">{props.kenteken}</span></div>
+        <div><span className="font-medium">Kenteken:</span> <span className="">{props.kenteken}</span></div>
         <div><span className="font-medium">Merk:</span> {props.merk ?? '—'} (uit RDW/ULU)</div>
         <div><span className="font-medium">Model:</span> {props.model ?? '—'} (uit RDW/ULU)</div>
         <div><span className="font-medium">Brandstof:</span> {props.brandstof ?? '—'} (uit RDW)</div>

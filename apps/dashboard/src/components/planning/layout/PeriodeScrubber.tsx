@@ -103,7 +103,7 @@ export default function PeriodeScrubber({ view, peildatum, vs: vsOverride, onCha
       {months.map((m, i) => (
         <span key={`l-${i}`} style={{
           position: 'absolute', top: 4, left: m.left + 3,
-          fontFamily: 'var(--font-mono)', fontSize: 9,
+          fontSize: 9,
           color: 'var(--fg-muted)', pointerEvents: 'none',
           textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>

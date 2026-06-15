@@ -109,14 +109,14 @@ export default function AvatarBeheer({
             onClick={handleVerwijder}
             style={{
               border: 'none', background: 'none', cursor: 'pointer',
-              fontFamily: 'var(--font-mono)', fontSize: 10,
+              fontSize: 10,
               color: 'var(--fg-muted)', padding: 0, textAlign: 'left',
             }}
           >
             Verwijderen
           </button>
         )}
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', margin: 0 }}>
+        <p style={{ fontSize: 10, color: 'var(--fg-muted)', margin: 0 }}>
           PNG, JPG of WebP · max 5 MB
         </p>
       </div>

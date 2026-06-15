@@ -157,7 +157,7 @@ export default function BedrijfsagendaView({
       {weergave === 'maand' ? (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           {ALLE_TYPES.map(({ kleur, label }) => (
-            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>
+            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--fg-muted)' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: kleur, flexShrink: 0 }} />
               {label}
             </span>
@@ -178,7 +178,6 @@ export default function BedrijfsagendaView({
                   color: actief ? kleur : 'var(--fg-muted)',
                   border: `1px solid ${actief ? kleur : 'var(--border)'}`,
                   fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  fontFamily: 'var(--font-mono)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -333,11 +332,11 @@ function BerekeendItemDetail({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: item.kleur, marginTop: 5, flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
               {typeLabel[item.type] ?? item.type}
             </div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)' }}>{item.titel}</div>
-            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 4 }}>
               {item.start_datum.split('-').reverse().join('-')}
             </div>
           </div>

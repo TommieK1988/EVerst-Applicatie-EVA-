@@ -384,7 +384,7 @@
 }
 
 .eva-section-label {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  font-family: var(--font-ui); font-size: 10px; font-weight: 700;
   color: var(--fg-muted); letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -406,7 +406,7 @@ a.eva-card:hover { background: var(--bg-active); }
 
 .eva-page-header { margin-bottom: 28px; }
 .eva-page-kicker {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  font-family: var(--font-ui); font-size: 10px; font-weight: 700;
   color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase;
   margin-bottom: 6px;
 }
@@ -616,4 +616,4 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   border: 1px solid var(--neutral-200); }
 .calc-input:focus { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 15%, transparent); }
 .calc-input-number { @apply w-full px-2 py-1.5 text-sm rounded text-right transition-colors;
-  font-family: var(--font-mono); border: 1px solid var(--neutral-200); }
+  font-family: var(--font-ui); border: 1px solid var(--neutral-200); }

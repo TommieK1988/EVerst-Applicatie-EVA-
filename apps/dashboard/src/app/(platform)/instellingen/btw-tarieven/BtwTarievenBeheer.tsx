@@ -46,7 +46,7 @@ export default function BtwTarievenBeheer({ initial }: { initial: number[] }) {
             background: 'var(--bg)', border: '1px solid var(--border)',
             borderRadius: 8, padding: '6px 12px',
           }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{t}%</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{t}%</span>
             <Button variant="ghost" size="sm" onClick={() => verwijder(t)} title="Verwijderen" style={{ padding: 0, lineHeight: 1, minWidth: 0, height: 'auto' }}>×</Button>
           </div>
         ))}
@@ -67,7 +67,7 @@ export default function BtwTarievenBeheer({ initial }: { initial: number[] }) {
             onKeyDown={e => e.key === 'Enter' && voegToe()}
             placeholder="bijv. 21"
             suffix="%"
-            style={{ fontFamily: 'var(--font-mono)' }}
+            style={{  }}
           />
         </div>
         <Button variant="ghost" size="sm" onClick={voegToe}>+ Toevoegen</Button>

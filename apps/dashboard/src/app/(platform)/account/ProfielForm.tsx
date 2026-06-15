@@ -14,7 +14,6 @@ type Props = {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)',
   fontSize: 10,
   fontWeight: 700,
   color: 'var(--fg-muted)',
@@ -108,7 +107,7 @@ export default function ProfielForm({ medewerker }: Props) {
         </div>
       )}
       {(medewerker.functie || medewerker.afdeling) && (
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', margin: 0 }}>
+        <p style={{ fontSize: 10, color: 'var(--fg-muted)', margin: 0 }}>
           Functie en afdeling worden beheerd door een beheerder.
         </p>
       )}

@@ -121,14 +121,14 @@ const KOLOMMEN: KolomDefinitie<Medewerker>[] = [
     label: 'Tarief verkoop',
     standaard_zichtbaar: false,
     sorteerWaarde: m => m.uurtarief_verkoop ?? -1,
-    render: m => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_verkoop)}</span>,
+    render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_verkoop)}</span>,
   },
   {
     key: 'uurtarief_kostprijs',
     label: 'Tarief kostprijs',
     standaard_zichtbaar: false,
     sorteerWaarde: m => m.uurtarief_kostprijs ?? -1,
-    render: m => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_kostprijs)}</span>,
+    render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_kostprijs)}</span>,
   },
   {
     key: 'cao_schaal',
@@ -136,14 +136,14 @@ const KOLOMMEN: KolomDefinitie<Medewerker>[] = [
     standaard_zichtbaar: false,
     filterType: 'tekst',
     sorteerWaarde: m => m.cao_schaal ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_schaal ?? '—'}</span>,
+    render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_schaal ?? '—'}</span>,
   },
   {
     key: 'in_dienst_vanaf',
     label: 'In dienst vanaf',
     standaard_zichtbaar: false,
     sorteerWaarde: m => m.in_dienst_vanaf ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.in_dienst_vanaf)}</span>,
+    render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.in_dienst_vanaf)}</span>,
   },
   {
     key: 'status',

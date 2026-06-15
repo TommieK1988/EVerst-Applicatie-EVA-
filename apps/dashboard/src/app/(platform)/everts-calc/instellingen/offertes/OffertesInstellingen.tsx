@@ -605,7 +605,7 @@ function SjabloontekstenTab({ sjabloonteksten: init }: { sjabloonteksten: Sjablo
                     {st.categorie && st.categorie !== 'algemeen' && (
                       <div className="text-xs text-slate-400 mt-0.5">{st.categorie}</div>
                     )}
-                    <pre className="mt-2 text-xs text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto max-h-20 font-mono whitespace-pre-wrap">
+                    <pre className="mt-2 text-xs text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto max-h-20  whitespace-pre-wrap">
                       {st.inhoud_html.substring(0, 200)}{st.inhoud_html.length > 200 ? '...' : ''}
                     </pre>
                   </div>
@@ -642,7 +642,7 @@ function SjabloontekstenTab({ sjabloonteksten: init }: { sjabloonteksten: Sjablo
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Inhoud (HTML)</label>
-              <textarea value={form.inhoud_html} onChange={e => setForm(f => ({ ...f, inhoud_html: e.target.value }))} rows={8} placeholder={'<table><tr><td>{{klant.naam}}</td></tr></table>'} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-everts/30 resize-y" />
+              <textarea value={form.inhoud_html} onChange={e => setForm(f => ({ ...f, inhoud_html: e.target.value }))} rows={8} placeholder={'<table><tr><td>{{klant.naam}}</td></tr></table>'} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm  focus:outline-none focus:ring-2 focus:ring-everts/30 resize-y" />
               <p className="text-xs text-slate-400 mt-1">Gebruik <code className="bg-slate-100 px-1 rounded">{'{{variabele}}'}</code> voor dynamische gegevens.</p>
             </div>
           </DialogBody>

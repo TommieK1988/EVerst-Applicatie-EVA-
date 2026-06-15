@@ -267,7 +267,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
         {meetstaat ? (
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-800">{meetstaat.naam}</span>
-            <span className="text-xs font-mono text-slate-400">{meetstaat.code}</span>
+            <span className="text-xs  text-slate-400">{meetstaat.code}</span>
             <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
               meetstaat.status === 'gesynchroniseerd'
                 ? 'bg-green-50 text-green-600 border-green-200'

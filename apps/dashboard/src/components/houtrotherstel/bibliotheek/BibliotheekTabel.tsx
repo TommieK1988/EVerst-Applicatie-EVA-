@@ -412,7 +412,7 @@ function ImportModal({ uurtarief, onImport, onClose }: {
                           {geldigeItems.slice(0, 5).map((item, i) => (
                             <tr key={i} className="border-b border-slate-100 last:border-0">
                               <td className="px-3 py-2">
-                                <span className="font-mono font-semibold text-everts-dark bg-everts-50 px-1.5 py-0.5 rounded">
+                                <span className=" font-semibold text-everts-dark bg-everts-50 px-1.5 py-0.5 rounded">
                                   {item.code}
                                 </span>
                               </td>
@@ -618,7 +618,7 @@ export default function BibliotheekTabel() {
                 gefilterd.map(item => (
                   <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 group">
                     <td className="px-3 py-3">
-                      <span className="font-mono text-xs font-semibold text-everts-dark bg-everts-50 px-1.5 py-0.5 rounded">
+                      <span className=" text-xs font-semibold text-everts-dark bg-everts-50 px-1.5 py-0.5 rounded">
                         {item.code}
                       </span>
                     </td>

@@ -155,7 +155,7 @@ export default function ScenarioSelector({ scenarios, actief, projectId, onChang
                   max="100"
                   value={form[key]}
                   onChange={e => setForm(f => ({ ...f, [key]: parseFloat(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm font-mono text-right focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-500"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm  text-right focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-500"
                 />
               </div>
             ))}

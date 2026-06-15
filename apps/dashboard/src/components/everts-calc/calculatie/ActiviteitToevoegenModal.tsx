@@ -274,7 +274,7 @@ export default function ActiviteitToevoegenModal({
                           value={hoeveelheden[item.id] ?? 1}
                           onChange={e => setHoeveelheid(item.id, parseFloat(e.target.value) || 1)}
                           onClick={e => e.stopPropagation()}
-                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                         />
                         <span className="text-xs text-slate-400 w-6 flex-shrink-0">{item.default_unit}</span>
                         <Button
@@ -303,9 +303,9 @@ export default function ActiviteitToevoegenModal({
                       <div key={i} className="flex items-center gap-2 text-xs py-1.5 border-b border-slate-50">
                         <span className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0 bg-blue-50 text-blue-700">A</span>
                         <span className="flex-1 text-slate-700">Arbeid</span>
-                        <span className="text-slate-500 font-mono">{n.hours_per_unit} u</span>
-                        <span className="text-slate-500 font-mono">{formatEuro(n.hour_rate)}/u</span>
-                        <span className="text-blue-700 font-mono font-medium">{formatEuro(n.cost_per_unit)}</span>
+                        <span className="text-slate-500 ">{n.hours_per_unit} u</span>
+                        <span className="text-slate-500 ">{formatEuro(n.hour_rate)}/u</span>
+                        <span className="text-blue-700  font-medium">{formatEuro(n.cost_per_unit)}</span>
                       </div>
                     ))}
                     {gefocust.material_norms.map((n, i) => (
@@ -316,8 +316,8 @@ export default function ActiviteitToevoegenModal({
                           {n.norm_type === 'onderaanneming' ? 'OA' : 'M'}
                         </span>
                         <span className="flex-1 text-slate-700 truncate">{n.material_name ?? 'Materiaal'}</span>
-                        <span className="text-slate-500 font-mono">{n.quantity_per_unit} {n.unit}</span>
-                        <span className={`font-mono font-medium ${n.norm_type === 'onderaanneming' ? 'text-purple-700' : 'text-amber-700'}`}>
+                        <span className="text-slate-500 ">{n.quantity_per_unit} {n.unit}</span>
+                        <span className={` font-medium ${n.norm_type === 'onderaanneming' ? 'text-purple-700' : 'text-amber-700'}`}>
                           {formatEuro(n.cost_per_unit)}
                         </span>
                       </div>
@@ -334,7 +334,7 @@ export default function ActiviteitToevoegenModal({
                       type="number" step="0.01" min="0.01"
                       value={hoeveelheden[gefocust.id] ?? 1}
                       onChange={e => setHoeveelheid(gefocust.id, parseFloat(e.target.value) || 1)}
-                      className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                      className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm text-right  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                     />
                     <span className="text-sm text-slate-500">{gefocust.default_unit}</span>
                   </div>

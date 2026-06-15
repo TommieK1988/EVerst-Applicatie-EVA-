@@ -512,3 +512,16 @@ export async function verwijderAfhankelijkheid(
   revalidatePath('/planning')
   return { ok: true }
 }
+
+// ─── Bouw7-planning sync (per dossier) ──────────────────────────────────────────
+
+/** Haal de planning (fasen/activiteiten/planitems) van dit dossier op uit Bouw7. */
+export async function syncPlanningVoorDossier(
+  dossier_id: string,
+): Promise<{ ok: true; nieuw: number; fouten: number } | { ok: false; error: string }> {
+  const { syncDossierPlanning } = await import('@/lib/bouw7/sync-planning')
+  const result = await syncDossierPlanning(dossier_id)
+  if (result.foutMelding) return { ok: false, error: result.foutMelding }
+  revalidatePath('/planning')
+  return { ok: true, nieuw: result.nieuw, fouten: result.fouten }
+}

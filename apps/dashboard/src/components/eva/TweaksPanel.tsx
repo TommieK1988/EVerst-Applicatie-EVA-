@@ -63,7 +63,7 @@ export default function TweaksPanel({ tweaks, setTweaks, onClose }: TweaksPanelP
       zIndex: 100, fontFamily: 'var(--font-ui)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Weergave</span>
+        <span style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Weergave</span>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
           <IconClose size={14}/>
         </button>

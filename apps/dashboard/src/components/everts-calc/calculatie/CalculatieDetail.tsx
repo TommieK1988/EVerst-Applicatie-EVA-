@@ -127,7 +127,7 @@ function LijnSubRij({ lijn, activiteit, onWijzig, onVerwijder }: LijnSubRijProps
       <td className="px-2 py-1 text-right">
         <input
           type="number" step="0.001" min="0"
-          className="w-20 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent font-mono text-slate-600"
+          className="w-20 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent  text-slate-600"
           value={lijn.hoeveelheid}
           onChange={e => onWijzig({ ...lijn, hoeveelheid: parseFloat(e.target.value) || 0 })}
         />
@@ -141,26 +141,26 @@ function LijnSubRij({ lijn, activiteit, onWijzig, onVerwijder }: LijnSubRijProps
           {EENHEDEN.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
       </td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">{n(min_pe, 1)}</td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">{n(tot_min, 1)}</td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">{n(tot_uren, 2)}</td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">{n(min_pe, 1)}</td>
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">{n(tot_min, 1)}</td>
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">{n(tot_uren, 2)}</td>
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">
         {mat_pe !== null ? formatEuro(mat_pe) : ''}
       </td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">
         {tot_mat !== null ? formatEuro(tot_mat) : ''}
       </td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">
         {oa_pe !== null ? formatEuro(oa_pe) : ''}
       </td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-500">
+      <td className="px-2 py-1 text-right  text-xs text-slate-500">
         {tot_oa !== null ? formatEuro(tot_oa) : ''}
       </td>
       <td className="px-2 py-1 text-right">
         <div className="flex items-center justify-end gap-0.5">
           <input
             type="number" step="0.01" min="0"
-            className="w-20 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent font-mono text-slate-600"
+            className="w-20 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent  text-slate-600"
             value={lijn.eenheidsprijs}
             onChange={e => onWijzig({ ...lijn, eenheidsprijs: parseFloat(e.target.value) || 0 })}
             title="Eenheidsprijs"
@@ -168,7 +168,7 @@ function LijnSubRij({ lijn, activiteit, onWijzig, onVerwijder }: LijnSubRijProps
           <span className="text-slate-400 text-xs">€</span>
         </div>
       </td>
-      <td className="px-2 py-1 text-right font-mono text-xs text-slate-600">
+      <td className="px-2 py-1 text-right  text-xs text-slate-600">
         {tot_kp > 0 ? formatEuro(tot_kp) : ''}
       </td>
       {/* Opslag % — leeg */}
@@ -177,7 +177,7 @@ function LijnSubRij({ lijn, activiteit, onWijzig, onVerwijder }: LijnSubRijProps
       <td className="px-2 py-1 text-right whitespace-nowrap">
         <input
           type="number" step="1" min="0" max="100"
-          className="w-12 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent font-mono text-slate-600"
+          className="w-12 text-xs text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent  text-slate-600"
           value={lijn.btw_pct ?? 21}
           onChange={e => onWijzig({ ...lijn, btw_pct: parseFloat(e.target.value) || 0 })}
         />
@@ -282,7 +282,7 @@ function ActiviteitRij({ activiteit, scenario, onVerwijder, onWijziging }: Activ
         <td className="px-2 py-2 text-right">
           <input
             type="number" step="0.01" min="0"
-            className="w-20 text-sm text-right font-semibold px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent font-mono"
+            className="w-20 text-sm text-right font-semibold px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent "
             value={activiteit.hoeveelheid}
             onChange={e => wijzigActiviteit({ hoeveelheid: parseFloat(e.target.value) || 0 })}
           />
@@ -296,37 +296,37 @@ function ActiviteitRij({ activiteit, scenario, onVerwijder, onWijziging }: Activ
             {EENHEDEN.map(e => <option key={e} value={e}>{e}</option>)}
           </select>
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.min_pe, v => formatGetal(v, 2))}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.tot_min, v => formatGetal(v, 2))}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.tot_uren, v => formatGetal(v, 2))}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.mat_pe, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.tot_mat, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.oa_pe, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.tot_oa, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-xs font-semibold text-slate-700">
+        <td className="px-2 py-2 text-right  text-xs font-semibold text-slate-700">
           {dash(r.kp_pe, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-sm font-bold text-everts-dark">
+        <td className="px-2 py-2 text-right  text-sm font-bold text-everts-dark">
           {dash(r.tot_kp, formatEuro)}
         </td>
         <td className="px-2 py-2 text-right whitespace-nowrap">
           <input
             type="number" step="0.5" min="0"
-            className="w-14 text-sm text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent font-mono"
+            className="w-14 text-sm text-right px-1 py-0.5 rounded border-0 hover:border hover:border-slate-200 focus:border focus:border-everts focus:outline-none bg-transparent "
             value={opslag}
             onChange={e => wijzigActiviteit({ opslag_pct: parseFloat(e.target.value) || 0 })}
           />
@@ -334,10 +334,10 @@ function ActiviteitRij({ activiteit, scenario, onVerwijder, onWijziging }: Activ
         </td>
         {/* BTW — leeg op activiteit niveau */}
         <td />
-        <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">
+        <td className="px-2 py-2 text-right  text-xs text-slate-600">
           {dash(r.vp_pe, formatEuro)}
         </td>
-        <td className="px-2 py-2 text-right font-mono text-sm font-bold text-everts">
+        <td className="px-2 py-2 text-right  text-sm font-bold text-everts">
           {dash(r.tot_vp, formatEuro)}
         </td>
         <td className="px-2 py-2">
@@ -446,7 +446,7 @@ function BegrotingsregelSectie({ element, scenario, onVerwijder, onWijziging }: 
             </span>
             <div className="flex-1" />
             {sectionKP > 0 && (
-              <span className="text-xs text-slate-500 font-mono">
+              <span className="text-xs text-slate-500 ">
                 KP: {formatEuro(sectionKP)} · VP: {formatEuro(sectionVP)}
               </span>
             )}
@@ -658,11 +658,11 @@ export default function CalculatieDetail({ selectie, scenario, onWijziging }: Pr
                 <td colSpan={12} className="px-3 py-2.5 text-sm font-semibold text-slate-700">
                   Totaal locatie
                 </td>
-                <td className="px-2 py-2.5 text-right font-bold font-mono text-everts-dark">
+                <td className="px-2 py-2.5 text-right font-bold  text-everts-dark">
                   {formatEuro(totaalKP)}
                 </td>
                 <td /><td /><td />
-                <td className="px-2 py-2.5 text-right font-bold font-mono text-everts">
+                <td className="px-2 py-2.5 text-right font-bold  text-everts">
                   {formatEuro(totaalVP)}
                 </td>
                 <td />

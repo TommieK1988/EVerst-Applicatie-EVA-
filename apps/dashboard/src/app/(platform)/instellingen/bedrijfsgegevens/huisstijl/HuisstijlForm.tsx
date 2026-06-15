@@ -108,7 +108,7 @@ export function HuisstijlForm({ data }: { data: Bedrijfsgegevens }) {
                       value={colors[k.name] || ''}
                       onChange={(e) => setColors((prev) => ({ ...prev, [k.name]: e.target.value }))}
                       placeholder={k.defaultValue || '#hex'}
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                      style={{ fontSize: 12 }}
                     />
                   </div>
                 </label>

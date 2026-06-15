@@ -56,7 +56,6 @@ export default function MaandKalender({ peildatum, regels, onItemClick, onDagCli
             textAlign: 'center',
             fontSize: 10, fontWeight: 700,
             color: 'var(--fg-muted)',
-            fontFamily: 'var(--font-mono)',
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
           }}>{d}</div>

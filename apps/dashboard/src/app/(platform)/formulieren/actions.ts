@@ -88,7 +88,7 @@ export async function createFormTemplate(input: {
     return { ok: false, error: 'Versie aanmaken mislukt: ' + versieError.message }
   }
 
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/sjablonen')
   return { ok: true, data: template }
 }
 
@@ -104,7 +104,7 @@ export async function updateFormTemplate(
     .select()
     .single()
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/sjablonen')
   return { ok: true, data: data as FormTemplate }
 }
 
@@ -115,7 +115,7 @@ export async function publishFormTemplate(id: string): Promise<ActionResult> {
     .update({ status: 'gepubliceerd' })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/sjablonen')
   revalidatePath(`/formulieren/${id}/bewerken`)
   return { ok: true, data: undefined }
 }
@@ -127,7 +127,7 @@ export async function archiveFormTemplate(id: string): Promise<ActionResult> {
     .update({ status: 'gearchiveerd' })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/sjablonen')
   return { ok: true, data: undefined }
 }
 
@@ -138,7 +138,7 @@ export async function deleteFormTemplate(id: string): Promise<ActionResult> {
     .delete()
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/sjablonen')
   return { ok: true, data: undefined }
 }
 
@@ -332,7 +332,7 @@ export async function updateInzendingStatus(
     .update({ status })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/overzicht')
   return { ok: true, data: undefined }
 }
 
@@ -382,7 +382,7 @@ export async function createFormTaak(input: {
     .select()
     .single()
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/overzicht')
   return { ok: true, data: data as FormTaak }
 }
 
@@ -396,8 +396,115 @@ export async function updateFormTaakStatus(
     .update({ status })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren')
+  revalidatePath('/formulieren/overzicht')
   return { ok: true, data: undefined }
+}
+
+// ── Formulier-taken van actieve dossiers (Overzicht-scherm) ───────
+
+import { getActieveDossierContext, type DossierContext } from '@/lib/dossiers/actief'
+
+/** Platte rij voor het Formulieren-overzicht: form_taak + dossier-context. */
+export type FormulierTaakRij = {
+  id: string
+  template_id: string
+  formulier_naam: string
+  categorie: string | null
+  status: FormTaakStatus
+  deadline: string | null
+  inzending_id: string | null
+  toegewezen_aan: string | null
+  toegewezen_naam: string | null
+  // Dossier-context
+  dossier_id: string
+  dossiernummer: string | null
+  dossier_titel: string
+  dossier_sectie: DossierContext['sectie']
+  dossier_fase: string
+  dossier_substatus: string | null
+  klant_naam: string | null
+  projectleider_naam: string | null
+  uitvoerder_naam: string | null
+  calculator_naam: string | null
+  werkvoorbereider_naam: string | null
+  werkadres_stad: string | null
+  verwacht_startdatum: string | null
+  verwacht_einddatum: string | null
+}
+
+/**
+ * Alle in te vullen formulier-taken van actieve dossiers, plat met dossier-context.
+ * Voor het Formulieren-overzicht. Alleen vanuit Server Components aanroepen.
+ */
+export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRij[]> {
+  const supabase = createAdminClient()
+
+  const { ids, context } = await getActieveDossierContext()
+  if (ids.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('form_taken')
+    .select('*, template:template_id ( naam, categorie )')
+    .in('dossier_id', ids)
+    .order('deadline', { ascending: true, nullsFirst: false })
+
+  if (error) throw new Error(`Fout bij ophalen formulier-taken: ${error.message}`)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const taken = (data ?? []) as any[]
+  if (taken.length === 0) return []
+
+  // Namen van toegewezen medewerkers ophalen.
+  const userIds = [...new Set(taken.map(t => t.toegewezen_aan).filter(Boolean))] as string[]
+  let namenMap: Record<string, string> = {}
+  if (userIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = supabase as any
+    const { data: meds } = await admin
+      .from('medewerkers')
+      .select('auth_user_id, voornaam, tussenvoegsel, achternaam')
+      .in('auth_user_id', userIds)
+    namenMap = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (meds ?? []).map((m: any) => [
+        m.auth_user_id,
+        [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      ]),
+    )
+  }
+
+  const rijen: FormulierTaakRij[] = []
+  for (const t of taken) {
+    const ctx = t.dossier_id ? context.get(t.dossier_id) : undefined
+    if (!ctx) continue
+    rijen.push({
+      id: t.id,
+      template_id: t.template_id,
+      formulier_naam: t.template?.naam ?? '—',
+      categorie: t.template?.categorie ?? null,
+      status: t.status,
+      deadline: t.deadline ?? null,
+      inzending_id: t.inzending_id ?? null,
+      toegewezen_aan: t.toegewezen_aan ?? null,
+      toegewezen_naam: t.toegewezen_aan ? (namenMap[t.toegewezen_aan] ?? null) : null,
+      dossier_id: ctx.id,
+      dossiernummer: ctx.dossiernummer,
+      dossier_titel: ctx.titel,
+      dossier_sectie: ctx.sectie,
+      dossier_fase: ctx.fase_label,
+      dossier_substatus: ctx.substatus_label,
+      klant_naam: ctx.klant_naam,
+      projectleider_naam: ctx.projectleider_naam,
+      uitvoerder_naam: ctx.uitvoerder_naam,
+      calculator_naam: ctx.calculator_naam,
+      werkvoorbereider_naam: ctx.werkvoorbereider_naam,
+      werkadres_stad: ctx.werkadres_stad,
+      verwacht_startdatum: ctx.verwacht_startdatum,
+      verwacht_einddatum: ctx.verwacht_einddatum,
+    })
+  }
+
+  return rijen
 }
 
 // ── Gepubliceerde formulieren voor taak-koppeling ─────────────────

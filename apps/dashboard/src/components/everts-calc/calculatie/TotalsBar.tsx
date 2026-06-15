@@ -55,7 +55,7 @@ export default function TotalsBar({
           <div className="text-white/50 text-xs mb-0.5 flex items-center gap-1">
             Uurtarief AB
           </div>
-          <div className="flex items-center gap-0.5 font-mono text-sm">
+          <div className="flex items-center gap-0.5  text-sm">
             <span className="text-white/50 text-xs">€</span>
             <input
               type="number" step="0.50" min="0"
@@ -65,7 +65,7 @@ export default function TotalsBar({
                 const v = parseFloat(e.target.value)
                 onScenarioWijzig({ standaard_uurtarief: isNaN(v) ? undefined : v })
               }}
-              className="w-14 bg-white/10 hover:bg-white/20 focus:bg-white/30 rounded px-1 py-0.5 text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30"
+              className="w-14 bg-white/10 hover:bg-white/20 focus:bg-white/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30"
             />
             <span className="text-white/50 text-xs">/u</span>
           </div>
@@ -74,13 +74,13 @@ export default function TotalsBar({
         {/* Kostprijs */}
         <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">Kostprijs</div>
-          <div className="font-semibold font-mono text-sm">{formatEuro(kostprijs_live)}</div>
+          <div className="font-semibold  text-sm">{formatEuro(kostprijs_live)}</div>
         </div>
 
         {/* Opslag (effectief, read-only) */}
         <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">Opslag</div>
-          <div className="font-mono text-sm text-white/80">
+          <div className=" text-sm text-white/80">
             {opslag_pct.toFixed(2)}%
             <span className="text-white/40 text-xs ml-1">({opslag_euro >= 0 ? '+' : ''}{formatEuro(opslag_euro)})</span>
           </div>
@@ -89,28 +89,28 @@ export default function TotalsBar({
         {/* Verkoopprijs excl. BTW */}
         <div className="px-4 py-2.5 flex-1 min-w-0">
           <div className="text-white/50 text-xs mb-0.5">VP excl. BTW</div>
-          <div className="font-bold font-mono text-base text-everts-light">{formatEuro(verkoopprijs_live)}</div>
+          <div className="font-bold  text-base text-everts-light">{formatEuro(verkoopprijs_live)}</div>
         </div>
 
         {/* BTW: per tarief (altijd read-only; instellen via rekenregels) */}
         {btw_groepen.map(g => (
           <div key={g.pct} className="px-4 py-2.5 min-w-0 flex-shrink-0">
             <div className="text-white/50 text-xs mb-0.5">BTW {g.pct}%</div>
-            <div className="font-mono text-sm text-white/80">+ {formatEuro(g.btw)}</div>
+            <div className=" text-sm text-white/80">+ {formatEuro(g.btw)}</div>
           </div>
         ))}
 
         {/* Totaal incl. BTW */}
         <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">Totaal incl. BTW</div>
-          <div className="font-bold font-mono text-base text-white">{formatEuro(totaal_incl)}</div>
+          <div className="font-bold  text-base text-white">{formatEuro(totaal_incl)}</div>
         </div>
 
         {/* Marge */}
         <div className="px-5 py-2.5 min-w-[130px] flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">Marge</div>
           <div
-            className="font-bold font-mono text-base"
+            className="font-bold  text-base"
             style={{ color: marge_pct >= 20 ? '#61ac2b' : marge_pct >= 12 ? '#ffb866' : '#fda29b' }}
           >
             {formatPct(marge_pct)}

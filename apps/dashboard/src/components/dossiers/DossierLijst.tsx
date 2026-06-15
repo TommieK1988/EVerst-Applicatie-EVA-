@@ -107,7 +107,7 @@ function ProgressBar({ pct, kleur }: { pct: number; kleur: string }) {
       <div style={{ flex: 1, height: 5, background: 'var(--neutral-200)', borderRadius: 9999, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: kleur, borderRadius: 9999 }} />
       </div>
-      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--neutral-500)', minWidth: 24 }}>
+      <span style={{ fontSize: 10, color: 'var(--neutral-500)', minWidth: 24 }}>
         {pct}%
       </span>
     </div>
@@ -123,7 +123,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--neutral-400)', marginBottom: 8 }}>
         {label}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: accent || 'var(--neutral-900)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+      <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', color: accent || 'var(--neutral-900)', lineHeight: 1 }}>
         {value}
       </div>
       {sub && <div style={{ fontSize: 11, color: 'var(--neutral-400)', marginTop: 5 }}>{sub}</div>}
@@ -188,7 +188,7 @@ export function DossierLijst({
       sorteerWaarde: d => d.titel ?? '',
       render: d => (
         <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-400)' }}>
+          <div style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
             {d.dossiernummer ?? d.id.slice(0, 12)}
           </div>
           <div style={{ fontWeight: 600, color: 'var(--neutral-900)', fontSize: 13, lineHeight: 1.3 }}>
@@ -266,7 +266,7 @@ export function DossierLijst({
         const verlopen = isVerlopen(d.verwacht_einddatum)
         return (
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11,
+            fontSize: 11,
             color: verlopen ? 'var(--warning-700)' : 'var(--neutral-500)',
             fontWeight: verlopen ? 600 : 400,
           }}>
@@ -281,7 +281,7 @@ export function DossierLijst({
       breedte: 90,
       sorteerWaarde: d => d.bedrag_excl_btw ?? 0,
       render: d => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-700)' }}>
+        <span style={{ fontSize: 12, color: 'var(--neutral-700)' }}>
           {formatBedrag(d.bedrag_excl_btw)}
         </span>
       ),

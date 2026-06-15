@@ -3,6 +3,9 @@
 Centrale referentie voor alle beschikbare Bouw7-endpoints in EVA.  
 Bij twijfel: kijk hier, niet in `client.ts` of `sync.ts`.
 
+> Dit document beschrijft het **lezen** uit Bouw7 (alles GET, read-only).
+> Voor **schrijven naar Bouw7** (two-way sync, 104 write-endpoints) → zie [`WRITE-ENDPOINTS.md`](./WRITE-ENDPOINTS.md).
+
 ---
 
 ## Authenticatie
@@ -74,9 +77,9 @@ id, quotationNumber, subject, reference, quotationDate
 employee { id, firstName, lastName, prefix }   ← calculator
 project  { id, name }
 contact  { id, name }
-subtotal         — verkoopprijs EXCL. BTW   ← geverifieerd: total/subtotal is exact de BTW-factor
-total            — verkoopprijs INCL. BTW      (1,21 / 1,09 / gemengd / 1,00 bij BTW-verlegd)
-commissionPercentage
+subtotal         — verkoopprijs EXCL. BTW, ínclusief AK- en W&R-opslag ("Totaal excl. BTW" in Bouw7)
+total            — verkoopprijs INCL. BTW   ← geverifieerd: total/subtotal is exact de BTW-factor
+commissionPercentage                           (1,21 / 1,09 / gemengd / 1,00 bij BTW-verlegd)
 quotationStatus  { id, name }
 createdAt, updatedAt
 ```
@@ -84,6 +87,22 @@ createdAt, updatedAt
 > detail-endpoint: `chapters[].lines[].calculationTotal` (som van laborTotal,
 > materialTotal, equipmentTotal, subcontractingTotal, purchaseOrderTotal, garbageTotal).
 > Null/0 als de offerte niet via de Bouw7-calculatiemodule is opgebouwd.
+
+**Detail-endpoint `/quotation/{id}`** — extra velden voor financiën:
+```
+chapters[].lines[]
+  subtotal              — verkoopprijs van de regel (excl. AK/W&R)
+  vatTariffPercentage   — "21" / "9" / "0" (verlegd of geen)
+  vatTariffObject       — { label: 'Hoog 21%' | 'Laag 9%' | 'Verlegd 21%' | 'Geen', percentage }
+  option                — optionele regel, telt niet mee
+  calculationTotal      — gecalculeerde kostprijs van de regel
+overheads               — AK-percentage over de regelsom (bv. "10"), met overheadsVatTariff
+profitAndRisk           — W&R-percentage over de regelsom (bv. "5"), met profitAndRiskVatTariff
+```
+> **BTW-splitsing:** grondslag per tarief = regel-subtotalen per tarief + AK-bedrag en
+> W&R-bedrag bij hun eigen tarief. Som van de BTW-bedragen == `total` − `subtotal`.
+> **Athena `fixedPrice` is de regelsom zónder AK/W&R** — daarom is het offerte-`subtotal`
+> leidend voor de aanneemsom zodra de offerte aansluit op het contractbedrag (zie sync.ts).
 
 ### Relaties
 
@@ -183,6 +202,90 @@ generalCostsProfit
 > Gebruik `getDossierFinancieel(dossierId)` (server action in `lib/dossiers/actions.ts`)
 > om live data op te halen. Gebruik altijd `toNum(v)` (uit `FinancieelTab.tsx`) voor veilige
 > nummer-conversie — de API retourneert soms strings i.p.v. numbers.
+
+---
+
+## Planning (Apollo — `https://apollo.bouw7.nl`)
+
+Bouw7's planning zit **niet** in Heimdall maar in de **Apollo** search-API. Auth is dezelfde
+Heimdall-JWT (Bearer-token) — `Bouw7Client.getApollo()` / `.getApolloAll()` hergebruiken die.
+
+| Wat | Endpoint | Methode | Query-DSL |
+|---|---|---|---|
+| Plan-items van een project | `GET /search/plan-items` | read | `project.id = {bouw7_id} limit 1000 page {n}` via `X-Query` header |
+
+**Query-DSL:** filter + paginatie gaan mee via de `X-Query`-header (geen URL-encoding nodig),
+bv. `project.id = 3494115 limit 1000 page 2`. De response is `{ items: PlanItem[], __metadata }`;
+`__metadata.page.total` geeft het aantal pagina's.
+
+**`PlanItem` → EVA-mapping** (zie `sync-planning.ts`):
+
+| Bouw7 plan-item | EVA |
+|---|---|
+| `securityPlanningLink.securityCode.chapter` (WERKZAAMHEDEN, STELPOSTEN, …) = **Hoofdtaak** | `planning_fasen` (bouw7_id `chapter:{id}`) |
+| plan-items zónder bewakingscode (crewblok) | fase **"Algemeen"** (`chapter:algemeen`) |
+| plan-item zelf = **Taak** | `planning_activiteiten` (bouw7_id `{planItem.id}`) |
+| `assignedEmployees[]` (per medewerker) | `planning_items` (bouw7_id `{planItem.id}:{employee.id}`) |
+
+> **Let op:** in de huidige Everts-data heeft géén plan-item `assignedEmployees` — er wordt op
+> `department` gepland, niet op individu. De split-per-medewerker is ingebouwd maar levert pas
+> planitems op zodra Bouw7 medewerkers aan plan-items koppelt. Tot dan: alleen fasen + activiteiten.
+>
+> **Read-only:** Apollo `/search/*` is alleen-lezen. Planning terugschrijven via Apollo kan dus niet.
+> Voor schrijven naar Bouw7 bestaat een aparte **Heimdall write-API** (zie [`WRITE-ENDPOINTS.md`](./WRITE-ENDPOINTS.md));
+> een `plan-item`-write-endpoint lijkt daar echter niet bij te zitten. Het model is two-way-ready (`bouw7_id` + `bron`).
+
+---
+
+## Projectbewaking per bewakingscode (Financieel-tab)
+
+De Financieel-tab toont financiën **per bewakingscode** (security code). Eén endpoint levert
+alles — begroting, prognose, geboekte/bestede uren én geboekte kosten — per kostensoort.
+
+**Bron — Athena, per kostensoort:**
+```
+GET /project-control/{id}/cost-type/{costType}/chapters?include_subprojects=false
+```
+> **LET OP:** het `/chapters`-achtervoegsel is verplicht; `/project-control/{id}` of
+> `/project-control/{id}/cost-type/{n}` zonder `/chapters` geeft 404.
+> Optioneel sorteren via `&q=SORT(chapterInfo.code,+ASC)`. Verwante endpoints: `…/graph` (tijdreeks).
+
+**Kostensoort-id's** (`cost-type/{n}`) — geverifieerd: `costAmount` per soort == `/project-financial`
+realisatie, `budgetAmount` == budgeted (zie `BOUW7_COST_TYPE`):
+```
+1 = Arbeid          (hourInfo.costHours = geboekte/bestede uren)
+2 = Inkoop
+3 = Onderaanneming
+4 = Materieel
+5 = Materiaal
+6 = Afval
+(7 bestaat maar is leeg; geen "total"-variant — roep 1..6 los aan en aggregeer)
+```
+
+**Response-vorm** (`{ count, totals, items[] }`): `items[].chapterInfo` (hoofdstuk-aggregatie) +
+`items[].securityCodes[]` (per code), beide met dezelfde velden. `totals` = projecttotaal voor die soort.
+```
+budgetAmount         Begroot bedrag            costAmount          Geboekte kosten (besteed)
+prognosisAmount      Totale prognose           contractCostAmount  Inkooporders/OA-contracten (verplicht)
+progress             % gereed (number)         additionalWorkAmount Meerwerk
+hourInfo.budgetHours / .prognosisHours / .costHours (geboekte uren) / .allowedHours
+```
+> `chapterInfo.name === 'uncoded_costs'` (id 0) = **kosten zonder bewakingscode** (securityCodes leeg;
+> data staat op `chapterInfo`). EVA toont dit als één regel "Kosten zonder bewaking".
+>
+> **Eén code kan onder meerdere kostensoorten begroot zijn** (bv. SW.A onder Arbeid + Materiaal +
+> Onderaanneming). `getDossierBewaking()` voegt per code samen: begroting/prognose/kosten **sommeren**,
+> `costHours`/arbeidskosten uit kostensoort 1, % gereed van de soort met de grootste begroting.
+
+### EVA-server action
+
+| Wat | Server action | Bestand |
+|---|---|---|
+| Bewaking per bewakingscode (live) | `getDossierBewaking(dossierId)` | `lib/dossiers/actions.ts` |
+
+> **Historie:** `/search/delivery-tickets` + `/list/security-codes` (Heimdall) zijn een alternatieve
+> bron voor realisatie per code, maar het `project-control`-endpoint is leidend (compleet, incl. uren).
+> De vierde host `hermes.bouw7.nl` (FastAPI) is niet nodig gebleken.
 
 ---
 

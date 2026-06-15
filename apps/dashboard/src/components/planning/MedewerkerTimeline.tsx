@@ -51,7 +51,7 @@ const AFWEZIGHEID_KLEUR: Record<MedewerkerAfwezigheidType, string> = {
 }
 
 const dialogLabelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -257,7 +257,7 @@ function PlanningItemEditDialog({
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
               {dossierNaam}
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>
               {taakNaam}
             </div>
           </div>
@@ -992,7 +992,7 @@ export default function MedewerkerTimeline({
           background: 'rgba(var(--accent-rgb, 59,130,246), 0.06)',
         }}>
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+            fontSize: 9, fontWeight: 700,
             color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em',
           }}>Bedrijfsagenda</span>
         </div>

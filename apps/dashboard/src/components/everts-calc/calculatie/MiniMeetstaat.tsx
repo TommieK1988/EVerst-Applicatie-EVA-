@@ -118,7 +118,7 @@ function Ni({ value, onChange, placeholder, onTab }: {
       step="any"
       value={raw}
       placeholder={placeholder ?? '0'}
-      className="w-full text-xs text-right font-mono px-1.5 py-1 rounded border border-slate-200
+      className="w-full text-xs text-right  px-1.5 py-1 rounded border border-slate-200
         focus:outline-none focus:border-everts/50 focus:ring-1 focus:ring-everts/20 bg-white
         hover:border-slate-300"
       onChange={e => {
@@ -189,7 +189,7 @@ function MeetrijRij({
 
       {/* Totaal */}
       <td className="px-2 py-1 text-right w-24">
-        <span className={`text-xs font-mono font-semibold ${totaal > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
+        <span className={`text-xs  font-semibold ${totaal > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
           {totaal > 0 ? totaal.toFixed(3) : '—'}
         </span>
       </td>
@@ -400,7 +400,7 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
             {/* Footer */}
             <DialogFooter split className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
               {/* Formule hint links */}
-              <span className="text-[11px] text-slate-400 font-mono hidden sm:block">
+              <span className="text-[11px] text-slate-400  hidden sm:block">
                 {simple ? 'Typ in de lege rij om te beginnen' : formuleHint}
               </span>
 
@@ -408,7 +408,7 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
                 {/* Eindtotaal */}
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-slate-400">Totaal:</span>
-                  <span className={`text-sm font-bold font-mono ${eindtotaal > 0 ? 'text-everts' : 'text-slate-300'}`}>
+                  <span className={`text-sm font-bold  ${eindtotaal > 0 ? 'text-everts' : 'text-slate-300'}`}>
                     {eindtotaal > 0 ? eindtotaal.toFixed(2) : '—'}
                   </span>
                   <span className="text-xs font-semibold text-slate-500">{gekozenEenheid}</span>

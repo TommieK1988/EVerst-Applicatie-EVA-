@@ -103,7 +103,7 @@ export default async function InzendingDetailPage({
     <div style={{ padding: '32px', maxWidth: 760 }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, fontSize: 13 }}>
-        <Link href="/formulieren" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Formulieren</Link>
+        <Link href="/formulieren/sjablonen" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Formulieren</Link>
         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--text-muted)' }}>
           <path d="M9 18l6-6-6-6"/>
         </svg>

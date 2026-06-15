@@ -111,11 +111,11 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
                     )}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-xs font-mono text-slate-600">
+                    <p className="text-xs  text-slate-600">
                       {item.totaalAantal % 1 === 0 ? item.totaalAantal.toFixed(0) : item.totaalAantal.toFixed(2)}
                       {' '}{item.comp.eenheid ?? item.regel.eenheid}
                     </p>
-                    <p className="text-[10px] font-mono text-slate-400">{formatEuro(item.totaalPrijs)}</p>
+                    <p className="text-[10px]  text-slate-400">{formatEuro(item.totaalPrijs)}</p>
                   </div>
                 </div>
               ))}
@@ -186,7 +186,7 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
             <div>
               <p className={labelCls}>Prijs per eenheid</p>
               <div className="relative flex items-center">
-                <span className="absolute left-2.5 text-sm text-slate-400 font-mono">€</span>
+                <span className="absolute left-2.5 text-sm text-slate-400 ">€</span>
                 <input
                   type="number" step="0.01" min="0"
                   className={`${inputCls} pl-6`}
@@ -202,7 +202,7 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
           <div>
             <p className={labelCls}>Totaalprijs</p>
             <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-sm text-slate-400 font-mono">€</span>
+              <span className="absolute left-2.5 text-sm text-slate-400 ">€</span>
               <input
                 type="number" step="0.01" min="0"
                 className={`${inputCls} pl-6 font-semibold`}

@@ -50,7 +50,7 @@ export default async function WerkbonPage(props: { params: Promise<{ id: string 
     <div>
       {/* Mini-header */}
       <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Link href="/planning/mijn-werkbonnen" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-muted)', textDecoration: 'none' }}>
+        <Link href="/planning/mijn-werkbonnen" style={{ fontSize: 12, color: 'var(--fg-muted)', textDecoration: 'none' }}>
           ← Mijn werkbonnen
         </Link>
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', marginLeft: 'auto' }}>

@@ -374,7 +374,7 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Inhoud (HTML)</label>
-              <textarea value={stForm.inhoud_html} onChange={e => setStForm(f => ({ ...f, inhoud_html: e.target.value }))} rows={8} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-everts/30 resize-y" />
+              <textarea value={stForm.inhoud_html} onChange={e => setStForm(f => ({ ...f, inhoud_html: e.target.value }))} rows={8} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm  focus:outline-none focus:ring-2 focus:ring-everts/30 resize-y" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setStModal({ open: false })} className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">Annuleren</button>
@@ -511,7 +511,7 @@ function WordTemplatePaneel({
                       className="w-full px-3 py-2 hover:bg-everts/5 transition-colors group text-left"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <code className={`text-xs px-1.5 py-0.5 rounded font-mono min-w-0 break-all ${
+                        <code className={`text-xs px-1.5 py-0.5 rounded  min-w-0 break-all ${
                           v.startsWith('#') ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                           v.startsWith('/') ? 'bg-slate-100 text-slate-500 border border-slate-200' :
                           v.startsWith('^') ? 'bg-purple-50 text-purple-700 border border-purple-100' :

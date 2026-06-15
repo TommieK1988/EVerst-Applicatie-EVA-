@@ -166,7 +166,7 @@ export default function StructuurBoom({ scenarioId, actiefGroepId, refreshTrigge
               diepte === 0 ? 'text-xs font-semibold' : 'text-xs'
             )}
           >
-            <span className="text-slate-400 mr-1 font-mono text-[10px]">{nummer}</span>
+            <span className="text-slate-400 mr-1  text-[10px]">{nummer}</span>
             <span className="truncate">{groep.naam}</span>
           </button>
 

@@ -61,9 +61,9 @@ export default async function DiagnosePage() {
           <h2 className="text-sm font-semibold text-slate-700 mb-3">Verbinding</h2>
           <dl className="grid grid-cols-2 gap-y-2 text-sm">
             <dt className="text-slate-500">Supabase URL</dt>
-            <dd className="font-mono text-xs">{url}</dd>
+            <dd className=" text-xs">{url}</dd>
             <dt className="text-slate-500">Project ID</dt>
-            <dd className="font-mono">{projectId}</dd>
+            <dd className="">{projectId}</dd>
             <dt className="text-slate-500">NEXT_PUBLIC_SUPABASE_ANON_KEY</dt>
             <dd>{hasAnon ? '✅ aanwezig' : '❌ ontbreekt'}</dd>
             <dt className="text-slate-500">SUPABASE_SERVICE_ROLE_KEY</dt>
@@ -91,7 +91,7 @@ export default async function DiagnosePage() {
                 const r = perTabelCheck[tbl]
                 return (
                   <tr key={tbl}>
-                    <td className="font-mono">public.{tbl}</td>
+                    <td className="">public.{tbl}</td>
                     <td>
                       {r?.ok ? (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">

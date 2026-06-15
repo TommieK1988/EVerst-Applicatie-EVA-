@@ -51,12 +51,28 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       ? (d.calculator_naam ?? d.werkvoorbereider_naam ?? null)
       : d.projectleider_naam
   }
+  function persoonsKleurVoorFilter(d: DossierRij): string | null {
+    return isCalculatorSectie
+      ? (d.calculator_kleur ?? d.werkvoorbereider_kleur ?? null)
+      : d.projectleider_kleur
+  }
 
   const uniekePLs = React.useMemo(() => {
     const namen = dossiers
       .map(d => persoonsNaamVoorFilter(d))
       .filter((n): n is string => !!n)
     return [...new Set(namen)].sort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dossiers, sectie])
+
+  const kleurPerLeider = React.useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const d of dossiers) {
+      const naam = persoonsNaamVoorFilter(d)
+      const kleur = persoonsKleurVoorFilter(d)
+      if (naam && kleur && !map[naam]) map[naam] = kleur
+    }
+    return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dossiers, sectie])
 
@@ -112,7 +128,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     }}>
       {uniekePLs.map(naam => {
         const actief = geselecteerdeLeiders.length === 0 || geselecteerdeLeiders.includes(naam)
-        const kleur  = crewKleur(crewInitialen(naam))
+        const kleur  = kleurPerLeider[naam] ?? crewKleur(crewInitialen(naam))
         return (
           <button
             key={naam}

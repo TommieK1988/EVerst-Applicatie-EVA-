@@ -110,7 +110,7 @@ function RoosterForm({
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
     display: 'block', marginBottom: 5,
   }
@@ -327,7 +327,7 @@ export default function RoosterBeheer({
                       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
                         {r.geldig_vanaf} → {r.geldig_tot ?? 'open'}
                       </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
                         {formatWerkdagen(r.werkdagen)} · {r.dagstart.slice(0,5)}–{r.dageind.slice(0,5)} · {r.contracturen_per_week}u/week
                         {formatPauzes(r.pauzes ?? []) && ` · Pauze: ${formatPauzes(r.pauzes ?? [])}`}
                       </div>

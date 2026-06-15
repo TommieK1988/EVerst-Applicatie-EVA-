@@ -145,7 +145,7 @@ function ZoekInvoer({
               className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-everts/5 text-xs"
             >
               {o.code && (
-                <span className="flex-shrink-0 font-mono font-semibold text-[10px] px-1.5 py-0.5 rounded bg-everts/10 text-everts min-w-[2rem] text-center">
+                <span className="flex-shrink-0  font-semibold text-[10px] px-1.5 py-0.5 rounded bg-everts/10 text-everts min-w-[2rem] text-center">
                   {o.code}
                 </span>
               )}
@@ -198,7 +198,7 @@ export default function MeetregelRij({
       onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); onChange(isNaN(v as number) ? undefined : v) }}
       onFocus={onFocus}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
-      className={`w-full text-xs text-right font-mono px-1 py-0.5 rounded bg-transparent border-0
+      className={`w-full text-xs text-right  px-1 py-0.5 rounded bg-transparent border-0
         hover:bg-white hover:border hover:border-slate-200
         focus:bg-white focus:border focus:border-everts/40 focus:outline-none ${cls}`}
     />
@@ -225,7 +225,7 @@ export default function MeetregelRij({
     <tr className={rijCls} onClick={onFocus}>
       {/* # */}
       <td className="px-2 py-1 text-center">
-        <span className={`text-xs font-mono ${actief ? 'text-slate-400' : 'text-slate-200'}`}>
+        <span className={`text-xs  ${actief ? 'text-slate-400' : 'text-slate-200'}`}>
           {actief ? volgnummer : ''}
         </span>
       </td>
@@ -234,7 +234,7 @@ export default function MeetregelRij({
       <td className="px-1 py-0.5">
         <div className="flex items-center gap-0.5">
           {geselecteerdOnderdeel?.code && (
-            <span className="flex-shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-everts/10 text-everts">
+            <span className="flex-shrink-0 text-[10px]  font-semibold px-1.5 py-0.5 rounded bg-everts/10 text-everts">
               {geselecteerdOnderdeel.code}
             </span>
           )}
@@ -260,7 +260,7 @@ export default function MeetregelRij({
       <td className="px-1 py-0.5">
         <div className="flex items-center gap-0.5">
           {geselecteerdType?.code && (
-            <span className="flex-shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+            <span className="flex-shrink-0 text-[10px]  font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
               {geselecteerdType.code}
             </span>
           )}
@@ -323,7 +323,7 @@ export default function MeetregelRij({
       {/* Hoeveelheid */}
       <td className="px-2 py-0.5 text-right">
         {hoev > 0 ? (
-          <span className={`text-xs font-mono font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
+          <span className={`text-xs  font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
             {hoev.toFixed(2)}
           </span>
         ) : null}
@@ -331,7 +331,7 @@ export default function MeetregelRij({
 
       {/* Eenheid — read-only */}
       <td className="px-1 py-0.5 text-center">
-        <span className="text-xs font-mono text-slate-400">{regel.eenheid}</span>
+        <span className="text-xs  text-slate-400">{regel.eenheid}</span>
       </td>
 
       {/* Omschrijving */}

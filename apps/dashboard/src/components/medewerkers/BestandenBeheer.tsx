@@ -96,7 +96,7 @@ export default function BestandenBeheer({
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
     display: 'block', marginBottom: 4,
   }
@@ -164,7 +164,7 @@ export default function BestandenBeheer({
             <Card key={b.id}>
               <CardBody className="flex items-center gap-3 px-[14px] py-[10px]">
                 <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+                  fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
                   padding: '2px 6px', borderRadius: 4, flexShrink: 0,
                   background: `${CATEGORIE_COLORS[b.categorie]}1a`,
                   color: CATEGORIE_COLORS[b.categorie],
@@ -175,7 +175,7 @@ export default function BestandenBeheer({
                   <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {b.naam}
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 1 }}>
                     {formatDate(b.created_at)}{b.grootte ? ` · ${formatBytes(b.grootte)}` : ''}
                   </div>
                 </div>

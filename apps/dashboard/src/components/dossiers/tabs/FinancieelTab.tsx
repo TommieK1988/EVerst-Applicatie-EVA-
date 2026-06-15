@@ -1,6 +1,6 @@
-import { getDossierFinancieel } from '@/lib/dossiers/actions'
+import { Fragment } from 'react'
+import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody } from '@/components/ui'
-import type { Bouw7FinancialValue } from '@/lib/bouw7/client'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
 
@@ -17,6 +17,17 @@ const fmt = (v: unknown, showZero = false): string => {
     style: 'currency', currency: 'EUR',
     minimumFractionDigits: 0, maximumFractionDigits: 0,
   }).format(n)
+}
+
+const fmtUren = (v: number | null, showZero = false): string => {
+  if (v == null) return '—'
+  if (v === 0 && !showZero) return '—'
+  return `${new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(v)} u`
+}
+
+const fmtPctWaarde = (v: number | null): string => {
+  if (v == null) return '—'
+  return `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(v)} %`
 }
 
 const fmtPct = (resultaat: number, omzet: number): string => {
@@ -52,10 +63,10 @@ const TD = ({ children, vet, accent, kleur }: {
     padding: '6px 12px',
     fontSize: 13,
     textAlign: 'right',
-    fontFamily: 'var(--font-mono)',
     fontWeight: vet ? 700 : 400,
     color: kleur ?? (accent ? 'var(--accent)' : vet ? 'var(--neutral-900)' : 'var(--neutral-700)'),
     borderBottom: '1px solid var(--neutral-100, #f4f7f8)',
+    whiteSpace: 'nowrap',
   }}>
     {children}
   </td>
@@ -69,6 +80,7 @@ const TDLabel = ({ children, vet, sub }: { children: React.ReactNode; vet?: bool
     color: vet ? 'var(--neutral-900)' : sub ? 'var(--neutral-400)' : 'var(--neutral-700)',
     borderBottom: '1px solid var(--neutral-100, #f4f7f8)',
     fontStyle: sub ? 'italic' : undefined,
+    whiteSpace: 'nowrap',
   }}>
     {children}
   </td>
@@ -109,14 +121,177 @@ const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) =>
   )
 }
 
+/* ── bewaking per bewakingscode (hoofdweergave) ──────────────────────── */
+
+/** Kolomkoppen van de bewakingstabel — exact de door de gebruiker gevraagde velden. */
+const BEWAKING_KOLOMMEN = [
+  'Begroot',
+  'Tot. prognose',
+  'Prognose-uren',
+  'Geboekte uren',
+  'Arbeidskosten',
+  'Onderaanneming',
+  'Materiaal',
+  'Inkoop/Mat./Afval',
+  'Bestelregels',
+  'Inkooporders/contr.',
+  'Geboekte kosten',
+  '% gereed',
+] as const
+
+const BewakingRow = ({ r }: { r: BewakingRegel }) => (
+  <tr>
+    <td style={{
+      padding: '6px 12px', fontSize: 13, color: 'var(--neutral-800)',
+      borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
+      position: 'sticky', left: 0, background: 'var(--surface, #fff)', zIndex: 1,
+    }}>
+      <span style={{ fontWeight: 600 }}>{r.code ?? '—'}</span>
+      {r.naam && <span style={{ color: 'var(--neutral-500)', marginLeft: 8 }}>{r.naam}</span>}
+    </td>
+    <TD>{fmt(r.begroot)}</TD>
+    <TD>{fmt(r.prognose)}</TD>
+    <TD>{fmtUren(r.prognoseUren)}</TD>
+    <TD>{fmtUren(r.geboekteUren)}</TD>
+    <TD>{fmt(r.arbeidskosten)}</TD>
+    <TD>{fmt(r.onderaanneming)}</TD>
+    <TD>{fmt(r.materiaal)}</TD>
+    <TD>{fmt(r.inkoopMaterieelAfval)}</TD>
+    <TD>{fmt(r.bestelregels)}</TD>
+    <TD>{fmt(r.contracten)}</TD>
+    <TD accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
+    <TD>{fmtPctWaarde(r.progress)}</TD>
+  </tr>
+)
+
+const BewakingTabel = async ({ dossierId }: { dossierId: string }) => {
+  const data = await getDossierBewaking(dossierId)
+
+  if (!data.beschikbaar) {
+    return (
+      <Card style={{ marginBottom: 16 }}>
+        <CardHeader>Bewaking per bewakingscode</CardHeader>
+        <CardBody>
+          <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '8px 0' }}>
+            Geen bewakingscodes gevonden voor dit project in Bouw7.
+          </div>
+        </CardBody>
+      </Card>
+    )
+  }
+
+  const t = data.totalen
+  const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
+  const sub = (regels: BewakingRegel[], sel: (r: BewakingRegel) => number) => regels.reduce((s, r) => s + sel(r), 0)
+
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <CardHeader>Bewaking per bewakingscode</CardHeader>
+      <CardBody style={{ padding: 0 }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={{
+                  padding: '7px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700,
+                  color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                  borderBottom: '2px solid var(--neutral-200, #e3e8ea)', whiteSpace: 'nowrap',
+                  position: 'sticky', left: 0, background: 'var(--surface, #fff)', zIndex: 2,
+                }}>
+                  Bewakingscode
+                </th>
+                {BEWAKING_KOLOMMEN.map((k) => <TH key={k} right>{k}</TH>)}
+              </tr>
+            </thead>
+            <tbody>
+              {data.hoofdstukken.map((h) => (
+                <Fragment key={`h-${h.id}-${h.naam}`}>
+                  <tr>
+                    <td colSpan={BEWAKING_KOLOMMEN.length + 1} style={{
+                      padding: '10px 12px 4px', fontSize: 11, fontWeight: 700,
+                      color: 'var(--neutral-400)', textTransform: 'uppercase', letterSpacing: '0.07em',
+                      borderBottom: '1px solid var(--neutral-200)',
+                      position: 'sticky', left: 0, background: 'var(--surface, #fff)',
+                    }}>
+                      {h.naam}
+                    </td>
+                  </tr>
+                  {h.regels.map((r, i) => <BewakingRow key={`${r.hoofdstukId}-${r.code ?? i}`} r={r} />)}
+                  <tr style={{ background: 'var(--neutral-50, #f8fafa)' }}>
+                    <td style={{
+                      padding: '6px 12px', fontSize: 12, fontWeight: 700, color: 'var(--neutral-700)',
+                      borderBottom: '1px solid var(--neutral-100)', whiteSpace: 'nowrap',
+                      position: 'sticky', left: 0, background: 'var(--neutral-50, #f8fafa)',
+                    }}>
+                      Subtotaal {h.naam}
+                    </td>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
+                    <TD vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
+                    <TD vet>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.inkoopMaterieelAfval))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.bestelregels))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.contracten))}</TD>
+                    <TD vet>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
+                    <TD>—</TD>
+                  </tr>
+                </Fragment>
+              ))}
+              {/* Eindtotaal */}
+              <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
+                <td style={{
+                  padding: '8px 12px', fontSize: 13, fontWeight: 800, color: 'var(--neutral-900)',
+                  whiteSpace: 'nowrap', position: 'sticky', left: 0, background: 'var(--neutral-100, #eef2f3)',
+                }}>
+                  Totaal
+                </td>
+                <TD vet>{fmt(t.begroot, true)}</TD>
+                <TD vet>{fmt(t.prognose, true)}</TD>
+                <TD vet>{fmtUren(t.prognoseUren, true)}</TD>
+                <TD vet>{fmtUren(t.geboekteUren, true)}</TD>
+                <TD vet>{fmt(t.arbeidskosten)}</TD>
+                <TD vet>{fmt(t.onderaanneming)}</TD>
+                <TD vet>{fmt(t.materiaal)}</TD>
+                <TD vet>{fmt(t.inkoopMaterieelAfval)}</TD>
+                <TD vet>{fmt(t.bestelregels)}</TD>
+                <TD vet>{fmt(t.contracten)}</TD>
+                <TD vet accent={t.geboekteKosten > 0}>{fmt(t.geboekteKosten)}</TD>
+                <TD>—</TD>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={{
+          padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
+          borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
+        }}>
+          Live uit Bouw7-projectbewaking (Control), per kostensoort samengevoegd per bewakingscode.
+          Geboekte uren en arbeidskosten betreffen de kostensoort Arbeid; geboekte kosten = totaal besteed (verplichtingen).
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 /* ── main component ──────────────────────────────────────────────────── */
 
 export async function FinancieelTab({ dossierId }: { dossierId: string }) {
   const { bouw7Financial: f, relatieFacturatie } = await getDossierFinancieel(dossierId)
 
+  const tableStyle: React.CSSProperties = {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 13,
+  }
+
   if (!f) {
     return (
-      <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 800 }}>
+      <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 1200 }}>
+        {/* Bewaking blijft beschikbaar ook zonder Athena-financiën */}
+        <BewakingTabel dossierId={dossierId} />
         <div style={{
           padding: '32px 28px',
           border: '1px dashed var(--neutral-200)',
@@ -126,9 +301,9 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
           color: 'var(--neutral-500)',
         }}>
           <div style={{ fontSize: 24, opacity: 0.4 }}>◻</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neutral-800)' }}>Geen financiële data beschikbaar</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neutral-800)' }}>Geen projecttotalen beschikbaar</div>
           <div style={{ fontSize: 12, fontWeight: 500, textAlign: 'center', maxWidth: 320 }}>
-            Dit dossier heeft geen Bouw7-koppeling. Financiële data wordt beschikbaar zodra het dossier gesynchroniseerd is.
+            Dit dossier heeft geen Bouw7-koppeling of financiële projectdata. Data wordt beschikbaar zodra het dossier gesynchroniseerd is.
           </div>
         </div>
       </div>
@@ -171,14 +346,19 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
     r: toNum(f.result?.realised),
   }
 
-  const tableStyle: React.CSSProperties = {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: 13,
-  }
-
   return (
-    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 960 }}>
+    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 1200 }}>
+
+      {/* Bewaking per bewakingscode — hoofdweergave */}
+      <BewakingTabel dossierId={dossierId} />
+
+      {/* ── Projecttotalen ─────────────────────────────────────────── */}
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: 'var(--neutral-400)', textTransform: 'uppercase',
+        letterSpacing: '0.07em', margin: '24px 0 10px',
+      }}>
+        Projecttotalen
+      </div>
 
       {/* Kosten */}
       <Card style={{ marginBottom: 16 }}>

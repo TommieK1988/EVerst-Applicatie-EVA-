@@ -155,7 +155,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       <div style={{ marginBottom: 12 }}>
         <Link
           href="/medewerkers"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', textDecoration: 'none' }}
+          style={{ fontSize: 11, color: 'var(--fg-muted)', textDecoration: 'none' }}
         >
           ← Medewerkers
         </Link>

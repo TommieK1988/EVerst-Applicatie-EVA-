@@ -178,7 +178,7 @@ function CalculatieTab() {
                   type="number" step="0.1" min="0" max="100"
                   value={opslagen[key]}
                   onChange={e => setOpslagen(o => ({ ...o, [key]: parseFloat(e.target.value) || 0 }))}
-                  className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-lg text-sm font-mono text-right focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                  className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-lg text-sm  text-right focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
               </div>
@@ -214,7 +214,7 @@ function CalculatieTab() {
         <div className="flex flex-wrap gap-2 mb-3">
           {eenheden.map(e => (
             <div key={e} className="inline-flex items-center gap-1 bg-slate-100 rounded-lg px-2.5 py-1">
-              <span className="text-sm font-mono text-slate-700">{e}</span>
+              <span className="text-sm  text-slate-700">{e}</span>
               <button onClick={() => setEenheden(prev => prev.filter(x => x !== e))} className="text-slate-400 hover:text-red-500 transition-colors ml-0.5">
                 <X className="w-3 h-3" />
               </button>
@@ -231,7 +231,7 @@ function CalculatieTab() {
               }
             }}
             placeholder="bijv. raam"
-            className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+            className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
           />
           <button
             onClick={() => {
@@ -351,7 +351,7 @@ function CalculatieTab() {
           <tbody>
             {KOLOM_STANDAARD.map(({ id, label }) => (
               <tr key={id} className="border-b border-slate-50">
-                <td className="py-1.5 pr-4 text-slate-600 text-xs font-mono">{label}</td>
+                <td className="py-1.5 pr-4 text-slate-600 text-xs ">{label}</td>
                 <td className="py-1">
                   <input
                     type="text"

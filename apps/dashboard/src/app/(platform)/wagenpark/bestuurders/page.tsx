@@ -171,7 +171,7 @@ export default async function BestuurdersPage(
                         naam={b.volledige_naam ?? `ULU #${b.user_id}`}
                       />
                     </td>
-                    <td className="font-mono text-slate-600">{b.laatste_kenteken ?? '—'}</td>
+                    <td className=" text-slate-600">{b.laatste_kenteken ?? '—'}</td>
                     <td>
                       <BestuurderBijtellingToggle
                         userId={b.user_id}

@@ -126,7 +126,7 @@ export default function BevindingRij({ bevinding }: { bevinding: Bevinding }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
-            <span className="font-mono font-semibold text-slate-700">{bevinding.regel_code}</span>
+            <span className=" font-semibold text-slate-700">{bevinding.regel_code}</span>
             <span>•</span>
             <span>{stijl.label}</span>
             {bevinding.bestuurder_naam && (
@@ -138,7 +138,7 @@ export default function BevindingRij({ bevinding }: { bevinding: Bevinding }) {
             {bevinding.kenteken && (
               <>
                 <span>•</span>
-                <span className="font-mono">{bevinding.kenteken}</span>
+                <span className="">{bevinding.kenteken}</span>
               </>
             )}
             <span>•</span>

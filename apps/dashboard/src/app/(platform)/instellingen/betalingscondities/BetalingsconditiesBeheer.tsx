@@ -54,7 +54,7 @@ function TermijnenEditor({
             value={t.percentage}
             onChange={e => update(i, { percentage: parseFloat(e.target.value) || 0 })}
             suffix="%"
-            style={{ width: 90, fontFamily: 'var(--font-mono)' }}
+            style={{ width: 90 }}
           />
           <Button
             variant="ghost"
@@ -67,7 +67,7 @@ function TermijnenEditor({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <Button variant="ghost" size="sm" onClick={voegToe}>+ Termijn toevoegen</Button>
         <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 12,
+          fontSize: 12,
           color: afwijking ? '#c0392b' : '#27ae60',
           marginLeft: 'auto',
         }}>
@@ -178,7 +178,7 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 28 }}>
                 {c.termijnen.map((t, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--fg)', minWidth: 36 }}>{t.percentage}%</span>
+                    <span style={{ fontWeight: 600, color: 'var(--fg)', minWidth: 36 }}>{t.percentage}%</span>
                     <span>{t.omschrijving}</span>
                   </div>
                 ))}

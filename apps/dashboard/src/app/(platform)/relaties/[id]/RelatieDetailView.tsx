@@ -833,7 +833,7 @@ function OmzetBlok({ omzet }: { omzet: OmzetData }) {
                     <tr key={r.jaar}>
                       <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', borderBottom: '1px solid var(--border)' }}>{r.jaar}</td>
                       <td style={{ padding: '7px 0', fontSize: 13, color: 'var(--fg-muted)', borderBottom: '1px solid var(--border)' }}>{r.aantalDossiers}</td>
-                      <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>
+                      <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
                         € {r.bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                       </td>
                     </tr>
@@ -861,7 +861,7 @@ function OmzetBlok({ omzet }: { omzet: OmzetData }) {
                       </div>
                     </div>
                     {d.bedrag != null && (
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg)', flexShrink: 0 }}>
                         € {d.bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                       </span>
                     )}

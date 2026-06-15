@@ -45,7 +45,6 @@ const KOLOMMEN: KolomDefinitie<BedrijfsagendaRegel>[] = [
           background: itemKleur(item) + '22',
           color: itemKleur(item),
           fontWeight: 700,
-          fontFamily: 'var(--font-mono)',
           whiteSpace: 'nowrap',
         }}
       >
@@ -72,7 +71,7 @@ const KOLOMMEN: KolomDefinitie<BedrijfsagendaRegel>[] = [
     label: 'Datum',
     standaard_zichtbaar: true,
     render: (item) => (
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+      <span style={{ fontSize: 12 }}>
         {formatDatum(item.start_datum, item.eind_datum)}
       </span>
     ),
@@ -108,12 +107,12 @@ const KOLOMMEN: KolomDefinitie<BedrijfsagendaRegel>[] = [
     render: (item) => (
       item.bron === 'berekend'
         ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--fg-muted)' }}>
             <Lock size={10} /> berekend
           </span>
         )
         : (
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
+          <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>
             handmatig
           </span>
         )

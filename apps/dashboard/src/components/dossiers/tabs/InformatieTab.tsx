@@ -98,7 +98,7 @@ function InfoVeld({
       </div>
       <div className={cn(
         'text-[13px]',
-        mono    ? 'font-mono font-medium'         : null,
+        mono    ? ' font-medium'         : null,
         numeric ? 'tabular-nums font-bold'        : null,
         !mono && !numeric ? 'font-medium'         : null,
         heeftWaarde
@@ -605,6 +605,9 @@ export function InformatieTab({
     ?? (finTotaalIncl != null && finAanneemsom != null
         ? Math.round((finTotaalIncl - finAanneemsom) * 100) / 100
         : null)
+  // BTW-splitsing per tarief uit de Bouw7-offerte — alleen tonen zonder EVA-calculatie
+  // (quoteTotalen kent één gezamenlijk BTW-bedrag).
+  const finBtwSplitsing       = !quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null
   const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
@@ -621,7 +624,7 @@ export function InformatieTab({
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-1.5">
-            <span className="font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">
+            <span className=" text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">
               {dossier.dossiernummer}
             </span>
             {bouw7Url && (
@@ -1131,7 +1134,20 @@ export function InformatieTab({
               )}
               <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
               <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
-              <InfoVeld label="BTW"               waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
+              {finBtwSplitsing ? (
+                finBtwSplitsing.map(t => (
+                  <InfoVeld
+                    key={t.label}
+                    label={t.percentage > 0
+                      ? `BTW ${t.percentage}%`
+                      : t.label.toLowerCase().includes('verlegd') ? 'BTW verlegd' : 'BTW 0%'}
+                    waarde={fmtBedrag(t.bedrag)}
+                    numeric
+                  />
+                ))
+              ) : (
+                <InfoVeld label="BTW" waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
+              )}
             </div>
             <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">Totaal incl. BTW</span>

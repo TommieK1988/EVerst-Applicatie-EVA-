@@ -72,7 +72,7 @@ export function FileItem({ name, size, onRemove, className }: FileItemProps) {
     <div className={cn('flex items-center gap-2.5 rounded-md border border-neutral-200 bg-white px-3 py-2', className)}>
       <FileIcon className="h-4 w-4 shrink-0 text-neutral-400" />
       <span className="min-w-0 flex-1 truncate text-[13px] text-neutral-900">{name}</span>
-      {size && <span className="shrink-0 font-mono text-[11px] text-neutral-500">{size}</span>}
+      {size && <span className="shrink-0  text-[11px] text-neutral-500">{size}</span>}
       {onRemove && (
         <button
           type="button"

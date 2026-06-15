@@ -93,7 +93,7 @@ export default function ProjectenLijst() {
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-slate-400 font-mono">#{project.project_number}</span>
+                      <span className="text-xs text-slate-400 ">#{project.project_number}</span>
                       <StatusBadge status={project.status} type="project" size="sm" />
                     </div>
                     <h3 className="font-semibold text-slate-800 group-hover:text-everts transition-colors truncate">{project.name}</h3>

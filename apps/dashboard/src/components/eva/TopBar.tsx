@@ -43,6 +43,9 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/opdrachten\/[^/]+\/[^/]+$/,{ title: 'Opdrachten',breadcrumb: 'Hoofdproces', withTabs: true }],
   [/^\/opdrachten\/[^/]+$/,       { title: 'Opdrachten',breadcrumb: 'Hoofdproces', withTabs: true }],
   [/^\/opdrachten$/,              { title: 'Opdrachten',breadcrumb: 'Hoofdproces' }],
+  [/^\/servicedesk\/[^/]+\/[^/]+$/,{ title: 'Servicedesk',breadcrumb: 'Hoofdproces', withTabs: true }],
+  [/^\/servicedesk\/[^/]+$/,       { title: 'Servicedesk',breadcrumb: 'Hoofdproces', withTabs: true }],
+  [/^\/servicedesk$/,              { title: 'Servicedesk',breadcrumb: 'Hoofdproces' }],
 
   // Beheer
   [/^\/relaties$/, { title: 'Relaties', breadcrumb: 'Beheer' }],

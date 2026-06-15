@@ -64,8 +64,8 @@ const WerkbonKaart = React.forwardRef<HTMLDivElement, WerkbonKaartProps>(
       >
         <div className="flex items-start justify-between gap-2 pl-[16px] pr-[13px] pt-[11px]">
           <div className="flex min-w-0 flex-col gap-px">
-            <span className="font-mono text-[10px] text-neutral-500">{werkbonId}</span>
-            {dossier && <span className="font-mono text-[10px] text-neutral-400">{dossier}</span>}
+            <span className=" text-[10px] text-neutral-500">{werkbonId}</span>
+            {dossier && <span className=" text-[10px] text-neutral-400">{dossier}</span>}
           </div>
           {!priorityHigh && <StatusPill status={status} />}
         </div>
@@ -94,7 +94,7 @@ const WerkbonKaart = React.forwardRef<HTMLDivElement, WerkbonKaartProps>(
           <div className="pl-[16px] pr-[13px] pt-[8px]">
             <div className="mb-[3px] flex items-baseline justify-between">
               <span className="text-[10px] text-neutral-400">{progress.label ?? 'Voortgang'}</span>
-              <span className="font-mono text-[10px] text-neutral-400">{progress.value}%</span>
+              <span className=" text-[10px] text-neutral-400">{progress.value}%</span>
             </div>
             <div className="h-[4px] overflow-hidden rounded-full bg-neutral-200">
               <div className="h-full rounded-full bg-[var(--wb-accent)]" style={{ width: `${progress.value}%` }} />
@@ -113,7 +113,7 @@ const WerkbonKaart = React.forwardRef<HTMLDivElement, WerkbonKaartProps>(
           <div className="pl-[16px] pr-[13px] pt-[8px]">
             <div className="mb-[3px] flex items-baseline justify-between">
               <span className="text-[10px] text-neutral-400">Voortgang</span>
-              <span className="font-mono text-[10px] text-neutral-400">{tasks.done}/{tasks.total}</span>
+              <span className=" text-[10px] text-neutral-400">{tasks.done}/{tasks.total}</span>
             </div>
             <div className="flex gap-0.5">
               {Array.from({ length: tasks.total }).map((_, i) => (
@@ -159,8 +159,8 @@ const WerkbonKaartCompact = React.forwardRef<HTMLDivElement, WerkbonKaartCompact
         {...props}
       >
         <div className="mb-1 flex items-center justify-between gap-2">
-          {time && <span className="font-mono text-[11px] font-semibold text-neutral-800">{time}</span>}
-          {werkbonId && <span className="font-mono text-[9.5px] text-neutral-400">{werkbonId}</span>}
+          {time && <span className=" text-[11px] font-semibold text-neutral-800">{time}</span>}
+          {werkbonId && <span className=" text-[9.5px] text-neutral-400">{werkbonId}</span>}
         </div>
         <div className="mb-1.5 truncate text-xs font-semibold leading-tight text-neutral-900">{title}</div>
         {location && (
@@ -194,7 +194,7 @@ const PlanningEntry = React.forwardRef<HTMLDivElement, PlanningEntryProps>(
       )}
       {...props}
     >
-      {time && <div className="font-mono text-[10px] font-medium opacity-90">{time}</div>}
+      {time && <div className=" text-[10px] font-medium opacity-90">{time}</div>}
       <div className="mt-px overflow-hidden text-[11.5px] font-semibold leading-[1.25]">{title}</div>
       {location && <div className="mt-0.5 text-[10px] opacity-85">{location}</div>}
     </div>

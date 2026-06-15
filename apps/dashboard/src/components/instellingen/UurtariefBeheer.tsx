@@ -56,9 +56,9 @@ export default function UurtariefBeheer({ initial }: { initial: Uurtarief[] }) {
           <div style={{ width: 130 }}>
             <Input type="number" min="0" step="0.5" value={t.tarief}
               onChange={e => update(i, { tarief: parseFloat(e.target.value) || 0 })}
-              prefix={<span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>€</span>}
-              suffix={<span style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>/uur</span>}
-              style={{ fontFamily: 'var(--font-mono)' }} />
+              prefix={<span style={{ fontSize: 12 }}>€</span>}
+              suffix={<span style={{ fontSize: 10 }}>/uur</span>}
+              style={{  }} />
           </div>
           <button onClick={() => remove(i)}
             style={{ width: 28, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--fg-muted)', fontSize: 16 }}

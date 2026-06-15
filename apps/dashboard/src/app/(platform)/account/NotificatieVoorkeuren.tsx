@@ -65,7 +65,7 @@ export default function NotificatieVoorkeurenForm({
         <div />
         {(['In-app', 'E-mail'] as const).map(label => (
           <div key={label} style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            fontSize: 10, fontWeight: 700,
             color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
             textAlign: 'center',
           }}>{label}</div>

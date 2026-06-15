@@ -124,7 +124,7 @@ function BedrijfsmiddelModal({
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
     display: 'block', marginBottom: 4,
   }
@@ -249,7 +249,7 @@ export default function BedrijfsmiddelenBeheer({
             <span style={{ fontSize: 18 }}>🚐</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>Voertuig</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
                 {actief_voertuig
                   ? `${actief_voertuig.kenteken}${actief_voertuig.merk ? ` — ${actief_voertuig.merk} ${actief_voertuig.model ?? ''}` : ''}`
                   : 'Geen voertuig gekoppeld'
@@ -259,7 +259,7 @@ export default function BedrijfsmiddelenBeheer({
             {actief_voertuig && (
               <a
                 href={`/wagenpark/voertuigen/${actief_voertuig.voertuig_id}`}
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}
+                style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}
               >
                 Wagenpark →
               </a>
@@ -285,7 +285,7 @@ export default function BedrijfsmiddelenBeheer({
                     {TYPE_LABELS[m.type]}{m.omschrijving ? ` — ${m.omschrijving}` : ''}
                     {!m.actief && <Badge tone="neutral" size="sm" className="ml-1.5 uppercase">retour</Badge>}
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
                     {formatKenmerken(m)}
                     {m.uitgegeven_op && ` · Uit: ${m.uitgegeven_op}`}
                     {m.retour_op && ` · Retour: ${m.retour_op}`}

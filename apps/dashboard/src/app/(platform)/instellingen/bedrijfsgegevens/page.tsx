@@ -68,7 +68,7 @@ function WerkmaatschappijCard({ wm }: { wm: Bedrijfsgegevens }) {
     }}>
       <div>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{wm.naam}</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
           {wm.code && <span style={{ marginRight: 8 }}>{wm.code}</span>}
           {wm.adres_plaats ?? 'Geen adres'}
           {wm.kvk_nummer && <> · KvK {wm.kvk_nummer}</>}
@@ -119,11 +119,11 @@ function MissingTableBanner() {
   return (
     <Alert tone="warning" title="Database-migratie nog niet uitgevoerd">
       <p style={{ margin: 0 }}>
-        De tabel <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>bedrijfsgegevens</code> bestaat nog niet.
+        De tabel <code style={{ fontSize: 11, background: 'rgba(0,0,0,0.06)', padding: '1px 5px', borderRadius: 4 }}>bedrijfsgegevens</code> bestaat nog niet.
       </p>
       <ol style={{ paddingLeft: 18, marginTop: 8, marginBottom: 0, lineHeight: 1.8 }}>
-        <li>Draai <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>20260415_platform_core.draft.sql</code></li>
-        <li>Draai <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>20260416_huisstijl_uitbreiding.sql</code></li>
+        <li>Draai <code style={{ fontSize: 11 }}>20260415_platform_core.draft.sql</code></li>
+        <li>Draai <code style={{ fontSize: 11 }}>20260416_huisstijl_uitbreiding.sql</code></li>
         <li>Herlaad deze pagina</li>
       </ol>
     </Alert>

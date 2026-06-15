@@ -7,7 +7,7 @@ import { upsertFunctie, verwijderFunctie, upsertAfdeling, verwijderAfdeling } fr
 import { Button, Card, CardBody, EmptyState, Input } from '@/components/ui'
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -114,7 +114,7 @@ function RoosterForm({ state, onChange }: {
         {/* Toggle */}
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: state.enabled ? 12 : 0 }}>
           <input type="checkbox" checked={state.enabled} onChange={e => set('enabled', e.target.checked)} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)' }}>
             Standaard werkrooster instellen
           </span>
         </label>
@@ -134,7 +134,7 @@ function RoosterForm({ state, onChange }: {
                       variant={active ? 'primary' : 'outline'}
                       size="sm"
                       onClick={() => toggleDag(dag.nr)}
-                      className="w-[34px] px-0 text-[10px] font-bold font-mono"
+                      className="w-[34px] px-0 text-[10px] font-bold "
                     >
                       {dag.label}
                     </Button>
@@ -165,7 +165,7 @@ function RoosterForm({ state, onChange }: {
               {state.pauzes.map((p, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <input type="time" style={{ ...inp, width: 100 }} value={p.pauze_start} onChange={e => updatePauze(i, 'pauze_start', e.target.value)} />
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>–</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>–</span>
                   <input type="time" style={{ ...inp, width: 100 }} value={p.pauze_eind} onChange={e => updatePauze(i, 'pauze_eind', e.target.value)} />
                   <Button type="button" variant="ghost" size="icon-sm" onClick={() => removePauze(i)}>×</Button>
                 </div>
@@ -283,11 +283,11 @@ function FunctieLijstBeheer({ functies: initialFuncties }: { functies: Medewerke
               {editingId === f.id ? editForm(f.id) : (
                 <Card>
                   <CardBody className="flex items-center gap-3 py-2.5 px-3.5">
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{f.volgorde}</span>
+                    <span style={{ fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{f.volgorde}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>{f.naam}</div>
                       {f.standaard_rooster && (
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', marginTop: 1 }}>
+                        <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 1 }}>
                           {roosterLabel(f.standaard_rooster)}
                         </div>
                       )}
@@ -306,7 +306,7 @@ function FunctieLijstBeheer({ functies: initialFuncties }: { functies: Medewerke
 
       {inactief.length > 0 && (
         <details style={{ marginTop: 10 }}>
-          <summary style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none' }}>
+          <summary style={{ fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none' }}>
             {inactief.length} inactief
           </summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
@@ -439,7 +439,7 @@ function LijstBeheer({
               ) : (
                 <Card>
                   <CardBody className="flex items-center gap-3 py-2.5 px-3.5">
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{item.volgorde}</span>
+                    <span style={{ fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{item.volgorde}</span>
                     <span style={{ flex: 1, fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>{item.naam}</span>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <Button variant="ghost" size="sm" onClick={() => startEdit(item)}>Bewerken</Button>
@@ -455,7 +455,7 @@ function LijstBeheer({
 
       {inactief.length > 0 && (
         <details style={{ marginTop: 10 }}>
-          <summary style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none' }}>
+          <summary style={{ fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none' }}>
             {inactief.length} inactief
           </summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>

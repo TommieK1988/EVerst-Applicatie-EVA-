@@ -32,7 +32,6 @@ export function KleurweergaveToggle({
   onChange: (v: Kleurweergave) => void
 }) {
   const btnBase: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)',
     fontSize: 10,
     fontWeight: 600,
     padding: '4px 10px',

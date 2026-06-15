@@ -5,7 +5,14 @@ import { revalidatePath } from 'next/cache'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
-import { Bouw7Client, type Bouw7ProjectFinancial } from '@/lib/bouw7/client'
+import {
+  Bouw7Client,
+  BOUW7_COST_TYPE,
+  type Bouw7ProjectFinancial,
+  type Bouw7ControlResponse,
+  type Bouw7ControlEntry,
+  type Bouw7CostTypeId,
+} from '@/lib/bouw7/client'
 
 type DossierResult =
   | { ok: true; data: DossierRij[] }
@@ -255,10 +262,53 @@ export async function getUniekeBouw7Categorieen(): Promise<string[]> {
   return uniek.sort()
 }
 
-/** Haal dossiers op voor een specifieke medewerker (alle rol-kolommen), verrijkt met klant- en rolnamen. */
+/** Rol-kolommen waarop een dossier aan een medewerker gekoppeld kan zijn. */
+export const DOSSIER_ROL_KOLOMMEN = [
+  'project_manager_id',
+  'teamleider_id',
+  'werkvoorbereider_id',
+  'calculator_id',
+  'uitvoerder_id',
+  'controller_id',
+] as const
+
+/**
+ * Haal dossiers op voor een specifieke medewerker, verrijkt met klant- en rolnamen.
+ * `rolKolommen` bepaalt op welke rollen wordt gefilterd (standaard alle rollen).
+ * Bijv. `['project_manager_id']` voor "alleen waar ik projectleider ben".
+ */
 export async function getMijnDossiers(
   medewerkerID: string,
   hoofdstatus: Hoofdstatus,
+  limit = 10,
+  sorteer: { kolom: string; ascending?: boolean } = { kolom: 'updated_at', ascending: false },
+  rolKolommen: readonly string[] = DOSSIER_ROL_KOLOMMEN,
+): Promise<DossierResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select(`*, ${ROL_SELECT}`)
+    .eq('hoofdstatus', hoofdstatus)
+    .or(rolKolommen.map(kolom => `${kolom}.eq.${medewerkerID}`).join(','))
+    .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
+    .limit(limit)
+
+  if (error) {
+    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
+    return { ok: false, error: error.message, missingTable }
+  }
+
+  return { ok: true, data: (data ?? []).map(mapRij) }
+}
+
+/**
+ * Haal servicedesk-dossiers op die aan een medewerker zijn gekoppeld als projectleider
+ * of uitvoerder. Zelfde servicedesk-afbakening als `getDossiersVoorServicedesk`
+ * (Bouw7 status LB of categorie Dagelijks onderhoud/Mutatie, excl. '08. Afgewezen').
+ */
+export async function getMijnServicedesk(
+  medewerkerID: string,
   limit = 10,
   sorteer: { kolom: string; ascending?: boolean } = { kolom: 'updated_at', ascending: false },
 ): Promise<DossierResult> {
@@ -267,15 +317,9 @@ export async function getMijnDossiers(
   const { data, error } = await supabase
     .from('dossiers')
     .select(`*, ${ROL_SELECT}`)
-    .eq('hoofdstatus', hoofdstatus)
-    .or(
-      `project_manager_id.eq.${medewerkerID},` +
-      `teamleider_id.eq.${medewerkerID},` +
-      `werkvoorbereider_id.eq.${medewerkerID},` +
-      `calculator_id.eq.${medewerkerID},` +
-      `uitvoerder_id.eq.${medewerkerID},` +
-      `controller_id.eq.${medewerkerID}`,
-    )
+    .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
+    .or(`project_manager_id.eq.${medewerkerID},uitvoerder_id.eq.${medewerkerID}`)
+    .neq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
     .limit(limit)
 
@@ -576,6 +620,224 @@ async function fetchRelatieFacturatie(supabase: any, relatieId: string) {
     .eq('relatie_id', relatieId)
     .maybeSingle()
   return data ?? null
+}
+
+/* ── Projectbewaking per bewakingscode ────────────────────────────── */
+
+/** Eén regel per bewakingscode op de Financieel-tab (samengevoegd over kostensoorten). */
+export type BewakingRegel = {
+  code: string | null
+  naam: string | null
+  hoofdstukId: number | null
+  hoofdstuk: string | null
+
+  begroot: number              // 1. Begroot bedrag (som over kostensoorten)
+  prognose: number             // 2. Totale prognose
+  prognoseUren: number         // 3. Aantal prognose-uren (arbeid)
+  geboekteUren: number         // 4. Geboekte/bestede uren (arbeid)
+  arbeidskosten: number        // 5. Arbeidskosten (geboekt, kostensoort Arbeid)
+  onderaanneming: number       // 6. Onderaanneming (geboekt)
+  materiaal: number            // 7. Materiaal (geboekt)
+  inkoopMaterieelAfval: number // 8. Inkoop + Materieel + Afval (geboekt)
+  bestelregels: number         // 9. Totaal geboekte inkoop (alle kostensoorten behalve arbeid)
+  contracten: number           // 10. Inkooporders + onderaannemer-contracten (verplicht)
+  geboekteKosten: number       // 11. Geboekte kosten / verplichtingen (totaal besteed)
+  progress: number | null      // 12. % gereed
+}
+
+export type BewakingTotalen = {
+  begroot: number
+  prognose: number
+  prognoseUren: number
+  geboekteUren: number
+  arbeidskosten: number
+  onderaanneming: number
+  materiaal: number
+  inkoopMaterieelAfval: number
+  bestelregels: number
+  contracten: number
+  geboekteKosten: number
+}
+
+export type DossierBewakingData = {
+  beschikbaar: boolean
+  hoofdstukken: { id: number | null; naam: string; regels: BewakingRegel[] }[]
+  totalen: BewakingTotalen
+  /** Geboekte uren op projectniveau (= som van de arbeid-besteed-uren). */
+  geboekteUrenProject: number | null
+}
+
+const toGetal = (v: unknown): number => {
+  if (v == null) return 0
+  const n = typeof v === 'string' ? parseFloat(v) : Number(v)
+  return isNaN(n) ? 0 : n
+}
+
+const legeRegel = (): BewakingRegel => ({
+  code: null, naam: null, hoofdstukId: null, hoofdstuk: null,
+  begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
+  arbeidskosten: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
+  bestelregels: 0, contracten: 0, geboekteKosten: 0, progress: null,
+})
+
+/** Kostensoorten op de Athena project-control: 1=Arbeid, 2=Inkoop, 3=OA, 4=Materieel, 5=Materiaal, 6=Afval. */
+const BEWAKING_KOSTENSOORTEN: Bouw7CostTypeId[] = [1, 2, 3, 4, 5, 6]
+const UNCODED_HOOFDSTUK_ID = -1
+
+/**
+ * Live financiële bewaking per bewakingscode voor een dossier.
+ *
+ * Bron: Athena `GET /project-control/{id}/cost-type/{costType}/chapters` per kostensoort
+ * (zie lib/bouw7/ENDPOINTS.md). Geverifieerd: `costAmount` per kostensoort == de realisatie
+ * in `/project-financial`. Eén code kan onder meerdere kostensoorten begroot zijn — begroting,
+ * prognose en kosten worden dan per code gesommeerd.
+ *
+ * Géén opslag — alles wordt live opgehaald bij het openen van de tab.
+ */
+export async function getDossierBewaking(dossierId: string): Promise<DossierBewakingData> {
+  const leeg: DossierBewakingData = {
+    beschikbaar: false, hoofdstukken: [],
+    totalen: {
+      begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
+      onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, bestelregels: 0, contracten: 0, geboekteKosten: 0,
+    },
+    geboekteUrenProject: null,
+  }
+
+  const supabase = createAdminClient() as any
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('bouw7_id')
+    .eq('id', dossierId)
+    .single()
+
+  if (!dossier?.bouw7_id) return leeg
+
+  const { data: integratie } = await supabase
+    .from('integraties')
+    .select('config')
+    .eq('naam', 'bouw7')
+    .maybeSingle()
+
+  const config = integratie?.config as Record<string, string> | undefined
+  if (!config?.api_key || !config?.app_name) return leeg
+
+  try {
+    const client = new Bouw7Client(config.api_key, config.app_name)
+    const bouw7Id = dossier.bouw7_id
+
+    const responses = await Promise.all(
+      BEWAKING_KOSTENSOORTEN.map((ct) =>
+        client
+          .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
+          .catch(() => null),
+      ),
+    )
+
+    const regelMap = new Map<string, BewakingRegel>()
+    const maxBudgetVoorProgress = new Map<string, number>()
+
+    /** Verwerk één control-regel (bewakingscode of niet-gecodeerde hoofdstukpost). */
+    const verwerk = (ct: Bouw7CostTypeId, e: Bouw7ControlEntry, hoofdstukId: number | null, hoofdstuk: string | null) => {
+      const code = e.code ?? null
+      const key = `${hoofdstukId ?? 'x'}|${code ?? ''}`
+      let r = regelMap.get(key)
+      if (!r) {
+        r = legeRegel()
+        r.code = code
+        r.naam = e.name ?? null
+        r.hoofdstukId = hoofdstukId
+        r.hoofdstuk = hoofdstuk
+        regelMap.set(key, r)
+        maxBudgetVoorProgress.set(key, -1)
+      }
+
+      const budget = toGetal(e.budgetAmount)
+      const kosten = toGetal(e.costAmount)
+      r.begroot += budget
+      r.prognose += toGetal(e.prognosisAmount)
+      r.geboekteKosten += kosten
+      r.contracten += toGetal(e.contractCostAmount)
+      r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
+      r.geboekteUren += toGetal(e.hourInfo?.costHours)
+
+      if (ct === 1) r.arbeidskosten += kosten
+      else if (ct === 3) r.onderaanneming += kosten
+      else if (ct === 5) r.materiaal += kosten
+      else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
+      if (ct !== 1) r.bestelregels += kosten
+
+      // % gereed: neem de waarde van de kostensoort met de grootste begroting voor deze code.
+      if (e.progress != null && budget >= (maxBudgetVoorProgress.get(key) ?? -1)) {
+        maxBudgetVoorProgress.set(key, budget)
+        r.progress = toGetal(e.progress)
+      }
+    }
+
+    BEWAKING_KOSTENSOORTEN.forEach((ct, i) => {
+      const resp = responses[i]
+      if (!resp) return
+      for (const item of resp.items ?? []) {
+        const ci = item.chapterInfo
+        const isUncoded = ci?.name === 'uncoded_costs' || ci?.id === 0
+        if (isUncoded) {
+          // Kosten zonder bewakingscode — één regel, samengevoegd over kostensoorten.
+          verwerk(ct, { ...ci, code: '-', name: 'Kosten zonder bewaking' }, UNCODED_HOOFDSTUK_ID, 'Kosten zonder bewaking')
+        } else {
+          for (const sc of item.securityCodes ?? []) {
+            verwerk(ct, sc, ci?.id ?? null, ci?.name ?? null)
+          }
+        }
+      }
+    })
+
+    // Groeperen per hoofdstuk.
+    const hoofdstukMap = new Map<string, { id: number | null; naam: string; regels: BewakingRegel[] }>()
+    for (const regel of regelMap.values()) {
+      const key = `${regel.hoofdstukId ?? 'x'}|${regel.hoofdstuk ?? ''}`
+      let groep = hoofdstukMap.get(key)
+      if (!groep) {
+        groep = { id: regel.hoofdstukId, naam: regel.hoofdstuk || 'Overig', regels: [] }
+        hoofdstukMap.set(key, groep)
+      }
+      groep.regels.push(regel)
+    }
+
+    // "Kosten zonder bewaking" onderaan, rest alfabetisch op hoofdstuknaam.
+    const hoofdstukken = [...hoofdstukMap.values()].sort((a, b) => {
+      if (a.id === UNCODED_HOOFDSTUK_ID) return 1
+      if (b.id === UNCODED_HOOFDSTUK_ID) return -1
+      return a.naam.localeCompare(b.naam, 'nl')
+    })
+    for (const h of hoofdstukken) {
+      h.regels.sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', 'nl'))
+    }
+
+    const alleRegels = hoofdstukken.flatMap((h) => h.regels)
+    const som = (sel: (r: BewakingRegel) => number) => alleRegels.reduce((s, r) => s + sel(r), 0)
+    const totalen: BewakingTotalen = {
+      begroot: som((r) => r.begroot),
+      prognose: som((r) => r.prognose),
+      prognoseUren: som((r) => r.prognoseUren),
+      geboekteUren: som((r) => r.geboekteUren),
+      arbeidskosten: som((r) => r.arbeidskosten),
+      onderaanneming: som((r) => r.onderaanneming),
+      materiaal: som((r) => r.materiaal),
+      inkoopMaterieelAfval: som((r) => r.inkoopMaterieelAfval),
+      bestelregels: som((r) => r.bestelregels),
+      contracten: som((r) => r.contracten),
+      geboekteKosten: som((r) => r.geboekteKosten),
+    }
+
+    return {
+      beschikbaar: alleRegels.length > 0,
+      hoofdstukken,
+      totalen,
+      geboekteUrenProject: totalen.geboekteUren,
+    }
+  } catch {
+    return leeg
+  }
 }
 
 /** Zoek relaties op naam (voor de aanvraag-combobox). */

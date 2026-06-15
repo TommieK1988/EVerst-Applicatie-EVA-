@@ -94,7 +94,7 @@ export default function WerkbonFlow({
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <Card>
           <CardBody>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
               Klant
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--fg)' }}>
@@ -110,7 +110,7 @@ export default function WerkbonFlow({
 
         <Card>
           <CardBody>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
               Activiteit
             </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>
@@ -130,7 +130,7 @@ export default function WerkbonFlow({
         {medewerkersOokGepland.length > 0 && (
           <Card>
             <CardBody>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
                 Ook aanwezig
               </div>
               {medewerkersOokGepland.map(n => (
@@ -160,7 +160,7 @@ export default function WerkbonFlow({
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <Card>
           <CardBody style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginBottom: 4 }}>
               Looptijd
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.02em' }}>
@@ -174,7 +174,7 @@ export default function WerkbonFlow({
 
         <Card>
           <CardBody>
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
               Opmerking
             </label>
             <textarea
@@ -190,7 +190,7 @@ export default function WerkbonFlow({
 
         <Card>
           <CardBody>
-            <label style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
               Foto&apos;s
             </label>
             <input
@@ -255,7 +255,7 @@ export default function WerkbonFlow({
 
       <Card>
         <CardBody>
-          <label style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
             Handtekening opdrachtgever
           </label>
           <HandtekeningPad onChange={setHandtek} />

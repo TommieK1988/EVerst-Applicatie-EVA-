@@ -50,7 +50,7 @@ export default function RegelEditor({ code, titel, beschrijving, actief, drempel
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-slate-700">{code}</span>
+            <span className=" text-xs font-bold text-slate-700">{code}</span>
             <span className="text-sm font-medium">{titel}</span>
           </div>
           {beschrijving && <p className="text-xs text-slate-500 mt-1">{beschrijving}</p>}
@@ -89,7 +89,7 @@ export default function RegelEditor({ code, titel, beschrijving, actief, drempel
             onChange={(e) => setJson(e.target.value)}
             rows={8}
             spellCheck={false}
-            className="w-full font-mono text-xs rounded border px-2 py-2"
+            className="w-full  text-xs rounded border px-2 py-2"
           />
           <div className="flex gap-2">
             <button

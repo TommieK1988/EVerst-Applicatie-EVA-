@@ -53,7 +53,7 @@ function MockDossierKaart({
     >
       {urgent && <span style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, background: 'var(--error-500)', borderRadius: '0 2px 2px 0' }} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, paddingLeft: urgent ? 6 : 0 }}>
-        <span style={{ fontSize: 11, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{nummer}</span>
+        <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{nummer}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg)', whiteSpace: 'nowrap' }}>{bedrag}</span>
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.3, paddingLeft: urgent ? 6 : 0 }}>{titel}</div>
@@ -276,7 +276,7 @@ export default function DsPreview() {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     {['Naam', 'Type', 'Stad', 'Telefoon', 'E-mail'].map(h => (
-                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', background: 'var(--neutral-50)' }}>{h}</th>
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', background: 'var(--neutral-50)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -324,7 +324,7 @@ export default function DsPreview() {
               <thead>
                 <tr>
                   {['Naam', 'Functie', 'Afdeling', 'Type', 'Status'].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', background: 'var(--neutral-50)' }}>{h}</th>
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', background: 'var(--neutral-50)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>

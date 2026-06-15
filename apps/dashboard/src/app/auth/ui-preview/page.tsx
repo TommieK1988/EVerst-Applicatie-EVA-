@@ -28,7 +28,7 @@ const DEMO_ROWS: Demo[] = [
 const DEMO_COLS: ColumnDef<Demo, any>[] = [
   { accessorKey: 'naam', header: 'Project' },
   { accessorKey: 'status', header: 'Status', cell: (c) => <TableBadge tone="info" dot>{c.getValue()}</TableBadge> },
-  { accessorKey: 'bedrag', header: 'Bedrag', cell: (c) => <span className="font-mono">€ {c.getValue<number>().toLocaleString('nl-NL')}</span> },
+  { accessorKey: 'bedrag', header: 'Bedrag', cell: (c) => <span className="">€ {c.getValue<number>().toLocaleString('nl-NL')}</span> },
 ]
 
 function Row({ title, children }: { title: string; children: React.ReactNode }) {

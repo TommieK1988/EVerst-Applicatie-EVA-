@@ -371,6 +371,15 @@ export const opdrachtSubstatusLabels: Record<OpdrachtSubstatus, string> = {
   financieel_afgesloten: 'Financieel afgesloten',
 }
 
+/** BTW per tarief uit de Bouw7-offerte (incl. AK/W&R in de grondslag). */
+export type BtwSplitsingItem = {
+  /** Tarieflabel uit Bouw7, bv. 'Hoog 21%', 'Laag 9%', 'Verlegd 21'. */
+  label: string
+  percentage: number
+  grondslag: number
+  bedrag: number
+}
+
 export type Dossier = {
   id: string
   dossiernummer: string | null
@@ -382,6 +391,7 @@ export type Dossier = {
   opdracht_substatus: OpdrachtSubstatus | null
   bedrag_excl_btw: number | null
   bedrag_incl_btw: number | null
+  btw_splitsing: BtwSplitsingItem[] | null
   verwacht_startdatum: string | null
   verwacht_einddatum: string | null
   project_manager_id: string | null
@@ -675,9 +685,17 @@ export type PlanningActiviteit = {
   locatie_adres: string | null
   status: PlanningActiviteitStatus
   volgorde: number
+  /** 'eva' = in EVA gemaakt, 'bouw7' = uit Bouw7 gesynct */
+  bron: PlanningBron
+  /** Externe sleutel bij bron='bouw7' (Bouw7 plan-item id) */
+  bouw7_id: string | null
+  bouw7_laatst_sync: string | null
   created_at: string
   updated_at: string
 }
+
+/** Herkomst van een planning-rij */
+export type PlanningBron = 'eva' | 'bouw7'
 
 /** Fase = groepering van activiteiten binnen een dossier */
 export type PlanningFase = {
@@ -685,6 +703,11 @@ export type PlanningFase = {
   dossier_id: string
   naam: string
   volgorde: number
+  /** 'eva' = in EVA gemaakt, 'bouw7' = uit Bouw7 gesynct */
+  bron: PlanningBron
+  /** Externe sleutel bij bron='bouw7' (chapter:{id} of chapter:algemeen) */
+  bouw7_id: string | null
+  bouw7_laatst_sync: string | null
   created_at: string
   updated_at: string
 }
@@ -724,6 +747,11 @@ export type PlanningItem = {
   overrule: boolean
   overrule_reden: string | null
   overrule_door: string | null
+  /** 'eva' = in EVA gemaakt, 'bouw7' = uit Bouw7 gesynct */
+  bron: PlanningBron
+  /** Externe sleutel bij bron='bouw7' ({planItemId}:{employeeId}) */
+  bouw7_id: string | null
+  bouw7_laatst_sync: string | null
   created_at: string
   updated_at: string
 }

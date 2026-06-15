@@ -33,7 +33,7 @@ type Props = {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -433,8 +433,7 @@ export default function AgendaItemModal({
                           key={dag} type="button" onClick={() => toggleWeekdag(nr)}
                           style={{
                             width: 36, height: 32, borderRadius: 6,
-                            fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                            border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
+                            fontSize: 11, fontWeight: 700, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
                             background: actief ? 'var(--accent)' : 'transparent',
                             color: actief ? 'white' : 'var(--fg-muted)',
                             cursor: 'pointer',
@@ -536,7 +535,7 @@ export default function AgendaItemModal({
           <Card>
             <CardHeader>
               Geldt voor
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-muted)', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>
                 Geen selectie = bedrijfsbreed
               </span>
             </CardHeader>
@@ -567,7 +566,7 @@ export default function AgendaItemModal({
                     </label>
                   ))}
                   {gefilterdAfdelingen.length === 0 && (
-                    <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>Geen resultaten</span>
+                    <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Geen resultaten</span>
                   )}
                 </div>
               </div>
@@ -596,12 +595,12 @@ export default function AgendaItemModal({
                       />
                       <div>
                         <span style={{ fontSize: 13, color: 'var(--fg)' }}>{medNaam(m)}</span>
-                        {m.afdeling && <span style={{ fontSize: 11, color: 'var(--fg-muted)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>{m.afdeling}</span>}
+                        {m.afdeling && <span style={{ fontSize: 11, color: 'var(--fg-muted)', marginLeft: 6 }}>{m.afdeling}</span>}
                       </div>
                     </label>
                   ))}
                   {gefilterdMedewerkers.length === 0 && (
-                    <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>Geen resultaten</span>
+                    <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Geen resultaten</span>
                   )}
                 </div>
               </div>

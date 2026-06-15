@@ -52,7 +52,7 @@ export default function PeriodeNav({
             variant={view === v ? 'primary' : 'ghost'}
             size="sm"
             onClick={() => onView(v)}
-            className="font-mono text-[10px] font-bold"
+            className=" text-[10px] font-bold"
           >
             {VIEW_LABELS[v]}
           </Button>

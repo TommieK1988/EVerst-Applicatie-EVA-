@@ -359,7 +359,7 @@ export default function CalculatieHoofdscherm({
                       ['Esc',          'Selectie opheffen'],
                     ].map(([keys, label]) => (
                       <tr key={keys} className="border-b border-slate-50 last:border-0">
-                        <td className="px-4 py-1.5 font-mono font-medium text-slate-800 whitespace-nowrap">{keys}</td>
+                        <td className="px-4 py-1.5  font-medium text-slate-800 whitespace-nowrap">{keys}</td>
                         <td className="px-4 py-1.5 text-slate-500">{label}</td>
                       </tr>
                     ))}

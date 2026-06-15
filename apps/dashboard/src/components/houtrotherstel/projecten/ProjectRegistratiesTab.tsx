@@ -94,7 +94,7 @@ export default function ProjectRegistratiesTab({
                     <span className="text-xs text-slate-500">· {r.component_type}</span>
                   )}
                   {r.element_number && (
-                    <span className="text-xs text-slate-400 font-mono">{r.element_number}</span>
+                    <span className="text-xs text-slate-400 ">{r.element_number}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-400">

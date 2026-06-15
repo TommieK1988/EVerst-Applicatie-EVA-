@@ -699,7 +699,7 @@ function LopendeTabel({ rijen }: { rijen: ManagementProject[] }) {
             )}
             {gefilterd.map((p, i) => (
               <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60'}>
-                <td className={tabelTd}><span className="font-mono text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
+                <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
                 <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
                 <td className={tabelTd}><StatusBadge tekst={p.status} /></td>
                 <td className={cn(tabelTd, 'max-w-[160px]')}><Klem>{p.opdrachtgever}</Klem></td>
@@ -779,7 +779,7 @@ function GereedTabel({ rijen }: { rijen: ManagementProject[] }) {
             )}
             {gefilterd.map((p, i) => (
               <tr key={p.id} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60'}>
-                <td className={tabelTd}><span className="font-mono text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
+                <td className={tabelTd}><span className=" text-[11px] font-semibold text-success-700">{p.projectnummer}</span></td>
                 <td className={tabelTd}><FiliaalbBadge tekst={p.filiaal} /></td>
                 <td className={tabelTd}><StatusBadge tekst={p.status} /></td>
                 <td className={cn(tabelTd, 'max-w-[160px]')}><Klem>{p.opdrachtgever}</Klem></td>

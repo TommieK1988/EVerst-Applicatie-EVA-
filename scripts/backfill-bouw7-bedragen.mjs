@@ -118,8 +118,58 @@ for (const q of quotations) {
 }
 console.log(`${quotations.length} offertes, ${quotationMap.size} gekoppeld aan project`)
 
-console.log('Offerte-details (calculatieregels) ophalen…')
-const kostprijsMap = new Map()
+// Zelfde berekening als berekenQuoteCijfers() in apps/dashboard/src/lib/bouw7/sync.ts
+function berekenQuoteCijfers(det, quote) {
+  const n = v => { const x = parseFloat(String(v ?? '')); return isNaN(x) ? 0 : x }
+  const rond = v => Math.round(v * 100) / 100
+
+  // Meerwerk-hoofdstukken (additionalWork) en optionele regels tellen niet mee in de aanneemsom.
+  const lines = (det.chapters ?? [])
+    .filter(c => !c.additionalWork)
+    .flatMap(c => c.lines ?? [])
+    .filter(l => !l.option)
+  if (!lines.length) return { kostprijs: null, regelsom: null, btwSplitsing: null }
+
+  const kostprijsSom = rond(lines.reduce((s, l) => s + n(l.calculationTotal), 0))
+  const regelsom     = rond(lines.reduce((s, l) => s + n(l.subtotal), 0))
+
+  const tarieven = new Map()
+  const telMee = (tarief, pctFallback, grondslag) => {
+    if (!grondslag) return
+    const percentage = n(tarief?.percentage ?? pctFallback)
+    const label = tarief?.label ?? `${percentage}%`
+    const cur = tarieven.get(label) ?? { label, percentage, grondslag: 0 }
+    cur.grondslag += grondslag
+    tarieven.set(label, cur)
+  }
+  for (const l of lines) telMee(l.vatTariffObject, l.vatTariffPercentage, n(l.subtotal))
+  telMee(det.overheadsVatTariff,     undefined, regelsom * n(det.overheads) / 100)
+  telMee(det.profitAndRiskVatTariff, undefined, regelsom * n(det.profitAndRisk) / 100)
+
+  const splitsing = [...tarieven.values()]
+    .map(t => ({ label: t.label, percentage: t.percentage, grondslag: rond(t.grondslag), bedrag: rond(t.grondslag * t.percentage / 100) }))
+    .sort((a, b) => b.percentage - a.percentage)
+
+  // Telt de splitsing niet op tot (total − subtotal) → liever géén splitsing dan een foute.
+  let splitsingOk = true
+  const doelBtw = quote.total != null && quote.subtotal != null
+    ? rond(Number(quote.total) - Number(quote.subtotal)) : null
+  if (doelBtw != null && splitsing.length) {
+    const som = rond(splitsing.reduce((s, t) => s + t.bedrag, 0))
+    const verschil = rond(doelBtw - som)
+    if (verschil !== 0 && Math.abs(verschil) <= 0.02) {
+      const grootste = splitsing.reduce((a, b) => (b.bedrag > a.bedrag ? b : a))
+      grootste.bedrag = rond(grootste.bedrag + verschil)
+    } else if (verschil !== 0) {
+      splitsingOk = false
+    }
+  }
+
+  return { kostprijs: kostprijsSom > 0 ? kostprijsSom : null, regelsom, btwSplitsing: splitsingOk ? splitsing : null }
+}
+
+console.log('Offerte-details (calculatieregels + BTW-splitsing) ophalen…')
+const quoteDetailMap = new Map()
 {
   const entries = [...quotationMap.entries()]
   for (let i = 0; i < entries.length; i += 10) {
@@ -129,18 +179,11 @@ const kostprijsMap = new Map()
     )
     results.forEach((r, j) => {
       if (r.status !== 'fulfilled' || !r.value?.chapters) return
-      const kostprijs = r.value.chapters
-        .flatMap(c => c.lines ?? [])
-        .filter(l => !l.option)
-        .reduce((s, l) => {
-          const n = parseFloat(String(l.calculationTotal ?? ''))
-          return s + (isNaN(n) ? 0 : n)
-        }, 0)
-      if (kostprijs > 0) kostprijsMap.set(batch[j][0], Math.round(kostprijs * 100) / 100)
+      quoteDetailMap.set(batch[j][0], berekenQuoteCijfers(r.value, batch[j][1]))
     })
     process.stdout.write(`\r${Math.min(i + 10, entries.length)}/${entries.length}`)
   }
-  console.log(`\n${kostprijsMap.size} projecten met gecalculeerde kostprijs`)
+  console.log(`\n${[...quoteDetailMap.values()].filter(d => d.kostprijs != null).length} projecten met gecalculeerde kostprijs`)
 }
 
 console.log('Athena financials ophalen…')
@@ -162,7 +205,7 @@ console.log()
 const APPLY = process.argv.includes('--apply')
 
 // Alleen dossiers bijwerken die al bestaan (geen nieuwe aanmaken — dat doet de echte sync)
-const dossiers = await sbGet('dossiers?select=bouw7_id,dossiernummer,bedrag_excl_btw,bedrag_incl_btw,kostprijs_excl_btw&bouw7_id=not.is.null&limit=10000')
+const dossiers = await sbGet('dossiers?select=bouw7_id,dossiernummer,bedrag_excl_btw,bedrag_incl_btw,kostprijs_excl_btw,btw_splitsing&bouw7_id=not.is.null&limit=10000')
 const bestaand = new Map(dossiers.map(d => [d.bouw7_id, d]))
 
 let updated = 0, skipped = 0, errors = 0, unchanged = 0
@@ -175,34 +218,40 @@ for (const p of projects) {
   const quote = quotationMap.get(id)
   const fin   = financialMap.get(id)
 
-  const verkoopExcl = extractFinNum(fin?.fixedPrice)
-    ?? extractFinNum(fin?.revenue?.budgeted)
-    ?? extractFinNum(quote?.subtotal)
-    ?? extractFinNum(p.fixedPrice)
-    ?? null
+  const det = quoteDetailMap.get(id)
+  const finPrijs = extractFinNum(fin?.fixedPrice) ?? extractFinNum(fin?.revenue?.budgeted)
   const quoteSubtotal = extractFinNum(quote?.subtotal)
-  const verkoopIncl = (quoteSubtotal != null && verkoopExcl != null
-    && Math.abs(quoteSubtotal - verkoopExcl) < 0.01)
-    ? extractFinNum(quote?.total)
-    : null
+  // Offerte is de bron als er geen contractbedrag is, of als het contractbedrag aansluit
+  // op deze offerte (== subtotal, of == regelsom: Athena fixedPrice is excl. AK/W&R).
+  const quoteIsBron = quoteSubtotal != null && (
+    finPrijs == null
+    || Math.abs(finPrijs - quoteSubtotal) < 0.01
+    || (det?.regelsom != null && Math.abs(finPrijs - det.regelsom) < 0.01)
+  )
 
   const body = {
-    bedrag_excl_btw:    verkoopExcl,
-    bedrag_incl_btw:    verkoopIncl,
-    kostprijs_excl_btw: kostprijsMap.get(id) ?? null,
+    bedrag_excl_btw:    quoteIsBron ? quoteSubtotal : (finPrijs ?? extractFinNum(p.fixedPrice) ?? null),
+    bedrag_incl_btw:    quoteIsBron ? extractFinNum(quote?.total) : null,
+    kostprijs_excl_btw: quoteIsBron ? (det?.kostprijs ?? null) : null,
+    btw_splitsing:      quoteIsBron ? (det?.btwSplitsing ?? null) : null,
   }
 
   const zelfde = num(huidig.bedrag_excl_btw) === body.bedrag_excl_btw
     && num(huidig.kostprijs_excl_btw) === body.kostprijs_excl_btw
     && num(huidig.bedrag_incl_btw) === body.bedrag_incl_btw
+    && JSON.stringify(huidig.btw_splitsing) === JSON.stringify(body.btw_splitsing)
   if (zelfde) { unchanged++; continue }
 
   if (!APPLY) {
+    const btwStr = body.btw_splitsing
+      ? body.btw_splitsing.map(t => `${t.percentage}%→${t.bedrag}`).join(' ')
+      : '-'
     console.log(
       `${(huidig.dossiernummer ?? id).padEnd(14)} ` +
       `excl: ${huidig.bedrag_excl_btw} → ${body.bedrag_excl_btw}  ` +
       `incl: → ${body.bedrag_incl_btw}  ` +
-      `kostprijs: ${huidig.kostprijs_excl_btw} → ${body.kostprijs_excl_btw}`
+      `kostprijs: ${huidig.kostprijs_excl_btw} → ${body.kostprijs_excl_btw}  ` +
+      `btw: ${btwStr}`
     )
     updated++
     continue

@@ -67,7 +67,7 @@ export default function PlanningShell({
               borderBottom: `1px solid ${KLEUR.border}`,
               display: 'flex', alignItems: 'flex-end',
               padding: '0 12px 6px',
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
             }}>
               {labelHeader}
@@ -88,7 +88,7 @@ export default function PlanningShell({
                   <div key={s.key} style={{
                     position: 'absolute', left: s.left, width: s.width, top: 0, bottom: 0,
                     padding: '4px 8px',
-                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                    fontSize: 10, fontWeight: 700,
                     color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
                     borderRight: `1px solid ${KLEUR.border}`,
                     overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
@@ -108,7 +108,7 @@ export default function PlanningShell({
                   <div key={c.key} style={{
                     position: 'absolute', left: c.left, width: c.width, top: 0, bottom: 0,
                     textAlign: 'center', padding: '4px 0',
-                    fontFamily: 'var(--font-mono)', fontSize: 9,
+                    fontSize: 9,
                     color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fgSoft,
                     fontWeight: c.isToday ? 700 : 400,
                     background: c.isToday ? KLEUR.vandaagHeaderBg : 'transparent',
@@ -134,7 +134,6 @@ export default function PlanningShell({
                         whiteSpace: 'nowrap',
                         zIndex: 22,
                         boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
-                        fontFamily: 'var(--font-mono)',
                         lineHeight: 1.4,
                       }}>
                         Vandaag

@@ -13,7 +13,7 @@ import {
 } from './actions'
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -78,9 +78,9 @@ function LoonschaalRij({
 
   return (
     <tr className="cao-rij">
-      <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{rij.schaal}</td>
-      <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{rij.trede}</td>
-      <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{formatEuro(rij.bruto_maand)}</td>
+      <td style={{ ...tdStyle, fontWeight: 600 }}>{rij.schaal}</td>
+      <td style={{ ...tdStyle }}>{rij.trede}</td>
+      <td style={{ ...tdStyle }}>{formatEuro(rij.bruto_maand)}</td>
       <td style={tdStyle}>
         <div style={{ display: 'flex', gap: 4 }}>
           <Button onClick={() => setEditing(true)} variant="ghost" size="sm">Bewerk</Button>
@@ -177,7 +177,7 @@ function CaoDocumentKaart({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{doc.naam}</div>
             {wmNaam && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'rgba(31,122,58,0.08)', borderRadius: 4, padding: '2px 6px' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'rgba(31,122,58,0.08)', borderRadius: 4, padding: '2px 6px' }}>
                 {wmNaam}
               </span>
             )}
@@ -185,7 +185,7 @@ function CaoDocumentKaart({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
             {statusBadge(status)}
             {doc.bestandsnaam && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>{doc.bestandsnaam}</span>
+              <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>{doc.bestandsnaam}</span>
             )}
           </div>
         </div>
@@ -222,15 +222,15 @@ function CaoDocumentKaart({
               const treden = schalen.filter(s => s.schaal === schaal).sort((a, b) => a.volgorde - b.volgorde)
               return (
                 <Card key={schaal} style={{ minWidth: 140 }}>
-                  <div style={{ background: 'var(--bg-elev)', padding: '5px 10px', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  <div style={{ background: 'var(--bg-elev)', padding: '5px 10px', fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                     Schaal {schaal}
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <tbody>
                       {treden.map(t => (
                         <tr key={t.id}>
-                          <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', borderBottom: '1px solid var(--border)' }}>Trede {t.trede}</td>
-                          <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>{formatEuro(t.bruto_maand)}</td>
+                          <td style={{ padding: '4px 10px', fontSize: 11, color: 'var(--fg-muted)', borderBottom: '1px solid var(--border)' }}>Trede {t.trede}</td>
+                          <td style={{ padding: '4px 10px', fontSize: 11, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>{formatEuro(t.bruto_maand)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -242,7 +242,7 @@ function CaoDocumentKaart({
 
           {/* Volledige bewerkbare tabel */}
           <details>
-            <summary style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none', marginBottom: 8 }}>
+            <summary style={{ fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none', marginBottom: 8 }}>
               Alle regels bewerken ({schalen.length})
             </summary>
             <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
@@ -250,7 +250,7 @@ function CaoDocumentKaart({
                 <thead>
                   <tr>
                     {['Schaal', 'Trede', 'Bruto/maand', ''].map(h => (
-                      <th key={h} style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+                      <th key={h} style={{ padding: '6px 10px', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
                         {h}
                       </th>
                     ))}

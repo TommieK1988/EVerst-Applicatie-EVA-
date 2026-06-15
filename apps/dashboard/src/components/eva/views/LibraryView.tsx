@@ -44,7 +44,7 @@ export default function LibraryView() {
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
             {t.label}
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>{t.count}</span>
+            <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>{t.count}</span>
           </button>
         ))}
         <div style={{ flex: 1 }}/>
@@ -67,7 +67,7 @@ export default function LibraryView() {
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 100px 140px 120px 80px 60px',
           padding: '10px 18px', borderBottom: '1px solid var(--border)',
-          fontFamily: 'var(--font-mono)', fontSize: 10,
+          fontSize: 10,
           color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase',
           background: 'var(--bg)',
         }}>
@@ -84,12 +84,12 @@ export default function LibraryView() {
               {it.pinned && <IconPin size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</span>
             </span>
-            <span style={{ color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{it.type}</span>
+            <span style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{it.type}</span>
             <span style={{ color: 'var(--fg-soft)' }}>{it.source}</span>
             <span>
-              <span style={{ padding: '2px 8px', fontSize: 10, fontFamily: 'var(--font-mono)', background: 'var(--bg-active)', color: 'var(--fg-soft)', borderRadius: 4, letterSpacing: '0.04em' }}>{it.tag}</span>
+              <span style={{ padding: '2px 8px', fontSize: 10, background: 'var(--bg-active)', color: 'var(--fg-soft)', borderRadius: 4, letterSpacing: '0.04em' }}>{it.tag}</span>
             </span>
-            <span style={{ color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{it.updated}</span>
+            <span style={{ color: 'var(--fg-muted)', fontSize: 11 }}>{it.updated}</span>
             <button style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <IconMore size={16}/>
             </button>

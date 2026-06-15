@@ -48,7 +48,7 @@ export default function HelpPanel({ open, onClose, content }: Props) {
         }}>
           <div>
             <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+              fontSize: 9, fontWeight: 700,
               color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.1em',
               marginBottom: 4,
             }}>Handleiding</div>
@@ -95,8 +95,7 @@ export default function HelpPanel({ open, onClose, content }: Props) {
                   <div style={{
                     fontSize: 11, fontWeight: 700,
                     color: 'var(--fg)', textTransform: 'uppercase',
-                    letterSpacing: '0.07em', fontFamily: 'var(--font-mono)',
-                    marginBottom: 6,
+                    letterSpacing: '0.07em', marginBottom: 6,
                   }}>{section.title}</div>
                   <p style={{
                     margin: 0,
@@ -124,10 +123,9 @@ export default function HelpPanel({ open, onClose, content }: Props) {
         }}>
           <div style={{
             fontSize: 11, color: 'var(--fg-muted)',
-            fontFamily: 'var(--font-mono)',
-          }}>
+            }}>
             Tip: druk <kbd style={{
-              fontFamily: 'var(--font-mono)', fontSize: 10,
+              fontSize: 10,
               background: 'var(--bg-active)', border: '1px solid var(--border)',
               borderRadius: 3, padding: '1px 5px',
               color: 'var(--fg-soft)',

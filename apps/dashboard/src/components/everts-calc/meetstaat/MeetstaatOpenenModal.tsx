@@ -54,7 +54,7 @@ export default function MeetstaatOpenenModal({ scenarioId, onSelecteer, onSluit 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-slate-800">{ms.naam}</span>
-                    <span className="text-xs font-mono text-slate-400">{ms.code}</span>
+                    <span className="text-xs  text-slate-400">{ms.code}</span>
                     <span className={`text-xs px-1.5 py-0.5 rounded-full border ml-auto ${
                       ms.status === 'gesynchroniseerd'
                         ? 'bg-green-50 text-green-600 border-green-200'

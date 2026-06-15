@@ -8,6 +8,7 @@ import type {
 import ActiviteitGantt, { type TaakMarker } from './ActiviteitGantt'
 import BudgetHeader from './BudgetHeader'
 import SyncWerkbegrotingKnop from './SyncWerkbegrotingKnop'
+import SyncBouw7PlanningKnop from './SyncBouw7PlanningKnop'
 import MedewerkerTimeline from './MedewerkerTimeline'
 import PlanningTabSwitcher from './PlanningTabSwitcher'
 import { getBedrijfsinstellingen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
@@ -36,7 +37,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
       .select('*, planning_uursoorten ( naam, kleur, code )')
       .eq('dossier_id', dossier_id),
     supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true),
-    supabase.from('dossiers').select('everts_calc_project_id, titel, dossiernummer').eq('id', dossier_id).single(),
+    supabase.from('dossiers').select('everts_calc_project_id, titel, dossiernummer, bouw7_id').eq('id', dossier_id).single(),
     supabase.from('relaties').select('id, naam').eq('type', 'onderaannemer').eq('actief', true).order('naam'),
     supabase.from('planning_fasen').select('*').eq('dossier_id', dossier_id).order('volgorde'),
   ])
@@ -86,6 +87,12 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const fasen             = (fasenRes.data ?? []) as PlanningFase[]
   const afhankelijkheden  = (afhankelijkhedenRes.data ?? []) as PlanningAfhankelijkheid[]
   const heeftCalcProject  = !!(dossierRes.data?.everts_calc_project_id)
+  const heeftBouw7        = !!(dossierRes.data?.bouw7_id)
+  const bouw7LaatstSync   = activiteiten
+    .filter((a: any) => a.bron === 'bouw7' && a.bouw7_laatst_sync)
+    .map((a: any) => a.bouw7_laatst_sync as string)
+    .sort()
+    .pop() ?? null
   const bedrijfsinstellingen = await getBedrijfsinstellingen()
   const uurtarieven: Uurtarief[] = bedrijfsinstellingen.uurtarieven ?? []
 
@@ -116,7 +123,12 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {budgetRegels.length > 0 && <BudgetHeader regels={budgetRegels} />}
-      {heeftCalcProject && <SyncWerkbegrotingKnop dossier_id={dossier_id} />}
+      {(heeftCalcProject || heeftBouw7) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          {heeftCalcProject && <SyncWerkbegrotingKnop dossier_id={dossier_id} />}
+          {heeftBouw7 && <SyncBouw7PlanningKnop dossier_id={dossier_id} laatstSync={bouw7LaatstSync} />}
+        </div>
+      )}
 
       <PlanningTabSwitcher
         activiteiten={

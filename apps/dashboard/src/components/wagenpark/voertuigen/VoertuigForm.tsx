@@ -44,7 +44,7 @@ export default function VoertuigForm() {
           type="text"
           required
           placeholder="P-931-XN"
-          className="w-full rounded-md border px-3 py-2 text-sm font-mono uppercase"
+          className="w-full rounded-md border px-3 py-2 text-sm  uppercase"
         />
         <p className="text-xs text-slate-500 mt-1">
           Hoofdletters, met of zonder streepjes. RDW wordt automatisch geraadpleegd

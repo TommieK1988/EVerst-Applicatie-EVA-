@@ -36,7 +36,7 @@ const GEBRUIKER_TYPE_LABELS: Record<GebruikerType, string> = {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -161,7 +161,7 @@ export default function GebruikerToegangBeheer({
           {authUserId ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {medewerker_email ?? '—'}
               </span>
             </div>
@@ -249,7 +249,7 @@ export default function GebruikerToegangBeheer({
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
                       padding: '2px 8px', borderRadius: 4,
-                      fontFamily: 'var(--font-mono)', fontSize: 10,
+                      fontSize: 10,
                       background: effectief ? 'rgba(31,122,58,0.08)' : 'var(--bg-active)',
                       color: effectief ? 'var(--accent)' : 'var(--fg-muted)',
                       border: heeftOverride ? '1px solid var(--accent)' : '1px solid var(--border)',
@@ -278,7 +278,7 @@ export default function GebruikerToegangBeheer({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {initial_o365_email}
               </span>
             </div>

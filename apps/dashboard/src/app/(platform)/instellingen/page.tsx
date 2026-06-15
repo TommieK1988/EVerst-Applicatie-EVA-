@@ -149,7 +149,7 @@ const appItems = [
 function SettingsCard({ item }: { item: typeof platformItems[number] }) {
   const inner = (
     <>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
         {item.kicker}
       </div>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: item.ready ? 'var(--fg)' : 'var(--fg-muted)', marginBottom: 5 }}>
@@ -160,7 +160,7 @@ function SettingsCard({ item }: { item: typeof platformItems[number] }) {
       </div>
       {!item.ready && (
         <div style={{ marginTop: 10 }}>
-          <Badge variant="outline" tone="neutral" size="sm" className="font-bold uppercase tracking-[0.08em]" style={{ fontFamily: 'var(--font-mono)' }}>
+          <Badge variant="outline" tone="neutral" size="sm" className="font-bold uppercase tracking-[0.08em]" style={{  }}>
             binnenkort
           </Badge>
         </div>
@@ -186,7 +186,6 @@ function SettingsCard({ item }: { item: typeof platformItems[number] }) {
 }
 
 const sectionLabel: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)',
   fontSize: 10,
   fontWeight: 700,
   color: 'var(--fg-muted)',

@@ -222,7 +222,7 @@ function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; gr
       {aggregaten.map((agg) => (
         <div key={agg.id} className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
           <span className="text-slate-600">{calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling)}</span>
-          <span className="font-mono font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>
+          <span className=" font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>
           {agg.is_gesynchroniseerd && <span className="text-green-500">✓</span>}
           {!agg.is_gesynchroniseerd && <span className="text-amber-400">●</span>}
         </div>

@@ -34,7 +34,7 @@ export function PagePlaceholder({
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', marginBottom: 6 }}>{s.title}</div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-soft)', lineHeight: 1.5, marginBottom: 12 }}>{s.description}</div>
             <span style={{
-              display: 'inline-block', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+              display: 'inline-block', fontSize: 9, fontWeight: 700,
               color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
               border: '1px solid var(--border)', borderRadius: 3, padding: '2px 6px',
             }}>binnenkort</span>

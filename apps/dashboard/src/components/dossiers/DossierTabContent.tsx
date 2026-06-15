@@ -129,7 +129,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       {titleInjector}
       {dossier ? (
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 10.5, color: 'var(--neutral-500, #6b757c)', fontWeight: 700, marginBottom: 4, fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 10.5, color: 'var(--neutral-500, #6b757c)', fontWeight: 700, marginBottom: 4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             {dossier.dossiernummer}
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--neutral-900, #161b20)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>

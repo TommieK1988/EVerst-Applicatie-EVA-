@@ -27,7 +27,7 @@ type Props = {
 const VERLOF_TYPEN: MedewerkerAfwezigheidType[] = ['verlof', 'ziek', 'training', 'overig']
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+  fontSize: 10, fontWeight: 700,
   color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   display: 'block', marginBottom: 4,
 }
@@ -172,7 +172,7 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, o
               onChange={e => setForm(f => ({ ...f, hele_dag: e.target.checked }))}
             />
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
             }}>
               Hele dag
@@ -229,7 +229,7 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, o
         {bestaand.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <div style={{
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
               marginBottom: 8,
             }}>
@@ -257,14 +257,14 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, o
                         {med ? medNaam(med) : a.medewerker_id}
                         <span style={{
                           marginLeft: 6,
-                          fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+                          fontSize: 9, fontWeight: 700,
                           color: 'var(--fg-muted)', textTransform: 'uppercase',
                         }}>
                           {medewerkerAfwezigheidLabels[a.type]}
                         </span>
                       </div>
                       <div style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 1,
+                        fontSize: 10, color: 'var(--fg-muted)', marginTop: 1,
                       }}>
                         {a.start_datum === a.eind_datum ? a.start_datum : `${a.start_datum} – ${a.eind_datum}`}
                         {tijdLabel(a)}

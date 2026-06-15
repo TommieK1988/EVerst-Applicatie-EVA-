@@ -56,7 +56,7 @@ function InlineGetal({
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         if (e.key === 'Escape') { setLokaal(waarde.toString()); setDirty(false) }
       }}
-      className={`${breedte} text-right px-2 py-1 border border-transparent hover:border-slate-300 focus:border-everts focus:outline-none rounded font-mono bg-transparent text-sm`}
+      className={`${breedte} text-right px-2 py-1 border border-transparent hover:border-slate-300 focus:border-everts focus:outline-none rounded  bg-transparent text-sm`}
     />
   )
 }
@@ -215,8 +215,8 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
                   <div className="font-medium text-slate-700">{m.omschrijving}</div>
                   <div className="flex items-center gap-2 text-slate-400 mt-0.5">
                     {m.leverancier && <span>{m.leverancier}</span>}
-                    {m.artikelnummer && <span className="font-mono">{m.artikelnummer}</span>}
-                    <span className="ml-auto font-mono text-everts">€{m.kostprijs.toFixed(2)}/{m.eenheid}</span>
+                    {m.artikelnummer && <span className="">{m.artikelnummer}</span>}
+                    <span className="ml-auto  text-everts">€{m.kostprijs.toFixed(2)}/{m.eenheid}</span>
                   </div>
                 </button>
               ))
@@ -266,7 +266,7 @@ function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
             onOpslaan={v => sla({ hours_per_unit: v / 60 })} />
           <span className="text-slate-400 text-xs">min</span>
         </div>
-        <div className="text-right text-xs text-slate-400 font-mono pr-1">
+        <div className="text-right text-xs text-slate-400  pr-1">
           {norm.hours_per_unit.toFixed(4)} u
         </div>
       </td>
@@ -275,7 +275,7 @@ function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
           onOpslaan={v => sla({ hour_rate: v })} />
         <span className="text-slate-400 text-xs ml-1">€/u</span>
       </td>
-      <td className="py-1 text-right font-mono text-blue-700 pr-2">{formatEuro(norm.cost_per_unit)}</td>
+      <td className="py-1 text-right  text-blue-700 pr-2">{formatEuro(norm.cost_per_unit)}</td>
       <td className="py-1 pr-2">
         <Button variant="ghost" size="icon-sm" onClick={verwijder}
           className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity">
@@ -348,7 +348,7 @@ function MateriaalRij({ norm, eenheid }: { norm: MaterialNorm; eenheid: string }
           </td>
         </>
       )}
-      <td className="py-1 text-right font-mono pr-2" style={{ color: isOA ? '#7c3aed' : '#b45309' }}>
+      <td className="py-1 text-right  pr-2" style={{ color: isOA ? '#7c3aed' : '#b45309' }}>
         {formatEuro(norm.cost_per_unit)}
       </td>
       <td className="py-1 pr-2">
@@ -469,7 +469,7 @@ function BewerkPaneel({
         <DialogHeader>
           <div>
             <DialogTitle>{item.full_name}</DialogTitle>
-            <div className="text-xs text-slate-400 font-mono mt-0.5">{item.item_code}</div>
+            <div className="text-xs text-slate-400  mt-0.5">{item.item_code}</div>
           </div>
         </DialogHeader>
 
@@ -530,7 +530,7 @@ function BewerkPaneel({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Arbeidsnormen
-                <span className="ml-2 text-blue-700 font-mono normal-case">{formatEuro(totaalArbeid)}/{eenheid}</span>
+                <span className="ml-2 text-blue-700  normal-case">{formatEuro(totaalArbeid)}/{eenheid}</span>
               </h3>
               <Button variant="ghost" size="sm" onClick={() => setNwLaborOpen(o => !o)}>
                 <Plus className="w-3.5 h-3.5" /> Toevoegen
@@ -572,14 +572,14 @@ function BewerkPaneel({
                     <label className="text-xs text-slate-500">Minuten/{eenheid}</label>
                     <input type="number" step="1" min="0" value={nwMin}
                       onChange={e => setNwMin(parseFloat(e.target.value) || 0)}
-                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm font-mono text-right focus:outline-none focus:border-everts" />
+                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm  text-right focus:outline-none focus:border-everts" />
                     <div className="text-xs text-slate-400 mt-0.5 text-right">{(nwMin / 60).toFixed(4)} uur</div>
                   </div>
                   <div>
                     <label className="text-xs text-slate-500">Tarief (€/uur)</label>
                     <input type="number" step="0.01" min="0" value={nwTarief}
                       onChange={e => setNwTarief(parseFloat(e.target.value) || 0)}
-                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm font-mono text-right focus:outline-none focus:border-everts" />
+                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm  text-right focus:outline-none focus:border-everts" />
                     <div className="text-xs text-slate-400 mt-0.5 text-right">
                       {formatEuro((nwMin / 60) * nwTarief)}/{eenheid}
                     </div>
@@ -598,7 +598,7 @@ function BewerkPaneel({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Materiaalnormen
-                <span className="ml-2 text-red-700 font-mono normal-case">{formatEuro(totaalMateriaal)}/{eenheid}</span>
+                <span className="ml-2 text-red-700  normal-case">{formatEuro(totaalMateriaal)}/{eenheid}</span>
               </h3>
               <Button variant="ghost" size="sm" onClick={() => setNwMatOpen(o => !o)}>
                 <Plus className="w-3.5 h-3.5" /> Toevoegen
@@ -635,7 +635,7 @@ function BewerkPaneel({
                     <label className="text-xs text-slate-500">Inzet/{eenheid}</label>
                     <input type="number" step="0.001" min="0" value={nwMatQty}
                       onChange={e => setNwMatQty(parseFloat(e.target.value) || 0)}
-                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm font-mono text-right focus:outline-none focus:border-everts" />
+                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm  text-right focus:outline-none focus:border-everts" />
                   </div>
                   <div>
                     <label className="text-xs text-slate-500">Eenheid</label>
@@ -646,7 +646,7 @@ function BewerkPaneel({
                     <label className="text-xs text-slate-500">Prijs (€/eenh)</label>
                     <input type="number" step="0.01" min="0" value={nwMatPrijs}
                       onChange={e => setNwMatPrijs(parseFloat(e.target.value) || 0)}
-                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm font-mono text-right focus:outline-none focus:border-everts" />
+                      className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm  text-right focus:outline-none focus:border-everts" />
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -662,7 +662,7 @@ function BewerkPaneel({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Onderaanneming
-                <span className="ml-2 text-purple-700 font-mono normal-case">{formatEuro(totaalOa)}/{eenheid}</span>
+                <span className="ml-2 text-purple-700  normal-case">{formatEuro(totaalOa)}/{eenheid}</span>
               </h3>
               <Button variant="ghost" size="sm" onClick={() => setNwOaOpen(o => !o)}>
                 <Plus className="w-3.5 h-3.5" /> Toevoegen
@@ -693,7 +693,7 @@ function BewerkPaneel({
                   <label className="text-xs text-slate-500">Prijs (€/{eenheid})</label>
                   <input type="number" step="0.01" min="0" value={nwOaPrijs}
                     onChange={e => setNwOaPrijs(parseFloat(e.target.value) || 0)}
-                    className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm font-mono text-right focus:outline-none focus:border-everts" />
+                    className="w-full mt-1 px-2 py-1.5 border border-slate-200 rounded text-sm  text-right focus:outline-none focus:border-everts" />
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={voegOaToe}>Opslaan</Button>
@@ -708,24 +708,24 @@ function BewerkPaneel({
             {totaalArbeid > 0 && (
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>Arbeid</span>
-                <span className="font-mono text-blue-700">{formatEuro(totaalArbeid)}</span>
+                <span className=" text-blue-700">{formatEuro(totaalArbeid)}</span>
               </div>
             )}
             {totaalMateriaal > 0 && (
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>Materiaal</span>
-                <span className="font-mono text-red-700">{formatEuro(totaalMateriaal)}</span>
+                <span className=" text-red-700">{formatEuro(totaalMateriaal)}</span>
               </div>
             )}
             {totaalOa > 0 && (
               <div className="flex items-center justify-between text-sm text-slate-500">
                 <span>Onderaanneming</span>
-                <span className="font-mono text-purple-700">{formatEuro(totaalOa)}</span>
+                <span className=" text-purple-700">{formatEuro(totaalOa)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <span className="text-sm font-medium text-slate-600">Totaal / {eenheid}</span>
-              <span className="text-base font-bold text-everts-dark font-mono">
+              <span className="text-base font-bold text-everts-dark ">
                 {formatEuro(totaalArbeid + totaalMateriaal + totaalOa)}
               </span>
             </div>
@@ -815,7 +815,7 @@ function NieuwReceptModal({
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Code *</label>
               <input value={code} onChange={e => setCode(e.target.value)} placeholder="bijv. SC-001"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts font-mono" />
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts " />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Eenheid *</label>
@@ -1012,7 +1012,7 @@ export default function BiblioteekBeheer({ items }: Props) {
                 <tr key={item.id}
                   className={`group hover:bg-slate-50 transition-colors ${!item.active ? 'opacity-40' : ''}`}>
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-slate-400">{item.item_code ?? '—'}</span>
+                    <span className=" text-xs text-slate-400">{item.item_code ?? '—'}</span>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-800">{item.full_name}</td>
                   <td className="px-4 py-3 text-slate-500">{item.default_unit ?? '—'}</td>
@@ -1028,10 +1028,10 @@ export default function BiblioteekBeheer({ items }: Props) {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-blue-700">{formatEuro(arbeid)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-red-700">{formatEuro(materiaal)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-purple-700">{oa > 0 ? formatEuro(oa) : <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold text-everts-dark">{formatEuro(totaal)}</td>
+                  <td className="px-4 py-3 text-right  text-blue-700">{formatEuro(arbeid)}</td>
+                  <td className="px-4 py-3 text-right  text-red-700">{formatEuro(materiaal)}</td>
+                  <td className="px-4 py-3 text-right  text-purple-700">{oa > 0 ? formatEuro(oa) : <span className="text-slate-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right  font-semibold text-everts-dark">{formatEuro(totaal)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon-sm" onClick={() => setBewerkItemId(item.id)} title="Bewerken">

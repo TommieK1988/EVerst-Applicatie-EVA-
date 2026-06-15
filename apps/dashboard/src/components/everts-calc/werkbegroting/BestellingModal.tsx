@@ -58,13 +58,13 @@ export default function BestellingModal({ werkbegrotingId, componenten, onSluit,
                   <span className="text-slate-600 truncate flex-1 mr-2">
                     {c.omschrijving || (c.type === 'arbeid' ? 'Arbeid' : c.type === 'materieel' ? 'Materieel' : 'Onderaanneming')}
                   </span>
-                  <span className="font-mono text-slate-500 flex-shrink-0">{formatEuro(c.norm_hoeveelheid * c.tarief)}</span>
+                  <span className=" text-slate-500 flex-shrink-0">{formatEuro(c.norm_hoeveelheid * c.tarief)}</span>
                 </div>
               ))}
             </div>
             <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between">
               <span className="text-xs font-semibold text-slate-600">Totaal (indicatief)</span>
-              <span className="text-xs font-mono font-bold text-slate-800">{formatEuro(totaalBedrag)}</span>
+              <span className="text-xs  font-bold text-slate-800">{formatEuro(totaalBedrag)}</span>
             </div>
           </div>
 

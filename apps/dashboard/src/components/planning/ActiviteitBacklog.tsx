@@ -44,11 +44,11 @@ function DraggableActiviteit({ activiteit }: { activiteit: PlanningActiviteit })
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 3, alignItems: 'center' }}>
         {activiteit.geschatte_uren != null && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>
+          <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>
             {activiteit.geschatte_uren}u
           </span>
         )}
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span style={{ fontSize: 9, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {STATUS_LABELS[activiteit.status] ?? activiteit.status}
         </span>
       </div>
@@ -141,7 +141,7 @@ export default function ActiviteitBacklog({ dossier_id, activiteiten: initialAct
 
       {ongepland.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
             Backlog
           </div>
           {ongepland.map(a => <DraggableActiviteit key={a.id} activiteit={a} />)}
@@ -150,7 +150,7 @@ export default function ActiviteitBacklog({ dossier_id, activiteiten: initialAct
 
       {gepland.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
             Ingepland
           </div>
           {gepland.map(a => <DraggableActiviteit key={a.id} activiteit={a} />)}
@@ -159,7 +159,7 @@ export default function ActiviteitBacklog({ dossier_id, activiteiten: initialAct
 
       {gereed.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
             Gereed
           </div>
           {gereed.map(a => <DraggableActiviteit key={a.id} activiteit={a} />)}

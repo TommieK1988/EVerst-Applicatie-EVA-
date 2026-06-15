@@ -76,12 +76,12 @@ const DossierKaart = React.forwardRef<HTMLDivElement, DossierKaartProps>(
     >
       {priorityHigh && <span className="absolute inset-y-2.5 left-0 w-[3px] rounded-r-sm bg-error-500" />}
       {draggable && <GripVertical className="absolute right-2 top-2 h-3.5 w-3.5 text-neutral-300" />}
-      {dossierId && <div className="mb-[5px] font-mono text-[10px] text-neutral-400">{dossierId}</div>}
+      {dossierId && <div className="mb-[5px]  text-[10px] text-neutral-400">{dossierId}</div>}
       <div className="mb-[3px] text-[12.5px] font-semibold leading-tight text-neutral-900">{title}</div>
       {client && <div className="mb-[9px] truncate text-[11.5px] text-neutral-500">{client}</div>}
       {(amount || meta) && (
         <div className="mt-2 flex items-center justify-between border-t border-neutral-100 pt-2">
-          {amount && <span className="font-mono text-xs font-semibold text-neutral-800">{amount}</span>}
+          {amount && <span className=" text-xs font-semibold text-neutral-800">{amount}</span>}
           {meta && <span className="flex items-center gap-[5px] text-[11px] text-neutral-500">{meta}</span>}
         </div>
       )}

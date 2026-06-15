@@ -140,7 +140,7 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     standaard_zichtbaar: false,
     filterType: 'tekst',
     sorteerWaarde: r => r.kvk_nummer ?? '',
-    render: r => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-soft)' }}>{r.kvk_nummer ?? '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.kvk_nummer ?? '—'}</span>,
   },
   {
     key: 'btw_nummer',
@@ -148,7 +148,7 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     standaard_zichtbaar: false,
     filterType: 'tekst',
     sorteerWaarde: r => r.btw_nummer ?? '',
-    render: r => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-soft)' }}>{r.btw_nummer ?? '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.btw_nummer ?? '—'}</span>,
   },
   {
     key: 'website',
@@ -166,7 +166,7 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     standaard_zichtbaar: false,
     filterType: 'tekst',
     sorteerWaarde: r => r.adres_postcode ?? '',
-    render: r => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-soft)' }}>{r.adres_postcode ?? '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.adres_postcode ?? '—'}</span>,
   },
   {
     key: 'adres_land',
@@ -182,7 +182,7 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     label: 'Aangemaakt',
     standaard_zichtbaar: false,
     sorteerWaarde: r => r.created_at,
-    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontFamily: 'var(--font-mono)' }}>{new Date(r.created_at).toLocaleDateString('nl-NL')}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{new Date(r.created_at).toLocaleDateString('nl-NL')}</span>,
   },
 ]
 
@@ -288,7 +288,7 @@ const KOLOMMEN_CONTACTPERSONEN: KolomDefinitie<ContactpersoonRij>[] = [
     label: 'Geboortedatum',
     standaard_zichtbaar: false,
     sorteerWaarde: r => r.geboortedatum ?? '',
-    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontFamily: 'var(--font-mono)' }}>{r.geboortedatum ? new Date(r.geboortedatum).toLocaleDateString('nl-NL') : '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.geboortedatum ? new Date(r.geboortedatum).toLocaleDateString('nl-NL') : '—'}</span>,
   },
   {
     key: 'linkedin_url',
@@ -377,7 +377,7 @@ const KOLOMMEN_PARTICULIEREN: KolomDefinitie<ParticulierRij>[] = [
     standaard_zichtbaar: false,
     filterType: 'tekst',
     sorteerWaarde: r => r.adres_postcode ?? '',
-    render: r => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-soft)' }}>{r.adres_postcode ?? '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.adres_postcode ?? '—'}</span>,
   },
   {
     key: 'mobiel',
@@ -392,7 +392,7 @@ const KOLOMMEN_PARTICULIEREN: KolomDefinitie<ParticulierRij>[] = [
     label: 'Geboortedatum',
     standaard_zichtbaar: false,
     sorteerWaarde: r => r.geboortedatum ?? '',
-    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontFamily: 'var(--font-mono)' }}>{r.geboortedatum ? new Date(r.geboortedatum).toLocaleDateString('nl-NL') : '—'}</span>,
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{r.geboortedatum ? new Date(r.geboortedatum).toLocaleDateString('nl-NL') : '—'}</span>,
   },
   {
     key: 'adres_land',

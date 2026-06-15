@@ -28,7 +28,7 @@ export default async function InzendingenPage({ params }: { params: Promise<{ id
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Link
-            href="/formulieren"
+            href="/formulieren/sjablonen"
             style={{ fontSize: 13, color: 'var(--text-muted)', textDecoration: 'none' }}
           >
             Formulieren

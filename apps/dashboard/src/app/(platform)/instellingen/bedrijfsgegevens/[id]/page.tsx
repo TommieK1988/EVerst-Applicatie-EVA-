@@ -30,7 +30,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         <>
           <div className="eva-page-header">
             <p className="eva-page-kicker">
-              Werkmaatschappij{result.data.code && <> · <span style={{ fontFamily: 'var(--font-mono)' }}>{result.data.code}</span></>}
+              Werkmaatschappij{result.data.code && <> · <span style={{  }}>{result.data.code}</span></>}
             </p>
             <h1 className="eva-page-title">{result.data.naam}</h1>
             <p className="eva-page-desc">

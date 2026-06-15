@@ -54,7 +54,7 @@ function InlineGetal({
       onChange={e => setLokaal(e.target.value)}
       onBlur={() => { const v = parseFloat(lokaal); onOpslaan(isNaN(v) ? 0 : v) }}
       onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className={`w-full text-xs text-right font-mono px-1.5 py-1 rounded border border-transparent
+      className={`w-full text-xs text-right  px-1.5 py-1 rounded border border-transparent
         hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
         hover:bg-white focus:bg-white placeholder-slate-300 ${cls}`}
     />
@@ -104,7 +104,7 @@ function MateriaalRij({
         <InlineTekst
           waarde={materiaal.artikelnummer ?? ''}
           placeholder="Artikelnr..."
-          cls="font-mono"
+          cls=""
           onOpslaan={v => onWijzig({ artikelnummer: v || undefined })}
         />
       </td>
@@ -140,7 +140,7 @@ function MateriaalRij({
           onChange={e => onWijzig({ eenheid: e.target.value })}
           className="w-full text-xs px-1.5 py-1 rounded border border-transparent
             hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
-            hover:bg-white focus:bg-white cursor-pointer font-mono"
+            hover:bg-white focus:bg-white cursor-pointer "
         >
           {STANDAARD_EENHEDEN.map(e => <option key={e} value={e}>{e}</option>)}
         </select>

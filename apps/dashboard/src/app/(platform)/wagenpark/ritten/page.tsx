@@ -276,7 +276,7 @@ export default async function RittenPage(
                 <tr key={r.id}>
                   <td>{formatDatumMetDag(r.start_datum)}</td>
                   <td>{r.start_tijd?.slice(0, 5)}</td>
-                  <td className="font-mono">{r.kenteken}</td>
+                  <td className="">{r.kenteken}</td>
                   <td className="max-w-[160px] truncate">{r.bestuurder_naam_raw ?? '—'}</td>
                   <td className="max-w-[220px] truncate">{r.adres_stop ?? '—'}</td>
                   <td>{formatKm(r.afstand_km ?? null, 1)}</td>

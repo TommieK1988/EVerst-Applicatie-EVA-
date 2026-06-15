@@ -76,11 +76,30 @@ const APPS: NavEntry[] = [
   { href: '/geveltekening',  label: 'Geveltekeningen', Icon: IconGeveltekeningen },
 ]
 
+const ICON_OVERZICHT = 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
+const ICON_SJABLONEN = 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'
+
 const APP_SUBNAV: Record<string, {
   label: string
   Icon: React.ComponentType<{ size?: number }>
   items: { href: string; label: string; icon: string }[]
 }> = {
+  '/formulieren': {
+    label: 'Formulieren',
+    Icon: IconFormulieren,
+    items: [
+      { href: '/formulieren/overzicht', label: 'Overzicht',  icon: ICON_OVERZICHT },
+      { href: '/formulieren/sjablonen', label: 'Sjablonen',  icon: ICON_SJABLONEN },
+    ],
+  },
+  '/taken': {
+    label: 'Actielijsten',
+    Icon: IconSjablonen,
+    items: [
+      { href: '/taken/overzicht', label: 'Overzicht',  icon: ICON_OVERZICHT },
+      { href: '/taken/lijsten',   label: 'Sjablonen',  icon: ICON_SJABLONEN },
+    ],
+  },
   '/houtrotherstel': {
     label: 'Houtrotherstel',
     Icon: IconHoutrotherstel,
@@ -149,10 +168,20 @@ const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'formulieren',   label: 'Formulieren',   d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
 ]
 
+const SERVICEDESK_TABS: DossierTab[] = [
+  { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { slug: 'bestanden',  label: 'Bestanden',  d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { slug: 'planning',   label: 'Planning',   d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { slug: 'taken',      label: 'Taken',      d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
+  { slug: 'vca',        label: 'VCA',        d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
+]
+
 const SECTIE_LABELS: Record<string, string> = {
-  aanvragen:  'Aanvragen',
-  offertes:   'Offertes',
-  opdrachten: 'Opdrachten',
+  aanvragen:   'Aanvragen',
+  offertes:    'Offertes',
+  opdrachten:  'Opdrachten',
+  servicedesk: 'Servicedesk',
 }
 
 export type SidebarProps = {
@@ -184,12 +213,15 @@ export default function Sidebar({
   const activeAppKey = Object.keys(APP_SUBNAV).find(key => pathname.startsWith(key)) ?? null
   const activeApp    = activeAppKey ? APP_SUBNAV[activeAppKey] : null
 
-  // Dossier detail detectie: /aanvragen/[id]/[tab] of /offertes/... of /opdrachten/...
-  const dossierMatch  = pathname.match(/^\/(aanvragen|offertes|opdrachten)\/([^/]+)/)
+  // Dossier detail detectie: /aanvragen/[id]/[tab], /offertes/..., /opdrachten/... of /servicedesk/...
+  const dossierMatch  = pathname.match(/^\/(aanvragen|offertes|opdrachten|servicedesk)\/([^/]+)/)
   const dossierSectie = dossierMatch?.[1]
   const dossierId     = dossierMatch?.[2]
   const isDossierDetail = !!dossierSectie && !!dossierId
-  const dossierTabs   = dossierSectie === 'opdrachten' ? OPDRACHT_TABS : AANVRAAG_TABS
+  const dossierTabs   =
+    dossierSectie === 'opdrachten'  ? OPDRACHT_TABS :
+    dossierSectie === 'servicedesk' ? SERVICEDESK_TABS :
+    AANVRAAG_TABS
 
   // Shared fade style for labels and decorations that hide when collapsed
   const labelFade: React.CSSProperties = {

@@ -1,9 +1,9 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
-import type { OrganisatieType } from '@everts/database'
+import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
 
 export type SyncResult = {
   nieuw: number
@@ -13,7 +13,7 @@ export type SyncResult = {
 }
 
 /** Haal de Bouw7 API key op uit de integraties-tabel. */
-async function getBouw7Client(): Promise<Bouw7Client> {
+export async function getBouw7Client(): Promise<Bouw7Client> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('integraties')
@@ -34,7 +34,7 @@ async function getBouw7Client(): Promise<Bouw7Client> {
 }
 
 /** Log sync-resultaat naar sync_log tabel. */
-async function logSync(
+export async function logSync(
   entiteit: string,
   richting: 'in' | 'out',
   result: SyncResult,
@@ -440,6 +440,88 @@ function extractFinNum(v: unknown): number | null {
   return null
 }
 
+/** Financiële cijfers afgeleid uit een Bouw7 offerte-detail (/quotation/{id}). */
+type QuoteCijfers = {
+  /** Som van calculationTotal over niet-optionele regels — null als niets gecalculeerd is. */
+  kostprijs: number | null
+  /** Som van de regel-subtotalen (verkoop, excl. AK/W&R) — null zonder regels. */
+  regelsom: number | null
+  /** BTW per tarief, incl. AK/W&R in de grondslag — null zonder regels. */
+  btwSplitsing: BtwSplitsingItem[] | null
+}
+
+/**
+ * Bereken kostprijs, regelsom en BTW-splitsing uit een offerte-detail.
+ * De grondslag per tarief = regel-subtotalen per tarief + AK- en W&R-bedrag bij hun
+ * eigen tarief. Het afrondingsverschil t.o.v. (quote.total − quote.subtotal) wordt
+ * verrekend met het grootste tarief zodat de splitsing exact optelt.
+ */
+function berekenQuoteCijfers(det: Bouw7QuotationDetail, quote: Bouw7Quotation): QuoteCijfers {
+  const num = (v: unknown): number => {
+    const n = parseFloat(String(v ?? ''))
+    return isNaN(n) ? 0 : n
+  }
+  const rond = (v: number) => Math.round(v * 100) / 100
+
+  // Meerwerk-hoofdstukken (additionalWork) en optionele regels tellen niet mee in de
+  // aanneemsom (quote.subtotal) — dus ook niet in kostprijs, regelsom en BTW-grondslag.
+  const lines = (det.chapters ?? [])
+    .filter(c => !c.additionalWork)
+    .flatMap(c => c.lines ?? [])
+    .filter(l => !l.option)
+  if (!lines.length) return { kostprijs: null, regelsom: null, btwSplitsing: null }
+
+  const kostprijsSom = rond(lines.reduce((s, l) => s + num(l.calculationTotal), 0))
+  const regelsom     = rond(lines.reduce((s, l) => s + num(l.subtotal), 0))
+
+  // Grondslag per tarief — key op label zodat 'Verlegd 21%' (0%) en 'Geen' apart blijven.
+  const tarieven = new Map<string, { label: string; percentage: number; grondslag: number }>()
+  const telMee = (tarief: Bouw7VatTariff | null | undefined, pctFallback: unknown, grondslag: number) => {
+    if (!grondslag) return
+    const percentage = num(tarief?.percentage ?? pctFallback)
+    const label = tarief?.label ?? `${percentage}%`
+    const cur = tarieven.get(label) ?? { label, percentage, grondslag: 0 }
+    cur.grondslag += grondslag
+    tarieven.set(label, cur)
+  }
+  for (const l of lines) telMee(l.vatTariffObject, l.vatTariffPercentage, num(l.subtotal))
+  telMee(det.overheadsVatTariff,     undefined, regelsom * num(det.overheads) / 100)
+  telMee(det.profitAndRiskVatTariff, undefined, regelsom * num(det.profitAndRisk) / 100)
+
+  const splitsing: BtwSplitsingItem[] = [...tarieven.values()]
+    .map(t => ({
+      label:      t.label,
+      percentage: t.percentage,
+      grondslag:  rond(t.grondslag),
+      bedrag:     rond(t.grondslag * t.percentage / 100),
+    }))
+    .sort((a, b) => b.percentage - a.percentage)
+
+  // Afrondingsverschil verrekenen met het grootste BTW-bedrag (max ±2 cent).
+  // Telt de splitsing daarna nog steeds niet op tot (total − subtotal), dan klopt onze
+  // reconstructie niet (onbekende korting/uitzondering) → liever géén splitsing dan een foute.
+  let splitsingOk = true
+  const doelBtw = quote.total != null && quote.subtotal != null
+    ? rond(Number(quote.total) - Number(quote.subtotal))
+    : null
+  if (doelBtw != null && splitsing.length) {
+    const som = rond(splitsing.reduce((s, t) => s + t.bedrag, 0))
+    const verschil = rond(doelBtw - som)
+    if (verschil !== 0 && Math.abs(verschil) <= 0.02) {
+      const grootste = splitsing.reduce((a, b) => (b.bedrag > a.bedrag ? b : a))
+      grootste.bedrag = rond(grootste.bedrag + verschil)
+    } else if (verschil !== 0) {
+      splitsingOk = false
+    }
+  }
+
+  return {
+    kostprijs:    kostprijsSom > 0 ? kostprijsSom : null,
+    regelsom,
+    btwSplitsing: splitsingOk ? splitsing : null,
+  }
+}
+
 type EvaStatusVelden = {
   hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht'
   aanvraag_substatus: string | null
@@ -687,9 +769,9 @@ export async function syncProjects(): Promise<SyncResult> {
       quotationLogInfo = `Fout /list/quotations: ${e instanceof Error ? e.message : String(e)}`
     }
 
-    // Gecalculeerde kostprijs per project: som van calculationTotal over de offerteregels
-    // (detail-endpoint /quotation/{id}). 0 of niet gecalculeerd → null.
-    const kostprijsMap = new Map<string, number>()
+    // Offerte-details per project: kostprijs (calculationTotal), regelsom en BTW-splitsing
+    // uit het detail-endpoint /quotation/{id}.
+    const quoteDetailMap = new Map<string, QuoteCijfers>()
     {
       const entries = [...quotationMap.entries()]
       const QUOTE_BATCH = 10
@@ -701,14 +783,7 @@ export async function syncProjects(): Promise<SyncResult> {
         for (let j = 0; j < batch.length; j++) {
           const r = results[j]
           if (r.status !== 'fulfilled' || !r.value?.chapters) continue
-          const kostprijs = r.value.chapters
-            .flatMap(c => c.lines ?? [])
-            .filter(l => !l.option)
-            .reduce((s, l) => {
-              const n = parseFloat(String(l.calculationTotal ?? ''))
-              return s + (isNaN(n) ? 0 : n)
-            }, 0)
-          if (kostprijs > 0) kostprijsMap.set(batch[j][0], Math.round(kostprijs * 100) / 100)
+          quoteDetailMap.set(batch[j][0], berekenQuoteCijfers(r.value, batch[j][1]))
         }
       }
     }
@@ -838,23 +913,26 @@ export async function syncProjects(): Promise<SyncResult> {
         quote?.quotationStatus?.name ?? null,
       )
 
-      // Gecalculeerde kostprijs: som van calculationTotal over de offerteregels (kostprijsMap).
-      // fixedPrice, revenue.budgeted en quote.subtotal zijn verkoopprijzen — géén kostprijs.
-      const kostprijs = kostprijsMap.get(bouw7IdStr) ?? null
-
-      // Verkoopprijs excl. BTW: Athena-contractbedrag, anders het offerte-subtotaal.
-      const verkoopExcl = extractFinNum(fin?.fixedPrice)
-        ?? extractFinNum(fin?.revenue?.budgeted)
-        ?? extractFinNum(quote?.subtotal)
-        ?? extractFinNum(p.fixedPrice)
-        ?? null
-      // Verkoopprijs incl. BTW: offerte-totaal — alleen bruikbaar als de offerte ook de bron
-      // van de excl-prijs is (zelfde offerte), anders hoort total niet bij dit bedrag.
+      const det = quoteDetailMap.get(bouw7IdStr)
+      const finPrijs = extractFinNum(fin?.fixedPrice) ?? extractFinNum(fin?.revenue?.budgeted)
       const quoteSubtotal = extractFinNum(quote?.subtotal)
-      const verkoopIncl = (quoteSubtotal != null && verkoopExcl != null
-        && Math.abs(quoteSubtotal - verkoopExcl) < 0.01)
-        ? extractFinNum(quote?.total)
-        : null
+      // De offerte is de financiële bron als er geen Athena-contractbedrag is, of als dat
+      // contractbedrag aansluit op deze offerte: gelijk aan het offerte-subtotaal, of gelijk
+      // aan de regelsom (Athena fixedPrice is de regelsom zónder AK/W&R-opslagen).
+      // Zo blijft een losse deelofferte/meerwerk-offerte buiten beschouwing.
+      const quoteIsBron = quoteSubtotal != null && (
+        finPrijs == null
+        || Math.abs(finPrijs - quoteSubtotal) < 0.01
+        || (det?.regelsom != null && Math.abs(finPrijs - det.regelsom) < 0.01)
+      )
+      // Verkoopprijs excl. BTW = offerte "Totaal excl. BTW" (incl. AK/W&R), anders contractbedrag.
+      const verkoopExcl = quoteIsBron
+        ? quoteSubtotal
+        : (finPrijs ?? extractFinNum(p.fixedPrice) ?? null)
+      const verkoopIncl = quoteIsBron ? extractFinNum(quote?.total) : null
+      // Kostprijs en BTW-splitsing horen bij dezelfde offerte als de verkoopprijs.
+      const kostprijs    = quoteIsBron ? (det?.kostprijs ?? null) : null
+      const btwSplitsing = quoteIsBron ? (det?.btwSplitsing ?? null) : null
 
       rows.push({
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
@@ -885,6 +963,7 @@ export async function syncProjects(): Promise<SyncResult> {
         bedrag_excl_btw:          verkoopExcl,
         bedrag_incl_btw:          verkoopIncl,
         kostprijs_excl_btw:       kostprijs,
+        btw_splitsing:            btwSplitsing,
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,
         werkadres_straat:         [p.streetName, p.houseNumber].filter(Boolean).join(' ') || null,

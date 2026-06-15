@@ -1,6 +1,6 @@
 import { createClient } from '@everts/database/server'
 import { getMijnTaken } from '@/lib/taken/services/taken'
-import { getMijnDossiers } from '@/lib/dossiers/actions'
+import { getMijnDossiers, getMijnServicedesk } from '@/lib/dossiers/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
 import { haalAlleRegels } from '@/app/(platform)/planning/bedrijfsagenda/actions'
 import { bedrijfsagendaTypeKleur } from '@everts/database/platform-types'
@@ -31,12 +31,15 @@ export default async function HomePage() {
   const jaar = new Date().getFullYear()
   const vandaag = localDateStr(0)
 
-  const [taken, aanvragenResult, offertesResult, opdrachtenResult, agendaRegels] = await Promise.all([
+  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
     // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
     medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
     medewerker ? getMijnDossiers(medewerker.id, 'offerte')  : Promise.resolve({ ok: true as const, data: [] }),
-    medewerker ? getMijnDossiers(medewerker.id, 'opdracht', 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
+    // Mijn opdrachten: alleen dossiers waar ik projectleider ben
+    medewerker ? getMijnDossiers(medewerker.id, 'opdracht', 10, { kolom: 'verwacht_startdatum', ascending: true }, ['project_manager_id']) : Promise.resolve({ ok: true as const, data: [] }),
+    // Mijn servicedesk: dossiers waar ik projectleider of uitvoerder ben
+    medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
   ])
 
@@ -68,6 +71,7 @@ export default async function HomePage() {
       aanvragen={aanvragenResult.ok   ? aanvragenResult.data   : []}
       offertes={offertesResult.ok    ? offertesResult.data    : []}
       opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
+      servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
       agendaItems={agendaItems}
     />
   )

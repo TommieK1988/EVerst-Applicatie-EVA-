@@ -9,6 +9,7 @@
 
 const HEIMDALL_URL = 'https://heimdall.bouw7.nl'
 const ATHENA_URL   = 'https://athena.bouw7.nl'
+const APOLLO_URL   = 'https://apollo.bouw7.nl'
 
 export class Bouw7Client {
   private token: string | null = null
@@ -43,6 +44,101 @@ export class Bouw7Client {
   /** GET request naar Athena API (financiën, budgetAmount). */
   async getAthena<T = unknown>(path: string, params?: Record<string, string>): Promise<T> {
     return this._get<T>(ATHENA_URL, path, params)
+  }
+
+  /**
+   * GET request naar de Apollo search-API (planning). Gebruikt dezelfde Bearer-token
+   * als Heimdall. De query-DSL gaat mee via de `X-Query` header (geen URL-encoding nodig).
+   * Bv. xquery = `project.id = 3494115 limit 1000`.
+   */
+  async getApollo<T = unknown>(path: string, xquery?: string): Promise<T> {
+    await this.ensureAuth()
+    const res = await fetch(new URL(path, APOLLO_URL).toString(), {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${this.token}`,
+        ...(xquery ? { 'X-Query': xquery } : {}),
+      },
+    })
+
+    if (res.status === 401) {
+      await this.login()
+      return this.getApollo<T>(path, xquery)
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Bouw7 Apollo GET ${path} mislukt (${res.status}): ${text}`)
+    }
+    return res.json()
+  }
+
+  /**
+   * Haal alle pagina's op van een Apollo search-endpoint. De query-DSL gebruikt
+   * `limit N page M`; paginatie-info zit in `__metadata.page` van de response.
+   */
+  async getApolloAll<T = unknown>(path: string, filter: string, pageSize = 1000): Promise<T[]> {
+    const all: T[] = []
+    let page = 1
+    // Veiligheidslimiet tegen oneindige loops; 50 × pageSize ruim voldoende per project.
+    for (let i = 0; i < 50; i++) {
+      const res = await this.getApollo<Bouw7ApolloResponse<T>>(
+        path,
+        `${filter} limit ${pageSize} page ${page}`.trim(),
+      )
+      const items = res.items ?? []
+      all.push(...items)
+      const total = res.__metadata?.page?.total ?? page
+      if (page >= total || items.length === 0) break
+      page++
+    }
+    return all
+  }
+
+  /**
+   * POST naar Heimdall — create/update (upsert). Het Bouw7-patroon: een `id` in de
+   * body betekent **update**, ontbreekt het dan wordt een nieuw record **aangemaakt**.
+   * Nested referenties (contact, status, employee, …) vereisen alleen `{ id }`.
+   * Zie WRITE-ENDPOINTS.md voor de schema's per resource.
+   */
+  async post<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this._write<T>('POST', path, body)
+  }
+
+  /** PUT naar Heimdall — o.a. de `.../update-status/{status}`-endpoints (vaak zonder body). */
+  async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this._write<T>('PUT', path, body)
+  }
+
+  /** DELETE naar Heimdall — body is een `Condensed{Resource}` met `{ id }`. (`delete` is gereserveerd → `del`.) */
+  async del<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this._write<T>('DELETE', path, body)
+  }
+
+  /** Gedeelde write-implementatie (POST/PUT/DELETE) met token- en 401-retry, net als `_get`. */
+  private async _write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
+    await this.ensureAuth()
+    const res = await fetch(new URL(path, HEIMDALL_URL).toString(), {
+      method,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${this.token}`,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+
+    if (res.status === 401) {
+      await this.login()
+      return this._write<T>(method, path, body)
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Bouw7 ${method} ${HEIMDALL_URL}${path} mislukt (${res.status}): ${text}`)
+    }
+
+    // Sommige write-endpoints geven 204/lege body terug.
+    const text = await res.text().catch(() => '')
+    return (text ? JSON.parse(text) : undefined) as T
   }
 
   private async _get<T>(baseUrl: string, path: string, params?: Record<string, string>): Promise<T> {
@@ -207,6 +303,7 @@ export type Bouw7QuotationLine = {
   price?: string | number
   subtotal?: string | number
   vatTariffPercentage?: string | number
+  vatTariffObject?: Bouw7VatTariff | null
   /** Optionele regel — telt niet mee in de aanneemsom. */
   option?: boolean
   laborTotal?: string | number | null
@@ -219,10 +316,25 @@ export type Bouw7QuotationLine = {
   calculationTotal?: string | number | null
 }
 
+/** BTW-tarief zoals Bouw7 het meegeeft op regels en opslagen. */
+export type Bouw7VatTariff = {
+  id?: number
+  /** Bv. 'Hoog 21%', 'Laag 9%', 'Verlegd 21'. */
+  label?: string
+  percentage?: string | number
+}
+
 /** Offerte-detail — GET /quotation/{id} (enkelvoud). Alleen de velden die EVA gebruikt. */
 export type Bouw7QuotationDetail = {
   id: number
-  chapters?: { id: number; name?: string; lines?: Bouw7QuotationLine[] }[]
+  /** LET OP: hoofdstukken met additionalWork=true (meerwerk/opties) tellen NIET mee in subtotal/total. */
+  chapters?: { id: number; name?: string; hasPrice?: boolean; additionalWork?: boolean; lines?: Bouw7QuotationLine[] }[]
+  /** AK-opslag als percentage over de regelsom, bv. "10". */
+  overheads?: string | number | null
+  overheadsVatTariff?: Bouw7VatTariff | null
+  /** W&R-opslag als percentage over de regelsom, bv. "5". */
+  profitAndRisk?: string | number | null
+  profitAndRiskVatTariff?: Bouw7VatTariff | null
 }
 
 /**
@@ -268,6 +380,66 @@ export type Bouw7ListResponse<T> = {
   offset: number
 }
 
+/* ── Apollo search-API (planning) ─────────────────────────────────── */
+
+/** Generieke Apollo search-response. Paginatie zit in `__metadata.page`. */
+export type Bouw7ApolloResponse<T> = {
+  items: T[]
+  __metadata?: {
+    page?: { current: number; total: number }
+    rows?: { total: number; perPage: number; offset: number }
+  }
+}
+
+export type Bouw7EmployeeRef = {
+  id: number
+  givenName?: string
+  familyName?: string
+  emailAddress?: string | null
+}
+
+/**
+ * Plan-item uit GET /search/plan-items (Apollo). Velden geverifieerd via live API.
+ *
+ * - `securityPlanningLink.securityCode.chapter` = bewakingscode-hoofdstuk → EVA-fase ("Hoofdtaak").
+ * - het plan-item zelf → EVA-activiteit ("Taak").
+ * - `assignedEmployees` → per medewerker één EVA-planitem (in de huidige data altijd leeg:
+ *   er wordt op `department` gepland, niet op individu).
+ */
+export type Bouw7PlanItem = {
+  id: number
+  name: string
+  startDate: string            // "YYYY-MM-DD HH:mm:ss"
+  endDate: string
+  isAllDay?: boolean
+  hours?: number
+  requisite?: number
+  remark?: string | null
+  color?: string | null
+  isProcessed?: boolean
+  project?: {
+    id: number
+    name?: string
+    number?: string
+    status?: { id: number; name?: string }
+    category?: { id: number; name?: string; code?: string }
+  } | null
+  department?: { id: number; name?: string; isActive?: boolean } | null
+  securityPlanningLink?: {
+    id: number
+    securityCode?: {
+      id: number
+      name?: string
+      code?: string
+      chapter?: { id: number; name?: string; code?: string } | null
+    } | null
+  } | null
+  assignedEmployees?: Bouw7EmployeeRef[]
+  assignedEmployeesByProject?: Bouw7EmployeeRef[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 /**
  * Uitgebreid project-type met financiële managementdata.
  * Bouw7 retourneert deze velden op het project-overzicht wanneer
@@ -288,4 +460,78 @@ export type Bouw7ProjectManagement = Bouw7Project & {
   marginPercentageFinancial?: number  // % marge (gereed)
   differenceMarginPercentage?: number // Verschil % marge
   isCompleted?: boolean           // true = Gereed Werken
+}
+
+/* ── Projectbewaking per bewakingscode (Control) ──────────────────── */
+
+/**
+ * Bouw7 kostensoort-id's (Athena project-control `cost-type/{id}`). Geverifieerd:
+ * `costAmount` per soort == `/project-financial` realisatie, `budgetAmount` == budgeted.
+ */
+export const BOUW7_COST_TYPE = {
+  1: 'Arbeid',
+  2: 'Inkoop',
+  3: 'Onderaanneming',
+  4: 'Materieel',
+  5: 'Materiaal',
+  6: 'Afval',
+} as const
+
+export type Bouw7CostTypeId = keyof typeof BOUW7_COST_TYPE
+
+/** Uren-blok op een control-regel. Alle velden zijn echte numbers. */
+export type Bouw7ControlHourInfo = {
+  budgetHours?: number              // Begrote uren
+  prognosisHours?: number           // Prognose-uren
+  costHours?: number                // Geboekte/bestede uren
+  contractCostHours?: number
+  allowedHours?: number             // Toegestane uren (standopname)
+  totalPrognosisHours?: number
+  additionalWorkHours?: number      // Meerwerk-uren
+}
+
+/**
+ * Eén regel uit GET /project/{id}/cost-type/{costType}/chapters (Athena). Zowel
+ * `chapterInfo` (hoofdstuk-aggregatie), elke `securityCodes[]`-regel, als het top-level
+ * `totals`-blok hebben deze vorm. Bedragen/uren zijn numbers.
+ */
+export type Bouw7ControlEntry = {
+  id?: number
+  code?: string
+  name?: string
+  status?: number
+  progress?: number                 // % gereed
+  adjustment?: number
+  budgetAmount?: number             // Begroot bedrag
+  prognosisAmount?: number          // Totale prognose
+  costAmount?: number               // Geboekte kosten (besteed)
+  contractCostAmount?: number       // Inkooporders/onderaannemer-contracten (verplicht)
+  termAmount?: number
+  allowedAmount?: number            // Standopname/toegestaan
+  additionalWorkAmount?: number     // Meerwerk
+  totalBudgetAmount?: number
+  totalPrognosisAmount?: number
+  resultBudgetAmount?: number
+  resultEndAmount?: number
+  remarkCount?: number
+  hourInfo?: Bouw7ControlHourInfo
+  securityObject?: { id: number; name?: string } | null
+  pslIds?: number[]
+}
+
+export type Bouw7ControlChapter = {
+  chapterInfo: Bouw7ControlEntry
+  securityCodes: Bouw7ControlEntry[]
+}
+
+/**
+ * Response van GET /project/{id}/cost-type/{costType}/chapters (Athena).
+ * `chapterInfo.name === 'uncoded_costs'` (id 0) = kosten zonder bewakingscode.
+ */
+export type Bouw7ControlResponse = {
+  count: number
+  limit: number | null
+  offset: number | null
+  totals: Bouw7ControlEntry
+  items: Bouw7ControlChapter[]
 }

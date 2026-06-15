@@ -44,7 +44,7 @@ export default async function LeasePage() {
               {contracten.map((c: any) => (
                 <tr key={c.id}>
                   <td>
-                    <span className="font-mono">{c.voertuigen?.kenteken ?? '—'}</span>
+                    <span className="">{c.voertuigen?.kenteken ?? '—'}</span>
                     <span className="text-xs text-slate-500 ml-2">
                       {[c.voertuigen?.merk, c.voertuigen?.model].filter(Boolean).join(' ')}
                     </span>

@@ -139,7 +139,7 @@ export default async function VoertuigenPage(
             <tbody>
               {voertuigen.map((v) => (
                 <tr key={v.id}>
-                  <td className="font-mono">{v.kenteken}</td>
+                  <td className="">{v.kenteken}</td>
                   <td>{[v.merk, v.model].filter(Boolean).join(' ') || '—'}</td>
                   <td className="text-slate-700">
                     {laatsteBestuurder.get(v.id) ?? <span className="text-slate-400">—</span>}

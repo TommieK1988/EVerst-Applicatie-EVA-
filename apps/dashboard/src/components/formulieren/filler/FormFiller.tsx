@@ -162,7 +162,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       <div style={{ marginBottom: 32 }}>
         <button
           type="button"
-          onClick={() => router.push('/formulieren')}
+          onClick={() => router.push('/formulieren/sjablonen')}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'transparent', border: 'none', cursor: 'pointer',

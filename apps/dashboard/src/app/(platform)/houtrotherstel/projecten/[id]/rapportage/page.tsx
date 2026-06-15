@@ -263,7 +263,7 @@ export default function RapportagePage() {
               <dl className="space-y-3">
                 <div className="flex gap-3">
                   <dt className="text-sm text-slate-400 w-32 flex-shrink-0">Projectnummer</dt>
-                  <dd className="text-sm font-mono font-bold text-slate-800">#{project.project_number}</dd>
+                  <dd className="text-sm  font-bold text-slate-800">#{project.project_number}</dd>
                 </div>
                 {project.address && (
                   <div className="flex gap-3">

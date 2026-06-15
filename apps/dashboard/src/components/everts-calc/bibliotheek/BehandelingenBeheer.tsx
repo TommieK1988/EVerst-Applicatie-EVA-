@@ -60,7 +60,7 @@ function BehandelingRij({
           <input
             value={code} onChange={e => setCode(e.target.value)}
             autoFocus
-            className="w-full px-2 py-1.5 border border-everts rounded text-sm font-mono focus:outline-none"
+            className="w-full px-2 py-1.5 border border-everts rounded text-sm  focus:outline-none"
           />
         </td>
         <td className="px-4 py-2">
@@ -89,7 +89,7 @@ function BehandelingRij({
   return (
     <tr className={`group hover:bg-slate-50 transition-colors ${!behandeling.active ? 'opacity-40' : ''}`}>
       <td className="px-4 py-3">
-        <span className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+        <span className=" text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
           {behandeling.treatment_code ?? '—'}
         </span>
       </td>
@@ -176,7 +176,7 @@ export default function BehandelingenBeheer({ behandelingen }: Props) {
               value={nieuwCode} onChange={e => setNieuwCode(e.target.value)}
               placeholder="bijv. SCH-001"
               autoFocus
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:border-everts"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm  focus:outline-none focus:border-everts"
             />
           </div>
           <div className="flex-1">

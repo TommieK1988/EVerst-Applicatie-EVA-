@@ -33,6 +33,7 @@ export type {
   OmzetOpenstaand,
   Medewerker,
   Dossier,
+  BtwSplitsingItem,
   Hoofdstatus,
   AanvraagSubstatus,
   OfferteSubstatus,

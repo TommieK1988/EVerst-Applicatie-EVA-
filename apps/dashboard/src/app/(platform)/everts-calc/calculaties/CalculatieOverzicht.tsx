@@ -20,7 +20,7 @@ function formatEur(bedrag: number): string {
 function EurCell({ bedrag }: { bedrag: number | null }) {
   if (bedrag === null || bedrag === 0) return <span style={{ color: 'var(--neutral-400)' }}>—</span>
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--neutral-900)' }}>
+    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--neutral-900)' }}>
       € {formatEur(bedrag)}
     </span>
   )
@@ -30,7 +30,7 @@ function MargeEur({ marge }: { marge: number | null }) {
   if (marge === null) return <span style={{ color: 'var(--neutral-400)' }}>—</span>
   const kleur = marge > 0 ? 'var(--success-600)' : marge < 0 ? 'var(--error-600)' : 'var(--neutral-500)'
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: kleur, fontWeight: 600 }}>
+    <span style={{ fontSize: 12, color: kleur, fontWeight: 600 }}>
       € {formatEur(marge)}
     </span>
   )
@@ -40,7 +40,7 @@ function MargePct({ pct }: { pct: number | null }) {
   if (pct === null) return <span style={{ color: 'var(--neutral-400)' }}>—</span>
   const kleur = pct > 0 ? 'var(--success-600)' : pct < 0 ? 'var(--error-600)' : 'var(--neutral-500)'
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: kleur, fontWeight: 600 }}>
+    <span style={{ fontSize: 12, color: kleur, fontWeight: 600 }}>
       {pct.toFixed(1)}%
     </span>
   )
@@ -109,7 +109,7 @@ export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
       render: r => (
         <div>
           {r.project_number && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-400)' }}>
+            <div style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
               {r.project_number}
             </div>
           )}
@@ -126,7 +126,7 @@ export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
       filterType: 'tekst',
       sorteerWaarde: r => r.dossiernummer ?? '',
       render: r => r.dossiernummer
-        ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-600)' }}>{r.dossiernummer}</span>
+        ? <span style={{ fontSize: 12, color: 'var(--neutral-600)' }}>{r.dossiernummer}</span>
         : <span style={{ color: 'var(--neutral-400)' }}>—</span>,
     },
     {
@@ -164,7 +164,7 @@ export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
       filterType: 'tekst',
       sorteerWaarde: r => r.quote_nummer ?? '',
       render: r => r.quote_nummer
-        ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-600)' }}>{r.quote_nummer}</span>
+        ? <span style={{ fontSize: 12, color: 'var(--neutral-600)' }}>{r.quote_nummer}</span>
         : <span style={{ color: 'var(--neutral-400)' }}>—</span>,
     },
     {

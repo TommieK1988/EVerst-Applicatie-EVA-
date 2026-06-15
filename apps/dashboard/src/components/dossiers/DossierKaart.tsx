@@ -96,7 +96,7 @@ export function DossierKaart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10.5,
+            fontSize: 10.5,
             color: 'var(--neutral-400)', letterSpacing: '0.01em',
           }}>
             {dossier.dossiernummer ?? 'Nieuw'}
@@ -127,7 +127,7 @@ export function DossierKaart({
         </div>
         {verkoopprijs != null && verkoopprijs > 0 && (
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+            fontSize: 12, fontWeight: 700,
             color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
           }}>
             {formatBedrag(verkoopprijs)}
@@ -153,11 +153,11 @@ export function DossierKaart({
       {/* Kostprijs + opslag (alleen voor offerte-sectie) */}
       {toonFinancieel && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
             Kostprijs {formatBedrag(kostprijs!)}
           </span>
           <span style={{
-            fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
+            fontSize: 11, fontWeight: 700,
             color: opslagKleur(opslagPct),
           }}>
             {opslagPct.toFixed(1)}% opslag

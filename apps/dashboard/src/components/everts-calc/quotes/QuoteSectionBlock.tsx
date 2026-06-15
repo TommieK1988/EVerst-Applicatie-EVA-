@@ -83,7 +83,7 @@ export default function QuoteSectionBlock({ section, quoteId, type }: Props) {
 
         {/* Niveau-indicator */}
         {section.niveau > 1 && (
-          <span className="text-xs text-slate-400 font-mono flex-shrink-0">
+          <span className="text-xs text-slate-400  flex-shrink-0">
             {'→'.repeat(section.niveau - 1)}
           </span>
         )}

@@ -49,7 +49,7 @@ export default function AllowancesPaneel({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="font-mono font-semibold text-slate-700">{a.regel_code}</span>
+              <span className=" font-semibold text-slate-700">{a.regel_code}</span>
               {a.categorie && (
                 <>
                   <span>•</span>

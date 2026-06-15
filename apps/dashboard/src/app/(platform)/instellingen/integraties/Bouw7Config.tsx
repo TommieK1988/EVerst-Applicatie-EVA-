@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button, Card, CardBody, Input } from '@/components/ui'
-import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult } from './actions'
+import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, verifyBouw7WriteAccess, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult, type WriteCheckResult } from './actions'
 
 type Status = { kind: 'idle' } | { kind: 'saving' } | { kind: 'success'; msg?: string } | { kind: 'error'; message: string }
 
@@ -20,6 +20,8 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
   const [quotationDebugging, setQuotationDebugging] = useState(false)
   const [projectDebug, setProjectDebug] = useState<ProjectDebugResult | null>(null)
   const [projectDebugging, setProjectDebugging] = useState(false)
+  const [writeCheck, setWriteCheck] = useState<WriteCheckResult | null>(null)
+  const [writeChecking, setWriteChecking] = useState(false)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -56,7 +58,7 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>API Key</span>
               <Input name="api_key" type="password" required defaultValue={existingKey ?? ''}
                 placeholder="Plak hier je API key"
-                style={{ fontFamily: 'var(--font-mono)' }} />
+                style={{  }} />
             </label>
           </div>
 
@@ -163,7 +165,7 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
                 marginTop: 10, padding: '12px 14px',
                 background: quotationDebug.ok ? 'var(--bg)' : 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))',
                 border: `1px solid ${quotationDebug.ok ? 'var(--border)' : 'color-mix(in srgb, #dc2626 20%, transparent)'}`,
-                borderRadius: 8, fontFamily: 'var(--font-mono)', fontSize: 11,
+                borderRadius: 8, fontSize: 11,
               }}>
                 {quotationDebug.ok ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: 'var(--fg)' }}>
@@ -198,7 +200,7 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
                 marginTop: 10, padding: '12px 14px',
                 background: projectDebug.ok ? 'var(--bg)' : 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))',
                 border: `1px solid ${projectDebug.ok ? 'var(--border)' : 'color-mix(in srgb, #dc2626 20%, transparent)'}`,
-                borderRadius: 8, fontFamily: 'var(--font-mono)', fontSize: 11,
+                borderRadius: 8, fontSize: 11,
               }}>
                 {projectDebug.ok ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: 'var(--fg)' }}>
@@ -209,6 +211,43 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
                   </div>
                 ) : (
                   <span style={{ color: '#dc2626' }}>{projectDebug.error}</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg-muted)', marginBottom: 4 }}>
+              Schrijftoegang (fase 0)
+            </p>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Toetst of de API-key naar Bouw7 mág schrijven. Veilig: leest de interne notitie van het
+              eerste project en schrijft exact dezelfde waarde terug — geen feitelijke wijziging.
+            </p>
+            <Button type="button" variant="ghost" size="sm" loading={writeChecking}
+              onClick={async () => {
+                setWriteChecking(true)
+                setWriteCheck(null)
+                try { setWriteCheck(await verifyBouw7WriteAccess()) }
+                finally { setWriteChecking(false) }
+              }}>
+              Schrijftoegang testen
+            </Button>
+            {writeCheck && (
+              <div style={{
+                marginTop: 10, padding: '12px 14px',
+                background: writeCheck.ok ? 'color-mix(in srgb, var(--accent) 8%, var(--bg))' : 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))',
+                border: `1px solid ${writeCheck.ok ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'color-mix(in srgb, #dc2626 20%, transparent)'}`,
+                borderRadius: 8, fontSize: 12,
+              }}>
+                {writeCheck.ok ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontWeight: 500 }}>
+                    <CheckIcon /> {writeCheck.message}
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#dc2626' }}>
+                    <WarnIcon /> {writeCheck.error}
+                  </span>
                 )}
               </div>
             )}

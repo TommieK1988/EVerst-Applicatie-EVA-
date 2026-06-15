@@ -282,16 +282,16 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
               {[...totalen.perUurtype.entries()].map(([uurtype, d]) => (
                 <tr key={uurtype} className="border-b border-slate-100/60">
                   <td className={`${tdCls} text-slate-700 font-medium truncate max-w-[60px]`} title={uurtype}>{uurtype}</td>
-                  <td className={`${tdCls} text-right font-mono text-slate-600`}>{d.aantal % 1 === 0 ? d.aantal.toFixed(0) : d.aantal.toFixed(1)}</td>
-                  <td className={`${tdCls} text-right font-mono text-slate-500`}>{formatEuro(d.tarief)}</td>
-                  <td className={`${tdCls} text-right font-mono font-semibold text-slate-800`}>{formatEuro(d.totaal)}</td>
+                  <td className={`${tdCls} text-right  text-slate-600`}>{d.aantal % 1 === 0 ? d.aantal.toFixed(0) : d.aantal.toFixed(1)}</td>
+                  <td className={`${tdCls} text-right  text-slate-500`}>{formatEuro(d.tarief)}</td>
+                  <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{formatEuro(d.totaal)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200">
                 <td colSpan={3} className="pt-1.5 text-[10px] font-bold text-blue-700">Totaal arbeid</td>
-                <td className="pt-1.5 text-right font-mono text-[11px] font-bold text-blue-700">{formatEuro(totalen.totaalArbeid)}</td>
+                <td className="pt-1.5 text-right  text-[11px] font-bold text-blue-700">{formatEuro(totalen.totaalArbeid)}</td>
               </tr>
             </tfoot>
           </table>
@@ -319,8 +319,8 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
               return (
                 <tr key={r.label} className="border-b border-slate-100/60">
                   <td className={`${tdCls} ${r.cls} font-medium`}>{r.label}</td>
-                  <td className={`${tdCls} text-right font-mono text-slate-400`}>{r.calc > 0 ? formatEuro(r.calc) : '—'}</td>
-                  <td className={`${tdCls} text-right font-mono font-semibold text-slate-800`}>{r.wb > 0 ? formatEuro(r.wb) : '—'}</td>
+                  <td className={`${tdCls} text-right  text-slate-400`}>{r.calc > 0 ? formatEuro(r.calc) : '—'}</td>
+                  <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{r.wb > 0 ? formatEuro(r.wb) : '—'}</td>
                   <td className={`${tdCls} text-right`}>
                     {r.calc > 0 && <VerschilBadge verschil={diff} pct={pct} />}
                   </td>
@@ -331,8 +331,8 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
           <tfoot>
             <tr className="border-t-2 border-slate-200">
               <td className="pt-1.5 text-[10px] font-bold text-slate-700">Totaal</td>
-              <td className="pt-1.5 text-right font-mono text-[10px] text-slate-400">{formatEuro(totalen.calcTotaal)}</td>
-              <td className="pt-1.5 text-right font-mono text-[11px] font-bold text-everts">{formatEuro(totalen.eindtotaal)}</td>
+              <td className="pt-1.5 text-right  text-[10px] text-slate-400">{formatEuro(totalen.calcTotaal)}</td>
+              <td className="pt-1.5 text-right  text-[11px] font-bold text-everts">{formatEuro(totalen.eindtotaal)}</td>
               <td className="pt-1.5 text-right">
                 {totalen.calcTotaal > 0 && (
                   <VerschilBadge
@@ -369,14 +369,14 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
                       d.type === 'Onderaannemer' ? 'bg-purple-50 text-purple-600' : 'bg-red-50 text-red-600'
                     }`}>{d.type === 'Onderaannemer' ? 'OA' : 'Lev'}</span>
                   </td>
-                  <td className={`${tdCls} text-right font-mono font-semibold text-slate-800`}>{formatEuro(d.totaal)}</td>
+                  <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{formatEuro(d.totaal)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200">
                 <td colSpan={2} className="pt-1.5 text-[10px] font-bold text-red-700">Totaal inkoop</td>
-                <td className="pt-1.5 text-right font-mono text-[11px] font-bold text-red-700">
+                <td className="pt-1.5 text-right  text-[11px] font-bold text-red-700">
                   {formatEuro(totalen.totaalMateriaal + totalen.totaalOA)}
                 </td>
               </tr>
@@ -390,7 +390,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
         <div className="px-4 py-3 border-t-2 border-slate-300 bg-white sticky bottom-0">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700">Totaal werkbegroting</span>
-            <span className="font-mono text-sm font-bold text-everts">{formatEuro(totalen.eindtotaal)}</span>
+            <span className=" text-sm font-bold text-everts">{formatEuro(totalen.eindtotaal)}</span>
           </div>
           {totalen.calcTotaal > 0 && (() => {
             const diff = totalen.eindtotaal - totalen.calcTotaal
@@ -919,7 +919,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
             <input
               type="number" step="0.01" min="0"
               value={totaalAantal === 0 ? '' : +(totaalAantal.toFixed(2))}
-              className={`${inputCls} text-right font-mono font-semibold text-slate-700`}
+              className={`${inputCls} text-right  font-semibold text-slate-700`}
               placeholder="0"
               onChange={e => {
                 const nieuw = parseFloat(e.target.value) || 0
@@ -935,9 +935,9 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         return (
           <td key={id} className={`px-1 py-1.5 ${base}`}>
             {comp.type === 'arbeid' ? (
-              <span className="font-mono text-[11px] text-teal-600 font-semibold px-1">uur</span>
+              <span className=" text-[11px] text-teal-600 font-semibold px-1">uur</span>
             ) : (
-              <input className={`${inputCls} text-slate-600 font-mono text-[11px]`}
+              <input className={`${inputCls} text-slate-600  text-[11px]`}
                 value={comp.eenheid ?? regel.eenheid ?? ''}
                 placeholder="eh"
                 onChange={e => onComponentWijzig(comp.id, { eenheid: e.target.value as never || undefined })} />
@@ -1018,11 +1018,11 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         return (
           <td key={id} className={`px-1 py-1 ${base}`}>
             <div className="flex items-center gap-0.5">
-              <span className="text-[11px] text-slate-400 flex-shrink-0 font-mono">€</span>
+              <span className="text-[11px] text-slate-400 flex-shrink-0 ">€</span>
               <BedragInput
                 value={comp.tarief}
                 onChange={v => onComponentWijzig(comp.id, { tarief: v })}
-                className={`${inputCls} text-right font-mono text-slate-700 flex-1`}
+                className={`${inputCls} text-right  text-slate-700 flex-1`}
               />
             </div>
           </td>
@@ -1031,7 +1031,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       case 'totaalprijs':
         return (
           <td key={id} className={`px-2 py-1.5 ${base}`}>
-            <span className={`font-mono font-semibold ${totaalPrijs > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
+            <span className={` font-semibold ${totaalPrijs > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
               {totaalPrijs > 0 ? formatEuro(totaalPrijs) : '—'}
             </span>
           </td>
@@ -1230,12 +1230,12 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                           </span>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             {rij.groepCalcTotaal > 0 && (
-                              <span className="text-[10px] text-slate-400 font-mono">
+                              <span className="text-[10px] text-slate-400 ">
                                 Calc: {formatEuro(rij.groepCalcTotaal)}
                               </span>
                             )}
                             {rij.groepTotaal > 0 && (
-                              <span className="font-mono text-[11px] font-bold text-slate-700">{formatEuro(rij.groepTotaal)}</span>
+                              <span className=" text-[11px] font-bold text-slate-700">{formatEuro(rij.groepTotaal)}</span>
                             )}
                             {rij.groepCalcTotaal > 0 && rij.groepTotaal > 0 && (() => {
                               const diff = rij.groepTotaal - rij.groepCalcTotaal
@@ -1276,7 +1276,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                   if (id === 'totaalprijs') {
                     const grand = displayRijen.reduce((s, r) => s + r.totaalPrijs, 0)
                     return <td key={id} className="px-2 py-2 text-right bg-everts-50">
-                      <span className="font-mono text-sm font-bold text-everts">{formatEuro(grand)}</span>
+                      <span className=" text-sm font-bold text-everts">{formatEuro(grand)}</span>
                     </td>
                   }
                   return <td key={id} />
@@ -1344,7 +1344,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
                         {/* Bedrag */}
                         {totaalPrijs > 0 && (
-                          <span className="text-xs font-mono text-slate-500 flex-shrink-0 line-through">{formatEuro(totaalPrijs)}</span>
+                          <span className="text-xs  text-slate-500 flex-shrink-0 line-through">{formatEuro(totaalPrijs)}</span>
                         )}
 
                         {/* Herstel knop */}

@@ -267,7 +267,7 @@ export default async function BestuurderDetailPage(
                 {koppelingen.map((k) => (
                   <tr key={k.id}>
                     <td>
-                      <Link href={`/voertuigen/${k.voertuig_id}`} className="font-mono hover:underline">
+                      <Link href={`/voertuigen/${k.voertuig_id}`} className=" hover:underline">
                         {k.kenteken}
                       </Link>
                     </td>
@@ -376,7 +376,7 @@ export default async function BestuurderDetailPage(
                     <tr key={r.id}>
                       <td>{formatDatumMetDag(r.start_datum)}</td>
                       <td>{r.start_tijd.slice(0, 5)}</td>
-                      <td className="font-mono">{r.kenteken}</td>
+                      <td className="">{r.kenteken}</td>
                       <td className="max-w-[240px] truncate">{r.adres_stop ?? '—'}</td>
                       <td>{formatKm(r.afstand_km, 1)}</td>
                       <td>

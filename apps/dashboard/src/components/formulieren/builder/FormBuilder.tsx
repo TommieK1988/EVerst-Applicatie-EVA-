@@ -119,7 +119,7 @@ export default function FormBuilder({ template, versie }: Props) {
         {/* Back */}
         <button
           type="button"
-          onClick={() => router.push('/formulieren')}
+          onClick={() => router.push('/formulieren/sjablonen')}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'transparent', border: 'none', cursor: 'pointer',

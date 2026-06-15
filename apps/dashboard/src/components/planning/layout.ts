@@ -337,7 +337,7 @@ export function PeriodeNav({
         React.createElement('button', { onClick: () => nav(-1), style: NAV_BTN, title: 'Vorige periode' }, '‹'),
         onVandaag && React.createElement('button', {
           onClick: onVandaag,
-          style: { ...NAV_BTN, width: 'auto', padding: '0 8px', fontFamily: 'var(--font-mono)', fontSize: 10 },
+          style: { ...NAV_BTN, width: 'auto', padding: '0 8px', fontSize: 10 },
         }, 'Vandaag'),
         React.createElement('button', { onClick: () => nav(1), style: NAV_BTN, title: 'Volgende periode' }, '›'),
       ),
@@ -362,7 +362,7 @@ export function PeriodeNav({
               padding: '3px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
               background: view === v ? 'var(--accent)' : 'transparent',
               color: view === v ? 'white' : 'var(--fg-muted)',
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
             },
           }, VIEW_LABELS[v]),
         ),
@@ -403,7 +403,7 @@ export function PeriodeScrubber({
   },
     React.createElement('span', {
       style: {
-        fontFamily: 'var(--font-mono)', fontSize: 9,
+        fontSize: 9,
         color: KLEUR.fgMuted, marginRight: 8, whiteSpace: 'nowrap' as const,
       },
     }, String(jaar)),
@@ -426,7 +426,7 @@ export function PeriodeScrubber({
               ? 'color-mix(in srgb, var(--accent) 20%, transparent)'
               : 'transparent',
             color: isActief ? 'white' : KLEUR.fgMuted,
-            fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+            fontSize: 9, fontWeight: 700,
             textTransform: 'uppercase' as const,
           },
         }, mLabel)
@@ -482,7 +482,7 @@ export function PlanningShell({
         },
           React.createElement('span', {
             style: {
-              fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               color: KLEUR.fgMuted, textTransform: 'uppercase' as const, letterSpacing: '0.08em',
             },
           }, labelHeader),
@@ -515,7 +515,7 @@ export function PlanningShell({
                   position: 'absolute' as const, top: 0, bottom: 0,
                   left: sp.left, width: sp.width,
                   padding: '4px 8px',
-                  fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+                  fontSize: 11, fontWeight: 700,
                   color: KLEUR.fgMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em',
                   borderRight: `1px solid ${KLEUR.border}`,
                   overflow: 'hidden', whiteSpace: 'nowrap' as const, boxSizing: 'border-box' as const,
@@ -535,7 +535,6 @@ export function PlanningShell({
                   left: col.left, width: col.width,
                   display: 'flex', flexDirection: 'column' as const,
                   alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'var(--font-mono)',
                   color: col.isToday ? 'var(--accent)' : col.isWeekend ? KLEUR.fgMuted : 'var(--fg-soft, #4a555e)',
                   fontWeight: col.isToday ? 700 : 400,
                   background: col.isToday

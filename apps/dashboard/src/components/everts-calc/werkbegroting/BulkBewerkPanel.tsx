@@ -73,7 +73,7 @@ export default function BulkBewerkPanel({ geselecteerdeComponenten, onWijzig, on
             type="number" step="0.1" placeholder="bijv. -5" value={tariefPct}
             onChange={e => setTariefPct(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleTariefAanpassing()}
-            className="w-20 text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:border-everts/40 text-right font-mono"
+            className="w-20 text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:border-everts/40 text-right "
           />
           <span className="text-xs text-slate-400">%</span>
           <Button variant="secondary" size="sm" onClick={handleTariefAanpassing}>

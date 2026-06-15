@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { syncContacts, syncEmployees, syncProjects, type SyncResult, type SyncContactsResult } from '@/lib/bouw7/sync'
+import { syncAllPlanning } from '@/lib/bouw7/sync-planning'
 
 type Integratie = {
   id: string
@@ -92,18 +93,20 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; projects: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; projects: SyncResult; planning: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(): Promise<RunSyncResult> {
   try {
-    // Sync in volgorde: contacts → employees → projects (projects hebben FK refs)
+    // Sync in volgorde: contacts → employees → projects → planning
+    // (projects en planning hebben FK refs naar medewerkers/dossiers).
     const contacts = await syncContacts()
     const employees = await syncEmployees()
     const projects = await syncProjects()
+    const planning = await syncAllPlanning()
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + projects.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + projects.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + projects.nieuw + planning.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -115,7 +118,7 @@ export async function runFullSync(): Promise<RunSyncResult> {
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, projects }
+    return { ok: true, contacts, employees, projects, planning }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }
@@ -199,6 +202,62 @@ export async function debugBouw7Projects(): Promise<ProjectDebugResult> {
     return { ok: false, error: results.join(' | ') }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Fout' }
+  }
+}
+
+/**
+ * Fase-0 schrijftest (zie WRITE-ENDPOINTS.md). Toetst of onze Bouw7 API-key
+ * schrijfrechten heeft, **zonder data te wijzigen**: leest de huidige interne
+ * notitie van een (test)project en schrijft exact dezelfde waarde terug via
+ * `POST /project/set-internal-note`. Slaagt → write-scope aanwezig. 401/403 → niet.
+ */
+export type WriteCheckResult =
+  | { ok: true; projectId: number; message: string }
+  | { ok: false; error: string }
+
+export async function verifyBouw7WriteAccess(projectId?: number): Promise<WriteCheckResult> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('integraties')
+      .select('config')
+      .eq('naam', 'bouw7')
+      .maybeSingle()
+    if (!data) return { ok: false, error: 'Bouw7 is nog niet geconfigureerd.' }
+
+    const { Bouw7Client } = await import('@/lib/bouw7/client')
+    const config = data.config as Record<string, string>
+    const client = new Bouw7Client(config.api_key, config.app_name)
+
+    // Kies een testproject: meegegeven id, anders het eerste uit de lijst.
+    let id = projectId ?? null
+    if (id == null) {
+      const list = await client.get<{ items?: { id: number }[] }>('/list/projects', { limit: '1', offset: '0' })
+      id = (Array.isArray(list) ? (list as { id: number }[])[0] : list?.items?.[0])?.id ?? null
+    }
+    if (id == null) return { ok: false, error: 'Geen project gevonden om de schrijftest op uit te voeren.' }
+
+    // Huidige interne notitie lezen, zodat we 'm onveranderd kunnen terugschrijven.
+    // Response kan het project direct zijn of in `items[0]` zitten.
+    const project = await client.get<Record<string, unknown>>(`/project/${id}`)
+    const root = (Array.isArray(project.items) ? project.items[0] : project) as Record<string, unknown>
+    const current = (root?.note as string | null | undefined) ?? null
+
+    // Zelfde waarde terugschrijven — idempotent, geen feitelijke wijziging.
+    await client.post('/project/set-internal-note', { id, note: current })
+
+    return {
+      ok: true,
+      projectId: id,
+      message: `Schrijftoegang bevestigd op project ${id} (interne notitie ongewijzigd teruggeschreven).`,
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout'
+    // 401/403 = geen write-scope op de key.
+    if (/\b40[13]\b/.test(msg)) {
+      return { ok: false, error: `Geen schrijfrechten op de API-key (${msg}). Genereer in Bouw7 een key mét schrijf-scope.` }
+    }
+    return { ok: false, error: msg }
   }
 }
 

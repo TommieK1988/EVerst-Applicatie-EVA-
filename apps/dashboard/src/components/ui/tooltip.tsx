@@ -32,7 +32,7 @@ TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
 function TooltipKbd({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-[3px] bg-neutral-700 px-[5px] py-px font-mono text-[10px] text-neutral-200">
+    <span className="rounded-[3px] bg-neutral-700 px-[5px] py-px  text-[10px] text-neutral-200">
       {children}
     </span>
   )

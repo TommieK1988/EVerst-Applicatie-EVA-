@@ -169,7 +169,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           </Link>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-slate-400 font-mono">{projectNummer}</p>
+          <p className="text-xs text-slate-400 ">{projectNummer}</p>
           <h1 className="text-sm font-semibold text-slate-800 truncate">{projectNaam} — Werkbegroting</h1>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${

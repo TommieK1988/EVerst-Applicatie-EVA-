@@ -168,7 +168,7 @@ function CaoSelectie({
   const bruto = geselecteerdeTrede?.bruto_maand
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
     display: 'block', marginBottom: 4,
   }
@@ -216,7 +216,7 @@ function CaoSelectie({
               ))}
             </select>
             {bruto != null && (
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', marginTop: 4, fontWeight: 600 }}>
+              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, fontWeight: 600 }}>
                 ≈ € {bruto.toLocaleString('nl-NL', { minimumFractionDigits: 2 })} bruto/maand
               </div>
             )}
@@ -284,7 +284,7 @@ export default function MedewerkerGegevensForm({
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
     display: 'block', marginBottom: 4,
   }
@@ -340,7 +340,7 @@ export default function MedewerkerGegevensForm({
               <span style={valueStyle}>
                 {[caoNaam, medewerker.cao_schaal && `Schaal ${medewerker.cao_schaal}`, medewerker.cao_trede && `Trede ${medewerker.cao_trede}`].filter(Boolean).join(' · ')}
                 {gekozenTrede?.bruto_maand != null && (
-                  <span style={{ marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
                     € {gekozenTrede.bruto_maand.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}/mnd
                   </span>
                 )}
@@ -352,7 +352,7 @@ export default function MedewerkerGegevensForm({
             {medewerker.kleur ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 20, height: 20, borderRadius: 4, background: medewerker.kleur, border: '1px solid var(--border)' }} />
-                <span style={{ ...valueStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{medewerker.kleur}</span>
+                <span style={{ ...valueStyle, fontSize: 12 }}>{medewerker.kleur}</span>
               </div>
             ) : (
               <span style={mutedStyle}>Automatisch (op basis van naam)</span>
@@ -376,7 +376,7 @@ export default function MedewerkerGegevensForm({
 
         {/* Persoonlijk */}
         <section>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Persoonlijk</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Persoonlijk</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>Voornaam</label>
@@ -423,7 +423,7 @@ export default function MedewerkerGegevensForm({
 
         {/* Organisatie */}
         <section>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Organisatie</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Organisatie</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>Functie</label>
@@ -485,7 +485,7 @@ export default function MedewerkerGegevensForm({
                   }}
                   placeholder="#3b82f6 — leeg = automatisch"
                   maxLength={7}
-                  style={{ width: 160, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                  style={{ width: 160, fontSize: 12 }}
                 />
                 {state.kleur && (
                   <Button type="button" variant="ghost" size="sm" onClick={() => set('kleur', '')}>
@@ -502,7 +502,7 @@ export default function MedewerkerGegevensForm({
 
         {/* Tarieven + CAO */}
         <section>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Beloning</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Beloning</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>Kostprijs / uur</label>

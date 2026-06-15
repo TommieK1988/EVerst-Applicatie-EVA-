@@ -88,7 +88,7 @@ function DefinitieForm({
       <CardBody>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div>
-            <label className="block mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Naam</label>
+            <label className="block mb-1  text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Naam</label>
             <Input
               value={state.naam}
               onChange={e => set('naam', e.target.value)}
@@ -97,7 +97,7 @@ function DefinitieForm({
             />
           </div>
           <div>
-            <label className="block mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Type</label>
+            <label className="block mb-1  text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Type</label>
             <Select
               value={state.veldtype}
               onValueChange={v => set('veldtype', v as AttribuutVeldtype)}
@@ -113,7 +113,7 @@ function DefinitieForm({
             </Select>
           </div>
           <div>
-            <label className="block mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Volgorde</label>
+            <label className="block mb-1  text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500">Volgorde</label>
             <Input
               type="number"
               value={state.volgorde}
@@ -203,7 +203,7 @@ export default function AttribuutDefinitiesBeheer({
             padding: '4px 14px', gap: 12,
           }}>
             {['Naam', 'Type', 'Volgorde', 'Verplicht', 'Actief', ''].map(h => (
-              <span key={h} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</span>
+              <span key={h} style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</span>
             ))}
           </div>
 
@@ -226,10 +226,10 @@ export default function AttribuutDefinitiesBeheer({
                   }}
                 >
                   <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>{d.naam}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{VELDTYPE_LABELS[d.veldtype]}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{d.volgorde}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{d.verplicht ? 'Ja' : 'Nee'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: d.actief ? 'var(--accent)' : 'var(--fg-muted)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{VELDTYPE_LABELS[d.veldtype]}</span>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{d.volgorde}</span>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{d.verplicht ? 'Ja' : 'Nee'}</span>
+                  <span style={{ fontSize: 11, color: d.actief ? 'var(--accent)' : 'var(--fg-muted)' }}>
                     {d.actief ? 'Ja' : 'Nee'}
                   </span>
                   <div style={{ display: 'flex', gap: 4 }}>

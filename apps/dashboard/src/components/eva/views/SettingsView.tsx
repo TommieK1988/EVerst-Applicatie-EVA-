@@ -32,7 +32,7 @@ function ModelCard({ name, tagline, meta, selected }: { name: string; tagline: s
         )}
       </div>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', marginBottom: 8 }}>{tagline}</div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.05em' }}>{meta}</div>
+      <div style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.05em' }}>{meta}</div>
     </button>
   );
 }
@@ -100,7 +100,7 @@ export default function SettingsView() {
     }}>
       {/* Sidebar nav */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0 10px 10px' }}>Settings</div>
+        <div style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0 10px 10px' }}>Settings</div>
         {SECTIONS.map(s => (
           <button key={s.key} onClick={() => setActive(s.key)} style={{
             padding: '8px 10px',

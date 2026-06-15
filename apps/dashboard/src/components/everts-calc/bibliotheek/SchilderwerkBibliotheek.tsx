@@ -50,7 +50,7 @@ function NumInput({ value, onChange, cls = '', step = '0.0001', min = '0' }: {
       type="number" step={step} min={min}
       defaultValue={value}
       onBlur={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v) }}
-      className={`w-full text-right font-mono text-xs px-1 py-0.5 rounded border border-transparent
+      className={`w-full text-right  text-xs px-1 py-0.5 rounded border border-transparent
         hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent hover:bg-white focus:bg-white ${cls}`}
     />
   )
@@ -155,8 +155,8 @@ function MateriaalBibliotheekZoeker({ onSelect, cls = '' }: {
                   <div className="font-medium text-slate-700">{m.omschrijving}</div>
                   <div className="flex items-center gap-2 text-slate-400 mt-0.5">
                     {m.leverancier && <span>{m.leverancier}</span>}
-                    {m.artikelnummer && <span className="font-mono">{m.artikelnummer}</span>}
-                    <span className="ml-auto font-mono text-everts">€{m.kostprijs.toFixed(2)}/{m.eenheid}</span>
+                    {m.artikelnummer && <span className="">{m.artikelnummer}</span>}
+                    <span className="ml-auto  text-everts">€{m.kostprijs.toFixed(2)}/{m.eenheid}</span>
                   </div>
                 </button>
               ))
@@ -192,7 +192,7 @@ function ArbeidNormRij({ norm, onRefresh }: {
       <td className="py-0.5 w-20">
         <NumInput value={norm.hour_rate} step="0.01" onChange={v => deb(() => wijzigArbeidNorm(norm.id, { hour_rate: v }))} />
       </td>
-      <td className="py-0.5 pr-1 text-right text-xs font-mono text-slate-500 w-20">
+      <td className="py-0.5 pr-1 text-right text-xs  text-slate-500 w-20">
         € {kosten}
       </td>
       <td className="py-0.5 pr-1 w-6">
@@ -242,7 +242,7 @@ function MateriaalNormRij({ norm, onRefresh }: {
       <td className="py-0.5 w-20">
         <NumInput value={norm.unit_price} step="0.01" onChange={v => deb(() => wijzigMateriaalNorm(norm.id, { unit_price: v }))} />
       </td>
-      <td className="py-0.5 pr-1 text-right text-xs font-mono text-slate-500 w-20">
+      <td className="py-0.5 pr-1 text-right text-xs  text-slate-500 w-20">
         € {(norm.quantity_per_unit * norm.unit_price).toFixed(2)}
       </td>
       <td className="py-0.5 pr-1 w-6">
@@ -323,7 +323,7 @@ function SchilderReceptCard({ combinatie, onRefresh }: {
         <div>
           <span className="text-sm font-semibold text-slate-800">{combinatie.behandeling.naam}</span>
           {combinatie.behandeling.code && (
-            <span className="ml-2 text-xs font-mono text-slate-400">{combinatie.behandeling.code}</span>
+            <span className="ml-2 text-xs  text-slate-400">{combinatie.behandeling.code}</span>
           )}
         </div>
         <Button
@@ -471,7 +471,7 @@ function InlineCodeEdit({ code, displayCode, onSave }: {
           e.stopPropagation()
         }}
         onClick={e => e.stopPropagation()}
-        className="w-16 text-[10px] font-mono px-1 py-0.5 border border-everts/40 rounded focus:outline-none bg-white"
+        className="w-16 text-[10px]  px-1 py-0.5 border border-everts/40 rounded focus:outline-none bg-white"
       />
     )
   }
@@ -482,7 +482,7 @@ function InlineCodeEdit({ code, displayCode, onSave }: {
     <span
       onClick={e => { e.stopPropagation(); setEditing(true) }}
       title={code ? `Code: ${code} — klik om te wijzigen` : 'Klik om code toe te voegen'}
-      className={`flex-shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded cursor-pointer transition-colors min-w-[2.5rem] text-center ${
+      className={`flex-shrink-0 text-[10px]  font-semibold px-1.5 py-0.5 rounded cursor-pointer transition-colors min-w-[2.5rem] text-center ${
         shown
           ? 'text-everts bg-everts/10 hover:bg-everts/20'
           : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
@@ -528,7 +528,7 @@ function TypeFormulier({ onderdeelId, onOpslaan, onAnnuleer }: {
     <div className="px-3 py-2 space-y-1.5 border-b border-slate-100 bg-slate-50/50">
       <div className="flex gap-1.5">
         <input
-          className={`${inpCls} w-16 flex-shrink-0 font-mono uppercase`}
+          className={`${inpCls} w-16 flex-shrink-0  uppercase`}
           placeholder="Code"
           value={code}
           onChange={e => setCode(e.target.value.toUpperCase())}
@@ -711,7 +711,7 @@ function BehandelingenTab({
               value={addCode}
               onChange={e => setAddCode(e.target.value.toUpperCase())}
               placeholder="bijv. BAS1"
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 font-mono uppercase focus:outline-none focus:border-everts/40"
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5  uppercase focus:outline-none focus:border-everts/40"
             />
           </div>
           <div className="flex-1 min-w-40">
@@ -982,7 +982,7 @@ export default function SchilderwerkBibliotheek({ onderdelen: initOnderdelen, ty
           {showAddOnderdeel && (
             <div className="px-3 py-2 flex gap-1.5 border-b border-slate-100">
               <input
-                className={`${inpCls} w-16 flex-shrink-0 font-mono uppercase`}
+                className={`${inpCls} w-16 flex-shrink-0  uppercase`}
                 placeholder="Code"
                 value={addOnderdeelCode}
                 onChange={e => setAddOnderdeelCode(e.target.value.toUpperCase())}
@@ -1103,7 +1103,7 @@ export default function SchilderwerkBibliotheek({ onderdelen: initOnderdelen, ty
                           ) : (
                             <span className="flex-1 text-left text-xs">{type.naam}</span>
                           )}
-                          <span className="text-[10px] text-slate-400 font-mono flex-shrink-0 mr-0.5">{type.eenheid}</span>
+                          <span className="text-[10px] text-slate-400  flex-shrink-0 mr-0.5">{type.eenheid}</span>
                           {editNaam?.id !== type.id && (
                             <button
                               onClick={e => { e.stopPropagation(); setEditNaam({ id: type.id, value: type.naam, entity: 'type' }) }}
@@ -1156,7 +1156,7 @@ export default function SchilderwerkBibliotheek({ onderdelen: initOnderdelen, ty
                 <p className="text-xs text-slate-400">{geselecteerdOnderdeel?.naam}</p>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-semibold text-slate-800">{geselecteerdType?.naam}</h2>
-                  <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{geselecteerdType?.eenheid}</span>
+                  <span className="text-xs  text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{geselecteerdType?.eenheid}</span>
                   {geselecteerdType?.formule && (
                     <span className="text-xs text-slate-500">= {formuleTekst(geselecteerdType.formule)} × Aantal</span>
                   )}

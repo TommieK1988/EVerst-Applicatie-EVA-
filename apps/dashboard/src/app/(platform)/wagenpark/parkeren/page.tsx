@@ -149,7 +149,7 @@ export default async function ParkerenPage(
                         timeStyle: 'short',
                       })}
                     </td>
-                    <td className="font-mono">{r.kenteken}</td>
+                    <td className="">{r.kenteken}</td>
                     <td className="text-slate-700">{r.bestuurder_naam_raw ?? '—'}</td>
                     <td className="max-w-[280px] truncate">{r.parkeerlocatie ?? '—'}</td>
                     <td className={'text-right ' + (dur > 3600 ? 'text-orange-700' : '')}>

@@ -301,7 +301,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
   }
 
   const afhBadge = (type: AfhankelijkheidsType) => (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent)18', padding: '1px 5px', borderRadius: 3 }}>{type}</span>
+    <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent)18', padding: '1px 5px', borderRadius: 3 }}>{type}</span>
   )
 
   return (
@@ -362,7 +362,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
                     <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: medKleur(e.medewerker_id), flexShrink: 0 }} />
                       <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1 }}>{medNaam(e)}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{e.start_dt.slice(0, 10)} → {e.eind_dt.slice(0, 10)} · {e.uren}u</span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{e.start_dt.slice(0, 10)} → {e.eind_dt.slice(0, 10)} · {e.uren}u</span>
                       <button style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }} onClick={() => itemVer(e.id)}>×</button>
                     </div>
                   ))}
@@ -376,7 +376,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
 
             {voorgangers.length > 0 && (
               <div style={{ marginBottom: 8 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Voorgangers</span>
+                <span style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Voorgangers</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
                   {voorgangers.map(a => {
                     const va = alleActiviteiten.find(t => t.id === a.van_activiteit_id)
@@ -384,7 +384,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
                       <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)' }}>
                         {afhBadge(a.type)}
                         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1 }}>{va?.titel ?? '—'}</span>
-                        {a.vertraging_dagen > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>+{a.vertraging_dagen}d</span>}
+                        {a.vertraging_dagen > 0 && <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>+{a.vertraging_dagen}d</span>}
                         <button style={{ ...S.iconBtn, width: 18, height: 18, fontSize: 10 }} onClick={() => delAfh(a.id)}>×</button>
                       </div>
                     )
@@ -395,7 +395,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
 
             {opvolgers.length > 0 && (
               <div style={{ marginBottom: 8 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Opvolgers</span>
+                <span style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Opvolgers</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
                   {opvolgers.map(a => {
                     const na = alleActiviteiten.find(t => t.id === a.naar_activiteit_id)
@@ -403,7 +403,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
                       <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)' }}>
                         {afhBadge(a.type)}
                         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1 }}>{na?.titel ?? '—'}</span>
-                        {a.vertraging_dagen > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>+{a.vertraging_dagen}d</span>}
+                        {a.vertraging_dagen > 0 && <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>+{a.vertraging_dagen}d</span>}
                         <button style={{ ...S.iconBtn, width: 18, height: 18, fontSize: 10 }} onClick={() => delAfh(a.id)}>×</button>
                       </div>
                     )
@@ -414,7 +414,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
 
             {/* Nieuwe voorganger toevoegen */}
             <div style={{ marginTop: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Voorganger toevoegen</span>
+              <span style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Voorganger toevoegen</span>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 72px 60px auto', gap: 6, alignItems: 'center' }}>
                 <select className="eva-input" style={{ fontSize: 12 }} value={nieuwVanId} onChange={e => setNieuwVanId(e.target.value)}>
                   <option value="">Selecteer activiteit…</option>
@@ -425,7 +425,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
                 </select>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <input className="eva-input" type="number" min="0" style={{ width: 42, fontSize: 12 }} value={nieuwLag} onChange={e => setNieuwLag(e.target.value)} />
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>d</span>
+                  <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>d</span>
                 </div>
                 <button className="eva-btn-primary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={addAfh} disabled={savingAfh || !nieuwVanId}>{savingAfh ? '…' : '+'}</button>
               </div>
@@ -807,7 +807,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, onEdit
         {heeftBereik && (
           <div data-bar="fase"
             title={`${fase.naam} — sleep om hele fase te verschuiven`}
-            style={{ position: 'absolute', top: 8, bottom: 8, left: left + shiftPx, width, borderRadius: 4, background: 'rgba(120,120,140,0.18)', border: '1px dashed rgba(80,80,100,0.6)', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', zIndex: dragging ? 8 : 1 }}
+            style={{ position: 'absolute', top: 8, bottom: 8, left: left + shiftPx, width, borderRadius: 4, background: 'rgba(120,120,140,0.18)', border: '1px dashed rgba(80,80,100,0.6)', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--fg-muted)', zIndex: dragging ? 8 : 1 }}
             onPointerDown={startDrag} onPointerMove={onMove} onPointerUp={onUp}>
             {dragging && delta !== 0 && (
               <span style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 3, fontWeight: 700 }}>{delta > 0 ? `+${delta}` : delta}d</span>
@@ -948,7 +948,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
           <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', color: 'var(--fg-muted)', fontSize: 14, userSelect: 'none', touchAction: 'none', opacity: 0.45 }}
             onPointerDown={dragHandleDown} onPointerMove={dragHandleMove} onPointerUp={dragHandleUp}
             title="Sleep om te herordenen">⠿</div>
-          <div style={{ width: 24, flexShrink: 0, textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{nr}</div>
+          <div style={{ width: 24, flexShrink: 0, textAlign: 'center', fontSize: 11, color: 'var(--fg-muted)' }}>{nr}</div>
           {items.length > 0 ? (
             <button onClick={onToggleUitklap}
               title={uitgeklapt ? 'Inklappen' : `${items.length} planitem${items.length === 1 ? '' : 's'} tonen`}
@@ -962,9 +962,9 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activiteit.titel}</span>
-              {isOA && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8650c4', background: 'rgba(134,80,196,0.08)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>OA</span>}
+              {isOA && <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8650c4', background: 'rgba(134,80,196,0.08)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>OA</span>}
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 1 }}>
+            <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 1 }}>
               {isOA && onderaannemer ? onderaannemer.naam : uursoort?.naam ?? ''}
               {activiteit.geschatte_uren != null ? ` · ${activiteit.geschatte_uren}u geschat` : ''}
               {(() => {
@@ -976,7 +976,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
               })()}
             </div>
           </div>
-          <div style={{ width: 36, flexShrink: 0, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)', marginRight: 8 }}>{duurDagen != null ? `${duurDagen}d` : ''}</div>
+          <div style={{ width: 36, flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--fg-muted)', marginRight: 8 }}>{duurDagen != null ? `${duurDagen}d` : ''}</div>
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
             <button title="Bewerken" onClick={onEdit} style={S.iconBtn}>✎</button>
             <button title="Toewijzen" onClick={() => setToewijzenOpen(true)} style={S.iconBtn}>+</button>
@@ -1061,7 +1061,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
     return (
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
         <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', opacity: 0.5 }}>Taken</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', opacity: 0.5 }}>Taken</span>
         </div>
         <div style={{ flex: 1, minWidth: totalW, height: 24 }} />
       </div>
@@ -1071,7 +1071,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
       <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
           Taken ({zichtbaar.length})
         </span>
       </div>
@@ -1594,7 +1594,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
             {/* Spans rij */}
             <div style={{ position: 'relative', height: 24, borderBottom: '1px solid var(--border)' }}>
               {spans.map(sp => (
-                <div key={sp.key} style={{ position: 'absolute', top: 0, bottom: 0, left: sp.left, width: sp.width, padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderRight: '1px solid var(--border)', overflow: 'hidden', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
+                <div key={sp.key} style={{ position: 'absolute', top: 0, bottom: 0, left: sp.left, width: sp.width, padding: '4px 8px', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderRight: '1px solid var(--border)', overflow: 'hidden', whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
                   {sp.label}
                 </div>
               ))}
@@ -1602,7 +1602,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
             {/* Cols rij */}
             <div style={{ position: 'relative', height: 28 }}>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'absolute', top: 0, bottom: 0, left: col.left, width: col.width, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', color: col.isToday ? 'var(--accent)' : col.isWeekend ? 'var(--fg-muted)' : 'var(--fg-soft)', fontWeight: col.isToday ? 700 : 400, background: col.isToday ? 'rgba(31,122,58,0.08)' : col.isWeekend ? 'rgba(0,0,0,0.04)' : 'transparent', borderRight: '1px solid var(--border)', borderLeft: col.isBorder ? '1px solid var(--border)' : 'none', boxSizing: 'border-box', overflow: 'hidden' }}>
+                <div key={col.key} style={{ position: 'absolute', top: 0, bottom: 0, left: col.left, width: col.width, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: col.isToday ? 'var(--accent)' : col.isWeekend ? 'var(--fg-muted)' : 'var(--fg-soft)', fontWeight: col.isToday ? 700 : 400, background: col.isToday ? 'rgba(31,122,58,0.08)' : col.isWeekend ? 'rgba(0,0,0,0.04)' : 'transparent', borderRight: '1px solid var(--border)', borderLeft: col.isBorder ? '1px solid var(--border)' : 'none', boxSizing: 'border-box', overflow: 'hidden' }}>
                   {col.subLabel && <span style={{ fontSize: 7, opacity: 0.6, lineHeight: 1 }}>{col.subLabel}</span>}
                   <span style={{ fontSize: 11, fontWeight: col.isToday ? 700 : 500 }}>{col.label}</span>
                 </div>
@@ -1727,7 +1727,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
           {medewerkers.filter(m => items.some(i => i.medewerker_id === m.id)).map(m => (
             <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 12, height: 12, borderRadius: 2, background: medKleur(m.id), flexShrink: 0 }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>{[m.voornaam, m.achternaam].filter(Boolean).join(' ')}</span>
+              <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{[m.voornaam, m.achternaam].filter(Boolean).join(' ')}</span>
             </div>
           ))}
         </div>
@@ -1764,8 +1764,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
 
 const S = {
   backdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 } as React.CSSProperties,
-  lbl: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  colHdr: { fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' } as React.CSSProperties,
+  lbl: { fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 } as React.CSSProperties,
+  colHdr: { fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' } as React.CSSProperties,
   iconBtn: { width: 26, height: 26, border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', color: 'var(--fg-muted)', fontSize: 13, cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0 } as React.CSSProperties,
   dlgTitle: { fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, margin: '0 0 4px', color: 'var(--fg)' } as React.CSSProperties,
   dlgSub: { fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: '0 0 14px' } as React.CSSProperties,

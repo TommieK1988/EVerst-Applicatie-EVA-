@@ -1117,6 +1117,7 @@ export type Database = {
             | null
           bedrag_excl_btw: number | null
           bedrag_incl_btw: number | null
+          btw_splitsing: Json | null
           bouw7_categorie: string | null
           bouw7_categorie_id: number | null
           bouw7_categorie_naam: string | null
@@ -1176,6 +1177,7 @@ export type Database = {
             | null
           bedrag_excl_btw?: number | null
           bedrag_incl_btw?: number | null
+          btw_splitsing?: Json | null
           bouw7_categorie?: string | null
           bouw7_categorie_id?: number | null
           bouw7_categorie_naam?: string | null
@@ -1235,6 +1237,7 @@ export type Database = {
             | null
           bedrag_excl_btw?: number | null
           bedrag_incl_btw?: number | null
+          btw_splitsing?: Json | null
           bouw7_categorie?: string | null
           bouw7_categorie_id?: number | null
           bouw7_categorie_naam?: string | null
@@ -3142,6 +3145,9 @@ export type Database = {
       planning_activiteiten: {
         Row: {
           benodigde_skills: string[]
+          bouw7_id: string | null
+          bouw7_laatst_sync: string | null
+          bron: string
           created_at: string
           deadline: string | null
           dossier_id: string
@@ -3160,6 +3166,9 @@ export type Database = {
         }
         Insert: {
           benodigde_skills?: string[]
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           deadline?: string | null
           dossier_id: string
@@ -3178,6 +3187,9 @@ export type Database = {
         }
         Update: {
           benodigde_skills?: string[]
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           deadline?: string | null
           dossier_id?: string
@@ -3227,6 +3239,9 @@ export type Database = {
       }
       planning_fasen: {
         Row: {
+          bouw7_id: string | null
+          bouw7_laatst_sync: string | null
+          bron: string
           created_at: string
           dossier_id: string
           id: string
@@ -3235,6 +3250,9 @@ export type Database = {
           volgorde: number
         }
         Insert: {
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           dossier_id: string
           id?: string
@@ -3243,6 +3261,9 @@ export type Database = {
           volgorde?: number
         }
         Update: {
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           dossier_id?: string
           id?: string
@@ -3263,6 +3284,9 @@ export type Database = {
       planning_items: {
         Row: {
           activiteit_id: string
+          bouw7_id: string | null
+          bouw7_laatst_sync: string | null
+          bron: string
           created_at: string
           eind_dt: string
           id: string
@@ -3276,6 +3300,9 @@ export type Database = {
         }
         Insert: {
           activiteit_id: string
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           eind_dt: string
           id?: string
@@ -3289,6 +3316,9 @@ export type Database = {
         }
         Update: {
           activiteit_id?: string
+          bouw7_id?: string | null
+          bouw7_laatst_sync?: string | null
+          bron?: string
           created_at?: string
           eind_dt?: string
           id?: string

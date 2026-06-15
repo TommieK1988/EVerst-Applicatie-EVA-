@@ -640,7 +640,7 @@ function WordTemplatePaneel({
                       className="w-full px-3 py-2 hover:bg-everts/5 transition-colors group text-left"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <code className={`text-xs px-1.5 py-0.5 rounded font-mono min-w-0 break-all ${
+                        <code className={`text-xs px-1.5 py-0.5 rounded  min-w-0 break-all ${
                           v.startsWith('#') ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                           v.startsWith('/') ? 'bg-slate-100 text-slate-500 border border-slate-200' :
                           v.startsWith('^') ? 'bg-purple-50 text-purple-700 border border-purple-100' :

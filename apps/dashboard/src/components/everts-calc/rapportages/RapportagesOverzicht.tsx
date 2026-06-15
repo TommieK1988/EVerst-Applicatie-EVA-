@@ -153,15 +153,15 @@ export default function RapportagesOverzicht() {
 
                 return (
                   <tr key={project.id}>
-                    <td><span className="font-mono text-xs text-slate-400">{project.code}</span></td>
+                    <td><span className=" text-xs text-slate-400">{project.code}</span></td>
                     <td>
                       <span className="font-medium text-slate-800 text-sm">{project.naam}</span>
                     </td>
                     <td><span className="text-sm text-slate-500">{project.opdrachtgever}</span></td>
                     <td><StatusBadge status={project.status} type="project" size="sm" /></td>
-                    <td className="text-right font-mono text-sm text-slate-600">{formatEuro(kostprijs)}</td>
-                    <td className="text-right font-mono font-semibold text-sm">{formatEuro(verkoopprijs)}</td>
-                    <td className={`text-right font-mono font-bold text-sm ${mKleur.tekst}`}>
+                    <td className="text-right  text-sm text-slate-600">{formatEuro(kostprijs)}</td>
+                    <td className="text-right  font-semibold text-sm">{formatEuro(verkoopprijs)}</td>
+                    <td className={`text-right  font-bold text-sm ${mKleur.tekst}`}>
                       {formatPct(marge_pct)}
                     </td>
                     <td>
@@ -181,9 +181,9 @@ export default function RapportagesOverzicht() {
                   <td colSpan={4} className="px-3 py-2.5 text-sm text-everts-dark">
                     Totaal ({gesorteerd.length} projecten)
                   </td>
-                  <td className="text-right px-3 font-mono text-sm text-everts-dark">{formatEuro(totaalKostprijs)}</td>
-                  <td className="text-right px-3 font-mono font-bold text-sm text-everts-dark">{formatEuro(totaalVerkoopprijs)}</td>
-                  <td className={`text-right px-3 font-mono font-bold text-sm ${getMargeKleur(gemiddeldeMarge).tekst}`}>
+                  <td className="text-right px-3  text-sm text-everts-dark">{formatEuro(totaalKostprijs)}</td>
+                  <td className="text-right px-3  font-bold text-sm text-everts-dark">{formatEuro(totaalVerkoopprijs)}</td>
+                  <td className={`text-right px-3  font-bold text-sm ${getMargeKleur(gemiddeldeMarge).tekst}`}>
                     {formatPct(gemiddeldeMarge)}
                   </td>
                   <td />

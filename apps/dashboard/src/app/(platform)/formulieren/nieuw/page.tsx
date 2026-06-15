@@ -50,7 +50,7 @@ export default function NieuwFormulierPage() {
     <div style={{ padding: '32px', maxWidth: 520 }}>
       <button
         type="button"
-        onClick={() => router.push('/formulieren')}
+        onClick={() => router.push('/formulieren/sjablonen')}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           background: 'transparent', border: 'none', cursor: 'pointer',
@@ -112,7 +112,7 @@ export default function NieuwFormulierPage() {
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <button
             type="button"
-            onClick={() => router.push('/formulieren')}
+            onClick={() => router.push('/formulieren/sjablonen')}
             style={{
               padding: '9px 18px', borderRadius: 7,
               border: '1px solid var(--border)',

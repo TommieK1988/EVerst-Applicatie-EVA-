@@ -116,7 +116,7 @@ export default function ProjectDetail({ projectId }: Props) {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm text-slate-400 font-mono">#{project.project_number}</span>
+              <span className="text-sm text-slate-400 ">#{project.project_number}</span>
               <StatusBadge status={project.status} type="project" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{project.name}</h1>

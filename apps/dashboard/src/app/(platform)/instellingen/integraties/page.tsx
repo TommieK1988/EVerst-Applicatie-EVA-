@@ -26,7 +26,7 @@ export default async function Page() {
 
         {!result.ok && result.missingTable ? (
           <Alert tone="warning" title="Integraties-tabel ontbreekt">
-            Draai de migratie <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>20260415_platform_core.draft.sql</code> in de Supabase SQL Editor.
+            Draai de migratie <code style={{ fontSize: 11 }}>20260415_platform_core.draft.sql</code> in de Supabase SQL Editor.
           </Alert>
         ) : !result.ok ? (
           <Alert tone="error">{result.error}</Alert>

@@ -18,7 +18,7 @@ function Rij({ label, bedrag, accent = false }: { label: React.ReactNode; bedrag
   return (
     <div className={`flex items-center justify-between py-1 ${accent ? 'font-semibold' : ''}`}>
       <span className={`text-sm ${accent ? 'text-slate-800' : 'text-slate-500'}`}>{label}</span>
-      <span className={`font-mono text-sm ${accent ? 'text-slate-900' : 'text-slate-700'}`}>
+      <span className={` text-sm ${accent ? 'text-slate-900' : 'text-slate-700'}`}>
         {formatEuro(bedrag)}
       </span>
     </div>
@@ -114,7 +114,7 @@ export default function CalculatieInstellingenKaarten({ projectId }: { projectId
             <span className="text-sm text-slate-500">
               AK {scenario.opslag_algemene_kosten.toFixed(1)}%
             </span>
-            <span className="font-mono text-sm text-blue-700">
+            <span className=" text-sm text-blue-700">
               + {formatEuro(opslag_euro)}
             </span>
           </div>
@@ -137,7 +137,7 @@ export default function CalculatieInstellingenKaarten({ projectId }: { projectId
                   <span className="text-sm text-slate-500">
                     {pct}% over {formatEuro(vp)}
                   </span>
-                  <span className="font-mono text-sm text-green-700">
+                  <span className=" text-sm text-green-700">
                     + {formatEuro(btw)}
                   </span>
                 </div>

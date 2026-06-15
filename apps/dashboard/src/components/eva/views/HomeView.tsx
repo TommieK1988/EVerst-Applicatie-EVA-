@@ -12,7 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { IconSparkle, IconArrowRight } from '../Icons';
 import {
   TasksWidget, WeatherWidget, RemindersWidget,
-  ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget,
+  ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
 } from '../widgets';
 import type { AgendaWidgetItem } from '../widgets';
 import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
@@ -77,18 +77,18 @@ function getWeekNumber(): number {
 
 /* ── Widget config ────────────────────────────────────────── */
 
-type WidgetId = 'tasks' | 'weather' | 'reminders' | 'projects' | 'agenda' | 'dossier' | 'news' | 'summary';
+type WidgetId = 'tasks' | 'weather' | 'reminders' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
 
 const DEFAULT_SPANS: Record<WidgetId, number> = {
   tasks: 5, weather: 4, reminders: 3,
-  projects: 5, agenda: 4, dossier: 3,
-  news: 8, summary: 4,
+  projects: 4, dossier: 4, servicedesk: 4,
+  agenda: 4, news: 4, summary: 4,
 };
 
 const DEFAULT_ORDER: WidgetId[] = [
   'tasks', 'weather', 'reminders',
-  'projects', 'agenda', 'dossier',
-  'news', 'summary',
+  'projects', 'dossier', 'servicedesk',
+  'agenda', 'news', 'summary',
 ];
 
 const MIN_COLS = 3; // 3/12 = 25% ≥ 20% minimum
@@ -283,11 +283,12 @@ export interface HomeViewProps {
   aanvragen: DossierRij[];
   offertes: DossierRij[];
   opdrachten: DossierRij[];
+  servicedesk: DossierRij[];
   agendaItems: AgendaWidgetItem[];
 }
 
 export default function HomeView({
-  displayName, taken, aanvragen, offertes, opdrachten, agendaItems,
+  displayName, taken, aanvragen, offertes, opdrachten, servicedesk, agendaItems,
 }: HomeViewProps) {
   const router = useRouter();
   const [greeting, setGreeting] = React.useState('Goedemorgen');
@@ -309,7 +310,9 @@ export default function HomeView({
       if (savedOrder) {
         const parsed: WidgetId[] = JSON.parse(savedOrder);
         if (Array.isArray(parsed) && parsed.every(id => DEFAULT_SPANS[id] !== undefined)) {
-          setWidgetOrder(parsed);
+          // Voeg nieuwe widgets toe die nog niet in een opgeslagen layout zaten.
+          const merged = [...parsed, ...DEFAULT_ORDER.filter(id => !parsed.includes(id))];
+          setWidgetOrder(merged);
         }
       }
       const savedSpans = localStorage.getItem('eva-widget-spans');
@@ -385,6 +388,7 @@ export default function HomeView({
       case 'projects': return <ProjectsWidget opdrachten={opdrachten}/>;
       case 'agenda':   return <AgendaWidget items={agendaItems}/>;
       case 'dossier':  return <DossierWidget aanvragen={aanvragen}/>;
+      case 'servicedesk': return <ServicedeskWidget dossiers={servicedesk}/>;
       case 'news':     return <NewsWidget/>;
       case 'summary':  return (
         <SummaryCard

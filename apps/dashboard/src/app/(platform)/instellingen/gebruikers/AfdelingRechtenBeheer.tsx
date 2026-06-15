@@ -44,7 +44,7 @@ function AfdelingRij({ afdeling }: { afdeling: MedewerkerAfdeling }) {
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+    fontSize: 10, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
   }
 

@@ -169,7 +169,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
         </Link>
 
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-sm font-semibold text-slate-700">{quote.quote_nummer}</span>
+          <span className=" text-sm font-semibold text-slate-700">{quote.quote_nummer}</span>
           {isIntern && (
             <span className="text-xs px-2 py-0.5 rounded-md border bg-purple-50 text-purple-700 border-purple-200 font-medium flex-shrink-0">
               INTERN

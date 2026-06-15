@@ -57,7 +57,7 @@ export default function DossierTogglesBeheer({ initial }: { initial: ToggleDefin
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{def.label}</div>
-              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'var(--fg-muted)' }}>{def.sleutel}</div>
+              <div style={{ fontFamily: 'var(--, monospace)', fontSize: 11, color: 'var(--fg-muted)' }}>{def.sleutel}</div>
             </div>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--fg-muted)' }}>
               <Switch checked={def.actief} onCheckedChange={(v: boolean) => zetActief(def.id, v)} />

@@ -204,7 +204,7 @@ export default function RegistratiesTable({
                         {[r.location_block, r.floor, r.room_or_unit].filter(Boolean).join(' · ') || '-'}
                       </div>
                       {r.element_number && (
-                        <div className="text-xs text-slate-400 font-mono">{r.element_number}</div>
+                        <div className="text-xs text-slate-400 ">{r.element_number}</div>
                       )}
                     </td>
                     <td className="px-4 py-3">

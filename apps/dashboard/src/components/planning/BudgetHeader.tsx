@@ -28,14 +28,14 @@ export default function BudgetHeader({ regels }: { regels: BudgetRij[] }) {
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg)' }}>
                 {r.planning_uursoorten?.naam ?? '—'}
               </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}>
+              <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>
                 {r.geplande_uren.toFixed(1)}u / {r.begrote_uren.toFixed(1)}u
               </span>
             </div>
             <div style={{ height: 6, background: 'var(--bg-active)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: kleur, borderRadius: 3, transition: 'width 0.3s' }} />
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 9, color: 'var(--fg-muted)', marginTop: 2 }}>
               {restant > 0 ? `${restant.toFixed(1)}u beschikbaar` : 'Vol'}
             </div>
           </div>

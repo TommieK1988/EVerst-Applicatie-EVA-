@@ -107,7 +107,7 @@ export default function RapportagesPage() {
 
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="font-semibold text-slate-800">{project.name}</div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">#{project.project_number}</div>
+                        <div className="text-xs text-slate-400  mt-0.5">#{project.project_number}</div>
                       </td>
 
                       <td className="px-5 py-3.5 whitespace-nowrap text-slate-600">

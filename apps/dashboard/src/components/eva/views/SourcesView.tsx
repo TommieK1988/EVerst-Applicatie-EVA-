@@ -5,7 +5,7 @@ import { IconPlus, IconSync, IconWarn, IconOffice, IconBuilding, IconFile, IconE
 function StatBlock({ label, value, sub, warn }: { label: string; value: string; sub: string; warn?: boolean }) {
   return (
     <div style={{ background: 'var(--bg-elev)', padding: '16px 18px' }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 400, letterSpacing: '-0.02em', color: warn ? 'var(--accent-2)' : 'var(--fg)', marginTop: 6 }}>{value}</div>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>{sub}</div>
     </div>
@@ -28,7 +28,7 @@ function SourceCard({ name, category, last, records, desc, color, Icon, synced }
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--fg)' }}>{name}</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 1 }}>{category}</div>
+          <div style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 1 }}>{category}</div>
         </div>
         {warn ? (
           <span style={{ padding: '3px 8px', background: 'oklch(0.95 0.04 65)', color: '#856020', fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, borderRadius: 4 }}>Aandacht nodig</span>
@@ -116,7 +116,7 @@ export default function SourcesView() {
         {AVAILABLE.map((a, i) => (
           <div key={i} style={{ padding: 14, border: '1px dashed var(--border)', borderRadius: 10, background: 'transparent', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>{a.name}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{a.cat}</div>
+            <div style={{ fontSize: 10, color: 'var(--fg-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{a.cat}</div>
           </div>
         ))}
       </div>

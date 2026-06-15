@@ -262,7 +262,7 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                         step={1}
                         value={opslagPct}
                         onChange={(e) => setOpslagPct(Math.max(0, Number(e.target.value)))}
-                        className="w-16 text-right px-2 py-1 text-sm border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
+                        className="w-16 text-right px-2 py-1 text-sm border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 "
                       />
                       <span className="text-sm text-amber-700 font-medium">%</span>
                     </div>

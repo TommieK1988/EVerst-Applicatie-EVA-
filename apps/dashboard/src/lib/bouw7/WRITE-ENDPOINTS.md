@@ -1,0 +1,196 @@
+# Bouw7 API — Schrijven (write) naar Bouw7
+
+Planningsreferentie voor het **two-way** maken van de Bouw7-koppeling.
+Tegenhanger van [`ENDPOINTS.md`](./ENDPOINTS.md) (dat beschrijft alleen het **lezen**).
+
+> **Status (juni 2026):** Bouw7 (Heimdall) heeft een **volledige write-API** — 104 schrijf-operaties.
+> EVA gebruikt die nog **niet**: `Bouw7Client` kan alleen `get()`. Dit document is de basis om
+> per veld/functionaliteit incrementeel two-way sync op te bouwen.
+> Bron: Swagger-spec `https://heimdall.bouw7.nl/api/spec.json`.
+
+---
+
+## 1. Hoe schrijven werkt (mechaniek)
+
+| Aspect | Werking |
+|---|---|
+| **API** | Alle schrijfacties zitten in **Heimdall** (`heimdall.bouw7.nl`). Athena en Apollo zijn read-only. |
+| **Auth** | Dezelfde Bearer-token als nu. Geen aparte write-credentials — maar de **app-key heeft mogelijk schrijf-scope nodig** (verifiëren, zie §5). |
+| **Create vs. update** | Eén `POST` per resource = **upsert**. `id` in de body aanwezig → **update**; weggelaten → **create**. |
+| **Verwijderen** | `DELETE` op het resource-endpoint met een `Condensed{Resource}`-body (alleen `{ id }`). |
+| **Statuswijziging** | `PUT .../update-status/{status}` (contracten, in-/verkoopfacturen) — status in de URL, geen body. |
+| **Nested referenties** | Verwijzingen (`contact`, `employee`, `status`, …) zijn `Condensed*`-objecten die **alleen `id` vereisen**: bv. `"status": { "id": 42 }`. De overige velden zijn echo/optioneel. |
+| **Client-uitbreiding** | `Bouw7Client` heeft een `post()/put()/delete()` nodig met dezelfde token- en 401-retry-logica als `_get()`. |
+
+**Skelet dat nog gebouwd moet worden in [`client.ts`](./client.ts):**
+```ts
+async post<T>(path: string, body: unknown): Promise<T> {
+  await this.ensureAuth()
+  const res = await fetch(new URL(path, HEIMDALL_URL).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) { await this.login(); return this.post<T>(path, body) }
+  if (!res.ok) throw new Error(`Bouw7 POST ${path} (${res.status}): ${await res.text().catch(() => '')}`)
+  return res.json()
+}
+// put(path, status) en del(path, body) analoog
+```
+
+---
+
+## 2. EVA-relevante write-resources (met velden)
+
+Legenda: **REQ** = verplicht · `Ref{id}` = `Condensed*` referentie, alleen `id` nodig.
+Audit-velden (`createdAt/By`, `updatedAt/By`) zijn read-only output — niet meesturen.
+
+### `POST /contact` — relatie (klant / leverancier / onderaannemer)
+Body: `FullContact` · DELETE-body: `CondensedContact { id }`
+
+| Veld | Type | | Opmerking |
+|---|---|---|---|
+| `id` | int | opt | aanwezig = update |
+| `name` | string | **REQ** | |
+| `contactType` | `ContactType { id* }` | **REQ** | bepaalt klant/leverancier/oa |
+| `streetName`, `houseNumber`, `zipCode`, `city`, `countryCode` | string | opt | adres (huisnummer los) |
+| `email`, `phoneNumber`, `mobileNumber` | string | opt | |
+| `cocNumber`, `vatNumber`, `oin`, `glnNumber` | string | opt | KvK / BTW / OIN / GLN |
+| `accountNumber`, `debtorNumber` | string | opt | IBAN / debiteurnr |
+| `isVatShifted` | bool | opt | BTW verlegd |
+| `hourlyRate`, `sellingHourlyRate`, `agreedHourlyRate` | string | opt | tarieven |
+| `information`, `planning` | string | opt | vrije tekst |
+| `glAccountCodePurchase`, `glAccountCodeInvoice` | string | opt | grootboek (Exact) |
+| `invoiceMail`, `invoiceSubject`, `reminderMail`, `invoiceDeliveryType`, `invoiceUblVersion` | — | opt | facturatie-instellingen |
+| `hourTypePrices[]`, `surcharges`, `contactDivisions[]`, `customAttributeValues[]` | array/obj | opt | |
+
+### `POST /contact/{contact}/contact-person` — contactpersoon
+Body: `ContactPerson` · `{contact}` = parent-contact-id in de URL · DELETE: `CondensedContactPerson { id }`
+
+| Veld | Type | | |
+|---|---|---|---|
+| `id` | int | opt | aanwezig = update |
+| `firstName`, `lastName` | string | **REQ** | |
+| `email`, `phoneNumber` | string | opt | |
+| `jobTitle`, `salutation` | string | opt | functie / aanhef |
+| `streetName`, `houseNumber`, `zipCode`, `city` | string | opt | |
+
+### `POST /project` — project (= EVA-dossier)
+Body: `Project` · DELETE: `CondensedProject { id }` (soft-delete; zie `/restore-project`, `/hard-delete-project`)
+
+| Veld | Type | | Opmerking |
+|---|---|---|---|
+| `id` | int | opt | aanwezig = update |
+| `type` | int | **REQ** | projecttype |
+| `status` | `CondensedProjectStatus { id* }` | **REQ** | EVA-statusmapping omgekeerd toepassen |
+| `name` | string | opt | |
+| `parentId` | int | opt | subproject |
+| `projectNumber`, `fullProjectNumber`, `reference` | string | opt | |
+| `streetName`, `houseNumber`, `zipCode`, `city`, `countryCode`, `workAddress` | string | opt | werkadres |
+| `contact` | `CondensedContact { id }` | opt | klant |
+| `contactPerson` | `CondensedContactPerson { id }` | opt | |
+| `category` | `CondensedProjectCategory { id }` | opt | |
+| `branch` | `CondensedBranch { id }` | opt | vestiging |
+| `projectLeader`, `workPlanner`, `executor` | `CondensedEmployee { id }` | opt | rollen |
+| `employees[]` | `CondensedEmployee[]` | opt | toegewezen team |
+| `startDate`, `endDate`, `deliveryDate` | string (ATOM) | opt | |
+| `fixedPrice`, `generalCostsAmount`, `additionalWork`, `provisionalCosts`, `profitAndRisk` | string | opt | financieel |
+| `hoursEstimate`, `hoursEstimatePerHourTypes[]` | string/array | opt | urenraming |
+| `information`, `note`, `planning` | string | opt | |
+| `customAttributeValues[]` | array | opt | maatwerkvelden |
+
+### `POST /project/set-internal-note` — interne notitie (laagrisico-test!)
+Body: `UpdateInternalNote` → `{ id*: <projectId>, note: string }`. Ideaal eerste test van schrijfrechten.
+
+### `POST /project/hour-log` — urenregistratie
+Body: `HourLog`. Vereist een actieve user gekoppeld aan een medewerker.
+
+| Veld | Type | | |
+|---|---|---|---|
+| `id` | int | opt | aanwezig = update |
+| `project` | `CondensedProject { id* }` | **REQ** | |
+| `logHours` | string | **REQ** | aantal uren |
+| `logDate` | string | **REQ** | datum |
+| `hourType` | `CondensedHourType { id* }` | **REQ** | uursoort |
+| `employee` | `CondensedEmployee { id }` | opt | |
+| `contact` | `CondensedContact { id }` | opt | |
+| `comments` | string | opt | |
+| `hourlyRate`, `invoiceAmount` | string | opt | |
+| `startTime`, `endTime` | string | opt | alleen bij dagstaat-modus |
+| `approved`, `paidOff` | bool | opt | |
+
+### `POST /quotation` — offerte
+Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, `contact{id}`, `quotationDate`, `language` (bv. `nl-NL`), `layout`. Regels via `chapters[] → QuotationLineChapter`. AK/W&R via `overheads`/`profitAndRisk` (+ hun `CondensedVatTariff`). **Complex** — laatste fase.
+
+### `POST /project/delivery-ticket` — bon/leverbon
+Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `ticketDate`, `purchaseType` (int), `processed` (bool). Optioneel `cost`, `description`, `file`.
+
+### Facturatie-termijnen
+- `POST /project/{project}/invoice-term-statement` — termijnstaat (`InvoiceTermStatement`)
+- `POST /project/{statement}/invoice-term` — losse termijn (`ProjectInvoiceTerm`)
+
+---
+
+## 3. Volledige write-catalogus (104 ops, gegroepeerd)
+
+> Patroon overal gelijk: `POST` = upsert · `DELETE` = `Condensed*{id}` · `PUT .../update-status/{status}`.
+
+**Projecten** `POST/DELETE /project` · `POST /project/set-internal-note` · `POST /restore-project/{id}` · `DELETE /hard-delete-project/{id}` · `POST/DELETE /project/delivery-ticket` · `POST /project/{project}/invoice-term-statement` · `POST /project/{statement}/invoice-term` · `DELETE /project/term-statement` · `POST /project/hour-log` · `POST /project/{project}/contract-order-line` *(deprecated)*
+
+**Relaties** `POST/DELETE /contact` · `POST/DELETE /contact/{contact}/contact-person`
+
+**Offertes** `POST /quotation` · `POST/DELETE /quotation/reminder`
+
+**Verkoopfacturen** `POST /invoice` · `DELETE /invoice/{invoice}` · `POST /invoice/{invoice}/make-attachments`
+
+**Inkoopfacturen** `POST/DELETE /purchase-invoice` · `PUT /purchase-invoice/{id}/update-status/{status}`
+
+**Contracten — inkoop** `POST/DELETE /contracts/purchase-order` · `PUT .../{id}/update-status/{status}` · `POST/DELETE /contracts/purchase-order/contract-term`
+
+**Contracten — onderaanneming** `POST/DELETE /contracts/subcontractor` · `PUT .../{id}/update-status/{status}` · `POST /contracts/subcontract/contract-term` · `DELETE /contracts/subcontractor/contract-term`
+
+**Goedkeuringen (workflow)** `POST /approval/{id}/vote-on-contract` · `POST /approval/{id}/vote-on-purchase-invoice` · `POST/DELETE /approval-template/criteria` · `POST /approval-template/match-criteria` · `POST/DELETE /approval-template/workflow` · `POST /approval-template/default-settings`
+
+**Organisatie/stamdata** `POST /organization/branch` · `POST/DELETE /organization/department` (+ `/work-in-progress-settings`) · `POST/DELETE /organization/employee` · `POST/DELETE /organization/project-category` · `POST/DELETE /organization/hour-type` · `POST /organization/hour-type-price` · `POST/DELETE /organization/project-file-category` · `POST/DELETE /organization/custom-attribute(s)` · `POST/DELETE /organization/text-template` · `POST/DELETE /organization/quotation-status`
+
+**Verlof/kalender** `POST/DELETE /day-off` · `POST/DELETE /organization/day-off-per-employee`
+
+**Materiaal** `POST/DELETE /material` · `POST/DELETE /material-booking` · `POST/DELETE /material-per-unit` · `POST/DELETE /material-unit`
+
+**Materieel (equipment)** `POST/DELETE /equipment` · `POST/DELETE /equipment-booking` · `POST/DELETE /equipment-group` · `POST/DELETE /equipment-unit`
+
+**Resources** `POST/DELETE /resource` · `POST/DELETE /resource-booking` · `POST/DELETE /resource-group` · `POST/DELETE /resource-unit`
+
+**Afval (waste)** `POST/DELETE /waste` · `POST /import/waste-per-unit` · `DELETE /waste-per-unit` · `POST/DELETE /waste-unit` · `DELETE /waste-booking`
+
+**Overig** `POST /mileage-registration` (km-registratie) · `POST/DELETE /property-asset` (vastgoedobject) · `POST /security-object` (bewakingscode-object) · `POST /storage/{modelType}/{modelId}` + `DELETE /storage/file` (bestanden/uploads)
+
+---
+
+## 4. Voorgestelde incrementele uitrol
+
+Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande sync**.
+
+| Fase | Wat | Endpoint(s) | Waarom hier |
+|---|---|---|---|
+| **0** | **Verifieer schrijfrechten** | `POST /project/set-internal-note` op een testproject | Laagste risico (1 tekstveld), bewijst of de app-key write-scope heeft |
+| **1** | **Notitie + losse velden op dossier** | `POST /project` (update: alleen gewijzigde velden + `id`/`status`/`type`) | Bouwt direct op bestaande project-sync; heft het [Bouw7-readonly-velden besluit](../../../../../.claude/projects/C--Users-t-kamminga-everts-platform/memory/project_bouw7_readonly_velden.md) per veld op |
+| **2** | **Contactpersonen** | `POST/DELETE /contact/{contact}/contact-person` | Klein schema, duidelijke EVA-tegenhanger (`contactpersonen`) |
+| **3** | **Relaties** | `POST/DELETE /contact` | Groter schema, raakt facturatie-instellingen |
+| **4** | **Urenregistratie** | `POST /project/hour-log` | Hoge businesswaarde (mobiele buitendienst), maar vereist medewerker-koppeling + uursoort-mapping |
+| **5** | **Bonnen / leverbonnen** | `POST /project/delivery-ticket` | |
+| **6** | **Offertes** | `POST /quotation` (+ chapters/lines) | Meest complexe schema; pas als calculatie-flow in EVA staat |
+| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg |
+
+**Per fase telkens dezelfde stappen:** (a) `Condensed*`-mapper EVA→Bouw7 schrijven, (b) `client.post/del` aanroepen, (c) resultaat (id) terugschrijven naar `bouw7_id`, (d) `logSync()`, (e) `sync_vergrendeld`/`bron`-velden respecteren om schrijf-loops te voorkomen.
+
+---
+
+## 5. Open punten / valkuilen
+
+- **Schrijf-scope van de app-key onbekend.** Eerst fase 0 draaien; bij 403 → in Bouw7 (`start.bouw7.nl/my-account/api-access`) een key met schrijfrechten regelen.
+- **Plan-items schrijven lijkt niet te bestaan.** We lezen planning via Apollo (read-only); er is geen `plan-item`-write-endpoint. Uren schrijf je via `/project/hour-log` (≠ plan-items). Verifiëren of planning terugschrijven überhaupt kan.
+- **Loop-preventie.** Lees-sync en schrijf-sync mogen elkaar niet triggeren. Hergebruik `bron` + `sync_vergrendeld` (al aanwezig in het datamodel) zodat door EVA gewijzigde velden niet door de lees-sync overschreven worden en vice versa.
+- **Idempotentie.** Upsert op `id` is veilig; create zonder `id` twee keer = dubbele records. Altijd eerst `bouw7_id` checken.
+- ~~Achterhaalde "write-API nog niet bekend"-notitie~~ — gecorrigeerd in [`ENDPOINTS.md`](./ENDPOINTS.md) (Apollo-sectie). `client.ts` heeft nu `post()/put()/del()`.
+- **Audit/fiscaal.** Verzonden facturen zijn onveranderbaar (creditnota i.p.v. wijzigen) — relevant vanaf fase 7.

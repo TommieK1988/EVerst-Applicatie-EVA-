@@ -7,8 +7,36 @@ import type {
   DbTask, DbTaskList, DbTaskComment, DbTaskAssignee,
   TaakMetDetails, ActielijstMetTaken, UrgenteTaak,
 } from '@/lib/taken/supabase/database.types'
+import { getActieveDossierContext, type DossierContext } from '@/lib/dossiers/actief'
 
 export type { UrgenteTaak }
+
+/** Platte rij voor het Taken-overzicht: taak + dossier-context. */
+export type TaakRij = {
+  id: string
+  titel: string
+  status: string
+  prioriteit: string
+  deadline: string | null
+  lijst_naam: string | null
+  toegewezen_namen: string[]
+  toegewezen_ids: string[]
+  // Dossier-context (afgevlakt voor kolommen/slicers)
+  dossier_id: string
+  dossiernummer: string | null
+  dossier_titel: string
+  dossier_sectie: DossierContext['sectie']
+  dossier_fase: string
+  dossier_substatus: string | null
+  klant_naam: string | null
+  projectleider_naam: string | null
+  uitvoerder_naam: string | null
+  calculator_naam: string | null
+  werkvoorbereider_naam: string | null
+  werkadres_stad: string | null
+  verwacht_startdatum: string | null
+  verwacht_einddatum: string | null
+}
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
 
@@ -321,6 +349,111 @@ export async function getLosseTakenVoorDossier(dossier_id: string): Promise<Taak
     comments_count:    0,
     attachments_count: 0,
   })) as unknown as TaakMetDetails[]
+}
+
+/**
+ * Alle taken (los én binnen actielijsten) van actieve dossiers, plat met dossier-context.
+ * Voor het Taken-overzicht. Alleen vanuit Server Components aanroepen (admin client).
+ */
+export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { ids, context } = await getActieveDossierContext()
+  if (ids.length === 0) return []
+
+  // Actielijst-instanties van actieve dossiers → map lijst_id → {dossier_id, naam}
+  const { data: lijsten } = await supabase
+    .from('task_lists')
+    .select('id, naam, dossier_id')
+    .in('dossier_id', ids)
+  const lijstMap = new Map<string, { dossier_id: string; naam: string }>(
+    (lijsten ?? []).map((l: { id: string; naam: string; dossier_id: string }) =>
+      [l.id, { dossier_id: l.dossier_id, naam: l.naam }]),
+  )
+  const lijstIds = [...lijstMap.keys()]
+
+  // Taken: direct aan dossier (losse taken) + taken binnen die actielijsten.
+  const TAAK_SELECT = '*, task_assignees ( user_id )'
+  const queries: Promise<{ data: Record<string, unknown>[] | null }>[] = [
+    supabase.from('tasks').select(TAAK_SELECT)
+      .in('dossier_id', ids).is('parent_task_id', null),
+  ]
+  if (lijstIds.length > 0) {
+    queries.push(
+      supabase.from('tasks').select(TAAK_SELECT)
+        .in('lijst_id', lijstIds).is('parent_task_id', null),
+    )
+  }
+  const resultaten = await Promise.all(queries)
+
+  // Dedupe op task-id (een taak kan in beide queries vallen mag niet, maar wees veilig).
+  const taakMap = new Map<string, Record<string, unknown>>()
+  for (const res of resultaten) {
+    for (const t of (res.data ?? [])) taakMap.set(t.id as string, t)
+  }
+  const taken = [...taakMap.values()]
+  if (taken.length === 0) return []
+
+  // Namen van toegewezen medewerkers ophalen.
+  const userIds = [...new Set(
+    taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
+  )]
+  let namenMap: Record<string, string> = {}
+  if (userIds.length > 0) {
+    const { data: meds } = await supabase
+      .from('medewerkers')
+      .select('auth_user_id, voornaam, tussenvoegsel, achternaam')
+      .in('auth_user_id', userIds)
+    namenMap = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (meds ?? []).map((m: any) => [
+        m.auth_user_id,
+        [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      ]),
+    )
+  }
+
+  const rijen: TaakRij[] = []
+  for (const t of taken) {
+    const lijstId = (t.lijst_id as string | null) ?? null
+    const lijst = lijstId ? lijstMap.get(lijstId) : undefined
+    // Effectief dossier: directe koppeling vóór de koppeling via de lijst.
+    const dossierId = (t.dossier_id as string | null) ?? lijst?.dossier_id ?? null
+    if (!dossierId) continue
+    const ctx = context.get(dossierId)
+    if (!ctx) continue
+
+    const assignees = ((t.task_assignees as { user_id: string }[]) ?? [])
+    const toegewezen_ids = assignees.map(a => a.user_id)
+
+    rijen.push({
+      id: t.id as string,
+      titel: t.titel as string,
+      status: t.status as string,
+      prioriteit: t.prioriteit as string,
+      deadline: (t.deadline as string | null) ?? null,
+      lijst_naam: lijst?.naam ?? null,
+      toegewezen_ids,
+      toegewezen_namen: toegewezen_ids.map(id => namenMap[id]).filter(Boolean),
+      dossier_id: dossierId,
+      dossiernummer: ctx.dossiernummer,
+      dossier_titel: ctx.titel,
+      dossier_sectie: ctx.sectie,
+      dossier_fase: ctx.fase_label,
+      dossier_substatus: ctx.substatus_label,
+      klant_naam: ctx.klant_naam,
+      projectleider_naam: ctx.projectleider_naam,
+      uitvoerder_naam: ctx.uitvoerder_naam,
+      calculator_naam: ctx.calculator_naam,
+      werkvoorbereider_naam: ctx.werkvoorbereider_naam,
+      werkadres_stad: ctx.werkadres_stad,
+      verwacht_startdatum: ctx.verwacht_startdatum,
+      verwacht_einddatum: ctx.verwacht_einddatum,
+    })
+  }
+
+  return rijen
 }
 
 export async function getSjablonen(): Promise<DbTaskList[]> {

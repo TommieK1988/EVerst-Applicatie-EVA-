@@ -313,7 +313,7 @@ export default async function ParkeerZonesPage(
                     <td>
                       <Link
                         href={`/parkeren/zones?kenteken=${encodeURIComponent(v.kenteken)}`}
-                        className="font-mono hover:underline"
+                        className=" hover:underline"
                       >
                         {v.kenteken}
                       </Link>
@@ -353,7 +353,7 @@ export default async function ParkeerZonesPage(
               <tbody>
                 {perVoertuigZone.map((r, i) => (
                   <tr key={i}>
-                    <td className="font-mono">{r.kenteken}</td>
+                    <td className="">{r.kenteken}</td>
                     <td>{r.zone}</td>
                     <td className="text-right">{r.aantal}</td>
                     <td className="text-right">

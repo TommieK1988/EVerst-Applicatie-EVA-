@@ -12,7 +12,6 @@ import { PageHeader, Card, CardBody } from '@/components/ui'
 export const metadata = { title: 'Mijn account' }
 
 const sectionKicker: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)',
   fontSize: 9,
   fontWeight: 700,
   color: 'var(--accent)',

@@ -27,7 +27,7 @@ function MargePct({ pct }: { pct: number | null }) {
   if (pct === null) return <span style={{ color: 'var(--neutral-400)' }}>—</span>
   const kleur = pct > 0 ? 'var(--success-600)' : pct < 0 ? 'var(--error-600)' : 'var(--neutral-500)'
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: kleur, fontWeight: 600 }}>
+    <span style={{ fontSize: 12, color: kleur, fontWeight: 600 }}>
       {pct.toFixed(1)}%
     </span>
   )
@@ -37,7 +37,7 @@ function MargeEur({ marge, heeftRegels }: { marge: number; heeftRegels: boolean 
   if (!heeftRegels) return <span style={{ color: 'var(--neutral-400)' }}>—</span>
   const kleur = marge > 0 ? 'var(--success-600)' : marge < 0 ? 'var(--error-600)' : 'var(--neutral-500)'
   return (
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: kleur, fontWeight: 600 }}>
+    <span style={{ fontSize: 12, color: kleur, fontWeight: 600 }}>
       € {formatEur(marge)}
     </span>
   )
@@ -78,7 +78,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       sorteerWaarde: q => q.quote_nummer,
       render: q => (
         <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--neutral-400)' }}>
+          <div style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
             {q.quote_nummer}
           </div>
           <div style={{ fontWeight: 600, color: 'var(--neutral-900)', fontSize: 13, lineHeight: 1.3 }}>
@@ -139,14 +139,14 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       render: q => (
         <div style={{ textAlign: 'right' }}>
           {q.totaal_inc_btw > 0 ? (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--neutral-900)' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--neutral-900)' }}>
               € {formatEur(q.totaal_inc_btw)}
             </span>
           ) : (
             <span style={{ color: 'var(--neutral-400)' }}>—</span>
           )}
           {q.subtotaal_ex_btw > 0 && q.subtotaal_ex_btw !== q.totaal_inc_btw && (
-            <div style={{ fontSize: 10, color: 'var(--neutral-400)', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ fontSize: 10, color: 'var(--neutral-400)' }}>
               € {formatEur(q.subtotaal_ex_btw)} excl.
             </div>
           )}
@@ -196,7 +196,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       filterType: 'tekst',
       sorteerWaarde: q => q.referentie ?? '',
       render: q => (
-        <span style={{ fontSize: 12, color: 'var(--neutral-500)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--neutral-500)' }}>
           {q.referentie ?? '—'}
         </span>
       ),
@@ -208,7 +208,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       sorteerWaarde: q => q.totaal_kostprijs,
       render: q => (
         q.totaal_kostprijs > 0 ? (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-700)' }}>
+          <span style={{ fontSize: 12, color: 'var(--neutral-700)' }}>
             € {formatEur(q.totaal_kostprijs)}
           </span>
         ) : (

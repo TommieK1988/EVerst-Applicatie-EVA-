@@ -198,7 +198,7 @@ function ComponentRegelRij({
     <input
       type="number" step={step} min="0"
       value={val === 0 ? '' : +val.toFixed(2)}
-      className={`w-full text-xs text-right font-mono px-1 py-0.5 rounded border-0 bg-transparent
+      className={`w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
         hover:bg-white hover:border hover:border-slate-200
         focus:bg-white focus:border focus:border-everts/40 focus:outline-none ${cls}`}
       onChange={e => onChange(parseFloat(e.target.value) || 0)}
@@ -263,7 +263,7 @@ function ComponentRegelRij({
                   placeholder="Offertenr..."
                   value={comp.offertenummer ?? ''}
                   onChange={e => onWijzig({ offertenummer: e.target.value })}
-                  className={`w-24 font-mono ${inputCls}`}
+                  className={`w-24  ${inputCls}`}
                 />
               </>
             )}
@@ -318,7 +318,7 @@ function ComponentRegelRij({
       case 'bedrag_ab': return (
         <td key={id} className={tdBase} style={tdSt}>
           {comp.type === 'arbeid' && compBedrag > 0 && (
-            <span className="font-mono text-xs text-blue-700 font-semibold">{formatEuro(compBedrag)}</span>
+            <span className=" text-xs text-blue-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
       )
@@ -334,7 +334,7 @@ function ComponentRegelRij({
       case 'bedrag_mt': return (
         <td key={id} className={tdBase} style={tdSt}>
           {comp.type === 'materieel' && compBedrag > 0 && (
-            <span className="font-mono text-xs text-red-700 font-semibold">{formatEuro(compBedrag)}</span>
+            <span className=" text-xs text-red-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
       )
@@ -350,25 +350,25 @@ function ComponentRegelRij({
       case 'bedrag_oa': return (
         <td key={id} className={tdBase} style={tdSt}>
           {comp.type === 'onderaanneming' && compBedrag > 0 && (
-            <span className="font-mono text-xs text-purple-700 font-semibold">{formatEuro(compBedrag)}</span>
+            <span className=" text-xs text-purple-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
       )
       case 'tot_uren': return (
         <td key={id} className={tdBase} style={tdSt}>
           {comp.type === 'arbeid' && normEdit > 0 && regelHoeveelheid > 0 && (
-            <span className="font-mono text-xs text-blue-600">{formatGetal(normEdit * regelHoeveelheid, 2)}</span>
+            <span className=" text-xs text-blue-600">{formatGetal(normEdit * regelHoeveelheid, 2)}</span>
           )}
         </td>
       )
       case 'kp_eenh': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {compKpPe > 0 && <span className="font-mono text-xs text-slate-600">{formatEuro(compKpPe)}</span>}
+          {compKpPe > 0 && <span className=" text-xs text-slate-600">{formatEuro(compKpPe)}</span>}
         </td>
       )
       case 'tot_kp': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {compBedrag > 0 && <span className="font-mono text-xs text-slate-700 font-semibold">{formatEuro(compBedrag)}</span>}
+          {compBedrag > 0 && <span className=" text-xs text-slate-700 font-semibold">{formatEuro(compBedrag)}</span>}
         </td>
       )
       case 'opslag_pct': return (
@@ -382,7 +382,7 @@ function ComponentRegelRij({
                 const v = e.target.value === '' ? undefined : parseFloat(e.target.value)
                 onWijzig({ opslag_pct: v !== undefined && isNaN(v) ? undefined : v })
               }}
-              className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-everts/40 focus:bg-white focus:outline-none text-slate-600 placeholder-slate-300"
+              className="w-full text-xs text-right  px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-everts/40 focus:bg-white focus:outline-none text-slate-600 placeholder-slate-300"
             />
             <span className="text-[10px] text-slate-300 flex-shrink-0">%</span>
           </div>
@@ -404,11 +404,11 @@ function ComponentRegelRij({
                 }
               }}
               onBlur={() => setVpEenhEdit(null)}
-              className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none text-everts"
+              className="w-full text-xs text-right  px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none text-everts"
             />
           ) : (
             <span
-              className="font-mono text-xs text-everts cursor-text block w-full text-right px-1 py-0.5"
+              className=" text-xs text-everts cursor-text block w-full text-right px-1 py-0.5"
               onClick={() => setVpEenhEdit(compVpPe === 0 ? '' : String(+compVpPe.toFixed(2)))}
               title="Klik om aan te passen"
             >
@@ -433,11 +433,11 @@ function ComponentRegelRij({
                 }
               }}
               onBlur={() => setTotVpEdit(null)}
-              className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none font-bold text-everts"
+              className="w-full text-xs text-right  px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none font-bold text-everts"
             />
           ) : (
             <span
-              className="font-mono text-xs text-everts font-bold cursor-text block w-full text-right px-1 py-0.5"
+              className=" text-xs text-everts font-bold cursor-text block w-full text-right px-1 py-0.5"
               onClick={() => setTotVpEdit(compVpTotaal === 0 ? '' : String(+compVpTotaal.toFixed(2)))}
               title="Klik om aan te passen"
             >
@@ -545,7 +545,7 @@ function OpslaanAlsReceptModal({
             </p>
           )}
           <div className="text-xs text-slate-400 space-y-0.5">
-            <div>Eenheid: <span className="font-mono text-slate-600">{regel.eenheid}</span></div>
+            <div>Eenheid: <span className=" text-slate-600">{regel.eenheid}</span></div>
             <div>{componenten.length} {componenten.length === 1 ? 'norm' : 'normen'} ({componenten.filter(c => c.type === 'arbeid').length} arb, {componenten.filter(c => c.type === 'materieel').length} mat, {componenten.filter(c => c.type === 'onderaanneming').length} OA)</div>
           </div>
         </div>
@@ -716,7 +716,7 @@ function CalculatieregelRij({
     <input
       type="number" step={step} min="0"
       value={val === 0 ? '' : (decimals !== undefined ? +val.toFixed(decimals) : val)}
-      className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border-0 bg-transparent
+      className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
         hover:bg-slate-50 hover:border hover:border-slate-200
         focus:bg-white focus:border focus:border-everts/40 focus:outline-none
         text-slate-700 placeholder-slate-200"
@@ -726,7 +726,7 @@ function CalculatieregelRij({
 
   const euro = (v: number, cls = 'text-slate-600') =>
     v !== 0
-      ? <span className={`font-mono text-xs ${cls}`}>{formatEuro(v)}</span>
+      ? <span className={` text-xs ${cls}`}>{formatEuro(v)}</span>
       : <span className="text-slate-200 text-xs">—</span>
 
   const renderCell = (id: ColId): React.ReactNode => {
@@ -831,7 +831,7 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {regel.meetstaat_aggregaat_id ? (
             <span
-              className="w-full text-xs text-right font-mono font-semibold px-1 py-0.5 block text-teal-600"
+              className="w-full text-xs text-right  font-semibold px-1 py-0.5 block text-teal-600"
               title="Hoeveelheid vastgesteld door meetstaat — pas aan in de meetstaat"
             >
               {regel.hoeveelheid === 0 ? '—' : regel.hoeveelheid.toFixed(2)}
@@ -841,7 +841,7 @@ function CalculatieregelRij({
               <input
                 type="number" step="0.01" min="0"
                 value={regel.hoeveelheid === 0 ? '' : +regel.hoeveelheid.toFixed(2)}
-                className="w-full text-xs text-right font-mono font-semibold px-1 py-0.5 rounded border-0 bg-transparent
+                className="w-full text-xs text-right  font-semibold px-1 py-0.5 rounded border-0 bg-transparent
                   hover:bg-slate-50 hover:border hover:border-slate-200
                   focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-800"
                 onChange={e => onWijzig(regel.id, { hoeveelheid: parseFloat(e.target.value) || 0 })}
@@ -866,7 +866,7 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {regel.meetstaat_aggregaat_id ? (
             <span
-              className="text-xs font-mono text-teal-600 font-semibold px-1 py-0.5 block"
+              className="text-xs  text-teal-600 font-semibold px-1 py-0.5 block"
               title="Eenheid vastgesteld door meetstaat"
             >
               {regel.eenheid}
@@ -919,7 +919,7 @@ function CalculatieregelRij({
       case 'tot_uren': return (
         <td key={id} className={`px-2 py-1 text-right ${base}`} style={tdSt}>
           {uren_totaal > 0
-            ? <span className="font-mono text-xs text-blue-700 font-semibold">{formatGetal(uren_totaal, 2)}</span>
+            ? <span className=" text-xs text-blue-700 font-semibold">{formatGetal(uren_totaal, 2)}</span>
             : <span className="text-slate-200">—</span>
           }
         </td>
@@ -940,21 +940,21 @@ function CalculatieregelRij({
       case 'uur_eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
-            ? <span className="text-xs font-mono text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe, 2) : ''}</span>
+            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe, 2) : ''}</span>
             : ni(abUren, onUrenChange, '0.01', 2)}
         </td>
       )
       case 'min_eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
-            ? <span className="text-xs font-mono text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe * 60, 2) : ''}</span>
+            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe * 60, 2) : ''}</span>
             : ni(abMin, onMinChange, '0.01', 2)}
         </td>
       )
       case 'tarief_ab': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
-            ? <span className="text-xs font-mono text-slate-300 block text-right px-1">—</span>
+            ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
             : ni(abTarief, onTariefAb, '0.01', 2)}
         </td>
       )
@@ -962,7 +962,7 @@ function CalculatieregelRij({
       case 'prijs_mt':  return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiMt
-            ? <span className="text-xs font-mono text-slate-300 block text-right px-1">—</span>
+            ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
             : ni(mtPrijs, v => { setMtPrijs(v); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, v)) }, '0.01', 2)}
         </td>
       )
@@ -981,14 +981,14 @@ function CalculatieregelRij({
               }
             }}
             onBlur={() => setMtBedragEdit(null)}
-            className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
+            className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
           />
         </td>
       )
       case 'prijs_oa':  return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiOa
-            ? <span className="text-xs font-mono text-slate-300 block text-right px-1">—</span>
+            ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
             : ni(oaPrijs, v => { setOaPrijs(v); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, v)) }, '0.01', 2)}
         </td>
       )
@@ -1007,7 +1007,7 @@ function CalculatieregelRij({
               }
             }}
             onBlur={() => setOaBedragEdit(null)}
-            className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
+            className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
           />
         </td>
       )
@@ -1024,7 +1024,7 @@ function CalculatieregelRij({
               type="number" step="0.01" min="0"
               value={displayOpslag === 0 ? '' : +displayOpslag.toFixed(2)}
               placeholder={defaultOpslag.toFixed(2)}
-              className="w-12 text-xs text-right font-mono px-1 py-0.5 rounded border-0 bg-transparent
+              className="w-12 text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
                 hover:bg-white hover:border hover:border-slate-200
                 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
               onChange={e => {
@@ -1055,11 +1055,11 @@ function CalculatieregelRij({
                 }
               }}
               onBlur={() => setVpEenhEdit(null)}
-              className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none text-everts"
+              className="w-full text-xs text-right  px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none text-everts"
             />
           ) : (
             <span
-              className="font-mono text-xs text-everts cursor-text block w-full text-right px-1 py-0.5"
+              className=" text-xs text-everts cursor-text block w-full text-right px-1 py-0.5"
               onClick={() => setVpEenhEdit(vp_pe === 0 ? '' : String(+vp_pe.toFixed(2)))}
               title="Klik om aan te passen"
             >
@@ -1085,11 +1085,11 @@ function CalculatieregelRij({
                 }
               }}
               onBlur={() => setTotVpEdit(null)}
-              className="w-full text-xs text-right font-mono px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none font-bold text-everts"
+              className="w-full text-xs text-right  px-1 py-0.5 rounded border border-everts/40 bg-white focus:outline-none font-bold text-everts"
             />
           ) : (
             <span
-              className="font-mono text-xs text-everts font-bold cursor-text block w-full text-right px-1 py-0.5"
+              className=" text-xs text-everts font-bold cursor-text block w-full text-right px-1 py-0.5"
               onClick={() => setTotVpEdit(vp_totaal === 0 ? '' : String(+vp_totaal.toFixed(2)))}
               title="Klik om aan te passen"
             >
@@ -1103,7 +1103,7 @@ function CalculatieregelRij({
           <select
             value={regel.btw_pct ?? ''}
             onChange={e => onWijzig(regel.id, { btw_pct: e.target.value !== '' ? parseInt(e.target.value) : undefined })}
-            className="w-full text-xs font-mono text-right px-1 py-0.5 rounded border-0 bg-transparent
+            className="w-full text-xs  text-right px-1 py-0.5 rounded border-0 bg-transparent
               hover:bg-white hover:border hover:border-slate-200
               focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
           >
@@ -1511,7 +1511,7 @@ function GroepSectie({
             >
               {ingeklapt ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
-            <span className={`font-mono opacity-50 text-[11px] ${diepte <= 1 ? 'text-white' : ''}`}>{nummer}</span>
+            <span className={` opacity-50 text-[11px] ${diepte <= 1 ? 'text-white' : ''}`}>{nummer}</span>
             {editingNaam ? (
               <input
                 autoFocus
@@ -1556,24 +1556,24 @@ function GroepSectie({
               return (
                 <div className="flex items-center gap-3 flex-wrap">
                   {groepUren > 0 && (
-                    <span className={`font-mono text-xs ${diepte <= 1 ? 'text-blue-200' : 'text-blue-500'}`}>
+                    <span className={` text-xs ${diepte <= 1 ? 'text-blue-200' : 'text-blue-500'}`}>
                       {formatGetal(groepUren, 1)} u
                     </span>
                   )}
                   {groepMT > 0 && (
-                    <span className={`font-mono text-xs ${diepte <= 1 ? 'text-red-200' : 'text-red-500'}`}>
+                    <span className={` text-xs ${diepte <= 1 ? 'text-red-200' : 'text-red-500'}`}>
                       MA: {formatEuro(groepMT)}
                     </span>
                   )}
                   {groepOA > 0 && (
-                    <span className={`font-mono text-xs ${diepte <= 1 ? 'text-purple-200' : 'text-purple-500'}`}>
+                    <span className={` text-xs ${diepte <= 1 ? 'text-purple-200' : 'text-purple-500'}`}>
                       OA: {formatEuro(groepOA)}
                     </span>
                   )}
-                  <span className={`font-mono text-xs ${diepte <= 1 ? 'text-white/70' : 'text-slate-500'}`}>
+                  <span className={` text-xs ${diepte <= 1 ? 'text-white/70' : 'text-slate-500'}`}>
                     KP: {formatEuro(kostprijs)}
                   </span>
-                  <span className={`font-mono text-xs font-semibold ${diepte <= 1 ? 'text-white' : 'text-everts'}`}>
+                  <span className={` text-xs font-semibold ${diepte <= 1 ? 'text-white' : 'text-everts'}`}>
                     VP: {formatEuro(groepVP)}
                   </span>
                 </div>
@@ -2460,27 +2460,27 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   )
                   if (id === 'bedrag_mt') return (
                     <td key={id} className="px-3 py-3 text-right bg-red-50/40">
-                      {totaalMT > 0 && <span className="font-mono text-sm font-bold text-red-700">{formatEuro(totaalMT)}</span>}
+                      {totaalMT > 0 && <span className=" text-sm font-bold text-red-700">{formatEuro(totaalMT)}</span>}
                     </td>
                   )
                   if (id === 'bedrag_oa') return (
                     <td key={id} className="px-3 py-3 text-right bg-purple-50/40">
-                      {totaalOA > 0 && <span className="font-mono text-sm font-bold text-purple-700">{formatEuro(totaalOA)}</span>}
+                      {totaalOA > 0 && <span className=" text-sm font-bold text-purple-700">{formatEuro(totaalOA)}</span>}
                     </td>
                   )
                   if (id === 'tot_uren') return (
                     <td key={id} className="px-3 py-3 text-right bg-blue-50/40">
-                      {totaalUren > 0 && <span className="font-mono text-sm font-bold text-blue-700">{formatGetal(totaalUren, 2)}</span>}
+                      {totaalUren > 0 && <span className=" text-sm font-bold text-blue-700">{formatGetal(totaalUren, 2)}</span>}
                     </td>
                   )
                   if (id === 'tot_kp') return (
                     <td key={id} className="px-3 py-3 text-left bg-everts-50">
-                      <span className="font-mono text-base font-bold text-everts-dark">{formatEuro(totaalKP)}</span>
+                      <span className=" text-base font-bold text-everts-dark">{formatEuro(totaalKP)}</span>
                     </td>
                   )
                   if (id === 'tot_vp') return (
                     <td key={id} className="px-3 py-3 text-left bg-everts-50/80">
-                      <span className="font-mono text-base font-bold text-everts">{formatEuro(totaalVP)}</span>
+                      <span className=" text-base font-bold text-everts">{formatEuro(totaalVP)}</span>
                     </td>
                   )
                   return <td key={id} />
@@ -2525,7 +2525,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                     className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-everts-50 hover:text-everts-dark transition-colors flex items-center gap-2"
                     style={{ paddingLeft: `${12 + indent}px` }}
                   >
-                    {nummer && <span className="font-mono text-slate-400 text-[10px]">{nummer}</span>}
+                    {nummer && <span className=" text-slate-400 text-[10px]">{nummer}</span>}
                     <span className="truncate">{g.naam}</span>
                   </button>
                 )

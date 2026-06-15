@@ -4,13 +4,13 @@ import React from 'react';
 import {
   IconCheck, IconBell, IconBuilding, IconSparkle,
   IconSun, IconPlus, IconMore,
-  IconTaken, IconOpdrachten, IconAanvragen, IconAgenda,
+  IconTaken, IconOpdrachten, IconAanvragen, IconAgenda, IconServicedesk,
 } from '../Icons';
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog';
 import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
 import type { DossierRij } from '@/components/dossiers/types';
 import {
-  getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN,
+  getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
 } from '@/components/dossiers/types';
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
 import { berekenWerkdagenDrempel } from '@/lib/agenda/werkdagen';
@@ -20,7 +20,7 @@ import { berekenWerkdagenDrempel } from '@/lib/agenda/werkdagen';
    passen binnen de beschikbare contenthoogte (±373px). */
 const MAX_TAKEN         = 6;
 const MAX_HERINNERINGEN = 5;
-const MAX_DOSSIERS      = 6;
+const MAX_DOSSIERS      = 7;
 const MAX_NIEUWS        = 4;
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -51,6 +51,11 @@ function substatusLabel(dossier: DossierRij): string {
   const sub = getDossierSubstatus(dossier);
   const all = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN];
   return all.find(s => s.key === sub)?.label ?? sub ?? '—';
+}
+
+function servicedeskSubstatusLabel(dossier: DossierRij): string {
+  const sub = dossier.servicedesk_substatus;
+  return SERVICEDESK_STATUSSEN.find(s => s.key === sub)?.label ?? sub ?? '—';
 }
 
 function relativeNewsTime(pubDate: string): string {
@@ -318,10 +323,10 @@ export function RemindersWidget({ taken }: { taken: TaakMetDetails[] }) {
 }
 
 /* ── DossierLijstWidget (gedeeld: opdrachten + aanvragen) ── */
-function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur }: {
+function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur, labelFn }: {
   title: string;
   dossiers: DossierRij[];
-  sectie: 'aanvragen' | 'opdrachten';
+  sectie: 'aanvragen' | 'opdrachten' | 'servicedesk';
   Icon: React.FC<{ size?: number }>;
   dotKleur: string;
   moreHref: string;
@@ -329,9 +334,12 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
   countLabel: string;
   /** Optionele kleur per dossier voor het substatus-label (bijv. rood bij actie vereist). */
   subKleur?: (d: DossierRij) => string;
+  /** Bepaalt het substatus-label per dossier (standaard op basis van hoofdstatus-fase). */
+  labelFn?: (d: DossierRij) => string;
 }) {
   const router = useRouter();
   const displayed = dossiers.slice(0, MAX_DOSSIERS);
+  const toonLabel = labelFn ?? substatusLabel;
 
   return (
     <WidgetShell
@@ -347,7 +355,7 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
           </div>
         )}
         {displayed.map((d, i) => {
-          const sub = substatusLabel(d);
+          const sub = toonLabel(d);
           return (
             <a
               key={d.id}
@@ -413,6 +421,23 @@ export function DossierWidget({ aanvragen }: { aanvragen: DossierRij[] }) {
       moreHref="/aanvragen"
       emptyText="Geen lopende aanvragen."
       countLabel="actief"
+    />
+  );
+}
+
+/* ── ServicedeskWidget ───────────────────────────────────── */
+export function ServicedeskWidget({ dossiers }: { dossiers: DossierRij[] }) {
+  return (
+    <DossierLijstWidget
+      title="Mijn Servicedesk"
+      dossiers={dossiers}
+      sectie="servicedesk"
+      Icon={IconServicedesk}
+      dotKleur="#3a7fb8"
+      moreHref="/servicedesk"
+      emptyText="Geen servicedesk-dossiers."
+      countLabel="lopend"
+      labelFn={servicedeskSubstatusLabel}
     />
   );
 }
@@ -645,7 +670,7 @@ export function AgendaWidget({ items = [] }: { items?: AgendaWidgetItem[] }) {
               background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
             }}>
               <div style={{
-                fontFamily:    'var(--font-mono)', fontSize: 11, fontWeight: 700,
+                fontSize: 11, fontWeight: 700,
                 color:         isVandaag ? 'var(--accent)' : 'var(--fg-muted)',
                 minWidth:      60, flexShrink: 0, letterSpacing: '-0.01em',
               }}>{label}</div>
