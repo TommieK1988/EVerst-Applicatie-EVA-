@@ -63,6 +63,8 @@ type Props<T extends { id: string }> = {
   layouts:    GebruikerLayout[]
   user_id:    string | null
   onRijKlik?: (item: T) => void
+  /** Toon de selectie-checkboxkolom (default true). */
+  selecteerbaar?: boolean
   /** Buttons rendered in the toolbar right area (Filter, Export, Nieuw…) */
   acties?:    React.ReactNode
 }
@@ -144,7 +146,7 @@ function SortIco({ dir }: { dir: false | 'asc' | 'desc' }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, acties,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -647,7 +649,7 @@ export default function OverzichtTabel<T extends { id: string }>({
             <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: 44 }} />
+                  {selecteerbaar && <col style={{ width: 44 }} />}
                   {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
                     if (columnVisibility[header.id] === false) return null
                     return <col key={header.id} style={{ width: header.getSize() }} />
@@ -657,13 +659,15 @@ export default function OverzichtTabel<T extends { id: string }>({
                 <thead>
                   <tr>
                     {/* Checkbox header */}
-                    <th style={{ ...thStyle, width: 44, padding: '10px 14px' }}>
-                      <Checkbox
-                        checked={table.getIsAllPageRowsSelected()}
-                        indeterminate={table.getIsSomePageRowsSelected()}
-                        onChange={table.getToggleAllPageRowsSelectedHandler() as (v: boolean) => void}
-                      />
-                    </th>
+                    {selecteerbaar && (
+                      <th style={{ ...thStyle, width: 44, padding: '10px 14px' }}>
+                        <Checkbox
+                          checked={table.getIsAllPageRowsSelected()}
+                          indeterminate={table.getIsSomePageRowsSelected()}
+                          onChange={table.getToggleAllPageRowsSelectedHandler() as (v: boolean) => void}
+                        />
+                      </th>
+                    )}
 
                     {/* Data column headers */}
                     {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
@@ -699,7 +703,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                   {/* Filter row */}
                   {hasFilters && (
                     <tr>
-                      <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />
+                      {selecteerbaar && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
                       {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
                         if (columnVisibility[header.id] === false) return null
                         const kol = kolommen.find(k => k.key === header.id)
@@ -740,9 +744,11 @@ export default function OverzichtTabel<T extends { id: string }>({
                         style={{ cursor: 'pointer', background: isSelected ? 'var(--brand-50)' : undefined }}
                       >
                         {/* Checkbox cell */}
-                        <td style={{ ...tdStyle, width: 44 }} onClick={e => { e.stopPropagation(); row.toggleSelected() }}>
-                          <Checkbox checked={isSelected} onChange={() => row.toggleSelected()} />
-                        </td>
+                        {selecteerbaar && (
+                          <td style={{ ...tdStyle, width: 44 }} onClick={e => { e.stopPropagation(); row.toggleSelected() }}>
+                            <Checkbox checked={isSelected} onChange={() => row.toggleSelected()} />
+                          </td>
+                        )}
 
                         {/* Data cells */}
                         {row.getVisibleCells().filter(c => c.column.id !== '__select').map(cell => {

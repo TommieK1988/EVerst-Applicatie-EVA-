@@ -100,6 +100,11 @@ function kortFiliaal(filiaal: string | null | undefined): string {
   return FILIAAL_KORT[filiaal] ?? filiaal.slice(0, 6)
 }
 
+/** Dashboard toont alleen echte werken: géén offerte/afgewezen-statussen (01./08./09.). */
+function isDashboardStatus(status: string | null | undefined): boolean {
+  return !/^(01|08|09)\./.test(status ?? '')
+}
+
 /** Korte PL-naam voor grafiekassen: voornaam + 1e letter achternaam. */
 function kortNaam(naam: string | null | undefined): string {
   if (!naam) return 'Onbekend'
@@ -188,8 +193,11 @@ function buildPivot(projecten: ManagementProject[]): FilPivot[] {
     const d = map.get(fil)!
     if (p.is_gereed) {
       d.aantalGereed++
-      d.omzetGerealiseerd     += p.gefactureerd       ?? 0
-      d.resultaatGerealiseerd += p.resultaat_gereed   ?? 0
+      // Gereed telt mee in zowel In opdracht als Gerealiseerd (anders klopt het totaal niet).
+      d.omzetOpdracht         += p.gefactureerd     ?? 0
+      d.omzetGerealiseerd     += p.gefactureerd     ?? 0
+      d.resultaatOpdracht     += p.resultaat_gereed ?? 0
+      d.resultaatGerealiseerd += p.resultaat_gereed ?? 0
     } else {
       d.aantalLopend++
       d.omzetOpdracht         += p.totale_opdracht    ?? 0
@@ -218,7 +226,10 @@ function leegAgg(): PivotAgg {
 function tel(d: PivotAgg, p: ManagementProject) {
   d.aantal++
   if (p.is_gereed) {
+    // Gereed telt mee in zowel In opdracht als Gerealiseerd (anders klopt het totaal niet).
+    d.omzetOpdracht         += p.gefactureerd     ?? 0
     d.omzetGerealiseerd     += p.gefactureerd     ?? 0
+    d.resultaatOpdracht     += p.resultaat_gereed ?? 0
     d.resultaatGerealiseerd += p.resultaat_gereed ?? 0
   } else {
     d.omzetOpdracht         += p.totale_opdracht    ?? 0
@@ -316,7 +327,10 @@ function buildPivotPL(projecten: ManagementProject[]): PLPivot[] {
     const d = map.get(pl)!
     if (p.is_gereed) {
       d.aantalGereed++
+      // Gereed telt mee in zowel In opdracht als Gerealiseerd (anders klopt het totaal niet).
+      d.omzetOpdracht         += p.gefactureerd     ?? 0
       d.omzetGerealiseerd     += p.gefactureerd     ?? 0
+      d.resultaatOpdracht     += p.resultaat_gereed ?? 0
       d.resultaatGerealiseerd += p.resultaat_gereed ?? 0
     } else {
       d.aantalLopend++
@@ -351,9 +365,12 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
   const lopend      = useMemo(() => projecten.filter(p => p.dossier_sectie === 'opdrachten' && !p.is_gereed), [projecten])
   const gereed      = useMemo(() => projecten.filter(p => p.is_gereed), [projecten])
   const servicedesk = useMemo(() => projecten.filter(p => p.dossier_sectie === 'servicedesk' && !p.is_gereed), [projecten])
-  const pivot      = useMemo(() => buildPivot(projecten), [projecten])
-  const hierarchie = useMemo(() => buildHierarchie(projecten), [projecten])
-  const plPivot    = useMemo(() => buildPivotPL(projecten), [projecten])
+
+  // Dashboard-aggregaties: offerte/afgewezen-statussen (01./08./09.) tellen niet mee.
+  const dashboardProjecten = useMemo(() => projecten.filter(p => isDashboardStatus(p.status)), [projecten])
+  const pivot      = useMemo(() => buildPivot(dashboardProjecten), [dashboardProjecten])
+  const hierarchie = useMemo(() => buildHierarchie(dashboardProjecten), [dashboardProjecten])
+  const plPivot    = useMemo(() => buildPivotPL(dashboardProjecten), [dashboardProjecten])
 
   const plResultaatData = useMemo(() => plPivot.map(pl => {
     const doel = doelVoorPL(doelstellingen, pl.projectleider)
@@ -370,25 +387,26 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
   const totaalAK                    = akData.reduce((s, a) => s + (a.bedrag_ak ?? 0), 0)
 
   const akDekkingGerealiseerd = totaalAK > 0 ? (totaalResultaatGerealiseerd / totaalAK) * 100 : null
-  const akDekkingOpdracht     = totaalAK > 0 ? ((totaalResultaatGerealiseerd + totaalResultaatOpdracht) / totaalAK) * 100 : null
+  // resultaatOpdracht = totaal verwacht/eind-resultaat (incl. gereed); niet nog eens gerealiseerd erbij optellen.
+  const akDekkingOpdracht     = totaalAK > 0 ? (totaalResultaatOpdracht / totaalAK) * 100 : null
 
   const jaarresultaatData = useMemo(() => pivot.map(f => {
     const doel    = doelstellingen.find(d => d.filiaal === f.filiaal && !d.projectleider)
     const doelRes = doel?.resultaat_doelstelling ?? 0
-    const real    = f.resultaatGerealiseerd
-    const opdracht = Math.max(0, f.resultaatOpdracht)
-    const nogBinnen = Math.max(0, doelRes - real - opdracht)
+    const real        = f.resultaatGerealiseerd
+    const opdrachtRest = Math.max(0, f.resultaatOpdracht - real)  // nog te realiseren deel van de opdracht
+    const nogBinnen   = Math.max(0, doelRes - real - opdrachtRest)
     return {
       name: kortFiliaal(f.filiaal),
       'Realisatie':       Math.round(real / 1000),
-      'In opdracht':      Math.round(opdracht / 1000),
+      'In opdracht':      Math.round(opdrachtRest / 1000),
       'Nog binnen halen': Math.round(nogBinnen / 1000),
     }
   }), [pivot, doelstellingen])
 
   const opdrachtgevers = useMemo(() => {
     const map = new Map<string, { omzet: number; resultaat: number }>()
-    for (const p of projecten) {
+    for (const p of dashboardProjecten) {
       const og = p.opdrachtgever ?? 'Onbekend'
       if (!map.has(og)) map.set(og, { omzet: 0, resultaat: 0 })
       const d = map.get(og)!
@@ -404,18 +422,18 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
       .map(([naam, v]) => ({ naam, ...v, marge: v.omzet > 0 ? (v.resultaat / v.omzet) * 100 : 0 }))
       .sort((a, b) => b.omzet - a.omzet)
       .slice(0, 15)
-  }, [projecten])
+  }, [dashboardProjecten])
 
   const categorieData = useMemo(() => {
     const map = new Map<string, number>()
-    for (const p of projecten) {
+    for (const p of dashboardProjecten) {
       const cat = p.categorie ?? 'Overig'
       map.set(cat, (map.get(cat) ?? 0) + ((p.is_gereed ? p.gefactureerd : p.totale_opdracht) ?? 0))
     }
     return [...map.entries()]
       .map(([name, value]) => ({ name, value: Math.round(value) }))
       .sort((a, b) => b.value - a.value)
-  }, [projecten])
+  }, [dashboardProjecten])
 
   const kostensoortData = useMemo(() => {
     const labels: Record<string, string> = {
@@ -423,7 +441,7 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
       materieel: 'Materieel', inkoop: 'Inkoop', overig: 'Overig',
     }
     const acc: Record<string, number> = {}
-    for (const p of projecten) {
+    for (const p of dashboardProjecten) {
       if (!p.kosten_split) continue
       for (const [k, v] of Object.entries(p.kosten_split)) acc[k] = (acc[k] ?? 0) + (v ?? 0)
     }
@@ -431,7 +449,7 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
       .filter(([, v]) => v > 0)
       .map(([k, v]) => ({ name: labels[k] ?? k, value: Math.round(v) }))
       .sort((a, b) => b.value - a.value)
-  }, [projecten])
+  }, [dashboardProjecten])
 
   function handleSync() {
     setSyncResult(null)
@@ -507,7 +525,7 @@ export default function ManagementDashboard({ projecten, akData, doelstellingen,
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {view === 'dashboard' && (
           <DashboardView
-            projecten={projecten}
+            projecten={dashboardProjecten}
             hierarchie={hierarchie}
             plPivot={plPivot}
             doelstellingen={doelstellingen}

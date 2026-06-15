@@ -67,7 +67,7 @@ function SlicerDropdown({
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '6px 10px', borderRadius: 8,
           border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
-          background: actief ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--surface)',
+          background: actief ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--bg-elev)',
           color: 'var(--text)', fontSize: 12.5, fontWeight: 500,
           cursor: 'pointer', whiteSpace: 'nowrap',
         }}
@@ -85,7 +85,7 @@ function SlicerDropdown({
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
           minWidth: 200, maxHeight: 320, overflowY: 'auto',
-          background: 'var(--surface)', border: '1px solid var(--border)',
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
           borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 4,
         }}>
           {def.opties.length === 0 && (

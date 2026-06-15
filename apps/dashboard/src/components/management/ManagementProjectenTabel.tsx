@@ -6,7 +6,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import type { ManagementProject } from './ManagementDashboard'
 import {
-  ProjectnummerCel, HoverTekst, StatusCel, EurCel, MargeCel, VerschilCel, PctGereedCel, openDossierTab,
+  ProjectnummerCel, HoverTekst, StatusCel, EurCel, MargeCel, VerschilCel, PctGereedCel, openDossierTab, fEur,
 } from './format'
 
 export type ProjectenVariant = 'lopend' | 'gereed' | 'servicedesk'
@@ -78,6 +78,45 @@ function kolommenVoor(variant: ProjectenVariant): KolomDefinitie<ManagementProje
   return variant === 'gereed' ? gereedKolommen : lopendKolommen
 }
 
+/* ── Totalen-balk (blijft in beeld bij scrollen) ─────────────────── */
+
+function som(rows: ManagementProject[], veld: keyof ManagementProject): number {
+  return rows.reduce((s, r) => s + ((r[veld] as number | null) ?? 0), 0)
+}
+
+function TotalenBalk({ rows, variant }: { rows: ManagementProject[]; variant: ProjectenVariant }) {
+  const posten: { label: string; value: React.ReactNode }[] = variant === 'gereed'
+    ? [
+        { label: 'Aantal',          value: rows.length },
+        { label: 'Gefactureerd',    value: fEur(som(rows, 'gefactureerd')) },
+        { label: 'Geboekte kosten', value: fEur(som(rows, 'geboekte_kosten')) },
+        { label: 'Resultaat',       value: fEur(som(rows, 'resultaat_gereed')) },
+      ]
+    : [
+        { label: 'Aantal',           value: rows.length },
+        { label: 'Totale opdracht',  value: fEur(som(rows, 'totale_opdracht')) },
+        { label: 'Geboekte kosten',  value: fEur(som(rows, 'geboekte_kosten')) },
+        { label: 'Verw. resultaat',  value: fEur(som(rows, 'verwacht_resultaat')) },
+      ]
+
+  return (
+    <div style={{
+      display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'baseline',
+      padding: '10px 14px', borderRadius: 8,
+      background: 'var(--bg-elev)', border: '1px solid var(--border)',
+    }}>
+      {posten.map(p => (
+        <div key={p.label} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fg-muted)' }}>
+            {p.label}
+          </span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg)' }}>{p.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── Component ───────────────────────────────────────────────────── */
 
 export default function ManagementProjectenTabel({ rows, variant, scherm, layouts, user_id }: Props) {
@@ -103,19 +142,25 @@ export default function ManagementProjectenTabel({ rows, variant, scherm, layout
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
-      <SlicerBalk
-        slicers={slicers}
-        waarde={slicer}
-        onChange={(key, values) => setSlicer(prev => ({ ...prev, [key]: values }))}
-        onReset={() => setSlicer({})}
-      />
-      <div style={{ flex: 1, minHeight: 0 }}>
+      {/* Vaste bovenbalk: filters + totalen blijven in beeld bij scrollen */}
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <SlicerBalk
+          slicers={slicers}
+          waarde={slicer}
+          onChange={(key, values) => setSlicer(prev => ({ ...prev, [key]: values }))}
+          onReset={() => setSlicer({})}
+        />
+        <TotalenBalk rows={gefilterd} variant={variant} />
+      </div>
+      {/* Scrollbaar tabelgebied */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <OverzichtTabel
           scherm={scherm}
           data={gefilterd}
           kolommen={kolommen}
           layouts={layouts}
           user_id={user_id}
+          selecteerbaar={false}
           onRijKlik={openDossierTab}
         />
       </div>

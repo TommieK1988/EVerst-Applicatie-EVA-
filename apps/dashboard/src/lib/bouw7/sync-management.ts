@@ -5,7 +5,12 @@ import {
   logSync,
   type SyncResult,
 } from './sync'
-import type { Bouw7Project, Bouw7ProjectFinancial, Bouw7ControlResponse } from './client'
+import type { Bouw7Project, Bouw7ProjectFinancial } from './client'
+
+/** Minimale vorm van de Athena WIP-report (`GET /wip/report`) — we gebruiken alleen progress. */
+type Bouw7WipReport = {
+  items?: { project?: { id?: number }; progress?: number | null }[]
+}
 
 /** De 6 echte kostensoorten op de Athena `costs`. NB: de API levert daarnaast soms een
  *  roll-up/total-key — die mag NIET meegeteld worden (anders verdubbelt de som). */
@@ -101,7 +106,7 @@ function mapProject(
 
   // ── Afgeleide percentages ──
   const pctMarge  = totaleOpdracht != null && verwachtResultaat != null ? pct(verwachtResultaat, totaleOpdracht) : null
-  // % gereed = Bouw7 project-control 'progress'; val terug op kostenratio (geboekte/prognose).
+  // % gereed = Bouw7 WIP-report 'progress'; val terug op kostenratio (geboekte/prognose).
   const pctGereed = progress != null
     ? progress
     : (geboekteKosten != null ? pct(geboekteKosten, kostenPrognose ?? 0) : null)
@@ -187,29 +192,40 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       .not('bouw7_id', 'is', null)
     const bestaand = new Set<string>((bestaandeData ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
 
-    // Athena per project (batch van 10), alleen voor de doel-dossiers:
-    //  • /project-financial/{id}              → bedragen
-    //  • /project-control/{id}/cost-type/total → totals.progress (Bouw7's eigen % gereed)
-    const financialMap = new Map<string, Bouw7ProjectFinancial>()
-    const progressMap = new Map<string, number>()
     const targetIds = doelDossiers.map(d => d.bouw7_id)
-    const ATHENA_BATCH = 10
-    for (let i = 0; i < targetIds.length; i += ATHENA_BATCH) {
-      const batch = targetIds.slice(i, i + ATHENA_BATCH)
-      const [finResults, ctrlResults] = await Promise.all([
-        Promise.allSettled(batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`))),
-        Promise.allSettled(batch.map(id => bouw7.getAthena<Bouw7ControlResponse>(`/project-control/${id}/cost-type/total`))),
-      ])
+
+    // 1) Athena project-financial per project (batch van 10) → bedragen.
+    const financialMap = new Map<string, Bouw7ProjectFinancial>()
+    const FIN_BATCH = 10
+    for (let i = 0; i < targetIds.length; i += FIN_BATCH) {
+      const batch = targetIds.slice(i, i + FIN_BATCH)
+      const results = await Promise.allSettled(
+        batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`)),
+      )
       for (let j = 0; j < batch.length; j++) {
-        const fr = finResults[j]
-        if (fr.status === 'fulfilled' && fr.value && typeof fr.value === 'object') {
-          financialMap.set(batch[j], fr.value)
-        }
-        const cr = ctrlResults[j]
-        if (cr.status === 'fulfilled' && cr.value?.totals?.progress != null) {
-          progressMap.set(batch[j], toNum(cr.value.totals.progress))
+        const r = results[j]
+        if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
+          financialMap.set(batch[j], r.value)
         }
       }
+    }
+
+    // 2) % gereed = Bouw7 WIP-report 'progress', batched per 25 projecten (project.id IN (lijst)).
+    const progressMap = new Map<string, number>()
+    const WIP_BATCH = 25
+    for (let i = 0; i < targetIds.length; i += WIP_BATCH) {
+      const batch = targetIds.slice(i, i + WIP_BATCH)
+      const q = `project.id IN (${batch.map(id => `"${id}"`).join(',')}) LIMIT ${batch.length} OFFSET 0`
+      try {
+        const rep = await bouw7.getAthena<Bouw7WipReport>('/wip/report', {
+          q, group_subprojects: 'false', include_unprocessed: 'true',
+        })
+        for (const it of rep.items ?? []) {
+          if (it.project?.id != null && it.progress != null) {
+            progressMap.set(String(it.project.id), toNum(it.progress))
+          }
+        }
+      } catch { /* WIP niet beschikbaar → val terug op kostenratio in mapProject */ }
     }
 
     const nu = new Date().toISOString()
