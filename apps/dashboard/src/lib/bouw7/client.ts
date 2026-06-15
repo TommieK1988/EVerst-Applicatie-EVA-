@@ -402,9 +402,11 @@ export type Bouw7EmployeeRef = {
  * Plan-item uit GET /search/plan-items (Apollo). Velden geverifieerd via live API.
  *
  * - `securityPlanningLink.securityCode.chapter` = bewakingscode-hoofdstuk → EVA-fase ("Hoofdtaak").
- * - het plan-item zelf → EVA-activiteit ("Taak").
- * - `assignedEmployees` → per medewerker één EVA-planitem (in de huidige data altijd leeg:
- *   er wordt op `department` gepland, niet op individu).
+ * - `securityPlanningLink.securityCode` = de **Taak** (bv. "Schilderwerk", code "SW.A").
+ * - het plan-item zelf → EVA-activiteit.
+ *
+ * LET OP: de Apollo-search geeft de **toegewezen medewerkers NIET** terug. Die zitten
+ * uitsluitend in het Heimdall detail-endpoint `GET /plan-item/{id}` (`Bouw7PlanItemDetail`).
  */
 export type Bouw7PlanItem = {
   id: number
@@ -434,10 +436,27 @@ export type Bouw7PlanItem = {
       chapter?: { id: number; name?: string; code?: string } | null
     } | null
   } | null
-  assignedEmployees?: Bouw7EmployeeRef[]
-  assignedEmployeesByProject?: Bouw7EmployeeRef[]
   createdAt?: string
   updatedAt?: string
+}
+
+/**
+ * Detail van één plan-item — Heimdall `GET /plan-item/{id}`. Bevat de toegewezen
+ * `employees[]` (en `contacts[]`) die de Apollo-search niet meegeeft. LET OP: hier
+ * heten de naamvelden `firstName`/`lastName` (niet `givenName`/`familyName`).
+ */
+export type Bouw7PlanItemEmployee = {
+  id: number
+  firstName?: string
+  lastName?: string
+}
+
+export type Bouw7PlanItemDetail = {
+  id: number
+  notes?: string | null
+  isProcessed?: boolean
+  employees?: Bouw7PlanItemEmployee[]
+  contacts?: { id: number; name?: string }[]
 }
 
 /**
@@ -534,4 +553,42 @@ export type Bouw7ControlResponse = {
   offset: number | null
   totals: Bouw7ControlEntry
   items: Bouw7ControlChapter[]
+}
+
+/**
+ * Inkoopfactuur uit GET /search/purchase-invoices (Apollo), gefilterd op `project.id`.
+ * Bron voor "geboekte kosten" = de inkoop waarvoor daadwerkelijk een factuur is ontvangen.
+ * Meerdere facturen (termijnen) kunnen naar dezelfde `deliveryTicket.id` verwijzen → dedupe.
+ */
+export type Bouw7PurchaseInvoice = {
+  id: number
+  deliveryTicket?: {
+    id: number
+    cost?: number | string
+    securityLink?: {
+      code?: { id?: number; code?: string; name?: string; chapter?: { id?: number; name?: string } | null } | null
+    } | null
+  } | null
+}
+
+/**
+ * Bestelregel/contractregel uit GET /list/contract-order-lines (Heimdall), via `q`-DSL gefilterd
+ * op `project.id`. `projectSecurityLink.code` = bewakingscode (kan ontbreken → kosten zonder code).
+ * `contact.type`: 'subcontractor' = onderaanneming, anders inkoop (leverancier/handmatig).
+ */
+export type Bouw7ContractOrderLine = {
+  id: number
+  description?: string
+  totalPrice?: number | string
+  costType?: number
+  contact?: { id?: number; name?: string; type?: string } | null
+  projectSecurityLink?: {
+    id?: number
+    code?: string | null
+    parentName?: string | null
+    costType?: number
+    status?: number
+  } | null
+  purchaseOrderContract?: unknown | null
+  subcontractorContract?: unknown | null
 }

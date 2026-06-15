@@ -7,11 +7,12 @@ import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import {
   Bouw7Client,
-  BOUW7_COST_TYPE,
   type Bouw7ProjectFinancial,
   type Bouw7ControlResponse,
   type Bouw7ControlEntry,
   type Bouw7CostTypeId,
+  type Bouw7PurchaseInvoice,
+  type Bouw7ContractOrderLine,
 } from '@/lib/bouw7/client'
 
 type DossierResult =
@@ -639,10 +640,9 @@ export type BewakingRegel = {
   onderaanneming: number       // 6. Onderaanneming (geboekt)
   materiaal: number            // 7. Materiaal (geboekt)
   inkoopMaterieelAfval: number // 8. Inkoop + Materieel + Afval (geboekt)
-  bestelregels: number         // 9. Totaal geboekte inkoop (alle kostensoorten behalve arbeid)
-  contracten: number           // 10. Inkooporders + onderaannemer-contracten (verplicht)
-  geboekteKosten: number       // 11. Geboekte kosten / verplichtingen (totaal besteed)
-  progress: number | null      // 12. % gereed
+  verwachteKosten: number      // 9. Alle verwachte-kosten-regels (contract-order-lines, incl. arbeid)
+  geboekteKosten: number       // 10. Geboekte kosten = arbeid + inkoop mét inkoopfactuur
+  progress: number | null      // 11. % gereed
 }
 
 export type BewakingTotalen = {
@@ -654,8 +654,7 @@ export type BewakingTotalen = {
   onderaanneming: number
   materiaal: number
   inkoopMaterieelAfval: number
-  bestelregels: number
-  contracten: number
+  verwachteKosten: number
   geboekteKosten: number
 }
 
@@ -677,7 +676,7 @@ const legeRegel = (): BewakingRegel => ({
   code: null, naam: null, hoofdstukId: null, hoofdstuk: null,
   begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
   arbeidskosten: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
-  bestelregels: 0, contracten: 0, geboekteKosten: 0, progress: null,
+  verwachteKosten: 0, geboekteKosten: 0, progress: null,
 })
 
 /** Kostensoorten op de Athena project-control: 1=Arbeid, 2=Inkoop, 3=OA, 4=Materieel, 5=Materiaal, 6=Afval. */
@@ -699,7 +698,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     beschikbaar: false, hoofdstukken: [],
     totalen: {
       begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
-      onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, bestelregels: 0, contracten: 0, geboekteKosten: 0,
+      onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
     },
     geboekteUrenProject: null,
   }
@@ -726,21 +725,49 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const client = new Bouw7Client(config.api_key, config.app_name)
     const bouw7Id = dossier.bouw7_id
 
-    const responses = await Promise.all(
-      BEWAKING_KOSTENSOORTEN.map((ct) =>
-        client
-          .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
-          .catch(() => null),
+    // Drie bronnen parallel: projectbewaking per kostensoort, gefactureerde inkoop, en bestelregels.
+    const orderLinesQuery =
+      `(projectSecurityLink = NULL OR projectSecurityLink.status != 2) AND status IN (0,3) ` +
+      `AND project.id = ${bouw7Id} AND totalPrice >= 0 SORT(description, ASC) LIMIT 1000`
+    const [responses, invoices, orderLines] = await Promise.all([
+      Promise.all(
+        BEWAKING_KOSTENSOORTEN.map((ct) =>
+          client
+            .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
+            .catch(() => null),
+        ),
       ),
-    )
+      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
+      client
+        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: orderLinesQuery })
+        .then((r) => r.items ?? [])
+        .catch(() => []),
+    ])
 
+    const GEEN = '-' // code-sleutel voor "Kosten zonder bewaking"
     const regelMap = new Map<string, BewakingRegel>()
+    const codeIndex = new Map<string, BewakingRegel>() // bewakingscode → regel (codes zijn uniek per project)
     const maxBudgetVoorProgress = new Map<string, number>()
 
-    /** Verwerk één control-regel (bewakingscode of niet-gecodeerde hoofdstukpost). */
+    /** Bestaande regel ophalen of nieuwe aanmaken (gematcht op bewakingscode). */
+    const vindOfMaak = (code: string, hoofdstukId: number | null, hoofdstuk: string | null, naam: string | null) => {
+      let r = codeIndex.get(code)
+      if (!r) {
+        r = legeRegel()
+        r.code = code
+        r.naam = naam ?? code
+        r.hoofdstukId = hoofdstukId
+        r.hoofdstuk = hoofdstuk
+        codeIndex.set(code, r)
+        regelMap.set(`${hoofdstukId ?? 'x'}|${code}`, r)
+      }
+      return r
+    }
+
+    /** Verwerk één control-regel (begroting/prognose/uren/realisatie per kostensoort). */
     const verwerk = (ct: Bouw7CostTypeId, e: Bouw7ControlEntry, hoofdstukId: number | null, hoofdstuk: string | null) => {
-      const code = e.code ?? null
-      const key = `${hoofdstukId ?? 'x'}|${code ?? ''}`
+      const code = e.code ?? GEEN
+      const key = `${hoofdstukId ?? 'x'}|${code}`
       let r = regelMap.get(key)
       if (!r) {
         r = legeRegel()
@@ -749,6 +776,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         r.hoofdstukId = hoofdstukId
         r.hoofdstuk = hoofdstuk
         regelMap.set(key, r)
+        codeIndex.set(code, r)
         maxBudgetVoorProgress.set(key, -1)
       }
 
@@ -756,8 +784,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       const kosten = toGetal(e.costAmount)
       r.begroot += budget
       r.prognose += toGetal(e.prognosisAmount)
-      r.geboekteKosten += kosten
-      r.contracten += toGetal(e.contractCostAmount)
       r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
       r.geboekteUren += toGetal(e.hourInfo?.costHours)
 
@@ -765,7 +791,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       else if (ct === 3) r.onderaanneming += kosten
       else if (ct === 5) r.materiaal += kosten
       else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
-      if (ct !== 1) r.bestelregels += kosten
 
       // % gereed: neem de waarde van de kostensoort met de grootste begroting voor deze code.
       if (e.progress != null && budget >= (maxBudgetVoorProgress.get(key) ?? -1)) {
@@ -782,7 +807,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         const isUncoded = ci?.name === 'uncoded_costs' || ci?.id === 0
         if (isUncoded) {
           // Kosten zonder bewakingscode — één regel, samengevoegd over kostensoorten.
-          verwerk(ct, { ...ci, code: '-', name: 'Kosten zonder bewaking' }, UNCODED_HOOFDSTUK_ID, 'Kosten zonder bewaking')
+          verwerk(ct, { ...ci, code: GEEN, name: 'Kosten zonder bewaking' }, UNCODED_HOOFDSTUK_ID, 'Kosten zonder bewaking')
         } else {
           for (const sc of item.securityCodes ?? []) {
             verwerk(ct, sc, ci?.id ?? null, ci?.name ?? null)
@@ -790,6 +815,48 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         }
       }
     })
+
+    // Geboekte kosten = arbeid (altijd geboekt) + inkoop mét inkoopfactuur.
+    // Dedupe op deliveryTicket.id: termijn-facturen verwijzen naar dezelfde bon.
+    const gefactureerdeBon = new Map<number, { code: string; chapterId: number | null; chapterNaam: string | null; naam: string | null; bedrag: number }>()
+    for (const inv of invoices) {
+      const dt = inv.deliveryTicket
+      if (!dt?.id || gefactureerdeBon.has(dt.id)) continue
+      const c = dt.securityLink?.code
+      gefactureerdeBon.set(dt.id, {
+        code: c?.code ?? GEEN,
+        chapterId: c?.code ? (c.chapter?.id ?? null) : UNCODED_HOOFDSTUK_ID,
+        chapterNaam: c?.code ? (c.chapter?.name ?? null) : 'Kosten zonder bewaking',
+        naam: c?.code ? (c.name ?? null) : 'Kosten zonder bewaking',
+        bedrag: toGetal(dt.cost),
+      })
+    }
+    const gefactureerdPerCode = new Map<string, number>()
+    for (const b of gefactureerdeBon.values()) {
+      gefactureerdPerCode.set(b.code, (gefactureerdPerCode.get(b.code) ?? 0) + b.bedrag)
+      vindOfMaak(b.code, b.chapterId, b.chapterNaam, b.naam)
+    }
+
+    // Verwachte kosten (#9) = totaal van alle contract-order-lines per code (incl. arbeid).
+    const verwachtPerCode = new Map<string, number>()
+    for (const line of orderLines) {
+      const code = line.projectSecurityLink?.code ?? GEEN
+      verwachtPerCode.set(code, (verwachtPerCode.get(code) ?? 0) + toGetal(line.totalPrice))
+      const isUncoded = code === GEEN
+      vindOfMaak(
+        code,
+        isUncoded ? UNCODED_HOOFDSTUK_ID : null,
+        isUncoded ? 'Kosten zonder bewaking' : (line.projectSecurityLink?.parentName ?? null),
+        isUncoded ? 'Kosten zonder bewaking' : (line.projectSecurityLink?.parentName ?? code),
+      )
+    }
+
+    // Afgeleide kolommen per regel toekennen.
+    for (const r of regelMap.values()) {
+      const code = r.code ?? GEEN
+      r.geboekteKosten = r.arbeidskosten + (gefactureerdPerCode.get(code) ?? 0)
+      r.verwachteKosten = verwachtPerCode.get(code) ?? 0
+    }
 
     // Groeperen per hoofdstuk.
     const hoofdstukMap = new Map<string, { id: number | null; naam: string; regels: BewakingRegel[] }>()
@@ -824,8 +891,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       onderaanneming: som((r) => r.onderaanneming),
       materiaal: som((r) => r.materiaal),
       inkoopMaterieelAfval: som((r) => r.inkoopMaterieelAfval),
-      bestelregels: som((r) => r.bestelregels),
-      contracten: som((r) => r.contracten),
+      verwachteKosten: som((r) => r.verwachteKosten),
       geboekteKosten: som((r) => r.geboekteKosten),
     }
 

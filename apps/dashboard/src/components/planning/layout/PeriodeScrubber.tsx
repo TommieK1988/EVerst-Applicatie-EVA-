@@ -56,17 +56,20 @@ export default function PeriodeScrubber({ view, peildatum, vs: vsOverride, onCha
 
   const dragRef = useRef<{ startX: number; origVs: Date } | null>(null)
 
+  // Klik op de tijdbalk → centreer het venster op de aangeklikte dag.
   function jumpToX(clientX: number) {
     const rect = ref.current?.getBoundingClientRect()
     if (!rect) return
-    const x = clientX - rect.left
-    const dayFromStart = Math.round(x / ppd) - Math.round(winDays / 2)
-    onChange(addDays(scrubStart, dayFromStart + Math.round(winDays / 2)))
+    const dag = Math.round((clientX - rect.left) / ppd)
+    onChange(addDays(scrubStart, dag - Math.round(winDays / 2)))
   }
 
   function startDrag(ev: React.PointerEvent) {
     if (ev.button !== 0) return
     ev.preventDefault()
+    // Sleep op de balk niet doorgeven aan de track-handler van de container — anders
+    // wordt het oppakken óók als "spring naar cursor" gezien.
+    ev.stopPropagation()
     ;(ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId)
     dragRef.current = { startX: ev.clientX, origVs: vs }
   }
@@ -81,9 +84,9 @@ export default function PeriodeScrubber({ view, peildatum, vs: vsOverride, onCha
     <div ref={ref} style={{
       position: 'relative', height: 38, background: 'var(--bg)',
       border: '1px solid var(--border)', borderRadius: 8,
-      marginBottom: 10, cursor: 'pointer', userSelect: 'none',
+      marginBottom: 10, cursor: 'pointer', userSelect: 'none', touchAction: 'none',
     }}
-      onClick={ev => { if (!dragRef.current) jumpToX(ev.clientX) }}>
+      onPointerDown={ev => { if (ev.button === 0) jumpToX(ev.clientX) }}>
       {weekLines.map((left, i) => (
         <div key={`w-${i}`} style={{
           position: 'absolute', top: '55%', bottom: 0,

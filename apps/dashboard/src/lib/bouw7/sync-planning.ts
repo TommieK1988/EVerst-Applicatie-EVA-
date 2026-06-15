@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client, logSync, type SyncResult } from './sync'
-import type { Bouw7PlanItem, Bouw7EmployeeRef } from './client'
+import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
 // admin-client als any zoals elders in de planning-module.
@@ -23,10 +23,35 @@ function toTimestamp(dt?: string | null): string | null {
   return dt.replace(' ', 'T')
 }
 
-/** Plan-items van één Bouw7-project (alle pagina's). */
-export async function fetchPlanItems(projectId: string): Promise<Bouw7PlanItem[]> {
-  const client = await getBouw7Client()
-  return client.getApolloAll<Bouw7PlanItem>('/search/plan-items', `project.id = ${projectId}`)
+/** Plan-items van één Bouw7-project (alle pagina's, via Apollo-search). */
+export async function fetchPlanItems(projectId: string, client?: Bouw7Client): Promise<Bouw7PlanItem[]> {
+  const c = client ?? (await getBouw7Client())
+  return c.getApolloAll<Bouw7PlanItem>('/search/plan-items', `project.id = ${projectId}`)
+}
+
+/** Aantal plan-item-details dat tegelijk wordt opgehaald. */
+const DETAIL_BATCH = 10
+
+/**
+ * Haal per plan-item het Heimdall-detail (`/plan-item/{id}`) op — de enige plek waar de
+ * toegewezen `employees[]` staan; de Apollo-search levert die niet. Gebatcht (Promise.allSettled),
+ * net als de Athena-/offerte-calls in syncProjects. Geeft een map plan-item-id → detail.
+ */
+export async function fetchPlanItemDetails(
+  ids: number[],
+  client: Bouw7Client,
+): Promise<Map<number, Bouw7PlanItemDetail>> {
+  const map = new Map<number, Bouw7PlanItemDetail>()
+  for (let i = 0; i < ids.length; i += DETAIL_BATCH) {
+    const batch = ids.slice(i, i + DETAIL_BATCH)
+    const results = await Promise.allSettled(
+      batch.map(id => client.get<Bouw7PlanItemDetail>(`/plan-item/${id}`)),
+    )
+    results.forEach((r, j) => {
+      if (r.status === 'fulfilled' && r.value) map.set(batch[j], r.value)
+    })
+  }
+  return map
 }
 
 /** Een plan-item zonder bewakingscode + met dezelfde naam als het project = crewblok. */
@@ -44,7 +69,8 @@ function faseKeyVan(pi: Bouw7PlanItem): string {
  * Synchroniseer de Bouw7-planning (plan-items) van één dossier naar EVA.
  *
  * Mapping: bewakingscode-chapter → planning_fasen (Hoofdtaak), plan-item →
- * planning_activiteiten (Taak), assignedEmployees → planning_items (per medewerker).
+ * planning_activiteiten (Taak), toegewezen medewerkers (uit het detail-endpoint) →
+ * planning_items (per medewerker).
  * Rijen met bron='bouw7' worden volledig herbouwd; bron='eva'-rijen blijven ongemoeid.
  */
 export async function syncDossierPlanning(dossierId: string): Promise<SyncResult> {
@@ -62,7 +88,10 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
     const bouw7Id = dossier?.bouw7_id
     if (!bouw7Id) return result // dossier zonder Bouw7-koppeling → niets te syncen
 
-    const planItems = await fetchPlanItems(String(bouw7Id))
+    const client = await getBouw7Client()
+    const planItems = await fetchPlanItems(String(bouw7Id), client)
+    // De toegewezen medewerkers staan alleen in het detail-endpoint, niet in de search-response.
+    const detailMap = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
     const nu = new Date().toISOString()
 
     // ── 1. Fasen (Hoofdtaken) ────────────────────────────────────────
@@ -128,8 +157,8 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
     }
 
     // ── 2. Medewerker-stubs voor toegewezen medewerkers ───────────────
-    // (In de huidige Everts-data altijd leeg, maar voorbereid op koppeling later.)
-    const empMap = await resolveMedewerkers(supabase, planItems, nu)
+    // De toewijzingen komen uit de plan-item-details (Apollo-search levert ze niet).
+    const empMap = await resolveMedewerkers(supabase, [...detailMap.values()], nu)
 
     // ── 3. Activiteiten (Taken) volledig herbouwen ────────────────────
     // Bestaande Bouw7-activiteiten verwijderen → planning_items cascaden mee.
@@ -145,7 +174,9 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
       const titel = crew
         ? (pi.department?.name?.trim() || pi.name?.trim() || 'Planning')
         : (pi.name?.trim() || 'Taak')
-      const omschrijving = crew ? (pi.project?.name ?? null) : null
+      // Opmerking van het plan-item (search-veld `remark`, anders detail-`notes`).
+      const remark = (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null
+      const omschrijving = crew ? (pi.project?.name ?? remark) : remark
 
       const { data: act, error: actErr } = await supabase
         .from('planning_activiteiten')
@@ -173,7 +204,7 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
       result.nieuw++
 
       // ── 4. Planitems per toegewezen medewerker ──────────────────────
-      const emps = pi.assignedEmployees ?? []
+      const emps = detailMap.get(pi.id)?.employees ?? []
       const itemRows: Record<string, unknown>[] = []
       for (const emp of emps) {
         const medewerkerId = empMap.get(String(emp.id))
@@ -208,20 +239,22 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
 }
 
 /**
- * Zorg dat elke door een plan-item toegewezen medewerker een EVA-record heeft.
+ * Zorg dat elke aan een plan-item toegewezen medewerker een EVA-record heeft.
  * Onbekende medewerkers krijgen een stub (zoals syncProjects voor rollen doet).
  * Geeft een map terug van Bouw7-employee-id → EVA medewerker-uuid.
+ *
+ * NB: de detail-employees gebruiken `firstName`/`lastName` (niet `givenName`/`familyName`).
  */
 async function resolveMedewerkers(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  planItems: Bouw7PlanItem[],
+  details: Bouw7PlanItemDetail[],
   nu: string,
 ): Promise<Map<string, string>> {
   const empMap = new Map<string, string>()
-  const alleEmps = new Map<string, Bouw7EmployeeRef>()
-  for (const pi of planItems) {
-    for (const emp of pi.assignedEmployees ?? []) {
+  const alleEmps = new Map<string, Bouw7PlanItemEmployee>()
+  for (const det of details) {
+    for (const emp of det.employees ?? []) {
       if (emp?.id) alleEmps.set(String(emp.id), emp)
     }
   }
@@ -239,8 +272,8 @@ async function resolveMedewerkers(
     .map(id => {
       const emp = alleEmps.get(id)!
       return {
-        voornaam: emp.givenName ?? '',
-        achternaam: emp.familyName ?? '',
+        voornaam: emp.firstName ?? '',
+        achternaam: emp.lastName ?? '',
         extern: false,
         actief: true,
         bouw7_id: id,

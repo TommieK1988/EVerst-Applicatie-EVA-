@@ -1,8 +1,10 @@
-import { Fragment } from 'react'
+import { Fragment, Suspense } from 'react'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
-import { Card, CardHeader, CardBody } from '@/components/ui'
+import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
+
+const ROOD = '#d9534f'
 
 const toNum = (v: unknown): number => {
   if (v == null) return 0
@@ -35,33 +37,36 @@ const fmtPct = (resultaat: number, omzet: number): string => {
   return `${((resultaat / omzet) * 100).toFixed(2)} %`
 }
 
-/* ── sub-components ──────────────────────────────────────────────────── */
+/* ── gedeelde cel-componenten ────────────────────────────────────────── */
 
-const TH = ({ children, right }: { children?: React.ReactNode; right?: boolean }) => (
+const TH = ({ children, right, compact }: { children?: React.ReactNode; right?: boolean; compact?: boolean }) => (
   <th style={{
-    padding: '7px 12px',
+    padding: compact ? '6px 6px' : '7px 12px',
     textAlign: right ? 'right' : 'left',
-    fontSize: 11,
+    fontSize: compact ? 10 : 11,
     fontWeight: 700,
     color: 'var(--neutral-500)',
     textTransform: 'uppercase',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
     borderBottom: '2px solid var(--neutral-200, #e3e8ea)',
     whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   }}>
     {children}
   </th>
 )
 
-const TD = ({ children, vet, accent, kleur }: {
+const TD = ({ children, vet, accent, kleur, compact }: {
   children: React.ReactNode
   vet?: boolean
   accent?: boolean
   kleur?: string
+  compact?: boolean
 }) => (
   <td style={{
-    padding: '6px 12px',
-    fontSize: 13,
+    padding: compact ? '5px 6px' : '6px 12px',
+    fontSize: compact ? 11.5 : 13,
     textAlign: 'right',
     fontWeight: vet ? 700 : 400,
     color: kleur ?? (accent ? 'var(--accent)' : vet ? 'var(--neutral-900)' : 'var(--neutral-700)'),
@@ -86,22 +91,6 @@ const TDLabel = ({ children, vet, sub }: { children: React.ReactNode; vet?: bool
   </td>
 )
 
-const SectionHeader = ({ children }: { children: React.ReactNode }) => (
-  <tr>
-    <td colSpan={5} style={{
-      padding: '10px 12px 4px',
-      fontSize: 11,
-      fontWeight: 700,
-      color: 'var(--neutral-400)',
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em',
-      borderBottom: '1px solid var(--neutral-200)',
-    }}>
-      {children}
-    </td>
-  </tr>
-)
-
 const TotaalRij = ({ label, b, p, r }: { label: string; b: number; p: number; r: number }) => (
   <tr style={{ background: 'var(--neutral-50, #f8fafa)' }}>
     <TDLabel vet>{label}</TDLabel>
@@ -123,7 +112,7 @@ const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) =>
 
 /* ── bewaking per bewakingscode (hoofdweergave) ──────────────────────── */
 
-/** Kolomkoppen van de bewakingstabel — exact de door de gebruiker gevraagde velden. */
+/** Kolomkoppen van de bewakingstabel — de door de gebruiker gevraagde velden. */
 const BEWAKING_KOLOMMEN = [
   'Begroot',
   'Tot. prognose',
@@ -133,38 +122,43 @@ const BEWAKING_KOLOMMEN = [
   'Onderaanneming',
   'Materiaal',
   'Inkoop/Mat./Afval',
-  'Bestelregels',
-  'Inkooporders/contr.',
+  'Verwachte kosten',
   'Geboekte kosten',
   '% gereed',
 ] as const
 
+/** Linker (bewakingscode) cel — vaste breedte, naam afgekapt zodat de rest past. */
+const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: string | null; vet?: boolean; achtergrond?: string }) => (
+  <td style={{
+    padding: '5px 8px', fontSize: 12, color: 'var(--neutral-800)', fontWeight: vet ? 700 : 400,
+    borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
+    overflow: 'hidden', textOverflow: 'ellipsis', background: achtergrond,
+  }}>
+    {code && <span style={{ fontWeight: 600 }}>{code}</span>}
+    {naam && <span style={{ color: 'var(--neutral-500)', marginLeft: code ? 8 : 0 }}>{naam}</span>}
+  </td>
+)
+
+const urenRood = (geboekt: number, prognose: number) => geboekt > prognose && geboekt > 0
+
 const BewakingRow = ({ r }: { r: BewakingRegel }) => (
   <tr>
-    <td style={{
-      padding: '6px 12px', fontSize: 13, color: 'var(--neutral-800)',
-      borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
-      position: 'sticky', left: 0, background: 'var(--surface, #fff)', zIndex: 1,
-    }}>
-      <span style={{ fontWeight: 600 }}>{r.code ?? '—'}</span>
-      {r.naam && <span style={{ color: 'var(--neutral-500)', marginLeft: 8 }}>{r.naam}</span>}
-    </td>
-    <TD>{fmt(r.begroot)}</TD>
-    <TD>{fmt(r.prognose)}</TD>
-    <TD>{fmtUren(r.prognoseUren)}</TD>
-    <TD>{fmtUren(r.geboekteUren)}</TD>
-    <TD>{fmt(r.arbeidskosten)}</TD>
-    <TD>{fmt(r.onderaanneming)}</TD>
-    <TD>{fmt(r.materiaal)}</TD>
-    <TD>{fmt(r.inkoopMaterieelAfval)}</TD>
-    <TD>{fmt(r.bestelregels)}</TD>
-    <TD>{fmt(r.contracten)}</TD>
-    <TD accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
-    <TD>{fmtPctWaarde(r.progress)}</TD>
+    <CodeCel code={r.code} naam={r.naam} />
+    <TD compact>{fmt(r.begroot)}</TD>
+    <TD compact>{fmt(r.prognose)}</TD>
+    <TD compact>{fmtUren(r.prognoseUren)}</TD>
+    <TD compact kleur={urenRood(r.geboekteUren, r.prognoseUren) ? ROOD : undefined}>{fmtUren(r.geboekteUren)}</TD>
+    <TD compact>{fmt(r.arbeidskosten)}</TD>
+    <TD compact>{fmt(r.onderaanneming)}</TD>
+    <TD compact>{fmt(r.materiaal)}</TD>
+    <TD compact>{fmt(r.inkoopMaterieelAfval)}</TD>
+    <TD compact>{fmt(r.verwachteKosten)}</TD>
+    <TD compact accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
+    <TD compact>{fmtPctWaarde(r.progress)}</TD>
   </tr>
 )
 
-const BewakingTabel = async ({ dossierId }: { dossierId: string }) => {
+async function BewakingTabel({ dossierId }: { dossierId: string }) {
   const data = await getDossierBewaking(dossierId)
 
   if (!data.beschikbaar) {
@@ -181,136 +175,141 @@ const BewakingTabel = async ({ dossierId }: { dossierId: string }) => {
   }
 
   const t = data.totalen
-  const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
   const sub = (regels: BewakingRegel[], sel: (r: BewakingRegel) => number) => regels.reduce((s, r) => s + sel(r), 0)
+  const subGroen = 'var(--neutral-50, #f8fafa)'
 
   return (
     <Card style={{ marginBottom: 16 }}>
       <CardHeader>Bewaking per bewakingscode</CardHeader>
       <CardBody style={{ padding: 0 }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={{
-                  padding: '7px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700,
-                  color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                  borderBottom: '2px solid var(--neutral-200, #e3e8ea)', whiteSpace: 'nowrap',
-                  position: 'sticky', left: 0, background: 'var(--surface, #fff)', zIndex: 2,
-                }}>
-                  Bewakingscode
-                </th>
-                {BEWAKING_KOLOMMEN.map((k) => <TH key={k} right>{k}</TH>)}
-              </tr>
-            </thead>
-            <tbody>
-              {data.hoofdstukken.map((h) => (
-                <Fragment key={`h-${h.id}-${h.naam}`}>
-                  <tr>
-                    <td colSpan={BEWAKING_KOLOMMEN.length + 1} style={{
-                      padding: '10px 12px 4px', fontSize: 11, fontWeight: 700,
-                      color: 'var(--neutral-400)', textTransform: 'uppercase', letterSpacing: '0.07em',
-                      borderBottom: '1px solid var(--neutral-200)',
-                      position: 'sticky', left: 0, background: 'var(--surface, #fff)',
-                    }}>
-                      {h.naam}
-                    </td>
-                  </tr>
-                  {h.regels.map((r, i) => <BewakingRow key={`${r.hoofdstukId}-${r.code ?? i}`} r={r} />)}
-                  <tr style={{ background: 'var(--neutral-50, #f8fafa)' }}>
-                    <td style={{
-                      padding: '6px 12px', fontSize: 12, fontWeight: 700, color: 'var(--neutral-700)',
-                      borderBottom: '1px solid var(--neutral-100)', whiteSpace: 'nowrap',
-                      position: 'sticky', left: 0, background: 'var(--neutral-50, #f8fafa)',
-                    }}>
-                      Subtotaal {h.naam}
-                    </td>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
-                    <TD vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
-                    <TD vet>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.inkoopMaterieelAfval))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.bestelregels))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.contracten))}</TD>
-                    <TD vet>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
-                    <TD>—</TD>
-                  </tr>
-                </Fragment>
-              ))}
-              {/* Eindtotaal */}
-              <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
-                <td style={{
-                  padding: '8px 12px', fontSize: 13, fontWeight: 800, color: 'var(--neutral-900)',
-                  whiteSpace: 'nowrap', position: 'sticky', left: 0, background: 'var(--neutral-100, #eef2f3)',
-                }}>
-                  Totaal
-                </td>
-                <TD vet>{fmt(t.begroot, true)}</TD>
-                <TD vet>{fmt(t.prognose, true)}</TD>
-                <TD vet>{fmtUren(t.prognoseUren, true)}</TD>
-                <TD vet>{fmtUren(t.geboekteUren, true)}</TD>
-                <TD vet>{fmt(t.arbeidskosten)}</TD>
-                <TD vet>{fmt(t.onderaanneming)}</TD>
-                <TD vet>{fmt(t.materiaal)}</TD>
-                <TD vet>{fmt(t.inkoopMaterieelAfval)}</TD>
-                <TD vet>{fmt(t.bestelregels)}</TD>
-                <TD vet>{fmt(t.contracten)}</TD>
-                <TD vet accent={t.geboekteKosten > 0}>{fmt(t.geboekteKosten)}</TD>
-                <TD>—</TD>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '15%' }} />
+            {BEWAKING_KOLOMMEN.map((k) => <col key={k} />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <TH>Bewakingscode</TH>
+              {BEWAKING_KOLOMMEN.map((k) => <TH key={k} right compact>{k}</TH>)}
+            </tr>
+          </thead>
+          <tbody>
+            {data.hoofdstukken.map((h) => (
+              <Fragment key={`h-${h.id}-${h.naam}`}>
+                <tr>
+                  <td colSpan={BEWAKING_KOLOMMEN.length + 1} style={{
+                    padding: '10px 8px 4px', fontSize: 11, fontWeight: 700,
+                    color: 'var(--neutral-400)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    borderBottom: '1px solid var(--neutral-200)',
+                  }}>
+                    {h.naam}
+                  </td>
+                </tr>
+                {h.regels.map((r, i) => <BewakingRow key={`${r.hoofdstukId}-${r.code ?? i}`} r={r} />)}
+                <tr style={{ background: subGroen }}>
+                  <CodeCel code={null} naam={`Subtotaal ${h.naam}`} vet achtergrond={subGroen} />
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
+                  <TD compact vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
+                  <TD compact vet kleur={urenRood(sub(h.regels, (r) => r.geboekteUren), sub(h.regels, (r) => r.prognoseUren)) ? ROOD : undefined}>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.inkoopMaterieelAfval))}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.verwachteKosten))}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
+                  <TD compact>—</TD>
+                </tr>
+              </Fragment>
+            ))}
+            {/* Eindtotaal */}
+            <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
+              <CodeCel code={null} naam="Totaal" vet achtergrond="var(--neutral-100, #eef2f3)" />
+              <TD compact vet>{fmt(t.begroot, true)}</TD>
+              <TD compact vet>{fmt(t.prognose, true)}</TD>
+              <TD compact vet>{fmtUren(t.prognoseUren, true)}</TD>
+              <TD compact vet kleur={urenRood(t.geboekteUren, t.prognoseUren) ? ROOD : undefined}>{fmtUren(t.geboekteUren, true)}</TD>
+              <TD compact vet>{fmt(t.arbeidskosten)}</TD>
+              <TD compact vet>{fmt(t.onderaanneming)}</TD>
+              <TD compact vet>{fmt(t.materiaal)}</TD>
+              <TD compact vet>{fmt(t.inkoopMaterieelAfval)}</TD>
+              <TD compact vet>{fmt(t.verwachteKosten)}</TD>
+              <TD compact vet accent={t.geboekteKosten > 0}>{fmt(t.geboekteKosten)}</TD>
+              <TD compact>—</TD>
+            </tr>
+          </tbody>
+        </table>
         <div style={{
           padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
         }}>
-          Live uit Bouw7-projectbewaking (Control), per kostensoort samengevoegd per bewakingscode.
-          Geboekte uren en arbeidskosten betreffen de kostensoort Arbeid; geboekte kosten = totaal besteed (verplichtingen).
+          Live uit Bouw7-projectbewaking. Geboekte uren/arbeidskosten = kostensoort Arbeid;
+          verwachte kosten = alle ingevoerde kostenregels (incl. arbeid); geboekte kosten = arbeid + ingekochte kosten mét inkoopfactuur.
         </div>
       </CardBody>
     </Card>
   )
 }
 
-/* ── main component ──────────────────────────────────────────────────── */
+/** Skeleton terwijl de (trage) bewaking-fetch loopt. */
+function BewakingSkeleton() {
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <CardHeader>Bewaking per bewakingscode</CardHeader>
+      <CardBody style={{ padding: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} style={{ height: i === 0 ? 14 : 24, width: i === 0 ? '40%' : '100%' }} />
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
 
-export async function FinancieelTab({ dossierId }: { dossierId: string }) {
+function ProjecttotalenSkeleton() {
+  return (
+    <>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: 'var(--neutral-400)', textTransform: 'uppercase',
+        letterSpacing: '0.07em', margin: '24px 0 10px',
+      }}>
+        Projecttotalen
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    </>
+  )
+}
+
+/* ── projecttotalen (Athena project-financial) ───────────────────────── */
+
+async function Projecttotalen({ dossierId }: { dossierId: string }) {
   const { bouw7Financial: f, relatieFacturatie } = await getDossierFinancieel(dossierId)
 
-  const tableStyle: React.CSSProperties = {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: 13,
-  }
+  const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
 
   if (!f) {
     return (
-      <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 1200 }}>
-        {/* Bewaking blijft beschikbaar ook zonder Athena-financiën */}
-        <BewakingTabel dossierId={dossierId} />
-        <div style={{
-          padding: '32px 28px',
-          border: '1px dashed var(--neutral-200)',
-          borderRadius: 10,
-          background: 'var(--neutral-50)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-          color: 'var(--neutral-500)',
-        }}>
-          <div style={{ fontSize: 24, opacity: 0.4 }}>◻</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neutral-800)' }}>Geen projecttotalen beschikbaar</div>
-          <div style={{ fontSize: 12, fontWeight: 500, textAlign: 'center', maxWidth: 320 }}>
-            Dit dossier heeft geen Bouw7-koppeling of financiële projectdata. Data wordt beschikbaar zodra het dossier gesynchroniseerd is.
-          </div>
+      <div style={{
+        padding: '32px 28px',
+        border: '1px dashed var(--neutral-200)',
+        borderRadius: 10,
+        background: 'var(--neutral-50)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+        color: 'var(--neutral-500)',
+      }}>
+        <div style={{ fontSize: 24, opacity: 0.4 }}>◻</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neutral-800)' }}>Geen projecttotalen beschikbaar</div>
+        <div style={{ fontSize: 12, fontWeight: 500, textAlign: 'center', maxWidth: 320 }}>
+          Dit dossier heeft geen Bouw7-koppeling of financiële projectdata.
         </div>
       </div>
     )
   }
 
-  /* kostentotalen per kolom */
   const kostenTypes: { label: string; key: keyof NonNullable<typeof f.costs> }[] = [
     { label: 'Uren',          key: 'labor'          },
     { label: 'Materialen',    key: 'material'        },
@@ -326,20 +325,15 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
     r: kostenTypes.reduce((s, t) => s + toNum(f.costs?.[t.key]?.realised), 0),
   }
 
-  /* opbrengsten */
   const omzet = {
     b: toNum(f.revenue?.budgeted),
     p: toNum(f.revenue?.prognosis),
     r: toNum(f.revenue?.realised),
   }
   const meerwerk   = toNum(f.additionalWork)
-  const opbrTotaal = {
-    b: omzet.b + meerwerk,
-    r: omzet.r,
-  }
+  const opbrTotaal = { b: omzet.b + meerwerk, r: omzet.r }
   const teFactureren = Math.max(0, omzet.b - omzet.r)
 
-  /* resultaat */
   const res = {
     b: toNum(f.result?.budgeted),
     p: toNum(f.result?.prognosis),
@@ -347,12 +341,7 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
   }
 
   return (
-    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 1200 }}>
-
-      {/* Bewaking per bewakingscode — hoofdweergave */}
-      <BewakingTabel dossierId={dossierId} />
-
-      {/* ── Projecttotalen ─────────────────────────────────────────── */}
+    <>
       <div style={{
         fontSize: 11, fontWeight: 700, color: 'var(--neutral-400)', textTransform: 'uppercase',
         letterSpacing: '0.07em', margin: '24px 0 10px',
@@ -449,9 +438,9 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
             <tbody>
               <tr>
                 <TDLabel>Resultaat</TDLabel>
-                <TD vet kleur={res.b >= 0 ? undefined : '#d9534f'}>{fmt(res.b, true)}</TD>
-                <TD vet kleur={res.p >= 0 ? undefined : '#d9534f'}>{fmt(res.p, true)}</TD>
-                <TD vet kleur={res.r >= 0 ? undefined : '#d9534f'}>{fmt(res.r, true)}</TD>
+                <TD vet kleur={res.b >= 0 ? undefined : ROOD}>{fmt(res.b, true)}</TD>
+                <TD vet kleur={res.p >= 0 ? undefined : ROOD}>{fmt(res.p, true)}</TD>
+                <TD vet kleur={res.r >= 0 ? undefined : ROOD}>{fmt(res.r, true)}</TD>
               </tr>
               <tr style={{ background: 'var(--neutral-50)' }}>
                 <TDLabel>Brutowinstmarge</TDLabel>
@@ -479,6 +468,26 @@ export async function FinancieelTab({ dossierId }: { dossierId: string }) {
           </CardBody>
         </Card>
       )}
+    </>
+  )
+}
+
+/* ── main component ──────────────────────────────────────────────────── */
+
+export function FinancieelTab({ dossierId }: { dossierId: string }) {
+  return (
+    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
+      {/* Bewaking per bewakingscode — volledige breedte, hoofdweergave */}
+      <Suspense fallback={<BewakingSkeleton />}>
+        <BewakingTabel dossierId={dossierId} />
+      </Suspense>
+
+      {/* Projecttotalen — smaller blok eronder */}
+      <div style={{ maxWidth: 960 }}>
+        <Suspense fallback={<ProjecttotalenSkeleton />}>
+          <Projecttotalen dossierId={dossierId} />
+        </Suspense>
+      </div>
     </div>
   )
 }

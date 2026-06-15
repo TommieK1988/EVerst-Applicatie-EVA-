@@ -212,7 +212,8 @@ Heimdall-JWT (Bearer-token) — `Bouw7Client.getApollo()` / `.getApolloAll()` he
 
 | Wat | Endpoint | Methode | Query-DSL |
 |---|---|---|---|
-| Plan-items van een project | `GET /search/plan-items` | read | `project.id = {bouw7_id} limit 1000 page {n}` via `X-Query` header |
+| Plan-items van een project | `GET /search/plan-items` (Apollo) | read | `project.id = {bouw7_id} limit 1000 page {n}` via `X-Query` header |
+| Detail van één plan-item (mét medewerkers) | `GET /plan-item/{id}` (Heimdall) | read | — |
 
 **Query-DSL:** filter + paginatie gaan mee via de `X-Query`-header (geen URL-encoding nodig),
 bv. `project.id = 3494115 limit 1000 page 2`. De response is `{ items: PlanItem[], __metadata }`;
@@ -277,15 +278,27 @@ hourInfo.budgetHours / .prognosisHours / .costHours (geboekte uren) / .allowedHo
 > Onderaanneming). `getDossierBewaking()` voegt per code samen: begroting/prognose/kosten **sommeren**,
 > `costHours`/arbeidskosten uit kostensoort 1, % gereed van de soort met de grootste begroting.
 
+### Aanvullende bronnen (2 extra kolommen)
+
+De Financieel-tab combineert project-control met twee andere endpoints:
+
+| Kolom | Bron | Berekening |
+|---|---|---|
+| **Geboekte kosten** | Apollo `GET /search/purchase-invoices` (`project.id = {id}`) | `arbeidskosten` (ct1 `costAmount`, altijd geboekt) **+** inkoop mét inkoopfactuur. Dedupe op `deliveryTicket.id` (termijn-facturen → zelfde bon); som `deliveryTicket.cost` per `deliveryTicket.securityLink.code.code`. **Let op:** géén `costAmount`-som — dat telt ook niet-gefactureerde leverbonnen mee. |
+| **Verwachte kosten** | Heimdall `GET /list/contract-order-lines` | `q`-DSL: `(projectSecurityLink = NULL OR projectSecurityLink.status != 2) AND status IN (0,3) AND project.id = {id} AND totalPrice >= 0 SORT(description, ASC) LIMIT 1000`. = Σ `totalPrice` per `projectSecurityLink.code`. Dit zijn **alle verwachte-kosten-regels** (incl. arbeid/inhuur), niet alleen inkoop — "bestelregel" is een misleidende naam. Een aparte inkoop/OA-splitsing is bewust niet gemaakt (`contact.type`/regel-`costType` zijn te onbetrouwbaar; Everts voert alles als losse regel in). |
+
+> **Niet gebruiken voor geboekte kosten:** `costAmount` (besteed = álle leverbonnen) en
+> `contractCostAmount` (klopt niet/0 in de praktijk). Geverifieerd op 3567976: geboekte kosten
+> €19.461 (arbeid €14.591 + factuur €4.870), niet €19.509 (incl. €48 niet-gefactureerde bon).
+>
+> **Historie:** `/search/delivery-tickets` + `/list/security-codes` zijn een alternatieve realisatie-bron;
+> de vierde host `hermes.bouw7.nl` (FastAPI) is niet nodig gebleken.
+
 ### EVA-server action
 
 | Wat | Server action | Bestand |
 |---|---|---|
 | Bewaking per bewakingscode (live) | `getDossierBewaking(dossierId)` | `lib/dossiers/actions.ts` |
-
-> **Historie:** `/search/delivery-tickets` + `/list/security-codes` (Heimdall) zijn een alternatieve
-> bron voor realisatie per code, maar het `project-control`-endpoint is leidend (compleet, incl. uren).
-> De vierde host `hermes.bouw7.nl` (FastAPI) is niet nodig gebleken.
 
 ---
 
