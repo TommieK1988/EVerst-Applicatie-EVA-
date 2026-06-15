@@ -218,11 +218,11 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
           const dossierHref = t.dossier_sectie && t.dossier_id
             ? `/${t.dossier_sectie}/${t.dossier_id}/taken`
             : null;
-          const contextLabel = t.dossier_naam ?? t.lijst?.naam ?? '—';
+          const dossierNaam = t.dossier_naam ?? t.lijst?.naam ?? '—';
           return (
             <div key={t.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 2px',
+              padding: '6px 2px',
               borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
             }}>
               <button onClick={() => toggle(t.id)} style={{
@@ -235,34 +235,39 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
                 {done && <IconCheck size={11}/>}
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500,
-                  color: done ? 'var(--fg-muted)' : 'var(--fg)',
-                  textDecoration: done ? 'line-through' : 'none',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{t.titel}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center' }}>
-                  {dossierHref ? (
-                    <a
-                      href={dossierHref}
-                      style={{
-                        fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
-                        color: 'var(--accent)', letterSpacing: '0.03em',
-                        textDecoration: 'none',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: 140,
-                      }}
-                    >{contextLabel}</a>
-                  ) : (
-                    <span style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                      {contextLabel}
-                    </span>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <div style={{
+                    flex: 1, minWidth: 0,
+                    fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500,
+                    color: done ? 'var(--fg-muted)' : 'var(--fg)',
+                    textDecoration: done ? 'line-through' : 'none',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{t.titel}</div>
                   <span style={{
                     fontFamily: 'var(--font-ui)', fontSize: 10, color: due === 'Verlopen' ? '#d04a2a' : 'var(--fg-muted)',
                     fontWeight: due === 'Verlopen' ? 600 : 400, flexShrink: 0,
-                  }}>· {due}</span>
+                  }}>{due}</span>
                 </div>
+                {/* Dossiernaam onder de taaknaam */}
+                {dossierHref ? (
+                  <a
+                    href={dossierHref}
+                    style={{
+                      display: 'block', marginTop: 1,
+                      fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
+                      color: 'var(--accent)', letterSpacing: '0.02em',
+                      textDecoration: 'none',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >{dossierNaam}</a>
+                ) : (
+                  <span style={{
+                    display: 'block', marginTop: 1,
+                    fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
+                    color: 'var(--fg-muted)', letterSpacing: '0.04em',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{dossierNaam}</span>
+                )}
               </div>
               <PriDot p={pri}/>
             </div>
@@ -348,7 +353,7 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
       Icon={Icon}
       onMore={() => router.push(moreHref)}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {displayed.length === 0 && (
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)', padding: '8px 0' }}>
             {emptyText}
@@ -362,7 +367,7 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
               href={`/${sectie}/${d.id}`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 2px',
+                padding: '6px 2px',
                 borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
                 textDecoration: 'none', color: 'inherit',
               }}

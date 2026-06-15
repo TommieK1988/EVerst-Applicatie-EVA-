@@ -726,9 +726,9 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const bouw7Id = dossier.bouw7_id
 
     // Drie bronnen parallel: projectbewaking per kostensoort, gefactureerde inkoop, en bestelregels.
-    const orderLinesQuery =
-      `(projectSecurityLink = NULL OR projectSecurityLink.status != 2) AND status IN (0,3) ` +
-      `AND project.id = ${bouw7Id} AND totalPrice >= 0 SORT(description, ASC) LIMIT 1000`
+    // Ongefilterd, gelijk aan Bouw7's eigen lijsttotaal; het response-`total`-veld is het
+    // gezaghebbende projecttotaal (volledig, ook bij >LIMIT regels).
+    const orderLinesQuery = `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`
     const [responses, invoices, orderLines] = await Promise.all([
       Promise.all(
         BEWAKING_KOSTENSOORTEN.map((ct) =>
@@ -739,9 +739,9 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       ),
       client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
       client
-        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: orderLinesQuery })
-        .then((r) => r.items ?? [])
-        .catch(() => []),
+        .get<{ items?: Bouw7ContractOrderLine[]; total?: number | string }>('/list/contract-order-lines', { q: orderLinesQuery })
+        .then((r) => ({ items: r.items ?? [], total: toGetal(r.total) }))
+        .catch(() => ({ items: [] as Bouw7ContractOrderLine[], total: 0 })),
     ])
 
     const GEEN = '-' // code-sleutel voor "Kosten zonder bewaking"
@@ -839,7 +839,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
 
     // Verwachte kosten (#9) = totaal van alle contract-order-lines per code (incl. arbeid).
     const verwachtPerCode = new Map<string, number>()
-    for (const line of orderLines) {
+    for (const line of orderLines.items) {
       const code = line.projectSecurityLink?.code ?? GEEN
       verwachtPerCode.set(code, (verwachtPerCode.get(code) ?? 0) + toGetal(line.totalPrice))
       const isUncoded = code === GEEN
@@ -891,7 +891,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       onderaanneming: som((r) => r.onderaanneming),
       materiaal: som((r) => r.materiaal),
       inkoopMaterieelAfval: som((r) => r.inkoopMaterieelAfval),
-      verwachteKosten: som((r) => r.verwachteKosten),
+      verwachteKosten: orderLines.total || som((r) => r.verwachteKosten),
       geboekteKosten: som((r) => r.geboekteKosten),
     }
 

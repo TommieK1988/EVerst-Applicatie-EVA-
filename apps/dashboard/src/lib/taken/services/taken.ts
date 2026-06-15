@@ -485,12 +485,15 @@ export async function getUrgenteTakenVoorDossier(dossier_id: string): Promise<Ur
     .eq('is_template', false)
 
   const lijstIds = (lijsten ?? []).map((l: { id: string }) => l.id)
-  if (lijstIds.length === 0) return []
+
+  // Taken via een actielijst van dit dossier ÓF rechtstreeks aan het dossier gekoppeld (losse taken).
+  const orFilters = [`dossier_id.eq.${dossier_id}`]
+  if (lijstIds.length > 0) orFilters.push(`lijst_id.in.(${lijstIds.join(',')})`)
 
   const { data: taken } = await supabase
     .from('tasks')
     .select('id, titel, deadline, prioriteit, status, task_assignees(user_id)')
-    .in('lijst_id', lijstIds)
+    .or(orFilters.join(','))
     .not('status', 'in', '("gereed","vervallen")')
     .order('deadline', { ascending: true, nullsFirst: false })
     .limit(10)

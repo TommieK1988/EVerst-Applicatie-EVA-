@@ -20,6 +20,9 @@ import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
 import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
 import TaakDetailPanel from '@/components/taken/TaakDetailPanel'
+import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
+import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
+import { Combobox } from '@/components/ui/combobox'
 import {
   Button, Card, CardHeader, CardBody,
   Input, Textarea,
@@ -131,6 +134,27 @@ function DsSelect({
   )
 }
 
+/* ─── Rol-select (zoekbare single-select) ─────────────────────────── */
+function RolSelect({
+  value, onChange, options, placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  placeholder?: string
+}) {
+  return (
+    <Combobox
+      options={[{ value: '', label: '— Geen —' }, ...options]}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder ?? '— Selecteer —'}
+      searchPlaceholder="Zoek medewerker…"
+      emptyText="Geen medewerker gevonden."
+    />
+  )
+}
+
 /* ─── taken blok ──────────────────────────────────────────────────── */
 function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
   return {
@@ -187,33 +211,67 @@ const STATUS_DOT: Record<string, string> = {
 }
 
 function TakenBlok({
-  dossierId, sectie, sjablonen, urgenteTaken,
+  dossierId, dossierTitel, sectie, sjablonen, urgenteTaken,
 }: {
   dossierId: string
+  dossierTitel: string
   sectie: string
   sjablonen: DbTaskList[]
   urgenteTaken: UrgenteTaak[]
 }) {
+  const router = useRouter()
   const [geselecteerd, setGeselecteerd] = React.useState<TaakMetDetails | null>(null)
+  const [afgevinkt, setAfgevinkt] = React.useState<Set<string>>(new Set())
+  const [, startTransition] = React.useTransition()
 
   const takenTabHref = `/${
     sectie === 'aanvraag' ? 'aanvragen' :
     sectie === 'offerte'  ? 'offertes'  : 'opdrachten'
   }/${dossierId}/taken`
 
+  const openTaken = urgenteTaken.filter(t => !afgevinkt.has(t.id))
+
+  function vinkAf(id: string) {
+    setAfgevinkt(prev => new Set(prev).add(id))
+    startTransition(async () => {
+      try {
+        await updateTaakStatus(id, 'gereed')
+        router.refresh()
+      } catch {
+        // optimistisch — bij fout terugdraaien
+        setAfgevinkt(prev => { const n = new Set(prev); n.delete(id); return n })
+      }
+    })
+  }
+
   return (
     <>
       <Card>
         <CardHeader>
-          <span>Taken · {urgenteTaken.length} open</span>
+          <span>Taken · {openTaken.length} open</span>
           <div className="flex items-center gap-1.5">
             {sjablonen.length > 0 && (
               <ActiveerSjabloonDialog dossier_id={dossierId} sjablonen={sjablonen} compact />
             )}
+            <NieuweTaakDialog
+              defaultDossier={{ id: dossierId, titel: dossierTitel }}
+              onSuccess={() => router.refresh()}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
+                >
+                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M10 4v12M4 10h12" />
+                  </svg>
+                  Nieuwe taak
+                </button>
+              }
+            />
           </div>
         </CardHeader>
         <CardBody className="py-3">
-          {urgenteTaken.length === 0 ? (
+          {openTaken.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-4 text-center">
               <span className="text-[22px] opacity-35">☑</span>
               <span className="text-xs font-medium text-neutral-500">Geen openstaande taken</span>
@@ -223,39 +281,49 @@ function TakenBlok({
             </div>
           ) : (
             <div className="flex flex-col">
-              {urgenteTaken.map((t, i) => (
-                <button
+              {openTaken.map((t, i) => (
+                <div
                   key={t.id}
-                  onClick={() => setGeselecteerd(urgenteTaakNaarDetails(t))}
-                  className="flex w-full cursor-pointer items-center gap-2.5 bg-transparent py-[7px] text-left outline-none"
+                  className="flex w-full items-center gap-2.5 py-[7px]"
                   style={{
-                    border: 'none',
-                    borderBottom: i < urgenteTaken.length - 1 ? '1px solid var(--neutral-200, #e3e8ea)' : undefined,
+                    borderBottom: i < openTaken.length - 1 ? '1px solid var(--neutral-200, #e3e8ea)' : undefined,
                   }}
                 >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: STATUS_DOT[t.status] ?? 'var(--fg-muted)' }}
+                  <button
+                    type="button"
+                    onClick={() => vinkAf(t.id)}
+                    title="Taak afvinken"
+                    className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-neutral-300 bg-transparent text-white outline-none transition-colors hover:border-brand-500 hover:bg-brand-50"
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium text-neutral-900">
-                      {t.titel}
+                  <button
+                    onClick={() => setGeselecteerd(urgenteTaakNaarDetails(t))}
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 bg-transparent text-left outline-none"
+                    style={{ border: 'none' }}
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: STATUS_DOT[t.status] ?? 'var(--fg-muted)' }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium text-neutral-900">
+                        {t.titel}
+                      </div>
+                      {t.assignee_naam && (
+                        <span className="mt-0.5 inline-block rounded-full bg-neutral-100 px-[5px] py-px text-[10px] font-semibold text-neutral-600">
+                          {t.assignee_naam}
+                        </span>
+                      )}
                     </div>
-                    {t.assignee_naam && (
-                      <span className="mt-0.5 inline-block rounded-full bg-neutral-100 px-[5px] py-px text-[10px] font-semibold text-neutral-600">
-                        {t.assignee_naam}
+                    {t.deadline && (
+                      <span
+                        className="shrink-0 text-[10px] font-semibold"
+                        style={{ color: deadlineKleur(t.deadline) }}
+                      >
+                        {fmtDeadline(t.deadline)}
                       </span>
                     )}
-                  </div>
-                  {t.deadline && (
-                    <span
-                      className="shrink-0 text-[10px] font-semibold"
-                      style={{ color: deadlineKleur(t.deadline) }}
-                    >
-                      {fmtDeadline(t.deadline)}
-                    </span>
-                  )}
-                </button>
+                  </button>
+                </div>
               ))}
               <Link
                 href={takenTabHref}
@@ -922,27 +990,27 @@ export function InformatieTab({
                     ) : (
                       <>
                         <FormField upper label="Projectleider">
-                          <DsSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
+                          <RolSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
                         </FormField>
                         <FormField upper label="Werkvoorbereider">
-                          <DsSelect value={form.werkvoorbereider_id} onChange={set('werkvoorbereider_id')} options={medewerkersOpties} placeholder="Selecteer werkvoorbereider" />
+                          <RolSelect value={form.werkvoorbereider_id} onChange={set('werkvoorbereider_id')} options={medewerkersOpties} placeholder="Selecteer werkvoorbereider" />
                         </FormField>
                         <FormField upper label="Uitvoerder">
-                          <DsSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
+                          <RolSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
                         </FormField>
                         {sectie === 'opdracht' && (
                           <FormField upper label="Calculator">
-                            <DsSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
+                            <RolSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
                           </FormField>
                         )}
                       </>
                     )}
                     {/* Teamleider & Controller zijn EVA-eigen → altijd bewerkbaar. */}
                     <FormField upper label="Teamleider">
-                      <DsSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
+                      <RolSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
                     </FormField>
                     <FormField upper label="Controller">
-                      <DsSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
+                      <RolSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
                     </FormField>
                   </FormRow>
                 </FormSection>
@@ -997,7 +1065,7 @@ export function InformatieTab({
 
         {/* Taken */}
         <div>
-          <TakenBlok dossierId={dossier.id} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
+          <TakenBlok dossierId={dossier.id} dossierTitel={dossier.titel} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
         </div>
 
         {/* Dossier-toggles */}

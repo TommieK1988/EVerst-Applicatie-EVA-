@@ -10,7 +10,7 @@ import {
   getWerkbegrotingBestellingen, slaWerkbegrotingOp, getScenarios,
   heroverhaalWerkbegroting,
 } from '@/lib/everts-calc/local-store'
-import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, type ControleTaakResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import HeroverhaalModal from './HeroverhaalModal'
@@ -21,10 +21,12 @@ interface Props {
   projectNaam: string
   projectNummer: string
   projectStatus: string
+  /** Dossier-id van de opdracht — nodig om bij goedkeuring een controletaak aan te maken. */
+  dossierId?: string
   ingesloten?: boolean
 }
 
-export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, projectNummer, projectStatus, ingesloten = false }: Props) {
+export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, projectNummer, projectStatus, dossierId, ingesloten = false }: Props) {
   const [wb, setWb] = useState<Werkbegroting | null>(null)
   const [scenarioId, setScenarioId] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -33,6 +35,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [isHeroverhaal, setIsHeroverhaal] = useState(false)
   const [gridKey, setGridKey] = useState(0)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
+  const [controleTaak, setControleTaak] = useState<ControleTaakResultaat | null>(null)
 
   useEffect(() => {
     const scenarios = getScenarios(projectId)
@@ -114,7 +117,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     }, 0)
   }, [wb, refreshTeller])
 
-  const handleStatusWijzig = useCallback((nieuweStatus: WerkbegrotingStatus, notitie?: string) => {
+  const handleStatusWijzig = useCallback(async (nieuweStatus: WerkbegrotingStatus, notitie?: string) => {
     if (!wb) return
     const bijgewerkt: Werkbegroting = { ...wb, status: nieuweStatus, bijgewerkt_op: new Date().toISOString() }
     slaWerkbegrotingOp(bijgewerkt)
@@ -127,7 +130,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     }
     toast.success(labels[nieuweStatus])
     if (notitie) console.info('[GoedkeuringNotitie]', notitie)
-  }, [wb])
+
+    // Bij indienen ter goedkeuring: controletaak voor de controller aanmaken.
+    if (nieuweStatus === 'definitief' && dossierId) {
+      try {
+        const resultaat = await maakWerkbegrotingControleTaak(dossierId)
+        setControleTaak(resultaat)
+      } catch {
+        toast.error('Controletaak kon niet worden aangemaakt')
+      }
+    }
+  }, [wb, dossierId])
 
   const toegestaneStatussen = ['gewonnen', 'opdracht', 'uitvoering', 'afgerond']
   const magAanmaken = toegestaneStatussen.includes(projectStatus)
@@ -254,6 +267,50 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           onStatusWijzig={handleStatusWijzig}
           onSluit={() => setGoedkeuringOpen(false)}
         />
+      )}
+
+      {controleTaak && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setControleTaak(null) }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-blue-700">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Controletaak aangemaakt</h2>
+            </div>
+            <div className="px-6 py-5 text-sm leading-relaxed text-gray-700">
+              <p>
+                Er is een taak <strong>&ldquo;Werkbegroting controleren&rdquo;</strong>
+                {controleTaak.bestond ? ' beschikbaar' : ' toegevoegd'} bij dit dossier
+                {controleTaak.toegewezenAan
+                  ? <> voor <strong>{controleTaak.toegewezenAan}</strong>.</>
+                  : <>.</>}
+              </p>
+              {controleTaak.isFallback && (
+                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
+                  Er was geen controller ingesteld op dit dossier — de taak is daarom toegewezen aan
+                  {' '}<strong>Tom Kamminga</strong>.
+                </p>
+              )}
+              {controleTaak.bestond && (
+                <p className="mt-2 text-[13px] text-gray-500">
+                  Er stond al een openstaande controletaak open; er is geen dubbele taak aangemaakt.
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                onClick={() => setControleTaak(null)}
+                className="rounded-lg bg-everts px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-everts/90"
+              >
+                Begrepen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

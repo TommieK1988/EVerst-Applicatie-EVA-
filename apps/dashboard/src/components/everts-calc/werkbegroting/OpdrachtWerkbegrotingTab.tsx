@@ -55,6 +55,7 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer }: Props) {
         projectNaam={naam}
         projectNummer={nummer}
         projectStatus="opdracht"
+        dossierId={aanvraagId}
         ingesloten
       />
     </div>

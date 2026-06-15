@@ -1,6 +1,8 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { createAdminClient } from '@everts/database/server'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
 
 export interface SyncWerkbegrotingResultaat {
@@ -166,4 +168,108 @@ export async function bulkUpdateComponenten(
 
   if (error) return { gelukt: false, fout: error.message }
   return { gelukt: true }
+}
+
+// ─── Controletaak bij goedkeuring aanvragen ───────────────────────────────────
+
+export interface ControleTaakResultaat {
+  /** Naam van de medewerker aan wie de taak is toegewezen (null als niemand gevonden). */
+  toegewezenAan: string | null
+  /** True als er geen controller op het dossier stond en is teruggevallen op Tom Kamminga. */
+  isFallback: boolean
+  /** True als er al een openstaande controletaak bestond (er is dan geen nieuwe gemaakt). */
+  bestond: boolean
+  taakId: string | null
+}
+
+/**
+ * Maakt bij het indienen van een werkbegroting ter goedkeuring een taak
+ * "Werkbegroting controleren" aan op het dossier, toegewezen aan de controller.
+ * Staat er geen controller op het dossier, dan valt de taak terug op Tom Kamminga.
+ */
+export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<ControleTaakResultaat> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  // 1. Controller van het dossier ophalen
+  const { data: dossier } = await db
+    .from('dossiers')
+    .select('controller_id')
+    .eq('id', dossierId)
+    .single()
+
+  let medewerkerId: string | null = dossier?.controller_id ?? null
+  let isFallback = false
+
+  // 2. Geen controller → terugvallen op Tom Kamminga
+  if (!medewerkerId) {
+    isFallback = true
+    const { data: tom } = await db
+      .from('medewerkers')
+      .select('id')
+      .ilike('voornaam', 'Tom')
+      .ilike('achternaam', 'Kamminga')
+      .limit(1)
+      .maybeSingle()
+    medewerkerId = tom?.id ?? null
+  }
+
+  // 3. Naam + auth-koppeling van de toegewezen medewerker
+  let naam: string | null = null
+  let authUserId: string | null = null
+  if (medewerkerId) {
+    const { data: med } = await db
+      .from('medewerkers')
+      .select('voornaam, tussenvoegsel, achternaam, auth_user_id')
+      .eq('id', medewerkerId)
+      .single()
+    if (med) {
+      naam = [med.voornaam, med.tussenvoegsel, med.achternaam].filter(Boolean).join(' ')
+      authUserId = med.auth_user_id ?? null
+    }
+  }
+
+  // 4. Bestaat er al een openstaande controletaak? Dan niet dubbel aanmaken.
+  const { data: bestaand } = await db
+    .from('tasks')
+    .select('id')
+    .eq('dossier_id', dossierId)
+    .eq('titel', 'Werkbegroting controleren')
+    .not('status', 'in', '("gereed","vervallen")')
+    .limit(1)
+    .maybeSingle()
+
+  if (bestaand) {
+    return { toegewezenAan: naam, isFallback, bestond: true, taakId: bestaand.id }
+  }
+
+  // 5. Taak aanmaken, rechtstreeks aan het dossier gekoppeld
+  const { data: taak, error } = await db
+    .from('tasks')
+    .insert({
+      titel:          'Werkbegroting controleren',
+      dossier_id:     dossierId,
+      status:         'open',
+      prioriteit:     'hoog',
+      assignee_type:  'direct',
+      dossier_rollen: [],
+    })
+    .select('id')
+    .single()
+
+  if (error) throw new Error(`Fout bij aanmaken controletaak: ${error.message}`)
+
+  // 6. Toewijzen aan de controller (of Tom Kamminga)
+  if (authUserId) {
+    await db.from('task_assignees').insert({
+      task_id: taak.id,
+      user_id: authUserId,
+      rol:     'verantwoordelijke',
+    })
+  }
+
+  revalidatePath('/opdrachten')
+  revalidatePath('/taken')
+
+  return { toegewezenAan: naam, isFallback, bestond: false, taakId: taak.id }
 }
