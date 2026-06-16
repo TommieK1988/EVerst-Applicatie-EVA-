@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import TopBar  from './TopBar'
 import MobileBottomNav from './MobileBottomNav'
+import MobileRouteGuard from './MobileRouteGuard'
 import { BreadcrumbProvider } from '@/lib/breadcrumb-context'
 import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 import type { Tweaks } from './types'
@@ -169,7 +170,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
           // ruimte voor de mobiele bottom-nav
           paddingBottom: isMobile ? 'var(--bottomnav-h)' : undefined,
         }}>
-          {children}
+          <MobileRouteGuard>{children}</MobileRouteGuard>
         </main>
       </div>
 

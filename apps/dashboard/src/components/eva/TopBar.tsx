@@ -225,18 +225,20 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0, onMenuClick
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Link href="/vraag-eva" title="Vraag EVA" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            height: 32, padding: isMobile ? '0 8px' : '0 12px',
-            background: 'var(--accent)',
-            color: 'white',
-            borderRadius: 6, fontSize: 12, fontWeight: 700,
-            textDecoration: 'none', letterSpacing: '0.01em',
-            whiteSpace: 'nowrap',
-          }}>
-            <IconChat size={14}/>
-            {!isMobile && 'Vraag EVA'}
-          </Link>
+          {!isMobile && (
+            <Link href="/vraag-eva" title="Vraag EVA" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              height: 32, padding: '0 12px',
+              background: 'var(--accent)',
+              color: 'white',
+              borderRadius: 6, fontSize: 12, fontWeight: 700,
+              textDecoration: 'none', letterSpacing: '0.01em',
+              whiteSpace: 'nowrap',
+            }}>
+              <IconChat size={14}/>
+              Vraag EVA
+            </Link>
+          )}
           <button
             onClick={() => setHelpOpen(true)}
             style={iconBtn()}
