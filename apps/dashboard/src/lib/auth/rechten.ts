@@ -20,11 +20,17 @@ export type CurrentMedewerker = {
 
 /** Haal het medewerker-record van de ingelogde gebruiker op (of null). */
 export async function getCurrentMedewerker(): Promise<CurrentMedewerker | null> {
+  // Sessie-client alleen voor de geverifieerde gebruiker (auth-API, niet RLS-afhankelijk).
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data } = await supabase
+  // Het medewerker-record via de admin-client lezen: op `medewerkers` staat RLS aan
+  // zónder policies, dus een sessie-client krijgt 0 rijen terug. We filteren strikt op
+  // de geverifieerde auth_user_id, dus we lezen uitsluitend de eigen rij.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data } = await admin
     .from('medewerkers')
     .select('id, voornaam, tussenvoegsel, achternaam, functie, afdeling, foto_url, gebruiker_type, rechten_override')
     .eq('auth_user_id', user.id)
