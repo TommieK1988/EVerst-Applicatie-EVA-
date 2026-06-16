@@ -472,17 +472,6 @@ input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
-/* ── Mobiel · ruimere paginarand op kleine schermen (< md = 768px) ────────
-   Page-padding wordt compacter op telefoon/tablet-portret zodat content
-   meer breedte krijgt. Touch-doelen (knoppen, links) houden min. 44px.
-   ─────────────────────────────────────────────────────────────────────── */
-@media (max-width: 767px) {
-  :root {
-    --page-pad-x: 16px;
-    --page-pad-y: 16px;
-  }
-}
-
 /* ── Print styles ─────────────────────────────────────────────────────── */
 @media print {
   .no-print { display: none !important; }

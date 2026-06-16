@@ -2,12 +2,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IconMoon, IconSun, IconChat, IconQuestion, IconBase } from './Icons';
+import { IconMoon, IconSun, IconChat, IconQuestion } from './Icons';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
 import HelpPanel from './HelpPanel';
 import NotificatiesDropdown from './NotificatiesDropdown';
 import { getPageHelp } from '@/lib/page-help';
-import { useIsMobile } from '@/lib/hooks/useMediaQuery';
 
 /* ── Tab-slug → label (voor dossier-detailpagina's) ── */
 const TAB_LABELS: Record<string, string> = {
@@ -164,17 +163,14 @@ type TopBarProps = {
   dark: boolean;
   setDark: (v: boolean) => void;
   aantalOngelezen?: number;
-  /** Opent de mobiele navigatie-drawer (alleen relevant onder md). */
-  onMenuClick?: () => void;
 };
 
-export default function TopBar({ dark, setDark, aantalOngelezen = 0, onMenuClick }: TopBarProps) {
+export default function TopBar({ dark, setDark, aantalOngelezen = 0 }: TopBarProps) {
   const pathname = usePathname()
   const { title, breadcrumb, withTabs } = resolveLabel(pathname)
   const breadcrumbCtx = useBreadcrumb()
   const [helpOpen, setHelpOpen] = useState(false)
   const helpContent = getPageHelp(pathname)
-  const isMobile = useIsMobile()
 
   let displayTitle = title
   if (withTabs && breadcrumbCtx?.recordName) {
@@ -192,53 +188,33 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0, onMenuClick
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg)',
         display: 'flex', alignItems: 'center',
-        padding: isMobile ? '0 12px' : '0 32px',
-        gap: isMobile ? 8 : 12,
+        padding: '0 32px',
+        gap: 12,
       }}>
-        {isMobile && (
-          <button
-            onClick={onMenuClick}
-            aria-label="Menu openen"
-            style={{
-              width: 'var(--touch-target)', height: 'var(--touch-target)',
-              flexShrink: 0, marginLeft: -8,
-              background: 'none', border: 'none', padding: 0,
-              color: 'var(--fg-soft)', cursor: 'pointer',
-              display: 'grid', placeItems: 'center',
-            }}
-          >
-            <IconBase size={24}>
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </IconBase>
-          </button>
-        )}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
           <h1 style={{
             margin: 0,
             fontFamily: 'var(--font-display)',
-            fontSize: isMobile ? 15 : 18, fontWeight: 700,
+            fontSize: 18, fontWeight: 700,
             letterSpacing: '-0.015em',
             color: 'var(--fg)',
             whiteSpace: 'nowrap',
-            overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{displayTitle}</h1>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {!isMobile && (
-            <Link href="/vraag-eva" title="Vraag EVA" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              height: 32, padding: '0 12px',
-              background: 'var(--accent)',
-              color: 'white',
-              borderRadius: 6, fontSize: 12, fontWeight: 700,
-              textDecoration: 'none', letterSpacing: '0.01em',
-              whiteSpace: 'nowrap',
-            }}>
-              <IconChat size={14}/>
-              Vraag EVA
-            </Link>
-          )}
+          <Link href="/vraag-eva" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            height: 32, padding: '0 12px',
+            background: 'var(--accent)',
+            color: 'white',
+            borderRadius: 6, fontSize: 12, fontWeight: 700,
+            textDecoration: 'none', letterSpacing: '0.01em',
+            whiteSpace: 'nowrap',
+          }}>
+            <IconChat size={14}/>
+            Vraag EVA
+          </Link>
           <button
             onClick={() => setHelpOpen(true)}
             style={iconBtn()}

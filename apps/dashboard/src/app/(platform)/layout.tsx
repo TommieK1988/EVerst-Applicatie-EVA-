@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@everts/database/server'
 import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
+import MobileRedirect from '@/components/mobiel/MobileRedirect'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       aantalOngelezen={aantalOngelezen}
       rechten={rechten}
     >
+      <MobileRedirect />
       {children}
       <ToastProvider />
     </PlatformShell>

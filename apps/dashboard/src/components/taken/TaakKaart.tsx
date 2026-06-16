@@ -55,12 +55,8 @@ export default function TaakKaart({ taak, onClick, compact = false }: Props) {
         <button
           onClick={toggleGereed}
           disabled={loading}
-          aria-label={taak.status === 'gereed' ? 'Markeer als open' : 'Markeer als gereed'}
           className={cn(
-            // relative + after-pseudo vergroot de touch-hitbox tot ~36px
-            // zonder het visuele 16px-vinkje of de layout te veranderen
-            'relative mt-0.5 flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
-            "after:absolute after:-inset-2.5 after:content-['']",
+            'mt-0.5 flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
             taak.status === 'gereed'
               ? 'bg-emerald-500 border-emerald-500'
               : 'border-slate-300 hover:border-emerald-400'

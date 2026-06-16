@@ -36,7 +36,6 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { KolomConfig, GebruikerLayout } from '@everts/database/platform-types'
 import { slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
-import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 import {
   GripVertical,
   Eye, EyeOff, X, Check, Layers, SlidersHorizontal, ChevronDown as ChevronDownSm,
@@ -150,7 +149,6 @@ export default function OverzichtTabel<T extends { id: string }>({
   scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties,
 }: Props<T>) {
   const router = useRouter()
-  const isMobile = useIsMobile()
   const [isPending, startTransition] = useTransition()
 
   const defaultVisibility: VisibilityState = Object.fromEntries(
@@ -444,7 +442,7 @@ export default function OverzichtTabel<T extends { id: string }>({
 
         {/* ── Toolbar ── */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 8,
           padding: '10px 14px',
           background: 'white',
           borderBottom: '1px solid var(--border)',
@@ -454,7 +452,7 @@ export default function OverzichtTabel<T extends { id: string }>({
             display: 'flex', alignItems: 'center', gap: 7,
             height: 32, padding: '0 10px',
             background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 6, minWidth: isMobile ? 140 : 220, flex: 1, maxWidth: isMobile ? undefined : 360,
+            borderRadius: 6, minWidth: 220, flex: 1, maxWidth: 360,
           }}>
             <Search size={13} style={{ color: 'var(--fg-muted)', flexShrink: 0 }} />
             <input
@@ -645,54 +643,7 @@ export default function OverzichtTabel<T extends { id: string }>({
           </div>
         )}
 
-        {/* ── Mobiel: kaartweergave i.p.v. brede tabel ── */}
-        {isMobile ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
-            {table.getRowModel().rows.map(row => {
-              const zichtbaar = orderedKolommen.filter(k => columnVisibility[k.key] !== false)
-              const [titelKol, ...restKol] = zichtbaar
-              const navigeer = () => onRijKlik ? onRijKlik(row.original) : router.push(`/${scherm}/${row.original.id}`)
-              return (
-                <div
-                  key={row.id}
-                  onClick={navigeer}
-                  style={{
-                    border: '1px solid var(--border)', borderRadius: 10,
-                    background: row.getIsSelected() ? 'var(--brand-50)' : 'white',
-                    padding: 12, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', gap: 8,
-                  }}
-                >
-                  {titelKol && (
-                    <div style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>
-                      {titelKol.render(row.original)}
-                    </div>
-                  )}
-                  {restKol.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                      {restKol.map(k => (
-                        <div key={k.key} style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
-                            {k.label}
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--fg)' }}>
-                            {k.render(row.original)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-            {table.getRowModel().rows.length === 0 && (
-              <p style={{ textAlign: 'center', color: 'var(--fg-muted)', padding: '40px 0', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
-                Geen resultaten
-              </p>
-            )}
-          </div>
-        ) : (
-        /* ── Table ── */
+        {/* ── Table ── */}
         <div style={{ overflowX: 'auto' }}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
@@ -837,7 +788,6 @@ export default function OverzichtTabel<T extends { id: string }>({
             </SortableContext>
           </DndContext>
         </div>
-        )}
 
         {/* ── Paginering (DS §43 tbl-pagination) ── */}
         <div style={{

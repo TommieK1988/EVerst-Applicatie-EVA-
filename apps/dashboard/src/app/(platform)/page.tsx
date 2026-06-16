@@ -6,8 +6,6 @@ import { haalAlleRegels } from '@/app/(platform)/planning/bedrijfsagenda/actions
 import { bedrijfsagendaTypeKleur } from '@everts/database/platform-types'
 import type { BedrijfsagendaType } from '@everts/database/platform-types'
 import HomeView from '@/components/eva/views/HomeView'
-import HomeResponsive from '@/components/eva/views/HomeResponsive'
-import { getFormTaken } from '@/app/(platform)/formulieren/actions'
 import type { AgendaWidgetItem } from '@/components/eva/widgets'
 
 export const metadata = { title: 'Overzicht' }
@@ -33,7 +31,7 @@ export default async function HomePage() {
   const jaar = new Date().getFullYear()
   const vandaag = localDateStr(0)
 
-  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels, formTakenResult] = await Promise.all([
+  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
     // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
     medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
@@ -43,28 +41,7 @@ export default async function HomePage() {
     // Mijn servicedesk: dossiers waar ik projectleider of uitvoerder ben
     medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
-    user ? getFormTaken({ toegewezen_aan: user.id }).catch(() => ({ ok: false as const, error: '' })) : Promise.resolve({ ok: false as const, error: '' }),
   ])
-
-  // ── Mobiel dashboard-data (afgeleid; desktop gebruikt dit niet) ──
-  const voornaam = medewerker?.voornaam ?? displayName.split(' ')[0] ?? displayName
-  const mobieleTaken = taken.map(t => ({
-    id: t.id,
-    titel: t.titel,
-    deadline: t.deadline ?? null,
-    dossier_id: (t as { dossier_id?: string | null }).dossier_id ?? null,
-    dossier_sectie: (t as { dossier_sectie?: string | null }).dossier_sectie ?? null,
-    dossier_naam: (t as { dossier_naam?: string | null }).dossier_naam ?? null,
-  }))
-  const mobieleFormTaken = (formTakenResult.ok ? formTakenResult.data : [])
-    .filter(t => t.status === 'open' || t.status === 'bezig' || t.status === 'afgekeurd')
-    .map(t => ({
-      id: t.id,
-      template_id: t.template_id,
-      naam: t.template?.naam ?? 'Formulier',
-      deadline: t.deadline ?? null,
-      dossier_id: t.dossier_id ?? null,
-    }))
 
   const agendaItems: AgendaWidgetItem[] = agendaRegels
     .filter(r => {
@@ -88,16 +65,14 @@ export default async function HomePage() {
     }))
 
   return (
-    <HomeResponsive voornaam={voornaam} taken={mobieleTaken} formTaken={mobieleFormTaken}>
-      <HomeView
-        displayName={displayName}
-        taken={taken}
-        aanvragen={aanvragenResult.ok   ? aanvragenResult.data   : []}
-        offertes={offertesResult.ok    ? offertesResult.data    : []}
-        opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
-        servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
-        agendaItems={agendaItems}
-      />
-    </HomeResponsive>
+    <HomeView
+      displayName={displayName}
+      taken={taken}
+      aanvragen={aanvragenResult.ok   ? aanvragenResult.data   : []}
+      offertes={offertesResult.ok    ? offertesResult.data    : []}
+      opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
+      servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
+      agendaItems={agendaItems}
+    />
   )
 }

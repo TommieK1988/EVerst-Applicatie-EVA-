@@ -197,10 +197,6 @@ export type SidebarProps = {
   userInitials?: string
   userSub?: string
   userFotoUrl?: string | null
-  /** Drawer-modus (mobiel): altijd uitgeklapt, geen collapse-toggle. */
-  drawer?: boolean
-  /** Aangeroepen na navigatie binnen de sidebar — sluit de mobiele drawer. */
-  onNavigate?: () => void
   /** Effectieve rechten van de ingelogde gebruiker (sidebar-filtering). */
   rechten?: RechtenSet
 }
@@ -208,7 +204,7 @@ export type SidebarProps = {
 export default function Sidebar({
   density, collapsed, onToggle, onMouseEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
-  userFotoUrl, drawer = false, onNavigate, rechten,
+  userFotoUrl, rechten,
 }: SidebarProps) {
   const pathname  = usePathname()
   const padY      = density === 'dense' ? 6 : 9
@@ -318,7 +314,7 @@ export default function Sidebar({
     }
 
     return (
-      <Link href={href} title={collapsed ? label : undefined} style={itemStyle} onClick={onNavigate}>
+      <Link href={href} title={collapsed ? label : undefined} style={itemStyle}>
         {innerContent}
       </Link>
     )
@@ -342,30 +338,27 @@ export default function Sidebar({
         overflow: 'hidden',   // clip labels during width animation; scrolling handled by inner wrapper
       }}
     >
-      {/* ── Toggle button ── (verborgen in drawer-modus: mobiel collapse je niet) */}
-      {!drawer && (
-        <button
-          onClick={onToggle}
-          title={collapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
-          style={{
-            position: 'absolute', top: 70, right: -11,
-            width: 22, height: 22, background: 'var(--bg-elev)',
-            border: '1px solid var(--border)', borderRadius: '50%',
-            display: 'grid', placeItems: 'center', color: 'var(--fg-muted)',
-            cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-          }}
-        >
-          <IconBase size={12}>
-            {collapsed ? <path d="M7 4l6 6-6 6"/> : <path d="M13 4l-6 6 6 6"/>}
-          </IconBase>
-        </button>
-      )}
+      {/* ── Toggle button ── */}
+      <button
+        onClick={onToggle}
+        title={collapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
+        style={{
+          position: 'absolute', top: 70, right: -11,
+          width: 22, height: 22, background: 'var(--bg-elev)',
+          border: '1px solid var(--border)', borderRadius: '50%',
+          display: 'grid', placeItems: 'center', color: 'var(--fg-muted)',
+          cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+        }}
+      >
+        <IconBase size={12}>
+          {collapsed ? <path d="M7 4l6 6-6 6"/> : <path d="M13 4l-6 6 6 6"/>}
+        </IconBase>
+      </button>
 
       {/* ── Brand panel — always rendered, wordmark fades ── */}
       <Link
         href="/"
         title="Naar overzicht"
-        onClick={onNavigate}
         style={{
           // Negative margin fills the 10px aside padding on three sides
           margin: '-14px -10px 0',
@@ -531,7 +524,6 @@ export default function Sidebar({
         <Link
           href="/account"
           title={collapsed ? userName : undefined}
-          onClick={onNavigate}
           style={{
             padding: collapsed ? `${padY}px 0` : `${padY}px 13px`,
             borderTop: '1px solid var(--border)',

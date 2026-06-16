@@ -2,7 +2,6 @@
 
 import React, { useRef, useEffect } from 'react'
 import type { FormField } from '../types'
-import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 
 type Props = {
   field: FormField
@@ -39,13 +38,6 @@ function Label({ field }: { field: FormField }) {
 }
 
 export default function FieldRenderer({ field, value, error, onChange }: Props) {
-  const isMobile = useIsMobile()
-  // Touch-bewuste invoerstijl: ruimere hitbox + 16px font (voorkomt auto-zoom op iOS)
-  const base: React.CSSProperties = isMobile
-    ? { ...inputBase, minHeight: 'var(--touch-target)', fontSize: 16 }
-    : inputBase
-  // Min-hoogte voor keuze-rijen (radio/checkbox/boolean) op touch
-  const choiceRow: React.CSSProperties = isMobile ? { minHeight: 'var(--touch-target)' } : {}
 
   if (field.type === 'divider') {
     return <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }}/>
@@ -84,7 +76,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         onChange={e => onChange(e.target.value)}
         placeholder={field.placeholder}
         disabled={field.readOnly}
-        style={{ ...base, ...errorStyle }}
+        style={{ ...inputBase, ...errorStyle }}
       />
     )
   }
@@ -97,7 +89,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         placeholder={field.placeholder}
         disabled={field.readOnly}
         rows={4}
-        style={{ ...base, ...errorStyle, resize: 'vertical' }}
+        style={{ ...inputBase, ...errorStyle, resize: 'vertical' }}
       />
     )
   }
@@ -110,7 +102,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
         placeholder={field.placeholder}
         disabled={field.readOnly}
-        style={{ ...base, ...errorStyle }}
+        style={{ ...inputBase, ...errorStyle }}
       />
     )
   }
@@ -122,7 +114,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...base, ...errorStyle }}
+        style={{ ...inputBase, ...errorStyle }}
       />
     )
   }
@@ -134,7 +126,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...base, ...errorStyle }}
+        style={{ ...inputBase, ...errorStyle }}
       />
     )
   }
@@ -146,7 +138,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...base, ...errorStyle }}
+        style={{ ...inputBase, ...errorStyle }}
       >
         <option value="">{field.placeholder || 'Kies een optie...'}</option>
         {(field.options ?? []).map(opt => (
@@ -164,7 +156,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt.value}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
             }}
           >
             <input
@@ -174,7 +166,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
               checked={value === opt.value}
               onChange={() => onChange(opt.value)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
+              style={{ accentColor: 'var(--primary)' }}
             />
             {opt.label}
           </label>
@@ -192,7 +184,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt.value}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
             }}
           >
             <input
@@ -205,7 +197,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
                 onChange(next)
               }}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
+              style={{ accentColor: 'var(--primary)' }}
             />
             {opt.label}
           </label>
@@ -222,7 +214,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
             }}
           >
             <input
@@ -232,7 +224,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
               checked={value === (opt === 'Ja' ? true : false)}
               onChange={() => onChange(opt === 'Ja' ? true : false)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
+              style={{ accentColor: 'var(--primary)' }}
             />
             {opt}
           </label>
@@ -420,7 +412,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
           value={String(value ?? '')}
           onChange={e => onChange(e.target.value)}
           placeholder="Scan of typ barcode/QR"
-          style={{ ...base, ...errorStyle, flex: 1 }}
+          style={{ ...inputBase, ...errorStyle, flex: 1 }}
         />
       </div>
     )
