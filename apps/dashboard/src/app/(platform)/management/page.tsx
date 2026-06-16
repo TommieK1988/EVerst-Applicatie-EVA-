@@ -8,6 +8,7 @@ import {
   getManagementDoelstellingen,
   getManagementLaatsteSync,
 } from '@/lib/dashboard/queries'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 
 export const metadata: Metadata = { title: 'Management' }
 
@@ -15,6 +16,8 @@ export const metadata: Metadata = { title: 'Management' }
 export const dynamic = 'force-dynamic'
 
 export default async function ManagementPage() {
+  await vereisModuleToegang('management')
+
   let user_id: string | null = null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getFormTemplate, getLatestFormVersie } from '../../actions'
 import FormBuilder from '@/components/formulieren/builder/FormBuilder'
+import BuilderDesktopGate from '@/components/formulieren/builder/BuilderDesktopGate'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
@@ -21,7 +22,9 @@ export default async function FormulierBewerkPage({ params }: { params: Promise<
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <FormBuilder template={templateResult.data} versie={versieResult.data} />
+      <BuilderDesktopGate>
+        <FormBuilder template={templateResult.data} versie={versieResult.data} />
+      </BuilderDesktopGate>
     </div>
   )
 }

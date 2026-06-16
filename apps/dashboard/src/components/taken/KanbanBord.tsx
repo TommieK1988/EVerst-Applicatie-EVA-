@@ -12,6 +12,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/taken/utils'
+import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import TaakKaart from './TaakKaart'
 import TaakDetailPanel from './TaakDetailPanel'
@@ -131,17 +132,21 @@ interface Props {
 }
 
 export default function KanbanBord({ taken, lijsten, isTemplate, takenInLijst = [] }: Props) {
+  const isMobile = useIsMobile()
   const [lokaalTaken, setLokaalTaken]             = useState<TaakMetDetails[]>(taken)
   const [actieveTaak, setActieveTaak]             = useState<TaakMetDetails | null>(null)
   const [geselecteerdeTaak, setGeselecteerdeTaak] = useState<TaakMetDetails | null>(null)
+  const [mobielStatus, setMobielStatus]           = useState<TaskStatus>('open')
   const [, startTransition]                       = useTransition()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
 
+  // Op mobiel is er geen optimistische drag-state — toon altijd de verse props.
+  const bron = isMobile ? taken : lokaalTaken
   const takenPerStatus = (status: TaskStatus) =>
-    lokaalTaken.filter(t => t.status === status)
+    bron.filter(t => t.status === status)
 
   const handleDragStart = ({ active }: DragStartEvent) => {
     setActieveTaak(lokaalTaken.find(t => t.id === active.id) ?? null)
@@ -172,6 +177,75 @@ export default function KanbanBord({ taken, lijsten, isTemplate, takenInLijst = 
         updateTaakStatus(active.id as string, nieuweStatus)
       })
     }
+  }
+
+  // ─── Mobiel: één kolom tegelijk via status-kiezer (geen drag-drop) ──────────
+  if (isMobile) {
+    const actieveKolom = takenPerStatus(mobielStatus)
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Status-kiezer (horizontaal scrollbaar) */}
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {KOLOMMEN.map(kolom => {
+            const aantal = takenPerStatus(kolom.status).length
+            const actief = kolom.status === mobielStatus
+            return (
+              <button
+                key={kolom.status}
+                onClick={() => setMobielStatus(kolom.status)}
+                className={cn(
+                  'flex-shrink-0 inline-flex items-center gap-1.5 rounded-full border px-3 min-h-[var(--touch-target)] text-sm font-medium transition-colors',
+                  actief
+                    ? 'bg-everts text-white border-everts'
+                    : 'bg-white text-slate-600 border-slate-200'
+                )}
+              >
+                <span>{kolom.label}</span>
+                <span className={cn(
+                  'rounded-full px-1.5 py-0.5 text-xs font-semibold',
+                  actief ? 'bg-white/20' : 'bg-slate-100 text-slate-500'
+                )}>
+                  {aantal}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Nieuwe taak */}
+        <div className="flex justify-end">
+          <NieuweTaakDialog
+            lijsten={lijsten}
+            trigger={
+              <button className="inline-flex items-center gap-1.5 text-sm font-medium text-everts border border-everts/30 rounded-lg px-3 min-h-[var(--touch-target)] hover:bg-everts/5 transition-colors">
+                <Plus className="w-4 h-4" /> Nieuwe taak
+              </button>
+            }
+          />
+        </div>
+
+        {/* Takenlijst voor de gekozen status */}
+        <div className="space-y-2">
+          {actieveKolom.map(taak => (
+            <TaakKaart key={taak.id} taak={taak} onClick={setGeselecteerdeTaak} compact />
+          ))}
+          {actieveKolom.length === 0 && (
+            <p className="text-center py-10 text-sm text-slate-400 select-none">
+              Geen taken in &ldquo;{KOLOMMEN.find(k => k.status === mobielStatus)?.label}&rdquo;
+            </p>
+          )}
+        </div>
+
+        {geselecteerdeTaak && (
+          <TaakDetailPanel
+            taak={geselecteerdeTaak}
+            onSluit={() => setGeselecteerdeTaak(null)}
+            isTemplate={isTemplate}
+            takenInLijst={takenInLijst}
+          />
+        )}
+      </div>
+    )
   }
 
   return (

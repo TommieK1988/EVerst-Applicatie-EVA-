@@ -1,6 +1,7 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Montserrat, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import ServiceWorkerRegister from '@/components/eva/ServiceWorkerRegister'
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -20,12 +21,33 @@ export const metadata: Metadata = {
     default: 'EVA — Everts Platform',
   },
   description: 'EVA — het centrale platform van Everts Groep',
+  applicationName: 'EVA',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'EVA',
+  },
+  icons: {
+    icon: '/logo-beeldmerk.svg',
+    apple: '/logo-beeldmerk.svg',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#009439',
+  width: 'device-width',
+  initialScale: 1,
+  // toestaan dat gebruikers inzoomen (toegankelijkheid); geen maximumScale-lock
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="nl">
-      <body className={`${montserrat.variable} ${jetbrainsMono.variable} font-sans`}>{children}</body>
+      <body className={`${montserrat.variable} ${jetbrainsMono.variable} font-sans`}>
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   )
 }

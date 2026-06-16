@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 import type { GebruikerType, RechtenSet } from '@everts/database/platform-types'
+import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import {
   updateGebruikerType,
   verstuurUitnodiging,
@@ -11,16 +12,7 @@ import {
 } from '@/app/(platform)/medewerkers/[id]/actions'
 import { Button } from '@/components/ui'
 
-const MODULES = [
-  { key: 'medewerkers',    label: 'Medewerkers' },
-  { key: 'planning',       label: 'Planning' },
-  { key: 'dossiers',       label: 'Dossiers' },
-  { key: 'financieel',     label: 'Financieel' },
-  { key: 'wagenpark',      label: 'Wagenpark' },
-  { key: 'houtrotherstel', label: 'Houtrotherstel' },
-  { key: 'everts_calc',    label: 'EvertsCalc' },
-  { key: 'instellingen',   label: 'Instellingen' },
-] as const
+const MODULES = RECHTEN_MODULES
 
 const NIVEAUS: { value: 'lezen' | 'schrijven' | 'beheren' | null; label: string }[] = [
   { value: null,        label: 'Geen' },

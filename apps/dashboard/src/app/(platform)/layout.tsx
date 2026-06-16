@@ -1,21 +1,15 @@
 import { createClient, createAdminClient } from '@everts/database/server'
 import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
+import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  /* Medewerker-record ophalen voor echte naam en functie */
-  const medewerker = user
-    ? await supabase
-        .from('medewerkers')
-        .select('voornaam, tussenvoegsel, achternaam, functie, afdeling, foto_url')
-        .eq('auth_user_id', user.id)
-        .eq('actief', true)
-        .maybeSingle()
-        .then(r => r.data)
-    : null
+  /* Medewerker-record + effectieve rechten van de ingelogde gebruiker */
+  const medewerker = await getCurrentMedewerker()
+  const rechten = await getEffectieveRechten(medewerker)
 
   /* Naam: medewerker-record heeft prioriteit boven auth metadata */
   const fullName = medewerker
@@ -53,6 +47,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       userSub={userSub}
       userFotoUrl={medewerker?.foto_url}
       aantalOngelezen={aantalOngelezen}
+      rechten={rechten}
     >
       {children}
       <ToastProvider />

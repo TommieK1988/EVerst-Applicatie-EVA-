@@ -7,6 +7,16 @@
 module.exports = {
   darkMode: ['class'],
   theme: {
+    // ── Breakpoints ────────────────────────────────────────────────────
+    // We gebruiken bewust de Tailwind-defaults (NIET overschrijven, anders
+    // vervalt de hele set). Conventie binnen EVA:
+    //   sm  640px  · grote telefoon landscape
+    //   md  768px  · tablet-portret — grens desktop ↔ mobiel
+    //   lg  1024px · tablet-landscape / kleine laptop
+    //   xl  1280px · desktop
+    //   2xl 1536px · breed desktop
+    // De JS-shell (PlatformShell) schakelt naar mobiele modus onder md via
+    // useIsMobile() (max-width: 767px). Houd CSS- en JS-grens gelijk.
     container: {
       center: true,
       padding: '2rem',

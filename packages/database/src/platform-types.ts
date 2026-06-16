@@ -483,10 +483,37 @@ export type GebruikerType = 'geen' | 'app_gebruiker' | 'platform_gebruiker'
 
 export type ModuleRechten = 'lezen' | 'schrijven' | 'beheren'
 
-export type RechtenSet = Partial<Record<
-  'medewerkers' | 'planning' | 'dossiers' | 'financieel' | 'wagenpark' | 'houtrotherstel' | 'everts_calc' | 'instellingen',
-  ModuleRechten | null
->>
+/**
+ * Eén bron van waarheid voor de instelbare onderdelen (modules) in het rechtensysteem.
+ * De rechtenmatrices (afdeling-standaard + gebruiker-override) en de Zod-validatie
+ * leiden hun lijst hieruit af, zodat ze nooit uit elkaar lopen.
+ *
+ * Het niveau (lezen/schrijven/beheren) is de bestaande ladder:
+ *  - lezen     → onderdeel zichtbaar + read-only overzichten
+ *  - schrijven → records aanmaken/bewerken binnen het onderdeel
+ *  - beheren   → óók de beheer-/instellingen-schermen van dat onderdeel
+ */
+export const RECHTEN_MODULES = [
+  { key: 'dossiers',       label: 'Dossiers' },
+  { key: 'servicedesk',    label: 'Servicedesk' },
+  { key: 'management',     label: 'Management' },
+  { key: 'planning',       label: 'Planning' },
+  { key: 'relaties',       label: 'Relaties' },
+  { key: 'medewerkers',    label: 'Medewerkers' },
+  { key: 'wagenpark',      label: 'Wagenpark' },
+  { key: 'kam',            label: 'KAM/VGM' },
+  { key: 'houtrotherstel', label: 'Houtrotherstel' },
+  { key: 'everts_calc',    label: 'EvertsCalc' },
+  { key: 'formulieren',    label: 'Formulieren' },
+  { key: 'taken',          label: 'Actielijsten' },
+  { key: 'geveltekening',  label: 'Geveltekeningen' },
+  { key: 'financieel',     label: 'Financieel' },
+  { key: 'instellingen',   label: 'Instellingen' },
+] as const
+
+export type RechtenModule = typeof RECHTEN_MODULES[number]['key']
+
+export type RechtenSet = Partial<Record<RechtenModule, ModuleRechten | null>>
 
 export type Medewerker = {
   id: string

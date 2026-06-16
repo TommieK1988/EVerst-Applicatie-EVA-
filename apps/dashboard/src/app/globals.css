@@ -143,6 +143,14 @@
   --page-pad-x:          32px;
   --page-pad-y:          28px;
 
+  /* ── Mobiel / touch ────────────────────────────────────────────────────
+     Breakpoint-conventie (Tailwind defaults): sm 640 · md 768 · lg 1024.
+     md (768px) = de grens desktop ↔ tablet-portret/telefoon. De JS-shell
+     gebruikt useIsMobile() op max-width 767px (= "kleiner dan md").
+     ──────────────────────────────────────────────────────────────────── */
+  --touch-target:        44px;   /* min. hitbox voor knoppen/links op touch */
+  --bottomnav-h:         56px;   /* hoogte mobiele bottom-tab-bar           */
+
   /* ── Transitions ───────────────────────────────────────────────────── */
   --duration-fast:  100ms;
   --duration-base:  120ms;
@@ -463,6 +471,17 @@ body {
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ── Mobiel · ruimere paginarand op kleine schermen (< md = 768px) ────────
+   Page-padding wordt compacter op telefoon/tablet-portret zodat content
+   meer breedte krijgt. Touch-doelen (knoppen, links) houden min. 44px.
+   ─────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  :root {
+    --page-pad-x: 16px;
+    --page-pad-y: 16px;
+  }
+}
 
 /* ── Print styles ─────────────────────────────────────────────────────── */
 @media print {

@@ -8,11 +8,14 @@ import {
   getManagementDimensies,
 } from '@/lib/dashboard/queries'
 import ManagementInstellingen from '@/components/management/ManagementInstellingen'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 
 export const metadata: Metadata = { title: 'Management — Instellingen' }
 export const dynamic = 'force-dynamic'
 
 export default async function ManagementInstellingenPage() {
+  await vereisModuleToegang('management', 'beheren')
+
   const [akData, doelstellingen, dimensies] = await Promise.all([
     getManagementAk(),
     getManagementDoelstellingen(),

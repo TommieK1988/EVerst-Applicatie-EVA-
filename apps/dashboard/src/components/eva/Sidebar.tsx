@@ -13,6 +13,8 @@ import {
   IconFormulieren,
 } from './Icons'
 import type { Tweaks } from './types'
+import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
+import { magOnderdeelZien } from '@/lib/auth/rechten-shared'
 
 
 function Wordmark({ style }: { style?: React.CSSProperties }) {
@@ -40,40 +42,41 @@ type NavEntry = {
   badge?: number
   separator?: boolean
   comingSoon?: boolean
+  module?: RechtenModule
 }
 
 const NAV: NavEntry[] = [
-  { href: '/aanvragen',   label: 'Aanvragen',   Icon: IconAanvragen  },
-  { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes   },
-  { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true },
-  { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk },
-  { href: '/management',  label: 'Management',  Icon: IconManagement },
+  { href: '/aanvragen',   label: 'Aanvragen',   Icon: IconAanvragen,  module: 'dossiers'    },
+  { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes,   module: 'dossiers'    },
+  { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
+  { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
+  { href: '/management',  label: 'Management',  Icon: IconManagement, module: 'management'   },
 ]
 
 const BEHEER: NavEntry[] = [
-  { href: '/relaties',    label: 'Relaties',    Icon: IconRelaties    },
-  { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers },
-  { href: '/wagenpark',   label: 'Wagenpark',   Icon: IconWagenpark   },
-  { href: '/kam', label: 'KAM/VGM', Icon: IconKam },
+  { href: '/relaties',    label: 'Relaties',    Icon: IconRelaties,    module: 'relaties'    },
+  { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers, module: 'medewerkers' },
+  { href: '/wagenpark',   label: 'Wagenpark',   Icon: IconWagenpark,   module: 'wagenpark'   },
+  { href: '/kam', label: 'KAM/VGM', Icon: IconKam, module: 'kam' },
 ]
 
 const PLANNING_INKOOP: NavEntry[] = [
-  { href: '/planning/project',         label: 'Projectplanning',    Icon: IconProjectplanning },
-  { href: '/planning/medewerker',      label: 'Medewerkerplanning', Icon: IconCrewplanning    },
-  { href: '/planning/bedrijfsagenda',  label: 'Bedrijfsagenda',     Icon: IconAgenda          },
+  { href: '/planning/project',         label: 'Projectplanning',    Icon: IconProjectplanning, module: 'planning' },
+  { href: '/planning/medewerker',      label: 'Medewerkerplanning', Icon: IconCrewplanning,    module: 'planning' },
+  { href: '/planning/bedrijfsagenda',  label: 'Bedrijfsagenda',     Icon: IconAgenda,          module: 'planning' },
 ]
 
 const FINANCIEEL: NavEntry[] = [
-  { label: 'Facturen', Icon: IconFacturen, comingSoon: true },
-  { label: 'Inkoop',   Icon: IconInkoop,   comingSoon: true },
+  { label: 'Facturen', Icon: IconFacturen, comingSoon: true, module: 'financieel' },
+  { label: 'Inkoop',   Icon: IconInkoop,   comingSoon: true, module: 'financieel' },
 ]
 
 const APPS: NavEntry[] = [
-  { href: '/formulieren',    label: 'Formulieren',     Icon: IconFormulieren    },
-  { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen      },
-  { href: '/houtrotherstel', label: 'Houtrotherstel',  Icon: IconHoutrotherstel },
-  { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc     },
-  { href: '/geveltekening',  label: 'Geveltekeningen', Icon: IconGeveltekeningen },
+  { href: '/formulieren',    label: 'Formulieren',     Icon: IconFormulieren,    module: 'formulieren'   },
+  { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen,      module: 'taken'         },
+  { href: '/houtrotherstel', label: 'Houtrotherstel',  Icon: IconHoutrotherstel, module: 'houtrotherstel' },
+  { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc,     module: 'everts_calc'   },
+  { href: '/geveltekening',  label: 'Geveltekeningen', Icon: IconGeveltekeningen, module: 'geveltekening' },
 ]
 
 const ICON_OVERZICHT = 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
@@ -194,16 +197,25 @@ export type SidebarProps = {
   userInitials?: string
   userSub?: string
   userFotoUrl?: string | null
+  /** Drawer-modus (mobiel): altijd uitgeklapt, geen collapse-toggle. */
+  drawer?: boolean
+  /** Aangeroepen na navigatie binnen de sidebar — sluit de mobiele drawer. */
+  onNavigate?: () => void
+  /** Effectieve rechten van de ingelogde gebruiker (sidebar-filtering). */
+  rechten?: RechtenSet
 }
 
 export default function Sidebar({
   density, collapsed, onToggle, onMouseEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
-  userFotoUrl,
+  userFotoUrl, drawer = false, onNavigate, rechten,
 }: SidebarProps) {
   const pathname  = usePathname()
   const padY      = density === 'dense' ? 6 : 9
   const width     = collapsed ? 56 : 256
+
+  // Toon een onderdeel tenzij het wordt afgedwongen én de gebruiker geen recht heeft.
+  const zichtbaar = (e: NavEntry) => magOnderdeelZien(rechten ?? {}, e.module)
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' :
@@ -306,7 +318,7 @@ export default function Sidebar({
     }
 
     return (
-      <Link href={href} title={collapsed ? label : undefined} style={itemStyle}>
+      <Link href={href} title={collapsed ? label : undefined} style={itemStyle} onClick={onNavigate}>
         {innerContent}
       </Link>
     )
@@ -330,27 +342,30 @@ export default function Sidebar({
         overflow: 'hidden',   // clip labels during width animation; scrolling handled by inner wrapper
       }}
     >
-      {/* ── Toggle button ── */}
-      <button
-        onClick={onToggle}
-        title={collapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
-        style={{
-          position: 'absolute', top: 70, right: -11,
-          width: 22, height: 22, background: 'var(--bg-elev)',
-          border: '1px solid var(--border)', borderRadius: '50%',
-          display: 'grid', placeItems: 'center', color: 'var(--fg-muted)',
-          cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-        }}
-      >
-        <IconBase size={12}>
-          {collapsed ? <path d="M7 4l6 6-6 6"/> : <path d="M13 4l-6 6 6 6"/>}
-        </IconBase>
-      </button>
+      {/* ── Toggle button ── (verborgen in drawer-modus: mobiel collapse je niet) */}
+      {!drawer && (
+        <button
+          onClick={onToggle}
+          title={collapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
+          style={{
+            position: 'absolute', top: 70, right: -11,
+            width: 22, height: 22, background: 'var(--bg-elev)',
+            border: '1px solid var(--border)', borderRadius: '50%',
+            display: 'grid', placeItems: 'center', color: 'var(--fg-muted)',
+            cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+          }}
+        >
+          <IconBase size={12}>
+            {collapsed ? <path d="M7 4l6 6-6 6"/> : <path d="M13 4l-6 6 6 6"/>}
+          </IconBase>
+        </button>
+      )}
 
       {/* ── Brand panel — always rendered, wordmark fades ── */}
       <Link
         href="/"
         title="Naar overzicht"
+        onClick={onNavigate}
         style={{
           // Negative margin fills the 10px aside padding on three sides
           margin: '-14px -10px 0',
@@ -434,7 +449,7 @@ export default function Sidebar({
       ) : (
         <>
           <NavSection collapsed={collapsed}>
-            {NAV.map(({ href, label, Icon, badge, separator, comingSoon }) => (
+            {NAV.filter(zichtbaar).map(({ href, label, Icon, badge, separator, comingSoon }) => (
               <React.Fragment key={label}>
                 {separator && (
                   <div style={{ height: 1, background: 'var(--border)', margin: '3px 13px' }}/>
@@ -452,7 +467,7 @@ export default function Sidebar({
           </NavSection>
 
           <NavSection label="Planning" collapsed={collapsed}>
-            {PLANNING_INKOOP.map(({ href, label, Icon, comingSoon }) => (
+            {PLANNING_INKOOP.filter(zichtbaar).map(({ href, label, Icon, comingSoon }) => (
               <NavItem
                 key={label}
                 href={href}
@@ -465,7 +480,7 @@ export default function Sidebar({
           </NavSection>
 
           <NavSection label="Beheer" collapsed={collapsed}>
-            {BEHEER.map(({ href, label, Icon, comingSoon }) => (
+            {BEHEER.filter(zichtbaar).map(({ href, label, Icon, comingSoon }) => (
               <NavItem
                 key={label}
                 href={href}
@@ -478,7 +493,7 @@ export default function Sidebar({
           </NavSection>
 
           <NavSection label="Financieel" collapsed={collapsed}>
-            {FINANCIEEL.map(({ label, Icon, comingSoon }) => (
+            {FINANCIEEL.filter(zichtbaar).map(({ label, Icon, comingSoon }) => (
               <NavItem
                 key={label}
                 icon={<Icon size={17}/>}
@@ -490,7 +505,7 @@ export default function Sidebar({
           </NavSection>
 
 <NavSection label="Apps" collapsed={collapsed}>
-            {APPS.map(({ href, label, Icon }) => (
+            {APPS.filter(zichtbaar).map(({ href, label, Icon }) => (
               <NavItem key={label} href={href} icon={<Icon size={17}/>} label={label} active={!!href && isActive(href)}/>
             ))}
           </NavSection>
@@ -516,6 +531,7 @@ export default function Sidebar({
         <Link
           href="/account"
           title={collapsed ? userName : undefined}
+          onClick={onNavigate}
           style={{
             padding: collapsed ? `${padY}px 0` : `${padY}px 13px`,
             borderTop: '1px solid var(--border)',

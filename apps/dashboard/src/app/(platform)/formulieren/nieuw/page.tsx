@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { createFormTemplate } from '../actions'
+import BuilderDesktopGate from '@/components/formulieren/builder/BuilderDesktopGate'
 
 const CATEGORIEEN = [
   { value: '',           label: 'Kies categorie (optioneel)' },
@@ -47,6 +48,7 @@ export default function NieuwFormulierPage() {
   }
 
   return (
+    <BuilderDesktopGate>
     <div style={{ padding: '32px', maxWidth: 520 }}>
       <button
         type="button"
@@ -138,5 +140,6 @@ export default function NieuwFormulierPage() {
         </div>
       </form>
     </div>
+    </BuilderDesktopGate>
   )
 }

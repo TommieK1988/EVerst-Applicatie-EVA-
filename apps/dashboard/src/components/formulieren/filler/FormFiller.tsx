@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
 import { evaluateConditions } from '../types'
 import FieldRenderer from './FieldRenderer'
@@ -23,6 +24,7 @@ const DRAFT_KEY = (templateId: string) => `form_draft_${templateId}`
 
 export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId }: Props) {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     // Priority: bestaande inzending > vooringevuld > localStorage draft > leeg
     let initial: Record<string, unknown> = {}
@@ -157,7 +159,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   const visibleFields = getVisibleFields(fields)
 
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 680, margin: '0 auto', padding: isMobile ? '16px 14px' : '32px 24px' }}>
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <button
@@ -214,6 +216,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
             disabled={isSaving}
             style={{
               padding: '9px 18px', borderRadius: 7,
+              minHeight: isMobile ? 'var(--touch-target)' : undefined,
               border: '1px solid var(--border)',
               background: 'var(--surface)',
               color: 'var(--text)',
@@ -229,6 +232,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
             style={{
               flex: 1,
               padding: '9px 18px', borderRadius: 7,
+              minHeight: isMobile ? 'var(--touch-target)' : undefined,
               border: 'none',
               background: 'var(--primary, #3b82f6)',
               color: 'white',

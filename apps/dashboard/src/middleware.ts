@@ -57,8 +57,10 @@ export const config = {
      * - _next/image (Next.js image optimization)
      * - favicon.ico
      * - publieke bestanden (svg, png, jpg etc.)
+     * - PWA-bestanden (manifest.webmanifest, sw.js) — moeten publiek zijn
+     *   anders kan de app niet installeren / de service worker niet laden
      * - api/weather en api/nieuws (geen auth vereist, externe data)
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|api/weather|api/nieuws|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|sw\\.js|api/weather|api/nieuws|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 }

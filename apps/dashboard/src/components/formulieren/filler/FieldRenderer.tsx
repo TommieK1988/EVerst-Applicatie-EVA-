@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useEffect } from 'react'
 import type { FormField } from '../types'
+import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 
 type Props = {
   field: FormField
@@ -38,6 +39,13 @@ function Label({ field }: { field: FormField }) {
 }
 
 export default function FieldRenderer({ field, value, error, onChange }: Props) {
+  const isMobile = useIsMobile()
+  // Touch-bewuste invoerstijl: ruimere hitbox + 16px font (voorkomt auto-zoom op iOS)
+  const base: React.CSSProperties = isMobile
+    ? { ...inputBase, minHeight: 'var(--touch-target)', fontSize: 16 }
+    : inputBase
+  // Min-hoogte voor keuze-rijen (radio/checkbox/boolean) op touch
+  const choiceRow: React.CSSProperties = isMobile ? { minHeight: 'var(--touch-target)' } : {}
 
   if (field.type === 'divider') {
     return <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }}/>
@@ -76,7 +84,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         onChange={e => onChange(e.target.value)}
         placeholder={field.placeholder}
         disabled={field.readOnly}
-        style={{ ...inputBase, ...errorStyle }}
+        style={{ ...base, ...errorStyle }}
       />
     )
   }
@@ -89,7 +97,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         placeholder={field.placeholder}
         disabled={field.readOnly}
         rows={4}
-        style={{ ...inputBase, ...errorStyle, resize: 'vertical' }}
+        style={{ ...base, ...errorStyle, resize: 'vertical' }}
       />
     )
   }
@@ -102,7 +110,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         onChange={e => onChange(e.target.value === '' ? null : Number(e.target.value))}
         placeholder={field.placeholder}
         disabled={field.readOnly}
-        style={{ ...inputBase, ...errorStyle }}
+        style={{ ...base, ...errorStyle }}
       />
     )
   }
@@ -114,7 +122,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...inputBase, ...errorStyle }}
+        style={{ ...base, ...errorStyle }}
       />
     )
   }
@@ -126,7 +134,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...inputBase, ...errorStyle }}
+        style={{ ...base, ...errorStyle }}
       />
     )
   }
@@ -138,7 +146,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
         disabled={field.readOnly}
-        style={{ ...inputBase, ...errorStyle }}
+        style={{ ...base, ...errorStyle }}
       >
         <option value="">{field.placeholder || 'Kies een optie...'}</option>
         {(field.options ?? []).map(opt => (
@@ -156,7 +164,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt.value}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
             }}
           >
             <input
@@ -166,7 +174,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
               checked={value === opt.value}
               onChange={() => onChange(opt.value)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
             />
             {opt.label}
           </label>
@@ -184,7 +192,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt.value}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
             }}
           >
             <input
@@ -197,7 +205,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
                 onChange(next)
               }}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
             />
             {opt.label}
           </label>
@@ -214,7 +222,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
             key={opt}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              cursor: 'pointer', fontSize: 14, color: 'var(--text)',
+              cursor: 'pointer', fontSize: 14, color: 'var(--text)', ...choiceRow,
             }}
           >
             <input
@@ -224,7 +232,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
               checked={value === (opt === 'Ja' ? true : false)}
               onChange={() => onChange(opt === 'Ja' ? true : false)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
             />
             {opt}
           </label>
@@ -412,7 +420,7 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
           value={String(value ?? '')}
           onChange={e => onChange(e.target.value)}
           placeholder="Scan of typ barcode/QR"
-          style={{ ...inputBase, ...errorStyle, flex: 1 }}
+          style={{ ...base, ...errorStyle, flex: 1 }}
         />
       </div>
     )
@@ -489,10 +497,43 @@ export default function FieldRenderer({ field, value, error, onChange }: Props) 
 
 // ── Handtekening-component ────────────────────────────────────────────
 
+const SIG_HEIGHT = 160
+
 function SignaturePad({ onSave }: { onSave: (data: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing   = useRef(false)
   const hasData   = useRef(false)
+
+  // Canvas-buffer afstemmen op de werkelijke (responsive) weergavebreedte ×
+  // devicePixelRatio. Zónder dit loopt de teken-coördinaat (CSS-px) niet gelijk
+  // met de buffer (was hard 560px), wat de lijn verschoven/uitgerekt maakte op
+  // smalle schermen. Configureert tevens de penstijl; canvas.width-toewijzing
+  // reset namelijk de context-transform.
+  function sizeCanvas() {
+    const c = canvasRef.current
+    if (!c) return
+    const cssW = c.clientWidth || 300
+    const dpr = window.devicePixelRatio || 1
+    c.width = Math.round(cssW * dpr)
+    c.height = Math.round(SIG_HEIGHT * dpr)
+    const ctx = c.getContext('2d')!
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.strokeStyle = '#1a1a1a'
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    hasData.current = false
+  }
+
+  useEffect(() => {
+    sizeCanvas()
+    window.addEventListener('resize', sizeCanvas)
+    window.addEventListener('orientationchange', sizeCanvas)
+    return () => {
+      window.removeEventListener('resize', sizeCanvas)
+      window.removeEventListener('orientationchange', sizeCanvas)
+    }
+  }, [])
 
   function getPos(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current!.getBoundingClientRect()
@@ -504,10 +545,6 @@ function SignaturePad({ onSave }: { onSave: (data: string) => void }) {
     canvasRef.current?.setPointerCapture(e.pointerId)
     const ctx = canvasRef.current!.getContext('2d')!
     const { x, y } = getPos(e)
-    ctx.strokeStyle = '#1a1a1a'
-    ctx.lineWidth = 2
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
     ctx.beginPath()
     ctx.moveTo(x, y)
   }
@@ -531,7 +568,12 @@ function SignaturePad({ onSave }: { onSave: (data: string) => void }) {
   function clear() {
     const c = canvasRef.current
     if (!c) return
-    c.getContext('2d')!.clearRect(0, 0, c.width, c.height)
+    const ctx = c.getContext('2d')!
+    // wis in buffer-coördinaten
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, c.width, c.height)
+    ctx.restore()
     hasData.current = false
   }
 
@@ -539,8 +581,6 @@ function SignaturePad({ onSave }: { onSave: (data: string) => void }) {
     <div>
       <canvas
         ref={canvasRef}
-        width={560}
-        height={140}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
@@ -551,6 +591,7 @@ function SignaturePad({ onSave }: { onSave: (data: string) => void }) {
           touchAction: 'none',
           cursor: 'crosshair',
           width: '100%',
+          height: SIG_HEIGHT,
           display: 'block',
         }}
       />

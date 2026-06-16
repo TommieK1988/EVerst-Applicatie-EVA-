@@ -1,16 +1,29 @@
 import React from 'react'
 import Link from 'next/link'
 import { PageHeader, Badge } from '@/components/ui'
+import type { RechtenModule } from '@everts/database/platform-types'
+import { getEffectieveRechten, magOnderdeelZien } from '@/lib/auth/rechten'
 
 export const metadata = { title: 'Instellingen' }
 
-const platformItems = [
+type SettingsItem = {
+  href: string
+  title: string
+  description: string
+  ready: boolean
+  kicker: string
+  /** Onderdeel waarvan dit een beheer-scherm is; vereist 'beheren' om te tonen. */
+  module: RechtenModule
+}
+
+const platformItems: SettingsItem[] = [
   {
     href: '/instellingen/functies-afdelingen',
     title: 'Functies & Afdelingen',
     description: 'Beheer de beschikbare functies en afdelingen die als keuze verschijnen bij medewerkerprofielen.',
     ready: true,
     kicker: 'Medewerkers',
+    module: 'medewerkers',
   },
   {
     href: '/instellingen/cao',
@@ -18,6 +31,7 @@ const platformItems = [
     description: 'Upload een CAO-document als PDF. EVA leest de loonschalen en treden automatisch in via AI.',
     ready: true,
     kicker: 'Medewerkers',
+    module: 'medewerkers',
   },
   {
     href: '/instellingen/bedrijfsgegevens',
@@ -25,6 +39,7 @@ const platformItems = [
     description: 'Organisatie en werkmaatschappijen — naam, KvK, BTW-nummer, adres.',
     ready: true,
     kicker: 'Bedrijf',
+    module: 'instellingen',
   },
   {
     href: '/instellingen/bedrijfsgegevens/huisstijl',
@@ -32,6 +47,7 @@ const platformItems = [
     description: "Logo's in meerdere formaten, kleurenpalet, typografie en huisstijlregels.",
     ready: true,
     kicker: 'Ontwerp',
+    module: 'instellingen',
   },
   {
     href: '/instellingen/gebruikers',
@@ -39,6 +55,7 @@ const platformItems = [
     description: 'Wie heeft toegang tot het platform, welk type gebruiker ze zijn en rechten per afdeling.',
     ready: true,
     kicker: 'Team',
+    module: 'instellingen',
   },
   {
     href: '/instellingen/integraties',
@@ -46,6 +63,7 @@ const platformItems = [
     description: 'Exact Bouw7 API-key, sync en overige koppelingen.',
     ready: true,
     kicker: 'Systeem',
+    module: 'instellingen',
   },
   {
     href: '/instellingen',
@@ -53,16 +71,18 @@ const platformItems = [
     description: 'Feature flags, cache, logs en backups.',
     ready: false,
     kicker: 'Geavanceerd',
+    module: 'instellingen',
   },
 ]
 
-const calcOfferteItems = [
+const calcOfferteItems: SettingsItem[] = [
   {
     href: '/instellingen/dossier-categorieen',
     title: 'Dossier categorieën',
     description: 'Beschikbare categorieën voor aanvragen, offertes en opdrachten.',
     ready: true,
     kicker: 'Dossiers',
+    module: 'dossiers',
   },
   {
     href: '/instellingen/dossier-toggles',
@@ -70,6 +90,7 @@ const calcOfferteItems = [
     description: 'Aan/uit-schakelaars per dossier; bruikbaar als trigger of conditie voor actielijsten.',
     ready: true,
     kicker: 'Dossiers',
+    module: 'dossiers',
   },
   {
     href: '/instellingen/btw-tarieven',
@@ -77,6 +98,7 @@ const calcOfferteItems = [
     description: 'Beschikbare BTW-percentages voor calculatieregels en offertes.',
     ready: true,
     kicker: 'Calculatie',
+    module: 'dossiers',
   },
   {
     href: '/instellingen/betalingscondities',
@@ -84,6 +106,7 @@ const calcOfferteItems = [
     description: 'Termijnschema\'s voor de aanneemsom — welk percentage wanneer verschuldigd is.',
     ready: true,
     kicker: 'Offerte',
+    module: 'dossiers',
   },
   {
     href: '/instellingen/algemene-voorwaarden',
@@ -91,6 +114,7 @@ const calcOfferteItems = [
     description: 'Upload en beheer PDF-documenten met algemene voorwaarden voor offertes.',
     ready: true,
     kicker: 'Offerte',
+    module: 'dossiers',
   },
   {
     href: '/instellingen/offerte-layout',
@@ -98,16 +122,18 @@ const calcOfferteItems = [
     description: 'Word-sjablonen met huisstijl, kleuren en papierindeling voor offertes.',
     ready: true,
     kicker: 'Offerte',
+    module: 'dossiers',
   },
 ]
 
-const appItems = [
+const appItems: SettingsItem[] = [
   {
     href: '/instellingen/planning',
     title: 'Planning',
     description: 'Uursoorten, everts-calc sync-koppeling en capaciteitsinstellingen.',
     ready: true,
     kicker: 'Planning',
+    module: 'planning',
   },
   {
     href: '/everts-calc/instellingen',
@@ -115,6 +141,7 @@ const appItems = [
     description: 'Rekenregels, prijslijsten en standaard calculatie-instellingen.',
     ready: true,
     kicker: 'Calculatie',
+    module: 'everts_calc',
   },
   {
     href: '/houtrotherstel/instellingen',
@@ -122,6 +149,7 @@ const appItems = [
     description: 'Producten, behandelingen, rapportage-sjablonen en tarieven.',
     ready: true,
     kicker: 'Houtrotherstel',
+    module: 'houtrotherstel',
   },
   {
     href: '/wagenpark/instellingen',
@@ -129,6 +157,7 @@ const appItems = [
     description: 'Voertuigcategorieën, brandstofnormen en koppeling met cartracker.',
     ready: true,
     kicker: 'Wagenpark',
+    module: 'wagenpark',
   },
   {
     href: '/taken/instellingen',
@@ -136,6 +165,7 @@ const appItems = [
     description: 'Standaard rollen en doorlooptijden voor actielijsten.',
     ready: false,
     kicker: 'Taken',
+    module: 'taken',
   },
   {
     href: '/geveltekening/instellingen',
@@ -143,10 +173,11 @@ const appItems = [
     description: 'Sjablonen, exportformaten en lagen-configuratie.',
     ready: false,
     kicker: 'Geveltekening',
+    module: 'geveltekening',
   },
 ]
 
-function SettingsCard({ item }: { item: typeof platformItems[number] }) {
+function SettingsCard({ item }: { item: SettingsItem }) {
   const inner = (
     <>
       <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -200,7 +231,12 @@ const grid: React.CSSProperties = {
   gap: 10,
 }
 
-export default function Page() {
+export default async function Page() {
+  const rechten = await getEffectieveRechten()
+  // Een beheer-scherm tonen we alleen als het onderdeel wordt afgedwongen én de
+  // gebruiker geen 'beheren'-recht heeft (nu enkel Management; rest is altijd zichtbaar).
+  const zichtbaar = (item: SettingsItem) => magOnderdeelZien(rechten, item.module, 'beheren')
+
   return (
     <div className="eva-page">
       <PageHeader eyebrow="Platform" title="Bedrijfsinstellingen" />
@@ -209,21 +245,21 @@ export default function Page() {
       <div style={{ marginBottom: 6 }}>
         <div style={sectionLabel}>Algemeen</div>
         <div style={grid}>
-          {platformItems.map(item => <SettingsCard key={item.title} item={item} />)}
+          {platformItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
         </div>
       </div>
 
       <div style={{ marginTop: 28 }}>
         <div style={sectionLabel}>Calculatie &amp; Offertes</div>
         <div style={grid}>
-          {calcOfferteItems.map(item => <SettingsCard key={item.title} item={item} />)}
+          {calcOfferteItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
         </div>
       </div>
 
       <div style={{ marginTop: 28 }}>
         <div style={sectionLabel}>Apps</div>
         <div style={grid}>
-          {appItems.map(item => <SettingsCard key={item.title} item={item} />)}
+          {appItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
         </div>
       </div>
     </div>

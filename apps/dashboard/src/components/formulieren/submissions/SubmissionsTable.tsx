@@ -2,10 +2,12 @@
 
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { FormInzending, FormInzendingStatus } from '../types'
 import { INZENDING_STATUS_LABELS } from '../types'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
+import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 
 type Props = {
   templateId: string
@@ -20,6 +22,8 @@ const STATUS_COLORS: Record<FormInzendingStatus, { bg: string; color: string }> 
 }
 
 export default function SubmissionsTable({ templateId, inzendingen }: Props) {
+  const isMobile = useIsMobile()
+  const router = useRouter()
   const [zoek, setZoek] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('alle')
   const [sortering, setSortering] = useState<'nieuwst' | 'oudst'>('nieuwst')
@@ -111,6 +115,61 @@ export default function SubmissionsTable({ templateId, inzendingen }: Props) {
           color: 'var(--text-muted)', fontSize: 14,
         }}>
           Geen inzendingen gevonden.
+        </div>
+      ) : isMobile ? (
+        /* ── Mobiel: kaartweergave ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {gefilterd.map(inz => {
+            const colors = STATUS_COLORS[inz.status] ?? STATUS_COLORS.concept
+            return (
+              <div
+                key={inz.id}
+                onClick={() => router.push(`/formulieren/${templateId}/inzendingen/${inz.id}`)}
+                style={{
+                  display: 'block', cursor: 'pointer',
+                  border: '1px solid var(--border)', borderRadius: 10,
+                  background: 'var(--surface)', padding: 12, color: 'var(--text)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                  <span style={{
+                    display: 'inline-block', padding: '2px 8px', borderRadius: 10,
+                    fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color,
+                  }}>
+                    {INZENDING_STATUS_LABELS[inz.status]}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    v{(inz.versie as { versienummer: number } | undefined)?.versienummer ?? '?'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  {inz.project_ref ?? 'Zonder project'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Aangemaakt {formatDatum(inz.aangemaakt_op)}
+                  {inz.ingediend_op && ` · Ingediend ${formatDatum(inz.ingediend_op)}`}
+                </div>
+                {inz.status !== 'concept' && (
+                  <a
+                    href={`/formulieren/${templateId}/inzendingen/${inz.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+                      minHeight: 'var(--touch-target)',
+                      color: '#009439', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                    }}
+                  >
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    PDF downloaden
+                  </a>
+                )}
+              </div>
+            )
+          })}
         </div>
       ) : (
         <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>

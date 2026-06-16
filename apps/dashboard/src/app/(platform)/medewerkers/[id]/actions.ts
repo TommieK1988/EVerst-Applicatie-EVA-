@@ -13,7 +13,9 @@ import type {
   MedewerkerRoosterPauze,
   GebruikerType,
   RechtenSet,
+  RechtenModule,
 } from '@everts/database/platform-types'
+import { RECHTEN_MODULES } from '@everts/database/platform-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -471,8 +473,10 @@ export async function verstuurUitnodiging(
   return { ok: true, auth_user_id }
 }
 
+const MODULE_KEYS = RECHTEN_MODULES.map(m => m.key) as [RechtenModule, ...RechtenModule[]]
+
 const rechtenSetSchema = z.record(
-  z.enum(['medewerkers', 'planning', 'dossiers', 'financieel', 'wagenpark', 'houtrotherstel', 'everts_calc', 'instellingen']),
+  z.enum(MODULE_KEYS),
   z.enum(['lezen', 'schrijven', 'beheren']).nullable()
 )
 

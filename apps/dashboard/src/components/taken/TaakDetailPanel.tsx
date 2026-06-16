@@ -5,6 +5,7 @@ import { X, Calendar, Trash2, MessageSquare, ChevronDown, Plus, Check, Clock, Us
 import { cn } from '@/lib/taken/utils'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
+import { useIsMobile } from '@/lib/hooks/useMediaQuery'
 import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
@@ -50,6 +51,7 @@ function omschrijvingNaarTekst(omschrijving: unknown): string {
 }
 
 export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijst = [] }: Props) {
+  const isMobile = useIsMobile()
   const [pending, startTransition] = useTransition()
   const [editTitel, setEditTitel]   = useState(false)
   const [titel, setTitel]           = useState(taak.titel)
@@ -193,7 +195,23 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
   )
 
   return (
-    <div className="w-96 flex-shrink-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col max-h-[calc(100vh-8rem)]">
+    <>
+      {/* Mobiel: backdrop achter de bottom-sheet */}
+      {isMobile && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={onSluit}
+          aria-hidden
+        />
+      )}
+      <div className={cn(
+        'bg-white overflow-hidden flex flex-col',
+        isMobile
+          // Mobiel: full-width bottom-sheet, schuift onder vanaf de onderkant
+          ? 'fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-2xl max-h-[92dvh] pb-[env(safe-area-inset-bottom)]'
+          // Desktop: zijpaneel in de flex-flow (ongewijzigd)
+          : 'w-96 flex-shrink-0 border border-slate-200 rounded-xl shadow-lg max-h-[calc(100vh-8rem)]'
+      )}>
       {/* Header */}
       <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
         <div className="flex-1 min-w-0 pr-2">
@@ -576,6 +594,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
           </form>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
