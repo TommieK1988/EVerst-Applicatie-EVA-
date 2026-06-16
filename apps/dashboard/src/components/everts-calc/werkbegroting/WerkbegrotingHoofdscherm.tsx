@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Save, Loader2, ChevronLeft, Clock, RefreshCw, Printer, ClipboardCheck } from 'lucide-react'
+import { Save, Loader2, ChevronLeft, Clock, RefreshCw, Printer, ClipboardCheck, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
@@ -10,7 +10,7 @@ import {
   getWerkbegrotingBestellingen, slaWerkbegrotingOp, getScenarios,
   heroverhaalWerkbegroting,
 } from '@/lib/everts-calc/local-store'
-import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, type ControleTaakResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, type ControleTaakResultaat, type PrognoseResultaat, type WerkbegrotingPrognoseTotalen } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import HeroverhaalModal from './HeroverhaalModal'
@@ -36,6 +36,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [gridKey, setGridKey] = useState(0)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
   const [controleTaak, setControleTaak] = useState<ControleTaakResultaat | null>(null)
+  const [prognoseOpen, setPrognoseOpen] = useState(false)
+  const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
+  const [prognoseBezig, setPrognoseBezig] = useState(false)
 
   useEffect(() => {
     const scenarios = getScenarios(projectId)
@@ -116,6 +119,53 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       return sum + regel.hoeveelheid * comp.norm_hoeveelheid * comp.tarief
     }, 0)
   }, [wb, refreshTeller])
+
+  /** Werkbegroting-totalen per component-type (zelfde formule als totaalBedrag, gesplitst per type). */
+  const berekenPrognoseTotalen = useCallback((): WerkbegrotingPrognoseTotalen => {
+    if (!wb) return {}
+    const regels = getWerkbegrotingRegels(wb.id)
+    const regelIds = new Set(regels.map(r => r.id))
+    const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id) && !c.is_verwijderd)
+    const t: WerkbegrotingPrognoseTotalen = { arbeid: { bedrag: 0, uren: 0 }, materieel: { bedrag: 0 }, onderaanneming: { bedrag: 0 } }
+    for (const comp of componenten) {
+      const regel = regels.find(r => r.id === comp.werkbegroting_regel_id)
+      if (!regel) continue
+      const hoeveelheid = regel.hoeveelheid * comp.norm_hoeveelheid
+      const bedrag = hoeveelheid * comp.tarief
+      if (comp.type === 'arbeid') { t.arbeid!.bedrag += bedrag; t.arbeid!.uren += hoeveelheid }
+      else if (comp.type === 'onderaanneming') t.onderaanneming!.bedrag += bedrag
+      else if (comp.type === 'materieel') t.materieel!.bedrag += bedrag
+    }
+    return t
+  }, [wb])
+
+  const openPrognose = useCallback(async () => {
+    if (!dossierId) return
+    setPrognoseOpen(true)
+    setPrognosePreview(null)
+    setPrognoseBezig(true)
+    try {
+      setPrognosePreview(await previewWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen()))
+    } finally {
+      setPrognoseBezig(false)
+    }
+  }, [dossierId, berekenPrognoseTotalen])
+
+  const verstuurPrognose = useCallback(async () => {
+    if (!dossierId) return
+    setPrognoseBezig(true)
+    try {
+      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen())
+      if (res.ok) {
+        toast.success(`Prognose verzonden: ${res.geschreven} kostensoort(en) bijgewerkt in Bouw7${res.overgeslagen ? `, ${res.overgeslagen} overgeslagen` : ''}.`)
+        setPrognoseOpen(false)
+      } else {
+        toast.error(`Verzenden mislukt: ${res.error}`)
+      }
+    } finally {
+      setPrognoseBezig(false)
+    }
+  }, [dossierId, berekenPrognoseTotalen])
 
   const handleStatusWijzig = useCallback(async (nieuweStatus: WerkbegrotingStatus, notitie?: string) => {
     if (!wb) return
@@ -240,6 +290,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
           Opslaan
         </button>
+        <button
+          onClick={openPrognose}
+          disabled={!dossierId || isSyncing}
+          title={dossierId ? 'Stuur de werkbegroting-bedragen als prognose naar Bouw7' : 'Geen dossier gekoppeld'}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+            border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
+            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Send className="w-3.5 h-3.5" />
+          Prognose naar Bouw7
+        </button>
       </div>
 
       {/* Grid + totalen panel */}
@@ -312,6 +373,92 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           </div>
         </div>
       )}
+
+      {prognoseOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !prognoseBezig) setPrognoseOpen(false) }}
+        >
+          <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700">
+                <Send className="h-5 w-5" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Prognose naar Bouw7</h2>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="mb-3 text-sm text-gray-600">
+                Per kostensoort wordt <strong>&ldquo;Niet/anders begroot&rdquo;</strong> in Bouw7 gezet op het
+                verschil tussen de werkbegroting en het Bouw7-begrote bedrag. Controleer hieronder vóór verzenden.
+              </p>
+
+              {prognoseBezig && !prognosePreview && (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Bedragen ophalen uit Bouw7…
+                </div>
+              )}
+
+              {prognosePreview && !prognosePreview.ok && (
+                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{prognosePreview.error}</div>
+              )}
+
+              {prognosePreview?.ok && (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
+                      <th className="py-1.5">Kostensoort</th>
+                      <th className="py-1.5 text-right">Begroot</th>
+                      <th className="py-1.5 text-right">Werkbegroting</th>
+                      <th className="py-1.5 text-right">Niet/anders begroot</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prognosePreview.regels.map((r) => (
+                      <tr key={r.type} className={`border-b border-gray-100 ${r.schrijfbaar ? 'text-gray-800' : 'text-gray-400'}`}>
+                        <td className="py-1.5">
+                          {r.label}
+                          {!r.schrijfbaar && r.reden && (
+                            <span className="ml-1 text-[11px] text-amber-600">— {r.reden}</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
+                        <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
+                        <td className="py-1.5 text-right tabular-nums font-semibold">
+                          {r.schrijfbaar ? euro(r.verschil) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                onClick={() => setPrognoseOpen(false)}
+                disabled={prognoseBezig}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={verstuurPrognose}
+                disabled={prognoseBezig || !prognosePreview?.ok || !prognosePreview.regels.some(r => r.schrijfbaar)}
+                className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {prognoseBezig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Verstuur naar Bouw7
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+/** Euro-formattering voor de prognose-preview. */
+function euro(n: number): string {
+  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 }

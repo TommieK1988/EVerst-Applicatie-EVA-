@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button, Card, CardBody, Input } from '@/components/ui'
-import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, verifyBouw7WriteAccess, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult, type WriteCheckResult } from './actions'
+import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, verifyBouw7WriteAccess, discoverBouw7Bestelregels, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult, type WriteCheckResult, type BestelregelRefsResult } from './actions'
 
 type Status = { kind: 'idle' } | { kind: 'saving' } | { kind: 'success'; msg?: string } | { kind: 'error'; message: string }
 
@@ -22,6 +22,8 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
   const [projectDebugging, setProjectDebugging] = useState(false)
   const [writeCheck, setWriteCheck] = useState<WriteCheckResult | null>(null)
   const [writeChecking, setWriteChecking] = useState(false)
+  const [poRefs, setPoRefs] = useState<BestelregelRefsResult | null>(null)
+  const [poRefsLoading, setPoRefsLoading] = useState(false)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -248,6 +250,42 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#dc2626' }}>
                     <WarnIcon /> {writeCheck.error}
                   </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg-muted)', marginBottom: 4 }}>
+              Bestelregels — bestaande regels &amp; bewakingscodes ontdekken
+            </p>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Read-only. Haalt voor het eerste project de bestaande bestelregels
+              (<code>GET /list/contract-order-lines</code>) en de bewakingscodes op, zodat je geldige
+              <code> projectSecurityLink</code>-ids ziet om nieuwe regels op te laten landen.
+            </p>
+            <Button type="button" variant="ghost" size="sm" loading={poRefsLoading}
+              onClick={async () => {
+                setPoRefsLoading(true)
+                setPoRefs(null)
+                try { setPoRefs(await discoverBouw7Bestelregels()) }
+                finally { setPoRefsLoading(false) }
+              }}>
+              Bestelregels &amp; bewakingscodes inspecteren
+            </Button>
+            {poRefs && (
+              <div style={{
+                marginTop: 10, padding: '12px 14px',
+                background: poRefs.ok ? 'var(--bg)' : 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))',
+                border: `1px solid ${poRefs.ok ? 'var(--border)' : 'color-mix(in srgb, #dc2626 20%, transparent)'}`,
+                borderRadius: 8, fontSize: 11,
+              }}>
+                {poRefs.ok ? (
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 320, overflow: 'auto', color: 'var(--fg-muted)' }}>
+                    {JSON.stringify({ projectId: poRefs.projectId, bestaandeRegels: poRefs.bestaandeRegels, bewakingscodes: poRefs.bewakingscodes }, null, 2)}
+                  </pre>
+                ) : (
+                  <span style={{ color: '#dc2626' }}>{poRefs.error}</span>
                 )}
               </div>
             )}

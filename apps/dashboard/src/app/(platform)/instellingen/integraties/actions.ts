@@ -261,6 +261,130 @@ export async function verifyBouw7WriteAccess(projectId?: number): Promise<WriteC
   }
 }
 
+/**
+ * Schrijft één of meer **bestelregels** (verwachte-kosten-regels) naar Bouw7 via
+ * `POST /project/{project}/contract-order-line`. Dit is exact het regeltype dat de
+ * EVA Financieel-tab al teruglez­t als "Verwachte kosten" (`GET /list/contract-order-lines`),
+ * gesommeerd per `projectSecurityLink.code`. Door een PSL-id mee te geven landt de regel
+ * op de juiste bewakingscode en telt 'ie mee in de verwachte kosten van die code.
+ *
+ * LET OP: voor dit endpoint bestaat **geen API-delete** — een testregel verwijder je
+ * in de Bouw7-UI. Bouw7 berekent `totalPrice` zelf uit quantity × unitPrice.
+ */
+export type Bestelregel = {
+  description: string
+  /** Aantal als string, bv. "1". */
+  quantity: string
+  /** Stukprijs (kostprijs) als string, bv. "100.00". */
+  unitPrice: string
+  unit?: string
+  articleNumber?: string
+  /** Bewakingscode-koppeling (PSL-id) — zo landt de regel op de juiste code. */
+  projectSecurityLinkId?: number
+  /** Optioneel: leverancier (contact-id). */
+  contactId?: number
+}
+
+export type CreateBestelregelsResult =
+  | { ok: true; aangemaakt: number; resultaten: unknown[]; message: string }
+  | { ok: false; error: string; aangemaakt: number }
+
+export async function createBouw7Bestelregels(projectId: number, regels: Bestelregel[]): Promise<CreateBestelregelsResult> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('integraties')
+      .select('config')
+      .eq('naam', 'bouw7')
+      .maybeSingle()
+    if (!data) return { ok: false, error: 'Bouw7 is nog niet geconfigureerd.', aangemaakt: 0 }
+
+    const { Bouw7Client } = await import('@/lib/bouw7/client')
+    const config = data.config as Record<string, string>
+    const client = new Bouw7Client(config.api_key, config.app_name)
+
+    const resultaten: unknown[] = []
+    // Het endpoint accepteert één regel per call → sequentieel posten zodat we precies
+    // weten hoeveel er gelukt zijn als er halverwege iets misgaat.
+    for (const r of regels) {
+      const body = {
+        project: { id: projectId },
+        description: r.description,
+        quantity: r.quantity,
+        unitPrice: r.unitPrice,
+        ...(r.unit ? { unit: r.unit } : {}),
+        ...(r.articleNumber ? { articleNumber: r.articleNumber } : {}),
+        ...(r.projectSecurityLinkId != null ? { projectSecurityLink: { id: r.projectSecurityLinkId } } : {}),
+        ...(r.contactId != null ? { contact: { id: r.contactId } } : {}),
+      }
+      resultaten.push(await client.post<unknown>(`/project/${projectId}/contract-order-line`, body))
+    }
+
+    return {
+      ok: true,
+      aangemaakt: resultaten.length,
+      resultaten,
+      message: `${resultaten.length} bestelregel(s) aangemaakt op project ${projectId}. Verschijnen als "Verwachte kosten" in Bouw7. (Geen API-delete — verwijder testregels in de Bouw7-UI.)`,
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout'
+    return { ok: false, error: /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — key mist schrijfrechten of ids niet toegestaan.` : msg, aangemaakt: 0 }
+  }
+}
+
+/**
+ * Read-only ontdek-helper voor bestelregels (zie WRITE-ENDPOINTS.md, fase "inkoop").
+ * Aligned op de juiste write-route `POST /project/{project}/contract-order-line`: haalt voor
+ * een (test)project de bestaande bestelregels op (`GET /list/contract-order-lines`) — daarin
+ * zie je de exacte regel-vorm én geldige `projectSecurityLink`-ids/codes — plus de
+ * bewakingscodes uit project-control kostensoort 1 (Arbeid) als referentie. Schrijft niets.
+ */
+export type BestelregelRefsResult =
+  | {
+      ok: true
+      projectId: number
+      bestaandeRegels: unknown
+      bewakingscodes: unknown
+    }
+  | { ok: false; error: string }
+
+export async function discoverBouw7Bestelregels(projectId?: number): Promise<BestelregelRefsResult> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('integraties')
+      .select('config')
+      .eq('naam', 'bouw7')
+      .maybeSingle()
+    if (!data) return { ok: false, error: 'Bouw7 is nog niet geconfigureerd.' }
+
+    const { Bouw7Client } = await import('@/lib/bouw7/client')
+    const config = data.config as Record<string, string>
+    const client = new Bouw7Client(config.api_key, config.app_name)
+
+    // Bepaal een project: meegegeven id, anders het eerste uit de lijst.
+    let id = projectId ?? null
+    if (id == null) {
+      const list = await client.get<{ items?: { id: number }[] }>('/list/projects', { limit: '1', offset: '0' })
+      id = (Array.isArray(list) ? (list as { id: number }[])[0] : list?.items?.[0])?.id ?? null
+    }
+    if (id == null) return { ok: false, error: 'Geen project gevonden.' }
+
+    const tryGet = async <T>(fn: () => Promise<T>) => { try { return await fn() } catch (e) { return { error: e instanceof Error ? e.message : String(e) } } }
+
+    const [bestaandeRegels, bewakingscodes] = await Promise.all([
+      // Bestaande bestelregels van dit project — toont vorm + geldige PSL-ids/codes.
+      tryGet(() => client.get<unknown>('/list/contract-order-lines', { q: `project.id = ${id} SORT(description, ASC) LIMIT 25` })),
+      // Bewakingscodes (security codes) van dit project via project-control kostensoort 1.
+      tryGet(() => client.getAthena<unknown>(`/project-control/${id}/cost-type/1/chapters?include_subprojects=false`)),
+    ])
+
+    return { ok: true, projectId: id, bestaandeRegels, bewakingscodes }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
+}
+
 export type SyncRelatiesResult =
   | { ok: true; organisaties: SyncResult; contactpersonen: SyncResult }
   | { ok: false; error: string }

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
+import { Bouw7Client } from '@/lib/bouw7/client'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
 
 export interface SyncWerkbegrotingResultaat {
@@ -272,4 +273,169 @@ export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<
   revalidatePath('/taken')
 
   return { toegewezenAan: naam, isFallback, bestond: false, taakId: taak.id }
+}
+
+// ─── Werkbegroting-prognose naar Bouw7 ────────────────────────────────────────
+//
+// Schrijft per Bouw7-kostensoort het veld "Niet/anders begroot" (prognosisOtherAmount)
+// via POST /project/update-prognosis-other { id: <pslId>, prognosisOtherAmount, prognosisOtherHours }.
+// In Bouw7 geldt: prognose = begroot + prognosisOtherAmount. We sturen dus het VERSCHIL
+// tussen het werkbegroting-bedrag en het Bouw7-begrote bedrag per kostensoort.
+//
+// Granulariteit: het endpoint schrijft per ProjectSecurityLink (PSL). De /total/cost-types
+// respons levert per kostensoort de pslIds. Heeft een kostensoort precies één PSL, dan is
+// het eenduidig schrijfbaar; bij meerdere bewakingscodes kan één kostensoort-totaal niet
+// eenduidig worden toegewezen en slaan we 'm over (gemeld in de preview).
+
+/** Werkbegroting-totalen per component-type (client berekent ze uit regels × componenten). */
+export type WerkbegrotingPrognoseTotalen = {
+  arbeid?: { bedrag: number; uren: number }
+  materieel?: { bedrag: number }
+  onderaanneming?: { bedrag: number }
+}
+
+/**
+ * Mapping component-type → Bouw7-kostensoort (op `name` in de project-control respons).
+ * LET OP: `materieel` → `material` (kostensoort 5) is de afgesproken-voorlopige mapping;
+ * Everts voert materiaalkosten als 'materieel' in. Inkoop (2)/Materieel (4)/Afval (6) worden
+ * (nog) niet vanuit de werkbegroting gevoed.
+ */
+const TYPE_NAAR_BOUW7: Record<keyof WerkbegrotingPrognoseTotalen, { naam: string; ct: number; label: string }> = {
+  arbeid:         { naam: 'labor',          ct: 1, label: 'Arbeid' },
+  onderaanneming: { naam: 'subcontracting', ct: 3, label: 'Onderaanneming' },
+  materieel:      { naam: 'material',       ct: 5, label: 'Materiaal' },
+}
+
+export type PrognoseRegel = {
+  type: keyof WerkbegrotingPrognoseTotalen
+  label: string
+  ct: number
+  begroot: number
+  werkbegroting: number
+  /** Te schrijven prognosisOtherAmount = werkbegroting − begroot. */
+  verschil: number
+  /** Voor arbeid: bijbehorende uren-correctie. */
+  verschilUren?: number
+  pslId: number | null
+  schrijfbaar: boolean
+  reden?: string
+}
+
+export type PrognoseResultaat =
+  | { ok: true; bouw7Id: string; regels: PrognoseRegel[] }
+  | { ok: false; error: string }
+
+type Bouw7CostTypeItem = {
+  name?: string
+  budgetAmount?: number | string
+  prognosisOtherAmount?: number | string
+  pslIds?: number[]
+}
+
+const getal = (v: unknown): number => {
+  if (typeof v === 'number') return v
+  if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  return 0
+}
+const rond = (n: number): number => Math.round(n * 100) / 100
+
+/** Gedeelde berekening: haal Bouw7-begroot per kostensoort op en bepaal de verschillen. */
+async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  const { data: dossier } = await db.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
+  const bouw7Id: string | null = dossier?.bouw7_id ?? null
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
+
+  const { data: integratie } = await db.from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
+  const config = integratie?.config as Record<string, string> | undefined
+  if (!config?.api_key || !config?.app_name) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+
+  let items: Bouw7CostTypeItem[]
+  try {
+    const client = new Bouw7Client(config.api_key, config.app_name)
+    const resp = await client.getAthena<{ items?: Bouw7CostTypeItem[] }>(
+      `/project-control/${bouw7Id}/total/cost-types`,
+      { include_subprojects: 'false' },
+    )
+    items = resp.items ?? []
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen Bouw7-projectbewaking mislukt.' }
+  }
+
+  const regels: PrognoseRegel[] = []
+  for (const type of Object.keys(totalen) as (keyof WerkbegrotingPrognoseTotalen)[]) {
+    const invoer = totalen[type]
+    if (!invoer) continue
+    const map = TYPE_NAAR_BOUW7[type]
+    const item = items.find(i => i.name === map.naam)
+
+    const begroot = getal(item?.budgetAmount)
+    const werkbegroting = invoer.bedrag
+    const verschil = rond(werkbegroting - begroot)
+    const pslIds = item?.pslIds ?? []
+
+    let schrijfbaar = true
+    let reden: string | undefined
+    let pslId: number | null = pslIds[0] ?? null
+
+    if (!item) { schrijfbaar = false; reden = `Kostensoort "${map.label}" bestaat niet op dit project.`; pslId = null }
+    else if (pslIds.length === 0) { schrijfbaar = false; reden = 'Geen bewakingskoppeling (PSL) gevonden.' }
+    else if (pslIds.length > 1) { schrijfbaar = false; reden = `${pslIds.length} bewakingscodes — niet eenduidig per kostensoort te schrijven.` }
+    else if (verschil === 0) { schrijfbaar = false; reden = 'Geen verschil t.o.v. begroot.' }
+
+    // Uren-correctie voor arbeid: verschil-bedrag gedeeld door het effectieve uurtarief.
+    let verschilUren: number | undefined
+    if (type === 'arbeid') {
+      const uren = (invoer as { uren: number }).uren
+      const tarief = uren > 0 ? werkbegroting / uren : 0
+      verschilUren = tarief > 0 ? rond(verschil / tarief) : 0
+    }
+
+    regels.push({ type, label: map.label, ct: map.ct, begroot, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, reden })
+  }
+
+  return { ok: true, bouw7Id, regels }
+}
+
+/** Preview: bereken (read-only) wat er naar Bouw7 geschreven zou worden. Schrijft niets. */
+export async function previewWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
+  return berekenPrognoseRegels(dossierId, totalen)
+}
+
+export type StuurPrognoseResultaat =
+  | { ok: true; geschreven: number; overgeslagen: number; regels: PrognoseRegel[] }
+  | { ok: false; error: string }
+
+/**
+ * Schrijft de nieuwe prognosebedragen naar Bouw7 ("Niet/anders begroot" per kostensoort).
+ * Alleen eenduidig-schrijfbare kostensoorten met een verschil ≠ 0 worden weggeschreven.
+ */
+export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<StuurPrognoseResultaat> {
+  const berekend = await berekenPrognoseRegels(dossierId, totalen)
+  if (!berekend.ok) return { ok: false, error: berekend.error }
+
+  const { data: integratie } = await (createAdminClient() as ReturnType<typeof createAdminClient>)
+    .from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
+  const config = integratie?.config as Record<string, string> | undefined
+  if (!config?.api_key || !config?.app_name) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+
+  const client = new Bouw7Client(config.api_key, config.app_name)
+  let geschreven = 0
+  try {
+    for (const r of berekend.regels) {
+      if (!r.schrijfbaar || r.pslId == null) continue
+      const body: Record<string, unknown> = { id: r.pslId, prognosisOtherAmount: String(r.verschil) }
+      if (r.type === 'arbeid') body.prognosisOtherHours = String(r.verschilUren ?? 0)
+      await client.post('/project/update-prognosis-other', body)
+      geschreven++
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout'
+    return { ok: false, error: /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — schrijfrechten of ids niet toegestaan.` : msg }
+  }
+
+  const overgeslagen = berekend.regels.filter(r => !r.schrijfbaar).length
+  return { ok: true, geschreven, overgeslagen, regels: berekend.regels }
 }

@@ -131,6 +131,60 @@ Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `tick
 
 ---
 
+## 2b. Bestelregels & prognose — EVA-specifiek (geverifieerd jun 2026)
+
+Afgestemd op wat EVA al **leest** (zie `ENDPOINTS.md` → "Projectbewaking per bewakingscode").
+
+### Bestelregels = "Verwachte kosten" → `POST /project/{project}/contract-order-line`
+EVA's Financieel-tab toont **"Verwachte kosten"** uit `GET /list/contract-order-lines`, gesommeerd per
+`projectSecurityLink.code`. De **schrijf-tegenhanger** van precies dat regeltype is:
+
+```
+POST /project/{project}/contract-order-line     body: ContractOrderLineOld
+```
+| Veld | | Opmerking |
+|---|---|---|
+| `project` `{id}` | **REQ** | path + body |
+| `description` | opt | regelomschrijving |
+| `quantity`, `unitPrice` | opt | Bouw7 rekent `totalPrice` = quantity × unitPrice zelf |
+| `unit`, `articleNumber` | opt | |
+| `projectSecurityLink` `{id}` | opt | **bewakingscode** — zo landt de regel op de juiste code |
+| `contact` `{id}` | opt | leverancier |
+
+> **Let op:** dit endpoint staat in de spec als *deprecated*, maar is wél de bron die EVA leest.
+> **Geen API-delete** (`/list/contract-order-lines` is GET; er is geen DELETE) — testregels in de Bouw7-UI verwijderen.
+> Niet te verwarren met `POST /contracts/purchase-order` (formele inkooporder met leverancier/status/termijnen →
+> voedt `contractCostAmount`, dat volgens EVA's eigen docs "klopt niet/0 in de praktijk"). Voor EVA-bestelregels
+> is `contract-order-line` de juiste route.
+
+EVA-implementatie: `createBouw7Bestelregels(projectId, regels)` + read-only `discoverBouw7Bestelregels(projectId?)`
+in `instellingen/integraties/actions.ts`.
+
+### Prognose — wél schrijfbaar via "Niet/anders begroot" (ongedocumenteerd Heimdall-endpoint)
+In Bouw7 zet je de prognose niet direct, maar via het veld **"Niet/anders begroot"** (`prognosisOtherAmount`)
+per kostensoort/bewakingscode. Geldt: **`prognose = budgetAmount + prognosisOtherAmount`**. De UI-call
+(afgevangen via DevTools, jun 2026) is een **ongedocumenteerd** Heimdall-endpoint:
+
+```
+POST /project/update-prognosis-other
+body: { id: <projectSecurityLink-id>, prognosisOtherAmount: "<bedrag>", prognosisOtherHours: "<uren>" }
+```
+- `id` = **PSL-id** (uit `pslIds` van de `GET /project-control/{id}/total/cost-types`-respons, per kostensoort).
+- `prognosisOtherAmount` = string; **absolute** "Niet/anders begroot"-waarde (overschrijft, telt niet op).
+- `prognosisOtherHours` = string; alleen relevant voor **Arbeid** (≈ `bedrag / uurtarief`).
+- Staat **niet** in de Swagger-spec; afgeleid uit de live UI-call. Host = **Heimdall** → bestaande `client.post()`.
+
+EVA-implementatie (`everts-calc/actions/werkbegroting.ts`): `previewWerkbegrotingPrognoseBouw7()` +
+`stuurWerkbegrotingPrognoseBouw7(dossierId, totalen)` — schrijft per kostensoort het **verschil**
+`werkbegroting − Bouw7-begroot`. Knop "Prognose naar Bouw7" in `WerkbegrotingHoofdscherm.tsx` (met
+bevestiging/preview). Schrijft alleen kostensoorten met **precies één PSL** (anders niet eenduidig → overgeslagen).
+
+### Athena read-surface die EVA al gebruikt (context)
+`GET /project-financial/{id}` · `GET /project-control/{id}/cost-type/{1..6}/chapters` · `GET /wip/report`
+· Apollo `GET /search/purchase-invoices` · `GET /search/delivery-tickets` · Heimdall `GET /list/contract-order-lines`.
+
+---
+
 ## 3. Volledige write-catalogus (104 ops, gegroepeerd)
 
 > Patroon overal gelijk: `POST` = upsert · `DELETE` = `Condensed*{id}` · `PUT .../update-status/{status}`.
