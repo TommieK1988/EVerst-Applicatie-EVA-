@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { Save, Loader2, ChevronLeft, Clock, RefreshCw, Printer, ClipboardCheck, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -10,7 +10,7 @@ import {
   getWerkbegrotingBestellingen, slaWerkbegrotingOp, getScenarios,
   heroverhaalWerkbegroting,
 } from '@/lib/everts-calc/local-store'
-import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, type ControleTaakResultaat, type PrognoseResultaat, type WerkbegrotingPrognoseTotalen } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import HeroverhaalModal from './HeroverhaalModal'
@@ -39,6 +39,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [prognoseOpen, setPrognoseOpen] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
   const [prognoseBezig, setPrognoseBezig] = useState(false)
+  /** Bouw7-bewakingscodes van het gekoppelde project (null = niet gekoppeld / nog niet geladen). */
+  const [bewakingscodes, setBewakingscodes] = useState<{ code: string; naam: string | null }[] | null>(null)
 
   useEffect(() => {
     const scenarios = getScenarios(projectId)
@@ -58,6 +60,16 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       setWb(nieuw)
     }
   }, [projectId, projectStatus])
+
+  // Bewakingscodes van het gekoppelde Bouw7-project ophalen → kostengroep-picker + prognose-match.
+  useEffect(() => {
+    if (!dossierId) { setBewakingscodes(null); return }
+    let actief = true
+    resolveBewakingscodes(dossierId)
+      .then(res => { if (actief) setBewakingscodes(res.ok ? res.codes.map(c => ({ code: c.code, naam: c.naam })) : null) })
+      .catch(() => { if (actief) setBewakingscodes(null) })
+    return () => { actief = false }
+  }, [dossierId])
 
   const handleWijziging = useCallback(() => {
     setRefreshTeller(t => t + 1)
@@ -120,23 +132,31 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     }, 0)
   }, [wb, refreshTeller])
 
-  /** Werkbegroting-totalen per component-type (zelfde formule als totaalBedrag, gesplitst per type). */
+  /** Werkbegroting-totalen per bewakingscode (= regel.kostengroep), gesplitst per component-type. */
   const berekenPrognoseTotalen = useCallback((): WerkbegrotingPrognoseTotalen => {
-    if (!wb) return {}
+    if (!wb) return []
     const regels = getWerkbegrotingRegels(wb.id)
+    const regelById = new Map(regels.map(r => [r.id, r]))
     const regelIds = new Set(regels.map(r => r.id))
     const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id) && !c.is_verwijderd)
-    const t: WerkbegrotingPrognoseTotalen = { arbeid: { bedrag: 0, uren: 0 }, materieel: { bedrag: 0 }, onderaanneming: { bedrag: 0 } }
+    const perCode = new Map<string, WerkbegrotingCodeTotaal>()
+    const ensure = (code: string): WerkbegrotingCodeTotaal => {
+      let t = perCode.get(code)
+      if (!t) { t = { code }; perCode.set(code, t) }
+      return t
+    }
     for (const comp of componenten) {
-      const regel = regels.find(r => r.id === comp.werkbegroting_regel_id)
+      const regel = regelById.get(comp.werkbegroting_regel_id)
       if (!regel) continue
+      const code = bareCode(regel.kostengroep)
       const hoeveelheid = regel.hoeveelheid * comp.norm_hoeveelheid
       const bedrag = hoeveelheid * comp.tarief
-      if (comp.type === 'arbeid') { t.arbeid!.bedrag += bedrag; t.arbeid!.uren += hoeveelheid }
-      else if (comp.type === 'onderaanneming') t.onderaanneming!.bedrag += bedrag
-      else if (comp.type === 'materieel') t.materieel!.bedrag += bedrag
+      const t = ensure(code)
+      if (comp.type === 'arbeid') { t.arbeid = t.arbeid ?? { bedrag: 0, uren: 0 }; t.arbeid.bedrag += bedrag; t.arbeid.uren += hoeveelheid }
+      else if (comp.type === 'onderaanneming') { t.onderaanneming = t.onderaanneming ?? { bedrag: 0 }; t.onderaanneming.bedrag += bedrag }
+      else if (comp.type === 'materieel') { t.materieel = t.materieel ?? { bedrag: 0 }; t.materieel.bedrag += bedrag }
     }
-    return t
+    return [...perCode.values()]
   }, [wb])
 
   const openPrognose = useCallback(async () => {
@@ -157,7 +177,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     try {
       const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen())
       if (res.ok) {
-        toast.success(`Prognose verzonden: ${res.geschreven} kostensoort(en) bijgewerkt in Bouw7${res.overgeslagen ? `, ${res.overgeslagen} overgeslagen` : ''}.`)
+        toast.success(`Prognose verzonden: ${res.geschreven} regel(s) bijgewerkt in Bouw7${res.overgeslagen ? `, ${res.overgeslagen} overgeslagen` : ''}.`)
         setPrognoseOpen(false)
       } else {
         toast.error(`Verzenden mislukt: ${res.error}`)
@@ -310,6 +330,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           werkbegrotingId={wb.id}
           scenarioId={scenarioId}
           onWijziging={handleWijziging}
+          bewakingscodes={bewakingscodes}
+          dossierId={dossierId}
         />
       </div>
 
@@ -389,8 +411,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
 
             <div className="px-6 py-5">
               <p className="mb-3 text-sm text-gray-600">
-                Per kostensoort wordt <strong>&ldquo;Niet/anders begroot&rdquo;</strong> in Bouw7 gezet op het
-                verschil tussen de werkbegroting en het Bouw7-begrote bedrag. Controleer hieronder vóór verzenden.
+                Per <strong>bewakingscode</strong> wordt <strong>&ldquo;Niet/anders begroot&rdquo;</strong> in Bouw7
+                gezet op het verschil tussen de werkbegroting en het Bouw7-begrote bedrag. De kostengroep in EVA wordt
+                op de bewakingscode gematcht. Controleer hieronder vóór verzenden.
               </p>
 
               {prognoseBezig && !prognosePreview && (
@@ -404,33 +427,45 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
               )}
 
               {prognosePreview?.ok && (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
-                      <th className="py-1.5">Kostensoort</th>
-                      <th className="py-1.5 text-right">Begroot</th>
-                      <th className="py-1.5 text-right">Werkbegroting</th>
-                      <th className="py-1.5 text-right">Niet/anders begroot</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prognosePreview.regels.map((r) => (
-                      <tr key={r.type} className={`border-b border-gray-100 ${r.schrijfbaar ? 'text-gray-800' : 'text-gray-400'}`}>
-                        <td className="py-1.5">
-                          {r.label}
-                          {!r.schrijfbaar && r.reden && (
-                            <span className="ml-1 text-[11px] text-amber-600">— {r.reden}</span>
-                          )}
-                        </td>
-                        <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
-                        <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
-                        <td className="py-1.5 text-right tabular-nums font-semibold">
-                          {r.schrijfbaar ? euro(r.verschil) : '—'}
-                        </td>
+                <div className="max-h-[55vh] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
+                        <th className="py-1.5">Kostensoort</th>
+                        <th className="py-1.5 text-right">Begroot</th>
+                        <th className="py-1.5 text-right">Werkbegroting</th>
+                        <th className="py-1.5 text-right">Niet/anders begroot</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {groepeerPerCode(prognosePreview.regels).map(([code, rs]) => (
+                        <Fragment key={code || '∅'}>
+                          <tr className="bg-gray-50">
+                            <td colSpan={4} className="py-1 px-1 text-xs font-semibold text-gray-600">
+                              {code ? code : 'Zonder bewakingscode'}
+                              {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
+                            </td>
+                          </tr>
+                          {rs.map((r) => (
+                            <tr key={`${code}-${r.type}`} className={`border-b border-gray-100 ${r.schrijfbaar ? 'text-gray-800' : 'text-gray-400'}`}>
+                              <td className="py-1.5 pl-3">
+                                {r.label}
+                                {!r.schrijfbaar && r.reden && (
+                                  <span className="ml-1 text-[11px] text-amber-600">— {r.reden}</span>
+                                )}
+                              </td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
+                              <td className="py-1.5 text-right tabular-nums font-semibold">
+                                {r.schrijfbaar ? euro(r.verschil) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -461,4 +496,24 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
 /** Euro-formattering voor de prognose-preview. */
 function euro(n: number): string {
   return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
+}
+
+/** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
+function bareCode(kostengroep?: string | null): string {
+  return (kostengroep ?? '').split(/\s[—-]\s/)[0].trim()
+}
+
+/** Groepeer prognose-regels per bewakingscode, met de codes gesorteerd (lege code achteraan). */
+function groepeerPerCode(regels: PrognoseRegel[]): [string, PrognoseRegel[]][] {
+  const map = new Map<string, PrognoseRegel[]>()
+  for (const r of regels) {
+    const arr = map.get(r.code) ?? []
+    arr.push(r)
+    map.set(r.code, arr)
+  }
+  return [...map.entries()].sort((a, b) => {
+    if (!a[0]) return 1
+    if (!b[0]) return -1
+    return a[0].localeCompare(b[0], 'nl')
+  })
 }

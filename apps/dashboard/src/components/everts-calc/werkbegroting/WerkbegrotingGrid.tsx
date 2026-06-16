@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch } from 'lucide-react'
+import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch, DownloadCloud } from 'lucide-react'
+import toast from 'react-hot-toast'
 import {
   getGroepen, getWerkbegrotingRegels, getWerkbegrotingComponenten,
   slaWerkbegrotingRegelOp, slaWerkbegrotingComponentOp,
   voegWijzigingToe, getInstellingen,
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
 } from '@/lib/everts-calc/local-store'
+import { getBouw7BewakingscodesImport } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { formatEuro } from '@/lib/everts-calc/calculations'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type {
@@ -22,6 +24,18 @@ interface Props {
   werkbegrotingId: string
   scenarioId: string
   onWijziging: () => void
+  /**
+   * Bouw7-bewakingscodes van het gekoppelde project. Als gezet, fungeert de kostengroep-kolom
+   * als bewakingscode-picker (kostengroep === bewakingscode). Null = vrije tekst (EVA-origine).
+   */
+  bewakingscodes?: { code: string; naam: string | null }[] | null
+  /** Dossier-id van het gekoppelde Bouw7-project — nodig om codes/bestelregels te importeren. */
+  dossierId?: string
+}
+
+/** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
+function bareCode(kostengroep?: string | null): string {
+  return (kostengroep ?? '').split(/\s[—-]\s/)[0].trim()
 }
 
 // ─── Kolom definities ──────────────────────────────────────────────────────────
@@ -410,7 +424,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, dossierId }: Props) {
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
@@ -521,11 +535,16 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const onColDragEnd = () => { setDragCol(null); setDragOverCol(null) }
 
   // ─── Kostengroep datalist ──────────────────────────────────────────────────
-  const alleKostengroepen = useMemo(() => {
+  // Bij een Bouw7-gekoppeld project: de projectbewakingscodes (kostengroep === bewakingscode).
+  // Anders (EVA-origine): de eerder gebruikte kostengroepen + de standaardlijst.
+  const alleKostengroepen = useMemo((): { value: string; label: string | null }[] => {
+    if (bewakingscodes && bewakingscodes.length > 0) {
+      return bewakingscodes.map(b => ({ value: b.code, label: b.naam }))
+    }
     const fromRegels = regels.map(r => r.kostengroep).filter(Boolean) as string[]
     const fromInst   = instellingen.standaard_kostengroepen ?? []
-    return [...new Set([...fromRegels, ...fromInst])].sort()
-  }, [regels, instellingen])
+    return [...new Set([...fromRegels, ...fromInst])].sort().map(v => ({ value: v, label: null }))
+  }, [regels, instellingen, bewakingscodes])
 
   // ─── Actieve en verwijderde componenten ───────────────────────────────────
   const actieveComponenten  = useMemo(() => componenten.filter(c => !c.is_verwijderd), [componenten])
@@ -717,6 +736,61 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     voegNieuweRegelToe(naam); setKgNaam(''); setKgFormOpen(false)
   }
 
+  // ─── Import bewakingscodes + bestelregels uit Bouw7 (Scenario B) ────────────
+  const [importBezig, setImportBezig] = useState(false)
+  const importeerUitBouw7 = useCallback(async () => {
+    if (!dossierId || importBezig) return
+    setImportBezig(true)
+    try {
+      const res = await getBouw7BewakingscodesImport(dossierId)
+      if (!res.ok) { toast.error(res.error); return }
+
+      // Bestaande codes (kostengroep) → regel-id, zodat we niet dubbel seeden.
+      const regelVoorCode = new Map<string, string>()
+      for (const r of regels) {
+        const c = bareCode(r.kostengroep)
+        if (c && !regelVoorCode.has(c)) regelVoorCode.set(c, r.id)
+      }
+      const codeNaam = new Map(res.codes.map(c => [c.code, c.naam]))
+
+      const nieuweRegels: WerkbegrotingRegel[] = []
+      const nieuweComps: WerkbegrotingComponent[] = []
+      let volg = regels.length + 1
+      const ensureRegel = (code: string): string => {
+        const bestaand = regelVoorCode.get(code)
+        if (bestaand) return bestaand
+        const regel: WerkbegrotingRegel = {
+          id: nieuweId(), werkbegroting_id: werkbegrotingId, source_calculatieregel_id: null,
+          groep_id: '', omschrijving: codeNaam.get(code) ?? '', hoeveelheid: 1, eenheid: 'st',
+          volgorde: volg++, kostengroep: code,
+        }
+        nieuweRegels.push(regel); regelVoorCode.set(code, regel.id)
+        return regel.id
+      }
+
+      // 1) Placeholder-regel per Bouw7-code die nog niet bestaat.
+      for (const c of res.codes) ensureRegel(c.code)
+      // 2) Bestelregels als componenten onder de juiste code.
+      for (const b of res.bestelregels) {
+        const regelId = ensureRegel(b.code)
+        nieuweComps.push({
+          id: nieuweId(), werkbegroting_regel_id: regelId, source_component_id: null,
+          type: b.type, norm_hoeveelheid: 1, tarief: b.bedrag,
+          omschrijving: b.omschrijving || undefined,
+        })
+      }
+
+      nieuweRegels.forEach(slaWerkbegrotingRegelOp)
+      nieuweComps.forEach(slaWerkbegrotingComponentOp)
+      setRegels(prev => [...prev, ...nieuweRegels])
+      setComponenten(prev => [...prev, ...nieuweComps])
+      onWijziging()
+      toast.success(`Geïmporteerd: ${nieuweRegels.length} bewakingscode(s), ${nieuweComps.length} bestelregel(s).`)
+    } finally {
+      setImportBezig(false)
+    }
+  }, [dossierId, importBezig, regels, werkbegrotingId, onWijziging])
+
   // Soft-delete component
   const verwijderComp = useCallback((compId: string) => {
     onComponentWijzig(compId, { is_verwijderd: true })
@@ -832,10 +906,16 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
       case 'kostengroep':
         return (
-          <td key={id} className={`px-2 py-1.5 ${base}`}>
-            <span className="text-xs text-slate-600 truncate block" title={regel.kostengroep}>
-              {regel.kostengroep ?? <span className="italic text-slate-300">—</span>}
-            </span>
+          <td key={id} className={`px-1 py-1 ${base}`}>
+            <input
+              list="kg-datalist"
+              value={regel.kostengroep ?? ''}
+              onChange={e => onRegelWijzig(regel.id, { kostengroep: e.target.value })}
+              placeholder="—"
+              title={regel.kostengroep ?? (bewakingscodes ? 'Kies een bewakingscode' : 'Kostengroep')}
+              className="w-full text-xs text-slate-600 px-1 py-0.5 bg-transparent border border-transparent rounded truncate
+                hover:border-slate-200 focus:border-everts focus:bg-white focus:outline-none"
+            />
           </td>
         )
 
@@ -1117,6 +1197,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
             <Tag className="w-3.5 h-3.5" /> Nieuwe kostengroep
           </button>
 
+          {dossierId && bewakingscodes && (
+            <button onClick={importeerUitBouw7} disabled={importBezig}
+              title="Bewakingscodes en bestelregels uit Bouw7 overhalen naar deze werkbegroting"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <DownloadCloud className="w-3.5 h-3.5" /> {importBezig ? 'Importeren…' : 'Uit Bouw7 overhalen'}
+            </button>
+          )}
+
           <button onClick={() => setSamenvoegen(v => !v)}
             title={samenvoegen ? 'Toon alle afzonderlijke regels' : 'Materiaal met zelfde artikelnr + leverancier samenvoegen'}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
@@ -1169,9 +1257,9 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           </div>
         )}
 
-        {/* Datalist kostengroepen */}
+        {/* Datalist kostengroepen / bewakingscodes */}
         <datalist id="kg-datalist">
-          {alleKostengroepen.map(kg => <option key={kg} value={kg} />)}
+          {alleKostengroepen.map(kg => <option key={kg.value} value={kg.value}>{kg.label ?? undefined}</option>)}
         </datalist>
 
         {/* Scroll-container */}

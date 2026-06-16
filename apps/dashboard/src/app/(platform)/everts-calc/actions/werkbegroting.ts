@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client } from '@/lib/bouw7/client'
+import type { Bouw7ControlResponse, Bouw7ContractOrderLine } from '@/lib/bouw7/client'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
 
 export interface SyncWerkbegrotingResultaat {
@@ -275,39 +276,142 @@ export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<
   return { toegewezenAan: naam, isFallback, bestond: false, taakId: taak.id }
 }
 
-// ─── Werkbegroting-prognose naar Bouw7 ────────────────────────────────────────
+// ─── Werkbegroting-prognose naar Bouw7 (per bewakingscode) ────────────────────
 //
-// Schrijft per Bouw7-kostensoort het veld "Niet/anders begroot" (prognosisOtherAmount)
-// via POST /project/update-prognosis-other { id: <pslId>, prognosisOtherAmount, prognosisOtherHours }.
+// Schrijft per bewakingscode × kostensoort het veld "Niet/anders begroot"
+// (prognosisOtherAmount) via POST /project/update-prognosis-other
+// { id: <pslId>, prognosisOtherAmount, prognosisOtherHours }.
 // In Bouw7 geldt: prognose = begroot + prognosisOtherAmount. We sturen dus het VERSCHIL
-// tussen het werkbegroting-bedrag en het Bouw7-begrote bedrag per kostensoort.
+// tussen het werkbegroting-bedrag en het Bouw7-begrote bedrag, per code.
 //
-// Granulariteit: het endpoint schrijft per ProjectSecurityLink (PSL). De /total/cost-types
-// respons levert per kostensoort de pslIds. Heeft een kostensoort precies één PSL, dan is
-// het eenduidig schrijfbaar; bij meerdere bewakingscodes kan één kostensoort-totaal niet
-// eenduidig worden toegewezen en slaan we 'm over (gemeld in de preview).
+// Kostengroep (EVA) === bewakingscode (Bouw7). De koppeling wordt LIVE afgeleid:
+// regel.kostengroep wordt op de Bouw7-code gematcht; per (code, kostensoort) bestaat
+// precies één projectSecurityLink (PSL) waar we naartoe schrijven.
 
-/** Werkbegroting-totalen per component-type (client berekent ze uit regels × componenten). */
-export type WerkbegrotingPrognoseTotalen = {
+/** Kostensoorten die vanuit de werkbegroting gevoed worden (= component-types). */
+const PROGNOSE_KOSTENSOORTEN = [1, 3, 5] as const
+
+/** Component-type → Bouw7-kostensoort. `materieel` → Materiaal (5) is de afgesproken mapping. */
+const TYPE_NAAR_BOUW7: Record<'arbeid' | 'materieel' | 'onderaanneming', { ct: number; label: string }> = {
+  arbeid:         { ct: 1, label: 'Arbeid' },
+  onderaanneming: { ct: 3, label: 'Onderaanneming' },
+  materieel:      { ct: 5, label: 'Materiaal' },
+}
+
+/** Werkbegroting-totalen per bewakingscode (client berekent ze uit regels × componenten). */
+export type WerkbegrotingCodeTotaal = {
+  /** Bewakingscode = regel.kostengroep (kale code). Leeg = regel zonder code. */
+  code: string
   arbeid?: { bedrag: number; uren: number }
   materieel?: { bedrag: number }
   onderaanneming?: { bedrag: number }
 }
+export type WerkbegrotingPrognoseTotalen = WerkbegrotingCodeTotaal[]
+
+const getal = (v: unknown): number => {
+  if (typeof v === 'number') return v
+  if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  return 0
+}
+const rond = (n: number): number => Math.round(n * 100) / 100
+
+/** Gedeelde Bouw7-context (bouw7_id + ingelogde client) voor een dossier. */
+async function bouw7Context(dossierId: string): Promise<{ ok: true; bouw7Id: string; client: Bouw7Client } | { ok: false; error: string }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data: dossier } = await db.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
+  const bouw7Id: string | null = dossier?.bouw7_id ?? null
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
+  const { data: integratie } = await db.from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
+  const config = integratie?.config as Record<string, string> | undefined
+  if (!config?.api_key || !config?.app_name) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+  return { ok: true, bouw7Id, client: new Bouw7Client(config.api_key, config.app_name) }
+}
+
+/** Eén Bouw7-bewakingscode met, per kostensoort, de PSL-id, het begrote bedrag en de begrote uren. */
+export type BewakingscodeRef = {
+  code: string
+  naam: string | null
+  hoofdstuk: string | null
+  pslPerCt: Record<number, number>
+  begrootPerCt: Record<number, number>
+  urenPerCt: Record<number, number>
+}
+export type ResolveBewakingscodesResultaat =
+  | { ok: true; bouw7Id: string; codes: BewakingscodeRef[] }
+  | { ok: false; error: string }
 
 /**
- * Mapping component-type → Bouw7-kostensoort (op `name` in de project-control respons).
- * LET OP: `materieel` → `material` (kostensoort 5) is de afgesproken-voorlopige mapping;
- * Everts voert materiaalkosten als 'materieel' in. Inkoop (2)/Materieel (4)/Afval (6) worden
- * (nog) niet vanuit de werkbegroting gevoed.
+ * Haalt de bewakingscodes van een Bouw7-project op met, per kostensoort (1/3/5), de PSL-id,
+ * het begrote bedrag en de begrote uren. Bron: `/cost-type/{ct}/chapters` (securityCodes);
+ * ontbrekende PSL-ids worden aangevuld uit de bestelregels (`/list/contract-order-lines`).
  */
-const TYPE_NAAR_BOUW7: Record<keyof WerkbegrotingPrognoseTotalen, { naam: string; ct: number; label: string }> = {
-  arbeid:         { naam: 'labor',          ct: 1, label: 'Arbeid' },
-  onderaanneming: { naam: 'subcontracting', ct: 3, label: 'Onderaanneming' },
-  materieel:      { naam: 'material',       ct: 5, label: 'Materiaal' },
+export async function resolveBewakingscodes(dossierId: string): Promise<ResolveBewakingscodesResultaat> {
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
+  const { client, bouw7Id } = ctx
+
+  const map = new Map<string, BewakingscodeRef>()
+  const ensure = (code: string): BewakingscodeRef => {
+    let r = map.get(code)
+    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {} }; map.set(code, r) }
+    return r
+  }
+
+  try {
+    const responses = await Promise.all(
+      PROGNOSE_KOSTENSOORTEN.map(ct =>
+        client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`).catch(() => null),
+      ),
+    )
+    PROGNOSE_KOSTENSOORTEN.forEach((ct, i) => {
+      const resp = responses[i]
+      if (!resp) return
+      for (const item of resp.items ?? []) {
+        const ci = item.chapterInfo
+        if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
+        for (const sc of item.securityCodes ?? []) {
+          const code = (sc.code ?? '').trim()
+          if (!code) continue
+          const ref = ensure(code)
+          if (!ref.naam) ref.naam = sc.name ?? null
+          if (!ref.hoofdstuk) ref.hoofdstuk = ci?.name ?? null
+          const psl = sc.pslIds?.[0]
+          if (psl != null) ref.pslPerCt[ct] = psl
+          ref.begrootPerCt[ct] = getal(sc.budgetAmount)
+          ref.urenPerCt[ct] = getal(sc.hourInfo?.budgetHours)
+        }
+      }
+    })
+
+    // Fallback: ontbrekende PSL-ids aanvullen uit de bestelregels.
+    const ontbreekt = [...map.values()].some(r => PROGNOSE_KOSTENSOORTEN.some(ct => r.begrootPerCt[ct] != null && r.pslPerCt[ct] == null))
+    if (ontbreekt) {
+      const orderLines = await client
+        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })
+        .then(r => r.items ?? [])
+        .catch(() => [] as Bouw7ContractOrderLine[])
+      for (const ol of orderLines) {
+        const code = (ol.projectSecurityLink?.code ?? '').trim()
+        const ct = ol.projectSecurityLink?.costType ?? ol.costType
+        const psl = ol.projectSecurityLink?.id
+        if (!code || ct == null || psl == null) continue
+        const ref = map.get(code)
+        if (ref && ref.pslPerCt[ct] == null) ref.pslPerCt[ct] = psl
+      }
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen Bouw7-bewakingscodes mislukt.' }
+  }
+
+  return { ok: true, bouw7Id, codes: [...map.values()] }
 }
 
 export type PrognoseRegel = {
-  type: keyof WerkbegrotingPrognoseTotalen
+  /** Bewakingscode (= kostengroep). */
+  code: string
+  codeNaam: string | null
+  type: 'arbeid' | 'materieel' | 'onderaanneming'
   label: string
   ct: number
   begroot: number
@@ -325,78 +429,46 @@ export type PrognoseResultaat =
   | { ok: true; bouw7Id: string; regels: PrognoseRegel[] }
   | { ok: false; error: string }
 
-type Bouw7CostTypeItem = {
-  name?: string
-  budgetAmount?: number | string
-  prognosisOtherAmount?: number | string
-  pslIds?: number[]
-}
-
-const getal = (v: unknown): number => {
-  if (typeof v === 'number') return v
-  if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
-  return 0
-}
-const rond = (n: number): number => Math.round(n * 100) / 100
-
-/** Gedeelde berekening: haal Bouw7-begroot per kostensoort op en bepaal de verschillen. */
+/** Gedeelde berekening: match werkbegroting-codes op Bouw7-bewakingscodes en bepaal de verschillen. */
 async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createAdminClient() as any
-
-  const { data: dossier } = await db.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
-  const bouw7Id: string | null = dossier?.bouw7_id ?? null
-  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
-
-  const { data: integratie } = await db.from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
-  const config = integratie?.config as Record<string, string> | undefined
-  if (!config?.api_key || !config?.app_name) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
-
-  let items: Bouw7CostTypeItem[]
-  try {
-    const client = new Bouw7Client(config.api_key, config.app_name)
-    const resp = await client.getAthena<{ items?: Bouw7CostTypeItem[] }>(
-      `/project-control/${bouw7Id}/total/cost-types`,
-      { include_subprojects: 'false' },
-    )
-    items = resp.items ?? []
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen Bouw7-projectbewaking mislukt.' }
-  }
+  const resolved = await resolveBewakingscodes(dossierId)
+  if (!resolved.ok) return resolved
+  const codeMap = new Map(resolved.codes.map(c => [c.code, c]))
 
   const regels: PrognoseRegel[] = []
-  for (const type of Object.keys(totalen) as (keyof WerkbegrotingPrognoseTotalen)[]) {
-    const invoer = totalen[type]
-    if (!invoer) continue
-    const map = TYPE_NAAR_BOUW7[type]
-    const item = items.find(i => i.name === map.naam)
+  for (const codeTotaal of totalen) {
+    const code = (codeTotaal.code ?? '').trim()
+    const ref = code ? codeMap.get(code) : undefined
 
-    const begroot = getal(item?.budgetAmount)
-    const werkbegroting = invoer.bedrag
-    const verschil = rond(werkbegroting - begroot)
-    const pslIds = item?.pslIds ?? []
+    ;(['arbeid', 'onderaanneming', 'materieel'] as const).forEach(type => {
+      const invoer = codeTotaal[type]
+      if (!invoer) return
+      const map = TYPE_NAAR_BOUW7[type]
+      const ct = map.ct
+      const begroot = ref?.begrootPerCt[ct] ?? 0
+      const werkbegroting = invoer.bedrag
+      const verschil = rond(werkbegroting - begroot)
+      const pslId = ref?.pslPerCt[ct] ?? null
 
-    let schrijfbaar = true
-    let reden: string | undefined
-    let pslId: number | null = pslIds[0] ?? null
+      let schrijfbaar = true
+      let reden: string | undefined
+      if (!code) { schrijfbaar = false; reden = 'Regel zonder bewakingscode (kostengroep leeg).' }
+      else if (!ref) { schrijfbaar = false; reden = `Bewakingscode "${code}" niet gevonden in Bouw7.` }
+      else if (pslId == null) { schrijfbaar = false; reden = `Geen ${map.label}-koppeling op deze code.` }
+      else if (verschil === 0) { schrijfbaar = false; reden = 'Geen verschil t.o.v. begroot.' }
 
-    if (!item) { schrijfbaar = false; reden = `Kostensoort "${map.label}" bestaat niet op dit project.`; pslId = null }
-    else if (pslIds.length === 0) { schrijfbaar = false; reden = 'Geen bewakingskoppeling (PSL) gevonden.' }
-    else if (pslIds.length > 1) { schrijfbaar = false; reden = `${pslIds.length} bewakingscodes — niet eenduidig per kostensoort te schrijven.` }
-    else if (verschil === 0) { schrijfbaar = false; reden = 'Geen verschil t.o.v. begroot.' }
+      let verschilUren: number | undefined
+      if (type === 'arbeid') {
+        const uren = (invoer as { uren: number }).uren
+        const tarief = uren > 0 ? werkbegroting / uren : 0
+        verschilUren = tarief > 0 ? rond(verschil / tarief) : 0
+      }
 
-    // Uren-correctie voor arbeid: verschil-bedrag gedeeld door het effectieve uurtarief.
-    let verschilUren: number | undefined
-    if (type === 'arbeid') {
-      const uren = (invoer as { uren: number }).uren
-      const tarief = uren > 0 ? werkbegroting / uren : 0
-      verschilUren = tarief > 0 ? rond(verschil / tarief) : 0
-    }
-
-    regels.push({ type, label: map.label, ct: map.ct, begroot, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, reden })
+      regels.push({ code, codeNaam: ref?.naam ?? null, type, label: map.label, ct, begroot, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, reden })
+    })
   }
 
-  return { ok: true, bouw7Id, regels }
+  return { ok: true, bouw7Id: resolved.bouw7Id, regels }
 }
 
 /** Preview: bereken (read-only) wat er naar Bouw7 geschreven zou worden. Schrijft niets. */
@@ -409,19 +481,17 @@ export type StuurPrognoseResultaat =
   | { ok: false; error: string }
 
 /**
- * Schrijft de nieuwe prognosebedragen naar Bouw7 ("Niet/anders begroot" per kostensoort).
- * Alleen eenduidig-schrijfbare kostensoorten met een verschil ≠ 0 worden weggeschreven.
+ * Schrijft de nieuwe prognosebedragen naar Bouw7 ("Niet/anders begroot" per bewakingscode ×
+ * kostensoort). Alleen schrijfbare regels met een verschil ≠ 0 worden weggeschreven.
  */
 export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<StuurPrognoseResultaat> {
   const berekend = await berekenPrognoseRegels(dossierId, totalen)
   if (!berekend.ok) return { ok: false, error: berekend.error }
 
-  const { data: integratie } = await (createAdminClient() as ReturnType<typeof createAdminClient>)
-    .from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
-  const config = integratie?.config as Record<string, string> | undefined
-  if (!config?.api_key || !config?.app_name) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return { ok: false, error: ctx.error }
+  const { client } = ctx
 
-  const client = new Bouw7Client(config.api_key, config.app_name)
   let geschreven = 0
   try {
     for (const r of berekend.regels) {
@@ -438,4 +508,47 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
 
   const overgeslagen = berekend.regels.filter(r => !r.schrijfbaar).length
   return { ok: true, geschreven, overgeslagen, regels: berekend.regels }
+}
+
+// ─── Import bewakingscodes + bestelregels uit Bouw7 (Scenario B) ──────────────
+
+/** Eén bestelregel uit Bouw7, klaar om als werkbegroting-component te seeden. */
+export type BestelregelImport = {
+  code: string
+  omschrijving: string
+  bedrag: number
+  type: 'arbeid' | 'onderaanneming' | 'materieel'
+}
+export type ImportBewakingscodesResultaat =
+  | { ok: true; codes: { code: string; naam: string | null }[]; bestelregels: BestelregelImport[] }
+  | { ok: false; error: string }
+
+/**
+ * Read-only: haalt voor een aan Bouw7 gekoppeld dossier de bewakingscodes (code + naam) én de
+ * bestelregels op, zodat de client de werkbegroting kan seeden (Scenario B — project uit Bouw7).
+ */
+export async function getBouw7BewakingscodesImport(dossierId: string): Promise<ImportBewakingscodesResultaat> {
+  const resolved = await resolveBewakingscodes(dossierId)
+  if (!resolved.ok) return resolved
+
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
+
+  let bestelregels: BestelregelImport[] = []
+  try {
+    const lines = await ctx.client
+      .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${ctx.bouw7Id} SORT(description, ASC) LIMIT 1000` })
+      .then(r => r.items ?? [])
+    bestelregels = lines
+      .map((ol): BestelregelImport => {
+        const ct = ol.projectSecurityLink?.costType ?? ol.costType
+        const type = ct === 1 ? 'arbeid' : ct === 3 ? 'onderaanneming' : 'materieel'
+        return { code: (ol.projectSecurityLink?.code ?? '').trim(), omschrijving: ol.description ?? '', bedrag: getal(ol.totalPrice), type }
+      })
+      .filter(b => b.code)
+  } catch {
+    // Bestelregels zijn optioneel; de codes alleen importeren mag ook.
+  }
+
+  return { ok: true, codes: resolved.codes.map(c => ({ code: c.code, naam: c.naam })), bestelregels }
 }
