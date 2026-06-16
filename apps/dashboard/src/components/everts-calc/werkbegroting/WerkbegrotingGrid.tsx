@@ -771,12 +771,23 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       // 1) Placeholder-regel per Bouw7-code die nog niet bestaat.
       for (const c of res.codes) ensureRegel(c.code)
       // 2) Bestelregels als componenten onder de juiste code.
+      const regelMetComponent = new Set<string>()
       for (const b of res.bestelregels) {
         const regelId = ensureRegel(b.code)
         nieuweComps.push({
           id: nieuweId(), werkbegroting_regel_id: regelId, source_component_id: null,
           type: b.type, norm_hoeveelheid: 1, tarief: b.bedrag,
           omschrijving: b.omschrijving || undefined,
+        })
+        regelMetComponent.add(regelId)
+      }
+      // 3) Nieuwe codes zónder bestelregel: een lege component, anders is de regel onzichtbaar
+      //    (de grid bouwt rijen per component) en niet bewerkbaar.
+      for (const regel of nieuweRegels) {
+        if (regelMetComponent.has(regel.id)) continue
+        nieuweComps.push({
+          id: nieuweId(), werkbegroting_regel_id: regel.id, source_component_id: null,
+          type: 'materieel', norm_hoeveelheid: 1, tarief: 0,
         })
       }
 
