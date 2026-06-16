@@ -177,7 +177,11 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     try {
       const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen())
       if (res.ok) {
-        toast.success(`Prognose verzonden: ${res.geschreven} regel(s) bijgewerkt in Bouw7${res.overgeslagen ? `, ${res.overgeslagen} overgeslagen` : ''}.`)
+        const delen = [`${res.geschreven} bijgewerkt`]
+        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
+        if (res.overgeslagen) delen.push(`${res.overgeslagen} overgeslagen`)
+        toast.success(`Prognose verzonden naar Bouw7: ${delen.join(', ')}.`)
+        if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
         setPrognoseOpen(false)
       } else {
         toast.error(`Verzenden mislukt: ${res.error}`)
@@ -447,17 +451,22 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                             </td>
                           </tr>
                           {rs.map((r) => (
-                            <tr key={`${code}-${r.type}`} className={`border-b border-gray-100 ${r.schrijfbaar ? 'text-gray-800' : 'text-gray-400'}`}>
+                            <tr key={`${code}-${r.type}`} className={`border-b border-gray-100 ${r.actie === 'skip' ? 'text-gray-400' : 'text-gray-800'}`}>
                               <td className="py-1.5 pl-3">
                                 {r.label}
-                                {!r.schrijfbaar && r.reden && (
-                                  <span className="ml-1 text-[11px] text-amber-600">— {r.reden}</span>
+                                {r.actie === 'aanmaken' && (
+                                  <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                    {r.nieuweCode ? 'nieuwe code' : 'nieuw'}
+                                  </span>
+                                )}
+                                {r.actie === 'skip' && r.reden && (
+                                  <span className="ml-1 text-[11px] text-gray-400">— {r.reden}</span>
                                 )}
                               </td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
                               <td className="py-1.5 text-right tabular-nums font-semibold">
-                                {r.schrijfbaar ? euro(r.verschil) : '—'}
+                                {r.actie === 'skip' ? '—' : euro(r.verschil)}
                               </td>
                             </tr>
                           ))}
