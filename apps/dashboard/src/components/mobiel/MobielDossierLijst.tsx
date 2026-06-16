@@ -9,7 +9,7 @@ export type MobielDossier = {
   dossiernummer: string | null
   klant_naam: string | null
   projectleider_naam: string | null
-  groep: 'aanvraag' | 'offerte' | 'opdracht' | 'servicedesk'
+  groep: 'aanvraag' | 'opdracht' | 'servicedesk'
   statusLabel: string
   statusColor: string
 }
@@ -17,7 +17,6 @@ export type MobielDossier = {
 const SLICER: { key: string; label: string }[] = [
   { key: 'alle',        label: 'Alle' },
   { key: 'aanvraag',    label: 'Aanvragen' },
-  { key: 'offerte',     label: 'Offertes' },
   { key: 'opdracht',    label: 'Opdrachten' },
   { key: 'servicedesk', label: 'Servicedesk' },
 ]

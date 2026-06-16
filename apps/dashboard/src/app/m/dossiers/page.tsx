@@ -3,6 +3,7 @@ import { getMijnDossiers, getMijnServicedesk } from '@/lib/dossiers/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielDossierLijst, { type MobielDossier } from '@/components/mobiel/MobielDossierLijst'
 import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
+import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import type { DossierRij } from '@/components/dossiers/types'
 
 export const metadata = { title: 'Dossiers · EVA Mobiel' }
@@ -23,10 +24,10 @@ export default async function MobielDossiersPage() {
     )
   }
 
+  // Offertes worden bewust weggelaten — daar ben je in het veld niet dagelijks mee bezig.
   const SORT = { kolom: 'updated_at', ascending: false }
-  const [aanv, off, opd, svc] = await Promise.all([
+  const [aanv, opd, svc] = await Promise.all([
     getMijnDossiers(medewerker.id, 'aanvraag', 100, SORT).catch(() => ({ ok: false as const, error: '' })),
-    getMijnDossiers(medewerker.id, 'offerte',  100, SORT).catch(() => ({ ok: false as const, error: '' })),
     getMijnDossiers(medewerker.id, 'opdracht', 100, SORT).catch(() => ({ ok: false as const, error: '' })),
     getMijnServicedesk(medewerker.id, 100, SORT).catch(() => ({ ok: false as const, error: '' })),
   ])
@@ -37,6 +38,8 @@ export default async function MobielDossiersPage() {
     if (!res.ok) return
     for (const d of res.data) {
       if (seen.has(d.id)) continue
+      // Alleen actieve dossiers (niet in eindstatus / niet gearchiveerd).
+      if (!isActiefDossier(d as unknown as DossierActiefVelden)) continue
       seen.add(d.id)
       const { label, color } = dossierStatusBadge(d)
       rows.push({
@@ -52,7 +55,6 @@ export default async function MobielDossiersPage() {
     }
   }
   add(aanv, 'aanvraag')
-  add(off, 'offerte')
   add(opd, 'opdracht')
   add(svc, 'servicedesk')
 
