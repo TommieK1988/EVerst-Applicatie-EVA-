@@ -587,8 +587,10 @@ async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPr
       let reden: string | undefined
       if (!code) {
         schrijfbaar = false; actie = 'skip'; reden = 'Regel zonder bewakingscode (kostengroep leeg).'
-      } else if (verschil === 0) {
-        schrijfbaar = false; actie = 'skip'; reden = 'Geen verschil t.o.v. begroot.'
+      } else if (werkbegroting === 0) {
+        // Geen werkbegroting-bedrag → niets te schrijven/aanmaken. (Telt ook niet als "in werkbegroting"
+        // voor de reset-sync, zodat een 0-regel de bijbehorende code juist naar prognose 0 brengt.)
+        schrijfbaar = false; actie = 'skip'; reden = 'Geen werkbegroting-bedrag.'
       } else if (pslId == null) {
         // PSL bestaat nog niet → wordt aangemaakt (begroot 0). Bestaat de code ook niet → ook de code aanmaken.
         actie = 'aanmaken'; nieuweCode = !ref
