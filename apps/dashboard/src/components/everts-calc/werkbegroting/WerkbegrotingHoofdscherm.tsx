@@ -10,7 +10,7 @@ import {
   getWerkbegrotingBestellingen, slaWerkbegrotingOp, getScenarios,
   heroverhaalWerkbegroting,
 } from '@/lib/everts-calc/local-store'
-import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import HeroverhaalModal from './HeroverhaalModal'
@@ -41,6 +41,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [prognoseBezig, setPrognoseBezig] = useState(false)
   /** Bouw7-bewakingscodes van het gekoppelde project (null = niet gekoppeld / nog niet geladen). */
   const [bewakingscodes, setBewakingscodes] = useState<{ code: string; naam: string | null }[] | null>(null)
+  /** Bestaande Bouw7-hoofdstukken + het gekozen doelhoofdstuk voor nieuwe codes (onthouden per dossier). */
+  const [hoofdstukken, setHoofdstukken] = useState<Hoofdstuk[]>([])
+  const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
 
   useEffect(() => {
     const scenarios = getScenarios(projectId)
@@ -165,7 +168,18 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     setPrognosePreview(null)
     setPrognoseBezig(true)
     try {
-      setPrognosePreview(await previewWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen()))
+      const [preview, hs] = await Promise.all([
+        previewWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen()),
+        getProjectHoofdstukken(dossierId),
+      ])
+      setPrognosePreview(preview)
+      if (hs.ok) {
+        setHoofdstukken(hs.hoofdstukken)
+        const opgeslagen = Number(localStorage.getItem(`eva_prognose_hoofdstuk_${dossierId}`))
+        const geldig = hs.hoofdstukken.some(h => h.id === opgeslagen)
+        const wb = hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB')
+        setDoelHoofdstukId(geldig ? opgeslagen : (wb?.id ?? hs.hoofdstukken[0]?.id ?? null))
+      }
     } finally {
       setPrognoseBezig(false)
     }
@@ -175,7 +189,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     if (!dossierId) return
     setPrognoseBezig(true)
     try {
-      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen())
+      if (doelHoofdstukId != null) localStorage.setItem(`eva_prognose_hoofdstuk_${dossierId}`, String(doelHoofdstukId))
+      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen(), doelHoofdstukId)
       if (res.ok) {
         const delen = [`${res.geschreven} bijgewerkt`]
         if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
@@ -190,7 +205,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     } finally {
       setPrognoseBezig(false)
     }
-  }, [dossierId, berekenPrognoseTotalen])
+  }, [dossierId, berekenPrognoseTotalen, doelHoofdstukId])
 
   const handleStatusWijzig = useCallback(async (nieuweStatus: WerkbegrotingStatus, notitie?: string) => {
     if (!wb) return
@@ -420,6 +435,21 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                 gezet op het verschil tussen de werkbegroting en het Bouw7-begrote bedrag. De kostengroep in EVA wordt
                 op de bewakingscode gematcht. Controleer hieronder vóór verzenden.
               </p>
+
+              {/* Doelhoofdstuk voor nieuwe codes — alleen relevant als er nieuwe codes aangemaakt worden. */}
+              {prognosePreview?.ok && prognosePreview.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode) && (
+                <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+                  <span className="text-xs font-medium text-amber-800">Nieuwe codes plaatsen onder hoofdstuk:</span>
+                  <select
+                    value={doelHoofdstukId ?? ''}
+                    onChange={(e) => setDoelHoofdstukId(e.target.value ? Number(e.target.value) : null)}
+                    className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                  >
+                    {hoofdstukken.length === 0 && <option value="">— geen hoofdstukken gevonden —</option>}
+                    {hoofdstukken.map((h) => <option key={h.id} value={h.id}>{h.naam || `Hoofdstuk ${h.id}`}</option>)}
+                  </select>
+                </div>
+              )}
 
               {prognoseBezig && !prognosePreview && (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">

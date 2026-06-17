@@ -445,13 +445,15 @@ async function createSecurityCode(client: Bouw7Client, naam: string, code: strin
 /**
  * Zorgt dat voor elke ontbrekende (code × kostensoort) een PSL bestaat: voegt de code/kostensoort
  * met begroot 0 toe aan de project-security-links structuur (read-modify-write), en maakt de code
- * eerst aan als die nog niet op het project staat. Nieuwe codes gaan onder hoofdstuk "WB"
- * (eenmalig handmatig in Bouw7 aan te maken; ontbreekt het, dan wordt de code overgeslagen + gemeld).
+ * eerst aan als die nog niet op het project staat. Nieuwe codes gaan onder het gekozen bestaande
+ * hoofdstuk (`doelHoofdstukId`, per dossier ingesteld in EVA); ontbreekt dat, dan wordt de code
+ * overgeslagen + gemeld.
  */
 async function zorgVoorOntbrekendePsls(
   client: Bouw7Client,
   bouw7Id: string,
   ontbrekend: { code: string; naam: string | null; ct: number }[],
+  doelHoofdstukId: number | null,
 ): Promise<{ aangemaakt: number; fouten: string[] }> {
   if (ontbrekend.length === 0) return { aangemaakt: 0, fouten: [] }
 
@@ -468,11 +470,11 @@ async function zorgVoorOntbrekendePsls(
     }
   }
 
-  // Nieuwe EVA-codes komen ALLEEN onder hoofdstuk "WB" (eenmalig handmatig in Bouw7 aan te maken),
-  // zodat altijd herkenbaar is dat ze uit EVA komen. Geen terugval naar een ander hoofdstuk:
-  // ontbreekt "WB", dan melden we dat netjes i.p.v. codes op een willekeurige plek te zetten.
-  const wbChapter = (): SecChapter | null =>
-    obj.securityCodesPerChapters.find(ch => (ch.securityCodeChapter?.name ?? '').trim().toUpperCase() === 'WB') ?? null
+  // Nieuwe codes komen onder het in EVA gekozen bestaande hoofdstuk (doelHoofdstukId, per dossier).
+  const doelChapter = (): SecChapter | null =>
+    doelHoofdstukId == null
+      ? null
+      : (obj.securityCodesPerChapters.find(ch => ch.securityCodeChapter?.id === doelHoofdstukId) ?? null)
 
   // Per code groeperen (we maken een code max één keer aan).
   const perCode = new Map<string, { naam: string | null; cts: number[] }>()
@@ -487,8 +489,8 @@ async function zorgVoorOntbrekendePsls(
   for (const [code, { naam, cts }] of perCode) {
     let bd = codeEntry.get(code)
     if (!bd) {
-      const chap = wbChapter()
-      if (!chap) { fouten.push(`Hoofdstuk "WB" ontbreekt op dit project — maak het eerst aan in Bouw7 (Project bewerken → Bewakingscodes → + Hoofdstuk "WB"). Code "${code}" overgeslagen.`); continue }
+      const chap = doelChapter()
+      if (!chap) { fouten.push(`Geen (geldig) doelhoofdstuk gekozen voor nieuwe code "${code}". Kies een hoofdstuk in EVA bij 'Prognose naar Bouw7'.`); continue }
       try {
         const newId = await createSecurityCode(client, naam ?? code, code, chap.securityCodeChapter.id)
         bd = { securityCode: { id: newId, name: naam ?? code, code, chapterName: chap.securityCodeChapter.name } }
@@ -514,32 +516,22 @@ async function zorgVoorOntbrekendePsls(
   return { aangemaakt, fouten }
 }
 
-/**
- * Zorgt dat hoofdstuk "WB" op het project bestaat. Bestaat het niet, dan wordt het aangemaakt door
- * een leeg hoofdstuk aan de project-security-links structuur toe te voegen en die te POSTen.
- * Geeft true terug als "WB" (daarna) bestaat. Best-effort: lukt het aanmaken niet, dan valt de
- * code-creatie terug op de nette "WB ontbreekt"-melding.
- */
-async function ensureWbChapter(client: Bouw7Client, bouw7Id: string): Promise<boolean> {
-  const heeftWb = (s: SecObject[]) =>
-    (s[0]?.securityCodesPerChapters ?? []).some(ch => (ch.securityCodeChapter?.name ?? '').trim().toUpperCase() === 'WB')
+/** Eén bestaand hoofdstuk (securityCodeChapter) op een project. */
+export type Hoofdstuk = { id: number; naam: string }
 
-  const struct = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`).catch(() => [] as SecObject[])
-  if (heeftWb(struct)) return true
-
-  let obj = struct[0]
-  if (!obj) { obj = { securityObject: null, securityCodesPerChapters: [] }; struct.push(obj) }
-  obj.securityCodesPerChapters.push({
-    securityCodeChapter: { name: 'WB', code: '' } as unknown as SecChapter['securityCodeChapter'],
-    budgetDataPerSecurityCodes: [],
-  })
+/** Haalt de bestaande hoofdstukken van een Bouw7-project op (voor de doelhoofdstuk-keuze in EVA). */
+export async function getProjectHoofdstukken(dossierId: string): Promise<{ ok: true; hoofdstukken: Hoofdstuk[] } | { ok: false; error: string }> {
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
   try {
-    await client.post(`/project/${bouw7Id}/project-security-links`, { securityCodeChaptersPerObjects: struct })
-  } catch {
-    return false
+    const struct = await ctx.client.get<SecObject[]>(`/project/${ctx.bouw7Id}/project-security-links`)
+    const hoofdstukken = (struct[0]?.securityCodesPerChapters ?? [])
+      .map(c => ({ id: c.securityCodeChapter?.id as number, naam: c.securityCodeChapter?.name ?? '' }))
+      .filter(h => h.id != null)
+    return { ok: true, hoofdstukken }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Hoofdstukken ophalen mislukt.' }
   }
-  const na = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`).catch(() => [] as SecObject[])
-  return heeftWb(na)
 }
 
 export type PrognoseRegel = {
@@ -631,7 +623,7 @@ export type StuurPrognoseResultaat =
  * kostensoort). Ontbrekende (code × kostensoort) — en zo nodig de code zelf — worden eerst
  * aangemaakt (begroot 0), daarna wordt de prognose weggeschreven.
  */
-export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<StuurPrognoseResultaat> {
+export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen, doelHoofdstukId: number | null = null): Promise<StuurPrognoseResultaat> {
   const berekend = await berekenPrognoseRegels(dossierId, totalen)
   if (!berekend.ok) return { ok: false, error: berekend.error }
 
@@ -641,15 +633,11 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
   const fouten: string[] = []
   let aangemaakt = 0
 
-  // 1) Ontbrekende (code × kostensoort) aanmaken (begroot 0), incl. nieuwe codes.
+  // 1) Ontbrekende (code × kostensoort) aanmaken (begroot 0), incl. nieuwe codes onder het gekozen hoofdstuk.
   const teMaken = berekend.regels.filter(r => r.actie === 'aanmaken').map(r => ({ code: r.code, naam: r.codeNaam, ct: r.ct }))
   if (teMaken.length > 0) {
-    // Nieuwe codes? Zorg eerst dat hoofdstuk "WB" bestaat (wordt zo nodig aangemaakt).
-    if (berekend.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode)) {
-      try { await ensureWbChapter(client, bouw7Id) } catch { /* val terug op de "WB ontbreekt"-melding */ }
-    }
     try {
-      const res = await zorgVoorOntbrekendePsls(client, bouw7Id, teMaken)
+      const res = await zorgVoorOntbrekendePsls(client, bouw7Id, teMaken, doelHoofdstukId)
       aangemaakt = res.aangemaakt
       fouten.push(...res.fouten)
     } catch (e) {
