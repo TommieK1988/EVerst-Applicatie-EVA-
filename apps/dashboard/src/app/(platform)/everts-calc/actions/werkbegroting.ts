@@ -679,14 +679,16 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
       geschreven++
     }
 
-    // 4) Reset-sync: codes/kostensoorten die NIET (meer) in de werkbegroting staan, maar in Bouw7
-    //    nog een "Niet/anders begroot" hebben → terug op 0. Werkbegroting is exact leidend.
+    // 4) Reset-sync: elke bestaande PSL (Arbeid/OA/Materiaal) die NIET in de werkbegroting staat →
+    //    "Niet/anders begroot" terug op 0. Werkbegroting is exact leidend. Onvoorwaardelijk, want
+    //    het chapters-endpoint levert de huidige prognosisOtherAmount niet betrouwbaar terug; 0
+    //    schrijven naar een al-nul PSL is een no-op.
     const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.code}|${r.ct}`))
     let gereset = 0
     for (const c of codeMap.values()) {
       for (const ct of PROGNOSE_KOSTENSOORTEN) {
         const psl = c.pslPerCt[ct]
-        if (psl == null || (c.prognosisOtherPerCt[ct] ?? 0) === 0) continue
+        if (psl == null) continue
         if (inWerkbegroting.has(`${c.code}|${ct}`)) continue
         const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: '0' }
         if (ct === 1) body.prognosisOtherHours = '0'
