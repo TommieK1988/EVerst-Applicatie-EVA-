@@ -139,7 +139,8 @@ export async function zoekRelaties(
     .select('id, naam, types, email, telefoon')
     .ilike('naam', `%${zoekterm}%`)
     .eq('actief', true)
-    .limit(20)
+    .order('naam', { ascending: true })
+    .limit(50)
 
   if (type) {
     query = query.contains('types', [type])
@@ -701,7 +702,11 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
 export type BestelregelImport = {
   code: string
   omschrijving: string
-  bedrag: number
+  /** Werkelijk aantal = quantity × quantityFactor. */
+  aantal: number
+  eenheid: string
+  /** Prijs per eenheid (unitPrice). */
+  prijs: number
   type: 'arbeid' | 'onderaanneming' | 'materieel'
 }
 export type ImportBewakingscodesResultaat =
@@ -728,7 +733,16 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
       .map((ol): BestelregelImport => {
         const ct = ol.projectSecurityLink?.costType ?? ol.costType
         const type = ct === 1 ? 'arbeid' : ct === 3 ? 'onderaanneming' : 'materieel'
-        return { code: (ol.projectSecurityLink?.code ?? '').trim(), omschrijving: ol.description ?? '', bedrag: getal(ol.totalPrice), type }
+        const factor = getal(ol.quantityFactor)
+        const aantal = getal(ol.quantity) * (factor || 1)
+        return {
+          code: (ol.projectSecurityLink?.code ?? '').trim(),
+          omschrijving: ol.description ?? '',
+          aantal,
+          eenheid: ol.unit ?? 'st',
+          prijs: getal(ol.unitPrice),
+          type,
+        }
       })
       .filter(b => b.code)
   } catch {

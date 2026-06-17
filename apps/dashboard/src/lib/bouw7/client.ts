@@ -579,6 +579,11 @@ export type Bouw7PurchaseInvoice = {
 export type Bouw7ContractOrderLine = {
   id: number
   description?: string
+  /** Aantal en aantal-factor; werkelijk aantal = quantity × quantityFactor. */
+  quantity?: number | string
+  quantityFactor?: number | string
+  unit?: string
+  unitPrice?: number | string
   totalPrice?: number | string
   costType?: number
   contact?: { id?: number; name?: string; type?: string } | null

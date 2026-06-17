@@ -63,7 +63,7 @@ const COL_DEFS: ColDef[] = [
   { id: 'opmerking',   label: '',                 dw: 28,  minW: 28,  align: 'center', fixed: true },
   { id: 'tot_aantal',  label: 'Totaal aantal',    dw: 76,  minW: 52,  align: 'right' },
   { id: 'eenheid',     label: 'Eh',               dw: 44,  minW: 32,  align: 'left'  },
-  { id: 'component',   label: 'Component',        dw: 108, minW: 80,  align: 'left'  },
+  { id: 'component',   label: 'Comp.',            dw: 60,  minW: 46,  align: 'left'  },
   { id: 'specificatie',label: 'Specificatie',     dw: 130, minW: 70,  align: 'left'  },
   { id: 'prijs_eh',    label: 'Prijs/eh',         dw: 80,  minW: 56,  align: 'right', thCls: 'text-everts bg-everts-50', tdCls: 'bg-everts-50/30' },
   { id: 'totaalprijs', label: 'Totaalprijs',      dw: 88,  minW: 64,  align: 'right', thCls: 'text-everts bg-everts-50', tdCls: 'bg-everts-50/60' },
@@ -776,18 +776,20 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         const regelId = ensureRegel(b.code)
         nieuweComps.push({
           id: nieuweId(), werkbegroting_regel_id: regelId, source_component_id: null,
-          type: b.type, norm_hoeveelheid: 1, tarief: b.bedrag,
+          type: b.type, norm_hoeveelheid: b.aantal, tarief: b.prijs,
+          eenheid: (b.eenheid || 'st') as WerkbegrotingComponent['eenheid'],
           omschrijving: b.omschrijving || undefined,
         })
         regelMetComponent.add(regelId)
       }
-      // 3) Nieuwe codes zónder bestelregel: een lege component, anders is de regel onzichtbaar
-      //    (de grid bouwt rijen per component) en niet bewerkbaar.
+      // 3) Nieuwe codes zónder bestelregel: een lege component (met de code-naam als omschrijving),
+      //    anders is de regel onzichtbaar (de grid bouwt rijen per component) en niet bewerkbaar.
       for (const regel of nieuweRegels) {
         if (regelMetComponent.has(regel.id)) continue
         nieuweComps.push({
           id: nieuweId(), werkbegroting_regel_id: regel.id, source_component_id: null,
           type: 'materieel', norm_hoeveelheid: 1, tarief: 0,
+          omschrijving: regel.omschrijving || regel.kostengroep || undefined,
         })
       }
 
@@ -933,21 +935,12 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       case 'omschrijving':
         return (
           <td key={id} className={`px-1 py-1 ${base}`}>
-            <div className="flex items-center gap-1 min-w-0">
-              <input
-                className={`${inputCls} text-slate-700 font-medium flex-1 min-w-0`}
-                value={regel.omschrijving}
-                placeholder="Omschrijving…"
-                onChange={e => onRegelWijzig(regel.id, { omschrijving: e.target.value })}
-              />
-              <span className="text-slate-300 flex-shrink-0">—</span>
-              <input
-                className={`${inputCls} text-[11px] text-slate-400 flex-shrink-0 w-[38%]`}
-                value={comp.omschrijving ?? ''}
-                placeholder="detail…"
-                onChange={e => onComponentWijzig(comp.id, { omschrijving: e.target.value || undefined })}
-              />
-            </div>
+            <input
+              className={`${inputCls} text-slate-700 font-medium w-full min-w-0`}
+              value={comp.omschrijving ?? ''}
+              placeholder="Omschrijving…"
+              onChange={e => onComponentWijzig(comp.id, { omschrijving: e.target.value || undefined })}
+            />
           </td>
         )
 
@@ -1045,17 +1038,18 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
             <div className="relative flex items-center">
               <select
                 value={comp.type}
-                className={`w-full appearance-none text-xs px-1 py-0.5 pr-4 rounded border-0 bg-transparent
+                title={comp.type === 'arbeid' ? 'Arbeid' : comp.type === 'materieel' ? 'Materiaal' : 'Onderaanneming'}
+                className={`w-full appearance-none text-xs px-1 py-0.5 pr-3 rounded border-0 bg-transparent
                   hover:bg-white hover:border hover:border-slate-200
                   focus:bg-white focus:border focus:border-everts/40 focus:outline-none
                   font-medium cursor-pointer ${typeKleur}`}
                 onChange={e => onTypeWijzig(comp.id, e.target.value as WerkbegrotingComponent['type'])}
               >
-                <option value="arbeid">Arbeid</option>
-                <option value="materieel">Materiaal</option>
-                <option value="onderaanneming">Onderaanneming</option>
+                <option value="arbeid">Arb</option>
+                <option value="materieel">Mat</option>
+                <option value="onderaanneming">OA</option>
               </select>
-              <ChevronDown className="absolute right-0.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-300 pointer-events-none flex-shrink-0" />
+              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-300 pointer-events-none flex-shrink-0" />
             </div>
           </td>
         )
