@@ -1,19 +1,17 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
-import { Save, Loader2, ChevronLeft, Clock, RefreshCw, Printer, ClipboardCheck, Send } from 'lucide-react'
+import { Loader2, ChevronLeft, Clock, ClipboardCheck, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie,
-  getWerkbegrotingRegels, getWerkbegrotingComponenten, getWerkbegrotingWijzigingen,
-  getWerkbegrotingBestellingen, slaWerkbegrotingOp, getScenarios,
-  heroverhaalWerkbegroting,
+  getWerkbegrotingRegels, getWerkbegrotingComponenten,
+  slaWerkbegrotingOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
-import { syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
-import HeroverhaalModal from './HeroverhaalModal'
 import GoedkeuringModal from './GoedkeuringModal'
 
 interface Props {
@@ -29,11 +27,7 @@ interface Props {
 export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, projectNummer, projectStatus, dossierId, ingesloten = false }: Props) {
   const [wb, setWb] = useState<Werkbegroting | null>(null)
   const [scenarioId, setScenarioId] = useState<string | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
   const [refreshTeller, setRefreshTeller] = useState(0)
-  const [heroverhaalOpen, setHeroverhaalOpen] = useState(false)
-  const [isHeroverhaal, setIsHeroverhaal] = useState(false)
-  const [gridKey, setGridKey] = useState(0)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
   const [controleTaak, setControleTaak] = useState<ControleTaakResultaat | null>(null)
   const [prognoseOpen, setPrognoseOpen] = useState(false)
@@ -77,51 +71,6 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const handleWijziging = useCallback(() => {
     setRefreshTeller(t => t + 1)
   }, [])
-
-  const handleHeroverhaal = useCallback((modus: 'volledig' | 'gewijzigd') => {
-    if (!wb || !scenarioId) return
-    setIsHeroverhaal(true)
-    try {
-      heroverhaalWerkbegroting(wb, scenarioId, modus)
-      setGridKey(k => k + 1)
-      setHeroverhaalOpen(false)
-      toast.success(
-        modus === 'volledig'
-          ? 'Werkbegroting volledig opnieuw overgehaald'
-          : 'Gewijzigde regels bijgewerkt'
-      )
-    } finally {
-      setIsHeroverhaal(false)
-    }
-  }, [wb, scenarioId])
-
-  const handleSync = useCallback(async () => {
-    if (!wb || !scenarioId) return
-    setIsSyncing(true)
-    try {
-      const regels = getWerkbegrotingRegels(wb.id)
-      const componentIds = new Set(regels.map(r => r.id))
-      const componenten = getWerkbegrotingComponenten().filter(c => componentIds.has(c.werkbegroting_regel_id))
-      const wijzigingen = getWerkbegrotingWijzigingen()
-      const bestellingen = getWerkbegrotingBestellingen(wb.id)
-
-      const resultaat = await syncWerkbegrotingNaarSupabase(wb, regels, componenten, wijzigingen)
-      if (bestellingen.length > 0) {
-        await syncBestellingenNaarSupabase(bestellingen)
-      }
-
-      if (resultaat.gelukt) {
-        const bijgewerkt: Werkbegroting = { ...wb, bijgewerkt_op: new Date().toISOString() }
-        slaWerkbegrotingOp(bijgewerkt)
-        setWb(bijgewerkt)
-        toast.success(`Werkbegroting opgeslagen (${resultaat.regels_geschreven} regels)`)
-      } else {
-        toast.error(`Opslaan mislukt: ${resultaat.fout}`)
-      }
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [wb, scenarioId])
 
   const totaalBedrag = useMemo(() => {
     if (!wb) return 0
@@ -283,31 +232,6 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Definitief' : 'Concept'}
         </span>
         <button
-          onClick={() => setHeroverhaalOpen(true)}
-          disabled={isSyncing || isHeroverhaal}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-            border border-slate-200 bg-white text-slate-600 hover:bg-slate-50
-            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Opnieuw overhalen
-        </button>
-        <button
-          onClick={() => {
-            const params = new URLSearchParams({
-              naam: projectNaam,
-              nummer: projectNummer,
-            })
-            window.open(`/everts-calc/werkbegroting/${projectId}/afdruk?${params}`, '_blank')
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-            border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
-          title="Afdrukken (liggend A4)"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          Afdrukken
-        </button>
-        <button
           onClick={() => setGoedkeuringOpen(true)}
           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
             wb.status === 'geaccordeerd'
@@ -322,17 +246,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Ter beoordeling' : 'Goedkeuring'}
         </button>
         <button
-          onClick={handleSync}
-          disabled={isSyncing}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-            bg-everts text-white hover:bg-everts/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Opslaan
-        </button>
-        <button
           onClick={openPrognose}
-          disabled={!dossierId || isSyncing}
+          disabled={!dossierId}
           title={dossierId ? 'Stuur de werkbegroting-bedragen als prognose naar Bouw7' : 'Geen dossier gekoppeld'}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
             border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
@@ -346,7 +261,6 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       {/* Grid + totalen panel */}
       <div className="flex-1 overflow-hidden">
         <WerkbegrotingGrid
-          key={gridKey}
           werkbegrotingId={wb.id}
           scenarioId={scenarioId}
           onWijziging={handleWijziging}
@@ -354,14 +268,6 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           dossierId={dossierId}
         />
       </div>
-
-      {heroverhaalOpen && (
-        <HeroverhaalModal
-          onKies={handleHeroverhaal}
-          onSluit={() => setHeroverhaalOpen(false)}
-          isBezig={isHeroverhaal}
-        />
-      )}
 
       {goedkeuringOpen && (
         <GoedkeuringModal
