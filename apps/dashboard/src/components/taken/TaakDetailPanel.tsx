@@ -357,7 +357,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
             </div>
             {formulierTemplateId && (
               <a
-                href={`/formulieren/${formulierTemplateId}/invullen${taak.dossier_id ? `?dossier_id=${taak.dossier_id}` : ''}`}
+                href={`/formulieren/${formulierTemplateId}/invullen?task_id=${taak.id}${taak.dossier_id ? `&dossier_id=${taak.dossier_id}` : ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-everts hover:text-everts/80 border border-everts/30 rounded-lg px-2 py-1.5 hover:bg-everts/5 transition-colors"

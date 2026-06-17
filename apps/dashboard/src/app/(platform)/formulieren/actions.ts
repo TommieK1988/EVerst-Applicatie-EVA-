@@ -13,6 +13,7 @@ import type {
 } from '@/components/formulieren/types'
 import { defaultSchema } from '@/components/formulieren/types'
 import type { Json } from '@everts/database/types'
+import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 
 // ── Resultaat-types ──────────────────────────────────────────────────
 
@@ -261,6 +262,7 @@ export async function saveFormInzending(input: {
   waarden: Record<string, unknown>
   submission_uuid?: string
   dossier_id?: string
+  task_id?: string
   project_ref?: string
   inzending_id?: string  // bestaande concept bijwerken
 }): Promise<ActionResult<FormInzending>> {
@@ -290,6 +292,7 @@ export async function saveFormInzending(input: {
       waarden: input.waarden as unknown as Json,
       submission_uuid: input.submission_uuid ?? null,
       dossier_id: input.dossier_id ?? null,
+      task_id: input.task_id ?? null,
       project_ref: input.project_ref ?? null,
       aangemaakt_door: user?.id ?? null,
     })
@@ -299,6 +302,26 @@ export async function saveFormInzending(input: {
 
   revalidatePath(`/formulieren/${input.template_id}/inzendingen`)
   return { ok: true, data: data as unknown as FormInzending }
+}
+
+/**
+ * Bestaand concept (nog niet ingediend) voor een specifieke taak.
+ * Wordt gebruikt om het invullen te hervatten i.p.v. een dubbele inzending te maken.
+ */
+export async function getConceptInzendingVoorTaak(
+  taskId: string
+): Promise<ActionResult<FormInzending | null>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('form_inzendingen')
+    .select('*')
+    .eq('task_id', taskId)
+    .eq('status', 'concept')
+    .order('aangemaakt_op', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: (data as unknown as FormInzending) ?? null }
 }
 
 export async function submitFormInzending(
@@ -314,10 +337,18 @@ export async function submitFormInzending(
       ingediend_door: user?.id ?? null,
     })
     .eq('id', id)
-    .select('template_id')
+    .select('template_id, task_id')
     .single()
   if (error) return { ok: false, error: error.message }
-  const templateId = (data as { template_id: string }).template_id
+  const { template_id: templateId, task_id: taskId } =
+    data as { template_id: string; task_id: string | null }
+
+  // Hangt het formulier aan een taak? Dan de taak automatisch voltooien.
+  // Fouten hierin mogen het indienen niet blokkeren.
+  if (taskId) {
+    try { await updateTaakStatus(taskId, 'gereed') } catch { /* niet-blokkerend */ }
+  }
+
   revalidatePath(`/formulieren/${templateId}/inzendingen`)
   return { ok: true, data: undefined }
 }

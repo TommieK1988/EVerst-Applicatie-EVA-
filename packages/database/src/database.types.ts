@@ -1452,6 +1452,7 @@ export type Database = {
           project_ref: string | null
           status: string
           submission_uuid: string | null
+          task_id: string | null
           template_id: string
           versie_id: string
           waarden: Json
@@ -1467,6 +1468,7 @@ export type Database = {
           project_ref?: string | null
           status?: string
           submission_uuid?: string | null
+          task_id?: string | null
           template_id: string
           versie_id: string
           waarden?: Json
@@ -1482,11 +1484,19 @@ export type Database = {
           project_ref?: string | null
           status?: string
           submission_uuid?: string | null
+          task_id?: string | null
           template_id?: string
           versie_id?: string
           waarden?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "form_inzendingen_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "form_inzendingen_template_id_fkey"
             columns: ["template_id"]

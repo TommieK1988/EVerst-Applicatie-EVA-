@@ -17,6 +17,8 @@ export default async function MobielTakenPage() {
     deadline: t.deadline ?? null,
     prioriteit: t.prioriteit,
     dossier_naam: (t as { dossier_naam?: string | null }).dossier_naam ?? null,
+    dossier_id: t.dossier_id ?? null,
+    formulier_template_id: t.formulier_template_id ?? null,
   }))
 
   return (

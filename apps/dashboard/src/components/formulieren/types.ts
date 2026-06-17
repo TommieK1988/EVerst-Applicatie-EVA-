@@ -108,6 +108,7 @@ export interface FormInzending {
   waarden: Record<string, unknown>
   submission_uuid: string | null
   dossier_id: string | null
+  task_id: string | null
   project_ref: string | null
   ingediend_op: string | null
   ingediend_door: string | null

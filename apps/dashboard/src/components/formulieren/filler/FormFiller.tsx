@@ -17,11 +17,16 @@ type Props = {
   bestaandeInzending?: FormInzending
   vooringevuld?: Record<string, unknown>
   taskId?: string
+  dossierId?: string
+  /** Compacte, touch-vriendelijke weergave voor de mobiele omgeving. */
+  mobiel?: boolean
+  /** Waar de terug-knop en de redirect-na-indienen naartoe gaan. */
+  terugHref?: string
 }
 
 const DRAFT_KEY = (templateId: string) => `form_draft_${templateId}`
 
-export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId }: Props) {
+export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, mobiel = false, terugHref }: Props) {
   const router = useRouter()
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     // Priority: bestaande inzending > vooringevuld > localStorage draft > leeg
@@ -103,6 +108,8 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         waarden: values,
         inzending_id: inzendingId,
         submission_uuid: inzendingId ?? crypto.randomUUID(),
+        task_id: taskId,
+        dossier_id: dossierId,
       })
       if (!result.ok) {
         toast.error('Opslaan mislukt: ' + result.error)
@@ -130,6 +137,8 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         waarden: values,
         inzending_id: inzendingId,
         submission_uuid: inzendingId ?? crypto.randomUUID(),
+        task_id: taskId,
+        dossier_id: dossierId,
       })
       if (!saveResult.ok) {
         toast.error('Opslaan mislukt: ' + saveResult.error)
@@ -146,8 +155,8 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       // Verwijder localStorage draft
       try { localStorage.removeItem(DRAFT_KEY(template.id)) } catch { /* ignore */ }
 
-      toast.success('Formulier ingediend!')
-      router.push(`/formulieren/${template.id}/inzendingen`)
+      toast.success(taskId ? 'Formulier ingediend — taak voltooid!' : 'Formulier ingediend!')
+      router.push(terugHref ?? (mobiel ? '/m/taken' : `/formulieren/${template.id}/inzendingen`))
     } finally {
       setIsSubmitting(false)
     }
@@ -156,25 +165,31 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   const fields = versie.schema.fields
   const visibleFields = getVisibleFields(fields)
 
+  const terug = () => router.push(terugHref ?? (mobiel ? '/m/taken' : '/formulieren/sjablonen'))
+
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{
+      maxWidth: mobiel ? '100%' : 680,
+      margin: '0 auto',
+      padding: mobiel ? '14px 14px 112px' : '32px 24px',
+    }}>
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: mobiel ? 20 : 32 }}>
         <button
           type="button"
-          onClick={() => router.push('/formulieren/sjablonen')}
+          onClick={terug}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', fontSize: 13, padding: 0, marginBottom: 16,
+            color: 'var(--text-muted)', fontSize: 13, padding: 0, marginBottom: 14,
           }}
         >
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
-          Formulieren
+          {terugHref || mobiel ? 'Terug' : 'Formulieren'}
         </button>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
+        <h1 style={{ fontSize: mobiel ? 19 : 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
           {template.naam}
         </h1>
         {template.omschrijving && (
@@ -183,7 +198,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       </div>
 
       {/* Fields */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: mobiel ? 18 : 20 }}>
         {visibleFields.map(field => (
           <FieldRenderer
             key={field.id}
@@ -191,6 +206,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
             value={values[field.id]}
             error={errors[field.id]}
             onChange={val => updateValue(field.id, val)}
+            mobiel={mobiel}
           />
         ))}
 
@@ -199,13 +215,17 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions — sticky onderbalk op mobiel, inline op desktop */}
       {fields.length > 0 && (
-        <div style={{
-          display: 'flex',
-          gap: 12,
-          marginTop: 40,
-          paddingTop: 24,
+        <div style={mobiel ? {
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
+          display: 'flex', gap: 10,
+          padding: '12px 14px calc(12px + env(safe-area-inset-bottom))',
+          background: 'var(--surface, #fff)',
+          borderTop: '1px solid var(--border)',
+        } : {
+          display: 'flex', gap: 12,
+          marginTop: 40, paddingTop: 24,
           borderTop: '1px solid var(--border)',
         }}>
           <button
@@ -213,14 +233,14 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
             onClick={handleSaveDraft}
             disabled={isSaving}
             style={{
-              padding: '9px 18px', borderRadius: 7,
+              padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
               border: '1px solid var(--border)',
               background: 'var(--surface)',
               color: 'var(--text)',
-              fontSize: 14, cursor: 'pointer',
+              fontSize: mobiel ? 15 : 14, cursor: 'pointer',
             }}
           >
-            {isSaving ? 'Opslaan...' : 'Opslaan als concept'}
+            {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
           </button>
           <button
             type="button"
@@ -228,11 +248,11 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
             disabled={isSubmitting}
             style={{
               flex: 1,
-              padding: '9px 18px', borderRadius: 7,
+              padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
               border: 'none',
               background: 'var(--primary, #3b82f6)',
               color: 'white',
-              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
             }}
           >
             {isSubmitting ? 'Indienen...' : 'Indienen'}

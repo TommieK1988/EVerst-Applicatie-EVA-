@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
@@ -10,6 +11,8 @@ export type MobielTaak = {
   deadline: string | null
   prioriteit: string
   dossier_naam: string | null
+  dossier_id: string | null
+  formulier_template_id: string | null
 }
 
 const PRIO: Record<string, { label: string; c: string; bg: string }> = {
@@ -82,9 +85,18 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {taak.dossier_naam && (
-                  <span style={{ fontSize: 10, fontWeight: 600, color: '#4d575e', background: '#f1f4f5', padding: '2px 7px', borderRadius: 6, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {taak.dossier_naam}
-                  </span>
+                  taak.dossier_id ? (
+                    <Link
+                      href={`/m/dossiers/${taak.dossier_id}`}
+                      style={{ fontSize: 10, fontWeight: 600, color: '#1f6feb', background: '#eef4ff', padding: '2px 7px', borderRadius: 6, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                    >
+                      {taak.dossier_naam}
+                    </Link>
+                  ) : (
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#4d575e', background: '#f1f4f5', padding: '2px 7px', borderRadius: 6, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {taak.dossier_naam}
+                    </span>
+                  )
                 )}
                 <span style={{ fontSize: 10, fontWeight: 700, color: prio.c, background: prio.bg, padding: '2px 8px', borderRadius: 99 }}>
                   {prio.label}
@@ -93,6 +105,22 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                   <span style={{ fontSize: 10, fontWeight: 700, color: dl.kleur }}>{dl.tekst}</span>
                 )}
               </div>
+              {taak.formulier_template_id && (
+                <Link
+                  href={`/m/taken/${taak.id}/formulier`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+                    padding: '8px 12px', borderRadius: 8,
+                    background: '#eef4ff', color: '#1f6feb',
+                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                  }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M9 13h6m-6 4h6M9 9h1M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+                  </svg>
+                  Formulier invullen
+                </Link>
+              )}
             </div>
           </div>
         )

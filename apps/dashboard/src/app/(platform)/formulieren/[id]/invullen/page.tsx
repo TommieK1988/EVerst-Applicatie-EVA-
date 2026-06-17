@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getFormTemplate, getLatestFormVersie } from '../../actions'
+import { getFormTemplate, getLatestFormVersie, getConceptInzendingVoorTaak } from '../../actions'
 import FormFiller from '@/components/formulieren/filler/FormFiller'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -9,8 +9,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: result.ok ? result.data.naam : 'Formulier invullen' }
 }
 
-export default async function FormulierInvullenPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FormulierInvullenPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ task_id?: string; dossier_id?: string }>
+}) {
   const { id } = await params
+  const { task_id: taskId, dossier_id: dossierId } = await searchParams
   const [templateResult, versieResult] = await Promise.all([
     getFormTemplate(id),
     getLatestFormVersie(id),
@@ -28,9 +35,18 @@ export default async function FormulierInvullenPage({ params }: { params: Promis
     )
   }
 
+  // Bestaand concept voor deze taak hervatten (voorkomt dubbele inzendingen).
+  const bestaande = taskId ? await getConceptInzendingVoorTaak(taskId) : null
+
   return (
     <div style={{ overflowY: 'auto', height: '100%' }}>
-      <FormFiller template={template} versie={versieResult.data} />
+      <FormFiller
+        template={template}
+        versie={versieResult.data}
+        taskId={taskId}
+        dossierId={dossierId}
+        bestaandeInzending={bestaande?.ok ? (bestaande.data ?? undefined) : undefined}
+      />
     </div>
   )
 }

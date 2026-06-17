@@ -216,7 +216,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
           const due      = relativeDeadline(t.deadline);
           const pri      = prioriteitLabel(t.prioriteit);
           const dossierHref = t.dossier_sectie && t.dossier_id
-            ? `/${t.dossier_sectie}/${t.dossier_id}/taken`
+            ? `/${t.dossier_sectie}/${t.dossier_id}`
             : null;
           const dossierNaam = t.dossier_naam ?? t.lijst?.naam ?? '—';
           return (
