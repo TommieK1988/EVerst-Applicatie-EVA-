@@ -336,6 +336,8 @@ export type BewakingscodeRef = {
   pslPerCt: Record<number, number>
   begrootPerCt: Record<number, number>
   urenPerCt: Record<number, number>
+  /** Huidige "Niet/anders begroot" (prognosisOtherAmount) per kostensoort — nodig voor reset-sync. */
+  prognosisOtherPerCt: Record<number, number>
 }
 export type ResolveBewakingscodesResultaat =
   | { ok: true; bouw7Id: string; codes: BewakingscodeRef[] }
@@ -354,7 +356,7 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
   const map = new Map<string, BewakingscodeRef>()
   const ensure = (code: string): BewakingscodeRef => {
     let r = map.get(code)
-    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {} }; map.set(code, r) }
+    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {}, prognosisOtherPerCt: {} }; map.set(code, r) }
     return r
   }
 
@@ -380,6 +382,7 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
           if (psl != null) ref.pslPerCt[ct] = psl
           ref.begrootPerCt[ct] = getal(sc.budgetAmount)
           ref.urenPerCt[ct] = getal(sc.hourInfo?.budgetHours)
+          ref.prognosisOtherPerCt[ct] = getal((sc as { prognosisOtherAmount?: number | string }).prognosisOtherAmount)
         }
       }
     })
@@ -511,6 +514,34 @@ async function zorgVoorOntbrekendePsls(
   return { aangemaakt, fouten }
 }
 
+/**
+ * Zorgt dat hoofdstuk "WB" op het project bestaat. Bestaat het niet, dan wordt het aangemaakt door
+ * een leeg hoofdstuk aan de project-security-links structuur toe te voegen en die te POSTen.
+ * Geeft true terug als "WB" (daarna) bestaat. Best-effort: lukt het aanmaken niet, dan valt de
+ * code-creatie terug op de nette "WB ontbreekt"-melding.
+ */
+async function ensureWbChapter(client: Bouw7Client, bouw7Id: string): Promise<boolean> {
+  const heeftWb = (s: SecObject[]) =>
+    (s[0]?.securityCodesPerChapters ?? []).some(ch => (ch.securityCodeChapter?.name ?? '').trim().toUpperCase() === 'WB')
+
+  const struct = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`).catch(() => [] as SecObject[])
+  if (heeftWb(struct)) return true
+
+  let obj = struct[0]
+  if (!obj) { obj = { securityObject: null, securityCodesPerChapters: [] }; struct.push(obj) }
+  obj.securityCodesPerChapters.push({
+    securityCodeChapter: { name: 'WB', code: '' } as unknown as SecChapter['securityCodeChapter'],
+    budgetDataPerSecurityCodes: [],
+  })
+  try {
+    await client.post(`/project/${bouw7Id}/project-security-links`, { securityCodeChaptersPerObjects: struct })
+  } catch {
+    return false
+  }
+  const na = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`).catch(() => [] as SecObject[])
+  return heeftWb(na)
+}
+
 export type PrognoseRegel = {
   /** Bewakingscode (= kostengroep). */
   code: string
@@ -592,7 +623,7 @@ export async function previewWerkbegrotingPrognoseBouw7(dossierId: string, total
 }
 
 export type StuurPrognoseResultaat =
-  | { ok: true; geschreven: number; aangemaakt: number; overgeslagen: number; fouten: string[]; regels: PrognoseRegel[] }
+  | { ok: true; geschreven: number; aangemaakt: number; gereset: number; overgeslagen: number; fouten: string[]; regels: PrognoseRegel[] }
   | { ok: false; error: string }
 
 /**
@@ -613,6 +644,10 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
   // 1) Ontbrekende (code × kostensoort) aanmaken (begroot 0), incl. nieuwe codes.
   const teMaken = berekend.regels.filter(r => r.actie === 'aanmaken').map(r => ({ code: r.code, naam: r.codeNaam, ct: r.ct }))
   if (teMaken.length > 0) {
+    // Nieuwe codes? Zorg eerst dat hoofdstuk "WB" bestaat (wordt zo nodig aangemaakt).
+    if (berekend.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode)) {
+      try { await ensureWbChapter(client, bouw7Id) } catch { /* val terug op de "WB ontbreekt"-melding */ }
+    }
     try {
       const res = await zorgVoorOntbrekendePsls(client, bouw7Id, teMaken)
       aangemaakt = res.aangemaakt
@@ -620,20 +655,20 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
     } catch (e) {
       return { ok: false, error: `Aanmaken bewakingscodes mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }
     }
-    // Opnieuw resolven → de zojuist aangemaakte PSL-id's invullen.
-    const opnieuw = await resolveBewakingscodes(dossierId)
-    if (opnieuw.ok) {
-      const codeMap = new Map(opnieuw.codes.map(c => [c.code, c]))
-      for (const r of berekend.regels) {
-        if (r.actie === 'aanmaken' && r.pslId == null) {
-          r.pslId = codeMap.get(r.code)?.pslPerCt[r.ct] ?? null
-          if (r.pslId == null) fouten.push(`PSL voor ${r.code} / ${r.label} niet gevonden na aanmaken.`)
-        }
-      }
+  }
+
+  // 2) Eén keer resolven na het aanmaken → nieuwe PSL-id's invullen + huidige "Niet/anders begroot"
+  //    per code ophalen (voor de reset-sync hieronder).
+  const naResolve = await resolveBewakingscodes(dossierId)
+  const codeMap = naResolve.ok ? new Map(naResolve.codes.map(c => [c.code, c])) : new Map<string, BewakingscodeRef>()
+  for (const r of berekend.regels) {
+    if (r.actie === 'aanmaken' && r.pslId == null) {
+      r.pslId = codeMap.get(r.code)?.pslPerCt[r.ct] ?? null
+      if (r.pslId == null) fouten.push(`PSL voor ${r.code} / ${r.label} niet gevonden na aanmaken.`)
     }
   }
 
-  // 2) Prognose ("Niet/anders begroot") wegschrijven voor alle regels met een PSL.
+  // 3) Prognose ("Niet/anders begroot") wegschrijven voor alle regels met een PSL.
   let geschreven = 0
   try {
     for (const r of berekend.regels) {
@@ -643,13 +678,29 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
       await client.post('/project/update-prognosis-other', body)
       geschreven++
     }
+
+    // 4) Reset-sync: codes/kostensoorten die NIET (meer) in de werkbegroting staan, maar in Bouw7
+    //    nog een "Niet/anders begroot" hebben → terug op 0. Werkbegroting is exact leidend.
+    const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.code}|${r.ct}`))
+    let gereset = 0
+    for (const c of codeMap.values()) {
+      for (const ct of PROGNOSE_KOSTENSOORTEN) {
+        const psl = c.pslPerCt[ct]
+        if (psl == null || (c.prognosisOtherPerCt[ct] ?? 0) === 0) continue
+        if (inWerkbegroting.has(`${c.code}|${ct}`)) continue
+        const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: '0' }
+        if (ct === 1) body.prognosisOtherHours = '0'
+        await client.post('/project/update-prognosis-other', body)
+        gereset++
+      }
+    }
+
+    const overgeslagen = berekend.regels.filter(r => r.actie === 'skip').length
+    return { ok: true, geschreven, aangemaakt, gereset, overgeslagen, fouten, regels: berekend.regels }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Onbekende fout'
     return { ok: false, error: /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — schrijfrechten of ids niet toegestaan.` : msg }
   }
-
-  const overgeslagen = berekend.regels.filter(r => r.actie === 'skip').length
-  return { ok: true, geschreven, aangemaakt, overgeslagen, fouten, regels: berekend.regels }
 }
 
 // ─── Import bewakingscodes + bestelregels uit Bouw7 (Scenario B) ──────────────

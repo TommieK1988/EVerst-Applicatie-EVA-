@@ -179,6 +179,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       if (res.ok) {
         const delen = [`${res.geschreven} bijgewerkt`]
         if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
+        if (res.gereset) delen.push(`${res.gereset} gereset`)
         if (res.overgeslagen) delen.push(`${res.overgeslagen} overgeslagen`)
         toast.success(`Prognose verzonden naar Bouw7: ${delen.join(', ')}.`)
         if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
