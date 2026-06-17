@@ -3,11 +3,21 @@
 import { useState, useEffect, useRef } from 'react'
 import WerkbegrotingHoofdscherm from './WerkbegrotingHoofdscherm'
 import { setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
+import { maakStandaardScenario } from '@/lib/everts-calc/local-store'
 
 const MAP_KEY = 'aanvraag_project_ids'
 
 function leesMapping(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(MAP_KEY) ?? '{}') } catch { return {} }
+}
+
+/**
+ * Stabiel synthetisch project-id voor een opdracht zónder gekoppelde EVA-calculatie.
+ * Deterministisch op de aanvraag/dossier-id, zodat scenario + (lege) werkbegroting
+ * idempotent zijn over re-renders en sessies heen.
+ */
+function syntheticProjectId(aanvraagId: string): string {
+  return `wb-direct-${aanvraagId}`
 }
 
 interface Props {
@@ -21,29 +31,28 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer }: Props) {
   const statusBijgewerkt = useRef(false)
 
   useEffect(() => {
-    const id = leesMapping()[aanvraagId] ?? null
-    setProjectId(id)
+    const gekoppeld = leesMapping()[aanvraagId] ?? null
 
-    if (id && !statusBijgewerkt.current) {
-      statusBijgewerkt.current = true
-      setProjectStatus(id, 'opdracht').catch(console.error)
+    if (gekoppeld) {
+      // Gekoppelde EVA-calculatie → werkbegroting wordt standaard overgehaald.
+      setProjectId(gekoppeld)
+      if (!statusBijgewerkt.current) {
+        statusBijgewerkt.current = true
+        setProjectStatus(gekoppeld, 'opdracht').catch(console.error)
+      }
+    } else {
+      // Geen calculatie gekoppeld → synthetisch project + scenario zodat er een
+      // lege werkbegroting verschijnt die uit Bouw7 overgehaald kan worden.
+      const synthId = syntheticProjectId(aanvraagId)
+      maakStandaardScenario(synthId)
+      setProjectId(synthId)
     }
   }, [aanvraagId])
 
   if (!projectId) {
     return (
-      <div style={{
-        padding: '56px 40px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
-      }}>
-        <div style={{ fontSize: 32, opacity: 0.25 }}>◻</div>
-        <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>
-          Geen calculatie gekoppeld
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--fg-muted)', textAlign: 'center', maxWidth: 320, margin: 0, lineHeight: 1.6 }}>
-          Er is geen calculatie gevonden voor deze opdracht.
-          Controleer of de aanvraag een gekoppelde calculatie heeft.
-        </p>
+      <div style={{ padding: '56px 40px', textAlign: 'center', fontSize: 13, color: 'var(--fg-muted)' }}>
+        Werkbegroting laden…
       </div>
     )
   }
