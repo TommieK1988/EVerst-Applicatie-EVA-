@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
 import { evaluateConditions } from '../types'
 import FieldRenderer from './FieldRenderer'
+import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import {
   saveFormInzending,
   submitFormInzending,
@@ -171,7 +172,11 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     <div style={{
       maxWidth: mobiel ? '100%' : 680,
       margin: '0 auto',
-      padding: mobiel ? '14px 14px 112px' : '32px 24px',
+      // Mobiel: vul de scroll-container zodat de sticky onderbalk ook bij korte
+      // formulieren onderaan blijft (en nooit achter de bottom-nav valt).
+      ...(mobiel
+        ? { display: 'flex', flexDirection: 'column', minHeight: '100%', padding: '14px 14px 0' }
+        : { padding: '32px 24px' }),
     }}>
       {/* Header */}
       <div style={{ marginBottom: mobiel ? 20 : 32 }}>
@@ -215,50 +220,57 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         )}
       </div>
 
-      {/* Actions — sticky onderbalk op mobiel, inline op desktop */}
-      {fields.length > 0 && (
-        <div style={mobiel ? {
-          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
-          display: 'flex', gap: 10,
-          padding: '12px 14px calc(12px + env(safe-area-inset-bottom))',
-          background: 'var(--surface, #fff)',
-          borderTop: '1px solid var(--border)',
-        } : {
-          display: 'flex', gap: 12,
-          marginTop: 40, paddingTop: 24,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={isSaving}
-            style={{
-              padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              fontSize: mobiel ? 15 : 14, cursor: 'pointer',
-            }}
-          >
-            {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            style={{
-              flex: 1,
-              padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
-              border: 'none',
-              background: 'var(--primary, #3b82f6)',
-              color: 'white',
-              fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            {isSubmitting ? 'Indienen...' : 'Indienen'}
-          </button>
-        </div>
-      )}
+      {/* Actions — sticky onderbalk op mobiel (binnen de scroll-container, dus
+          nooit achter de bottom-nav), inline onderaan op desktop. */}
+      {fields.length > 0 && (() => {
+        const knoppen = (
+          <>
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSaving}
+              style={{
+                padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                fontSize: mobiel ? 15 : 14, cursor: 'pointer',
+              }}
+            >
+              {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              style={{
+                flex: 1,
+                padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
+                border: 'none',
+                background: 'var(--primary, #3b82f6)',
+                color: 'white',
+                fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {isSubmitting ? 'Indienen...' : 'Indienen'}
+            </button>
+          </>
+        )
+
+        return mobiel ? (
+          <MobielStickyFooter style={{ marginLeft: -14, marginRight: -14, marginTop: 'auto' }}>
+            {knoppen}
+          </MobielStickyFooter>
+        ) : (
+          <div style={{
+            display: 'flex', gap: 12,
+            marginTop: 40, paddingTop: 24,
+            borderTop: '1px solid var(--border)',
+          }}>
+            {knoppen}
+          </div>
+        )
+      })()}
     </div>
   )
 }
