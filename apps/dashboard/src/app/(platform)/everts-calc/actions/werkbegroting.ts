@@ -668,9 +668,9 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
     }
 
     // 4) Reset-sync: elke bestaande PSL (Arbeid/OA/Materiaal) die NIET in de werkbegroting staat →
-    //    "Niet/anders begroot" terug op 0. Werkbegroting is exact leidend. Onvoorwaardelijk, want
-    //    het chapters-endpoint levert de huidige prognosisOtherAmount niet betrouwbaar terug; 0
-    //    schrijven naar een al-nul PSL is een no-op.
+    //    prognose moet 0 worden (werkbegroting is exact leidend). Omdat prognose = begroot +
+    //    "Niet/anders begroot", zetten we Niet/anders begroot op −begroot (en −begrote uren voor
+    //    arbeid). Onvoorwaardelijk, want het chapters-endpoint geeft de huidige waarde niet terug.
     const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.code}|${r.ct}`))
     let gereset = 0
     for (const c of codeMap.values()) {
@@ -678,8 +678,8 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
         const psl = c.pslPerCt[ct]
         if (psl == null) continue
         if (inWerkbegroting.has(`${c.code}|${ct}`)) continue
-        const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: '0' }
-        if (ct === 1) body.prognosisOtherHours = '0'
+        const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: String(rond(-(c.begrootPerCt[ct] ?? 0))) }
+        if (ct === 1) body.prognosisOtherHours = String(rond(-(c.urenPerCt[ct] ?? 0)))
         await client.post('/project/update-prognosis-other', body)
         gereset++
       }
