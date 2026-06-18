@@ -12,9 +12,19 @@ import {
 import { updateDossierSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
+import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
+import {
+  getScenarios, getGroepen,
+  getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
+} from '@/lib/everts-calc/local-store'
+import {
+  berekenScenarioVP, berekenScenarioKostprijs, berekenBtwBreakdown, berekenCalculatieregel,
+} from '@/lib/everts-calc/calculations'
+import type { Groep } from '@/lib/everts-calc/types'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
+import { DossierVerversKnop } from '../DossierVerversKnop'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
@@ -49,6 +59,76 @@ const fmtBedrag = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
 const fmtDatum = (iso: string) =>
   new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
+
+/* ─── client-side calculatietotalen ───────────────────────────────────
+   Fallback voor de Financiële-totalen kaart zolang er nog geen offerte in
+   Supabase is gegenereerd: bereken verkoop/BTW direct uit de calculatie
+   (localStorage) — bijv. meteen na een .c4y-import. */
+type CalcTotalen = {
+  subtotaal_ex_btw: number
+  kostprijs: number
+  stelposten_subtotaal: number
+  opties_subtotaal: number
+  btw_bedrag: number
+  totaal_incl_btw: number
+  marge_euro: number
+  marge_pct: number
+  btw_groepen: { pct: number; btw: number }[]
+}
+
+function berekenCalcTotalenVoorProject(projectId: string): CalcTotalen | null {
+  const scenarios = getScenarios(projectId)
+  const scenario = scenarios.find(s => s.is_standaard) ?? scenarios[0]
+  if (!scenario) return null
+
+  const groepen = getGroepen(scenario.id)
+  const regels = getCalculatieregelsVoorScenario(scenario.id)
+  if (regels.length === 0) return null
+  const componenten = getComponentregelsVoorScenario(scenario.id)
+
+  // Optionele groepen (en hun nakomelingen) uitsluiten — zoals in CalculatieGrid.
+  const optioneelIds = new Set(
+    groepen.filter(g => {
+      let cur: Groep | undefined = g
+      while (cur) {
+        if (cur.optioneel) return true
+        cur = groepen.find(p => p.id === cur!.parent_id)
+      }
+      return false
+    }).map(g => g.id),
+  )
+  const nietOptioneel = groepen.filter(g => !optioneelIds.has(g.id))
+  const nietOptioneelIds = new Set(nietOptioneel.map(g => g.id))
+
+  const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
+  const btwDefault = scenario.btw_pct_default ?? 21
+
+  const subtotaal_ex_btw = berekenScenarioVP(nietOptioneel, regels, componenten, defaultOpslag)
+  const kostprijs = berekenScenarioKostprijs(nietOptioneel, regels, componenten)
+  const btwGroepen = berekenBtwBreakdown(
+    regels.filter(r => nietOptioneelIds.has(r.groep_id)), componenten, defaultOpslag, btwDefault,
+  )
+  const btw_bedrag = btwGroepen.reduce((s, g) => s + g.btw, 0)
+
+  const vpVan = (r: (typeof regels)[number]) =>
+    berekenCalculatieregel(r, componenten, r.opslag_pct ?? defaultOpslag).vp_totaal
+  const stelposten_subtotaal = regels
+    .filter(r => nietOptioneelIds.has(r.groep_id) && r.is_stelpost)
+    .reduce((s, r) => s + vpVan(r), 0)
+  const opties_subtotaal = regels
+    .filter(r => optioneelIds.has(r.groep_id))
+    .reduce((s, r) => s + vpVan(r), 0)
+
+  const marge_euro = subtotaal_ex_btw - kostprijs
+  const marge_pct = subtotaal_ex_btw > 0 ? (marge_euro / subtotaal_ex_btw) * 100 : 0
+
+  return {
+    subtotaal_ex_btw, kostprijs, stelposten_subtotaal, opties_subtotaal,
+    btw_bedrag, totaal_incl_btw: subtotaal_ex_btw + btw_bedrag,
+    marge_euro, marge_pct,
+    btw_groepen: btwGroepen.map(g => ({ pct: g.pct, btw: g.btw })),
+  }
+}
 
 /* ─── form state ──────────────────────────────────────────────────── */
 type FormValues = {
@@ -596,20 +676,26 @@ export function InformatieTab({
     marge_euro: number
     marge_pct: number
   } | null>(null)
+  const [calcTotalen, setCalcTotalen] = useState<CalcTotalen | null>(null)
+  const [importTick,  setImportTick]  = useState(0)
 
   useEffect(() => {
-    if (sectie !== 'aanvraag') return
     try {
       const raw = localStorage.getItem('aanvraag_project_ids')
       const map: Record<string, string> = raw ? JSON.parse(raw) : {}
       setProjectId(map[dossier.id] ?? null)
     } catch { /* localStorage niet beschikbaar */ }
-  }, [dossier.id, sectie])
+  }, [dossier.id, importTick])
 
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId) { setQuoteTotalen(null); return }
     getQuoteTotalenVoorProject(projectId).then(setQuoteTotalen).catch(() => {})
-  }, [projectId])
+  }, [projectId, importTick])
+
+  useEffect(() => {
+    if (!projectId) { setCalcTotalen(null); return }
+    try { setCalcTotalen(berekenCalcTotalenVoorProject(projectId)) } catch { setCalcTotalen(null) }
+  }, [projectId, importTick])
 
   const set = (key: keyof FormValues) => (v: string) => setForm(p => ({ ...p, [key]: v }))
 
@@ -657,25 +743,29 @@ export function InformatieTab({
 
   const heeftCalcKnoppen      = sectie === 'aanvraag' && projectId != null
   const geselecteerdFa        = factuuradressen.find(fa => fa.id === form.factuuradres_id) ?? null
-  const finAanneemsom         = quoteTotalen?.subtotaal_ex_btw ?? dossier.bedrag_excl_btw ?? null
-  const finKostprijs          = quoteTotalen?.kostprijs        ?? dossier.kostprijs_excl_btw ?? null
+  // Voorkeur: gegenereerde offerte (Supabase) → anders live calculatietotalen → anders Bouw7.
+  const T                     = quoteTotalen ?? calcTotalen
+  const finAanneemsom         = T?.subtotaal_ex_btw ?? dossier.bedrag_excl_btw ?? null
+  const finKostprijs          = T?.kostprijs        ?? dossier.kostprijs_excl_btw ?? null
   // Marge alleen te bepalen als kostprijs én verkoopprijs bekend zijn — anders niet tonen.
-  const finMargeEuro          = quoteTotalen?.marge_euro
+  const finMargeEuro          = T?.marge_euro
     ?? (finAanneemsom != null && finKostprijs != null ? finAanneemsom - finKostprijs : null)
-  const finMargePct           = quoteTotalen?.marge_pct
+  const finMargePct           = T?.marge_pct
     ?? (finMargeEuro != null && finAanneemsom ? (finMargeEuro / finAanneemsom) * 100 : null)
-  const finStelposten         = quoteTotalen?.stelposten_subtotaal ?? 0
-  const finOptioneel          = quoteTotalen?.opties_subtotaal     ?? 0
+  const finStelposten         = T?.stelposten_subtotaal ?? 0
+  const finOptioneel          = T?.opties_subtotaal     ?? 0
   // Totaal incl. BTW komt uit de calculatie of uit Bouw7 (bedrag_incl_btw) — nooit zelf 21% schatten,
   // want er zijn ook 9%- en BTW-verlegd-projecten. BTW = incl − excl.
-  const finTotaalIncl         = quoteTotalen?.totaal_incl_btw ?? dossier.bedrag_incl_btw ?? null
-  const finBtw                = quoteTotalen?.btw_bedrag
+  const finTotaalIncl         = T?.totaal_incl_btw ?? dossier.bedrag_incl_btw ?? null
+  const finBtw                = T?.btw_bedrag
     ?? (finTotaalIncl != null && finAanneemsom != null
         ? Math.round((finTotaalIncl - finAanneemsom) * 100) / 100
         : null)
-  // BTW-splitsing per tarief uit de Bouw7-offerte — alleen tonen zonder EVA-calculatie
-  // (quoteTotalen kent één gezamenlijk BTW-bedrag).
-  const finBtwSplitsing       = !quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null
+  // BTW-splitsing per tarief: uit de live calculatie (per tarief) of anders uit de Bouw7-offerte.
+  const finBtwSplitsing       =
+    (!quoteTotalen && calcTotalen?.btw_groepen?.length)
+      ? calcTotalen.btw_groepen.map(g => ({ label: `BTW ${g.pct}%`, percentage: g.pct, bedrag: g.btw }))
+      : (!quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null)
   const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
@@ -711,6 +801,7 @@ export function InformatieTab({
                 </svg>
               </a>
             )}
+            {bouw7Vergrendeld && <DossierVerversKnop dossierId={dossier.id} />}
           </div>
           <h1 className="m-0 text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-neutral-900">
             {dossier.titel}
@@ -1241,6 +1332,17 @@ export function InformatieTab({
             )}
           </CardBody>
         </Card>
+
+        {/* Calculatie importeren (.c4y) — sleep een Calc4You-werkbegroting hierheen */}
+        <div className="col-span-2">
+          <C4yDropCard
+            dossierId={dossier.id}
+            sectie={sectie}
+            naam={dossier.titel}
+            nummer={dossier.dossiernummer ?? ''}
+            onImported={() => setImportTick(t => t + 1)}
+          />
+        </div>
 
         {/* Calculatie-instellingen — alleen voor aanvraag met gekoppeld project */}
         {heeftCalcKnoppen && (
