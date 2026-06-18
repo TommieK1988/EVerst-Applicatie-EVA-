@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
-import { evaluateConditions } from '../types'
+import { evaluateConditions, isInvoerVeld } from '../types'
 import FieldRenderer from './FieldRenderer'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import {
@@ -19,16 +19,25 @@ type Props = {
   vooringevuld?: Record<string, unknown>
   taskId?: string
   dossierId?: string
+  /**
+   * Scope-sleutel voor de lokale concept-cache. Uniek per invul-exemplaar
+   * (inzending-id of een nonce voor een nieuw exemplaar), zodat invullingen
+   * van hetzelfde sjabloon elkaars draft niet overschrijven.
+   */
+  draftScope?: string
   /** Compacte, touch-vriendelijke weergave voor de mobiele omgeving. */
   mobiel?: boolean
   /** Waar de terug-knop en de redirect-na-indienen naartoe gaan. */
   terugHref?: string
 }
 
-const DRAFT_KEY = (templateId: string) => `form_draft_${templateId}`
+const DRAFT_KEY = (scope: string) => `form_draft_${scope}`
 
-export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, mobiel = false, terugHref }: Props) {
+export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, draftScope, mobiel = false, terugHref }: Props) {
   const router = useRouter()
+  // Cache-sleutel per exemplaar: voorkomt dat verschillende invullingen van
+  // hetzelfde sjabloon dezelfde localStorage-draft delen.
+  const draftKey = DRAFT_KEY(draftScope ?? template.id)
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     // Priority: bestaande inzending > vooringevuld > localStorage draft > leeg
     let initial: Record<string, unknown> = {}
@@ -39,7 +48,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       initial = { ...vooringevuld }
     } else if (typeof window !== 'undefined') {
       try {
-        const raw = localStorage.getItem(DRAFT_KEY(template.id))
+        const raw = localStorage.getItem(draftKey)
         if (raw) initial = JSON.parse(raw)
       } catch { /* ignore */ }
     }
@@ -68,9 +77,9 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   // Sla concept automatisch op in localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(DRAFT_KEY(template.id), JSON.stringify(values))
+      localStorage.setItem(draftKey, JSON.stringify(values))
     } catch { /* storage full */ }
-  }, [values, template.id])
+  }, [values, draftKey])
 
   function updateValue(fieldId: string, value: unknown) {
     setValues(prev => ({ ...prev, [fieldId]: value }))
@@ -79,21 +88,17 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     }
   }
 
-  function validate(): boolean {
-    const newErrors: Record<string, string> = {}
-    const visibleFields = getVisibleFields(versie.schema.fields)
-
-    for (const field of visibleFields) {
-      if (field.required) {
-        const val = values[field.id]
-        if (val === undefined || val === null || val === '' ||
-            (Array.isArray(val) && val.length === 0)) {
-          newErrors[field.id] = `${field.label} is verplicht.`
-        }
-      }
-    }
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+  /** Zichtbare, verplichte invoervelden die nog leeg zijn. */
+  function getMissingFields(): FormField[] {
+    return getVisibleFields(versie.schema.fields).filter(field => {
+      // Weergave-only velden (kop/tekstblok/scheidingslijn) hebben geen invoer
+      // en mogen het indienen nooit blokkeren.
+      if (!isInvoerVeld(field)) return false
+      if (!field.required) return false
+      const val = values[field.id]
+      return val === undefined || val === null || val === '' ||
+        (Array.isArray(val) && val.length === 0)
+    })
   }
 
   function getVisibleFields(fields: FormField[]): FormField[] {
@@ -124,8 +129,19 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   }
 
   async function handleSubmit() {
-    if (!validate()) {
-      toast.error('Vul alle verplichte velden in.')
+    const missing = getMissingFields()
+    if (missing.length > 0) {
+      // Markeer de ontbrekende velden, benoem ze concreet en scroll naar de eerste,
+      // zodat duidelijk is wélke vraag nog open staat (niet de koppen/tekstblokken).
+      setErrors(Object.fromEntries(missing.map(f => [f.id, `${f.label} is verplicht.`])))
+      const namen = missing.slice(0, 3).map(f => f.label).join(', ')
+      toast.error(
+        missing.length === 1
+          ? `Nog 1 verplicht veld in te vullen: ${namen}.`
+          : `Nog ${missing.length} verplichte velden in te vullen: ${namen}${missing.length > 3 ? '…' : ''}.`
+      )
+      document.getElementById(`veld-${missing[0].id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -154,7 +170,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       }
 
       // Verwijder localStorage draft
-      try { localStorage.removeItem(DRAFT_KEY(template.id)) } catch { /* ignore */ }
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
 
       toast.success(taskId ? 'Formulier ingediend — taak voltooid!' : 'Formulier ingediend!')
       router.push(terugHref ?? (mobiel ? '/m/taken' : `/formulieren/${template.id}/inzendingen`))
@@ -205,14 +221,15 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       {/* Fields */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: mobiel ? 18 : 20 }}>
         {visibleFields.map(field => (
-          <FieldRenderer
-            key={field.id}
-            field={field}
-            value={values[field.id]}
-            error={errors[field.id]}
-            onChange={val => updateValue(field.id, val)}
-            mobiel={mobiel}
-          />
+          <div key={field.id} id={`veld-${field.id}`} style={{ scrollMarginTop: 80 }}>
+            <FieldRenderer
+              field={field}
+              value={values[field.id]}
+              error={errors[field.id]}
+              onChange={val => updateValue(field.id, val)}
+              mobiel={mobiel}
+            />
+          </div>
         ))}
 
         {visibleFields.length === 0 && (

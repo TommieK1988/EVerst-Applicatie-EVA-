@@ -164,7 +164,9 @@ export default function FormulierenActieveDossiers({
     if (r.inzending_id) {
       router.push(`/formulieren/${r.template_id}/inzendingen/${r.inzending_id}`)
     } else {
-      router.push(`/formulieren/${r.template_id}/invullen`)
+      // Dossiercontext meegeven zodat bestaande concepten herkend worden en
+      // meerdere exemplaren per dossier mogelijk zijn (keuze hervatten/nieuw).
+      router.push(`/formulieren/${r.template_id}/invullen?dossier_id=${r.dossier_id}`)
     }
   }
 

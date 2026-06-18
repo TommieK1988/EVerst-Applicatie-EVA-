@@ -7,6 +7,7 @@ import {
   FIELD_TYPE_GROUPS,
   labelToName,
   defaultField,
+  isInvoerVeld,
 } from '../types'
 
 type Props = {
@@ -400,13 +401,10 @@ function SubFieldsEditor({
 // ── Hoofd FieldSettings component ──────────────────────────────────────
 
 export default function FieldSettings({ field, allFields, onChange }: Props) {
-  const isStructural = field.type === 'heading' || field.type === 'paragraph' || field.type === 'divider'
+  const isStructural = !isInvoerVeld(field)
   const hasOptions   = field.type === 'dropdown' || field.type === 'radio' || field.type === 'checkbox'
   const isRepeatable = field.type === 'repeatable'
-  const otherFields  = allFields.filter(f =>
-    f.id !== field.id &&
-    f.type !== 'heading' && f.type !== 'paragraph' && f.type !== 'divider'
-  )
+  const otherFields  = allFields.filter(f => f.id !== field.id && isInvoerVeld(f))
 
   function update(patch: Partial<FormField>) {
     onChange({ ...field, ...patch })

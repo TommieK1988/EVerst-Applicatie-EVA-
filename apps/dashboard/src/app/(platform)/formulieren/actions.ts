@@ -11,7 +11,7 @@ import type {
   FormInzendingStatus,
   FormTaakStatus,
 } from '@/components/formulieren/types'
-import { defaultSchema } from '@/components/formulieren/types'
+import { defaultSchema, normalizeSchemaRequired } from '@/components/formulieren/types'
 import type { Json } from '@everts/database/types'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 
@@ -182,6 +182,10 @@ export async function saveFormVersie(
   const supabase = createAdminClient()
   const { data: { user } } = await (await createClient()).auth.getUser()
 
+  // Weergave-only velden (kop/tekstblok/scheidingslijn) mogen nooit verplicht
+  // zijn — anders blokkeren ze het indienen. Normaliseer vóór opslaan.
+  const genormaliseerd = normalizeSchemaRequired(schema)
+
   // Haal huidige versienummer op
   const { data: tmpl } = await supabase
     .from('form_templates')
@@ -197,7 +201,7 @@ export async function saveFormVersie(
     .insert({
       template_id: templateId,
       versienummer: nieuw,
-      schema: schema as unknown as Json,
+      schema: genormaliseerd as unknown as Json,
       wijzigingsnota: wijzigingsnota ?? null,
       aangemaakt_door: user?.id ?? null,
     })
@@ -322,6 +326,27 @@ export async function getConceptInzendingVoorTaak(
     .maybeSingle()
   if (error) return { ok: false, error: error.message }
   return { ok: true, data: (data as unknown as FormInzending) ?? null }
+}
+
+/**
+ * Bestaande concepten (nog niet ingediend) van een sjabloon op een dossier.
+ * Gebruikt om bij het invullen te kiezen tussen een bestaand concept hervatten
+ * of een nieuw exemplaar toevoegen — meerdere exemplaren per dossier zijn toegestaan.
+ */
+export async function getConceptInzendingenVoorDossier(
+  templateId: string,
+  dossierId: string
+): Promise<ActionResult<FormInzending[]>> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('form_inzendingen')
+    .select('*')
+    .eq('template_id', templateId)
+    .eq('dossier_id', dossierId)
+    .eq('status', 'concept')
+    .order('aangemaakt_op', { ascending: false })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data: (data as unknown as FormInzending[]) ?? [] }
 }
 
 export async function submitFormInzending(

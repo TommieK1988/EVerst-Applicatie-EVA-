@@ -65,11 +65,36 @@ export interface FormField {
   validation?: FieldValidation
 }
 
+// ── Weergave-only veldtypen ──────────────────────────────────────────
+// Kop, tekstblok en scheidingslijn zijn puur opmaak: ze renderen geen
+// invoer en mogen dus nooit als "verplichte vraag" worden behandeld.
+
+export const DISPLAY_ONLY_FIELD_TYPES: FormFieldType[] = ['heading', 'paragraph', 'divider']
+
+export function isInvoerVeld(field: { type: FormFieldType }): boolean {
+  return !DISPLAY_ONLY_FIELD_TYPES.includes(field.type)
+}
+
 // ── Schema (opgeslagen als JSONB) ────────────────────────────────────
 
 export interface FormSchema {
   version: 1
   fields: FormField[]
+}
+
+/**
+ * Normaliseer een schema vóór opslaan: weergave-only velden (kop/tekstblok/
+ * scheidingslijn) mogen nooit `required` zijn, anders blokkeren ze het indienen.
+ * Werkt ook recursief op herhalende secties (`children`).
+ */
+export function normalizeSchemaRequired(schema: FormSchema): FormSchema {
+  const fix = (fields: FormField[]): FormField[] =>
+    fields.map(f => ({
+      ...f,
+      required: isInvoerVeld(f) ? f.required : false,
+      ...(f.children ? { children: fix(f.children) } : {}),
+    }))
+  return { ...schema, fields: fix(schema.fields ?? []) }
 }
 
 // ── DB-entiteiten ─────────────────────────────────────────────────────
