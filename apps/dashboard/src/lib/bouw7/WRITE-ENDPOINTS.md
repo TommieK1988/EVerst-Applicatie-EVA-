@@ -4,9 +4,53 @@ Planningsreferentie voor het **two-way** maken van de Bouw7-koppeling.
 Tegenhanger van [`ENDPOINTS.md`](./ENDPOINTS.md) (dat beschrijft alleen het **lezen**).
 
 > **Status (juni 2026):** Bouw7 (Heimdall) heeft een **volledige write-API** — 104 schrijf-operaties.
-> EVA gebruikt die nog **niet**: `Bouw7Client` kan alleen `get()`. Dit document is de basis om
-> per veld/functionaliteit incrementeel two-way sync op te bouwen.
-> Bron: Swagger-spec `https://heimdall.bouw7.nl/api/spec.json`.
+> `Bouw7Client` heeft `post()/put()/del()`. **Eerste two-way feature is live:** werkbegroting → prognose
+> (zie §0). Bron: Swagger-spec `https://heimdall.bouw7.nl/api/spec.json`.
+
+---
+
+## 0. Geïmplementeerd & live: werkbegroting → prognose (juni 2026)
+
+EVA schrijft de **werkbegroting** terug als **prognose** ("Niet/anders begroot") per bewakingscode in
+Bouw7. Kern: `apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts`
+(`stuurWerkbegrotingPrognoseBouw7`, `previewWerkbegrotingPrognoseBouw7`, `resolveBewakingscodes`,
+`getProjectHoofdstukken`, `getBouw7BewakingscodesImport`) + UI in `WerkbegrotingHoofdscherm.tsx` /
+`WerkbegrotingGrid.tsx`. Knop **"Prognose naar Bouw7"** met preview.
+
+### Gebruikte endpoints (deels ongedocumenteerd — afgevangen uit de Bouw7-UI)
+
+| Doel | Endpoint | Body / opmerking |
+|---|---|---|
+| **Prognose zetten** per PSL | `POST /project/update-prognosis-other` (Heimdall) | `{ id: <pslId>, prognosisOtherAmount: "<bedrag>", prognosisOtherHours?: "<uren>" }`. **Prognose = begroot + prognosisOtherAmount.** Uren alleen voor Arbeid. |
+| **Structuur lezen** (codes+begroting) | `GET /project/{id}/project-security-links` (Heimdall) | `[{ securityObject, securityCodesPerChapters: [{ securityCodeChapter{id,name}, budgetDataPerSecurityCodes: [{ securityCode{id,code,name}, laborCosts, subcontractorCosts, materialCosts, … }] }] }]` |
+| **Structuur schrijven** (PSL aanmaken) | `POST /project/{id}/project-security-links` (Heimdall) | Body `{ securityCodeChaptersPerObjects: [...zelfde array...] }` — **read-modify-write** (vervangt alles). Code+kostensoort toevoegen = kostensoort-veld op `"0"` zetten → PSL ontstaat (begroot 0). |
+| **Bewakingscode aanmaken** | `POST /security-code` (Heimdall) | `{ name, code, securityCodeChapter: { id } }` → response `{ id }`. Hoofdstuk-id moet **bestaan** (geen betrouwbaar create-hoofdstuk-endpoint gevonden). |
+| **Bewakingscodes/begroting lezen** | Athena `GET /project-control/{id}/cost-type/{1,3,5}/chapters` | `securityCodes[].pslIds[0]` = PSL-id per (code × kostensoort); `budgetAmount`, `hourInfo.budgetHours`. |
+| **Bestelregels** (import) | `GET /list/contract-order-lines` (Heimdall, `q`-DSL) | items: `quantity`, `quantityFactor`, `unitPrice`, `unit`, `totalPrice`, `projectSecurityLink{code,costType}`. Aantal = `quantity × quantityFactor`. |
+
+### Kostensoort ↔ structuur-veld
+ct1 Arbeid → `laborCosts` (+ `laborHours`/`laborHourlyRate`) · ct2 Inkoop → `purchaseOrderCosts` ·
+ct3 OA → `subcontractorCosts` · ct4 Materieel → `equipmentCosts` · ct5 Materiaal → `materialCosts` ·
+ct6 Afval → `wasteCosts` · ct7 Overig → `miscellaneousCosts`. EVA voedt alleen **1/3/5**
+(arbeid/onderaanneming/materieel → materiaal).
+
+### Sync-logica (belangrijke regels)
+- **Match:** EVA `kostengroep` === Bouw7 bewakingscode (kale code). Per (code × kostensoort) één PSL.
+- **Bedrag:** `prognosisOtherAmount = werkbegroting − begroot` (verschil). Bij een **nieuw aangemaakte**
+  PSL is begroot 0 → prognose = werkbegroting.
+- **Nieuwe codes:** worden aangemaakt onder een **bestaand** hoofdstuk dat de gebruiker per dossier kiest
+  (dropdown in de preview, onthouden in `localStorage` `eva_prognose_hoofdstuk_{dossierId}`; default "WB").
+- **Reset-sync (werkbegroting = leidend):** elke bestaande PSL (1/3/5) die **niet** in de werkbegroting
+  staat → `prognosisOtherAmount = −begroot` (prognose 0). Onvoorwaardelijk (chapters-endpoint geeft de
+  huidige prognosisOtherAmount niet terug). Codes mét werkbegroting-bedrag (ook als verschil 0) tellen mee
+  en worden dus **niet** gereset.
+- **Skip alleen** bij leeg werkbegroting-bedrag of lege kostengroep.
+
+### Niet (betrouwbaar) mogelijk gebleken
+- **Hoofdstuk aanmaken** via API — daarom kiest de gebruiker een bestaand hoofdstuk. ("+ Hoofdstuk" in de
+  Bouw7-UI gaf geen bruikbare afgevangen call; een leeg hoofdstuk meesturen in de structuur-POST werkte niet.)
+- **Prognose direct lezen** per code uit het chapters-endpoint (`prognosisOtherAmount` ontbreekt daar) →
+  daarom de onvoorwaardelijke reset.
 
 ---
 
