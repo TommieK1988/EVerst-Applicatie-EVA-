@@ -7,6 +7,9 @@ import {
   getManagementAk,
   getManagementDoelstellingen,
   getManagementLaatsteSync,
+  getFunnelData,
+  getCalculatorStats,
+  getMaandSnapshots,
 } from '@/lib/dashboard/queries'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
 
@@ -28,11 +31,18 @@ export default async function ManagementPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [projecten, akData, doelstellingen, laatstGesynchroniseerd, lopend, gereed, servicedesk] = await Promise.all([
+  const [
+    projecten, akData, doelstellingen, laatstGesynchroniseerd,
+    funnel, calculators, snapshots,
+    lopend, gereed, servicedesk,
+  ] = await Promise.all([
     getManagementProjecten(),
     getManagementAk(),
     getManagementDoelstellingen(),
     getManagementLaatsteSync(),
+    getFunnelData(),
+    getCalculatorStats(),
+    getMaandSnapshots(),
     user_id ? laadLayouts(user_id, 'management-lopend') : [],
     user_id ? laadLayouts(user_id, 'management-gereed') : [],
     user_id ? laadLayouts(user_id, 'management-servicedesk') : [],
@@ -44,6 +54,9 @@ export default async function ManagementPage() {
         projecten={projecten}
         akData={akData}
         doelstellingen={doelstellingen}
+        funnel={funnel}
+        calculators={calculators}
+        snapshots={snapshots}
         laatstGesynchroniseerd={laatstGesynchroniseerd}
         user_id={user_id}
         layouts={{ lopend, gereed, servicedesk }}
