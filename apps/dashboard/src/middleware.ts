@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isMobileUA } from '@/lib/isMobileUA'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -35,15 +36,27 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isLoginPage = pathname === '/login'
   const isAuthRoute = pathname.startsWith('/auth/')
+  const isApiRoute = pathname.startsWith('/api/')
+  const isOpMobiel = pathname === '/m' || pathname.startsWith('/m/')
+  const mobiel = isMobileUA(request.headers.get('user-agent'))
 
   // Niet ingelogd → doorsturen naar login (behalve login-pagina en auth-callbacks)
   if (!user && !isLoginPage && !isAuthRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Al ingelogd en op login → doorsturen naar home
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL('/', request.url))
+  if (user) {
+    // Al ingelogd en op login → meteen naar de juiste home (mobiel: /m).
+    // Server-side beslist zodat de desktop-app niet kort in beeld flitst.
+    if (isLoginPage) {
+      return NextResponse.redirect(new URL(mobiel ? '/m' : '/', request.url))
+    }
+
+    // Telefoon op een desktop-route → server-side naar de mobiele omgeving.
+    // (Vervangt de client-side flash; MobileRedirect blijft als viewport-fallback.)
+    if (mobiel && !isOpMobiel && !isAuthRoute && !isApiRoute) {
+      return NextResponse.redirect(new URL('/m', request.url))
+    }
   }
 
   return response

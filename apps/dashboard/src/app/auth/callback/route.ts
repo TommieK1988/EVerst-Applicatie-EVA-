@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@everts/database/server'
+import { isMobileUA } from '@/lib/isMobileUA'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/'
+  const mobiel = isMobileUA(request.headers.get('user-agent'))
+  // Telefoon → direct naar de mobiele omgeving (geen desktop-flits na inloggen).
+  const next = searchParams.get('next') ?? (mobiel ? '/m' : '/')
 
   if (code) {
     const supabase = await createClient()
