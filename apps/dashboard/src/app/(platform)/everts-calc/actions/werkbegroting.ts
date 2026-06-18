@@ -505,6 +505,11 @@ async function zorgVoorOntbrekendePsls(
       const veld = CT_STRUCTUUR_VELD[ct]
       if (!veld) continue
       if (bd[veld] == null) bd[veld] = '0'
+      // Arbeid: Bouw7 eist dat bij laborCosts óók laborHours én laborHourlyRate zijn gezet.
+      if (ct === 1) {
+        if (bd.laborHours == null) bd.laborHours = '0'
+        if (bd.laborHourlyRate == null) bd.laborHourlyRate = '0'
+      }
       aangemaakt++
     }
   }
@@ -700,6 +705,8 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
 
 /** Eén bestelregel uit Bouw7, klaar om als werkbegroting-component te seeden. */
 export type BestelregelImport = {
+  /** Stabiel Bouw7 contract-order-line id — voor dedup bij herhaald overhalen. */
+  bouw7LineId: number
   code: string
   omschrijving: string
   /** Werkelijk aantal = quantity × quantityFactor. */
@@ -736,6 +743,7 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
         const factor = getal(ol.quantityFactor)
         const aantal = getal(ol.quantity) * (factor || 1)
         return {
+          bouw7LineId: ol.id,
           code: (ol.projectSecurityLink?.code ?? '').trim(),
           omschrijving: ol.description ?? '',
           aantal,
