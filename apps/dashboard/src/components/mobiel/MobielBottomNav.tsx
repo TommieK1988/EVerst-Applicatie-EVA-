@@ -2,15 +2,16 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ListChecks, FolderOpen } from 'lucide-react'
+import { ListChecks, FolderOpen, User } from 'lucide-react'
 
 /**
- * Mobiele bottom-nav (DS-spec): 2 tabs, 52px hoog, icoon 20px (stroke 2 actief /
+ * Mobiele bottom-nav (DS-spec): tabs, 52px hoog, icoon 20px (stroke 2 actief /
  * 1.75 inactief), label 9px, dot 4px bij actief, actief #009439.
  */
 const TABS = [
   { key: 'taken',    label: 'Taken',    href: '/m/taken',    Icon: ListChecks },
   { key: 'dossiers', label: 'Dossiers', href: '/m/dossiers', Icon: FolderOpen },
+  { key: 'profiel',  label: 'Profiel',  href: '/m/profiel',  Icon: User },
 ]
 
 export default function MobielBottomNav() {

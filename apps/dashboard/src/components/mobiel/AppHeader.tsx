@@ -52,8 +52,19 @@ export default function AppHeader({
             Terug
           </Link>
         )}
-        <div style={{ fontSize: backHref ? 18 : 21, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-          {title}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Klein vol-wit beeldmerk naast de titel. Asset is wit-E met groene
+              gradient; brightness(0) invert(1) maakt 'm egaal wit. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-beeldmerk.svg"
+            alt=""
+            aria-hidden
+            style={{ height: backHref ? 22 : 26, width: 'auto', flexShrink: 0, filter: 'brightness(0) invert(1)' }}
+          />
+          <div style={{ fontSize: backHref ? 18 : 21, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            {title}
+          </div>
         </div>
         {sub && <div style={{ fontSize: 12, opacity: 0.82, marginTop: 3, fontWeight: 500 }}>{sub}</div>}
       </div>

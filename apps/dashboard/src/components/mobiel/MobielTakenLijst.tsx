@@ -13,6 +13,8 @@ export type MobielTaak = {
   dossier_naam: string | null
   dossier_id: string | null
   formulier_template_id: string | null
+  /** Platte omschrijving-tekst; null als er geen omschrijving is. */
+  omschrijving: string | null
 }
 
 const PRIO: Record<string, { label: string; c: string; bg: string }> = {
@@ -33,6 +35,7 @@ function deadlineLabel(iso: string | null): { tekst: string; kleur: string } | n
 
 export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
   const [afgevinkt, setAfgevinkt] = useState<Set<string>>(new Set())
+  const [detail, setDetail] = useState<MobielTaak | null>(null)
   const [, startTransition] = useTransition()
 
   function vinkAf(id: string) {
@@ -57,6 +60,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
   }
 
   return (
+    <>
     <div style={{ padding: '10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       {zichtbaar.map(taak => {
         const prio = PRIO[taak.prioriteit] ?? PRIO.normaal
@@ -80,9 +84,28 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
               }}
             />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#161b20', lineHeight: 1.45, marginBottom: 6 }}>
-                {taak.titel}
-              </div>
+              {taak.omschrijving ? (
+                <button
+                  type="button"
+                  onClick={() => setDetail(taak)}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 6, width: '100%',
+                    background: 'none', border: 'none', padding: 0, margin: '0 0 6px',
+                    textAlign: 'left', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#161b20', lineHeight: 1.45 }}>
+                    {taak.titel}
+                  </span>
+                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#1f6feb" strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }}>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </button>
+              ) : (
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#161b20', lineHeight: 1.45, marginBottom: 6 }}>
+                  {taak.titel}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {taak.dossier_naam && (
                   taak.dossier_id ? (
@@ -126,5 +149,49 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
         )
       })}
     </div>
+
+    {detail && (
+      <div
+        onClick={() => setDetail(null)}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 60,
+          background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'flex-end',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '100%', background: '#fff',
+            borderTopLeftRadius: 18, borderTopRightRadius: 18,
+            padding: '8px 20px calc(24px + env(safe-area-inset-bottom, 0px))',
+            maxHeight: '70dvh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+          }}
+        >
+          {/* grijp-streepje */}
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 14px', flexShrink: 0 }} />
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#161b20', marginBottom: 10, flexShrink: 0 }}>
+            {detail.titel}
+          </div>
+          <div style={{ overflowY: 'auto', fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+            {detail.omschrijving}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDetail(null)}
+            style={{
+              marginTop: 18, flexShrink: 0,
+              padding: '13px 16px', borderRadius: 12,
+              background: '#f1f4f5', color: '#161b20', border: 'none',
+              fontSize: 15, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Sluiten
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

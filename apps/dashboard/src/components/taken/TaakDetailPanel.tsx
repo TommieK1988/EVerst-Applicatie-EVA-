@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from 'react'
 import { X, Calendar, Trash2, MessageSquare, ChevronDown, Plus, Check, Clock, UserPlus, Lock, FileText, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/taken/utils'
+import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee } from '@/app/(platform)/taken/actions/taken'
@@ -40,14 +41,6 @@ const ASSIGNEE_ROLLEN: { value: TaskAssigneeRol; label: string }[] = [
   { value: 'mede-uitvoerder',   label: 'Mede-uitvoerder' },
   { value: 'reviewer',          label: 'Reviewer' },
 ]
-
-function omschrijvingNaarTekst(omschrijving: unknown): string {
-  if (!omschrijving) return ''
-  if (typeof omschrijving === 'string') return omschrijving
-  const obj = omschrijving as Record<string, unknown>
-  if (typeof obj.text === 'string') return obj.text
-  return ''
-}
 
 export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijst = [] }: Props) {
   const [pending, startTransition] = useTransition()

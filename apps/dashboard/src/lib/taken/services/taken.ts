@@ -189,15 +189,16 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
   const taskIds = toewijzingen.map(t => t.task_id)
   if (taskIds.length === 0) return []
 
+  // Slanke query voor de "mijn taken"-lijst (mobiel + desktop-home-widgets):
+  // alleen de taakkolommen + de dossier-koppeling. De relaties assignees/subtaken/
+  // comments/attachments worden hier niet getoond, dus die joins laten we weg
+  // (scheelt fors aan querytijd en payload). Velden hieronder op defaults gezet
+  // zodat het TaakMetDetails-type intact blijft.
   // as any: dossiers join staat niet in gegenereerde types
   const { data, error } = await (supabase as any)
     .from('tasks')
     .select(`
       *,
-      task_assignees ( task_id, user_id, rol ),
-      subtaken:tasks!parent_task_id ( id ),
-      task_comments ( id ),
-      task_attachments ( id ),
       lijst:task_lists ( id, naam, dossier_id, dossiers ( id, titel, hoofdstatus ) ),
       dossier:dossiers ( id, titel, hoofdstatus )
     `)
@@ -212,10 +213,10 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
   // Dossier-context: directe koppeling (losse taak) gaat vóór de koppeling via de lijst.
   return (data as any[]).map(taak => ({
     ...taak,
-    assignees:         taak.task_assignees ?? [],
-    subtaken:          taak.subtaken ?? [],
-    comments_count:    (taak.task_comments ?? []).length,
-    attachments_count: (taak.task_attachments ?? []).length,
+    assignees:         [],
+    subtaken:          [],
+    comments_count:    0,
+    attachments_count: 0,
     lijst:             taak.lijst ?? undefined,
     dossier_id:        taak.dossier?.id ?? taak.lijst?.dossier_id ?? null,
     dossier_naam:      taak.dossier?.titel ?? taak.lijst?.dossiers?.titel ?? null,

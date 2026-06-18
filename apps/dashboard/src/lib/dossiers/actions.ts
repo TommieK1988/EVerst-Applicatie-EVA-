@@ -34,6 +34,21 @@ const ROL_SELECT = `
   contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
 `.trim()
 
+/**
+ * Slanke projectie voor lijst-weergaven (bijv. de mobiele dossierlijst): alleen
+ * de kolommen die de lijst, de status-badge en de actief-check nodig hebben, plus
+ * klant- en projectleidernaam. Scheelt fors t.o.v. `*, ROL_SELECT` (47 kolommen +
+ * 8 joins). Gemodelleerd op getActieveDossierContext. `mapRij` vult de overige
+ * rolnamen netjes met null.
+ */
+const LEAN_SELECT = `
+  id, dossiernummer, titel, hoofdstatus,
+  aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus,
+  gearchiveerd, updated_at, verwacht_startdatum, verwacht_einddatum,
+  relaties!klant_id ( naam ),
+  projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam )
+`.trim()
+
 function medNaam(med: { voornaam?: string; tussenvoegsel?: string; achternaam?: string } | null): string | null {
   if (!med) return null
   return [med.voornaam, med.tussenvoegsel, med.achternaam].filter(Boolean).join(' ') || null
@@ -284,12 +299,13 @@ export async function getMijnDossiers(
   limit = 10,
   sorteer: { kolom: string; ascending?: boolean } = { kolom: 'updated_at', ascending: false },
   rolKolommen: readonly string[] = DOSSIER_ROL_KOLOMMEN,
+  lean = false,
 ): Promise<DossierResult> {
   const supabase = createAdminClient() as any
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`)
     .eq('hoofdstatus', hoofdstatus)
     .or(rolKolommen.map(kolom => `${kolom}.eq.${medewerkerID}`).join(','))
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
@@ -312,12 +328,13 @@ export async function getMijnServicedesk(
   medewerkerID: string,
   limit = 10,
   sorteer: { kolom: string; ascending?: boolean } = { kolom: 'updated_at', ascending: false },
+  lean = false,
 ): Promise<DossierResult> {
   const supabase = createAdminClient() as any
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`)
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .or(`project_manager_id.eq.${medewerkerID},uitvoerder_id.eq.${medewerkerID}`)
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')

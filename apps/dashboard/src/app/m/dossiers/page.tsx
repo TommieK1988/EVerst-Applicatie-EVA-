@@ -2,6 +2,7 @@ import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getMijnDossiers, getMijnServicedesk } from '@/lib/dossiers/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielDossierLijst, { type MobielDossier } from '@/components/mobiel/MobielDossierLijst'
+import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import type { DossierRij } from '@/components/dossiers/types'
@@ -26,10 +27,11 @@ export default async function MobielDossiersPage() {
 
   // Offertes worden bewust weggelaten — daar ben je in het veld niet dagelijks mee bezig.
   const SORT = { kolom: 'updated_at', ascending: false }
+  // lean=true: slanke select (alleen lijst-/badge-velden) voor snellere tab-wissels.
   const [aanv, opd, svc] = await Promise.all([
-    getMijnDossiers(medewerker.id, 'aanvraag', 100, SORT).catch(() => ({ ok: false as const, error: '' })),
-    getMijnDossiers(medewerker.id, 'opdracht', 100, SORT).catch(() => ({ ok: false as const, error: '' })),
-    getMijnServicedesk(medewerker.id, 100, SORT).catch(() => ({ ok: false as const, error: '' })),
+    getMijnDossiers(medewerker.id, 'aanvraag', 100, SORT, undefined, true).catch(() => ({ ok: false as const, error: '' })),
+    getMijnDossiers(medewerker.id, 'opdracht', 100, SORT, undefined, true).catch(() => ({ ok: false as const, error: '' })),
+    getMijnServicedesk(medewerker.id, 100, SORT, true).catch(() => ({ ok: false as const, error: '' })),
   ])
 
   const seen = new Set<string>()
@@ -61,6 +63,7 @@ export default async function MobielDossiersPage() {
   return (
     <>
       <AppHeader title="Dossiers" sub={`${rows.length} dossiers`} />
+      <MobielPullToRefresh />
       <MobielDossierLijst dossiers={rows} />
     </>
   )
