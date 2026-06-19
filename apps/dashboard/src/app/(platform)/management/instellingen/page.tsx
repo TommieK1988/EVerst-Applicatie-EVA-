@@ -6,6 +6,9 @@ import {
   getManagementAk,
   getManagementDoelstellingen,
   getManagementDimensies,
+  getManagementOhw,
+  getManagementProjectenKeuze,
+  HUIDIG_BOEKJAAR,
 } from '@/lib/dashboard/queries'
 import ManagementInstellingen from '@/components/management/ManagementInstellingen'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
@@ -16,10 +19,12 @@ export const dynamic = 'force-dynamic'
 export default async function ManagementInstellingenPage() {
   await vereisModuleToegang('management', 'beheren')
 
-  const [akData, doelstellingen, dimensies] = await Promise.all([
+  const [akData, doelstellingen, dimensies, ohwData, projectKeuze] = await Promise.all([
     getManagementAk(),
     getManagementDoelstellingen(),
     getManagementDimensies(),
+    getManagementOhw(HUIDIG_BOEKJAAR),
+    getManagementProjectenKeuze(),
   ])
 
   return (
@@ -33,7 +38,7 @@ export default async function ManagementInstellingenPage() {
             Management — Instellingen
           </h1>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-            Algemene kosten (AK) per werkmaatschappij en doelstellingen per werkmaatschappij / projectleider.
+            Algemene kosten (AK) en doelstellingen per werkmaatschappij / projectleider, en OHW-correcties per dossier.
           </p>
         </div>
       </div>
@@ -41,6 +46,8 @@ export default async function ManagementInstellingenPage() {
       <ManagementInstellingen
         akData={akData}
         doelstellingen={doelstellingen}
+        ohwData={ohwData}
+        projectKeuze={projectKeuze}
         filialen={dimensies.filialen}
         projectleiders={dimensies.projectleiders}
       />

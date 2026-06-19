@@ -8,7 +8,7 @@ import { CalendarCheck } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import {
   berekenManagementKpi,
-  type ManagementProject, type ManagementAK, type ManagementDoelstelling,
+  type ManagementProject, type ManagementAK, type ManagementDoelstelling, type ManagementOhw,
   type FunnelData, type CalculatorStat, type MaandSnapshotSamenvatting,
 } from '@/lib/dashboard/aggregaties'
 import ManagementProjectenTabel from './ManagementProjectenTabel'
@@ -19,7 +19,7 @@ import HistorieView from './HistorieView'
 import MaandcijfersModal from './MaandcijfersModal'
 
 /* Types blijven hier geëxporteerd voor bestaande imports (queries, tabel, instellingen). */
-export type { ManagementProject, ManagementAK, ManagementDoelstelling }
+export type { ManagementProject, ManagementAK, ManagementDoelstelling, ManagementOhw }
 
 type ManagementLayouts = {
   lopend: GebruikerLayout[]

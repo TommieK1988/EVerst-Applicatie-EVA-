@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Pencil, Trash2, Plus, X } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, Search } from 'lucide-react'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,8 +11,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import {
   upsertAk, verwijderAk, type AkInput,
   upsertDoelstelling, verwijderDoelstelling, type DoelstellingInput,
+  upsertOhw, verwijderOhw, type OhwInput,
 } from '@/app/(platform)/management/instellingen/actions'
-import type { ManagementAK, ManagementDoelstelling } from './ManagementDashboard'
+import type { ManagementProjectKeuze } from '@/lib/dashboard/queries'
+import type { ManagementAK, ManagementDoelstelling, ManagementOhw } from './ManagementDashboard'
 
 const HUIDIG_JAAR = 2026
 
@@ -24,15 +26,20 @@ function fEur(v: number | null | undefined): string {
 type Props = {
   akData: ManagementAK[]
   doelstellingen: ManagementDoelstelling[]
+  ohwData: ManagementOhw[]
+  projectKeuze: ManagementProjectKeuze[]
   filialen: string[]
   projectleiders: string[]
 }
 
-export default function ManagementInstellingen({ akData, doelstellingen, filialen, projectleiders }: Props) {
+export default function ManagementInstellingen({ akData, doelstellingen, ohwData, projectKeuze, filialen, projectleiders }: Props) {
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
-      <AkSectie akData={akData} filialen={filialen} />
-      <DoelstellingSectie doelstellingen={doelstellingen} filialen={filialen} projectleiders={projectleiders} />
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <AkSectie akData={akData} filialen={filialen} />
+        <DoelstellingSectie doelstellingen={doelstellingen} filialen={filialen} projectleiders={projectleiders} />
+      </div>
+      <OhwSectie ohwData={ohwData} projectKeuze={projectKeuze} />
     </div>
   )
 }
@@ -245,6 +252,216 @@ function DoelstellingSectie({ doelstellingen, filialen, projectleiders }: {
         </div>
       </CardBody>
     </Card>
+  )
+}
+
+/* ── OHW-correctie per dossier ────────────────────────────────────── */
+
+const HUIDIG_BOEKJAAR = HUIDIG_JAAR
+
+const leegOhw: OhwInput = {
+  boekjaar: HUIDIG_BOEKJAAR, bouw7_id: '', projectnummer: null, projectnaam: null, filiaal: null,
+  omzet_vorig_boekjaar: 0, resultaat_vorig_boekjaar: 0, opmerkingen: '',
+}
+
+function OhwSectie({ ohwData, projectKeuze }: { ohwData: ManagementOhw[]; projectKeuze: ManagementProjectKeuze[] }) {
+  const router = useRouter()
+  const [form, setForm] = useState<OhwInput>(leegOhw)
+  const [isPending, startTransition] = useTransition()
+
+  function bewerk(o: ManagementOhw) {
+    setForm({
+      id: o.id, boekjaar: o.boekjaar, bouw7_id: o.bouw7_id,
+      projectnummer: o.projectnummer, projectnaam: o.projectnaam, filiaal: o.filiaal,
+      omzet_vorig_boekjaar: o.omzet_vorig_boekjaar ?? 0,
+      resultaat_vorig_boekjaar: o.resultaat_vorig_boekjaar ?? 0,
+      opmerkingen: o.opmerkingen ?? '',
+    })
+  }
+  function reset() { setForm(leegOhw) }
+
+  function opslaan() {
+    if (!form.bouw7_id) { toast.error('Kies eerst een dossier'); return }
+    startTransition(async () => {
+      const r = await upsertOhw(form)
+      if (r.ok) { toast.success('OHW-correctie opgeslagen'); reset(); router.refresh() }
+      else toast.error(r.fout ?? 'Opslaan mislukt')
+    })
+  }
+  function wis(id: string) {
+    startTransition(async () => {
+      const r = await verwijderOhw(id)
+      if (r.ok) { toast.success('Verwijderd'); router.refresh() }
+      else toast.error(r.fout ?? 'Verwijderen mislukt')
+    })
+  }
+
+  const huidigLabel = form.projectnummer
+    ? `${form.projectnummer}${form.projectnaam ? ` — ${form.projectnaam}` : ''}`
+    : null
+
+  return (
+    <Card>
+      <CardHeader>OHW-correctie per dossier (stand 1 januari)</CardHeader>
+      <CardBody>
+        <div className="flex flex-col gap-2.5">
+          <div className="grid gap-2" style={{ gridTemplateColumns: '160px 1fr' }}>
+            <Veld label="Boekjaar">
+              <Input inputSize="md" type="number" value={form.boekjaar}
+                onChange={e => setForm(f => ({ ...f, boekjaar: Number(e.target.value) }))} />
+            </Veld>
+            <Veld label="Dossier">
+              <DossierPicker
+                value={form.bouw7_id}
+                currentLabel={huidigLabel}
+                projectKeuze={projectKeuze}
+                onChange={p => setForm(f => ({
+                  ...f,
+                  bouw7_id: p?.bouw7_id ?? '',
+                  projectnummer: p?.projectnummer ?? null,
+                  projectnaam: p?.projectnaam ?? null,
+                  filiaal: p?.filiaal ?? null,
+                }))}
+              />
+            </Veld>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Veld label="Omzet vorig boekjaar (€)">
+              <Input inputSize="md" type="number" value={form.omzet_vorig_boekjaar}
+                onChange={e => setForm(f => ({ ...f, omzet_vorig_boekjaar: Number(e.target.value) }))} />
+            </Veld>
+            <Veld label="Resultaat vorig boekjaar (€)">
+              <Input inputSize="md" type="number" value={form.resultaat_vorig_boekjaar}
+                onChange={e => setForm(f => ({ ...f, resultaat_vorig_boekjaar: Number(e.target.value) }))} />
+            </Veld>
+            <Veld label="Opmerkingen">
+              <Input inputSize="md" value={form.opmerkingen ?? ''}
+                onChange={e => setForm(f => ({ ...f, opmerkingen: e.target.value }))} />
+            </Veld>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="primary" size="md" loading={isPending} onClick={opslaan}>
+              {form.id ? 'Bijwerken' : <><Plus className="h-4 w-4" /> Toevoegen</>}
+            </Button>
+            {form.id && (
+              <Button variant="ghost" size="md" onClick={reset}><X className="h-4 w-4" /> Annuleer</Button>
+            )}
+          </div>
+          <p className="text-[11px] text-neutral-500">
+            De ingevulde omzet en resultaat worden aan het vórige boekjaar toegewezen en op het dashboard
+            van de Gerealiseerd-cijfers afgetrokken (per werkmaatschappij opgeteld). De opdrachtwaarde
+            (In opdracht) blijft ongewijzigd.
+          </p>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          {ohwData.length === 0 ? (
+            <EmptyState title="Nog geen OHW-correcties" tone="neutral" size="sm" />
+          ) : (
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr>
+                  <th className={th}>Boekjaar</th>
+                  <th className={cn(th, 'text-left')}>Dossier</th>
+                  <th className={cn(th, 'text-left')}>Werkmij.</th>
+                  <th className={cn(th, 'text-right')}>Omzet vorig bj.</th>
+                  <th className={cn(th, 'text-right')}>Resultaat vorig bj.</th>
+                  <th className={th} />
+                </tr>
+              </thead>
+              <tbody>
+                {ohwData.map((o, i) => (
+                  <tr key={o.id} className={i % 2 === 0 ? 'bg-white' : 'bg-neutral-50/60'}>
+                    <td className={cn(td, 'text-center')}>{o.boekjaar}</td>
+                    <td className={td}>
+                      <span className="font-medium">{o.projectnummer ?? o.bouw7_id}</span>
+                      {o.projectnaam && <span className="text-neutral-500"> — {o.projectnaam}</span>}
+                    </td>
+                    <td className={td}>{o.filiaal ?? <span className="text-neutral-400">—</span>}</td>
+                    <td className={cn(td, 'text-right')}>{fEur(o.omzet_vorig_boekjaar)}</td>
+                    <td className={cn(td, 'text-right')}>{fEur(o.resultaat_vorig_boekjaar)}</td>
+                    <td className={cn(td, 'text-right whitespace-nowrap')}>
+                      <RijActies onBewerk={() => bewerk(o)} onWis={() => wis(o.id)} disabled={isPending} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+/** Zoek-picker over de managementprojecten (projectnummer + naam + opdrachtgever). */
+function DossierPicker({ value, currentLabel, projectKeuze, onChange }: {
+  value: string
+  currentLabel: string | null
+  projectKeuze: ManagementProjectKeuze[]
+  onChange: (p: ManagementProjectKeuze | null) => void
+}) {
+  const [zoek, setZoek] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const geselecteerd = value ? (projectKeuze.find(p => p.bouw7_id === value) ?? null) : null
+  const label = geselecteerd
+    ? `${geselecteerd.projectnummer} — ${geselecteerd.projectnaam}`
+    : currentLabel
+
+  const filtered = useMemo(() => {
+    const q = zoek.trim().toLowerCase()
+    const lijst = q
+      ? projectKeuze.filter(p =>
+          `${p.projectnummer} ${p.projectnaam} ${p.opdrachtgever ?? ''}`.toLowerCase().includes(q))
+      : projectKeuze
+    return lijst.slice(0, 50)
+  }, [zoek, projectKeuze])
+
+  if (value && !open) {
+    return (
+      <div className="flex gap-1">
+        <div className="flex h-9 flex-1 items-center rounded-md border border-neutral-300 bg-neutral-50 px-3 text-[13px] text-neutral-900">
+          <span className="truncate">{label ?? value}</span>
+        </div>
+        <Button variant="ghost" size="md" onClick={() => { setOpen(true); setZoek('') }} title="Ander dossier kiezen">
+          <Search className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="md" onClick={() => onChange(null)} title="Wissen">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <Input inputSize="md" value={zoek} placeholder="Zoek op projectnummer, naam of opdrachtgever…"
+        autoFocus={open}
+        onChange={e => setZoek(e.target.value)}
+        onFocus={() => setOpen(true)} />
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-[12px] text-neutral-500">Geen projecten gevonden</div>
+          ) : filtered.map(p => (
+            <button
+              key={p.bouw7_id}
+              type="button"
+              onClick={() => { onChange(p); setOpen(false); setZoek('') }}
+              className="flex w-full flex-col items-start gap-0.5 border-b border-neutral-100 px-3 py-2 text-left last:border-b-0 hover:bg-brand-50"
+            >
+              <span className="text-[12px] font-medium text-neutral-900">
+                {p.projectnummer} — {p.projectnaam}
+              </span>
+              <span className="text-[11px] text-neutral-500">
+                {[p.opdrachtgever, p.filiaal].filter(Boolean).join(' · ') || '—'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

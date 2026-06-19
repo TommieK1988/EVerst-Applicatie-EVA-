@@ -37,6 +37,22 @@ export type ManagementProject = {
   dossier_id: string | null
   dossier_sectie: string | null
   bouw7_laatst_sync: string | null
+  /** OHW-correctie (handmatig per dossier): omzet/resultaat dat aan het vórige
+   *  boekjaar toebehoort. Wordt afgetrokken van de Gerealiseerd-cijfers. */
+  ohw_omzet?: number | null
+  ohw_resultaat?: number | null
+}
+
+export type ManagementOhw = {
+  id: string
+  boekjaar: number
+  bouw7_id: string
+  projectnummer: string | null
+  projectnaam: string | null
+  filiaal: string | null
+  omzet_vorig_boekjaar: number | null
+  resultaat_vorig_boekjaar: number | null
+  opmerkingen: string | null
 }
 
 export type ManagementAK = {
@@ -157,6 +173,10 @@ function tel(d: PivotAgg, p: ManagementProject) {
     d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
     d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
   }
+  // OHW-correctie: trek het aan het vórige boekjaar toegewezen deel af van de
+  // Gerealiseerd-cijfers (In opdracht blijft de volledige opdrachtwaarde).
+  d.omzetGerealiseerd     -= p.ohw_omzet     ?? 0
+  d.resultaatGerealiseerd -= p.ohw_resultaat ?? 0
 }
 
 export function optellen(a: PivotAgg, b: PivotAgg): PivotAgg {
@@ -256,6 +276,9 @@ export function buildPivotPL(projecten: ManagementProject[]): PLPivot[] {
       d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
       d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
     }
+    // OHW-correctie: trek vorig-boekjaar-deel af van de Gerealiseerd-cijfers.
+    d.omzetGerealiseerd     -= p.ohw_omzet     ?? 0
+    d.resultaatGerealiseerd -= p.ohw_resultaat ?? 0
   }
   return [...map.values()].sort((a, b) =>
     (b.omzetOpdracht + b.omzetGerealiseerd) - (a.omzetOpdracht + a.omzetGerealiseerd),

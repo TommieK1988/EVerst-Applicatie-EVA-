@@ -5,12 +5,16 @@ import {
   type ManagementProject,
   type ManagementAK,
   type ManagementDoelstelling,
+  type ManagementOhw,
   type FunnelDossier,
   type FunnelData,
   type CalculatorStat,
   type MaandSnapshot,
   type MaandSnapshotSamenvatting,
 } from './aggregaties'
+
+/** Boekjaar waarvan de 1-jan OHW-stand op het live dashboard meetelt. */
+export const HUIDIG_BOEKJAAR = new Date().getFullYear()
 
 export interface MedewerkerInfo {
   id: string
@@ -41,11 +45,56 @@ const MANAGEMENT_PROJECT_KOLOMMEN =
 
 export async function getManagementProjecten(): Promise<ManagementProject[]> {
   const supabase = createAdminClient() as any
+  const [{ data }, ohw] = await Promise.all([
+    supabase
+      .from('management_projecten')
+      .select(MANAGEMENT_PROJECT_KOLOMMEN)
+      .order('projectnummer', { ascending: true }),
+    getManagementOhw(HUIDIG_BOEKJAAR),
+  ])
+  const projecten = (data ?? []) as ManagementProject[]
+
+  // OHW-correctie per dossier koppelen op bouw7_id.
+  const ohwMap = new Map<string, ManagementOhw>()
+  for (const o of ohw) if (o.bouw7_id) ohwMap.set(o.bouw7_id, o)
+  for (const p of projecten) {
+    const o = p.bouw7_id ? ohwMap.get(p.bouw7_id) : undefined
+    p.ohw_omzet     = o?.omzet_vorig_boekjaar     ?? 0
+    p.ohw_resultaat = o?.resultaat_vorig_boekjaar ?? 0
+  }
+  return projecten
+}
+
+/** OHW-correctieregels (handmatig per dossier), optioneel gefilterd op boekjaar. */
+export async function getManagementOhw(boekjaar?: number): Promise<ManagementOhw[]> {
+  const supabase = createAdminClient() as any
+  let q = supabase
+    .from('management_ohw')
+    .select('id, boekjaar, bouw7_id, projectnummer, projectnaam, filiaal, omzet_vorig_boekjaar, resultaat_vorig_boekjaar, opmerkingen')
+    .order('boekjaar', { ascending: false })
+    .order('projectnummer', { ascending: true })
+  if (boekjaar != null) q = q.eq('boekjaar', boekjaar)
+  const { data } = await q
+  return (data ?? []) as ManagementOhw[]
+}
+
+export type ManagementProjectKeuze = {
+  bouw7_id: string
+  projectnummer: string
+  projectnaam: string
+  opdrachtgever: string | null
+  filiaal: string | null
+}
+
+/** Selecteerbare projecten voor de OHW-dossier-picker in Instellingen. */
+export async function getManagementProjectenKeuze(): Promise<ManagementProjectKeuze[]> {
+  const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('management_projecten')
-    .select(MANAGEMENT_PROJECT_KOLOMMEN)
+    .select('bouw7_id, projectnummer, projectnaam, opdrachtgever, filiaal')
+    .not('bouw7_id', 'is', null)
     .order('projectnummer', { ascending: true })
-  return (data ?? []) as ManagementProject[]
+  return (data ?? []) as ManagementProjectKeuze[]
 }
 
 export async function getManagementAk(): Promise<ManagementAK[]> {
