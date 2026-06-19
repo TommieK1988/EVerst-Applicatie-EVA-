@@ -7,14 +7,15 @@ export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 /**
- * POST /api/cron/bouw7-sync
+ * POST /api/cron/bouw7-sync?mode=incremental|full
  *
- * Beschermde endpoint die de volledige Bouw7-sync uitvoert:
- *   1. runFullSync()            → relaties, contactpersonen, medewerkers, dossiers, planning
+ * Beschermde endpoint die de Bouw7-sync uitvoert:
+ *   1. runFullSync(mode)         → relaties, contactpersonen, medewerkers, dossiers, planning
  *   2. syncManagementProjecten() → management_projecten (KPI-dashboard)
  *
  * Wordt 2× per dag aangeroepen (06:30 + 12:45 NL) door de Supabase Edge Functions
- * 'bouw7-sync-ochtend' en 'bouw7-sync-middag'.
+ * 'bouw7-sync-ochtend' en 'bouw7-sync-middag'. De ochtendrun draait `full` als drift-correctie,
+ * de middagrun `incremental` (alleen gewijzigde records → snel). Default = incremental.
  *
  * Beveiliging: Authorization: Bearer <CRON_SECRET>
  */
@@ -26,10 +27,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const mode = req.nextUrl.searchParams.get('mode') === 'full' ? 'full' : 'incremental'
   const startedAt = Date.now()
 
-  // 1. Volledige sync (relaties → medewerkers → dossiers → planning).
-  const full = await runFullSync()
+  // 1. Sync (relaties → medewerkers → dossiers → planning).
+  const full = await runFullSync(mode)
   if (!full.ok) {
     return NextResponse.json(
       { ok: false, fase: 'runFullSync', error: full.error, duur_ms: Date.now() - startedAt },
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       ok: true,
+      mode,
       contacts: full.contacts,
       employees: full.employees,
       projects: full.projects,

@@ -3,14 +3,25 @@
 import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { fingerprint } from './fingerprint'
 import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
 
 export type SyncResult = {
   nieuw: number
   bijgewerkt: number
   fouten: number
+  /** Aantal records dat ongewijzigd was en bij incrementele sync is overgeslagen. */
+  overgeslagen?: number
   foutMelding?: string
 }
+
+/**
+ * Sync-modus.
+ * - `incremental` (default): alleen nieuwe/gewijzigde records doen de dure detail-calls + DB-writes;
+ *   ongewijzigde records (gelijke `bouw7_sync_hash`) worden overgeslagen.
+ * - `full`: alles opnieuw ophalen en wegschrijven (eerste run / vangnet tegen drift).
+ */
+export type SyncMode = 'incremental' | 'full'
 
 /** Haal de Bouw7 API key op uit de integraties-tabel. */
 export async function getBouw7Client(): Promise<Bouw7Client> {
@@ -119,10 +130,11 @@ export type SyncContactsResult = {
   contactpersonen: SyncResult
 }
 
-export async function syncContacts(): Promise<SyncContactsResult> {
+export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncContactsResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
-  const orgResult: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
-  const cpResult: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const orgResult: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const cpResult: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
 
   try {
     const bouw7 = await getBouw7Client()
@@ -150,7 +162,7 @@ export async function syncContacts(): Promise<SyncContactsResult> {
     // 3. Pre-fetch bestaande relaties (één DB-query i.p.v. N)
     const { data: dbRelaties, error: selectErr } = await supabase
       .from('relaties')
-      .select('id, bouw7_id, sync_vergrendeld')
+      .select('id, bouw7_id, sync_vergrendeld, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
     if (selectErr) throw new Error(`Schema cache fout bij ophalen relaties: ${selectErr.message}`)
 
@@ -167,6 +179,12 @@ export async function syncContacts(): Promise<SyncContactsResult> {
 
       const orgType = mapContactType(c.type?.name)
       const straat = [c.streetName, c.houseNumber].filter(Boolean).join(' ') || null
+      const hash = fingerprint({
+        naam: c.name ?? null, type: orgType, kvk: c.cocNumber ?? null, btw: c.vatNumber ?? null,
+        em: c.emailAddress ?? null, tel: c.phoneNumber ?? null, mob: c.mobilePhoneNumber ?? null,
+        opm: c.information ?? null, str: straat, pc: c.zipCode ?? null, pl: c.city ?? null,
+        land: c.countryCode ?? 'Nederland', act: c.isActive !== false, iban: c.iban ?? null,
+      })
       relatieRows.push({
         naam:              c.name,
         types:             [orgType],
@@ -182,16 +200,23 @@ export async function syncContacts(): Promise<SyncContactsResult> {
         adres_land:        c.countryCode ?? 'Nederland',
         actief:            c.isActive !== false,
         bouw7_id:          bouw7IdStr,
+        bouw7_sync_hash:   hash,
         bouw7_laatst_sync: new Date().toISOString(),
         bouw7_sync_status: 'synced',
         bouw7_sync_fout:   null,
       })
     }
 
+    // Incrementeel: alleen nieuwe/gewijzigde relaties schrijven (gelijke hash → overslaan).
+    const changedRelatieRows = mode === 'full'
+      ? relatieRows
+      : relatieRows.filter(r => relatieMap.get(r.bouw7_id as string)?.bouw7_sync_hash !== r.bouw7_sync_hash)
+    orgResult.overgeslagen = relatieRows.length - changedRelatieRows.length
+
     // Splits in nieuw en bestaand voor batch-schrijven
     // relaties heeft een partiële unique index op bouw7_id — upsert via primary key voor bestaande
-    const nieuweRelaties = relatieRows.filter(r => !relatieMap.has(r.bouw7_id as string))
-    const bestaandeRelaties = relatieRows
+    const nieuweRelaties = changedRelatieRows.filter(r => !relatieMap.has(r.bouw7_id as string))
+    const bestaandeRelaties = changedRelatieRows
       .filter(r => relatieMap.has(r.bouw7_id as string))
       .map(r => ({ ...r, id: relatieMap.get(r.bouw7_id as string)?.id as string }))
 
@@ -238,7 +263,7 @@ export async function syncContacts(): Promise<SyncContactsResult> {
     // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N)
     const { data: dbCps } = await supabase
       .from('contactpersonen')
-      .select('id, bouw7_id, sync_vergrendeld')
+      .select('id, bouw7_id, sync_vergrendeld, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -265,6 +290,9 @@ export async function syncContacts(): Promise<SyncContactsResult> {
           email:             cp.email ?? null,
           telefoon:          cp.phone ?? null,
           bouw7_id:          cpBouw7Id,
+          bouw7_sync_hash:   fingerprint({
+            v: cp.firstName ?? '', a: cp.lastName ?? '', em: cp.email ?? null, tel: cp.phone ?? null,
+          }),
           bouw7_laatst_sync: new Date().toISOString(),
           bouw7_sync_status: 'synced',
         })
@@ -272,9 +300,15 @@ export async function syncContacts(): Promise<SyncContactsResult> {
       }
     }
 
+    // Incrementeel: alleen nieuwe/gewijzigde contactpersonen schrijven (gelijke hash → overslaan).
+    const changedCpRows = mode === 'full'
+      ? cpRows
+      : cpRows.filter(r => cpMap.get(r.bouw7_id as string)?.bouw7_sync_hash !== r.bouw7_sync_hash)
+    cpResult.overgeslagen = cpRows.length - changedCpRows.length
+
     // Splits in nieuw en bestaand (contactpersonen heeft ook partiële unique index)
-    const nieuweCps = cpRows.filter(r => !cpMap.has(r.bouw7_id as string))
-    const bestaandeCps = cpRows
+    const nieuweCps = changedCpRows.filter(r => !cpMap.has(r.bouw7_id as string))
+    const bestaandeCps = changedCpRows
       .filter(r => cpMap.has(r.bouw7_id as string))
       .map(r => ({ ...r, id: cpMap.get(r.bouw7_id as string)?.id as string }))
 
@@ -361,45 +395,64 @@ function mapContactType(typeName?: string): OrganisatieType {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * SYNC: Employees → Medewerkers
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-export async function syncEmployees(): Promise<SyncResult> {
+export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
-  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
 
   try {
     const bouw7 = await getBouw7Client()
     const employees = await fetchAllPages<Bouw7Employee>(bouw7, '/list/employees')
-    const supabase = createAdminClient()
+    // De gegenereerde types lopen achter op de bouw7_sync_hash-kolom; admin-client als any, net als elders.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
 
-    // Pre-fetch bestaande bouw7_ids voor nieuw/bijgewerkt telling (één query)
+    // Pre-fetch bestaande bouw7_ids + hashes (één query) voor telling en change-detectie.
     const { data: bestaand } = await supabase
       .from('medewerkers')
-      .select('bouw7_id')
+      .select('bouw7_id, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
-    const bestaandIds = new Set(
+    const hashByBouw7Id = new Map<string, string | null>(
       (bestaand ?? [])
-        .map((m: { bouw7_id: string | null }) => m.bouw7_id)
-        .filter((id): id is string => id != null)
+        .filter((m: { bouw7_id: string | null }) => m.bouw7_id != null)
+        .map((m: { bouw7_id: string; bouw7_sync_hash: string | null }) => [m.bouw7_id, m.bouw7_sync_hash])
     )
 
-    const rows = employees.map(e => ({
-      voornaam:            e.firstName ?? '',
-      tussenvoegsel:       e.prefix ?? null,
-      achternaam:          e.lastName ?? '',
-      email:               e.email ?? null,
-      telefoon:            e.phone ?? null,
-      functie:             e.function ?? null,
-      afdeling:            e.department?.name ?? null,
-      actief:              e.isActive !== false,
-      uurtarief_verkoop:   e.hourlyRate ?? null,
-      uurtarief_kostprijs: e.costRate ?? null,
-      bouw7_id:            String(e.id),
-      bouw7_laatst_sync:   new Date().toISOString(),
-      bouw7_sync_status:   'synced',
-      bouw7_sync_fout:     null,
-    }))
+    const allRows = employees.map(e => {
+      const bouw7Id = String(e.id)
+      const hash = fingerprint({
+        v: e.firstName ?? '', tv: e.prefix ?? null, a: e.lastName ?? '',
+        em: e.email ?? null, tel: e.phone ?? null, fn: e.function ?? null,
+        afd: e.department?.name ?? null, act: e.isActive !== false,
+        hr: e.hourlyRate ?? null, cr: e.costRate ?? null,
+      })
+      return {
+        voornaam:            e.firstName ?? '',
+        tussenvoegsel:       e.prefix ?? null,
+        achternaam:          e.lastName ?? '',
+        email:               e.email ?? null,
+        telefoon:            e.phone ?? null,
+        functie:             e.function ?? null,
+        afdeling:            e.department?.name ?? null,
+        actief:              e.isActive !== false,
+        uurtarief_verkoop:   e.hourlyRate ?? null,
+        uurtarief_kostprijs: e.costRate ?? null,
+        bouw7_id:            bouw7Id,
+        bouw7_sync_hash:     hash,
+        bouw7_laatst_sync:   new Date().toISOString(),
+        bouw7_sync_status:   'synced',
+        bouw7_sync_fout:     null,
+      }
+    })
 
-    result.nieuw = rows.filter(r => !bestaandIds.has(r.bouw7_id)).length
-    result.bijgewerkt = rows.filter(r => bestaandIds.has(r.bouw7_id)).length
+    // Incrementeel: alleen nieuwe/gewijzigde rijen schrijven (gelijke hash → overslaan).
+    const rows = mode === 'full'
+      ? allRows
+      : allRows.filter(r => hashByBouw7Id.get(r.bouw7_id) !== r.bouw7_sync_hash)
+
+    result.nieuw = rows.filter(r => !hashByBouw7Id.has(r.bouw7_id)).length
+    result.bijgewerkt = rows.filter(r => hashByBouw7Id.has(r.bouw7_id)).length
+    result.overgeslagen = allRows.length - rows.length
 
     // Batch upsert — medewerkers heeft een volledige unique constraint op bouw7_id
     for (let i = 0; i < rows.length; i += 500) {
@@ -683,9 +736,12 @@ function mapBouw7NaarEvaStatus(
   }
 }
 
-export async function syncProjects(): Promise<SyncResult> {
+export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
+  // Scoped run (ververs één dossier): alleen deze bouw7_ids, geforceerd, en geen soft-delete.
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
   const start = Date.now()
-  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
 
   try {
     const bouw7 = await getBouw7Client()
@@ -712,7 +768,7 @@ export async function syncProjects(): Promise<SyncResult> {
 
     const { data: dossierData } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op')
+      .select('id, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
@@ -730,24 +786,9 @@ export async function syncProjects(): Promise<SyncResult> {
       }
     }
 
-    // Haal Athena project-financial data op voor alle projecten (parallel, batch van 10).
-    // budgetAmount / fixedPrice zit in de Athena API, niet in Heimdall.
-    const financialMap = new Map<string, Bouw7ProjectFinancial>()
-    const ATHENA_BATCH = 10
-    for (let i = 0; i < projects.length; i += ATHENA_BATCH) {
-      const batch = projects.slice(i, i + ATHENA_BATCH)
-      const results = await Promise.allSettled(
-        batch.map(p => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${p.id}`))
-      )
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j]
-        if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
-          financialMap.set(String(batch[j].id), r.value)
-        }
-      }
-    }
-
     // Haal alle offertes op en bouw een map op projectId (meest recente versie per project).
+    // Dit is een goedkope lijst-call en gebeurt vóór de fingerprint-bepaling, want de offerte-velden
+    // bepalen mede of een dossier is gewijzigd.
     let quotationMap = new Map<string, Bouw7Quotation>()
     let quotationLogInfo = 'niet opgehaald'
     try {
@@ -769,11 +810,73 @@ export async function syncProjects(): Promise<SyncResult> {
       quotationLogInfo = `Fout /list/quotations: ${e instanceof Error ? e.message : String(e)}`
     }
 
+    // ── Fingerprint + changed-set ─────────────────────────────────────
+    // Bereken per project een stabiele fingerprint uit de goedkope lijstvelden (project + gematchte
+    // offerte). Is die gelijk aan de opgeslagen `bouw7_sync_hash`, dan is het dossier ongewijzigd en
+    // slaan we de dure Athena-/offerte-detail-calls + upsert over. In `full`-modus doen we alles.
+    const hashMap = new Map<string, string>()
+    const changedIds = new Set<string>()
+    for (const p of projects) {
+      const key = String(p.id)
+      const q = quotationMap.get(key)
+      const fp = fingerprint({
+        pn:        p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
+        name:      p.name ?? null,
+        contact:   p.contact?.id ?? null,
+        pl:        p.projectLeader?.id ?? null,
+        wp:        p.workPlanner?.id ?? null,
+        ex:        p.executor?.id ?? null,
+        cp:        p.contactPerson?.id ?? null,
+        start:     p.startDate ?? null,
+        end:       p.endDate ?? null,
+        street:    p.streetName ?? null,
+        hnr:       p.houseNumber ?? null,
+        zip:       p.zipCode ?? null,
+        city:      p.city ?? null,
+        notes:     p.notes ?? null,
+        ref:       p.reference ?? null,
+        statusId:  p.status?.id ?? null,
+        statusNm:  p.status?.name ?? null,
+        catId:     p.category?.id ?? null,
+        catNm:     p.category?.name ?? null,
+        price:     p.fixedPrice ?? null,
+        q:         q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
+      })
+      hashMap.set(key, fp)
+      const existing = dossierMap.get(key)
+      if (scoped) {
+        if (scoped.has(key)) changedIds.add(key) // geforceerd, ongeacht hash
+      } else if (mode === 'full' || !existing || existing.bouw7_sync_hash !== fp) {
+        changedIds.add(key)
+      }
+    }
+    const changedProjects = projects.filter(p => changedIds.has(String(p.id)))
+    result.overgeslagen = scoped ? 0 : projects.length - changedProjects.length
+
+    // Haal Athena project-financial data op — alléén voor changed/new projecten (parallel, batch van 10).
+    // budgetAmount / fixedPrice zit in de Athena API, niet in Heimdall.
+    const financialMap = new Map<string, Bouw7ProjectFinancial>()
+    const ATHENA_BATCH = 10
+    for (let i = 0; i < changedProjects.length; i += ATHENA_BATCH) {
+      const batch = changedProjects.slice(i, i + ATHENA_BATCH)
+      const results = await Promise.allSettled(
+        batch.map(p => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${p.id}`))
+      )
+      for (let j = 0; j < batch.length; j++) {
+        const r = results[j]
+        if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
+          financialMap.set(String(batch[j].id), r.value)
+        }
+      }
+    }
+
     // Offerte-details per project: kostprijs (calculationTotal), regelsom en BTW-splitsing
-    // uit het detail-endpoint /quotation/{id}.
+    // uit het detail-endpoint /quotation/{id}. Alléén voor changed/new projecten met een offerte.
     const quoteDetailMap = new Map<string, QuoteCijfers>()
     {
-      const entries = [...quotationMap.entries()]
+      const entries = changedProjects
+        .map(p => [String(p.id), quotationMap.get(String(p.id))] as const)
+        .filter((e): e is readonly [string, Bouw7Quotation] => e[1] != null)
       const QUOTE_BATCH = 10
       for (let i = 0; i < entries.length; i += QUOTE_BATCH) {
         const batch = entries.slice(i, i + QUOTE_BATCH)
@@ -790,8 +893,8 @@ export async function syncProjects(): Promise<SyncResult> {
     // Log quotation-diagnose apart zodat fouten zichtbaar zijn in sync_log
     await supabase.from('sync_log').insert({
       integratie: 'bouw7', entiteit: 'quotations', richting: 'in',
-      aantal_nieuw: 0, aantal_bijgewerkt: quotationMap.size, aantal_fout: quotationLogInfo.startsWith('Fout') ? 1 : 0,
-      duur_ms: 0, fout_melding: quotationLogInfo,
+      aantal_nieuw: 0, aantal_bijgewerkt: quoteDetailMap.size, aantal_fout: quotationLogInfo.startsWith('Fout') ? 1 : 0,
+      duur_ms: 0, fout_melding: `${quotationLogInfo} (${mode}, ${changedProjects.length} changed)`,
     })
 
     // ── Medewerker-stubs ──────────────────────────────────────────────
@@ -814,7 +917,7 @@ export async function syncProjects(): Promise<SyncResult> {
         bouw7_sync_status: 'synced',
       })
     }
-    for (const p of projects) {
+    for (const p of changedProjects) {
       noteMed(p.projectLeader)
       noteMed(p.workPlanner)
       noteMed(p.executor)
@@ -847,7 +950,7 @@ export async function syncProjects(): Promise<SyncResult> {
     )
 
     const cpStubs = new Map<string, { row: Record<string, unknown>; orgBouw7Id: string | null }>()
-    for (const p of projects) {
+    for (const p of changedProjects) {
       const cp = p.contactPerson
       if (!cp?.id) continue
       const key = String(cp.id)
@@ -897,7 +1000,7 @@ export async function syncProjects(): Promise<SyncResult> {
     const bouw7IdsInResponse = new Set(projects.map(p => String(p.id)))
     const rows: Record<string, unknown>[] = []
 
-    for (const p of projects) {
+    for (const p of changedProjects) {
       const bouw7IdStr = String(p.id)
       const existing = dossierMap.get(bouw7IdStr)
 
@@ -977,6 +1080,7 @@ export async function syncProjects(): Promise<SyncResult> {
         bouw7_categorie_naam:     p.category?.name ?? null,
         categorie:                p.category?.name ?? null,
         bouw7_id:                 bouw7IdStr,
+        bouw7_sync_hash:          hashMap.get(bouw7IdStr) ?? null,
         bouw7_laatst_sync:        new Date().toISOString(),
         bouw7_sync_status:        'synced',
         bouw7_sync_fout:          null,
@@ -995,8 +1099,9 @@ export async function syncProjects(): Promise<SyncResult> {
       if (error) { result.fouten++; result.foutMelding = error.message }
     }
 
-    // Zachte delete: dossiers die niet meer in Bouw7 staan markeren
-    const toDeactivate = (dossierData ?? [])
+    // Zachte delete: dossiers die niet meer in Bouw7 staan markeren.
+    // Overslaan bij een scoped run (ververs één dossier) — we keken dan niet naar de hele set.
+    const toDeactivate = scoped ? [] : (dossierData ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((d: any) => !bouw7IdsInResponse.has(d.bouw7_id))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -385,6 +385,7 @@ export interface WerkbegrotingComponent {
   offertenummer?: string     // specificatie bij onderaanneming
   artikelnummer?: string     // specificatie bij materieel
   uurtype?: string           // specificatie bij arbeid (bijv. 'Gezel', 'Leerling')
+  bouw7_line_id?: number     // Bouw7 contract-order-line id (dedup bij re-import uit Bouw7)
   is_verwijderd?: boolean
 }
 

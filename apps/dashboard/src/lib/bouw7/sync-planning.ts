@@ -1,7 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { getBouw7Client, logSync, type SyncResult } from './sync'
+import { getBouw7Client, logSync, type SyncResult, type SyncMode } from './sync'
+import { fingerprint } from './fingerprint'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -73,23 +74,50 @@ function faseKeyVan(pi: Bouw7PlanItem): string {
  * planning_items (per medewerker).
  * Rijen met bron='bouw7' worden volledig herbouwd; bron='eva'-rijen blijven ongemoeid.
  */
-export async function syncDossierPlanning(dossierId: string): Promise<SyncResult> {
+export async function syncDossierPlanning(
+  dossierId: string,
+  opts?: { mode?: SyncMode; client?: Bouw7Client; planItems?: Bouw7PlanItem[]; silent?: boolean },
+): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
-  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
   const supabase = db()
 
   try {
     const { data: dossier } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id')
+      .select('id, bouw7_id, bouw7_planning_hash')
       .eq('id', dossierId)
       .single()
 
     const bouw7Id = dossier?.bouw7_id
     if (!bouw7Id) return result // dossier zonder Bouw7-koppeling → niets te syncen
 
-    const client = await getBouw7Client()
-    const planItems = await fetchPlanItems(String(bouw7Id), client)
+    const client = opts?.client ?? (await getBouw7Client())
+    const planItems = opts?.planItems ?? (await fetchPlanItems(String(bouw7Id), client))
+
+    // Planning-fingerprint uit de goedkope Apollo-lijst (id/updatedAt/uren/datums/naam/chapter/remark).
+    // Is die gelijk aan de opgeslagen hash → de dure /plan-item/{id} detail-calls + rebuild overslaan.
+    const planningHash = fingerprint(
+      planItems
+        .map(pi => ({
+          id:  pi.id,
+          upd: pi.updatedAt ?? null,
+          h:   pi.hours ?? null,
+          s:   pi.startDate ?? null,
+          e:   pi.endDate ?? null,
+          nm:  pi.name ?? null,
+          ch:  pi.securityPlanningLink?.securityCode?.chapter?.id ?? null,
+          rm:  pi.remark ?? null,
+          dep: pi.department?.name ?? null,
+        }))
+        .sort((a, b) => a.id - b.id),
+    )
+    if (mode !== 'full' && dossier.bouw7_planning_hash === planningHash) {
+      result.overgeslagen = 1
+      return result
+    }
+
     // De toegewezen medewerkers staan alleen in het detail-endpoint, niet in de search-response.
     const detailMap = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
     const nu = new Date().toISOString()
@@ -228,13 +256,18 @@ export async function syncDossierPlanning(dossierId: string): Promise<SyncResult
       }
     }
 
+    // Sla de nieuwe planning-fingerprint op zodat een volgende incrementele sync dit dossier overslaat.
+    await supabase.from('dossiers').update({ bouw7_planning_hash: planningHash }).eq('id', dossierId)
+
     return result
   } catch (e: unknown) {
     result.fouten++
     result.foutMelding = e instanceof Error ? e.message : 'Planning-sync mislukt'
     return result
   } finally {
-    await logSync('planning', 'in', result, Date.now() - start)
+    // Bij bulk-sync (syncAllPlanning) logt de aanroeper een samenvatting; per-dossier loggen zou de
+    // sync_log overspoelen. Een losse aanroep (ververs-knop) logt wél.
+    if (!opts?.silent) await logSync('planning', 'in', result, Date.now() - start)
   }
 }
 
@@ -297,22 +330,31 @@ async function resolveMedewerkers(
  * Synchroniseer de planning van alle dossiers met een Bouw7-koppeling.
  * Bedoeld om mee te liften op de volledige sync (runFullSync).
  */
-export async function syncAllPlanning(): Promise<SyncResult> {
+export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
-  const totaal: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const totaal: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
   const supabase = db()
 
   try {
+    // Scope: planning bestaat in Bouw7 alleen voor dossiers in uitvoering. Aanvraag/offerte-dossiers
+    // hebben geen plan-items, dus die slaan we volledig over (geen Apollo-call). Binnen de scope zorgt
+    // de planning-hash dat ongewijzigde dossiers de dure detail-calls overslaan.
     const { data: dossiers } = await supabase
       .from('dossiers')
       .select('id')
       .not('bouw7_id', 'is', null)
+      .in('hoofdstatus', ['opdracht', 'servicedesk'])
+
+    // Eén gedeelde client → niet per dossier opnieuw inloggen bij Bouw7.
+    const client = await getBouw7Client()
 
     for (const d of (dossiers ?? []) as { id: string }[]) {
-      const r = await syncDossierPlanning(d.id)
+      const r = await syncDossierPlanning(d.id, { mode, client, silent: true })
       totaal.nieuw += r.nieuw
       totaal.bijgewerkt += r.bijgewerkt
       totaal.fouten += r.fouten
+      totaal.overgeslagen = (totaal.overgeslagen ?? 0) + (r.overgeslagen ?? 0)
     }
     return totaal
   } catch (e: unknown) {
@@ -320,7 +362,7 @@ export async function syncAllPlanning(): Promise<SyncResult> {
     totaal.foutMelding = e instanceof Error ? e.message : 'Planning-bulk-sync mislukt'
     return totaal
   } finally {
-    // Per-dossier sync logt al; hier een samenvattende regel.
+    // Per-dossier sync is stil; hier één samenvattende regel.
     await logSync('planning', 'in', totaal, Date.now() - start)
   }
 }

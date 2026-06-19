@@ -206,7 +206,7 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
     .is('parent_task_id', null)
     .neq('status', 'gereed')
     .neq('status', 'vervallen')
-    .order('deadline', { ascending: true, nullsFirst: false })
+    .order('deadline', { ascending: false, nullsFirst: false })
 
   if (error) throw new Error(`Fout bij ophalen mijn taken: ${error.message}`)
 
@@ -493,10 +493,12 @@ export async function getUrgenteTakenVoorDossier(dossier_id: string): Promise<Ur
 
   const { data: taken } = await supabase
     .from('tasks')
-    .select('id, titel, deadline, prioriteit, status, task_assignees(user_id)')
+    .select('id, titel, deadline, prioriteit, status, volgorde, task_assignees(user_id)')
     .or(orFilters.join(','))
     .not('status', 'in', '("gereed","vervallen")')
-    .order('deadline', { ascending: true, nullsFirst: false })
+    // Eerst op aflopende deadline, daarna op de volgorde van het actielijst-sjabloon.
+    .order('deadline', { ascending: false, nullsFirst: false })
+    .order('volgorde', { ascending: true })
     .limit(10)
 
   if (!taken?.length) return []
