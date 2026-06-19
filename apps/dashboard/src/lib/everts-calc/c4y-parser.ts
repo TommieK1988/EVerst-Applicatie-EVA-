@@ -26,8 +26,8 @@
  * Per DETAILregel zijn de kostenpotjes prijzen PER EENHEID; op POST/HOOFDSTUK-regels
  * zijn het TOTALEN (worden door de hoeveelheid gedeeld om de eenheidsprijs te krijgen).
  *   <arb> = uren        → arbeid    (tarief = <uurloon>, val. alginfo <ul>)
- *   <maa> = materiaal   → materieel (oms. "Materiaal")
- *   <mee> = materieel   → materieel (oms. "Materieel")
+ *   <maa> = materiaal   → materieel-component (in EVA getoond als "Materiaal")
+ *   <mee> = materieel   → materieel-component (ook als "Materiaal" — geen apart type)
  *   <ond> = onderaann.  → onderaanneming
  *
  * Gebruikt DOMParser — alleen client-side uitvoeren (browser).
@@ -283,7 +283,7 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
     })
     if (meeEh > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'materieel', norm_hoeveelheid: 1, tarief: meeEh, omschrijving: 'Materieel',
+      type: 'materieel', norm_hoeveelheid: 1, tarief: meeEh, omschrijving: 'Materiaal',
     })
     if (ondEh > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
