@@ -32,6 +32,8 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
     hierarchie, plPivot, doelstellingen,
     jaarresultaatData, plResultaatData, opdrachtgevers, categorieData, kostensoortData,
   } = kpi
+  const ohwPerFiliaal = kpi.ohwPerFiliaal ?? []
+  const ohwTotaal     = kpi.ohwTotaal ?? { omzet: 0, resultaat: 0 }
 
   return (
     <div className="flex flex-col gap-4 pb-6">
@@ -81,7 +83,8 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
         <Card>
           <CardHeader>Overzicht per werkmaatschappij</CardHeader>
           <CardBody className="p-0">
-            <PivotTabel hierarchie={hierarchie} doelstellingen={doelstellingen} />
+            <PivotTabel hierarchie={hierarchie} doelstellingen={doelstellingen}
+              ohwPerFiliaal={ohwPerFiliaal} ohwTotaal={ohwTotaal} />
           </CardBody>
         </Card>
 
@@ -185,9 +188,11 @@ function dekkingCel(agg: PivotAgg) {
   )
 }
 
-function PivotTabel({ hierarchie, doelstellingen }: {
+function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
   hierarchie: FilGroep[]
   doelstellingen: ManagementDoelstelling[]
+  ohwPerFiliaal: { filiaal: string; omzet: number; resultaat: number }[]
+  ohwTotaal: { omzet: number; resultaat: number }
 }) {
   const eindtotaal = hierarchie.reduce((acc, g) => optellen(acc, g.totaal), leegAgg())
   const heeftDoel  = doelstellingen.some(d => d.filiaal && !d.projectleider)
@@ -268,6 +273,38 @@ function PivotTabel({ hierarchie, doelstellingen }: {
             <td className={cn(pvTd, 'text-right text-success-700')}>{fEur(eindtotaal.resultaatGerealiseerd || null)}</td>
             <td className={cn(pvTd, 'text-right')}>{dekkingCel(eindtotaal)}</td>
           </tr>
+
+          {ohwPerFiliaal.length > 0 && (
+            <>
+              <tr className="border-t-2 border-neutral-300">
+                <td colSpan={8} className={cn(pvTd, 'text-[11px] italic text-neutral-500')}>
+                  Waarvan toegewezen aan vorig boekjaar (OHW — al in mindering op Gerealiseerd)
+                </td>
+              </tr>
+              {ohwPerFiliaal.map(o => (
+                <tr key={`ohw-${o.filiaal}`} className="bg-neutral-50/60">
+                  <td className={cn(pvTd, 'pl-6 text-neutral-600')}>{kortFiliaal(o.filiaal)}</td>
+                  <td className={cn(pvTd, 'text-right')} />
+                  <td className={cn(pvTd, 'text-right')} />
+                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
+                  <td className={cn(pvTd, 'text-right')} />
+                  <td className={cn(pvTd, 'text-right')} />
+                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.resultaat ? `−${fEur(o.resultaat)}` : '—'}</td>
+                  <td className={cn(pvTd, 'text-right')} />
+                </tr>
+              ))}
+              <tr className="bg-neutral-100/70 font-semibold border-t border-neutral-200">
+                <td className={cn(pvTd, 'text-neutral-700')}>OHW-totaal</td>
+                <td className={cn(pvTd, 'text-right')} />
+                <td className={cn(pvTd, 'text-right')} />
+                <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
+                <td className={cn(pvTd, 'text-right')} />
+                <td className={cn(pvTd, 'text-right')} />
+                <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.resultaat ? `−${fEur(ohwTotaal.resultaat)}` : '—'}</td>
+                <td className={cn(pvTd, 'text-right')} />
+              </tr>
+            </>
+          )}
         </tbody>
       </table>
 

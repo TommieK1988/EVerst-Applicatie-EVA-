@@ -312,6 +312,10 @@ export type ManagementKpi = {
   opdrachtgevers: { naam: string; omzet: number; resultaat: number; marge: number }[]
   categorieData: { name: string; value: number }[]
   kostensoortData: { name: string; value: number }[]
+  /** OHW-correctie per werkmaatschappij: bedragen toegewezen aan het vórige
+   *  boekjaar (al in mindering gebracht op de Gerealiseerd-cijfers). */
+  ohwPerFiliaal: { filiaal: string; omzet: number; resultaat: number }[]
+  ohwTotaal: { omzet: number; resultaat: number }
   /** Relevante doelstellingen (meegekopieerd zodat pivot-tabellen ook uit een snapshot werken). */
   doelstellingen: ManagementDoelstelling[]
 }
@@ -402,6 +406,24 @@ export function berekenManagementKpi(
     .map(([k, v]) => ({ name: ksLabels[k] ?? k, value: Math.round(v) }))
     .sort((a, b) => b.value - a.value)
 
+  // OHW-correctie per werkmaatschappij (toegewezen aan vorig boekjaar).
+  const ohwMap = new Map<string, { omzet: number; resultaat: number }>()
+  for (const p of dash) {
+    const o = p.ohw_omzet ?? 0, r = p.ohw_resultaat ?? 0
+    if (!o && !r) continue
+    const fil = p.filiaal ?? 'Overig'
+    const cur = ohwMap.get(fil) ?? { omzet: 0, resultaat: 0 }
+    cur.omzet += o; cur.resultaat += r
+    ohwMap.set(fil, cur)
+  }
+  const ohwPerFiliaal = [...ohwMap.entries()]
+    .map(([filiaal, v]) => ({ filiaal, ...v }))
+    .sort((a, b) => a.filiaal.localeCompare(b.filiaal))
+  const ohwTotaal = ohwPerFiliaal.reduce(
+    (s, f) => ({ omzet: s.omzet + f.omzet, resultaat: s.resultaat + f.resultaat }),
+    { omzet: 0, resultaat: 0 },
+  )
+
   return {
     totaalProjecten: dash.length,
     aantalLopend: dash.filter(p => !p.is_gereed).length,
@@ -418,6 +440,8 @@ export function berekenManagementKpi(
     opdrachtgevers,
     categorieData,
     kostensoortData,
+    ohwPerFiliaal,
+    ohwTotaal,
     doelstellingen,
   }
 }
