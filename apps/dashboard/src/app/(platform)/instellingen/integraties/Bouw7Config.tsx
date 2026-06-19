@@ -113,23 +113,36 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
           <CardBody>
           <p className="eva-section-label">Synchronisatie</p>
           <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)', marginBottom: 14 }}>
-            Importeer relaties, medewerkers en projecten uit Bouw7 naar het platform.
+            Importeer relaties, medewerkers en projecten uit Bouw7 naar het platform. Een incrementele
+            sync werkt alleen gewijzigde records bij (snel); een volledige sync haalt alles opnieuw op.
           </p>
 
-          <Button type="button" loading={syncing}
-            onClick={async () => {
-              setSyncing(true)
-              setSyncResult(null)
-              try { setSyncResult(await runFullSync()) }
-              finally { setSyncing(false) }
-            }}>
-            {!syncing && (
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 10a7 7 0 0 1 12-5l2 2M17 10a7 7 0 0 1-12 5l-2-2M15 3v4h-4M5 17v-4h4"/>
-              </svg>
-            )}
-            {syncing ? 'Synchroniseren…' : 'Volledige sync starten'}
-          </Button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Button type="button" loading={syncing}
+              onClick={async () => {
+                setSyncing(true)
+                setSyncResult(null)
+                try { setSyncResult(await runFullSync('incremental')) }
+                finally { setSyncing(false) }
+              }}>
+              {!syncing && (
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 10a7 7 0 0 1 12-5l2 2M17 10a7 7 0 0 1-12 5l-2-2M15 3v4h-4M5 17v-4h4"/>
+                </svg>
+              )}
+              {syncing ? 'Synchroniseren…' : 'Sync starten'}
+            </Button>
+
+            <Button type="button" variant="ghost" disabled={syncing}
+              onClick={async () => {
+                setSyncing(true)
+                setSyncResult(null)
+                try { setSyncResult(await runFullSync('full')) }
+                finally { setSyncing(false) }
+              }}>
+              Volledige sync
+            </Button>
+          </div>
 
           {syncResult && !syncResult.ok && (
             <div style={{ marginTop: 12, padding: '12px 14px', background: 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))', border: '1px solid color-mix(in srgb, #dc2626 20%, transparent)', borderRadius: 8 }}>
@@ -140,9 +153,10 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
           {syncResult?.ok && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 14 }}>
               <SyncCard label="Relaties"     result={{
-                nieuw:      syncResult.contacts.organisaties.nieuw      + syncResult.contacts.contactpersonen.nieuw,
-                bijgewerkt: syncResult.contacts.organisaties.bijgewerkt + syncResult.contacts.contactpersonen.bijgewerkt,
-                fouten:     syncResult.contacts.organisaties.fouten     + syncResult.contacts.contactpersonen.fouten,
+                nieuw:       syncResult.contacts.organisaties.nieuw      + syncResult.contacts.contactpersonen.nieuw,
+                bijgewerkt:  syncResult.contacts.organisaties.bijgewerkt + syncResult.contacts.contactpersonen.bijgewerkt,
+                fouten:      syncResult.contacts.organisaties.fouten     + syncResult.contacts.contactpersonen.fouten,
+                overgeslagen:(syncResult.contacts.organisaties.overgeslagen ?? 0) + (syncResult.contacts.contactpersonen.overgeslagen ?? 0),
               }} />
               <SyncCard label="Medewerkers"  result={syncResult.employees} />
               <SyncCard label="Projecten"    result={syncResult.projects}  />
@@ -299,7 +313,7 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
 
 function SyncCard({ label, result }: {
   label: string
-  result: { nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }
+  result: { nieuw: number; bijgewerkt: number; fouten: number; overgeslagen?: number; foutMelding?: string }
 }) {
   const hasErrors = result.fouten > 0
   return (
@@ -313,6 +327,9 @@ function SyncCard({ label, result }: {
       <div style={{ display: 'flex', gap: 10, fontFamily: 'var(--font-ui)', fontSize: 12 }}>
         <span style={{ color: 'var(--accent)', fontWeight: 600 }}>+{result.nieuw} nieuw</span>
         <span style={{ color: 'var(--fg-muted)' }}>{result.bijgewerkt} bijgewerkt</span>
+        {result.overgeslagen != null && result.overgeslagen > 0 && (
+          <span style={{ color: 'var(--fg-muted)' }}>{result.overgeslagen} overgeslagen</span>
+        )}
         {hasErrors && <span style={{ color: '#dc2626' }}>{result.fouten} fouten</span>}
       </div>
       {result.foutMelding && (

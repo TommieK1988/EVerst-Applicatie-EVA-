@@ -13,6 +13,7 @@ import { updateDossierSubstatus, updateDossierRollen, updateDossierInfo, getCont
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
+import { DossierVerversKnop } from '../DossierVerversKnop'
 import {
   getScenarios, getGroepen,
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
@@ -800,6 +801,7 @@ export function InformatieTab({
                 </svg>
               </a>
             )}
+            {bouw7Vergrendeld && <DossierVerversKnop dossierId={dossier.id} />}
           </div>
           <h1 className="m-0 text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-neutral-900">
             {dossier.titel}

@@ -2,8 +2,8 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { syncContacts, syncEmployees, syncProjects, type SyncResult, type SyncContactsResult } from '@/lib/bouw7/sync'
-import { syncAllPlanning } from '@/lib/bouw7/sync-planning'
+import { syncContacts, syncEmployees, syncProjects, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
+import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 
 type Integratie = {
   id: string
@@ -96,14 +96,15 @@ export type RunSyncResult =
   | { ok: true; contacts: SyncContactsResult; employees: SyncResult; projects: SyncResult; planning: SyncResult }
   | { ok: false; error: string }
 
-export async function runFullSync(): Promise<RunSyncResult> {
+export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
   try {
     // Sync in volgorde: contacts → employees → projects → planning
     // (projects en planning hebben FK refs naar medewerkers/dossiers).
-    const contacts = await syncContacts()
-    const employees = await syncEmployees()
-    const projects = await syncProjects()
-    const planning = await syncAllPlanning()
+    // `incremental` (default): alleen gewijzigde records doen detail-calls + writes.
+    const contacts = await syncContacts({ mode })
+    const employees = await syncEmployees({ mode })
+    const projects = await syncProjects({ mode })
+    const planning = await syncAllPlanning({ mode })
 
     const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + projects.nieuw + planning.nieuw
     const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt
@@ -121,6 +122,37 @@ export async function runFullSync(): Promise<RunSyncResult> {
     return { ok: true, contacts, employees, projects, planning }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
+  }
+}
+
+export type SyncEnkelDossierResult =
+  | { ok: true; projects: SyncResult; planning: SyncResult }
+  | { ok: false; error: string }
+
+/**
+ * Ververs één dossier direct vanuit Bouw7 (knop op de dossierpagina). Forceert de sync van precies
+ * dit dossier — dossiervelden + financiën + offerte én de planning — zonder de hele set over te halen.
+ * Hergebruikt syncProjects (scoped op dit ene bouw7_id) en syncDossierPlanning (mode 'full').
+ */
+export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDossierResult> {
+  try {
+    const supabase = createAdminClient()
+    const { data: dossier } = await supabase
+      .from('dossiers')
+      .select('bouw7_id')
+      .eq('id', dossierId)
+      .maybeSingle()
+
+    const bouw7Id = (dossier as { bouw7_id: string | null } | null)?.bouw7_id
+    if (!bouw7Id) return { ok: false, error: 'Dit dossier heeft geen Bouw7-koppeling.' }
+
+    const projects = await syncProjects({ onlyBouw7Ids: [String(bouw7Id)] })
+    const planning = await syncDossierPlanning(dossierId, { mode: 'full' })
+
+    revalidatePath(`/dossiers/${dossierId}`)
+    return { ok: true, projects, planning }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Verversen mislukt' }
   }
 }
 

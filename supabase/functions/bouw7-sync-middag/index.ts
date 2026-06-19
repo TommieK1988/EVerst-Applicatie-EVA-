@@ -22,8 +22,9 @@ Deno.serve(async (_req) => {
     })
   }
 
-  const url = `${appUrl}/api/cron/bouw7-sync`
-  console.log('[bouw7-sync-middag] Start sync via', url)
+  // Middagrun = incrementeel (alleen gewijzigde records → snel).
+  const url = `${appUrl}/api/cron/bouw7-sync?mode=incremental`
+  console.log('[bouw7-sync-middag] Start incrementele sync via', url)
 
   try {
     const res = await fetch(url, {
