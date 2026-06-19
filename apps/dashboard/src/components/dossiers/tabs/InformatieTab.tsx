@@ -24,7 +24,6 @@ import type { Groep } from '@/lib/everts-calc/types'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
-import { DossierVerversKnop } from '../DossierVerversKnop'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
@@ -801,7 +800,6 @@ export function InformatieTab({
                 </svg>
               </a>
             )}
-            {bouw7Vergrendeld && <DossierVerversKnop dossierId={dossier.id} />}
           </div>
           <h1 className="m-0 text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-neutral-900">
             {dossier.titel}
