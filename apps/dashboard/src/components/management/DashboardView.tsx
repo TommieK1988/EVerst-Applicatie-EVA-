@@ -8,7 +8,7 @@ import {
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatCard } from '@/components/ui/stat-card'
-import { ChartCard, CHART_COLORS, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, chartColor } from '@/components/ui/chart'
+import { ChartCard, CHART_COLORS, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, categoricalColor } from '@/components/ui/chart'
 import { Briefcase, TrendingUp, BarChart3 } from 'lucide-react'
 import { cn } from '@everts/ui'
 import {
@@ -20,7 +20,6 @@ import {
 
 const C_GROEN  = CHART_COLORS[0]  // #009439
 const C_BLAUW  = CHART_COLORS[3]  // #2e90fa
-const C_ORANJE = CHART_COLORS[4]  // #f08000
 
 /* ── Dashboard View (live én snapshot) ───────────────────────────── */
 
@@ -30,7 +29,7 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
     totaalResultaatGerealiseerd, totaalResultaatOpdracht,
     akDekkingGerealiseerd, akDekkingOpdracht,
     hierarchie, plPivot, doelstellingen,
-    jaarresultaatData, plResultaatData, opdrachtgevers, categorieData, kostensoortData,
+    jaarresultaatData, opdrachtgevers, categorieData, kostensoortData,
   } = kpi
   const ohwPerFiliaal = kpi.ohwPerFiliaal ?? []
   const ohwTotaal     = kpi.ohwTotaal ?? { omzet: 0, resultaat: 0 }
@@ -88,15 +87,15 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
           </CardBody>
         </Card>
 
-        <ChartCard title="Jaarresultaat (×€1.000)">
+        <ChartCard title="Jaarresultaat (% van doelstelling)">
           <div className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={jaarresultaatData} barCategoryGap="30%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e9eb" vertical={false} />
                 <XAxis dataKey="name" {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} />
                 <YAxis {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} width={48}
-                  tickFormatter={v => v === 0 ? '0' : `${v}K`} />
-                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                  domain={[0, 100]} tickFormatter={v => `${v}%`} />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(v) => `${v}%`} />
                 <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="Realisatie"       stackId="r" fill={C_GROEN} />
                 <Bar dataKey="In opdracht"      stackId="r" fill={C_BLAUW} />
@@ -107,38 +106,13 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
         </ChartCard>
       </div>
 
-      {/* Per projectleider: pivot + resultaatgrafiek */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 360px' }}>
-        <Card>
-          <CardHeader>Overzicht per projectleider</CardHeader>
-          <CardBody className="p-0">
-            <PivotTabelPL plPivot={plPivot} doelstellingen={doelstellingen} />
-          </CardBody>
-        </Card>
-
-        <ChartCard title="Resultaat per projectleider (×€1.000)">
-          {plResultaatData.length > 0 ? (
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={plResultaatData} barGap={4} barCategoryGap="30%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e9eb" vertical={false} />
-                  <XAxis dataKey="name" {...CHART_AXIS_PROPS} axisLine={false} tickLine={false}
-                    interval={0} angle={-30} textAnchor="end" height={56} />
-                  <YAxis {...CHART_AXIS_PROPS} axisLine={false} tickLine={false} width={48}
-                    tickFormatter={v => v === 0 ? '0' : `${v}K`} />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Gerealiseerd" fill={C_GROEN}  radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="In opdracht"  fill={C_BLAUW}  radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Doelstelling" fill={C_ORANJE} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <EmptyState title="Geen projectleidergegevens" tone="neutral" size="sm" />
-          )}
-        </ChartCard>
-      </div>
+      {/* Overzicht per projectleider */}
+      <Card>
+        <CardHeader>Overzicht per projectleider</CardHeader>
+        <CardBody className="p-0">
+          <PivotTabelPL plPivot={plPivot} doelstellingen={doelstellingen} />
+        </CardBody>
+      </Card>
 
       {/* Top opdrachtgevers */}
       <Card>
@@ -461,7 +435,7 @@ function CategorieChart({ data }: { data: { name: string; value: number }[] }) {
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-              {data.map((_, i) => <Cell key={i} fill={chartColor(i)} />)}
+              {data.map((_, i) => <Cell key={i} fill={categoricalColor(i)} />)}
             </Pie>
             <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
           </PieChart>
@@ -470,7 +444,7 @@ function CategorieChart({ data }: { data: { name: string; value: number }[] }) {
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
         {data.slice(0, 8).map((d, i) => (
           <div key={d.name} className="flex items-center gap-1.5 text-[11px]">
-            <span className="h-2 w-2 rounded-sm flex-shrink-0" style={{ background: chartColor(i) }} />
+            <span className="h-2 w-2 rounded-sm flex-shrink-0" style={{ background: categoricalColor(i) }} />
             <span className="text-neutral-500">{d.name}</span>
             <span className="font-semibold text-neutral-900">
               {totaal > 0 ? `${((d.value / totaal) * 100).toFixed(0)}%` : '—'}

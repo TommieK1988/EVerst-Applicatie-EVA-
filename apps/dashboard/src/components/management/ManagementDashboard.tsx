@@ -76,45 +76,51 @@ export default function ManagementDashboard({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', gap: 20 }}>
 
-      {/* ── Actiebalk ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 16, flexShrink: 0, gap: 12,
+      {/* ── Sidebar: navigatie ── */}
+      <nav style={{
+        display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0,
+        width: 190, paddingRight: 20, borderRight: '1px solid var(--neutral-200)',
       }}>
-        {/* Filter-tabs (DS-patroon: pill-stijl) */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {([
-            { key: 'dashboard',   label: 'Dashboard' },
-            { key: 'lopend',      label: `Lopende Werken (${lopend.length})` },
-            { key: 'gereed',      label: `Gereed Werken (${gereed.length})` },
-            { key: 'servicedesk', label: `Servicedesk (${servicedesk.length})` },
-            { key: 'funnel',      label: 'Verkoop' },
-            { key: 'calculators', label: 'Calculators' },
-            { key: 'historie',    label: `Historie${snapshots.length ? ` (${snapshots.length})` : ''}` },
-          ] as const).map(({ key, label }) => {
-            const actief = view === key
-            return (
-              <button
-                key={key}
-                onClick={() => setView(key)}
-                style={{
-                  height: 30, padding: '0 14px', borderRadius: 6, border: '1px solid',
-                  borderColor: actief ? 'var(--brand-300)' : 'var(--neutral-200)',
-                  background:  actief ? 'var(--brand-50)'  : 'white',
-                  color:       actief ? 'var(--brand-700)' : 'var(--neutral-600)',
-                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 120ms',
-                }}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        {([
+          { key: 'dashboard',   label: 'Dashboard' },
+          { key: 'lopend',      label: `Lopende Werken (${lopend.length})` },
+          { key: 'gereed',      label: `Gereed Werken (${gereed.length})` },
+          { key: 'servicedesk', label: `Servicedesk (${servicedesk.length})` },
+          { key: 'funnel',      label: 'Verkoop' },
+          { key: 'calculators', label: 'Calculators' },
+          { key: 'historie',    label: `Historie${snapshots.length ? ` (${snapshots.length})` : ''}` },
+        ] as const).map(({ key, label }) => {
+          const actief = view === key
+          return (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              style={{
+                width: '100%', height: 34, padding: '0 12px', borderRadius: 6,
+                border: '1px solid',
+                textAlign: 'left',
+                borderColor: actief ? 'var(--brand-300)' : 'transparent',
+                background:  actief ? 'var(--brand-50)'  : 'transparent',
+                color:       actief ? 'var(--brand-700)' : 'var(--neutral-600)',
+                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 120ms',
+              }}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </nav>
 
-        {/* Acties */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      {/* ── Content-kolom ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+
+        {/* Actiebalk */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          marginBottom: 16, flexShrink: 0, gap: 8,
+        }}>
           <span style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
             Sync: {fDatum(laatstGesynchroniseerd)}
           </span>
@@ -126,36 +132,40 @@ export default function ManagementDashboard({
               {syncResult}
             </span>
           )}
-          <Button variant="outline" size="md" onClick={() => setModalOpen(true)}>
-            <CalendarCheck className="h-4 w-4 mr-1" /> Maandcijfers vaststellen
-          </Button>
-          <Button asChild variant="outline" size="md">
-            <Link href="/management/instellingen">Instellingen</Link>
-          </Button>
+          {view === 'dashboard' && (
+            <>
+              <Button variant="outline" size="md" onClick={() => setModalOpen(true)}>
+                <CalendarCheck className="h-4 w-4 mr-1" /> Maandcijfers vaststellen
+              </Button>
+              <Button asChild variant="outline" size="md">
+                <Link href="/management/instellingen">Instellingen</Link>
+              </Button>
+            </>
+          )}
           <Button variant="primary" size="md" loading={isPending} onClick={handleSync}>
             {isPending ? 'Synchroniseren…' : 'Synchroniseer'}
           </Button>
         </div>
-      </div>
 
-      {/* ── Content ── */}
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {view === 'dashboard'   && <DashboardView kpi={kpi} />}
-        {view === 'funnel'      && <FunnelView funnel={funnel} />}
-        {view === 'calculators' && <CalculatorsView calculators={calculators} />}
-        {view === 'historie'    && <HistorieView snapshots={snapshots} />}
-        {view === 'lopend' && (
-          <ManagementProjectenTabel rows={lopend} variant="lopend"
-            scherm="management-lopend" layouts={layouts.lopend} user_id={user_id} />
-        )}
-        {view === 'gereed' && (
-          <ManagementProjectenTabel rows={gereed} variant="gereed"
-            scherm="management-gereed" layouts={layouts.gereed} user_id={user_id} />
-        )}
-        {view === 'servicedesk' && (
-          <ManagementProjectenTabel rows={servicedesk} variant="servicedesk"
-            scherm="management-servicedesk" layouts={layouts.servicedesk} user_id={user_id} />
-        )}
+        {/* Content */}
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          {view === 'dashboard'   && <DashboardView kpi={kpi} />}
+          {view === 'funnel'      && <FunnelView funnel={funnel} />}
+          {view === 'calculators' && <CalculatorsView calculators={calculators} />}
+          {view === 'historie'    && <HistorieView snapshots={snapshots} />}
+          {view === 'lopend' && (
+            <ManagementProjectenTabel rows={lopend} variant="lopend"
+              scherm="management-lopend" layouts={layouts.lopend} user_id={user_id} />
+          )}
+          {view === 'gereed' && (
+            <ManagementProjectenTabel rows={gereed} variant="gereed"
+              scherm="management-gereed" layouts={layouts.gereed} user_id={user_id} />
+          )}
+          {view === 'servicedesk' && (
+            <ManagementProjectenTabel rows={servicedesk} variant="servicedesk"
+              scherm="management-servicedesk" layouts={layouts.servicedesk} user_id={user_id} />
+          )}
+        </div>
       </div>
 
       <MaandcijfersModal

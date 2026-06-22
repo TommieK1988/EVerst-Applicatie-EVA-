@@ -109,9 +109,9 @@ export function dekkingTone(v: number | null): 'success' | 'warning' | 'error' |
 
 export function margeTone(v: number | null | undefined): string {
   if (v == null) return 'text-neutral-400'
-  if (v < 0)    return 'text-error-500 font-semibold'
-  if (v < 10)   return 'text-warning-700 font-semibold'
-  return 'text-success-700 font-semibold'
+  if (v < 20)   return 'text-error-500 font-semibold'    // < 20% → rood
+  if (v < 25)   return 'text-orange-600 font-semibold'   // 20–25% → oranje
+  return 'text-success-700 font-semibold'                // ≥ 25% → groen
 }
 
 export function resultaatClass(v: number | null | undefined): string {
@@ -307,7 +307,6 @@ export type ManagementKpi = {
   hierarchie: FilGroep[]
   plPivot: PLPivot[]
   jaarresultaatData: { name: string; Realisatie: number; 'In opdracht': number; 'Nog binnen halen': number }[]
-  plResultaatData: { name: string; Gerealiseerd: number; 'In opdracht': number; Doelstelling?: number }[]
   opdrachtgevers: { naam: string; omzet: number; resultaat: number; marge: number }[]
   categorieData: { name: string; value: number }[]
   kostensoortData: { name: string; value: number }[]
@@ -360,27 +359,19 @@ export function berekenManagementKpi(
   const akDekkingGerealiseerd = totaalAK > 0 ? (totaalResultaatGerealiseerd / totaalAK) * 100 : null
   const akDekkingOpdracht     = totaalAK > 0 ? (totaalResultaatOpdracht     / totaalAK) * 100 : null
 
+  // Procentueel t.o.v. de doelstelling (doel = 100%); segmenten stapelen tot 100%.
   const jaarresultaatData = filTotalen.map(({ filiaal, t }) => {
     const doel    = doelVoorFiliaal(doelstellingen, filiaal)
     const doelRes = doel?.resultaat_doelstelling ?? 0
     const real        = t.resultaatGerealiseerd - (ohwMap.get(filiaal)?.resultaat ?? 0)
     const opdrachtRest = Math.max(0, t.resultaatOpdracht - real)
     const nogBinnen   = Math.max(0, doelRes - real - opdrachtRest)
+    const pct = (x: number) => doelRes > 0 ? Math.round((x / doelRes) * 100) : 0
     return {
       name: kortFiliaal(filiaal),
-      'Realisatie':       Math.round(real / 1000),
-      'In opdracht':      Math.round(opdrachtRest / 1000),
-      'Nog binnen halen': Math.round(nogBinnen / 1000),
-    }
-  })
-
-  const plResultaatData = plPivot.map(pl => {
-    const doel = doelVoorPL(doelstellingen, pl.projectleider)
-    return {
-      name: kortNaam(pl.projectleider),
-      'Gerealiseerd': Math.round(pl.resultaatGerealiseerd / 1000),
-      'In opdracht':  Math.round(pl.resultaatOpdracht     / 1000),
-      'Doelstelling': doel?.resultaat_doelstelling != null ? Math.round(doel.resultaat_doelstelling / 1000) : undefined,
+      'Realisatie':       pct(real),
+      'In opdracht':      pct(opdrachtRest),
+      'Nog binnen halen': pct(nogBinnen),
     }
   })
 
@@ -440,7 +431,6 @@ export function berekenManagementKpi(
     hierarchie,
     plPivot,
     jaarresultaatData,
-    plResultaatData,
     opdrachtgevers,
     categorieData,
     kostensoortData,

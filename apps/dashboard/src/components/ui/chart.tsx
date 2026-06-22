@@ -18,6 +18,21 @@ export const CHART_COLORS = [
 
 export const chartColor = (i: number) => CHART_COLORS[i % CHART_COLORS.length]
 
+/** Categorisch palet met contrasterende tinten — voor pie-/verdeling-charts
+ *  waar aangrenzende segmenten goed te onderscheiden moeten zijn. */
+export const CHART_CATEGORICAL = [
+  '#009439', // groen
+  '#2e90fa', // blauw
+  '#f08000', // oranje
+  '#8b5cf6', // paars
+  '#e8453b', // rood
+  '#14b8a6', // teal
+  '#eab308', // geel
+  '#ec4899', // roze
+] as const
+
+export const categoricalColor = (i: number) => CHART_CATEGORICAL[i % CHART_CATEGORICAL.length]
+
 /** Gestileerde container voor een grafiek (border-first, brand-watermerk optioneel). */
 export interface ChartCardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   title?: React.ReactNode
