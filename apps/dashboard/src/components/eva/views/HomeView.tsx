@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { IconSparkle, IconArrowRight } from '../Icons';
+import { useGlobalSearch } from '../GlobalSearch';
 import {
   TasksWidget, WeatherWidget, RemindersWidget,
   ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
@@ -366,6 +367,8 @@ export default function HomeView({
     document.addEventListener('mouseup', handleUp);
   }
 
+  const search = useGlobalSearch();
+
   const go = (seed: string) => {
     router.push(seed ? `/vraag-eva?seed=${encodeURIComponent(seed)}` : '/vraag-eva');
   };
@@ -463,7 +466,7 @@ export default function HomeView({
       </div>
 
       {/* Prompt */}
-      <div onClick={() => go('')} style={{
+      <div onClick={search.open} style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '14px 18px',
         background: 'var(--bg-elev)', border: '1px solid var(--border)',

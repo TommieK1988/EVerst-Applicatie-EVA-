@@ -2,6 +2,7 @@
 import React from 'react'
 import Sidebar from './Sidebar'
 import TopBar  from './TopBar'
+import { GlobalSearchProvider } from './GlobalSearch'
 import { BreadcrumbProvider } from '@/lib/breadcrumb-context'
 import type { Tweaks } from './types'
 import type { RechtenSet } from '@everts/database/platform-types'
@@ -61,6 +62,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
 
   return (
     <BreadcrumbProvider>
+    <GlobalSearchProvider>
     <div
       className="eva"
       data-theme={dataTheme}
@@ -104,6 +106,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
         </main>
       </div>
     </div>
+    </GlobalSearchProvider>
     </BreadcrumbProvider>
   )
 }

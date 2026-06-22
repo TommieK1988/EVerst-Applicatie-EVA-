@@ -16,25 +16,6 @@ function mdLite(s: string): string {
 type MsgCard = { label: string; value: string };
 type Message = { role: 'user' | 'assistant'; text: string; cards?: MsgCard[] };
 
-const INITIAL: Message[] = [
-  {
-    role: 'user',
-    text: 'Geef een overzicht van de openstaande debiteuren ouder dan 30 dagen, gekoppeld aan lopende projecten.',
-  },
-  {
-    role: 'assistant',
-    text: "Ik heb Exact Online en Bouw7 gecombineerd. In totaal **€ 184.240** openstaand > 30 dagen, verdeeld over **12 debiteuren** op **8 lopende projecten**.\n\nTop drie:\n\n1. **Jansen Bouw B.V.** - € 42.180 (project *De Linie*, factuur 47 dagen oud)\n2. **Gemeente Almelo** - € 38.900 (project *Nieuwbouw Wierden*, 38 dagen)\n3. **VVE Zuidpark** - € 24.560 (meerdere facturen, oudste 52 dagen)\n\nZal ik voor de top drie automatisch een herinnering voorbereiden in Office 365?",
-    cards: [
-      { label: 'Bron', value: 'Exact Online + Bouw7' },
-      { label: 'Peildatum', value: '20-04-2026' },
-    ],
-  },
-  {
-    role: 'user',
-    text: 'Ja, bereid herinneringen voor. Toon me eerst de concepttekst voor Jansen.',
-  },
-];
-
 function MsgAction({ label }: { label: string }) {
   return (
     <button style={{
@@ -150,69 +131,71 @@ export default function ChatView() {
   const router       = useRouter()
   const seed         = searchParams.get('seed') ?? ''
 
-  const [messages, setMessages] = React.useState<Message[]>(INITIAL);
+  const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [typing, setTyping] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
-    if (seed) {
-      setInput(seed)
-      // Verwijder de seed parameter uit de URL zonder page reload
-      router.replace('/vraag-eva')
+  const send = React.useCallback(async (vraag: string) => {
+    const tekst = vraag.trim();
+    if (!tekst || typing) return;
+    setMessages(m => [...m, { role: 'user', text: tekst }]);
+    setInput('');
+    setTyping(true);
+    try {
+      const res = await fetch('/api/eva/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vraag: tekst }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const antwoord = res.ok
+        ? (data.answer ?? 'Ik kon hier geen antwoord op formuleren.')
+        : (data.error ?? 'Er ging iets mis bij het beantwoorden van de vraag.');
+      setMessages(m => [...m, { role: 'assistant', text: antwoord }]);
+    } catch {
+      setMessages(m => [...m, { role: 'assistant', text: 'EVA is nu niet bereikbaar. Probeer het zo nog eens.' }]);
+    } finally {
+      setTyping(false);
     }
-  }, [seed, router]);
+  }, [typing]);
 
-  /* auto-reply after 3rd message */
+  // Seed uit de URL (vanuit de snelzoeker of dashboard) → direct versturen.
+  const seedVerwerkt = React.useRef(false);
   React.useEffect(() => {
-    if (messages.length === 3 && !typing) {
-      const t = setTimeout(() => {
-        setTyping(true);
-        setTimeout(() => {
-          setMessages(m => [...m, {
-            role: 'assistant',
-            text: "Concept voor **Jansen Bouw B.V.** - factuur 2026-0472, € 42.180:\n\n> *Geachte heer Jansen,*\n> \n> *Uw factuur 2026-0472 van 4 maart jl. staat op dit moment 47 dagen open. Wellicht is deze aan uw aandacht ontsnapt. Wij verzoeken u vriendelijk om het openstaande bedrag van € 42.180,00 binnen 7 dagen over te maken.*\n> \n> *Met vriendelijke groet,*\n> *Team Everts - onderhoud & renovatie*\n\nIk kan deze nu als concept klaarzetten in Outlook, of direct namens jou versturen. Wat heeft jouw voorkeur?",
-            cards: [
-              { label: 'Type', value: '1e herinnering' },
-              { label: 'Toon', value: 'Vriendelijk, zakelijk' },
-            ],
-          }]);
-          setTyping(false);
-        }, 1600);
-      }, 400);
-      return () => clearTimeout(t);
+    if (seed && !seedVerwerkt.current) {
+      seedVerwerkt.current = true;
+      router.replace('/vraag-eva');
+      void send(seed);
     }
-  }, [messages.length, typing]);
+  }, [seed, router, send]);
 
   React.useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, typing]);
-
-  const send = () => {
-    if (!input.trim()) return;
-    setMessages(m => [...m, { role: 'user', text: input.trim() }]);
-    setInput('');
-    setTyping(true);
-    setTimeout(() => {
-      setMessages(m => [...m, { role: 'assistant', text: 'Begrepen — ik duik er nu in en combineer de gegevens uit je bronnen. Moment.' }]);
-      setTyping(false);
-    }, 1400);
-  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {/* Thread */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '28px 0 20px' }}>
         <div style={{ maxWidth: 780, margin: '0 auto', width: '100%', padding: '0 40px' }}>
-          <div style={{
-            fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
-            color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8,
-          }}>Vandaag · Debiteurenbeheer</div>
-          <h2 style={{
-            margin: '0 0 28px',
-            fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700,
-            letterSpacing: '-0.02em', color: 'var(--fg)',
-          }}>Openstaande debiteuren koppelen aan projecten</h2>
+          {messages.length === 0 && !typing && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{
+                fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
+                color: 'var(--fg-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8,
+              }}>Vraag EVA</div>
+              <h2 style={{
+                margin: '0 0 8px',
+                fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700,
+                letterSpacing: '-0.02em', color: 'var(--fg)',
+              }}>Wat wil je weten?</h2>
+              <p style={{ margin: 0, color: 'var(--fg-muted)', fontSize: 14, lineHeight: 1.6 }}>
+                Stel een vraag over je relaties, dossiers en medewerkers — bijvoorbeeld
+                <em> "Hoeveel staat er nog open bij …?"</em>. EVA zoekt uitsluitend in je eigen EVA-data.
+              </p>
+            </div>
+          )}
           {messages.map((m, i) => <MessageBubble key={i} {...m}/>)}
           {typing && <Typing/>}
         </div>
@@ -229,8 +212,8 @@ export default function ChatView() {
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Antwoord aan EVA."
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
+              placeholder="Stel EVA een vraag…"
               rows={1}
               style={{
                 background: 'transparent', border: 'none', color: 'var(--fg)',
@@ -251,8 +234,8 @@ export default function ChatView() {
                 <IconMic size={17}/>
               </button>
               <button
-                onClick={send}
-                disabled={!input.trim()}
+                onClick={() => send(input)}
+                disabled={!input.trim() || typing}
                 style={{
                   width: 34, height: 34, borderRadius: 8,
                   background: input.trim() ? 'var(--fg)' : 'var(--bg-active)',
