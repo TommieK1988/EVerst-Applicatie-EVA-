@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
+import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
 
 export type SyncResult = {
@@ -705,16 +706,9 @@ function mapBouw7NaarEvaStatus(
     }
   }
 
-  // Opdrachten — 02 t/m 07 (substatus altijd overschrijven vanuit Bouw7)
-  const opdrachtMap: Record<string, string> = {
-    '02.': 'nieuwe_opdracht',
-    '03.': 'werkvoorbereiding',
-    '04.': 'onderhanden',
-    '05.': 'uitvoering_gereed',
-    '06.': 'financieel_gereed',
-    '07.': 'financieel_afgesloten',
-  }
-  for (const [prefix, substatus] of Object.entries(opdrachtMap)) {
+  // Opdrachten — 02 t/m 07 (substatus altijd overschrijven vanuit Bouw7).
+  // Mapping leeft in lib/bouw7/status-map.ts — gedeeld met de terugschrijf-helper.
+  for (const [prefix, substatus] of Object.entries(OPDRACHT_PREFIX_NAAR_SUBSTATUS)) {
     if (naam.startsWith(prefix)) {
       return {
         hoofdstatus:           'opdracht',

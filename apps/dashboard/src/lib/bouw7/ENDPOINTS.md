@@ -302,6 +302,34 @@ De Financieel-tab combineert project-control met twee andere endpoints:
 
 ---
 
+## Inkoop / Verkoop / Uren-tabs (Heimdall `/list/*`, geverifieerd jun 2026)
+
+Heimdall-lijstendpoints met een `q`-HQL-filter (zelfde mechaniek als `/list/contract-order-lines`:
+`client.get(path, { q })`). Response-vorm: `{ items: T[], count, limit, offset }` (sommige met extra
+totaal-velden). Live opgehaald, géén opslag — defensief met `.catch` per bron + `beschikbaar`-flag.
+
+| Wat | Endpoint | Filter (`q`) | Belangrijke velden |
+|---|---|---|---|
+| **Projectstatussen** | `GET /list/project-statuses` | `LIMIT 200` | `id`, `name` ("04. Onderhanden") — bron voor status-id bij terugschrijven |
+| **Uren per medewerker** | `GET /list/hour-logs/employee` | `project.id = {id}` | item: `employee{firstName,lastName}`, `type{name}` (uursoort), `projectSecurityLink{code,name}`, `hours`, `logDate`, `hourlyRate`, `invoicedAmount`, `isApproved`. Envelope: `totalHours`, `totalCost` |
+| **Verkooptermijnen** | `GET /list/project-invoice-terms` | `statement.project.id = {id}` | `description`, `percentage`, `subtotal`, `invoiceableAt`, `invoiceLine` (aanwezig = gefactureerd) |
+| **Verkoopfacturen** | `GET /list/invoices` | `project.id = {id}` | `invoiceNumber`, `status` (int), `isCredit`, `date`, `dueDate`, `datePaid` (gevuld = betaald), `total` |
+| **Onderaannemerscontracten** | `GET /list/subcontractor-contracts` | `project.id = {id}` | `subcontractor{name}`, `statusName`, `name`, `price` (contractbedrag), `outstandingCosts`, `projectSecurityLink{code}` |
+
+### EVA-server actions
+
+| Wat | Server action | Bestand |
+|---|---|---|
+| Inkoop (orders + OA-contracten + geboekte kosten) | `getDossierInkoop(dossierId)` | `lib/dossiers/actions.ts` |
+| Uren (per medewerker, fallback per bewakingscode) | `getDossierUren(dossierId)` | `lib/dossiers/actions.ts` |
+| Verkoop (termijnen + facturen + betaalgegevens) | `getDossierVerkoop(dossierId)` | `lib/dossiers/actions.ts` |
+
+> **Two-way status** (zie `WRITE-ENDPOINTS.md`): `schrijfBouw7Projectstatus()` in `lib/dossiers/bouw7-status.ts`
+> mapt EVA opdracht-substatus → Bouw7-status-id (via `/list/project-statuses` + `lib/bouw7/status-map.ts`)
+> en schrijft met read-modify-write: `GET /project/{id}` → `POST /project { id, type, status:{ id } }`.
+
+---
+
 ## EVA-intern (Supabase)
 
 Financiële data die wél in de EVA-database staat.

@@ -96,6 +96,14 @@ export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplat
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taken])
 
+  // Houd het geopende detailpaneel in sync met verse serverdata (bv. na het
+  // toevoegen van een subtaak): geselecteerdeTaak is een momentopname van de klik,
+  // dus zonder dit blijft het paneel de oude taak (incl. subtaken) tonen.
+  useEffect(() => {
+    setGeselecteerdeTaak(prev => (prev ? taken.find(t => t.id === prev.id) ?? null : null))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taken])
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return

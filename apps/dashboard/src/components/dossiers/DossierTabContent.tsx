@@ -1,4 +1,5 @@
-import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen } from '@/lib/dossiers/actions'
+import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles } from '@/lib/dossiers/actions'
+import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
 import { getSjablonen, getUrgenteTakenVoorDossier } from '@/lib/taken/services/taken'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
@@ -9,6 +10,9 @@ import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import VcaTab from './tabs/VcaTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
+import { InkoopTab } from './tabs/InkoopTab'
+import { VerkoopTab } from './tabs/VerkoopTab'
+import { UrenTab } from './tabs/UrenTab'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import type { DossierSectie } from './types'
 
@@ -20,6 +24,7 @@ const TAB_LABELS: Record<string, string> = {
   vca:           'VCA',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
+  uren:          'Uren',
   meerwerk:      'Meerwerk',
   financieel:    'Financieel',
   formulieren:   'Formulieren',
@@ -105,12 +110,18 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   }
 
   if (tab === 'vca') {
-    return (
-      <>
-        {titleInjector}
-        <VcaTab dossierId={id} />
-      </>
-    )
+    // Alleen tonen wanneer de VCA-toggle voor dit dossier aanstaat; anders valt
+    // de render door naar de generieke "niet beschikbaar"-weergave hieronder.
+    const toggles = await getDossierToggles(id)
+    const vcaAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.vca && t.aan)
+    if (vcaAan) {
+      return (
+        <>
+          {titleInjector}
+          <VcaTab dossierId={id} />
+        </>
+      )
+    }
   }
 
   if (tab === 'financieel' && sectie === 'opdracht') {
@@ -118,6 +129,33 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       <>
         {titleInjector}
         <FinancieelTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'inkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
+    return (
+      <>
+        {titleInjector}
+        <InkoopTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'verkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
+    return (
+      <>
+        {titleInjector}
+        <VerkoopTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'uren' && sectie === 'opdracht') {
+    return (
+      <>
+        {titleInjector}
+        <UrenTab dossierId={id} />
       </>
     )
   }

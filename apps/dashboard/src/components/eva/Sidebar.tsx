@@ -15,6 +15,8 @@ import {
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
 import { magOnderdeelZien } from '@/lib/auth/rechten-shared'
+import { getDossierToggles } from '@/lib/dossiers/actions'
+import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 
 
 function Wordmark({ style }: { style?: React.CSSProperties }) {
@@ -177,6 +179,7 @@ const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'planning',      label: 'Planning',      d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { slug: 'taken',         label: 'Taken',         d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
   { slug: 'vca',           label: 'VCA',           d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  { slug: 'uren',          label: 'Uren',          d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'inkoop',        label: 'Inkoop',        d: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
   { slug: 'verkoop',       label: 'Verkoop',       d: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { slug: 'meerwerk',      label: 'Meerwerk',      d: 'M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
@@ -190,6 +193,8 @@ const SERVICEDESK_TABS: DossierTab[] = [
   { slug: 'planning',   label: 'Planning',   d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { slug: 'taken',      label: 'Taken',      d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
   { slug: 'vca',        label: 'VCA',        d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  { slug: 'inkoop',     label: 'Inkoop',     d: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
+  { slug: 'verkoop',    label: 'Verkoop',    d: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
@@ -243,6 +248,29 @@ export default function Sidebar({
     dossierSectie === 'opdrachten'  ? OPDRACHT_TABS :
     dossierSectie === 'servicedesk' ? SERVICEDESK_TABS :
     AANVRAAG_TABS
+
+  // Aan-staande toggle-sleutels voor het huidige dossier; stuurt de zichtbaarheid
+  // van toggle-gestuurde tabs (zie TAB_TOGGLE_GATES). Default leeg → gated tabs
+  // blijven verborgen tot we weten dat de toggle aanstaat (geen flash).
+  const [aanSleutels, setAanSleutels] = React.useState<Set<string>>(new Set())
+  React.useEffect(() => {
+    if (!isDossierDetail || !dossierId) {
+      setAanSleutels(new Set())
+      return
+    }
+    let actief = true
+    getDossierToggles(dossierId)
+      .then(toggles => {
+        if (actief) setAanSleutels(new Set(toggles.filter(t => t.aan).map(t => t.sleutel)))
+      })
+      .catch(() => { if (actief) setAanSleutels(new Set()) })
+    return () => { actief = false }
+  }, [isDossierDetail, dossierId])
+
+  const zichtbareTabs = dossierTabs.filter(t => {
+    const vereisteSleutel = TAB_TOGGLE_GATES[t.slug]
+    return !vereisteSleutel || aanSleutels.has(vereisteSleutel)
+  })
 
   // Shared fade style for labels and decorations that hide when collapsed
   const labelFade: React.CSSProperties = {
@@ -436,7 +464,7 @@ export default function Sidebar({
             </>
           )}
           {/* Dossier tabs */}
-          {dossierTabs.map(t => (
+          {zichtbareTabs.map(t => (
             <NavItem
               key={t.slug}
               href={`/${dossierSectie}/${dossierId}/${t.slug}`}

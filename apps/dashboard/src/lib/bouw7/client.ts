@@ -597,3 +597,99 @@ export type Bouw7ContractOrderLine = {
   purchaseOrderContract?: unknown | null
   subcontractorContract?: unknown | null
 }
+
+/* ── Two-way / list-endpoints (geverifieerd via Swagger jun 2026) ─────
+ * Alle onderstaande lijsten zijn Heimdall `GET /list/...` met een `q`-HQL-filter
+ * (zelfde mechaniek als /list/contract-order-lines: `client.get(path, { q })`). */
+
+/** Projectstatus uit GET /list/project-statuses (Heimdall). Bron voor de status-id bij terugschrijven. */
+export type Bouw7ProjectStatus = {
+  id: number
+  name: string
+  closesProject?: boolean
+  invoicesProject?: boolean
+  plansProject?: boolean
+  closesPlanning?: boolean
+}
+
+/**
+ * Urenregel uit GET /list/hour-logs/employee (Heimdall, q-DSL `project.id = {id}`).
+ * `type` = uursoort (hourType), `hours`/`hourlyRate`/`invoicedAmount` zijn strings.
+ * Response-envelope: `Bouw7EmployeeHourLogResponse` ({ items, totalHours, totalCost, count }).
+ */
+export type Bouw7EmployeeHourLog = {
+  id: number
+  employee?: { id: number; firstName?: string; lastName?: string } | null
+  type?: { id: number; name?: string } | null
+  project?: { id: number; name?: string } | null
+  projectSecurityLink?: { id?: number; code?: string | null; name?: string | null; parentName?: string | null; costType?: number } | null
+  hours?: string | number
+  logDate?: string
+  comment?: string | null
+  hourlyRate?: string | number
+  invoicedAmount?: string | number
+  isApproved?: boolean
+  bookingStatus?: number
+}
+
+export type Bouw7EmployeeHourLogResponse = {
+  items: Bouw7EmployeeHourLog[]
+  totalHours?: string | number
+  totalCost?: string | number
+  count?: number
+}
+
+/**
+ * Verkooptermijn uit GET /list/project-invoice-terms (Heimdall, q-DSL `statement.project.id = {id}`).
+ * `invoiceLine` aanwezig = termijn is daadwerkelijk gefactureerd. `subtotal` = termijnbedrag excl. BTW.
+ */
+export type Bouw7ProjectInvoiceTerm = {
+  id: number
+  statement?: { id: number; project?: { id: number }; contact?: { id: number; name?: string }; fixedPrice?: string | number } | null
+  description?: string
+  percentage?: string | number
+  subtotal?: string | number
+  invoiceableAt?: string | null
+  vatTariffPercentage?: string | number
+  vatTariff?: Bouw7VatTariff | null
+  invoiceLine?: { id: number; invoiceId?: number; invoiceStatusId?: number } | null
+}
+
+/**
+ * Verkoopfactuur uit GET /list/invoices (Heimdall, q-DSL `project.id = {id}`).
+ * `status` = integer-statuscode; `datePaid` gevuld = betaald. Bedragen zijn strings.
+ * Response-envelope heeft totalen `subTotal`/`vat`/`total`.
+ */
+export type Bouw7SalesInvoice = {
+  id: number
+  invoiceNumber?: string
+  status?: number
+  isCredit?: boolean
+  contact?: { id: number; name?: string } | null
+  contactPersonName?: string | null
+  date?: string
+  dueDate?: string
+  datePaid?: string | null
+  subTotal?: string | number
+  vatTotal?: string | number
+  total?: string | number
+  isMailed?: boolean
+}
+
+/**
+ * Onderaannemerscontract uit GET /list/subcontractor-contracts (Heimdall, q-DSL `project.id = {id}`).
+ * `price` = contractbedrag, `outstandingCosts` = nog te factureren/openstaand, `statusName` = leesbare status.
+ */
+export type Bouw7SubcontractorContract = {
+  id: number
+  subcontractor?: { id: number; name?: string } | null
+  status?: number
+  statusName?: string
+  name?: string
+  description?: string
+  price?: string | number
+  outstandingCosts?: string | number
+  projectSecurityLink?: { id?: number; code?: string | null; name?: string | null; parentName?: string | null } | null
+  expectedCompletionDate?: string | null
+  acceptedAt?: string | null
+}

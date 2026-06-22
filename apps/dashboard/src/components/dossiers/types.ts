@@ -73,10 +73,11 @@ export const OPDRACHT_STATUSSEN: StatusDef<OpdrachtSubstatus>[] = [
 export const OPDRACHT_ACTIEF_STATUSSEN: StatusDef<OpdrachtSubstatus>[] =
   OPDRACHT_STATUSSEN.filter(s => s.key !== 'financieel_afgesloten')
 
-/** Kanban-statussen voor opdrachten: excl. financieel_gereed én financieel_afgesloten.
- *  financieel_gereed is bereikbaar via de "Financieel gereed melden" knop in de detail-view. */
+/** Kanban-statussen voor opdrachten: excl. financieel_afgesloten (definitieve afsluiting via knop).
+ *  financieel_gereed is óók een kolom zodat je een opdracht ernaartoe kunt slepen (schrijft naar Bouw7);
+ *  de "Financieel gereed melden" knop in de detail-view doet hetzelfde. */
 export const OPDRACHT_KANBAN_STATUSSEN: StatusDef<OpdrachtSubstatus>[] =
-  OPDRACHT_STATUSSEN.filter(s => s.key !== 'financieel_afgesloten' && s.key !== 'financieel_gereed')
+  OPDRACHT_STATUSSEN.filter(s => s.key !== 'financieel_afgesloten')
 
 export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'                         },

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
 import {
   Bouw7Client,
   type Bouw7ProjectFinancial,
@@ -13,6 +14,11 @@ import {
   type Bouw7CostTypeId,
   type Bouw7PurchaseInvoice,
   type Bouw7ContractOrderLine,
+  type Bouw7SubcontractorContract,
+  type Bouw7EmployeeHourLogResponse,
+  type Bouw7ProjectInvoiceTerm,
+  type Bouw7SalesInvoice,
+  type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
 
 type DossierResult =
@@ -420,16 +426,24 @@ export async function getDossierById(id: string): Promise<{ ok: true; data: Doss
   return { ok: true, data: mapRij(data) }
 }
 
-/** Update de substatus van een dossier. De trigger in de DB handelt fase-promoties af. */
+/**
+ * Update de substatus van een dossier. De trigger in de DB handelt fase-promoties af.
+ *
+ * `opts.schrijfBouw7`: schrijf de nieuwe opdracht-substatus óók terug naar Bouw7
+ * (alleen voor opdracht-dossiers met een `bouw7_id`). De EVA-update gaat altijd door;
+ * een mislukte Bouw7-write wordt teruggegeven in `bouw7` zodat de UI een toast kan tonen
+ * (geen rollback — de 2×/dag lees-sync corrigeert eventuele drift).
+ */
 export async function updateDossierSubstatus(
   id: string,
-  nieuweSubstatus: DossierSubstatus
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  nieuweSubstatus: DossierSubstatus,
+  opts?: { schrijfBouw7?: boolean }
+): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
   const supabase = createAdminClient()
 
   const { data: huidig, error: fetchError } = await supabase
     .from('dossiers')
-    .select('hoofdstatus')
+    .select('hoofdstatus, bouw7_id')
     .eq('id', id)
     .single()
 
@@ -464,11 +478,17 @@ export async function updateDossierSubstatus(
   // De DB-trigger heeft een dossier-event ge-enqueued; evalueer triggers en activeer nu direct.
   await verwerkDossierTriggers(id).catch(() => {})
 
+  // Two-way: opdracht-substatus terugschrijven naar Bouw7 (alleen opdracht-dossiers met koppeling).
+  let bouw7: Bouw7WriteResult | undefined
+  if (opts?.schrijfBouw7 && huidig.hoofdstatus === 'opdracht' && huidig.bouw7_id != null) {
+    bouw7 = await schrijfBouw7Projectstatus(huidig.bouw7_id, nieuweSubstatus, 'opdracht')
+  }
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
   revalidatePath('/servicedesk')
-  return { ok: true }
+  return { ok: true, bouw7 }
 }
 
 /** Haal actieve medewerkers op voor rol-dropdowns. */
@@ -920,6 +940,318 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     }
   } catch {
     return leeg
+  }
+}
+
+/* ── Inkoop / Verkoop / Uren-tabs (live uit Bouw7) ─────────────────────
+ * Zelfde live-ophaalpatroon als getDossierBewaking: geen opslag, alles defensief
+ * met `.catch` per bron en een `beschikbaar`-flag, zodat een ontbrekend endpoint
+ * of dossier zonder bouw7_id de tab niet laat crashen. */
+
+/** Maakt een Bouw7-client voor een dossier op basis van de integratie-config; null als ongekoppeld/onvolledig. */
+async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Client; bouw7Id: string } | null> {
+  const supabase = createAdminClient() as any
+  const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
+  if (!dossier?.bouw7_id) return null
+  const { data: integratie } = await supabase.from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
+  const config = integratie?.config as Record<string, string> | undefined
+  if (!config?.api_key || !config?.app_name) return null
+  return { client: new Bouw7Client(config.api_key, config.app_name), bouw7Id: String(dossier.bouw7_id) }
+}
+
+/* — Inkoop — */
+
+export type InkoopOrderRegel = {
+  code: string | null
+  omschrijving: string | null
+  relatie: string | null
+  aantal: number | null
+  eenheid: string | null
+  prijs: number | null
+  totaal: number
+  type: 'inkoop' | 'onderaanneming'
+}
+export type OnderaannemerContract = {
+  code: string | null
+  onderaannemer: string | null
+  omschrijving: string | null
+  contractbedrag: number
+  openstaand: number
+  status: string | null
+}
+export type GeboekteKostenRegel = { code: string | null; naam: string | null; bedrag: number }
+export type DossierInkoopData = {
+  beschikbaar: boolean
+  inkooporders: InkoopOrderRegel[]
+  onderaannemers: OnderaannemerContract[]
+  geboekteKosten: GeboekteKostenRegel[]
+  totalen: { besteld: number; onderaanneming: number; geboekt: number }
+}
+
+/**
+ * Inkoop-overzicht van een dossier: inkooporders (contract-order-lines), onderaannemerscontracten
+ * en geboekte kosten (inkoopfacturen, deduped op deliveryTicket). Live uit Bouw7.
+ */
+export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
+  const leeg: DossierInkoopData = {
+    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [],
+    totalen: { besteld: 0, onderaanneming: 0, geboekt: 0 },
+  }
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return leeg
+  const { client, bouw7Id } = ctx
+
+  try {
+    const [orderResp, subResp, invoices] = await Promise.all([
+      client.get<{ items?: Bouw7ContractOrderLine[]; total?: number | string }>('/list/contract-order-lines', {
+        q: `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`,
+      }).catch(() => ({ items: [] as Bouw7ContractOrderLine[], total: 0 })),
+      client.get<Bouw7ListResponse<Bouw7SubcontractorContract>>('/list/subcontractor-contracts', {
+        q: `project.id = ${bouw7Id} LIMIT 500`,
+      }).catch(() => ({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
+      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
+    ])
+
+    const inkooporders: InkoopOrderRegel[] = (orderResp.items ?? []).map((l) => {
+      const aantal = toGetal(l.quantity) * (l.quantityFactor != null ? toGetal(l.quantityFactor) : 1)
+      const isOa = l.contact?.type === 'subcontractor'
+      return {
+        code: l.projectSecurityLink?.code ?? null,
+        omschrijving: l.description ?? null,
+        relatie: l.contact?.name ?? null,
+        aantal: aantal || null,
+        eenheid: l.unit ?? null,
+        prijs: l.unitPrice != null ? toGetal(l.unitPrice) : null,
+        totaal: toGetal(l.totalPrice),
+        type: isOa ? 'onderaanneming' : 'inkoop',
+      }
+    })
+
+    const onderaannemers: OnderaannemerContract[] = (subResp.items ?? []).map((c) => ({
+      code: c.projectSecurityLink?.code ?? null,
+      onderaannemer: c.subcontractor?.name ?? null,
+      omschrijving: c.name ?? c.description ?? null,
+      contractbedrag: toGetal(c.price),
+      openstaand: toGetal(c.outstandingCosts),
+      status: c.statusName ?? null,
+    }))
+
+    // Geboekte kosten: inkoopfacturen deduped op deliveryTicket.id (termijnen → zelfde bon).
+    const bonnen = new Map<number, GeboekteKostenRegel>()
+    for (const inv of invoices) {
+      const dt = inv.deliveryTicket
+      if (!dt?.id || bonnen.has(dt.id)) continue
+      const c = dt.securityLink?.code
+      bonnen.set(dt.id, { code: c?.code ?? null, naam: c?.name ?? null, bedrag: toGetal(dt.cost) })
+    }
+    const geboekteKosten = [...bonnen.values()]
+
+    const besteld = toGetal(orderResp.total) || inkooporders.reduce((s, r) => s + r.totaal, 0)
+    const onderaanneming = onderaannemers.reduce((s, c) => s + c.contractbedrag, 0)
+    const geboekt = geboekteKosten.reduce((s, r) => s + r.bedrag, 0)
+
+    return {
+      beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
+      inkooporders, onderaannemers, geboekteKosten,
+      totalen: { besteld, onderaanneming, geboekt },
+    }
+  } catch {
+    return leeg
+  }
+}
+
+/* — Uren — */
+
+export type UrenRegel = {
+  medewerker: string | null
+  datum: string | null
+  uren: number
+  uurtarief: number | null
+  uursoort: string | null
+  code: string | null
+  codeNaam: string | null
+  bedrag: number
+}
+export type DossierUrenData = {
+  beschikbaar: boolean
+  detailNiveau: 'medewerker' | 'bewakingscode'
+  regels: UrenRegel[]
+  totalen: { uren: number; bedrag: number }
+}
+
+/**
+ * Geboekte uren van een dossier. Primair per medewerker (GET /list/hour-logs/employee);
+ * valt terug op geaggregeerde uren per bewakingscode (control-endpoint via getDossierBewaking)
+ * als het detail-endpoint niet beschikbaar is.
+ */
+export async function getDossierUren(dossierId: string): Promise<DossierUrenData> {
+  const leeg: DossierUrenData = { beschikbaar: false, detailNiveau: 'medewerker', regels: [], totalen: { uren: 0, bedrag: 0 } }
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return leeg
+  const { client, bouw7Id } = ctx
+
+  // 1. Detail per medewerker.
+  try {
+    const resp = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
+      q: `project.id = ${bouw7Id} SORT(logDate, DESC) LIMIT 2000`,
+    })
+    const items = resp.items ?? []
+    if (items.length > 0) {
+      const regels: UrenRegel[] = items.map((h) => {
+        const uren = toGetal(h.hours)
+        const tarief = h.hourlyRate != null ? toGetal(h.hourlyRate) : null
+        const bedrag = h.invoicedAmount != null && toGetal(h.invoicedAmount) > 0
+          ? toGetal(h.invoicedAmount)
+          : uren * (tarief ?? 0)
+        const naam = [h.employee?.firstName, h.employee?.lastName].filter(Boolean).join(' ') || null
+        return {
+          medewerker: naam,
+          datum: h.logDate ? h.logDate.slice(0, 10) : null,
+          uren,
+          uurtarief: tarief,
+          uursoort: h.type?.name ?? null,
+          code: h.projectSecurityLink?.code ?? null,
+          codeNaam: h.projectSecurityLink?.name ?? h.projectSecurityLink?.parentName ?? null,
+          bedrag,
+        }
+      })
+      return {
+        beschikbaar: true,
+        detailNiveau: 'medewerker',
+        regels,
+        totalen: {
+          uren: resp.totalHours != null ? toGetal(resp.totalHours) : regels.reduce((s, r) => s + r.uren, 0),
+          bedrag: resp.totalCost != null ? toGetal(resp.totalCost) : regels.reduce((s, r) => s + r.bedrag, 0),
+        },
+      }
+    }
+  } catch {
+    // val door naar de bewakingscode-fallback
+  }
+
+  // 2. Fallback: geaggregeerde uren per bewakingscode uit de projectbewaking.
+  const bewaking = await getDossierBewaking(dossierId)
+  if (!bewaking.beschikbaar) return leeg
+  const regels: UrenRegel[] = bewaking.hoofdstukken.flatMap((h) =>
+    h.regels
+      .filter((r) => r.geboekteUren > 0 || r.arbeidskosten > 0)
+      .map((r) => ({
+        medewerker: null,
+        datum: null,
+        uren: r.geboekteUren,
+        uurtarief: r.geboekteUren > 0 ? r.arbeidskosten / r.geboekteUren : null,
+        uursoort: null,
+        code: r.code,
+        codeNaam: r.naam,
+        bedrag: r.arbeidskosten,
+      })),
+  )
+  return {
+    beschikbaar: regels.length > 0,
+    detailNiveau: 'bewakingscode',
+    regels,
+    totalen: {
+      uren: bewaking.totalen.geboekteUren,
+      bedrag: bewaking.totalen.arbeidskosten,
+    },
+  }
+}
+
+/* — Verkoop — */
+
+export type VerkoopTermijn = {
+  nummer: number
+  omschrijving: string | null
+  percentage: number | null
+  bedrag: number
+  gefactureerd: boolean
+  invoiceableAt: string | null
+}
+export type VerkoopFactuur = {
+  factuurnummer: string | null
+  datum: string | null
+  vervaldatum: string | null
+  bedrag: number
+  betaald: boolean
+  isCredit: boolean
+}
+export type DossierVerkoopData = {
+  beschikbaar: boolean
+  termijnenBeschikbaar: boolean
+  termijnen: VerkoopTermijn[]
+  facturen: VerkoopFactuur[]
+  betaalgegevens: DossierFinancieelData['relatieFacturatie']
+  totalen: { aanneemsom: number; gefactureerd: number; openstaand: number }
+}
+
+/**
+ * Verkoop-overzicht van een dossier: termijnen (project-invoice-terms), verkoopfacturen (invoices)
+ * en betaalgegevens van de klant (relatie_facturatie). Live uit Bouw7 + EVA. Defensief: ontbrekend
+ * termijnen-endpoint → termijnenBeschikbaar=false zonder de tab te breken.
+ */
+export async function getDossierVerkoop(dossierId: string): Promise<DossierVerkoopData> {
+  const leeg: DossierVerkoopData = {
+    beschikbaar: false, termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
+    totalen: { aanneemsom: 0, gefactureerd: 0, openstaand: 0 },
+  }
+  const ctx = await bouw7VoorDossier(dossierId)
+  // Betaalgegevens + aanneemsom komen via getDossierFinancieel (werkt ook zonder Bouw7-koppeling).
+  const { bouw7Financial, relatieFacturatie } = await getDossierFinancieel(dossierId)
+  if (!ctx) {
+    return { ...leeg, betaalgegevens: relatieFacturatie }
+  }
+  const { client, bouw7Id } = ctx
+
+  let termijnenBeschikbaar = false
+  let termijnen: VerkoopTermijn[] = []
+  let facturen: VerkoopFactuur[] = []
+
+  try {
+    const termResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTerm>>('/list/project-invoice-terms', {
+      q: `statement.project.id = ${bouw7Id} LIMIT 500`,
+    })
+    termijnenBeschikbaar = true
+    termijnen = (termResp.items ?? []).map((t, i) => ({
+      nummer: i + 1,
+      omschrijving: t.description ?? null,
+      percentage: t.percentage != null ? toGetal(t.percentage) : null,
+      bedrag: toGetal(t.subtotal),
+      gefactureerd: t.invoiceLine != null,
+      invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
+    }))
+  } catch {
+    termijnenBeschikbaar = false
+  }
+
+  try {
+    const invResp = await client.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
+      q: `project.id = ${bouw7Id} SORT(date, DESC) LIMIT 500`,
+    })
+    facturen = (invResp.items ?? []).map((inv) => ({
+      factuurnummer: inv.invoiceNumber ?? null,
+      datum: inv.date ? inv.date.slice(0, 10) : null,
+      vervaldatum: inv.dueDate ? inv.dueDate.slice(0, 10) : null,
+      bedrag: toGetal(inv.total),
+      betaald: inv.datePaid != null,
+      isCredit: !!inv.isCredit,
+    }))
+  } catch {
+    facturen = []
+  }
+
+  const aanneemsom = toGetal(bouw7Financial?.fixedPrice) || toGetal(bouw7Financial?.revenue?.budgeted)
+  const gefactureerd = facturen.length
+    ? facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0)
+    : toGetal(bouw7Financial?.revenue?.realised)
+  const openstaand = Math.max(0, aanneemsom - gefactureerd)
+
+  return {
+    beschikbaar: termijnen.length > 0 || facturen.length > 0 || aanneemsom > 0,
+    termijnenBeschikbaar,
+    termijnen,
+    facturen,
+    betaalgegevens: relatieFacturatie,
+    totalen: { aanneemsom, gefactureerd, openstaand },
   }
 }
 

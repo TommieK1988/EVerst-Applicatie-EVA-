@@ -82,7 +82,9 @@ export async function activeerSjabloon(input: {
 
   if (lijstError || !nieuweLijst) throw new Error(`Fout bij aanmaken instantie: ${lijstError?.message}`)
 
-  // Kopieer taken
+  // Kopieer taken (oud→nieuw id-map zodat parent_task_id van subtaken na afloop
+  // geremapt kan worden naar de nieuwe taken — anders verliezen subtaken hun hiërarchie).
+  const idMap = new Map<string, string>()
   for (const taak of sjabloonTaken ?? []) {
     // Bereken deadline
     let deadline: string | null = null
@@ -114,6 +116,7 @@ export async function activeerSjabloon(input: {
       .single()
 
     if (taakError || !nieuweTaak) continue
+    idMap.set(taak.id, nieuweTaak.id)
 
     // Toewijzingen resolven
     const assignees = taak.task_assignees ?? []
@@ -159,6 +162,16 @@ export async function activeerSjabloon(input: {
           volgorde:    a.volgorde,
         }))
       )
+    }
+  }
+
+  // Pass 2: hiërarchie (parent_task_id) remappen naar de gekopieerde taken.
+  for (const taak of sjabloonTaken ?? []) {
+    if (!taak.parent_task_id) continue
+    const nieuwId       = idMap.get(taak.id)
+    const nieuwParentId = idMap.get(taak.parent_task_id)
+    if (nieuwId && nieuwParentId) {
+      await (supabase as any).from('tasks').update({ parent_task_id: nieuwParentId }).eq('id', nieuwId)
     }
   }
 
@@ -262,13 +275,22 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
     }
   }
 
-  // Pass 2: taak-afhankelijkheden (blocked_by) remappen naar de nieuwe taken
+  // Pass 2: taak-relaties (blocked_by + parent_task_id) remappen naar de nieuwe taken.
   for (const taak of bronTaken ?? []) {
-    if (!taak.blocked_by_task_id) continue
-    const nieuwId        = idMap.get(taak.id)
-    const nieuwBlockerId = idMap.get(taak.blocked_by_task_id)
-    if (nieuwId && nieuwBlockerId) {
-      await sb.from('tasks').update({ blocked_by_task_id: nieuwBlockerId }).eq('id', nieuwId)
+    if (!taak.blocked_by_task_id && !taak.parent_task_id) continue
+    const nieuwId = idMap.get(taak.id)
+    if (!nieuwId) continue
+    const patch: Record<string, string> = {}
+    if (taak.blocked_by_task_id) {
+      const nieuwBlockerId = idMap.get(taak.blocked_by_task_id)
+      if (nieuwBlockerId) patch.blocked_by_task_id = nieuwBlockerId
+    }
+    if (taak.parent_task_id) {
+      const nieuwParentId = idMap.get(taak.parent_task_id)
+      if (nieuwParentId) patch.parent_task_id = nieuwParentId
+    }
+    if (Object.keys(patch).length > 0) {
+      await sb.from('tasks').update(patch).eq('id', nieuwId)
     }
   }
 

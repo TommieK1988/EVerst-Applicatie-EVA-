@@ -140,7 +140,7 @@ export async function getTaken(opties?: {
     .select(`
       *,
       task_assignees ( task_id, user_id, rol ),
-      subtaken:tasks!parent_task_id ( id ),
+      subtaken:tasks!parent_task_id ( id, titel, status ),
       task_comments ( id ),
       task_attachments ( id ),
       lijst:task_lists ( id, naam )

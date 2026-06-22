@@ -80,10 +80,15 @@ export function DossierKanban<K extends string>({
   async function handleDrop(targetStatus: K) {
     if (!draggingId) return
 
-    // Bouw7-eigen substatussen zijn alleen in Bouw7 wijzigbaar. Weiger een drop op zo'n kolom
-    // voor dossiers die uit Bouw7 komen; EVA-eigen kolommen blijven vrij sleepbaar.
     const gesleept = dossiers.find(d => d.id === draggingId)
-    if (gesleept && (gesleept as any).bouw7_id != null && isBouw7Substatus(sectie, targetStatus)) {
+
+    // Opdracht-dossiers zijn two-way: slepen naar een Bouw7-eigen opdracht-substatus is toegestaan
+    // en wordt teruggeschreven naar Bouw7. Voor offerte/servicedesk blijven Bouw7-eigen substatussen
+    // alleen-lezen in EVA (geen 1:1 Bouw7-projectstatus) — daar weigeren we de drop nog steeds.
+    if (
+      sectie !== 'opdracht' &&
+      gesleept && (gesleept as any).bouw7_id != null && isBouw7Substatus(sectie, targetStatus)
+    ) {
       setDraggingId(null)
       setDragOverCol(null)
       toast.error('Deze status komt uit Bouw7 en is alleen daar te wijzigen.')
@@ -113,7 +118,15 @@ export function DossierKanban<K extends string>({
       )
       setDraggingId(null)
       setDragOverCol(null)
-      await updateDossierSubstatus(draggingId, targetStatus as DossierSubstatus)
+      // Opdracht-dossiers: schrijf de statuswijziging óók terug naar Bouw7.
+      const res = await updateDossierSubstatus(
+        draggingId,
+        targetStatus as DossierSubstatus,
+        { schrijfBouw7: sectie === 'opdracht' },
+      )
+      if (res.ok && res.bouw7 && !res.bouw7.ok) {
+        toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+      }
     }
   }
 

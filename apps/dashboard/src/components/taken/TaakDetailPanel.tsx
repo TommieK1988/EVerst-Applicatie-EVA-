@@ -139,6 +139,15 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
     })
   }
 
+  const handleSubtaakToggle = (subId: string, huidigeStatus: string) => {
+    startTransition(() => updateTaakStatus(subId, huidigeStatus === 'gereed' ? 'open' : 'gereed'))
+  }
+
+  const handleSubtaakVerwijderen = (subId: string, subTitel: string) => {
+    if (!confirm(`Subtaak "${subTitel}" verwijderen?`)) return
+    startTransition(() => verwijderTaak(subId))
+  }
+
   const handleAssigneeToevoegen = () => {
     if (!nieuweAssigneeId) return
     startTransition(async () => {
@@ -521,9 +530,29 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
           {taak.subtaken.length > 0 && (
             <div className="space-y-1.5 mb-2">
               {taak.subtaken.map((sub: any) => (
-                <div key={sub.id} className="flex items-center gap-2 text-xs text-slate-600 py-1 px-2 bg-slate-50 rounded-lg">
-                  <div className={cn('w-3.5 h-3.5 rounded border-2 flex-shrink-0', sub.status === 'gereed' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300')} />
-                  <span className={cn(sub.status === 'gereed' && 'line-through text-slate-400')}>{sub.titel}</span>
+                <div key={sub.id} className="group flex items-center gap-2 text-xs text-slate-600 py-1 px-2 bg-slate-50 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleSubtaakToggle(sub.id, sub.status)}
+                    disabled={pending}
+                    title={sub.status === 'gereed' ? 'Markeer als open' : 'Markeer als gereed'}
+                    className={cn(
+                      'w-3.5 h-3.5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors disabled:opacity-50',
+                      sub.status === 'gereed' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-everts',
+                    )}
+                  >
+                    {sub.status === 'gereed' && <Check className="w-2.5 h-2.5 text-white" />}
+                  </button>
+                  <span className={cn('flex-1 truncate', sub.status === 'gereed' && 'line-through text-slate-400')}>{sub.titel}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSubtaakVerwijderen(sub.id, sub.titel)}
+                    disabled={pending}
+                    title="Subtaak verwijderen"
+                    className="flex-shrink-0 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               ))}
             </div>
