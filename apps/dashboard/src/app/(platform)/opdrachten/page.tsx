@@ -6,6 +6,8 @@ import { DossierLijst } from '@/components/dossiers/DossierLijst'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import { OPDRACHT_KANBAN_STATUSSEN, OPDRACHT_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersByBouw7Prefix, getDossiersAfgesloten, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
+import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
+import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import { AfgeslotenToggle } from './AfgeslotenToggle'
 import { Suspense } from 'react'
 
@@ -14,17 +16,21 @@ export const metadata: Metadata = { title: 'Opdrachten' }
 export default async function OpdrachtenPage({
   searchParams,
 }: {
-  searchParams: Promise<{ afgesloten?: string }>
+  searchParams: Promise<{ afgesloten?: string; mijn?: string }>
 }) {
   const sp = await searchParams
   const toonAfgesloten = sp.afgesloten === '1'
 
   let user_id: string | null = null
+  let mijnNaam: string | null = null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionClient = createServerClient() as any
     const { data: { user } } = await sessionClient.auth.getUser()
     user_id = user?.id ?? null
+    if (sp.mijn === '1' && user_id) {
+      mijnNaam = medewerkerNaam(await getMedewerkerByAuthId(user_id))
+    }
   } catch {
     // niet ingelogd of session unavailable
   }
@@ -70,6 +76,7 @@ export default async function OpdrachtenPage({
       dossiers={dossiers}
       layouts={layouts}
       user_id={user_id}
+      mijnNaam={mijnNaam}
       extraActies={
         <div className="flex items-center gap-2">
           <BouwSyncKnop lasteSyncIso={lasteSyncIso} />

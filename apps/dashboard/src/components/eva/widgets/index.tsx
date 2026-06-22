@@ -74,7 +74,7 @@ function relativeNewsTime(pubDate: string): string {
 
 /* ── WidgetShell ─────────────────────────────────────────── */
 export function WidgetShell({
-  title, subtitle, action, onAction, actionNode, Icon, children, compact, onMore,
+  title, subtitle, action, onAction, actionNode, Icon, children, compact, onMore, onTitleClick, titleHint,
 }: {
   title: string;
   subtitle?: string;
@@ -82,10 +82,42 @@ export function WidgetShell({
   onAction?: () => void;
   actionNode?: React.ReactNode;
   onMore?: () => void;
+  /** Maakt het icoon + de titel klikbaar (bijv. doorlinken naar het overzicht). */
+  onTitleClick?: () => void;
+  /** Tooltip op de klikbare titel. */
+  titleHint?: string;
   Icon?: React.FC<{ size?: number }>;
   children?: React.ReactNode;
   compact?: boolean;
 }) {
+  const iconNode = Icon ? (
+    <div style={{
+      width: 26, height: 26, borderRadius: 7,
+      background: 'var(--bg-active)',
+      display: 'grid', placeItems: 'center',
+      color: 'var(--accent)', flexShrink: 0,
+    }}>
+      <Icon size={15}/>
+    </div>
+  ) : null;
+
+  const titleBlock = (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{
+        fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700,
+        color: 'var(--fg)', letterSpacing: '-0.005em',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{title}</div>
+      {subtitle && (
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 500,
+          color: 'var(--fg-muted)', marginTop: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{subtitle}</div>
+      )}
+    </div>
+  );
+
   return (
     <section style={{
       background: 'var(--bg-elev)',
@@ -102,30 +134,26 @@ export function WidgetShell({
         borderBottom: '1px solid var(--border)',
         minWidth: 0, flexShrink: 0,
       }}>
-        {Icon && (
-          <div style={{
-            width: 26, height: 26, borderRadius: 7,
-            background: 'var(--bg-active)',
-            display: 'grid', placeItems: 'center',
-            color: 'var(--accent)', flexShrink: 0,
-          }}>
-            <Icon size={15}/>
-          </div>
+        {onTitleClick ? (
+          <button
+            onClick={onTitleClick}
+            title={titleHint ?? title}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              flex: 1, minWidth: 0,
+              background: 'none', border: 'none', padding: 0, margin: 0,
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            {iconNode}
+            {titleBlock}
+          </button>
+        ) : (
+          <>
+            {iconNode}
+            {titleBlock}
+          </>
         )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700,
-            color: 'var(--fg)', letterSpacing: '-0.005em',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{title}</div>
-          {subtitle && (
-            <div style={{
-              fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 500,
-              color: 'var(--fg-muted)', marginTop: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{subtitle}</div>
-          )}
-        </div>
         {actionNode ?? (action && (
           <button onClick={onAction} style={{
             background: 'none', border: 'none',
@@ -351,6 +379,8 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
       title={title}
       subtitle={displayed.length > 0 ? `${displayed.length} ${countLabel}` : 'Geen actieve dossiers'}
       Icon={Icon}
+      onTitleClick={() => router.push(`${moreHref}?mijn=1`)}
+      titleHint={`${title} — gefilterd op mij`}
       onMore={() => router.push(moreHref)}
     >
       <div style={{ display: 'flex', flexDirection: 'column' }}>

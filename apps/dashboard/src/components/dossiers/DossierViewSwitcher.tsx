@@ -21,9 +21,11 @@ type Props = {
   extraActies?: React.ReactNode
   kolomKeyModus?: KolomKeyModus
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
+  /** Naam van de ingelogde medewerker — wordt voorgeselecteerd in de personen-slicer (bv. via ?mijn=1). */
+  mijnNaam?: string | null
 }
 
-export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, extraActies, kolomKeyModus, onStatusChange }: Props) {
+export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, extraActies, kolomKeyModus, onStatusChange, mijnNaam }: Props) {
   const storageKey = `dossier-view-${sectie}`
 
   const [view, setView] = React.useState<ViewMode>(() => {
@@ -31,7 +33,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     return (localStorage.getItem(storageKey) as ViewMode) ?? 'kanban'
   })
 
-  const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>([])
+  const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>(
+    mijnNaam ? [mijnNaam] : [],
+  )
 
   function switchView(v: ViewMode) {
     setView(v)
@@ -61,9 +65,12 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     const namen = dossiers
       .map(d => persoonsNaamVoorFilter(d))
       .filter((n): n is string => !!n)
+    // Neem een eventueel voorgeselecteerde naam altijd op, zodat de chip + "Wis filter"
+    // zichtbaar zijn — ook als de gebruiker de enige persoon in de lijst is.
+    if (mijnNaam) namen.push(mijnNaam)
     return [...new Set(namen)].sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dossiers, sectie])
+  }, [dossiers, sectie, mijnNaam])
 
   const kleurPerLeider = React.useMemo(() => {
     const map: Record<string, string> = {}
@@ -118,8 +125,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     </div>
   )
 
-  // Slicer balk — alleen tonen als er ≥ 2 unieke projectleiders zijn
-  const slicerBalk = uniekePLs.length >= 2 ? (
+  // Slicer balk — tonen bij ≥ 2 unieke personen, of als er een filter actief is
+  // (bv. voorgeselecteerd via ?mijn=1) zodat de gebruiker die kan wissen.
+  const slicerBalk = (uniekePLs.length >= 2 || geselecteerdeLeiders.length > 0) ? (
     <div style={{
       display: 'flex', gap: 6, flexWrap: 'wrap',
       padding: '8px 16px',
