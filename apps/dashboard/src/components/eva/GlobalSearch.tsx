@@ -2,11 +2,10 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { Command } from 'cmdk'
 import { IconSparkle, IconChat } from './Icons'
 import type { GroupedResults, SearchHit, MedewerkerProfiel } from '@/lib/search/global'
 
-/* ─── Context ───────────────────────────────────────────────────────────── */
+/* ─── Context (voor ⌘K + de TopBar-knop) ────────────────────────────────── */
 
 type GlobalSearchCtx = { open: () => void; close: () => void }
 const Ctx = React.createContext<GlobalSearchCtx | null>(null)
@@ -27,7 +26,7 @@ function lijktVraag(s: string): boolean {
   return VRAAGWOORDEN.includes(eerste) && t.split(/\s+/).length >= 3
 }
 
-/* ─── Provider ──────────────────────────────────────────────────────────── */
+/* ─── Provider: ⌘K opent een licht zwevend paneel (geen dimming) ─────────── */
 
 export function GlobalSearchProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
@@ -51,22 +50,37 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
   return (
     <Ctx.Provider value={api}>
       {children}
-      {open && <GlobalSearchDialog onClose={() => setOpen(false)} />}
+      {open && (
+        <>
+          {/* Transparante vanger: klik buiten = sluiten, géén verduistering */}
+          <div
+            onMouseDown={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'transparent' }}
+          />
+          <div
+            style={{
+              position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)',
+              width: 'min(640px, 92vw)', zIndex: 1000,
+            }}
+          >
+            <EvaSearchField
+              autoFocus
+              placeholder="Zoek relaties, dossiers, medewerkers… of stel EVA een vraag"
+              onDone={() => setOpen(false)}
+            />
+          </div>
+        </>
+      )}
     </Ctx.Provider>
   )
 }
 
-/* ─── Dialog ────────────────────────────────────────────────────────────── */
+/* ─── Zoek-hook (debounced server-side fetch) ───────────────────────────── */
 
-function GlobalSearchDialog({ onClose }: { onClose: () => void }) {
-  const router = useRouter()
-  const [query, setQuery] = React.useState('')
+function useEntitySearch(query: string) {
   const [results, setResults] = React.useState<GroupedResults | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const [profiel, setProfiel] = React.useState<MedewerkerProfiel | null>(null)
-  const [profielLaadt, setProfielLaadt] = React.useState(false)
 
-  // Debounced server-side zoek.
   React.useEffect(() => {
     const term = query.trim()
     if (term.length < 2) {
@@ -78,36 +92,64 @@ function GlobalSearchDialog({ onClose }: { onClose: () => void }) {
     const ctrl = new AbortController()
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/eva/search?q=${encodeURIComponent(term)}`, {
-          signal: ctrl.signal,
-        })
+        const res = await fetch(`/api/eva/search?q=${encodeURIComponent(term)}`, { signal: ctrl.signal })
         if (res.ok) setResults(await res.json())
       } catch {
-        /* afgebroken of mislukt — stil laten */
+        /* afgebroken of mislukt — stil */
       } finally {
         setLoading(false)
       }
-    }, 300)
+    }, 250)
     return () => {
       clearTimeout(t)
       ctrl.abort()
     }
   }, [query])
 
+  return { results, loading }
+}
+
+/* ─── Herbruikbare zoekbalk met inline dropdown (geen popup) ─────────────── */
+
+export function EvaSearchField({
+  placeholder = 'Zoek relaties, dossiers, medewerkers… of stel EVA een vraag',
+  autoFocus = false,
+  onDone,
+  barStyle,
+}: {
+  placeholder?: string
+  autoFocus?: boolean
+  /** Wordt aangeroepen na navigeren/vraag (bv. om het zwevende paneel te sluiten). */
+  onDone?: () => void
+  /** Extra styling voor de balk zelf (om hem in te passen op het dashboard). */
+  barStyle?: React.CSSProperties
+}) {
+  const router = useRouter()
+  const [query, setQuery] = React.useState('')
+  const [focused, setFocused] = React.useState(false)
+  const [profiel, setProfiel] = React.useState<MedewerkerProfiel | null>(null)
+  const [profielLaadt, setProfielLaadt] = React.useState(false)
+  const blurTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { results, loading } = useEntitySearch(query)
+
+  const term = query.trim()
+  const toon = focused && term.length >= 1
+  const isVraag = lijktVraag(query)
+
   function vraagEva() {
-    const term = query.trim()
     if (!term) return
-    onClose()
+    onDone?.()
     router.push(`/vraag-eva?seed=${encodeURIComponent(term)}`)
   }
 
   function kiesHit(hit: SearchHit) {
     if (hit.type === 'medewerker') {
-      openMedewerker(hit.id)
+      void openMedewerker(hit.id)
       return
     }
     if (hit.href) {
-      onClose()
+      onDone?.()
       router.push(hit.href)
     }
   }
@@ -125,47 +167,48 @@ function GlobalSearchDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const isVraag = lijktVraag(query)
-
   return (
-    <div
-      onMouseDown={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        paddingTop: '12vh',
-      }}
-    >
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(640px, 92vw)',
-          background: 'var(--bg-elev)',
-          border: '1px solid var(--border)',
-          borderRadius: 14,
-          boxShadow: '0 24px 60px rgba(0,0,0,0.3)',
-          overflow: 'hidden',
-          fontFamily: 'var(--font-ui)',
-        }}
-      >
-        <Command shouldFilter={false} loop>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-            <IconSparkle size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-            <Command.Input
-              autoFocus
-              value={query}
-              onValueChange={(v) => { setQuery(v); setProfiel(null) }}
-              placeholder="Zoek relaties, dossiers, medewerkers… of stel EVA een vraag"
-              onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
-              style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                color: 'var(--fg)', fontSize: 15, fontFamily: 'var(--font-ui)',
-              }}
-            />
-            <kbd style={{ fontSize: 10, color: 'var(--fg-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 5px' }}>esc</kbd>
-          </div>
+    <div style={{ position: 'relative' }}>
+      {/* De balk */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 16px',
+        background: 'var(--bg-elev)', border: '1px solid var(--border)',
+        borderRadius: 12,
+        ...barStyle,
+      }}>
+        <IconSparkle size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+        <input
+          autoFocus={autoFocus}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setProfiel(null) }}
+          onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setFocused(true) }}
+          onBlur={() => { blurTimer.current = setTimeout(() => setFocused(false), 150) }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); vraagEva() }
+            if (e.key === 'Escape') { (e.target as HTMLInputElement).blur(); onDone?.() }
+          }}
+          placeholder={placeholder}
+          style={{
+            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+            color: 'var(--fg)', fontSize: 14, fontFamily: 'var(--font-ui)',
+          }}
+        />
+        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em' }}>⌘ K</span>
+      </div>
 
+      {/* Inline dropdown (geen verduistering, geen modale popup) */}
+      {toon && (
+        <div
+          // voorkom dat klikken in het paneel de input laat blurren
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 1001,
+            background: 'var(--bg-elev)', border: '1px solid var(--border)',
+            borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+            overflow: 'hidden', fontFamily: 'var(--font-ui)',
+          }}
+        >
           {profiel || profielLaadt ? (
             <MedewerkerPaneel
               profiel={profiel}
@@ -173,45 +216,46 @@ function GlobalSearchDialog({ onClose }: { onClose: () => void }) {
               onTerug={() => { setProfiel(null); setProfielLaadt(false) }}
             />
           ) : (
-            <Command.List style={{ maxHeight: '52vh', overflowY: 'auto', padding: 8 }}>
-              {query.trim().length >= 1 && (
-                <Command.Group>
-                  <Command.Item
-                    value="__vraag-eva__"
-                    onSelect={vraagEva}
-                    style={rowStyle(isVraag)}
-                  >
-                    <IconChat size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      Vraag EVA: <strong style={{ color: 'var(--fg)' }}>"{query.trim()}"</strong>
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>↵</span>
-                  </Command.Item>
-                </Command.Group>
-              )}
+            <div style={{ maxHeight: '56vh', overflowY: 'auto', padding: 8 }}>
+              {/* Vraag-EVA actie-rij */}
+              <button
+                onMouseDown={(e) => { e.preventDefault(); vraagEva() }}
+                style={{ ...rowStyle(isVraag), width: '100%', border: 'none', textAlign: 'left' }}
+              >
+                <IconChat size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  Vraag EVA: <strong style={{ color: 'var(--fg)' }}>&quot;{term}&quot;</strong>
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>↵</span>
+              </button>
 
               {loading && (
-                <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--fg-muted)' }}>Zoeken…</div>
+                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>Zoeken…</div>
               )}
 
-              {!loading && query.trim().length >= 2 && results && results.total === 0 && (
-                <Command.Empty style={{ padding: '12px 14px', fontSize: 13, color: 'var(--fg-muted)' }}>
-                  Niets gevonden in EVA voor "{query.trim()}".
-                </Command.Empty>
+              {!loading && term.length >= 2 && results && results.total === 0 && (
+                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
+                  Niets gevonden in EVA voor &quot;{term}&quot;.
+                </div>
+              )}
+
+              {term.length < 2 && (
+                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
+                  Typ minstens 2 tekens om te zoeken.
+                </div>
               )}
 
               {results?.groups.map((g) => (
-                <Command.Group
-                  key={g.type}
-                  heading={g.label}
-                  style={{ marginTop: 6 }}
-                >
+                <div key={g.type} style={{ marginTop: 6 }}>
+                  <div style={{
+                    fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: 'var(--fg-muted)', padding: '6px 12px 2px',
+                  }}>{g.label}</div>
                   {g.hits.map((hit) => (
-                    <Command.Item
+                    <button
                       key={`${hit.type}:${hit.id}`}
-                      value={`${hit.type}:${hit.id}:${hit.label}`}
-                      onSelect={() => kiesHit(hit)}
-                      style={rowStyle(false)}
+                      onMouseDown={(e) => { e.preventDefault(); kiesHit(hit) }}
+                      style={{ ...rowStyle(false), width: '100%', border: 'none', textAlign: 'left' }}
                     >
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ color: 'var(--fg)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -233,20 +277,14 @@ function GlobalSearchDialog({ onClose }: { onClose: () => void }) {
                       {hit.type === 'medewerker' && (
                         <span style={{ fontSize: 11, color: 'var(--fg-muted)', flexShrink: 0 }}>profiel ›</span>
                       )}
-                    </Command.Item>
+                    </button>
                   ))}
-                </Command.Group>
-              ))}
-
-              {query.trim().length < 2 && (
-                <div style={{ padding: '14px', fontSize: 13, color: 'var(--fg-muted)' }}>
-                  Typ minstens 2 tekens om te zoeken.
                 </div>
-              )}
-            </Command.List>
+              ))}
+            </div>
           )}
-        </Command>
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -257,10 +295,11 @@ function rowStyle(highlight: boolean): React.CSSProperties {
     padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
     fontSize: 14, color: 'var(--fg-soft)',
     background: highlight ? 'var(--bg-active)' : 'transparent',
+    fontFamily: 'var(--font-ui)',
   }
 }
 
-/* ─── Medewerker-profielpaneel ──────────────────────────────────────────── */
+/* ─── Medewerker-profielpaneel (in de dropdown) ─────────────────────────── */
 
 function MedewerkerPaneel({
   profiel, laadt, onTerug,
@@ -268,7 +307,7 @@ function MedewerkerPaneel({
   return (
     <div style={{ padding: 16 }}>
       <button
-        onClick={onTerug}
+        onMouseDown={(e) => { e.preventDefault(); onTerug() }}
         style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', fontSize: 12, cursor: 'pointer', padding: 0, marginBottom: 12 }}
       >‹ Terug naar resultaten</button>
 

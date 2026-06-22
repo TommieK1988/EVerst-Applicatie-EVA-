@@ -9,8 +9,8 @@ import {
   SortableContext, useSortable, rectSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { IconSparkle, IconArrowRight } from '../Icons';
-import { useGlobalSearch } from '../GlobalSearch';
+import { IconArrowRight } from '../Icons';
+import { EvaSearchField } from '../GlobalSearch';
 import {
   TasksWidget, WeatherWidget, RemindersWidget,
   ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
@@ -367,8 +367,6 @@ export default function HomeView({
     document.addEventListener('mouseup', handleUp);
   }
 
-  const search = useGlobalSearch();
-
   const go = (seed: string) => {
     router.push(seed ? `/vraag-eva?seed=${encodeURIComponent(seed)}` : '/vraag-eva');
   };
@@ -465,18 +463,9 @@ export default function HomeView({
         </div>
       </div>
 
-      {/* Prompt */}
-      <div onClick={search.open} style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 18px',
-        background: 'var(--bg-elev)', border: '1px solid var(--border)',
-        borderRadius: 12, cursor: 'text', marginBottom: 22,
-      }}>
-        <IconSparkle size={18} style={{ color: 'var(--accent)' }}/>
-        <span style={{ flex: 1, color: 'var(--fg-muted)', fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 500 }}>
-          Stel EVA een vraag over projecten, facturen of documenten.
-        </span>
-        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em' }}>⌘ K</span>
+      {/* Zoekbalk — typ direct, resultaten verschijnen eronder (geen popup) */}
+      <div style={{ marginBottom: 22 }}>
+        <EvaSearchField placeholder="Stel EVA een vraag over projecten, facturen of documenten." barStyle={{ padding: '14px 18px' }} />
       </div>
 
       {/* Widget grid */}
