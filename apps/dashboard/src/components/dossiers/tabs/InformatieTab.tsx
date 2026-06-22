@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import { Calculator, FileText } from 'lucide-react'
 import { cn } from '@everts/ui'
 import {
@@ -617,11 +618,23 @@ export function InformatieTab({
   const bouw7Url = bouw7Vergrendeld
     ? `https://start.bouw7.nl/project/view?id=${(dossier as any).bouw7_id}#/`
     : null
-  // Fase-gating: alleen EVA-eigen substatussen zijn kiesbaar; Bouw7-eigen statussen blijven
-  // zichtbaar als huidige waarde maar zijn niet selecteerbaar.
-  const kiesbareStatussen = beschikbareStatussen.filter(
-    s => !bouw7Vergrendeld || !isBouw7Substatus(sectie, s.key) || s.key === substatus
-  )
+  // Fase-gating. Opdracht-dossiers zijn two-way: hun Bouw7-eigen opdracht-statussen zijn selecteerbaar
+  // (worden teruggeschreven naar Bouw7), behalve financieel_afgesloten (definitieve afsluiting). Voor
+  // aanvraag/offerte blijven Bouw7-eigen substatussen alleen-lezen (zichtbaar als huidige waarde).
+  const kiesbareStatussen = beschikbareStatussen.filter(s => {
+    if (s.key === substatus) return true
+    if (sectie === 'opdracht') return s.key !== 'financieel_afgesloten'
+    return !bouw7Vergrendeld || !isBouw7Substatus(sectie, s.key)
+  })
+
+  // Statuswijziging vanuit de detail-view: EVA bijwerken en — voor opdrachten — terugschrijven naar Bouw7.
+  async function zetSubstatus(next: string) {
+    setSubstatus(next)
+    const res = await updateDossierSubstatus(dossier.id, next as any, { schrijfBouw7: sectie === 'opdracht' })
+    if (res.ok && res.bouw7 && !res.bouw7.ok) {
+      toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+    }
+  }
 
   const [contactpersoonOpties, setContactpersoonOpties] = React.useState<{
     id: string; naam: string; email: string | null; telefoon: string | null
@@ -702,9 +715,11 @@ export function InformatieTab({
   function opslaan() {
     setOpgeslagen(form)
     setEditMode(false)
-    // Fase alleen wegschrijven als de gekozen substatus EVA-stuurbaar is (gating in de dropdown
-    // voorkomt al een Bouw7-eigen keuze, maar dubbel afdekken kan geen kwaad).
-    if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
+    // Fase wegschrijven. Opdracht-dossiers zijn two-way (schrijft ook naar Bouw7); voor aanvraag/offerte
+    // alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen blijven daar alleen-lezen).
+    if (sectie === 'opdracht') {
+      zetSubstatus(substatus).catch(() => {})
+    } else if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
       updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
     }
     // Rollen: voor Bouw7-dossiers alleen de EVA-eigen rollen (teamleider/controller) wegschrijven;
@@ -785,23 +800,6 @@ export function InformatieTab({
             <span className=" text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">
               {dossier.dossiernummer}
             </span>
-            {bouw7Url && (
-              <a
-                href={bouw7Url}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Openen in Bouw7"
-                className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-500 opacity-40 transition-opacity hover:opacity-100"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </a>
-            )}
-            {bouw7Vergrendeld && <DossierVerversKnop dossierId={dossier.id} />}
           </div>
           <h1 className="m-0 text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-neutral-900">
             {dossier.titel}
@@ -830,7 +828,7 @@ export function InformatieTab({
                     <PopoverItem
                       key={s.key}
                       active={s.key === substatus}
-                      onClick={() => { setSubstatus(s.key); updateDossierSubstatus(dossier.id, s.key as any) }}
+                      onClick={() => { zetSubstatus(s.key) }}
                     >
                       <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: statusKleur(s.key) }} />
                       {s.label}
@@ -850,6 +848,23 @@ export function InformatieTab({
 
         {/* Acties rechts */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {bouw7Url && (
+            <>
+              <Button variant="ghost" asChild>
+                <a href={bouw7Url} target="_blank" rel="noopener noreferrer" title="Openen in Bouw7">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                  Open in Bouw7
+                </a>
+              </Button>
+              <DossierVerversKnop dossierId={dossier.id} />
+              <div className="h-6 w-px shrink-0 bg-neutral-200" />
+            </>
+          )}
           {heeftCalcKnoppen && (
             <>
               <Button variant="ghost" asChild>
@@ -888,8 +903,7 @@ export function InformatieTab({
                   <AlertDialogFooter>
                     <AlertDialogCancel>Annuleren</AlertDialogCancel>
                     <AlertDialogAction onClick={async () => {
-                      await updateDossierSubstatus(dossier.id, 'financieel_gereed' as any)
-                      setSubstatus('financieel_gereed')
+                      await zetSubstatus('financieel_gereed')
                       setFinDialoogOpen(false)
                       router.refresh()
                     }}>
