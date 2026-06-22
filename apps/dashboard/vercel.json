@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/bouw7-sync?mode=full",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/bouw7-sync?mode=incremental",
+      "schedule": "45 10 * * *"
+    }
+  ]
+}

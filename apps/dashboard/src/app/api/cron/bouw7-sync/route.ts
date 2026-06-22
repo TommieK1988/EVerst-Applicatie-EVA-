@@ -7,19 +7,21 @@ export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 /**
- * POST /api/cron/bouw7-sync?mode=incremental|full
+ * GET|POST /api/cron/bouw7-sync?mode=incremental|full
  *
  * Beschermde endpoint die de Bouw7-sync uitvoert:
  *   1. runFullSync(mode)         → relaties, contactpersonen, medewerkers, dossiers, planning
  *   2. syncManagementProjecten() → management_projecten (KPI-dashboard)
  *
- * Wordt 2× per dag aangeroepen (06:30 + 12:45 NL) door de Supabase Edge Functions
- * 'bouw7-sync-ochtend' en 'bouw7-sync-middag'. De ochtendrun draait `full` als drift-correctie,
- * de middagrun `incremental` (alleen gewijzigde records → snel). Default = incremental.
+ * Wordt 2× per dag aangeroepen (06:30 + 12:45 NL) via Vercel Cron (zie vercel.json).
+ * De ochtendrun draait `full` als drift-correctie, de middagrun `incremental`
+ * (alleen gewijzigde records → snel). Default = incremental.
  *
- * Beveiliging: Authorization: Bearer <CRON_SECRET>
+ * Beveiliging: Authorization: Bearer <CRON_SECRET>. Vercel Cron zet deze header
+ * automatisch zodra de env var CRON_SECRET in het project staat. GET is voor Vercel
+ * Cron (dat altijd GET stuurt), POST voor handmatig testen met curl.
  */
-export async function POST(req: NextRequest) {
+async function handle(req: NextRequest) {
   const auth = req.headers.get('authorization')
   const secret = process.env.CRON_SECRET
 
@@ -56,3 +58,6 @@ export async function POST(req: NextRequest) {
     { status: 200 },
   )
 }
+
+export const GET = handle
+export const POST = handle

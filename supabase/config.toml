@@ -16,18 +16,4 @@
 schedule = "0 5 * * *"
 verify_jwt = false
 
-# ---------------------------------------------------------------------------
-# Bouw7-sync — 2× per dag (06:30 + 12:45 NL)
-# Cron draait in UTC en past zich NIET aan op zomer-/wintertijd.
-# Tijden hieronder zijn afgesteld op NL ZOMERTIJD (CEST = UTC+2).
-#   06:30 NL → "30 4 * * *"   |  wintertijd: "30 5 * * *"
-#   12:45 NL → "45 10 * * *"  |  wintertijd: "45 11 * * *"
-# ---------------------------------------------------------------------------
-
-[functions.bouw7-sync-ochtend]
-schedule = "30 4 * * *"
-verify_jwt = false
-
-[functions.bouw7-sync-middag]
-schedule = "45 10 * * *"
-verify_jwt = false
+# Bouw7-sync draait via Vercel Cron (apps/dashboard/vercel.json), niet via Supabase.
