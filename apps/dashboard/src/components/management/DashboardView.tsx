@@ -177,6 +177,15 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
   // OHW-aftrek per werkmaatschappij (volledige filiaalnaam als sleutel).
   const ohwMapFil = new Map(ohwPerFiliaal.map(o => [o.filiaal, o]))
 
+  // Eindtotaal netto: OHW-totaal afgetrokken van In opdracht én Gerealiseerd.
+  const netEind: PivotAgg = {
+    ...eindtotaal,
+    omzetOpdracht:         eindtotaal.omzetOpdracht         - ohwTotaal.omzet,
+    omzetGerealiseerd:     eindtotaal.omzetGerealiseerd     - ohwTotaal.omzet,
+    resultaatOpdracht:     eindtotaal.resultaatOpdracht     - ohwTotaal.resultaat,
+    resultaatGerealiseerd: eindtotaal.resultaatGerealiseerd - ohwTotaal.resultaat,
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[12px]">
@@ -201,23 +210,32 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
         <tbody>
           {hierarchie.map(groep => {
             const doel = doelVoorFiliaal(doelstellingen, groep.filiaal)
+            // Totaalregel netto: OHW (toegewezen aan vorig boekjaar) afgetrokken van In opdracht én Gerealiseerd.
+            const ohwFil = ohwMapFil.get(groep.filiaal) ?? { omzet: 0, resultaat: 0 }
+            const netTotaal: PivotAgg = {
+              ...groep.totaal,
+              omzetOpdracht:         groep.totaal.omzetOpdracht         - ohwFil.omzet,
+              omzetGerealiseerd:     groep.totaal.omzetGerealiseerd     - ohwFil.omzet,
+              resultaatOpdracht:     groep.totaal.resultaatOpdracht     - ohwFil.resultaat,
+              resultaatGerealiseerd: groep.totaal.resultaatGerealiseerd - ohwFil.resultaat,
+            }
             return (
               <React.Fragment key={groep.filiaal}>
                 <tr className="bg-success-50/30 font-bold border-t border-success-200">
                   <td className={pvTd}>
                     <span className="font-semibold text-neutral-900">{kortFiliaal(groep.filiaal)}</span>
                   </td>
-                  <td className={cn(pvTd, 'text-right')}>{fEur(groep.totaal.omzetOpdracht || null)}</td>
+                  <td className={cn(pvTd, 'text-right')}>{fEur(netTotaal.omzetOpdracht || null)}</td>
                   <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doel?.omzet_doelstelling ?? null)}</td>
-                  <td className={cn(pvTd, 'text-right')}>{fEur(groep.totaal.omzetGerealiseerd || null)}</td>
-                  <td className={cn(pvTd, 'text-right', groep.totaal.resultaatOpdracht < 0 ? 'text-error-500' : 'text-neutral-900')}>
-                    {fEur(groep.totaal.resultaatOpdracht || null)}
+                  <td className={cn(pvTd, 'text-right')}>{fEur(netTotaal.omzetGerealiseerd || null)}</td>
+                  <td className={cn(pvTd, 'text-right', netTotaal.resultaatOpdracht < 0 ? 'text-error-500' : 'text-neutral-900')}>
+                    {fEur(netTotaal.resultaatOpdracht || null)}
                   </td>
                   <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doel?.resultaat_doelstelling ?? null)}</td>
-                  <td className={cn(pvTd, 'text-right', groep.totaal.resultaatGerealiseerd < 0 ? 'text-error-500' : 'text-success-700')}>
-                    {fEur(groep.totaal.resultaatGerealiseerd || null)}
+                  <td className={cn(pvTd, 'text-right', netTotaal.resultaatGerealiseerd < 0 ? 'text-error-500' : 'text-success-700')}>
+                    {fEur(netTotaal.resultaatGerealiseerd || null)}
                   </td>
-                  <td className={cn(pvTd, 'text-right')}>{dekkingCel(groep.totaal)}</td>
+                  <td className={cn(pvTd, 'text-right')}>{dekkingCel(netTotaal)}</td>
                 </tr>
 
                 {(() => {
@@ -225,7 +243,7 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
                   if (!o || (!o.omzet && !o.resultaat)) return null
                   return (
                     <tr className="bg-warning-50/40">
-                      <td className={cn(pvTd, 'pl-6 text-[11px] italic text-neutral-500')}>OHW vorig boekjaar</td>
+                      <td className={cn(pvTd, 'pl-6 text-[11px] italic text-neutral-500')}>w.v. OHW vorig boekjaar (verrekend)</td>
                       <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
                       <td className={cn(pvTd, 'text-right')} />
                       <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
@@ -259,18 +277,18 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
 
           <tr className="bg-success-50/60 font-bold border-t-2 border-success-300">
             <td className={pvTd}><span className="font-bold text-success-700">Eindtotaal</span></td>
-            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.omzetOpdracht || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(netEind.omzetOpdracht || null)}</td>
             <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doelTotaalOmzet || null)}</td>
-            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.omzetGerealiseerd || null)}</td>
-            <td className={cn(pvTd, 'text-right')}>{fEur(eindtotaal.resultaatOpdracht || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(netEind.omzetGerealiseerd || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{fEur(netEind.resultaatOpdracht || null)}</td>
             <td className={cn(pvTd, 'text-right text-neutral-500')}>{fEur(doelTotaalResultaat || null)}</td>
-            <td className={cn(pvTd, 'text-right text-success-700')}>{fEur(eindtotaal.resultaatGerealiseerd || null)}</td>
-            <td className={cn(pvTd, 'text-right')}>{dekkingCel(eindtotaal)}</td>
+            <td className={cn(pvTd, 'text-right text-success-700')}>{fEur(netEind.resultaatGerealiseerd || null)}</td>
+            <td className={cn(pvTd, 'text-right')}>{dekkingCel(netEind)}</td>
           </tr>
 
           {(ohwTotaal.omzet > 0 || ohwTotaal.resultaat > 0) && (
             <tr className="bg-warning-50/50 font-semibold">
-              <td className={cn(pvTd, 'text-neutral-600 italic text-[11px]')}>OHW-totaal vorig boekjaar (aftrek)</td>
+              <td className={cn(pvTd, 'text-neutral-600 italic text-[11px]')}>w.v. OHW-totaal vorig boekjaar (verrekend)</td>
               <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
               <td className={cn(pvTd, 'text-right')} />
               <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
