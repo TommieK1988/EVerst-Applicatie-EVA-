@@ -597,11 +597,13 @@ type Props = {
   sjablonen?: DbTaskList[]
   urgenteTaken?: UrgenteTaak[]
   categorieen?: string[]
+  /** Goedgekeurd meerwerk (excl. btw), live uit Bouw7; 0 indien geen/ongekoppeld. */
+  meerwerk?: number
 }
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
-  relatie = null, sjablonen = [], urgenteTaken = [], categorieen,
+  relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
 }: Props) {
   const router = useRouter()
   const [editMode, setEditMode]     = React.useState(false)
@@ -781,6 +783,16 @@ export function InformatieTab({
     (!quoteTotalen && calcTotalen?.btw_groepen?.length)
       ? calcTotalen.btw_groepen.map(g => ({ label: `BTW ${g.pct}%`, percentage: g.pct, bedrag: g.btw }))
       : (!quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null)
+  // Goedgekeurd meerwerk (live uit Bouw7) verhoogt de opdrachtwaarde. Excl. btw rechtstreeks bijtellen;
+  // voor incl. btw het effectieve btw-tarief van dit dossier hergebruiken (incl/excl-verhouding), anders 21%.
+  const heeftMeerwerk         = meerwerk > 0
+  const btwFactor             = (finTotaalIncl != null && finAanneemsom)
+    ? finTotaalIncl / finAanneemsom
+    : 1.21
+  const finAanneemsomMeerwerk = heeftMeerwerk && finAanneemsom != null ? finAanneemsom + meerwerk : finAanneemsom
+  const finTotaalInclMeerwerk = heeftMeerwerk && finTotaalIncl != null
+    ? Math.round((finTotaalIncl + meerwerk * btwFactor) * 100) / 100
+    : finTotaalIncl
   const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
@@ -1284,6 +1296,12 @@ export function InformatieTab({
           <CardBody>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <InfoVeld label="Aanneemsom excl. BTW"   waarde={finAanneemsom != null ? fmtBedrag(finAanneemsom) : null} numeric />
+              {heeftMeerwerk && (
+                <InfoVeld label="Goedgekeurd meerwerk (excl. BTW)" waarde={fmtBedrag(meerwerk)} numeric />
+              )}
+              {heeftMeerwerk && finAanneemsomMeerwerk != null && (
+                <InfoVeld label="Aanneemsom incl. meerwerk (excl. BTW)" waarde={fmtBedrag(finAanneemsomMeerwerk)} numeric />
+              )}
               {finKostprijs != null ? (
                 <InfoVeld label="Gecalculeerde kostprijs" waarde={fmtBedrag(finKostprijs)} numeric />
               ) : (
@@ -1323,9 +1341,11 @@ export function InformatieTab({
               )}
             </div>
             <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">Totaal incl. BTW</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">
+                {heeftMeerwerk ? 'Totaal incl. BTW & meerwerk' : 'Totaal incl. BTW'}
+              </span>
               <span className="tabular-nums text-[18px] font-bold text-neutral-900">
-                {finTotaalIncl != null ? fmtBedrag(finTotaalIncl) : '—'}
+                {finTotaalInclMeerwerk != null ? fmtBedrag(finTotaalInclMeerwerk) : '—'}
               </span>
             </div>
             <Separator className="my-3" />

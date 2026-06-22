@@ -115,6 +115,7 @@ const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) =>
 /** Kolomkoppen van de bewakingstabel — de door de gebruiker gevraagde velden. */
 const BEWAKING_KOLOMMEN = [
   'Begroot',
+  'Meerwerk',
   'Tot. prognose',
   'Prognose-uren',
   'Geboekte uren',
@@ -145,6 +146,7 @@ const BewakingRow = ({ r }: { r: BewakingRegel }) => (
   <tr>
     <CodeCel code={r.code} naam={r.naam} />
     <TD compact>{fmt(r.begroot)}</TD>
+    <TD compact>{fmt(r.meerwerk)}</TD>
     <TD compact>{fmt(r.prognose)}</TD>
     <TD compact>{fmtUren(r.prognoseUren)}</TD>
     <TD compact kleur={urenRood(r.geboekteUren, r.prognoseUren) ? ROOD : undefined}>{fmtUren(r.geboekteUren)}</TD>
@@ -209,6 +211,7 @@ async function BewakingTabel({ dossierId }: { dossierId: string }) {
                 <tr style={{ background: subGroen }}>
                   <CodeCel code={null} naam={`Subtotaal ${h.naam}`} vet achtergrond={subGroen} />
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.meerwerk), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
                   <TD compact vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
                   <TD compact vet kleur={urenRood(sub(h.regels, (r) => r.geboekteUren), sub(h.regels, (r) => r.prognoseUren)) ? ROOD : undefined}>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
@@ -226,6 +229,7 @@ async function BewakingTabel({ dossierId }: { dossierId: string }) {
             <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
               <CodeCel code={null} naam="Totaal" vet achtergrond="var(--neutral-100, #eef2f3)" />
               <TD compact vet>{fmt(t.begroot, true)}</TD>
+              <TD compact vet>{fmt(t.meerwerk, true)}</TD>
               <TD compact vet>{fmt(t.prognose, true)}</TD>
               <TD compact vet>{fmtUren(t.prognoseUren, true)}</TD>
               <TD compact vet kleur={urenRood(t.geboekteUren, t.prognoseUren) ? ROOD : undefined}>{fmtUren(t.geboekteUren, true)}</TD>
@@ -406,13 +410,13 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
                 <TD>{fmt(teFactureren)}</TD>
               </tr>
               <tr>
-                <TDLabel>Meerwerk</TDLabel>
-                <TD>{fmt(f.additionalWork)}</TD>
+                <TDLabel>Goedgekeurd meerwerk</TDLabel>
+                <TD accent={meerwerk > 0}>{fmt(f.additionalWork)}</TD>
                 <TD>—</TD>
                 <TD>—</TD>
               </tr>
               <tr style={{ background: 'var(--neutral-50)' }}>
-                <TDLabel vet>Totaal</TDLabel>
+                <TDLabel vet>Totaal incl. meerwerk</TDLabel>
                 <TD vet>{fmt(opbrTotaal.b, true)}</TD>
                 <TD vet accent={opbrTotaal.r > 0}>{fmt(opbrTotaal.r, true)}</TD>
                 <TD vet>{fmt(teFactureren, true)}</TD>

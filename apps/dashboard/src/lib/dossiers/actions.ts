@@ -670,6 +670,7 @@ export type BewakingRegel = {
   hoofdstuk: string | null
 
   begroot: number              // 1. Begroot bedrag (som over kostensoorten)
+  meerwerk: number             // 1b. Geaccordeerd meerwerk (som over kostensoorten)
   prognose: number             // 2. Totale prognose
   prognoseUren: number         // 3. Aantal prognose-uren (arbeid)
   geboekteUren: number         // 4. Geboekte/bestede uren (arbeid)
@@ -684,6 +685,7 @@ export type BewakingRegel = {
 
 export type BewakingTotalen = {
   begroot: number
+  meerwerk: number
   prognose: number
   prognoseUren: number
   geboekteUren: number
@@ -711,7 +713,7 @@ const toGetal = (v: unknown): number => {
 
 const legeRegel = (): BewakingRegel => ({
   code: null, naam: null, hoofdstukId: null, hoofdstuk: null,
-  begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
+  begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
   arbeidskosten: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
   verwachteKosten: 0, geboekteKosten: 0, progress: null,
 })
@@ -734,7 +736,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
   const leeg: DossierBewakingData = {
     beschikbaar: false, hoofdstukken: [],
     totalen: {
-      begroot: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
+      begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
       onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
     },
     geboekteUrenProject: null,
@@ -820,6 +822,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       const budget = toGetal(e.budgetAmount)
       const kosten = toGetal(e.costAmount)
       r.begroot += budget
+      r.meerwerk += toGetal(e.additionalWorkAmount)
       r.prognose += toGetal(e.prognosisAmount)
       r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
       r.geboekteUren += toGetal(e.hourInfo?.costHours)
@@ -921,6 +924,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const som = (sel: (r: BewakingRegel) => number) => alleRegels.reduce((s, r) => s + sel(r), 0)
     const totalen: BewakingTotalen = {
       begroot: som((r) => r.begroot),
+      meerwerk: som((r) => r.meerwerk),
       prognose: som((r) => r.prognose),
       prognoseUren: som((r) => r.prognoseUren),
       geboekteUren: som((r) => r.geboekteUren),

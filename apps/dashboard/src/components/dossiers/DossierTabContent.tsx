@@ -1,4 +1,4 @@
-import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles } from '@/lib/dossiers/actions'
+import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel } from '@/lib/dossiers/actions'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
 import { getSjablonen, getUrgenteTakenVoorDossier } from '@/lib/taken/services/taken'
@@ -39,14 +39,18 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen] = await Promise.all([
+    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel] = await Promise.all([
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
       getSjablonen(),
       getUrgenteTakenVoorDossier(id),
       getUniekeBouw7Categorieen(),
+      // Goedgekeurd meerwerk komt live uit Bouw7; alleen ophalen bij gekoppeld dossier.
+      dossier.bouw7_id ? getDossierFinancieel(id).catch(() => null) : Promise.resolve(null),
     ])
+
+    const meerwerk = Number(financieel?.bouw7Financial?.additionalWork) || 0
 
     return (
       <>
@@ -60,6 +64,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           sjablonen={sjablonen}
           urgenteTaken={urgenteTaken}
           categorieen={categorieen}
+          meerwerk={meerwerk}
         />
       </>
     )
