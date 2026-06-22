@@ -215,6 +215,8 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
     <WidgetShell
       title="Mijn taken"
       subtitle={`${open} open · ${doneIds.size} afgerond`}
+      onTitleClick={() => router.push('/mijn-taken')}
+      titleHint="Bekijk al mijn taken"
       actionNode={
         <NieuweTaakDialog
           toonDossierPicker

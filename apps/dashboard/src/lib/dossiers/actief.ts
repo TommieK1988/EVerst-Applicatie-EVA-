@@ -125,6 +125,17 @@ function toContext(row: any): DossierContext {
   }
 }
 
+const DOSSIER_CONTEXT_SELECT = `
+  id, dossiernummer, titel, hoofdstatus,
+  aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus,
+  gearchiveerd, werkadres_stad, verwacht_startdatum, verwacht_einddatum,
+  relaties!klant_id ( naam ),
+  projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam ),
+  uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
+  calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
+  werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam )
+`
+
 /**
  * Haalt alle actieve dossiers op, verrijkt met klant- en rolnamen.
  * Retourneert de id-lijst plus een lookup-map voor de tabel-context.
@@ -139,16 +150,7 @@ export async function getActieveDossierContext(): Promise<{
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`
-      id, dossiernummer, titel, hoofdstatus,
-      aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus,
-      gearchiveerd, werkadres_stad, verwacht_startdatum, verwacht_einddatum,
-      relaties!klant_id ( naam ),
-      projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam ),
-      uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
-      calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
-      werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam )
-    `)
+    .select(DOSSIER_CONTEXT_SELECT)
 
   if (error) throw new Error(`Fout bij ophalen actieve dossiers: ${error.message}`)
 
@@ -160,4 +162,30 @@ export async function getActieveDossierContext(): Promise<{
   }
 
   return { ids: [...context.keys()], context }
+}
+
+/**
+ * Context-map voor een specifieke set dossier-ids (zonder actief-filter).
+ * Voor schermen die vanuit taken/toewijzingen vertrekken i.p.v. vanuit de actieve
+ * dossiers — zodat ook taken op afgeronde dossiers volledige context houden.
+ * Alleen aanroepen vanuit Server Components (admin client, geen RLS).
+ */
+export async function getDossierContextVoorIds(
+  ids: string[],
+): Promise<Map<string, DossierContext>> {
+  const context = new Map<string, DossierContext>()
+  if (ids.length === 0) return context
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select(DOSSIER_CONTEXT_SELECT)
+    .in('id', ids)
+
+  if (error) throw new Error(`Fout bij ophalen dossier-context: ${error.message}`)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const row of (data ?? []) as any[]) context.set(row.id, toContext(row))
+  return context
 }

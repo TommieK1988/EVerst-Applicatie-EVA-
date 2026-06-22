@@ -31,7 +31,7 @@ export default async function MijnTakenPage() {
       layouts={layouts}
       user_id={user_id}
       titel="Mijn taken"
-      subtitel="Jouw toegewezen open taken op actieve dossiers."
+      subtitel="Al jouw toegewezen open taken."
       scherm="mijn-taken"
       verbergToegewezenSlicer
     />
