@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { IconSparkle, IconChat } from './Icons'
+import { IconSparkle } from './Icons'
 import type { GroupedResults, SearchHit, MedewerkerProfiel } from '@/lib/search/global'
 
 /* ─── Context (voor ⌘K + de TopBar-knop) ────────────────────────────────── */
@@ -14,16 +14,6 @@ export function useGlobalSearch(): GlobalSearchCtx {
   const ctx = React.useContext(Ctx)
   if (!ctx) return { open: () => {}, close: () => {} }
   return ctx
-}
-
-const VRAAGWOORDEN = ['hoeveel', 'wat', 'welke', 'wie', 'waar', 'hoe', 'wanneer', 'waarom']
-
-function lijktVraag(s: string): boolean {
-  const t = s.trim().toLowerCase()
-  if (!t) return false
-  if (t.endsWith('?')) return true
-  const eerste = t.split(/\s+/)[0]
-  return VRAAGWOORDEN.includes(eerste) && t.split(/\s+/).length >= 3
 }
 
 /* ─── Provider: ⌘K opent een licht zwevend paneel (geen dimming) ─────────── */
@@ -65,7 +55,7 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
           >
             <EvaSearchField
               autoFocus
-              placeholder="Zoek relaties, dossiers, medewerkers… of stel EVA een vraag"
+              placeholder="Zoek op relatie, adres of dossier…"
               onDone={() => setOpen(false)}
             />
           </div>
@@ -112,7 +102,7 @@ function useEntitySearch(query: string) {
 /* ─── Herbruikbare zoekbalk met inline dropdown (geen popup) ─────────────── */
 
 export function EvaSearchField({
-  placeholder = 'Zoek relaties, dossiers, medewerkers… of stel EVA een vraag',
+  placeholder = 'Zoek op relatie, adres of dossier…',
   autoFocus = false,
   onDone,
   barStyle,
@@ -135,13 +125,6 @@ export function EvaSearchField({
 
   const term = query.trim()
   const toon = focused && term.length >= 1
-  const isVraag = lijktVraag(query)
-
-  function vraagEva() {
-    if (!term) return
-    onDone?.()
-    router.push(`/vraag-eva?seed=${encodeURIComponent(term)}`)
-  }
 
   function kiesHit(hit: SearchHit) {
     if (hit.type === 'medewerker') {
@@ -185,7 +168,6 @@ export function EvaSearchField({
           onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setFocused(true) }}
           onBlur={() => { blurTimer.current = setTimeout(() => setFocused(false), 150) }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); vraagEva() }
             if (e.key === 'Escape') { (e.target as HTMLInputElement).blur(); onDone?.() }
           }}
           placeholder={placeholder}
@@ -217,18 +199,6 @@ export function EvaSearchField({
             />
           ) : (
             <div style={{ maxHeight: '56vh', overflowY: 'auto', padding: 8 }}>
-              {/* Vraag-EVA actie-rij */}
-              <button
-                onMouseDown={(e) => { e.preventDefault(); vraagEva() }}
-                style={{ ...rowStyle(isVraag), width: '100%', border: 'none', textAlign: 'left' }}
-              >
-                <IconChat size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  Vraag EVA: <strong style={{ color: 'var(--fg)' }}>&quot;{term}&quot;</strong>
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>↵</span>
-              </button>
-
               {loading && (
                 <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>Zoeken…</div>
               )}

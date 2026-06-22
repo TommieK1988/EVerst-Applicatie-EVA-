@@ -102,14 +102,20 @@ export async function searchAllEntities(
     await Promise.all([
       supabase
         .from('dossiers')
-        .select('id, dossiernummer, titel, hoofdstatus, relaties!klant_id ( naam )')
-        .or(`titel.ilike.${orLike},dossiernummer.ilike.${orLike}`)
+        .select('id, dossiernummer, titel, hoofdstatus, werkadres_straat, werkadres_stad, relaties!klant_id ( naam )')
+        .or(
+          `titel.ilike.${orLike},dossiernummer.ilike.${orLike},` +
+            `werkadres_straat.ilike.${orLike},werkadres_postcode.ilike.${orLike},werkadres_stad.ilike.${orLike}`,
+        )
         .order('updated_at', { ascending: false })
         .limit(limit),
       supabase
         .from('relaties')
-        .select('id, naam, types, adres_plaats')
-        .ilike('naam', like)
+        .select('id, naam, types, adres_straat, adres_plaats')
+        .or(
+          `naam.ilike.${orLike},adres_straat.ilike.${orLike},` +
+            `adres_postcode.ilike.${orLike},adres_plaats.ilike.${orLike}`,
+        )
         .order('naam', { ascending: true })
         .limit(limit),
       supabase
@@ -140,7 +146,7 @@ export async function searchAllEntities(
       type: 'relatie' as const,
       id: r.id,
       label: r.naam,
-      sublabel: r.adres_plaats ?? null,
+      sublabel: [r.adres_straat, r.adres_plaats].filter(Boolean).join(', ') || null,
       badge: Array.isArray(r.types) && r.types.length ? r.types[0] : null,
       href: `/relaties/${r.id}`,
     })),
@@ -156,7 +162,9 @@ export async function searchAllEntities(
       type: 'dossier' as const,
       id: d.id,
       label: d.titel,
-      sublabel: [d.dossiernummer, d.relaties?.naam].filter(Boolean).join(' · ') || null,
+      sublabel: [d.dossiernummer, d.relaties?.naam, [d.werkadres_straat, d.werkadres_stad].filter(Boolean).join(' ')]
+        .filter(Boolean)
+        .join(' · ') || null,
       badge: d.hoofdstatus ?? null,
       href: dossierHref(d.id, d.hoofdstatus),
     })),
