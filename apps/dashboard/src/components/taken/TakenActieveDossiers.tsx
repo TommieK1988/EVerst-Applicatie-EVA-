@@ -59,10 +59,18 @@ const NIET_TOEGEWEZEN = '__none__'
 
 export default function TakenActieveDossiers({
   data, layouts, user_id,
+  titel = 'Taken — actieve dossiers',
+  subtitel = 'Alle taken (los én uit actielijsten) van dossiers die nog niet zijn afgerond.',
+  scherm = 'taken-overzicht',
+  verbergToegewezenSlicer = false,
 }: {
   data: TaakRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
+  titel?: string
+  subtitel?: string
+  scherm?: string
+  verbergToegewezenSlicer?: boolean
 }) {
   const router = useRouter()
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
@@ -85,14 +93,16 @@ export default function TakenActieveDossiers({
       { key: 'prioriteit', label: 'Prioriteit',
         opties: ord(prios, ['urgent', 'hoog', 'normaal', 'laag'])
           .map(p => ({ value: p, label: PRIO_META[p]?.label ?? p })) },
-      { key: 'toegewezen', label: 'Toegewezen aan',
+      ...(verbergToegewezenSlicer ? [] : [{
+        key: 'toegewezen', label: 'Toegewezen aan',
         opties: [
           ...personen.map(p => ({ value: p, label: p })),
           { value: NIET_TOEGEWEZEN, label: 'Niet toegewezen' },
-        ] },
+        ],
+      }]),
       { key: 'deadline', label: 'Deadline', opties: DEADLINE_OPTIES },
     ]
-  }, [data])
+  }, [data, verbergToegewezenSlicer])
 
   // ── Filtering op slicer-waarden ──────────────────────────────────
   const gefilterd = useMemo(() => {
@@ -181,10 +191,10 @@ export default function TakenActieveDossiers({
     <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
-          Taken — actieve dossiers
+          {titel}
         </h1>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-          Alle taken (los én uit actielijsten) van dossiers die nog niet zijn afgerond.
+          {subtitel}
         </p>
       </div>
 
@@ -196,7 +206,7 @@ export default function TakenActieveDossiers({
       />
 
       <OverzichtTabel
-        scherm="taken-overzicht"
+        scherm={scherm}
         data={gefilterd}
         kolommen={kolommen}
         layouts={layouts}

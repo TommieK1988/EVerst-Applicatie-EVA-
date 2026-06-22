@@ -506,6 +506,7 @@ export const RECHTEN_MODULES = [
   { key: 'everts_calc',    label: 'EvertsCalc' },
   { key: 'formulieren',    label: 'Formulieren' },
   { key: 'taken',          label: 'Actielijsten' },
+  { key: 'mijn_taken',     label: 'Mijn taken' },
   { key: 'geveltekening',  label: 'Geveltekeningen' },
   { key: 'financieel',     label: 'Financieel' },
   { key: 'instellingen',   label: 'Instellingen' },

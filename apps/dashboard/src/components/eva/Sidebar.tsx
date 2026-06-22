@@ -10,7 +10,7 @@ import {
   IconFacturen, IconInkoop,
   IconKam,
   IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc, IconGeveltekeningen,
-  IconFormulieren,
+  IconFormulieren, IconMijnTaken,
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -48,6 +48,7 @@ type NavEntry = {
 }
 
 const NAV: NavEntry[] = [
+  { href: '/mijn-taken',  label: 'Mijn taken',  Icon: IconMijnTaken,  separator: true, module: 'mijn_taken' },
   { href: '/aanvragen',   label: 'Aanvragen',   Icon: IconAanvragen,  module: 'dossiers'    },
   { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes,   module: 'dossiers'    },
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },

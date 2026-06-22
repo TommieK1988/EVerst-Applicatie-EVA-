@@ -457,6 +457,15 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
   return rijen
 }
 
+/**
+ * Mijn toegewezen taken — dezelfde rijen als het Taken-overzicht (actieve dossiers),
+ * maar gefilterd op de taken die aan `userId` zijn toegewezen. Voor de "Mijn taken"-pagina.
+ */
+export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
+  const alle = await getTakenVoorActieveDossiers()
+  return alle.filter(r => r.toegewezen_ids.includes(userId))
+}
+
 export async function getSjablonen(): Promise<DbTaskList[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
