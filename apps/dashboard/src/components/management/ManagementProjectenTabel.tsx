@@ -95,9 +95,10 @@ function TotalenBalk({ rows, variant }: { rows: ManagementProject[]; variant: Pr
       ]
     : [
         { label: 'Aantal',           value: rows.length },
-        { label: 'Totale opdracht',  value: fEur(som(rows, 'totale_opdracht')) },
+        // In opdracht netto na OHW-aftrek (toegewezen aan vorig boekjaar).
+        { label: 'Totale opdracht',  value: fEur(som(rows, 'totale_opdracht')    - som(rows, 'ohw_omzet')) },
         { label: 'Geboekte kosten',  value: fEur(som(rows, 'geboekte_kosten')) },
-        { label: 'Verw. resultaat',  value: fEur(som(rows, 'verwacht_resultaat')) },
+        { label: 'Verw. resultaat',  value: fEur(som(rows, 'verwacht_resultaat') - som(rows, 'ohw_resultaat')) },
       ]
 
   return (

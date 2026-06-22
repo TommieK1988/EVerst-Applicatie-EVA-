@@ -275,7 +275,9 @@ export function buildPivotPL(projecten: ManagementProject[]): PLPivot[] {
       d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
       d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
     }
-    // OHW-correctie: trek vorig-boekjaar-deel af van de Gerealiseerd-cijfers.
+    // OHW-correctie: trek vorig-boekjaar-deel af van zowel In opdracht als Gerealiseerd.
+    d.omzetOpdracht         -= p.ohw_omzet     ?? 0
+    d.resultaatOpdracht     -= p.ohw_resultaat ?? 0
     d.omzetGerealiseerd     -= p.ohw_omzet     ?? 0
     d.resultaatGerealiseerd -= p.ohw_resultaat ?? 0
   }
@@ -351,9 +353,9 @@ export function berekenManagementKpi(
     { omzet: 0, resultaat: 0 },
   )
 
-  // Netto = bruto werken − OHW (toegewezen aan vorig boekjaar).
+  // Netto = bruto werken − OHW (toegewezen aan vorig boekjaar) — zowel In opdracht als Gerealiseerd.
   const totaalResultaatGerealiseerd = filTotalen.reduce((s, f) => s + f.t.resultaatGerealiseerd, 0) - ohwTotaal.resultaat
-  const totaalResultaatOpdracht     = filTotalen.reduce((s, f) => s + f.t.resultaatOpdracht, 0)
+  const totaalResultaatOpdracht     = filTotalen.reduce((s, f) => s + f.t.resultaatOpdracht, 0) - ohwTotaal.resultaat
   const totaalAK                    = akData.reduce((s, a) => s + (a.bedrag_ak ?? 0), 0)
 
   const akDekkingGerealiseerd = totaalAK > 0 ? (totaalResultaatGerealiseerd / totaalAK) * 100 : null
@@ -363,8 +365,9 @@ export function berekenManagementKpi(
   const jaarresultaatData = filTotalen.map(({ filiaal, t }) => {
     const doel    = doelVoorFiliaal(doelstellingen, filiaal)
     const doelRes = doel?.resultaat_doelstelling ?? 0
-    const real        = t.resultaatGerealiseerd - (ohwMap.get(filiaal)?.resultaat ?? 0)
-    const opdrachtRest = Math.max(0, t.resultaatOpdracht - real)
+    const ohwRes  = ohwMap.get(filiaal)?.resultaat ?? 0
+    const real        = t.resultaatGerealiseerd - ohwRes
+    const opdrachtRest = Math.max(0, (t.resultaatOpdracht - ohwRes) - real)
     const nogBinnen   = Math.max(0, doelRes - real - opdrachtRest)
     const pct = (x: number) => doelRes > 0 ? Math.round((x / doelRes) * 100) : 0
     return {

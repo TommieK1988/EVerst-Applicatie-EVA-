@@ -226,10 +226,10 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
                   return (
                     <tr className="bg-warning-50/40">
                       <td className={cn(pvTd, 'pl-6 text-[11px] italic text-neutral-500')}>OHW vorig boekjaar</td>
-                      <td className={cn(pvTd, 'text-right')} />
-                      <td className={cn(pvTd, 'text-right')} />
                       <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
                       <td className={cn(pvTd, 'text-right')} />
+                      <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
+                      <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.resultaat ? `−${fEur(o.resultaat)}` : '—'}</td>
                       <td className={cn(pvTd, 'text-right')} />
                       <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.resultaat ? `−${fEur(o.resultaat)}` : '—'}</td>
                       <td className={cn(pvTd, 'text-right')} />
@@ -271,10 +271,10 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
           {(ohwTotaal.omzet > 0 || ohwTotaal.resultaat > 0) && (
             <tr className="bg-warning-50/50 font-semibold">
               <td className={cn(pvTd, 'text-neutral-600 italic text-[11px]')}>OHW-totaal vorig boekjaar (aftrek)</td>
-              <td className={cn(pvTd, 'text-right')} />
-              <td className={cn(pvTd, 'text-right')} />
               <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
               <td className={cn(pvTd, 'text-right')} />
+              <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
+              <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.resultaat ? `−${fEur(ohwTotaal.resultaat)}` : '—'}</td>
               <td className={cn(pvTd, 'text-right')} />
               <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.resultaat ? `−${fEur(ohwTotaal.resultaat)}` : '—'}</td>
               <td className={cn(pvTd, 'text-right')} />
