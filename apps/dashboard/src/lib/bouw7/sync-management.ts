@@ -105,7 +105,8 @@ function mapProject(
   const resultaatGereed = fin ? toNum(fin.result?.realised) : null
 
   // ── Afgeleide percentages ──
-  const pctMarge  = totaleOpdracht != null && verwachtResultaat != null ? pct(verwachtResultaat, totaleOpdracht) : null
+  // Lopende "% marge" = begrote marge o.b.v. opdracht (excl. BTW) en prognose-kosten.
+  const pctMarge = totaleOpdracht != null ? pct(totaleOpdracht - (kostenPrognose ?? 0), totaleOpdracht) : null
   // % gereed = Bouw7 WIP-report 'progress'; val terug op kostenratio (geboekte/prognose).
   const pctGereed = progress != null
     ? progress
@@ -114,8 +115,13 @@ function mapProject(
   const omzetObvPct     = totaleOpdracht  != null && pctGereed != null ? totaleOpdracht  * (pctGereed / 100) : null
   const resultaatObvPct = verwachtResultaat != null && pctGereed != null ? verwachtResultaat * (pctGereed / 100) : null
 
-  const pctMargeGereed   = gefactureerd != null && resultaatGereed != null ? pct(resultaatGereed, gefactureerd) : null
-  const verschilPctMarge = pctMargeGereed != null && pctMarge != null ? pctMargeGereed - pctMarge : null
+  // Gereed "% marge" = gerealiseerde marge o.b.v. opbrengsten en geboekte kosten.
+  const pctMargeGereed = gefactureerd != null ? pct(gefactureerd - (geboekteKosten ?? 0), gefactureerd) : null
+
+  // Δ marge alleen als er écht een begroting is: begrote én prognose-kosten > 0.
+  const kostenBegroot    = fin ? somKosten(fin.costs, 'budgeted') : null
+  const heeftBegroting   = (kostenBegroot ?? 0) > 0 && (kostenPrognose ?? 0) > 0
+  const verschilPctMarge = heeftBegroting && pctMargeGereed != null && pctMarge != null ? pctMargeGereed - pctMarge : null
 
   return {
     projectnummer,
