@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Progress } from '@/components/ui/progress'
-import type { ManagementProject } from './ManagementDashboard'
+import type { ManagementProject } from '@/lib/dashboard/aggregaties'
 
 /* ── Formatters ──────────────────────────────────────────────────── */
 

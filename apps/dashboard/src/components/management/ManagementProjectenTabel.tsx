@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
-import type { ManagementProject } from './ManagementDashboard'
+import type { ManagementProject } from '@/lib/dashboard/aggregaties'
 import {
   ProjectnummerCel, HoverTekst, StatusCel, EurCel, MargeCel, VerschilCel, PctGereedCel, openDossierTab, fEur,
 } from './format'

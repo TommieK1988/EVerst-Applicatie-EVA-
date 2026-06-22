@@ -50,7 +50,7 @@ const NAV: NavEntry[] = [
   { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes,   module: 'dossiers'    },
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
   { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
-  { href: '/management',  label: 'Management',  Icon: IconManagement, module: 'management'   },
+  { href: '/management/dashboard', label: 'Management', Icon: IconManagement, module: 'management' },
 ]
 
 const BEHEER: NavEntry[] = [
@@ -144,6 +144,19 @@ const APP_SUBNAV: Record<string, {
     items: [
       { href: '/geveltekening',            label: 'Overzicht',  icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
       { href: '/geveltekening/tekeningen', label: 'Tekeningen', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+    ],
+  },
+  '/management': {
+    label: 'Management',
+    Icon: IconManagement,
+    items: [
+      { href: '/management/dashboard',   label: 'Dashboard',      icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+      { href: '/management/lopend',      label: 'Lopende Werken', icon: 'M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z' },
+      { href: '/management/gereed',      label: 'Gereed Werken',  icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+      { href: '/management/servicedesk', label: 'Servicedesk',    icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { href: '/management/verkoop',     label: 'Verkoop',        icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
+      { href: '/management/calculators', label: 'Calculators',    icon: 'M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M16 3l2 2-9 9m0 0H7m2 0V9' },
+      { href: '/management/historie',    label: 'Historie',       icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
     ],
   },
 }

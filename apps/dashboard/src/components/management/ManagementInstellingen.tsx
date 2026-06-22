@@ -14,7 +14,7 @@ import {
   upsertOhw, verwijderOhw, type OhwInput,
 } from '@/app/(platform)/management/instellingen/actions'
 import type { ManagementProjectKeuze } from '@/lib/dashboard/queries'
-import type { ManagementAK, ManagementDoelstelling, ManagementOhw } from './ManagementDashboard'
+import type { ManagementAK, ManagementDoelstelling, ManagementOhw } from '@/lib/dashboard/aggregaties'
 
 const HUIDIG_JAAR = 2026
 
