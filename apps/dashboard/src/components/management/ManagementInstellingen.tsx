@@ -264,9 +264,19 @@ const leegOhw: OhwInput = {
   omzet_vorig_boekjaar: 0, resultaat_vorig_boekjaar: 0, opmerkingen: '',
 }
 
+/** Tolerante bedrag-parse: accepteert komma én punt als decimaalteken. */
+function parseBedrag(s: string): number {
+  const n = Number(String(s).replace(',', '.').trim())
+  return Number.isFinite(n) ? n : 0
+}
+const bedragStr = (n: number | null | undefined) => (n ? String(n) : '')
+
 function OhwSectie({ ohwData, projectKeuze }: { ohwData: ManagementOhw[]; projectKeuze: ManagementProjectKeuze[] }) {
   const router = useRouter()
   const [form, setForm] = useState<OhwInput>(leegOhw)
+  // Bedragen als losse string-state zodat decimalen (1234,56) tijdens typen blijven staan.
+  const [omzetRaw, setOmzetRaw] = useState('')
+  const [resultaatRaw, setResultaatRaw] = useState('')
   const [isPending, startTransition] = useTransition()
 
   function bewerk(o: ManagementOhw) {
@@ -277,13 +287,19 @@ function OhwSectie({ ohwData, projectKeuze }: { ohwData: ManagementOhw[]; projec
       resultaat_vorig_boekjaar: o.resultaat_vorig_boekjaar ?? 0,
       opmerkingen: o.opmerkingen ?? '',
     })
+    setOmzetRaw(bedragStr(o.omzet_vorig_boekjaar))
+    setResultaatRaw(bedragStr(o.resultaat_vorig_boekjaar))
   }
-  function reset() { setForm(leegOhw) }
+  function reset() { setForm(leegOhw); setOmzetRaw(''); setResultaatRaw('') }
 
   function opslaan() {
     if (!form.bouw7_id) { toast.error('Kies eerst een dossier'); return }
     startTransition(async () => {
-      const r = await upsertOhw(form)
+      const r = await upsertOhw({
+        ...form,
+        omzet_vorig_boekjaar: parseBedrag(omzetRaw),
+        resultaat_vorig_boekjaar: parseBedrag(resultaatRaw),
+      })
       if (r.ok) { toast.success('OHW-correctie opgeslagen'); reset(); router.refresh() }
       else toast.error(r.fout ?? 'Opslaan mislukt')
     })
@@ -327,12 +343,12 @@ function OhwSectie({ ohwData, projectKeuze }: { ohwData: ManagementOhw[]; projec
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Veld label="Omzet vorig boekjaar (€)">
-              <Input inputSize="md" type="number" value={form.omzet_vorig_boekjaar}
-                onChange={e => setForm(f => ({ ...f, omzet_vorig_boekjaar: Number(e.target.value) }))} />
+              <Input inputSize="md" inputMode="decimal" placeholder="0,00" value={omzetRaw}
+                onChange={e => setOmzetRaw(e.target.value)} />
             </Veld>
             <Veld label="Resultaat vorig boekjaar (€)">
-              <Input inputSize="md" type="number" value={form.resultaat_vorig_boekjaar}
-                onChange={e => setForm(f => ({ ...f, resultaat_vorig_boekjaar: Number(e.target.value) }))} />
+              <Input inputSize="md" inputMode="decimal" placeholder="0,00" value={resultaatRaw}
+                onChange={e => setResultaatRaw(e.target.value)} />
             </Veld>
             <Veld label="Opmerkingen">
               <Input inputSize="md" value={form.opmerkingen ?? ''}

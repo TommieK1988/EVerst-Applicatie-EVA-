@@ -88,9 +88,10 @@ function TotalenBalk({ rows, variant }: { rows: ManagementProject[]; variant: Pr
   const posten: { label: string; value: React.ReactNode }[] = variant === 'gereed'
     ? [
         { label: 'Aantal',          value: rows.length },
-        { label: 'Gefactureerd',    value: fEur(som(rows, 'gefactureerd')) },
+        // Netto na OHW-aftrek (toegewezen aan vorig boekjaar) — sluit aan op het dashboard.
+        { label: 'Gefactureerd',    value: fEur(som(rows, 'gefactureerd')     - som(rows, 'ohw_omzet')) },
         { label: 'Geboekte kosten', value: fEur(som(rows, 'geboekte_kosten')) },
-        { label: 'Resultaat',       value: fEur(som(rows, 'resultaat_gereed')) },
+        { label: 'Resultaat',       value: fEur(som(rows, 'resultaat_gereed') - som(rows, 'ohw_resultaat')) },
       ]
     : [
         { label: 'Aantal',           value: rows.length },

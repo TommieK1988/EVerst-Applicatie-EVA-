@@ -173,10 +173,9 @@ function tel(d: PivotAgg, p: ManagementProject) {
     d.resultaatOpdracht     += p.verwacht_resultaat ?? 0
     d.resultaatGerealiseerd += p.resultaat_obv_pct  ?? 0
   }
-  // OHW-correctie: trek het aan het vórige boekjaar toegewezen deel af van de
-  // Gerealiseerd-cijfers (In opdracht blijft de volledige opdrachtwaarde).
-  d.omzetGerealiseerd     -= p.ohw_omzet     ?? 0
-  d.resultaatGerealiseerd -= p.ohw_resultaat ?? 0
+  // NB: de werkmaatschappij-pivot toont het *bruto* werken-totaal; de OHW-aftrek
+  // wordt daar als aparte regel getoond (zie ohwPerFiliaal). Daarom hier géén
+  // OHW-correctie. Het netto telt door via berekenManagementKpi + buildPivotPL.
 }
 
 export function optellen(a: PivotAgg, b: PivotAgg): PivotAgg {
@@ -313,7 +312,8 @@ export type ManagementKpi = {
   categorieData: { name: string; value: number }[]
   kostensoortData: { name: string; value: number }[]
   /** OHW-correctie per werkmaatschappij: bedragen toegewezen aan het vórige
-   *  boekjaar (al in mindering gebracht op de Gerealiseerd-cijfers). */
+   *  boekjaar. De werkmaatschappij-pivot toont het bruto werken-totaal met deze
+   *  bedragen als aparte aftrekregel; KPI/jaarresultaat/opdrachtgevers zijn netto. */
   ohwPerFiliaal: { filiaal: string; omzet: number; resultaat: number }[]
   ohwTotaal: { omzet: number; resultaat: number }
   /** Relevante doelstellingen (meegekopieerd zodat pivot-tabellen ook uit een snapshot werken). */
@@ -331,10 +331,29 @@ export function berekenManagementKpi(
   const hierarchie = buildHierarchie(dash)
   const plPivot    = buildPivotPL(dash)
 
-  // Filiaal-totaal afgeleid uit de hiërarchie (zelfde cijfers als de pivot).
+  // Filiaal-totaal afgeleid uit de hiërarchie (zelfde cijfers als de pivot, bruto werken).
   const filTotalen = hierarchie.map(g => ({ filiaal: g.filiaal, t: g.totaal }))
 
-  const totaalResultaatGerealiseerd = filTotalen.reduce((s, f) => s + f.t.resultaatGerealiseerd, 0)
+  // OHW-correctie per werkmaatschappij (toegewezen aan vorig boekjaar).
+  const ohwMap = new Map<string, { omzet: number; resultaat: number }>()
+  for (const p of dash) {
+    const o = p.ohw_omzet ?? 0, r = p.ohw_resultaat ?? 0
+    if (!o && !r) continue
+    const fil = p.filiaal ?? 'Overig'
+    const cur = ohwMap.get(fil) ?? { omzet: 0, resultaat: 0 }
+    cur.omzet += o; cur.resultaat += r
+    ohwMap.set(fil, cur)
+  }
+  const ohwPerFiliaal = [...ohwMap.entries()]
+    .map(([filiaal, v]) => ({ filiaal, ...v }))
+    .sort((a, b) => a.filiaal.localeCompare(b.filiaal))
+  const ohwTotaal = ohwPerFiliaal.reduce(
+    (s, f) => ({ omzet: s.omzet + f.omzet, resultaat: s.resultaat + f.resultaat }),
+    { omzet: 0, resultaat: 0 },
+  )
+
+  // Netto = bruto werken − OHW (toegewezen aan vorig boekjaar).
+  const totaalResultaatGerealiseerd = filTotalen.reduce((s, f) => s + f.t.resultaatGerealiseerd, 0) - ohwTotaal.resultaat
   const totaalResultaatOpdracht     = filTotalen.reduce((s, f) => s + f.t.resultaatOpdracht, 0)
   const totaalAK                    = akData.reduce((s, a) => s + (a.bedrag_ak ?? 0), 0)
 
@@ -344,7 +363,7 @@ export function berekenManagementKpi(
   const jaarresultaatData = filTotalen.map(({ filiaal, t }) => {
     const doel    = doelVoorFiliaal(doelstellingen, filiaal)
     const doelRes = doel?.resultaat_doelstelling ?? 0
-    const real        = t.resultaatGerealiseerd
+    const real        = t.resultaatGerealiseerd - (ohwMap.get(filiaal)?.resultaat ?? 0)
     const opdrachtRest = Math.max(0, t.resultaatOpdracht - real)
     const nogBinnen   = Math.max(0, doelRes - real - opdrachtRest)
     return {
@@ -377,6 +396,9 @@ export function berekenManagementKpi(
       d.omzet     += p.totale_opdracht    ?? 0
       d.resultaat += p.verwacht_resultaat ?? 0
     }
+    // OHW-aftrek (toegewezen aan vorig boekjaar) — netto per opdrachtgever.
+    d.omzet     -= p.ohw_omzet     ?? 0
+    d.resultaat -= p.ohw_resultaat ?? 0
   }
   const opdrachtgevers = [...ogMap.entries()]
     .map(([naam, v]) => ({ naam, ...v, marge: v.omzet > 0 ? (v.resultaat / v.omzet) * 100 : 0 }))
@@ -405,24 +427,6 @@ export function berekenManagementKpi(
     .filter(([, v]) => v > 0)
     .map(([k, v]) => ({ name: ksLabels[k] ?? k, value: Math.round(v) }))
     .sort((a, b) => b.value - a.value)
-
-  // OHW-correctie per werkmaatschappij (toegewezen aan vorig boekjaar).
-  const ohwMap = new Map<string, { omzet: number; resultaat: number }>()
-  for (const p of dash) {
-    const o = p.ohw_omzet ?? 0, r = p.ohw_resultaat ?? 0
-    if (!o && !r) continue
-    const fil = p.filiaal ?? 'Overig'
-    const cur = ohwMap.get(fil) ?? { omzet: 0, resultaat: 0 }
-    cur.omzet += o; cur.resultaat += r
-    ohwMap.set(fil, cur)
-  }
-  const ohwPerFiliaal = [...ohwMap.entries()]
-    .map(([filiaal, v]) => ({ filiaal, ...v }))
-    .sort((a, b) => a.filiaal.localeCompare(b.filiaal))
-  const ohwTotaal = ohwPerFiliaal.reduce(
-    (s, f) => ({ omzet: s.omzet + f.omzet, resultaat: s.resultaat + f.resultaat }),
-    { omzet: 0, resultaat: 0 },
-  )
 
   return {
     totaalProjecten: dash.length,

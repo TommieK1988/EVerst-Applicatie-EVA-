@@ -200,6 +200,9 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
   const doelTotaalOmzet     = hierarchie.reduce((s, g) => s + (doelVoorFiliaal(doelstellingen, g.filiaal)?.omzet_doelstelling ?? 0), 0)
   const doelTotaalResultaat = hierarchie.reduce((s, g) => s + (doelVoorFiliaal(doelstellingen, g.filiaal)?.resultaat_doelstelling ?? 0), 0)
 
+  // OHW-aftrek per werkmaatschappij (volledige filiaalnaam als sleutel).
+  const ohwMapFil = new Map(ohwPerFiliaal.map(o => [o.filiaal, o]))
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-[12px]">
@@ -243,6 +246,23 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
                   <td className={cn(pvTd, 'text-right')}>{dekkingCel(groep.totaal)}</td>
                 </tr>
 
+                {(() => {
+                  const o = ohwMapFil.get(groep.filiaal)
+                  if (!o || (!o.omzet && !o.resultaat)) return null
+                  return (
+                    <tr className="bg-warning-50/40">
+                      <td className={cn(pvTd, 'pl-6 text-[11px] italic text-neutral-500')}>OHW vorig boekjaar</td>
+                      <td className={cn(pvTd, 'text-right')} />
+                      <td className={cn(pvTd, 'text-right')} />
+                      <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
+                      <td className={cn(pvTd, 'text-right')} />
+                      <td className={cn(pvTd, 'text-right')} />
+                      <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.resultaat ? `−${fEur(o.resultaat)}` : '—'}</td>
+                      <td className={cn(pvTd, 'text-right')} />
+                    </tr>
+                  )
+                })()}
+
                 {groep.statussen.map(({ status, agg }) => (
                   <tr key={`${groep.filiaal}|${status}`} className="bg-white">
                     <td className={cn(pvTd, 'pl-6 text-neutral-600')}>{status}</td>
@@ -274,36 +294,17 @@ function PivotTabel({ hierarchie, doelstellingen, ohwPerFiliaal, ohwTotaal }: {
             <td className={cn(pvTd, 'text-right')}>{dekkingCel(eindtotaal)}</td>
           </tr>
 
-          {ohwPerFiliaal.length > 0 && (
-            <>
-              <tr className="border-t-2 border-neutral-300">
-                <td colSpan={8} className={cn(pvTd, 'text-[11px] italic text-neutral-500')}>
-                  Waarvan toegewezen aan vorig boekjaar (OHW — al in mindering op Gerealiseerd)
-                </td>
-              </tr>
-              {ohwPerFiliaal.map(o => (
-                <tr key={`ohw-${o.filiaal}`} className="bg-neutral-50/60">
-                  <td className={cn(pvTd, 'pl-6 text-neutral-600')}>{kortFiliaal(o.filiaal)}</td>
-                  <td className={cn(pvTd, 'text-right')} />
-                  <td className={cn(pvTd, 'text-right')} />
-                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.omzet ? `−${fEur(o.omzet)}` : '—'}</td>
-                  <td className={cn(pvTd, 'text-right')} />
-                  <td className={cn(pvTd, 'text-right')} />
-                  <td className={cn(pvTd, 'text-right text-neutral-500')}>{o.resultaat ? `−${fEur(o.resultaat)}` : '—'}</td>
-                  <td className={cn(pvTd, 'text-right')} />
-                </tr>
-              ))}
-              <tr className="bg-neutral-100/70 font-semibold border-t border-neutral-200">
-                <td className={cn(pvTd, 'text-neutral-700')}>OHW-totaal</td>
-                <td className={cn(pvTd, 'text-right')} />
-                <td className={cn(pvTd, 'text-right')} />
-                <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
-                <td className={cn(pvTd, 'text-right')} />
-                <td className={cn(pvTd, 'text-right')} />
-                <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.resultaat ? `−${fEur(ohwTotaal.resultaat)}` : '—'}</td>
-                <td className={cn(pvTd, 'text-right')} />
-              </tr>
-            </>
+          {(ohwTotaal.omzet > 0 || ohwTotaal.resultaat > 0) && (
+            <tr className="bg-warning-50/50 font-semibold">
+              <td className={cn(pvTd, 'text-neutral-600 italic text-[11px]')}>OHW-totaal vorig boekjaar (aftrek)</td>
+              <td className={cn(pvTd, 'text-right')} />
+              <td className={cn(pvTd, 'text-right')} />
+              <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.omzet ? `−${fEur(ohwTotaal.omzet)}` : '—'}</td>
+              <td className={cn(pvTd, 'text-right')} />
+              <td className={cn(pvTd, 'text-right')} />
+              <td className={cn(pvTd, 'text-right text-neutral-600')}>{ohwTotaal.resultaat ? `−${fEur(ohwTotaal.resultaat)}` : '—'}</td>
+              <td className={cn(pvTd, 'text-right')} />
+            </tr>
           )}
         </tbody>
       </table>
