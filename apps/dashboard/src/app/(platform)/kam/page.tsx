@@ -19,7 +19,7 @@ export default async function KamPage() {
   const inzendingen = inzendingenResult.ok ? inzendingenResult.data : []
 
   return (
-    <div style={{ padding: '32px', maxWidth: 1100, width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: '32px', width: '100%', boxSizing: 'border-box' }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>
@@ -29,6 +29,17 @@ export default async function KamPage() {
           Kwaliteit, Arbo en Milieu — inzendingen van alle KAM-formulieren inclusief inspecties, toolboxen en VCA-registraties.
         </p>
       </div>
+
+      {/* Opdrachten met VCA-toggle aan */}
+      <section style={{ marginBottom: 36 }}>
+        <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+          Opdrachten met VCA
+        </h2>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted)' }}>
+          Alle opdrachten waarop de VCA-toggle aanstaat, met de voortgang van KAM/VGM-formulieren en follow-up taken.
+        </p>
+        <VcaOpdrachtenTabel rijen={vcaOpdrachten} />
+      </section>
 
       {/* Statistieken */}
       <div style={{
@@ -88,17 +99,6 @@ export default async function KamPage() {
           Fout bij laden: {inzendingenResult.error}
         </div>
       )}
-
-      {/* Opdrachten met VCA-toggle aan */}
-      <section style={{ marginTop: 40 }}>
-        <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-          Opdrachten met VCA
-        </h2>
-        <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted)' }}>
-          Alle opdrachten waarop de VCA-toggle aanstaat, met de voortgang van KAM/VGM-formulieren en follow-up taken.
-        </p>
-        <VcaOpdrachtenTabel rijen={vcaOpdrachten} />
-      </section>
     </div>
   )
 }
