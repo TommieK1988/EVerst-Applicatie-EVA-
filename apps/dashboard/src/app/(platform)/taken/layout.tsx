@@ -1,7 +1,7 @@
 export default function TakenLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="h-full p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto"
+      className="h-full p-4 sm:p-6 lg:p-8"
       style={{
         '--border': '214.3 31.8% 91.4%',
         '--input':  '214.3 31.8% 91.4%',

@@ -477,13 +477,17 @@ export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
   const taskIds = [...new Set(((toewijzingen ?? []) as { task_id: string }[]).map(t => t.task_id))]
   if (taskIds.length === 0) return []
 
-  const { data: takenData } = await supabase
+  // Zelfde status-filter als de werkende home-widget (getMijnTaken): twee neq's
+  // i.p.v. een not-in, dat in PostgREST stil kon mislukken (lege lijst tot gevolg).
+  const { data: takenData, error: takenError } = await supabase
     .from('tasks')
     .select('*, task_assignees ( user_id )')
     .in('id', taskIds)
     .is('parent_task_id', null)
-    .not('status', 'in', '("gereed","vervallen")')
+    .neq('status', 'gereed')
+    .neq('status', 'vervallen')
     .order('deadline', { ascending: false, nullsFirst: false })
+  if (takenError) throw new Error(`Fout bij ophalen mijn taken: ${takenError.message}`)
   const taken = (takenData ?? []) as Record<string, unknown>[]
   if (taken.length === 0) return []
 
