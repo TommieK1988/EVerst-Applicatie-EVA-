@@ -385,7 +385,7 @@ export default function Sidebar({
         onClick={onToggle}
         title={pinned ? 'Sidebar losmaken' : 'Sidebar vastzetten'}
         style={{
-          position: 'absolute', top: 70, right: -11,
+          position: 'absolute', top: 70, right: 22,
           width: 22, height: 22,
           background: pinned ? 'var(--brand-50)' : 'var(--bg-elev)',
           border: `1px solid ${pinned ? 'var(--brand)' : 'var(--border)'}`,
