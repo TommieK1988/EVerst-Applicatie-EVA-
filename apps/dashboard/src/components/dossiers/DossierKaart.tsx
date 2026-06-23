@@ -65,6 +65,11 @@ export function DossierKaart({
     ? `https://start.bouw7.nl/project/view?id=${dossier.bouw7_id}#/`
     : null
 
+  // Aanvragen-tab: aanmaakdatum dossier. Offerte-tab: datum dat de offerte verzonden is.
+  const kaartDatum = sectie === 'offerte'
+    ? (dossier.verzonden_op ?? dossier.created_at)
+    : dossier.created_at
+
   return (
     <div
       onClick={onClick}
@@ -188,7 +193,7 @@ export function DossierKaart({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
           {spoed && <Badge tone="error" size="sm">Aandacht</Badge>}
           <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
-            {formatDatum(dossier.created_at)}
+            {formatDatum(kaartDatum)}
           </span>
         </div>
       </div>
