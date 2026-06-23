@@ -190,7 +190,11 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
     });
   };
 
-  const displayed = taken.slice(0, MAX_TAKEN);
+  // Sorteer op deadline (verlopen/urgent eerst); taken zonder deadline achteraan.
+  const gesorteerd = [...taken].sort((a, b) =>
+    (a.deadline ?? '9999-12-31').localeCompare(b.deadline ?? '9999-12-31'),
+  );
+  const displayed = gesorteerd.slice(0, MAX_TAKEN);
   const open = displayed.filter(t => !doneIds.has(t.id)).length;
 
   return (

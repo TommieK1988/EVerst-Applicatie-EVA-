@@ -67,6 +67,8 @@ type Props<T extends { id: string }> = {
   selecteerbaar?: boolean
   /** Buttons rendered in the toolbar right area (Filter, Export, Nieuw…) */
   acties?:    React.ReactNode
+  /** Begin-sortering (kolom-key + richting); de gebruiker kan daarna vrij sorteren. */
+  beginSortering?: SortingState
 }
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
@@ -146,7 +148,7 @@ function SortIco({ dir }: { dir: false | 'asc' | 'desc' }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -159,7 +161,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(defaultVisibility)
   const [columnOrder, setColumnOrder]           = useState<ColumnOrderState>(defaultOrder)
   const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>({})
-  const [sorting, setSorting]                   = useState<SortingState>([])
+  const [sorting, setSorting]                   = useState<SortingState>(beginSortering ?? [])
   const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter]         = useState('')
   const [rowSelection, setRowSelection]         = useState<RowSelectionState>({})

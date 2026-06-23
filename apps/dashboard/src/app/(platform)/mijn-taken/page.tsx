@@ -34,6 +34,7 @@ export default async function MijnTakenPage() {
       subtitel="Al jouw toegewezen open taken."
       scherm="mijn-taken"
       verbergToegewezenSlicer
+      beginSortering={[{ id: 'deadline', desc: false }]}
     />
   )
 }

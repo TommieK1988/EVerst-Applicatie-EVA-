@@ -63,6 +63,7 @@ export default function TakenActieveDossiers({
   subtitel = 'Alle taken (los én uit actielijsten) van dossiers die nog niet zijn afgerond.',
   scherm = 'taken-overzicht',
   verbergToegewezenSlicer = false,
+  beginSortering,
 }: {
   data: TaakRij[]
   layouts: GebruikerLayout[]
@@ -71,6 +72,7 @@ export default function TakenActieveDossiers({
   subtitel?: string
   scherm?: string
   verbergToegewezenSlicer?: boolean
+  beginSortering?: { id: string; desc: boolean }[]
 }) {
   const router = useRouter()
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
@@ -211,6 +213,7 @@ export default function TakenActieveDossiers({
         kolommen={kolommen}
         layouts={layouts}
         user_id={user_id}
+        beginSortering={beginSortering}
         onRijKlik={r => router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`)}
       />
     </div>
