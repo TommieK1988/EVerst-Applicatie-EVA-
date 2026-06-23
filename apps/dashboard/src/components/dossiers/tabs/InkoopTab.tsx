@@ -42,7 +42,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
             <table style={tabel}>
               <thead>
                 <tr>
-                  <TH>Nummer</TH><TH>Leverancier</TH><TH>Omschrijving</TH><TH>Status</TH>
+                  <TH>Nummer</TH><TH>Leverancier</TH><TH>Naam</TH><TH>Status</TH>
                   <TH right>Orderbedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
                 </tr>
               </thead>
