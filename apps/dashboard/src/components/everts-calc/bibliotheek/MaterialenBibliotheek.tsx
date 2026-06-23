@@ -8,15 +8,13 @@ import {
   wijzigMateriaal,
   verwijderMateriaal as verwijderMateriaalDb,
   importMaterialen,
+  getMateriaalgroepen,
 } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { Materiaal, MateriaalStatus } from '@/lib/everts-calc/types'
-import { MATERIAAL_GROEPEN } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Alert } from '@/components/ui/alert'
-
-const STANDAARD_EENHEDEN = ['m²', 'm¹', 'st', 'ltr', 'kg', 'set', 'uur', 'dag', 'm³']
 
 // ─── Inline bewerkbare cellen ─────────────────────────────────────────────────
 
@@ -42,30 +40,6 @@ function InlineTekst({
   )
 }
 
-function InlineGetal({
-  waarde, placeholder = '0', stap = '0.01', cls = '',
-  onOpslaan,
-}: { waarde: number; placeholder?: string; stap?: string; cls?: string; onOpslaan: (v: number) => void }) {
-  const [lokaal, setLokaal] = useState(waarde === 0 ? '' : String(waarde))
-  useEffect(() => setLokaal(waarde === 0 ? '' : String(waarde)), [waarde])
-
-  return (
-    <input
-      type="number"
-      step={stap}
-      min="0"
-      value={lokaal}
-      placeholder={placeholder}
-      onChange={e => setLokaal(e.target.value)}
-      onBlur={() => { const v = parseFloat(lokaal); onOpslaan(isNaN(v) ? 0 : v) }}
-      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      className={`w-full text-xs text-right  px-1.5 py-1 rounded border border-transparent
-        hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
-        hover:bg-white focus:bg-white placeholder-slate-300 ${cls}`}
-    />
-  )
-}
-
 function InlineSelect({
   waarde, opties, onOpslaan, cls = '',
 }: { waarde: string; opties: { value: string; label: string }[]; onOpslaan: (v: string) => void; cls?: string }) {
@@ -85,9 +59,10 @@ function InlineSelect({
 // ─── Materiaal rij ────────────────────────────────────────────────────────────
 
 function MateriaalRij({
-  materiaal, onWijzig, onVerwijder,
+  materiaal, groepOpties, onWijzig, onVerwijder,
 }: {
   materiaal: Materiaal
+  groepOpties: string[]
   onWijzig: (patch: Partial<Materiaal>) => void
   onVerwijder: () => void
 }) {
@@ -143,7 +118,11 @@ function MateriaalRij({
             hover:bg-white focus:bg-white cursor-pointer"
         >
           <option value="">— Kies —</option>
-          {MATERIAAL_GROEPEN.map(g => <option key={g} value={g}>{g}</option>)}
+          {groepOpties.map(g => <option key={g} value={g}>{g}</option>)}
+          {/* Bestaande waarde die (nog) niet in de beheerlijst staat, blijven tonen */}
+          {materiaal.materiaalgroep && !groepOpties.includes(materiaal.materiaalgroep) && (
+            <option value={materiaal.materiaalgroep}>{materiaal.materiaalgroep}</option>
+          )}
         </select>
         {materiaal.leverancier_productgroep && (
           <div className="px-1.5 text-[10px] text-slate-400 truncate" title={materiaal.leverancier_productgroep}>
@@ -152,31 +131,16 @@ function MateriaalRij({
         )}
       </td>
 
-      {/* Eenheid */}
+      {/* Eenheid — read-only (komt uit de leverancier/import) */}
       <td className="px-1 py-0.5 w-16">
-        <select
-          value={materiaal.eenheid}
-          onChange={e => onWijzig({ eenheid: e.target.value })}
-          className="w-full text-xs px-1.5 py-1 rounded border border-transparent
-            hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
-            hover:bg-white focus:bg-white cursor-pointer "
-        >
-          {STANDAARD_EENHEDEN.map(e => <option key={e} value={e}>{e}</option>)}
-        </select>
+        <span className="block text-xs text-slate-500 px-1.5 py-1">{materiaal.eenheid}</span>
       </td>
 
-      {/* Kostprijs */}
+      {/* Kostprijs — read-only (komt uit de leverancier/import) */}
       <td className="px-1 py-0.5 w-24">
-        <div className="flex items-center gap-0.5">
-          <span className="text-[10px] text-slate-300 flex-shrink-0">€</span>
-          <InlineGetal
-            waarde={materiaal.kostprijs}
-            placeholder="0.00"
-            stap="0.01"
-            cls="text-slate-700"
-            onOpslaan={v => onWijzig({ kostprijs: v })}
-          />
-        </div>
+        <span className="block text-xs text-right text-slate-700 px-1.5 py-1">
+          € {materiaal.kostprijs.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
       </td>
 
       {/* Status */}
@@ -222,6 +186,8 @@ export default function MaterialenBibliotheek() {
   const fileRef = useRef<HTMLInputElement>(null)
   const dicoRef = useRef<HTMLInputElement>(null)
 
+  const [groepOpties, setGroepOpties] = useState<string[]>([])
+
   const laad = useCallback(async () => {
     setLaden(true)
     try {
@@ -232,6 +198,7 @@ export default function MaterialenBibliotheek() {
   }, [])
 
   useEffect(() => { void laad() }, [laad])
+  useEffect(() => { getMateriaalgroepen().then(setGroepOpties).catch(() => setGroepOpties([])) }, [])
 
   const wijzig = useCallback((id: string, patch: Partial<Materiaal>) => {
     // Optimistisch in de UI, daarna persisteren naar Supabase.
@@ -526,6 +493,7 @@ export default function MaterialenBibliotheek() {
               <MateriaalRij
                 key={m.id}
                 materiaal={m}
+                groepOpties={groepOpties}
                 onWijzig={patch => wijzig(m.id, patch)}
                 onVerwijder={() => verwijder(m.id)}
               />

@@ -10,6 +10,7 @@ import {
 import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-store'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
 import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
+import MateriaalgroepenBeheer from '@/components/everts-calc/bibliotheek/MateriaalgroepenBeheer'
 
 // ─── Constanten ───────────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ export default function Instellingen() {
       {activeTab === 'offerte'    && <OfferteTab />}
       {activeTab === 'materialen' && (
         <div className="space-y-6">
+          <MateriaalgroepenBeheer />
           <DicoIntegratiesBeheer />
           <ProductgroepKoppeling />
         </div>

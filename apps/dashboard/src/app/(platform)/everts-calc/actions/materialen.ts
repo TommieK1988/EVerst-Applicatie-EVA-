@@ -234,6 +234,54 @@ export async function importMaterialen(
   return { aangemaakt, bijgewerkt, fouten }
 }
 
+// ─── Eigen materiaalgroepen (beheerbaar) ────────────────────────────────────────
+
+export async function getMateriaalgroepen(): Promise<string[]> {
+  const supabase = await db()
+  const { data, error } = await supabase
+    .from('evc_materiaalgroepen')
+    .select('naam')
+    .eq('actief', true)
+    .order('volgorde', { ascending: true })
+    .order('naam', { ascending: true })
+  if (error) throw new Error(`Materiaalgroepen ophalen mislukt: ${error.message}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => r.naam as string)
+}
+
+export async function maakMateriaalgroep(naam: string): Promise<void> {
+  const supabase = await db()
+  const schoon = naam.trim()
+  if (!schoon) throw new Error('Naam is verplicht')
+  const { error } = await supabase
+    .from('evc_materiaalgroepen')
+    .upsert({ naam: schoon, volgorde: 500 }, { onConflict: 'naam' })
+  if (error) throw new Error(`Materiaalgroep aanmaken mislukt: ${error.message}`)
+  revalidatePath('/everts-calc/bibliotheek/materialen')
+}
+
+// Hernoemen cascadeert naar materialen én koppeltabel zodat alles consistent blijft.
+export async function hernoemMateriaalgroep(oud: string, nieuw: string): Promise<void> {
+  const supabase = await db()
+  const schoon = nieuw.trim()
+  if (!schoon) throw new Error('Naam is verplicht')
+  const { error: e1 } = await supabase.from('evc_materiaalgroepen').update({ naam: schoon }).eq('naam', oud)
+  if (e1) throw new Error(`Hernoemen mislukt: ${e1.message}`)
+  await supabase.from('evc_materialen').update({ materiaalgroep: schoon }).eq('materiaalgroep', oud)
+  await supabase.from('dico_groep_mapping').update({ materiaalgroep: schoon }).eq('materiaalgroep', oud)
+  revalidatePath('/everts-calc/bibliotheek/materialen')
+}
+
+// Verwijderen maakt verwijzingen leeg (materialen blijven bestaan, zonder groep).
+export async function verwijderMateriaalgroep(naam: string): Promise<void> {
+  const supabase = await db()
+  await supabase.from('evc_materialen').update({ materiaalgroep: null }).eq('materiaalgroep', naam)
+  await supabase.from('dico_groep_mapping').update({ materiaalgroep: null }).eq('materiaalgroep', naam)
+  const { error } = await supabase.from('evc_materiaalgroepen').delete().eq('naam', naam)
+  if (error) throw new Error(`Verwijderen mislukt: ${error.message}`)
+  revalidatePath('/everts-calc/bibliotheek/materialen')
+}
+
 // ─── Productgroep-koppeling (leverancier-productgroep -> eigen materiaalgroep) ──────
 
 export async function getLeveranciers(): Promise<string[]> {
