@@ -227,6 +227,16 @@ bevestiging/preview). Schrijft alleen kostensoorten met **precies één PSL** (a
 `GET /project-financial/{id}` · `GET /project-control/{id}/cost-type/{1..6}/chapters` · `GET /wip/report`
 · Apollo `GET /search/purchase-invoices` · `GET /search/delivery-tickets` · Heimdall `GET /list/contract-order-lines`.
 
+### Inkoopfacturen: bewust NIET schrijven (EVA-rekenlaag) — besluit juni 2026
+Het Inkoop-tab kan een geboekte kost **hercoderen** (andere bewakingscode) of **toewijzen** aan een
+inkooporder/OA-contract, zodat het saldo per order/contract en de kosten per bewakingscode in EVA kloppen
+ook bij een verkeerde inboeking. Deze correctie wordt **uitsluitend in EVA** opgeslagen
+(`public.inkoop_correcties`, gemerged in `getDossierInkoop`) en **NIET** naar Bouw7 teruggeschreven.
+Reden: een geboekte inkoopfactuur is **fiscaal-relevant** (bedrag/BTW/factuurnummer); die mag EVA niet muteren.
+Daarom géén `POST /purchase-invoice` / `PUT /purchase-invoice/{id}/update-status` vanuit EVA — niet alsnog
+inbouwen zonder uitdrukkelijk akkoord. Geboekte kosten leest EVA via Heimdall `GET /list/purchase-invoices`
+(rijke financiën) + Apollo `GET /search/purchase-invoices` (bewakingscode), gemerged op `deliveryTicket.id`.
+
 ---
 
 ## 3. Volledige write-catalogus (104 ops, gegroepeerd)

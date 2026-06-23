@@ -574,13 +574,46 @@ export type Bouw7ControlResponse = {
  */
 export type Bouw7PurchaseInvoice = {
   id: number
+  invoiceNumber?: string
   deliveryTicket?: {
     id: number
     cost?: number | string
+    purchaseType?: number
     securityLink?: {
       code?: { id?: number; code?: string; name?: string; chapter?: { id?: number; name?: string } | null } | null
     } | null
   } | null
+}
+
+/**
+ * Inkoopfactuur uit GET /list/purchase-invoices (Heimdall, q-DSL `project.id = {id}`).
+ * Rijkere bron dan Apollo: bedragen excl/btw/incl, leverancier mét type, factuurnummer,
+ * datums, betaalstatus en `purchaseTypeName` (type kosten). **Bevat géén bewakingscode** —
+ * die komt uit de Apollo-variant (`Bouw7PurchaseInvoice.deliveryTicket.securityLink`), gemerged
+ * op `deliveryTicket.id`. Envelope: `Bouw7PurchaseInvoiceListResponse`.
+ */
+export type Bouw7PurchaseInvoiceListItem = {
+  id: number
+  invoiceNumber?: string
+  date?: string
+  dueDate?: string
+  datePaid?: string | null
+  status?: number
+  comment?: string | null
+  subTotal?: string | number
+  vatTotal?: string | number
+  total?: string | number
+  isMutable?: boolean
+  supplier?: { id?: number; name?: string; type?: string; typeId?: number } | null
+  deliveryTicket?: { id?: number; description?: string; purchaseTypeName?: string; price?: string | number } | null
+}
+
+export type Bouw7PurchaseInvoiceListResponse = {
+  items: Bouw7PurchaseInvoiceListItem[]
+  subTotal?: string | number
+  vat?: string | number
+  total?: string | number
+  count?: number
 }
 
 /**

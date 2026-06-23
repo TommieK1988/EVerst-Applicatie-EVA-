@@ -13,6 +13,8 @@ import {
   type Bouw7ControlEntry,
   type Bouw7CostTypeId,
   type Bouw7PurchaseInvoice,
+  type Bouw7PurchaseInvoiceListItem,
+  type Bouw7PurchaseInvoiceListResponse,
   type Bouw7ContractOrderLine,
   type Bouw7SubcontractorContract,
   type Bouw7EmployeeHourLogResponse,
@@ -966,6 +968,7 @@ async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Clien
 /* — Inkoop — */
 
 export type InkoopOrderRegel = {
+  orderId: number | null
   code: string | null
   omschrijving: string | null
   relatie: string | null
@@ -973,32 +976,111 @@ export type InkoopOrderRegel = {
   eenheid: string | null
   prijs: number | null
   totaal: number
+  /** Som van geboekte kosten die in EVA aan deze order zijn toegewezen. */
+  geboekt: number
+  /** totaal − geboekt (niet onder nul). */
+  nogVerwacht: number
   type: 'inkoop' | 'onderaanneming'
 }
 export type OnderaannemerContract = {
+  contractId: number | null
   code: string | null
   onderaannemer: string | null
   omschrijving: string | null
   contractbedrag: number
+  /** Bouw7-geboekt (contractbedrag − openstaand) + in EVA toegewezen kosten. */
+  geboekt: number
   openstaand: number
+  /** contractbedrag − geboekt (niet onder nul). */
+  nogVerwacht: number
   status: string | null
 }
-export type GeboekteKostenRegel = { code: string | null; naam: string | null; bedrag: number }
+/** Eén geboekte kostenregel = één Bouw7-inkoopfactuur, verrijkt met bewakingscode + EVA-correctie. */
+export type GeboekteKostenRegel = {
+  /** Bouw7 purchase-invoice id — sleutel voor EVA-correcties. */
+  bronId: number
+  factuurnummer: string | null
+  leverancier: string | null
+  leverancierType: 'leverancier' | 'onderaannemer' | null
+  omschrijving: string | null
+  /** Bedrag excl. btw (subTotal). */
+  bedrag: number
+  btw: number | null
+  totaal: number | null
+  datum: string | null
+  vervaldatum: string | null
+  betaald: boolean
+  /** Effectieve bewakingscode (na eventuele EVA-correctie). */
+  code: string | null
+  codeNaam: string | null
+  /** Oorspronkelijke Bouw7-bewakingscode (voor "gecorrigeerd"-weergave). */
+  bronCode: string | null
+  typeKosten: string | null
+  gecorrigeerd: boolean
+  toegewezenOrderId: number | null
+  toegewezenContractId: number | null
+}
+export type ProjectBewakingscode = { code: string; naam: string | null }
 export type DossierInkoopData = {
   beschikbaar: boolean
   inkooporders: InkoopOrderRegel[]
   onderaannemers: OnderaannemerContract[]
   geboekteKosten: GeboekteKostenRegel[]
+  /** Bewakingscodes die al op dit project voorkomen (voor de hercodeer-dropdown). */
+  projectcodes: ProjectBewakingscode[]
   totalen: { besteld: number; onderaanneming: number; geboekt: number }
+}
+
+/** EVA-correctie op een geboekte kost (rekenlaag; raakt Bouw7 niet). */
+export type InkoopCorrectie = {
+  id: string
+  dossier_id: string
+  bron_type: string
+  bron_id: number
+  bewakingscode_override: string | null
+  bewakingscode_naam_override: string | null
+  toegewezen_order_id: number | null
+  toegewezen_contract_id: number | null
+  opmerking: string | null
+}
+
+const PURCHASE_TYPE_LABELS: Record<string, string> = {
+  labor: 'Arbeid', material: 'Materiaal', subcontractor: 'Onderaanneming',
+  equipment: 'Materieel', waste: 'Afval', misc: 'Overig', other: 'Overig',
+}
+function typeKostenLabel(name?: string | null): string | null {
+  if (!name) return null
+  return PURCHASE_TYPE_LABELS[name.toLowerCase()] ?? name.charAt(0).toUpperCase() + name.slice(1)
+}
+function stripHtml(s?: string | null): string | null {
+  if (!s) return null
+  const t = s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+  return t || null
+}
+/** "2026-04-30" of "2026-04-30T00:00:00+02:00" → "2026-04-30". */
+function isoDatum(s?: string | null): string | null {
+  return s ? s.slice(0, 10) : null
+}
+
+/** Leest de EVA-inkoopcorrecties voor een dossier (admin-client; RLS omzeild server-side). */
+export async function getInkoopCorrecties(dossierId: string): Promise<InkoopCorrectie[]> {
+  const supabase = createAdminClient() as any
+  const { data } = await supabase.from('inkoop_correcties').select('*').eq('dossier_id', dossierId)
+  return (data ?? []) as InkoopCorrectie[]
 }
 
 /**
  * Inkoop-overzicht van een dossier: inkooporders (contract-order-lines), onderaannemerscontracten
- * en geboekte kosten (inkoopfacturen, deduped op deliveryTicket). Live uit Bouw7.
+ * en geboekte kosten (inkoopfacturen). Live uit Bouw7, met EVA-correcties erbovenop gemerged.
+ *
+ * Geboekte kosten = één rij per inkoopfactuur (Heimdall `/list/purchase-invoices` voor de rijke
+ * financiën, Apollo `/search/purchase-invoices` voor de bewakingscode, gemerged op deliveryTicket.id).
+ * EVA-correcties (hercoderen / toewijzen aan order/contract) worden toegepast maar NIET naar Bouw7
+ * teruggeschreven — ze beïnvloeden alleen EVA's saldo per order/contract en de code-toewijzing.
  */
 export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
   const leeg: DossierInkoopData = {
-    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [],
+    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [],
     totalen: { besteld: 0, onderaanneming: 0, geboekt: 0 },
   }
   const ctx = await bouw7VoorDossier(dossierId)
@@ -1006,7 +1088,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
   const { client, bouw7Id } = ctx
 
   try {
-    const [orderResp, subResp, invoices] = await Promise.all([
+    const [orderResp, subResp, apolloInvoices, heimdallResp, correcties] = await Promise.all([
       client.get<{ items?: Bouw7ContractOrderLine[]; total?: number | string }>('/list/contract-order-lines', {
         q: `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`,
       }).catch(() => ({ items: [] as Bouw7ContractOrderLine[], total: 0 })),
@@ -1014,41 +1096,111 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         q: `project.id = ${bouw7Id} LIMIT 500`,
       }).catch(() => ({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
       client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
+      client.get<Bouw7PurchaseInvoiceListResponse>('/list/purchase-invoices', {
+        q: `project.id = ${bouw7Id} LIMIT 1000`,
+      }).catch(() => ({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
+      getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
     ])
+
+    // Apollo levert de bewakingscode: indexeer per deliveryTicket.id én per invoice.id (fallback).
+    const codePerBon = new Map<number, { code: string | null; naam: string | null }>()
+    const codePerInvoice = new Map<number, { code: string | null; naam: string | null }>()
+    for (const inv of apolloInvoices) {
+      const c = inv.deliveryTicket?.securityLink?.code
+      const entry = { code: c?.code ?? null, naam: c?.name ?? null }
+      if (inv.deliveryTicket?.id) codePerBon.set(inv.deliveryTicket.id, entry)
+      if (inv.id) codePerInvoice.set(inv.id, entry)
+    }
+
+    const correctieMap = new Map<number, InkoopCorrectie>()
+    for (const c of correcties) correctieMap.set(Number(c.bron_id), c)
+
+    const geboekteKosten: GeboekteKostenRegel[] = (heimdallResp.items ?? []).map((inv) => {
+      const apolloCode =
+        (inv.deliveryTicket?.id != null ? codePerBon.get(inv.deliveryTicket.id) : undefined) ??
+        codePerInvoice.get(inv.id) ?? { code: null, naam: null }
+      const corr = correctieMap.get(inv.id)
+      const heeftCodeOverride = !!corr?.bewakingscode_override
+      const sup = inv.supplier
+      const levType: GeboekteKostenRegel['leverancierType'] =
+        sup?.type === 'subcontractor' ? 'onderaannemer' : sup?.type ? 'leverancier' : null
+      return {
+        bronId: inv.id,
+        factuurnummer: inv.invoiceNumber ?? null,
+        leverancier: sup?.name ?? null,
+        leverancierType: levType,
+        omschrijving: stripHtml(inv.deliveryTicket?.description) ?? inv.comment ?? null,
+        bedrag: toGetal(inv.subTotal),
+        btw: inv.vatTotal != null ? toGetal(inv.vatTotal) : null,
+        totaal: inv.total != null ? toGetal(inv.total) : null,
+        datum: isoDatum(inv.date),
+        vervaldatum: isoDatum(inv.dueDate),
+        betaald: inv.datePaid != null,
+        code: heeftCodeOverride ? corr!.bewakingscode_override : apolloCode.code,
+        codeNaam: heeftCodeOverride ? corr!.bewakingscode_naam_override : apolloCode.naam,
+        bronCode: apolloCode.code,
+        typeKosten: typeKostenLabel(inv.deliveryTicket?.purchaseTypeName),
+        gecorrigeerd: !!corr,
+        toegewezenOrderId: corr?.toegewezen_order_id != null ? Number(corr.toegewezen_order_id) : null,
+        toegewezenContractId: corr?.toegewezen_contract_id != null ? Number(corr.toegewezen_contract_id) : null,
+      }
+    })
+
+    // Geboekt per order/contract op basis van EVA-toewijzingen.
+    const geboektPerOrder = new Map<number, number>()
+    const geboektPerContract = new Map<number, number>()
+    for (const r of geboekteKosten) {
+      if (r.toegewezenOrderId != null) geboektPerOrder.set(r.toegewezenOrderId, (geboektPerOrder.get(r.toegewezenOrderId) ?? 0) + r.bedrag)
+      if (r.toegewezenContractId != null) geboektPerContract.set(r.toegewezenContractId, (geboektPerContract.get(r.toegewezenContractId) ?? 0) + r.bedrag)
+    }
 
     const inkooporders: InkoopOrderRegel[] = (orderResp.items ?? []).map((l) => {
       const aantal = toGetal(l.quantity) * (l.quantityFactor != null ? toGetal(l.quantityFactor) : 1)
       const isOa = l.contact?.type === 'subcontractor'
+      const totaal = toGetal(l.totalPrice)
+      const geboekt = (l.id != null ? geboektPerOrder.get(l.id) : 0) ?? 0
       return {
+        orderId: l.id ?? null,
         code: l.projectSecurityLink?.code ?? null,
         omschrijving: l.description ?? null,
         relatie: l.contact?.name ?? null,
         aantal: aantal || null,
         eenheid: l.unit ?? null,
         prijs: l.unitPrice != null ? toGetal(l.unitPrice) : null,
-        totaal: toGetal(l.totalPrice),
+        totaal,
+        geboekt,
+        nogVerwacht: Math.max(0, totaal - geboekt),
         type: isOa ? 'onderaanneming' : 'inkoop',
       }
     })
 
-    const onderaannemers: OnderaannemerContract[] = (subResp.items ?? []).map((c) => ({
-      code: c.projectSecurityLink?.code ?? null,
-      onderaannemer: c.subcontractor?.name ?? null,
-      omschrijving: c.name ?? c.description ?? null,
-      contractbedrag: toGetal(c.price),
-      openstaand: toGetal(c.outstandingCosts),
-      status: c.statusName ?? null,
-    }))
+    const onderaannemers: OnderaannemerContract[] = (subResp.items ?? []).map((c) => {
+      const contractbedrag = toGetal(c.price)
+      const openstaand = toGetal(c.outstandingCosts)
+      const geboektBouw7 = Math.max(0, contractbedrag - openstaand)
+      const geboektEva = (c.id != null ? geboektPerContract.get(c.id) : 0) ?? 0
+      const geboekt = geboektBouw7 + geboektEva
+      return {
+        contractId: c.id ?? null,
+        code: c.projectSecurityLink?.code ?? null,
+        onderaannemer: c.subcontractor?.name ?? null,
+        omschrijving: c.name ?? c.description ?? null,
+        contractbedrag,
+        geboekt,
+        openstaand,
+        nogVerwacht: Math.max(0, contractbedrag - geboekt),
+        status: c.statusName ?? null,
+      }
+    })
 
-    // Geboekte kosten: inkoopfacturen deduped op deliveryTicket.id (termijnen → zelfde bon).
-    const bonnen = new Map<number, GeboekteKostenRegel>()
-    for (const inv of invoices) {
-      const dt = inv.deliveryTicket
-      if (!dt?.id || bonnen.has(dt.id)) continue
-      const c = dt.securityLink?.code
-      bonnen.set(dt.id, { code: c?.code ?? null, naam: c?.name ?? null, bedrag: toGetal(dt.cost) })
-    }
-    const geboekteKosten = [...bonnen.values()]
+    // Projectbewakingscodes = codes die al op dit project voorkomen (orders + contracten + geboekte kosten).
+    const codeMap = new Map<string, string | null>()
+    for (const l of orderResp.items ?? []) if (l.projectSecurityLink?.code) codeMap.set(l.projectSecurityLink.code, l.projectSecurityLink.parentName ?? null)
+    for (const c of subResp.items ?? []) if (c.projectSecurityLink?.code && !codeMap.has(c.projectSecurityLink.code)) codeMap.set(c.projectSecurityLink.code, c.projectSecurityLink.name ?? null)
+    for (const r of geboekteKosten) if (r.bronCode && !codeMap.has(r.bronCode)) codeMap.set(r.bronCode, r.codeNaam ?? null)
+    const projectcodes: ProjectBewakingscode[] = [...codeMap.entries()]
+      .map(([code, naam]) => ({ code, naam }))
+      .sort((a, b) => a.code.localeCompare(b.code))
 
     const besteld = toGetal(orderResp.total) || inkooporders.reduce((s, r) => s + r.totaal, 0)
     const onderaanneming = onderaannemers.reduce((s, c) => s + c.contractbedrag, 0)
@@ -1056,12 +1208,82 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
 
     return {
       beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
-      inkooporders, onderaannemers, geboekteKosten,
+      inkooporders, onderaannemers, geboekteKosten, projectcodes,
       totalen: { besteld, onderaanneming, geboekt },
     }
   } catch {
     return leeg
   }
+}
+
+/* — Inkoop-correcties (EVA-rekenlaag; geen Bouw7-write) — */
+
+type InkoopCorrectieResult = { ok: true } | { ok: false; error: string }
+
+/** Upsert helper: schrijf één veld-set naar inkoop_correcties voor (dossier, bron). */
+async function upsertInkoopCorrectie(
+  dossierId: string,
+  bronId: number,
+  patch: Partial<Pick<InkoopCorrectie, 'bewakingscode_override' | 'bewakingscode_naam_override' | 'toegewezen_order_id' | 'toegewezen_contract_id'>>,
+): Promise<InkoopCorrectieResult> {
+  if (!dossierId || !Number.isFinite(bronId)) return { ok: false, error: 'Ongeldige parameters.' }
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('inkoop_correcties')
+    .upsert({ dossier_id: dossierId, bron_type: 'purchase_invoice', bron_id: bronId, updated_at: new Date().toISOString(), ...patch },
+      { onConflict: 'dossier_id,bron_type,bron_id' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/opdrachten/${dossierId}/inkoop`)
+  revalidatePath(`/servicedesk/${dossierId}/inkoop`)
+  return { ok: true }
+}
+
+/** Wijs een geboekte kost toe aan een inkooporder of OA-contract (exclusief). */
+export async function verplaatsGeboekteKost(
+  dossierId: string,
+  bronId: number,
+  doel: { orderId?: number | null; contractId?: number | null },
+): Promise<InkoopCorrectieResult> {
+  return upsertInkoopCorrectie(dossierId, bronId, {
+    toegewezen_order_id: doel.orderId ?? null,
+    toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
+  })
+}
+
+/** Zet een geboekte kost op een andere (bestaande) bewakingscode. Validatie tegen projectcodes. */
+export async function hercodeerGeboekteKost(
+  dossierId: string,
+  bronId: number,
+  code: string,
+  naam: string | null,
+): Promise<InkoopCorrectieResult> {
+  const codeClean = (code ?? '').trim()
+  if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
+  // "Alleen bestaande projectcodes": valideer tegen de codes die al op het project voorkomen.
+  const data = await getDossierInkoop(dossierId)
+  if (!data.projectcodes.some((c) => c.code === codeClean)) {
+    return { ok: false, error: 'Bewakingscode bestaat niet op dit project.' }
+  }
+  return upsertInkoopCorrectie(dossierId, bronId, {
+    bewakingscode_override: codeClean,
+    bewakingscode_naam_override: naam,
+  })
+}
+
+/** Verwijder de EVA-correctie van een geboekte kost (terug naar de Bouw7-waarde). */
+export async function wisInkoopCorrectie(dossierId: string, bronId: number): Promise<InkoopCorrectieResult> {
+  if (!dossierId || !Number.isFinite(bronId)) return { ok: false, error: 'Ongeldige parameters.' }
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('inkoop_correcties')
+    .delete()
+    .eq('dossier_id', dossierId)
+    .eq('bron_type', 'purchase_invoice')
+    .eq('bron_id', bronId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/opdrachten/${dossierId}/inkoop`)
+  revalidatePath(`/servicedesk/${dossierId}/inkoop`)
+  return { ok: true }
 }
 
 /* — Uren — */
