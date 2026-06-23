@@ -41,6 +41,12 @@ type Kolom = {
   render: (r: GeboekteKostenRegel) => React.ReactNode
 }
 
+type SubtotaalRij = { _sub: true; label: string; bedrag: number }
+type DisplayRij = GeboekteKostenRegel | SubtotaalRij
+const isSub = (r: DisplayRij): r is SubtotaalRij => '_sub' in r
+
+const GROEPEERBARE_KEYS = new Set(['leverancier', 'typeKosten', 'code'])
+
 export default function GeboekteKostenTabel({ dossierId, data, orders, contracten, projectcodes }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -121,6 +127,31 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     return r
   }, [data, zoek, sortKey, sortDir, kolommen])
 
+  const displayRijen = useMemo((): DisplayRij[] => {
+    if (!GROEPEERBARE_KEYS.has(sortKey)) return rijen
+    const kol = kolommen.find(k => k.key === sortKey)
+    if (!kol) return rijen
+
+    const result: DisplayRij[] = []
+    let groepLabel: string | null = null
+    let groepBedrag = 0
+
+    for (const rij of rijen) {
+      const label = String(kol.waarde(rij))
+      if (groepLabel !== null && label !== groepLabel) {
+        result.push({ _sub: true, label: groepLabel, bedrag: groepBedrag })
+        groepBedrag = 0
+      }
+      groepLabel = label
+      groepBedrag += rij.bedrag
+      result.push(rij)
+    }
+    if (groepLabel !== null) {
+      result.push({ _sub: true, label: groepLabel, bedrag: groepBedrag })
+    }
+    return result
+  }, [rijen, sortKey, kolommen])
+
   const sorteer = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(key); setSortDir('asc') }
@@ -154,6 +185,14 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const tdStyle = (right?: boolean): React.CSSProperties => ({
     padding: '3px 10px', fontSize: 12.5, textAlign: right ? 'right' : 'left', color: 'var(--neutral-700)',
     borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
+  })
+  const subStyle = (right?: boolean): React.CSSProperties => ({
+    padding: '2px 10px', fontSize: 11.5, textAlign: right ? 'right' : 'left',
+    background: 'var(--neutral-100, #f0f4f5)',
+    borderTop: '1px solid var(--neutral-200, #e3e8ea)',
+    borderBottom: '2px solid var(--neutral-200, #e3e8ea)',
+    color: 'var(--neutral-600)',
+    whiteSpace: 'nowrap',
   })
 
   return (
@@ -191,20 +230,37 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
             </tr>
           </thead>
           <tbody>
-            {rijen.map((r) => (
-              <tr key={r.bronId} style={{ background: r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
-                {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
-                <td style={{ ...tdStyle(true) }}>
-                  <button
-                    onClick={() => setActief(r)}
-                    title="Toewijzen / hercoderen"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
-                  >
-                    <SlidersHorizontal size={12} /> Corrigeren
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {displayRijen.map((item, i) => {
+              if (isSub(item)) {
+                return (
+                  <tr key={`sub-${i}`}>
+                    <td colSpan={kolommen.length - 1} style={subStyle()}>
+                      <span style={{ fontWeight: 600 }}>↳ Subtotaal</span>
+                      {item.label
+                        ? <span style={{ marginLeft: 6, color: 'var(--neutral-500)', fontWeight: 400 }}>{item.label}</span>
+                        : <span style={{ marginLeft: 6, color: 'var(--neutral-400)', fontWeight: 400 }}>(niet gecodeerd)</span>}
+                    </td>
+                    <td style={{ ...subStyle(true), fontWeight: 700, color: 'var(--neutral-800)' }}>{euro(item.bedrag)}</td>
+                    <td style={subStyle(true)} />
+                  </tr>
+                )
+              }
+              const r = item
+              return (
+                <tr key={r.bronId} style={{ background: r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
+                  {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
+                  <td style={{ ...tdStyle(true) }}>
+                    <button
+                      onClick={() => setActief(r)}
+                      title="Toewijzen / hercoderen"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
+                    >
+                      <SlidersHorizontal size={12} /> Corrigeren
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
             <tr style={{ background: 'var(--neutral-50)' }}>
               <td style={{ ...tdStyle(), fontWeight: 700, color: 'var(--neutral-900)' }} colSpan={kolommen.length - 1}>Totaal{zoek ? ' (gefilterd)' : ''}</td>
               <td style={{ ...tdStyle(true), fontWeight: 700, color: 'var(--neutral-900)' }}>{euro(totaal)}</td>
