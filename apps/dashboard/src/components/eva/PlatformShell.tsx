@@ -83,6 +83,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
         <Sidebar
           density={tweaks.density}
           collapsed={collapsed && !hovering}
+          pinned={!collapsed}
           onToggle={() => setCollapsed(c => !c)}
           onMouseEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}

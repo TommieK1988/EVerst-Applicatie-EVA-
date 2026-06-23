@@ -124,7 +124,6 @@ const APP_SUBNAV: Record<string, {
       { href: '/everts-calc/bibliotheek/recepten',     label: 'Recepten',     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
       { href: '/everts-calc/bibliotheek/schilderwerk', label: 'Schilderwerk', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
       { href: '/everts-calc/bibliotheek/materialen',   label: 'Materialen',   icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
-      { href: '/everts-calc/rapportages',              label: 'Rapportages',  icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
     ],
   },
   '/wagenpark': {
@@ -208,6 +207,8 @@ const SECTIE_LABELS: Record<string, string> = {
 export type SidebarProps = {
   density: Tweaks['density']
   collapsed: boolean
+  /** Echte vastzet-status (los van hover-uitklappen) — stuurt het punaise-icoon. */
+  pinned: boolean
   onToggle: () => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
@@ -220,7 +221,7 @@ export type SidebarProps = {
 }
 
 export default function Sidebar({
-  density, collapsed, onToggle, onMouseEnter, onMouseLeave,
+  density, collapsed, pinned, onToggle, onMouseEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
   userFotoUrl, rechten,
 }: SidebarProps) {
@@ -382,17 +383,21 @@ export default function Sidebar({
       {/* ── Toggle button ── */}
       <button
         onClick={onToggle}
-        title={collapsed ? 'Sidebar uitklappen' : 'Sidebar inklappen'}
+        title={pinned ? 'Sidebar losmaken' : 'Sidebar vastzetten'}
         style={{
           position: 'absolute', top: 70, right: -11,
-          width: 22, height: 22, background: 'var(--bg-elev)',
-          border: '1px solid var(--border)', borderRadius: '50%',
-          display: 'grid', placeItems: 'center', color: 'var(--fg-muted)',
+          width: 22, height: 22,
+          background: pinned ? 'var(--brand-50)' : 'var(--bg-elev)',
+          border: `1px solid ${pinned ? 'var(--brand)' : 'var(--border)'}`,
+          borderRadius: '50%',
+          display: 'grid', placeItems: 'center',
+          color: pinned ? 'var(--brand)' : 'var(--fg-muted)',
           cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
         }}
       >
         <IconBase size={12}>
-          {collapsed ? <path d="M7 4l6 6-6 6"/> : <path d="M13 4l-6 6 6 6"/>}
+          <path d="M12 17v5"/>
+          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
         </IconBase>
       </button>
 
