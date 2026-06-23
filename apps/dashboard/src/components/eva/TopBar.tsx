@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { IconMoon, IconSun, IconChat, IconQuestion } from './Icons';
-import { useGlobalSearch } from './GlobalSearch';
+import { IconMoon, IconSun, IconQuestion } from './Icons';
+import { TopbarZoek } from './GlobalSearch';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
 import HelpPanel from './HelpPanel';
 import NotificatiesDropdown from './NotificatiesDropdown';
@@ -169,7 +169,6 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0 }: TopBarPro
   const pathname = usePathname()
   const { title, breadcrumb, withTabs } = resolveLabel(pathname)
   const breadcrumbCtx = useBreadcrumb()
-  const search = useGlobalSearch()
   const [helpOpen, setHelpOpen] = useState(false)
   const helpContent = getPageHelp(pathname)
 
@@ -204,18 +203,7 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0 }: TopBarPro
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={search.open} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            height: 32, padding: '0 12px',
-            background: 'var(--accent)',
-            color: 'white',
-            border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
-            cursor: 'pointer', letterSpacing: '0.01em',
-            whiteSpace: 'nowrap',
-          }}>
-            <IconChat size={14}/>
-            Vraag EVA
-          </button>
+          <TopbarZoek />
           <button
             onClick={() => setHelpOpen(true)}
             style={iconBtn()}

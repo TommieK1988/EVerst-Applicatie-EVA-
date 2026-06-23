@@ -2,28 +2,31 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { IconSparkle } from './Icons'
+import { IconSparkle, IconChat } from './Icons'
 import type { GroupedResults, SearchHit, MedewerkerProfiel } from '@/lib/search/global'
 
-/* ─── Context (voor ⌘K + de TopBar-knop) ────────────────────────────────── */
+/* ─── Context (⌘K + de TopBar-popup delen één open-status) ───────────────── */
 
-type GlobalSearchCtx = { open: () => void; close: () => void }
+type GlobalSearchCtx = { open: () => void; close: () => void; toggle: () => void; isOpen: boolean }
 const Ctx = React.createContext<GlobalSearchCtx | null>(null)
 
 export function useGlobalSearch(): GlobalSearchCtx {
   const ctx = React.useContext(Ctx)
-  if (!ctx) return { open: () => {}, close: () => {} }
+  if (!ctx) return { open: () => {}, close: () => {}, toggle: () => {}, isOpen: false }
   return ctx
 }
 
-/* ─── Provider: ⌘K opent een licht zwevend paneel (geen dimming) ─────────── */
-
 export function GlobalSearchProvider({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = React.useState(false)
+  const [isOpen, setOpen] = React.useState(false)
 
   const api = React.useMemo<GlobalSearchCtx>(
-    () => ({ open: () => setOpen(true), close: () => setOpen(false) }),
-    [],
+    () => ({
+      open: () => setOpen(true),
+      close: () => setOpen(false),
+      toggle: () => setOpen((o) => !o),
+      isOpen,
+    }),
+    [isOpen],
   )
 
   React.useEffect(() => {
@@ -37,32 +40,8 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  return (
-    <Ctx.Provider value={api}>
-      {children}
-      {open && (
-        <>
-          {/* Transparante vanger: klik buiten = sluiten, géén verduistering */}
-          <div
-            onMouseDown={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'transparent' }}
-          />
-          <div
-            style={{
-              position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)',
-              width: 'min(640px, 92vw)', zIndex: 1000,
-            }}
-          >
-            <EvaSearchField
-              autoFocus
-              placeholder="Zoek op relatie, adres of dossier…"
-              onDone={() => setOpen(false)}
-            />
-          </div>
-        </>
-      )}
-    </Ctx.Provider>
-  )
+  // De popup zelf hangt in de TopBar (TopbarZoek). Hier alleen de gedeelde status.
+  return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }
 
 /* ─── Zoek-hook (debounced server-side fetch) ───────────────────────────── */
@@ -99,43 +78,24 @@ function useEntitySearch(query: string) {
   return { results, loading }
 }
 
-/* ─── Herbruikbare zoekbalk met inline dropdown (geen popup) ─────────────── */
+/* ─── Gedeelde resultaten-render (lijst + medewerker-profiel) ────────────── */
 
-export function EvaSearchField({
-  placeholder = 'Zoek op relatie, adres of dossier…',
-  autoFocus = false,
-  onDone,
-  barStyle,
+function ZoekResultaten({
+  term, results, loading, onNavigate,
 }: {
-  placeholder?: string
-  autoFocus?: boolean
-  /** Wordt aangeroepen na navigeren/vraag (bv. om het zwevende paneel te sluiten). */
-  onDone?: () => void
-  /** Extra styling voor de balk zelf (om hem in te passen op het dashboard). */
-  barStyle?: React.CSSProperties
+  term: string
+  results: GroupedResults | null
+  loading: boolean
+  onNavigate: (hit: SearchHit) => void
 }) {
-  const router = useRouter()
-  const [query, setQuery] = React.useState('')
-  const [focused, setFocused] = React.useState(false)
   const [profiel, setProfiel] = React.useState<MedewerkerProfiel | null>(null)
   const [profielLaadt, setProfielLaadt] = React.useState(false)
-  const blurTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { results, loading } = useEntitySearch(query)
-
-  const term = query.trim()
-  const toon = focused && term.length >= 1
-
-  function kiesHit(hit: SearchHit) {
-    if (hit.type === 'medewerker') {
-      void openMedewerker(hit.id)
-      return
-    }
-    if (hit.href) {
-      onDone?.()
-      router.push(hit.href)
-    }
-  }
+  // Reset het profielpaneel zodra de zoekterm wijzigt.
+  React.useEffect(() => {
+    setProfiel(null)
+    setProfielLaadt(false)
+  }, [term])
 
   async function openMedewerker(id: string) {
     setProfielLaadt(true)
@@ -150,9 +110,112 @@ export function EvaSearchField({
     }
   }
 
+  function pick(hit: SearchHit) {
+    if (hit.type === 'medewerker') {
+      void openMedewerker(hit.id)
+      return
+    }
+    if (hit.href) onNavigate(hit)
+  }
+
+  if (profiel || profielLaadt) {
+    return (
+      <MedewerkerPaneel
+        profiel={profiel}
+        laadt={profielLaadt}
+        onTerug={() => { setProfiel(null); setProfielLaadt(false) }}
+      />
+    )
+  }
+
+  return (
+    <div style={{ maxHeight: '56vh', overflowY: 'auto', padding: 8 }}>
+      {loading && (
+        <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>Zoeken…</div>
+      )}
+
+      {!loading && term.length >= 2 && results && results.total === 0 && (
+        <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
+          Niets gevonden voor &quot;{term}&quot;.
+        </div>
+      )}
+
+      {term.length < 2 && (
+        <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
+          Typ minstens 2 tekens om te zoeken.
+        </div>
+      )}
+
+      {results?.groups.map((g) => (
+        <div key={g.type} style={{ marginTop: 6 }}>
+          <div style={{
+            fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em',
+            color: 'var(--fg-muted)', padding: '6px 12px 2px',
+          }}>{g.label}</div>
+          {g.hits.map((hit) => (
+            <button
+              key={`${hit.type}:${hit.id}`}
+              onMouseDown={(e) => { e.preventDefault(); pick(hit) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                fontSize: 14, color: 'var(--fg-soft)',
+                background: 'transparent', border: 'none', textAlign: 'left',
+                fontFamily: 'var(--font-ui)',
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--fg)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {hit.label}
+                </span>
+                {hit.sublabel && (
+                  <span style={{ color: 'var(--fg-muted)', fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {hit.sublabel}
+                  </span>
+                )}
+              </span>
+              {hit.badge && (
+                <span style={{
+                  fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: 'var(--fg-muted)', border: '1px solid var(--border)',
+                  borderRadius: 999, padding: '2px 8px', flexShrink: 0,
+                }}>{hit.badge}</span>
+              )}
+              {hit.type === 'medewerker' && (
+                <span style={{ fontSize: 11, color: 'var(--fg-muted)', flexShrink: 0 }}>profiel ›</span>
+              )}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ─── Inline zoekbalk met dropdown (dashboard) ──────────────────────────── */
+
+export function EvaSearchField({
+  placeholder = 'Zoek op relatie, adres of dossier…',
+  autoFocus = false,
+  onDone,
+  barStyle,
+}: {
+  placeholder?: string
+  autoFocus?: boolean
+  onDone?: () => void
+  barStyle?: React.CSSProperties
+}) {
+  const router = useRouter()
+  const [query, setQuery] = React.useState('')
+  const [focused, setFocused] = React.useState(false)
+  const blurTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { results, loading } = useEntitySearch(query)
+  const term = query.trim()
+  const toon = focused && term.length >= 1
+
   return (
     <div style={{ position: 'relative' }}>
-      {/* De balk */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '12px 16px',
@@ -164,12 +227,10 @@ export function EvaSearchField({
         <input
           autoFocus={autoFocus}
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setProfiel(null) }}
+          onChange={(e) => setQuery(e.target.value)}
           onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setFocused(true) }}
           onBlur={() => { blurTimer.current = setTimeout(() => setFocused(false), 150) }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { (e.target as HTMLInputElement).blur(); onDone?.() }
-          }}
+          onKeyDown={(e) => { if (e.key === 'Escape') { (e.target as HTMLInputElement).blur(); onDone?.() } }}
           placeholder={placeholder}
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -179,10 +240,8 @@ export function EvaSearchField({
         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', letterSpacing: '0.08em' }}>⌘ K</span>
       </div>
 
-      {/* Inline dropdown (geen verduistering, geen modale popup) */}
       {toon && (
         <div
-          // voorkom dat klikken in het paneel de input laat blurren
           onMouseDown={(e) => e.preventDefault()}
           style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 1001,
@@ -191,85 +250,93 @@ export function EvaSearchField({
             overflow: 'hidden', fontFamily: 'var(--font-ui)',
           }}
         >
-          {profiel || profielLaadt ? (
-            <MedewerkerPaneel
-              profiel={profiel}
-              laadt={profielLaadt}
-              onTerug={() => { setProfiel(null); setProfielLaadt(false) }}
-            />
-          ) : (
-            <div style={{ maxHeight: '56vh', overflowY: 'auto', padding: 8 }}>
-              {loading && (
-                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>Zoeken…</div>
-              )}
-
-              {!loading && term.length >= 2 && results && results.total === 0 && (
-                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
-                  Niets gevonden in EVA voor &quot;{term}&quot;.
-                </div>
-              )}
-
-              {term.length < 2 && (
-                <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--fg-muted)' }}>
-                  Typ minstens 2 tekens om te zoeken.
-                </div>
-              )}
-
-              {results?.groups.map((g) => (
-                <div key={g.type} style={{ marginTop: 6 }}>
-                  <div style={{
-                    fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em',
-                    color: 'var(--fg-muted)', padding: '6px 12px 2px',
-                  }}>{g.label}</div>
-                  {g.hits.map((hit) => (
-                    <button
-                      key={`${hit.type}:${hit.id}`}
-                      onMouseDown={(e) => { e.preventDefault(); kiesHit(hit) }}
-                      style={{ ...rowStyle(false), width: '100%', border: 'none', textAlign: 'left' }}
-                    >
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ color: 'var(--fg)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {hit.label}
-                        </span>
-                        {hit.sublabel && (
-                          <span style={{ color: 'var(--fg-muted)', fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {hit.sublabel}
-                          </span>
-                        )}
-                      </span>
-                      {hit.badge && (
-                        <span style={{
-                          fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em',
-                          color: 'var(--fg-muted)', border: '1px solid var(--border)',
-                          borderRadius: 999, padding: '2px 8px', flexShrink: 0,
-                        }}>{hit.badge}</span>
-                      )}
-                      {hit.type === 'medewerker' && (
-                        <span style={{ fontSize: 11, color: 'var(--fg-muted)', flexShrink: 0 }}>profiel ›</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+          <ZoekResultaten
+            term={term}
+            results={results}
+            loading={loading}
+            onNavigate={(hit) => { onDone?.(); router.push(hit.href!) }}
+          />
         </div>
       )}
     </div>
   )
 }
 
-function rowStyle(highlight: boolean): React.CSSProperties {
-  return {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
-    fontSize: 14, color: 'var(--fg-soft)',
-    background: highlight ? 'var(--bg-active)' : 'transparent',
-    fontFamily: 'var(--font-ui)',
-  }
+/* ─── TopBar-popup (knop + verankerde dropdown, sluit bij klik buiten) ───── */
+
+export function TopbarZoek() {
+  const router = useRouter()
+  const { isOpen, toggle, close } = useGlobalSearch()
+  const ref = React.useRef<HTMLDivElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [query, setQuery] = React.useState('')
+
+  const { results, loading } = useEntitySearch(query)
+  const term = query.trim()
+
+  // Sluit bij klik buiten de popup.
+  React.useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) close()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [close])
+
+  // Focus het invoerveld zodra de popup opent; leeg de term bij sluiten.
+  React.useEffect(() => {
+    if (isOpen) inputRef.current?.focus()
+    else setQuery('')
+  }, [isOpen])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={toggle} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        height: 32, padding: '0 12px',
+        background: 'var(--accent)', color: 'white',
+        border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
+        cursor: 'pointer', letterSpacing: '0.01em', whiteSpace: 'nowrap',
+      }}>
+        <IconChat size={14} />
+        Vraag EVA
+      </button>
+
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+          width: 'min(440px, 90vw)', zIndex: 1000,
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
+          borderRadius: 12, boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+          overflow: 'hidden', fontFamily: 'var(--font-ui)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+            <IconSparkle size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') close() }}
+              placeholder="Zoek op relatie, adres of dossier…"
+              style={{
+                flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                color: 'var(--fg)', fontSize: 14, fontFamily: 'var(--font-ui)',
+              }}
+            />
+          </div>
+          <ZoekResultaten
+            term={term}
+            results={results}
+            loading={loading}
+            onNavigate={(hit) => { close(); router.push(hit.href!) }}
+          />
+        </div>
+      )}
+    </div>
+  )
 }
 
-/* ─── Medewerker-profielpaneel (in de dropdown) ─────────────────────────── */
+/* ─── Medewerker-profielpaneel ──────────────────────────────────────────── */
 
 function MedewerkerPaneel({
   profiel, laadt, onTerug,
