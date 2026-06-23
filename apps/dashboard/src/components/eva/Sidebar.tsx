@@ -381,7 +381,7 @@ export default function Sidebar({
           background: pinned ? 'var(--brand-50)' : 'var(--bg-elev)',
           border: `1px solid ${pinned ? 'var(--brand)' : 'var(--border)'}`,
           borderRadius: '50%',
-          display: 'grid', placeItems: 'center',
+          display: collapsed ? 'none' : 'grid', placeItems: 'center',
           color: pinned ? 'var(--brand)' : 'var(--fg-muted)',
           cursor: 'pointer', zIndex: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
         }}
