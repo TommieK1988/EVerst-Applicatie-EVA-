@@ -141,7 +141,7 @@ export default function TakenActieveDossiers({
     { key: 'klant_naam', label: 'Klant', breedte: 180, standaard_zichtbaar: false,
       sorteerWaarde: r => r.klant_naam ?? '',
       render: r => r.klant_naam ?? '—' },
-    { key: 'fase', label: 'Fase', breedte: 160, filterType: 'select',
+    { key: 'fase', label: 'Fase', breedte: 160,
       sorteerWaarde: r => r.dossier_fase,
       render: r => (
         <span>
@@ -151,10 +151,10 @@ export default function TakenActieveDossiers({
           )}
         </span>
       ) },
-    { key: 'status', label: 'Status', breedte: 130, filterType: 'select',
+    { key: 'status', label: 'Status', breedte: 130,
       sorteerWaarde: r => r.status,
       render: r => <Badge meta={STATUS_META[r.status]} /> },
-    { key: 'prioriteit', label: 'Prioriteit', breedte: 110, filterType: 'select',
+    { key: 'prioriteit', label: 'Prioriteit', breedte: 110,
       sorteerWaarde: r => ['laag', 'normaal', 'hoog', 'urgent'].indexOf(r.prioriteit),
       render: r => <Badge meta={PRIO_META[r.prioriteit]} /> },
     { key: 'deadline', label: 'Deadline', breedte: 120,
@@ -190,7 +190,7 @@ export default function TakenActieveDossiers({
   ], [])
 
   return (
-    <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
           {titel}
