@@ -1,17 +1,19 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getKamInzendingen, getKamStats, getKamTemplates } from './actions'
+import { getKamInzendingen, getKamStats, getKamTemplates, getVcaOpdrachten } from './actions'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { KamTabelClient } from './KamTabelClient'
+import { VcaOpdrachtenTabel } from './VcaOpdrachtenTabel'
 
 export const metadata: Metadata = { title: 'KAM / VGM' }
 
 export default async function KamPage() {
-  const [inzendingenResult, stats, templates] = await Promise.all([
+  const [inzendingenResult, stats, templates, vcaOpdrachten] = await Promise.all([
     getKamInzendingen(),
     getKamStats(),
     getKamTemplates(),
+    getVcaOpdrachten(),
   ])
 
   const inzendingen = inzendingenResult.ok ? inzendingenResult.data : []
@@ -86,6 +88,17 @@ export default async function KamPage() {
           Fout bij laden: {inzendingenResult.error}
         </div>
       )}
+
+      {/* Opdrachten met VCA-toggle aan */}
+      <section style={{ marginTop: 40 }}>
+        <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+          Opdrachten met VCA
+        </h2>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted)' }}>
+          Alle opdrachten waarop de VCA-toggle aanstaat, met de voortgang van KAM/VGM-formulieren en follow-up taken.
+        </p>
+        <VcaOpdrachtenTabel rijen={vcaOpdrachten} />
+      </section>
     </div>
   )
 }
