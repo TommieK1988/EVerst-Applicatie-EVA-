@@ -104,6 +104,15 @@ function MateriaalRij({
         />
       </td>
 
+      {/* Merk */}
+      <td className="px-1 py-0.5">
+        <InlineTekst
+          waarde={materiaal.merk ?? ''}
+          placeholder="Merk..."
+          onOpslaan={v => onWijzig({ merk: v || undefined })}
+        />
+      </td>
+
       {/* Artikelnummer */}
       <td className="px-1 py-0.5">
         <InlineTekst
@@ -136,6 +145,11 @@ function MateriaalRij({
           <option value="">— Kies —</option>
           {MATERIAAL_GROEPEN.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
+        {materiaal.leverancier_productgroep && (
+          <div className="px-1.5 text-[10px] text-slate-400 truncate" title={materiaal.leverancier_productgroep}>
+            lev.: {materiaal.leverancier_productgroep}
+          </div>
+        )}
       </td>
 
       {/* Eenheid */}
@@ -200,6 +214,7 @@ export default function MaterialenBibliotheek() {
   const [zoek, setZoek] = useState('')
   const [filterGroep, setFilterGroep] = useState('')
   const [filterLeverancier, setFilterLeverancier] = useState('')
+  const [filterMerk, setFilterMerk] = useState('')
   const [filterStatus, setFilterStatus] = useState<'alle' | 'actief' | 'inactief'>('actief')
   const [laden, setLaden] = useState(true)
   const [importBezig, setImportBezig] = useState(false)
@@ -239,18 +254,22 @@ export default function MaterialenBibliotheek() {
 
   const leveranciers = Array.from(new Set(materialen.map(m => m.leverancier).filter(Boolean) as string[])).sort()
   const groepen      = Array.from(new Set(materialen.map(m => m.materiaalgroep).filter(Boolean) as string[])).sort()
+  const merken       = Array.from(new Set(materialen.map(m => m.merk).filter(Boolean) as string[])).sort()
 
   const gefilterd = materialen.filter(m => {
     if (filterStatus !== 'alle' && m.status !== filterStatus) return false
     if (filterGroep && m.materiaalgroep !== filterGroep) return false
     if (filterLeverancier && m.leverancier !== filterLeverancier) return false
+    if (filterMerk && m.merk !== filterMerk) return false
     if (zoek) {
       const q = zoek.toLowerCase()
       return (
         m.omschrijving.toLowerCase().includes(q) ||
         (m.leverancier?.toLowerCase().includes(q) ?? false) ||
+        (m.merk?.toLowerCase().includes(q) ?? false) ||
         (m.artikelnummer?.toLowerCase().includes(q) ?? false) ||
-        (m.materiaalgroep?.toLowerCase().includes(q) ?? false)
+        (m.materiaalgroep?.toLowerCase().includes(q) ?? false) ||
+        (m.leverancier_productgroep?.toLowerCase().includes(q) ?? false)
       )
     }
     return true
@@ -328,7 +347,7 @@ export default function MaterialenBibliotheek() {
     }
   }
 
-  const actieveFilters = [filterStatus !== 'actief', !!filterGroep, !!filterLeverancier].filter(Boolean).length
+  const actieveFilters = [filterStatus !== 'actief', !!filterGroep, !!filterLeverancier, !!filterMerk].filter(Boolean).length
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -393,12 +412,24 @@ export default function MaterialenBibliotheek() {
             </select>
           )}
 
+          {/* Merk filter */}
+          {merken.length > 0 && (
+            <select
+              value={filterMerk}
+              onChange={e => setFilterMerk(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 focus:outline-none focus:border-everts/40 bg-white"
+            >
+              <option value="">Alle merken</option>
+              {merken.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
+
           {/* Reset filters */}
           {actieveFilters > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { setFilterStatus('actief'); setFilterGroep(''); setFilterLeverancier('') }}
+              onClick={() => { setFilterStatus('actief'); setFilterGroep(''); setFilterLeverancier(''); setFilterMerk('') }}
             >
               Filters wissen ({actieveFilters})
             </Button>
@@ -480,6 +511,7 @@ export default function MaterialenBibliotheek() {
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
               <th className="min-w-[140px] px-2 py-2 text-left font-medium">Leverancier</th>
+              <th className="min-w-[120px] px-2 py-2 text-left font-medium">Merk</th>
               <th className="min-w-[120px] px-2 py-2 text-left font-medium">Artikelnummer</th>
               <th className="min-w-[200px] px-2 py-2 text-left font-medium">Omschrijving</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Materiaalgroep</th>

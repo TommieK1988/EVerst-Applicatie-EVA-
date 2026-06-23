@@ -24,9 +24,11 @@ function rowNaarMateriaal(r: any): Materiaal {
     kostprijs: Number(r.kostprijs ?? 0),
     status: (r.status ?? 'actief') as MateriaalStatus,
     aangepast_op: r.aangepast_op ?? r.created_at ?? new Date().toISOString(),
+    merk: r.merk ?? undefined,
     gtin: r.gtin ?? undefined,
     etim_klasse: r.etim_klasse ?? undefined,
     leverancier_gln: r.leverancier_gln ?? undefined,
+    leverancier_productgroep: r.leverancier_productgroep ?? undefined,
     bron: (r.bron ?? 'handmatig') as MateriaalBron,
     externe_ref: r.externe_ref ?? undefined,
     gesynct_op: r.gesynct_op ?? null,
@@ -44,9 +46,11 @@ function materiaalNaarRow(m: Partial<Materiaal>): Record<string, unknown> {
   set('eenheid', m.eenheid)
   set('kostprijs', m.kostprijs)
   set('status', m.status)
+  set('merk', m.merk ?? null)
   set('gtin', m.gtin ?? null)
   set('etim_klasse', m.etim_klasse ?? null)
   set('leverancier_gln', m.leverancier_gln ?? null)
+  set('leverancier_productgroep', m.leverancier_productgroep ?? null)
   set('bron', m.bron)
   set('externe_ref', m.externe_ref ?? null)
   set('gesynct_op', m.gesynct_op)
@@ -60,7 +64,7 @@ function materiaalNaarRow(m: Partial<Materiaal>): Record<string, unknown> {
 const PAGINA = 1000
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function haalAlles(opts: { alleenActief?: boolean; select?: string } = {}): Promise<any[]> {
+async function haalAlles(opts: { alleenActief?: boolean; select?: string; leverancier?: string } = {}): Promise<any[]> {
   const supabase = await db()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const alle: any[] = []
@@ -71,6 +75,7 @@ async function haalAlles(opts: { alleenActief?: boolean; select?: string } = {})
       .order('omschrijving', { ascending: true })
       .range(van, van + PAGINA - 1)
     if (opts.alleenActief) q = q.eq('status', 'actief')
+    if (opts.leverancier) q = q.eq('leverancier', opts.leverancier)
     const { data, error } = await q
     if (error) throw new Error(`Materialen ophalen mislukt: ${error.message}`)
     alle.push(...(data ?? []))
@@ -146,6 +151,19 @@ export async function importMaterialen(
   // dedup bij >1000 bestaande materialen en ontstaan duplicaten.
   const bestaande = await haalAlles({ select: 'id, artikelnummer, leverancier, gtin' })
 
+  // Koppeltabel laden: leveranciers-productgroep -> eigen materiaalgroep (per leverancier).
+  // Bij import wordt de eigen materiaalgroep hieruit afgeleid zodat een herhaalde upload
+  // meteen goed staat.
+  const { data: mappingRows } = await supabase
+    .from('dico_groep_mapping')
+    .select('leverancier, leverancier_productgroep, materiaalgroep')
+  const groepKey = (lev?: string | null, pg?: string | null) => `${lev ?? ''}\n${pg ?? ''}`
+  const groepMap = new Map<string, string | null>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (mappingRows ?? []) as any[]) {
+    groepMap.set(groepKey(r.leverancier, r.leverancier_productgroep), r.materiaalgroep ?? null)
+  }
+
   // Matchindexen: op GTIN en op artikelnummer+leverancier.
   const opGtin = new Map<string, string>()
   const opArtLev = new Map<string, string>()
@@ -177,9 +195,15 @@ export async function importMaterialen(
       fouten.push(`Regel ${i + 1}: omschrijving ontbreekt`)
       continue
     }
+    // Eigen materiaalgroep afleiden uit de koppeltabel (DICO), anders de meegegeven
+    // waarde (Excel-import met handmatige groep).
+    const k = groepKey(m.leverancier, m.leverancier_productgroep)
+    const eigenGroep = m.leverancier_productgroep && groepMap.has(k)
+      ? (groepMap.get(k) ?? undefined)
+      : m.materiaalgroep
     const payload = materiaalNaarRow({
       eenheid: 'ltr', kostprijs: 0, status: 'actief',
-      ...m, bron, gesynct_op: syncTijd, aangepast_op: nu,
+      ...m, materiaalgroep: eigenGroep, bron, gesynct_op: syncTijd, aangepast_op: nu,
     })
     const id = vindId(m)
     if (id) {
@@ -208,4 +232,82 @@ export async function importMaterialen(
 
   revalidatePath('/everts-calc/bibliotheek/materialen')
   return { aangemaakt, bijgewerkt, fouten }
+}
+
+// ─── Productgroep-koppeling (leverancier-productgroep -> eigen materiaalgroep) ──────
+
+export async function getLeveranciers(): Promise<string[]> {
+  const rijen = await haalAlles({ select: 'leverancier' })
+  const set = new Set<string>()
+  for (const r of rijen) if (r.leverancier) set.add(r.leverancier)
+  return [...set].sort((a, b) => a.localeCompare(b, 'nl'))
+}
+
+export type ProductgroepKoppeling = {
+  leverancier_productgroep: string
+  aantal: number
+  materiaalgroep: string | null   // huidige eigen koppeling (null = niet gekoppeld)
+}
+
+// Alle leveranciers-productgroepen van één leverancier, met artikelaantal en de huidige
+// koppeling naar een eigen materiaalgroep.
+export async function getProductgroepKoppelingen(leverancier: string): Promise<ProductgroepKoppeling[]> {
+  const supabase = await db()
+  const rijen = await haalAlles({ select: 'leverancier_productgroep', leverancier })
+  const aantallen = new Map<string, number>()
+  for (const r of rijen) {
+    const pg = r.leverancier_productgroep
+    if (pg) aantallen.set(pg, (aantallen.get(pg) ?? 0) + 1)
+  }
+  const { data: mapping } = await supabase
+    .from('dico_groep_mapping')
+    .select('leverancier_productgroep, materiaalgroep')
+    .eq('leverancier', leverancier)
+  const gekoppeld = new Map<string, string | null>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (mapping ?? []) as any[]) gekoppeld.set(r.leverancier_productgroep, r.materiaalgroep ?? null)
+
+  return [...aantallen.entries()]
+    .map(([pg, aantal]) => ({
+      leverancier_productgroep: pg,
+      aantal,
+      materiaalgroep: gekoppeld.get(pg) ?? null,
+    }))
+    .sort((a, b) => a.leverancier_productgroep.localeCompare(b.leverancier_productgroep, 'nl'))
+}
+
+// Slaat de koppelingen voor één leverancier op (onthouden voor volgende imports) én past
+// ze direct toe op de bestaande materialen van die leverancier.
+export async function slaProductgroepKoppelingenOp(
+  leverancier: string,
+  koppelingen: { leverancier_productgroep: string; materiaalgroep: string | null }[],
+): Promise<void> {
+  const supabase = await db()
+  const nu = new Date().toISOString()
+
+  // 1. Koppeltabel bijwerken (upsert op leverancier + productgroep).
+  const rows = koppelingen.map(k => ({
+    leverancier,
+    leverancier_productgroep: k.leverancier_productgroep,
+    materiaalgroep: k.materiaalgroep,
+    updated_at: nu,
+  }))
+  if (rows.length) {
+    const { error } = await supabase
+      .from('dico_groep_mapping')
+      .upsert(rows, { onConflict: 'leverancier,leverancier_productgroep' })
+    if (error) throw new Error(`Koppeling opslaan mislukt: ${error.message}`)
+  }
+
+  // 2. Direct toepassen op bestaande materialen van deze leverancier.
+  for (const k of koppelingen) {
+    const { error } = await supabase
+      .from('evc_materialen')
+      .update({ materiaalgroep: k.materiaalgroep, aangepast_op: nu })
+      .eq('leverancier', leverancier)
+      .eq('leverancier_productgroep', k.leverancier_productgroep)
+    if (error) throw new Error(`Toepassen op materialen mislukt: ${error.message}`)
+  }
+
+  revalidatePath('/everts-calc/bibliotheek/materialen')
 }

@@ -339,10 +339,16 @@ export interface Materiaal {
   status: MateriaalStatus
   aangepast_op: string
 
+  // Merk van het artikel (indien de leverancier dit meelevert; staat los van leverancier)
+  merk?: string
+
   // DICO / Ketenstandaard / ETIM (optioneel; gevuld via DICO-import of -sync)
   gtin?: string
   etim_klasse?: string
   leverancier_gln?: string
+  // Ruwe productgroep zoals de leverancier die aanlevert (DICO BuyingGroup);
+  // wordt via dico_groep_mapping gekoppeld aan de eigen `materiaalgroep`.
+  leverancier_productgroep?: string
   bron?: MateriaalBron
   externe_ref?: string
   gesynct_op?: string | null

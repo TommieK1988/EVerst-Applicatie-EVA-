@@ -28,12 +28,17 @@ const KANDIDATEN = {
     'verkoopeenheid', 'besteleenheid', 'unit', 'uom', 'measureunit', 'quantityunit', 'orderunit'],
   prijs: ['grossprice', 'brutoprijs', 'nettoprijs', 'verkoopprijs', 'kostprijs', 'prijs',
     'netprice', 'listprice', 'unitprice', 'price'],
-  leverancier: ['leverancier', 'leveranciersnaam', 'suppliername', 'supplier', 'fabrikant',
-    'fabrikantnaam', 'manufacturername', 'manufacturer', 'merk', 'brand'],
+  leverancier: ['leverancier', 'leveranciersnaam', 'suppliername', 'supplier'],
   leverancier_gln: ['leveranciersgln', 'suppliergln', 'gln'],
+  // Merk/fabrikant van het artikel (los van de leverancier). Niet elke leverancier
+  // levert dit; bij afwezigheid blijft merk leeg.
+  merk: ['merk', 'brand', 'brandname', 'fabrikant', 'fabrikantnaam', 'manufacturer',
+    'manufacturername', 'tradeitembrandname', 'productbrand'],
   etim_klasse: ['etimklasse', 'etimclass', 'etimclasscode', 'classificationcode', 'etim'],
-  materiaalgroep: ['buyinggroup', 'productgroep', 'assortimentsgroep', 'productgroup', 'groep',
-    'group', 'category', 'categorie', 'hoofdgroep'],
+  // Ruwe leveranciers-productgroep (DICO BuyingGroup); koppeling naar eigen
+  // materiaalgroep gebeurt later via dico_groep_mapping.
+  leverancier_productgroep: ['buyinggroup', 'productgroep', 'assortimentsgroep', 'productgroup',
+    'groep', 'group', 'category', 'categorie', 'hoofdgroep'],
 } as const
 
 type Veld = keyof typeof KANDIDATEN
@@ -188,7 +193,10 @@ export function parseDicoArtikelen(xml: string, standaardLeverancier?: string): 
       gtin,
       leverancier: kies(s, 'leverancier') ?? headerLeverancier,
       leverancier_gln: kies(s, 'leverancier_gln') ?? headerGln,
-      materiaalgroep: kies(s, 'materiaalgroep'),
+      merk: kies(s, 'merk'),
+      // Ruwe leveranciers-productgroep; eigen materiaalgroep wordt bij import via
+      // de koppeltabel gezet, niet hier.
+      leverancier_productgroep: kies(s, 'leverancier_productgroep'),
       etim_klasse: kies(s, 'etim_klasse'),
       eenheid: mapUom(kies(s, 'eenheid')),
       kostprijs: parsePrijs(kies(s, 'prijs')),

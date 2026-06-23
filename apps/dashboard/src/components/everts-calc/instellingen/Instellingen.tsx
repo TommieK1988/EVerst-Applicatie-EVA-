@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-store'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
+import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
 
 // ─── Constanten ───────────────────────────────────────────────────────────────
 
@@ -81,7 +82,12 @@ export default function Instellingen() {
 
       {activeTab === 'calculatie' && <CalculatieTab />}
       {activeTab === 'offerte'    && <OfferteTab />}
-      {activeTab === 'materialen' && <DicoIntegratiesBeheer />}
+      {activeTab === 'materialen' && (
+        <div className="space-y-6">
+          <DicoIntegratiesBeheer />
+          <ProductgroepKoppeling />
+        </div>
+      )}
 
       {/* Reset */}
       <div className="flex justify-start pt-2 border-t border-slate-100">
