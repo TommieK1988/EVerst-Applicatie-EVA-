@@ -24,6 +24,12 @@ export type SyncResult = {
  */
 export type SyncMode = 'incremental' | 'full'
 
+/** ISO-datumstring → "YYYY-MM-DD" voor `date`-kolommen (bv. "1965-04-04T00:00:00+01:00" → "1965-04-04"). */
+function toDate(dt?: string | null): string | null {
+  if (!dt) return null
+  return dt.slice(0, 10)
+}
+
 /** Haal de Bouw7 API key op uit de integraties-tabel. */
 export async function getBouw7Client(): Promise<Bouw7Client> {
   const supabase = createAdminClient()
@@ -421,23 +427,33 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
 
     const allRows = employees.map(e => {
       const bouw7Id = String(e.id)
+      // Verkoop = sellingHourlyRate, kostprijs = hourlyRate (komen als string binnen).
+      const uurtariefVerkoop   = e.sellingHourlyRate != null ? Number(e.sellingHourlyRate) : null
+      const uurtariefKostprijs = e.hourlyRate != null ? Number(e.hourlyRate) : null
+      // Geen top-level isActive in de API: "uit dienst"-datum gevuld → niet meer actief.
+      const actief = !e.dateOfResignation
       const hash = fingerprint({
         v: e.firstName ?? '', tv: e.prefix ?? null, a: e.lastName ?? '',
-        em: e.email ?? null, tel: e.phone ?? null, fn: e.function ?? null,
-        afd: e.department?.name ?? null, act: e.isActive !== false,
-        hr: e.hourlyRate ?? null, cr: e.costRate ?? null,
+        em: e.emailAddress ?? null, tel: e.phoneNumber ?? null, fn: e.functionTitle ?? null,
+        afd: e.department?.name ?? null, act: actief, ext: e.external ?? false,
+        gb: e.birthDate ?? null, dvd: e.dateOfEmployment ?? null, udp: e.dateOfResignation ?? null,
+        hr: uurtariefVerkoop, cr: uurtariefKostprijs,
       })
       return {
         voornaam:            e.firstName ?? '',
         tussenvoegsel:       e.prefix ?? null,
         achternaam:          e.lastName ?? '',
-        email:               e.email ?? null,
-        telefoon:            e.phone ?? null,
-        functie:             e.function ?? null,
+        email:               e.emailAddress ?? null,
+        telefoon:            e.phoneNumber ?? null,
+        functie:             e.functionTitle ?? null,
         afdeling:            e.department?.name ?? null,
-        actief:              e.isActive !== false,
-        uurtarief_verkoop:   e.hourlyRate ?? null,
-        uurtarief_kostprijs: e.costRate ?? null,
+        actief,
+        extern:              e.external ?? false,
+        geboortedatum:       toDate(e.birthDate),
+        in_dienst_vanaf:     toDate(e.dateOfEmployment),
+        uit_dienst_per:      toDate(e.dateOfResignation),
+        uurtarief_verkoop:   uurtariefVerkoop,
+        uurtarief_kostprijs: uurtariefKostprijs,
         bouw7_id:            bouw7Id,
         bouw7_sync_hash:     hash,
         bouw7_laatst_sync:   new Date().toISOString(),

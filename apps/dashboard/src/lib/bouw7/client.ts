@@ -203,19 +203,31 @@ export type Bouw7ContactPerson = {
   function?: string
 }
 
+// Let op: veldnamen hieronder zijn afgeleid van de *werkelijke* /list/employees-respons,
+// niet van de oudere documentatie. De API levert o.a. `emailAddress` (niet `email`),
+// `phoneNumber` (niet `phone`), `functionTitle` (niet `function`) en levert geen top-level
+// `isActive`/`costRate`. Uurtarieven komen als strings binnen.
 export type Bouw7Employee = {
   id: number
   firstName?: string
   prefix?: string
   lastName?: string
-  email?: string
-  phone?: string
-  function?: string
+  emailAddress?: string
+  phoneNumber?: string
+  functionTitle?: string
   department?: { id: number; name: string }
   branch?: { id: number; name: string }
-  isActive?: boolean
-  hourlyRate?: number
-  costRate?: number
+  /** ISO-datum, bv. "1965-04-04T00:00:00+01:00". */
+  birthDate?: string | null
+  /** Datum in dienst, ISO-datum. */
+  dateOfEmployment?: string | null
+  /** Datum uit dienst (gevuld = niet meer actief), ISO-datum. */
+  dateOfResignation?: string | null
+  external?: boolean
+  /** Kostprijs-uurtarief, als string bv. "75.00". */
+  hourlyRate?: string | null
+  /** Verkoop-uurtarief, als string bv. "125.0000". */
+  sellingHourlyRate?: string | null
 }
 
 export type Bouw7Project = {
