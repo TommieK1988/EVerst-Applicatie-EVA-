@@ -1637,16 +1637,21 @@ export async function setDossierToggle(
 export type UrenBewakingRegel = {
   code: string
   naam: string | null
-  begroot_uren: number
-  begroot_uurtarief: number | null
-  begroot_bedrag: number
+  /** Prognose uren uit Bouw7 (prognosisHours, kostensoort Arbeid). */
+  prognose_uren: number
+  /** Uurtarief uit de gesynchroniseerde werkbegroting — null als geen werkbegroting. */
+  wb_uurtarief: number | null
+  /** prognose_uren × wb_uurtarief; null als geen werkbegroting. */
+  prognose_bedrag: number | null
   geboekte_uren: number
   geboekte_kosten: number
   standopname_pct: number | null
   prognose_uren_100: number | null
   prognose_kosten_100: number | null
+  /** prognose_uren − geboekte_uren */
   uren_saldo: number
-  kosten_saldo: number
+  /** prognose_bedrag − geboekte_kosten; null als geen werkbegroting. */
+  kosten_saldo: number | null
 }
 
 export type DossierUrenBewakingData = {
@@ -1654,8 +1659,8 @@ export type DossierUrenBewakingData = {
   heeftWerkbegroting: boolean
   regels: UrenBewakingRegel[]
   totalen: {
-    begroot_uren: number
-    begroot_bedrag: number
+    prognose_uren: number
+    prognose_bedrag: number
     geboekte_uren: number
     geboekte_kosten: number
     uren_saldo: number
@@ -1674,7 +1679,7 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     beschikbaar: false,
     heeftWerkbegroting: false,
     regels: [],
-    totalen: { begroot_uren: 0, begroot_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
+    totalen: { prognose_uren: 0, prognose_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
   }
 
   const [bewaking, wbData] = await Promise.all([
@@ -1729,11 +1734,13 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
 
   if (!bewaking.beschikbaar) return leeg
 
-  const bouwMap = new Map<string, { geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
+  // Inclusief codes met alleen prognoseuren (nog geen boekingen) — zodat projecten
+  // die nog in voorbereiding zijn al zichtbaar zijn in de tabel.
+  const bouwMap = new Map<string, { prognose_uren: number; geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
   for (const hfd of bewaking.hoofdstukken) {
     for (const r of hfd.regels) {
-      if (!r.code || (r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
-      bouwMap.set(r.code, { geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
+      if (!r.code || (r.prognoseUren <= 0 && r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
+      bouwMap.set(r.code, { prognose_uren: r.prognoseUren, geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
     }
   }
 
@@ -1743,37 +1750,38 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
   const regels: UrenBewakingRegel[] = [...codeSet].map((code) => {
     const bouw = bouwMap.get(code)
     const wb = wbData?.get(code)
-    const begroot_uren = wb?.uren ?? 0
-    const begroot_bedrag = wb?.bedrag ?? 0
+    const prognose_uren = bouw?.prognose_uren ?? 0
+    const wb_uurtarief = wb && wb.uren > 0 ? wb.bedrag / wb.uren : null
+    const prognose_bedrag = wb_uurtarief != null ? prognose_uren * wb_uurtarief : null
     const geboekte_uren = bouw?.geboekte_uren ?? 0
     const geboekte_kosten = bouw?.geboekte_kosten ?? 0
     const standopname_pct = bouw?.progress ?? null
     return {
       code,
       naam: bouw?.naam ?? null,
-      begroot_uren,
-      begroot_uurtarief: begroot_uren > 0 ? begroot_bedrag / begroot_uren : null,
-      begroot_bedrag,
+      prognose_uren,
+      wb_uurtarief,
+      prognose_bedrag,
       geboekte_uren,
       geboekte_kosten,
       standopname_pct,
       prognose_uren_100: standopname_pct != null && standopname_pct > 0 ? geboekte_uren / (standopname_pct / 100) : null,
       prognose_kosten_100: standopname_pct != null && standopname_pct > 0 ? geboekte_kosten / (standopname_pct / 100) : null,
-      uren_saldo: begroot_uren - geboekte_uren,
-      kosten_saldo: begroot_bedrag - geboekte_kosten,
+      uren_saldo: prognose_uren - geboekte_uren,
+      kosten_saldo: prognose_bedrag != null ? prognose_bedrag - geboekte_kosten : null,
     }
   }).sort((a, b) => a.code.localeCompare(b.code))
 
   const totalen = regels.reduce(
     (t, r) => ({
-      begroot_uren: t.begroot_uren + r.begroot_uren,
-      begroot_bedrag: t.begroot_bedrag + r.begroot_bedrag,
+      prognose_uren: t.prognose_uren + r.prognose_uren,
+      prognose_bedrag: t.prognose_bedrag + (r.prognose_bedrag ?? 0),
       geboekte_uren: t.geboekte_uren + r.geboekte_uren,
       geboekte_kosten: t.geboekte_kosten + r.geboekte_kosten,
       uren_saldo: t.uren_saldo + r.uren_saldo,
-      kosten_saldo: t.kosten_saldo + r.kosten_saldo,
+      kosten_saldo: t.kosten_saldo + (r.kosten_saldo ?? 0),
     }),
-    { begroot_uren: 0, begroot_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
+    { prognose_uren: 0, prognose_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
   )
 
   return { beschikbaar: regels.length > 0, heeftWerkbegroting, regels, totalen }

@@ -34,9 +34,9 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
             <thead>
               <tr>
                 <TH>Bewakingscode</TH>
-                <TH right>Begrote uren</TH>
-                <TH right>Begroot tarief</TH>
-                <TH right>Begroot bedrag</TH>
+                <TH right>Prognose uren</TH>
+                <TH right>Uurtarief wb</TH>
+                <TH right>Prognose bedrag</TH>
                 <TH right>Geboekte uren</TH>
                 <TH right>Geboekte kosten</TH>
                 <TH right>% Gereed</TH>
@@ -57,34 +57,34 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                       </span>
                     )}
                   </TD>
-                  <TD right>{heeftWerkbegroting ? fmtUren(r.begroot_uren) : '—'}</TD>
-                  <TD right>{heeftWerkbegroting ? fmtTarief(r.begroot_uurtarief) : '—'}</TD>
-                  <TD right>{heeftWerkbegroting ? fmt(r.begroot_bedrag) : '—'}</TD>
+                  <TD right>{fmtUren(r.prognose_uren)}</TD>
+                  <TD right>{heeftWerkbegroting ? fmtTarief(r.wb_uurtarief) : '—'}</TD>
+                  <TD right>{heeftWerkbegroting && r.prognose_bedrag != null ? fmt(r.prognose_bedrag) : '—'}</TD>
                   <TD right>{fmtUren(r.geboekte_uren)}</TD>
                   <TD right accent={r.geboekte_kosten > 0}>{fmt(r.geboekte_kosten)}</TD>
                   <TD right>{fmtPct(r.standopname_pct)}</TD>
                   <TD right>{r.prognose_uren_100 != null ? fmtUren(r.prognose_uren_100) : '—'}</TD>
                   <TD right>{r.prognose_kosten_100 != null ? fmt(r.prognose_kosten_100) : '—'}</TD>
-                  <TD right kleur={heeftWerkbegroting ? KLEUR_SALDO(r.uren_saldo) : undefined}>
-                    {heeftWerkbegroting ? fmtUren(r.uren_saldo) : '—'}
+                  <TD right kleur={KLEUR_SALDO(r.uren_saldo)}>
+                    {fmtUren(r.uren_saldo)}
                   </TD>
-                  <TD right kleur={heeftWerkbegroting ? KLEUR_SALDO(r.kosten_saldo) : undefined}>
-                    {heeftWerkbegroting ? fmt(r.kosten_saldo) : '—'}
+                  <TD right kleur={r.kosten_saldo != null ? KLEUR_SALDO(r.kosten_saldo) : undefined}>
+                    {r.kosten_saldo != null ? fmt(r.kosten_saldo) : '—'}
                   </TD>
                 </tr>
               ))}
               <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
                 <TD vet>Totaal</TD>
-                <TD right vet>{heeftWerkbegroting ? fmtUren(totalen.begroot_uren, true) : '—'}</TD>
+                <TD right vet>{fmtUren(totalen.prognose_uren, true)}</TD>
                 <TD>{''}</TD>
-                <TD right vet>{heeftWerkbegroting ? fmt(totalen.begroot_bedrag, true) : '—'}</TD>
+                <TD right vet>{heeftWerkbegroting ? fmt(totalen.prognose_bedrag, true) : '—'}</TD>
                 <TD right vet>{fmtUren(totalen.geboekte_uren, true)}</TD>
                 <TD right vet>{fmt(totalen.geboekte_kosten, true)}</TD>
                 <TD>{''}</TD>
                 <TD>{''}</TD>
                 <TD>{''}</TD>
-                <TD right vet kleur={heeftWerkbegroting ? KLEUR_SALDO(totalen.uren_saldo) : undefined}>
-                  {heeftWerkbegroting ? fmtUren(totalen.uren_saldo, true) : '—'}
+                <TD right vet kleur={KLEUR_SALDO(totalen.uren_saldo)}>
+                  {fmtUren(totalen.uren_saldo, true)}
                 </TD>
                 <TD right vet kleur={heeftWerkbegroting ? KLEUR_SALDO(totalen.kosten_saldo) : undefined}>
                   {heeftWerkbegroting ? fmt(totalen.kosten_saldo, true) : '—'}
