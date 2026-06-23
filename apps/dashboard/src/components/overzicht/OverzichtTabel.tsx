@@ -365,23 +365,34 @@ export default function OverzichtTabel<T extends { id: string }>({
     ? (layouts.find(l => l.id === activeLayoutId)?.naam ?? 'Layout')
     : 'Weergave'
 
-  // ── CSV Export ─────────────────────────────────────────────────────────────
-  function exportNaarCsv() {
+  // ── Excel Export ───────────────────────────────────────────────────────────
+  async function exportNaarExcel() {
+    const XLSX = await import('xlsx')
     const zichtbareKolommen = orderedKolommen.filter(k => columnVisibility[k.key] !== false)
     const headers = zichtbareKolommen.map(k => k.label)
     const rijen = table.getFilteredRowModel().rows.map(row =>
       zichtbareKolommen.map(k => {
         const waarde = k.sorteerWaarde ? k.sorteerWaarde(row.original) : ''
-        return waarde != null ? String(waarde) : ''
+        // Getallen als getal behouden zodat Excel ermee rekent; null → lege cel
+        if (waarde == null) return ''
+        if (typeof waarde === 'number' || typeof waarde === 'boolean') return waarde
+        return String(waarde)
       })
     )
-    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
-    const csv = [headers, ...rijen].map(r => r.map(escape).join(',')).join('\r\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = Object.assign(document.createElement('a'), { href: url, download: `${scherm}-export.csv` })
-    document.body.appendChild(a); a.click()
-    document.body.removeChild(a); URL.revokeObjectURL(url)
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rijen])
+    // Kolombreedte op basis van langste waarde per kolom
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = Math.max(
+        String(h).length,
+        ...rijen.map(r => String(r[i] ?? '').length),
+      )
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 50) }
+    })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Export')
+    XLSX.writeFile(wb, `${scherm}-export.xlsx`)
     toast.success(`${rijen.length} rijen geëxporteerd`)
   }
 
@@ -481,8 +492,8 @@ export default function OverzichtTabel<T extends { id: string }>({
 
           {/* Export knop (ingebouwd) */}
           <button
-            onClick={exportNaarCsv}
-            title="Exporteer als CSV"
+            onClick={exportNaarExcel}
+            title="Exporteer als Excel"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               height: 32, padding: '0 10px',
