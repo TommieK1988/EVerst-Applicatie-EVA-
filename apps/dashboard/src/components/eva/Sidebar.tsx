@@ -9,7 +9,7 @@ import {
   IconProjectplanning, IconCrewplanning, IconAgenda,
   IconFacturen, IconInkoop,
   IconKam,
-  IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc, IconGeveltekeningen,
+  IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc,
   IconFormulieren,
 } from './Icons'
 import type { Tweaks } from './types'
@@ -78,7 +78,6 @@ const APPS: NavEntry[] = [
   { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen,      module: 'taken'         },
   { href: '/houtrotherstel', label: 'Houtrotherstel',  Icon: IconHoutrotherstel, module: 'houtrotherstel' },
   { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc,     module: 'everts_calc'   },
-  { href: '/geveltekening',  label: 'Geveltekeningen', Icon: IconGeveltekeningen, module: 'geveltekening' },
 ]
 
 const ICON_OVERZICHT = 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
@@ -137,14 +136,6 @@ const APP_SUBNAV: Record<string, {
       { href: '/wagenpark/parkeren',    label: 'Parkeren',    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z' },
       { href: '/wagenpark/bevindingen', label: 'Bevindingen', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
       { href: '/wagenpark/diagnose',    label: 'Diagnose',    icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18' },
-    ],
-  },
-  '/geveltekening': {
-    label: 'Geveltekeningen',
-    Icon: IconGeveltekeningen,
-    items: [
-      { href: '/geveltekening',            label: 'Overzicht',  icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
-      { href: '/geveltekening/tekeningen', label: 'Tekeningen', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     ],
   },
   '/management': {

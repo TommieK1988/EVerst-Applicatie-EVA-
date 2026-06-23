@@ -812,15 +812,12 @@ flowchart LR
       R["🤝 Relaties"]
       W["🚐 Wagenpark"]
       A["📅 Agenda & Taken"]
-      G["🏠 Geveltekening"]
     end
 
     B7["🏗️ Bouw7\nProjectbeheer"]
     ULU["🚗 ULU\nRitregistratie"]
     RDW["🚦 RDW\nVoertuigenregister"]
     O365["📧 Microsoft 365\nOutlook & Teams"]
-    BAG["🗺️ PDOK / BAG\nGebouwdata"]
-    CL["🤖 Claude AI\nBeeldanalyse"]
 
     M <-->|"Projectcijfers"| B7
     P <-->|"Medewerkers sync"| B7
@@ -828,12 +825,9 @@ flowchart LR
     W -->|"Ritdata importeren"| ULU
     W -->|"Voertuiggegevens"| RDW
     A <-->|"Agenda & taken"| O365
-    G -->|"Adressen opzoeken"| BAG
-    G -->|"Gevelbeoordeling"| CL
 
     style EVA fill:#f0faf3,stroke:#1f7a3a
     style B7 fill:#155d2b,color:#fff
-    style CL fill:#d97706,color:#fff
     </div>
   </div>
 
@@ -853,14 +847,6 @@ flowchart LR
     <div class="card top-blue">
       <h4>📧 Microsoft Office 365</h4>
       <p><strong>Wat doet het?</strong> Medewerkers kunnen inloggen met hun Office 365-account. Agenda-afspraken en taken worden gesynchroniseerd met Outlook.</p>
-    </div>
-    <div class="card top-teal">
-      <h4>🗺️ PDOK / BAG</h4>
-      <p><strong>Wat doet het?</strong> Alleen in de geveltekeningapp. Adresopzoek en officiële gebouwdata voor nauwkeurige geveltekeningen.</p>
-    </div>
-    <div class="card top-gold">
-      <h4>🤖 Claude AI</h4>
-      <p><strong>Wat doet het?</strong> Alleen in de geveltekeningapp. De AI analyseert gevelfoto's en beoordeelt houtrot, verfconditie en geeft reparatieaanbevelingen.</p>
     </div>
   </div>
 </section>

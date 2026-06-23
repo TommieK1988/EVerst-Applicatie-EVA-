@@ -12,8 +12,7 @@
     "lint": "turbo run lint --filter=eva",
     "type-check": "turbo run type-check --filter=eva",
     "dev:eva": "turbo run dev --filter=eva",
-    "dev:everts-calc": "turbo run dev --filter=everts-calc",
-    "dev:geveltekening": "turbo run dev --filter=geveltekening-app"
+    "dev:everts-calc": "turbo run dev --filter=everts-calc"
   },
   "devDependencies": {
     "turbo": "^2.1.0",

@@ -167,14 +167,6 @@ const appItems: SettingsItem[] = [
     kicker: 'Taken',
     module: 'taken',
   },
-  {
-    href: '/geveltekening/instellingen',
-    title: 'Geveltekeningen',
-    description: 'Sjablonen, exportformaten en lagen-configuratie.',
-    ready: false,
-    kicker: 'Geveltekening',
-    module: 'geveltekening',
-  },
 ]
 
 function SettingsCard({ item }: { item: SettingsItem }) {

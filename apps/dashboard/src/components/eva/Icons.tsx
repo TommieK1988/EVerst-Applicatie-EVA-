@@ -136,7 +136,6 @@ export const IconSjablonen     = (p: IconProps) => <IconBase {...p}><rect x="3.5
 export const IconWagenpark     = (p: IconProps) => <IconBase {...p}><path d="M2 14V6h12v3h4l3 3v2h-3M14 14h-3M9 14H2"/><circle cx="6" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></IconBase>;
 export const IconHoutrotherstel = (p: IconProps) => <IconBase {...p}><path d="M4 20V9l8-5 8 5v11"/><path d="M4 20h16"/><path d="M9 20v-4a3 3 0 0 1 6 0v4z" fill="currentColor" stroke="none"/><path d="M9 9c1.2.8 1.6 2 1.2 3.2M14 8c1.2 1 1.6 2.4 1 4"/></IconBase>;
 export const IconEvertsCalc    = (p: IconProps) => <IconBase {...p}><rect x="3.5" y="3.5" width="17" height="17" rx="2.2"/><rect x="7" y="12" width="2.6" height="5" rx="0.5" fill="currentColor" stroke="none"/><rect x="11" y="8.5" width="2.6" height="8.5" rx="0.5" fill="currentColor" stroke="none"/><rect x="15" y="10.5" width="2.6" height="6.5" rx="0.5" fill="currentColor" stroke="none"/></IconBase>;
-export const IconGeveltekeningen = (p: IconProps) => <IconBase {...p}><path d="M3 21V9l6-4 6 4v12"/><path d="M6 21v-4h3v4z" fill="currentColor" stroke="none"/><path d="M6 12h3"/><path d="M15 21V8l5 3v10z" fill="currentColor" stroke="none"/></IconBase>;
 export const IconMijnTaken     = (p: IconProps) => <IconBase {...p}><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h2"/><path d="M13.5 17.5l2 2 4-4.5"/></IconBase>;
 
 // Dossier-modules

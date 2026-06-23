@@ -12,7 +12,6 @@ npm workspaces + Turborepo. Twee actieve Next.js 14 apps onder `apps/`, vijf int
 |-----|------|---------|
 | `apps/dashboard` (EVA) | 3000 | Centraal platform — alle modules geïntegreerd |
 | `apps/everts-calc` | 3001 | Legacy standalone (wordt samengevoegd met EVA, tijdelijk actief) |
-| `apps/geveltekening-app` | 3006 | Geveltekening-editor (AI-powered, geen Supabase) |
 
 Gearchiveerde standalone apps (niet meer starten):
 - `apps/houtrotherstel-app` — geïntegreerd in EVA onder `/houtrotherstel`
@@ -35,7 +34,6 @@ npm run dev
 # Specifieke app starten
 npm run dev:eva              # EVA — port 3000
 npm run dev:everts-calc      # legacy calc — port 3001 (tijdelijk)
-npm run dev:geveltekening    # geveltekening — port 3006
 
 # Of via Turbo filter (algemeen patroon)
 npx turbo run dev --filter=<app-name>
@@ -50,9 +48,9 @@ Tests zijn nog niet geconfigureerd in deze monorepo.
 
 ## Database
 
-Eén gedeeld Supabase-project voor alle apps (behalve geveltekening-app). Migraties staan in `supabase/migrations/`.
+Eén gedeeld Supabase-project voor alle apps. Migraties staan in `supabase/migrations/`.
 
-Elke app (behalve geveltekening-app) heeft een `.env.local` nodig:
+Elke app heeft een `.env.local` nodig:
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
@@ -74,9 +72,6 @@ React Hook Form + Zod schemas. Zod schema's dienen ook als de TypeScript brontyp
 
 ### Shared state / notifications
 `react-hot-toast` voor toast-notificaties (gedeeld patroon in alle apps).
-
-### geveltekening-app
-Staat-loze AI-app zonder Supabase. Gebruikt `@anthropic-ai/sdk` voor Claude-analyse van gevels. Draait volledig op Next.js API routes.
 
 ## Hoofdproces — statuswaarden
 
