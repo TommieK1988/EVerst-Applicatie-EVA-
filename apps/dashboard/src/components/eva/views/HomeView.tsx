@@ -12,7 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { IconArrowRight } from '../Icons';
 import { EvaSearchField } from '../GlobalSearch';
 import {
-  TasksWidget, WeatherWidget, RemindersWidget,
+  TasksWidget, WeatherWidget,
   ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
 } from '../widgets';
 import type { AgendaWidgetItem } from '../widgets';
@@ -78,16 +78,16 @@ function getWeekNumber(): number {
 
 /* ── Widget config ────────────────────────────────────────── */
 
-type WidgetId = 'tasks' | 'weather' | 'reminders' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
+type WidgetId = 'tasks' | 'weather' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
 
 const DEFAULT_SPANS: Record<WidgetId, number> = {
-  tasks: 5, weather: 4, reminders: 3,
+  tasks: 5, weather: 4,
   projects: 4, dossier: 4, servicedesk: 4,
   agenda: 4, news: 4, summary: 4,
 };
 
 const DEFAULT_ORDER: WidgetId[] = [
-  'tasks', 'weather', 'reminders',
+  'tasks', 'weather',
   'projects', 'dossier', 'servicedesk',
   'agenda', 'news', 'summary',
 ];
@@ -310,9 +310,11 @@ export default function HomeView({
       const savedOrder = localStorage.getItem('eva-widget-order');
       if (savedOrder) {
         const parsed: WidgetId[] = JSON.parse(savedOrder);
-        if (Array.isArray(parsed) && parsed.every(id => DEFAULT_SPANS[id] !== undefined)) {
-          // Voeg nieuwe widgets toe die nog niet in een opgeslagen layout zaten.
-          const merged = [...parsed, ...DEFAULT_ORDER.filter(id => !parsed.includes(id))];
+        if (Array.isArray(parsed)) {
+          // Filter verwijderde/onbekende widgets eruit (bv. 'reminders') en
+          // voeg nieuwe widgets toe die nog niet in een opgeslagen layout zaten.
+          const geldig = parsed.filter(id => DEFAULT_SPANS[id] !== undefined);
+          const merged = [...geldig, ...DEFAULT_ORDER.filter(id => !geldig.includes(id))];
           setWidgetOrder(merged);
         }
       }
@@ -385,7 +387,6 @@ export default function HomeView({
     switch (id) {
       case 'tasks':    return <TasksWidget taken={taken}/>;
       case 'weather':  return <WeatherWidget/>;
-      case 'reminders': return <RemindersWidget taken={taken}/>;
       case 'projects': return <ProjectsWidget opdrachten={opdrachten}/>;
       case 'agenda':   return <AgendaWidget items={agendaItems}/>;
       case 'dossier':  return <DossierWidget aanvragen={aanvragen}/>;

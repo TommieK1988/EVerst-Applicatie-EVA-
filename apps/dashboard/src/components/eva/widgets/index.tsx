@@ -2,8 +2,8 @@
 import { useRouter } from 'next/navigation';
 import React from 'react';
 import {
-  IconCheck, IconBell, IconBuilding, IconSparkle,
-  IconSun, IconPlus, IconMore,
+  IconCheck, IconBuilding, IconSparkle,
+  IconSun, IconPlus,
   IconTaken, IconOpdrachten, IconAanvragen, IconAgenda, IconServicedesk,
 } from '../Icons';
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog';
@@ -13,21 +13,15 @@ import {
   getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
 } from '@/components/dossiers/types';
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
-import { berekenWerkdagenDrempel } from '@/lib/agenda/werkdagen';
 
 /* ── Weergave-limieten ───────────────────────────────────────
    Widgets zijn 460px hoog zonder interne scroll; deze aantallen
    passen binnen de beschikbare contenthoogte (±373px). */
 const MAX_TAKEN         = 6;
-const MAX_HERINNERINGEN = 5;
 const MAX_DOSSIERS      = 7;
 const MAX_NIEUWS        = 4;
 
 /* ── Helpers ─────────────────────────────────────────────── */
-
-function localDateStr(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function relativeDeadline(deadline: string | null): string {
   if (!deadline) return 'Geen deadline';
@@ -74,14 +68,13 @@ function relativeNewsTime(pubDate: string): string {
 
 /* ── WidgetShell ─────────────────────────────────────────── */
 export function WidgetShell({
-  title, subtitle, action, onAction, actionNode, Icon, children, compact, onMore, onTitleClick, titleHint,
+  title, subtitle, action, onAction, actionNode, Icon, children, compact, onTitleClick, titleHint,
 }: {
   title: string;
   subtitle?: string;
   action?: string;
   onAction?: () => void;
   actionNode?: React.ReactNode;
-  onMore?: () => void;
   /** Maakt het icoon + de titel klikbaar (bijv. doorlinken naar het overzicht). */
   onTitleClick?: () => void;
   /** Tooltip op de klikbare titel. */
@@ -163,17 +156,6 @@ export function WidgetShell({
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{action}</button>
         ))}
-        {onMore && (
-          <button
-            onClick={onMore}
-            style={{
-              background: 'none', border: 'none', color: 'var(--fg-muted)',
-              cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0,
-            }}
-          >
-            <IconMore size={16}/>
-          </button>
-        )}
       </div>
       <div style={{
         flex: 1,
@@ -308,55 +290,6 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
   );
 }
 
-/* ── RemindersWidget ─────────────────────────────────────── */
-export function RemindersWidget({ taken }: { taken: TaakMetDetails[] }) {
-  const router = useRouter();
-  const today = localDateStr();
-  // Urgente taken + taken die binnen 3 werkdagen (excl. weekend/feestdagen) verlopen.
-  // Input is al gesorteerd op deadline ASC (nulls laatst).
-  const drempel = React.useMemo(() => berekenWerkdagenDrempel(new Date(), 3), []);
-  const urgent = taken
-    .filter(t => t.prioriteit === 'urgent' || (t.deadline && t.deadline <= drempel))
-    .slice(0, MAX_HERINNERINGEN);
-
-  return (
-    <WidgetShell
-      title="Mijn herinneringen"
-      subtitle={urgent.length > 0 ? `${urgent.length} dringend` : 'Niets dringends'}
-      Icon={IconBell}
-      onMore={() => router.push('/taken')}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
-        {urgent.length === 0 && (
-          <div style={{ padding: '8px 0', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
-            Geen urgente taken.
-          </div>
-        )}
-        {urgent.map((t) => {
-          const overdue = t.deadline && t.deadline < today;
-          const accentColor = t.prioriteit === 'urgent' || overdue ? '#d04a2a' : 'var(--accent)';
-          return (
-            <div key={t.id} style={{
-              display: 'flex', gap: 12, padding: '10px 12px',
-              background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
-            }}>
-              <div style={{ width: 4, alignSelf: 'stretch', background: accentColor, borderRadius: 2, flexShrink: 0 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.titel}
-                </div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: overdue ? '#d04a2a' : 'var(--fg-muted)', marginTop: 2, fontWeight: 500 }}>
-                  {relativeDeadline(t.deadline)} · {t.lijst?.naam ?? t.dossier_naam ?? 'Takenlijst'}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </WidgetShell>
-  );
-}
-
 /* ── DossierLijstWidget (gedeeld: opdrachten + aanvragen) ── */
 function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur, labelFn }: {
   title: string;
@@ -383,7 +316,6 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
       Icon={Icon}
       onTitleClick={() => router.push(`${moreHref}?mijn=1`)}
       titleHint={`${title} — gefilterd op mij`}
-      onMore={() => router.push(moreHref)}
     >
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {displayed.length === 0 && (
@@ -686,8 +618,8 @@ export function AgendaWidget({ items = [] }: { items?: AgendaWidgetItem[] }) {
     <WidgetShell
       title="Bedrijfsagenda"
       subtitle={subtitle}
-      action="Alle"
-      onAction={() => router.push('/planning/bedrijfsagenda')}
+      onTitleClick={() => router.push('/planning/bedrijfsagenda')}
+      titleHint="Open de bedrijfsagenda"
       Icon={IconAgenda}
       compact
     >
