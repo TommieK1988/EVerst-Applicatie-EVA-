@@ -979,7 +979,7 @@ export type InkoopOrderRegel = {
   /** Bouw7-geboekt (contractbedrag − openstaand) + in EVA toegewezen kosten. */
   geboekt: number
   openstaand: number
-  /** contractbedrag − geboekt (niet onder nul). */
+  /** contractbedrag − geboekt (mag negatief zijn bij overschrijding). */
   nogVerwacht: number
   status: string | null
 }
@@ -993,7 +993,7 @@ export type OnderaannemerContract = {
   /** Bouw7-geboekt (contractbedrag − openstaand) + in EVA toegewezen kosten. */
   geboekt: number
   openstaand: number
-  /** contractbedrag − geboekt (niet onder nul). */
+  /** contractbedrag − geboekt (mag negatief zijn bij overschrijding). */
   nogVerwacht: number
   status: string | null
 }
@@ -1019,6 +1019,8 @@ export type GeboekteKostenRegel = {
   bronCode: string | null
   typeKosten: string | null
   gecorrigeerd: boolean
+  /** Herkomst van de effectieve koppeling: Bouw7-bonmatch, EVA-correctie, of geen. */
+  linkBron: 'bouw7' | 'eva' | null
   toegewezenOrderId: number | null
   toegewezenContractId: number | null
 }
@@ -1030,7 +1032,7 @@ export type DossierInkoopData = {
   geboekteKosten: GeboekteKostenRegel[]
   /** Bewakingscodes die al op dit project voorkomen (voor de hercodeer-dropdown). */
   projectcodes: ProjectBewakingscode[]
-  totalen: { besteld: number; onderaanneming: number; geboekt: number }
+  totalen: { besteld: number; onderaanneming: number; geboekt: number; toegewezen: number; nietToegewezen: number }
 }
 
 /** EVA-correctie op een geboekte kost (rekenlaag; raakt Bouw7 niet). */
@@ -1083,7 +1085,7 @@ export async function getInkoopCorrecties(dossierId: string): Promise<InkoopCorr
 export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
   const leeg: DossierInkoopData = {
     beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [],
-    totalen: { besteld: 0, onderaanneming: 0, geboekt: 0 },
+    totalen: { besteld: 0, onderaanneming: 0, geboekt: 0, toegewezen: 0, nietToegewezen: 0 },
   }
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return leeg
@@ -1114,6 +1116,12 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       if (inv.id) codePerInvoice.set(inv.id, entry)
     }
 
+    // Bonnummer → order-id / contract-id voor Bouw7-linkage
+    const orderNummerIndex = new Map<string, number>()
+    for (const o of orderResp.items ?? []) if (o.number && o.id != null) orderNummerIndex.set(o.number, o.id)
+    const contractNummerIndex = new Map<string, number>()
+    for (const sub of subResp.items ?? []) if (sub.number && sub.id != null) contractNummerIndex.set(sub.number, sub.id)
+
     const correctieMap = new Map<number, InkoopCorrectie>()
     for (const c of correcties) correctieMap.set(Number(c.bron_id), c)
 
@@ -1126,6 +1134,25 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       const sup = inv.supplier
       const levType: GeboekteKostenRegel['leverancierType'] =
         sup?.type === 'subcontractor' ? 'onderaannemer' : sup?.type ? 'leverancier' : null
+
+      // Effectieve koppeling: EVA-override heeft voorrang; anders Bouw7-bonmatch
+      const bon = inv.deliveryTicket?.number ?? null
+      let effOrderId: number | null = corr?.toegewezen_order_id != null ? Number(corr.toegewezen_order_id) : null
+      let effContractId: number | null = corr?.toegewezen_contract_id != null ? Number(corr.toegewezen_contract_id) : null
+      let linkBron: 'bouw7' | 'eva' | null = null
+      if (effOrderId != null || effContractId != null) {
+        linkBron = 'eva'
+      } else if (bon) {
+        for (const [nummer, orderId] of orderNummerIndex) {
+          if (bon === nummer || bon.startsWith(nummer + 'B')) { effOrderId = orderId; linkBron = 'bouw7'; break }
+        }
+        if (linkBron === null) {
+          for (const [nummer, contractId] of contractNummerIndex) {
+            if (bon === nummer || bon.startsWith(nummer + 'B')) { effContractId = contractId; linkBron = 'bouw7'; break }
+          }
+        }
+      }
+
       return {
         bronId: inv.id,
         factuurnummer: inv.invoiceNumber ?? null,
@@ -1143,8 +1170,9 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         bronCode: apolloCode.code,
         typeKosten: typeKostenLabel(inv.deliveryTicket?.purchaseTypeName),
         gecorrigeerd: !!corr,
-        toegewezenOrderId: corr?.toegewezen_order_id != null ? Number(corr.toegewezen_order_id) : null,
-        toegewezenContractId: corr?.toegewezen_contract_id != null ? Number(corr.toegewezen_contract_id) : null,
+        linkBron,
+        toegewezenOrderId: effOrderId,
+        toegewezenContractId: effContractId,
       }
     })
 
@@ -1159,9 +1187,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     const inkooporders: InkoopOrderRegel[] = (orderResp.items ?? []).map((o) => {
       const contractbedrag = toGetal(o.price)
       const openstaand = toGetal(o.outstandingCosts)
-      const geboektBouw7 = Math.max(0, contractbedrag - openstaand)
-      const geboektEva = (o.id != null ? geboektPerOrder.get(o.id) : 0) ?? 0
-      const geboekt = geboektBouw7 + geboektEva
+      const geboekt = (o.id != null ? geboektPerOrder.get(o.id) : 0) ?? 0
       return {
         orderId: o.id ?? null,
         nummer: o.number ?? null,
@@ -1170,7 +1196,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         contractbedrag,
         geboekt,
         openstaand,
-        nogVerwacht: Math.max(0, contractbedrag - geboekt),
+        nogVerwacht: contractbedrag - geboekt,
         status: o.statusName ?? null,
       }
     })
@@ -1178,9 +1204,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     const onderaannemers: OnderaannemerContract[] = (subResp.items ?? []).map((c) => {
       const contractbedrag = toGetal(c.price)
       const openstaand = toGetal(c.outstandingCosts)
-      const geboektBouw7 = Math.max(0, contractbedrag - openstaand)
-      const geboektEva = (c.id != null ? geboektPerContract.get(c.id) : 0) ?? 0
-      const geboekt = geboektBouw7 + geboektEva
+      const geboekt = (c.id != null ? geboektPerContract.get(c.id) : 0) ?? 0
       return {
         contractId: c.id ?? null,
         nummer: c.number ?? null,
@@ -1189,7 +1213,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         contractbedrag,
         geboekt,
         openstaand,
-        nogVerwacht: Math.max(0, contractbedrag - geboekt),
+        nogVerwacht: contractbedrag - geboekt,
         status: c.statusName ?? null,
       }
     })
@@ -1206,11 +1230,13 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     const besteld = inkooporders.reduce((s, r) => s + r.contractbedrag, 0)
     const onderaanneming = onderaannemers.reduce((s, c) => s + c.contractbedrag, 0)
     const geboekt = geboekteKosten.reduce((s, r) => s + r.bedrag, 0)
+    const toegewezen = geboekteKosten.filter(r => r.toegewezenOrderId != null || r.toegewezenContractId != null).reduce((s, r) => s + r.bedrag, 0)
+    const nietToegewezen = geboekt - toegewezen
 
     return {
       beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
       inkooporders, onderaannemers, geboekteKosten, projectcodes,
-      totalen: { besteld, onderaanneming, geboekt },
+      totalen: { besteld, onderaanneming, geboekt, toegewezen, nietToegewezen },
     }
   } catch {
     return leeg

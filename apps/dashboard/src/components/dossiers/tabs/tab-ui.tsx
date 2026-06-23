@@ -17,7 +17,7 @@ export const fmt = (v: unknown, showZero = false): string => {
   const n = toNum(v)
   if (n === 0 && !showZero) return '—'
   return new Intl.NumberFormat('nl-NL', {
-    style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0,
+    style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 }
 

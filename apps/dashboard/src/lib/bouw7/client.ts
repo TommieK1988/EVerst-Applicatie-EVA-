@@ -605,7 +605,7 @@ export type Bouw7PurchaseInvoiceListItem = {
   total?: string | number
   isMutable?: boolean
   supplier?: { id?: number; name?: string; type?: string; typeId?: number } | null
-  deliveryTicket?: { id?: number; description?: string; purchaseTypeName?: string; price?: string | number } | null
+  deliveryTicket?: { id?: number; number?: string; description?: string; purchaseTypeName?: string; price?: string | number } | null
 }
 
 export type Bouw7PurchaseInvoiceListResponse = {

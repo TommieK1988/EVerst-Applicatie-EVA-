@@ -53,9 +53,14 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     {
       key: 'factuurnummer', label: 'Factuurnr.', waarde: (r) => r.factuurnummer ?? '',
       render: (r) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--fg)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 600, color: 'var(--fg)' }}>
           {r.factuurnummer ?? '—'}
-          {r.gecorrigeerd && <Badge tone="warning" size="sm">gecorrigeerd</Badge>}
+          {r.gecorrigeerd && (
+            <span
+              title="Handmatig gecorrigeerd in EVA"
+              style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--warning-500, #f59e0b)', display: 'inline-block', flexShrink: 0 }}
+            />
+          )}
         </span>
       ),
     },
@@ -130,6 +135,11 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   }
 
   const totaal = useMemo(() => rijen.reduce((s, r) => s + r.bedrag, 0), [rijen])
+  const totaalAlles = useMemo(() => data.reduce((s, r) => s + r.bedrag, 0), [data])
+  const totaalToegewezen = useMemo(() =>
+    data.filter(r => r.toegewezenOrderId != null || r.toegewezenContractId != null).reduce((s, r) => s + r.bedrag, 0),
+  [data])
+  const totaalNietToegewezen = totaalAlles - totaalToegewezen
 
   const huidigeDoelwaarde = actief
     ? actief.toegewezenOrderId != null ? `order:${actief.toegewezenOrderId}`
@@ -200,6 +210,16 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
               <td style={{ ...tdStyle(true), fontWeight: 700, color: 'var(--neutral-900)' }}>{euro(totaal)}</td>
               <td style={tdStyle(true)} />
             </tr>
+            <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={{ ...tdStyle(), fontSize: 11, color: 'var(--neutral-500)' }} colSpan={kolommen.length - 1}>↳ Gekoppeld aan order / contract</td>
+              <td style={{ ...tdStyle(true), fontSize: 11, color: 'var(--neutral-500)' }}>{euro(totaalToegewezen)}</td>
+              <td style={tdStyle(true)} />
+            </tr>
+            <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={{ ...tdStyle(), fontSize: 11, color: 'var(--neutral-500)' }} colSpan={kolommen.length - 1}>↳ Niet gekoppeld</td>
+              <td style={{ ...tdStyle(true), fontSize: 11, color: totaalNietToegewezen > 0 ? 'var(--neutral-700)' : 'var(--neutral-400)' }}>{euro(totaalNietToegewezen)}</td>
+              <td style={tdStyle(true)} />
+            </tr>
           </tbody>
         </table>
       </div>
@@ -215,6 +235,11 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                 <div><strong style={{ color: 'var(--fg)' }}>{actief.factuurnummer ?? '—'}</strong> · {actief.leverancier ?? '—'}</div>
                 <div>{euro(actief.bedrag)} excl. btw · {actief.typeKosten ?? '—'} · {fmtDatum(actief.datum)}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--fg-muted)', marginTop: 4 }}>
+                  {actief.linkBron === 'bouw7'
+                    ? 'Huidige koppeling via Bouw7-bonnummer. '
+                    : actief.linkBron === 'eva'
+                    ? 'Handmatig toegewezen in EVA. '
+                    : 'Niet gekoppeld aan een order of contract. '}
                   Alleen de toewijzing en bewakingscode zijn aanpasbaar; dit wijzigt niets in Bouw7.
                 </div>
               </div>

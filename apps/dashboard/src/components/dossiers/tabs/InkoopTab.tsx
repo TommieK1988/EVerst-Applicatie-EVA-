@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { getDossierInkoop } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, TH, TD, LegeStaat } from './tab-ui'
+import { fmt, TH, TD, LegeStaat, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 
 async function InkoopInhoud({ dossierId }: { dossierId: string }) {
@@ -55,14 +55,14 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                     <TD>{r.status ?? '—'}</TD>
                     <TD right>{fmt(r.contractbedrag)}</TD>
                     <TD right>{fmt(r.geboekt)}</TD>
-                    <TD right>{fmt(r.nogVerwacht)}</TD>
+                    <TD right kleur={r.nogVerwacht < 0 ? ROOD : undefined}>{fmt(r.nogVerwacht)}</TD>
                   </tr>
                 ))}
                 <tr style={{ background: 'var(--neutral-50)' }}>
                   <TD vet>Totaal besteld</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
                   <TD right vet>{fmt(t.besteld, true)}</TD>
                   <TD right vet>{fmt(ordersGeboekt, true)}</TD>
-                  <TD right vet>{fmt(ordersVerwacht, true)}</TD>
+                  <TD right vet kleur={ordersVerwacht < 0 ? ROOD : undefined}>{fmt(ordersVerwacht, true)}</TD>
                 </tr>
               </tbody>
             </table>
@@ -93,14 +93,14 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                     <TD>{c.status ?? '—'}</TD>
                     <TD right>{fmt(c.contractbedrag)}</TD>
                     <TD right>{fmt(c.geboekt)}</TD>
-                    <TD right>{fmt(c.nogVerwacht)}</TD>
+                    <TD right kleur={c.nogVerwacht < 0 ? ROOD : undefined}>{fmt(c.nogVerwacht)}</TD>
                   </tr>
                 ))}
                 <tr style={{ background: 'var(--neutral-50)' }}>
                   <TD vet>Totaal onderaanneming</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
                   <TD right vet>{fmt(t.onderaanneming, true)}</TD>
                   <TD right vet>{fmt(oaGeboekt, true)}</TD>
-                  <TD right vet>{fmt(oaVerwacht, true)}</TD>
+                  <TD right vet kleur={oaVerwacht < 0 ? ROOD : undefined}>{fmt(oaVerwacht, true)}</TD>
                 </tr>
               </tbody>
             </table>
@@ -127,9 +127,8 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
       </Card>
 
       <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
-        Live uit Bouw7. <strong>Geboekt</strong> = contractbedrag − openstaand (Bouw7), plus kosten die je hier
-        zelf aan de order/het contract hebt toegewezen. Correcties (toewijzen / hercoderen) zijn EVA-only en
-        wijzigen niets in Bouw7.
+        Live uit Bouw7. <strong>Geboekt</strong> = echte inkoopfacturen gekoppeld via het bonnummer of een handmatige EVA-toewijzing.
+        Rood = overschrijding. Correcties zijn EVA-only en wijzigen niets in Bouw7.
       </div>
     </div>
   )
