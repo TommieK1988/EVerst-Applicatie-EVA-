@@ -25,7 +25,7 @@ export default async function ServicedeskPage({
   let mijnNaam: string | null = null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionClient = createServerClient() as any
+    const sessionClient = (await createServerClient()) as any
     const { data: { user } } = await sessionClient.auth.getUser()
     user_id = user?.id ?? null
     if (sp.mijn === '1' && user_id) {
