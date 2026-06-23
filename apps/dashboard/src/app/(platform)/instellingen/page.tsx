@@ -109,6 +109,14 @@ const calcOfferteItems: SettingsItem[] = [
     module: 'dossiers',
   },
   {
+    href: '/instellingen/debiteur-redencodes',
+    title: 'Debiteuren — redencodes',
+    description: 'Beheer de redenen "niet betaald" die op het Facturen-scherm gekozen kunnen worden.',
+    ready: true,
+    kicker: 'Financieel',
+    module: 'financieel',
+  },
+  {
     href: '/instellingen/algemene-voorwaarden',
     title: 'Algemene Voorwaarden',
     description: 'Upload en beheer PDF-documenten met algemene voorwaarden voor offertes.',

@@ -52,6 +52,7 @@ async function handle(req: NextRequest) {
       employees: full.employees,
       projects: full.projects,
       planning: full.planning,
+      debiteuren: full.debiteuren,
       management,
       duur_ms: Date.now() - startedAt,
     },

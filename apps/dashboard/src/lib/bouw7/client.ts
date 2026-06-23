@@ -707,13 +707,16 @@ export type Bouw7ProjectInvoiceTerm = {
  */
 export type Bouw7SalesInvoice = {
   id: number
-  invoiceNumber?: string
+  invoiceNumber?: string | null
   status?: number
   isCredit?: boolean
   contact?: { id: number; name?: string } | null
   contactPersonName?: string | null
-  date?: string
-  dueDate?: string
+  /** Bij de globale `/list/invoices`-query (zonder project-filter) zit het project ín de factuur. */
+  project?: { id: number; name?: string; number?: string; status?: string; statusId?: number } | null
+  debtorNumber?: string | null
+  date?: string | null
+  dueDate?: string | null
   datePaid?: string | null
   subTotal?: string | number
   vatTotal?: string | number
@@ -727,6 +730,8 @@ export type Bouw7SalesInvoice = {
  */
 export type Bouw7SubcontractorContract = {
   id: number
+  /** Contractnummer, bv. "20257.00064OA001". */
+  number?: string
   subcontractor?: { id: number; name?: string } | null
   status?: number
   statusName?: string
@@ -737,4 +742,23 @@ export type Bouw7SubcontractorContract = {
   projectSecurityLink?: { id?: number; code?: string | null; name?: string | null; parentName?: string | null } | null
   expectedCompletionDate?: string | null
   acceptedAt?: string | null
+}
+
+/**
+ * Inkooporder-contract uit GET /list/purchase-order-contracts (Heimdall, q-DSL `project.id = {id}`).
+ * De échte inkooporders (formele opdracht met leverancier/status/prijs) — niet te verwarren met de
+ * bestelregels uit /list/contract-order-lines. Zelfde vorm als subcontractor-contracts.
+ * `number` = ordernummer (bv. "20251.00062IO001"); `price` = orderbedrag; `outstandingCosts` = openstaand.
+ */
+export type Bouw7PurchaseOrderContract = {
+  id: number
+  number?: string
+  supplier?: { id: number; name?: string; type?: string } | null
+  status?: number
+  statusName?: string
+  name?: string
+  description?: string
+  price?: string | number
+  outstandingCosts?: string | number
+  projectSecurityLink?: { id?: number; code?: string | null; name?: string | null; parentName?: string | null } | null
 }

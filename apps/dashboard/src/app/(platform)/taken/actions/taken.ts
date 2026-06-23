@@ -178,6 +178,34 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       throw new Error('Deze taak is geblokkeerd door een nog niet afgeronde taak.')
   }
 
+  // Debiteuren-afdwingen: een >60-dagen debiteurentaak mag pas 'gereed' wanneer de verplichte
+  // opvolging compleet is (reden, actie, actiehouder, verwachte betaaldatum, opvolgdatum + logboek).
+  if (status === 'gereed') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = createAdminClient() as any
+    const { data: deb } = await admin
+      .from('debiteuren')
+      .select('id, status, vervaldatum, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum')
+      .eq('task_id', id)
+      .maybeSingle()
+    if (deb && deb.status === 'open' && deb.vervaldatum) {
+      const dagenTeLaat = Math.floor((Date.now() - Date.parse(`${deb.vervaldatum}T00:00:00Z`)) / 86_400_000)
+      if (dagenTeLaat > 60) {
+        const veldenCompleet = !!deb.reden_code_id && !!(deb.actie ?? '').trim() && !!deb.actiehouder_id
+          && !!deb.verwachte_betaaldatum && !!deb.opvolgdatum
+        let heeftLogboek = false
+        if (veldenCompleet) {
+          const { count } = await admin
+            .from('debiteur_logboek').select('id', { count: 'exact', head: true }).eq('debiteur_id', deb.id)
+          heeftLogboek = (count ?? 0) > 0
+        }
+        if (!veldenCompleet || !heeftLogboek) {
+          throw new Error('Vul eerst reden, actie, actiehouder, verwachte betaaldatum, opvolgdatum én een opmerking in voordat je deze debiteurentaak kunt afronden.')
+        }
+      }
+    }
+  }
+
   const { error } = await supabase
     .from('tasks')
     .update({ status, updated_at: new Date().toISOString() })

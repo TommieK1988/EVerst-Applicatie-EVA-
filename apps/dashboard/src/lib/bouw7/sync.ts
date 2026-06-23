@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
@@ -1133,5 +1133,265 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
   await logSync('dossiers', 'in', result, Date.now() - start)
   return result
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * SYNC: Verkoopfacturen → Debiteuren (openstaande verkoopfacturen)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/**
+ * Sync alle OPENSTAANDE verkoopfacturen uit Bouw7 naar `public.debiteuren`.
+ *
+ * Bron: globale `GET /list/invoices` met q-DSL `datePaid IS NULL AND isCredit = false`
+ * (geverifieerd: de factuur bevat dan zélf het `project`-object → koppeling aan dossier/
+ * projectleider zonder per-project calls). Concept-facturen (zonder `invoiceNumber`,
+ * Bouw7 status 3 / "Lopende bonnen") zijn nog geen debiteur en worden overgeslagen.
+ *
+ * Belangrijk: de **opvolging-kolommen** (reden/actie/actiehouder/datums/opvolgstatus/
+ * task_id/logboek) worden NOOIT door de sync aangeraakt — bij bestaande rijen werken we
+ * uitsluitend de Bouw7-bronkolommen bij. Facturen die niet meer in de open-lijst staan
+ * (betaald/gecrediteerd) worden zacht afgesloten (`status='betaald'`), niet verwijderd,
+ * zodat opvolging + logboek bewaard blijven.
+ */
+export async function syncDebiteuren(opts?: { mode?: SyncMode }): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const nu = new Date()
+  const vandaag = nu.toISOString().slice(0, 10)
+
+  try {
+    const bouw7 = await getBouw7Client()
+    const resp = await bouw7.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
+      q: 'datePaid IS NULL AND isCredit = false SORT(dueDate, ASC) LIMIT 5000',
+    })
+    // Alleen daadwerkelijk uitgegeven facturen zijn debiteuren (concept = geen factuurnummer).
+    const facturen = (resp.items ?? []).filter(inv => !!inv.invoiceNumber && !inv.isCredit && !inv.datePaid)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+
+    // Prefetch koppelmaps: project → dossier/projectleider, contact → relatie.
+    const { data: dossierRows } = await supabase
+      .from('dossiers')
+      .select('id, bouw7_id, titel, project_manager_id')
+      .not('bouw7_id', 'is', null)
+    const dossierByProject = new Map<string, { id: string; titel: string | null; project_manager_id: string | null }>(
+      (dossierRows ?? [])
+        .filter((d: { bouw7_id: string | null }) => d.bouw7_id != null)
+        .map((d: { id: string; bouw7_id: string; titel: string | null; project_manager_id: string | null }) =>
+          [d.bouw7_id, { id: d.id, titel: d.titel, project_manager_id: d.project_manager_id }])
+    )
+
+    const { data: relatieRows } = await supabase
+      .from('relaties')
+      .select('id, bouw7_id')
+      .not('bouw7_id', 'is', null)
+    const relatieByBouw7 = new Map<string, string>(
+      (relatieRows ?? [])
+        .filter((r: { bouw7_id: string | null }) => r.bouw7_id != null)
+        .map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
+    )
+
+    // Bestaande debiteuren: id + hash + status, voor change-detectie en zacht afsluiten.
+    const { data: bestaand } = await supabase
+      .from('debiteuren')
+      .select('id, bouw7_invoice_id, bouw7_sync_hash, status')
+    const bestaandByInvoice = new Map<string, { id: string; bouw7_sync_hash: string | null; status: string }>(
+      (bestaand ?? []).map((d: { id: string; bouw7_invoice_id: string; bouw7_sync_hash: string | null; status: string }) =>
+        [d.bouw7_invoice_id, { id: d.id, bouw7_sync_hash: d.bouw7_sync_hash, status: d.status }])
+    )
+
+    const openInvoiceIds = new Set<string>()
+
+    // Bouw rijen op (alleen Bouw7-bronkolommen).
+    const allRows = facturen.map(inv => {
+      const invoiceId = String(inv.id)
+      openInvoiceIds.add(invoiceId)
+      const projectId = inv.project?.id != null ? String(inv.project.id) : null
+      const dossier = projectId ? dossierByProject.get(projectId) : undefined
+      const relatieId = inv.contact?.id != null ? relatieByBouw7.get(String(inv.contact.id)) ?? null : null
+      const bedrag = inv.total != null ? Number(inv.total) : null
+      const hash = fingerprint({
+        nr:   inv.invoiceNumber ?? null,
+        st:   inv.status ?? null,
+        cont: inv.contact?.id ?? null,
+        proj: projectId,
+        bed:  bedrag,
+        fd:   toDate(inv.date),
+        vd:   toDate(inv.dueDate),
+      })
+      return {
+        invoiceId,
+        bron: {
+          bouw7_invoice_id:  invoiceId,
+          bouw7_project_id:  projectId,
+          factuurnummer:     inv.invoiceNumber ?? null,
+          klant_naam:        inv.contact?.name ?? null,
+          klant_relatie_id:  relatieId,
+          project_titel:     inv.project?.name ?? dossier?.titel ?? null,
+          dossier_id:        dossier?.id ?? null,
+          projectleider_id:  dossier?.project_manager_id ?? null,
+          bedrag,
+          factuurdatum:      toDate(inv.date),
+          vervaldatum:       toDate(inv.dueDate),
+          datum_betaald:     toDate(inv.datePaid),
+          is_credit:         false,
+          bouw7_status:      inv.status ?? null,
+          bouw7_sync_hash:   hash,
+          bouw7_laatst_sync: nu.toISOString(),
+        },
+      }
+    })
+
+    // Splits in nieuw (insert) en bestaand (update). Bij bestaand: incrementeel overslaan bij gelijke hash.
+    const nieuweRows = allRows.filter(r => !bestaandByInvoice.has(r.invoiceId))
+    const bestaandeRows = allRows.filter(r => bestaandByInvoice.has(r.invoiceId))
+    const teUpdaten = mode === 'full'
+      ? bestaandeRows
+      : bestaandeRows.filter(r => bestaandByInvoice.get(r.invoiceId)?.bouw7_sync_hash !== r.bron.bouw7_sync_hash)
+
+    result.nieuw = nieuweRows.length
+    result.bijgewerkt = teUpdaten.length
+    result.overgeslagen = bestaandeRows.length - teUpdaten.length
+
+    // Nieuwe debiteuren: insert mét status='open' + default opvolging.
+    const inserts = nieuweRows.map(r => ({ ...r.bron, status: 'open' }))
+    for (let i = 0; i < inserts.length; i += 500) {
+      const { error } = await supabase.from('debiteuren').insert(inserts.slice(i, i + 500))
+      if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+
+    // Bestaande debiteuren: update UITSLUITEND de Bouw7-bronkolommen (opvolging blijft ongemoeid).
+    for (const r of teUpdaten) {
+      const { error } = await supabase
+        .from('debiteuren')
+        .update(r.bron)
+        .eq('bouw7_invoice_id', r.invoiceId)
+      if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+
+    // Zacht afsluiten: openstaande debiteuren die niet meer in de Bouw7-open-lijst zitten → betaald.
+    const teSluiten = (bestaand ?? [])
+      .filter((d: { bouw7_invoice_id: string; status: string }) =>
+        d.status === 'open' && !openInvoiceIds.has(d.bouw7_invoice_id))
+      .map((d: { id: string }) => d.id)
+    for (let i = 0; i < teSluiten.length; i += 500) {
+      const { error } = await supabase
+        .from('debiteuren')
+        .update({ status: 'betaald', datum_betaald: vandaag, bouw7_laatst_sync: nu.toISOString() })
+        .in('id', teSluiten.slice(i, i + 500))
+      if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+
+    // ── Auto-taken (>60 dagen) + reminders (verlopen opvolgdatum) ───────────────
+    await verwerkDebiteurTakenEnReminders(supabase, nu, vandaag, result)
+  } catch (e: unknown) {
+    result.foutMelding = e instanceof Error ? e.message : 'Onbekende fout'
+    result.fouten++
+  }
+
+  await logSync('debiteuren', 'in', result, Date.now() - start)
+  return result
+}
+
+/** Auth-id's van administratie/MT (financieel schrijven/beheren via afdeling óf override, of beheerder). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getAdministratieAuthIds(supabase: any): Promise<string[]> {
+  const ids = new Set<string>()
+  const { data: afd } = await supabase
+    .from('medewerker_afdelingen').select('naam, standaard_rechten').eq('actief', true)
+  const adminAfd = new Set<string>(
+    (afd ?? [])
+      .filter((a: { standaard_rechten: Record<string, string> | null }) =>
+        ['schrijven', 'beheren'].includes(a.standaard_rechten?.financieel ?? ''))
+      .map((a: { naam: string }) => a.naam))
+  const { data: mws } = await supabase
+    .from('medewerkers').select('auth_user_id, afdeling, rechten_override').eq('actief', true).not('auth_user_id', 'is', null)
+  for (const m of mws ?? []) {
+    const ro = (m.rechten_override ?? {}) as Record<string, string>
+    const heeft = (m.afdeling && adminAfd.has(m.afdeling))
+      || ['schrijven', 'beheren'].includes(ro.financieel ?? '')
+      || ro.instellingen === 'beheren'
+    if (heeft && m.auth_user_id) ids.add(m.auth_user_id as string)
+  }
+  return [...ids]
+}
+
+/**
+ * Maakt automatisch een opvolgtaak (>60 dagen te laat, deadline +7) per openstaande debiteur die er
+ * nog geen heeft, toegewezen aan de projectleider — of ontoegewezen mét administratie-signaal als er geen
+ * projectleider is. Stuurt daarnaast in-app reminders zodra de opvolgdatum is verstreken. Dedupe via
+ * `task_id` (taken) en `laatste_reminder_op` (reminders).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function verwerkDebiteurTakenEnReminders(supabase: any, nu: Date, vandaag: string, result: SyncResult): Promise<void> {
+  const vandaagMs = Date.parse(`${vandaag}T00:00:00Z`)
+  const deadline7 = new Date(nu.getTime() + 7 * 86_400_000).toISOString().slice(0, 10)
+
+  const administratieAuthIds = await getAdministratieAuthIds(supabase)
+  const { data: mwAuth } = await supabase
+    .from('medewerkers').select('id, auth_user_id').not('auth_user_id', 'is', null)
+  const authByMw = new Map<string, string>(
+    (mwAuth ?? [])
+      .filter((m: { auth_user_id: string | null }) => m.auth_user_id != null)
+      .map((m: { id: string; auth_user_id: string }) => [m.id, m.auth_user_id]))
+
+  const { data: openDeb } = await supabase
+    .from('debiteuren')
+    .select('id, factuurnummer, klant_naam, bedrag, vervaldatum, opvolgdatum, dossier_id, projectleider_id, task_id, laatste_reminder_op')
+    .eq('status', 'open')
+
+  type OpenDeb = {
+    id: string; factuurnummer: string | null; klant_naam: string | null; bedrag: number | null
+    vervaldatum: string | null; opvolgdatum: string | null; dossier_id: string | null
+    projectleider_id: string | null; task_id: string | null; laatste_reminder_op: string | null
+  }
+
+  async function notify(userIds: string[], titel: string, body: string) {
+    for (const uid of userIds) {
+      await supabase.from('notificaties').insert({ user_id: uid, type: 'debiteur', titel, body, url: '/facturen', gelezen: false })
+    }
+  }
+
+  for (const d of (openDeb ?? []) as OpenDeb[]) {
+    const dagenTeLaat = d.vervaldatum ? Math.floor((vandaagMs - Date.parse(`${d.vervaldatum}T00:00:00Z`)) / 86_400_000) : 0
+    const plAuth = d.projectleider_id ? (authByMw.get(d.projectleider_id) ?? null) : null
+
+    // 1. Auto-taak bij >60 dagen zonder bestaande taak.
+    if (dagenTeLaat > 60 && !d.task_id) {
+      const titel = `Debiteur >60 dagen te laat: ${d.factuurnummer ?? 'factuur'}${d.klant_naam ? ' — ' + d.klant_naam : ''}`
+      const { data: taak, error: taakErr } = await supabase
+        .from('tasks')
+        .insert({
+          titel,
+          dossier_id: d.dossier_id ?? null,
+          status: 'open',
+          prioriteit: 'hoog',
+          deadline: deadline7,
+          omschrijving: { bron: 'debiteurenbeheer', debiteur_id: d.id, bedrag: d.bedrag, vervaldatum: d.vervaldatum },
+        })
+        .select('id')
+        .single()
+      if (taakErr || !taak) { result.fouten++; result.foutMelding = taakErr?.message ?? 'Debiteurtaak aanmaken mislukt'; continue }
+
+      if (plAuth) {
+        await supabase.from('task_assignees').insert({ task_id: taak.id, user_id: plAuth, rol: 'verantwoordelijke' })
+      }
+      await supabase.from('debiteuren').update({ task_id: taak.id }).eq('id', d.id)
+
+      const body = `Factuur ${d.factuurnummer ?? ''} (${d.klant_naam ?? ''}) is meer dan 60 dagen te laat. Vul de verplichte opvolging in.`
+      if (plAuth) await notify([plAuth], 'Debiteur >60 dagen te laat', body)
+      else await notify(administratieAuthIds, 'Onbeheerde debiteur >60 dagen te laat', `${body} (geen projectleider gekoppeld)`)
+    }
+
+    // 2. Reminder zodra de opvolgdatum is verstreken (dedupe via laatste_reminder_op).
+    if (d.opvolgdatum && d.opvolgdatum < vandaag && (!d.laatste_reminder_op || d.laatste_reminder_op < d.opvolgdatum)) {
+      const ontvangers = plAuth ? [plAuth] : administratieAuthIds
+      await notify(ontvangers, 'Opvolgdatum debiteur verstreken',
+        `De opvolgdatum (${d.opvolgdatum}) voor factuur ${d.factuurnummer ?? ''} (${d.klant_naam ?? ''}) is verstreken.`)
+      await supabase.from('debiteuren').update({ laatste_reminder_op: vandaag }).eq('id', d.id)
+    }
+  }
 }
 

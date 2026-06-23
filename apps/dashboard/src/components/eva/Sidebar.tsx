@@ -69,7 +69,7 @@ const PLANNING_INKOOP: NavEntry[] = [
 ]
 
 const FINANCIEEL: NavEntry[] = [
-  { label: 'Facturen', Icon: IconFacturen, comingSoon: true, module: 'financieel' },
+  { href: '/facturen', label: 'Facturen', Icon: IconFacturen, module: 'financieel' },
   { label: 'Inkoop',   Icon: IconInkoop,   comingSoon: true, module: 'financieel' },
 ]
 
@@ -523,12 +523,13 @@ export default function Sidebar({
           </NavSection>
 
           <NavSection label="Financieel" collapsed={collapsed}>
-            {FINANCIEEL.filter(zichtbaar).map(({ label, Icon, comingSoon }) => (
+            {FINANCIEEL.filter(zichtbaar).map(({ href, label, Icon, comingSoon }) => (
               <NavItem
                 key={label}
+                href={href}
                 icon={<Icon size={17}/>}
                 label={label}
-                active={false}
+                active={!!href && isActive(href)}
                 comingSoon={comingSoon}
               />
             ))}
