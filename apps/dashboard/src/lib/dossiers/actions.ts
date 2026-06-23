@@ -678,6 +678,7 @@ export type BewakingRegel = {
   prognoseUren: number         // 3. Aantal prognose-uren (arbeid)
   geboekteUren: number         // 4. Geboekte/bestede uren (arbeid)
   arbeidskosten: number        // 5. Arbeidskosten (geboekt, kostensoort Arbeid)
+  arbeidPrognose: number       // 5b. Prognose-bedrag (kostensoort Arbeid, ct=1)
   onderaanneming: number       // 6. Onderaanneming (geboekt)
   materiaal: number            // 7. Materiaal (geboekt)
   inkoopMaterieelAfval: number // 8. Inkoop + Materieel + Afval (geboekt)
@@ -717,7 +718,7 @@ const toGetal = (v: unknown): number => {
 const legeRegel = (): BewakingRegel => ({
   code: null, naam: null, hoofdstukId: null, hoofdstuk: null,
   begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
-  arbeidskosten: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
+  arbeidskosten: 0, arbeidPrognose: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
   verwachteKosten: 0, geboekteKosten: 0, progress: null,
 })
 
@@ -830,7 +831,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
       r.geboekteUren += toGetal(e.hourInfo?.costHours)
 
-      if (ct === 1) r.arbeidskosten += kosten
+      if (ct === 1) { r.arbeidskosten += kosten; r.arbeidPrognose += toGetal(e.prognosisAmount) }
       else if (ct === 3) r.onderaanneming += kosten
       else if (ct === 5) r.materiaal += kosten
       else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
@@ -1679,8 +1680,8 @@ export type UrenBewakingRegel = {
   prognose_uren: number
   /** Uurtarief uit de gesynchroniseerde werkbegroting — null als geen werkbegroting. */
   wb_uurtarief: number | null
-  /** prognose_uren × wb_uurtarief; null als geen werkbegroting. */
-  prognose_bedrag: number | null
+  /** prognosisAmount ct=1 uit Bouw7 — gevuld zodra Bouw7 bewakingsdata beschikbaar is. */
+  prognose_bedrag: number
   geboekte_uren: number
   geboekte_kosten: number
   standopname_pct: number | null
@@ -1688,8 +1689,8 @@ export type UrenBewakingRegel = {
   prognose_kosten_100: number | null
   /** prognose_uren − geboekte_uren */
   uren_saldo: number
-  /** prognose_bedrag − geboekte_kosten; null als geen werkbegroting. */
-  kosten_saldo: number | null
+  /** prognose_bedrag − geboekte_kosten */
+  kosten_saldo: number
 }
 
 export type DossierUrenBewakingData = {
@@ -1774,11 +1775,11 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
 
   // Inclusief codes met alleen prognoseuren (nog geen boekingen) — zodat projecten
   // die nog in voorbereiding zijn al zichtbaar zijn in de tabel.
-  const bouwMap = new Map<string, { prognose_uren: number; geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
+  const bouwMap = new Map<string, { prognose_uren: number; prognose_kosten: number; geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
   for (const hfd of bewaking.hoofdstukken) {
     for (const r of hfd.regels) {
-      if (!r.code || (r.prognoseUren <= 0 && r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
-      bouwMap.set(r.code, { prognose_uren: r.prognoseUren, geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
+      if (!r.code || (r.prognoseUren <= 0 && r.arbeidPrognose <= 0 && r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
+      bouwMap.set(r.code, { prognose_uren: r.prognoseUren, prognose_kosten: r.arbeidPrognose, geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
     }
   }
 
@@ -1789,8 +1790,8 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     const bouw = bouwMap.get(code)
     const wb = wbData?.get(code)
     const prognose_uren = bouw?.prognose_uren ?? 0
+    const prognose_bedrag = bouw?.prognose_kosten ?? 0
     const wb_uurtarief = wb && wb.uren > 0 ? wb.bedrag / wb.uren : null
-    const prognose_bedrag = wb_uurtarief != null ? prognose_uren * wb_uurtarief : null
     const geboekte_uren = bouw?.geboekte_uren ?? 0
     const geboekte_kosten = bouw?.geboekte_kosten ?? 0
     const standopname_pct = bouw?.progress ?? null
@@ -1806,18 +1807,18 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
       prognose_uren_100: standopname_pct != null && standopname_pct > 0 ? geboekte_uren / (standopname_pct / 100) : null,
       prognose_kosten_100: standopname_pct != null && standopname_pct > 0 ? geboekte_kosten / (standopname_pct / 100) : null,
       uren_saldo: prognose_uren - geboekte_uren,
-      kosten_saldo: prognose_bedrag != null ? prognose_bedrag - geboekte_kosten : null,
+      kosten_saldo: prognose_bedrag - geboekte_kosten,
     }
   }).sort((a, b) => a.code.localeCompare(b.code))
 
   const totalen = regels.reduce(
     (t, r) => ({
       prognose_uren: t.prognose_uren + r.prognose_uren,
-      prognose_bedrag: t.prognose_bedrag + (r.prognose_bedrag ?? 0),
+      prognose_bedrag: t.prognose_bedrag + r.prognose_bedrag,
       geboekte_uren: t.geboekte_uren + r.geboekte_uren,
       geboekte_kosten: t.geboekte_kosten + r.geboekte_kosten,
       uren_saldo: t.uren_saldo + r.uren_saldo,
-      kosten_saldo: t.kosten_saldo + (r.kosten_saldo ?? 0),
+      kosten_saldo: t.kosten_saldo + r.kosten_saldo,
     }),
     { prognose_uren: 0, prognose_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
   )

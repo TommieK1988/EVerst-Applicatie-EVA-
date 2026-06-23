@@ -59,7 +59,7 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                   </TD>
                   <TD right>{fmtUren(r.prognose_uren)}</TD>
                   <TD right>{heeftWerkbegroting ? fmtTarief(r.wb_uurtarief) : '—'}</TD>
-                  <TD right>{heeftWerkbegroting && r.prognose_bedrag != null ? fmt(r.prognose_bedrag) : '—'}</TD>
+                  <TD right accent={r.prognose_bedrag > 0}>{fmt(r.prognose_bedrag)}</TD>
                   <TD right>{fmtUren(r.geboekte_uren)}</TD>
                   <TD right accent={r.geboekte_kosten > 0}>{fmt(r.geboekte_kosten)}</TD>
                   <TD right>{fmtPct(r.standopname_pct)}</TD>
@@ -68,8 +68,8 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                   <TD right kleur={KLEUR_SALDO(r.uren_saldo)}>
                     {fmtUren(r.uren_saldo)}
                   </TD>
-                  <TD right kleur={r.kosten_saldo != null ? KLEUR_SALDO(r.kosten_saldo) : undefined}>
-                    {r.kosten_saldo != null ? fmt(r.kosten_saldo) : '—'}
+                  <TD right kleur={KLEUR_SALDO(r.kosten_saldo)}>
+                    {fmt(r.kosten_saldo)}
                   </TD>
                 </tr>
               ))}
@@ -77,7 +77,7 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                 <TD vet>Totaal</TD>
                 <TD right vet>{fmtUren(totalen.prognose_uren, true)}</TD>
                 <TD>{''}</TD>
-                <TD right vet>{heeftWerkbegroting ? fmt(totalen.prognose_bedrag, true) : '—'}</TD>
+                <TD right vet>{fmt(totalen.prognose_bedrag, true)}</TD>
                 <TD right vet>{fmtUren(totalen.geboekte_uren, true)}</TD>
                 <TD right vet>{fmt(totalen.geboekte_kosten, true)}</TD>
                 <TD>{''}</TD>
@@ -86,8 +86,8 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                 <TD right vet kleur={KLEUR_SALDO(totalen.uren_saldo)}>
                   {fmtUren(totalen.uren_saldo, true)}
                 </TD>
-                <TD right vet kleur={heeftWerkbegroting ? KLEUR_SALDO(totalen.kosten_saldo) : undefined}>
-                  {heeftWerkbegroting ? fmt(totalen.kosten_saldo, true) : '—'}
+                <TD right vet kleur={KLEUR_SALDO(totalen.kosten_saldo)}>
+                  {fmt(totalen.kosten_saldo, true)}
                 </TD>
               </tr>
             </tbody>
