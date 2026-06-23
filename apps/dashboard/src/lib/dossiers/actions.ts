@@ -1459,7 +1459,7 @@ export type DossierVerkoopData = {
   termijnen: VerkoopTermijn[]
   facturen: VerkoopFactuur[]
   betaalgegevens: DossierFinancieelData['relatieFacturatie']
-  totalen: { aanneemsom: number; gefactureerd: number; openstaand: number }
+  totalen: { aanneemsom: number; meerwerk: number; contractTotaal: number; gefactureerd: number; openstaand: number }
   termijnenDekking: TermijnenDekking | null
 }
 
@@ -1471,7 +1471,7 @@ export type DossierVerkoopData = {
 export async function getDossierVerkoop(dossierId: string): Promise<DossierVerkoopData> {
   const leeg: DossierVerkoopData = {
     beschikbaar: false, termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
-    totalen: { aanneemsom: 0, gefactureerd: 0, openstaand: 0 }, termijnenDekking: null,
+    totalen: { aanneemsom: 0, meerwerk: 0, contractTotaal: 0, gefactureerd: 0, openstaand: 0 }, termijnenDekking: null,
   }
   const ctx = await bouw7VoorDossier(dossierId)
   // Betaalgegevens + aanneemsom komen via getDossierFinancieel (werkt ook zonder Bouw7-koppeling).
@@ -1529,32 +1529,35 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   }
 
   const aanneemsom = toGetal(bouw7Financial?.fixedPrice) || toGetal(bouw7Financial?.revenue?.budgeted)
+  // Goedgekeurd meerwerk: additionalWork is een object; bedrag zit in prognosis (= expected)
+  const meerwerk = toGetal(bouw7Financial?.additionalWork?.prognosis ?? bouw7Financial?.additionalWork?.expected)
+  const contractTotaal = aanneemsom + meerwerk
   const gefactureerd = facturen.length
     ? facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0)
     : toGetal(bouw7Financial?.revenue?.realised)
-  const openstaand = Math.max(0, aanneemsom - gefactureerd)
+  const openstaand = Math.max(0, contractTotaal - gefactureerd)
 
   let termijnenDekking: TermijnenDekking | null = null
-  if (aanneemsom > 0 && termijnenBeschikbaar) {
+  if (contractTotaal > 0 && termijnenBeschikbaar) {
     const somBedrag = termijnen.reduce((s, t) => s + t.bedrag, 0)
     const allePctBekend = termijnen.length > 0 && termijnen.every(t => t.percentage != null)
     const somPct = allePctBekend ? termijnen.reduce((s, t) => s + (t.percentage ?? 0), 0) : null
     termijnenDekking = {
-      volledig: Math.abs(somBedrag - aanneemsom) <= 1,
+      volledig: Math.abs(somBedrag - contractTotaal) <= 1,
       somBedrag,
       somPct,
-      ontbreektBedrag: Math.max(0, aanneemsom - somBedrag),
+      ontbreektBedrag: Math.max(0, contractTotaal - somBedrag),
       ontbreektPct: somPct != null ? Math.max(0, 100 - somPct) : null,
     }
   }
 
   return {
-    beschikbaar: termijnen.length > 0 || facturen.length > 0 || aanneemsom > 0,
+    beschikbaar: termijnen.length > 0 || facturen.length > 0 || contractTotaal > 0,
     termijnenBeschikbaar,
     termijnen,
     facturen,
     betaalgegevens: relatieFacturatie,
-    totalen: { aanneemsom, gefactureerd, openstaand },
+    totalen: { aanneemsom, meerwerk, contractTotaal, gefactureerd, openstaand },
     termijnenDekking,
   }
 }

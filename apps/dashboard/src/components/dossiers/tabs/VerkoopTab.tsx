@@ -43,8 +43,26 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                   Aanneemsom
                   <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>excl. BTW</span>
                 </TD>
-                <TD right vet>{fmt(t.aanneemsom, true)}</TD>
+                <TD right>{fmt(t.aanneemsom, true)}</TD>
               </tr>
+              {t.meerwerk > 0 && (
+                <tr>
+                  <TD>
+                    Goedgekeurd meerwerk
+                    <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>excl. BTW</span>
+                  </TD>
+                  <TD right accent>{fmt(t.meerwerk, true)}</TD>
+                </tr>
+              )}
+              {t.meerwerk > 0 && (
+                <tr style={{ borderTop: '1px solid var(--neutral-100)' }}>
+                  <TD vet>
+                    Totaal incl. meerwerk
+                    <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>excl. BTW</span>
+                  </TD>
+                  <TD right vet>{fmt(t.contractTotaal, true)}</TD>
+                </tr>
+              )}
               <tr>
                 <TD>
                   Gefactureerd
@@ -89,18 +107,18 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
               {dk.volledig ? (
                 <>
                   <span>✓</span>
-                  <span>Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(t.aanneemsom)}</span>
+                  <span>Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(t.contractTotaal)}</span>
                 </>
               ) : data.termijnen.length === 0 ? (
                 <>
                   <span>⚠</span>
-                  <span>Geen termijnen aangemaakt voor een aanneemsom van {fmt(t.aanneemsom)}</span>
+                  <span>Geen termijnen aangemaakt voor een aanneemsom van {fmt(t.contractTotaal)}</span>
                 </>
               ) : (
                 <>
                   <span>⚠</span>
                   <span>
-                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(t.aanneemsom)} aanneemsom
+                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(t.contractTotaal)} aanneemsom
                     {' '}— nog {fmt(dk.ontbreektBedrag)}
                     {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
                   </span>
