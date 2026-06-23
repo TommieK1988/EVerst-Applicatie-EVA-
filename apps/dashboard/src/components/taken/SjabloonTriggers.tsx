@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useCallback, useTransition } from 'react'
 import { Plus, Trash2, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -10,6 +10,8 @@ import {
   DrawerTitle,
   DrawerDescription,
   DrawerBody,
+  Combobox,
+  type ComboboxOption,
 } from '@/components/ui'
 import {
   getTriggersVoorSjabloon, upsertTrigger, verwijderTrigger,
@@ -103,6 +105,7 @@ interface DraftTrigger {
   event_type: string
   event_config: Record<string, unknown>
   condities: TriggerConditie[]
+  conditie_logica: 'en' | 'of'
   actief: boolean
 }
 
@@ -126,7 +129,8 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
     getTriggersVoorSjabloon(templateId).then(rows =>
       setTriggers(rows.map(r => ({
         id: r.id, localKey: nieuweKey(), event_type: r.event_type,
-        event_config: r.event_config ?? {}, condities: r.condities ?? [], actief: r.actief,
+        event_config: r.event_config ?? {}, condities: r.condities ?? [],
+        conditie_logica: r.conditie_logica ?? 'en', actief: r.actief,
       }))),
     ).catch(() => {})
   }, [templateId])
@@ -146,7 +150,8 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
 
   function voegToe() {
     setTriggers(prev => [...prev, {
-      localKey: nieuweKey(), event_type: 'dossier_status', event_config: {}, condities: [], actief: true,
+      localKey: nieuweKey(), event_type: 'dossier_status', event_config: {}, condities: [],
+      conditie_logica: 'en', actief: true,
     }])
   }
 
@@ -155,7 +160,8 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
       try {
         const { id } = await upsertTrigger({
           id: t.id, template_id: templateId, event_type: t.event_type,
-          event_config: t.event_config, condities: t.condities, actief: t.actief,
+          event_config: t.event_config, condities: t.condities,
+          conditie_logica: t.conditie_logica, actief: t.actief,
         })
         patch(t.localKey, { id })
         toast.success('Trigger opgeslagen')
@@ -326,10 +332,12 @@ function TriggerKaart({
       {/* Condities */}
       <CondititesEditor
         condities={trigger.condities}
+        logica={trigger.conditie_logica}
         categorieen={categorieen}
         bouw7Categorieen={bouw7Categorieen}
         toggles={toggles}
         onChange={(c) => onPatch({ condities: c })}
+        onLogicaChange={(l) => onPatch({ conditie_logica: l })}
       />
 
       <div className="flex items-center justify-between pt-1">
@@ -348,32 +356,40 @@ function TriggerKaart({
 // ─── Condities-editor ─────────────────────────────────────────────────────────
 
 function CondititesEditor({
-  condities, categorieen, bouw7Categorieen, toggles, onChange,
+  condities, logica, categorieen, bouw7Categorieen, toggles, onChange, onLogicaChange,
 }: {
   condities: TriggerConditie[]
+  logica: 'en' | 'of'
   categorieen: string[]
   bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
   onChange: (c: TriggerConditie[]) => void
+  onLogicaChange: (l: 'en' | 'of') => void
 }) {
-  const [klantZoek, setKlantZoek] = useState('')
-  const [klantResultaten, setKlantResultaten] = useState<{ id: string; naam: string }[]>([])
-
   function set(i: number, c: TriggerConditie) {
     onChange(condities.map((x, idx) => idx === i ? c : x))
   }
   function voegToe() { onChange([...condities, { soort: 'veld', veld: 'categorie', op: 'eq', waarde: '' }]) }
   function verwijder(i: number) { onChange(condities.filter((_, idx) => idx !== i)) }
 
-  async function zoek(q: string) {
-    setKlantZoek(q)
-    if (q.trim().length < 2) { setKlantResultaten([]); return }
-    try { setKlantResultaten(await zoekRelaties(q)) } catch { setKlantResultaten([]) }
-  }
-
   return (
     <div className="border-t border-slate-200 pt-2 space-y-2">
-      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Condities (alle moeten kloppen)</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
+          Condities
+          {condities.length < 2 && <span className="normal-case tracking-normal"> (alle moeten kloppen)</span>}
+        </p>
+        {condities.length >= 2 && (
+          <select
+            value={logica}
+            onChange={e => onLogicaChange(e.target.value as 'en' | 'of')}
+            className="appearance-none border border-slate-200 rounded-lg px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="en">alle condities (EN)</option>
+            <option value="of">één van de condities (OF)</option>
+          </select>
+        )}
+      </div>
       {condities.map((c, i) => (
         <div key={i} className="flex items-start gap-2">
           <div className="flex-1 grid grid-cols-3 gap-1.5">
@@ -436,24 +452,11 @@ function CondititesEditor({
 
             {c.soort === 'klant' && (
               <div className="col-span-2">
-                {c.klant_id
-                  ? <div className="flex items-center gap-2 text-xs min-w-0">
-                      <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded truncate" title={c.klant_naam}>
-                        {c.klant_naam ?? 'Gekozen opdrachtgever'}
-                      </span>
-                      <button onClick={() => set(i, { soort: 'klant', op: 'eq' })} className="text-slate-400 hover:text-red-500 flex-shrink-0">wijzig</button>
-                    </div>
-                  : <>
-                      <input type="text" value={klantZoek} onChange={e => zoek(e.target.value)} placeholder="Zoek opdrachtgever…" className={inp} />
-                      {klantResultaten.length > 0 && (
-                        <div className="mt-1 border border-slate-200 rounded-lg max-h-32 overflow-auto bg-white">
-                          {klantResultaten.map(r => (
-                            <button key={r.id} onClick={() => { set(i, { soort: 'klant', op: 'eq', klant_id: r.id, klant_naam: r.naam }); setKlantZoek(''); setKlantResultaten([]) }}
-                              className="block w-full text-left px-2 py-1.5 text-xs hover:bg-slate-50">{r.naam}</button>
-                          ))}
-                        </div>
-                      )}
-                    </>}
+                <RelatieConditiePicker
+                  klantId={c.klant_id}
+                  klantNaam={c.klant_naam}
+                  onPick={(klant_id, klant_naam) => set(i, { soort: 'klant', op: 'eq', klant_id, klant_naam })}
+                />
               </div>
             )}
 
@@ -492,5 +495,43 @@ function CondititesEditor({
         <Plus className="w-3 h-3" /> Conditie toevoegen
       </button>
     </div>
+  )
+}
+
+// ─── Opdrachtgever-picker (kies uit relaties) ──────────────────────────────────
+
+function RelatieConditiePicker({
+  klantId, klantNaam, onPick,
+}: {
+  klantId?: string
+  klantNaam?: string
+  onPick: (klantId: string, klantNaam: string) => void
+}) {
+  // Seed met de huidige keuze zodat de opgeslagen naam meteen zichtbaar is bij heropenen.
+  const [options, setOptions] = useState<ComboboxOption[]>(
+    klantId ? [{ value: klantId, label: klantNaam ?? 'Gekozen opdrachtgever' }] : [],
+  )
+
+  const zoek = useCallback(async (q: string) => {
+    if (q.trim().length < 2) return
+    try {
+      const r = await zoekRelaties(q, { type: 'opdrachtgever' })
+      setOptions(r.map(x => ({ value: x.id, label: x.naam })))
+    } catch { /* genegeerd */ }
+  }, [])
+
+  return (
+    <Combobox
+      options={options}
+      value={klantId}
+      onChange={(v) => {
+        const opt = options.find(o => o.value === v)
+        if (opt) onPick(opt.value, opt.label)
+      }}
+      placeholder="Kies opdrachtgever…"
+      searchPlaceholder="Zoek opdrachtgever…"
+      emptyText="Typ om te zoeken…"
+      onSearch={zoek}
+    />
   )
 }

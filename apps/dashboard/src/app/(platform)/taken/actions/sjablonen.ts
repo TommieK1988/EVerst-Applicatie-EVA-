@@ -381,6 +381,8 @@ export interface ActielijstTrigger {
   event_type: string
   event_config: Record<string, unknown>
   condities: TriggerConditie[]
+  /** Hoe de condities gecombineerd worden: 'en' = alle, 'of' = ten minste één. */
+  conditie_logica?: 'en' | 'of'
   actief: boolean
   volgorde: number
 }
@@ -480,26 +482,38 @@ interface DossierContext {
   toggles: Map<string, boolean>
 }
 
-/** Alle AND-condities moeten waar zijn (lege lijst = altijd waar). Velden via whitelist. */
-function evalCondities(condities: TriggerConditie[], ctx: DossierContext): boolean {
-  if (!Array.isArray(condities) || condities.length === 0) return true
-  return condities.every(c => {
-    switch (c.soort) {
-      case 'veld':
-        if (!CONDITIE_VELD_WHITELIST.includes(c.veld as typeof CONDITIE_VELD_WHITELIST[number])) return false
-        return vergelijk(ctx.dossier[c.veld!], c.waarde, c.op ?? 'eq')
-      case 'klant':
-        return ctx.dossier.klant_id === c.klant_id
-      case 'relatie_type': {
-        // relaties.types is een array; eq = bevat de waarde, neq = bevat de waarde niet.
-        const bevat = ctx.relatieTypes.includes(String(c.waarde))
-        return (c.op ?? 'eq') === 'neq' ? !bevat : bevat
-      }
-      case 'toggle':
-        return (ctx.toggles.get(c.toggle_sleutel ?? '') ?? false) === (c.aan ?? true)
-      default: return false
+/** Test één conditie tegen de dossiercontext. Velden via whitelist. */
+function evalConditie(c: TriggerConditie, ctx: DossierContext): boolean {
+  switch (c.soort) {
+    case 'veld':
+      if (!CONDITIE_VELD_WHITELIST.includes(c.veld as typeof CONDITIE_VELD_WHITELIST[number])) return false
+      return vergelijk(ctx.dossier[c.veld!], c.waarde, c.op ?? 'eq')
+    case 'klant':
+      return ctx.dossier.klant_id === c.klant_id
+    case 'relatie_type': {
+      // relaties.types is een array; eq = bevat de waarde, neq = bevat de waarde niet.
+      const bevat = ctx.relatieTypes.includes(String(c.waarde))
+      return (c.op ?? 'eq') === 'neq' ? !bevat : bevat
     }
-  })
+    case 'toggle':
+      return (ctx.toggles.get(c.toggle_sleutel ?? '') ?? false) === (c.aan ?? true)
+    default: return false
+  }
+}
+
+/**
+ * Combineert de condities volgens de trigger-logica (lege lijst = altijd waar).
+ * 'en' = alle condities moeten kloppen, 'of' = ten minste één.
+ */
+function evalCondities(
+  condities: TriggerConditie[],
+  ctx: DossierContext,
+  logica: 'en' | 'of' = 'en',
+): boolean {
+  if (!Array.isArray(condities) || condities.length === 0) return true
+  return logica === 'of'
+    ? condities.some(c => evalConditie(c, ctx))
+    : condities.every(c => evalConditie(c, ctx))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -585,7 +599,7 @@ export async function verwerkDossierTriggers(dossier_id?: string): Promise<numbe
             .eq('actief', true)
 
           for (const t of (triggers ?? []) as ActielijstTrigger[]) {
-            if (matchEvent(t, ev, toggleSleutelById) && evalCondities(t.condities ?? [], ctx)) {
+            if (matchEvent(t, ev, toggleSleutelById) && evalCondities(t.condities ?? [], ctx, t.conditie_logica ?? 'en')) {
               // ON CONFLICT DO NOTHING via upsert ignoreDuplicates → idempotent.
               await sb
                 .from('actielijst_activeringen')
@@ -630,6 +644,7 @@ export async function upsertTrigger(input: {
   event_type: string
   event_config: Record<string, unknown>
   condities: TriggerConditie[]
+  conditie_logica?: 'en' | 'of'
   volgorde?: number
   actief?: boolean
 }): Promise<{ id: string }> {
@@ -638,12 +653,13 @@ export async function upsertTrigger(input: {
   const sb = supabase as any
 
   const payload = {
-    template_id:  input.template_id,
-    event_type:   input.event_type,
-    event_config: input.event_config,
-    condities:    input.condities,
-    volgorde:     input.volgorde ?? 0,
-    actief:       input.actief ?? true,
+    template_id:     input.template_id,
+    event_type:      input.event_type,
+    event_config:    input.event_config,
+    condities:       input.condities,
+    conditie_logica: input.conditie_logica ?? 'en',
+    volgorde:        input.volgorde ?? 0,
+    actief:          input.actief ?? true,
   }
 
   if (input.id) {

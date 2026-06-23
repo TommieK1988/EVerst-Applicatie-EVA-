@@ -1259,18 +1259,21 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   }
 }
 
-/** Zoek relaties op naam (voor de aanvraag-combobox). */
-export async function zoekRelaties(query: string): Promise<{ id: string; naam: string; type: string }[]> {
+/** Zoek relaties op naam (voor de aanvraag-combobox). Optioneel filteren op relatie-type. */
+export async function zoekRelaties(
+  query: string,
+  opts?: { type?: string },
+): Promise<{ id: string; naam: string; types: string[] }[]> {
   if (!query.trim()) return []
   const supabase = createAdminClient() as any
-  const { data } = await supabase
+  let q = supabase
     .from('relaties')
-    .select('id, naam, type')
+    .select('id, naam, types')
     .ilike('naam', `%${query.trim()}%`)
     .eq('actief', true)
-    .order('naam', { ascending: true })
-    .limit(8)
-  return (data ?? []) as { id: string; naam: string; type: string }[]
+  if (opts?.type) q = q.contains('types', [opts.type])
+  const { data } = await q.order('naam', { ascending: true }).limit(8)
+  return (data ?? []) as { id: string; naam: string; types: string[] }[]
 }
 
 /** Sla vrije inhoudsvelden op (categorie, referentie, contactpersoon, datums, werkadres). */

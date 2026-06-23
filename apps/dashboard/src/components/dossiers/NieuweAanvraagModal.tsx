@@ -21,7 +21,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen }: 
   const [klantId,        setKlantId]        = React.useState<string | null>(null)
   const [klantNaam,      setKlantNaam]      = React.useState('')
   const [zoekQuery,      setZoekQuery]      = React.useState('')
-  const [zoekResultaten, setZoekResultaten] = React.useState<{ id: string; naam: string; type: string }[]>([])
+  const [zoekResultaten, setZoekResultaten] = React.useState<{ id: string; naam: string; types: string[] }[]>([])
   const [zoekOpen,       setZoekOpen]       = React.useState(false)
   const [zoekBezig,      setZoekBezig]      = React.useState(false)
   const [titel,          setTitel]          = React.useState('')
@@ -78,7 +78,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen }: 
     }, 280)
   }
 
-  function selecteerRelatie(rel: { id: string; naam: string; type: string }) {
+  function selecteerRelatie(rel: { id: string; naam: string; types: string[] }) {
     setKlantId(rel.id)
     setKlantNaam(rel.naam)
     setZoekQuery(rel.naam)
@@ -172,7 +172,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen }: 
                           fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
                           color: 'var(--fg-muted)', padding: '2px 6px',
                           background: 'var(--bg-active)', borderRadius: 4,
-                        }}>{rel.type}</span>
+                        }}>{rel.types?.[0] ?? ''}</span>
                       </button>
                     ))}
                   </div>
