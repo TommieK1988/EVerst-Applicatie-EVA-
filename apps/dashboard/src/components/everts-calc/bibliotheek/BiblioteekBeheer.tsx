@@ -10,7 +10,8 @@ import {
   importeerExcel, maakRecept, leegMaakBibliotheek,
 } from '@/app/(platform)/everts-calc/actions/bibliotheek'
 import { formatEuro } from '@/lib/everts-calc/calculations'
-import { getInstellingen, getMaterialen } from '@/lib/everts-calc/local-store'
+import { getInstellingen } from '@/lib/everts-calc/local-store'
+import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { PaintItemMetNormen, LaborNorm, MaterialNorm } from '@/lib/everts-calc/services/bibliotheek'
 import type { Materiaal } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui/button'
@@ -142,9 +143,9 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [materialen, setMaterialen] = useState<Materiaal[]>([])
 
-  // Laad materialen uit local-store (alleen actieve)
+  // Laad actieve materialen uit Supabase
   useEffect(() => {
-    if (open) setMaterialen(getMaterialen().filter(m => m.status === 'actief'))
+    if (open) getActieveMaterialen().then(setMaterialen).catch(() => setMaterialen([]))
   }, [open])
 
   const gefilterd = zoek

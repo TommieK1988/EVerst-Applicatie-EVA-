@@ -762,11 +762,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/everts-calc\/rapportages$/, {
-    title: 'EvertsCalc — Rapportages',
-    description: 'Rapportages over EvertsCalc­offertes: offerteconversie, gemiddelde offerte­waarde, meest gebruikte behandelingen en materiaal­verbruik over een gekozen periode.',
-  }],
-
   [/^\/everts-calc\/instellingen\/offertes\/layouts\/[^/]+$/, {
     title: 'EvertsCalc — Offerte layout editor',
     description: 'Bewerk een offerte­lay-out: koptekst, voettekst, kleur­schema, kolom­weergave en welke velden zichtbaar zijn voor de klant. Wijzigingen zijn direct zichtbaar in de preview.',

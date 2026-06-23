@@ -2,7 +2,7 @@ import type {
   Project, Deelproject, Locatie, Element, Activiteit,
   CalculatieLijn, Scenario, BibliotheekActiviteit,
   Groep, Calculatieregel, Componentregel, Instellingen,
-  Meetstaat, Meetregel, MeetregelAggregaat, Materiaal,
+  Meetstaat, Meetregel, MeetregelAggregaat,
   Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent,
   WerkbegrotingWijziging, WerkbegrotingBestelling,
 } from './types'
@@ -31,7 +31,6 @@ const KEYS = {
   meetstaten: 'evc_meetstaten',
   meetregels: 'evc_meetregels',
   meetregel_aggregaten: 'evc_meetregel_aggregaten',
-  materialen: 'evc_materialen',
 }
 
 const STANDAARD_INSTELLINGEN: Instellingen = {
@@ -425,21 +424,6 @@ export function getInstellingen(): Instellingen {
 export function slaInstellingenOp(inst: Instellingen): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(KEYS.instellingen, JSON.stringify(inst))
-}
-
-// ─── Materialen ───────────────────────────────────────────────────────────────
-
-export function getMaterialen(): Materiaal[] {
-  return lees<Materiaal>(KEYS.materialen, [])
-}
-
-export function slaMateriaalOp(m: Materiaal): void {
-  const lijst = getMaterialen().filter(x => x.id !== m.id)
-  sla(KEYS.materialen, [...lijst, { ...m, aangepast_op: new Date().toISOString() }])
-}
-
-export function verwijderMateriaal(id: string): void {
-  sla(KEYS.materialen, getMaterialen().filter(m => m.id !== id))
 }
 
 // ─── Kostprijs berekening voor heel project ───────────────────────────────────

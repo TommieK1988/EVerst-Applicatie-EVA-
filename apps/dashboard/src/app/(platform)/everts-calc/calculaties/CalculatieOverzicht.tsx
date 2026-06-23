@@ -84,7 +84,12 @@ function dossierRoute(rij: CalculatieRij): string | null {
   const sectie = rij.dossier_hoofdstatus === 'aanvraag' ? 'aanvragen'
     : rij.dossier_hoofdstatus === 'offerte' ? 'offertes'
     : 'opdrachten'
-  return `/${sectie}/${rij.dossier_id}`
+  // Aanvraag- en offerte-dossiers hebben een Calculatie-tab; open die direct.
+  // Opdrachten gebruiken Werkbegroting — val terug op de dossier-root (Informatie).
+  const heeftCalculatieTab = rij.dossier_hoofdstatus === 'aanvraag' || rij.dossier_hoofdstatus === 'offerte'
+  return heeftCalculatieTab
+    ? `/${sectie}/${rij.dossier_id}/calculatie`
+    : `/${sectie}/${rij.dossier_id}`
 }
 
 // ── Hoofd-component ───────────────────────────────────────────────────────────

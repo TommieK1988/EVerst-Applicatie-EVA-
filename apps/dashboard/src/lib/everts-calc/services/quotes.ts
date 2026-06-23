@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { createAdminClient } from '@everts/database/server'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getDb(): Promise<any> {
@@ -29,6 +30,10 @@ export type OfferteRij = {
   totaal_kostprijs: number
   marge: number
   marge_pct: number | null
+
+  // Platform-dossier (optioneel — via quote.project_id → dossiers.everts_calc_project_id)
+  dossier_id: string | null
+  dossier_hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht' | null
 }
 
 export async function getQuotesMetMarge(): Promise<OfferteRij[]> {
@@ -36,7 +41,7 @@ export async function getQuotesMetMarge(): Promise<OfferteRij[]> {
   const { data, error } = await supabase
     .from('quotes')
     .select(`
-      id, quote_nummer, type, status, titel, referentie,
+      id, project_id, quote_nummer, type, status, titel, referentie,
       datum, geldig_tot, subtotaal_ex_btw, btw_bedrag, totaal_inc_btw,
       created_at, updated_at,
       client:clients(id, naam, bedrijfsnaam),
@@ -45,6 +50,26 @@ export async function getQuotesMetMarge(): Promise<OfferteRij[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
+
+  // Platform-dossiers koppelen via everts_calc_project_id (niet in de gegenereerde
+  // types → admin client). Zelfde patroon als services/calculaties.ts.
+  const projectIds = Array.from(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new Set((data ?? []).map((q: any) => q.project_id).filter(Boolean)),
+  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dossierByProject = new Map<string, any>()
+  if (projectIds.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const platformClient = createAdminClient() as any
+    const { data: dossiers } = await platformClient
+      .from('dossiers')
+      .select('id, hoofdstatus, everts_calc_project_id')
+      .in('everts_calc_project_id', projectIds)
+    for (const d of dossiers ?? []) {
+      if (d.everts_calc_project_id) dossierByProject.set(d.everts_calc_project_id, d)
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data ?? []).map((q: any) => {
@@ -56,8 +81,16 @@ export async function getQuotesMetMarge(): Promise<OfferteRij[]> {
     const subtotaal = q.subtotaal_ex_btw ?? 0
     const marge = subtotaal - totaal_kostprijs
     const marge_pct = subtotaal > 0 ? (marge / subtotaal) * 100 : null
-    const { lines: _lines, ...rest } = q
-    return { ...rest, totaal_kostprijs, marge, marge_pct } as OfferteRij
+    const dossier = q.project_id ? dossierByProject.get(q.project_id) ?? null : null
+    const { lines: _lines, project_id: _project_id, ...rest } = q
+    return {
+      ...rest,
+      totaal_kostprijs,
+      marge,
+      marge_pct,
+      dossier_id: dossier?.id ?? null,
+      dossier_hoofdstatus: dossier?.hoofdstatus ?? null,
+    } as OfferteRij
   })
 }
 

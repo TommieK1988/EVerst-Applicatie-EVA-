@@ -119,7 +119,6 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/everts-calc\/bibliotheek\/materialen$/, { title: 'EvertsCalc › Bibliotheek › Materialen', breadcrumb: 'Apps' }],
   [/^\/everts-calc\/bibliotheek\/behandelingen$/, { title: 'EvertsCalc › Bibliotheek › Behandelingen', breadcrumb: 'Apps' }],
   [/^\/everts-calc\/bibliotheek$/, { title: 'EvertsCalc › Bibliotheek', breadcrumb: 'Apps' }],
-  [/^\/everts-calc\/rapportages$/, { title: 'EvertsCalc › Rapportages', breadcrumb: 'Apps' }],
   [/^\/everts-calc\/instellingen\/offertes\/layouts\/[^/]+$/, { title: 'EvertsCalc › Instellingen › Offerte layouts › Editor', breadcrumb: 'Apps' }],
   [/^\/everts-calc\/instellingen\/offertes\/layouts$/, { title: 'EvertsCalc › Instellingen › Offerte layouts', breadcrumb: 'Apps' }],
   [/^\/everts-calc\/instellingen\/offertes$/, { title: 'EvertsCalc › Instellingen › Offertes', breadcrumb: 'Apps' }],

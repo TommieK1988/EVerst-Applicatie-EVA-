@@ -2,8 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Trash2, Download, Upload, Search, X } from 'lucide-react'
-import { getMaterialen, slaMateriaalOp, verwijderMateriaal } from '@/lib/everts-calc/local-store'
-import { nieuweId } from '@/lib/everts-calc/utils'
+import {
+  getMaterialen,
+  maakMateriaal,
+  wijzigMateriaal,
+  verwijderMateriaal as verwijderMateriaalDb,
+  importMaterialen,
+} from '@/app/(platform)/everts-calc/actions/materialen'
 import type { Materiaal, MateriaalStatus } from '@/lib/everts-calc/types'
 import { MATERIAAL_GROEPEN } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui/button'
@@ -196,43 +201,39 @@ export default function MaterialenBibliotheek() {
   const [filterGroep, setFilterGroep] = useState('')
   const [filterLeverancier, setFilterLeverancier] = useState('')
   const [filterStatus, setFilterStatus] = useState<'alle' | 'actief' | 'inactief'>('actief')
+  const [laden, setLaden] = useState(true)
   const [importBezig, setImportBezig] = useState(false)
   const [importResultaat, setImportResultaat] = useState<{ aangemaakt: number; bijgewerkt: number; fouten: string[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const dicoRef = useRef<HTMLInputElement>(null)
 
-  const laad = useCallback(() => {
-    setMaterialen(getMaterialen())
+  const laad = useCallback(async () => {
+    setLaden(true)
+    try {
+      setMaterialen(await getMaterialen())
+    } finally {
+      setLaden(false)
+    }
   }, [])
 
-  useEffect(() => { laad() }, [laad])
+  useEffect(() => { void laad() }, [laad])
 
   const wijzig = useCallback((id: string, patch: Partial<Materiaal>) => {
-    setMaterialen(prev => {
-      const bijgewerkt = prev.map(m => m.id === id ? { ...m, ...patch } : m)
-      const mat = bijgewerkt.find(m => m.id === id)
-      if (mat) slaMateriaalOp(mat)
-      return bijgewerkt
-    })
-  }, [])
+    // Optimistisch in de UI, daarna persisteren naar Supabase.
+    setMaterialen(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+    void wijzigMateriaal(id, patch).catch(() => { void laad() })
+  }, [laad])
 
-  const voegToe = useCallback(() => {
-    const nieuw: Materiaal = {
-      id: nieuweId(),
-      omschrijving: '',
-      eenheid: 'ltr',
-      kostprijs: 0,
-      status: 'actief',
-      aangepast_op: new Date().toISOString(),
-    }
-    slaMateriaalOp(nieuw)
+  const voegToe = useCallback(async () => {
+    const nieuw = await maakMateriaal()
     setMaterialen(prev => [...prev, nieuw])
   }, [])
 
   const verwijder = useCallback((id: string) => {
     if (!confirm('Materiaal verwijderen?')) return
-    verwijderMateriaal(id)
     setMaterialen(prev => prev.filter(m => m.id !== id))
-  }, [])
+    void verwijderMateriaalDb(id).catch(() => { void laad() })
+  }, [laad])
 
   // ─── Filters ──────────────────────────────────────────────────────────────
 
@@ -275,55 +276,55 @@ export default function MaterialenBibliotheek() {
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rijen = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
 
-      let aangemaakt = 0
-      let bijgewerkt = 0
-      const fouten: string[] = []
-
-      for (let i = 0; i < rijen.length; i++) {
-        const rij = rijen[i]
-        const omschr = String(rij['Omschrijving'] ?? rij['omschrijving'] ?? '').trim()
-        if (!omschr) { fouten.push(`Rij ${i + 2}: Omschrijving ontbreekt`); continue }
-
-        const leverancier  = String(rij['Leverancier']   ?? rij['leverancier']   ?? '').trim() || undefined
-        const artikelnr    = String(rij['Artikelnummer']  ?? rij['artikelnummer'] ?? '').trim() || undefined
-        const groep        = String(rij['Materiaalgroep'] ?? rij['materiaalgroep'] ?? '').trim() || undefined
-        const eenheid      = String(rij['Eenheid']        ?? rij['eenheid']       ?? 'ltr').trim() || 'ltr'
+      const items: Partial<Materiaal>[] = rijen.map(rij => {
         const kostprijsRaw = parseFloat(String(rij['Kostprijs'] ?? rij['kostprijs'] ?? '0').replace(',', '.'))
-        const kostprijs    = isNaN(kostprijsRaw) ? 0 : kostprijsRaw
         const statusRaw    = String(rij['Status'] ?? rij['status'] ?? 'actief').trim().toLowerCase()
         const status: MateriaalStatus = statusRaw === 'inactief' ? 'inactief' : 'actief'
-
-        // Find bestaand op artikelnummer+leverancier, anders nieuw aanmaken
-        const huidig = materialen.find(m =>
-          artikelnr && m.artikelnummer === artikelnr &&
-          (!leverancier || m.leverancier === leverancier)
-        )
-
-        if (huidig) {
-          const bijgewerktMat: Materiaal = {
-            ...huidig, omschrijving: omschr, leverancier, artikelnummer: artikelnr,
-            materiaalgroep: groep, eenheid, kostprijs, status,
-          }
-          slaMateriaalOp(bijgewerktMat)
-          bijgewerkt++
-        } else {
-          const nieuw: Materiaal = {
-            id: nieuweId(), omschrijving: omschr, leverancier, artikelnummer: artikelnr,
-            materiaalgroep: groep, eenheid, kostprijs, status,
-            aangepast_op: new Date().toISOString(),
-          }
-          slaMateriaalOp(nieuw)
-          aangemaakt++
+        return {
+          omschrijving:   String(rij['Omschrijving']   ?? rij['omschrijving']   ?? '').trim(),
+          leverancier:    String(rij['Leverancier']    ?? rij['leverancier']    ?? '').trim() || undefined,
+          artikelnummer:  String(rij['Artikelnummer']  ?? rij['artikelnummer']  ?? '').trim() || undefined,
+          materiaalgroep: String(rij['Materiaalgroep'] ?? rij['materiaalgroep'] ?? '').trim() || undefined,
+          eenheid:        String(rij['Eenheid']        ?? rij['eenheid']        ?? 'ltr').trim() || 'ltr',
+          kostprijs:      isNaN(kostprijsRaw) ? 0 : kostprijsRaw,
+          status,
         }
-      }
+      })
 
-      laad()
-      setImportResultaat({ aangemaakt, bijgewerkt, fouten })
+      const resultaat = await importMaterialen(items, 'excel')
+      await laad()
+      setImportResultaat(resultaat)
     } catch (err) {
       setImportResultaat({ aangemaakt: 0, bijgewerkt: 0, fouten: [String(err)] })
     } finally {
       setImportBezig(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  // ─── DICO-import ──────────────────────────────────────────────────────────
+
+  const handleDicoImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const bestand = e.target.files?.[0]
+    if (!bestand) return
+    setImportBezig(true)
+    setImportResultaat(null)
+    try {
+      const form = new FormData()
+      form.append('file', bestand)
+      const res = await fetch('/everts-calc/api/materialen/dico', { method: 'POST', body: form })
+      const json = await res.json()
+      if (!res.ok) {
+        setImportResultaat({ aangemaakt: 0, bijgewerkt: 0, fouten: [json.error ?? 'DICO-import mislukt'] })
+      } else {
+        await laad()
+        setImportResultaat({ aangemaakt: json.aangemaakt ?? 0, bijgewerkt: json.bijgewerkt ?? 0, fouten: json.fouten ?? [] })
+      }
+    } catch (err) {
+      setImportResultaat({ aangemaakt: 0, bijgewerkt: 0, fouten: [String(err)] })
+    } finally {
+      setImportBezig(false)
+      if (dicoRef.current) dicoRef.current.value = ''
     }
   }
 
@@ -424,7 +425,19 @@ export default function MaterialenBibliotheek() {
             title="Excel importeren"
           >
             {importBezig ? <Spinner size="sm" /> : <Upload className="w-3.5 h-3.5" />}
-            Importeren
+            Excel
+          </Button>
+
+          <input ref={dicoRef} type="file" accept=".xml,.dico,text/xml,application/xml" className="hidden" onChange={handleDicoImport} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => dicoRef.current?.click()}
+            disabled={importBezig}
+            title="DICO-bestand importeren (Ketenstandaard artikel-XML)"
+          >
+            {importBezig ? <Spinner size="sm" /> : <Upload className="w-3.5 h-3.5" />}
+            DICO
           </Button>
 
           <Button
@@ -488,7 +501,13 @@ export default function MaterialenBibliotheek() {
           </tbody>
         </table>
 
-        {gefilterd.length === 0 && (
+        {laden && (
+          <div className="flex items-center justify-center py-16 text-slate-400">
+            <Spinner size="sm" /> <span className="ml-2 text-sm">Materialen laden…</span>
+          </div>
+        )}
+
+        {!laden && gefilterd.length === 0 && (
           <EmptyState
             tone="neutral"
             title={materialen.length === 0 ? 'Nog geen materialen' : 'Geen materialen gevonden'}

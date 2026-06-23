@@ -5,9 +5,10 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/everts-calc/shared/PageHeader'
 import {
-  Save, RefreshCw, Plus, X, FileText, ChevronRight, Calculator,
+  Save, RefreshCw, Plus, X, FileText, ChevronRight, Calculator, Package,
 } from 'lucide-react'
 import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-store'
+import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
 
 // ─── Constanten ───────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ const KOLOM_STANDAARD: { id: string; label: string }[] = [
 
 // ─── Hoofd component ──────────────────────────────────────────────────────────
 
-type TabKey = 'calculatie' | 'offerte'
+type TabKey = 'calculatie' | 'offerte' | 'materialen'
 
 export default function Instellingen() {
   const [activeTab, setActiveTab] = useState<TabKey>('calculatie')
@@ -50,6 +51,7 @@ export default function Instellingen() {
   const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: 'calculatie', label: 'Calculatie',          icon: Calculator },
     { key: 'offerte',    label: 'Offerte instellingen', icon: FileText },
+    { key: 'materialen', label: 'Materialen / DICO',     icon: Package },
   ]
 
   return (
@@ -79,6 +81,7 @@ export default function Instellingen() {
 
       {activeTab === 'calculatie' && <CalculatieTab />}
       {activeTab === 'offerte'    && <OfferteTab />}
+      {activeTab === 'materialen' && <DicoIntegratiesBeheer />}
 
       {/* Reset */}
       <div className="flex justify-start pt-2 border-t border-slate-100">

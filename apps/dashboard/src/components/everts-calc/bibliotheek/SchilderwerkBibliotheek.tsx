@@ -18,7 +18,8 @@ import {
   importeerSchilderwerkExcel,
 } from '@/app/(platform)/everts-calc/actions/schilderwerk'
 import { valideerFormule, formuleTekst } from '@/lib/everts-calc/schilder-formule'
-import { getInstellingen, getMaterialen } from '@/lib/everts-calc/local-store'
+import { getInstellingen } from '@/lib/everts-calc/local-store'
+import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { Materiaal } from '@/lib/everts-calc/types'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ function MateriaalBibliotheekZoeker({ onSelect, cls = '' }: {
   const [materialen, setMaterialen] = useState<Materiaal[]>([])
 
   useEffect(() => {
-    if (open) setMaterialen(getMaterialen().filter(m => m.status === 'actief'))
+    if (open) getActieveMaterialen().then(setMaterialen).catch(() => setMaterialen([]))
   }, [open])
 
   const gefilterd = zoek

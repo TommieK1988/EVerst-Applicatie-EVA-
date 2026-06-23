@@ -83,7 +83,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     )
   }
 
-  if (tab === 'calculatie' && sectie === 'aanvraag') {
+  if (tab === 'calculatie' && (sectie === 'aanvraag' || sectie === 'offerte')) {
     return (
       <>
         {titleInjector}

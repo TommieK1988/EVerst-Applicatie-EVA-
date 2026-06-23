@@ -16,6 +16,18 @@ function formatEur(bedrag: number): string {
   return bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+// Bij een gekoppeld dossier: open de Informatie-tab van dat dossier.
+// Zonder dossier: val terug op de quote-editor.
+function offerteRoute(q: OfferteRij): string {
+  if (q.dossier_id && q.dossier_hoofdstatus) {
+    const sectie = q.dossier_hoofdstatus === 'aanvraag' ? 'aanvragen'
+      : q.dossier_hoofdstatus === 'offerte' ? 'offertes'
+      : 'opdrachten'
+    return `/${sectie}/${q.dossier_id}/informatie`
+  }
+  return `/everts-calc/quotes/${q.id}`
+}
+
 function formatDatum(iso: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
@@ -234,7 +246,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       kolommen={kolommen}
       layouts={layouts}
       user_id={user_id}
-      onRijKlik={q => router.push(`/everts-calc/quotes/${q.id}`)}
+      onRijKlik={q => router.push(offerteRoute(q))}
       acties={acties}
     />
   )

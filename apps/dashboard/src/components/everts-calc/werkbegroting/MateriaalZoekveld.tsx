@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { X, Search, Package } from 'lucide-react'
-import { getMaterialen } from '@/lib/everts-calc/local-store'
+import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import { formatEuro } from '@/lib/everts-calc/calculations'
 import type { Materiaal } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui'
@@ -19,13 +19,27 @@ export default function MateriaalZoekveld({ artikelnummer, omschrijving, onSelec
   const [resultaten, setResultaten] = useState<Materiaal[]>([])
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const alleRef = useRef<Materiaal[] | null>(null)
 
-  const zoek = useCallback((term: string) => {
+  // Actieve materialen één keer (lazy) uit Supabase laden, daarna client-side filteren.
+  const zorgGeladen = useCallback(async () => {
+    if (alleRef.current) return alleRef.current
+    try {
+      const lijst = await getActieveMaterialen()
+      alleRef.current = lijst
+      return lijst
+    } catch {
+      alleRef.current = []
+      return []
+    }
+  }, [])
+
+  const zoek = useCallback(async (term: string) => {
     if (term.length < 1) { setResultaten([]); return }
     const t = term.toLowerCase()
+    const alle = await zorgGeladen()
     setResultaten(
-      getMaterialen()
-        .filter(m => m.status === 'actief')
+      alle
         .filter(m =>
           m.omschrijving.toLowerCase().includes(t) ||
           (m.artikelnummer ?? '').toLowerCase().includes(t) ||
@@ -34,7 +48,10 @@ export default function MateriaalZoekveld({ artikelnummer, omschrijving, onSelec
         )
         .slice(0, 20)
     )
-  }, [])
+  }, [zorgGeladen])
+
+  // Vast laden zodra het veld in beeld komt, zodat de eerste toetsaanslag direct filtert.
+  useEffect(() => { void zorgGeladen() }, [zorgGeladen])
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value

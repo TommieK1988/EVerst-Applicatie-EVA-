@@ -326,6 +326,8 @@ export const MATERIAAL_GROEPEN = [
   'Bescherming & verpakking', 'Gereedschap', 'Overig',
 ] as const
 
+export type MateriaalBron = 'handmatig' | 'excel' | 'dico_import' | 'dico_api'
+
 export interface Materiaal {
   id: string
   leverancier?: string
@@ -336,6 +338,14 @@ export interface Materiaal {
   kostprijs: number
   status: MateriaalStatus
   aangepast_op: string
+
+  // DICO / Ketenstandaard / ETIM (optioneel; gevuld via DICO-import of -sync)
+  gtin?: string
+  etim_klasse?: string
+  leverancier_gln?: string
+  bron?: MateriaalBron
+  externe_ref?: string
+  gesynct_op?: string | null
 }
 
 // ─── WERKBEGROTING ────────────────────────────────────────────────────────────
