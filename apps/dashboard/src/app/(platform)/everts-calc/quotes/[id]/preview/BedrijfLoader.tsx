@@ -1,16 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import nextDynamic from 'next/dynamic'
 import type { Quote } from '@/lib/everts-calc/types-quotes'
+
+const DocxViewer = nextDynamic(() => import('@/components/everts-calc/DocxViewer'), { ssr: false })
 
 const BEDRIJF_KEY = 'evc_offerte_bedrijf'
 
 export default function BedrijfLoader({ quote }: { quote: Quote }) {
   const [src, setSrc] = useState<string | null>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    let url = `/everts-calc/everts-calc/api/quotes/${quote.id}/preview-html`
+    let url = `/everts-calc/api/quotes/${quote.id}/docx-preview`
     const bedrijfRaw = localStorage.getItem(BEDRIJF_KEY)
     if (bedrijfRaw) {
       url += `?bedrijf=${encodeURIComponent(bedrijfRaw)}`
@@ -26,13 +28,5 @@ export default function BedrijfLoader({ quote }: { quote: Quote }) {
     )
   }
 
-  return (
-    <iframe
-      ref={iframeRef}
-      src={src}
-      className="w-full border-0 bg-white"
-      style={{ minHeight: '1123px', height: 'calc(100vh - 120px)' }}
-      title="Offerte voorvertoning"
-    />
-  )
+  return <DocxViewer src={src} className="w-full h-full" />
 }

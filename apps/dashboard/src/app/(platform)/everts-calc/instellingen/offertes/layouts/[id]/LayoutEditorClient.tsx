@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useTransition } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
   ArrowLeft, Save, Eye, Code2, RefreshCw, Copy, Check,
@@ -11,13 +12,10 @@ import {
 import toast from 'react-hot-toast'
 import { updateLayout } from '@/app/(platform)/everts-calc/actions/quote-instellingen'
 import { maakSjabloontekst, updateSjabloontekst, verwijderSjabloontekst } from '@/app/(platform)/everts-calc/actions/sjabloonteksten'
-import { TEMPLATE_STANDAARD } from '@/lib/everts-calc/quote-templates/standaard'
-import { TEMPLATE_UITGEBREID } from '@/lib/everts-calc/quote-templates/uitgebreid'
-import { TEMPLATE_BEKNOPT } from '@/lib/everts-calc/quote-templates/beknopt'
-// Directe import (geen dynamic) — LayoutEditorClient is al 'use client'
-import WysiwygEditor from '@/components/everts-calc/WysiwygEditor'
-import type { WysiwygEditorRef, DocumentStyle } from '@/components/everts-calc/WysiwygEditor'
 import type { Sjabloontekst } from '@/app/(platform)/everts-calc/actions/sjabloonteksten'
+
+// Word-preview rendert client-side (geen SSR)
+const DocxViewer = dynamic(() => import('@/components/everts-calc/DocxViewer'), { ssr: false })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +26,10 @@ interface Layout {
   html_template?: string | null
   wysiwyg_body?: string | null
   docx_template_url?: string | null
+  docx_template_bron?: string | null
+  docx_template_drive_id?: string | null
+  docx_template_item_id?: string | null
+  docx_template_web_url?: string | null
   primaire_kleur: string
   secundaire_kleur?: string | null
   accent_kleur?: string | null
@@ -113,8 +115,6 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
   const [form, setForm] = useState({
     naam: layout.naam,
     beschrijving: layout.beschrijving ?? '',
-    html_template: layout.html_template ?? TEMPLATE_STANDAARD,
-    wysiwyg_body: layout.wysiwyg_body ?? '',
     primaire_kleur: layout.primaire_kleur ?? '#1a56db',
     secundaire_kleur: layout.secundaire_kleur ?? '#f8fafc',
     accent_kleur: layout.accent_kleur ?? '#009439',
@@ -136,6 +136,10 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
     voettekst: layout.voettekst ?? 'Pagina {{paginanummer}} van {{totaal_paginas}}',
     footer_html: layout.footer_html ?? '',
     docx_template_url: layout.docx_template_url ?? '',
+    docx_template_bron: layout.docx_template_bron ?? '',
+    docx_template_drive_id: layout.docx_template_drive_id ?? '',
+    docx_template_item_id: layout.docx_template_item_id ?? '',
+    docx_template_web_url: layout.docx_template_web_url ?? '',
   })
 
   const activeTab = 'word' as const
@@ -161,18 +165,21 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
   const [stForm, setStForm] = useState({ naam: '', inhoud_html: '', categorie: 'algemeen' })
   const [, startStTransition] = useTransition()
 
-  const editorRef = useRef<WysiwygEditorRef>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const bedrijfJson = typeof window !== 'undefined'
     ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
     : '{}'
 
-  const previewUrl = voorbeeldQuoteId
-    ? form.docx_template_url
-      ? `/everts-calc/everts-calc/api/quotes/${voorbeeldQuoteId}/docx-preview?template_url=${encodeURIComponent(form.docx_template_url)}&bedrijf=${encodeURIComponent(bedrijfJson)}`
-      : `/everts-calc/everts-calc/api/quotes/${voorbeeldQuoteId}/preview-html?bedrijf=${encodeURIComponent(bedrijfJson)}`
-    : null
+  // Word-only: voorbeeld vereist een gekoppelde .docx-template (SharePoint/OneDrive of Supabase)
+  const isGraphTemplate = form.docx_template_bron === 'sharepoint' || form.docx_template_bron === 'onedrive'
+  const previewUrl = !voorbeeldQuoteId
+    ? null
+    : isGraphTemplate && form.docx_template_drive_id && form.docx_template_item_id
+      ? `/everts-calc/api/quotes/${voorbeeldQuoteId}/docx-preview?drive_id=${encodeURIComponent(form.docx_template_drive_id)}&item_id=${encodeURIComponent(form.docx_template_item_id)}&bedrijf=${encodeURIComponent(bedrijfJson)}`
+      : form.docx_template_url
+        ? `/everts-calc/api/quotes/${voorbeeldQuoteId}/docx-preview?template_url=${encodeURIComponent(form.docx_template_url)}&bedrijf=${encodeURIComponent(bedrijfJson)}`
+        : null
 
   // ── Opslaan ───────────────────────────────────────────────────────────────
 
@@ -203,9 +210,11 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
           voettekst: form.voettekst,
           footer_html: form.footer_html || null,
           docx_template_url: form.docx_template_url || null,
+          docx_template_bron: form.docx_template_bron || null,
+          docx_template_drive_id: form.docx_template_drive_id || null,
+          docx_template_item_id: form.docx_template_item_id || null,
+          docx_template_web_url: form.docx_template_web_url || null,
         }
-
-        // Word-modus: html_template/wysiwyg_body ongewijzigd laten
 
         await updateLayout(layout.id, data)
         toast.success('Layout opgeslagen')
@@ -334,7 +343,20 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
               <WordTemplatePaneel
                 layoutId={layout.id}
                 docxTemplateUrl={form.docx_template_url}
-                onUrlChange={url => setForm(f => ({ ...f, docx_template_url: url }))}
+                bron={form.docx_template_bron}
+                webUrl={form.docx_template_web_url}
+                onUrlChange={url => setForm(f => ({
+                  ...f, docx_template_url: url,
+                  docx_template_bron: '', docx_template_drive_id: '', docx_template_item_id: '', docx_template_web_url: '',
+                }))}
+                onGraphLink={r => setForm(f => ({
+                  ...f, docx_template_url: '',
+                  docx_template_bron: 'sharepoint',
+                  docx_template_drive_id: r.drive_id, docx_template_item_id: r.item_id, docx_template_web_url: r.web_url ?? '',
+                }))}
+                onClearGraph={() => setForm(f => ({
+                  ...f, docx_template_bron: '', docx_template_drive_id: '', docx_template_item_id: '', docx_template_web_url: '',
+                }))}
               />
 
             </div>
@@ -346,12 +368,8 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
         <div className="flex-1 overflow-hidden flex flex-col bg-slate-100">
           <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0">
             <Eye className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">
-              {form.docx_template_url ? 'Voorbeeld Word-template' : 'Voorbeeld offerte'}
-            </span>
-            {form.docx_template_url && (
-              <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Word</span>
-            )}
+            <span className="text-xs text-slate-500 font-medium">Voorbeeld Word-template</span>
+            <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Word</span>
             {!voorbeeldQuoteId && (
               <span className="text-xs text-amber-600 ml-2">⚠ Geen offerte gevonden voor preview</span>
             )}
@@ -360,10 +378,12 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
             </button>
           </div>
           {previewUrl ? (
-            <iframe key={previewKey} src={previewUrl} className="flex-1 w-full border-none" title="Offerte preview" />
+            <DocxViewer key={previewKey} src={previewUrl} className="flex-1" />
           ) : (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-              Geen voorbeeld-offerte beschikbaar.
+            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm px-6 text-center">
+              {voorbeeldQuoteId
+                ? 'Koppel een Word-template om een voorbeeld te zien.'
+                : 'Geen voorbeeld-offerte beschikbaar.'}
             </div>
           )}
         </div>
@@ -508,16 +528,49 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
 function WordTemplatePaneel({
   layoutId,
   docxTemplateUrl,
+  bron,
+  webUrl,
   onUrlChange,
+  onGraphLink,
+  onClearGraph,
 }: {
   layoutId: string
   docxTemplateUrl: string
+  bron: string
+  webUrl: string
   onUrlChange: (url: string) => void
+  onGraphLink: (r: { drive_id: string; item_id: string; web_url: string | null; naam: string | null }) => void
+  onClearGraph: () => void
 }) {
   const [uploading, setUploading] = useState(false)
   const [copiedVar, setCopiedVar] = useState<string | null>(null)
   const [openGroep, setOpenGroep] = useState<string | null>('Offerte')
+  const [shareLink, setShareLink] = useState('')
+  const [linking, setLinking] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const isGraph = bron === 'sharepoint' || bron === 'onedrive'
+
+  async function koppelGraph() {
+    if (!shareLink.trim()) { toast.error('Plak eerst een SharePoint/OneDrive-link'); return }
+    setLinking(true)
+    try {
+      const res = await fetch('/everts-calc/api/docx-templates/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shareLink: shareLink.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+      onGraphLink(json)
+      setShareLink('')
+      toast.success('Word-template gekoppeld — klik op Opslaan')
+    } catch (err) {
+      toast.error('Koppelen mislukt: ' + String(err))
+    } finally {
+      setLinking(false)
+    }
+  }
 
   async function uploadTemplate(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -531,7 +584,7 @@ function WordTemplatePaneel({
       const formData = new FormData()
       formData.append('file', file)
       formData.append('layoutId', layoutId)
-      const res = await fetch('/everts-calc/everts-calc/api/docx-templates/upload', { method: 'POST', body: formData })
+      const res = await fetch('/everts-calc/api/docx-templates/upload', { method: 'POST', body: formData })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
       onUrlChange(json.url)
@@ -562,7 +615,43 @@ function WordTemplatePaneel({
           <FileText className="w-3 h-3" /> Word template
         </h3>
 
-        {docxTemplateUrl ? (
+        {/* SharePoint / OneDrive koppeling — bewerken in Word Online */}
+        {isGraph ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <FileText className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+              <span className="text-xs text-blue-800 flex-1 truncate font-medium">Gekoppeld aan SharePoint/OneDrive</span>
+            </div>
+            <div className="flex gap-1.5">
+              {webUrl && (
+                <a href={webUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1 border border-slate-300 rounded text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+                  <Pencil className="w-3 h-3" /> Bewerken in Word Online
+                </a>
+              )}
+              <button onClick={() => { onClearGraph(); toast.success('Koppeling verwijderd') }}
+                className="p-1 border border-red-200 rounded text-red-500 hover:bg-red-50 transition-colors" title="Ontkoppelen">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <input
+              type="url" value={shareLink} onChange={e => setShareLink(e.target.value)}
+              placeholder="Plak SharePoint/OneDrive-link naar .docx"
+              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-everts/30"
+            />
+            <button onClick={koppelGraph} disabled={linking}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-60">
+              {linking ? '⟳ Koppelen...' : <><FileText className="w-3.5 h-3.5" /> Koppel & bewerk in Word Online</>}
+            </button>
+          </div>
+        )}
+
+        {!isGraph && <div className="text-[10px] text-slate-400 text-center py-0.5">— of upload een .docx —</div>}
+
+        {!isGraph && (docxTemplateUrl ? (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 px-2.5 py-1.5 bg-green-50 border border-green-200 rounded-lg">
               <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
@@ -588,7 +677,7 @@ function WordTemplatePaneel({
             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-everts hover:text-everts transition-colors disabled:opacity-60">
             {uploading ? '⟳ Uploaden...' : <><Upload className="w-3.5 h-3.5" /> .docx template uploaden</>}
           </button>
-        )}
+        ))}
         <input ref={fileRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={uploadTemplate} />
       </div>
 

@@ -20,7 +20,7 @@ export default function DocxDownloadButton({ quoteId, quoteNummer }: Props) {
         ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
         : '{}'
 
-      const url = `/everts-calc/everts-calc/api/quotes/${quoteId}/docx?bedrijf=${encodeURIComponent(bedrijfRaw)}`
+      const url = `/everts-calc/api/quotes/${quoteId}/docx?bedrijf=${encodeURIComponent(bedrijfRaw)}`
       const response = await fetch(url)
 
       if (!response.ok) {

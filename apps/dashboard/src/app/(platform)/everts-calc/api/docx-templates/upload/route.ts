@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { listDocxTags } from '@/lib/everts-calc/docx-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,15 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    // Tags detecteren (best-effort) zodat de auteur ziet welke variabelen het template gebruikt
+    let tags: string[] = []
+    try {
+      const PizZip = (await import('pizzip')).default
+      tags = listDocxTags(new PizZip(buffer))
+    } catch {
+      /* tag-detectie is niet kritisch */
+    }
+
     const { error } = await supabase.storage
       .from('docx-templates')
       .upload(pad, buffer, {
@@ -52,7 +62,7 @@ export async function POST(request: NextRequest) {
       .from('docx-templates')
       .getPublicUrl(pad)
 
-    return NextResponse.json({ url: publicUrl })
+    return NextResponse.json({ url: publicUrl, tags })
   } catch (err) {
     console.error('Docx template upload fout:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

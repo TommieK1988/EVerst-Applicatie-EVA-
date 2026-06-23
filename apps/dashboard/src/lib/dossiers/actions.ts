@@ -1324,6 +1324,12 @@ export type UrenRegel = {
   code: string | null
   codeNaam: string | null
   bedrag: number
+  /** Bouw7 hour-log ID — aanwezig bij detailNiveau='medewerker', null bij bewakingscode-fallback. */
+  bouw7Id: number | null
+  /** Bouw7 project-id van dit uurlog — nodig voor de POST /project/hour-log upsert. */
+  bouw7ProjectId: number | null
+  /** Bouw7 uursoort-id — nodig voor de POST /project/hour-log upsert. */
+  hourTypeId: number | null
 }
 export type DossierUrenData = {
   beschikbaar: boolean
@@ -1366,6 +1372,9 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
           code: h.projectSecurityLink?.code ?? null,
           codeNaam: h.projectSecurityLink?.name ?? h.projectSecurityLink?.parentName ?? null,
           bedrag,
+          bouw7Id: h.id,
+          bouw7ProjectId: h.project?.id ?? null,
+          hourTypeId: h.type?.id ?? null,
         }
       })
       return {
@@ -1397,6 +1406,9 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
         code: r.code,
         codeNaam: r.naam,
         bedrag: r.arbeidskosten,
+        bouw7Id: null,
+        bouw7ProjectId: null,
+        hourTypeId: null,
       })),
   )
   return {
@@ -1618,4 +1630,200 @@ export async function setDossierToggle(
 
   await verwerkDossierTriggers(dossier_id).catch(() => {})
   return { ok: true }
+}
+
+/* — Uren bewaking — */
+
+export type UrenBewakingRegel = {
+  code: string
+  naam: string | null
+  begroot_uren: number
+  begroot_uurtarief: number | null
+  begroot_bedrag: number
+  geboekte_uren: number
+  geboekte_kosten: number
+  standopname_pct: number | null
+  prognose_uren_100: number | null
+  prognose_kosten_100: number | null
+  uren_saldo: number
+  kosten_saldo: number
+}
+
+export type DossierUrenBewakingData = {
+  beschikbaar: boolean
+  heeftWerkbegroting: boolean
+  regels: UrenBewakingRegel[]
+  totalen: {
+    begroot_uren: number
+    begroot_bedrag: number
+    geboekte_uren: number
+    geboekte_kosten: number
+    uren_saldo: number
+    kosten_saldo: number
+  }
+}
+
+export type BewakingscodeOptie = {
+  code: string
+  naam: string | null
+  pslId: number
+}
+
+export async function getDossierUrenBewaking(dossierId: string): Promise<DossierUrenBewakingData> {
+  const leeg: DossierUrenBewakingData = {
+    beschikbaar: false,
+    heeftWerkbegroting: false,
+    regels: [],
+    totalen: { begroot_uren: 0, begroot_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
+  }
+
+  const [bewaking, wbData] = await Promise.all([
+    getDossierBewaking(dossierId),
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = createAdminClient() as any
+      const syntheticId = `wb-direct-${dossierId}`
+      const { data: werkbegrotingen } = await supabase
+        .from('werkbegrotingen')
+        .select('id, status')
+        .eq('project_id', syntheticId)
+        .order('bijgewerkt_op', { ascending: false })
+      if (!werkbegrotingen || werkbegrotingen.length === 0) return null
+
+      const statusPrio: Record<string, number> = { geaccordeerd: 0, definitief: 1, concept: 2 }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wb = [...werkbegrotingen].sort((a: any, b: any) => (statusPrio[a.status] ?? 3) - (statusPrio[b.status] ?? 3))[0]
+
+      const { data: regels } = await supabase
+        .from('werkbegroting_regels')
+        .select('id, kostengroep')
+        .eq('werkbegroting_id', wb.id)
+        .not('kostengroep', 'is', null)
+        .neq('kostengroep', '')
+      if (!regels || regels.length === 0) return null
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const regelKostengroep = new Map<string, string>(regels.map((r: any) => [r.id, r.kostengroep]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: componenten } = await supabase
+        .from('werkbegroting_componenten')
+        .select('werkbegroting_regel_id, norm_hoeveelheid, tarief')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .in('werkbegroting_regel_id', regels.map((r: any) => r.id))
+        .eq('type', 'arbeid')
+      if (!componenten) return null
+
+      const codeMap = new Map<string, { uren: number; bedrag: number }>()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const comp of componenten as any[]) {
+        const code = regelKostengroep.get(comp.werkbegroting_regel_id)
+        if (!code) continue
+        const uren = toGetal(comp.norm_hoeveelheid)
+        const bedrag = uren * toGetal(comp.tarief)
+        const cur = codeMap.get(code) ?? { uren: 0, bedrag: 0 }
+        codeMap.set(code, { uren: cur.uren + uren, bedrag: cur.bedrag + bedrag })
+      }
+      return codeMap.size > 0 ? codeMap : null
+    })(),
+  ])
+
+  if (!bewaking.beschikbaar) return leeg
+
+  const bouwMap = new Map<string, { geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
+  for (const hfd of bewaking.hoofdstukken) {
+    for (const r of hfd.regels) {
+      if (!r.code || (r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
+      bouwMap.set(r.code, { geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
+    }
+  }
+
+  const codeSet = new Set<string>([...bouwMap.keys(), ...(wbData?.keys() ?? [])])
+  const heeftWerkbegroting = wbData != null && wbData.size > 0
+
+  const regels: UrenBewakingRegel[] = [...codeSet].map((code) => {
+    const bouw = bouwMap.get(code)
+    const wb = wbData?.get(code)
+    const begroot_uren = wb?.uren ?? 0
+    const begroot_bedrag = wb?.bedrag ?? 0
+    const geboekte_uren = bouw?.geboekte_uren ?? 0
+    const geboekte_kosten = bouw?.geboekte_kosten ?? 0
+    const standopname_pct = bouw?.progress ?? null
+    return {
+      code,
+      naam: bouw?.naam ?? null,
+      begroot_uren,
+      begroot_uurtarief: begroot_uren > 0 ? begroot_bedrag / begroot_uren : null,
+      begroot_bedrag,
+      geboekte_uren,
+      geboekte_kosten,
+      standopname_pct,
+      prognose_uren_100: standopname_pct != null && standopname_pct > 0 ? geboekte_uren / (standopname_pct / 100) : null,
+      prognose_kosten_100: standopname_pct != null && standopname_pct > 0 ? geboekte_kosten / (standopname_pct / 100) : null,
+      uren_saldo: begroot_uren - geboekte_uren,
+      kosten_saldo: begroot_bedrag - geboekte_kosten,
+    }
+  }).sort((a, b) => a.code.localeCompare(b.code))
+
+  const totalen = regels.reduce(
+    (t, r) => ({
+      begroot_uren: t.begroot_uren + r.begroot_uren,
+      begroot_bedrag: t.begroot_bedrag + r.begroot_bedrag,
+      geboekte_uren: t.geboekte_uren + r.geboekte_uren,
+      geboekte_kosten: t.geboekte_kosten + r.geboekte_kosten,
+      uren_saldo: t.uren_saldo + r.uren_saldo,
+      kosten_saldo: t.kosten_saldo + r.kosten_saldo,
+    }),
+    { begroot_uren: 0, begroot_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
+  )
+
+  return { beschikbaar: regels.length > 0, heeftWerkbegroting, regels, totalen }
+}
+
+export async function getBewakingscodesVoorUurlog(dossierId: string): Promise<BewakingscodeOptie[]> {
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return []
+  const { client, bouw7Id } = ctx
+  try {
+    const resp = await client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/1/chapters?include_subprojects=false`)
+    const opties: BewakingscodeOptie[] = []
+    for (const item of resp.items ?? []) {
+      const ci = item.chapterInfo
+      if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
+      for (const sc of item.securityCodes ?? []) {
+        const code = (sc.code ?? '').trim()
+        if (!code) continue
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pslId = (sc as any).pslIds?.[0]
+        if (pslId == null) continue
+        opties.push({ code, naam: sc.name ?? null, pslId })
+      }
+    }
+    return opties.sort((a, b) => a.code.localeCompare(b.code))
+  } catch {
+    return []
+  }
+}
+
+export async function updateUurlogBewakingscode(
+  dossierId: string,
+  hourLog: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number },
+  nieuwePslId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
+  const { client } = ctx
+  try {
+    await client.post('/project/hour-log', {
+      id: hourLog.id,
+      project: { id: hourLog.bouw7ProjectId },
+      logHours: hourLog.logHours,
+      logDate: hourLog.logDate,
+      hourType: { id: hourLog.hourTypeId },
+      projectSecurityLink: { id: nieuwePslId },
+    })
+    revalidatePath(`/opdrachten/${dossierId}/uren`)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }
+  }
 }

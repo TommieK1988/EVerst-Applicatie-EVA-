@@ -36,7 +36,7 @@ export default function PdfDownloadButton({ quoteId, quoteNummer }: Props) {
         ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
         : '{}'
 
-      const url = `/everts-calc/everts-calc/api/quotes/${quoteId}/pdf?bedrijf=${encodeURIComponent(bedrijfRaw)}`
+      const url = `/everts-calc/api/quotes/${quoteId}/pdf?bedrijf=${encodeURIComponent(bedrijfRaw)}`
       const response = await fetch(url)
 
       if (!response.ok) {
