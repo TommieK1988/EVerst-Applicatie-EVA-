@@ -119,8 +119,8 @@ export default function DebiteurPaneel({ rij, redencodes, medewerkers, magBewerk
                   background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)',
                   fontSize: 12, color: '#b91c1c', fontWeight: 600,
                 }}>
-                  Deze factuur is &gt;60 dagen te laat. Reden, actie, actiehouder, verwachte betaaldatum,
-                  opvolgdatum én een opmerking zijn verplicht — de opvolgtaak kan pas worden afgerond als alles ingevuld is.
+                  Deze factuur is &gt;60 dagen te laat. Reden, actie, actiehouder, opvolgdatum én een
+                  opmerking zijn verplicht — de opvolgtaak kan pas worden afgerond als alles ingevuld is.
                 </div>
               )}
 
@@ -160,7 +160,7 @@ export default function DebiteurPaneel({ rij, redencodes, medewerkers, magBewerk
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>Verwachte betaaldatum {verplicht && <span style={{ color: '#dc2626' }}>*</span>}</label>
+                    <label style={labelStyle}>Verwachte betaaldatum</label>
                     <input type="date" style={inputStyle} value={verwachteBetaaldatum} disabled={!magBewerken}
                       onChange={e => setVerwachteBetaaldatum(e.target.value)} />
                   </div>

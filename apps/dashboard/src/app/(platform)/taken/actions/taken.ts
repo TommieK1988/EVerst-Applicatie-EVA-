@@ -192,7 +192,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       const dagenTeLaat = Math.floor((Date.now() - Date.parse(`${deb.vervaldatum}T00:00:00Z`)) / 86_400_000)
       if (dagenTeLaat > 60) {
         const veldenCompleet = !!deb.reden_code_id && !!(deb.actie ?? '').trim() && !!deb.actiehouder_id
-          && !!deb.verwachte_betaaldatum && !!deb.opvolgdatum
+          && !!deb.opvolgdatum
         let heeftLogboek = false
         if (veldenCompleet) {
           const { count } = await admin
@@ -200,7 +200,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
           heeftLogboek = (count ?? 0) > 0
         }
         if (!veldenCompleet || !heeftLogboek) {
-          throw new Error('Vul eerst reden, actie, actiehouder, verwachte betaaldatum, opvolgdatum én een opmerking in voordat je deze debiteurentaak kunt afronden.')
+          throw new Error('Vul eerst reden, actie, actiehouder, opvolgdatum én een opmerking in voordat je deze debiteurentaak kunt afronden.')
         }
       }
     }

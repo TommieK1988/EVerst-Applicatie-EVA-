@@ -69,6 +69,8 @@ type Props<T extends { id: string }> = {
   acties?:    React.ReactNode
   /** Begin-sortering (kolom-key + richting); de gebruiker kan daarna vrij sorteren. */
   beginSortering?: SortingState
+  /** Compacte rij-dichtheid (minder verticaal padding) — opt-in voor data-dichte schermen. */
+  dicht?: boolean
 }
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
@@ -148,7 +150,7 @@ function SortIco({ dir }: { dir: false | 'asc' | 'desc' }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -400,13 +402,13 @@ export default function OverzichtTabel<T extends { id: string }>({
   const thStyle: React.CSSProperties = {
     fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 700,
     color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-    padding: '10px 14px', textAlign: 'left', userSelect: 'none', whiteSpace: 'nowrap',
+    padding: dicht ? '7px 12px' : '10px 14px', textAlign: 'left', userSelect: 'none', whiteSpace: 'nowrap',
     borderBottom: '1px solid var(--border)', background: 'var(--bg)',
   }
 
   const tdStyle: React.CSSProperties = {
     fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)',
-    padding: '12px 14px', borderBottom: '1px solid var(--border-soft)',
+    padding: dicht ? '7px 12px' : '12px 14px', borderBottom: '1px solid var(--border-soft)',
     verticalAlign: 'middle',
   }
 

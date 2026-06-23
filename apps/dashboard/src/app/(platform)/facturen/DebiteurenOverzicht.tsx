@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
-import { PageHeader, Button } from '@/components/ui'
+import { Button } from '@/components/ui'
 import DebiteurPaneel from '@/components/debiteuren/DebiteurPaneel'
 import {
   ververDebiteuren,
@@ -30,7 +30,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'stoplicht',
     label: 'Status',
-    breedte: 130,
+    breedte: 120,
     filterType: 'select',
     filterOpties: ['Op tijd', '< 30 dgn te laat', '30+ dgn te laat'],
     sorteerWaarde: r => r.dagen_na_vervaldatum ?? -9999,
@@ -51,6 +51,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
     key: 'factuurnummer',
     label: 'Factuurnr.',
     vast: true,
+    breedte: 110,
     filterType: 'tekst',
     sorteerWaarde: r => r.factuurnummer ?? '',
     render: r => <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{r.factuurnummer ?? '—'}</span>,
@@ -58,6 +59,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'klant_naam',
     label: 'Klant',
+    breedte: 200,
     filterType: 'tekst',
     sorteerWaarde: r => r.klant_naam ?? '',
     render: r => <span style={{ fontSize: 13, color: 'var(--fg)' }}>{r.klant_naam ?? '—'}</span>,
@@ -65,6 +67,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'project_titel',
     label: 'Project',
+    breedte: 220,
     filterType: 'tekst',
     sorteerWaarde: r => r.project_titel ?? '',
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.project_titel ?? '—'}</span>,
@@ -72,6 +75,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'projectleider_naam',
     label: 'Projectleider',
+    breedte: 150,
     filterType: 'tekst',
     sorteerWaarde: r => r.projectleider_naam ?? '',
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.projectleider_naam ?? '—'}</span>,
@@ -84,17 +88,23 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
     render: r => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{euro(r.bedrag)}</span>,
   },
   {
-    key: 'dagen_na_factuurdatum',
-    label: 'Dagen (factuur)',
-    breedte: 110,
-    standaard_zichtbaar: false,
-    sorteerWaarde: r => r.dagen_na_factuurdatum ?? -9999,
-    render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{r.dagen_na_factuurdatum != null ? r.dagen_na_factuurdatum : '—'}</span>,
+    key: 'factuurdatum',
+    label: 'Factuurdatum',
+    breedte: 105,
+    sorteerWaarde: r => r.factuurdatum ?? '',
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datum(r.factuurdatum)}</span>,
+  },
+  {
+    key: 'vervaldatum',
+    label: 'Vervaldatum',
+    breedte: 105,
+    sorteerWaarde: r => r.vervaldatum ?? '',
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datum(r.vervaldatum)}</span>,
   },
   {
     key: 'dagen_na_vervaldatum',
     label: 'Dagen te laat',
-    breedte: 110,
+    breedte: 95,
     sorteerWaarde: r => r.dagen_na_vervaldatum ?? -9999,
     render: r => {
       const d = r.dagen_na_vervaldatum
@@ -105,6 +115,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'opvolgstatus',
     label: 'Opvolging',
+    breedte: 130,
     filterType: 'select',
     filterOpties: Object.values(OPVOLGSTATUS_LABEL),
     sorteerWaarde: r => OPVOLGSTATUS_LABEL[r.opvolgstatus],
@@ -113,7 +124,7 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'reden_label',
     label: 'Reden',
-    standaard_zichtbaar: false,
+    breedte: 160,
     filterType: 'tekst',
     sorteerWaarde: r => r.reden_label ?? '',
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.reden_label ?? '—'}</span>,
@@ -121,17 +132,10 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
   {
     key: 'actiehouder_naam',
     label: 'Actiehouder',
-    standaard_zichtbaar: false,
+    breedte: 150,
     filterType: 'tekst',
     sorteerWaarde: r => r.actiehouder_naam ?? '',
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.actiehouder_naam ?? '—'}</span>,
-  },
-  {
-    key: 'verwachte_betaaldatum',
-    label: 'Verwacht betaald',
-    standaard_zichtbaar: false,
-    sorteerWaarde: r => r.verwachte_betaaldatum ?? '',
-    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{datum(r.verwachte_betaaldatum)}</span>,
   },
   {
     key: 'opvolgdatum',
@@ -139,6 +143,22 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
     breedte: 110,
     sorteerWaarde: r => r.opvolgdatum ?? '',
     render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{datum(r.opvolgdatum)}</span>,
+  },
+  {
+    key: 'dagen_na_factuurdatum',
+    label: 'Dagen (factuur)',
+    breedte: 110,
+    standaard_zichtbaar: false,
+    sorteerWaarde: r => r.dagen_na_factuurdatum ?? -9999,
+    render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{r.dagen_na_factuurdatum != null ? r.dagen_na_factuurdatum : '—'}</span>,
+  },
+  {
+    key: 'verwachte_betaaldatum',
+    label: 'Verwacht betaald',
+    breedte: 120,
+    standaard_zichtbaar: false,
+    sorteerWaarde: r => r.verwachte_betaaldatum ?? '',
+    render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{datum(r.verwachte_betaaldatum)}</span>,
   },
 ]
 
@@ -187,36 +207,38 @@ export default function DebiteurenOverzicht({
   }
 
   return (
-    <div className="eva-page-full">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <PageHeader eyebrow="Financieel" title="Facturen — Debiteurenbeheer" />
-        <Button variant="secondary" onClick={handleVerversen} disabled={verversen} style={{ marginTop: 8, flexShrink: 0 }}>
+    <div className="eva-page-full" style={{ paddingTop: 18, paddingBottom: 28 }}>
+      {/* Compacte kop: titel + scope-toggle + stats op één regel, Ververs rechts */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--fg-muted)' }}>Financieel</div>
+            <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 500, color: 'var(--fg)', letterSpacing: '-0.01em' }}>Facturen — Debiteuren</h1>
+          </div>
+          <div style={{ display: 'flex', gap: 2, padding: 3, background: 'var(--bg-subtle)', borderRadius: 9, width: 'fit-content' }}>
+            {(['mijn', 'alle'] as Scope[]).map(s => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                style={{
+                  padding: '5px 12px', border: 'none', borderRadius: 7, cursor: 'pointer',
+                  fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600,
+                  background: scope === s ? 'white' : 'transparent',
+                  color: scope === s ? 'var(--fg)' : 'var(--fg-muted)',
+                  boxShadow: scope === s ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                {s === 'mijn' ? 'Mijn facturen' : 'Alle facturen'}
+              </button>
+            ))}
+          </div>
+          <Stat label="Openstaand" value={euro(totaalOpenstaand)} />
+          <Stat label="Aantal" value={String(zichtbaar.length)} />
+          <Stat label="30+ dgn te laat" value={String(aantalRood)} tone={aantalRood > 0 ? '#dc2626' : undefined} />
+        </div>
+        <Button variant="secondary" onClick={handleVerversen} disabled={verversen} style={{ flexShrink: 0 }}>
           {verversen ? 'Bezig met verversen…' : '↻ Ververs uit Bouw7'}
         </Button>
-      </div>
-
-      {/* Samenvatting + scope-toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 2, padding: 4, background: 'var(--bg-subtle)', borderRadius: 10, width: 'fit-content' }}>
-          {(['mijn', 'alle'] as Scope[]).map(s => (
-            <button
-              key={s}
-              onClick={() => setScope(s)}
-              style={{
-                padding: '6px 14px', border: 'none', borderRadius: 8, cursor: 'pointer',
-                fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
-                background: scope === s ? 'white' : 'transparent',
-                color: scope === s ? 'var(--fg)' : 'var(--fg-muted)',
-                boxShadow: scope === s ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-              }}
-            >
-              {s === 'mijn' ? 'Mijn facturen' : 'Alle facturen'}
-            </button>
-          ))}
-        </div>
-        <Stat label="Openstaand" value={euro(totaalOpenstaand)} />
-        <Stat label="Aantal" value={String(zichtbaar.length)} />
-        <Stat label="30+ dgn te laat" value={String(aantalRood)} tone={aantalRood > 0 ? '#dc2626' : undefined} />
       </div>
 
       <OverzichtTabel
@@ -227,6 +249,7 @@ export default function DebiteurenOverzicht({
         user_id={user_id}
         beginSortering={[{ id: 'dagen_na_vervaldatum', desc: true }]}
         onRijKlik={r => setGeselecteerd(r)}
+        dicht
       />
 
       <DebiteurPaneel

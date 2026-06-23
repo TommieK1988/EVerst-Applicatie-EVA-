@@ -117,7 +117,7 @@ export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promis
     const heeftLogboek = logSet.has(d.id as string)
     const verplichtPeriode = (dagenNaVerval ?? 0) > VERPLICHTE_VELDEN_DREMPEL_DAGEN
     const veldenCompleet = !!d.reden_code_id && !!(d.actie as string | null)?.trim() && !!d.actiehouder_id
-      && !!d.verwachte_betaaldatum && !!d.opvolgdatum && heeftLogboek
+      && !!d.opvolgdatum && heeftLogboek
     return {
       id: d.id as string,
       factuurnummer: (d.factuurnummer as string | null) ?? null,
@@ -177,13 +177,20 @@ export async function ververDebiteuren(): Promise<VerversResultaat> {
 
 export type MedewerkerOptie = { id: string; naam: string }
 
-/** Actieve medewerkers voor de actiehouder-dropdown. */
+/**
+ * Actieve binnendienst-medewerkers voor de actiehouder-dropdown.
+ * "Kantoor" = de binnendienst-afdelingen (medewerkers hebben geen letterlijke afdeling 'Kantoor';
+ * buitendienst Schilder/Timmerman valt er bewust buiten).
+ */
+const KANTOOR_AFDELINGEN = ['Administratie', 'Projectbureau', 'Directie', 'Teamleiders']
+
 export async function getMedewerkerOpties(): Promise<MedewerkerOptie[]> {
   const supabase = db()
   const { data } = await supabase
     .from('medewerkers')
     .select('id, voornaam, tussenvoegsel, achternaam')
     .eq('actief', true)
+    .in('afdeling', KANTOOR_AFDELINGEN)
     .order('voornaam', { ascending: true })
   return (data ?? [])
     .map((m: { id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null }) =>
