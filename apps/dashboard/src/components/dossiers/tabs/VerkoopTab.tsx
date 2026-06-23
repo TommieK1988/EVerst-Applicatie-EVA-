@@ -28,6 +28,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   }
 
   const t = data.totalen
+  const dk = data.termijnenDekking
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -37,9 +38,24 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
         <CardBody style={{ padding: 0 }}>
           <table style={tabel}>
             <tbody>
-              <tr><TD>Aanneemsom</TD><TD right vet>{fmt(t.aanneemsom, true)}</TD></tr>
-              <tr><TD>Gefactureerd</TD><TD right accent={t.gefactureerd > 0}>{fmt(t.gefactureerd, true)}</TD></tr>
-              <tr style={{ background: 'var(--neutral-50)' }}><TD vet>Nog te factureren</TD><TD right vet>{fmt(t.openstaand, true)}</TD></tr>
+              <tr>
+                <TD>
+                  Aanneemsom
+                  <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>excl. BTW</span>
+                </TD>
+                <TD right vet>{fmt(t.aanneemsom, true)}</TD>
+              </tr>
+              <tr>
+                <TD>
+                  Gefactureerd
+                  <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>incl. BTW</span>
+                </TD>
+                <TD right accent={t.gefactureerd > 0}>{fmt(t.gefactureerd, true)}</TD>
+              </tr>
+              <tr style={{ background: 'var(--neutral-50)' }}>
+                <TD vet>Nog te factureren</TD>
+                <TD right vet>{fmt(t.openstaand, true)}</TD>
+              </tr>
             </tbody>
           </table>
         </CardBody>
@@ -49,6 +65,50 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
       <Card>
         <CardHeader>Termijnen</CardHeader>
         <CardBody style={{ padding: 0 }}>
+          {/* Dekkingcheck-banner */}
+          {dk && (
+            <div style={{
+              margin: '0 0 0 0',
+              padding: '8px 12px',
+              borderBottom: '1px solid var(--neutral-100)',
+              fontSize: 12.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: dk.volledig
+                ? 'var(--green-50, #f0fdf4)'
+                : data.termijnen.length === 0
+                  ? 'var(--orange-50, #fff7ed)'
+                  : 'var(--amber-50, #fffbeb)',
+              color: dk.volledig
+                ? 'var(--green-700, #15803d)'
+                : data.termijnen.length === 0
+                  ? 'var(--orange-700, #c2410c)'
+                  : 'var(--amber-700, #b45309)',
+            }}>
+              {dk.volledig ? (
+                <>
+                  <span>✓</span>
+                  <span>Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(t.aanneemsom)}</span>
+                </>
+              ) : data.termijnen.length === 0 ? (
+                <>
+                  <span>⚠</span>
+                  <span>Geen termijnen aangemaakt voor een aanneemsom van {fmt(t.aanneemsom)}</span>
+                </>
+              ) : (
+                <>
+                  <span>⚠</span>
+                  <span>
+                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(t.aanneemsom)} aanneemsom
+                    {' '}— nog {fmt(dk.ontbreektBedrag)}
+                    {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
           {!data.termijnenBeschikbaar ? (
             <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
           ) : data.termijnen.length === 0 ? (
@@ -56,7 +116,17 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           ) : (
             <table style={tabel}>
               <thead>
-                <tr><TH>#</TH><TH>Omschrijving</TH><TH right>%</TH><TH right>Bedrag</TH><TH>Factureerbaar</TH><TH>Status</TH></tr>
+                <tr>
+                  <TH>#</TH>
+                  <TH>Omschrijving</TH>
+                  <TH right>%</TH>
+                  <TH right>Excl. BTW</TH>
+                  <TH right>BTW%</TH>
+                  <TH right>BTW</TH>
+                  <TH right>Incl. BTW</TH>
+                  <TH>Factureerbaar</TH>
+                  <TH>Status</TH>
+                </tr>
               </thead>
               <tbody>
                 {data.termijnen.map((tm) => (
@@ -65,11 +135,30 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                     <TD>{tm.omschrijving ?? '—'}</TD>
                     <TD right>{fmtPct(tm.percentage)}</TD>
                     <TD right>{fmt(tm.bedrag)}</TD>
+                    <TD right kleur="var(--neutral-500)">{tm.btwPercentage != null ? `${tm.btwPercentage}%` : '—'}</TD>
+                    <TD right>{tm.btwBedrag > 0 ? fmt(tm.btwBedrag) : '—'}</TD>
+                    <TD right vet>{fmt(tm.bedragIncl)}</TD>
                     <TD>{fmtDatum(tm.invoiceableAt)}</TD>
                     <TD kleur={tm.gefactureerd ? 'var(--accent)' : undefined}>{tm.gefactureerd ? 'Gefactureerd' : 'Open'}</TD>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
+                  <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.termijnen.reduce((s, tm) => s + tm.bedrag, 0))}
+                  </td>
+                  <td style={{ padding: '6px 12px' }} />
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.termijnen.reduce((s, tm) => s + tm.btwBedrag, 0))}
+                  </td>
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.termijnen.reduce((s, tm) => s + tm.bedragIncl, 0))}
+                  </td>
+                  <td colSpan={2} style={{ padding: '6px 12px' }} />
+                </tr>
+              </tfoot>
             </table>
           )}
         </CardBody>
@@ -84,7 +173,15 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           ) : (
             <table style={tabel}>
               <thead>
-                <tr><TH>Factuurnr.</TH><TH>Datum</TH><TH>Vervaldatum</TH><TH right>Bedrag</TH><TH>Status</TH></tr>
+                <tr>
+                  <TH>Factuurnr.</TH>
+                  <TH>Datum</TH>
+                  <TH>Vervaldatum</TH>
+                  <TH right>Excl. BTW</TH>
+                  <TH right>BTW</TH>
+                  <TH right>Incl. BTW</TH>
+                  <TH>Status</TH>
+                </tr>
               </thead>
               <tbody>
                 {data.facturen.map((f, i) => (
@@ -92,11 +189,28 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                     <TD>{f.factuurnummer ?? '—'}{f.isCredit ? ' (credit)' : ''}</TD>
                     <TD>{fmtDatum(f.datum)}</TD>
                     <TD>{fmtDatum(f.vervaldatum)}</TD>
-                    <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined}>{fmt(f.bedrag)}</TD>
+                    <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined}>{fmt(f.bedragExcl)}</TD>
+                    <TD right kleur="var(--neutral-500)">{f.btwBedrag > 0 ? fmt(f.btwBedrag) : '—'}</TD>
+                    <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined} vet>{fmt(f.bedrag)}</TD>
                     <TD kleur={f.betaald ? 'var(--accent)' : undefined}>{f.betaald ? 'Betaald' : 'Open'}</TD>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
+                  <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0))}
+                  </td>
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0))}
+                  </td>
+                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0))}
+                  </td>
+                  <td style={{ padding: '6px 12px' }} />
+                </tr>
+              </tfoot>
             </table>
           )}
         </CardBody>

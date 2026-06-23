@@ -1428,7 +1428,10 @@ export type VerkoopTermijn = {
   nummer: number
   omschrijving: string | null
   percentage: number | null
-  bedrag: number
+  bedrag: number           // excl. BTW (subtotal)
+  btwPercentage: number | null
+  btwBedrag: number        // berekend: bedrag * btwPercentage / 100
+  bedragIncl: number       // bedrag + btwBedrag
   gefactureerd: boolean
   invoiceableAt: string | null
 }
@@ -1436,9 +1439,18 @@ export type VerkoopFactuur = {
   factuurnummer: string | null
   datum: string | null
   vervaldatum: string | null
-  bedrag: number
+  bedragExcl: number       // subTotal
+  btwBedrag: number        // vatTotal
+  bedrag: number           // total (incl. BTW)
   betaald: boolean
   isCredit: boolean
+}
+export type TermijnenDekking = {
+  volledig: boolean
+  somBedrag: number
+  somPct: number | null
+  ontbreektBedrag: number
+  ontbreektPct: number | null
 }
 export type DossierVerkoopData = {
   beschikbaar: boolean
@@ -1447,6 +1459,7 @@ export type DossierVerkoopData = {
   facturen: VerkoopFactuur[]
   betaalgegevens: DossierFinancieelData['relatieFacturatie']
   totalen: { aanneemsom: number; gefactureerd: number; openstaand: number }
+  termijnenDekking: TermijnenDekking | null
 }
 
 /**
@@ -1457,7 +1470,7 @@ export type DossierVerkoopData = {
 export async function getDossierVerkoop(dossierId: string): Promise<DossierVerkoopData> {
   const leeg: DossierVerkoopData = {
     beschikbaar: false, termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
-    totalen: { aanneemsom: 0, gefactureerd: 0, openstaand: 0 },
+    totalen: { aanneemsom: 0, gefactureerd: 0, openstaand: 0 }, termijnenDekking: null,
   }
   const ctx = await bouw7VoorDossier(dossierId)
   // Betaalgegevens + aanneemsom komen via getDossierFinancieel (werkt ook zonder Bouw7-koppeling).
@@ -1476,14 +1489,22 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
       q: `statement.project.id = ${bouw7Id} LIMIT 500`,
     })
     termijnenBeschikbaar = true
-    termijnen = (termResp.items ?? []).map((t, i) => ({
-      nummer: i + 1,
-      omschrijving: t.description ?? null,
-      percentage: t.percentage != null ? toGetal(t.percentage) : null,
-      bedrag: toGetal(t.subtotal),
-      gefactureerd: t.invoiceLine != null,
-      invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
-    }))
+    termijnen = (termResp.items ?? []).map((t, i) => {
+      const bedrag = toGetal(t.subtotal)
+      const btwPercentage = t.vatTariffPercentage != null ? toGetal(t.vatTariffPercentage) : null
+      const btwBedrag = btwPercentage != null ? Math.round(bedrag * btwPercentage) / 100 : 0
+      return {
+        nummer: i + 1,
+        omschrijving: t.description ?? null,
+        percentage: t.percentage != null ? toGetal(t.percentage) : null,
+        bedrag,
+        btwPercentage,
+        btwBedrag,
+        bedragIncl: bedrag + btwBedrag,
+        gefactureerd: t.invoiceLine != null,
+        invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
+      }
+    })
   } catch {
     termijnenBeschikbaar = false
   }
@@ -1496,6 +1517,8 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
       factuurnummer: inv.invoiceNumber ?? null,
       datum: inv.date ? inv.date.slice(0, 10) : null,
       vervaldatum: inv.dueDate ? inv.dueDate.slice(0, 10) : null,
+      bedragExcl: toGetal(inv.subTotal),
+      btwBedrag: toGetal(inv.vatTotal),
       bedrag: toGetal(inv.total),
       betaald: inv.datePaid != null,
       isCredit: !!inv.isCredit,
@@ -1510,6 +1533,20 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     : toGetal(bouw7Financial?.revenue?.realised)
   const openstaand = Math.max(0, aanneemsom - gefactureerd)
 
+  let termijnenDekking: TermijnenDekking | null = null
+  if (aanneemsom > 0 && termijnenBeschikbaar) {
+    const somBedrag = termijnen.reduce((s, t) => s + t.bedrag, 0)
+    const allePctBekend = termijnen.length > 0 && termijnen.every(t => t.percentage != null)
+    const somPct = allePctBekend ? termijnen.reduce((s, t) => s + (t.percentage ?? 0), 0) : null
+    termijnenDekking = {
+      volledig: Math.abs(somBedrag - aanneemsom) <= 1,
+      somBedrag,
+      somPct,
+      ontbreektBedrag: Math.max(0, aanneemsom - somBedrag),
+      ontbreektPct: somPct != null ? Math.max(0, 100 - somPct) : null,
+    }
+  }
+
   return {
     beschikbaar: termijnen.length > 0 || facturen.length > 0 || aanneemsom > 0,
     termijnenBeschikbaar,
@@ -1517,6 +1554,7 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     facturen,
     betaalgegevens: relatieFacturatie,
     totalen: { aanneemsom, gefactureerd, openstaand },
+    termijnenDekking,
   }
 }
 
