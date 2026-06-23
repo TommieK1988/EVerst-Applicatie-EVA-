@@ -334,7 +334,9 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
     p: toNum(f.revenue?.prognosis),
     r: toNum(f.revenue?.realised),
   }
-  const meerwerk   = toNum(f.additionalWork)
+  // Meerwerk-opbrengst: additionalWork is een object; het bedrag zit in de prognose
+  // (== expected), niet in een losse waarde. omzet.b + meerwerk == revenue.prognosis.
+  const meerwerk   = toNum(f.additionalWork?.prognosis ?? f.additionalWork?.expected)
   const opbrTotaal = { b: omzet.b + meerwerk, r: omzet.r }
   const teFactureren = Math.max(0, omzet.b - omzet.r)
 
@@ -411,8 +413,8 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
               </tr>
               <tr>
                 <TDLabel>Goedgekeurd meerwerk</TDLabel>
-                <TD accent={meerwerk > 0}>{fmt(f.additionalWork)}</TD>
-                <TD>—</TD>
+                <TD accent={meerwerk > 0}>{fmt(meerwerk)}</TD>
+                <TD>{fmt(toNum(f.additionalWork?.realised))}</TD>
                 <TD>—</TD>
               </tr>
               <tr style={{ background: 'var(--neutral-50)' }}>
@@ -448,8 +450,9 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
               </tr>
               <tr style={{ background: 'var(--neutral-50)' }}>
                 <TDLabel>Brutowinstmarge</TDLabel>
-                <TD vet>{fmtPct(res.b, omzet.b + meerwerk)}</TD>
-                <TD vet>{fmtPct(res.p, omzet.p + meerwerk)}</TD>
+                {/* Begroot = omzet excl. meerwerk; prognose-omzet bevat meerwerk al (niet nogmaals optellen). */}
+                <TD vet>{fmtPct(res.b, omzet.b)}</TD>
+                <TD vet>{fmtPct(res.p, omzet.p)}</TD>
                 <TD vet accent>{fmtPct(res.r, omzet.r)}</TD>
               </tr>
             </tbody>

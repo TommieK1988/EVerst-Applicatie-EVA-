@@ -50,7 +50,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       dossier.bouw7_id ? getDossierFinancieel(id).catch(() => null) : Promise.resolve(null),
     ])
 
-    const meerwerk = Number(financieel?.bouw7Financial?.additionalWork) || 0
+    // additionalWork is een object; het meerwerk-bedrag zit in de prognose (== expected).
+    const aw = financieel?.bouw7Financial?.additionalWork
+    const meerwerk = Number(aw?.prognosis ?? aw?.expected) || 0
 
     return (
       <>

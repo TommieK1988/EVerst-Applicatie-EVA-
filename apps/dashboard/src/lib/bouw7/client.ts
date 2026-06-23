@@ -357,22 +357,23 @@ export type Bouw7QuotationDetail = {
 export type Bouw7FinancialValue = number | string | null
 
 type BFCostType = {
-  budgeted?:  BFV
-  prognosis?: BFV
-  realised?:  BFV
+  budgeted?:    BFV
+  prognosis?:   BFV
+  realised?:    BFV
+  unprocessed?: BFV
+  openTerms?:   BFV
+  expected?:    BFV
 }
 type BFV = Bouw7FinancialValue
 
 export type Bouw7ProjectFinancial = {
-  fixedPrice?:      BFV
-  additionalWork?:  BFV
-  provisionalCosts?: BFV
-  tailCosts?:       BFV
-  revenue?: {
-    budgeted?:  BFV
-    prognosis?: BFV
-    realised?:  BFV
-  }
+  // LET OP: dit zijn objecten met budgeted/prognosis/realised/expected — géén losse getallen.
+  // Het meerwerk-bedrag zit in additionalWork.prognosis (== .expected), niet in een scalar.
+  fixedPrice?:       BFCostType
+  additionalWork?:   BFCostType
+  provisionalCosts?: BFCostType
+  tailCosts?:        BFCostType
+  revenue?:          BFCostType
   costs?: {
     labor?:          BFCostType
     purchaseOrder?:  BFCostType
