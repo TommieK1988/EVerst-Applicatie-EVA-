@@ -17,6 +17,7 @@ import {
   type Bouw7PurchaseInvoiceListResponse,
   type Bouw7ContractOrderLine,
   type Bouw7SubcontractorContract,
+  type Bouw7PurchaseOrderContract,
   type Bouw7EmployeeHourLogResponse,
   type Bouw7ProjectInvoiceTerm,
   type Bouw7SalesInvoice,
@@ -967,24 +968,25 @@ async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Clien
 
 /* — Inkoop — */
 
+/** Inkooporder-contract (zelfde kolommen als een onderaannemerscontract). */
 export type InkoopOrderRegel = {
   orderId: number | null
-  code: string | null
+  /** Ordernummer (Bouw7 `number`), bv. "20251.00062IO001". */
+  nummer: string | null
+  leverancier: string | null
   omschrijving: string | null
-  relatie: string | null
-  aantal: number | null
-  eenheid: string | null
-  prijs: number | null
-  totaal: number
-  /** Som van geboekte kosten die in EVA aan deze order zijn toegewezen. */
+  contractbedrag: number
+  /** Bouw7-geboekt (contractbedrag − openstaand) + in EVA toegewezen kosten. */
   geboekt: number
-  /** totaal − geboekt (niet onder nul). */
+  openstaand: number
+  /** contractbedrag − geboekt (niet onder nul). */
   nogVerwacht: number
-  type: 'inkoop' | 'onderaanneming'
+  status: string | null
 }
 export type OnderaannemerContract = {
   contractId: number | null
-  code: string | null
+  /** Contractnummer (Bouw7 `number`), bv. "20257.00064OA001". */
+  nummer: string | null
   onderaannemer: string | null
   omschrijving: string | null
   contractbedrag: number
@@ -1089,9 +1091,9 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
 
   try {
     const [orderResp, subResp, apolloInvoices, heimdallResp, correcties] = await Promise.all([
-      client.get<{ items?: Bouw7ContractOrderLine[]; total?: number | string }>('/list/contract-order-lines', {
-        q: `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`,
-      }).catch(() => ({ items: [] as Bouw7ContractOrderLine[], total: 0 })),
+      client.get<Bouw7ListResponse<Bouw7PurchaseOrderContract>>('/list/purchase-order-contracts', {
+        q: `project.id = ${bouw7Id} LIMIT 500`,
+      }).catch(() => ({ items: [] as Bouw7PurchaseOrderContract[] } as Bouw7ListResponse<Bouw7PurchaseOrderContract>)),
       client.get<Bouw7ListResponse<Bouw7SubcontractorContract>>('/list/subcontractor-contracts', {
         q: `project.id = ${bouw7Id} LIMIT 500`,
       }).catch(() => ({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
@@ -1154,23 +1156,22 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       if (r.toegewezenContractId != null) geboektPerContract.set(r.toegewezenContractId, (geboektPerContract.get(r.toegewezenContractId) ?? 0) + r.bedrag)
     }
 
-    const inkooporders: InkoopOrderRegel[] = (orderResp.items ?? []).map((l) => {
-      const aantal = toGetal(l.quantity) * (l.quantityFactor != null ? toGetal(l.quantityFactor) : 1)
-      const isOa = l.contact?.type === 'subcontractor'
-      const totaal = toGetal(l.totalPrice)
-      const geboekt = (l.id != null ? geboektPerOrder.get(l.id) : 0) ?? 0
+    const inkooporders: InkoopOrderRegel[] = (orderResp.items ?? []).map((o) => {
+      const contractbedrag = toGetal(o.price)
+      const openstaand = toGetal(o.outstandingCosts)
+      const geboektBouw7 = Math.max(0, contractbedrag - openstaand)
+      const geboektEva = (o.id != null ? geboektPerOrder.get(o.id) : 0) ?? 0
+      const geboekt = geboektBouw7 + geboektEva
       return {
-        orderId: l.id ?? null,
-        code: l.projectSecurityLink?.code ?? null,
-        omschrijving: l.description ?? null,
-        relatie: l.contact?.name ?? null,
-        aantal: aantal || null,
-        eenheid: l.unit ?? null,
-        prijs: l.unitPrice != null ? toGetal(l.unitPrice) : null,
-        totaal,
+        orderId: o.id ?? null,
+        nummer: o.number ?? null,
+        leverancier: o.supplier?.name ?? null,
+        omschrijving: o.name ?? o.description ?? null,
+        contractbedrag,
         geboekt,
-        nogVerwacht: Math.max(0, totaal - geboekt),
-        type: isOa ? 'onderaanneming' : 'inkoop',
+        openstaand,
+        nogVerwacht: Math.max(0, contractbedrag - geboekt),
+        status: o.statusName ?? null,
       }
     })
 
@@ -1182,7 +1183,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       const geboekt = geboektBouw7 + geboektEva
       return {
         contractId: c.id ?? null,
-        code: c.projectSecurityLink?.code ?? null,
+        nummer: c.number ?? null,
         onderaannemer: c.subcontractor?.name ?? null,
         omschrijving: c.name ?? c.description ?? null,
         contractbedrag,
@@ -1193,16 +1194,16 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       }
     })
 
-    // Projectbewakingscodes = codes die al op dit project voorkomen (orders + contracten + geboekte kosten).
+    // Projectbewakingscodes = codes die al op dit project voorkomen (contracten + geboekte kosten).
     const codeMap = new Map<string, string | null>()
-    for (const l of orderResp.items ?? []) if (l.projectSecurityLink?.code) codeMap.set(l.projectSecurityLink.code, l.projectSecurityLink.parentName ?? null)
+    for (const o of orderResp.items ?? []) if (o.projectSecurityLink?.code && !codeMap.has(o.projectSecurityLink.code)) codeMap.set(o.projectSecurityLink.code, o.projectSecurityLink.name ?? null)
     for (const c of subResp.items ?? []) if (c.projectSecurityLink?.code && !codeMap.has(c.projectSecurityLink.code)) codeMap.set(c.projectSecurityLink.code, c.projectSecurityLink.name ?? null)
     for (const r of geboekteKosten) if (r.bronCode && !codeMap.has(r.bronCode)) codeMap.set(r.bronCode, r.codeNaam ?? null)
     const projectcodes: ProjectBewakingscode[] = [...codeMap.entries()]
       .map(([code, naam]) => ({ code, naam }))
       .sort((a, b) => a.code.localeCompare(b.code))
 
-    const besteld = toGetal(orderResp.total) || inkooporders.reduce((s, r) => s + r.totaal, 0)
+    const besteld = inkooporders.reduce((s, r) => s + r.contractbedrag, 0)
     const onderaanneming = onderaannemers.reduce((s, c) => s + c.contractbedrag, 0)
     const geboekt = geboekteKosten.reduce((s, r) => s + r.bedrag, 0)
 

@@ -1,26 +1,11 @@
 import { Suspense } from 'react'
 import { getDossierInkoop } from '@/lib/dossiers/actions'
-import { laadLayouts } from '@/app/actions/layouts'
-import { createClient as createServerClient } from '@everts/database/server'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, TH, TD, LegeStaat } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 
 async function InkoopInhoud({ dossierId }: { dossierId: string }) {
-  let user_id: string | null = null
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionClient = createServerClient() as any
-    const { data: { user } } = await sessionClient.auth.getUser()
-    user_id = user?.id ?? null
-  } catch {
-    // niet ingelogd of session unavailable
-  }
-
-  const [data, layouts] = await Promise.all([
-    getDossierInkoop(dossierId),
-    user_id ? laadLayouts(user_id, 'inkoop-geboekt') : Promise.resolve([]),
-  ])
+  const data = await getDossierInkoop(dossierId)
 
   if (!data.beschikbaar) {
     return (
@@ -40,7 +25,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
 
   const orderOpties = data.inkooporders
     .filter((o) => o.orderId != null)
-    .map((o) => ({ orderId: o.orderId as number, code: o.code, omschrijving: o.omschrijving, relatie: o.relatie }))
+    .map((o) => ({ orderId: o.orderId as number, nummer: o.nummer, leverancier: o.leverancier, omschrijving: o.omschrijving }))
   const contractOpties = data.onderaannemers
     .filter((c) => c.contractId != null)
     .map((c) => ({ contractId: c.contractId as number, onderaannemer: c.onderaannemer, omschrijving: c.omschrijving }))
@@ -57,27 +42,24 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
             <table style={tabel}>
               <thead>
                 <tr>
-                  <TH>Code</TH><TH>Omschrijving</TH><TH>Leverancier</TH><TH>Soort</TH>
-                  <TH right>Aantal</TH><TH right>Prijs</TH><TH right>Totaal</TH>
-                  <TH right>Geboekt</TH><TH right>Nog verwacht</TH>
+                  <TH>Nummer</TH><TH>Leverancier</TH><TH>Omschrijving</TH><TH>Status</TH>
+                  <TH right>Orderbedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
                 </tr>
               </thead>
               <tbody>
                 {data.inkooporders.map((r, i) => (
                   <tr key={i}>
-                    <TD>{r.code ?? '—'}</TD>
+                    <TD>{r.nummer ?? '—'}</TD>
+                    <TD>{r.leverancier ?? '—'}</TD>
                     <TD>{r.omschrijving ?? '—'}</TD>
-                    <TD>{r.relatie ?? '—'}</TD>
-                    <TD>{r.type === 'onderaanneming' ? 'Onderaanneming' : 'Inkoop'}</TD>
-                    <TD right>{r.aantal != null ? `${r.aantal}${r.eenheid ? ` ${r.eenheid}` : ''}` : '—'}</TD>
-                    <TD right>{r.prijs != null ? fmt(r.prijs) : '—'}</TD>
-                    <TD right accent={r.totaal > 0}>{fmt(r.totaal)}</TD>
+                    <TD>{r.status ?? '—'}</TD>
+                    <TD right>{fmt(r.contractbedrag)}</TD>
                     <TD right>{fmt(r.geboekt)}</TD>
                     <TD right>{fmt(r.nogVerwacht)}</TD>
                   </tr>
                 ))}
                 <tr style={{ background: 'var(--neutral-50)' }}>
-                  <TD vet>Totaal besteld</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
+                  <TD vet>Totaal besteld</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
                   <TD right vet>{fmt(t.besteld, true)}</TD>
                   <TD right vet>{fmt(ordersGeboekt, true)}</TD>
                   <TD right vet>{fmt(ordersVerwacht, true)}</TD>
@@ -98,14 +80,14 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
             <table style={tabel}>
               <thead>
                 <tr>
-                  <TH>Code</TH><TH>Onderaannemer</TH><TH>Omschrijving</TH><TH>Status</TH>
+                  <TH>Nummer</TH><TH>Onderaannemer</TH><TH>Omschrijving</TH><TH>Status</TH>
                   <TH right>Contractbedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
                 </tr>
               </thead>
               <tbody>
                 {data.onderaannemers.map((c, i) => (
                   <tr key={i}>
-                    <TD>{c.code ?? '—'}</TD>
+                    <TD>{c.nummer ?? '—'}</TD>
                     <TD>{c.onderaannemer ?? '—'}</TD>
                     <TD>{c.omschrijving ?? '—'}</TD>
                     <TD>{c.status ?? '—'}</TD>
@@ -126,7 +108,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
         </CardBody>
       </Card>
 
-      {/* Geboekte kosten — filterbaar/sorteerbaar/aanpasbaar met correctie-acties */}
+      {/* Geboekte kosten — compacte, sorteerbare tabel met zoekbalk + correctie-acties */}
       <Card>
         <CardHeader>Geboekte kosten</CardHeader>
         <CardBody style={{ padding: data.geboekteKosten.length === 0 ? undefined : 0 }}>
@@ -136,8 +118,6 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
             <GeboekteKostenTabel
               dossierId={dossierId}
               data={data.geboekteKosten}
-              layouts={layouts}
-              user_id={user_id}
               orders={orderOpties}
               contracten={contractOpties}
               projectcodes={data.projectcodes}
@@ -147,10 +127,9 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
       </Card>
 
       <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
-        Live uit Bouw7. Inkooporders = ingevoerde bestelregels (verwachte kosten); geboekte kosten = inkoop
-        mét ontvangen inkoopfactuur. <strong>Geboekt</strong> bij orders telt kosten die je hier hebt toegewezen;
-        bij onderaannemerscontracten is dat Bouw7&apos;s geboekt (contractbedrag − openstaand). Correcties
-        (toewijzen / hercoderen) zijn EVA-only en wijzigen niets in Bouw7.
+        Live uit Bouw7. <strong>Geboekt</strong> = contractbedrag − openstaand (Bouw7), plus kosten die je hier
+        zelf aan de order/het contract hebt toegewezen. Correcties (toewijzen / hercoderen) zijn EVA-only en
+        wijzigen niets in Bouw7.
       </div>
     </div>
   )

@@ -3,8 +3,6 @@
 import React, { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import type { GebruikerLayout } from '@everts/database/platform-types'
-import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, Badge, Button,
 } from '@/components/ui'
@@ -13,22 +11,18 @@ import {
   verplaatsGeboekteKost, hercodeerGeboekteKost, wisInkoopCorrectie,
   type GeboekteKostenRegel, type ProjectBewakingscode,
 } from '@/lib/dossiers/actions'
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 
-type OrderOptie = { orderId: number; code: string | null; omschrijving: string | null; relatie: string | null }
+type OrderOptie = { orderId: number; nummer: string | null; leverancier: string | null; omschrijving: string | null }
 type ContractOptie = { contractId: number; onderaannemer: string | null; omschrijving: string | null }
 
 type Props = {
   dossierId: string
   data: GeboekteKostenRegel[]
-  layouts: GebruikerLayout[]
-  user_id: string | null
   orders: OrderOptie[]
   contracten: ContractOptie[]
   projectcodes: ProjectBewakingscode[]
 }
-
-type Rij = GeboekteKostenRegel & { id: string }
 
 const euro = (n: number | null | undefined): string =>
   n == null ? '—' : new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -38,21 +32,94 @@ const selectStyle: React.CSSProperties = {
   border: '1px solid var(--border)', background: 'white', color: 'var(--fg)',
 }
 
-export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id, orders, contracten, projectcodes }: Props) {
+type Kolom = {
+  key: string
+  label: string
+  right?: boolean
+  breedte?: number
+  waarde: (r: GeboekteKostenRegel) => string | number
+  render: (r: GeboekteKostenRegel) => React.ReactNode
+}
+
+export default function GeboekteKostenTabel({ dossierId, data, orders, contracten, projectcodes }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [actief, setActief] = useState<Rij | null>(null)
+  const [actief, setActief] = useState<GeboekteKostenRegel | null>(null)
+  const [zoek, setZoek] = useState('')
+  const [sortKey, setSortKey] = useState<string>('datum')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const rijen: Rij[] = useMemo(() => data.map((r) => ({ ...r, id: String(r.bronId) })), [data])
+  const kolommen: Kolom[] = useMemo(() => [
+    {
+      key: 'factuurnummer', label: 'Factuurnr.', waarde: (r) => r.factuurnummer ?? '',
+      render: (r) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--fg)' }}>
+          {r.factuurnummer ?? '—'}
+          {r.gecorrigeerd && <Badge tone="warning" size="sm">gecorrigeerd</Badge>}
+        </span>
+      ),
+    },
+    {
+      key: 'leverancier', label: 'Leverancier / OA', waarde: (r) => r.leverancier ?? '',
+      render: (r) => (
+        <span title={r.leverancierType === 'onderaannemer' ? 'Onderaannemer' : 'Leverancier'}>
+          {r.leverancier ?? '—'}{r.leverancierType === 'onderaannemer' ? ' (OA)' : ''}
+        </span>
+      ),
+    },
+    {
+      key: 'omschrijving', label: 'Omschrijving', breedte: 240, waarde: (r) => r.omschrijving ?? '',
+      render: (r) => (
+        <span style={{ display: 'block', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--fg-soft)' }} title={r.omschrijving ?? undefined}>
+          {r.omschrijving ?? '—'}
+        </span>
+      ),
+    },
+    { key: 'typeKosten', label: 'Type', waarde: (r) => r.typeKosten ?? '', render: (r) => r.typeKosten ?? '—' },
+    {
+      key: 'code', label: 'Bewakingscode', breedte: 180, waarde: (r) => r.code ?? '',
+      render: (r) => (
+        <span style={{ display: 'block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.codeNaam ?? undefined}>
+          {r.code ?? '— niet gecodeerd'}{r.codeNaam ? ` · ${r.codeNaam}` : ''}
+        </span>
+      ),
+    },
+    { key: 'datum', label: 'Datum', waarde: (r) => r.datum ?? '', render: (r) => fmtDatum(r.datum) },
+    { key: 'vervaldatum', label: 'Vervaldatum', waarde: (r) => r.vervaldatum ?? '', render: (r) => fmtDatum(r.vervaldatum) },
+    {
+      key: 'betaald', label: 'Betaald', waarde: (r) => (r.betaald ? 1 : 0),
+      render: (r) => <Badge tone={r.betaald ? 'success' : 'neutral'} size="sm">{r.betaald ? 'Ja' : 'Nee'}</Badge>,
+    },
+    {
+      key: 'bedrag', label: 'Bedrag excl.', right: true, waarde: (r) => r.bedrag,
+      render: (r) => <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{euro(r.bedrag)}</span>,
+    },
+  ], [])
 
-  const typeOpties = useMemo(
-    () => [...new Set(rijen.map((r) => r.typeKosten).filter(Boolean) as string[])].sort(),
-    [rijen],
-  )
-  const codeOpties = useMemo(
-    () => [...new Set(rijen.map((r) => r.code).filter(Boolean) as string[])].sort(),
-    [rijen],
-  )
+  const rijen = useMemo(() => {
+    const q = zoek.trim().toLowerCase()
+    let r = data
+    if (q) {
+      r = data.filter((row) =>
+        [row.factuurnummer, row.leverancier, row.omschrijving, row.typeKosten, row.code, row.codeNaam]
+          .some((v) => (v ?? '').toLowerCase().includes(q)))
+    }
+    const kol = kolommen.find((k) => k.key === sortKey)
+    if (kol) {
+      const dir = sortDir === 'asc' ? 1 : -1
+      r = [...r].sort((a, b) => {
+        const va = kol.waarde(a), vb = kol.waarde(b)
+        if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+        return String(va).localeCompare(String(vb), 'nl') * dir
+      })
+    }
+    return r
+  }, [data, zoek, sortKey, sortDir, kolommen])
+
+  const sorteer = (key: string) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   const doe = (actie: () => Promise<{ ok: boolean; error?: string }>, succes: string) => {
     start(async () => {
@@ -62,113 +129,80 @@ export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id,
     })
   }
 
-  const kolommen: KolomDefinitie<Rij>[] = useMemo(() => [
-    {
-      key: 'factuurnummer', label: 'Factuurnr.', vast: true, filterType: 'tekst',
-      sorteerWaarde: (r) => r.factuurnummer ?? '',
-      render: (r) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--fg)' }}>
-          {r.factuurnummer ?? '—'}
-          {r.gecorrigeerd && <Badge tone="warning">gecorrigeerd</Badge>}
-        </span>
-      ),
-    },
-    {
-      key: 'leverancier', label: 'Leverancier / OA', filterType: 'tekst',
-      sorteerWaarde: (r) => r.leverancier ?? '',
-      render: (r) => (
-        <div>
-          <div style={{ fontSize: 13, color: 'var(--fg)' }}>{r.leverancier ?? '—'}</div>
-          {r.leverancierType && (
-            <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-              {r.leverancierType === 'onderaannemer' ? 'Onderaannemer' : 'Leverancier'}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'omschrijving', label: 'Omschrijving', filterType: 'tekst',
-      sorteerWaarde: (r) => r.omschrijving ?? '',
-      render: (r) => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.omschrijving ?? '—'}</span>,
-    },
-    {
-      key: 'typeKosten', label: 'Type kosten', filterType: 'select', filterOpties: typeOpties,
-      sorteerWaarde: (r) => r.typeKosten ?? '',
-      render: (r) => <span style={{ fontSize: 13 }}>{r.typeKosten ?? '—'}</span>,
-    },
-    {
-      key: 'code', label: 'Bewakingscode', filterType: 'select', filterOpties: codeOpties,
-      sorteerWaarde: (r) => r.code ?? '',
-      render: (r) => (
-        <span style={{ fontSize: 13 }} title={r.codeNaam ?? undefined}>
-          {r.code ?? '— niet gecodeerd'}{r.codeNaam ? ` · ${r.codeNaam}` : ''}
-        </span>
-      ),
-    },
-    {
-      key: 'bedrag', label: 'Bedrag excl.', filterType: 'tekst',
-      sorteerWaarde: (r) => r.bedrag,
-      render: (r) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{euro(r.bedrag)}</span>,
-    },
-    {
-      key: 'btw', label: 'Btw', standaard_zichtbaar: false,
-      sorteerWaarde: (r) => r.btw ?? 0,
-      render: (r) => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{euro(r.btw)}</span>,
-    },
-    {
-      key: 'totaal', label: 'Totaal incl.', standaard_zichtbaar: false,
-      sorteerWaarde: (r) => r.totaal ?? 0,
-      render: (r) => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{euro(r.totaal)}</span>,
-    },
-    {
-      key: 'datum', label: 'Datum', filterType: 'tekst',
-      sorteerWaarde: (r) => r.datum ?? '',
-      render: (r) => <span style={{ fontSize: 13 }}>{fmtDatum(r.datum)}</span>,
-    },
-    {
-      key: 'vervaldatum', label: 'Vervaldatum', standaard_zichtbaar: false,
-      sorteerWaarde: (r) => r.vervaldatum ?? '',
-      render: (r) => <span style={{ fontSize: 13 }}>{fmtDatum(r.vervaldatum)}</span>,
-    },
-    {
-      key: 'betaald', label: 'Betaald', filterType: 'select', filterOpties: ['Ja', 'Nee'],
-      sorteerWaarde: (r) => (r.betaald ? 'Ja' : 'Nee'),
-      render: (r) => <Badge tone={r.betaald ? 'success' : 'neutral'}>{r.betaald ? 'Ja' : 'Nee'}</Badge>,
-    },
-    {
-      key: 'actie', label: '', vast: true,
-      render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); setActief(r) }}
-          title="Toewijzen / hercoderen"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', fontSize: 12,
-            borderRadius: 7, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer',
-          }}
-        >
-          <SlidersHorizontal size={13} /> Corrigeren
-        </button>
-      ),
-    },
-  ], [typeOpties, codeOpties])
+  const totaal = useMemo(() => rijen.reduce((s, r) => s + r.bedrag, 0), [rijen])
 
   const huidigeDoelwaarde = actief
     ? actief.toegewezenOrderId != null ? `order:${actief.toegewezenOrderId}`
       : actief.toegewezenContractId != null ? `contract:${actief.toegewezenContractId}` : ''
     : ''
 
+  const thStyle = (right?: boolean): React.CSSProperties => ({
+    padding: '6px 10px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
+    color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.04em',
+    borderBottom: '2px solid var(--neutral-200, #e3e8ea)', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
+  })
+  const tdStyle = (right?: boolean): React.CSSProperties => ({
+    padding: '3px 10px', fontSize: 12.5, textAlign: right ? 'right' : 'left', color: 'var(--neutral-700)',
+    borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
+  })
+
   return (
     <>
-      <OverzichtTabel
-        scherm="inkoop-geboekt"
-        data={rijen}
-        kolommen={kolommen}
-        layouts={layouts}
-        user_id={user_id}
-        selecteerbaar={false}
-        beginSortering={[{ id: 'datum', desc: true }]}
-      />
+      {/* Zoekbalk */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
+        <div style={{ position: 'relative', flex: '0 0 280px' }}>
+          <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--neutral-400)' }} />
+          <input
+            value={zoek}
+            onChange={(e) => setZoek(e.target.value)}
+            placeholder="Zoeken…"
+            style={{ width: '100%', padding: '6px 10px 6px 28px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)' }}
+          />
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--neutral-500)' }}>{rijen.length} regel{rijen.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {/* Tabel */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {kolommen.map((k) => (
+                <th key={k.key} style={thStyle(k.right)} onClick={() => sorteer(k.key)}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexDirection: k.right ? 'row-reverse' : 'row' }}>
+                    {k.label}
+                    {sortKey === k.key
+                      ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                      : <ChevronsUpDown size={11} style={{ opacity: 0.35 }} />}
+                  </span>
+                </th>
+              ))}
+              <th style={{ ...thStyle(true), cursor: 'default' }} />
+            </tr>
+          </thead>
+          <tbody>
+            {rijen.map((r) => (
+              <tr key={r.bronId} style={{ background: r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
+                {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
+                <td style={{ ...tdStyle(true) }}>
+                  <button
+                    onClick={() => setActief(r)}
+                    title="Toewijzen / hercoderen"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
+                  >
+                    <SlidersHorizontal size={12} /> Corrigeren
+                  </button>
+                </td>
+              </tr>
+            ))}
+            <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={{ ...tdStyle(), fontWeight: 700, color: 'var(--neutral-900)' }} colSpan={kolommen.length - 1}>Totaal{zoek ? ' (gefilterd)' : ''}</td>
+              <td style={{ ...tdStyle(true), fontWeight: 700, color: 'var(--neutral-900)' }}>{euro(totaal)}</td>
+              <td style={tdStyle(true)} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <Dialog open={!!actief} onOpenChange={(o) => { if (!o) setActief(null) }}>
         <DialogContent>
@@ -177,7 +211,6 @@ export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id,
           </DialogHeader>
           {actief && (
             <DialogBody style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Read-only factuurinfo */}
               <div style={{ fontSize: 12.5, color: 'var(--fg-soft)', lineHeight: 1.6 }}>
                 <div><strong style={{ color: 'var(--fg)' }}>{actief.factuurnummer ?? '—'}</strong> · {actief.leverancier ?? '—'}</div>
                 <div>{euro(actief.bedrag)} excl. btw · {actief.typeKosten ?? '—'} · {fmtDatum(actief.datum)}</div>
@@ -186,7 +219,6 @@ export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id,
                 </div>
               </div>
 
-              {/* Toewijzen aan order/contract */}
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)' }}>Toewijzen aan inkooporder / OA-contract</span>
                 <select
@@ -206,7 +238,7 @@ export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id,
                     <optgroup label="Inkooporders">
                       {orders.map((o) => (
                         <option key={`o${o.orderId}`} value={`order:${o.orderId}`}>
-                          {[o.code, o.omschrijving, o.relatie].filter(Boolean).join(' · ') || `Order ${o.orderId}`}
+                          {[o.nummer, o.omschrijving, o.leverancier].filter(Boolean).join(' · ') || `Order ${o.orderId}`}
                         </option>
                       ))}
                     </optgroup>
@@ -223,7 +255,6 @@ export default function GeboekteKostenTabel({ dossierId, data, layouts, user_id,
                 </select>
               </label>
 
-              {/* Hercoderen */}
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)' }}>Bewakingscode</span>
                 <select
