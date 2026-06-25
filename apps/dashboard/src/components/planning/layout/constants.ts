@@ -25,6 +25,9 @@ export const PPD_PER_VIEW: Record<string, number> = {
 /** Fractie van de zichtbare breedte waarop "Vandaag" landt bij openen/wisselen. */
 export const VANDAAG_ANCHOR = 1 / 6
 
+/** Weekenddagen (za/zo) worden in alle planningen smaller getekend dan werkdagen. */
+export const WEEKEND_FACTOR = 0.5
+
 /** Minimale balkbreedte (px) zodat korte taken (bv. 4 uur) ook in Maand/Kwartaal
  *  zichtbaar en klikbaar blijven, ongeacht het zoomniveau. */
 export const MIN_BAR_W = 6

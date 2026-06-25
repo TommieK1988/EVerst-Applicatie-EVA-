@@ -13,8 +13,9 @@ import { usePlanningLayout, viewBereik, type PlanningLayout, type View } from '.
  *    view-wissel, de Vandaag-knop en bij scrubben;
  *  - één set handlers voor PeriodeNav + PeriodeScrubber.
  */
-export function usePlanningController(opts?: { defaultView?: View; labelW?: number }) {
+export function usePlanningController(opts?: { defaultView?: View; labelW?: number; weekendFactor?: number }) {
   const labelW = opts?.labelW ?? LABEL_W
+  const weekendFactor = opts?.weekendFactor
   const [view, setView]           = useState<View>(opts?.defaultView ?? 'maand')
   const [peildatum, setPeildatum] = useState<Date>(() => viewBereik(opts?.defaultView ?? 'maand', new Date()).vs)
   const [availableW, setAvailableW] = useState(800)
@@ -36,7 +37,7 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
     return () => ro.disconnect()
   }, [labelW])
 
-  const layout = usePlanningLayout({ peildatum, view, availableW })
+  const layout = usePlanningLayout({ peildatum, view, availableW, weekendFactor })
 
   // Scroll zo dat het anker (Vandaag of periodegrens) op VANDAAG_ANCHOR landt.
   useLayoutEffect(() => {

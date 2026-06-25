@@ -752,10 +752,11 @@ function AfhankelijkheidSVG({ afhankelijkheden, activiteitMap, activiteitRowY, v
 
 // ─── FaseRij ──────────────────────────────────────────────────────────────────
 
-function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, onEdit, onNieuweActiviteit, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
+function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
   fase: PlanningFase; totalW: number
   vs: Date; ppd: number; totalDays: number
   faseStart: string | null; faseEind: string | null
+  ingeklapt: boolean; onToggleInklap: () => void
   onEdit: () => void; onNieuweActiviteit: () => void
   onShift: (delta: number) => void
   dragHandleDown: (ev: React.PointerEvent) => void
@@ -803,7 +804,11 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, onEdit
         <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', color: 'var(--fg-muted)', fontSize: 14, userSelect: 'none', touchAction: 'none', opacity: 0.45 }}
           onPointerDown={dragHandleDown} onPointerMove={dragHandleMove} onPointerUp={dragHandleUp}
           title="Sleep om te herordenen">⠿</div>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--fg-muted)', flex: 1, paddingLeft: 24 }}>{fase.naam}</span>
+        <button title={ingeklapt ? 'Fase uitklappen' : 'Fase inklappen'} onClick={onToggleInklap}
+          style={{ width: 20, height: 20, flexShrink: 0, display: 'grid', placeItems: 'center', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--fg-muted)', fontSize: 11 }}>
+          {ingeklapt ? '▶' : '▼'}
+        </button>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--fg-muted)', flex: 1, paddingLeft: 2 }}>{fase.naam}</span>
         <button title="Naam wijzigen" onClick={onEdit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>✎</button>
         <button title="Activiteit toevoegen" onClick={onNieuweActiviteit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 14, color: 'var(--accent)' }}>+</button>
       </div>
@@ -1127,7 +1132,9 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const {
     view, peildatum, layout, wrapRef, scrollRef,
     handlePeildatum, handleView, handleVandaag, handleScrub,
-  } = usePlanningController({ defaultView: 'maand', labelW: LEFT_W })
+    // weekendFactor 1 = uniforme dagbreedte; de detailplanning houdt (voorlopig) volle
+    // weekenddagen i.v.m. de drag-/afhankelijkheidsgeometrie die nog niet is omgezet.
+  } = usePlanningController({ defaultView: 'maand', labelW: LEFT_W, weekendFactor: 1 })
 
   const [activiteiten, setActiviteiten] = useState(initA)
   const [items,        setItems]        = useState(initI)
@@ -1141,6 +1148,13 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   useEffect(() => { setAfhankelijkheden(initAfh) }, [initAfh])
   const [editActiviteit, setEditActiviteit] = useState<PlanningActiviteit | null>(null)
   const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set())
+  const [ingeklapteFasen, setIngeklapteFasen] = useState<Set<string>>(new Set())
+
+  const toggleFaseInklap = (id: string) => setIngeklapteFasen(prev => {
+    const n = new Set(prev)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
 
   const toggleUitklap = (id: string) => setUitgeklapt(prev => {
     const n = new Set(prev)
@@ -1271,11 +1285,12 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
     for (const a of sorted.filter(a => !a.fase_id)) addActiviteit(a)
     for (const f of fSorted) {
       rows.push({ kind: 'fase', fase: f })
+      if (ingeklapteFasen.has(f.id)) continue   // ingeklapt → activiteiten verbergen
       for (const a of sorted.filter(a => a.fase_id === f.id)) addActiviteit(a)
     }
     return rows
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activiteiten, fasen, items, uitgeklapt, medewerkerMap])
+  }, [activiteiten, fasen, items, uitgeklapt, ingeklapteFasen, medewerkerMap])
 
   const rowHeight = (r: GanttRow) =>
     r.kind === 'fase'     ? FASE_HOOGTE
@@ -1622,6 +1637,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                     }}
                     onNieuweActiviteit={() => { setNieuweFId(row.fase.id); setNieuweStart(''); setToonNieuw(true) }}
                     onShift={(d) => handleFaseShift(row.fase.id, d)}
+                    ingeklapt={ingeklapteFasen.has(row.fase.id)}
+                    onToggleInklap={() => toggleFaseInklap(row.fase.id)}
                     isDragging={draggingFaseId === row.fase.id}
                     isDropIndicatorAbove={dropBeforeFaseId === row.fase.id && draggingFaseId !== null && draggingFaseId !== row.fase.id}
                     dragHandleDown={ev => onFaseDragHandleDown(ev, row.fase.id)}

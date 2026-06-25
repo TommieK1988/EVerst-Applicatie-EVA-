@@ -1,6 +1,6 @@
 'use client'
 
-import { differenceInDays, startOfDay } from 'date-fns'
+import { startOfDay } from 'date-fns'
 import type { ReactNode, RefObject } from 'react'
 import {
   HEADER_COL_HOOGTE, HEADER_SPAN_HOOGTE, KLEUR, LABEL_W,
@@ -35,12 +35,14 @@ export default function PlanningShell({
   layout, scrollRef, toolbar, scrubber, preHeaderStrip,
   labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W,
 }: PlanningShellProps) {
-  const { spans, cols, gridUnits, totalW, vs, ppd } = layout
+  const { spans, cols, gridUnits, totalW } = layout
 
   const headerHoogte = HEADER_SPAN_HOOGTE + HEADER_COL_HOOGTE
-  // Gecentreerd op de dagkolom: offset × ppd + ppd/2
-  const vandaagOffset = differenceInDays(startOfDay(new Date()), startOfDay(vs)) * ppd + ppd / 2
-  const toonVandaag   = vandaagOffset >= 0 && vandaagOffset <= totalW
+  // Gecentreerd op de dagkolom (12:00 → midden van de dag, weekend-bewust).
+  const vandaagNoon = startOfDay(new Date()).getTime() + 12 * 3600_000
+  const vandaagOffset = layout.xVoor(new Date(vandaagNoon).toISOString())
+  const today0 = startOfDay(new Date())
+  const toonVandaag = today0 >= startOfDay(layout.vs) && today0 <= startOfDay(layout.ve)
 
   return (
     <div>

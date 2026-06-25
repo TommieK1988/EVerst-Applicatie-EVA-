@@ -5,7 +5,7 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  addMinutes, differenceInCalendarDays, differenceInMinutes,
+  addDays, addMinutes, differenceInCalendarDays, differenceInMinutes,
   eachDayOfInterval, format, isWeekend, parseISO, startOfDay,
 } from 'date-fns'
 import { AlertTriangle, Trash2, X } from 'lucide-react'
@@ -449,27 +449,24 @@ function AgendaTimelineRij({
   layout:     PlanningLayout
   dagen:      Date[]
 }) {
-  const { ppd, vs } = layout
+  const { totalW, xVoor, breedteVoor } = layout
   const top = 0
 
   function renderBar(
     id: string, titel: string, start_datum: string, eind_datum: string, kleur: string,
     start_tijd?: string | null, eind_tijd?: string | null,
   ) {
-    const dayOff = differenceInCalendarDays(parseISO(start_datum), startOfDay(vs))
     let left: number, width: number
     if (start_tijd && eind_tijd) {
-      const sMin = parseTime(start_tijd), eMin = parseTime(eind_tijd)
-      left  = dayOff * ppd + (sMin / 1440) * ppd
-      width = Math.max(ppd * 0.03, ((eMin - sMin) / 1440) * ppd)
+      left  = xVoor(`${start_datum}T${start_tijd}`)
+      width = Math.max(MIN_BAR_W, xVoor(`${start_datum}T${eind_tijd}`) - left)
     } else {
-      const duur = Math.max(1, Math.round((new Date(eind_datum).getTime() - new Date(start_datum).getTime()) / DAG_MS) + 1)
-      left  = dayOff * ppd
-      width = duur * ppd
+      left  = xVoor(start_datum)
+      width = breedteVoor(start_datum, addDays(parseISO(eind_datum), 1).toISOString())
     }
-    if (left + width <= 0 || left >= dagen.length * ppd) return null
+    if (left + width <= 0 || left >= totalW) return null
     const cLeft  = Math.max(0, left)
-    const cWidth = Math.min(width, dagen.length * ppd - cLeft) - 2
+    const cWidth = Math.min(width, totalW - cLeft) - 2
     return (
       <div
         key={id}
@@ -546,9 +543,8 @@ function TimelineRij({
   onEditEntry:       (entry: PlanningItemVerrijkt & { dossier_id?: string }) => void
   onResizedEntry:    (id: string, ns: string, ne: string) => void
 }) {
-  const { ppd, vs } = layout
-  const vs0     = startOfDay(vs).getTime()
-  const dagLenW = dagen.length * ppd
+  const { ppd, totalW, xVoor, breedteVoor } = layout
+  const dagLenW = totalW
 
   function buitenRooster(dag: Date): boolean {
     const iso    = dag.toISOString().slice(0, 10)
@@ -592,8 +588,8 @@ function TimelineRij({
             id={cellId}
             medewerker_id={medewerker.id}
             datum={iso}
-            left={i * ppd}
-            width={ppd}
+            left={xVoor(dag.toISOString())}
+            width={breedteVoor(dag.toISOString(), addDays(dag, 1).toISOString())}
             top={top}
             hoogte={RIJ_VAST}
             background={bg}
@@ -613,10 +609,8 @@ function TimelineRij({
 
       {/* Werk-taken op één strook (geen stapeling) */}
       {entries.map(entry => {
-        const sd    = parseISO(entry.start_dt).getTime()
-        const ed    = parseISO(entry.eind_dt).getTime()
-        const left  = ((sd - vs0) / DAG_MS) * ppd
-        const rawW  = ((ed - sd) / DAG_MS) * ppd
+        const left  = xVoor(entry.start_dt)
+        const rawW  = breedteVoor(entry.start_dt, entry.eind_dt)
         const width = Math.max(MIN_BAR_W, rawW)
         if (left + width <= 0 || left >= dagLenW) return null
         const cLeft  = Math.max(0, left)
@@ -647,8 +641,8 @@ function TimelineRij({
 
       {/* Conflict-gloed — overlappend werk of werk tijdens verlof/feestdag/ATV */}
       {conflicten.map((seg, i) => {
-        const left  = ((seg.s - vs0) / DAG_MS) * ppd
-        const rawW  = ((seg.e - seg.s) / DAG_MS) * ppd
+        const left  = xVoor(new Date(seg.s).toISOString())
+        const rawW  = xVoor(new Date(seg.e).toISOString()) - left
         const width = Math.max(MIN_BAR_W, rawW)
         if (left + width <= 0 || left >= dagLenW) return null
         const cLeft  = Math.max(0, left)

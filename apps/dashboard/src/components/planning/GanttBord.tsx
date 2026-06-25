@@ -1,6 +1,6 @@
 'use client'
 
-import { differenceInDays, parseISO, startOfDay } from 'date-fns'
+import { addDays, parseISO, startOfDay } from 'date-fns'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { crewKleur } from '@/lib/utils/crew'
@@ -34,7 +34,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
   const [sortBy, setSortBy] = useState<SortKey>('start')
   const [geselecteerdeCategorieen, setGeselecteerdeCategorieen] = useState<string[]>([])
 
-  const { ppd, totalDays, vs, ve } = layout
+  const { vs, ve } = layout
 
   const uniekeCat = useMemo(
     () => [...new Set(opdrachten.map(o => o.categorie).filter(Boolean) as string[])].sort(),
@@ -67,10 +67,10 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
   }
 
   function balk(start: Date, eind: Date) {
-    const startOff = Math.max(0, differenceInDays(startOfDay(start), startOfDay(vs)))
-    const eindOff  = Math.min(totalDays, differenceInDays(startOfDay(eind), startOfDay(vs)) + 1)
-    const w = Math.max(1, eindOff - startOff) * ppd - 2
-    return { left: startOff * ppd, width: w }
+    const left  = layout.xVoor(startOfDay(start).toISOString())
+    const right = layout.xVoor(addDays(startOfDay(eind), 1).toISOString())
+    const w = Math.max(1, right - left) - 2
+    return { left, width: w }
   }
 
   const bodyHoogte = gesorteerd.length * RIJ_HOOGTE
