@@ -37,11 +37,14 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = pathname === '/login'
   const isAuthRoute = pathname.startsWith('/auth/')
   const isApiRoute = pathname.startsWith('/api/')
+  // Cron-endpoints beveiligen zichzelf met CRON_SECRET (Bearer) en hebben géén sessiecookie —
+  // de cookie-auth mag ze daarom niet naar /login redirecten (anders draait de Vercel-cron nooit).
+  const isCronRoute = pathname.startsWith('/api/cron/')
   const isOpMobiel = pathname === '/m' || pathname.startsWith('/m/')
   const mobiel = isMobileUA(request.headers.get('user-agent'))
 
-  // Niet ingelogd → doorsturen naar login (behalve login-pagina en auth-callbacks)
-  if (!user && !isLoginPage && !isAuthRoute) {
+  // Niet ingelogd → doorsturen naar login (behalve login-pagina, auth-callbacks en cron-endpoints)
+  if (!user && !isLoginPage && !isAuthRoute && !isCronRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
