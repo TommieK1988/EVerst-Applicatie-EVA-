@@ -14,9 +14,9 @@ export const dynamic = 'force-dynamic'
  *
  * Beveiliging: Authorization: Bearer <CRON_SECRET> (door Vercel automatisch gezet).
  */
-async function handle(req: NextRequest, ctx: { params: { mode: string } }) {
-  const mode = ctx.params.mode === 'full' ? 'full' : 'incremental'
-  return runCronSync(req, mode)
+async function handle(req: NextRequest, ctx: { params: Promise<{ mode: string }> }) {
+  const { mode } = await ctx.params
+  return runCronSync(req, mode === 'full' ? 'full' : 'incremental')
 }
 
 export const GET = handle
