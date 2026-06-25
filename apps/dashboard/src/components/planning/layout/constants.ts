@@ -6,8 +6,27 @@ export const RIJ_HOOGTE         = 44
 export const HEADER_SPAN_HOOGTE = 24
 export const HEADER_COL_HOOGTE  = 28
 
-/** Minimale dag-breedte (px) — fit-to-screen valt nooit onder dit getal. */
+/** Minimale dag-breedte (px) — fit-to-screen valt nooit onder dit getal.
+ *  Alleen nog relevant voor de oude fit-to-screen-helpers; de planning-pagina's
+ *  gebruiken nu een vaste dagbreedte (zie PPD_PER_VIEW). */
 export const MIN_PPD = 2
+
+/** Vaste dagbreedte (pixels per dag) per zoomniveau. De tijdlijn is een doorlopende,
+ *  horizontaal-scrollbare strook — niet meer fit-to-screen. */
+export const PPD_PER_VIEW: Record<string, number> = {
+  week:     40,
+  '2weken': 26,
+  maand:    18,
+  kwartaal: 8,
+  jaar:     3,
+}
+
+/** Fractie van de zichtbare breedte waarop "Vandaag" landt bij openen/wisselen. */
+export const VANDAAG_ANCHOR = 1 / 6
+
+/** Minimale balkbreedte (px) zodat korte taken (bv. 4 uur) ook in Maand/Kwartaal
+ *  zichtbaar en klikbaar blijven, ongeacht het zoomniveau. */
+export const MIN_BAR_W = 6
 
 export const KLEUR = {
   weekend:          'rgba(0,0,0,0.04)',

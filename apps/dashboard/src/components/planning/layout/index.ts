@@ -1,5 +1,6 @@
 export * from './constants'
 export * from './usePlanningLayout'
+export { usePlanningController } from './usePlanningController'
 export { default as PeriodeNav } from './PeriodeNav'
 export { default as PlanningShell } from './PlanningShell'
 export type { PlanningShellProps } from './PlanningShell'

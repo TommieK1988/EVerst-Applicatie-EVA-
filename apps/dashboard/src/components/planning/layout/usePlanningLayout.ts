@@ -9,7 +9,7 @@ import {
   addWeeks, subWeeks, addYears, subYears,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { MIN_PPD } from './constants'
+import { PPD_PER_VIEW, VANDAAG_ANCHOR } from './constants'
 
 export type View = 'week' | '2weken' | 'maand' | 'kwartaal' | 'jaar'
 
@@ -222,8 +222,13 @@ export function verschuifDatum(yyyymmdd: string, days: number): string {
 export type PlanningLayout = {
   view:        View
   peildatum:   Date
+  /** Begin van de gerenderde (gepadde) range — niet de periodegrens. */
   vs:          Date
+  /** Einde van de gerenderde (gepadde) range. */
   ve:          Date
+  /** Periodegrens (zonder buffer) van de peildatum — voor scroll-ankering. */
+  periodeVs:   Date
+  periodeVe:   Date
   ppd:         number
   totalDays:   number
   totalW:      number
@@ -236,12 +241,31 @@ export type PlanningLayout = {
   xVoor:       (iso: string) => number
 }
 
+/**
+ * Tijdlijn-layout met een **vaste dagbreedte** (PPD_PER_VIEW) i.p.v. fit-to-screen.
+ * De gerenderde range is de periode (viewBereik) uitgebreid met een dynamische buffer
+ * links/rechts, berekend uit `availableW`, zodat de strook altijd breder is dan het
+ * scherm (horizontaal scrollbaar) én "Vandaag"/de periodegrens op VANDAAG_ANCHOR
+ * (1/6) kan worden gezet zonder negatieve scrollpositie.
+ */
 export function usePlanningLayout({
   peildatum, view, availableW,
 }: { peildatum: Date; view: View; availableW: number }): PlanningLayout {
-  const { vs, ve } = useMemo(() => viewBereik(view, peildatum), [view, peildatum])
+  const ppd = PPD_PER_VIEW[view] ?? 18
+
+  const { periodeVs, periodeVe } = useMemo(() => {
+    const { vs, ve } = viewBereik(view, peildatum)
+    return { periodeVs: vs, periodeVe: ve }
+  }, [view, peildatum])
+
+  const { vs, ve } = useMemo(() => {
+    // Genoeg ruimte links voor de 1/6-ankering, en rechts om de viewport te vullen.
+    const leftBuf  = Math.ceil((availableW * VANDAAG_ANCHOR) / ppd) + 2
+    const rightBuf = Math.ceil((availableW * (1 - VANDAAG_ANCHOR)) / ppd) + 2
+    return { vs: addDays(periodeVs, -leftBuf), ve: addDays(periodeVe, rightBuf) }
+  }, [periodeVs, periodeVe, availableW, ppd])
+
   const totalDays  = useMemo(() => differenceInDays(startOfDay(ve), startOfDay(vs)) + 1, [vs, ve])
-  const ppd        = useMemo(() => Math.max(MIN_PPD, availableW / totalDays), [availableW, totalDays])
   const totalW     = totalDays * ppd
   const { spans, cols } = useMemo(() => buildHeader(view, vs, ve, ppd), [view, vs, ve, ppd])
   const gridUnits  = useMemo(() => buildGridUnits(view, vs, ve, ppd), [view, vs, ve, ppd])
@@ -249,5 +273,8 @@ export function usePlanningLayout({
   const dagOff = (iso: string) => dagOffset(iso, vs)
   const xVoor  = (iso: string) => Math.max(0, Math.min(totalW, dagOff(iso) * ppd))
 
-  return { view, peildatum, vs, ve, ppd, totalDays, totalW, spans, cols, gridUnits, dagOffset: dagOff, xVoor }
+  return {
+    view, peildatum, vs, ve, periodeVs, periodeVe,
+    ppd, totalDays, totalW, spans, cols, gridUnits, dagOffset: dagOff, xVoor,
+  }
 }

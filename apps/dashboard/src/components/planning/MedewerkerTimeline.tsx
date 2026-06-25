@@ -5,12 +5,10 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  addDays, addMinutes, differenceInCalendarDays, differenceInDays, differenceInMinutes,
-  eachDayOfInterval, format, isToday, isWeekend, parseISO,
-  startOfDay, startOfMonth, startOfWeek,
+  addMinutes, differenceInCalendarDays, differenceInMinutes,
+  eachDayOfInterval, format, isWeekend, parseISO, startOfDay,
 } from 'date-fns'
-import { nl } from 'date-fns/locale'
-import { Trash2, X } from 'lucide-react'
+import { AlertTriangle, Trash2, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
@@ -24,24 +22,22 @@ import type {
 import { bedrijfsagendaTypeKleur, medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
 import { verplaatsPlanningItem, verwijderPlanningItem } from '@/app/(platform)/planning/actions'
 import {
-  buildGridUnits, buildHeader, KLEUR, LABEL_W, PeriodeNav, PeriodeScrubber, PlanningShell,
-  RIJ_HOOGTE, usePlanningLayout, verschuifTs, viewBereik, type PlanningLayout, type View,
-} from './layout'
+  KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
+  usePlanningController, verschuifTs, type PlanningLayout,
+} from './layout/index'
 import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
 import VerlofModal from './VerlofModal'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEM_H   = 28
-const LANE_GAP = 3
-const ROW_PAD  = 6
+const ITEM_H  = 28
+const ROW_PAD = 6
+/** Vaste rijhoogte — taken worden niet meer gestapeld in lanes (één strook). */
+const RIJ_VAST = ROW_PAD * 2 + ITEM_H
+
+const DAG_MS = 86_400_000
 
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
-
-function rijHoogteVoor(numLanes: number): number {
-  const n = Math.max(1, numLanes)
-  return ROW_PAD * 2 + n * ITEM_H + (n - 1) * LANE_GAP
-}
 
 const AFWEZIGHEID_KLEUR: Record<MedewerkerAfwezigheidType, string> = {
   verlof:   '#3b82f6',
@@ -56,29 +52,56 @@ const dialogLabelStyle: React.CSSProperties = {
   display: 'block', marginBottom: 4,
 }
 
-// ─── Lane types ───────────────────────────────────────────────────────────────
+type SortKey = 'voornaam' | 'afdeling' | 'functie'
+const SORT_OPTIES: { key: SortKey; label: string }[] = [
+  { key: 'voornaam', label: 'Voornaam' },
+  { key: 'afdeling', label: 'Afdeling' },
+  { key: 'functie',  label: 'Functie' },
+]
 
-type LanedBar =
-  | { kind: 'entry';   left: number; width: number; lane: number; entry: PlanningItemVerrijkt & { dossier_id?: string } }
-  | { kind: 'verlof';  left: number; width: number; lane: number; item: MedewerkerAfwezigheid }
-  | { kind: 'agenda';  left: number; width: number; lane: number; item: BedrijfsagendaItemMetDoelgroep }
-  | { kind: 'feestdag'; left: number; width: number; lane: number; item: BedrijfsagendaVirtueel }
+// ─── Conflict-detectie (op echte tijdstippen) ───────────────────────────────────
+
+type Interval = { s: number; e: number } // ms-bereik [start, eind)
+
+/**
+ * Conflictsegmenten op basis van werkelijke tijdstippen, los van de gerenderde
+ * balkbreedte: (a) waar twee werk-taken in tijd overlappen, en (b) waar werk binnen
+ * een blok-periode valt (verlof/afwezigheid/feestdag/ATV).
+ */
+function berekenConflicten(work: Interval[], blokken: Interval[]): Interval[] {
+  const segs: Interval[] = []
+  const sorted = [...work].sort((a, b) => a.s - b.s)
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (sorted[j].s >= sorted[i].e) break
+      segs.push({ s: Math.max(sorted[i].s, sorted[j].s), e: Math.min(sorted[i].e, sorted[j].e) })
+    }
+  }
+  for (const w of work) {
+    for (const b of blokken) {
+      const s = Math.max(w.s, b.s)
+      const e = Math.min(w.e, b.e)
+      if (s < e) segs.push({ s, e })
+    }
+  }
+  return segs
+}
+
+function afwezigheidInterval(a: MedewerkerAfwezigheid): Interval {
+  if (a.start_tijd && a.eind_tijd) {
+    return {
+      s: new Date(`${a.start_datum}T${a.start_tijd}`).getTime(),
+      e: new Date(`${a.eind_datum}T${a.eind_tijd}`).getTime(),
+    }
+  }
+  return { s: parseISO(a.start_datum).getTime(), e: parseISO(a.eind_datum).getTime() + DAG_MS }
+}
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 function parseTime(timeStr: string): number {
   const [h, m] = timeStr.split(':').map(Number)
   return h * 60 + (m || 0)
-}
-
-function itemGeldtVoorMedewerker(
-  item: BedrijfsagendaItemMetDoelgroep,
-  med: { id: string; afdeling: string | null },
-): boolean {
-  if (item.doelgroep_afdelingen.length === 0 && item.doelgroep_medewerkers.length === 0) return true
-  if (item.doelgroep_medewerkers.includes(med.id)) return true
-  if (med.afdeling && item.doelgroep_afdelingen.includes(med.afdeling)) return true
-  return false
 }
 
 function dossierKleur(dossier_id: string): string {
@@ -94,86 +117,8 @@ function medKleur(id: string): string {
   return CREW_KLEUREN[h % CREW_KLEUREN.length]
 }
 
-// ─── Lane assignment ──────────────────────────────────────────────────────────
-
-function berekenLanes(
-  dagLen: number,
-  ppd:    number,
-  vs:     Date,
-  entries:    (PlanningItemVerrijkt & { dossier_id?: string })[],
-  afwezigheid: MedewerkerAfwezigheid[],
-  agendaItems: BedrijfsagendaItemMetDoelgroep[],
-  feestdagen:  BedrijfsagendaVirtueel[],
-): LanedBar[] {
-  type RawBar =
-    | { kind: 'entry';   left: number; width: number; entry: PlanningItemVerrijkt & { dossier_id?: string } }
-    | { kind: 'verlof';  left: number; width: number; item: MedewerkerAfwezigheid }
-    | { kind: 'agenda';  left: number; width: number; item: BedrijfsagendaItemMetDoelgroep }
-    | { kind: 'feestdag'; left: number; width: number; item: BedrijfsagendaVirtueel }
-
-  const raw: RawBar[] = []
-
-  for (const entry of entries) {
-    const startDt = parseISO(entry.start_dt)
-    const eindDt  = parseISO(entry.eind_dt)
-    const dayOff  = differenceInCalendarDays(startDt, vs)
-    const duurMin = differenceInMinutes(eindDt, startDt)
-    const left    = dayOff * ppd
-    const width   = Math.max(ppd * 0.05, (duurMin / 1440) * ppd)
-    if (left + width > 0 && left < dagLen * ppd)
-      raw.push({ kind: 'entry', entry, left, width })
-  }
-
-  for (const a of afwezigheid) {
-    const dayOffStart = differenceInCalendarDays(parseISO(a.start_datum), startOfDay(vs))
-    const dayOffEind  = differenceInCalendarDays(parseISO(a.eind_datum),  startOfDay(vs))
-    let left: number, width: number
-    if (a.start_tijd && a.eind_tijd) {
-      const sMin = parseTime(a.start_tijd), eMin = parseTime(a.eind_tijd)
-      left  = dayOffStart * ppd + (sMin / 1440) * ppd
-      width = Math.max(ppd * 0.05, ((eMin - sMin) / 1440) * ppd)
-    } else {
-      left  = dayOffStart * ppd
-      width = (dayOffEind - dayOffStart + 1) * ppd
-    }
-    if (left + width > 0 && left < dagLen * ppd)
-      raw.push({ kind: 'verlof', item: a, left, width })
-  }
-
-  for (const item of agendaItems) {
-    const dayOff = differenceInCalendarDays(parseISO(item.start_datum), startOfDay(vs))
-    let left: number, width: number
-    if (!item.hele_dag && item.start_tijd && item.eind_tijd) {
-      const sMin = parseTime(item.start_tijd), eMin = parseTime(item.eind_tijd)
-      left  = dayOff * ppd + (sMin / 1440) * ppd
-      width = Math.max(ppd * 0.03, ((eMin - sMin) / 1440) * ppd)
-    } else {
-      const duur = Math.max(1, Math.round((new Date(item.eind_datum).getTime() - new Date(item.start_datum).getTime()) / 86400000) + 1)
-      left  = dayOff * ppd
-      width = duur * ppd
-    }
-    if (left + width > 0 && left < dagLen * ppd)
-      raw.push({ kind: 'agenda', item, left, width })
-  }
-
-  for (const f of feestdagen) {
-    const dayOff = differenceInCalendarDays(parseISO(f.start_datum), startOfDay(vs))
-    const left = dayOff * ppd, width = ppd
-    if (left + width > 0 && left < dagLen * ppd)
-      raw.push({ kind: 'feestdag', item: f, left, width })
-  }
-
-  raw.sort((a, b) => a.left - b.left)
-
-  const laneRight: number[] = []
-  return raw.map(bar => {
-    const cLeft  = Math.max(0, bar.left)
-    const cRight = cLeft + Math.min(bar.width, dagLen * ppd - cLeft)
-    let lane = laneRight.findIndex(r => r <= cLeft)
-    if (lane === -1) { lane = laneRight.length; laneRight.push(0) }
-    laneRight[lane] = cRight
-    return { ...bar, lane } as LanedBar
-  })
+function volledigeNaam(m: Pick<Medewerker, 'voornaam' | 'tussenvoegsel' | 'achternaam'>): string {
+  return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
 }
 
 // ─── PlanningItemEditDialog ───────────────────────────────────────────────────
@@ -278,7 +223,7 @@ function PlanningItemEditDialog({
             >
               {medewerkers.map(m => (
                 <option key={m.id} value={m.id}>
-                  {[m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')}
+                  {volledigeNaam(m)}
                 </option>
               ))}
             </select>
@@ -517,7 +462,7 @@ function AgendaTimelineRij({
       left  = dayOff * ppd + (sMin / 1440) * ppd
       width = Math.max(ppd * 0.03, ((eMin - sMin) / 1440) * ppd)
     } else {
-      const duur = Math.max(1, Math.round((new Date(eind_datum).getTime() - new Date(start_datum).getTime()) / 86400000) + 1)
+      const duur = Math.max(1, Math.round((new Date(eind_datum).getTime() - new Date(start_datum).getTime()) / DAG_MS) + 1)
       left  = dayOff * ppd
       width = duur * ppd
     }
@@ -579,16 +524,16 @@ function AgendaTimelineRij({
 // ─── TimelineRij ──────────────────────────────────────────────────────────────
 
 function TimelineRij({
-  medewerker, top, rijHoogte, dagen, layout, bars, roosters, afwezigheid,
+  medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
   overCellId, dossierMap, kleurweergave, medewerkerKleuren, uursoortKleuren,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
 }: {
   medewerker:        Medewerker
   top:               number
-  rijHoogte:         number
   dagen:             Date[]
   layout:            PlanningLayout
-  bars:              LanedBar[]
+  entries:           (PlanningItemVerrijkt & { dossier_id?: string })[]
+  conflicten:        Interval[]
   roosters:          MedewerkerRooster[]
   afwezigheid:       MedewerkerAfwezigheid[]
   overCellId:        string | null
@@ -602,7 +547,9 @@ function TimelineRij({
   onEditEntry:       (entry: PlanningItemVerrijkt & { dossier_id?: string }) => void
   onResizedEntry:    (id: string, ns: string, ne: string) => void
 }) {
-  const { ppd } = layout
+  const { ppd, vs } = layout
+  const vs0     = startOfDay(vs).getTime()
+  const dagLenW = dagen.length * ppd
 
   function buitenRooster(dag: Date): boolean {
     const iso    = dag.toISOString().slice(0, 10)
@@ -615,28 +562,30 @@ function TimelineRij({
     return !(actief.werkdagen ?? []).includes(dagNum)
   }
 
-  function isAfwezig(dag: Date): boolean {
+  function afwezigheidOpDag(dag: Date): MedewerkerAfwezigheid | undefined {
     const iso = dag.toISOString().slice(0, 10)
-    return afwezigheid.some(a => iso >= a.start_datum && iso <= a.eind_datum)
+    return afwezigheid.find(a => iso >= a.start_datum && iso <= a.eind_datum)
   }
 
   return (
     <>
-      {/* Drop-cells + dag-achtergrond */}
+      {/* Drop-cells + dag-achtergrond (verlof/afwezigheid/feestdag/ATV als shading) */}
       {dagen.map((dag, i) => {
-        const iso         = dag.toISOString().slice(0, 10)
-        const buiten      = buitenRooster(dag)
-        const afwez       = isAfwezig(dag)
-        const feest       = feestdagenDagen.has(iso)
-        const atv         = atvDagen.has(iso)
-        const cellId      = `tcell-${medewerker.id}-${iso}`
-        const bg          = feest  ? 'rgba(251,146,60,0.12)'
-                          : atv    ? 'rgba(8,145,178,0.10)'
-                          : (buiten && !isWeekend(dag)) ? 'rgba(0,0,0,0.04)'
-                          : 'transparent'
+        const iso    = dag.toISOString().slice(0, 10)
+        const buiten = buitenRooster(dag)
+        const afwez  = afwezigheidOpDag(dag)
+        const feest  = feestdagenDagen.has(iso)
+        const atv    = atvDagen.has(iso)
+        const cellId = `tcell-${medewerker.id}-${iso}`
+        const bg     = feest ? 'rgba(251,146,60,0.12)'
+                     : atv   ? 'rgba(8,145,178,0.10)'
+                     : afwez ? `${AFWEZIGHEID_KLEUR[afwez.type]}1f`
+                     : (buiten && !isWeekend(dag)) ? 'rgba(0,0,0,0.04)'
+                     : 'transparent'
         const geblokkeerd = feest || atv
         const cellTitle   = feest ? feestdagenNamen[iso]
                           : atv   ? 'ATV-dag'
+                          : afwez ? medewerkerAfwezigheidLabels[afwez.type]
                           : undefined
         return (
           <DroppableTimelineCell
@@ -647,7 +596,7 @@ function TimelineRij({
             left={i * ppd}
             width={ppd}
             top={top}
-            hoogte={rijHoogte}
+            hoogte={RIJ_VAST}
             background={bg}
             isOver={overCellId === cellId}
             geblokkeerd={geblokkeerd}
@@ -658,134 +607,71 @@ function TimelineRij({
 
       {/* Rij-onderlijn */}
       <div style={{
-        position: 'absolute', top: top + rijHoogte - 1,
+        position: 'absolute', top: top + RIJ_VAST - 1,
         left: 0, right: 0, height: 1, background: KLEUR.border,
         pointerEvents: 'none',
       }} />
 
-      {/* Bars per lane */}
-      {bars.map((bar, idx) => {
-        const cLeft  = Math.max(0, bar.left)
-        const cWidth = Math.min(bar.width, dagen.length * ppd - cLeft) - 2
-        const barTop = top + ROW_PAD + bar.lane * (ITEM_H + LANE_GAP)
+      {/* Werk-taken op één strook (geen stapeling) */}
+      {entries.map(entry => {
+        const sd    = parseISO(entry.start_dt).getTime()
+        const ed    = parseISO(entry.eind_dt).getTime()
+        const left  = ((sd - vs0) / DAG_MS) * ppd
+        const rawW  = ((ed - sd) / DAG_MS) * ppd
+        const width = Math.max(MIN_BAR_W, rawW)
+        if (left + width <= 0 || left >= dagLenW) return null
+        const cLeft  = Math.max(0, left)
+        const cWidth = Math.min(width, dagLenW - cLeft)
         if (cWidth <= 0) return null
 
-        if (bar.kind === 'entry') {
-          const { entry } = bar
-          const dossier_id = entry.dossier_id ?? ''
-          const titel      = dossierMap[dossier_id] ?? dossier_id
-          const uursoortId = entry.planning_activiteiten?.uursoort_id as string | undefined
-          const entryKleur = kleurweergave === 'uursoort'
-            ? (uursoortId ? (uursoortKleuren[uursoortId] ?? '#4a7c9e') : '#4a7c9e')
-            : (medewerkerKleuren[medewerker.id] ?? medKleur(medewerker.id))
-          return (
-            <TimelineEntry
-              key={`entry-${entry.id}`}
-              entry={entry}
-              left={cLeft}
-              width={cWidth}
-              top={barTop}
-              dossier_id={dossier_id}
-              dossier_titel={titel}
-              kleur={entryKleur}
-              ppd={ppd}
-              onEdit={() => onEditEntry(entry)}
-              onResized={onResizedEntry}
-            />
-          )
-        }
+        const dossier_id = entry.dossier_id ?? ''
+        const titel      = dossierMap[dossier_id] ?? dossier_id
+        const uursoortId = entry.planning_activiteiten?.uursoort_id as string | undefined
+        const entryKleur = kleurweergave === 'uursoort'
+          ? (uursoortId ? (uursoortKleuren[uursoortId] ?? '#4a7c9e') : '#4a7c9e')
+          : (medewerkerKleuren[medewerker.id] ?? medKleur(medewerker.id))
+        return (
+          <TimelineEntry
+            key={`entry-${entry.id}`}
+            entry={entry}
+            left={cLeft}
+            width={cWidth}
+            top={top + ROW_PAD}
+            dossier_id={dossier_id}
+            dossier_titel={titel}
+            kleur={entryKleur}
+            ppd={ppd}
+            onEdit={() => onEditEntry(entry)}
+            onResized={onResizedEntry}
+          />
+        )
+      })}
 
-        if (bar.kind === 'verlof') {
-          const a     = bar.item
-          const kleur = AFWEZIGHEID_KLEUR[a.type]
-          const label = medewerkerAfwezigheidLabels[a.type]
-          return (
-            <div
-              key={`verlof-${a.id}-${idx}`}
-              title={`${label}${a.start_tijd ? ` · ${a.start_tijd}–${a.eind_tijd}` : ''}${a.opmerking ? ` · ${a.opmerking}` : ''}`}
-              style={{
-                position: 'absolute',
-                top: barTop, height: ITEM_H,
-                left: cLeft, width: cWidth,
-                borderRadius: 5,
-                background: kleur + '28',
-                borderLeft: `3px solid ${kleur}`,
-                display: 'flex', alignItems: 'center',
-                paddingLeft: 6, overflow: 'hidden',
-                zIndex: 5, pointerEvents: 'none',
-              }}
-            >
-              {cWidth > 32 && (
-                <span style={{
-                  fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
-                  color: kleur, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {label}
-                </span>
-              )}
-            </div>
-          )
-        }
-
-        if (bar.kind === 'agenda') {
-          const item  = bar.item
-          const kleur = item.kleur ?? bedrijfsagendaTypeKleur[item.type as BedrijfsagendaType] ?? '#64748b'
-          return (
-            <div
-              key={`agenda-${item.id}-${idx}`}
-              title={`${item.titel}${item.start_tijd ? ` · ${item.start_tijd}–${item.eind_tijd}` : ''}`}
-              style={{
-                position: 'absolute',
-                top: barTop, height: ITEM_H,
-                left: cLeft, width: cWidth,
-                borderRadius: 5, background: kleur, opacity: 0.75,
-                border: '2px solid var(--bg-elev)',
-                display: 'flex', alignItems: 'center',
-                paddingLeft: 6, overflow: 'hidden',
-                zIndex: 6, pointerEvents: 'none',
-              }}
-            >
-              {cWidth > 40 && (
-                <span style={{
-                  fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
-                  color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {item.titel}
-                </span>
-              )}
-            </div>
-          )
-        }
-
-        if (bar.kind === 'feestdag') {
-          const f = bar.item
-          return (
-            <div
-              key={`feestdag-${f.id}-${idx}`}
-              title={f.titel}
-              style={{
-                position: 'absolute',
-                top: barTop, height: ITEM_H,
-                left: cLeft, width: cWidth,
-                borderRadius: 5, background: f.kleur ?? '#f97316', opacity: 0.85,
-                display: 'flex', alignItems: 'center',
-                paddingLeft: 7, overflow: 'hidden',
-                zIndex: 4, pointerEvents: 'none',
-              }}
-            >
-              {cWidth > 40 && (
-                <span style={{
-                  fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
-                  color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {f.titel}
-                </span>
-              )}
-            </div>
-          )
-        }
-
-        return null
+      {/* Conflict-gloed — overlappend werk of werk tijdens verlof/feestdag/ATV */}
+      {conflicten.map((seg, i) => {
+        const left  = ((seg.s - vs0) / DAG_MS) * ppd
+        const rawW  = ((seg.e - seg.s) / DAG_MS) * ppd
+        const width = Math.max(MIN_BAR_W, rawW)
+        if (left + width <= 0 || left >= dagLenW) return null
+        const cLeft  = Math.max(0, left)
+        const cWidth = Math.min(width, dagLenW - cLeft)
+        if (cWidth <= 0) return null
+        return (
+          <div
+            key={`conflict-${i}`}
+            title="Dubbel ingepland / conflict"
+            style={{
+              position: 'absolute',
+              top: top + 2, height: RIJ_VAST - 4,
+              left: cLeft, width: cWidth,
+              borderRadius: 5,
+              background: 'rgba(239,68,68,0.22)',
+              border: '1px solid rgba(239,68,68,0.75)',
+              boxShadow: '0 0 7px 1px rgba(239,68,68,0.55)',
+              pointerEvents: 'none', zIndex: 7,
+            }}
+          />
+        )
       })}
     </>
   )
@@ -813,47 +699,42 @@ export default function MedewerkerTimeline({
   const router = useRouter()
   const [, startTransition] = useTransition()
 
-  const [peildatum, setPeildatum] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
-  const [view,      setView]      = useState<View>('week')
-  const [viewStart, setViewStart] = useState(
-    () => viewBereik('week', startOfWeek(new Date(), { weekStartsOn: 1 })).vs)
+  const {
+    view, peildatum, layout, wrapRef, scrollRef,
+    handlePeildatum, handleView, handleVandaag, handleScrub,
+  } = usePlanningController({ defaultView: 'maand' })
+  const { vs, ve, ppd } = layout
+
   const [entries,   setEntries]   = useState(initialEntries)
   const [activeItem,    setActiveItem]    = useState<{ entry: PlanningItemVerrijkt; dossier_id: string } | null>(null)
   const [overCellId,    setOverCellId]    = useState<string | null>(null)
   const [verlofModalOpen, setVerlofModalOpen] = useState(false)
   const [editingEntry,  setEditingEntry]  = useState<(PlanningItemVerrijkt & { dossier_id?: string }) | null>(null)
 
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const [availableW, setAvailableW] = useState(800)
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const ro = new ResizeObserver(([entry]) => {
-      setAvailableW(Math.max(100, entry.contentRect.width - LABEL_W))
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+  const [selAfdelingen, setSelAfdelingen] = useState<string[]>([])
+  const [sortBy, setSortBy] = useState<SortKey>('voornaam')
+
+  useEffect(() => { setEntries(initialEntries) }, [initialEntries])
 
   const [kleurweergave, setKleurweergave] = useKleurweergave()
 
-  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
-  const vs = viewStart
-  const ve = useMemo(() => addDays(viewStart, layout.totalDays - 1), [viewStart, layout.totalDays])
-  const { spans: effSpans, cols: effCols } = useMemo(
-    () => buildHeader(view, vs, ve, layout.ppd), [view, vs, ve, layout.ppd])
-  const effGridUnits = useMemo(
-    () => buildGridUnits(view, vs, ve, layout.ppd), [view, vs, ve, layout.ppd])
-  const effectiefLayout = useMemo<PlanningLayout>(() => ({
-    ...layout,
-    vs, ve,
-    spans: effSpans, cols: effCols, gridUnits: effGridUnits,
-    dagOffset: (iso: string) => differenceInDays(startOfDay(parseISO(iso)), startOfDay(vs)),
-    xVoor: (iso: string) => Math.max(0, Math.min(layout.totalW,
-      differenceInDays(startOfDay(parseISO(iso)), startOfDay(vs)) * layout.ppd)),
-  }), [layout, vs, ve, effSpans, effCols, effGridUnits])
+  const dagen = useMemo(() => eachDayOfInterval({ start: vs, end: ve }), [vs, ve])
 
-  const dagen  = useMemo(() => eachDayOfInterval({ start: vs, end: ve }), [vs, ve])
+  const afdelingOpties = useMemo(
+    () => [...new Set(medewerkers.map(m => m.afdeling).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'nl')),
+    [medewerkers],
+  )
+
+  const zichtbareMedewerkers = useMemo(() => {
+    let list = medewerkers
+    if (selAfdelingen.length > 0) list = list.filter(m => m.afdeling && selAfdelingen.includes(m.afdeling))
+    const cmp = (a: string | null, b: string | null) => (a ?? '').localeCompare(b ?? '', 'nl')
+    return [...list].sort((a, b) => {
+      if (sortBy === 'afdeling') return cmp(a.afdeling, b.afdeling) || cmp(a.voornaam, b.voornaam)
+      if (sortBy === 'functie')  return cmp(a.functie,  b.functie)  || cmp(a.voornaam, b.voornaam)
+      return cmp(a.voornaam, b.voornaam) || cmp(a.achternaam, b.achternaam)
+    })
+  }, [medewerkers, selAfdelingen, sortBy])
 
   const medewerkerKleuren = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m.kleur])), [medewerkers])
   const uursoortKleuren   = useMemo(() => Object.fromEntries(uursoorten.filter(u => u.kleur).map(u => [u.id, u.kleur])), [uursoorten])
@@ -871,7 +752,6 @@ export default function MedewerkerTimeline({
     return map
   }, [entries])
 
-  const roostersPerMedewerker    = useMemo(() => groupBy(roosters,    r => r.medewerker_id), [roosters])
   const afwezigheidPerMedewerker = useMemo(() => groupBy(afwezigheid, a => a.medewerker_id), [afwezigheid])
 
   const feestdagenDagen = useMemo(() => new Set(feestdagen.map(f => f.start_datum)), [feestdagen])
@@ -892,6 +772,14 @@ export default function MedewerkerTimeline({
     return set
   }, [agendaItems])
 
+  // Blok-intervallen die voor iedereen gelden (feestdag/ATV) — voor conflictdetectie.
+  const feestAtvIntervals = useMemo<Interval[]>(() => {
+    const arr: Interval[] = []
+    for (const iso of feestdagenDagen) { const t = parseISO(iso).getTime(); arr.push({ s: t, e: t + DAG_MS }) }
+    for (const iso of atvDagen)        { const t = parseISO(iso).getTime(); arr.push({ s: t, e: t + DAG_MS }) }
+    return arr
+  }, [feestdagenDagen, atvDagen])
+
   const agendaItemsInBereik = useMemo(() => {
     const start = vs.toISOString().slice(0, 10)
     const einde = ve.toISOString().slice(0, 10)
@@ -906,32 +794,29 @@ export default function MedewerkerTimeline({
 
   const heeftAgendaRij = agendaItems.length > 0 || feestdagen.length > 0
 
-  // Per-medewerker layout: bars (with lanes) + rijhoogte + absolute top
+  // Per-medewerker layout: zichtbare entries + conflictsegmenten + vaste rijhoogte + top.
   const medewerkerLayout = useMemo(() => {
+    const vsMs = vs.getTime()
+    const veMs = ve.getTime() + DAG_MS
     let accTop = heeftAgendaRij ? RIJ_HOOGTE : 0
-    return medewerkers.map(m => {
-      const bars = berekenLanes(
-        dagen.length,
-        layout.ppd,
-        vs,
-        entriesPerMedewerker[m.id] ?? [],
-        afwezigheidPerMedewerker[m.id] ?? [],
-        agendaItemsInBereik.filter(item => itemGeldtVoorMedewerker(item, m)),
-        feestdagenInBereik,
-      )
-      const numLanes  = bars.length ? Math.max(...bars.map(b => b.lane)) + 1 : 0
-      const rijHoogte = rijHoogteVoor(numLanes)
-      const row = { medewerker: m, top: accTop, bars, rijHoogte }
-      accTop += rijHoogte
+    return zichtbareMedewerkers.map(m => {
+      const alle    = entriesPerMedewerker[m.id] ?? []
+      const myEntries = alle.filter(e => {
+        const s = parseISO(e.start_dt).getTime()
+        const en = parseISO(e.eind_dt).getTime()
+        return en >= vsMs && s <= veMs
+      })
+      const myAfw = afwezigheidPerMedewerker[m.id] ?? []
+      const work: Interval[]   = myEntries.map(e => ({ s: parseISO(e.start_dt).getTime(), e: parseISO(e.eind_dt).getTime() }))
+      const blokken: Interval[] = [...feestAtvIntervals, ...myAfw.map(afwezigheidInterval)]
+      const conflicten = berekenConflicten(work, blokken)
+      const row = { medewerker: m, top: accTop, entries: myEntries, conflicten, heeftConflict: conflicten.length > 0 }
+      accTop += RIJ_VAST
       return row
     })
-  }, [
-    medewerkers, entriesPerMedewerker, afwezigheidPerMedewerker,
-    agendaItemsInBereik, feestdagenInBereik, dagen, layout.ppd, vs, heeftAgendaRij,
-  ])
+  }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, heeftAgendaRij])
 
-  const bodyHoogte = (heeftAgendaRij ? RIJ_HOOGTE : 0) +
-    medewerkerLayout.reduce((s, ml) => s + ml.rijHoogte, 0)
+  const bodyHoogte = (heeftAgendaRij ? RIJ_HOOGTE : 0) + zichtbareMedewerkers.length * RIJ_VAST
 
   async function onDragEnd(event: DragEndEvent) {
     setActiveItem(null)
@@ -997,11 +882,11 @@ export default function MedewerkerTimeline({
           }}>Bedrijfsagenda</span>
         </div>
       )}
-      {medewerkerLayout.map(({ medewerker: m, rijHoogte }) => (
+      {medewerkerLayout.map(({ medewerker: m, heeftConflict }) => (
         <Link key={m.id} href={`/medewerkers/${m.id}`} style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{
-            height: rijHoogte, display: 'flex', alignItems: 'center',
-            paddingLeft: 12, gap: 8, borderBottom: `1px solid ${KLEUR.border}`,
+            height: RIJ_VAST, display: 'flex', alignItems: 'center',
+            paddingLeft: 12, paddingRight: 8, gap: 8, borderBottom: `1px solid ${KLEUR.border}`,
             background: KLEUR.bgElev,
           }}>
             <div style={{
@@ -1011,14 +896,27 @@ export default function MedewerkerTimeline({
             }}>
               {[m.voornaam[0], m.achternaam[0]].join('').toUpperCase()}
             </div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{
                 fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: KLEUR.fg,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
-                {[m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')}
+                {volledigeNaam(m)}
               </div>
+              {(m.functie || m.afdeling) && (
+                <div style={{
+                  fontSize: 9, color: KLEUR.fgMuted,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {[m.functie, m.afdeling].filter(Boolean).join(' · ')}
+                </div>
+              )}
             </div>
+            {heeftConflict && (
+              <span title="Dubbel ingepland / conflict" style={{ display: 'inline-flex', color: '#ef4444', flexShrink: 0 }}>
+                <AlertTriangle size={15} />
+              </span>
+            )}
           </div>
         </Link>
       ))}
@@ -1035,16 +933,16 @@ export default function MedewerkerTimeline({
           dagen={dagen}
         />
       )}
-      {medewerkerLayout.map(({ medewerker: m, top, bars, rijHoogte }) => (
+      {medewerkerLayout.map(({ medewerker: m, top, entries: rijEntries, conflicten }) => (
         <TimelineRij
           key={m.id}
           medewerker={m}
           top={top}
-          rijHoogte={rijHoogte}
           dagen={dagen}
           layout={layout}
-          bars={bars}
-          roosters={roostersPerMedewerker[m.id] ?? []}
+          entries={rijEntries}
+          conflicten={conflicten}
+          roosters={roosters.filter(r => r.medewerker_id === m.id)}
           afwezigheid={afwezigheidPerMedewerker[m.id] ?? []}
           overCellId={overCellId}
           dossierMap={dossierMap}
@@ -1061,6 +959,62 @@ export default function MedewerkerTimeline({
     </>
   )
 
+  // ─── Slicer + sorteer-balk (bovenin) ─────────────────────────────────────────
+  const segGroep = (children: React.ReactNode) => (
+    <div style={{ display: 'flex', gap: 2, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 2 }}>
+      {children}
+    </div>
+  )
+  const sortControl = segGroep(
+    SORT_OPTIES.map(o => (
+      <button key={o.key} onClick={() => setSortBy(o.key)} style={{
+        padding: '3px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
+        background: sortBy === o.key ? 'var(--accent)' : 'transparent',
+        color: sortBy === o.key ? 'white' : 'var(--fg-muted)',
+        fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+      }}>
+        {o.label}
+      </button>
+    )),
+  )
+
+  const slicerBalk = (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+      {afdelingOpties.length >= 2 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Afdeling</span>
+          {afdelingOpties.map(afd => {
+            const actief = selAfdelingen.includes(afd)
+            return (
+              <button key={afd} onClick={() => setSelAfdelingen(prev =>
+                actief ? prev.filter(a => a !== afd) : [...prev, afd]
+              )} style={{
+                padding: '3px 10px', borderRadius: 20, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
+                background: actief ? 'var(--accent)' : 'transparent',
+                color: actief ? 'white' : 'var(--fg-muted)',
+                fontSize: 10, fontWeight: 600, cursor: 'pointer',
+              }}>
+                {afd}
+              </button>
+            )
+          })}
+          {selAfdelingen.length > 0 && (
+            <button onClick={() => setSelAfdelingen([])} style={{
+              padding: '3px 8px', borderRadius: 20, border: '1px solid var(--border)',
+              background: 'transparent', color: 'var(--fg-muted)', fontSize: 10, cursor: 'pointer',
+            }}>
+              × wis
+            </button>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sorteer</span>
+        {sortControl}
+      </div>
+    </div>
+  )
+
   return (
     <DndContext
       sensors={sensors}
@@ -1073,43 +1027,32 @@ export default function MedewerkerTimeline({
       onDragCancel={() => { setActiveItem(null); setOverCellId(null) }}
     >
       <div ref={wrapRef}>
+        {slicerBalk}
         <PlanningShell
-          layout={effectiefLayout}
+          layout={layout}
+          scrollRef={scrollRef}
           toolbar={
-            <>
-              <PeriodeNav
-                peildatum={peildatum}
-                view={view}
-                onPeildatum={pd => { setPeildatum(pd); setViewStart(viewBereik(view, pd).vs) }}
-                onView={v => {
-                  setView(v)
-                  let pd = peildatum
-                  if (v === 'maand') pd = startOfMonth(peildatum)
-                  if (v === 'week' || v === '2weken') pd = startOfWeek(peildatum, { weekStartsOn: 1 })
-                  setPeildatum(pd)
-                  setViewStart(viewBereik(v, pd).vs)
-                }}
-                onVandaag={() => {
-                  const pd = startOfWeek(new Date(), { weekStartsOn: 1 })
-                  setPeildatum(pd)
-                  setViewStart(viewBereik(view, pd).vs)
-                }}
-                rightSlot={
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => setVerlofModalOpen(true)}
-                      className="eva-btn-ghost"
-                    >
-                      + Verlof
-                    </button>
-                    <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />
-                  </div>
-                }
-              />
-              <PeriodeScrubber view={view} peildatum={peildatum} vs={viewStart} onChange={setViewStart} />
-            </>
+            <PeriodeNav
+              peildatum={peildatum}
+              view={view}
+              onPeildatum={handlePeildatum}
+              onView={handleView}
+              onVandaag={handleVandaag}
+              rightSlot={
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setVerlofModalOpen(true)}
+                    className="eva-btn-ghost"
+                  >
+                    + Verlof
+                  </button>
+                  <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />
+                </div>
+              }
+            />
           }
+          scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
           labelHeader="Medewerker"
           labelKolom={labelKolom}
           body={body}

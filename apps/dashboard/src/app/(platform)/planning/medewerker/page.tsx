@@ -8,6 +8,10 @@ import { PageHeader } from '@/components/ui'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
 
+/** Niet-uitvoerende afdelingen die buiten de medewerkerplanning blijven.
+ *  Pas deze lijst aan als de afdelingsindeling wijzigt. */
+const KANTOOR_AFDELINGEN = ['Projectbureau', 'Administratie', 'Directie']
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
@@ -30,7 +34,10 @@ export default async function MedewerkerplanningPage() {
     haalPlanningItemsMetExpansie(jaar),
   ])
 
-  const medewerkers = (medewerkerRes.data ?? []) as Medewerker[]
+  // Alleen uitvoerend personeel: kantoor-afdelingen weglaten (medewerkers zonder
+  // afdeling blijven wél staan).
+  const medewerkers = ((medewerkerRes.data ?? []) as Medewerker[])
+    .filter(m => !m.afdeling || !KANTOOR_AFDELINGEN.includes(m.afdeling))
   const roosters    = (roostersRes.data ?? []) as MedewerkerRooster[]
   const afwezigheid = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
   const uursoorten  = (uursoortRes.data ?? []) as PlanningUursoort[]

@@ -1,13 +1,13 @@
 'use client'
 
-import { addDays, differenceInDays, parseISO, startOfDay, startOfMonth } from 'date-fns'
+import { differenceInDays, parseISO, startOfDay } from 'date-fns'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { crewKleur } from '@/lib/utils/crew'
 import {
-  buildGridUnits, buildHeader, KLEUR, LABEL_W, PeriodeNav, PeriodeScrubber,
-  PlanningShell, RIJ_HOOGTE, usePlanningLayout, viewBereik, type View,
-} from './layout'
+  KLEUR, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
+  usePlanningController,
+} from './layout/index'
 import type { OpdrachtRij } from '@/app/(platform)/planning/project/page'
 
 const SUBSTATUS_KLEUR: Record<string, string> = {
@@ -17,35 +17,24 @@ const SUBSTATUS_KLEUR: Record<string, string> = {
   uitvoering_gereed: '#8650c4',
 }
 
+type SortKey = 'start' | 'eind' | 'naam'
+const SORT_OPTIES: { key: SortKey; label: string }[] = [
+  { key: 'start', label: 'Startdatum' },
+  { key: 'eind',  label: 'Einddatum' },
+  { key: 'naam',  label: 'Projectnaam' },
+]
+
 export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] }) {
-  const [peildatum,   setPeildatum]   = useState(() => startOfMonth(new Date()))
-  const [view,        setView]        = useState<View>('maand')
-  const [kleurModus,  setKleurModus]  = useState<'status' | 'projectleider'>('projectleider')
-  const [viewStart, setViewStart] = useState(() => viewBereik('maand', startOfMonth(new Date())).vs)
-  const [availableW, setAvailableW] = useState(800)
+  const {
+    view, peildatum, layout, wrapRef, scrollRef,
+    handlePeildatum, handleView, handleVandaag, handleScrub,
+  } = usePlanningController({ defaultView: 'maand' })
+
+  const [kleurModus, setKleurModus] = useState<'status' | 'projectleider'>('projectleider')
+  const [sortBy, setSortBy] = useState<SortKey>('start')
   const [geselecteerdeCategorieen, setGeselecteerdeCategorieen] = useState<string[]>([])
-  const wrapRef   = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const ro = new ResizeObserver(([entry]) => {
-      setAvailableW(Math.max(100, entry.contentRect.width - LABEL_W))
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
-  const { ppd, totalDays } = layout
-  const vs = viewStart
-  const ve = useMemo(() => addDays(viewStart, totalDays - 1), [viewStart, totalDays])
-  const { spans: effSpans, cols: effCols } = useMemo(() => buildHeader(view, vs, ve, ppd), [view, vs, ve, ppd])
-  const effGridUnits = useMemo(() => buildGridUnits(view, vs, ve, ppd), [view, vs, ve, ppd])
-  const effectiefLayout = useMemo(
-    () => ({ ...layout, vs, ve, spans: effSpans, cols: effCols, gridUnits: effGridUnits }),
-    [layout, vs, ve, effSpans, effCols, effGridUnits])
+  const { ppd, totalDays, vs, ve } = layout
 
   const uniekeCat = useMemo(
     () => [...new Set(opdrachten.map(o => o.categorie).filter(Boolean) as string[])].sort(),
@@ -59,38 +48,23 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     [opdrachten, geselecteerdeCategorieen],
   )
 
+  const gesorteerd = useMemo(() => {
+    const start = (o: OpdrachtRij) => o.planning_start ?? o.verwacht_startdatum ?? ''
+    const eind  = (o: OpdrachtRij) => o.planning_eind  ?? o.verwacht_einddatum  ?? ''
+    const cmpLeegLaatst = (a: string, b: string) =>
+      (a === '' ? 1 : 0) - (b === '' ? 1 : 0) || a.localeCompare(b)
+    return [...gefilterd].sort((a, b) => {
+      if (sortBy === 'naam') return (a.titel ?? '').localeCompare(b.titel ?? '', 'nl')
+      if (sortBy === 'eind')  return cmpLeegLaatst(eind(a), eind(b))
+      return cmpLeegLaatst(start(a), start(b))
+    })
+  }, [gefilterd, sortBy])
+
   function getKleur(o: OpdrachtRij) {
     if (kleurModus === 'projectleider')
       return o.projectleider_kleur ?? crewKleur(o.projectleider_naam ?? '—')
     return SUBSTATUS_KLEUR[o.opdracht_substatus ?? ''] ?? '#888'
   }
-
-  function handlePeildatum(pd: Date) {
-    setPeildatum(pd)
-    setViewStart(viewBereik(view, pd).vs)
-  }
-  function handleView(v: View) {
-    setView(v)
-    setViewStart(viewBereik(v, peildatum).vs)
-  }
-  function handleVandaag() {
-    const pd = startOfMonth(new Date())
-    setPeildatum(pd)
-    setViewStart(viewBereik(view, pd).vs)
-    setTimeout(scrollNaarVandaag, 50)
-  }
-
-  function scrollNaarVandaag() {
-    if (!scrollRef.current) return
-    const offset = differenceInDays(startOfDay(new Date()), startOfDay(vs))
-    scrollRef.current.scrollLeft = Math.max(0, offset * ppd - 80)
-  }
-
-  useEffect(() => {
-    const t = setTimeout(scrollNaarVandaag, 50)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peildatum.getTime(), ppd])
 
   function balk(start: Date, eind: Date) {
     const startOff = Math.max(0, differenceInDays(startOfDay(start), startOfDay(vs)))
@@ -99,7 +73,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     return { left: startOff * ppd, width: w }
   }
 
-  const bodyHoogte = gefilterd.length * RIJ_HOOGTE
+  const bodyHoogte = gesorteerd.length * RIJ_HOOGTE
 
   // DS-spec: border-radius 6px + box-shadow op activiteitbaren + hover-lift
   const balkStijl = (
@@ -119,7 +93,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
 
   const labelKolom = (
     <div>
-      {gefilterd.map(o => {
+      {gesorteerd.map(o => {
         const kleur = getKleur(o)
         return (
           <div key={o.id} style={{
@@ -154,7 +128,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
 
   const body = (
     <>
-      {gefilterd.map((o, i) => {
+      {gesorteerd.map((o, i) => {
         const startStr = o.planning_start ?? o.verwacht_startdatum
         const eindStr  = o.planning_eind  ?? o.verwacht_einddatum
         const start = startStr ? parseISO(startStr) : vs
@@ -204,7 +178,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
 
   const legendaItems = kleurModus === 'status'
     ? Object.entries(SUBSTATUS_KLEUR).map(([key, kleur]) => ({ label: key.replace(/_/g, ' '), kleur }))
-    : [...new Map(gefilterd.map(o => [
+    : [...new Map(gesorteerd.map(o => [
         o.projectleider_naam ?? '—',
         { label: o.projectleider_naam ?? '—', kleur: o.projectleider_kleur ?? crewKleur(o.projectleider_naam ?? '—') },
       ])).values()]
@@ -222,18 +196,37 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     </div>
   )
 
-  const kleurToggle = (
+  const segGroep = (
+    children: React.ReactNode,
+  ) => (
     <div style={{ display: 'flex', gap: 2, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 2 }}>
-      {(['status', 'projectleider'] as const).map(modus => (
-        <button key={modus} onClick={() => setKleurModus(modus)} style={{
-          padding: '3px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
-          background: kleurModus === modus ? 'var(--accent)' : 'transparent',
-          color: kleurModus === modus ? 'white' : 'var(--fg-muted)',
-          fontSize: 10, fontWeight: 700,
-        }}>
-          {modus === 'status' ? 'Status' : 'Medewerker'}
-        </button>
-      ))}
+      {children}
+    </div>
+  )
+  const segKnop = (actief: boolean, label: string, onClick: () => void) => (
+    <button key={label} onClick={onClick} style={{
+      padding: '3px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
+      background: actief ? 'var(--accent)' : 'transparent',
+      color: actief ? 'white' : 'var(--fg-muted)',
+      fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </button>
+  )
+
+  const sortControl = segGroep(
+    SORT_OPTIES.map(o => segKnop(sortBy === o.key, o.label, () => setSortBy(o.key))),
+  )
+  const kleurToggle = segGroep(
+    (['status', 'projectleider'] as const).map(modus =>
+      segKnop(kleurModus === modus, modus === 'status' ? 'Status' : 'Medewerker', () => setKleurModus(modus)),
+    ),
+  )
+  const rightSlot = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sorteer</span>
+      {sortControl}
+      {kleurToggle}
     </div>
   )
 
@@ -270,7 +263,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     <div ref={wrapRef}>
       {balkStijl}
       {categorieSlicer}
-      {gefilterd.length === 0 ? (
+      {gesorteerd.length === 0 ? (
         <>
           <PeriodeNav
             peildatum={peildatum}
@@ -289,30 +282,26 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
           </div>
         </>
       ) : (
-        <>
-          <PlanningShell
-            layout={effectiefLayout}
-            scrollRef={scrollRef}
-            toolbar={
-              <>
-                <PeriodeNav
-                  peildatum={peildatum}
-                  view={view}
-                  onPeildatum={handlePeildatum}
-                  onView={handleView}
-                  onVandaag={handleVandaag}
-                  rightSlot={kleurToggle}
-                />
-                <PeriodeScrubber view={view} peildatum={peildatum} vs={viewStart} onChange={setViewStart} />
-              </>
-            }
-            labelHeader="Opdracht"
-            labelKolom={labelKolom}
-            body={body}
-            bodyHoogte={bodyHoogte}
-            legenda={legenda}
-          />
-        </>
+        <PlanningShell
+          layout={layout}
+          scrollRef={scrollRef}
+          toolbar={
+            <PeriodeNav
+              peildatum={peildatum}
+              view={view}
+              onPeildatum={handlePeildatum}
+              onView={handleView}
+              onVandaag={handleVandaag}
+              rightSlot={rightSlot}
+            />
+          }
+          scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
+          labelHeader="Opdracht"
+          labelKolom={labelKolom}
+          body={body}
+          bodyHoogte={bodyHoogte}
+          legenda={legenda}
+        />
       )}
     </div>
   )
