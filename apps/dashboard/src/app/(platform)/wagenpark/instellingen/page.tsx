@@ -16,11 +16,17 @@ type RegelRij = {
 }
 
 export default async function InstellingenPage() {
-  const regels = await pgQuery<RegelRij>(
-    `select id, code, titel, beschrijving, actief, drempel_config
-       from public.handboek_regels
-      order by code`,
-  )
+  let regels: RegelRij[] = []
+  let verbindingsfout: string | null = null
+  try {
+    regels = await pgQuery<RegelRij>(
+      `select id, code, titel, beschrijving, actief, drempel_config
+         from public.handboek_regels
+        order by code`,
+    )
+  } catch (e) {
+    verbindingsfout = e instanceof Error ? e.message : String(e)
+  }
 
   return (
     <>
@@ -33,7 +39,15 @@ export default async function InstellingenPage() {
         <div className="px-5 py-3 border-b">
           <h2 className="text-sm font-semibold text-slate-700">Handboek-regels</h2>
         </div>
-        {regels.length === 0 ? (
+        {verbindingsfout ? (
+          <div className="m-5 p-4 bg-red-50 border border-red-200 rounded text-sm text-red-900">
+            <strong>Geen verbinding met de database.</strong> De regels staan er wél, maar konden
+            niet worden opgehaald. {verbindingsfout}
+            <div className="mt-2">
+              Zie <a href="/wagenpark/diagnose" className="underline">Diagnose</a> voor details.
+            </div>
+          </div>
+        ) : regels.length === 0 ? (
           <EmptyState
             titel="Geen regels geconfigureerd"
             omschrijving="Voer de migratie uit — regels worden automatisch geseed."

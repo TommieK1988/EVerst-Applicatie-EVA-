@@ -44,17 +44,30 @@ export function getPgPool(): Pool {
   return globalThis.__wagenparkPgPool
 }
 
+/** Is de directe Postgres-verbinding geconfigureerd? */
+export function hasDatabaseUrl(): boolean {
+  return !!process.env.DATABASE_URL
+}
+
 /**
  * Convenience: voer een query uit en geef rijen terug.
- * Geeft een lege array terug als DATABASE_URL niet geconfigureerd is,
- * zodat pagina's een lege staat tonen in plaats van te crashen.
+ *
+ * Gooit een duidelijke fout als DATABASE_URL ontbreekt, i.p.v. stilletjes
+ * een lege array terug te geven — dat laatste deed een ontbrekende env-var
+ * lijken op "data verdwenen". Een ontbrekende verbinding hoort als fout
+ * zichtbaar te zijn, niet als lege lijst.
  */
 export async function pgQuery<T extends Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
   if (!process.env.DATABASE_URL) {
-    return []
+    throw new Error(
+      'DATABASE_URL ontbreekt — de Wagenpark-database-verbinding is niet ' +
+        'geconfigureerd in deze omgeving. Zet de Supabase connection string ' +
+        '(Transaction pooler, poort 6543) als env-variable. Lokaal: .env.local; ' +
+        'online: Vercel → Settings → Environment Variables, daarna redeployen.',
+    )
   }
   const pool = getPgPool()
   const res = await pool.query<T>(sql, params)

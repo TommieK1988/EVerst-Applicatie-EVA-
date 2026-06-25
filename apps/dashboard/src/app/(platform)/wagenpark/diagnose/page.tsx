@@ -1,5 +1,6 @@
 import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
+import { hasDatabaseUrl, pgQuery } from '@/lib/wagenpark/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,28 @@ export default async function DiagnosePage() {
   const projectId = url.match(/https:\/\/([^.]+)\./)?.[1] ?? 'onbekend'
   const hasAnon = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const hasServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  const hasDbUrl = hasDatabaseUrl()
+
+  // De directe Postgres-verbinding (DATABASE_URL) levert de meeste reads,
+  // o.a. de compliance-regels. Test 'm met een echte query.
+  let pgStatus: { ok: boolean; detail: string }
+  if (!hasDbUrl) {
+    pgStatus = {
+      ok: false,
+      detail:
+        'DATABASE_URL ontbreekt in deze omgeving — pagina’s die hierop leunen ' +
+        '(regels, ritten, bestuurders, bevindingen, parkeren) tonen geen data.',
+    }
+  } else {
+    try {
+      const rows = await pgQuery<{ n: number }>(
+        'select count(*)::int as n from public.handboek_regels',
+      )
+      pgStatus = { ok: true, detail: `verbonden — ${rows[0]?.n ?? 0} handboek-regels gevonden` }
+    } catch (e) {
+      pgStatus = { ok: false, detail: e instanceof Error ? e.message : String(e) }
+    }
+  }
 
   let tabellenInDb: string[] = []
   let tabellenCheckError: string | null = null
@@ -68,7 +91,22 @@ export default async function DiagnosePage() {
             <dd>{hasAnon ? '✅ aanwezig' : '❌ ontbreekt'}</dd>
             <dt className="text-slate-500">SUPABASE_SERVICE_ROLE_KEY</dt>
             <dd>{hasServiceRole ? '✅ aanwezig' : '❌ ontbreekt'}</dd>
+            <dt className="text-slate-500">DATABASE_URL</dt>
+            <dd>{hasDbUrl ? '✅ aanwezig' : '❌ ontbreekt'}</dd>
+            <dt className="text-slate-500">Postgres-verbinding (regels)</dt>
+            <dd className={pgStatus.ok ? '' : 'text-red-700'}>
+              {pgStatus.ok ? '✅ ' : '❌ '}
+              <span className="text-xs">{pgStatus.detail}</span>
+            </dd>
           </dl>
+          {!pgStatus.ok && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-900">
+              <strong>Wagenpark-data blijft leeg zonder DATABASE_URL.</strong> Zet de Supabase
+              connection string (Project Settings → Database → <strong>Transaction pooler</strong>,
+              poort 6543) als env-variable <code className="px-1 rounded bg-red-100">DATABASE_URL</code>.
+              Online: Vercel → Settings → Environment Variables, daarna <strong>redeployen</strong>.
+            </div>
+          )}
         </section>
 
         <section className="bg-white rounded-lg border p-5">
