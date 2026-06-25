@@ -14,6 +14,7 @@ export const MIN_PPD = 2
 /** Vaste dagbreedte (pixels per dag) per zoomniveau. De tijdlijn is een doorlopende,
  *  horizontaal-scrollbare strook — niet meer fit-to-screen. */
 export const PPD_PER_VIEW: Record<string, number> = {
+  dag:      900,   // ~37px per uur (uur-detail)
   week:     40,
   '2weken': 26,
   maand:    18,

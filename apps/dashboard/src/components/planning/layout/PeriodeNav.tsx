@@ -6,6 +6,7 @@ import { navigatePeriode, periodeLabel } from './usePlanningLayout'
 import { Button } from '@/components/ui/button'
 
 const VIEW_LABELS: Record<View, string> = {
+  dag:     'Dag',
   week:    'Week',
   '2weken': '2 weken',
   maand:   'Maand',
@@ -13,6 +14,7 @@ const VIEW_LABELS: Record<View, string> = {
   jaar:    'Jaar',
 }
 
+// Standaard zonder 'Dag' (alleen de detailplanning gebruikt uur-detail).
 const VIEWS: View[] = ['week', '2weken', 'maand', 'kwartaal', 'jaar']
 
 export default function PeriodeNav({

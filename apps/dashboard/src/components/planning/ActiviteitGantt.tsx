@@ -21,9 +21,10 @@ import {
   maakAfhankelijkheid, verwijderAfhankelijkheid,
 } from '@/app/(platform)/planning/actions'
 import {
-  PeriodeNav, PeriodeScrubber, dagOffset, verschuifTs, verschuifDatum, viewBereik,
-  usePlanningLayout, buildHeader, buildGridUnits, type View, type HSpan, type HCol, type GridUnit,
-} from './layout'
+  PeriodeNav, PeriodeScrubber, usePlanningController,
+  dagOffset, verschuifTs, verschuifDatum,
+  type View, type GridUnit,
+} from './layout/index'
 import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -47,6 +48,9 @@ type GanttRow =
   | { kind: 'planitem'; activiteit: PlanningActiviteit; medewerker: Medewerker; items: PlanningItemVerrijkt[] }
 
 const PLANITEM_RIJ_HOOGTE = 32
+
+// Detailplanning toont ook uur-detail (Dag); de overige planningen niet.
+const DETAIL_VIEWS: View[] = ['dag', 'week', '2weken', 'maand', 'kwartaal', 'jaar']
 
 // View-helpers, header-builders en geometry-utilities komen nu uit ./layout
 // (zie de layout-laag voor één gedeelde implementatie voor alle drie planningen).
@@ -794,7 +798,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, onEdit
   return (
     <>
       {isDropIndicatorAbove && <div style={{ height: 2, background: 'var(--accent)', marginLeft: LEFT_W }} />}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-active)', minHeight: FASE_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
+      <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg-active)', minHeight: FASE_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
       <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg-active)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 10px 0 0', gap: 6 }}>
         <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', color: 'var(--fg-muted)', fontSize: 14, userSelect: 'none', touchAction: 'none', opacity: 0.45 }}
           onPointerDown={dragHandleDown} onPointerMove={dragHandleMove} onPointerUp={dragHandleUp}
@@ -843,7 +847,7 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
   const heeftDubbel = items.some(i => dubbelGeplandSet.has(i.id))
 
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid var(--border-soft)', background: 'var(--bg)', minHeight: PLANITEM_RIJ_HOOGTE }}>
+    <div style={{ display: 'flex', width: LEFT_W + totW, borderBottom: '1px solid var(--border-soft)', background: 'var(--bg)', minHeight: PLANITEM_RIJ_HOOGTE }}>
       <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 70px', gap: 8 }}>
         <div style={{ width: 8, height: 8, borderRadius: 2, background: swatchKleur, flexShrink: 0 }} />
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{naam}</span>
@@ -941,7 +945,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
   return (
     <>
       {isDropIndicatorAbove && <div style={{ height: 2, background: 'var(--accent)', marginLeft: LEFT_W }} />}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-elev)', minHeight: RIJ_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
+      <div style={{ display: 'flex', width: LEFT_W + totalDays * ppd, borderBottom: '1px solid var(--border)', background: 'var(--bg-elev)', minHeight: RIJ_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
 
         {/* Sticky linker cel */}
         <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg-elev)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 0' }}>
@@ -1059,7 +1063,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
 
   if (zichtbaar.length === 0) {
     return (
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
         <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', opacity: 0.5 }}>Taken</span>
         </div>
@@ -1069,7 +1073,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
   }
 
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
       <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
           Taken ({zichtbaar.length})
@@ -1118,21 +1122,13 @@ type Props = {
 export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, onderaannemers, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
   const router     = useRouter()
   const [, startT] = useTransition()
-  const containerRef = useRef<HTMLDivElement>(null)
-  const rowsRef      = useRef<HTMLDivElement>(null)
+  const rowsRef    = useRef<HTMLDivElement>(null)
 
-  const [peildatum,  setPeildatum]  = useState(new Date())
-  const [view,       setView]       = useState<View>('maand')
-  const [viewStart,  setViewStart]  = useState(() => viewBereik('maand', new Date()).vs)
+  const {
+    view, peildatum, layout, wrapRef, scrollRef,
+    handlePeildatum, handleView, handleVandaag, handleScrub,
+  } = usePlanningController({ defaultView: 'maand', labelW: LEFT_W })
 
-  function handlePeildatum(pd: Date) {
-    setPeildatum(pd)
-    setViewStart(viewBereik(view, pd).vs)
-  }
-  function handleView(v: View) {
-    setView(v)
-    setViewStart(viewBereik(v, peildatum).vs)
-  }
   const [activiteiten, setActiviteiten] = useState(initA)
   const [items,        setItems]        = useState(initI)
   const [fasen,        setFasen]        = useState(initF)
@@ -1171,23 +1167,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [nwFaseNaam,    setNwFaseNaam]    = useState('')
   const [savingF,       setSavingF]       = useState(false)
 
-  // Fit-to-screen via ResizeObserver
-  const [availableW, setAvailableW] = useState(800)
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver(([entry]) => setAvailableW(Math.max(100, entry.contentRect.width - LEFT_W)))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  // View window — aantal dagen/ppd via layout-engine, maar vs is vrij scrubbaar
-  const layout = usePlanningLayout({ peildatum, view, availableW, viewStart })
-  const { totalDays, ppd, totalW } = layout
-  const vs       = viewStart
-  const ve       = addDays(viewStart, totalDays - 1)
-  const { spans, cols } = useMemo(() => buildHeader(view, vs, ve, ppd), [view, vs, ve, ppd])
-  const gridUnits       = useMemo(() => buildGridUnits(view, vs, ve, ppd), [view, vs, ve, ppd])
+  // Layout (vaste dagbreedte + horizontale scroll) komt uit de gedeelde controller.
+  const { vs, ve, ppd, totalDays, totalW, spans, cols, gridUnits } = layout
 
   // Kleurweergave toggle
   const [kleurweergave, setKleurweergave] = useKleurweergave()
@@ -1550,13 +1531,14 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   }
 
   return (
-    <>
+    <div ref={wrapRef}>
       <PeriodeNav
         peildatum={peildatum}
         view={view}
+        views={DETAIL_VIEWS}
         onPeildatum={handlePeildatum}
         onView={handleView}
-        onVandaag={() => handlePeildatum(new Date())}
+        onVandaag={handleVandaag}
         rightSlot={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />
@@ -1566,7 +1548,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         }
       />
 
-      <PeriodeScrubber view={view} peildatum={peildatum} vs={viewStart} onChange={setViewStart} />
+      <PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />
 
       {/* Nieuwe fase */}
       {toonNwFase && (
@@ -1578,10 +1560,10 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
       )}
 
       {/* ── Gantt ── */}
-      <div ref={containerRef} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+      <div ref={scrollRef} style={{ border: '1px solid var(--border)', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', width: LEFT_W + totalW, background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg-elev)', borderRight: '2px solid var(--border)' }}>
             <div style={{ height: 24, display: 'flex', alignItems: 'center', paddingLeft: 54, borderBottom: '1px solid var(--border)' }}>
               <span style={S.colHdr}>Activiteit</span>
@@ -1757,7 +1739,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
           onClose={() => setEditActiviteit(null)}
         />
       )}
-    </>
+    </div>
   )
 }
 

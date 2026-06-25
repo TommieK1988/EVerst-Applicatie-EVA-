@@ -4,14 +4,14 @@ import { useMemo } from 'react'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
   addMonths, addDays, isToday, isWeekend, parseISO,
-  differenceInDays, startOfDay, getISODay, getISOWeek,
+  differenceInDays, startOfDay, endOfDay, getISODay, getISOWeek,
   startOfISOWeek, endOfISOWeek, startOfYear, endOfYear,
   addWeeks, subWeeks, addYears, subYears,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { PPD_PER_VIEW, VANDAAG_ANCHOR } from './constants'
 
-export type View = 'week' | '2weken' | 'maand' | 'kwartaal' | 'jaar'
+export type View = 'dag' | 'week' | '2weken' | 'maand' | 'kwartaal' | 'jaar'
 
 export type HSpan = { key: string; label: string; left: number; width: number }
 export type HCol  = {
@@ -27,6 +27,7 @@ export type GridUnit = {
 
 export function viewBereik(view: View, pd: Date): { vs: Date; ve: Date } {
   switch (view) {
+    case 'dag':      return { vs: startOfDay(pd), ve: endOfDay(pd) }
     case 'week':     return { vs: startOfISOWeek(pd), ve: endOfISOWeek(pd) }
     case '2weken': {
       const vs = startOfISOWeek(pd)
@@ -43,6 +44,7 @@ export function viewBereik(view: View, pd: Date): { vs: Date; ve: Date } {
 
 export function navigatePeriode(view: View, pd: Date, dir: -1 | 1): Date {
   switch (view) {
+    case 'dag':      return addDays(pd, dir)
     case 'week':     return dir === 1 ? addWeeks(pd, 1) : subWeeks(pd, 1)
     case '2weken':   return dir === 1 ? addWeeks(pd, 2) : subWeeks(pd, 2)
     case 'maand':    return addMonths(pd, dir)
@@ -54,6 +56,8 @@ export function navigatePeriode(view: View, pd: Date, dir: -1 | 1): Date {
 export function periodeLabel(view: View, pd: Date): string {
   const { vs, ve } = viewBereik(view, pd)
   switch (view) {
+    case 'dag':
+      return format(pd, 'EEEE d MMMM yyyy', { locale: nl })
     case 'week':
       return `Week ${getISOWeek(vs)} · ${format(vs, 'd MMM', { locale: nl })} – ${format(ve, 'd MMM yyyy', { locale: nl })}`
     case '2weken':
@@ -71,6 +75,30 @@ export function periodeLabel(view: View, pd: Date): string {
 export function buildHeader(view: View, vs: Date, ve: Date, ppd: number): { spans: HSpan[]; cols: HCol[] } {
   const days = eachDayOfInterval({ start: vs, end: ve })
   const dx = (d: Date) => differenceInDays(startOfDay(d), startOfDay(vs)) * ppd
+
+  if (view === 'dag') {
+    // Uur-detail: één span per dag, kolommen per uur.
+    const spans: HSpan[] = days.map(d => ({
+      key: format(d, 'yyyy-MM-dd'),
+      label: format(d, 'EEEE d MMMM', { locale: nl }),
+      left: dx(d), width: ppd,
+    }))
+    const hourW = ppd / 24
+    const cols: HCol[] = []
+    for (const d of days) {
+      const base = dx(d)
+      const today = isToday(d), weekend = isWeekend(d)
+      for (let h = 0; h < 24; h++) {
+        cols.push({
+          key: `${d.toISOString()}-h${h}`,
+          label: String(h).padStart(2, '0'),
+          left: base + h * hourW, width: hourW,
+          isToday: today, isWeekend: weekend, isBorder: h === 0,
+        })
+      }
+    }
+    return { spans, cols }
+  }
 
   if (view === 'week' || view === '2weken') {
     const spans: HSpan[] = []
@@ -155,7 +183,7 @@ export function buildGridUnits(view: View, vs: Date, ve: Date, ppd: number): Gri
   const days = eachDayOfInterval({ start: vs, end: ve })
   const dx = (d: Date) => differenceInDays(startOfDay(d), startOfDay(vs)) * ppd
 
-  if (view === 'week') {
+  if (view === 'dag' || view === 'week') {
     // Major: per dag · Minor: per uur
     const units: GridUnit[] = []
     const hourW = ppd / 24
