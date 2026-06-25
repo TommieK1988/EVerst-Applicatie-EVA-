@@ -18,6 +18,12 @@ const uursoortSchema = z.object({
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
+/** Revalideer beide plekken waar uursoorten getoond worden (oude planning-route + Stamgegevens). */
+function revalideerUursoorten() {
+  revalidatePath('/instellingen/planning')
+  revalidatePath('/instellingen/uursoorten-tarieven')
+}
+
 export async function laadUursoorten(): Promise<{ ok: true; data: PlanningUursoort[] } | { ok: false; error: string }> {
   const { data, error } = await db()
     .from('planning_uursoorten')
@@ -40,7 +46,7 @@ export async function maakUursoort(raw: unknown): Promise<ActionResult> {
     if (error.code === '23505') return { ok: false, error: `Code '${parsed.data.code}' bestaat al.` }
     return { ok: false, error: error.message }
   }
-  revalidatePath('/instellingen/planning')
+  revalideerUursoorten()
   return { ok: true }
 }
 
@@ -48,20 +54,31 @@ export async function updateUursoort(id: string, raw: unknown): Promise<ActionRe
   const parsed = uursoortSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
+  // Bouw7-afgeleide uursoorten zijn read-only qua identiteit (naam/code/kleur). Alleen de
+  // everts-calc-mapping mag dan bijgewerkt worden (tarief loopt via setUursoortTarief).
+  const { data: row } = await db().from('planning_uursoorten').select('bron').eq('id', id).maybeSingle()
+  const payload = row?.bron === 'bouw7'
+    ? { everts_calc_omschrijvingen: parsed.data.everts_calc_omschrijvingen, volgorde: parsed.data.volgorde }
+    : parsed.data
+
   const { error } = await db()
     .from('planning_uursoorten')
-    .update(parsed.data)
+    .update(payload)
     .eq('id', id)
 
   if (error) {
     if (error.code === '23505') return { ok: false, error: `Code '${parsed.data.code}' bestaat al.` }
     return { ok: false, error: error.message }
   }
-  revalidatePath('/instellingen/planning')
+  revalideerUursoorten()
   return { ok: true }
 }
 
 export async function verwijderUursoort(id: string): Promise<ActionResult> {
+  // Bouw7-afgeleide uursoorten zijn read-only — alleen in Bouw7 te wijzigen.
+  const { data: row } = await db().from('planning_uursoorten').select('bron').eq('id', id).maybeSingle()
+  if (row?.bron === 'bouw7') return { ok: false, error: 'Deze uursoort komt uit Bouw7 en kan hier niet verwijderd worden.' }
+
   // Soft delete
   const { error } = await db()
     .from('planning_uursoorten')
@@ -69,7 +86,25 @@ export async function verwijderUursoort(id: string): Promise<ActionResult> {
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/planning')
+  revalideerUursoorten()
+  return { ok: true }
+}
+
+/**
+ * Zet het per-uursoort default uurtarief (laag 3 van de hiërarchie). Werkt voor zowel
+ * EVA- als Bouw7-uursoorten; raakt alleen de tariefvelden, niet de read-only Bouw7-identiteit.
+ */
+export async function setUursoortTarief(
+  id: string,
+  patch: { tarief_verkoop?: number | null; tarief_kostprijs?: number | null },
+): Promise<ActionResult> {
+  const schoon: Record<string, number | null> = {}
+  if ('tarief_verkoop' in patch) schoon.tarief_verkoop = patch.tarief_verkoop ?? null
+  if ('tarief_kostprijs' in patch) schoon.tarief_kostprijs = patch.tarief_kostprijs ?? null
+
+  const { error } = await db().from('planning_uursoorten').update(schoon).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalideerUursoorten()
   return { ok: true }
 }
 
@@ -81,7 +116,7 @@ export async function herschikUursoorten(ids: string[]): Promise<ActionResult> {
   const failed = results.find(r => r.error)
   if (failed?.error) return { ok: false, error: failed.error.message }
 
-  revalidatePath('/instellingen/planning')
+  revalideerUursoorten()
   return { ok: true }
 }
 
@@ -97,6 +132,6 @@ export async function updateEvertsCalcMapping(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/planning')
+  revalideerUursoorten()
   return { ok: true }
 }

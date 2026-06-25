@@ -1,80 +1,79 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
-import { setBtwTarieven } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
-import { Button, EmptyState, Input } from '@/components/ui'
+import type { BtwTarief } from '@everts/database/platform-types'
+import { Badge, EmptyState } from '@/components/ui'
 
-export default function BtwTarievenBeheer({ initial }: { initial: number[] }) {
-  const router = useRouter()
-  const [, startT] = useTransition()
-  const [tarieven, setTarieven] = useState<number[]>(initial)
-  const [nieuw, setNieuw] = useState('')
-  const [busy, setBusy] = useState(false)
+function formatDatum(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
-  function voegToe() {
-    const v = parseFloat(nieuw)
-    if (isNaN(v) || v < 0 || v > 100) return
-    if (!tarieven.includes(v)) setTarieven(prev => [...prev, v].sort((a, b) => a - b))
-    setNieuw('')
-  }
-
-  function verwijder(tarief: number) {
-    setTarieven(prev => prev.filter(t => t !== tarief))
-  }
-
-  async function opslaan() {
-    setBusy(true)
-    const r = await setBtwTarieven(tarieven)
-    setBusy(false)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success('BTW tarieven opgeslagen')
-    startT(() => router.refresh())
-  }
+export default function BtwTarievenBeheer({
+  tarieven,
+  legacyMismatch,
+}: {
+  tarieven: BtwTarief[]
+  legacyMismatch: number[]
+}) {
+  const laatsteSync = tarieven
+    .map(t => t.bouw7_laatst_sync)
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>
-        Beschikbare BTW-percentages die gebruikt worden in calculatieregels en offertes.
-      </p>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {tarieven.map(t => (
-          <div key={t} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '6px 12px',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{t}%</span>
-            <Button variant="ghost" size="sm" onClick={() => verwijder(t)} title="Verwijderen" style={{ padding: 0, lineHeight: 1, minWidth: 0, height: 'auto' }}>×</Button>
-          </div>
-        ))}
-        {tarieven.length === 0 && (
-          <EmptyState size="sm" tone="neutral" title="Nog geen BTW-tarieven ingesteld" />
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Badge variant="outline" tone="info" size="sm">uit Bouw7</Badge>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
+          Laatst bijgewerkt: {formatDatum(laatsteSync)}
+        </span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 100 }}>
-          <Input
-            type="number"
-            min="0"
-            max="100"
-            step="1"
-            value={nieuw}
-            onChange={e => setNieuw(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && voegToe()}
-            placeholder="bijv. 21"
-            suffix="%"
-            style={{  }}
-          />
+      {tarieven.length === 0 ? (
+        <EmptyState
+          size="sm"
+          tone="neutral"
+          title="Nog geen BTW-tarieven afgeleid"
+          description="Draai een Bouw7-sync of open een dossier met een offerte; de tarieven worden dan automatisch ingelezen."
+        />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {tarieven.map(t => (
+            <div key={t.id} style={{
+              display: 'grid', gridTemplateColumns: '70px 1fr auto', alignItems: 'center', gap: 12,
+              padding: '10px 4px', borderBottom: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+                {Number(t.percentage)}%
+              </span>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>
+                {t.label}
+              </span>
+              {t.verlegd && (
+                <Badge variant="outline" tone="warning" size="sm">verlegd</Badge>
+              )}
+            </div>
+          ))}
         </div>
-        <Button variant="ghost" size="sm" onClick={voegToe}>+ Toevoegen</Button>
-        <Button variant="primary" size="sm" onClick={opslaan} loading={busy} style={{ marginLeft: 'auto' }}>
-          {busy ? 'Bezig…' : 'Opslaan'}
-        </Button>
-      </div>
+      )}
+
+      {legacyMismatch.length > 0 && (
+        <div style={{
+          background: 'var(--bg)', border: '1px solid var(--warning, #d4a017)', borderRadius: 8,
+          padding: '10px 12px', fontSize: 12, color: 'var(--fg-muted)',
+        }}>
+          <strong style={{ color: 'var(--fg)' }}>Let op:</strong> de oude handmatige instelling bevat
+          percentage(s) <strong>{legacyMismatch.join('%, ')}%</strong> die niet voorkomen in de
+          uit Bouw7 afgeleide lijst. Controleer of deze nog kloppen — Bouw7 is leidend.
+        </div>
+      )}
+
+      <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', margin: 0 }}>
+        BTW-tarieven worden read-only overgenomen uit de Bouw7-offertes, zodat ze altijd
+        overeenkomen met wat naar Bouw7 wordt teruggeschreven. Wijzigen kan alleen in Bouw7.
+      </p>
     </div>
   )
 }

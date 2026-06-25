@@ -34,6 +34,7 @@ import TaakDetailPanel from '@/components/taken/TaakDetailPanel'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
+import { STANDAARD_BTW_HOOG_PCT as STANDAARD_BTW_PCT } from '@/lib/stamdata/constants'
 import {
   Button, Card, CardHeader, CardBody,
   Input, Textarea,
@@ -464,12 +465,15 @@ function OffertePreview({ dossier }: { dossier: DossierRij }) {
   const scaledW = Math.round(A4_W * scale)
   const scaledH = Math.round(A4_H * scale)
 
+  // LET OP: deze kostenverdeling (arbeid/materiaal/onderaanneming) is nog placeholder/mock —
+  // het zijn vaste verhoudingen, geen echte calculatie. De BTW gebruikt wél het bedrijfs-default
+  // hoge tarief (centrale BTW-bron) i.p.v. een hardcoded percentage.
   const bedrag      = dossier.bedrag_excl_btw ?? 0
   const arbeid      = Math.round(bedrag * 0.58)
   const materiaal   = Math.round(bedrag * 0.28)
   const onderaannem = Math.round(bedrag * 0.10)
   const overig      = bedrag - arbeid - materiaal - onderaannem
-  const btw         = Math.round(bedrag * 0.21)
+  const btw         = Math.round(bedrag * (STANDAARD_BTW_PCT / 100))
   const inclBtw     = bedrag + btw
 
   function kopieer() {

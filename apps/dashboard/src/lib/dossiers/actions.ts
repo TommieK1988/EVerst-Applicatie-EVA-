@@ -23,6 +23,7 @@ import {
   type Bouw7SalesInvoice,
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
+import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
 
 type DossierResult =
   | { ok: true; data: DossierRij[] }
@@ -1378,6 +1379,10 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
           hourTypeId: h.type?.id ?? null,
         }
       })
+      // Uursoorten (Bouw7 leidend) opportunistisch afleiden uit deze uren-logs — liften mee
+      // op de call die de tab tóch al doet. Faalt stil zodat de urenweergave nooit breekt.
+      try { await deriveUursoorten(items) } catch { /* afleiding mag nooit de tab blokkeren */ }
+
       return {
         beschikbaar: true,
         detailNiveau: 'medewerker',

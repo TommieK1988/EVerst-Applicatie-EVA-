@@ -75,6 +75,44 @@ const platformItems: SettingsItem[] = [
   },
 ]
 
+// Gedeelde stamgegevens — data die door meerdere modules wordt gebruikt
+// (calculatie, offerte, verkoop, uren, planning). BTW-tarieven en uursoorten zijn
+// read-only afgeleid uit Bouw7 zodat ze niet kunnen afwijken bij terugschrijven.
+const stamgegevensItems: SettingsItem[] = [
+  {
+    href: '/instellingen/btw-tarieven',
+    title: 'BTW-tarieven',
+    description: 'Read-only uit Bouw7. Gebruikt door calculatie, offertes, verkoop en facturen.',
+    ready: true,
+    kicker: 'Bouw7',
+    module: 'dossiers',
+  },
+  {
+    href: '/instellingen/uursoorten-tarieven',
+    title: 'Uursoorten & uurtarieven',
+    description: 'Uursoorten (uit Bouw7) en de uurtarief-hiërarchie. Gebruikt door planning, uren en calculatie.',
+    ready: true,
+    kicker: 'Bouw7',
+    module: 'planning',
+  },
+  {
+    href: '/instellingen/kostensoorten',
+    title: 'Kostensoorten',
+    description: 'De vaste Bouw7-kostensoorten (arbeid, inkoop, onderaanneming, …). Read-only.',
+    ready: true,
+    kicker: 'Bouw7',
+    module: 'dossiers',
+  },
+  {
+    href: '/instellingen/betalingscondities',
+    title: 'Betalingscondities',
+    description: 'Termijnschema\'s voor de aanneemsom — welk percentage wanneer verschuldigd is.',
+    ready: true,
+    kicker: 'Offerte',
+    module: 'dossiers',
+  },
+]
+
 const calcOfferteItems: SettingsItem[] = [
   {
     href: '/instellingen/dossier-categorieen',
@@ -90,22 +128,6 @@ const calcOfferteItems: SettingsItem[] = [
     description: 'Aan/uit-schakelaars per dossier; bruikbaar als trigger of conditie voor actielijsten.',
     ready: true,
     kicker: 'Dossiers',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/btw-tarieven',
-    title: 'BTW tarieven',
-    description: 'Beschikbare BTW-percentages voor calculatieregels en offertes.',
-    ready: true,
-    kicker: 'Calculatie',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/betalingscondities',
-    title: 'Betalingscondities',
-    description: 'Termijnschema\'s voor de aanneemsom — welk percentage wanneer verschuldigd is.',
-    ready: true,
-    kicker: 'Offerte',
     module: 'dossiers',
   },
   {
@@ -135,14 +157,6 @@ const calcOfferteItems: SettingsItem[] = [
 ]
 
 const appItems: SettingsItem[] = [
-  {
-    href: '/instellingen/planning',
-    title: 'Planning',
-    description: 'Uursoorten, everts-calc sync-koppeling en capaciteitsinstellingen.',
-    ready: true,
-    kicker: 'Planning',
-    module: 'planning',
-  },
   {
     href: '/everts-calc/instellingen',
     title: 'EvertsCalc',
@@ -246,6 +260,13 @@ export default async function Page() {
         <div style={sectionLabel}>Algemeen</div>
         <div style={grid}>
           {platformItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <div style={sectionLabel}>Stamgegevens</div>
+        <div style={grid}>
+          {stamgegevensItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
         </div>
       </div>
 

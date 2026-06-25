@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import toast from 'react-hot-toast'
-import { Button, Input, EmptyState, Card, CardBody } from '@/components/ui'
+import { Button, Input, EmptyState, Card, CardBody, Badge } from '@/components/ui'
 import type { PlanningUursoort } from '@everts/database/platform-types'
 import {
   maakUursoort,
@@ -26,6 +26,7 @@ import {
   verwijderUursoort,
   herschikUursoorten,
   updateEvertsCalcMapping,
+  setUursoortTarief,
 } from '@/app/(platform)/instellingen/planning/actions'
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -97,6 +98,41 @@ function TagInput({
   )
 }
 
+/* ── Per-uursoort tarief (laag 3 van de hiërarchie) ─────────────── */
+
+function TariefCel({ item }: { item: PlanningUursoort }) {
+  const [waarde, setWaarde] = useState<string>(item.tarief_verkoop != null ? String(item.tarief_verkoop) : '')
+  const [busy, setBusy] = useState(false)
+
+  async function opslaan() {
+    const parsed = waarde.trim() === '' ? null : parseFloat(waarde)
+    const huidig = item.tarief_verkoop ?? null
+    if (parsed === huidig) return
+    if (parsed != null && isNaN(parsed)) return
+    setBusy(true)
+    const r = await setUursoortTarief(item.id, { tarief_verkoop: parsed })
+    setBusy(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Uursoort-tarief opgeslagen')
+  }
+
+  return (
+    <div style={{ width: 120 }} title="Per-uursoort default verkooptarief (overschrijfbaar per medewerker)">
+      <Input
+        type="number" min="0" step="0.5" inputSize="sm"
+        value={waarde}
+        disabled={busy}
+        placeholder="—"
+        onChange={e => setWaarde(e.target.value)}
+        onBlur={opslaan}
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        prefix={<span style={{ fontSize: 11 }}>€</span>}
+        suffix={<span style={{ fontSize: 9 }}>/uur</span>}
+      />
+    </div>
+  )
+}
+
 /* ── Inline formulier ───────────────────────────────────────────── */
 
 function UursoortFormulier({
@@ -104,11 +140,14 @@ function UursoortFormulier({
   onSave,
   onCancel,
   isPending,
+  readonlyIdentiteit = false,
 }: {
   initial: EditState
   onSave: (state: EditState) => void
   onCancel: () => void
   isPending: boolean
+  /** Bouw7-afgeleide uursoort: naam/code/kleur zijn read-only (alleen mapping bewerkbaar). */
+  readonlyIdentiteit?: boolean
 }) {
   const [state, setState] = useState<EditState>(initial)
   const set = (k: keyof EditState, v: unknown) => setState(prev => ({ ...prev, [k]: v }))
@@ -126,7 +165,8 @@ function UursoortFormulier({
               onChange={e => set('naam', e.target.value)}
               placeholder="Bijv. Directe arbeid"
               style={{ width: '100%' }}
-              autoFocus
+              disabled={readonlyIdentiteit}
+              autoFocus={!readonlyIdentiteit}
             />
           </div>
 
@@ -139,6 +179,7 @@ function UursoortFormulier({
               onChange={e => set('code', e.target.value.toUpperCase())}
               placeholder="Bijv. DA"
               maxLength={10}
+              disabled={readonlyIdentiteit}
               style={{ width: '100%' }}
             />
           </div>
@@ -152,7 +193,8 @@ function UursoortFormulier({
                 type="color"
                 value={state.kleur}
                 onChange={e => set('kleur', e.target.value)}
-                style={{ width: 36, height: 32, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', padding: 2 }}
+                disabled={readonlyIdentiteit}
+                style={{ width: 36, height: 32, border: '1px solid var(--border)', borderRadius: 6, cursor: readonlyIdentiteit ? 'not-allowed' : 'pointer', padding: 2 }}
               />
               <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {state.kleur}
@@ -236,6 +278,7 @@ function SortableRow({
           onSave={onSave}
           onCancel={onCancelEdit}
           isPending={isPending}
+          readonlyIdentiteit={item.bron === 'bouw7'}
         />
       </div>
     )
@@ -266,13 +309,16 @@ function SortableRow({
       <div style={{ width: 18, height: 18, borderRadius: 4, background: item.kleur, flexShrink: 0 }} />
 
       {/* Naam + code */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
           {item.naam}
         </span>
-        <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--fg-muted)' }}>
+        <span style={{ fontSize: 10, color: 'var(--fg-muted)' }}>
           {item.code}
         </span>
+        {item.bron === 'bouw7' && (
+          <Badge variant="outline" tone="info" size="sm" title="Afgeleid uit Bouw7 — read-only">Bouw7</Badge>
+        )}
       </div>
 
       {/* Everts-calc tags */}
@@ -292,12 +338,19 @@ function SortableRow({
         </div>
       )}
 
+      {/* Per-uursoort default tarief (laag 3 hiërarchie) */}
+      <TariefCel item={item} />
+
       {/* Acties */}
       <div style={{ display: 'flex', gap: 6 }}>
         <Button variant="ghost" size="sm" onClick={onEdit}>
-          Bewerken
+          {item.bron === 'bouw7' ? 'Koppeling' : 'Bewerken'}
         </Button>
-        <Button variant="outline" size="sm" onClick={onDelete} disabled={isPending}>
+        <Button
+          variant="outline" size="sm" onClick={onDelete}
+          disabled={isPending || item.bron === 'bouw7'}
+          title={item.bron === 'bouw7' ? 'Bouw7-uursoort kan hier niet verwijderd worden' : undefined}
+        >
           Verwijder
         </Button>
       </div>

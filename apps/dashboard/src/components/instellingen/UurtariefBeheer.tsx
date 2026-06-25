@@ -72,7 +72,10 @@ export default function UurtariefBeheer({ initial }: { initial: Uurtarief[] }) {
         </Button>
       </div>
       <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, marginTop: 4 }} className="text-neutral-500">
-        ★ = standaard uurtarief bij nieuw project. Tarieven worden gedeeld met everts-calc en getoond in de Gantt-planning.
+        ★ = globaal standaard uurtarief. Dit is de onderste laag van de uurtarief-hiërarchie:
+        <strong> medewerker → per uursoort → globaal</strong>. De meest specifieke laag met een
+        ingevuld tarief wint (per-uursoort tarieven stel je in bij de uursoorten hieronder; het
+        medewerker-tarief komt uit Bouw7). Tarieven worden gedeeld met everts-calc en de Gantt-planning.
       </p>
     </div>
   )

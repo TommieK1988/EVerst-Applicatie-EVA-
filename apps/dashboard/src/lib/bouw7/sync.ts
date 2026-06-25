@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
+import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
 
@@ -883,6 +884,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // Offerte-details per project: kostprijs (calculationTotal), regelsom en BTW-splitsing
     // uit het detail-endpoint /quotation/{id}. Alléén voor changed/new projecten met een offerte.
     const quoteDetailMap = new Map<string, QuoteCijfers>()
+    const quoteDetailsRaw: Bouw7QuotationDetail[] = []
     {
       const entries = changedProjects
         .map(p => [String(p.id), quotationMap.get(String(p.id))] as const)
@@ -896,8 +898,28 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         for (let j = 0; j < batch.length; j++) {
           const r = results[j]
           if (r.status !== 'fulfilled' || !r.value?.chapters) continue
+          quoteDetailsRaw.push(r.value)
           quoteDetailMap.set(batch[j][0], berekenQuoteCijfers(r.value, batch[j][1]))
         }
+      }
+    }
+
+    // BTW-tarieven (Bouw7 leidend) afleiden uit de zojuist opgehaalde offerte-details.
+    // Liften mee op deze calls — geen extra API-sweep. Faalt stil zodat de project-sync nooit hangt.
+    if (quoteDetailsRaw.length) {
+      try {
+        const btw = await deriveBtwTarieven(quoteDetailsRaw)
+        await supabase.from('sync_log').insert({
+          integratie: 'bouw7', entiteit: 'btw_tarieven', richting: 'in',
+          aantal_nieuw: btw.nieuw, aantal_bijgewerkt: btw.bijgewerkt, aantal_fout: 0,
+          duur_ms: 0, fout_melding: `${btw.gevonden} unieke tarieven uit ${quoteDetailsRaw.length} offertes`,
+        })
+      } catch (e) {
+        await supabase.from('sync_log').insert({
+          integratie: 'bouw7', entiteit: 'btw_tarieven', richting: 'in',
+          aantal_nieuw: 0, aantal_bijgewerkt: 0, aantal_fout: 1,
+          duur_ms: 0, fout_melding: `Fout BTW-afleiding: ${e instanceof Error ? e.message : String(e)}`,
+        })
       }
     }
     // Log quotation-diagnose apart zodat fouten zichtbaar zijn in sync_log

@@ -640,6 +640,41 @@ export type PlanningUursoort = {
   everts_calc_omschrijvingen: string[]
   volgorde: number
   actief: boolean
+  /** 'eva' = handmatig beheerd (bewerkbaar); 'bouw7' = afgeleid uit uren-logs (read-only). */
+  bron: 'eva' | 'bouw7'
+  /** Bouw7 hourType-id waaraan deze uursoort gekoppeld is (verplicht bij terugschrijven van uren). */
+  bouw7_id: string | null
+  bouw7_naam: string | null
+  /** Per-uursoort default uurtarief (laag 2 van de hiërarchie). */
+  tarief_verkoop: number | null
+  tarief_kostprijs: number | null
+  created_at: string
+  updated_at: string
+}
+
+/** Read-only BTW-tarief afgeleid uit Bouw7-offerteregels (vatTariffObject). */
+export type BtwTarief = {
+  id: string
+  /** Bouw7 vatTariff-id; null als alleen op label/percentage afgeleid. */
+  bouw7_id: number | null
+  label: string
+  percentage: number
+  /** BTW verlegd (reverse charge). */
+  verlegd: boolean
+  actief: boolean
+  bron: 'bouw7' | 'eva'
+  bouw7_laatst_sync: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Per-werkmaatschappij uurtarief-override per uursoort (hiërarchie-laag). */
+export type UursoortTariefOverride = {
+  id: string
+  werkmaatschappij_id: string
+  uursoort_id: string
+  tarief_verkoop: number | null
+  tarief_kostprijs: number | null
   created_at: string
   updated_at: string
 }
