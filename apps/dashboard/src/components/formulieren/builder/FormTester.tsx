@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { FormField, FieldCondition } from '../types'
 import { evaluateConditions, conditionMatches } from '../types'
 import FieldRenderer from '../filler/FieldRenderer'
+import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
 
 type Props = {
   fields: FormField[]
@@ -51,6 +52,16 @@ export default function FormTester({ fields }: Props) {
   const [values, setValues]   = useState<Record<string, unknown>>(() => initValues(fields))
   const [ingediend, setIngediend] = useState(false)
   const [showDebug, setShowDebug] = useState(true)
+  const [medewerkers, setMedewerkers] = useState<{ id: string; naam: string }[]>([])
+
+  // Medewerkers laden voor `medewerker`-velden in de testweergave.
+  useEffect(() => {
+    let actief = true
+    getMedewerkersVoorToewijzing()
+      .then(list => { if (actief) setMedewerkers(list.map(m => ({ id: m.id, naam: m.naam }))) })
+      .catch(() => { /* lijst blijft leeg */ })
+    return () => { actief = false }
+  }, [])
 
   const zichtbaar = fields.filter(f => evaluateConditions(f, fields, values))
   const verborgen = fields.filter(f => !evaluateConditions(f, fields, values))
@@ -156,6 +167,7 @@ export default function FormTester({ fields }: Props) {
                     field={field}
                     value={values[field.id]}
                     onChange={val => updateValue(field.id, val)}
+                    medewerkers={medewerkers}
                   />
                   {field.conditions && field.conditions.length > 0 && (
                     <span style={{

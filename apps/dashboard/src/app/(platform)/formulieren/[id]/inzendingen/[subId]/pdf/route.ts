@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { FormField } from '@/components/formulieren/types'
+import { formatVeldwaardeTekst } from '@/components/formulieren/format'
 
 // Hulpfunctie: URL → base64 data-URL
 async function urlNaarBase64(url: string): Promise<string | null> {
@@ -147,28 +148,24 @@ export async function GET(
       continue
     }
 
-    const val = waarden[field.id]
-    let display = '—'
-
-    if (val !== undefined && val !== null && val !== '') {
-      if (field.type === 'boolean') {
-        display = val === true ? 'Ja' : 'Nee'
-      } else if (field.type === 'checkbox' && Array.isArray(val)) {
-        const labels = (field.options ?? [])
-          .filter(o => (val as string[]).includes(o.value))
-          .map(o => o.label)
-        display = labels.join(', ') || '—'
-      } else if (field.type === 'location' && typeof val === 'object') {
-        const loc = val as { lat: number; lng: number; adres?: string }
-        display = loc.adres ?? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`
-      } else if (field.type === 'repeatable' && Array.isArray(val)) {
-        display = `${(val as unknown[]).length} rij(en)`
-      } else {
-        display = String(val)
-      }
+    // Herhalende sectie: elke rij met zijn sub-velden uitschrijven.
+    if (field.type === 'repeatable') {
+      const rijen = Array.isArray(waarden[field.id]) ? (waarden[field.id] as Record<string, unknown>[]) : []
+      rows.push([`▶ ${field.label}`, rijen.length === 0 ? '(geen rijen)' : ''])
+      rijen.forEach((row, i) => {
+        rows.push([`#${i + 1}`, ''])
+        for (const child of field.children ?? []) {
+          if (child.type === 'divider' || child.type === 'heading' || child.type === 'paragraph') continue
+          const disp = (child.type === 'signature' || child.type === 'photo')
+            ? '[Afbeelding — zie digitale inzending]'
+            : formatVeldwaardeTekst(child, row[child.id])
+          rows.push([`    ${child.label}`, disp])
+        }
+      })
+      continue
     }
 
-    rows.push([field.label, display])
+    rows.push([field.label, formatVeldwaardeTekst(field, waarden[field.id])])
   }
 
   autoTable(doc, {
@@ -184,12 +181,18 @@ export async function GET(
       1: { cellWidth: 'auto' },
     },
     didParseCell: (data) => {
-      // Kopregel-stijl
-      if (data.section === 'body' && data.cell.raw &&
-          typeof data.cell.raw === 'string' && data.cell.raw.startsWith('▶')) {
+      const raw = typeof data.cell.raw === 'string' ? data.cell.raw : ''
+      // Kopregel-stijl (sectiekop / heading)
+      if (data.section === 'body' && raw.startsWith('▶')) {
         data.cell.styles.fillColor = [240, 244, 255]
         data.cell.styles.fontStyle = 'bold'
         data.cell.styles.textColor = [0, 100, 200]
+      }
+      // Rij-kop binnen een herhalende sectie (#1, #2, …)
+      if (data.section === 'body' && /^#\d+$/.test(raw)) {
+        data.cell.styles.fillColor = [243, 244, 246]
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [90, 90, 90]
       }
     },
   })

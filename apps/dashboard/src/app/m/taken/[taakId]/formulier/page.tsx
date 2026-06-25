@@ -6,6 +6,9 @@ import {
   getConceptInzendingVoorTaak,
 } from '@/app/(platform)/formulieren/actions'
 import FormFiller from '@/components/formulieren/filler/FormFiller'
+import { resolveDossierVariabelen } from '@/components/formulieren/dossier-variabelen'
+import { getDossierById } from '@/lib/dossiers/actions'
+import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
 
 export const metadata = { title: 'Formulier · EVA Mobiel' }
 
@@ -47,6 +50,16 @@ export default async function MobielTaakFormulierPage({
     )
   }
 
+  // Medewerkers voor `medewerker`-velden + dossier-gegevens voor `dossier`-velden.
+  const [medewerkers, dossierWaarden] = await Promise.all([
+    getMedewerkersVoorToewijzing().then(list => list.map(m => ({ id: m.id, naam: m.naam }))),
+    dossierId
+      ? getDossierById(dossierId).then(res =>
+          res.ok ? resolveDossierVariabelen(versieResult.data.schema.fields ?? [], res.data) : undefined,
+        )
+      : Promise.resolve(undefined),
+  ])
+
   return (
     <FormFiller
       template={template}
@@ -54,6 +67,8 @@ export default async function MobielTaakFormulierPage({
       taskId={taak.id}
       dossierId={dossierId ?? undefined}
       bestaandeInzending={bestaande.ok ? (bestaande.data ?? undefined) : undefined}
+      medewerkers={medewerkers}
+      dossierWaarden={dossierWaarden}
       mobiel
       terugHref="/m/taken"
     />

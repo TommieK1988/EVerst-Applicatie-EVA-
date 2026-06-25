@@ -5,13 +5,19 @@ import { notFound } from 'next/navigation'
 import { getFormInzending, getFormTemplate } from '../../../actions'
 import { INZENDING_STATUS_LABELS } from '@/components/formulieren/types'
 import type { FormField } from '@/components/formulieren/types'
+import { formatVeldwaardeTekst, medewerkerNamen } from '@/components/formulieren/format'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 
 export const metadata: Metadata = { title: 'Inzending bekijken' }
 
+function isLeeg(value: unknown): boolean {
+  return value === undefined || value === null || value === '' ||
+    (Array.isArray(value) && value.length === 0)
+}
+
 function formatValue(field: FormField, value: unknown): React.ReactNode {
-  if (value === undefined || value === null || value === '') {
+  if (isLeeg(value)) {
     return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Niet ingevuld</span>
   }
 
@@ -31,21 +37,21 @@ function formatValue(field: FormField, value: unknown): React.ReactNode {
     return <img src={value} alt="Handtekening" style={{ maxWidth: 280, border: '1px solid var(--border)', borderRadius: 6, marginTop: 4 }}/>
   }
 
-  if (field.type === 'boolean') {
-    return <span>{value === true ? 'Ja' : 'Nee'}</span>
-  }
-
-  if (field.type === 'checkbox' && Array.isArray(value)) {
-    const selected = value as string[]
-    const labels = (field.options ?? [])
-      .filter(o => selected.includes(o.value))
-      .map(o => o.label)
-    return <span>{labels.join(', ') || '—'}</span>
-  }
-
-  if (field.type === 'location' && typeof value === 'object' && value !== null) {
-    const loc = value as { lat: number; lng: number; adres?: string }
-    return <span>📍 {loc.adres ?? `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`}</span>
+  if (field.type === 'medewerker') {
+    const namen = medewerkerNamen(value)
+    if (namen.length === 0) return <span>—</span>
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {namen.map((naam, i) => (
+          <span key={i} style={{
+            display: 'inline-flex', alignItems: 'center',
+            padding: '2px 8px', borderRadius: 12,
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            fontSize: 12,
+          }}>{naam}</span>
+        ))}
+      </div>
+    )
   }
 
   if (field.type === 'repeatable' && Array.isArray(value)) {
@@ -55,9 +61,9 @@ function formatValue(field: FormField, value: unknown): React.ReactNode {
           <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', marginBottom: 8 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Rij {i + 1}</span>
             {(field.children ?? []).map(child => (
-              <div key={child.id} style={{ marginTop: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 500 }}>{child.label}: </span>
-                <span style={{ fontSize: 12 }}>{String(row[child.id] ?? '—')}</span>
+              <div key={child.id} style={{ marginTop: 6, fontSize: 12 }}>
+                <span style={{ fontWeight: 500 }}>{child.label}: </span>
+                {formatValue(child, row[child.id])}
               </div>
             ))}
           </div>
@@ -66,7 +72,7 @@ function formatValue(field: FormField, value: unknown): React.ReactNode {
     )
   }
 
-  return <span>{String(value)}</span>
+  return <span>{formatVeldwaardeTekst(field, value)}</span>
 }
 
 export default async function InzendingDetailPage({

@@ -10,6 +10,9 @@ import {
 import FormFiller from '@/components/formulieren/filler/FormFiller'
 import ConceptKeuze from '@/components/formulieren/filler/ConceptKeuze'
 import type { FormInzending } from '@/components/formulieren/types'
+import { resolveDossierVariabelen } from '@/components/formulieren/dossier-variabelen'
+import { getDossierById } from '@/lib/dossiers/actions'
+import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
@@ -78,6 +81,18 @@ export default async function FormulierInvullenPage({
     draftScope = `new:${nieuwNonce}`
   }
 
+  // Medewerkers voor `medewerker`-velden + dossier-gegevens voor `dossier`-velden.
+  // Het effectieve dossier kan uit de URL komen of (bij hervatten) uit de inzending.
+  const effectiveDossierId = dossierId ?? bestaande?.dossier_id ?? undefined
+  const [medewerkers, dossierWaarden] = await Promise.all([
+    getMedewerkersVoorToewijzing().then(list => list.map(m => ({ id: m.id, naam: m.naam }))),
+    effectiveDossierId
+      ? getDossierById(effectiveDossierId).then(res =>
+          res.ok ? resolveDossierVariabelen(versieResult.data.schema.fields ?? [], res.data) : undefined,
+        )
+      : Promise.resolve(undefined),
+  ])
+
   return (
     <div style={{ overflowY: 'auto', height: '100%' }}>
       <FormFiller
@@ -87,6 +102,8 @@ export default async function FormulierInvullenPage({
         dossierId={dossierId}
         draftScope={draftScope}
         bestaandeInzending={bestaande}
+        medewerkers={medewerkers}
+        dossierWaarden={dossierWaarden}
       />
     </div>
   )

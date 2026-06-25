@@ -2,6 +2,8 @@
 
 import React, { useRef, useEffect } from 'react'
 import type { FormField } from '../types'
+import type { MedewerkerWaarde } from '../format'
+import { Combobox } from '@/components/ui/combobox'
 
 type Props = {
   field: FormField
@@ -10,6 +12,8 @@ type Props = {
   onChange: (value: unknown) => void
   /** Touch-vriendelijke maatvoering voor de mobiele omgeving. */
   mobiel?: boolean
+  /** Keuzelijst voor `medewerker`-velden (actieve medewerkers). */
+  medewerkers?: { id: string; naam: string }[]
 }
 
 const inputBase: React.CSSProperties = {
@@ -46,7 +50,7 @@ function Label({ field }: { field: FormField }) {
   )
 }
 
-export default function FieldRenderer({ field, value, error, onChange, mobiel = false }: Props) {
+export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers }: Props) {
 
   const inputStyle: React.CSSProperties = mobiel ? { ...inputBase, ...inputMobiel } : inputBase
   const optieFont = mobiel ? 15 : 14
@@ -432,6 +436,71 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
     )
   }
 
+  // ── Koppeling ─────────────────────────────────────────────────────
+  if (field.type === 'medewerker') {
+    const gekozen = Array.isArray(value) ? (value as MedewerkerWaarde[]) : []
+    const gekozenIds = new Set(gekozen.map(m => m.id))
+    const opties = (medewerkers ?? [])
+      .filter(m => !gekozenIds.has(m.id))
+      .map(m => ({ value: m.id, label: m.naam }))
+
+    return wrap(
+      <div>
+        {gekozen.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: field.readOnly ? 0 : 8 }}>
+            {gekozen.map(m => (
+              <span
+                key={m.id}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: mobiel ? '5px 10px' : '3px 8px', borderRadius: 14,
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  fontSize: mobiel ? 14 : 13, color: 'var(--text)',
+                }}
+              >
+                {m.naam}
+                {!field.readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(gekozen.filter(x => x.id !== m.id))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, lineHeight: 1, fontSize: 12 }}
+                  >✕</button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+        {!field.readOnly && (
+          <Combobox
+            options={opties}
+            value=""
+            onChange={id => {
+              const med = (medewerkers ?? []).find(m => m.id === id)
+              if (med) onChange([...gekozen, { id: med.id, naam: med.naam }])
+            }}
+            placeholder={field.placeholder || 'Medewerker toevoegen…'}
+            searchPlaceholder="Zoek medewerker…"
+            emptyText={(medewerkers?.length ?? 0) > 0 ? 'Geen medewerker gevonden.' : 'Geen medewerkers beschikbaar.'}
+          />
+        )}
+      </div>
+    )
+  }
+
+  if (field.type === 'dossier') {
+    const tekst = value === undefined || value === null || value === '' ? null : String(value)
+    return wrap(
+      <div style={{
+        ...inputStyle,
+        background: 'var(--surface-2)',
+        color: tekst ? 'var(--text)' : 'var(--text-muted)',
+        cursor: 'default',
+      }}>
+        {tekst ?? '(wordt automatisch uit het dossier gehaald)'}
+      </div>
+    )
+  }
+
   if (field.type === 'repeatable') {
     const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
     return (
@@ -481,6 +550,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                   field={child}
                   value={row[child.id]}
                   mobiel={mobiel}
+                  medewerkers={medewerkers}
                   onChange={val => {
                     const next = [...rows]
                     next[i] = { ...next[i], [child.id]: val }

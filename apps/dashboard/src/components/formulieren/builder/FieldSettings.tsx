@@ -9,6 +9,7 @@ import {
   defaultField,
   isInvoerVeld,
 } from '../types'
+import { DOSSIER_VARIABELEN } from '../dossier-variabelen'
 
 type Props = {
   field: FormField
@@ -87,11 +88,12 @@ const OPERATORS = [
   { value: 'is_not_empty', label: 'is niet leeg' },
 ]
 
-// Veldtypen die toegestaan zijn als sub-veld (geen nesting van herhalende secties)
+// Veldtypen die toegestaan zijn als sub-veld (geen nesting van herhalende secties,
+// geen dossier-gegeven binnen een rij)
 const SUB_FIELD_TYPES: FormFieldType[] = [
   'text', 'textarea', 'number', 'date', 'time',
   'dropdown', 'radio', 'checkbox', 'boolean',
-  'photo', 'file', 'signature',
+  'photo', 'file', 'signature', 'medewerker',
   'heading', 'paragraph', 'divider',
 ]
 
@@ -404,6 +406,7 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
   const isStructural = !isInvoerVeld(field)
   const hasOptions   = field.type === 'dropdown' || field.type === 'radio' || field.type === 'checkbox'
   const isRepeatable = field.type === 'repeatable'
+  const isDossier    = field.type === 'dossier'
   const otherFields  = allFields.filter(f => f.id !== field.id && isInvoerVeld(f))
 
   function update(patch: Partial<FormField>) {
@@ -502,7 +505,7 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
       )}
 
       {/* Placeholder */}
-      {!isStructural && !isRepeatable && (
+      {!isStructural && !isRepeatable && !isDossier && (
         <InputRow label="Placeholder">
           <TextInput
             value={field.placeholder ?? ''}
@@ -568,6 +571,24 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
         </InputRow>
       )}
 
+      {/* Dossier-variabele keuze */}
+      {isDossier && (
+        <InputRow label="Dossier-gegeven">
+          <select
+            value={field.dossierVariabele ?? ''}
+            onChange={e => update({ dossierVariabele: e.target.value })}
+            style={selectStyle}
+          >
+            {DOSSIER_VARIABELEN.map(v => (
+              <option key={v.key} value={v.key}>{v.label}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+            Wordt bij het invullen automatisch (alleen-lezen) gevuld vanuit het gekoppelde dossier.
+          </p>
+        </InputRow>
+      )}
+
       {/* Sub-fields editor for repeatable */}
       {isRepeatable && (
         <div style={{ marginBottom: 16 }}>
@@ -579,7 +600,7 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
       )}
 
       {/* Toggles */}
-      {!isStructural && (
+      {!isStructural && !isDossier && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
           {!isRepeatable && (
             <Toggle checked={field.required} onChange={v => update({ required: v })} label="Verplicht veld" />

@@ -15,6 +15,8 @@ export type FormFieldType =
   | 'location'
   | 'barcode'
   | 'file'
+  | 'medewerker'
+  | 'dossier'
   | 'repeatable'
   | 'heading'
   | 'paragraph'
@@ -61,6 +63,7 @@ export interface FormField {
   defaultValue?: unknown
   options?: FieldOption[]     // dropdown | radio | checkbox
   children?: FormField[]      // repeatable section
+  dossierVariabele?: string   // dossier: welke variabele uit het gekoppelde dossier
   conditions?: FieldCondition[]
   validation?: FieldValidation
 }
@@ -184,6 +187,8 @@ export const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   location:    'Locatie / GPS',
   barcode:     'Barcode / QR',
   file:        'Bestand upload',
+  medewerker:  'Medewerker(s)',
+  dossier:     'Dossier-gegeven',
   repeatable:  'Herhalende sectie',
   heading:     'Kop (vaste titel)',
   paragraph:   'Tekst­blok',
@@ -202,6 +207,10 @@ export const FIELD_TYPE_GROUPS: { label: string; types: FormFieldType[] }[] = [
   {
     label: 'Media & Locatie',
     types: ['photo', 'signature', 'location', 'barcode', 'file'],
+  },
+  {
+    label: 'Koppeling',
+    types: ['dossier', 'medewerker'],
   },
   {
     label: 'Opmaak & Structuur',
@@ -285,6 +294,13 @@ export function defaultField(type: FormFieldType, existingNames: string[]): Form
 
   if (type === 'repeatable') {
     base.children = []
+  }
+
+  if (type === 'dossier') {
+    // Dossier-gegevens worden automatisch uit het gekoppelde dossier gevuld en
+    // zijn altijd alleen-lezen. De concrete variabele kiest de bouwer in de instellingen.
+    base.readOnly = true
+    base.dossierVariabele = 'dossiernummer'
   }
 
   return base

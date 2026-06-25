@@ -29,11 +29,18 @@ type Props = {
   mobiel?: boolean
   /** Waar de terug-knop en de redirect-na-indienen naartoe gaan. */
   terugHref?: string
+  /** Keuzelijst voor `medewerker`-velden (actieve medewerkers). */
+  medewerkers?: { id: string; naam: string }[]
+  /**
+   * Waarden voor `dossier`-velden, opgehaald uit het gekoppelde dossier.
+   * Worden alleen-lezen over de overige waarden heen gelegd (dossier is leidend).
+   */
+  dossierWaarden?: Record<string, unknown>
 }
 
 const DRAFT_KEY = (scope: string) => `form_draft_${scope}`
 
-export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, draftScope, mobiel = false, terugHref }: Props) {
+export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, draftScope, mobiel = false, terugHref, medewerkers, dossierWaarden }: Props) {
   const router = useRouter()
   // Cache-sleutel per exemplaar: voorkomt dat verschillende invullingen van
   // hetzelfde sjabloon dezelfde localStorage-draft delen.
@@ -65,6 +72,10 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         if (field.type === 'time') initial[field.id] = nuTijd
       }
     }
+
+    // Dossier-gegevens zijn alleen-lezen en altijd leidend: leg ze als laatste
+    // over de overige waarden heen, ook bij het hervatten van een concept.
+    if (dossierWaarden) initial = { ...initial, ...dossierWaarden }
 
     return initial
   })
@@ -228,6 +239,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
               error={errors[field.id]}
               onChange={val => updateValue(field.id, val)}
               mobiel={mobiel}
+              medewerkers={medewerkers}
             />
           </div>
         ))}
