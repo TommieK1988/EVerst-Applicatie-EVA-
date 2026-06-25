@@ -139,7 +139,14 @@ export default function PlanningShell({
                         Vandaag
                       </div>
                     )}
-                    <div>{c.label}</div>
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: c.isToday ? 700 : 600,
+                      color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fg,
+                      lineHeight: 1.1,
+                    }}>
+                      {c.label}
+                    </div>
                     {c.subLabel && (
                       <div style={{ fontSize: 8, color: KLEUR.fgMuted, marginTop: 1 }}>
                         {c.subLabel}

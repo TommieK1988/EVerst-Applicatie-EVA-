@@ -4,7 +4,7 @@ import React, { useState, useTransition, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import type {
   Medewerker, Bedrijfsgegevens, Relatie,
-  MedewerkerFunctie, MedewerkerAfdeling,
+  MedewerkerFunctie, MedewerkerAfdeling, Ploeg,
   CaoDocument, CaoLoonschaal,
 } from '@everts/database/platform-types'
 import { updateMedewerkerGegevens } from '@/app/(platform)/medewerkers/[id]/actions'
@@ -35,6 +35,7 @@ type FormState = {
   werkmaatschappij_id: string
   relatie_id: string
   kleur: string
+  ploeg_id: string
 }
 
 function toForm(m: Medewerker): FormState {
@@ -63,6 +64,7 @@ function toForm(m: Medewerker): FormState {
     werkmaatschappij_id: m.werkmaatschappij_id ?? '',
     relatie_id:          m.relatie_id ?? '',
     kleur:               m.kleur ?? '',
+    ploeg_id:            m.ploeg_id ?? '',
   }
 }
 
@@ -234,6 +236,7 @@ export default function MedewerkerGegevensForm({
   relaties,
   functies,
   afdelingen,
+  ploegen,
   caoDocumenten,
   caoSchalen,
 }: {
@@ -242,6 +245,7 @@ export default function MedewerkerGegevensForm({
   relaties: Pick<Relatie, 'id' | 'naam' | 'types'>[]
   functies: MedewerkerFunctie[]
   afdelingen: MedewerkerAfdeling[]
+  ploegen: Pick<Ploeg, 'id' | 'naam'>[]
   caoDocumenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   caoSchalen: CaoLoonschaal[]
 }) {
@@ -276,6 +280,7 @@ export default function MedewerkerGegevensForm({
         werkmaatschappij_id: state.werkmaatschappij_id || null,
         relatie_id:          state.relatie_id || null,
         kleur:               state.kleur || null,
+        ploeg_id:            state.ploeg_id || null,
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Gegevens opgeslagen')
@@ -432,6 +437,13 @@ export default function MedewerkerGegevensForm({
             <div>
               <label style={labelStyle}>Afdeling</label>
               <ComboSelect opties={afdelingopties} value={state.afdeling} onChange={v => set('afdeling', v)} placeholder="bijv. Uitvoering" />
+            </div>
+            <div>
+              <label style={labelStyle}>Ploeg</label>
+              <select className="eva-input" style={{ width: '100%' }} value={state.ploeg_id} onChange={e => set('ploeg_id', e.target.value)}>
+                <option value="">— Geen ploeg —</option>
+                {ploegen.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
+              </select>
             </div>
             <div>
               <label style={labelStyle}>In dienst vanaf</label>

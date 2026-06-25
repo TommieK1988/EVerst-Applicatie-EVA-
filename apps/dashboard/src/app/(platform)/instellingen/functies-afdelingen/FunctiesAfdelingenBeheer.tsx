@@ -2,9 +2,15 @@
 
 import React, { useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import type { MedewerkerFunctie, MedewerkerAfdeling, StandaardRooster } from '@everts/database/platform-types'
-import { upsertFunctie, verwijderFunctie, upsertAfdeling, verwijderAfdeling } from './actions'
+import type { MedewerkerFunctie, MedewerkerAfdeling, Ploeg, StandaardRooster } from '@everts/database/platform-types'
+import { upsertFunctie, verwijderFunctie, upsertAfdeling, verwijderAfdeling, upsertPloeg, verwijderPloeg } from './actions'
 import { Button, Card, CardBody, EmptyState, Input } from '@/components/ui'
+
+export type MedewerkerOptie = { id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }
+
+function medewerkerNaam(m: MedewerkerOptie): string {
+  return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
+}
 
 const labelStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 700,
@@ -473,17 +479,162 @@ function LijstBeheer({
   )
 }
 
+// ── Ploegen lijst (naam + volgorde + teamleider) ──────────────────────────────
+
+function PloegLijstBeheer({
+  ploegen: initialPloegen, medewerkers,
+}: {
+  ploegen: Ploeg[]
+  medewerkers: MedewerkerOptie[]
+}) {
+  const [ploegen, setPloegen]     = useState<Ploeg[]>(initialPloegen)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showNieuw, setShowNieuw] = useState(false)
+  const [naam, setNaam]           = useState('')
+  const [volgorde, setVolgorde]   = useState('0')
+  const [teamleiderId, setTeamleiderId] = useState('')
+  const [isPending, startTransition] = useTransition()
+
+  const medewerkerById = (id: string | null) => medewerkers.find(m => m.id === id)
+
+  function resetForm() { setNaam(''); setVolgorde('0'); setTeamleiderId('') }
+
+  function startEdit(p: Ploeg) {
+    setEditingId(p.id); setNaam(p.naam); setVolgorde(String(p.volgorde))
+    setTeamleiderId(p.teamleider_id ?? ''); setShowNieuw(false)
+  }
+
+  function handleSave(id?: string) {
+    startTransition(async () => {
+      const result = await upsertPloeg({ naam: naam.trim(), volgorde, teamleider_id: teamleiderId || null }, id)
+      if (!result.ok) { toast.error(result.error); return }
+      toast.success(id ? 'Bijgewerkt' : 'Toegevoegd')
+      window.location.reload()
+    })
+  }
+
+  function handleVerwijder(id: string) {
+    startTransition(async () => {
+      const result = await verwijderPloeg(id)
+      if (!result.ok) { toast.error(result.error); return }
+      setPloegen(prev => prev.map(p => p.id === id ? { ...p, actief: false } : p))
+      toast.success('Gedeactiveerd')
+    })
+  }
+
+  const actief   = ploegen.filter(p => p.actief).sort((a, b) => a.volgorde - b.volgorde || a.naam.localeCompare(b.naam))
+  const inactief = ploegen.filter(p => !p.actief)
+
+  const teamleiderSelect = (
+    <select className="eva-input" style={{ width: '100%' }} value={teamleiderId} onChange={e => setTeamleiderId(e.target.value)}>
+      <option value="">— Geen teamleider —</option>
+      {medewerkers.map(m => <option key={m.id} value={m.id}>{medewerkerNaam(m)}</option>)}
+    </select>
+  )
+
+  const editForm = (id?: string) => (
+    <Card className={id ? 'border-brand-400' : 'mb-2'}>
+      <CardBody className="py-3 px-3.5">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Naam</label>
+            <Input style={{ width: '100%' }} value={naam} onChange={e => setNaam(e.target.value)} placeholder="bijv. Ploeg A" autoFocus />
+          </div>
+          <div>
+            <label style={labelStyle}>Volgorde</label>
+            <Input type="number" style={{ width: '100%' }} value={volgorde} onChange={e => setVolgorde(e.target.value)} min={0} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Teamleider</label>
+          {teamleiderSelect}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button type="button" variant="ghost" onClick={() => { id ? setEditingId(null) : setShowNieuw(false); resetForm() }} disabled={isPending}>Annuleren</Button>
+          <Button type="button" variant="primary" onClick={() => handleSave(id)} loading={isPending} disabled={isPending || !naam.trim()}>
+            Opslaan
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--fg)', margin: 0 }}>Ploegen</h3>
+        {!showNieuw && (
+          <Button variant="ghost" size="sm" onClick={() => { setShowNieuw(true); setEditingId(null); resetForm() }}>
+            + Toevoegen
+          </Button>
+        )}
+      </div>
+
+      {showNieuw && editForm()}
+
+      {actief.length === 0 && !showNieuw ? (
+        <EmptyState size="sm" tone="neutral" title="Nog geen ploegen ingesteld." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {actief.map(p => (
+            <div key={p.id}>
+              {editingId === p.id ? editForm(p.id) : (
+                <Card>
+                  <CardBody className="flex items-center gap-3 py-2.5 px-3.5">
+                    <span style={{ fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{p.volgorde}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>{p.naam}</div>
+                      <div style={{ fontSize: 10, color: p.teamleider_id ? 'var(--accent)' : 'var(--fg-muted)', marginTop: 1 }}>
+                        {p.teamleider_id ? `Teamleider: ${medewerkerById(p.teamleider_id) ? medewerkerNaam(medewerkerById(p.teamleider_id)!) : '—'}` : 'Geen teamleider'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(p)}>Bewerken</Button>
+                      <Button variant="outline" size="sm" onClick={() => handleVerwijder(p.id)} disabled={isPending}>Deact.</Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {inactief.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ fontSize: 10, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none' }}>
+            {inactief.length} inactief
+          </summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
+            {inactief.map(p => (
+              <Card key={p.id} className="opacity-45">
+                <CardBody className="flex items-center gap-3 py-2.5 px-3.5">
+                  <span style={{ flex: 1, fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>{p.naam}</span>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export default function FunctiesAfdelingenBeheer({
   functies,
   afdelingen,
+  ploegen,
+  medewerkers,
 }: {
   functies: MedewerkerFunctie[]
   afdelingen: MedewerkerAfdeling[]
+  ploegen: Ploeg[]
+  medewerkers: MedewerkerOptie[]
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 32 }}>
       <FunctieLijstBeheer functies={functies} />
       <LijstBeheer
         titel="Afdelingen"
@@ -491,6 +642,7 @@ export default function FunctiesAfdelingenBeheer({
         onUpsert={(raw, id) => upsertAfdeling(raw, id)}
         onVerwijder={verwijderAfdeling}
       />
+      <PloegLijstBeheer ploegen={ploegen} medewerkers={medewerkers} />
     </div>
   )
 }

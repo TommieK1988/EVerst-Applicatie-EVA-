@@ -68,3 +68,29 @@ export async function verwijderAfdeling(id: string): Promise<ActionResult> {
   revalidatePath('/instellingen/functies-afdelingen')
   return { ok: true }
 }
+
+// ── Ploegen (beheerde lijst + teamleider) ──────────────────────────────────────
+
+const ploegSchema = z.object({
+  naam:          z.string().min(1),
+  volgorde:      z.coerce.number().default(0),
+  teamleider_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
+})
+
+export async function upsertPloeg(raw: unknown, id?: string): Promise<ActionResult> {
+  const p = ploegSchema.safeParse(raw)
+  if (!p.success) return { ok: false, error: p.error.errors[0]?.message ?? 'Ongeldig' }
+  const { error } = id
+    ? await db().from('ploegen').update(p.data).eq('id', id)
+    : await db().from('ploegen').insert({ ...p.data, actief: true })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/functies-afdelingen')
+  return { ok: true }
+}
+
+export async function verwijderPloeg(id: string): Promise<ActionResult> {
+  const { error } = await db().from('ploegen').update({ actief: false }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/functies-afdelingen')
+  return { ok: true }
+}

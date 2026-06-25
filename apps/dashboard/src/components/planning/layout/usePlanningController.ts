@@ -1,6 +1,6 @@
 'use client'
 
-import { differenceInDays, startOfDay } from 'date-fns'
+import { startOfDay } from 'date-fns'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LABEL_W, VANDAAG_ANCHOR } from './constants'
 import { usePlanningLayout, viewBereik, type PlanningLayout, type View } from './usePlanningLayout'
@@ -22,7 +22,9 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
   const wrapRef   = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   // Bepaalt waarop de eerstvolgende layout-update de scroll ankert.
-  const anchorRef = useRef<'today' | 'period'>('today')
+  const anchorRef = useRef<'today' | 'period' | 'scrub'>('today')
+  // Exacte dag waarop bij scrubben wordt geankerd (per dag, los van de periodegrens).
+  const anchorDateRef = useRef<Date | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -42,9 +44,12 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
     if (!el) return
     const today    = startOfDay(new Date())
     const inWindow = today >= startOfDay(layout.vs) && today <= startOfDay(layout.ve)
-    const target   = anchorRef.current === 'today' && inWindow ? today : startOfDay(layout.periodeVs)
-    const offset   = differenceInDays(target, startOfDay(layout.vs))
-    el.scrollLeft  = Math.max(0, offset * layout.ppd - availableW * VANDAAG_ANCHOR)
+    const target   = anchorRef.current === 'scrub' && anchorDateRef.current
+      ? startOfDay(anchorDateRef.current)
+      : anchorRef.current === 'today' && inWindow
+        ? today
+        : startOfDay(layout.periodeVs)
+    el.scrollLeft  = Math.max(0, layout.xVoor(target.toISOString()) - availableW * VANDAAG_ANCHOR)
   }, [layout.vs, layout.periodeVs, layout.ppd, availableW, view, peildatum])
 
   // ‹ › — naar vorige/volgende periode; toon de nieuwe periodegrens op 1/6.
@@ -65,11 +70,13 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
     setPeildatum(viewBereik(view, new Date()).vs)
   }, [view])
 
-  // Scrubber — spring naar de aangewezen datum; die periode op 1/6.
+  // Scrubber — per dag scrubben: anker op de exacte aangewezen dag (op 1/6),
+  // de gerenderde periode volgt die dag.
   const handleScrub = useCallback((newVs: Date) => {
-    anchorRef.current = 'period'
-    setPeildatum(viewBereik(view, newVs).vs)
-  }, [view])
+    anchorRef.current = 'scrub'
+    anchorDateRef.current = startOfDay(newVs)
+    setPeildatum(startOfDay(newVs))
+  }, [])
 
   return {
     view, peildatum, availableW, layout: layout as PlanningLayout,

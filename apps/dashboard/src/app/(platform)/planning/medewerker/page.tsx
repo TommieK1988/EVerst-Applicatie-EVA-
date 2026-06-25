@@ -22,17 +22,24 @@ export default async function MedewerkerplanningPage() {
 
   const feestdagen = berekenFeestdagen(jaar)
 
-  const [medewerkerRes, entriesRes, roostersRes, afwezigheidRes, dossiersRes, uursoortRes, agendaItems] = await Promise.all([
+  const [medewerkerRes, entriesRes, roostersRes, afwezigheidRes, dossiersRes, uursoortRes, ploegenRes, agendaItems] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
     supabase
       .from('planning_items')
       .select('*, planning_activiteiten ( titel, uursoort_id, geschatte_uren, dossier_id ), medewerkers ( voornaam, tussenvoegsel, achternaam, functie )'),
     supabase.from('medewerker_roosters').select('*'),
     supabase.from('medewerker_afwezigheid').select('*').gte('eind_datum', vandaag),
-    supabase.from('dossiers').select('id, titel, dossiernummer').eq('hoofdstatus', 'opdracht'),
+    supabase.from('dossiers')
+      .select('id, titel, dossiernummer, project_manager_id, medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam, kleur )')
+      .eq('hoofdstatus', 'opdracht'),
     supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true),
+    supabase.from('ploegen').select('id, naam').eq('actief', true),
     haalPlanningItemsMetExpansie(jaar),
   ])
+
+  const ploegNamen: Record<string, string> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const p of ((ploegenRes.data ?? []) as any[])) ploegNamen[p.id] = p.naam
 
   // Alleen uitvoerend personeel: kantoor-afdelingen weglaten (medewerkers zonder
   // afdeling blijven wél staan).
@@ -49,8 +56,15 @@ export default async function MedewerkerplanningPage() {
   }))
 
   const dossierMap: Record<string, string> = {}
-  for (const d of (dossiersRes.data ?? [])) {
+  const projectleiders: Record<string, { kleur: string | null; naam: string | null }> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const d of ((dossiersRes.data ?? []) as any[])) {
     dossierMap[d.id] = d.dossiernummer ? `${d.dossiernummer} ${d.titel}` : d.titel
+    const med = d.medewerkers
+    projectleiders[d.id] = {
+      kleur: med?.kleur ?? null,
+      naam: med ? [med.voornaam, med.tussenvoegsel, med.achternaam].filter(Boolean).join(' ') : null,
+    }
   }
 
   return (
@@ -66,6 +80,8 @@ export default async function MedewerkerplanningPage() {
         roosters={roosters}
         afwezigheid={afwezigheid}
         dossierMap={dossierMap}
+        projectleiders={projectleiders}
+        ploegNamen={ploegNamen}
         uursoorten={uursoorten}
         agendaItems={agendaItems}
         feestdagen={feestdagen}

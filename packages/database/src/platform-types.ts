@@ -549,6 +549,7 @@ export type Medewerker = {
   cao_document_id: string | null
   cao_trede: string | null
   kleur: string | null
+  ploeg_id: string | null
   // Persoonlijke accountinstellingen
   notificatie_voorkeuren: NotificatieVoorkeuren
   voorkeuren: GebruikerVoorkeuren
@@ -914,6 +915,15 @@ export type MedewerkerAfdeling = {
   actief:            boolean
   standaard_rechten: RechtenSet
   created_at:        string
+}
+
+export type Ploeg = {
+  id:            string
+  naam:          string
+  teamleider_id: string | null
+  volgorde:      number
+  actief:        boolean
+  created_at:    string
 }
 
 // ─── CAO ────────────────────────────────────────────────────────────────────

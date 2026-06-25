@@ -25,7 +25,7 @@ import {
   KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
   usePlanningController, verschuifTs, type PlanningLayout,
 } from './layout/index'
-import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
+import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -52,11 +52,12 @@ const dialogLabelStyle: React.CSSProperties = {
   display: 'block', marginBottom: 4,
 }
 
-type SortKey = 'voornaam' | 'afdeling' | 'functie'
+type SortKey = 'voornaam' | 'afdeling' | 'functie' | 'ploeg'
 const SORT_OPTIES: { key: SortKey; label: string }[] = [
   { key: 'voornaam', label: 'Voornaam' },
   { key: 'afdeling', label: 'Afdeling' },
   { key: 'functie',  label: 'Functie' },
+  { key: 'ploeg',    label: 'Ploeg' },
 ]
 
 // ─── Conflict-detectie (op echte tijdstippen) ───────────────────────────────────
@@ -525,7 +526,7 @@ function AgendaTimelineRij({
 
 function TimelineRij({
   medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
-  overCellId, dossierMap, kleurweergave, medewerkerKleuren, uursoortKleuren,
+  overCellId, dossierMap, projectleiders,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
 }: {
   medewerker:        Medewerker
@@ -538,9 +539,7 @@ function TimelineRij({
   afwezigheid:       MedewerkerAfwezigheid[]
   overCellId:        string | null
   dossierMap:        Record<string, string>
-  kleurweergave:     Kleurweergave
-  medewerkerKleuren: Record<string, string | null>
-  uursoortKleuren:   Record<string, string>
+  projectleiders:    Record<string, { kleur: string | null; naam: string | null }>
   feestdagenDagen:   Set<string>
   feestdagenNamen:   Record<string, string>
   atvDagen:          Set<string>
@@ -626,10 +625,9 @@ function TimelineRij({
 
         const dossier_id = entry.dossier_id ?? ''
         const titel      = dossierMap[dossier_id] ?? dossier_id
-        const uursoortId = entry.planning_activiteiten?.uursoort_id as string | undefined
-        const entryKleur = kleurweergave === 'uursoort'
-          ? (uursoortId ? (uursoortKleuren[uursoortId] ?? '#4a7c9e') : '#4a7c9e')
-          : (medewerkerKleuren[medewerker.id] ?? medKleur(medewerker.id))
+        // Balkkleur = kleur van de projectleider van het dossier.
+        const pl         = projectleiders[dossier_id]
+        const entryKleur = pl?.kleur ?? crewKleur(pl?.naam ?? titel ?? '—')
         return (
           <TimelineEntry
             key={`entry-${entry.id}`}
@@ -685,6 +683,8 @@ type Props = {
   roosters:     MedewerkerRooster[]
   afwezigheid:  MedewerkerAfwezigheid[]
   dossierMap:   Record<string, string>
+  projectleiders?: Record<string, { kleur: string | null; naam: string | null }>
+  ploegNamen?:  Record<string, string>
   uursoorten?:  PlanningUursoort[]
   agendaItems?: BedrijfsagendaItemMetDoelgroep[]
   feestdagen?:  BedrijfsagendaVirtueel[]
@@ -694,7 +694,7 @@ type Props = {
 
 export default function MedewerkerTimeline({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
-  uursoorten = [], agendaItems = [], feestdagen = [],
+  projectleiders = {}, ploegNamen = {}, agendaItems = [], feestdagen = [],
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -716,8 +716,6 @@ export default function MedewerkerTimeline({
 
   useEffect(() => { setEntries(initialEntries) }, [initialEntries])
 
-  const [kleurweergave, setKleurweergave] = useKleurweergave()
-
   const dagen = useMemo(() => eachDayOfInterval({ start: vs, end: ve }), [vs, ve])
 
   const afdelingOpties = useMemo(
@@ -729,15 +727,24 @@ export default function MedewerkerTimeline({
     let list = medewerkers
     if (selAfdelingen.length > 0) list = list.filter(m => m.afdeling && selAfdelingen.includes(m.afdeling))
     const cmp = (a: string | null, b: string | null) => (a ?? '').localeCompare(b ?? '', 'nl')
+    // Lege sorteerwaarde (geen afdeling/functie/ploeg) onderaan, dan op voornaam.
+    const opWaarde = (a: Medewerker, b: Medewerker, get: (m: Medewerker) => string) => {
+      const av = get(a).trim()
+      const bv = get(b).trim()
+      if (!av && !bv) return cmp(a.voornaam, b.voornaam)
+      if (!av) return 1
+      if (!bv) return -1
+      return cmp(av, bv) || cmp(a.voornaam, b.voornaam)
+    }
     return [...list].sort((a, b) => {
-      if (sortBy === 'afdeling') return cmp(a.afdeling, b.afdeling) || cmp(a.voornaam, b.voornaam)
-      if (sortBy === 'functie')  return cmp(a.functie,  b.functie)  || cmp(a.voornaam, b.voornaam)
+      if (sortBy === 'afdeling') return opWaarde(a, b, m => m.afdeling ?? '')
+      if (sortBy === 'functie')  return opWaarde(a, b, m => m.functie ?? '')
+      if (sortBy === 'ploeg')    return opWaarde(a, b, m => ploegNamen[m.ploeg_id ?? ''] ?? '')
       return cmp(a.voornaam, b.voornaam) || cmp(a.achternaam, b.achternaam)
     })
-  }, [medewerkers, selAfdelingen, sortBy])
+  }, [medewerkers, selAfdelingen, sortBy, ploegNamen])
 
   const medewerkerKleuren = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m.kleur])), [medewerkers])
-  const uursoortKleuren   = useMemo(() => Object.fromEntries(uursoorten.filter(u => u.kleur).map(u => [u.id, u.kleur])), [uursoorten])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -946,9 +953,7 @@ export default function MedewerkerTimeline({
           afwezigheid={afwezigheidPerMedewerker[m.id] ?? []}
           overCellId={overCellId}
           dossierMap={dossierMap}
-          kleurweergave={kleurweergave}
-          medewerkerKleuren={medewerkerKleuren}
-          uursoortKleuren={uursoortKleuren}
+          projectleiders={projectleiders}
           feestdagenDagen={feestdagenDagen}
           feestdagenNamen={feestdagenNamen}
           atvDagen={atvDagen}
@@ -1039,16 +1044,13 @@ export default function MedewerkerTimeline({
               onView={handleView}
               onVandaag={handleVandaag}
               rightSlot={
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => setVerlofModalOpen(true)}
-                    className="eva-btn-ghost"
-                  >
-                    + Verlof
-                  </button>
-                  <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setVerlofModalOpen(true)}
+                  className="eva-btn-ghost"
+                >
+                  + Verlof
+                </button>
               }
             />
           }

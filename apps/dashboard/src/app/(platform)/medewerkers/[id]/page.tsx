@@ -12,6 +12,7 @@ import type {
   Relatie,
   MedewerkerFunctie,
   MedewerkerAfdeling,
+  Ploeg,
   CaoDocument,
   CaoLoonschaal,
 } from '@everts/database/platform-types'
@@ -61,6 +62,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     afdelingenRes,
     caoDocumentenRes,
     caoSchalenRes,
+    ploegenRes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('id', params.id).maybeSingle(),
     supabase
@@ -113,6 +115,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     supabase.from('medewerker_afdelingen').select('*').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('cao_documenten').select('id, naam, werkmaatschappij_id').eq('actief', true).order('created_at', { ascending: false }),
     supabase.from('cao_loonschalen').select('*').order('volgorde'),
+    supabase.from('ploegen').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
   ])
 
   if (!medewerkerRes.data) notFound()
@@ -133,6 +136,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     afdelingen.find(a => a.naam === medewerker.afdeling)?.standaard_rechten ?? {}
   const caoDocumenten = (caoDocumentenRes.data ?? []) as Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   const caoSchalen = (caoSchalenRes.data ?? []) as CaoLoonschaal[]
+  const ploegen = (ploegenRes.data ?? []) as Pick<Ploeg, 'id' | 'naam'>[]
   const bedrijfsmiddelen = (bedrijfsmiddelenRes.data ?? []) as MedewerkerBedrijfsmiddel[]
   const attribuutDefinities = (attribuutDefRes.data ?? []) as MedewerkerAttribuutDefinitie[]
   const attribuutWaarden = (attribuutWaardenRes.data ?? []) as MedewerkerAttribuutWaarde[]
@@ -191,6 +195,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
               relaties={relaties}
               functies={functies}
               afdelingen={afdelingen}
+              ploegen={ploegen}
               caoDocumenten={caoDocumenten}
               caoSchalen={caoSchalen}
             />
