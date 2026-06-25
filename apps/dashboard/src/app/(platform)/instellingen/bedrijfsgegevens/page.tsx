@@ -59,24 +59,23 @@ export default async function Page() {
 
 function WerkmaatschappijCard({ wm }: { wm: Bedrijfsgegevens }) {
   return (
-    <Link href={`/instellingen/bedrijfsgegevens/${wm.id}`} style={{
+    <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '14px 18px',
       background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 10,
-      textDecoration: 'none',
-      transition: 'background 0.15s',
     }}>
-      <div>
+      <Link href={`/instellingen/bedrijfsgegevens/${wm.id}`} style={{
+        flex: 1, minWidth: 0, textDecoration: 'none',
+      }}>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{wm.naam}</div>
         <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
           {wm.code && <span style={{ marginRight: 8 }}>{wm.code}</span>}
           {wm.adres_plaats ?? 'Geen adres'}
           {wm.kvk_nummer && <> · KvK {wm.kvk_nummer}</>}
         </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      </Link>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
         <Link href={`/instellingen/bedrijfsgegevens/huisstijl?bedrijf=${wm.id}`}
-          onClick={e => e.stopPropagation()}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '5px 10px',
@@ -86,11 +85,14 @@ function WerkmaatschappijCard({ wm }: { wm: Bedrijfsgegevens }) {
           }}>
           Huisstijl
         </Link>
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--fg-muted)' }}>
-          <path d="M7 4l6 6-6 6"/>
-        </svg>
+        <Link href={`/instellingen/bedrijfsgegevens/${wm.id}`} aria-label={`Open ${wm.naam}`}
+          style={{ display: 'inline-flex', color: 'var(--fg-muted)' }}>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 4l6 6-6 6"/>
+          </svg>
+        </Link>
       </div>
-    </Link>
+    </div>
   )
 }
 
