@@ -183,7 +183,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
               checked={value === opt.value}
               onChange={() => onChange(opt.value)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'hsl(var(--primary))' }}
             />
             {opt.label}
           </label>
@@ -215,7 +215,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                 onChange(next)
               }}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'hsl(var(--primary))' }}
             />
             {opt.label}
           </label>
@@ -242,7 +242,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
               checked={value === (opt === 'Ja' ? true : false)}
               onChange={() => onChange(opt === 'Ja' ? true : false)}
               disabled={field.readOnly}
-              style={{ accentColor: 'var(--primary)' }}
+              style={{ accentColor: 'hsl(var(--primary))' }}
             />
             {opt}
           </label>
@@ -517,7 +517,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
             onClick={() => onChange([...rows, {}])}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
-              background: 'var(--primary, #3b82f6)', color: 'white',
+              background: 'hsl(var(--primary))', color: 'white',
               border: 'none', borderRadius: 5, padding: '4px 10px',
               fontSize: 12, cursor: 'pointer',
             }}

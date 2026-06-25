@@ -276,7 +276,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
                 flex: 1,
                 padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
                 border: 'none',
-                background: 'var(--primary, #3b82f6)',
+                background: 'hsl(var(--primary))',
                 color: 'white',
                 fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
               }}

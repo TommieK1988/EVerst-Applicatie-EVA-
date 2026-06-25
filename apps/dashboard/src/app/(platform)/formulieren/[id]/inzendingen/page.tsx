@@ -60,7 +60,7 @@ export default async function InzendingenPage({ params }: { params: Promise<{ id
                 style={{
                   padding: '8px 14px', borderRadius: 7,
                   border: 'none',
-                  background: 'var(--primary, #3b82f6)', color: 'white',
+                  background: 'hsl(var(--primary))', color: 'white',
                   fontSize: 13, fontWeight: 600, textDecoration: 'none',
                 }}
               >

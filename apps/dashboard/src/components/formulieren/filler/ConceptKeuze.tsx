@@ -76,7 +76,7 @@ export default function ConceptKeuze({ templateId, templateNaam, dossierId, conc
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '11px 18px', borderRadius: 9, border: 'none',
-          background: 'var(--primary, #3b82f6)', color: 'white',
+          background: 'hsl(var(--primary))', color: 'white',
           fontSize: 14, fontWeight: 600, cursor: 'pointer',
         }}
       >

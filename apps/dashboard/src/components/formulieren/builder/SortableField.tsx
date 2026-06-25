@@ -41,7 +41,7 @@ export default function SortableField({ field, isSelected, onSelect, onDelete, o
     >
       <div
         style={{
-          border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
+          border: `2px solid ${isSelected ? 'hsl(var(--primary))' : 'var(--border)'}`,
           borderRadius: 8,
           padding: '10px 12px',
           background: isSelected ? 'var(--primary-subtle, #f0f4ff)' : 'var(--bg)',
