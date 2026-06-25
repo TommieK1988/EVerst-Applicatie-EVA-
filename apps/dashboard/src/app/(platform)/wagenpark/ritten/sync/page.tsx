@@ -17,8 +17,9 @@ export default function SyncPage() {
       <div className="bg-white rounded-lg border p-6 max-w-3xl">
         {!heeftCredentials && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
-            ⚠️ <strong>ULU_EMAIL</strong> en/of <strong>ULU_PASSWORD</strong> ontbreken in
-            <code className="px-1 mx-1 rounded bg-amber-100">apps/wagenpark/.env.local</code>.
+            ⚠️ <strong>ULU_EMAIL</strong> en/of <strong>ULU_PASSWORD</strong> ontbreken.
+            Zet ze lokaal in <code className="px-1 mx-1 rounded bg-amber-100">apps/dashboard/.env.local</code>
+            en online in Vercel → Settings → Environment Variables.
             Voeg deze toe met de credentials die je van ULU hebt gekregen.
           </div>
         )}
@@ -26,7 +27,8 @@ export default function SyncPage() {
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
             ⚠️ <strong>DATABASE_URL</strong> ontbreekt. Vind hem in Supabase →
             Project Settings → Database → Connection string (gebruik de <em>Transaction pooler</em>,
-            port 6543) en zet hem in <code className="px-1 rounded bg-amber-100">apps/wagenpark/.env.local</code>.
+            port 6543) en zet hem in <code className="px-1 rounded bg-amber-100">apps/dashboard/.env.local</code>
+            (en in Vercel voor de online-versie).
           </div>
         )}
 

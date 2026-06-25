@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { PoolClient } from 'pg'
 import { UluApi, RDW, type UluTripInput } from '@everts/wagenpark-core'
 import { getPgPool } from '@/lib/wagenpark/db'
 import { runComplianceAction } from './compliance'
@@ -49,10 +50,10 @@ export async function syncUluAction(
   const from = periodeStart ?? `${new Date().getFullYear()}-01-01`
   const to = periodeEind ?? new Date().toISOString().slice(0, 10)
 
-  const pool = getPgPool()
-  const client = await pool.connect()
+  let client: PoolClient | null = null
 
   try {
+    client = await getPgPool().connect()
     // --- Step 1: login + fetch vehicles + company_users ---------------
     // company_users bevat ALLE bestuurders (incl. degenen zonder recente trip);
     // /users is een kleinere subset. We gebruiken company_users als bron.
@@ -400,6 +401,6 @@ export async function syncUluAction(
       duur_ms: Date.now() - t0,
     }
   } finally {
-    client.release()
+    client?.release()
   }
 }
