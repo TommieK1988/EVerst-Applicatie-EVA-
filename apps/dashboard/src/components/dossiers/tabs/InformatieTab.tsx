@@ -24,6 +24,7 @@ import {
 } from '@/lib/everts-calc/calculations'
 import type { Groep } from '@/lib/everts-calc/types'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
+import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
@@ -950,6 +951,18 @@ export function InformatieTab({
       {/* ── Kaarten grid ── */}
       <div className="grid grid-cols-2 gap-3.5">
 
+        {/* Servicedesk-paneel: mandaat, facturatiemethode, doorlooptijd, offerte-acties */}
+        {sectie === 'servicedesk' && (
+          <ServicedeskInfoPaneel
+            dossierId={dossier.id}
+            titel={dossier.titel}
+            createdAt={dossier.bouw7_aanmaakdatum ?? dossier.created_at ?? null}
+            initieelMandaat={dossier.mandaat_bedrag ?? null}
+            initieleFacturatiemethode={(dossier.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'}
+            heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
+          />
+        )}
+
         {/* Projectinformatie */}
         <Card>
           <CardHeader>Projectinformatie</CardHeader>
@@ -1008,7 +1021,24 @@ export function InformatieTab({
                 <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Opmerkingen</p>
                 <div className="grid grid-cols-1 gap-y-3">
                   <InfoVeld label="Bouw7" waarde={(dossier as any).opmerkingen || null} />
-                  <InfoVeld label="Intern (EVA)" waarde={form.interne_opmerkingen || null} />
+                  {sectie === 'servicedesk' ? (
+                    <div>
+                      <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Intern (EVA)</div>
+                      <Textarea
+                        value={form.interne_opmerkingen}
+                        onChange={e => set('interne_opmerkingen')(e.target.value)}
+                        onBlur={() => {
+                          if (form.interne_opmerkingen !== opgeslagen.interne_opmerkingen) {
+                            updateDossierInfo(dossier.id, { interne_opmerkingen: form.interne_opmerkingen || null }).catch(() => {})
+                            setOpgeslagen(p => ({ ...p, interne_opmerkingen: form.interne_opmerkingen }))
+                          }
+                        }}
+                        placeholder="Interne aanvullingen — worden nooit door de Bouw7-sync overschreven"
+                      />
+                    </div>
+                  ) : (
+                    <InfoVeld label="Intern (EVA)" waarde={form.interne_opmerkingen || null} />
+                  )}
                 </div>
               </>
             )}
@@ -1294,7 +1324,8 @@ export function InformatieTab({
           </CardBody>
         </Card>
 
-        {/* Financiële totalen */}
+        {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
+        {sectie !== 'servicedesk' && (
         <Card>
           <CardHeader>Financiële totalen</CardHeader>
           <CardBody>
@@ -1370,8 +1401,10 @@ export function InformatieTab({
             )}
           </CardBody>
         </Card>
+        )}
 
-        {/* Calculatie importeren (.c4y) — sleep een Calc4You-werkbegroting hierheen */}
+        {/* Calculatie importeren (.c4y) — niet voor servicedesk */}
+        {sectie !== 'servicedesk' && (
         <div className="col-span-2">
           <C4yDropCard
             dossierId={dossier.id}
@@ -1381,6 +1414,7 @@ export function InformatieTab({
             onImported={() => setImportTick(t => t + 1)}
           />
         </div>
+        )}
 
         {/* Calculatie-instellingen — alleen voor aanvraag met gekoppeld project */}
         {heeftCalcKnoppen && (

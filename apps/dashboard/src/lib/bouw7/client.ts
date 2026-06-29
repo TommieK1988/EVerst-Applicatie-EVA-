@@ -191,6 +191,18 @@ export type Bouw7Contact = {
   iban?: string
   information?: string
   isActive?: boolean
+  /**
+   * "Uurtarief per uurtype" — afgesproken verkoop-/kostprijstarief per uursoort voor deze relatie.
+   * Veldnaam/shape defensief getypeerd: nog te bevestigen tegen de live API (mogelijk alleen op
+   * het detail-endpoint `/contacts/{id}`). Wordt gesynct naar `relatie_uurtarieven`.
+   */
+  hourTypePrices?: Array<{
+    hourType?: { id?: number; name?: string }
+    hourTypeId?: number
+    sellingPrice?: string | number | null
+    costPrice?: string | number | null
+    price?: string | number | null
+  }>
 }
 
 export type Bouw7ContactPerson = {
@@ -260,6 +272,9 @@ export type Bouw7Project = {
   city?: string
   startDate?: string
   endDate?: string
+  /** Aanmaakdatum van het project (ISO-timestamp). Ongedocumenteerd maar aanwezig in de live response. */
+  createdAt?: string
+  updatedAt?: string
   /**
    * Historisch veld — komt in de huidige API-response niet meer voor en bevatte
    * bovendien de prijs ínclusief BTW (ondanks de naam). Niet meer gebruiken.

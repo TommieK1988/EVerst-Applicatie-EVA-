@@ -85,7 +85,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     )
   }
 
-  if (tab === 'calculatie' && (sectie === 'aanvraag' || sectie === 'offerte')) {
+  if (tab === 'calculatie' && (sectie === 'aanvraag' || sectie === 'offerte' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
@@ -93,6 +93,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           aanvraagId={id}
           naam={dossier?.titel ?? 'Aanvraag'}
           nummer={dossier?.dossiernummer ?? ''}
+          initieelProjectId={(dossier as any)?.everts_calc_project_id ?? null}
         />
       </>
     )
@@ -131,16 +132,17 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     }
   }
 
-  if (tab === 'financieel' && sectie === 'opdracht') {
+  if (tab === 'financieel' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
-        <FinancieelTab dossierId={id} />
+        <FinancieelTab dossierId={id} sectie={sectie} />
       </>
     )
   }
 
-  if (tab === 'inkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
+  // Inkoop/Verkoop zijn voor servicedesk samengevoegd in het Financieel-tab; alleen opdracht houdt ze los.
+  if (tab === 'inkoop' && sectie === 'opdracht') {
     return (
       <>
         {titleInjector}
@@ -149,7 +151,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     )
   }
 
-  if (tab === 'verkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
+  if (tab === 'verkoop' && sectie === 'opdracht') {
     return (
       <>
         {titleInjector}

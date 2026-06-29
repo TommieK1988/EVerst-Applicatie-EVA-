@@ -35,17 +35,27 @@ interface Props {
   aanvraagId: string
   naam: string
   nummer: string
+  /** Server-side gekoppeld everts-calc project (dossiers.everts_calc_project_id). Seedt de
+   *  localStorage-mapping zodat de calculatie ook in een verse browser zichtbaar is. */
+  initieelProjectId?: string | null
 }
 
-export function AanvraagCalculatieTab({ aanvraagId, naam, nummer }: Props) {
+export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjectId }: Props) {
   const [projectId, setProjectId] = useState<string | null>(null)
   const [isLaden, setIsLaden]     = useState(false)
   const [fout, setFout]           = useState<string | null>(null)
 
   useEffect(() => {
     const mapping = leesMapping()
-    if (mapping[aanvraagId]) setProjectId(mapping[aanvraagId])
-  }, [aanvraagId])
+    if (mapping[aanvraagId]) {
+      setProjectId(mapping[aanvraagId])
+    } else if (initieelProjectId) {
+      // Server zegt dat er een project gekoppeld is, maar deze browser kent de mapping nog niet.
+      mapping[aanvraagId] = initieelProjectId
+      schrijfMapping(mapping)
+      setProjectId(initieelProjectId)
+    }
+  }, [aanvraagId, initieelProjectId])
 
   async function handleKoppelen() {
     setIsLaden(true)

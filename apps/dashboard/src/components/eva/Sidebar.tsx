@@ -15,7 +15,7 @@ import {
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
 import { magOnderdeelZien } from '@/lib/auth/rechten-shared'
-import { getDossierToggles } from '@/lib/dossiers/actions'
+import { getDossierToggles, dossierHeeftCalculatie } from '@/lib/dossiers/actions'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 
 
@@ -180,11 +180,9 @@ const OPDRACHT_TABS: DossierTab[] = [
 const SERVICEDESK_TABS: DossierTab[] = [
   { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'bestanden',  label: 'Bestanden',  d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { slug: 'calculatie', label: 'Calculatie', d: 'M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M16 3l2 2-9 9m0 0H7m2 0V9' },
   { slug: 'planning',   label: 'Planning',   d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { slug: 'taken',      label: 'Taken',      d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
   { slug: 'vca',        label: 'VCA',        d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
-  { slug: 'inkoop',     label: 'Inkoop',     d: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
-  { slug: 'verkoop',    label: 'Verkoop',    d: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
@@ -245,9 +243,13 @@ export default function Sidebar({
   // van toggle-gestuurde tabs (zie TAB_TOGGLE_GATES). Default leeg → gated tabs
   // blijven verborgen tot we weten dat de toggle aanstaat (geen flash).
   const [aanSleutels, setAanSleutels] = React.useState<Set<string>>(new Set())
+  // Servicedesk: het Calculatie-tab verschijnt pas zodra er een offerte/calculatie
+  // gekoppeld is (na "Offerte maken"). null = nog onbekend → tab verborgen (geen flash).
+  const [heeftCalc, setHeeftCalc] = React.useState<boolean | null>(null)
   React.useEffect(() => {
     if (!isDossierDetail || !dossierId) {
       setAanSleutels(new Set())
+      setHeeftCalc(null)
       return
     }
     let actief = true
@@ -256,12 +258,22 @@ export default function Sidebar({
         if (actief) setAanSleutels(new Set(toggles.filter(t => t.aan).map(t => t.sleutel)))
       })
       .catch(() => { if (actief) setAanSleutels(new Set()) })
+    if (dossierSectie === 'servicedesk') {
+      dossierHeeftCalculatie(dossierId)
+        .then(v => { if (actief) setHeeftCalc(v) })
+        .catch(() => { if (actief) setHeeftCalc(false) })
+    } else {
+      setHeeftCalc(null)
+    }
     return () => { actief = false }
-  }, [isDossierDetail, dossierId])
+  }, [isDossierDetail, dossierId, dossierSectie])
 
   const zichtbareTabs = dossierTabs.filter(t => {
     const vereisteSleutel = TAB_TOGGLE_GATES[t.slug]
-    return !vereisteSleutel || aanSleutels.has(vereisteSleutel)
+    if (vereisteSleutel && !aanSleutels.has(vereisteSleutel)) return false
+    // Calculatie-tab is in servicedesk gegated op een gekoppelde calculatie/offerte.
+    if (dossierSectie === 'servicedesk' && t.slug === 'calculatie' && !heeftCalc) return false
+    return true
   })
 
   // Shared fade style for labels and decorations that hide when collapsed

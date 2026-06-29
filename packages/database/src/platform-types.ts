@@ -412,11 +412,21 @@ export type Dossier = {
   /** Meest recente Bouw7-offertestatus (quotationStatus.name), bv. '04. Gewonnen'. */
   bouw7_quotation_status: string | null
   bouw7_laatst_sync: string | null
+  /** Bouw7 project createdAt — aanmaakdatum melding/project; basis voor servicedesk-doorlooptijd. */
+  bouw7_aanmaakdatum: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null
   kostprijs_excl_btw: number | null
   contactpersoon_id: string | null
   servicedesk_substatus: ServicedeskSubstatus | null
+  /** Gekoppeld everts-calc project (calculatie/offerte). Zichtbaar-maken Calculatie-tab servicedesk. */
+  everts_calc_project_id: string | null
+  /** Servicedesk: handmatig opgegeven mandaat (EUR excl. btw). EVA-eigen. */
+  mandaat_bedrag: number | null
+  /** Servicedesk facturatiewijze: 'regie' (default) of 'termijnen' (na offerte-akkoord). */
+  facturatiemethode: 'regie' | 'termijnen'
+  /** true = facturatiemethode handmatig vastgezet; auto-logica overschrijft niet. */
+  facturatiemethode_handmatig: boolean
   verzonden_op: string | null
   opmerkingen: string | null
   /** EVA-eigen opmerkingen — nooit door de Bouw7-sync overschreven. */

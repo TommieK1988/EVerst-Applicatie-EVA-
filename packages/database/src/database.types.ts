@@ -1139,11 +1139,14 @@ export type Database = {
           dossiernummer: string | null
           everts_calc_project_id: string | null
           factuuradres_id: string | null
+          facturatiemethode: string
+          facturatiemethode_handmatig: boolean
           gearchiveerd: boolean
           hoofdstatus: Database["public"]["Enums"]["hoofdstatus"]
           id: string
           klant_id: string | null
           kostprijs_excl_btw: number | null
+          mandaat_bedrag: number | null
           offerte_substatus:
             | Database["public"]["Enums"]["offerte_substatus"]
             | null
@@ -1199,11 +1202,14 @@ export type Database = {
           dossiernummer?: string | null
           everts_calc_project_id?: string | null
           factuuradres_id?: string | null
+          facturatiemethode?: string
+          facturatiemethode_handmatig?: boolean
           gearchiveerd?: boolean
           hoofdstatus?: Database["public"]["Enums"]["hoofdstatus"]
           id?: string
           klant_id?: string | null
           kostprijs_excl_btw?: number | null
+          mandaat_bedrag?: number | null
           offerte_substatus?:
             | Database["public"]["Enums"]["offerte_substatus"]
             | null
@@ -1259,11 +1265,14 @@ export type Database = {
           dossiernummer?: string | null
           everts_calc_project_id?: string | null
           factuuradres_id?: string | null
+          facturatiemethode?: string
+          facturatiemethode_handmatig?: boolean
           gearchiveerd?: boolean
           hoofdstatus?: Database["public"]["Enums"]["hoofdstatus"]
           id?: string
           klant_id?: string | null
           kostprijs_excl_btw?: number | null
+          mandaat_bedrag?: number | null
           offerte_substatus?:
             | Database["public"]["Enums"]["offerte_substatus"]
             | null

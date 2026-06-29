@@ -261,6 +261,13 @@ export async function updateServicedeskSubstatus(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
+  // Alleen loggen wanneer de substatus daadwerkelijk wijzigt (voorkomt ruis in de historie).
+  const { data: huidig } = await supabase
+    .from('dossiers')
+    .select('servicedesk_substatus')
+    .eq('id', id)
+    .single()
+
   const { error } = await supabase
     .from('dossiers')
     .update({ servicedesk_substatus: nieuweSubstatus })
@@ -268,8 +275,118 @@ export async function updateServicedeskSubstatus(
 
   if (error) return { ok: false, error: error.message }
 
+  if (huidig?.servicedesk_substatus !== nieuweSubstatus) {
+    await logSubstatusHistorie(id, String(nieuweSubstatus), 'handmatig').catch(() => {})
+  }
+
   await verwerkDossierTriggers(id).catch(() => {})
 
+  revalidatePath('/servicedesk')
+  return { ok: true }
+}
+
+/** Schrijft één substatuswijziging naar de historie (basis voor doorlooptijd-per-fase). */
+export async function logSubstatusHistorie(
+  dossierId: string,
+  substatus: string,
+  bron: 'handmatig' | 'sync',
+): Promise<void> {
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('dossier_substatus_historie')
+    .insert({ dossier_id: dossierId, substatus, bron })
+}
+
+/** True als er een everts-calc calculatie/offerte aan het dossier gekoppeld is. */
+export async function dossierHeeftCalculatie(dossierId: string): Promise<boolean> {
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossiers')
+    .select('everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+  return !!data?.everts_calc_project_id
+}
+
+/**
+ * Servicedesk: start het offertetraject. Maakt (idempotent) een everts-calc project aan,
+ * koppelt het aan het dossier (`everts_calc_project_id`) zodat het Calculatie-tab verschijnt,
+ * en geeft het project-id terug zodat de client de localStorage-mapping kan bijwerken.
+ */
+export async function maakOfferteVoorServicedesk(
+  dossierId: string,
+): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { data: dossier, error } = await supabase
+    .from('dossiers')
+    .select('id, titel, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+  if (error) return { ok: false, error: error.message }
+
+  // Al gekoppeld? Hergebruik het bestaande project (idempotent).
+  if (dossier?.everts_calc_project_id) {
+    return { ok: true, projectId: dossier.everts_calc_project_id as string }
+  }
+
+  try {
+    const { maakProjectVanAanvraag } = await import('@/app/(platform)/everts-calc/actions/projecten')
+    const naam = dossier?.titel ?? 'Servicedesk'
+    const { id: projectId } = await maakProjectVanAanvraag(naam, '')
+
+    const { error: koppelFout } = await supabase
+      .from('dossiers')
+      .update({ everts_calc_project_id: projectId })
+      .eq('id', dossierId)
+    if (koppelFout) return { ok: false, error: koppelFout.message }
+
+    revalidatePath('/servicedesk')
+    return { ok: true, projectId }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij aanmaken offerte.' }
+  }
+}
+
+/**
+ * Servicedesk: markeer de gekoppelde offerte als Akkoord. Zet de aanneemsom (uit de
+ * gegenereerde quote) in het dossier, schakelt naar termijn-facturatie (tenzij handmatig
+ * vastgezet) en werkt de substatus bij. Het Calculatie-tab blijft zichtbaar.
+ */
+export async function offerteAkkoordServicedesk(
+  dossierId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { data: dossier, error } = await supabase
+    .from('dossiers')
+    .select('everts_calc_project_id, facturatiemethode_handmatig')
+    .eq('id', dossierId)
+    .single()
+  if (error) return { ok: false, error: error.message }
+  if (!dossier?.everts_calc_project_id) {
+    return { ok: false, error: 'Geen offerte/calculatie gekoppeld aan dit dossier.' }
+  }
+
+  // Aanneemsom + BTW-totaal uit de gegenereerde quote (kan null zijn als nog niet gegenereerd).
+  const patch: Record<string, unknown> = {
+    servicedesk_substatus: 'offerte_uitgebracht',
+  }
+  if (!dossier.facturatiemethode_handmatig) patch.facturatiemethode = 'termijnen'
+
+  try {
+    const { getQuoteTotalenVoorProject } = await import('@/app/(platform)/everts-calc/actions/quotes')
+    const totalen = await getQuoteTotalenVoorProject(dossier.everts_calc_project_id as string)
+    if (totalen) {
+      patch.bedrag_excl_btw = totalen.subtotaal_ex_btw ?? null
+      patch.bedrag_incl_btw = totalen.totaal_incl_btw ?? null
+      patch.kostprijs_excl_btw = totalen.kostprijs ?? null
+    }
+  } catch { /* quote nog niet beschikbaar — alleen status/facturatiemethode zetten */ }
+
+  const { error: updFout } = await supabase.from('dossiers').update(patch).eq('id', dossierId)
+  if (updFout) return { ok: false, error: updFout.message }
+
+  await logSubstatusHistorie(dossierId, 'offerte_uitgebracht', 'handmatig').catch(() => {})
+  await verwerkDossierTriggers(dossierId).catch(() => {})
   revalidatePath('/servicedesk')
   return { ok: true }
 }
@@ -958,7 +1075,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
  * of dossier zonder bouw7_id de tab niet laat crashen. */
 
 /** Maakt een Bouw7-client voor een dossier op basis van de integratie-config; null als ongekoppeld/onvolledig. */
-async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Client; bouw7Id: string } | null> {
+export async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Client; bouw7Id: string } | null> {
   const supabase = createAdminClient() as any
   const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
   if (!dossier?.bouw7_id) return null

@@ -1,6 +1,12 @@
 import { Fragment, Suspense } from 'react'
+import { createAdminClient } from '@everts/database/server'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
+import { InkoopTab } from './InkoopTab'
+import { VerkoopTab } from './VerkoopTab'
+import { UrenTab } from './UrenTab'
+import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
+import type { DossierSectie } from '../types'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
 
@@ -481,7 +487,17 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
 
 /* ── main component ──────────────────────────────────────────────────── */
 
-export function FinancieelTab({ dossierId }: { dossierId: string }) {
+export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
+  // Servicedesk voegt Inkoop/Verkoop/Financieel samen tot één tab, met een aparte
+  // weergave voor regie vs. aangenomen (op basis van de facturatiemethode).
+  if (sectie === 'servicedesk') {
+    return (
+      <Suspense fallback={<div style={{ padding: 28 }}><BewakingSkeleton /></div>}>
+        <ServicedeskFinancieel dossierId={dossierId} />
+      </Suspense>
+    )
+  }
+
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
       {/* Bewaking per bewakingscode — volledige breedte, hoofdweergave */}
@@ -496,5 +512,25 @@ export function FinancieelTab({ dossierId }: { dossierId: string }) {
         </Suspense>
       </div>
     </div>
+  )
+}
+
+/** Servicedesk Financieel-tab: regie (bewerkbare factuurregels) of aangenomen (orders/uren/termijnen). */
+async function ServicedeskFinancieel({ dossierId }: { dossierId: string }) {
+  const supabase = createAdminClient() as any
+  const { data } = await supabase.from('dossiers').select('facturatiemethode').eq('id', dossierId).single()
+  const methode = (data?.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'
+
+  if (methode === 'regie') {
+    return <ServicedeskRegiePaneel dossierId={dossierId} />
+  }
+
+  // Aangenomen: opdracht & orders, geboekte kosten/uren, en verkooptermijnen.
+  return (
+    <>
+      <InkoopTab dossierId={dossierId} />
+      <UrenTab dossierId={dossierId} />
+      <VerkoopTab dossierId={dossierId} />
+    </>
   )
 }

@@ -192,6 +192,8 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         em: c.emailAddress ?? null, tel: c.phoneNumber ?? null, mob: c.mobilePhoneNumber ?? null,
         opm: c.information ?? null, str: straat, pc: c.zipCode ?? null, pl: c.city ?? null,
         land: c.countryCode ?? 'Nederland', act: c.isActive !== false, iban: c.iban ?? null,
+        // Uurtarieven per uurtype in de fingerprint zodat tariefwijzigingen incrementeel meegaan.
+        htp: c.hourTypePrices?.length ? JSON.stringify(c.hourTypePrices) : null,
       })
       relatieRows.push({
         naam:              c.name,
@@ -267,6 +269,49 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         .from('relatie_bankgegevens')
         .upsert(ibanRows.slice(i, i + 500), { onConflict: 'relatie_id', ignoreDuplicates: false })
     }
+
+    // 8b. Uurtarief per uurtype → relatie_uurtarieven (verkooptarief per relatie × uursoort).
+    //     Bouw7 hourType.id koppelt aan planning_uursoorten via bouw7_id. Geen-op als de
+    //     /list/contacts-response geen hourTypePrices levert (dan via detail-endpoint te bevestigen).
+    try {
+      const { data: uursoorten } = await supabase
+        .from('planning_uursoorten')
+        .select('id, bouw7_id')
+        .not('bouw7_id', 'is', null)
+      const uursoortByBouw7 = new Map<string, string>(
+        (uursoorten ?? []).map((u: { id: string; bouw7_id: string }) => [String(u.bouw7_id), u.id])
+      )
+      const num = (v: unknown): number | null => {
+        if (v == null) return null
+        const n = typeof v === 'string' ? parseFloat(v) : Number(v)
+        return isNaN(n) ? null : n
+      }
+      const tariefRows: Record<string, unknown>[] = []
+      for (const c of allContacts) {
+        const relatieId = relatieIdMap.get(String(c.id))
+        if (!relatieId || !c.hourTypePrices?.length) continue
+        for (const p of c.hourTypePrices) {
+          const hourTypeId = p.hourType?.id ?? p.hourTypeId
+          if (hourTypeId == null) continue
+          const uursoortId = uursoortByBouw7.get(String(hourTypeId))
+          if (!uursoortId) continue // uursoort nog niet bekend in EVA (komt via derive-stamdata)
+          tariefRows.push({
+            relatie_id:        relatieId,
+            uursoort_id:       uursoortId,
+            tarief_verkoop:    num(p.sellingPrice ?? p.price),
+            tarief_kostprijs:  num(p.costPrice),
+            bouw7_hourtype_id: String(hourTypeId),
+            bron:              'bouw7',
+            updated_at:        new Date().toISOString(),
+          })
+        }
+      }
+      for (let i = 0; i < tariefRows.length; i += 500) {
+        await supabase
+          .from('relatie_uurtarieven')
+          .upsert(tariefRows.slice(i, i + 500), { onConflict: 'relatie_id,uursoort_id' })
+      }
+    } catch { /* tarief-sync is best-effort; faalt nooit de hele contact-sync */ }
 
     // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N)
     const { data: dbCps } = await supabase
@@ -1031,6 +1076,8 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     const bouw7IdsInResponse = new Set(projects.map(p => String(p.id)))
     const rows: Record<string, unknown>[] = []
+    // Servicedesk-substatuswijzigingen voor de doorlooptijd-historie (na de upsert weggeschreven).
+    const substatusWijzigingen: { bouw7_id: string; substatus: string }[] = []
 
     for (const p of changedProjects) {
       const bouw7IdStr = String(p.id)
@@ -1047,6 +1094,12 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         existing?.verzonden_op ?? null,
         quote?.quotationStatus?.name ?? null,
       )
+
+      // Servicedesk: log een substatuswijziging (basis voor doorlooptijd-per-fase).
+      if (evaStatus.servicedesk_substatus
+          && existing?.servicedesk_substatus !== evaStatus.servicedesk_substatus) {
+        substatusWijzigingen.push({ bouw7_id: bouw7IdStr, substatus: evaStatus.servicedesk_substatus })
+      }
 
       const det = quoteDetailMap.get(bouw7IdStr)
       const finPrijs = extractFinNum(fin?.fixedPrice) ?? extractFinNum(fin?.revenue?.budgeted)
@@ -1101,6 +1154,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         btw_splitsing:            btwSplitsing,
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,
+        bouw7_aanmaakdatum:       p.createdAt ?? null,
         werkadres_straat:         [p.streetName, p.houseNumber].filter(Boolean).join(' ') || null,
         werkadres_postcode:       p.zipCode ?? null,
         werkadres_stad:           p.city ?? null,
@@ -1129,6 +1183,23 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         .from('dossiers')
         .upsert(rows.slice(i, i + 500), { onConflict: 'bouw7_id' })
       if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+
+    // Doorlooptijd-historie: schrijf de servicedesk-substatuswijzigingen weg (bron='sync').
+    if (substatusWijzigingen.length > 0) {
+      const { data: dossierIds } = await supabase
+        .from('dossiers')
+        .select('id, bouw7_id')
+        .in('bouw7_id', substatusWijzigingen.map(w => w.bouw7_id))
+      const idMap = new Map<string, string>(
+        (dossierIds ?? []).map((d: any) => [d.bouw7_id as string, d.id as string]),
+      )
+      const historieRows = substatusWijzigingen
+        .map(w => ({ dossier_id: idMap.get(w.bouw7_id), substatus: w.substatus, bron: 'sync' }))
+        .filter((r): r is { dossier_id: string; substatus: string; bron: string } => !!r.dossier_id)
+      for (let i = 0; i < historieRows.length; i += 500) {
+        await supabase.from('dossier_substatus_historie').insert(historieRows.slice(i, i + 500))
+      }
     }
 
     // Zachte delete: dossiers die niet meer in Bouw7 staan markeren.
