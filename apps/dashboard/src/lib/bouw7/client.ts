@@ -286,6 +286,13 @@ export type Bouw7Project = {
   notes?: string
   information?: string
   reference?: string
+  /**
+   * Maatwerkvelden (custom attributes) — komen plat mee op /list/projects met `ca`-prefix.
+   * Andere aanwezige velden: caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres.
+   * `caEindverantwoordelijkeOfferte` bevat de naam van de eindverantwoordelijke en wordt in de
+   * sync gematcht op een medewerker → dossier-rol Controller. Alleen gevuld in de Offerte-fase.
+   */
+  caEindverantwoordelijkeOfferte?: string | null
 }
 
 /**

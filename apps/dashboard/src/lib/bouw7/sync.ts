@@ -816,15 +816,46 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     const { data: medewerkerData } = await supabase
       .from('medewerkers')
-      .select('id, bouw7_id')
+      .select('id, bouw7_id, voornaam, tussenvoegsel, achternaam')
       .not('bouw7_id', 'is', null)
     const medewerkerMap = new Map<string, string>(
       (medewerkerData ?? []).map((m: { id: string; bouw7_id: string }) => [m.bouw7_id, m.id])
     )
 
+    // Naam → medewerker-id, voor het matchen van vrije-tekst-namen uit Bouw7-maatwerkvelden
+    // (bv. custom attribute "Eindverantwoordelijke offerte" → rol Controller). Normaliseer naar
+    // lowercase, non-breaking spaces → spatie, witruimte inklappen. Keys voor zowel
+    // "voornaam achternaam" als "voornaam tussenvoegsel achternaam". Namen die naar meerdere
+    // medewerkers wijzen worden ambigu en niet gematcht.
+    const normNaam = (s: string | null | undefined) =>
+      (s ?? '').replace(/ /g, ' ').toLowerCase().replace(/\s+/g, ' ').trim()
+    const naamMap = new Map<string, string | null>() // null = ambigu
+    for (const m of (medewerkerData ?? []) as {
+      id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null
+    }[]) {
+      const keys = new Set([
+        normNaam([m.voornaam, m.achternaam].filter(Boolean).join(' ')),
+        normNaam([m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')),
+      ])
+      for (const k of keys) {
+        if (!k) continue
+        if (naamMap.has(k) && naamMap.get(k) !== m.id) naamMap.set(k, null) // ambigu
+        else naamMap.set(k, m.id)
+      }
+    }
+    /** Match een vrije-tekstnaam (custom attribute) op een medewerker-id; null als leeg/onbekend/ambigu. */
+    const matchControllerUitCa = (raw: string | null | undefined): string | null => {
+      const key = normNaam(raw)
+      if (!key) return null
+      const hit = naamMap.get(key)
+      if (hit) return hit
+      console.warn(`[sync] Controller-naam "${raw}" niet gematcht op een medewerker`)
+      return null
+    }
+
     const { data: dossierData } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, bouw7_sync_hash')
+      .select('id, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
@@ -896,6 +927,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         catId:     p.category?.id ?? null,
         catNm:     p.category?.name ?? null,
         price:     p.fixedPrice ?? null,
+        ctrl:      p.caEindverantwoordelijkeOfferte ?? null,
         q:         q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
       })
       hashMap.set(key, fp)
@@ -1148,6 +1180,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
                                     const evaKlantId = p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null
                                     return evaKlantId ? (contactpersoonMap.get(evaKlantId) ?? null) : null
                                   })(),
+        // Custom attribute "Eindverantwoordelijke offerte" (vrije tekst, alleen in de Offerte-fase)
+        // → rol Controller. Vult/overschrijft bij een gevulde, matchende naam; valt anders terug op
+        // de bestaande (eventueel handmatig gezette) controller. Het veld blijft in de UI bewerkbaar.
+        controller_id:            matchControllerUitCa(p.caEindverantwoordelijkeOfferte) ?? existing?.controller_id ?? null,
         bedrag_excl_btw:          verkoopExcl,
         bedrag_incl_btw:          verkoopIncl,
         kostprijs_excl_btw:       kostprijs,

@@ -53,9 +53,14 @@ totalExclVat        — HISTORISCH: komt niet meer voor in de response én bevat
 fixedPrice          — vaste aanneemsom (excl. BTW) als string
 budgetAmount        — begroting
 information, reference
+caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres, caEindverantwoordelijkeOfferte
+                    — maatwerkvelden (custom attributes), plat met `ca`-prefix; vrije tekst (vaak leeg)
 ```
 > Werkadres = `streetName` + losse `houseNumber` (samenvoegen, net als bij contacten).
 > Projectcontactpersoon = `contactPerson` (niet de org-primair) — map op `contactpersonen.bouw7_id`.
+> **Maatwerkvelden:** komen plat mee op `/list/projects` (géén apart endpoint). `caEindverantwoordelijkeOfferte`
+> bevat de naam van de eindverantwoordelijke (alleen gevuld in de Offerte-fase) en wordt in `syncProjects()`
+> via naam-matching op `medewerkers` overgezet naar de dossier-rol **Controller** (`controller_id`).
 
 **Status-mapping Heimdall → EVA:**
 - `01.*` → aanvraag
