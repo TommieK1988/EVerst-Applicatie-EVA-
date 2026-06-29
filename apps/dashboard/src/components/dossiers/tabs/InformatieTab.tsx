@@ -6,11 +6,11 @@ import toast from 'react-hot-toast'
 import { Calculator, FileText } from 'lucide-react'
 import { cn } from '@everts/ui'
 import {
-  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN,
+  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
   getDossierSubstatus, isBouw7Substatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateDossierSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
@@ -50,12 +50,13 @@ import {
 } from '@/components/ui'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
-const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN]
+const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_STATUSSEN]
 const statusLabel = (s: string) => alleStatussen.find(x => x.key === s)?.label ?? s
 const statusKleur = (s: string) =>
   ['verloren', 'vervallen', 'afgewezen'].includes(s) ? '#d9534f' :
-  ['gewonnen', 'offerte_gereed', 'financieel_afgesloten'].includes(s) ? '#009439' :
-  ['verzonden', 'nabellen', 'in_behandeling', 'mondelinge_toezegging', 'onderhanden', 'uitvoering_gereed'].includes(s) ? 'var(--accent)' :
+  ['gewonnen', 'offerte_gereed', 'financieel_afgesloten', 'financieel_gereed'].includes(s) ? '#009439' :
+  ['verzonden', 'nabellen', 'in_behandeling', 'mondelinge_toezegging', 'onderhanden', 'uitvoering_gereed',
+   'loopt', 'uitgevoerd', 'ingepland', 'offerte_uitgebracht', 'kosten_compleet'].includes(s) ? 'var(--accent)' :
   'var(--fg-muted)'
 
 const fmtBedrag = (v: number) =>
@@ -612,12 +613,17 @@ export function InformatieTab({
 }: Props) {
   const router = useRouter()
   const [editMode, setEditMode]     = React.useState(false)
-  const [substatus, setSubstatus]   = React.useState<string>(getDossierSubstatus(dossier))
+  const [substatus, setSubstatus]   = React.useState<string>(
+    // Servicedesk gebruikt servicedesk_substatus; getDossierSubstatus kent alleen aanvraag/offerte/opdracht
+    // en zou anders terugvallen op aanvraag_substatus ('nieuw').
+    sectie === 'servicedesk' ? ((dossier as any).servicedesk_substatus ?? 'nieuw') : getDossierSubstatus(dossier)
+  )
   const [finDialoogOpen, setFinDialoogOpen] = React.useState(false)
 
   const beschikbareStatussen =
-    sectie === 'aanvraag' ? AANVRAAG_STATUSSEN :
-    sectie === 'offerte'  ? OFFERTE_STATUSSEN  : OPDRACHT_STATUSSEN
+    sectie === 'aanvraag'    ? AANVRAAG_STATUSSEN :
+    sectie === 'offerte'     ? OFFERTE_STATUSSEN  :
+    sectie === 'servicedesk' ? SERVICEDESK_STATUSSEN : OPDRACHT_STATUSSEN
 
   // Velden die uit Bouw7 komen zijn niet bewerkbaar in EVA (geen terugschrijven naar Bouw7).
   // Geldt alleen voor dossiers die daadwerkelijk uit Bouw7 komen.
@@ -637,6 +643,11 @@ export function InformatieTab({
   // Statuswijziging vanuit de detail-view: EVA bijwerken en — voor opdrachten — terugschrijven naar Bouw7.
   async function zetSubstatus(next: string) {
     setSubstatus(next)
+    if (sectie === 'servicedesk') {
+      const res = await updateServicedeskSubstatus(dossier.id, next)
+      if (!res.ok) toast.error(res.error ?? 'Bijwerken mislukt')
+      return
+    }
     const res = await updateDossierSubstatus(dossier.id, next as any, { schrijfBouw7: sectie === 'opdracht' })
     if (res.ok && res.bouw7 && !res.bouw7.ok) {
       toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
@@ -726,6 +737,8 @@ export function InformatieTab({
     // alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen blijven daar alleen-lezen).
     if (sectie === 'opdracht') {
       zetSubstatus(substatus).catch(() => {})
+    } else if (sectie === 'servicedesk') {
+      updateServicedeskSubstatus(dossier.id, substatus).catch(() => {})
     } else if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
       updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
     }
