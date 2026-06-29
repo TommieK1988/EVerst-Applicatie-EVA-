@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { getDossierVerkoop } from '@/lib/dossiers/actions'
+import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtPct, fmtDatum, TH, TD, LegeStaat } from './tab-ui'
 
@@ -27,8 +28,20 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
     )
   }
 
-  const t = data.totalen
-  const dk = data.termijnenDekking
+  // EVA-native meerwerkregels zijn leidend voor het meerwerk in het contracttotaal; valt terug op het
+  // Bouw7-aggregaat uit getDossierVerkoop wanneer er nog geen goedgekeurde EVA-regels zijn.
+  const meerwerk = await getDossierMeerwerk(dossierId).catch(() => null)
+  const meerwerkEva = meerwerk?.totalen.goedgekeurdExcl ?? 0
+  const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
+  let t = data.totalen
+  let dk = data.termijnenDekking
+  if (meerwerkEva > 0 && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
+    const contractTotaal = t.aanneemsom + meerwerkEva
+    t = { ...t, meerwerk: meerwerkEva, contractTotaal, openstaand: Math.max(0, contractTotaal - t.gefactureerd) }
+    if (dk) {
+      dk = { ...dk, volledig: Math.abs(dk.somBedrag - contractTotaal) <= 1, ontbreektBedrag: Math.max(0, contractTotaal - dk.somBedrag) }
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -181,6 +194,44 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           )}
         </CardBody>
       </Card>
+
+      {/* Meerwerk in de termijnstaat (EVA-weergave; nog niet naar Bouw7 geschreven) */}
+      {goedgekeurdeRegels.length > 0 && (
+        <Card>
+          <CardHeader>Meerwerk in termijnstaat</CardHeader>
+          <CardBody style={{ padding: 0 }}>
+            <table style={tabel}>
+              <thead>
+                <tr>
+                  <TH>#</TH>
+                  <TH>Omschrijving</TH>
+                  <TH>Verwerking</TH>
+                  <TH right>Excl. BTW</TH>
+                  <TH right>Incl. BTW</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {goedgekeurdeRegels.map((r) => (
+                  <tr key={r.id}>
+                    <TD>MW{String(r.volgnummer).padStart(2, '0')}</TD>
+                    <TD>{r.omschrijving}</TD>
+                    <TD kleur="var(--neutral-500)">
+                      {r.termijn_wijze === 'eigen_termijnstaat' ? 'Eigen termijnstaat'
+                        : r.termijn_wijze === 'een_regel' ? '1 regel in termijnstaat'
+                        : 'Nog te kiezen'}
+                    </TD>
+                    <TD right vet>{fmt(r.effectiefExcl)}</TD>
+                    <TD right kleur="var(--neutral-500)">{fmt(r.effectiefIncl)}</TD>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px' }}>
+              EVA-weergave op basis van de meerwerkregels. Het daadwerkelijk wegschrijven van termijnen naar Bouw7 volgt in een latere fase.
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Verkoopfacturen */}
       <Card>

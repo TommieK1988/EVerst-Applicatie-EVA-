@@ -16,7 +16,7 @@ export default async function FunctiesAfdelingenPage() {
   ])
 
   return (
-    <div className="eva-page">
+    <div className="eva-page-wide">
       <PageHeader eyebrow="Instellingen" title="Functies, Afdelingen & Ploegen" />
       <p className="-mt-3 mb-[22px] text-[13.5px] text-neutral-500">
         Beheer de beschikbare functies, afdelingen en ploegen. Deze worden als keuzelijst aangeboden bij medewerkerprofielen.

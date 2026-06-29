@@ -1,8 +1,10 @@
 'use client'
 
-import React from 'react'
+import React, { useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Progress } from '@/components/ui/progress'
 import type { ManagementProject } from '@/lib/dashboard/aggregaties'
+import { bewaarVoortgang } from '@/lib/dossiers/voortgang'
 
 /* ── Formatters ──────────────────────────────────────────────────── */
 
@@ -105,6 +107,94 @@ export function PctGereedCel({ waarde }: { waarde: number | null }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
       <Progress value={Math.min(waarde, 100)} tone={tone} size="sm" className="w-12" />
       <span style={{ fontSize: 11, fontWeight: 600, color: kleur, minWidth: 30 }}>{waarde.toFixed(0)}%</span>
+    </div>
+  )
+}
+
+/**
+ * Bewerkbare % gereed-cel voor de Management-tabel. Klik = inline number-input;
+ * Enter/blur slaat op (EVA + Bouw7 via bewaarVoortgang), Escape annuleert.
+ * stopPropagation voorkomt dat de rij-klik (openDossierTab) afgaat tijdens bewerken.
+ * Zonder Bouw7-koppeling (geen bouw7_id) valt 'ie terug op de read-only weergave.
+ */
+export function PctGereedCelEditable({ p }: { p: ManagementProject }) {
+  const [waarde, setWaarde] = useState<number | null>(p.pct_gereed)
+  const [editing, setEditing] = useState(false)
+  const [tekst, setTekst] = useState('')
+  const [bezig, setBezig] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  if (!p.bouw7_id) return <PctGereedCel waarde={waarde} />
+
+  const start = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setTekst(waarde != null ? String(waarde) : '')
+    setEditing(true)
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  const commit = async () => {
+    if (bezig) return
+    const ruw = tekst.trim().replace(',', '.')
+    if (ruw === '') { setEditing(false); return }
+    const pct = Number(ruw)
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      toast.error('Geef een percentage tussen 0 en 100.')
+      return
+    }
+    if (waarde != null && Math.round(pct * 100) === Math.round(waarde * 100)) { setEditing(false); return }
+
+    setBezig(true)
+    const res = await bewaarVoortgang({
+      bouw7Id: p.bouw7_id!,
+      dossierId: p.dossier_id,
+      niveau: 'project',
+      pctGereed: pct,
+    })
+    setBezig(false)
+    setEditing(false)
+    if (res.ok) {
+      setWaarde(pct)
+      if (res.bouw7 === 'synced') toast.success('% gereed bijgewerkt in Bouw7.')
+      else toast(res.melding ?? 'Opgeslagen in EVA.', { icon: '💾' })
+    } else {
+      toast.error(res.error)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          value={tekst}
+          disabled={bezig}
+          onChange={(e) => setTekst(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void commit() }
+            else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
+          }}
+          style={{
+            width: 56, textAlign: 'right', fontSize: 11, fontWeight: 600, padding: '2px 4px',
+            border: '1px solid var(--brand, #2563eb)', borderRadius: 4, background: 'var(--surface, #fff)',
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      onClick={start}
+      title="Klik om % gereed te wijzigen"
+      style={{ cursor: 'pointer', borderRadius: 4 }}
+    >
+      <PctGereedCel waarde={waarde} />
     </div>
   )
 }

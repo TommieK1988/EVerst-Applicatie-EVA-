@@ -371,6 +371,53 @@ export const opdrachtSubstatusLabels: Record<OpdrachtSubstatus, string> = {
   financieel_afgesloten: 'Financieel afgesloten',
 }
 
+/* ── Meerwerk (EVA-native werkstroom per opdracht) ───────────────── */
+
+export type MeerwerkStatus =
+  | 'aangevraagd'
+  | 'offerte_verstuurd'
+  | 'akkoord'
+  | 'afgewezen'
+  | 'voltooid'
+
+export const meerwerkStatusLabels: Record<MeerwerkStatus, string> = {
+  aangevraagd:       'Aangevraagd',
+  offerte_verstuurd: 'Offerte verstuurd',
+  akkoord:           'Akkoord',
+  afgewezen:         'Afgewezen',
+  voltooid:          'Voltooid',
+}
+
+export type MeerwerkAfrekenwijze = 'regie' | 'aangenomen'
+export type MeerwerkStelpostGrondslag = 'geboekte_kosten' | 'eenheidsprijzen'
+export type MeerwerkTermijnWijze = 'eigen_termijnstaat' | 'een_regel'
+
+export type MeerwerkRegel = {
+  id: string
+  dossier_id: string
+  volgnummer: number
+  omschrijving: string
+  status: MeerwerkStatus
+  afrekenwijze: MeerwerkAfrekenwijze
+  is_stelpost: boolean
+  stelpost_grondslag: MeerwerkStelpostGrondslag | null
+  bedrag_excl_btw: number | null
+  eenheid: string | null
+  eenheidsprijs: number | null
+  hoeveelheid_werkelijk: number | null
+  btw_pct: number | null
+  factuurreferentie: string | null
+  termijn_wijze: MeerwerkTermijnWijze | null
+  bewakingscode: string | null
+  bouw7_security_code_id: number | null
+  bouw7_chapter_id: number | null
+  quote_id: string | null
+  afgewezen_reden: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
 /** BTW per tarief uit de Bouw7-offerte (incl. AK/W&R in de grondslag). */
 export type BtwSplitsingItem = {
   /** Tarieflabel uit Bouw7, bv. 'Hoog 21%', 'Laag 9%', 'Verlegd 21'. */
@@ -429,8 +476,6 @@ export type Dossier = {
   facturatiemethode_handmatig: boolean
   verzonden_op: string | null
   opmerkingen: string | null
-  /** EVA-eigen opmerkingen — nooit door de Bouw7-sync overschreven. */
-  interne_opmerkingen: string | null
   werkadres_straat: string | null
   werkadres_postcode: string | null
   werkadres_stad: string | null
@@ -1068,3 +1113,23 @@ export type BedrijfsagendaVirtueel = {
 export type BedrijfsagendaRegel =
   | (BedrijfsagendaItemMetDoelgroep & { bron: 'handmatig'; series_id?: string })
   | (BedrijfsagendaVirtueel         & { bron: 'berekend' })
+
+/**
+ * Door EVA ingevoerde "% gereed" (voortgang), terug te schrijven naar Bouw7.
+ * Tabel: public.dossier_voortgang. Niveau 'project' = projectbreed; 'bewakingscode' = standopname per code.
+ */
+export type DossierVoortgang = {
+  id:                 string
+  dossier_id:         string | null
+  bouw7_id:           string
+  niveau:             'project' | 'bewakingscode'
+  bewakingscode:      string | null
+  pct_gereed:         number
+  bron:               string
+  bouw7_sync_status:  'pending' | 'synced' | 'error'
+  bouw7_sync_fout:    string | null
+  bouw7_laatst_sync:  string | null
+  gewijzigd_door:     string | null
+  created_at:         string
+  updated_at:         string
+}

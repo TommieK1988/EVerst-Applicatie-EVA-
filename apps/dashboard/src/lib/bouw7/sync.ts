@@ -1194,7 +1194,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         werkadres_straat:         [p.streetName, p.houseNumber].filter(Boolean).join(' ') || null,
         werkadres_postcode:       p.zipCode ?? null,
         werkadres_stad:           p.city ?? null,
-        opmerkingen:              p.notes ?? p.reference ?? null,
+        // Bouw7-`reference` hoort in het EVA-veld `referentie` (kenmerk opdrachtgever), niet als
+        // opmerking. `notes` is in de praktijk altijd leeg maar blijft gemapt voor de toekomst.
+        referentie:               p.reference ?? existing?.referentie ?? null,
+        opmerkingen:              p.notes ?? null,
         bouw7_projectstatus_id:   p.status?.id ?? null,
         bouw7_projectstatus_naam: p.status?.name ?? null,
         bouw7_quotation_status:   quote?.quotationStatus?.name ?? null,

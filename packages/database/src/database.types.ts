@@ -1154,7 +1154,6 @@ export type Database = {
           opdracht_substatus:
             | Database["public"]["Enums"]["opdracht_substatus"]
             | null
-          interne_opmerkingen: string | null
           opmerkingen: string | null
           project_manager_id: string | null
           referentie: string | null
@@ -1217,7 +1216,6 @@ export type Database = {
           opdracht_substatus?:
             | Database["public"]["Enums"]["opdracht_substatus"]
             | null
-          interne_opmerkingen?: string | null
           opmerkingen?: string | null
           project_manager_id?: string | null
           referentie?: string | null
@@ -1280,7 +1278,6 @@ export type Database = {
           opdracht_substatus?:
             | Database["public"]["Enums"]["opdracht_substatus"]
             | null
-          interne_opmerkingen?: string | null
           opmerkingen?: string | null
           project_manager_id?: string | null
           referentie?: string | null

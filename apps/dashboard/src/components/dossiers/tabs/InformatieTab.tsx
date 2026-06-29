@@ -25,6 +25,8 @@ import {
 import type { Groep } from '@/lib/everts-calc/types'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
+import DossierNotitiesBlok from './DossierNotitiesBlok'
+import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
@@ -141,7 +143,6 @@ type FormValues = {
   categorie: string
   referentie: string
   opmerkingen: string
-  interne_opmerkingen: string
   contactpersoon_id: string
   verwacht_startdatum: string
   verwacht_einddatum: string
@@ -605,11 +606,16 @@ type Props = {
   categorieen?: string[]
   /** Goedgekeurd meerwerk (excl. btw), live uit Bouw7; 0 indien geen/ongekoppeld. */
   meerwerk?: number
+  /** Dossiernotities (nieuwste eerst), getoond in het Notities-blok rechts. */
+  notities?: DossierNotitie[]
+  /** Ingelogde medewerker — bepaalt welke notities verwijderbaar zijn. */
+  currentMedewerkerId?: string | null
 }
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
   relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
+  notities = [], currentMedewerkerId = null,
 }: Props) {
   const router = useRouter()
   const [editMode, setEditMode]     = React.useState(false)
@@ -669,7 +675,6 @@ export function InformatieTab({
     categorie:               (dossier as any).categorie           ?? '',
     referentie:              dossier.referentie           ?? '',
     opmerkingen:             (dossier as any).opmerkingen          ?? '',
-    interne_opmerkingen:     (dossier as any).interne_opmerkingen ?? '',
     contactpersoon_id:       (dossier as any).contactpersoon_id  ?? '',
     verwacht_startdatum:     dossier.verwacht_startdatum         ?? '',
     verwacht_einddatum:      dossier.verwacht_einddatum          ?? '',
@@ -762,7 +767,6 @@ export function InformatieTab({
       werkadres_naam:       form.werkadres_naam       || null,
       werkadres_telefoon:   form.werkadres_telefoon   || null,
       werkadres_email:      form.werkadres_email      || null,
-      interne_opmerkingen:  form.interne_opmerkingen  || null,
       ...(bouw7Vergrendeld ? {} : {
         categorie:            form.categorie            || null,
         contactpersoon_id:    form.contactpersoon_id    || null,
@@ -1028,34 +1032,6 @@ export function InformatieTab({
               </>
             )}
 
-            {!editMode && (
-              <>
-                <Separator className="my-3" />
-                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Opmerkingen</p>
-                <div className="grid grid-cols-1 gap-y-3">
-                  <InfoVeld label="Bouw7" waarde={(dossier as any).opmerkingen || null} />
-                  {sectie === 'servicedesk' ? (
-                    <div>
-                      <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Intern (EVA)</div>
-                      <Textarea
-                        value={form.interne_opmerkingen}
-                        onChange={e => set('interne_opmerkingen')(e.target.value)}
-                        onBlur={() => {
-                          if (form.interne_opmerkingen !== opgeslagen.interne_opmerkingen) {
-                            updateDossierInfo(dossier.id, { interne_opmerkingen: form.interne_opmerkingen || null }).catch(() => {})
-                            setOpgeslagen(p => ({ ...p, interne_opmerkingen: form.interne_opmerkingen }))
-                          }
-                        }}
-                        placeholder="Interne aanvullingen — worden nooit door de Bouw7-sync overschreven"
-                      />
-                    </div>
-                  ) : (
-                    <InfoVeld label="Intern (EVA)" waarde={form.interne_opmerkingen || null} />
-                  )}
-                </div>
-              </>
-            )}
-
             {editMode && (
               <div className="mt-4">
                 {bouw7Vergrendeld && (
@@ -1081,9 +1057,13 @@ export function InformatieTab({
                           <DsSelect value={form.categorie} onChange={set('categorie')} options={categorieOpties} placeholder="bijv. Schilderwerk" />
                         </FormField>
                       )}
-                    <FormField upper label="Referentie">
-                      <Input value={form.referentie} onChange={e => set('referentie')(e.target.value)} placeholder="kenmerk van opdrachtgever" />
-                    </FormField>
+                    {bouw7Vergrendeld
+                      ? <InfoVeld label="Referentie" waarde={form.referentie || null} />
+                      : (
+                        <FormField upper label="Referentie">
+                          <Input value={form.referentie} onChange={e => set('referentie')(e.target.value)} placeholder="kenmerk van opdrachtgever" />
+                        </FormField>
+                      )}
                     {sectie === 'opdracht' && (
                       <FormField upper label="Opdracht referentie">
                         <Input value={form.opdracht_referentie} onChange={e => set('opdracht_referentie')(e.target.value)} placeholder="Referentie opdrachtgever" />
@@ -1179,17 +1159,6 @@ export function InformatieTab({
                   </FormRow>
                 </FormSection>
 
-                <FormSection title="Opmerkingen">
-                  {bouw7Vergrendeld && (dossier as any).opmerkingen && (
-                    <div className="mb-3">
-                      <InfoVeld label="Bouw7 (alleen-lezen)" waarde={(dossier as any).opmerkingen} />
-                    </div>
-                  )}
-                  <FormField upper label="Interne opmerkingen (EVA)">
-                    <Textarea value={form.interne_opmerkingen} onChange={e => set('interne_opmerkingen')(e.target.value)} placeholder="Interne aanvullingen — worden nooit door de Bouw7-sync overschreven" />
-                  </FormField>
-                </FormSection>
-
                 <FormSection title="Werkadres">
                   <FormRow cols="2">
                     <FormField upper label="Naam" className="col-span-2">
@@ -1227,9 +1196,16 @@ export function InformatieTab({
           </CardBody>
         </Card>
 
-        {/* Taken */}
-        <div>
+        {/* Rechterkolom: Taken + Notities. De cel stretcht naar de hoogte van Projectinformatie;
+            het Notities-blok vult met flex-1 de resterende ruimte (interne scroll). */}
+        <div className="flex flex-col gap-3.5">
           <TakenBlok dossierId={dossier.id} dossierTitel={dossier.titel} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
+          <DossierNotitiesBlok
+            dossierId={dossier.id}
+            notities={notities}
+            currentMedewerkerId={currentMedewerkerId}
+            className="min-h-[220px] flex-1"
+          />
         </div>
 
         {/* Dossier-toggles */}

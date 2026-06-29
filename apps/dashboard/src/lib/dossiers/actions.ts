@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { getVoortgang } from './voortgang'
 import {
   Bouw7Client,
   type Bouw7ProjectFinancial,
@@ -821,6 +822,8 @@ export type BewakingTotalen = {
 
 export type DossierBewakingData = {
   beschikbaar: boolean
+  /** Bouw7-project-id (write-sleutel voor de % gereed-editors); null als ongekoppeld. */
+  bouw7Id: string | null
   hoofdstukken: { id: number | null; naam: string; regels: BewakingRegel[] }[]
   totalen: BewakingTotalen
   /** Geboekte uren op projectniveau (= som van de arbeid-besteed-uren). */
@@ -856,7 +859,7 @@ const UNCODED_HOOFDSTUK_ID = -1
  */
 export async function getDossierBewaking(dossierId: string): Promise<DossierBewakingData> {
   const leeg: DossierBewakingData = {
-    beschikbaar: false, hoofdstukken: [],
+    beschikbaar: false, bouw7Id: null, hoofdstukken: [],
     totalen: {
       begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
       onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
@@ -1020,6 +1023,15 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       r.verwachteKosten = verwachtPerCode.get(code) ?? 0
     }
 
+    // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de Bouw7-waarde
+    // (zodat een net-ingevoerde standopname blijft staan tot Bouw7 het bevestigt).
+    const overlay = await getVoortgang(String(bouw7Id))
+    if (overlay.codes.size > 0) {
+      for (const r of regelMap.values()) {
+        if (r.code && overlay.codes.has(r.code)) r.progress = overlay.codes.get(r.code)!
+      }
+    }
+
     // Groeperen per hoofdstuk.
     const hoofdstukMap = new Map<string, { id: number | null; naam: string; regels: BewakingRegel[] }>()
     for (const regel of regelMap.values()) {
@@ -1060,6 +1072,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
 
     return {
       beschikbaar: alleRegels.length > 0,
+      bouw7Id: String(bouw7Id),
       hoofdstukken,
       totalen,
       geboekteUrenProject: totalen.geboekteUren,
@@ -1716,7 +1729,6 @@ export async function updateDossierInfo(
     werkadres_straat?: string | null
     werkadres_postcode?: string | null
     werkadres_stad?: string | null
-    interne_opmerkingen?: string | null
     opdracht_referentie?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {

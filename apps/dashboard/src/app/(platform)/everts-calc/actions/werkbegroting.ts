@@ -540,6 +540,79 @@ export async function getProjectHoofdstukken(dossierId: string): Promise<{ ok: t
   }
 }
 
+// ─── Meerwerk: eigen bewakingscode aanmaken + prognose (hergebruik bewezen pad) ─
+
+export type MeerwerkBewakingscodeResultaat =
+  | { ok: true; chapterId: number | null; pslId: number | null; prognoseGezet: boolean; waarschuwing?: string }
+  | { ok: false; error: string }
+
+/**
+ * Maakt voor een meerwerkregel een eigen bewakingscode aan in Bouw7 (onder een meerwerk-/gekozen
+ * hoofdstuk) en zet — best effort — de prognose ("Niet/anders begroot") op de meegegeven kostensoort.
+ * Hergebruikt exact het bewezen werkbegroting→prognose-pad (`createSecurityCode` +
+ * `project-security-links` + `update-prognosis-other`). Faalt netjes: de bewakingscode wordt
+ * aangemaakt ook als de prognose-write wordt geweigerd (waarschuwing teruggegeven).
+ *
+ * NB: welk Bouw7-veld het meerwerk-*bedrag* idealiter voedt is nog te bevestigen op een testproject
+ * (zie WRITE-ENDPOINTS.md); daarom is de prognose-write best-effort en blokkeert hij de EVA-flow niet.
+ */
+export async function maakMeerwerkBewakingscodeBouw7(
+  dossierId: string,
+  opts: { code: string; naam: string; bedrag?: number | null; kostensoort?: number; hoofdstukId?: number | null },
+): Promise<MeerwerkBewakingscodeResultaat> {
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
+  const { client, bouw7Id } = ctx
+  const code = opts.code.trim()
+  if (!code) return { ok: false, error: 'Lege bewakingscode.' }
+  const ct = opts.kostensoort ?? 5 // Materiaal als neutrale default-kostensoort.
+
+  // 1. Doelhoofdstuk: expliciet meegegeven → anders een hoofdstuk dat op 'meerwerk'/'MW' lijkt → anders het eerste.
+  let chapterId = opts.hoofdstukId ?? null
+  let chapterFout: string | undefined
+  if (chapterId == null) {
+    const hk = await getProjectHoofdstukken(dossierId)
+    if (hk.ok) {
+      const mw = hk.hoofdstukken.find(h => /meerwerk|^mw\b|^mw$/i.test(h.naam.trim()))
+      chapterId = (mw ?? hk.hoofdstukken[0])?.id ?? null
+    } else chapterFout = hk.error
+  }
+  if (chapterId == null) return { ok: false, error: chapterFout ?? 'Geen hoofdstuk gevonden om de bewakingscode onder te plaatsen.' }
+
+  // 2. Code + PSL aanmaken (begroot 0) — read-modify-write op de structuur.
+  let maakRes: { aangemaakt: number; fouten: string[] }
+  try {
+    maakRes = await zorgVoorOntbrekendePsls(client, bouw7Id, [{ code, naam: opts.naam, ct }], chapterId)
+  } catch (e) {
+    return { ok: false, error: `Bewakingscode aanmaken mislukt: ${e instanceof Error ? e.message : ''}` }
+  }
+  if (maakRes.aangemaakt === 0 && maakRes.fouten.length > 0) {
+    return { ok: false, error: maakRes.fouten.join(' ') }
+  }
+
+  // 3. PSL-id teruglezen voor de prognose-write.
+  const resolved = await resolveBewakingscodes(dossierId)
+  const ref = resolved.ok ? resolved.codes.find(c => c.code === code) : undefined
+  const pslId = ref?.pslPerCt[ct] ?? null
+
+  // 4. Prognose ("Niet/anders begroot") — best effort.
+  let prognoseGezet = false
+  let waarschuwing: string | undefined = maakRes.fouten.length > 0 ? maakRes.fouten.join(' ') : undefined
+  const bedrag = opts.bedrag != null ? rond(Number(opts.bedrag)) : null
+  if (bedrag != null && bedrag !== 0 && pslId != null) {
+    try {
+      const begroot = ref?.begrootPerCt[ct] ?? 0
+      await client.post('/project/update-prognosis-other', { id: pslId, prognosisOtherAmount: String(rond(bedrag - begroot)) })
+      prognoseGezet = true
+    } catch (e) {
+      const m = e instanceof Error ? e.message : ''
+      waarschuwing = `Bewakingscode aangemaakt, maar prognose schrijven mislukt: ${m}`
+    }
+  }
+
+  return { ok: true, chapterId, pslId, prognoseGezet, waarschuwing }
+}
+
 export type PrognoseRegel = {
   /** Bewakingscode (= kostengroep). */
   code: string

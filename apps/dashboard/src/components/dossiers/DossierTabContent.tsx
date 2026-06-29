@@ -1,4 +1,7 @@
 import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel } from '@/lib/dossiers/actions'
+import { getDossierNotities } from '@/lib/dossiers/notities-actions'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getGoedgekeurdMeerwerkExcl } from '@/lib/dossiers/meerwerk'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
 import { getSjablonen, getUrgenteTakenVoorDossier } from '@/lib/taken/services/taken'
@@ -13,6 +16,7 @@ import { FinancieelTab } from './tabs/FinancieelTab'
 import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
+import MeerwerkTab from './tabs/MeerwerkTab'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import type { DossierSectie } from './types'
 
@@ -39,7 +43,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel] = await Promise.all([
+    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker] = await Promise.all([
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
@@ -48,11 +52,17 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       getUniekeBouw7Categorieen(),
       // Goedgekeurd meerwerk komt live uit Bouw7; alleen ophalen bij gekoppeld dossier.
       dossier.bouw7_id ? getDossierFinancieel(id).catch(() => null) : Promise.resolve(null),
+      // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
+      getGoedgekeurdMeerwerkExcl(id).catch(() => 0),
+      getDossierNotities(id).catch(() => []),
+      getCurrentMedewerker().catch(() => null),
     ])
 
-    // additionalWork is een object; het meerwerk-bedrag zit in de prognose (== expected).
+    // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
+    // valt het terug op het losse Bouw7-aggregaat (additionalWork.prognosis == .expected).
     const aw = financieel?.bouw7Financial?.additionalWork
-    const meerwerk = Number(aw?.prognosis ?? aw?.expected) || 0
+    const meerwerkBouw7 = Number(aw?.prognosis ?? aw?.expected) || 0
+    const meerwerk = meerwerkEva > 0 ? meerwerkEva : meerwerkBouw7
 
     return (
       <>
@@ -67,6 +77,8 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           urgenteTaken={urgenteTaken}
           categorieen={categorieen}
           meerwerk={meerwerk}
+          notities={notities}
+          currentMedewerkerId={currentMedewerker?.id ?? null}
         />
       </>
     )
@@ -165,6 +177,15 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       <>
         {titleInjector}
         <UrenTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'meerwerk' && sectie === 'opdracht') {
+    return (
+      <>
+        {titleInjector}
+        <MeerwerkTab dossierId={id} />
       </>
     )
   }

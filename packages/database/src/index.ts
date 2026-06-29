@@ -39,6 +39,12 @@ export type {
   OfferteSubstatus,
   OpdrachtSubstatus,
   ServicedeskSubstatus,
+  // Meerwerk-module
+  MeerwerkStatus,
+  MeerwerkAfrekenwijze,
+  MeerwerkStelpostGrondslag,
+  MeerwerkTermijnWijze,
+  MeerwerkRegel,
   // Planning-module
   PlanningUursoort,
   PlanningWerkbegrotingRegel,
@@ -66,6 +72,7 @@ export {
   aanvraagSubstatusLabels,
   offerteSubstatusLabels,
   opdrachtSubstatusLabels,
+  meerwerkStatusLabels,
   getDossierSubstatus,
   // Planning-module
   afhankelijkheidsTypeLabels,

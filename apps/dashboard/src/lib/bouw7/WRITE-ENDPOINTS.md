@@ -239,6 +239,41 @@ inbouwen zonder uitdrukkelijk akkoord. Geboekte kosten leest EVA via Heimdall `G
 
 ---
 
+## 2c. Voortgang / "% gereed" — schrijven (Fase 0 OPEN)
+
+EVA **leest** % gereed al op twee niveaus: project-breed via Athena `GET /wip/report` (`progress`,
+→ `management_projecten.pct_gereed`) en per bewakingscode via `…/project-control/.../chapters`
+(`progress`). De **schrijf**-tegenhanger staat **niet** in deze gedocumenteerde catalogus:
+`GET /list/progress-sheets` (voortgangsstaten) is read-only in de spec, en de WIP/control-endpoints
+zitten op Athena (read-only). Net als de prognose (§2b) is dit vrijwel zeker een **ongedocumenteerd
+Heimdall-endpoint** dat uit de Bouw7-UI gecaptured moet worden.
+
+**Bouw7 ondersteunt beide wijzes** (per project kiesbaar): één project-brede % gereed én een
+standopname per bewakingscode. Capture daarom **beide** UI-acties (method + volledige URL + body):
+
+1. **project-niveau** — zet % gereed op een testproject;
+2. **per bewakingscode** — zet een standopname op één code.
+
+Te beantwoorden door de capture: host/endpoint, welke id (project-id / PSL-id / progress-sheet-id),
+of er eerst een "mode" gezet moet worden (per-code vs project-totaal), en of de waarde absoluut
+(overschrijft) is en welk veldtype (string/number).
+
+**EVA-implementatie (al gebouwd, write gestubd tot de capture er is):**
+- Opslag: `public.dossier_voortgang` (`niveau` = `project` | `bewakingscode`), bron `eva`,
+  `bouw7_sync_status` `pending` tot Bouw7 bevestigt.
+- Server actions: `lib/dossiers/voortgang.ts` (`bewaarVoortgang`, `getVoortgang`, `getVoortgangProjectMap`).
+- Bouw7-write: `lib/dossiers/bouw7-voortgang.ts` (`schrijfBouw7VoortgangProject/Code`). Achter de vlag
+  `BOUW7_VOORTGANG_WRITE` (nu `false`): **vul hier endpoint + body in op basis van de capture en zet de
+  vlag op `true`.** Tot die tijd staat de waarde wél in EVA (en prevaleert via overlay), maar gaat 'ie
+  nog niet naar Bouw7.
+- UI: Management-tabel (`PctGereedCelEditable`), Financieel-tab project-editor + per-code editor
+  (`components/dossiers/tabs/VoortgangEditors.tsx`).
+- Overlay: EVA-waarde wint op read in `getDossierBewaking` en `getManagementProjecten` (incl. herberekende
+  `omzet_obv_pct`/`resultaat_obv_pct`). **Reconciliatie** (EVA-override loslaten zodra Bouw7 de waarde
+  bevestigt) moet bij het live zetten van de write worden toegevoegd.
+
+---
+
 ## 3. Volledige write-catalogus (104 ops, gegroepeerd)
 
 > Patroon overal gelijk: `POST` = upsert · `DELETE` = `Condensed*{id}` · `PUT .../update-status/{status}`.

@@ -89,6 +89,64 @@ export async function maakQuoteVanuitProject(
   redirect(`/everts-calc/quotes/${quote.id}?import=1`)
 }
 
+// ─── Meerwerk-offerte (gekoppeld aan een meerwerkregel) ───────────────────────
+
+/**
+ * Maakt een "Meerwerk offerte"-calculatie voor een meerwerkregel binnen een bestaand everts-calc
+ * project. Geen redirect — geeft het nieuwe quote-id terug zodat de aanroeper (lib/dossiers/meerwerk.ts)
+ * het op de regel kan vastleggen. Hergebruikt de standaard-template + standaardvoorwaarden zoals
+ * maakQuoteVanuitProject.
+ */
+export async function maakMeerwerkOfferte(opts: {
+  projectId: string
+  meerwerkRegelId: string
+  omschrijving: string
+  clientId?: string | null
+  referentie?: string | null
+}): Promise<{ ok: true; quoteId: string } | { ok: false; error: string }> {
+  const supabase = await getDb()
+
+  const { data: template } = await supabase
+    .from('quote_templates')
+    .select('id, geldigheid_dagen, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+    .eq('is_standaard', true)
+    .single()
+
+  const datum = new Date().toISOString().split('T')[0]
+  const dagen = template?.geldigheid_dagen ?? 30
+  const d = new Date(datum)
+  d.setDate(d.getDate() + dagen)
+  const geldig_tot = d.toISOString().split('T')[0]
+
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .insert({
+      type: 'verkoopofferte' as QuoteType,
+      client_id: opts.clientId ?? null,
+      titel: `Meerwerk offerte — ${opts.omschrijving}`,
+      referentie: opts.referentie ?? null,
+      datum,
+      geldig_tot,
+      project_id: opts.projectId,
+      template_id: template?.id ?? null,
+      meerwerk_regel_id: opts.meerwerkRegelId,
+    })
+    .select('id')
+    .single()
+  if (error) return { ok: false, error: error.message }
+
+  if (template) {
+    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] = []
+    if (template.standaard_voorwaarden) terms.push({ quote_id: quote.id, type: 'voorwaarden', inhoud: template.standaard_voorwaarden, volgorde: 0 })
+    if (template.standaard_uitsluitingen) terms.push({ quote_id: quote.id, type: 'uitsluitingen', inhoud: template.standaard_uitsluitingen, volgorde: 0 })
+    if (template.standaard_opmerkingen) terms.push({ quote_id: quote.id, type: 'opmerkingen', inhoud: template.standaard_opmerkingen, volgorde: 0 })
+    if (terms.length) await supabase.from('quote_terms').insert(terms)
+  }
+
+  revalidatePath(PAD)
+  return { ok: true, quoteId: quote.id }
+}
+
 // ─── Offerte vanuit project — met directe import van calculatieregels ─────────
 
 export type ImportRegel = {

@@ -1,11 +1,13 @@
 import { Fragment, Suspense } from 'react'
 import { createAdminClient } from '@everts/database/server'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
+import { getVoortgang } from '@/lib/dossiers/voortgang'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 import { InkoopTab } from './InkoopTab'
 import { VerkoopTab } from './VerkoopTab'
 import { UrenTab } from './UrenTab'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
+import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import type { DossierSectie } from '../types'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -148,7 +150,9 @@ const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: 
 
 const urenRood = (geboekt: number, prognose: number) => geboekt > prognose && geboekt > 0
 
-const BewakingRow = ({ r }: { r: BewakingRegel }) => (
+const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
+  r: BewakingRegel; dossierId: string; bouw7Id: string | null; bewerkbaar: boolean
+}) => (
   <tr>
     <CodeCel code={r.code} naam={r.naam} />
     <TD compact>{fmt(r.begroot)}</TD>
@@ -162,12 +166,18 @@ const BewakingRow = ({ r }: { r: BewakingRegel }) => (
     <TD compact>{fmt(r.inkoopMaterieelAfval)}</TD>
     <TD compact>{fmt(r.verwachteKosten)}</TD>
     <TD compact accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
-    <TD compact>{fmtPctWaarde(r.progress)}</TD>
+    <TD compact>
+      {bewerkbaar && r.code && r.code !== '-'
+        ? <BewakingProgressCel dossierId={dossierId} bouw7Id={bouw7Id} code={r.code} initial={r.progress} />
+        : fmtPctWaarde(r.progress)}
+    </TD>
   </tr>
 )
 
-async function BewakingTabel({ dossierId }: { dossierId: string }) {
+async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
   const data = await getDossierBewaking(dossierId)
+  // Standopname per bewakingscode is alleen bij Opdrachten bewerkbaar.
+  const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id
 
   if (!data.beschikbaar) {
     return (
@@ -213,7 +223,15 @@ async function BewakingTabel({ dossierId }: { dossierId: string }) {
                     {h.naam}
                   </td>
                 </tr>
-                {h.regels.map((r, i) => <BewakingRow key={`${r.hoofdstukId}-${r.code ?? i}`} r={r} />)}
+                {h.regels.map((r, i) => (
+                  <BewakingRow
+                    key={`${r.hoofdstukId}-${r.code ?? i}`}
+                    r={r}
+                    dossierId={dossierId}
+                    bouw7Id={data.bouw7Id}
+                    bewerkbaar={bewerkbaar}
+                  />
+                ))}
                 <tr style={{ background: subGroen }}>
                   <CodeCel code={null} naam={`Subtotaal ${h.naam}`} vet achtergrond={subGroen} />
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
@@ -485,6 +503,34 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
   )
 }
 
+/* ── project-niveau % gereed (Opdrachten + Servicedesk) ──────────────── */
+
+/**
+ * Resolve het Bouw7-id + de huidige % gereed van het project en render de bewerkbare
+ * project-voortgang. Huidige waarde: EVA-overlay (handmatig) > gesyncte WIP-waarde
+ * (management_projecten.pct_gereed). Toont niets zonder Bouw7-koppeling.
+ */
+async function ProjectVoortgangBlok({ dossierId }: { dossierId: string }) {
+  const supabase = createAdminClient() as any
+  const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
+  const bouw7Id = dossier?.bouw7_id ? String(dossier.bouw7_id) : null
+  if (!bouw7Id) return null
+
+  const overlay = await getVoortgang(bouw7Id)
+  let initial = overlay.project
+  if (initial == null) {
+    const { data: mp } = await supabase
+      .from('management_projecten')
+      .select('pct_gereed')
+      .eq('bouw7_id', bouw7Id)
+      .maybeSingle()
+    const v = mp?.pct_gereed
+    initial = v == null ? null : (typeof v === 'string' ? parseFloat(v) : v)
+  }
+
+  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={bouw7Id} initial={initial} />
+}
+
 /* ── main component ──────────────────────────────────────────────────── */
 
 export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
@@ -500,9 +546,16 @@ export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie
 
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
+      {/* Project-brede % gereed (bewerkbaar) */}
+      <div style={{ maxWidth: 960 }}>
+        <Suspense fallback={null}>
+          <ProjectVoortgangBlok dossierId={dossierId} />
+        </Suspense>
+      </div>
+
       {/* Bewaking per bewakingscode — volledige breedte, hoofdweergave */}
       <Suspense fallback={<BewakingSkeleton />}>
-        <BewakingTabel dossierId={dossierId} />
+        <BewakingTabel dossierId={dossierId} sectie={sectie} />
       </Suspense>
 
       {/* Projecttotalen — smaller blok eronder */}
@@ -521,16 +574,27 @@ async function ServicedeskFinancieel({ dossierId }: { dossierId: string }) {
   const { data } = await supabase.from('dossiers').select('facturatiemethode').eq('id', dossierId).single()
   const methode = (data?.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'
 
-  if (methode === 'regie') {
-    return <ServicedeskRegiePaneel dossierId={dossierId} />
-  }
-
-  // Aangenomen: opdracht & orders, geboekte kosten/uren, en verkooptermijnen.
   return (
     <>
-      <InkoopTab dossierId={dossierId} />
-      <UrenTab dossierId={dossierId} />
-      <VerkoopTab dossierId={dossierId} />
+      {/* Project-brede % gereed (bewerkbaar) — boven beide weergaven */}
+      <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
+        <div style={{ maxWidth: 960 }}>
+          <Suspense fallback={null}>
+            <ProjectVoortgangBlok dossierId={dossierId} />
+          </Suspense>
+        </div>
+      </div>
+
+      {methode === 'regie' ? (
+        <ServicedeskRegiePaneel dossierId={dossierId} />
+      ) : (
+        // Aangenomen: opdracht & orders, geboekte kosten/uren, en verkooptermijnen.
+        <>
+          <InkoopTab dossierId={dossierId} />
+          <UrenTab dossierId={dossierId} />
+          <VerkoopTab dossierId={dossierId} />
+        </>
+      )}
     </>
   )
 }
