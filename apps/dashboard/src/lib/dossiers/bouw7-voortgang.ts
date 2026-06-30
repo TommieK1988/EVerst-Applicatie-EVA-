@@ -20,6 +20,7 @@
  */
 
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import type { Bouw7ControlResponse, Bouw7CostTypeId } from '@/lib/bouw7/client'
 
 export type VoortgangWriteResult =
   | { ok: true; skipped?: boolean }
@@ -93,32 +94,50 @@ export async function schrijfBouw7VoortgangProject(
   }
 }
 
-/** Structuur van `GET /project/{id}/project-security-links` (alleen wat we nodig hebben). */
-type Bouw7ProjectSecurityLinks = {
-  securityCodesPerChapters?: {
-    budgetDataPerSecurityCodes?: { securityCode?: { id?: number; code?: string; name?: string } }[]
-  }[]
-}[]
+/**
+ * Resolve de echte ProjectSecurityLink-id van een bewakingscode binnen een project.
+ *
+ * Bron: Athena `/project-control/{id}/cost-type/{ct}/chapters` → `securityCodes[].pslIds`
+ * (zelfde PSL-ids als de prognose-feature en als de progress-READ). NB: NIET `securityCode.id`
+ * uit `/project-security-links` — dat is de code-*definitie*-id en geeft een 403 protection_error.
+ *
+ * Eén code kan onder meerdere kostensoorten een eigen PSL hebben; we kiezen — net als de
+ * progress-read in getDossierBewaking — de PSL van de kostensoort met de grootste begroting.
+ */
+const PSL_KOSTENSOORTEN: Bouw7CostTypeId[] = [1, 2, 3, 4, 5, 6]
 
-/** Resolve de PSL-id (project-security-link) van een bewakingscode binnen een project. */
 async function resolvePslId(
   client: Awaited<ReturnType<typeof getBouw7Client>>,
   bouw7Id: string | number,
   bewakingscode: string,
 ): Promise<number | null> {
-  const links = await client.get<Bouw7ProjectSecurityLinks>(`/project/${bouw7Id}/project-security-links`)
   const doel = bewakingscode.trim()
-  for (const obj of links ?? []) {
-    for (const ch of obj.securityCodesPerChapters ?? []) {
-      for (const bd of ch.budgetDataPerSecurityCodes ?? []) {
-        const code = bd.securityCode?.code
-        if (code != null && (code === bewakingscode || code.trim() === doel) && bd.securityCode?.id != null) {
-          return bd.securityCode.id
+  const responses = await Promise.all(
+    PSL_KOSTENSOORTEN.map((ct) =>
+      client
+        .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
+        .catch(() => null),
+    ),
+  )
+
+  let bestePsl: number | null = null
+  let besteBudget = -1
+  for (const resp of responses) {
+    if (!resp) continue
+    for (const item of resp.items ?? []) {
+      for (const sc of item.securityCodes ?? []) {
+        if ((sc.code ?? '').trim() !== doel) continue
+        const psl = sc.pslIds?.[0]
+        if (psl == null) continue
+        const budget = typeof sc.budgetAmount === 'number' ? sc.budgetAmount : Number(sc.budgetAmount ?? 0)
+        if (budget >= besteBudget) {
+          besteBudget = budget
+          bestePsl = psl
         }
       }
     }
   }
-  return null
+  return bestePsl
 }
 
 /**
