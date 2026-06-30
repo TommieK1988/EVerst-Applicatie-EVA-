@@ -239,38 +239,44 @@ inbouwen zonder uitdrukkelijk akkoord. Geboekte kosten leest EVA via Heimdall `G
 
 ---
 
-## 2c. Voortgang / "% gereed" — schrijven (Fase 0 OPEN)
+## 2c. Voortgang / "% gereed" — schrijven (gecaptured jun 2026, LIVE)
 
 EVA **leest** % gereed al op twee niveaus: project-breed via Athena `GET /wip/report` (`progress`,
 → `management_projecten.pct_gereed`) en per bewakingscode via `…/project-control/.../chapters`
-(`progress`). De **schrijf**-tegenhanger staat **niet** in deze gedocumenteerde catalogus:
-`GET /list/progress-sheets` (voortgangsstaten) is read-only in de spec, en de WIP/control-endpoints
-zitten op Athena (read-only). Net als de prognose (§2b) is dit vrijwel zeker een **ongedocumenteerd
-Heimdall-endpoint** dat uit de Bouw7-UI gecaptured moet worden.
+(`progress`). De **schrijf**-endpoints staan niet in de Swagger-catalogus en zijn (net als de prognose,
+§2b) uit de Bouw7-UI afgevangen. Bouw7 ondersteunt **beide wijzes** (per project kiesbaar).
 
-**Bouw7 ondersteunt beide wijzes** (per project kiesbaar): één project-brede % gereed én een
-standopname per bewakingscode. Capture daarom **beide** UI-acties (method + volledige URL + body):
+| Doel | Endpoint | Body |
+|---|---|---|
+| **Project-niveau % gereed** | **Athena** `POST /wip/project-progress` | `{ projectId, progressType, progress: "<pct>", prognosisType, prognosisAmount }` |
+| **Per bewakingscode (standopname)** | **Heimdall** `POST /project/progress-log` | `{ projectSecurityLink: { id: <pslId> }, dateRecorded: "YYYY-MM-DD", progress: "<pct>" }` |
 
-1. **project-niveau** — zet % gereed op een testproject;
-2. **per bewakingscode** — zet een standopname op één code.
+**Project-niveau (Athena!):** één call zet zowel `progress` als de WIP-**prognose**
+(`prognosisType`/`prognosisAmount`). EVA doet daarom **read-modify-write**: huidige instellingen lezen,
+alléén `progress` vervangen. `progressType`/`prognosisType` = `1` = handmatig in de capture.
+`progress`/bedragen als **string**/number; `progress` overschrijft (absoluut). Let op: `post()` op de
+client gaat naar Heimdall — gebruik **`postAthena()`** (toegevoegd aan `Bouw7Client`).
 
-Te beantwoorden door de capture: host/endpoint, welke id (project-id / PSL-id / progress-sheet-id),
-of er eerst een "mode" gezet moet worden (per-code vs project-totaal), en of de waarde absoluut
-(overschrijft) is en welk veldtype (string/number).
+**Per bewakingscode (Heimdall):** append-style logregel per PSL — clobbert niets. De `projectSecurityLink.id`
+(bv. `4226378`, code `" TIM.A"`) resolven we uit `GET /project/{id}/project-security-links`
+(`securityCodesPerChapters[].budgetDataPerSecurityCodes[].securityCode{id,code}`), match op kale code.
 
-**EVA-implementatie (al gebouwd, write gestubd tot de capture er is):**
-- Opslag: `public.dossier_voortgang` (`niveau` = `project` | `bewakingscode`), bron `eva`,
-  `bouw7_sync_status` `pending` tot Bouw7 bevestigt.
+**EVA-implementatie:**
+- Opslag: `public.dossier_voortgang` (`niveau` = `project` | `bewakingscode`), `bouw7_sync_status`.
 - Server actions: `lib/dossiers/voortgang.ts` (`bewaarVoortgang`, `getVoortgang`, `getVoortgangProjectMap`).
-- Bouw7-write: `lib/dossiers/bouw7-voortgang.ts` (`schrijfBouw7VoortgangProject/Code`). Achter de vlag
-  `BOUW7_VOORTGANG_WRITE` (nu `false`): **vul hier endpoint + body in op basis van de capture en zet de
-  vlag op `true`.** Tot die tijd staat de waarde wél in EVA (en prevaleert via overlay), maar gaat 'ie
-  nog niet naar Bouw7.
+- Bouw7-write: `lib/dossiers/bouw7-voortgang.ts` (`schrijfBouw7VoortgangProject/Code`), vlag
+  `BOUW7_VOORTGANG_WRITE = true`.
 - UI: Management-tabel (`PctGereedCelEditable`), Financieel-tab project-editor + per-code editor
   (`components/dossiers/tabs/VoortgangEditors.tsx`).
 - Overlay: EVA-waarde wint op read in `getDossierBewaking` en `getManagementProjecten` (incl. herberekende
-  `omzet_obv_pct`/`resultaat_obv_pct`). **Reconciliatie** (EVA-override loslaten zodra Bouw7 de waarde
-  bevestigt) moet bij het live zetten van de write worden toegevoegd.
+  `omzet_obv_pct`/`resultaat_obv_pct`).
+
+**Open punten:**
+- **Read-endpoint project-niveau onbevestigd.** De read-modify-write leest via `GET /wip/project-progress?projectId=`
+  (gespiegeld op de POST). Klopt dat niet, dan **schrijft EVA de project-% bewust NIET** (prognose niet
+  geclobberd) en blijft de waarde EVA-only. Capture zo nodig de GET van het WIP/standopname-scherm.
+- **Reconciliatie.** De overlay laat de EVA-waarde altijd winnen; zodra de read-sync de Bouw7-waarde
+  bevestigt zou de override losgelaten/op `synced` gezet moeten worden (nog te bouwen).
 
 ---
 

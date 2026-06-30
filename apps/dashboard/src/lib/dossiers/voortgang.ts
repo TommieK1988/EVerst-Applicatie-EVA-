@@ -104,7 +104,15 @@ export type VoortgangOverlay = {
   codes: Map<string, number>
 }
 
-/** EVA-overlay voor één project: project-waarde + per-code waarden. */
+/**
+ * Twee-richtingen sync: de EVA-overlay geldt **alleen** voor nog-niet-bevestigde wijzigingen
+ * (`bouw7_sync_status` ∈ {pending, error}). Zodra de Bouw7-write geslaagd is (`synced`) is Bouw7
+ * weer de bron van waarheid — een latere wijziging in Bouw7 komt dan gewoon via de read-sync mee
+ * en wordt niet door een oude EVA-waarde gemaskeerd.
+ */
+const OVERLAY_STATUSSEN = ['pending', 'error']
+
+/** EVA-overlay voor één project: project-waarde + per-code waarden (alleen onbevestigde wijzigingen). */
 export async function getVoortgang(bouw7Id: string): Promise<VoortgangOverlay> {
   const overlay: VoortgangOverlay = { project: null, codes: new Map() }
   if (!bouw7Id) return overlay
@@ -112,8 +120,9 @@ export async function getVoortgang(bouw7Id: string): Promise<VoortgangOverlay> {
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossier_voortgang')
-    .select('niveau, bewakingscode, pct_gereed')
+    .select('niveau, bewakingscode, pct_gereed, bouw7_sync_status')
     .eq('bouw7_id', bouw7Id)
+    .in('bouw7_sync_status', OVERLAY_STATUSSEN)
 
   for (const row of (data ?? []) as { niveau: string; bewakingscode: string | null; pct_gereed: number | string }[]) {
     const pct = typeof row.pct_gereed === 'string' ? parseFloat(row.pct_gereed) : row.pct_gereed
@@ -123,7 +132,7 @@ export async function getVoortgang(bouw7Id: string): Promise<VoortgangOverlay> {
   return overlay
 }
 
-/** EVA-overlay voor de Management-tabel: project-waarden voor een set Bouw7-ids. */
+/** EVA-overlay voor de Management-tabel: onbevestigde project-waarden voor een set Bouw7-ids. */
 export async function getVoortgangProjectMap(bouw7Ids: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>()
   const ids = [...new Set(bouw7Ids.filter(Boolean))]
@@ -132,8 +141,9 @@ export async function getVoortgangProjectMap(bouw7Ids: string[]): Promise<Map<st
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossier_voortgang')
-    .select('bouw7_id, pct_gereed')
+    .select('bouw7_id, pct_gereed, bouw7_sync_status')
     .eq('niveau', 'project')
+    .in('bouw7_sync_status', OVERLAY_STATUSSEN)
     .in('bouw7_id', ids)
 
   for (const row of (data ?? []) as { bouw7_id: string; pct_gereed: number | string }[]) {

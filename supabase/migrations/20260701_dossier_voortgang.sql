@@ -32,10 +32,11 @@ create table if not exists public.dossier_voortgang (
   updated_at         timestamptz not null default now()
 );
 
--- Eén regel per (project, niveau, code). Bij niveau 'project' is bewakingscode leeg
--- → coalesce naar '' zodat de unieke index ook NULL-codes dedupliceert (upsert-doel).
+-- Eén regel per (project, niveau, code). NULLS NOT DISTINCT (PG15+) dedupliceert ook de
+-- project-rijen (bewakingscode NULL). Gewone kolom-index zodat de upsert
+-- ON CONFLICT (bouw7_id, niveau, bewakingscode) hierop matcht.
 create unique index if not exists dv_uniek_idx
-  on public.dossier_voortgang (bouw7_id, niveau, coalesce(bewakingscode, ''));
+  on public.dossier_voortgang (bouw7_id, niveau, bewakingscode) nulls not distinct;
 
 create index if not exists dv_dossier_idx on public.dossier_voortgang(dossier_id);
 create index if not exists dv_sync_status_idx on public.dossier_voortgang(bouw7_sync_status);

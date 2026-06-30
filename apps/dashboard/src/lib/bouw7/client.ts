@@ -104,6 +104,11 @@ export class Bouw7Client {
     return this._write<T>('POST', path, body)
   }
 
+  /** POST naar Athena — enkele write-endpoints zitten op Athena i.p.v. Heimdall (bv. `/wip/project-progress`). */
+  async postAthena<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this._write<T>('POST', path, body, ATHENA_URL)
+  }
+
   /** PUT naar Heimdall — o.a. de `.../update-status/{status}`-endpoints (vaak zonder body). */
   async put<T = unknown>(path: string, body?: unknown): Promise<T> {
     return this._write<T>('PUT', path, body)
@@ -115,9 +120,9 @@ export class Bouw7Client {
   }
 
   /** Gedeelde write-implementatie (POST/PUT/DELETE) met token- en 401-retry, net als `_get`. */
-  private async _write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  private async _write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown, baseUrl: string = HEIMDALL_URL): Promise<T> {
     await this.ensureAuth()
-    const res = await fetch(new URL(path, HEIMDALL_URL).toString(), {
+    const res = await fetch(new URL(path, baseUrl).toString(), {
       method,
       headers: {
         Accept: 'application/json',
@@ -129,11 +134,11 @@ export class Bouw7Client {
 
     if (res.status === 401) {
       await this.login()
-      return this._write<T>(method, path, body)
+      return this._write<T>(method, path, body, baseUrl)
     }
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`Bouw7 ${method} ${HEIMDALL_URL}${path} mislukt (${res.status}): ${text}`)
+      throw new Error(`Bouw7 ${method} ${baseUrl}${path} mislukt (${res.status}): ${text}`)
     }
 
     // Sommige write-endpoints geven 204/lege body terug.
