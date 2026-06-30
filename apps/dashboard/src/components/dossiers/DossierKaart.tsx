@@ -191,6 +191,16 @@ export function DossierKaart({
           <span />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
+          {dossier.bouw7_uren_overschrijding && (
+            <span title="Arbeid: uren op 100% overschrijden de prognose-uren">
+              <Badge tone="error" size="sm">Uren</Badge>
+            </span>
+          )}
+          {dossier.bouw7_bestelregels_afwijking && (
+            <span title="Bestelregels sluiten niet aan op de prognose — projectleider: werkbegroting laten goedkeuren">
+              <Badge tone="warning" size="sm">Begroting</Badge>
+            </span>
+          )}
           {spoed && <Badge tone="error" size="sm">Aandacht</Badge>}
           <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
             {formatDatum(kaartDatum)}

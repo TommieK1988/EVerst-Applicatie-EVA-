@@ -965,6 +965,26 @@ export function InformatieTab({
         </div>
       </div>
 
+      {/* ── Actie-indicatoren projectleider (bewaking-vlaggen uit Bouw7-sync) ── */}
+      {(sectie === 'opdracht' || sectie === 'servicedesk')
+        && (dossier.bouw7_uren_overschrijding || dossier.bouw7_bestelregels_afwijking) && (
+        <div style={{
+          marginBottom: 14, padding: '12px 16px', borderRadius: 8,
+          background: 'var(--warning-50, #fff7ed)', border: '1px solid var(--warning-200, #fed7aa)',
+          color: 'var(--warning-800, #9a3412)', fontSize: 13,
+        }}>
+          <strong>⚠ Actie projectleider</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>
+            {dossier.bouw7_bestelregels_afwijking && (
+              <li>Bestelregels sluiten niet aan op de prognose — laat de werkbegroting goedkeuren of werk de bestelregels bij.</li>
+            )}
+            {dossier.bouw7_uren_overschrijding && (
+              <li>Een arbeid-bewakingscode overschrijdt op 100% de prognose-uren — controleer de urenraming.</li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {/* ── Kaarten grid ── */}
       <div className="grid grid-cols-2 gap-3.5">
 

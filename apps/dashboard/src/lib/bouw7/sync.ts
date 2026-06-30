@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
@@ -792,6 +792,64 @@ function mapBouw7NaarEvaStatus(
   }
 }
 
+/** Heeft dit project een projectbewaking (opdracht 02–06 of servicedesk LB.)? Alleen dan vlaggen berekenen. */
+function heeftBewaking(statusNaam?: string | null): boolean {
+  const n = (statusNaam ?? '').trim()
+  return /^0[2-6]\./.test(n) || n.startsWith('LB.')
+}
+
+/** Som van de prognose-kosten over de 6 kostensoorten (== bewaking "Tot. prognose"). */
+function prognoseKostenTotaal(fin?: Bouw7ProjectFinancial): number {
+  const costs = (fin?.costs ?? {}) as Record<string, { prognosis?: number | string } | undefined>
+  return ['labor', 'material', 'equipment', 'subcontracting', 'purchaseOrder', 'other']
+    .reduce((s, k) => s + (Number(costs[k]?.prognosis ?? 0) || 0), 0)
+}
+
+/**
+ * Twee projectleider-actie-vlaggen voor de bewakingstabel (tijdens sync, per opdracht):
+ *  - bestelregelsAfwijking: bestelregels-totaal (contract-order-lines) sluit niet aan op de
+ *    prognose-totaal (project-financial). Verschil → werkbegroting nog goed te keuren / regels invoeren.
+ *  - urenOverschrijding: een Arbeid-bewakingscode waarvan de naar 100% geextrapoleerde uren
+ *    (geboekte uren / (% gereed)) de prognose-uren overschrijden.
+ * Faalt stil (geen vlag bij leesfout) zodat de sync nooit hangt.
+ */
+async function berekenBewakingsVlaggen(
+  bouw7: Bouw7Client,
+  bouw7Id: string | number,
+  prognoseTotaal: number,
+): Promise<{ bestelregelsAfwijking: boolean; urenOverschrijding: boolean }> {
+  let bestelregelsAfwijking = false
+  let urenOverschrijding = false
+
+  try {
+    const r = await bouw7.get<{ total?: number | string }>('/list/contract-order-lines', {
+      q: `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`,
+    })
+    const bestelregels = Number(r.total ?? 0) || 0
+    bestelregelsAfwijking = Math.abs(bestelregels - prognoseTotaal) > 1
+  } catch { /* geen vlag bij leesfout */ }
+
+  try {
+    const resp = await bouw7.getAthena<Bouw7ControlResponse>(
+      `/project-control/${bouw7Id}/cost-type/1/chapters?include_subprojects=false`,
+    )
+    for (const item of resp.items ?? []) {
+      for (const sc of item.securityCodes ?? []) {
+        const prognoseUren = Number(sc.hourInfo?.prognosisHours ?? 0) || 0
+        const geboekteUren = Number(sc.hourInfo?.costHours ?? 0) || 0
+        const progress = sc.progress
+        if (progress != null && progress > 0 && geboekteUren / (progress / 100) > prognoseUren + 0.01) {
+          urenOverschrijding = true
+          break
+        }
+      }
+      if (urenOverschrijding) break
+    }
+  } catch { /* geen vlag bij leesfout */ }
+
+  return { bestelregelsAfwijking, urenOverschrijding }
+}
+
 export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
   // Scoped run (ververs één dossier): alleen deze bouw7_ids, geforceerd, en geen soft-delete.
@@ -955,6 +1013,22 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
           financialMap.set(String(batch[j].id), r.value)
         }
+      }
+    }
+
+    // Projectleider-actie-vlaggen (bewaking) — alleen voor opdracht/servicedesk-projecten,
+    // want ze hangen op de zware per-code data (2 extra calls per project). Batched, faalt stil.
+    const vlagMap = new Map<string, { bestelregelsAfwijking: boolean; urenOverschrijding: boolean }>()
+    const bewakingProjecten = changedProjects.filter(p => heeftBewaking(p.status?.name))
+    const VLAG_BATCH = 8
+    for (let i = 0; i < bewakingProjecten.length; i += VLAG_BATCH) {
+      const batch = bewakingProjecten.slice(i, i + VLAG_BATCH)
+      const results = await Promise.allSettled(
+        batch.map(p => berekenBewakingsVlaggen(bouw7, p.id, prognoseKostenTotaal(financialMap.get(String(p.id))))),
+      )
+      for (let j = 0; j < batch.length; j++) {
+        const r = results[j]
+        if (r.status === 'fulfilled') vlagMap.set(String(batch[j].id), r.value)
       }
     }
 
@@ -1205,6 +1279,8 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         bouw7_categorie_naam:     p.category?.name ?? null,
         categorie:                p.category?.name ?? null,
         bouw7_id:                 bouw7IdStr,
+        bouw7_bestelregels_afwijking: vlagMap.get(bouw7IdStr)?.bestelregelsAfwijking ?? false,
+        bouw7_uren_overschrijding:    vlagMap.get(bouw7IdStr)?.urenOverschrijding ?? false,
         bouw7_sync_hash:          hashMap.get(bouw7IdStr) ?? null,
         bouw7_laatst_sync:        new Date().toISOString(),
         bouw7_sync_status:        'synced',

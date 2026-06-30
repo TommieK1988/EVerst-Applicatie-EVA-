@@ -30,6 +30,9 @@ export type DossierRij = Dossier & {
   contactpersoon_naam:     string | null
   contactpersoon_email:    string | null
   contactpersoon_telefoon: string | null
+  /** Bewaking-vlaggen (tijdens Bouw7-sync berekend; nog niet in de gegenereerde Dossier-types). */
+  bouw7_bestelregels_afwijking?: boolean | null
+  bouw7_uren_overschrijding?:    boolean | null
 }
 
 /** Geeft de actieve substatus terug voor een dossier, ongeacht de fase. */
