@@ -327,6 +327,12 @@
 /* ── Animaties ───────────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Indeterminate loading-balk (auto-ververs dossier): segment loopt links→rechts. */
+@keyframes dossierLoadBar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 @keyframes evaTyping {
   0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
   30%            { opacity: 1;   transform: translateY(-2px); }

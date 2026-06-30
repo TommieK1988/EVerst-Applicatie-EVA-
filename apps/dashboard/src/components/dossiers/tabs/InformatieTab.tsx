@@ -15,6 +15,7 @@ import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
+import { DossierAutoVervers } from '../DossierAutoVervers'
 import {
   getScenarios, getGroepen,
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
@@ -826,6 +827,9 @@ export function InformatieTab({
 
   const inhoud = (
     <div className="px-8 py-7">
+
+      {/* Auto-ververs uit Bouw7 bij openen (1× per sessie) + loading-balk bovenin */}
+      <DossierAutoVervers dossierId={dossier.id} bouw7Gekoppeld={!!dossier.bouw7_id} />
 
       {/* ── Pagina header ── */}
       <div className="mb-6 flex items-start justify-between gap-4">
