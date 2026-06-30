@@ -95,22 +95,22 @@ export async function schrijfBouw7VoortgangProject(
 }
 
 /**
- * Resolve de echte ProjectSecurityLink-id van een bewakingscode binnen een project.
+ * Resolve ALLE ProjectSecurityLink-ids van een bewakingscode binnen een project.
  *
  * Bron: Athena `/project-control/{id}/cost-type/{ct}/chapters` → `securityCodes[].pslIds`
  * (zelfde PSL-ids als de prognose-feature en als de progress-READ). NB: NIET `securityCode.id`
  * uit `/project-security-links` — dat is de code-*definitie*-id en geeft een 403 protection_error.
  *
- * Eén code kan onder meerdere kostensoorten een eigen PSL hebben; we kiezen — net als de
- * progress-read in getDossierBewaking — de PSL van de kostensoort met de grootste begroting.
+ * Eén code kan onder meerdere kostensoorten een eigen PSL hebben. De standopname (% gereed)
+ * moet op ELKE kostensoort-PSL van de code geschreven worden → we verzamelen ze allemaal (dedup).
  */
 const PSL_KOSTENSOORTEN: Bouw7CostTypeId[] = [1, 2, 3, 4, 5, 6]
 
-async function resolvePslId(
+async function resolvePslIds(
   client: Awaited<ReturnType<typeof getBouw7Client>>,
   bouw7Id: string | number,
   bewakingscode: string,
-): Promise<number | null> {
+): Promise<number[]> {
   const doel = bewakingscode.trim()
   const responses = await Promise.all(
     PSL_KOSTENSOORTEN.map((ct) =>
@@ -120,24 +120,19 @@ async function resolvePslId(
     ),
   )
 
-  let bestePsl: number | null = null
-  let besteBudget = -1
+  const ids = new Set<number>()
   for (const resp of responses) {
     if (!resp) continue
     for (const item of resp.items ?? []) {
       for (const sc of item.securityCodes ?? []) {
         if ((sc.code ?? '').trim() !== doel) continue
-        const psl = sc.pslIds?.[0]
-        if (psl == null) continue
-        const budget = typeof sc.budgetAmount === 'number' ? sc.budgetAmount : Number(sc.budgetAmount ?? 0)
-        if (budget >= besteBudget) {
-          besteBudget = budget
-          bestePsl = psl
+        for (const psl of sc.pslIds ?? []) {
+          if (psl != null) ids.add(psl)
         }
       }
     }
   }
-  return bestePsl
+  return [...ids]
 }
 
 /**
@@ -155,17 +150,34 @@ export async function schrijfBouw7VoortgangCode(
   try {
     const client = await getBouw7Client()
 
-    const pslId = await resolvePslId(client, bouw7Id, bewakingscode)
-    if (pslId == null) {
+    const pslIds = await resolvePslIds(client, bouw7Id, bewakingscode)
+    if (pslIds.length === 0) {
       return { ok: false, error: `Bewakingscode "${bewakingscode.trim()}" niet gevonden in Bouw7; % gereed niet teruggeschreven.` }
     }
 
+    // Standopname op elke kostensoort-PSL van de code schrijven.
     const dateRecorded = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
-    await client.post('/project/progress-log', {
-      projectSecurityLink: { id: pslId },
-      dateRecorded,
-      progress: String(pct),
-    })
+    const resultaten = await Promise.allSettled(
+      pslIds.map((id) =>
+        client.post('/project/progress-log', {
+          projectSecurityLink: { id },
+          dateRecorded,
+          progress: String(pct),
+        }),
+      ),
+    )
+
+    const mislukt = resultaten.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (mislukt.length === pslIds.length) {
+      const reden = mislukt[0]?.reason
+      return { ok: false, error: reden instanceof Error ? reden.message : 'Bouw7-write mislukt.' }
+    }
+    if (mislukt.length > 0) {
+      return {
+        ok: false,
+        error: `${pslIds.length - mislukt.length}/${pslIds.length} kostensoort-PSL's bijgewerkt; rest mislukte.`,
+      }
+    }
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij terugschrijven naar Bouw7.' }

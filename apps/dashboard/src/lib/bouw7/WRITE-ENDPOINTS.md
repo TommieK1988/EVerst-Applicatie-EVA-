@@ -257,9 +257,13 @@ alléén `progress` vervangen. `progressType`/`prognosisType` = `1` = handmatig 
 `progress`/bedragen als **string**/number; `progress` overschrijft (absoluut). Let op: `post()` op de
 client gaat naar Heimdall — gebruik **`postAthena()`** (toegevoegd aan `Bouw7Client`).
 
-**Per bewakingscode (Heimdall):** append-style logregel per PSL — clobbert niets. De `projectSecurityLink.id`
-(bv. `4226378`, code `" TIM.A"`) resolven we uit `GET /project/{id}/project-security-links`
-(`securityCodesPerChapters[].budgetDataPerSecurityCodes[].securityCode{id,code}`), match op kale code.
+**Per bewakingscode (Heimdall):** append-style logregel per PSL — clobbert niets. De
+`projectSecurityLink.id` (bv. `4226378`, code `" TIM.A"`) resolven we uit Athena
+`/project-control/{id}/cost-type/{ct}/chapters` → `securityCodes[].pslIds` (zelfde PSL-ids als de
+prognose-feature en de progress-read). **NIET** `securityCode.id` uit `/project-security-links` —
+dat is de code-*definitie*-id en geeft een 403 `protection_error` ("Access denied … ProjectSecurityLink").
+Een code kan onder meerdere kostensoorten een eigen PSL hebben → de standopname wordt op **elke**
+kostensoort-PSL van de code geschreven (één progress-log per PSL).
 
 **EVA-implementatie:**
 - Opslag: `public.dossier_voortgang` (`niveau` = `project` | `bewakingscode`), `bouw7_sync_status`.
