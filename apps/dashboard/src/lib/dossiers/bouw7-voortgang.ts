@@ -59,15 +59,11 @@ export async function schrijfBouw7VoortgangProject(
     const client = await getBouw7Client()
 
     // 1. Huidige WIP-instellingen lezen om de prognose te behouden.
+    //    Athena `GET /wip/project-progress/{id}` (pad-param!) geeft een plat object terug;
+    //    de `?projectId=`-queryvariant geeft 405.
     let current: WipProjectProgress | null = null
     try {
-      const r = await client.getAthena<WipProjectProgress | { items?: WipProjectProgress[] }>(
-        '/wip/project-progress',
-        { projectId: String(bouw7Id) },
-      )
-      current = Array.isArray((r as { items?: WipProjectProgress[] }).items)
-        ? ((r as { items?: WipProjectProgress[] }).items?.[0] ?? null)
-        : (r as WipProjectProgress)
+      current = await client.getAthena<WipProjectProgress>(`/wip/project-progress/${bouw7Id}`)
     } catch {
       current = null
     }
@@ -81,9 +77,10 @@ export async function schrijfBouw7VoortgangProject(
     }
 
     // 2. Alléén progress vervangen; prognose-instellingen onveranderd terugsturen.
+    //    Management-edit is handmatig → progressType 1.
     await client.postAthena('/wip/project-progress', {
       projectId: Number(bouw7Id),
-      progressType: current.progressType ?? 1,
+      progressType: 1,
       progress: String(pct),
       prognosisType: current.prognosisType,
       prognosisAmount: current.prognosisAmount,

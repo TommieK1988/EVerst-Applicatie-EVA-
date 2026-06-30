@@ -29,12 +29,6 @@ const fmt = (v: unknown, showZero = false): string => {
   }).format(n)
 }
 
-const fmtUren = (v: number | null, showZero = false): string => {
-  if (v == null) return '—'
-  if (v === 0 && !showZero) return '—'
-  return `${new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(v)} u`
-}
-
 const fmtPctWaarde = (v: number | null): string => {
   if (v == null) return '—'
   return `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(v)} %`
@@ -125,8 +119,6 @@ const BEWAKING_KOLOMMEN = [
   'Begroot',
   'Meerwerk',
   'Tot. prognose',
-  'Prognose-uren',
-  'Geboekte uren',
   'Prognose arbeid',
   'Arbeidskosten',
   'Onderaanneming',
@@ -149,8 +141,6 @@ const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: 
   </td>
 )
 
-const urenRood = (geboekt: number, prognose: number) => geboekt > prognose && geboekt > 0
-
 const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
   r: BewakingRegel; dossierId: string; bouw7Id: string | null; bewerkbaar: boolean
 }) => (
@@ -159,8 +149,6 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact>{fmt(r.begroot)}</TD>
     <TD compact>{fmt(r.meerwerk)}</TD>
     <TD compact>{fmt(r.prognose)}</TD>
-    <TD compact>{fmtUren(r.prognoseUren)}</TD>
-    <TD compact kleur={urenRood(r.geboekteUren, r.prognoseUren) ? ROOD : undefined}>{fmtUren(r.geboekteUren)}</TD>
     <TD compact>{fmt(r.arbeidPrognose)}</TD>
     <TD compact>{fmt(r.arbeidskosten)}</TD>
     <TD compact>{fmt(r.onderaanneming)}</TD>
@@ -239,8 +227,6 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.meerwerk), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
-                  <TD compact vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
-                  <TD compact vet kleur={urenRood(sub(h.regels, (r) => r.geboekteUren), sub(h.regels, (r) => r.prognoseUren)) ? ROOD : undefined}>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidPrognose))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
@@ -258,8 +244,6 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               <TD compact vet>{fmt(t.begroot, true)}</TD>
               <TD compact vet>{fmt(t.meerwerk, true)}</TD>
               <TD compact vet>{fmt(t.prognose, true)}</TD>
-              <TD compact vet>{fmtUren(t.prognoseUren, true)}</TD>
-              <TD compact vet kleur={urenRood(t.geboekteUren, t.prognoseUren) ? ROOD : undefined}>{fmtUren(t.geboekteUren, true)}</TD>
               <TD compact vet>{fmt(t.arbeidPrognose)}</TD>
               <TD compact vet>{fmt(t.arbeidskosten)}</TD>
               <TD compact vet>{fmt(t.onderaanneming)}</TD>
@@ -275,8 +259,9 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
           padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
         }}>
-          Live uit Bouw7-projectbewaking. Geboekte uren/arbeidskosten = kostensoort Arbeid;
-          geboekte kosten = arbeid + ingekochte kosten mét inkoopfactuur; nog te verwachten = Tot. prognose − geboekte kosten (rood = overschreden).
+          Live uit Bouw7-projectbewaking. Arbeidskosten = kostensoort Arbeid; geboekte kosten = arbeid +
+          ingekochte kosten mét inkoopfactuur; nog te verwachten = Tot. prognose − geboekte kosten (rood = overschreden).
+          % gereed = waarde-gewogen gemiddelde over de kostensoorten. Uren staan op het Uren-tab.
         </div>
       </CardBody>
     </Card>

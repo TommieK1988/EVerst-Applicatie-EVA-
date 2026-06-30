@@ -912,7 +912,12 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const GEEN = '-' // code-sleutel voor "Kosten zonder bewaking"
     const regelMap = new Map<string, BewakingRegel>()
     const codeIndex = new Map<string, BewakingRegel>() // bewakingscode → regel (codes zijn uniek per project)
-    const maxBudgetVoorProgress = new Map<string, number>()
+    // % gereed wordt per code waarde-gewogen gemiddeld over de kostensoorten (Bouw7 kan per
+    // (code × kostensoort) een eigen % hebben). Waarde = prognose, anders begroting.
+    const progressSom = new Map<string, number>()       // Σ progress × waarde
+    const progressGewicht = new Map<string, number>()   // Σ waarde
+    const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder waarde)
+    const progressSimpelN = new Map<string, number>()   // aantal kostensoorten met % (fallback)
 
     /** Bestaande regel ophalen of nieuwe aanmaken (gematcht op bewakingscode). */
     const vindOfMaak = (code: string, hoofdstukId: number | null, hoofdstuk: string | null, naam: string | null) => {
@@ -942,7 +947,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         r.hoofdstuk = hoofdstuk
         regelMap.set(key, r)
         codeIndex.set(code, r)
-        maxBudgetVoorProgress.set(key, -1)
       }
 
       const budget = toGetal(e.budgetAmount)
@@ -958,10 +962,16 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       else if (ct === 5) r.materiaal += kosten
       else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
 
-      // % gereed: neem de waarde van de kostensoort met de grootste begroting voor deze code.
-      if (e.progress != null && budget >= (maxBudgetVoorProgress.get(key) ?? -1)) {
-        maxBudgetVoorProgress.set(key, budget)
-        r.progress = toGetal(e.progress)
+      // % gereed: accumuleer voor een waarde-gewogen gemiddelde over de kostensoorten.
+      if (e.progress != null) {
+        const prog = toGetal(e.progress)
+        const waarde = toGetal(e.prognosisAmount) > 0 ? toGetal(e.prognosisAmount) : budget
+        progressSimpelSom.set(key, (progressSimpelSom.get(key) ?? 0) + prog)
+        progressSimpelN.set(key, (progressSimpelN.get(key) ?? 0) + 1)
+        if (waarde > 0) {
+          progressSom.set(key, (progressSom.get(key) ?? 0) + prog * waarde)
+          progressGewicht.set(key, (progressGewicht.get(key) ?? 0) + waarde)
+        }
       }
     }
 
@@ -1022,6 +1032,18 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       const code = r.code ?? GEEN
       r.geboekteKosten = r.arbeidskosten + (gefactureerdPerCode.get(code) ?? 0)
       r.verwachteKosten = verwachtPerCode.get(code) ?? 0
+    }
+
+    // % gereed per code afronden: waarde-gewogen gemiddelde over de kostensoorten,
+    // met als fallback een ongewogen gemiddelde (codes zonder begroting/prognose).
+    for (const [key, r] of regelMap) {
+      const gewicht = progressGewicht.get(key) ?? 0
+      if (gewicht > 0) {
+        r.progress = Math.round(((progressSom.get(key) ?? 0) / gewicht) * 100) / 100
+      } else {
+        const n = progressSimpelN.get(key) ?? 0
+        r.progress = n > 0 ? Math.round(((progressSimpelSom.get(key) ?? 0) / n) * 100) / 100 : null
+      }
     }
 
     // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de Bouw7-waarde
