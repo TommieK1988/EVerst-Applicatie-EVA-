@@ -1,6 +1,6 @@
 import { Fragment, Suspense } from 'react'
 import { createAdminClient } from '@everts/database/server'
-import { getDossierFinancieel, getDossierBewaking, bouw7VoorDossier, type BewakingRegel } from '@/lib/dossiers/actions'
+import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { getVoortgang } from '@/lib/dossiers/voortgang'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 import { InkoopTab } from './InkoopTab'
@@ -495,35 +495,19 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
 /* ── project-niveau % gereed (Opdrachten + Servicedesk) ──────────────── */
 
 /**
- * Resolve het Bouw7-id + de huidige % gereed van het project en render de (read-only)
- * project-voortgang. Huidige waarde: EVA-overlay (handmatige override) > de live
- * bewakingscode-rollup (project-control `totals.progress`). Toont niets zonder Bouw7-koppeling.
+ * Render de (read-only) project-% gereed. Waarde: EVA-overlay (handmatige override) >
+ * de live prognose-gewogen rollup van de bewakingscodes (`getDossierBewaking().projectProgress`,
+ * exact gelijk aan de getoonde code-%'en). Toont niets zonder Bouw7-koppeling.
  */
 async function ProjectVoortgangBlok({ dossierId }: { dossierId: string }) {
-  const supabase = createAdminClient() as any
-  const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
-  const bouw7Id = dossier?.bouw7_id ? String(dossier.bouw7_id) : null
-  if (!bouw7Id) return null
+  const data = await getDossierBewaking(dossierId)
+  if (!data.bouw7Id) return null
 
-  const overlay = await getVoortgang(bouw7Id)
-  let initial = overlay.project
-  if (initial == null) {
-    // Live bewakingscode-rollup uit Bouw7 (gewogen over de kostensoorten) — gelijk aan de
-    // bron die de Management-sync gebruikt voor pct_gereed.
-    const ctx = await bouw7VoorDossier(dossierId)
-    if (ctx) {
-      try {
-        const r = await ctx.client.getAthena<{ totals?: { progress?: number | null } }>(
-          `/project-control/${ctx.bouw7Id}/total/cost-types`,
-        )
-        const v = r?.totals?.progress
-        initial = v == null ? null : toNum(v)
-      } catch { initial = null }
-    }
-  }
+  const overlay = await getVoortgang(data.bouw7Id)
+  const initial = overlay.project ?? data.projectProgress
 
   // % gereed (project) is op het Financieel-tab alléén-lezen; wijzigen kan in Management.
-  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={bouw7Id} initial={initial} readOnly />
+  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={data.bouw7Id} initial={initial} readOnly />
 }
 
 /* ── main component ──────────────────────────────────────────────────── */

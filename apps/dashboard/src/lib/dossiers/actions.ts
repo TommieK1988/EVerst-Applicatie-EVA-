@@ -89,7 +89,33 @@ function mapRij(row: any): DossierRij {
     contactpersoon_naam:     medNaam(row.contactpersoon),
     contactpersoon_email:    row.contactpersoon?.email    ?? null,
     contactpersoon_telefoon: row.contactpersoon?.telefoon ?? null,
+    intern: false,
   }
+}
+
+/**
+ * Geeft de set dossier-ids terug waarvoor de "Intern"-toggle (sleutel 'intern') aan staat.
+ * Wordt gebruikt om interne dossiers te verbergen op de borden/lijsten.
+ */
+async function getInternDossierIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossier_toggles')
+    .select('dossier_id, dossier_toggle_definities!inner(sleutel)')
+    .eq('aan', true)
+    .eq('dossier_toggle_definities.sleutel', 'intern')
+    .in('dossier_id', ids)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Set((data ?? []).map((d: any) => d.dossier_id as string))
+}
+
+/** Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit). */
+async function verrijkMetIntern(rijen: DossierRij[]): Promise<DossierRij[]> {
+  const internSet = await getInternDossierIds(rijen.map(r => r.id))
+  if (internSet.size === 0) return rijen
+  return rijen.map(r => (internSet.has(r.id) ? { ...r, intern: true } : r))
 }
 
 /** Haal alle dossiers op voor een fase, verrijkt met klant- en rolnamen. */
@@ -107,7 +133,7 @@ export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResu
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -138,7 +164,7 @@ export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofd
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -168,7 +194,7 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -195,7 +221,7 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /** Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit '08. Afgewezen' uit. */
@@ -214,7 +240,7 @@ export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
@@ -233,7 +259,7 @@ export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /** Haal financieel afgesloten dossiers op (Bouw7 status 07). */
@@ -251,7 +277,7 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
 /** Update de servicedesk substatus van een dossier (voor kanban drag & drop). */
@@ -829,6 +855,8 @@ export type DossierBewakingData = {
   totalen: BewakingTotalen
   /** Geboekte uren op projectniveau (= som van de arbeid-besteed-uren). */
   geboekteUrenProject: number | null
+  /** Project-% gereed = prognose-gewogen rollup van de bewakingscodes; null als geen prognose. */
+  projectProgress: number | null
 }
 
 const toGetal = (v: unknown): number => {
@@ -866,6 +894,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
     },
     geboekteUrenProject: null,
+    projectProgress: null,
   }
 
   const supabase = createAdminClient() as any
@@ -912,12 +941,16 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const GEEN = '-' // code-sleutel voor "Kosten zonder bewaking"
     const regelMap = new Map<string, BewakingRegel>()
     const codeIndex = new Map<string, BewakingRegel>() // bewakingscode → regel (codes zijn uniek per project)
-    // % gereed wordt per code waarde-gewogen gemiddeld over de kostensoorten (Bouw7 kan per
-    // (code × kostensoort) een eigen % hebben). Waarde = prognose, anders begroting.
-    const progressSom = new Map<string, number>()       // Σ progress × waarde
-    const progressGewicht = new Map<string, number>()   // Σ waarde
-    const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder waarde)
+    // % gereed wordt PROGNOSE-gewogen gemiddeld over de kostensoorten (Bouw7 kan per
+    // (code × kostensoort) een eigen % hebben). Weggestreepte kostensoorten (prognose 0,
+    // bv. via "niet/anders begroot") tellen zo niet mee.
+    const progressSom = new Map<string, number>()       // Σ progress × prognose (per code)
+    const progressGewicht = new Map<string, number>()   // Σ prognose (per code)
+    const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder prognose)
     const progressSimpelN = new Map<string, number>()   // aantal kostensoorten met % (fallback)
+    // Projectbrede prognose-gewogen rollup (= % gereed voor het project, gelijk aan de codes).
+    let projectProgressSom = 0
+    let projectProgressGewicht = 0
 
     /** Bestaande regel ophalen of nieuwe aanmaken (gematcht op bewakingscode). */
     const vindOfMaak = (code: string, hoofdstukId: number | null, hoofdstuk: string | null, naam: string | null) => {
@@ -962,15 +995,18 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       else if (ct === 5) r.materiaal += kosten
       else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
 
-      // % gereed: accumuleer voor een waarde-gewogen gemiddelde over de kostensoorten.
+      // % gereed: prognose-gewogen gemiddelde over de kostensoorten (per code én projectbreed).
+      // Kostensoorten met prognose 0 (weggestreept) tellen niet mee in de weging.
       if (e.progress != null) {
         const prog = toGetal(e.progress)
-        const waarde = toGetal(e.prognosisAmount) > 0 ? toGetal(e.prognosisAmount) : budget
+        const waarde = toGetal(e.prognosisAmount)
         progressSimpelSom.set(key, (progressSimpelSom.get(key) ?? 0) + prog)
         progressSimpelN.set(key, (progressSimpelN.get(key) ?? 0) + 1)
         if (waarde > 0) {
           progressSom.set(key, (progressSom.get(key) ?? 0) + prog * waarde)
           progressGewicht.set(key, (progressGewicht.get(key) ?? 0) + waarde)
+          projectProgressSom += prog * waarde
+          projectProgressGewicht += waarde
         }
       }
     }
@@ -1034,8 +1070,8 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       r.verwachteKosten = verwachtPerCode.get(code) ?? 0
     }
 
-    // % gereed per code afronden: waarde-gewogen gemiddelde over de kostensoorten,
-    // met als fallback een ongewogen gemiddelde (codes zonder begroting/prognose).
+    // % gereed per code afronden: prognose-gewogen gemiddelde over de kostensoorten,
+    // met als fallback een ongewogen gemiddelde (codes zonder prognose).
     for (const [key, r] of regelMap) {
       const gewicht = progressGewicht.get(key) ?? 0
       if (gewicht > 0) {
@@ -1045,6 +1081,11 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         r.progress = n > 0 ? Math.round(((progressSimpelSom.get(key) ?? 0) / n) * 100) / 100 : null
       }
     }
+
+    // Project-% gereed = prognose-gewogen rollup over álle (code × kostensoort).
+    const projectProgress = projectProgressGewicht > 0
+      ? Math.round((projectProgressSom / projectProgressGewicht) * 100) / 100
+      : null
 
     // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de Bouw7-waarde
     // (zodat een net-ingevoerde standopname blijft staan tot Bouw7 het bevestigt).
@@ -1100,6 +1141,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       hoofdstukken,
       totalen,
       geboekteUrenProject: totalen.geboekteUren,
+      projectProgress,
     }
   } catch {
     return leeg
@@ -1900,6 +1942,26 @@ export async function setDossierToggle(
 
   await verwerkDossierTriggers(dossier_id).catch(() => {})
   return { ok: true }
+}
+
+/**
+ * Zet de "Intern"-toggle (sleutel 'intern') van een dossier aan/uit. Interne dossiers
+ * worden verborgen op de borden/lijsten. Zoekt de definitie via de stabiele sleutel,
+ * zodat de UI de definitie-UUID niet hoeft te kennen.
+ */
+export async function zetDossierIntern(
+  dossier_id: string,
+  aan: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data: def } = await supabase
+    .from('dossier_toggle_definities')
+    .select('id')
+    .eq('sleutel', 'intern')
+    .maybeSingle()
+  if (!def) return { ok: false, error: "De 'Intern'-toggle bestaat niet. Maak deze aan onder Instellingen → Dossier-toggles." }
+  return setDossierToggle(dossier_id, def.id as string, aan)
 }
 
 /* — Uren bewaking — */
