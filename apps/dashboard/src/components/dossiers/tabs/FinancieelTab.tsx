@@ -132,8 +132,8 @@ const BEWAKING_KOLOMMEN = [
   'Onderaanneming',
   'Materiaal',
   'Inkoop/Mat./Afval',
-  'Verwachte kosten',
   'Geboekte kosten',
+  'Nog te verwachten',
   '% gereed',
 ] as const
 
@@ -166,8 +166,8 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact>{fmt(r.onderaanneming)}</TD>
     <TD compact>{fmt(r.materiaal)}</TD>
     <TD compact>{fmt(r.inkoopMaterieelAfval)}</TD>
-    <TD compact>{fmt(r.verwachteKosten)}</TD>
     <TD compact accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
+    <TD compact kleur={r.prognose - r.geboekteKosten < 0 ? ROOD : undefined}>{fmt(r.prognose - r.geboekteKosten)}</TD>
     <TD compact>
       {bewerkbaar && r.code && r.code !== '-'
         ? <BewakingProgressCel dossierId={dossierId} bouw7Id={bouw7Id} code={r.code} initial={r.progress} />
@@ -246,8 +246,8 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.inkoopMaterieelAfval))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.verwachteKosten))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
+                  <TD compact vet kleur={sub(h.regels, (r) => r.prognose - r.geboekteKosten) < 0 ? ROOD : undefined}>{fmt(sub(h.regels, (r) => r.prognose - r.geboekteKosten))}</TD>
                   <TD compact>—</TD>
                 </tr>
               </Fragment>
@@ -265,8 +265,8 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               <TD compact vet>{fmt(t.onderaanneming)}</TD>
               <TD compact vet>{fmt(t.materiaal)}</TD>
               <TD compact vet>{fmt(t.inkoopMaterieelAfval)}</TD>
-              <TD compact vet>{fmt(t.verwachteKosten)}</TD>
               <TD compact vet accent={t.geboekteKosten > 0}>{fmt(t.geboekteKosten)}</TD>
+              <TD compact vet kleur={t.prognose - t.geboekteKosten < 0 ? ROOD : undefined}>{fmt(t.prognose - t.geboekteKosten)}</TD>
               <TD compact>—</TD>
             </tr>
           </tbody>
@@ -276,7 +276,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
         }}>
           Live uit Bouw7-projectbewaking. Geboekte uren/arbeidskosten = kostensoort Arbeid;
-          verwachte kosten = alle ingevoerde kostenregels (incl. arbeid); geboekte kosten = arbeid + ingekochte kosten mét inkoopfactuur.
+          geboekte kosten = arbeid + ingekochte kosten mét inkoopfactuur; nog te verwachten = Tot. prognose − geboekte kosten (rood = overschreden).
         </div>
       </CardBody>
     </Card>
@@ -532,7 +532,8 @@ async function ProjectVoortgangBlok({ dossierId }: { dossierId: string }) {
     initial = v == null ? null : (typeof v === 'string' ? parseFloat(v) : v)
   }
 
-  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={bouw7Id} initial={initial} />
+  // % gereed (project) is op het Financieel-tab alléén-lezen; wijzigen kan in Management.
+  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={bouw7Id} initial={initial} readOnly />
 }
 
 /* ── main component ──────────────────────────────────────────────────── */

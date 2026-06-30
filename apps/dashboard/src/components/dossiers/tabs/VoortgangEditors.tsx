@@ -114,8 +114,8 @@ export function BewakingProgressCel({
 /* ── Project-niveau — compacte kaartregel ────────────────────────────── */
 
 export function ProjectVoortgangEditor({
-  dossierId, bouw7Id, initial,
-}: { dossierId: string; bouw7Id: string | null; initial: number | null }) {
+  dossierId, bouw7Id, initial, readOnly = false,
+}: { dossierId: string; bouw7Id: string | null; initial: number | null; readOnly?: boolean }) {
   const [waarde, setWaarde] = useState<number | null>(initial)
   const [tekst, setTekst] = useState(initial != null ? String(initial) : '')
   const { bezig, opslaan } = useVoortgangOpslaan({ dossierId, bouw7Id, niveau: 'project' })
@@ -125,6 +125,27 @@ export function ProjectVoortgangEditor({
     if (waarde != null && Math.round(pct * 100) === Math.round(waarde * 100)) return
     const nieuw = await opslaan(pct)
     if (nieuw != null) { setWaarde(nieuw); setTekst(String(nieuw)) }
+  }
+
+  // Read-only weergave: % gereed wordt uitsluitend in Management gewijzigd.
+  if (readOnly) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        padding: '12px 16px', marginBottom: 16,
+        border: '1px solid var(--neutral-200, #e3e8ea)', borderRadius: 10, background: 'var(--neutral-50, #f8fafa)',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            % gereed (project)
+          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--neutral-500)' }}>Wijzigen kan via Management.</span>
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: 16, fontWeight: 700, color: 'var(--neutral-700)' }}>
+          {waarde != null ? `${waarde}%` : '—'}
+        </span>
+      </div>
+    )
   }
 
   return (
