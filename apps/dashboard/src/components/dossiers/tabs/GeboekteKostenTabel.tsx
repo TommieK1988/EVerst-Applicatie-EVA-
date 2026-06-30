@@ -9,6 +9,7 @@ import {
 import { fmtDatum } from './tab-ui'
 import {
   verplaatsGeboekteKost, hercodeerGeboekteKost, wisInkoopCorrectie,
+  hercodeerGeboekteKostenBulk, verplaatsGeboekteKostenBulk, wisInkoopCorrectiesBulk,
   type GeboekteKostenRegel, type ProjectBewakingscode,
 } from '@/lib/dossiers/actions'
 import { SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
@@ -51,6 +52,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const router = useRouter()
   const [pending, start] = useTransition()
   const [actief, setActief] = useState<GeboekteKostenRegel | null>(null)
+  const [sel, setSel] = useState<Set<number>>(new Set())
   const [zoek, setZoek] = useState('')
   const [sortKey, setSortKey] = useState<string>('datum')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -165,6 +167,18 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     })
   }
 
+  // Bulk-actie op de geselecteerde regels — leegt de selectie bij succes.
+  const doeBulk = (actie: () => Promise<{ ok: boolean; error?: string }>, succes: string) => {
+    start(async () => {
+      const res = await actie()
+      if (res.ok) { toast.success(succes); setSel(new Set()); router.refresh() }
+      else toast.error(res.error ?? 'Mislukt')
+    })
+  }
+
+  const toggleSel = (bronId: number) =>
+    setSel((prev) => { const n = new Set(prev); n.has(bronId) ? n.delete(bronId) : n.add(bronId); return n })
+
   const totaal = useMemo(() => rijen.reduce((s, r) => s + r.bedrag, 0), [rijen])
   const totaalAlles = useMemo(() => data.reduce((s, r) => s + r.bedrag, 0), [data])
   const totaalToegewezen = useMemo(() =>
@@ -211,11 +225,81 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
         <span style={{ fontSize: 12, color: 'var(--neutral-500)' }}>{rijen.length} regel{rijen.length === 1 ? '' : 's'}</span>
       </div>
 
+      {/* Bulk-balk: zichtbaar zodra er regels geselecteerd zijn */}
+      {sel.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', background: 'var(--brand-50, #eff6ff)', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--fg)' }}>{sel.size} geselecteerd</span>
+          <select
+            style={{ ...selectStyle, width: 'auto', padding: '6px 10px' }}
+            disabled={pending}
+            value=""
+            onChange={(e) => {
+              const code = e.target.value
+              if (!code) return
+              const naam = projectcodes.find((p) => p.code === code)?.naam ?? null
+              doeBulk(() => hercodeerGeboekteKostenBulk(dossierId, [...sel], code, naam), `${sel.size} regel(s) gehercodeerd`)
+            }}
+          >
+            <option value="">Hercodeer naar bewakingscode…</option>
+            {projectcodes.map((p) => (
+              <option key={p.code} value={p.code}>{p.code}{p.naam ? ` · ${p.naam}` : ''}</option>
+            ))}
+          </select>
+          <select
+            style={{ ...selectStyle, width: 'auto', padding: '6px 10px' }}
+            disabled={pending}
+            value=""
+            onChange={(e) => {
+              const v = e.target.value
+              if (!v) return
+              const doel = v.startsWith('order:') ? { orderId: Number(v.slice(6)) }
+                : v.startsWith('contract:') ? { contractId: Number(v.slice(9)) }
+                : {}
+              doeBulk(() => verplaatsGeboekteKostenBulk(dossierId, [...sel], doel), `${sel.size} regel(s) toegewezen`)
+            }}
+          >
+            <option value="">Toewijzen aan order / contract…</option>
+            <option value="none">— Niet toegewezen —</option>
+            {orders.length > 0 && (
+              <optgroup label="Inkooporders">
+                {orders.map((o) => (
+                  <option key={`o${o.orderId}`} value={`order:${o.orderId}`}>
+                    {[o.nummer, o.omschrijving, o.leverancier].filter(Boolean).join(' · ') || `Order ${o.orderId}`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {contracten.length > 0 && (
+              <optgroup label="Onderaannemerscontracten">
+                {contracten.map((c) => (
+                  <option key={`c${c.contractId}`} value={`contract:${c.contractId}`}>
+                    {[c.onderaannemer, c.omschrijving].filter(Boolean).join(' · ') || `Contract ${c.contractId}`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <Button variant="ghost" disabled={pending} onClick={() => doeBulk(() => wisInkoopCorrectiesBulk(dossierId, [...sel]), 'Correcties ongedaan gemaakt')}>
+            Correctie wissen
+          </Button>
+          <Button variant="secondary" disabled={pending} onClick={() => setSel(new Set())}>Deselecteren</Button>
+        </div>
+      )}
+
       {/* Tabel */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
+              <th style={{ ...thStyle(), width: 36, cursor: 'default', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  aria-label="Alles selecteren"
+                  checked={rijen.length > 0 && rijen.every((r) => sel.has(r.bronId))}
+                  ref={(el) => { if (el) el.indeterminate = sel.size > 0 && !rijen.every((r) => sel.has(r.bronId)) }}
+                  onChange={(e) => setSel(e.target.checked ? new Set(rijen.map((r) => r.bronId)) : new Set())}
+                />
+              </th>
               {kolommen.map((k) => (
                 <th key={k.key} style={thStyle(k.right)} onClick={() => sorteer(k.key)}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexDirection: k.right ? 'row-reverse' : 'row' }}>
@@ -234,6 +318,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
               if (isSub(item)) {
                 return (
                   <tr key={`sub-${i}`}>
+                    <td style={subStyle()} />
                     <td colSpan={kolommen.length - 1} style={subStyle()}>
                       <span style={{ fontWeight: 600 }}>↳ Subtotaal</span>
                       {item.label
@@ -247,7 +332,10 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
               }
               const r = item
               return (
-                <tr key={r.bronId} style={{ background: r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
+                <tr key={r.bronId} style={{ background: sel.has(r.bronId) ? 'color-mix(in srgb, var(--brand-50, #eff6ff) 70%, transparent)' : r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
+                  <td style={{ ...tdStyle(), textAlign: 'center' }}>
+                    <input type="checkbox" aria-label="Selecteer regel" checked={sel.has(r.bronId)} onChange={() => toggleSel(r.bronId)} />
+                  </td>
                   {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
                   <td style={{ ...tdStyle(true) }}>
                     <button
@@ -262,16 +350,19 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
               )
             })}
             <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={tdStyle()} />
               <td style={{ ...tdStyle(), fontWeight: 700, color: 'var(--neutral-900)' }} colSpan={kolommen.length - 1}>Totaal{zoek ? ' (gefilterd)' : ''}</td>
               <td style={{ ...tdStyle(true), fontWeight: 700, color: 'var(--neutral-900)' }}>{euro(totaal)}</td>
               <td style={tdStyle(true)} />
             </tr>
             <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={tdStyle()} />
               <td style={{ ...tdStyle(), fontSize: 11, color: 'var(--neutral-500)' }} colSpan={kolommen.length - 1}>↳ Gekoppeld aan order / contract</td>
               <td style={{ ...tdStyle(true), fontSize: 11, color: 'var(--neutral-500)' }}>{euro(totaalToegewezen)}</td>
               <td style={tdStyle(true)} />
             </tr>
             <tr style={{ background: 'var(--neutral-50)' }}>
+              <td style={tdStyle()} />
               <td style={{ ...tdStyle(), fontSize: 11, color: 'var(--neutral-500)' }} colSpan={kolommen.length - 1}>↳ Niet gekoppeld</td>
               <td style={{ ...tdStyle(true), fontSize: 11, color: totaalNietToegewezen > 0 ? 'var(--neutral-700)' : 'var(--neutral-400)' }}>{euro(totaalNietToegewezen)}</td>
               <td style={tdStyle(true)} />

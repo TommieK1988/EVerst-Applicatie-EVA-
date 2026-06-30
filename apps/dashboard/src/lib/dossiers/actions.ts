@@ -1447,6 +1447,76 @@ export async function wisInkoopCorrectie(dossierId: string, bronId: number): Pro
   return { ok: true }
 }
 
+/* — Bulk-correcties (multiselect op het Inkoop-tab) — */
+
+/** Bulk-upsert helper: schrijf dezelfde veld-set naar inkoop_correcties voor meerdere bronnen. */
+async function upsertInkoopCorrectiesBulk(
+  dossierId: string,
+  bronIds: number[],
+  patch: Partial<Pick<InkoopCorrectie, 'bewakingscode_override' | 'bewakingscode_naam_override' | 'toegewezen_order_id' | 'toegewezen_contract_id'>>,
+): Promise<InkoopCorrectieResult> {
+  const ids = [...new Set(bronIds.filter((n) => Number.isFinite(n)))]
+  if (!dossierId || ids.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+  const supabase = createAdminClient() as any
+  const now = new Date().toISOString()
+  const rows = ids.map((id) => ({ dossier_id: dossierId, bron_type: 'purchase_invoice', bron_id: id, updated_at: now, ...patch }))
+  const { error } = await supabase
+    .from('inkoop_correcties')
+    .upsert(rows, { onConflict: 'dossier_id,bron_type,bron_id' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/opdrachten/${dossierId}/inkoop`)
+  revalidatePath(`/servicedesk/${dossierId}/inkoop`)
+  return { ok: true }
+}
+
+/** Bulk: zet meerdere geboekte kosten op dezelfde (bestaande) bewakingscode. */
+export async function hercodeerGeboekteKostenBulk(
+  dossierId: string,
+  bronIds: number[],
+  code: string,
+  naam: string | null,
+): Promise<InkoopCorrectieResult> {
+  const codeClean = (code ?? '').trim()
+  if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
+  const data = await getDossierInkoop(dossierId)
+  if (!data.projectcodes.some((c) => c.code === codeClean)) {
+    return { ok: false, error: 'Bewakingscode bestaat niet op dit project.' }
+  }
+  return upsertInkoopCorrectiesBulk(dossierId, bronIds, {
+    bewakingscode_override: codeClean,
+    bewakingscode_naam_override: naam,
+  })
+}
+
+/** Bulk: wijs meerdere geboekte kosten toe aan dezelfde inkooporder of OA-contract (exclusief). */
+export async function verplaatsGeboekteKostenBulk(
+  dossierId: string,
+  bronIds: number[],
+  doel: { orderId?: number | null; contractId?: number | null },
+): Promise<InkoopCorrectieResult> {
+  return upsertInkoopCorrectiesBulk(dossierId, bronIds, {
+    toegewezen_order_id: doel.orderId ?? null,
+    toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
+  })
+}
+
+/** Bulk: verwijder de EVA-correcties van meerdere geboekte kosten. */
+export async function wisInkoopCorrectiesBulk(dossierId: string, bronIds: number[]): Promise<InkoopCorrectieResult> {
+  const ids = [...new Set(bronIds.filter((n) => Number.isFinite(n)))]
+  if (!dossierId || ids.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('inkoop_correcties')
+    .delete()
+    .eq('dossier_id', dossierId)
+    .eq('bron_type', 'purchase_invoice')
+    .in('bron_id', ids)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/opdrachten/${dossierId}/inkoop`)
+  revalidatePath(`/servicedesk/${dossierId}/inkoop`)
+  return { ok: true }
+}
+
 /* — Uren — */
 
 export type UrenRegel = {
