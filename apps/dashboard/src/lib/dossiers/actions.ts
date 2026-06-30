@@ -812,6 +812,7 @@ export type BewakingTotalen = {
   prognose: number
   prognoseUren: number
   geboekteUren: number
+  arbeidPrognose: number
   arbeidskosten: number
   onderaanneming: number
   materiaal: number
@@ -861,7 +862,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
   const leeg: DossierBewakingData = {
     beschikbaar: false, bouw7Id: null, hoofdstukken: [],
     totalen: {
-      begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidskosten: 0,
+      begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidPrognose: 0, arbeidskosten: 0,
       onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
     },
     geboekteUrenProject: null,
@@ -1062,6 +1063,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       prognose: som((r) => r.prognose),
       prognoseUren: som((r) => r.prognoseUren),
       geboekteUren: som((r) => r.geboekteUren),
+      arbeidPrognose: som((r) => r.arbeidPrognose),
       arbeidskosten: som((r) => r.arbeidskosten),
       onderaanneming: som((r) => r.onderaanneming),
       materiaal: som((r) => r.materiaal),

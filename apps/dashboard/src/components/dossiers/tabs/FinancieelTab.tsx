@@ -127,6 +127,7 @@ const BEWAKING_KOLOMMEN = [
   'Tot. prognose',
   'Prognose-uren',
   'Geboekte uren',
+  'Prognose arbeid',
   'Arbeidskosten',
   'Onderaanneming',
   'Materiaal',
@@ -160,6 +161,7 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact>{fmt(r.prognose)}</TD>
     <TD compact>{fmtUren(r.prognoseUren)}</TD>
     <TD compact kleur={urenRood(r.geboekteUren, r.prognoseUren) ? ROOD : undefined}>{fmtUren(r.geboekteUren)}</TD>
+    <TD compact>{fmt(r.arbeidPrognose)}</TD>
     <TD compact>{fmt(r.arbeidskosten)}</TD>
     <TD compact>{fmt(r.onderaanneming)}</TD>
     <TD compact>{fmt(r.materiaal)}</TD>
@@ -239,6 +241,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
                   <TD compact vet>{fmtUren(sub(h.regels, (r) => r.prognoseUren), true)}</TD>
                   <TD compact vet kleur={urenRood(sub(h.regels, (r) => r.geboekteUren), sub(h.regels, (r) => r.prognoseUren)) ? ROOD : undefined}>{fmtUren(sub(h.regels, (r) => r.geboekteUren), true)}</TD>
+                  <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidPrognose))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
@@ -257,6 +260,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               <TD compact vet>{fmt(t.prognose, true)}</TD>
               <TD compact vet>{fmtUren(t.prognoseUren, true)}</TD>
               <TD compact vet kleur={urenRood(t.geboekteUren, t.prognoseUren) ? ROOD : undefined}>{fmtUren(t.geboekteUren, true)}</TD>
+              <TD compact vet>{fmt(t.arbeidPrognose)}</TD>
               <TD compact vet>{fmt(t.arbeidskosten)}</TD>
               <TD compact vet>{fmt(t.onderaanneming)}</TD>
               <TD compact vet>{fmt(t.materiaal)}</TD>
