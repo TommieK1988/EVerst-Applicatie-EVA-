@@ -759,10 +759,12 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       // een bewust verwijderde regel mag niet terugkeren.
       const contentKey = (code: string, type: string, oms: string, aantal: number, prijs: number, eenheid: string) =>
         [code, type, oms, aantal, prijs, eenheid].join('|')
-      const bestaandeLineIds = new Set<number>()
+      // Bestaande componenten per Bouw7-line-id (voor "bijwerken of overslaan"); voor legacy-
+      // componenten zónder line-id een content-sleutel als fallback-dedup van nieuwe regels.
+      const compPerLineId = new Map<number, WerkbegrotingComponent>()
       const bestaandeContentKeys = new Set<string>()
       for (const c of componenten) {
-        if (c.bouw7_line_id != null) bestaandeLineIds.add(c.bouw7_line_id)
+        if (c.bouw7_line_id != null) { compPerLineId.set(c.bouw7_line_id, c); continue }
         const r = regels.find(x => x.id === c.werkbegroting_regel_id)
         bestaandeContentKeys.add(contentKey(
           bareCode(r?.kostengroep), c.type, c.omschrijving ?? '',
@@ -770,9 +772,11 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         ))
       }
       let overgeslagen = 0
+      let bijgewerkt = 0
 
       const nieuweRegels: WerkbegrotingRegel[] = []
       const nieuweComps: WerkbegrotingComponent[] = []
+      const updates: { id: string; patch: Partial<WerkbegrotingComponent> }[] = []
       let volg = regels.length + 1
       const ensureRegel = (code: string): string => {
         const bestaand = regelVoorCode.get(code)
@@ -788,20 +792,43 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
       // 1) Placeholder-regel per Bouw7-code die nog niet bestaat.
       for (const c of res.codes) ensureRegel(c.code)
-      // 2) Bestelregels als componenten onder de juiste code — reeds overgehaalde overslaan.
+      // 2) Bestelregels onder de juiste code: nieuw toevoegen, GEWIJZIGDE bijwerken, ongewijzigde overslaan.
       const regelMetComponent = new Set<string>()
       for (const b of res.bestelregels) {
-        const alBekend =
-          bestaandeLineIds.has(b.bouw7LineId) ||
-          bestaandeContentKeys.has(contentKey(b.code, b.type, b.omschrijving ?? '', b.aantal, b.prijs, b.eenheid || 'st'))
-        if (alBekend) { overgeslagen++; continue }
-
+        const nieuweEenheid = (b.eenheid || 'st') as WerkbegrotingComponent['eenheid']
+        const bestaand = compPerLineId.get(b.bouw7LineId)
+        if (bestaand) {
+          // Bewust verwijderde regel mag niet terugkeren.
+          if (bestaand.is_verwijderd) { overgeslagen++; continue }
+          const huidigeCode = bareCode(regels.find(x => x.id === bestaand.werkbegroting_regel_id)?.kostengroep)
+          const gewijzigd =
+            Math.abs((bestaand.norm_hoeveelheid ?? 0) - b.aantal) > 0.0001 ||
+            Math.abs((bestaand.tarief ?? 0) - b.prijs) > 0.0001 ||
+            (bestaand.eenheid ?? 'st') !== (b.eenheid || 'st') ||
+            (bestaand.omschrijving ?? '') !== (b.omschrijving ?? '') ||
+            bestaand.type !== b.type ||
+            huidigeCode !== b.code
+          if (!gewijzigd) { overgeslagen++; continue }
+          const patch: Partial<WerkbegrotingComponent> = {
+            norm_hoeveelheid: b.aantal, tarief: b.prijs, eenheid: nieuweEenheid,
+            type: b.type, omschrijving: b.omschrijving || undefined,
+          }
+          // Verplaatst naar een andere bewakingscode → koppel aan (zo nodig nieuwe) regel.
+          if (huidigeCode !== b.code) patch.werkbegroting_regel_id = ensureRegel(b.code)
+          updates.push({ id: bestaand.id, patch })
+          bijgewerkt++
+          continue
+        }
+        // Geen line-id-match → nieuw (legacy content-match wordt overgeslagen).
+        if (bestaandeContentKeys.has(contentKey(b.code, b.type, b.omschrijving ?? '', b.aantal, b.prijs, b.eenheid || 'st'))) {
+          overgeslagen++; continue
+        }
         const regelId = ensureRegel(b.code)
         nieuweComps.push({
           id: nieuweId(), werkbegroting_regel_id: regelId, source_component_id: null,
           bouw7_line_id: b.bouw7LineId,
           type: b.type, norm_hoeveelheid: b.aantal, tarief: b.prijs,
-          eenheid: (b.eenheid || 'st') as WerkbegrotingComponent['eenheid'],
+          eenheid: nieuweEenheid,
           omschrijving: b.omschrijving || undefined,
         })
         regelMetComponent.add(regelId)
@@ -821,14 +848,18 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       nieuweComps.forEach(slaWerkbegrotingComponentOp)
       setRegels(prev => [...prev, ...nieuweRegels])
       setComponenten(prev => [...prev, ...nieuweComps])
+      // Gewijzigde bestelregels bijwerken — ná het opslaan van eventueel nieuwe regels,
+      // zodat een verplaatste component naar een bestaande/persisted regel verwijst.
+      updates.forEach(u => onComponentWijzig(u.id, u.patch))
       onWijziging()
-      const delen = [`${nieuweRegels.length} bewakingscode(s), ${nieuweComps.length} bestelregel(s)`]
-      if (overgeslagen) delen.push(`${overgeslagen} bestonden al (overgeslagen)`)
+      const delen = [`${nieuweRegels.length} bewakingscode(s), ${nieuweComps.length} nieuwe bestelregel(s)`]
+      if (bijgewerkt) delen.push(`${bijgewerkt} bijgewerkt`)
+      if (overgeslagen) delen.push(`${overgeslagen} ongewijzigd (overgeslagen)`)
       toast.success(`Geïmporteerd: ${delen.join(' — ')}.`)
     } finally {
       setImportBezig(false)
     }
-  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, onWijziging])
+  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, onWijziging, onComponentWijzig])
 
   // Soft-delete component
   const verwijderComp = useCallback((compId: string) => {
