@@ -64,7 +64,7 @@ export async function getManagementProjecten(): Promise<ManagementProject[]> {
   }
 
   // Geen handmatige project-override meer: `pct_gereed` = de door de sync berekende
-  // bewakingscode-rollup (zie sync-management.ts berekenProjectRollup).
+  // bewakingscode-rollup (zie sync-management.ts berekenProjectControl).
   return projecten
 }
 

@@ -189,6 +189,7 @@ const gegevensSchema = z.object({
   relatie_id:         z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
   kleur:              z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().or(z.literal('')).transform(v => v || null),
   ploeg_id:           z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
+  standaard_uursoort_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
 })
 
 export async function updateMedewerkerGegevens(

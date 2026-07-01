@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import type {
   Medewerker, Bedrijfsgegevens, Relatie,
   MedewerkerFunctie, MedewerkerAfdeling, Ploeg,
-  CaoDocument, CaoLoonschaal,
+  CaoDocument, CaoLoonschaal, PlanningUursoort,
 } from '@everts/database/platform-types'
 import { updateMedewerkerGegevens } from '@/app/(platform)/medewerkers/[id]/actions'
 import { Button, Input } from '@/components/ui'
@@ -36,6 +36,7 @@ type FormState = {
   relatie_id: string
   kleur: string
   ploeg_id: string
+  standaard_uursoort_id: string
 }
 
 function toForm(m: Medewerker): FormState {
@@ -65,6 +66,7 @@ function toForm(m: Medewerker): FormState {
     relatie_id:          m.relatie_id ?? '',
     kleur:               m.kleur ?? '',
     ploeg_id:            m.ploeg_id ?? '',
+    standaard_uursoort_id: m.standaard_uursoort_id ?? '',
   }
 }
 
@@ -237,6 +239,7 @@ export default function MedewerkerGegevensForm({
   functies,
   afdelingen,
   ploegen,
+  uursoorten,
   caoDocumenten,
   caoSchalen,
 }: {
@@ -246,6 +249,7 @@ export default function MedewerkerGegevensForm({
   functies: MedewerkerFunctie[]
   afdelingen: MedewerkerAfdeling[]
   ploegen: Pick<Ploeg, 'id' | 'naam'>[]
+  uursoorten: Pick<PlanningUursoort, 'id' | 'naam'>[]
   caoDocumenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   caoSchalen: CaoLoonschaal[]
 }) {
@@ -281,6 +285,7 @@ export default function MedewerkerGegevensForm({
         relatie_id:          state.relatie_id || null,
         kleur:               state.kleur || null,
         ploeg_id:            state.ploeg_id || null,
+        standaard_uursoort_id: state.standaard_uursoort_id || null,
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Gegevens opgeslagen')
@@ -331,6 +336,7 @@ export default function MedewerkerGegevensForm({
           </div>
           <Field label="Functie" value={medewerker.functie} />
           <Field label="Afdeling" value={medewerker.afdeling} />
+          <Field label="Uursoort (werkvoorraad)" value={uursoorten.find(u => u.id === medewerker.standaard_uursoort_id)?.naam} />
           <Field label="In dienst vanaf" value={medewerker.in_dienst_vanaf} />
           <Field label="Uit dienst per" value={medewerker.uit_dienst_per} />
           <Field label="Type" value={medewerker.extern ? 'Extern' : 'Intern'} />
@@ -444,6 +450,16 @@ export default function MedewerkerGegevensForm({
                 <option value="">— Geen ploeg —</option>
                 {ploegen.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
               </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Uursoort (werkvoorraad)</label>
+              <select className="eva-input" style={{ width: '100%' }} value={state.standaard_uursoort_id} onChange={e => set('standaard_uursoort_id', e.target.value)}>
+                <option value="">— Geen —</option>
+                {uursoorten.map(u => <option key={u.id} value={u.id}>{u.naam}</option>)}
+              </select>
+              <p style={{ margin: '4px 0 0', fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
+                Uitvoerende discipline — bepaalt onder welke groep de capaciteit valt in Management → Werkvoorraad.
+              </p>
             </div>
             <div>
               <label style={labelStyle}>In dienst vanaf</label>

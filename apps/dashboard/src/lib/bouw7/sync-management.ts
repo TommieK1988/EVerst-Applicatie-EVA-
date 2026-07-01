@@ -76,10 +76,11 @@ type DossierKoppeling = {
 function mapProject(
   p: Bouw7Project,
   fin: Bouw7ProjectFinancial | undefined,
-  progress: number | null,
+  control: ProjectControlData | null,
   dossier: DossierKoppeling,
   nu: string,
 ): ManagementProjectRow {
+  const progress = control?.progress ?? null
   const projectnummer = p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? String(p.id)
 
   // ── Verkoop / omzet ──
@@ -102,7 +103,7 @@ function mapProject(
   // ── Afgeleide percentages ──
   // Lopende "% marge" = begrote marge o.b.v. opdracht (excl. BTW) en prognose-kosten.
   const pctMarge = totaleOpdracht != null ? pct(totaleOpdracht - (kostenPrognose ?? 0), totaleOpdracht) : null
-  // % gereed = zélf berekende bewakingscode-rollup (berekenProjectRollup); val terug op kostenratio (geboekte/prognose).
+  // % gereed = zélf berekende bewakingscode-rollup (berekenProjectControl); val terug op kostenratio (geboekte/prognose).
   const pctGereed = progress != null
     ? progress
     : (geboekteKosten != null ? pct(geboekteKosten, kostenPrognose ?? 0) : null)
@@ -147,6 +148,9 @@ function mapProject(
     dossier_sectie:     dossier.sectie,
     kosten_split:       kostenSplit(fin?.costs),
 
+    arbeid_prognose_uren: control?.arbeidPrognoseUren ?? null,
+    arbeid_geboekte_uren: control?.arbeidGeboekteUren ?? null,
+
     bouw7_laatst_sync:  nu,
     bouw7_sync_status:  'synced',
     bouw7_sync_fout:    null,
@@ -154,16 +158,36 @@ function mapProject(
   }
 }
 
+type ProjectControlData = {
+  /** Prognose-gewogen % gereed (rollup over alle code×kostensoort). */
+  progress: number | null
+  /** Prognose arbeidsuren (kostensoort 1, Σ over bewakingscodes). Null als geen arbeid-data. */
+  arbeidPrognoseUren: number | null
+  /** Geboekte arbeidsuren (kostensoort 1, Σ over bewakingscodes). Null als geen arbeid-data. */
+  arbeidGeboekteUren: number | null
+}
+
 /**
- * Prognose-gewogen rollup van de bewakingscode-standopnames voor één project
- * (Σ progress×prognose / Σ prognose over alle (code × kostensoort), uit de project-control chapters).
- * Zelfde berekening als getDossierBewaking.projectProgress. Null als er geen prognose is.
+ * Haalt de project-control chapters op (alle 6 kostensoorten) en leidt in één keer af:
+ *  - % gereed = prognose-gewogen rollup van de bewakingscode-standopnames
+ *    (Σ progress×prognose / Σ prognose over alle (code × kostensoort)). Zelfde berekening
+ *    als getDossierBewaking.projectProgress. Null als er geen prognose is.
+ *  - arbeidsuren (prognose + geboekt) = Σ van hourInfo.prognosisHours / .costHours over de
+ *    bewakingscodes (én de uncoded chapter) op kostensoort 1 (Arbeid). Zie getDossierBewaking.
  */
-async function berekenProjectRollup(
+async function berekenProjectControl(
   bouw7: Awaited<ReturnType<typeof getBouw7Client>>,
   bouw7Id: string,
-): Promise<number | null> {
-  type Chapters = { items?: { securityCodes?: { progress?: number | null; prognosisAmount?: number | string | null }[] }[] }
+): Promise<ProjectControlData> {
+  type HourInfo = { prognosisHours?: number | string | null; costHours?: number | string | null }
+  type Entry = {
+    progress?: number | string | null
+    prognosisAmount?: number | string | null
+    hourInfo?: HourInfo | null
+    name?: string | null
+    id?: number | null
+  }
+  type Chapters = { items?: { chapterInfo?: Entry | null; securityCodes?: Entry[] }[] }
   const resps = await Promise.all(
     [1, 2, 3, 4, 5, 6].map(ct =>
       bouw7
@@ -171,6 +195,8 @@ async function berekenProjectRollup(
         .catch(() => null),
     ),
   )
+
+  // % gereed — prognose-gewogen over álle kostensoorten (securityCodes).
   let som = 0
   let gew = 0
   for (const resp of resps) {
@@ -183,7 +209,31 @@ async function berekenProjectRollup(
       }
     }
   }
-  return gew > 0 ? Math.round((som / gew) * 100) / 100 : null
+
+  // Arbeidsuren — alléén kostensoort 1 (resps[0]), incl. uncoded chapter.
+  let pUren = 0
+  let gUren = 0
+  let heeftUren = false
+  const arbeid = resps[0]
+  if (arbeid) {
+    const tel = (e?: Entry | null) => {
+      if (!e?.hourInfo) return
+      pUren += toNum(e.hourInfo.prognosisHours)
+      gUren += toNum(e.hourInfo.costHours)
+      heeftUren = true
+    }
+    for (const item of arbeid.items ?? []) {
+      const ci = item.chapterInfo
+      if (ci && (ci.name === 'uncoded_costs' || ci.id === 0)) tel(ci)
+      for (const sc of item.securityCodes ?? []) tel(sc)
+    }
+  }
+
+  return {
+    progress: gew > 0 ? Math.round((som / gew) * 100) / 100 : null,
+    arbeidPrognoseUren: heeftUren ? pUren : null,
+    arbeidGeboekteUren: heeftUren ? gUren : null,
+  }
 }
 
 /**
@@ -248,14 +298,14 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
     //    NB: NIET /wip/report — dat geeft 0 bij projecten in "Handmatig"-modus, ook al staan de standopnames
     //    per code wél in Bouw7. En NIET total/cost-types.totals.progress (= SOM per kostensoort). Zelfde
     //    berekening als getDossierBewaking.projectProgress op het Financieel-tab. 6 calls/project (batched).
-    const progressMap = new Map<string, number>()
+    const controlMap = new Map<string, ProjectControlData>()
     const ROLLUP_BATCH = 6
     for (let i = 0; i < targetIds.length; i += ROLLUP_BATCH) {
       const batch = targetIds.slice(i, i + ROLLUP_BATCH)
-      const results = await Promise.allSettled(batch.map(id => berekenProjectRollup(bouw7, id)))
+      const results = await Promise.allSettled(batch.map(id => berekenProjectControl(bouw7, id)))
       for (let j = 0; j < batch.length; j++) {
         const r = results[j]
-        if (r.status === 'fulfilled' && r.value != null) progressMap.set(batch[j], r.value)
+        if (r.status === 'fulfilled' && r.value != null) controlMap.set(batch[j], r.value)
       }
     }
 
@@ -264,8 +314,8 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       const p = projectMap.get(d.bouw7_id)
       if (!p) return []  // geen Bouw7-project → niets om te tonen
       const sectie: 'opdrachten' | 'servicedesk' = d.servicedesk_substatus ? 'servicedesk' : 'opdrachten'
-      const progress = progressMap.has(d.bouw7_id) ? progressMap.get(d.bouw7_id)! : null
-      return [mapProject(p, financialMap.get(d.bouw7_id), progress, { id: d.id, sectie }, nu)]
+      const control = controlMap.get(d.bouw7_id) ?? null
+      return [mapProject(p, financialMap.get(d.bouw7_id), control, { id: d.id, sectie }, nu)]
     })
 
     for (const row of rows) {

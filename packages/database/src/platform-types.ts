@@ -605,6 +605,8 @@ export type Medewerker = {
   cao_trede: string | null
   kleur: string | null
   ploeg_id: string | null
+  /** Uitvoerende discipline (uursoort) — bepaalt de capaciteitsgroep in Werkvoorraad. */
+  standaard_uursoort_id: string | null
   // Persoonlijke accountinstellingen
   notificatie_voorkeuren: NotificatieVoorkeuren
   voorkeuren: GebruikerVoorkeuren

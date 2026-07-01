@@ -37,6 +37,9 @@ export type ManagementProject = {
   dossier_id: string | null
   dossier_sectie: string | null
   bouw7_laatst_sync: string | null
+  /** Arbeidsuren (Bouw7 project-control kostensoort 1) — voor de Werkvoorraad-tab. */
+  arbeid_prognose_uren?: number | null
+  arbeid_geboekte_uren?: number | null
   /** OHW-correctie (handmatig per dossier): omzet/resultaat dat aan het vórige
    *  boekjaar toebehoort. Wordt afgetrokken van de Gerealiseerd-cijfers. */
   ohw_omzet?: number | null
