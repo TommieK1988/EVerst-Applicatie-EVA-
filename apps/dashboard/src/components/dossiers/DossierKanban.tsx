@@ -6,7 +6,7 @@ import { Button, Input, EmptyState } from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
 import { NieuweAanvraagModal } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
-import { updateDossierSubstatus, zetDossierIntern } from '@/lib/dossiers/actions'
+import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { getDossierSubstatus, isBouw7Substatus } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
@@ -130,20 +130,6 @@ export function DossierKanban<K extends string>({
     }
   }
 
-  // Markeer een dossier als "Intern": optimistisch van het bord halen, dan terugschrijven.
-  async function markeerIntern(id: string) {
-    const vorige = dossiers
-    setDossiers(prev => prev.filter(d => d.id !== id))
-    const r = await zetDossierIntern(id, true)
-    if (!r.ok) {
-      toast.error(r.error)
-      setDossiers(vorige)
-      return
-    }
-    toast.success('Dossier naar Intern verplaatst')
-    router.refresh()
-  }
-
   return (
     <>
       {kanNieuwAanmaken && (
@@ -255,7 +241,6 @@ export function DossierKanban<K extends string>({
                         dossier={d}
                         sectie={sectie}
                         onClick={() => { if (draggingId) return; router.push(`/${routeBase}/${d.id}/informatie`) }}
-                        onIntern={() => markeerIntern(d.id)}
                       />
                     </div>
                   ))}
