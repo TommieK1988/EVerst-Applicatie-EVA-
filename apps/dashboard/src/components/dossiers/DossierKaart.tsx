@@ -1,5 +1,6 @@
 'use client'
 import React from 'react'
+import { EyeOff } from 'lucide-react'
 import type { DossierRij, DossierSectie } from './types'
 import { Badge } from '@/components/ui'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
@@ -23,22 +24,16 @@ function opslagKleur(pct: number): string {
   return 'var(--error-600, #d9534f)'
 }
 
-// Prioriteit-strip kleur op basis van urgentie (toekomstig veld) of datum
-function isSpoed(dossier: DossierRij): boolean {
-  if (!dossier.created_at) return false
-  const dagOud = (Date.now() - new Date(dossier.created_at).getTime()) / (1000 * 60 * 60 * 24)
-  return dagOud > 14 // ouder dan 2 weken = aandacht nodig
-}
-
 export function DossierKaart({
-  dossier, onClick, sectie,
+  dossier, onClick, sectie, onIntern,
 }: {
   dossier: DossierRij
   onClick?: () => void
   sectie?: DossierSectie
+  /** Markeer dit dossier als "Intern" (haalt het van het bord). */
+  onIntern?: () => void
 }) {
   const [hovered, setHovered] = React.useState(false)
-  const spoed = isSpoed(dossier)
 
   // Voor aanvraag/offerte: toon calculator; anders: projectleider
   const toonCalculator = sectie === 'aanvraag' || sectie === 'offerte'
@@ -93,9 +88,26 @@ export function DossierKaart({
       {/* 3px linker accent-strip */}
       <span style={{
         position: 'absolute', left: 0, top: 8, bottom: 8, width: 3,
-        background: spoed ? 'var(--error-500)' : persoonsKleur,
+        background: persoonsKleur,
         borderRadius: '0 2px 2px 0',
       }} />
+
+      {/* Hover-actie: dossier naar Intern verplaatsen (van het bord halen) */}
+      {onIntern && hovered && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onIntern() }}
+          title="Naar Intern verplaatsen"
+          style={{
+            position: 'absolute', top: 6, right: 6, zIndex: 2,
+            display: 'grid', placeItems: 'center', width: 22, height: 22,
+            borderRadius: 6, border: '1px solid var(--border)',
+            background: 'var(--neutral-0)', color: 'var(--neutral-500)',
+            cursor: 'pointer', boxShadow: '0 1px 3px rgba(16,24,40,0.12)',
+          }}
+        >
+          <EyeOff size={13} />
+        </button>
+      )}
 
       {/* Dossiernummer + Bouw7-link + bedrag */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -170,7 +182,7 @@ export function DossierKaart({
         </div>
       )}
 
-      {/* Footer: persoons-badge + datum + spoed badge */}
+      {/* Footer: persoons-badge + datum */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
         {persoonsNaam ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -201,7 +213,6 @@ export function DossierKaart({
               <Badge tone="warning" size="sm">Begroting</Badge>
             </span>
           )}
-          {spoed && <Badge tone="error" size="sm">Aandacht</Badge>}
           <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
             {formatDatum(kaartDatum)}
           </span>

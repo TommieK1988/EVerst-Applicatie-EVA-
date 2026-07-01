@@ -3,6 +3,7 @@ import React from 'react'
 import { DossierKanban } from './DossierKanban'
 import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
+import { InternDossiersKnop } from './InternDossiersKnop'
 import { IconGrid, IconList } from '@/components/eva/Icons'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -92,7 +93,14 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     [dossiers, geselecteerdeLeiders, sectie],
   )
 
+  // Interne dossiers (Intern-toggle aan) worden verborgen op het bord/lijst en
+  // alleen via de Intern-popup getoond.
+  const interneDossiers  = React.useMemo(() => gefilterdeDossiers.filter(d => d.intern),  [gefilterdeDossiers])
+  const zichtbareDossiers = React.useMemo(() => gefilterdeDossiers.filter(d => !d.intern), [gefilterdeDossiers])
+
   const toggle = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <InternDossiersKnop dossiers={interneDossiers} sectie={sectie} />
     <div style={{ display: 'flex', gap: 2, background: 'var(--neutral-100)', borderRadius: 6, padding: 2 }}>
       <button
         onClick={() => switchView('kanban')}
@@ -122,6 +130,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       >
         <IconList size={14} />
       </button>
+    </div>
     </div>
   )
 
@@ -193,7 +202,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         <DossierLijst
           sectie={sectie}
           statussen={statussen as StatusDef<DossierSubstatus>[]}
-          dossiers={gefilterdeDossiers}
+          dossiers={zichtbareDossiers}
           layouts={layouts}
           user_id={user_id}
           kanNieuwAanmaken={kanNieuwAanmaken}
@@ -211,7 +220,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       <DossierKanban
         sectie={sectie}
         statussen={statussen}
-        dossiers={gefilterdeDossiers}
+        dossiers={zichtbareDossiers}
         kanNieuwAanmaken={kanNieuwAanmaken}
         categorieen={categorieen}
         extraActies={extraActies}

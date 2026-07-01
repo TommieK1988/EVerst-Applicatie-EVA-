@@ -33,6 +33,8 @@ export type DossierRij = Dossier & {
   /** Bewaking-vlaggen (tijdens Bouw7-sync berekend; nog niet in de gegenereerde Dossier-types). */
   bouw7_bestelregels_afwijking?: boolean | null
   bouw7_uren_overschrijding?:    boolean | null
+  /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
+  intern: boolean
 }
 
 /** Geeft de actieve substatus terug voor een dossier, ongeacht de fase. */
