@@ -1,7 +1,6 @@
 import { Fragment, Suspense } from 'react'
 import { createAdminClient } from '@everts/database/server'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
-import { getVoortgang } from '@/lib/dossiers/voortgang'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 import { InkoopTab } from './InkoopTab'
 import { VerkoopTab } from './VerkoopTab'
@@ -503,11 +502,8 @@ async function ProjectVoortgangBlok({ dossierId }: { dossierId: string }) {
   const data = await getDossierBewaking(dossierId)
   if (!data.bouw7Id) return null
 
-  const overlay = await getVoortgang(data.bouw7Id)
-  const initial = overlay.project ?? data.projectProgress
-
-  // % gereed (project) is op het Financieel-tab alléén-lezen; wijzigen kan in Management.
-  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={data.bouw7Id} initial={initial} readOnly />
+  // Project-% = altijd de berekende rollup van de bewakingscodes (geen handmatige override).
+  return <ProjectVoortgangEditor dossierId={dossierId} bouw7Id={data.bouw7Id} initial={data.projectProgress} readOnly />
 }
 
 /* ── main component ──────────────────────────────────────────────────── */

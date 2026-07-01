@@ -6,7 +6,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import type { ManagementProject } from '@/lib/dashboard/aggregaties'
 import {
-  ProjectnummerCel, HoverTekst, StatusCel, EurCel, MargeCel, VerschilCel, PctGereedCelEditable, openDossierTab, fEur,
+  ProjectnummerCel, HoverTekst, StatusCel, EurCel, MargeCel, VerschilCel, PctGereedCel, openDossierTab, fEur,
 } from './format'
 
 export type ProjectenVariant = 'lopend' | 'gereed' | 'servicedesk'
@@ -47,7 +47,7 @@ const lopendKolommen: KolomDefinitie<ManagementProject>[] = [
   { key: 'totale_opdracht', label: 'Totale opdracht', breedte: 120,
     render: p => <EurCel value={p.totale_opdracht} />, sorteerWaarde: p => p.totale_opdracht },
   { key: 'pct_gereed', label: '% gereed', breedte: 110,
-    render: p => <PctGereedCelEditable p={p} />, sorteerWaarde: p => p.pct_gereed },
+    render: p => <PctGereedCel waarde={p.pct_gereed} />, sorteerWaarde: p => p.pct_gereed },
   { key: 'totale_prognose', label: 'Prognose', breedte: 120,
     render: p => <EurCel value={p.totale_prognose} />, sorteerWaarde: p => p.totale_prognose },
   { key: 'verwacht_resultaat', label: 'Verw. resultaat', breedte: 120,

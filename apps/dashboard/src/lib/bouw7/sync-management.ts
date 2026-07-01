@@ -102,7 +102,7 @@ function mapProject(
   // ── Afgeleide percentages ──
   // Lopende "% marge" = begrote marge o.b.v. opdracht (excl. BTW) en prognose-kosten.
   const pctMarge = totaleOpdracht != null ? pct(totaleOpdracht - (kostenPrognose ?? 0), totaleOpdracht) : null
-  // % gereed = Bouw7 WIP-report 'progress' (standopname-rollup); val terug op kostenratio (geboekte/prognose).
+  // % gereed = zélf berekende bewakingscode-rollup (berekenProjectRollup); val terug op kostenratio (geboekte/prognose).
   const pctGereed = progress != null
     ? progress
     : (geboekteKosten != null ? pct(geboekteKosten, kostenPrognose ?? 0) : null)
@@ -152,6 +152,38 @@ function mapProject(
     bouw7_sync_fout:    null,
     updated_at:         nu,
   }
+}
+
+/**
+ * Prognose-gewogen rollup van de bewakingscode-standopnames voor één project
+ * (Σ progress×prognose / Σ prognose over alle (code × kostensoort), uit de project-control chapters).
+ * Zelfde berekening als getDossierBewaking.projectProgress. Null als er geen prognose is.
+ */
+async function berekenProjectRollup(
+  bouw7: Awaited<ReturnType<typeof getBouw7Client>>,
+  bouw7Id: string,
+): Promise<number | null> {
+  type Chapters = { items?: { securityCodes?: { progress?: number | null; prognosisAmount?: number | string | null }[] }[] }
+  const resps = await Promise.all(
+    [1, 2, 3, 4, 5, 6].map(ct =>
+      bouw7
+        .getAthena<Chapters>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
+        .catch(() => null),
+    ),
+  )
+  let som = 0
+  let gew = 0
+  for (const resp of resps) {
+    if (!resp) continue
+    for (const item of resp.items ?? []) {
+      for (const sc of item.securityCodes ?? []) {
+        if (sc.progress == null) continue
+        const w = toNum(sc.prognosisAmount)
+        if (w > 0) { som += toNum(sc.progress) * w; gew += w }
+      }
+    }
+  }
+  return gew > 0 ? Math.round((som / gew) * 100) / 100 : null
 }
 
 /**
@@ -211,25 +243,20 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       }
     }
 
-    // 2) % gereed (project) = Bouw7 WIP-report `progress` (de standopname-rollup voor projecten in
-    //    Standopname-modus), batched per 25 (project.id IN (lijst)). NB: NIET `total/cost-types`
-    //    `totals.progress` — dat bleek de SOM van de progress per kostensoort (onbruikbaar).
-    //    Valt in mapProject terug op de kostenratio als de WIP-call faalt.
+    // 2) % gereed (project) = zélf berekende prognose-gewogen rollup van de bewakingscode-standopnames
+    //    (Σ progress×prognose / Σ prognose over alle (code × kostensoort), uit de project-control chapters).
+    //    NB: NIET /wip/report — dat geeft 0 bij projecten in "Handmatig"-modus, ook al staan de standopnames
+    //    per code wél in Bouw7. En NIET total/cost-types.totals.progress (= SOM per kostensoort). Zelfde
+    //    berekening als getDossierBewaking.projectProgress op het Financieel-tab. 6 calls/project (batched).
     const progressMap = new Map<string, number>()
-    const WIP_BATCH = 25
-    for (let i = 0; i < targetIds.length; i += WIP_BATCH) {
-      const batch = targetIds.slice(i, i + WIP_BATCH)
-      const q = `project.id IN (${batch.map(id => `"${id}"`).join(',')}) LIMIT ${batch.length} OFFSET 0`
-      try {
-        const rep = await bouw7.getAthena<{ items?: { project?: { id?: number }; progress?: number | null }[] }>('/wip/report', {
-          q, group_subprojects: 'false', include_unprocessed: 'true',
-        })
-        for (const it of rep.items ?? []) {
-          if (it.project?.id != null && it.progress != null) {
-            progressMap.set(String(it.project.id), toNum(it.progress))
-          }
-        }
-      } catch { /* WIP niet beschikbaar → val terug op kostenratio in mapProject */ }
+    const ROLLUP_BATCH = 6
+    for (let i = 0; i < targetIds.length; i += ROLLUP_BATCH) {
+      const batch = targetIds.slice(i, i + ROLLUP_BATCH)
+      const results = await Promise.allSettled(batch.map(id => berekenProjectRollup(bouw7, id)))
+      for (let j = 0; j < batch.length; j++) {
+        const r = results[j]
+        if (r.status === 'fulfilled' && r.value != null) progressMap.set(batch[j], r.value)
+      }
     }
 
     const nu = new Date().toISOString()

@@ -948,9 +948,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const progressGewicht = new Map<string, number>()   // Σ prognose (per code)
     const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder prognose)
     const progressSimpelN = new Map<string, number>()   // aantal kostensoorten met % (fallback)
-    // Projectbrede prognose-gewogen rollup (= % gereed voor het project, gelijk aan de codes).
-    let projectProgressSom = 0
-    let projectProgressGewicht = 0
 
     /** Bestaande regel ophalen of nieuwe aanmaken (gematcht op bewakingscode). */
     const vindOfMaak = (code: string, hoofdstukId: number | null, hoofdstuk: string | null, naam: string | null) => {
@@ -1005,8 +1002,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         if (waarde > 0) {
           progressSom.set(key, (progressSom.get(key) ?? 0) + prog * waarde)
           progressGewicht.set(key, (progressGewicht.get(key) ?? 0) + waarde)
-          projectProgressSom += prog * waarde
-          projectProgressGewicht += waarde
         }
       }
     }
@@ -1082,11 +1077,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       }
     }
 
-    // Project-% gereed = prognose-gewogen rollup over álle (code × kostensoort).
-    const projectProgress = projectProgressGewicht > 0
-      ? Math.round((projectProgressSom / projectProgressGewicht) * 100) / 100
-      : null
-
     // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de Bouw7-waarde
     // (zodat een net-ingevoerde standopname blijft staan tot Bouw7 het bevestigt).
     const overlay = await getVoortgang(String(bouw7Id))
@@ -1095,6 +1085,17 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         if (r.code && overlay.codes.has(r.code)) r.progress = overlay.codes.get(r.code)!
       }
     }
+
+    // Project-% gereed = prognose-gewogen rollup van de codes, ná de overlay (zodat een
+    // handmatige per-code % meetelt), gewogen per code-prognose.
+    let projectSom = 0
+    let projectGewicht = 0
+    for (const r of regelMap.values()) {
+      if (r.progress == null || r.prognose <= 0) continue
+      projectSom += r.progress * r.prognose
+      projectGewicht += r.prognose
+    }
+    const projectProgress = projectGewicht > 0 ? Math.round((projectSom / projectGewicht) * 100) / 100 : null
 
     // Groeperen per hoofdstuk.
     const hoofdstukMap = new Map<string, { id: number | null; naam: string; regels: BewakingRegel[] }>()

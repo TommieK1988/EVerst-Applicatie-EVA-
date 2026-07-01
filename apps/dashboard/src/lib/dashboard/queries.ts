@@ -1,5 +1,4 @@
 import { createAdminClient } from '@everts/database/server'
-import { getVoortgangProjectMap } from '@/lib/dossiers/voortgang'
 import {
   berekenFunnel,
   berekenCalculatorStats,
@@ -64,20 +63,8 @@ export async function getManagementProjecten(): Promise<ManagementProject[]> {
     p.ohw_resultaat = o?.resultaat_vorig_boekjaar ?? 0
   }
 
-  // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de gesyncte WIP-waarde.
-  // De o.b.v.-%-kolommen worden meegerekend zodat de rij intern consistent blijft (zie
-  // sync-management.ts mapProject). NB: zodra de Bouw7-write live is (Fase 0) moet een
-  // bevestigde waarde weer door de read-sync overgenomen kunnen worden — reconciliatie volgt daar.
-  const evaPct = await getVoortgangProjectMap(projecten.map(p => p.bouw7_id).filter(Boolean) as string[])
-  if (evaPct.size > 0) {
-    for (const p of projecten) {
-      const v = p.bouw7_id ? evaPct.get(p.bouw7_id) : undefined
-      if (v == null) continue
-      p.pct_gereed = v
-      if (p.totale_opdracht != null) p.omzet_obv_pct = p.totale_opdracht * (v / 100)
-      if (p.verwacht_resultaat != null) p.resultaat_obv_pct = p.verwacht_resultaat * (v / 100)
-    }
-  }
+  // Geen handmatige project-override meer: `pct_gereed` = de door de sync berekende
+  // bewakingscode-rollup (zie sync-management.ts berekenProjectRollup).
   return projecten
 }
 
