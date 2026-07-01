@@ -34,7 +34,8 @@ export function filiaalKleur(filiaal: string | null | undefined): string {
 
 export function openDossierTab(p: ManagementProject) {
   if (!p.dossier_id || !p.dossier_sectie) return
-  window.open(`/${p.dossier_sectie}/${p.dossier_id}`, '_blank', 'noopener')
+  // Vanuit Management direct naar het Financieel-tab van het dossier.
+  window.open(`/${p.dossier_sectie}/${p.dossier_id}/financieel`, '_blank', 'noopener')
 }
 
 /* ── Cel-renderers ───────────────────────────────────────────────── */
