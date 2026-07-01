@@ -337,6 +337,10 @@ export type BewakingscodeRef = {
   pslPerCt: Record<number, number>
   begrootPerCt: Record<number, number>
   urenPerCt: Record<number, number>
+  /** Meerwerk (additionalWorkAmount) per kostensoort — grondslag naast begroot voor de prognose. */
+  meerwerkPerCt: Record<number, number>
+  /** Meerwerk-uren (hourInfo.additionalWorkHours) per kostensoort. */
+  meerwerkUrenPerCt: Record<number, number>
   /** Huidige "Niet/anders begroot" (prognosisOtherAmount) per kostensoort — nodig voor reset-sync. */
   prognosisOtherPerCt: Record<number, number>
 }
@@ -357,7 +361,7 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
   const map = new Map<string, BewakingscodeRef>()
   const ensure = (code: string): BewakingscodeRef => {
     let r = map.get(code)
-    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {}, prognosisOtherPerCt: {} }; map.set(code, r) }
+    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {}, meerwerkPerCt: {}, meerwerkUrenPerCt: {}, prognosisOtherPerCt: {} }; map.set(code, r) }
     return r
   }
 
@@ -383,6 +387,8 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
           if (psl != null) ref.pslPerCt[ct] = psl
           ref.begrootPerCt[ct] = getal(sc.budgetAmount)
           ref.urenPerCt[ct] = getal(sc.hourInfo?.budgetHours)
+          ref.meerwerkPerCt[ct] = getal(sc.additionalWorkAmount)
+          ref.meerwerkUrenPerCt[ct] = getal(sc.hourInfo?.additionalWorkHours)
           ref.prognosisOtherPerCt[ct] = getal((sc as { prognosisOtherAmount?: number | string }).prognosisOtherAmount)
         }
       }
@@ -602,7 +608,8 @@ export async function maakMeerwerkBewakingscodeBouw7(
   if (bedrag != null && bedrag !== 0 && pslId != null) {
     try {
       const begroot = ref?.begrootPerCt[ct] ?? 0
-      await client.post('/project/update-prognosis-other', { id: pslId, prognosisOtherAmount: String(rond(bedrag - begroot)) })
+      const meerwerk = ref?.meerwerkPerCt[ct] ?? 0
+      await client.post('/project/update-prognosis-other', { id: pslId, prognosisOtherAmount: String(rond(bedrag - begroot - meerwerk)) })
       prognoseGezet = true
     } catch (e) {
       const m = e instanceof Error ? e.message : ''
@@ -621,8 +628,10 @@ export type PrognoseRegel = {
   label: string
   ct: number
   begroot: number
+  /** Meerwerk (additionalWorkAmount) op deze code × kostensoort — grondslag naast begroot. */
+  meerwerk: number
   werkbegroting: number
-  /** Te schrijven prognosisOtherAmount = werkbegroting − begroot. */
+  /** Te schrijven prognosisOtherAmount = werkbegroting − begroot − meerwerk. */
   verschil: number
   /** Voor arbeid: bijbehorende uren-correctie. */
   verschilUren?: number
@@ -656,8 +665,9 @@ async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPr
       const map = TYPE_NAAR_BOUW7[type]
       const ct = map.ct
       const begroot = ref?.begrootPerCt[ct] ?? 0
+      const meerwerk = ref?.meerwerkPerCt[ct] ?? 0
       const werkbegroting = invoer.bedrag
-      const verschil = rond(werkbegroting - begroot)
+      const verschil = rond(werkbegroting - begroot - meerwerk)
       const pslId = ref?.pslPerCt[ct] ?? null
 
       let schrijfbaar = true
@@ -683,7 +693,7 @@ async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPr
         verschilUren = tarief > 0 ? rond(verschil / tarief) : 0
       }
 
-      regels.push({ code, codeNaam: ref?.naam ?? null, type, label: map.label, ct, begroot, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, actie, nieuweCode, reden })
+      regels.push({ code, codeNaam: ref?.naam ?? null, type, label: map.label, ct, begroot, meerwerk, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, actie, nieuweCode, reden })
     })
   }
 
@@ -750,8 +760,9 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
 
     // 4) Reset-sync: elke bestaande PSL (Arbeid/OA/Materiaal) die NIET in de werkbegroting staat →
     //    prognose moet 0 worden (werkbegroting is exact leidend). Omdat prognose = begroot +
-    //    "Niet/anders begroot", zetten we Niet/anders begroot op −begroot (en −begrote uren voor
-    //    arbeid). Onvoorwaardelijk, want het chapters-endpoint geeft de huidige waarde niet terug.
+    //    meerwerk + "Niet/anders begroot", zetten we Niet/anders begroot op −(begroot + meerwerk)
+    //    (en −(begrote uren + meerwerk-uren) voor arbeid). Onvoorwaardelijk, want het chapters-
+    //    endpoint geeft de huidige waarde niet terug.
     const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.code}|${r.ct}`))
     let gereset = 0
     for (const c of codeMap.values()) {
@@ -759,8 +770,8 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
         const psl = c.pslPerCt[ct]
         if (psl == null) continue
         if (inWerkbegroting.has(`${c.code}|${ct}`)) continue
-        const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: String(rond(-(c.begrootPerCt[ct] ?? 0))) }
-        if (ct === 1) body.prognosisOtherHours = String(rond(-(c.urenPerCt[ct] ?? 0)))
+        const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: String(rond(-((c.begrootPerCt[ct] ?? 0) + (c.meerwerkPerCt[ct] ?? 0)))) }
+        if (ct === 1) body.prognosisOtherHours = String(rond(-((c.urenPerCt[ct] ?? 0) + (c.meerwerkUrenPerCt[ct] ?? 0))))
         await client.post('/project/update-prognosis-other', body)
         gereset++
       }

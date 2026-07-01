@@ -338,8 +338,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
             <div className="px-6 py-5">
               <p className="mb-3 text-sm text-gray-600">
                 Per <strong>bewakingscode</strong> wordt <strong>&ldquo;Niet/anders begroot&rdquo;</strong> in Bouw7
-                gezet op het verschil tussen de werkbegroting en het Bouw7-begrote bedrag. De kostengroep in EVA wordt
-                op de bewakingscode gematcht. Controleer hieronder vóór verzenden.
+                gezet op de werkbegroting minus <strong>begroot + meerwerk</strong>, zodat de totale prognose gelijk
+                wordt aan de werkbegroting. De kostengroep in EVA wordt op de bewakingscode gematcht. Controleer
+                hieronder vóór verzenden.
               </p>
 
               {/* Doelhoofdstuk voor nieuwe codes — alleen relevant als er nieuwe codes aangemaakt worden. */}
@@ -374,6 +375,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                       <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
                         <th className="py-1.5">Kostensoort</th>
                         <th className="py-1.5 text-right">Begroot</th>
+                        <th className="py-1.5 text-right">Meerwerk</th>
                         <th className="py-1.5 text-right">Werkbegroting</th>
                         <th className="py-1.5 text-right">Niet/anders begroot</th>
                       </tr>
@@ -382,7 +384,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                       {groepeerPerCode(prognosePreview.regels).map(([code, rs]) => (
                         <Fragment key={code || '∅'}>
                           <tr className="bg-gray-50">
-                            <td colSpan={4} className="py-1 px-1 text-xs font-semibold text-gray-600">
+                            <td colSpan={5} className="py-1 px-1 text-xs font-semibold text-gray-600">
                               {code ? code : 'Zonder bewakingscode'}
                               {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
                             </td>
@@ -401,6 +403,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                                 )}
                               </td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.meerwerk)}</td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
                               <td className="py-1.5 text-right tabular-nums font-semibold">
                                 {r.actie === 'skip' ? '—' : euro(r.verschil)}
