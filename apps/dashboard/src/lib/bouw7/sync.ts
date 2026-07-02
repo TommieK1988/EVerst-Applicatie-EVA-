@@ -448,6 +448,15 @@ function mapContactType(typeName?: string): OrganisatieType {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * SYNC: Employees → Medewerkers
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// Normalisatie van Bouw7-functienamen naar de EVA-functiecatalogus.
+const FUNCTIE_NORMALISATIE: Record<string, string> = { Teamleiders: 'Teamleider' }
+function normFunctie(v?: string | null): string | null {
+  const s = (v ?? '').trim()
+  if (!s) return null
+  return FUNCTIE_NORMALISATIE[s] ?? s
+}
+
 export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
@@ -478,10 +487,14 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
       const uurtariefKostprijs = e.hourlyRate != null ? Number(e.hourlyRate) : null
       // Geen top-level isActive in de API: "uit dienst"-datum gevuld → niet meer actief.
       const actief = !e.dateOfResignation
+      // Het Bouw7-"department" bevat feitelijk de rol → dat wordt de EVA-functie.
+      // `afdeling` wordt EVA-beheerd (afgeleid via functie.standaard_afdeling door
+      // een DB-trigger) en dus NIET meer vanuit Bouw7 geschreven.
+      const functie = normFunctie(e.functionTitle || e.department?.name)
       const hash = fingerprint({
         v: e.firstName ?? '', tv: e.prefix ?? null, a: e.lastName ?? '',
-        em: e.emailAddress ?? null, tel: e.phoneNumber ?? null, fn: e.functionTitle ?? null,
-        afd: e.department?.name ?? null, act: actief, ext: e.external ?? false,
+        em: e.emailAddress ?? null, tel: e.phoneNumber ?? null, fn: functie,
+        act: actief, ext: e.external ?? false,
         gb: e.birthDate ?? null, dvd: e.dateOfEmployment ?? null, udp: e.dateOfResignation ?? null,
         hr: uurtariefVerkoop, cr: uurtariefKostprijs,
       })
@@ -491,8 +504,7 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
         achternaam:          e.lastName ?? '',
         email:               e.emailAddress ?? null,
         telefoon:            e.phoneNumber ?? null,
-        functie:             e.functionTitle ?? null,
-        afdeling:            e.department?.name ?? null,
+        functie,
         actief,
         extern:              e.external ?? false,
         geboortedatum:       toDate(e.birthDate),

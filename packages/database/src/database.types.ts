@@ -2166,6 +2166,7 @@ export type Database = {
           created_at: string | null
           id: string
           naam: string
+          standaard_afdeling_id: string | null
           standaard_rooster: Json | null
           volgorde: number
         }
@@ -2174,6 +2175,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           naam: string
+          standaard_afdeling_id?: string | null
           standaard_rooster?: Json | null
           volgorde?: number
         }
@@ -2182,10 +2184,19 @@ export type Database = {
           created_at?: string | null
           id?: string
           naam?: string
+          standaard_afdeling_id?: string | null
           standaard_rooster?: Json | null
           volgorde?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "medewerker_functies_standaard_afdeling_id_fkey"
+            columns: ["standaard_afdeling_id"]
+            isOneToOne: false
+            referencedRelation: "medewerker_afdelingen"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       medewerker_o365_tokens: {
         Row: {

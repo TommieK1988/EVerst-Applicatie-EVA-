@@ -957,12 +957,13 @@ export type StandaardRooster = {
 } | null
 
 export type MedewerkerFunctie = {
-  id:                 string
-  naam:               string
-  volgorde:           number
-  actief:             boolean
-  standaard_rooster:  StandaardRooster
-  created_at:         string
+  id:                    string
+  naam:                  string
+  volgorde:              number
+  actief:                boolean
+  standaard_rooster:     StandaardRooster
+  standaard_afdeling_id: string | null
+  created_at:            string
 }
 
 export type MedewerkerAfdeling = {

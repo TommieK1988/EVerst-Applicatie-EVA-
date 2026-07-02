@@ -24,9 +24,10 @@ const roosterTemplateSchema = z.object({
 })
 
 const functieSchema = z.object({
-  naam:              z.string().min(1),
-  volgorde:          z.coerce.number().default(0),
-  standaard_rooster: roosterTemplateSchema.nullable().optional(),
+  naam:                  z.string().min(1),
+  volgorde:              z.coerce.number().default(0),
+  standaard_rooster:     roosterTemplateSchema.nullable().optional(),
+  standaard_afdeling_id: z.string().uuid().or(z.literal('')).transform(v => v || null),
 })
 
 // ── Functies ─────────────────────────────────────────────────────────────────

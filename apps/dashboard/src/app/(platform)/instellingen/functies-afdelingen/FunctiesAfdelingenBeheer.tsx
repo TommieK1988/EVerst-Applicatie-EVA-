@@ -189,29 +189,38 @@ function RoosterForm({ state, onChange }: {
 
 // ── Functies lijst ────────────────────────────────────────────────────────────
 
-function FunctieLijstBeheer({ functies: initialFuncties }: { functies: MedewerkerFunctie[] }) {
+function FunctieLijstBeheer({ functies: initialFuncties, afdelingen }: {
+  functies: MedewerkerFunctie[]
+  afdelingen: MedewerkerAfdeling[]
+}) {
   const [functies, setFuncties]   = useState<MedewerkerFunctie[]>(initialFuncties)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showNieuw, setShowNieuw] = useState(false)
   const [naam, setNaam]           = useState('')
   const [volgorde, setVolgorde]   = useState('0')
   const [rooster, setRooster]     = useState<RoosterState>(roosterFromFunctie(null))
+  const [afdelingId, setAfdelingId] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  function resetForm() { setNaam(''); setVolgorde('0'); setRooster(roosterFromFunctie(null)) }
+  const actieveAfdelingen = afdelingen.filter(a => a.actief).sort((a, b) => a.volgorde - b.volgorde || a.naam.localeCompare(b.naam))
+  const afdelingNaam = (id: string | null) => afdelingen.find(a => a.id === id)?.naam ?? null
+
+  function resetForm() { setNaam(''); setVolgorde('0'); setRooster(roosterFromFunctie(null)); setAfdelingId('') }
 
   function startEdit(f: MedewerkerFunctie) {
     setEditingId(f.id)
     setNaam(f.naam)
     setVolgorde(String(f.volgorde))
     setRooster(roosterFromFunctie(f.standaard_rooster))
+    setAfdelingId(f.standaard_afdeling_id ?? '')
     setShowNieuw(false)
   }
 
   function buildPayload() {
     return {
-      naam:              naam.trim(),
+      naam:                  naam.trim(),
       volgorde,
+      standaard_afdeling_id: afdelingId,
       standaard_rooster: rooster.enabled ? {
         werkdagen:             rooster.werkdagen,
         dagstart:              rooster.dagstart,
@@ -256,6 +265,13 @@ function FunctieLijstBeheer({ functies: initialFuncties }: { functies: Medewerke
             <Input type="number" style={{ width: '100%' }} value={volgorde} onChange={e => setVolgorde(e.target.value)} min={0} />
           </div>
         </div>
+        <div style={{ marginTop: 10 }}>
+          <label style={labelStyle}>Standaard afdeling</label>
+          <select className="eva-input" style={{ width: '100%' }} value={afdelingId} onChange={e => setAfdelingId(e.target.value)}>
+            <option value="">— Geen —</option>
+            {actieveAfdelingen.map(a => <option key={a.id} value={a.id}>{a.naam}</option>)}
+          </select>
+        </div>
         <RoosterForm state={rooster} onChange={setRooster} />
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
           <Button type="button" variant="ghost" onClick={() => { id ? setEditingId(null) : setShowNieuw(false); resetForm() }} disabled={isPending}>Annuleren</Button>
@@ -291,7 +307,14 @@ function FunctieLijstBeheer({ functies: initialFuncties }: { functies: Medewerke
                   <CardBody className="flex items-center gap-3 py-2.5 px-3.5">
                     <span style={{ fontSize: 10, color: 'var(--fg-muted)', width: 20, textAlign: 'right' }}>{f.volgorde}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>{f.naam}</div>
+                      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>
+                        {f.naam}
+                        {afdelingNaam(f.standaard_afdeling_id) && (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', marginLeft: 8, padding: '1px 6px', border: '1px solid var(--border)', borderRadius: 4 }}>
+                            {afdelingNaam(f.standaard_afdeling_id)}
+                          </span>
+                        )}
+                      </div>
                       {f.standaard_rooster && (
                         <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 1 }}>
                           {roosterLabel(f.standaard_rooster)}
@@ -635,7 +658,7 @@ export default function FunctiesAfdelingenBeheer({
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 32 }}>
-      <FunctieLijstBeheer functies={functies} />
+      <FunctieLijstBeheer functies={functies} afdelingen={afdelingen} />
       <LijstBeheer
         titel="Afdelingen"
         items={afdelingen}
