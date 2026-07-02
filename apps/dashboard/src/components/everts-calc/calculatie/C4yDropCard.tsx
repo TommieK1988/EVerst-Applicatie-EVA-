@@ -13,7 +13,11 @@
 
 import { useState } from 'react'
 import { FileCode2, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { Card, CardHeader, CardBody, Button } from '@/components/ui'
+import {
+  Card, CardHeader, CardBody, Button,
+  AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui'
 import { FileUpload } from '@/components/ui/file-upload'
 import { parseC4y, type C4yParseResultaat } from '@/lib/everts-calc/c4y-parser'
 import {
@@ -54,10 +58,11 @@ interface Props {
 }
 
 export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Props) {
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [bezig, setBezig]     = useState(false)
-  const [fout, setFout]       = useState<string | null>(null)
-  const [klaar, setKlaar]     = useState<string | null>(null)
+  const [preview, setPreview]           = useState<Preview | null>(null)
+  const [bezig, setBezig]               = useState(false)
+  const [fout, setFout]                 = useState<string | null>(null)
+  const [klaar, setKlaar]               = useState<string | null>(null)
+  const [bevestigOpen, setBevestigOpen] = useState(false)
 
   async function verwerkBestand(file: File) {
     setFout(null); setKlaar(null)
@@ -102,8 +107,16 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
     }
   }
 
+  // Bij een bestaande werkbegroting: eerst expliciet bevestigen (die wordt gewist).
+  function startImport() {
+    if (!preview) return
+    if (getWerkbegrotingVoorScenario(preview.scenarioId)) setBevestigOpen(true)
+    else bevestig()
+  }
+
   function bevestig() {
     if (!preview) return
+    setBevestigOpen(false)
     setBezig(true); setFout(null)
     try {
       const { resultaat, projectId, scenarioId } = preview
@@ -217,7 +230,7 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
             )}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setPreview(null)} disabled={bezig}>Annuleren</Button>
-              <Button variant="primary" onClick={bevestig} disabled={bezig}>
+              <Button variant="primary" onClick={startImport} disabled={bezig}>
                 {bezig ? 'Importeren…' : 'Importeren'}
               </Button>
             </div>
@@ -231,6 +244,22 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
           </div>
         )}
       </CardBody>
+
+      <AlertDialog open={bevestigOpen} onOpenChange={setBevestigOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Werkbegroting wissen en opnieuw opbouwen?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Dit dossier heeft al een werkbegroting. Bij het importeren wordt de volledige
+            werkbegroting — inclusief de historie van verwijderde regels — gewist en opnieuw
+            opgebouwd uit het nieuwe .c4y-bestand. Handmatige aanpassingen in de werkbegroting
+            gaan hierbij verloren.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={bevestig}>Ja, wissen en importeren</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
