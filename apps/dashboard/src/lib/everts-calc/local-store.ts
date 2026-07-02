@@ -545,7 +545,10 @@ export function slaWerkbegrotingOp(wb: Werkbegroting): void {
 export function verwijderWerkbegroting(id: string): void {
   sla(KEYS.werkbegrotingen, getWerkbegrotingen().filter(w => w.id !== id))
   getWerkbegrotingRegels(id).forEach(r => verwijderWerkbegrotingRegel(r.id))
-  sla(KEYS.werkbegroting_bestellingen, getWerkbegrotingBestellingen(id).filter(() => false))
+  sla(KEYS.werkbegroting_bestellingen, getWerkbegrotingBestellingen().filter(b => b.werkbegroting_id !== id))
+  // Volledige wijzigingshistorie (incl. historie van verwijderde regels) van deze WB leegmaken.
+  const alleWijzigingen = lees<WerkbegrotingWijziging>(KEYS.werkbegroting_wijzigingen, [])
+  sla(KEYS.werkbegroting_wijzigingen, alleWijzigingen.filter(w => w.werkbegroting_id !== id))
 }
 
 // ─── WERKBEGROTING REGELS ────────────────────────────────────────────────────

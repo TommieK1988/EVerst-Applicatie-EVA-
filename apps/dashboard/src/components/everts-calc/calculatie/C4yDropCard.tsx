@@ -20,7 +20,7 @@ import {
   maakStandaardScenario, slaScenarioOp,
   getGroepen, verwijderGroep,
   slaGroepOp, slaCalculatieregelOp, slaComponentregelOp,
-  getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie, heroverhaalWerkbegroting,
+  getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie, verwijderWerkbegroting,
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, formatEuro } from '@/lib/everts-calc/calculations'
 import { maakProjectVanAanvraag, setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
@@ -117,22 +117,23 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
       resultaat.calculatieregels.forEach(slaCalculatieregelOp)
       resultaat.componentregels.forEach(slaComponentregelOp)
 
-      // Respecteer fase: alleen in de opdracht-fase overhalen naar werkbegroting
+      // Volledige werkbegroting — inclusief de historie van verwijderde regels — wissen
+      // bij (her)import, zodat er geen resten van de vorige begroting achterblijven.
+      const bestaandeWb = getWerkbegrotingVoorScenario(scenarioId)
+      const wbGeleegd = !!bestaandeWb
+      if (bestaandeWb) verwijderWerkbegroting(bestaandeWb.id)
+
+      // Respecteer fase: alleen in de opdracht-fase (opnieuw) opbouwen naar werkbegroting.
       if (sectie === 'opdracht') {
         setProjectStatus(projectId, 'opdracht').catch(() => {})
-        const bestaand = getWerkbegrotingVoorScenario(scenarioId)
-        if (bestaand) {
-          heroverhaalWerkbegroting(bestaand, scenarioId, 'gewijzigd')
-        } else {
-          maakWerkbegrotingVanCalculatie(projectId, scenarioId)
-        }
+        maakWerkbegrotingVanCalculatie(projectId, scenarioId)
       }
 
       const aantal = resultaat.calculatieregels.length
-      setKlaar(
-        `${aantal} regel${aantal !== 1 ? 's' : ''} geïmporteerd` +
-        (sectie === 'opdracht' ? ' en overgehaald naar de werkbegroting.' : '.'),
-      )
+      const wbDeel = wbGeleegd
+        ? ' Werkbegroting en historie geleegd' + (sectie === 'opdracht' ? ' en opnieuw opgebouwd.' : '.')
+        : (sectie === 'opdracht' ? ' en overgehaald naar de werkbegroting.' : '.')
+      setKlaar(`${aantal} regel${aantal !== 1 ? 's' : ''} geïmporteerd.${wbDeel}`)
       setPreview(null)
       onImported?.(projectId)
     } catch (err) {
@@ -203,9 +204,17 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
                 {formatEuro(preview.resultaat.verkoopTotaal - preview.resultaat.verwachtTotaal)}). Controleer de begroting.
               </p>
             )}
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-700">
-              De bestaande calculatie van dit dossier wordt vervangen.
-            </p>
+            {getWerkbegrotingVoorScenario(preview.scenarioId) ? (
+              <p className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-[11.5px] font-medium leading-snug text-red-700">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                Let op: de bestaande calculatie én de volledige werkbegroting — inclusief de historie
+                van verwijderde regels — worden gewist en opnieuw opgebouwd.
+              </p>
+            ) : (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-700">
+                De bestaande calculatie van dit dossier wordt vervangen.
+              </p>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setPreview(null)} disabled={bezig}>Annuleren</Button>
               <Button variant="primary" onClick={bevestig} disabled={bezig}>
