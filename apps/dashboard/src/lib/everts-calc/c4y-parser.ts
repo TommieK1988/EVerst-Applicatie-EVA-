@@ -238,6 +238,14 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
     return node.kinderen.some(k => !k.isGroep || heeftRegelNakomeling(k))
   }
 
+  /** Aantal echte groepsniveaus in de subboom (childless groepen tellen niet — die worden regels). */
+  function groepDiepte(node: RuweRij): number {
+    if (!node.isGroep || !heeftRegelNakomeling(node)) return 0
+    let max = 0
+    for (const k of node.kinderen) if (k.isGroep && heeftRegelNakomeling(k)) max = Math.max(max, groepDiepte(k))
+    return 1 + max
+  }
+
   /**
    * Voeg één calculatieregel + componenten toe.
    * @param bedragenTotaal true → arb/maa/mee/ond zijn totalen (childless groep); anders per eenheid.
@@ -298,27 +306,35 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
     verkoopTotaal += evaKostprijs * (1 + (opslag ?? 0) / 100)
   }
 
-  /** Loop de ruwe boom af; diepte = EVA-niveau (gecapt op 3, dieper wordt samengevoegd). */
-  function verwerk(node: RuweRij, parentGroep: Groep | null, diepte: number, hoofdstukNaam: string, prefix: string) {
-    if (!node.isGroep) {
-      voegRegelToe(node, parentGroep ?? ensureDefaultGroep(), hoofdstukNaam || (parentGroep?.naam ?? ''), false, prefix)
+  /**
+   * Loop de ruwe boom af. EVA staat max 3 groepsniveaus toe; is de boom dieper, dan
+   * worden de bovenste (zuivere) groepen samengevoegd: hun omschrijving wordt gecombineerd
+   * ("Hoofdstuk — Post") tot één groep, zodat alle regels binnen 3 niveaus vallen en er
+   * niets verloren gaat. Totalen zijn onafhankelijk van de groepering.
+   */
+  function verwerk(node: RuweRij, parentGroep: Groep | null, evaNiveau: number, groepPrefix: string, hoofdstukNaam: string) {
+    // Losse regel, of een groep zonder regels eronder (→ als één regel importeren).
+    if (!node.isGroep || !heeftRegelNakomeling(node)) {
+      const groep = parentGroep ?? ensureDefaultGroep()
+      voegRegelToe(node, groep, hoofdstukNaam || groep.naam, node.isGroep, groepPrefix)
       return
     }
-    // Groep zonder enige regel eronder → tóch als één regel (anders verdwijnt het bedrag).
-    if (!heeftRegelNakomeling(node)) {
-      voegRegelToe(node, parentGroep ?? ensureDefaultGroep(), hoofdstukNaam || (parentGroep?.naam ?? ''), true, prefix)
+    const naam = groepPrefix ? `${groepPrefix} — ${node.oms}` : (node.oms || `Groep ${evaNiveau}`)
+    const heeftRegelKind = node.kinderen.some(k => !(k.isGroep && heeftRegelNakomeling(k)))
+    const teDiep = (evaNiveau - 1) + groepDiepte(node) > 3
+
+    // Te diep én puur structuur (alleen subgroepen) → geen eigen EVA-groep; naam meenemen
+    // naar beneden zodat 'ie samensmelt met het volgende niveau.
+    if (teDiep && !heeftRegelKind) {
+      const hk = evaNiveau === 1 ? naam : hoofdstukNaam
+      for (const kind of node.kinderen) verwerk(kind, parentGroep, evaNiveau, naam, hk)
       return
     }
-    if (diepte <= 3) {
-      const g = nieuweGroep(node.oms || `Groep ${diepte}`, diepte as 1 | 2 | 3, parentGroep?.id ?? null)
-      const hk = diepte === 1 ? (node.oms || g.naam) : hoofdstukNaam
-      for (const kind of node.kinderen) verwerk(kind, g, diepte + 1, hk, '')
-    } else {
-      // Overtollig niveau: geen nieuwe EVA-groep; regels aan de niveau-3-voorouder,
-      // groepsnaam vóór de regel-omschrijving zodat niets verloren gaat.
-      const nieuwPrefix = prefix ? `${prefix} / ${node.oms}` : node.oms
-      for (const kind of node.kinderen) verwerk(kind, parentGroep, diepte, hoofdstukNaam, nieuwPrefix)
-    }
+
+    const niveau = Math.min(evaNiveau, 3) as 1 | 2 | 3
+    const g = nieuweGroep(naam, niveau, parentGroep?.id ?? null)
+    const hk = evaNiveau === 1 ? naam : hoofdstukNaam
+    for (const kind of node.kinderen) verwerk(kind, g, evaNiveau + 1, '', hk)
   }
 
   for (const r of roots) verwerk(r, null, 1, '', '')

@@ -7,8 +7,9 @@ import { Card, CardHeader, CardBody, Button, Input, Badge } from '@/components/u
 import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, type MeerwerkTermijnWijze } from '@everts/database'
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
-  verwijderMeerwerkRegel, maakMeerwerkCalculatie,
+  verwijderMeerwerkRegel, maakMeerwerkCalculatie, getBouw7Meerwerk, importeerBouw7Meerwerk,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
+  type Bouw7MeerwerkData, type Bouw7MeerwerkPerCode, type Bouw7MeerwerkOfferteRegel,
 } from '@/lib/dossiers/meerwerk'
 
 const fmt = (v: number) =>
@@ -30,14 +31,38 @@ const LEGE_NIEUW: NieuweMeerwerkData = {
 export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
   const router = useRouter()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
+  const [bouw7, setBouw7] = useState<Bouw7MeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
 
   function herlaad() {
     getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
+    getBouw7Meerwerk(dossierId).then(setBouw7).catch(() => setBouw7({ beschikbaar: false, perCode: [], offerteRegels: [] }))
   }
   useEffect(herlaad, [dossierId])
+
+  async function importCode(r: Bouw7MeerwerkPerCode) {
+    setBezig(true)
+    const res = await importeerBouw7Meerwerk(dossierId, {
+      bron: 'bouw7_code', sleutel: r.sleutel, omschrijving: r.naam || `Meerwerk ${r.code}`,
+      bedrag: r.bedrag, bewakingscode: r.code, bouw7ChapterId: r.hoofdstukId,
+    })
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    toast.success('Geïmporteerd als EVA-regel'); herlaad()
+  }
+
+  async function importOfferte(r: Bouw7MeerwerkOfferteRegel) {
+    setBezig(true)
+    const res = await importeerBouw7Meerwerk(dossierId, {
+      bron: 'bouw7_offerte', sleutel: r.sleutel, omschrijving: r.omschrijving,
+      bedrag: r.bedrag, eenheid: r.eenheid, eenheidsprijs: r.prijs, aantal: r.aantal, btwPct: r.btwPct,
+    })
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    toast.success('Geïmporteerd als EVA-regel'); herlaad()
+  }
 
   async function voegToe() {
     if (!nieuw.omschrijving.trim()) { toast.error('Geef een omschrijving op.'); return }
@@ -252,6 +277,79 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
           )}
         </CardBody>
       </Card>
+
+      {bouw7 && bouw7.beschikbaar && (
+        <Card>
+          <CardHeader>Bestaand meerwerk in Bouw7 (read-only)</CardHeader>
+          <CardBody>
+            {bouw7.perCode.length > 0 && (
+              <div className="mb-4">
+                <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">Geboekt per bewakingscode</div>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-400">
+                      <th className="py-1.5 pr-2">Code</th>
+                      <th className="py-1.5 px-2">Omschrijving</th>
+                      <th className="py-1.5 px-2 text-right">Meerwerk</th>
+                      <th className="py-1.5 pl-2 text-right">Actie</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bouw7.perCode.map(r => (
+                      <tr key={r.sleutel} className="border-b border-neutral-100 text-[12.5px]">
+                        <td className="py-1.5 pr-2 tabular-nums text-neutral-500">{r.code}</td>
+                        <td className="py-1.5 px-2 text-neutral-800">{r.naam ?? '—'}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-neutral-900">{fmt(r.bedrag)}</td>
+                        <td className="py-1.5 pl-2 text-right">
+                          {r.alGeimporteerd
+                            ? <span className="text-[11px] text-neutral-400">Geïmporteerd</span>
+                            : <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig} onClick={() => importCode(r)}>Importeer</button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {bouw7.offerteRegels.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">Meerwerk-offerteregels</div>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-400">
+                      <th className="py-1.5 pr-2">Offerte</th>
+                      <th className="py-1.5 px-2">Omschrijving</th>
+                      <th className="py-1.5 px-2 text-right">Aantal</th>
+                      <th className="py-1.5 px-2 text-right">Prijs</th>
+                      <th className="py-1.5 px-2 text-right">Bedrag</th>
+                      <th className="py-1.5 pl-2 text-right">Actie</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bouw7.offerteRegels.map(r => (
+                      <tr key={r.sleutel} className="border-b border-neutral-100 text-[12.5px]">
+                        <td className="py-1.5 pr-2 tabular-nums text-neutral-500">{r.quotationNummer ?? r.quotationId}</td>
+                        <td className="py-1.5 px-2 text-neutral-800">{r.omschrijving}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{r.aantal != null ? `${r.aantal}${r.eenheid ? ` ${r.eenheid}` : ''}` : '—'}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{r.prijs != null ? fmt(r.prijs) : '—'}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-neutral-900">{fmt(r.bedrag)}</td>
+                        <td className="py-1.5 pl-2 text-right">
+                          {r.alGeimporteerd
+                            ? <span className="text-[11px] text-neutral-400">Geïmporteerd</span>
+                            : <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig} onClick={() => importOfferte(r)}>Importeer</button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="mt-3 text-[11px] text-neutral-500">
+              Live uit Bouw7 (geboekt meerwerk per bewakingscode + meerwerk-offerteregels). Importeren maakt een bewerkbare EVA-regel (status Aangevraagd); dubbel importeren wordt voorkomen.
+            </div>
+          </CardBody>
+        </Card>
+      )}
     </div>
   )
 }

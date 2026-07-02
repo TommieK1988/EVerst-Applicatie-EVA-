@@ -44,6 +44,7 @@ export type {
   MeerwerkAfrekenwijze,
   MeerwerkStelpostGrondslag,
   MeerwerkTermijnWijze,
+  MeerwerkBron,
   MeerwerkRegel,
   // Planning-module
   PlanningUursoort,
