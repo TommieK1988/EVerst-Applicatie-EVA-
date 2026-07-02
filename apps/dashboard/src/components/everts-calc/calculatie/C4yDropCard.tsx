@@ -194,10 +194,13 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
                 Onbekende BTW-code(s): {preview.resultaat.onbekendeBtwCodes.join(', ')} — op 21% gezet. Controleer de tarieven.
               </p>
             )}
-            {preview.resultaat.samengevattePosten.length > 0 && (
-              <p className="rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
-                Samengevat tot één regel (subregels telden niet op tot de post):{' '}
-                {preview.resultaat.samengevattePosten.join(', ')}.
+            {preview.resultaat.verwachtTotaal > 0 &&
+              Math.abs(preview.resultaat.verkoopTotaal - preview.resultaat.verwachtTotaal) > 0.01 && (
+              <p className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-700">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                Controle: geïmporteerde verkoop {formatEuro(preview.resultaat.verkoopTotaal)} wijkt af van
+                het .c4y-totaal {formatEuro(preview.resultaat.verwachtTotaal)} (verschil{' '}
+                {formatEuro(preview.resultaat.verkoopTotaal - preview.resultaat.verwachtTotaal)}). Controleer de begroting.
               </p>
             )}
             <p className="rounded-md bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-700">

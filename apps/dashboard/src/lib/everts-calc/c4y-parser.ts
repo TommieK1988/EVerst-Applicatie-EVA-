@@ -4,31 +4,22 @@
  * Converteert een native Calc4You werkbegroting-bestand (.c4y) naar de interne
  * Everts Calc datastructuren: Groep[], Calculatieregel[], Componentregel[].
  *
- * Anders dan het CUF-uitwisselformaat (zie cuf-parser.ts) is .c4y een eigen,
- * platte XML met lowercase tags en tekstinhoud in kind-elementen:
+ * Platte XML met lowercase tags; de boom zit in het <s>-veld:
+ *   <s> = 1,2,3,…  → GROEP op dat niveau (alleen structuur, nooit als regel importeren)
+ *   <s> leeg / S / V → DETAILREGEL (altijd importeren; S = stelpost, V = verrekenbaar)
+ *   overig (/, =, a, b, onbekend) of <enh>=%  → FOOTER/subtotaal/BTW-regel → overslaan
  *
- *   <alginfo> … </alginfo>          → projectkop + totalen
- *   <begroting> … </begroting> × N  → regels; de boom zit in het <s>-veld
- *
- * Boomstructuur — leidend is <s> (NIET <ouder>, dat is niet altijd gevuld):
- *   <s>=1  → hoofdstuk         (Groep niveau 1)
- *   <s>=2  → post              (Groep niveau 2 óf — als de subregels niet optellen
- *                               tot de post — een samengevatte regel)
- *   <s> leeg → detailregel     (Calculatieregel, prijzen per eenheid)
- *   <s>=S  of <enh>=stp → detailregel + is_stelpost
- *   <s>=V  → detailregel + is_verrekenbaar
- *   <s>=/  of <s>== → subtotaal / eindtotaal → overslaan
- *
- * Bedragen: <aard> = kostprijs van de regel, <totaal> = verkoopprijs (incl. opslag).
- * De OPSLAG% wordt per regel afgeleid uit verkoop/kostprijs (totaal/aard); staat er
- * geen opslag in (kostprijsbegroting), dan is verkoop = kostprijs en blijft opslag leeg.
- *
- * Per DETAILregel zijn de kostenpotjes prijzen PER EENHEID; op POST/HOOFDSTUK-regels
- * zijn het TOTALEN (worden door de hoeveelheid gedeeld om de eenheidsprijs te krijgen).
- *   <arb> = uren        → arbeid    (tarief = <uurloon>, val. alginfo <ul>)
- *   <maa> = materiaal   → materieel-component (in EVA getoond als "Materiaal")
- *   <mee> = materieel   → materieel-component (ook als "Materiaal" — geen apart type)
- *   <ond> = onderaann.  → onderaanneming
+ * Uitgangspunten:
+ *  - De boom heeft een variabel aantal niveaus. We bouwen 'm op een stapel en cappen
+ *    op EVA-max 3 groepsniveaus; diepere groepen worden samengevoegd (groepsnaam voor
+ *    de regel-omschrijving), zodat nooit regels verloren gaan.
+ *  - Hoeveelheid = <althv> (effectieve hoeveelheid die in de rollup telt), fallback <hvh>.
+ *    Zo tellen subregels exact op tot hun post en klopt het totaal op de cent.
+ *  - Bedragen: <aard> = kostprijs, <totaal> = verkoop. Opslag% = totaal/aard − 1 (exact).
+ *  - Kostenpotjes per eenheid → componenten:
+ *      <arb> uren → arbeid (tarief <uurloon>, val. alginfo <ul>)
+ *      <maa>/<mee> → materieel-component (EVA toont dit als "Materiaal")
+ *      <ond> → onderaanneming
  *
  * Gebruikt DOMParser — alleen client-side uitvoeren (browser).
  */
@@ -44,10 +35,7 @@ function leestekst(parent: Element, tag: string): string {
   return el?.textContent?.trim() ?? ''
 }
 
-/**
- * Parse een Calc4You-getal (Nederlands formaat): punt = duizendtal, komma = decimaal.
- * "25.098,12" → 25098.12 · "0,46" → 0.46 · "1108" → 1108 · "442,4" → 442.4
- */
+/** Nederlands getal: punt = duizendtal, komma = decimaal. "25.098,12" → 25098.12 */
 function leesGetal(parent: Element, tag: string): number {
   const txt = leestekst(parent, tag)
   if (!txt) return 0
@@ -55,11 +43,7 @@ function leesGetal(parent: Element, tag: string): number {
   return isNaN(n) ? 0 : n
 }
 
-/**
- * BTW uit <btw>. Calc4You-conventie: 'h'/'hoog' = 21%, 'l'/'laag' = 9%.
- * Daarnaast een paar varianten en een kaal percentage. Leeg → hoog (21%).
- * Onbekende, niet-lege code → 21% maar herkend=false (zodat de import 'm meldt).
- */
+/** BTW uit <btw>: 'h'/'hoog'/'1'/'21' = 21%, 'l'/'laag'/'2'/'9' = 9%. Leeg → 21%. */
 const BTW_HOOG = ['a', 'h', 'hoog', '1', '21']
 const BTW_LAAG = ['b', 'l', 'laag', '2', '9']
 
@@ -95,20 +79,30 @@ function mapEenheid(raw: string): Eenheid {
   return 'st'   // 'rit', 'week', 'm2/4wk' e.d. → geen 1-op-1 eenheid; bedrag blijft correct
 }
 
-/**
- * Leid opslag% af uit verkoop/kostprijs. EXACT (niet afgerond) zodat EVA per regel
- * precies het verkoopbedrag uit het bestand reproduceert en alle totalen op de cent
- * kloppen. De UI rondt het percentage in de weergave af. Geen opslag → undefined.
- */
+/** Opslag% uit verkoop/kostprijs. EXACT (niet afgerond) zodat totalen op de cent kloppen. */
 function leidOpslagAf(kostprijs: number, verkoop: number): number | undefined {
   if (kostprijs <= 0 || verkoop <= 0) return undefined
   const pct = (verkoop / kostprijs - 1) * 100
   return Math.abs(pct) > 0.0001 ? pct : undefined
 }
 
-/** abs-verschil binnen 0,5% of 50 cent. */
-function ongeveerGelijk(a: number, b: number): boolean {
-  return Math.abs(a - b) <= Math.max(0.5, Math.abs(b) * 0.005)
+// ─── Rij-classificatie op <s> ─────────────────────────────────────────────────
+
+type RijSoort =
+  | { type: 'groep'; niveau: number }
+  | { type: 'regel' }
+  | { type: 'skip' }
+
+function classificeer(s: string, enh: string): RijSoort {
+  if (enh.trim() === '%') return { type: 'skip' }          // BTW-/percentage-footer (s=a/s=b)
+  const t = s.trim()
+  if (/^\d+$/.test(t)) {
+    const n = parseInt(t, 10)
+    return n > 0 ? { type: 'groep', niveau: n } : { type: 'skip' }
+  }
+  const u = t.toUpperCase()
+  if (t === '' || u === 'S' || u === 'V') return { type: 'regel' }
+  return { type: 'skip' }                                   // '/', '=', 'a', 'b', onbekende codes
 }
 
 // ─── Exporttype ───────────────────────────────────────────────────────────────
@@ -123,25 +117,30 @@ export interface C4yParseResultaat {
   componentregels:    Componentregel[]
   /** Niet-herkende <btw>-codes (op 21% gezet) — om bij import te kunnen signaleren. */
   onbekendeBtwCodes:  string[]
-  /** Posten waarvan de subregels niet optelden en die als één regel zijn samengevat. */
-  samengevattePosten: string[]
+  /** Gezaghebbend totaal excl. BTW uit <alginfo><totaal>. */
+  verwachtTotaal:     number
+  /** Som van de geïmporteerde verkoopbedragen (voor reconciliatie). */
+  verkoopTotaal:      number
 }
 
 // ─── Interne ruwe rij ──────────────────────────────────────────────────────────
 
 interface RuweRij {
-  kind:           'hoofdstuk' | 'post' | 'detail'
+  isGroep:        boolean
+  niveau:         number   // groepsniveau uit <s> (0 voor een regel)
   oms:            string
   code4:          string
   btw:            { pct: number; herkend: boolean; code: string }
   hvh:            number
+  althv:          number
   eenheidRaw:     string
   uurloon:        number
   arb:            number
   maa:            number
   mee:            number
   ond:            number
-  totaal:         number   // verkoopprijs
+  aard:           number   // kostprijs van de rij (nominaal, op <hvh>)
+  totaal:         number   // verkoop van de rij (nominaal, op <hvh>)
   isStelpost:     boolean
   isVerrekenbaar: boolean
   kinderen:       RuweRij[]
@@ -165,160 +164,164 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
 
   // ─── Projectkop ───────────────────────────────────────────────────────────
   const alginfo = Array.from(root.children).find(c => c.tagName === 'alginfo') ?? null
-  const projectNummer = alginfo ? leestekst(alginfo, 'kop') : ''
-  const projectNaam   = alginfo ? leestekst(alginfo, 'r1')  : ''
-  const opdrachtgever = alginfo ? leestekst(alginfo, 'og')  : ''
-  const standaardUurloon = alginfo ? leesGetal(alginfo, 'ul') : 0
+  const projectNummer   = alginfo ? leestekst(alginfo, 'kop') : ''
+  const projectNaam      = alginfo ? leestekst(alginfo, 'r1')  : ''
+  const opdrachtgever    = alginfo ? leestekst(alginfo, 'og')  : ''
+  const standaardUurloon = alginfo ? leesGetal(alginfo, 'ul')  : 0
+  const verwachtTotaal   = alginfo ? leesGetal(alginfo, 'totaal') : 0
 
-  // ─── Pass 1: ruwe rijen + boom (op <s>) ────────────────────────────────────
-  const hoofdstukken: RuweRij[] = []
-  let curHoofdstuk: RuweRij | null = null
-  let curPost: RuweRij | null = null
-
-  function maakSyntheticHoofdstuk(): RuweRij {
-    const h = leegRij('hoofdstuk', 'Algemeen')
-    hoofdstukken.push(h)
-    curHoofdstuk = h
-    curPost = null
-    return h
-  }
+  // ─── Pass 1: ruwe rijen → boom op een stapel (variabele diepte) ─────────────
+  const roots: RuweRij[] = []
+  const stack: RuweRij[] = []   // open groepen, oplopend in niveau
 
   for (const el of Array.from(root.children).filter(c => c.tagName === 'begroting')) {
     const s   = leestekst(el, 's')
+    const enh = leestekst(el, 'enh')
     const oms = leestekst(el, 'oms')
-    if (s === '/' || s === '=') continue
+    const soort = classificeer(s, enh)
+    if (soort.type === 'skip') continue
 
     const totaal = leesGetal(el, 'totaal')
-    let kind: RuweRij['kind']
-    if (s === '1')      kind = 'hoofdstuk'
-    else if (s === '2') kind = 'post'
-    else {
-      if (!oms && totaal === 0) continue   // lege/afsluitende regel
-      kind = 'detail'
-    }
+    if (soort.type === 'regel' && !oms && totaal === 0) continue   // lege/afsluitende regel
 
-    const eenheidRaw = leestekst(el, 'enh')
+    const u = s.trim().toUpperCase()
     const rij: RuweRij = {
-      kind,
+      isGroep:        soort.type === 'groep',
+      niveau:         soort.type === 'groep' ? soort.niveau : 0,
       oms,
       code4:          leestekst(el, 'code4'),
       btw:            leesBtwCode(el),
       hvh:            leesGetal(el, 'hvh'),
-      eenheidRaw,
+      althv:          leesGetal(el, 'althv'),
+      eenheidRaw:     enh,
       uurloon:        leesGetal(el, 'uurloon') || standaardUurloon,
       arb:            leesGetal(el, 'arb'),
       maa:            leesGetal(el, 'maa'),
       mee:            leesGetal(el, 'mee'),
       ond:            leesGetal(el, 'ond'),
+      aard:           leesGetal(el, 'aard'),
       totaal,
-      isStelpost:     s === 'S' || eenheidRaw.toLowerCase() === 'stp',
-      isVerrekenbaar: s === 'V' || oms.toLowerCase().includes('verrekenbaar'),
+      isStelpost:     u === 'S' || enh.toLowerCase() === 'stp',
+      isVerrekenbaar: u === 'V' || oms.toLowerCase().includes('verrekenbaar'),
       kinderen:       [],
     }
 
-    if (kind === 'hoofdstuk') {
-      hoofdstukken.push(rij); curHoofdstuk = rij; curPost = null
-    } else if (kind === 'post') {
-      if (!curHoofdstuk) maakSyntheticHoofdstuk()
-      curHoofdstuk!.kinderen.push(rij); curPost = rij
+    if (rij.isGroep) {
+      while (stack.length && stack[stack.length - 1].niveau >= rij.niveau) stack.pop()
+      const parent = stack[stack.length - 1]
+      ;(parent ? parent.kinderen : roots).push(rij)
+      stack.push(rij)
     } else {
-      const parent = curPost ?? curHoofdstuk ?? maakSyntheticHoofdstuk()
-      parent.kinderen.push(rij)
+      const parent = stack[stack.length - 1]
+      ;(parent ? parent.kinderen : roots).push(rij)
     }
   }
 
-  // ─── Pass 2: bouw EVA-structuren ───────────────────────────────────────────
+  // ─── Pass 2: boom → EVA-structuren ─────────────────────────────────────────
   const groepen:          Groep[]           = []
   const calculatieregels: Calculatieregel[] = []
   const componentregels:  Componentregel[]  = []
-  const onbekendeBtwCodes  = new Set<string>()
-  const samengevattePosten: string[]        = []
+  const onbekendeBtwCodes = new Set<string>()
+  let   verkoopTotaal     = 0
 
-  function nieuweGroep(naam: string, niveau: 1 | 2, parentId: string | null, volgorde: number): Groep {
+  function nieuweGroep(naam: string, niveau: 1 | 2 | 3, parentId: string | null): Groep {
+    const volgorde = groepen.filter(g => g.parent_id === parentId).length + 1
     const g: Groep = { id: nieuweId(), scenario_id: scenarioId, parent_id: parentId, naam, niveau, volgorde }
     groepen.push(g)
     return g
   }
 
-  /** Voeg een calculatieregel + componenten toe. perEenheid=false → bedragen zijn totalen (post). */
-  function voegRegelToe(rij: RuweRij, groep: Groep, hoofdstukNaam: string, perEenheid: boolean, btwOverride?: RuweRij['btw']) {
-    const hvh = rij.hvh || 1
-    // Eenheidsprijzen: detail = al per eenheid; post = totalen / hoeveelheid
-    const deler = perEenheid ? 1 : hvh
-    const arbEh = rij.arb / deler
-    const maaEh = rij.maa / deler
-    const meeEh = rij.mee / deler
-    const ondEh = rij.ond / deler
+  let defaultGroep: Groep | null = null
+  const ensureDefaultGroep = () => (defaultGroep ??= nieuweGroep('Algemeen', 1, null))
 
-    const kostprijsTot = (arbEh * rij.uurloon + maaEh + meeEh + ondEh) * hvh
-    const opslag = leidOpslagAf(kostprijsTot, rij.totaal)
+  function heeftRegelNakomeling(node: RuweRij): boolean {
+    return node.kinderen.some(k => !k.isGroep || heeftRegelNakomeling(k))
+  }
 
-    const btw = btwOverride ?? rij.btw
+  /**
+   * Voeg één calculatieregel + componenten toe.
+   * @param bedragenTotaal true → arb/maa/mee/ond zijn totalen (childless groep); anders per eenheid.
+   */
+  function voegRegelToe(node: RuweRij, groep: Groep, hoofdstukNaam: string, bedragenTotaal: boolean, naamPrefix: string) {
+    const hvhNom      = node.hvh || 1
+    const hoeveelheid = node.althv || node.hvh || 1
+    const deler       = bedragenTotaal ? hoeveelheid : 1   // totalen → per eenheid delen
+    const arbU = node.arb / deler
+    const maaU = node.maa / deler
+    const meeU = node.mee / deler
+    const ondU = node.ond / deler
+
+    const perEenheidKp = arbU * node.uurloon + maaU + meeU + ondU
+    // Opslag uit de rij-eigen verhouding kostprijs↔verkoop (hoeveelheids-onafhankelijk).
+    const nominaleKp = node.aard > 0 ? node.aard : perEenheidKp * hvhNom
+    const opslag = leidOpslagAf(nominaleKp, node.totaal)
+
+    const btw = node.btw
     if (!btw.herkend) onbekendeBtwCodes.add(btw.code)
 
+    const omschrijving = (naamPrefix ? `${naamPrefix} — ` : '') + (node.oms || 'Regel')
     const volgorde = calculatieregels.filter(r => r.groep_id === groep.id).length + 1
     const regel: Calculatieregel = {
       id:           nieuweId(),
       groep_id:     groep.id,
-      omschrijving: rij.oms || `Regel ${volgorde}`,
-      hoeveelheid:  hvh,
-      eenheid:      mapEenheid(rij.eenheidRaw),
+      omschrijving,
+      hoeveelheid,
+      eenheid:      mapEenheid(node.eenheidRaw),
       volgorde,
       btw_pct:      btw.pct,
       ...(opslag !== undefined ? { opslag_pct: opslag } : {}),
-      ...(rij.isStelpost ? { is_stelpost: true } : {}),
-      ...(rij.isVerrekenbaar ? { is_verrekenbaar: true } : {}),
+      ...(node.isStelpost ? { is_stelpost: true } : {}),
+      ...(node.isVerrekenbaar ? { is_verrekenbaar: true } : {}),
       ...(hoofdstukNaam ? { kostengroep: hoofdstukNaam } : {}),
-      ...(rij.code4 ? { opmerking: rij.code4 } : {}),
+      ...(node.code4 ? { opmerking: node.code4 } : {}),
     }
     calculatieregels.push(regel)
 
-    if (arbEh > 0) componentregels.push({
+    if (arbU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'arbeid', norm_hoeveelheid: arbEh, tarief: rij.uurloon, eenheid: 'uur',
+      type: 'arbeid', norm_hoeveelheid: arbU, tarief: node.uurloon, eenheid: 'uur',
     })
-    if (maaEh > 0) componentregels.push({
+    if (maaU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'materieel', norm_hoeveelheid: 1, tarief: maaEh, omschrijving: 'Materiaal',
+      type: 'materieel', norm_hoeveelheid: 1, tarief: maaU, omschrijving: 'Materiaal',
     })
-    if (meeEh > 0) componentregels.push({
+    if (meeU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'materieel', norm_hoeveelheid: 1, tarief: meeEh, omschrijving: 'Materiaal',
+      type: 'materieel', norm_hoeveelheid: 1, tarief: meeU, omschrijving: 'Materiaal',
     })
-    if (ondEh > 0) componentregels.push({
+    if (ondU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'onderaanneming', norm_hoeveelheid: 1, tarief: ondEh,
+      type: 'onderaanneming', norm_hoeveelheid: 1, tarief: ondU,
     })
+
+    const evaKostprijs = perEenheidKp * hoeveelheid
+    verkoopTotaal += evaKostprijs * (1 + (opslag ?? 0) / 100)
   }
 
-  let g1Volgorde = 0
-  for (const hoofdstuk of hoofdstukken) {
-    g1Volgorde += 1
-    const g1 = nieuweGroep(hoofdstuk.oms || `Hoofdstuk ${g1Volgorde}`, 1, null, g1Volgorde)
-    let g2Volgorde = 0
-
-    for (const kind of hoofdstuk.kinderen) {
-      if (kind.kind === 'detail') {
-        // Detailregel rechtstreeks onder het hoofdstuk (bijv. stelposten)
-        voegRegelToe(kind, g1, hoofdstuk.oms, true)
-        continue
-      }
-      // Post (s=2): groep als de subregels optellen tot de post, anders één regel
-      const subregels = kind.kinderen.filter(k => k.kind === 'detail')
-      const subSom = subregels.reduce((s, k) => s + k.totaal, 0)
-      if (subregels.length > 0 && ongeveerGelijk(subSom, kind.totaal)) {
-        g2Volgorde += 1
-        const g2 = nieuweGroep(kind.oms || `Post ${g2Volgorde}`, 2, g1.id, g2Volgorde)
-        for (const sub of subregels) voegRegelToe(sub, g2, hoofdstuk.oms, true)
-      } else {
-        // Post zelf als (samengevatte) regel; bedragen zijn totalen.
-        // BTW van de post (vaak leeg) → erf van de eerste subregel.
-        const btwOverride = kind.btw.code === '' && subregels[0] ? subregels[0].btw : undefined
-        voegRegelToe(kind, g1, hoofdstuk.oms, false, btwOverride)
-        if (subregels.length > 0) samengevattePosten.push(kind.oms)
-      }
+  /** Loop de ruwe boom af; diepte = EVA-niveau (gecapt op 3, dieper wordt samengevoegd). */
+  function verwerk(node: RuweRij, parentGroep: Groep | null, diepte: number, hoofdstukNaam: string, prefix: string) {
+    if (!node.isGroep) {
+      voegRegelToe(node, parentGroep ?? ensureDefaultGroep(), hoofdstukNaam || (parentGroep?.naam ?? ''), false, prefix)
+      return
+    }
+    // Groep zonder enige regel eronder → tóch als één regel (anders verdwijnt het bedrag).
+    if (!heeftRegelNakomeling(node)) {
+      voegRegelToe(node, parentGroep ?? ensureDefaultGroep(), hoofdstukNaam || (parentGroep?.naam ?? ''), true, prefix)
+      return
+    }
+    if (diepte <= 3) {
+      const g = nieuweGroep(node.oms || `Groep ${diepte}`, diepte as 1 | 2 | 3, parentGroep?.id ?? null)
+      const hk = diepte === 1 ? (node.oms || g.naam) : hoofdstukNaam
+      for (const kind of node.kinderen) verwerk(kind, g, diepte + 1, hk, '')
+    } else {
+      // Overtollig niveau: geen nieuwe EVA-groep; regels aan de niveau-3-voorouder,
+      // groepsnaam vóór de regel-omschrijving zodat niets verloren gaat.
+      const nieuwPrefix = prefix ? `${prefix} / ${node.oms}` : node.oms
+      for (const kind of node.kinderen) verwerk(kind, parentGroep, diepte, hoofdstukNaam, nieuwPrefix)
     }
   }
+
+  for (const r of roots) verwerk(r, null, 1, '', '')
 
   return {
     projectNaam,
@@ -329,16 +332,7 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
     calculatieregels,
     componentregels,
     onbekendeBtwCodes: Array.from(onbekendeBtwCodes),
-    samengevattePosten,
-  }
-}
-
-// ─── Hulp ──────────────────────────────────────────────────────────────────────
-
-function leegRij(kind: RuweRij['kind'], oms: string): RuweRij {
-  return {
-    kind, oms, code4: '', btw: { pct: 21, herkend: true, code: '' },
-    hvh: 1, eenheidRaw: '', uurloon: 0, arb: 0, maa: 0, mee: 0, ond: 0,
-    totaal: 0, isStelpost: false, isVerrekenbaar: false, kinderen: [],
+    verwachtTotaal,
+    verkoopTotaal: Math.round(verkoopTotaal * 100) / 100,
   }
 }
