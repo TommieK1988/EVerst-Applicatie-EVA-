@@ -4,6 +4,7 @@ import {
   fetchAllPages,
   logSync,
   type SyncResult,
+  type SyncMode,
 } from './sync'
 import type { Bouw7Project, Bouw7ProjectFinancial } from './client'
 
@@ -63,6 +64,26 @@ function kostenSplit(costs: Bouw7ProjectFinancial['costs'] | undefined): Record<
     inkoop:         toNum(costs.purchaseOrder?.realised),
     overig:         toNum(costs.other?.realised),
   }
+}
+
+/**
+ * Voer `fn` uit over alle `items` met maximaal `limit` gelijktijdig in-flight.
+ * Anders dan batch-and-wait blijft de pijplijn continu gevuld: er wordt niet per ronde
+ * gewacht op de traagste call van een batch, wat bij ~2400 Athena-calls het verschil
+ * maakt tussen ruim binnen en over de 300s-functietimeout. Piek-concurrency = `limit`;
+ * resultaten in dezelfde volgorde als `items`.
+ */
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
+  return results
 }
 
 type ManagementProjectRow = Record<string, unknown>
@@ -168,16 +189,22 @@ type ProjectControlData = {
 }
 
 /**
- * Haalt de project-control chapters op (alle 6 kostensoorten) en leidt in één keer af:
- *  - % gereed = prognose-gewogen rollup van de bewakingscode-standopnames
- *    (Σ progress×prognose / Σ prognose over alle (code × kostensoort)). Zelfde berekening
- *    als getDossierBewaking.projectProgress. Null als er geen prognose is.
- *  - arbeidsuren (prognose + geboekt) = Σ van hourInfo.prognosisHours / .costHours over de
- *    bewakingscodes (én de uncoded chapter) op kostensoort 1 (Arbeid). Zie getDossierBewaking.
+ * Haalt (alleen de benodigde) project-control chapters op en leidt af:
+ *  - `rollup` → % gereed = prognose-gewogen rollup van de bewakingscode-standopnames
+ *    (Σ progress×prognose / Σ prognose over alle (code × kostensoort), alle 6 kostensoorten).
+ *    Zelfde berekening als getDossierBewaking.projectProgress. Alleen nodig voor projecten in
+ *    HANDMATIG-modus; voor automatische/afgeronde projecten pakken we Bouw7's eigen rollup uit
+ *    de bulk `/wip/report` (bewezen identiek), wat 6 calls/project bespaart.
+ *  - `hours` → arbeidsuren (prognose + geboekt) = Σ hourInfo.prognosisHours / .costHours over de
+ *    bewakingscodes (én de uncoded chapter) op kostensoort 1. Alleen nodig voor lopende projecten
+ *    (werkvoorraad). Geen bulk-endpoint beschikbaar, dus 1 call kostensoort-1 per lopend project.
+ *
+ * Kostensoorten die worden opgehaald: `rollup` ? alle 6 : (`hours` ? alleen 1 : geen).
  */
 async function berekenProjectControl(
   bouw7: Awaited<ReturnType<typeof getBouw7Client>>,
   bouw7Id: string,
+  opts: { rollup: boolean; hours: boolean },
 ): Promise<ProjectControlData> {
   type HourInfo = { prognosisHours?: number | string | null; costHours?: number | string | null }
   type Entry = {
@@ -188,34 +215,43 @@ async function berekenProjectControl(
     id?: number | null
   }
   type Chapters = { items?: { chapterInfo?: Entry | null; securityCodes?: Entry[] }[] }
+
+  const costTypes = opts.rollup ? [1, 2, 3, 4, 5, 6] : opts.hours ? [1] : []
+  if (costTypes.length === 0) {
+    return { progress: null, arbeidPrognoseUren: null, arbeidGeboekteUren: null }
+  }
   const resps = await Promise.all(
-    [1, 2, 3, 4, 5, 6].map(ct =>
+    costTypes.map(ct =>
       bouw7
         .getAthena<Chapters>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
         .catch(() => null),
     ),
   )
 
-  // % gereed — prognose-gewogen over álle kostensoorten (securityCodes).
-  let som = 0
-  let gew = 0
-  for (const resp of resps) {
-    if (!resp) continue
-    for (const item of resp.items ?? []) {
-      for (const sc of item.securityCodes ?? []) {
-        if (sc.progress == null) continue
-        const w = toNum(sc.prognosisAmount)
-        if (w > 0) { som += toNum(sc.progress) * w; gew += w }
+  // % gereed — prognose-gewogen over álle kostensoorten (securityCodes). Alleen bij handmatig-modus.
+  let progress: number | null = null
+  if (opts.rollup) {
+    let som = 0
+    let gew = 0
+    for (const resp of resps) {
+      if (!resp) continue
+      for (const item of resp.items ?? []) {
+        for (const sc of item.securityCodes ?? []) {
+          if (sc.progress == null) continue
+          const w = toNum(sc.prognosisAmount)
+          if (w > 0) { som += toNum(sc.progress) * w; gew += w }
+        }
       }
     }
+    progress = gew > 0 ? Math.round((som / gew) * 100) / 100 : null
   }
 
-  // Arbeidsuren — alléén kostensoort 1 (resps[0]), incl. uncoded chapter.
+  // Arbeidsuren — alléén kostensoort 1 (altijd resps[0] als opgehaald), incl. uncoded chapter.
   let pUren = 0
   let gUren = 0
   let heeftUren = false
-  const arbeid = resps[0]
-  if (arbeid) {
+  const arbeid = costTypes[0] === 1 ? resps[0] : null
+  if (opts.hours && arbeid) {
     const tel = (e?: Entry | null) => {
       if (!e?.hourInfo) return
       pUren += toNum(e.hourInfo.prognosisHours)
@@ -230,7 +266,7 @@ async function berekenProjectControl(
   }
 
   return {
-    progress: gew > 0 ? Math.round((som / gew) * 100) / 100 : null,
+    progress,
     arbeidPrognoseUren: heeftUren ? pUren : null,
     arbeidGeboekteUren: heeftUren ? gUren : null,
   }
@@ -240,8 +276,15 @@ async function berekenProjectControl(
  * Sync alle Bouw7-projecten met financiële data naar `management_projecten`.
  * Voor het Management Dashboard (KPI's, pivots per werkmaatschappij/projectleider,
  * Lopende/Gereed Werken-tabellen).
+ *
+ * `mode`:
+ *  - `full` (ochtend-cron): álle doel-projecten opnieuw ophalen — drift-correctie,
+ *    pikt ook heropende projecten weer op.
+ *  - `incremental` (middag-cron + handmatige knop): reeds-gerede projecten (financieel
+ *    afgesloten in Bouw7) overslaan. Hun cijfers wijzigen niet meer, dus we behouden de
+ *    bestaande rij en besparen ~6 Athena-calls per gereed project. Halveert de calls.
  */
-export async function syncManagementProjecten(): Promise<SyncResult> {
+export async function syncManagementProjecten(mode: SyncMode = 'full'): Promise<SyncResult> {
   const start = Date.now()
   const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
 
@@ -268,49 +311,90 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       d.servicedesk_substatus != null || d.hoofdstatus === 'opdracht',
     )
 
-    // Bestaande bouw7_id's ophalen om nieuw vs. bijgewerkt te tellen en stale te prunen.
+    // Bestaande bouw7_id's + gereed-vlag ophalen: nieuw vs. bijgewerkt tellen, stale prunen,
+    // en (bij incremental) de reeds-gerede projecten overslaan.
     const { data: bestaandeData } = await supabase
       .from('management_projecten')
-      .select('bouw7_id')
+      .select('bouw7_id, is_gereed')
       .not('bouw7_id', 'is', null)
-    const bestaand = new Set<string>((bestaandeData ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
+    const bestaandeRijen = (bestaandeData ?? []) as { bouw7_id: string; is_gereed: boolean | null }[]
+    const bestaand = new Set<string>(bestaandeRijen.map(r => r.bouw7_id))
+    const gereedIds = new Set<string>(bestaandeRijen.filter(r => r.is_gereed).map(r => r.bouw7_id))
 
     const targetIds = doelDossiers.map(d => d.bouw7_id)
+    // Incrementeel: gerede projecten niet opnieuw ophalen (bestaande rij blijft staan).
+    // De volledige ochtend-sync corrigeert drift en pikt eventuele heropende projecten weer op.
+    const verwerkIds = mode === 'incremental'
+      ? targetIds.filter(id => !gereedIds.has(id))
+      : targetIds
+    const verwerkSet = new Set(verwerkIds)
 
-    // 1) Athena project-financial per project (batch van 10) → bedragen.
+    // 1) Athena project-financial per project (max 10 gelijktijdig) → bedragen.
     const financialMap = new Map<string, Bouw7ProjectFinancial>()
-    const FIN_BATCH = 10
-    for (let i = 0; i < targetIds.length; i += FIN_BATCH) {
-      const batch = targetIds.slice(i, i + FIN_BATCH)
-      const results = await Promise.allSettled(
-        batch.map(id => bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`)),
-      )
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j]
-        if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
-          financialMap.set(batch[j], r.value)
+    const finResults = await mapPool(verwerkIds, 10, id =>
+      bouw7.getAthena<Bouw7ProjectFinancial>(`/project-financial/${id}`).catch(() => null),
+    )
+    verwerkIds.forEach((id, i) => {
+      const v = finResults[i]
+      if (v && typeof v === 'object') financialMap.set(id, v)
+    })
+
+    // 2) Bulk `/wip/report` (1 call, álle projecten): Bouw7's eigen prognose-gewogen % gereed
+    //    (`progress`) + de progressmodus (`progressType`). Voor AUTOMATISCHE (type 2) en AFGERONDE
+    //    (type 4, altijd 100%) projecten is `progress` bewezen identiek aan onze eigen rollup —
+    //    die nemen we dus rechtstreeks over (scheelt 6 calls/project). Voor HANDMATIG-modus (type 1)
+    //    is `progress` de handmatig ingevoerde project-% (die willen we NIET) → daar berekenen we de
+    //    bewakingscode-rollup alsnog zelf.
+    type WipRow = { progress: number | null; progressType: number | null }
+    const wipMap = new Map<string, WipRow>()
+    try {
+      const wip = await bouw7.getAthena<{
+        items?: { project?: { id?: number | string }; progress?: number | string | null; progressType?: number | null }[]
+      }>('/wip/report')
+      for (const it of wip.items ?? []) {
+        const id = it.project?.id
+        if (id != null) {
+          wipMap.set(String(id), {
+            progress: it.progress == null ? null : toNum(it.progress),
+            progressType: it.progressType ?? null,
+          })
         }
       }
-    }
+    } catch { /* wip optioneel: bij uitval valt % gereed terug op de kostenratio in mapProject */ }
 
-    // 2) % gereed (project) = zélf berekende prognose-gewogen rollup van de bewakingscode-standopnames
-    //    (Σ progress×prognose / Σ prognose over alle (code × kostensoort), uit de project-control chapters).
-    //    NB: NIET /wip/report — dat geeft 0 bij projecten in "Handmatig"-modus, ook al staan de standopnames
-    //    per code wél in Bouw7. En NIET total/cost-types.totals.progress (= SOM per kostensoort). Zelfde
-    //    berekening als getDossierBewaking.projectProgress op het Financieel-tab. 6 calls/project (batched).
-    const controlMap = new Map<string, ProjectControlData>()
-    const ROLLUP_BATCH = 6
-    for (let i = 0; i < targetIds.length; i += ROLLUP_BATCH) {
-      const batch = targetIds.slice(i, i + ROLLUP_BATCH)
-      const results = await Promise.allSettled(batch.map(id => berekenProjectControl(bouw7, id)))
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j]
-        if (r.status === 'fulfilled' && r.value != null) controlMap.set(batch[j], r.value)
+    // 3) Project-control alleen waar nodig: rollup uitsluitend bij handmatig-modus, arbeidsuren
+    //    (kostensoort 1) uitsluitend voor lopende projecten (werkvoorraad). Projecten die geen van
+    //    beide nodig hebben (afgerond & niet-handmatig) doen 0 control-calls.
+    const controlWork = verwerkIds.map(id => {
+      const wipRow = wipMap.get(id)
+      const p = projectMap.get(id)
+      return {
+        id,
+        handmatig: wipRow?.progressType === 1,
+        lopend: p ? !isGereedVanStatus(p) : true,
+        wipProgress: wipRow?.progress ?? null,
       }
-    }
+    })
+    const controlMap = new Map<string, ProjectControlData>()
+    const ctrlResults = await mapPool(controlWork, 6, w =>
+      w.handmatig || w.lopend
+        ? berekenProjectControl(bouw7, w.id, { rollup: w.handmatig, hours: w.lopend }).catch(() => null)
+        : Promise.resolve(null),
+    )
+    controlWork.forEach((w, i) => {
+      const ctrl = ctrlResults[i]
+      // % gereed: handmatig → eigen bewakingscode-rollup (null → kostenratio in mapProject);
+      // automatisch/afgerond → Bouw7's rollup uit /wip/report. Nooit de handmatige project-%.
+      controlMap.set(w.id, {
+        progress: w.handmatig ? (ctrl?.progress ?? null) : w.wipProgress,
+        arbeidPrognoseUren: ctrl?.arbeidPrognoseUren ?? null,
+        arbeidGeboekteUren: ctrl?.arbeidGeboekteUren ?? null,
+      })
+    })
 
     const nu = new Date().toISOString()
     const rows: ManagementProjectRow[] = doelDossiers.flatMap(d => {
+      if (!verwerkSet.has(d.bouw7_id)) return []  // gereed & incrementeel → bestaande rij behouden
       const p = projectMap.get(d.bouw7_id)
       if (!p) return []  // geen Bouw7-project → niets om te tonen
       const sectie: 'opdrachten' | 'servicedesk' = d.servicedesk_substatus ? 'servicedesk' : 'opdrachten'
@@ -334,8 +418,12 @@ export async function syncManagementProjecten(): Promise<SyncResult> {
       }
     }
 
-    // Prune: rijen die niet meer in de doel-set (opdracht/servicedesk) zitten, verwijderen.
-    const behoud = new Set<string>(rows.map(r => r.bouw7_id as string))
+    // Prune: rijen die niet meer in de doel-set (opdracht/servicedesk mét bestaand Bouw7-project)
+    // zitten. NB: gebaseerd op de volledige doel-set, niet op `rows` — anders zouden de bij
+    // incremental bewust overgeslagen gerede projecten als stale worden verwijderd.
+    const behoud = new Set<string>(
+      doelDossiers.filter(d => projectMap.has(d.bouw7_id)).map(d => d.bouw7_id),
+    )
     const stale = [...bestaand].filter(id => !behoud.has(id))
     for (let i = 0; i < stale.length; i += 500) {
       await supabase.from('management_projecten').delete().in('bouw7_id', stale.slice(i, i + 500))

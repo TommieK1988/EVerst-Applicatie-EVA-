@@ -84,12 +84,18 @@ export default function ManagementShell({
   function handleSync() {
     setSyncResult(null)
     startTransition(async () => {
-      const r = await syncManagementAction()
-      setSyncResult(
-        r.fouten > 0
-          ? `⚠ ${r.fouten} fouten — ${r.foutMelding ?? ''}`
-          : `✓ ${r.nieuw} nieuw · ${r.bijgewerkt} bijgewerkt`,
-      )
+      try {
+        const r = await syncManagementAction()
+        setSyncResult(
+          r.fouten > 0
+            ? `⚠ ${r.fouten} fouten — ${r.foutMelding ?? ''}`
+            : `✓ ${r.nieuw} nieuw · ${r.bijgewerkt} bijgewerkt`,
+        )
+      } catch {
+        // Server-action gekilld (bv. 300s-timeout) of netwerkfout: nooit de pagina
+        // laten crashen — toon een nette melding. De geplande sync houdt de data actueel.
+        setSyncResult('⚠ Synchronisatie afgebroken (duurde te lang). De geplande sync houdt de cijfers actueel; probeer het later opnieuw.')
+      }
     })
   }
 

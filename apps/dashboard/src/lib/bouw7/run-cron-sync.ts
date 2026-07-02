@@ -30,7 +30,7 @@ export async function runCronSync(req: NextRequest, mode: SyncMode): Promise<Nex
     )
   }
 
-  const management = await syncManagementProjecten()
+  const management = await syncManagementProjecten(mode)
 
   return NextResponse.json(
     {

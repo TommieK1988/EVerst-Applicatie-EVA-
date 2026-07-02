@@ -14,7 +14,9 @@ import {
 import { berekenManagementKpi } from '@/lib/dashboard/aggregaties'
 
 export async function syncManagementAction(): Promise<{ nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }> {
-  const result = await syncManagementProjecten()
+  // Handmatig verversen = incrementeel: gerede (financieel afgesloten) projecten overslaan,
+  // zodat de knop ruim binnen de functietimeout blijft. De ochtend-cron doet de volledige sync.
+  const result = await syncManagementProjecten('incremental')
   revalidatePath('/management')
   return result
 }
