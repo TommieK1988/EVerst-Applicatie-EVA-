@@ -1,4 +1,5 @@
 import { createAdminClient } from '@everts/database/server'
+import { getInterneDossierIds } from './queries'
 
 /**
  * Werkvoorraad-berekening: nog uit te voeren arbeidsuren (vraag) tegenover de
@@ -109,10 +110,10 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
   const peildatum = isoDatum(peil)
   const eindDatum = isoDatum(eind)
 
-  const [projRes, medRes, uursoortRes] = await Promise.all([
+  const [projRes, medRes, uursoortRes, internSet] = await Promise.all([
     supabase
       .from('management_projecten')
-      .select('bouw7_id, projectnummer, projectnaam, filiaal, arbeid_prognose_uren, arbeid_geboekte_uren')
+      .select('bouw7_id, projectnummer, projectnaam, filiaal, arbeid_prognose_uren, arbeid_geboekte_uren, dossier_id')
       .eq('is_gereed', false),
     supabase
       .from('medewerkers')
@@ -122,6 +123,7 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
       .from('planning_uursoorten')
       .select('id, naam, kleur, volgorde')
       .order('volgorde', { ascending: true }),
+    getInterneDossierIds(),
   ])
 
   // ── Vraag ──
@@ -130,8 +132,9 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
   const projecten: WerkvoorraadProjectRegel[] = []
   for (const p of (projRes.data ?? []) as {
     bouw7_id: string | null; projectnummer: string; projectnaam: string; filiaal: string | null
-    arbeid_prognose_uren: number | null; arbeid_geboekte_uren: number | null
+    arbeid_prognose_uren: number | null; arbeid_geboekte_uren: number | null; dossier_id: string | null
   }[]) {
+    if (p.dossier_id && internSet.has(p.dossier_id)) continue
     if (p.arbeid_prognose_uren == null && p.arbeid_geboekte_uren == null) continue
     const saldo = (p.arbeid_prognose_uren ?? 0) - (p.arbeid_geboekte_uren ?? 0)
     if (saldo > 0) {

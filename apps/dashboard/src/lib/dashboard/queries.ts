@@ -37,6 +37,21 @@ export async function getMedewerkerByAuthId(authUserId: string): Promise<Medewer
 
 /* ── Management Dashboard ─────────────────────────────────────────── */
 
+/**
+ * Dossier-ids waarvoor de "Intern"-toggle (sleutel 'intern') aan staat.
+ * Interne dossiers tellen niet mee in het Management-tab (KPI's, lijsten, funnel, werkvoorraad).
+ */
+export async function getInterneDossierIds(): Promise<Set<string>> {
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossier_toggles')
+    .select('dossier_id, dossier_toggle_definities!inner(sleutel)')
+    .eq('aan', true)
+    .eq('dossier_toggle_definities.sleutel', 'intern')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Set((data ?? []).map((d: any) => d.dossier_id as string))
+}
+
 const MANAGEMENT_PROJECT_KOLOMMEN =
   'id, projectnummer, bouw7_id, filiaal, status, opdrachtgever, projectnaam, categorie, projectleider, ' +
   'geboekte_kosten, totale_opdracht, pct_gereed, totale_prognose, verwacht_resultaat, pct_marge, ' +
@@ -45,14 +60,16 @@ const MANAGEMENT_PROJECT_KOLOMMEN =
 
 export async function getManagementProjecten(): Promise<ManagementProject[]> {
   const supabase = createAdminClient() as any
-  const [{ data }, ohw] = await Promise.all([
+  const [{ data }, ohw, internSet] = await Promise.all([
     supabase
       .from('management_projecten')
       .select(MANAGEMENT_PROJECT_KOLOMMEN)
       .order('projectnummer', { ascending: true }),
     getManagementOhw(HUIDIG_BOEKJAAR),
+    getInterneDossierIds(),
   ])
-  const projecten = (data ?? []) as ManagementProject[]
+  const projecten = ((data ?? []) as ManagementProject[])
+    .filter(p => !p.dossier_id || !internSet.has(p.dossier_id))
 
   // OHW-correctie per dossier koppelen op bouw7_id.
   const ohwMap = new Map<string, ManagementOhw>()
@@ -152,18 +169,21 @@ export async function getManagementLaatsteSync(): Promise<string | null> {
 /* ── Verkoop / funnel + calculators ───────────────────────────────── */
 
 const FUNNEL_DOSSIER_KOLOMMEN =
-  'hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, bedrag_excl_btw, ' +
+  'id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, bedrag_excl_btw, ' +
   'categorie, bouw7_filiaal, calculator_id, created_at, verzonden_op, gearchiveerd'
 
-/** Lean dossier-projectie voor funnel/calculator-aggregatie (niet-gearchiveerd). */
+/** Lean dossier-projectie voor funnel/calculator-aggregatie (niet-gearchiveerd, niet-intern). */
 async function getFunnelDossiers(): Promise<FunnelDossier[]> {
   const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('dossiers')
-    .select(FUNNEL_DOSSIER_KOLOMMEN)
-    .limit(20000)
-  return ((data ?? []) as (FunnelDossier & { gearchiveerd: boolean | null })[])
-    .filter(d => d.gearchiveerd !== true)
+  const [{ data }, internSet] = await Promise.all([
+    supabase
+      .from('dossiers')
+      .select(FUNNEL_DOSSIER_KOLOMMEN)
+      .limit(20000),
+    getInterneDossierIds(),
+  ])
+  return ((data ?? []) as (FunnelDossier & { id: string; gearchiveerd: boolean | null })[])
+    .filter(d => d.gearchiveerd !== true && !internSet.has(d.id))
 }
 
 function medNaam(med: { voornaam?: string | null; tussenvoegsel?: string | null; achternaam?: string | null } | null): string {
