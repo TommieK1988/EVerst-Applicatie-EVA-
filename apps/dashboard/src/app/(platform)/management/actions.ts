@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
+import { syncDaysOff } from '@/lib/bouw7/sync'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import {
   getManagementProjecten,
@@ -16,7 +17,11 @@ import { berekenManagementKpi } from '@/lib/dashboard/aggregaties'
 export async function syncManagementAction(): Promise<{ nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }> {
   // Handmatig verversen = incrementeel: gerede (financieel afgesloten) projecten overslaan,
   // zodat de knop ruim binnen de functietimeout blijft. De ochtend-cron doet de volledige sync.
-  const result = await syncManagementProjecten('incremental')
+  // Verlof/vrije dagen (Bouw7 days-off) meenemen zodat de Werkvoorraad-capaciteit meeloopt.
+  const [result] = await Promise.all([
+    syncManagementProjecten('incremental'),
+    syncDaysOff().catch(() => null),
+  ])
   revalidatePath('/management')
   return result
 }

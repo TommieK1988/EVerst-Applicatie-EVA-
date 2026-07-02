@@ -247,6 +247,34 @@ export type Bouw7Employee = {
   sellingHourlyRate?: string | null
 }
 
+/**
+ * Individueel verlof/vrije dag uit GET /list/days-off-per-employee (Heimdall, CalendarApi).
+ * Toekomstgericht (kalender). Geen type-veld (verlof/ziek niet te onderscheiden), alleen `remark`.
+ */
+export type Bouw7DayOffPerEmployee = {
+  id: number
+  employee?: { id: number; firstName?: string; lastName?: string } | null
+  /** ISO-datum/-datetime (live JSON, camelCase). */
+  startDate?: string | null
+  endDate?: string | null
+  /** isAllDay=true bij hele-dag-verlof; hours is in de praktijk altijd "0.00". */
+  isAllDay?: boolean | null
+  hours?: string | number | null
+  remark?: string | null
+  /** Status-code (in de praktijk 0); alle statussen worden meegenomen. */
+  status?: number | null
+}
+
+/** Organisatiebrede vrije dag (feestdag/bouwvak) uit GET /list/days-off (Heimdall, CalendarApi). */
+export type Bouw7DayOff = {
+  id: number
+  startDate?: string | null
+  endDate?: string | null
+  name?: string | null
+  /** Herhaalt jaarlijks (feestdagen). Live API-veld = `isAnnual`. */
+  isAnnual?: boolean | null
+}
+
 export type Bouw7Project = {
   id: number
   projectCode?: string

@@ -110,7 +110,7 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
   const peildatum = isoDatum(peil)
   const eindDatum = isoDatum(eind)
 
-  const [projRes, medRes, uursoortRes, internSet] = await Promise.all([
+  const [projRes, medRes, uursoortRes, vrijeRes, internSet] = await Promise.all([
     supabase
       .from('management_projecten')
       .select('bouw7_id, projectnummer, projectnaam, filiaal, arbeid_prognose_uren, arbeid_geboekte_uren, dossier_id')
@@ -123,8 +123,29 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
       .from('planning_uursoorten')
       .select('id, naam, kleur, volgorde')
       .order('volgorde', { ascending: true }),
+    supabase
+      .from('bouw7_vrije_dagen')
+      .select('start_datum, eind_datum, herhaalt_jaarlijks'),
     getInterneDossierIds(),
   ])
+
+  // Organisatiebrede vrije dagen (feestdagen/bouwvak) → set van geblokkeerde ISO-datums
+  // binnen [peildatum, eindDatum]. herhaalt_jaarlijks: remap MM-DD naar het huidige jaar.
+  const orgVrij = new Set<string>()
+  for (const v of (vrijeRes.data ?? []) as { start_datum: string; eind_datum: string; herhaalt_jaarlijks: boolean }[]) {
+    let s = v.start_datum
+    let e = v.eind_datum
+    if (v.herhaalt_jaarlijks) {
+      s = `${jaar}-${v.start_datum.slice(5, 10)}`
+      e = `${jaar}-${v.eind_datum.slice(5, 10)}`
+      if (e < s) e = s
+    }
+    const van = s > peildatum ? s : peildatum
+    const tot = e < eindDatum ? e : eindDatum
+    for (let dd = new Date(`${van}T00:00:00Z`); isoDatum(dd) <= tot; dd.setUTCDate(dd.getUTCDate() + 1)) {
+      orgVrij.add(isoDatum(dd))
+    }
+  }
 
   // ── Vraag ──
   let vraagUren = 0
@@ -208,6 +229,8 @@ export async function getWerkvoorraad(): Promise<WerkvoorraadData> {
         (r.geldig_tot == null || r.geldig_tot >= datum),
       )
       if (!rooster) continue
+      // Organisatiebrede vrije dag (feestdag/bouwvak) → voor iedereen niet beschikbaar.
+      if (orgVrij.has(datum)) continue
       // Verlof/ziekte op deze dag → volledige dag niet beschikbaar.
       const afwezig = afw.some(a => a.start_datum <= datum && a.eind_datum >= datum)
       if (afwezig) continue

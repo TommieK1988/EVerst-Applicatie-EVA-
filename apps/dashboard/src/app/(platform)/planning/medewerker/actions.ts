@@ -47,6 +47,16 @@ export async function maakAfwezigheid(
 export async function verwijderAfwezigheid(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Uit Bouw7 gesynct verlof is read-only in EVA — de sync beheert het.
+  const { data: bestaand } = await db()
+    .from('medewerker_afwezigheid')
+    .select('bron')
+    .eq('id', id)
+    .maybeSingle()
+  if (bestaand?.bron === 'bouw7') {
+    return { ok: false, error: 'Dit verlof komt uit Bouw7 en kan alleen daar gewijzigd worden.' }
+  }
+
   const { error } = await db()
     .from('medewerker_afwezigheid')
     .delete()

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Lock } from 'lucide-react'
 import type { Medewerker, MedewerkerAfwezigheid, MedewerkerAfwezigheidType } from '@everts/database/platform-types'
 import { medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
 import { maakAfwezigheid, verwijderAfwezigheid, haalAfwezigheidInPeriode } from '@/app/(platform)/planning/medewerker/actions'
@@ -262,6 +262,15 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, o
                         }}>
                           {medewerkerAfwezigheidLabels[a.type]}
                         </span>
+                        {a.bron === 'bouw7' && (
+                          <span style={{
+                            marginLeft: 6,
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
+                            color: 'var(--accent)', textTransform: 'uppercase',
+                          }}>
+                            Bouw7
+                          </span>
+                        )}
                       </div>
                       <div style={{
                         fontSize: 10, color: 'var(--fg-muted)', marginTop: 1,
@@ -271,20 +280,29 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, o
                         {a.opmerking && ` · ${a.opmerking}`}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleVerwijder(a.id)}
-                      disabled={deletingId === a.id}
-                      style={{
-                        flexShrink: 0,
-                        opacity: deletingId === a.id ? 0.4 : 1,
-                      }}
-                      title="Verwijder"
-                    >
-                      <Trash2 size={13} />
-                    </Button>
+                    {a.bron === 'bouw7' ? (
+                      <span
+                        style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
+                        title="Uit Bouw7 gesynct — wijzig in Bouw7"
+                      >
+                        <Lock size={12} />
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleVerwijder(a.id)}
+                        disabled={deletingId === a.id}
+                        style={{
+                          flexShrink: 0,
+                          opacity: deletingId === a.id ? 0.4 : 1,
+                        }}
+                        title="Verwijder"
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    )}
                   </div>
                 )
               })}

@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { syncContacts, syncEmployees, syncProjects, syncDebiteuren, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
+import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 
 type Integratie = {
@@ -93,7 +93,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -104,12 +104,13 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     // `incremental` (default): alleen gewijzigde records doen detail-calls + writes.
     const contacts = await syncContacts({ mode })
     const employees = await syncEmployees({ mode })
+    const daysOff = await syncDaysOff({ mode })
     const projects = await syncProjects({ mode })
     const planning = await syncAllPlanning({ mode })
     const debiteuren = await syncDebiteuren({ mode })
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -121,7 +122,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, projects, planning, debiteuren }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }

@@ -776,6 +776,23 @@ export type MedewerkerAfwezigheid = {
   start_tijd: string | null
   eind_tijd: string | null
   opmerking: string | null
+  /** Herkomst: 'eva' = handmatig, 'bouw7' = gesynct uit Bouw7 days-off (read-only in EVA). */
+  bron: 'eva' | 'bouw7'
+  bouw7_id: string | null
+  bouw7_status: number | null
+  created_at: string
+  updated_at: string
+}
+
+/** Organisatiebrede vrije dag (feestdag/bouwvak) gesynct uit Bouw7 /list/days-off. */
+export type Bouw7VrijeDag = {
+  id: string
+  bouw7_id: string
+  start_datum: string
+  eind_datum: string
+  naam: string | null
+  herhaalt_jaarlijks: boolean
+  bouw7_laatst_sync: string | null
   created_at: string
   updated_at: string
 }

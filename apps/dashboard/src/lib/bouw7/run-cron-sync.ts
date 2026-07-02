@@ -38,6 +38,7 @@ export async function runCronSync(req: NextRequest, mode: SyncMode): Promise<Nex
       mode,
       contacts: full.contacts,
       employees: full.employees,
+      daysOff: full.daysOff,
       projects: full.projects,
       planning: full.planning,
       management,

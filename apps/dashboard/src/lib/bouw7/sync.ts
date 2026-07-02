@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
@@ -531,6 +531,131 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
   }
 
   await logSync('medewerkers', 'in', result, Date.now() - start)
+  return result
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * SYNC: Days Off → verlof (medewerker_afwezigheid) + org-vrije dagen (bouw7_vrije_dagen)
+ *
+ * Bouw7 CalendarApi:
+ *  - /list/days-off-per-employee → individueel verlof (toekomstgericht). Geen type-veld;
+ *    alles komt binnen als type='verlof'. Alle statussen worden meegenomen.
+ *  - /list/days-off → organisatiebrede vrije dagen (feestdagen/bouwvak).
+ * Idempotent: upsert op bouw7_id + prune van stale bron='bouw7'-rijen (ingetrokken verlof).
+ * Handmatige EVA-rijen (bron='eva', bouw7_id null) blijven ongemoeid.
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+export async function syncDaysOff(_opts?: { mode?: SyncMode }): Promise<SyncResult> {
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+
+  try {
+    const bouw7 = await getBouw7Client()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+    const nu = new Date().toISOString()
+    const jaarStart = `${new Date().getUTCFullYear()}-01-01`
+
+    // Medewerker-map: Bouw7 employee-id → EVA medewerker-id.
+    const { data: medData } = await supabase
+      .from('medewerkers')
+      .select('id, bouw7_id')
+      .not('bouw7_id', 'is', null)
+    const medMap = new Map<string, string>(
+      (medData ?? []).map((m: { id: string; bouw7_id: string }) => [m.bouw7_id, m.id]),
+    )
+
+    // ── a) Individueel verlof → medewerker_afwezigheid ──
+    const perEmp = await fetchAllPages<Bouw7DayOffPerEmployee>(bouw7, '/list/days-off-per-employee')
+
+    const { data: bestaandeAfw } = await supabase
+      .from('medewerker_afwezigheid')
+      .select('bouw7_id')
+      .eq('bron', 'bouw7')
+      .not('bouw7_id', 'is', null)
+    const bestaandeAfwIds = new Set<string>((bestaandeAfw ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
+
+    const afwRows: Record<string, unknown>[] = []
+    const afwIds = new Set<string>()
+    for (const d of perEmp) {
+      const empId = d.employee?.id != null ? String(d.employee.id) : null
+      const medId = empId ? medMap.get(empId) : undefined
+      if (!medId) continue // medewerker niet in EVA
+      const startDatum = toDate(d.startDate)
+      if (!startDatum) continue
+      const eindDatum = toDate(d.endDate) ?? startDatum
+      if (eindDatum < jaarStart) continue // geen oude historie importeren
+      const bId = String(d.id)
+      afwIds.add(bId)
+      afwRows.push({
+        medewerker_id: medId,
+        type: 'verlof', // Bouw7 kent geen verlof/ziek-onderscheid
+        start_datum: startDatum,
+        eind_datum: eindDatum,
+        opmerking: d.remark ?? null,
+        bron: 'bouw7',
+        bouw7_id: bId,
+        bouw7_status: d.status ?? null,
+        updated_at: nu,
+      })
+    }
+
+    for (let i = 0; i < afwRows.length; i += 500) {
+      const { error } = await supabase
+        .from('medewerker_afwezigheid')
+        .upsert(afwRows.slice(i, i + 500), { onConflict: 'bouw7_id' })
+      if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+    for (const id of afwIds) (bestaandeAfwIds.has(id) ? (result.bijgewerkt++) : (result.nieuw++))
+
+    // Prune: bron='bouw7'-rijen die niet meer in Bouw7 staan (ingetrokken verlof).
+    const staleAfw = [...bestaandeAfwIds].filter(id => !afwIds.has(id))
+    for (let i = 0; i < staleAfw.length; i += 500) {
+      await supabase.from('medewerker_afwezigheid').delete().in('bouw7_id', staleAfw.slice(i, i + 500))
+    }
+
+    // ── b) Organisatiebrede vrije dagen → bouw7_vrije_dagen ──
+    const orgDays = await fetchAllPages<Bouw7DayOff>(bouw7, '/list/days-off')
+
+    const { data: bestaandeOrg } = await supabase.from('bouw7_vrije_dagen').select('bouw7_id')
+    const bestaandeOrgIds = new Set<string>((bestaandeOrg ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
+
+    const orgRows: Record<string, unknown>[] = []
+    const orgIds = new Set<string>()
+    for (const d of orgDays) {
+      const startDatum = toDate(d.startDate)
+      if (!startDatum) continue
+      const eindDatum = toDate(d.endDate) ?? startDatum
+      const bId = String(d.id)
+      orgIds.add(bId)
+      orgRows.push({
+        bouw7_id: bId,
+        start_datum: startDatum,
+        eind_datum: eindDatum,
+        naam: d.name ?? null,
+        herhaalt_jaarlijks: d.isAnnual ?? false,
+        bouw7_laatst_sync: nu,
+        updated_at: nu,
+      })
+    }
+
+    for (let i = 0; i < orgRows.length; i += 500) {
+      const { error } = await supabase
+        .from('bouw7_vrije_dagen')
+        .upsert(orgRows.slice(i, i + 500), { onConflict: 'bouw7_id' })
+      if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+    for (const id of orgIds) (bestaandeOrgIds.has(id) ? (result.bijgewerkt++) : (result.nieuw++))
+
+    const staleOrg = [...bestaandeOrgIds].filter(id => !orgIds.has(id))
+    for (let i = 0; i < staleOrg.length; i += 500) {
+      await supabase.from('bouw7_vrije_dagen').delete().in('bouw7_id', staleOrg.slice(i, i + 500))
+    }
+  } catch (e: unknown) {
+    result.foutMelding = e instanceof Error ? e.message : 'Onbekende fout'
+    result.fouten++
+  }
+
+  await logSync('days_off', 'in', result, Date.now() - start)
   return result
 }
 
