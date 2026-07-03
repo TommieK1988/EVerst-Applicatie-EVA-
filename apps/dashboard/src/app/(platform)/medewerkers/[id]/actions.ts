@@ -16,6 +16,7 @@ import type {
   RechtenModule,
 } from '@everts/database/platform-types'
 import { RECHTEN_MODULES } from '@everts/database/platform-types'
+import { pgQuery } from '@/lib/wagenpark/db'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -493,6 +494,32 @@ export async function updateRechtenOverride(
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
   return { ok: true }
+}
+
+// ── Wagenpark-bestuurder (ulu_users) ──────────────────────────────────
+// ulu_users wordt via de directe Postgres-pooler benaderd (DATABASE_URL),
+// net als de rest van de wagenpark-module — niet via de Supabase JS client.
+
+export async function koppelBestuurder(medewerker_id: string, ulu_user_id: string): Promise<ActionResult> {
+  try {
+    // Eén bestuurder per medewerker: maak een eventuele bestaande koppeling eerst los.
+    await pgQuery('UPDATE public.ulu_users SET medewerker_id = NULL, updated_at = now() WHERE medewerker_id = $1', [medewerker_id])
+    await pgQuery('UPDATE public.ulu_users SET medewerker_id = $2, updated_at = now() WHERE id = $1', [ulu_user_id, medewerker_id])
+    revalidatePath(`/medewerkers/${medewerker_id}`)
+    return { ok: true }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
+}
+
+export async function ontkoppelBestuurder(medewerker_id: string, ulu_user_id: string): Promise<ActionResult> {
+  try {
+    await pgQuery('UPDATE public.ulu_users SET medewerker_id = NULL, updated_at = now() WHERE id = $1', [ulu_user_id])
+    revalidatePath(`/medewerkers/${medewerker_id}`)
+    return { ok: true }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
 }
 
 export async function ontkoppelOffice365(medewerker_id: string): Promise<ActionResult> {

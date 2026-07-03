@@ -8,6 +8,8 @@ import type {
   MedewerkerAttribuutDefinitie,
   MedewerkerAttribuutWaarde,
   MedewerkerBestand,
+  MedewerkerAfwezigheid,
+  Bouw7VrijeDag,
   Bedrijfsgegevens,
   Relatie,
   MedewerkerFunctie,
@@ -27,6 +29,9 @@ import CustomAttributenBeheer from '@/components/medewerkers/CustomAttributenBeh
 import BestandenBeheer from '@/components/medewerkers/BestandenBeheer'
 import HandtekeningBeheer from '@/components/medewerkers/HandtekeningBeheer'
 import GebruikerToegangBeheer from '@/components/medewerkers/GebruikerToegangBeheer'
+import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
+import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
+import { pgQuery } from '@/lib/wagenpark/db'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -65,6 +70,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     caoSchalenRes,
     ploegenRes,
     uursoortenRes,
+    afwezigheidRes,
+    vrijeDagenRes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('id', params.id).maybeSingle(),
     supabase
@@ -119,6 +126,16 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     supabase.from('cao_loonschalen').select('*').order('volgorde'),
     supabase.from('ploegen').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('planning_uursoorten').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
+    supabase
+      .from('medewerker_afwezigheid')
+      .select('*')
+      .eq('medewerker_id', params.id)
+      .gte('start_datum', `${new Date().getFullYear() - 1}-01-01`)
+      .order('start_datum', { ascending: false }),
+    supabase
+      .from('bouw7_vrije_dagen')
+      .select('*')
+      .order('start_datum', { ascending: false }),
   ])
 
   if (!medewerkerRes.data) notFound()
@@ -155,10 +172,42 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       }
     : null
 
+  // Verlof: individuele afwezigheid + org-brede vrije dagen (recent of jaarlijks herhalend)
+  const afwezigheid = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
+  const vorigJaarStart = `${new Date().getFullYear() - 1}-01-01`
+  const vrijeDagen = ((vrijeDagenRes.data ?? []) as Bouw7VrijeDag[])
+    .filter(v => v.herhaalt_jaarlijks || v.eind_datum >= vorigJaarStart)
+
+  // Wagenpark-bestuurder (ulu_users) via de directe Postgres-pooler.
+  // Bij ontbrekende DATABASE_URL breekt de kaart niet: het blok toont dan de fout.
+  let bestuurderGekoppeld: BestuurderOptie | null = null
+  let bestuurdersBeschikbaar: BestuurderOptie[] = []
+  let bestuurderSuggestieId: string | null = null
+  let bestuurderFout: string | null = null
+  try {
+    const [gekoppeldRows, beschikbaarRows] = await Promise.all([
+      pgQuery<{ id: string; volledige_naam: string | null; email: string | null }>(
+        'SELECT id::text AS id, volledige_naam, email FROM public.ulu_users WHERE medewerker_id = $1 LIMIT 1',
+        [params.id],
+      ),
+      pgQuery<{ id: string; volledige_naam: string | null; email: string | null }>(
+        'SELECT id::text AS id, volledige_naam, email FROM public.ulu_users WHERE actief AND medewerker_id IS NULL ORDER BY volledige_naam',
+      ),
+    ])
+    bestuurderGekoppeld = gekoppeldRows[0] ?? null
+    bestuurdersBeschikbaar = beschikbaarRows
+    if (!bestuurderGekoppeld && medewerker.email) {
+      const mail = medewerker.email.trim().toLowerCase()
+      bestuurderSuggestieId = beschikbaarRows.find(b => b.email?.trim().toLowerCase() === mail)?.id ?? null
+    }
+  } catch (e: unknown) {
+    bestuurderFout = e instanceof Error ? e.message : 'Onbekende fout'
+  }
+
   const naam = [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam]
     .filter(Boolean).join(' ')
   return (
-    <div className="eva-page">
+    <div className="eva-page-full">
       {/* Breadcrumb */}
       <div style={{ marginBottom: 12 }}>
         <Link
@@ -187,104 +236,135 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
           </p>
         </div>
       </div>
-      {/* Secties */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 28 }}>
+      {/* Secties: 2 kolommen van 50%, vallen automatisch terug naar 1 kolom op smalle schermen */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: 16, marginTop: 28, alignItems: 'start' }}>
 
-        {/* Gegevens (persoonlijk + organisatie + tarieven) */}
-        <Card>
-          <CardBody>
-            <MedewerkerGegevensForm
-              medewerker={medewerker}
-              werkmaatschappijen={werkmaatschappijen}
-              relaties={relaties}
-              functies={functies}
-              afdelingen={afdelingen}
-              ploegen={ploegen}
-              uursoorten={uursoorten}
-              caoDocumenten={caoDocumenten}
-              caoSchalen={caoSchalen}
-            />
-          </CardBody>
-        </Card>
+        {/* Linkerkolom */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
-        {/* Toegang & gebruiker */}
-        <Card>
-          <CardBody>
-            <GebruikerToegangBeheer
-              medewerker_id={params.id}
-              medewerker_email={medewerker.email}
-              gebruiker_type={medewerker.gebruiker_type}
-              auth_user_id={medewerker.auth_user_id}
-              o365_email={medewerker.o365_email}
-              rechten_override={medewerker.rechten_override}
-              afdeling_standaard_rechten={afdelingStandaardRechten}
-            />
-          </CardBody>
-        </Card>
-
-        {/* Handtekening */}
-        <Card>
-          <CardBody>
-            <HandtekeningBeheer
-              medewerker_id={params.id}
-              initial_url={medewerker.handtekening_url}
-            />
-          </CardBody>
-        </Card>
-
-        {/* Bedrijfsmiddelen */}
-        <Card>
-          <CardBody>
-            <BedrijfsmiddelenBeheer
-              medewerker_id={params.id}
-              initial={bedrijfsmiddelen}
-              actief_voertuig={voertuigKoppeling}
-            />
-          </CardBody>
-        </Card>
-
-        {/* Custom attributen */}
-        {(attribuutDefinities.length > 0) && (
+          {/* Gegevens (persoonlijk + organisatie + tarieven) */}
           <Card>
             <CardBody>
-              <CustomAttributenBeheer
-                medewerker_id={params.id}
-                definities={attribuutDefinities}
-                initial_waarden={attribuutWaarden}
+              <MedewerkerGegevensForm
+                medewerker={medewerker}
+                werkmaatschappijen={werkmaatschappijen}
+                relaties={relaties}
+                functies={functies}
+                afdelingen={afdelingen}
+                ploegen={ploegen}
+                uursoorten={uursoorten}
+                caoDocumenten={caoDocumenten}
+                caoSchalen={caoSchalen}
               />
             </CardBody>
           </Card>
-        )}
 
-        {/* Werkrooster */}
-        <Card>
-          <CardBody>
-            <RoosterBeheer
-              medewerker_id={params.id}
-              initial={roosters}
-            />
-          </CardBody>
-        </Card>
+          {/* Verlof & afwezigheid */}
+          <Card>
+            <CardBody>
+              <VerlofOverzicht
+                afwezigheid={afwezigheid}
+                vrijeDagen={vrijeDagen}
+              />
+            </CardBody>
+          </Card>
+        </div>
 
-        {/* Skills */}
-        <Card>
-          <CardBody>
-            <SkillBeheer
-              medewerker_id={params.id}
-              initial={skills.map(s => s.skill_naam)}
-            />
-          </CardBody>
-        </Card>
+        {/* Rechterkolom */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
-        {/* Bestanden */}
-        <Card>
-          <CardBody>
-            <BestandenBeheer
-              medewerker_id={params.id}
-              initial={bestanden}
-            />
-          </CardBody>
-        </Card>
+          {/* Toegang & gebruiker */}
+          <Card>
+            <CardBody>
+              <GebruikerToegangBeheer
+                medewerker_id={params.id}
+                medewerker_email={medewerker.email}
+                gebruiker_type={medewerker.gebruiker_type}
+                auth_user_id={medewerker.auth_user_id}
+                o365_email={medewerker.o365_email}
+                rechten_override={medewerker.rechten_override}
+                afdeling_standaard_rechten={afdelingStandaardRechten}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Wagenpark-bestuurder */}
+          <Card>
+            <CardBody>
+              <BestuurderKoppeling
+                medewerker_id={params.id}
+                gekoppeld={bestuurderGekoppeld}
+                beschikbaar={bestuurdersBeschikbaar}
+                suggestie_id={bestuurderSuggestieId}
+                fout={bestuurderFout}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Bedrijfsmiddelen */}
+          <Card>
+            <CardBody>
+              <BedrijfsmiddelenBeheer
+                medewerker_id={params.id}
+                initial={bedrijfsmiddelen}
+                actief_voertuig={voertuigKoppeling}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Handtekening */}
+          <Card>
+            <CardBody>
+              <HandtekeningBeheer
+                medewerker_id={params.id}
+                initial_url={medewerker.handtekening_url}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Custom attributen */}
+          {(attribuutDefinities.length > 0) && (
+            <Card>
+              <CardBody>
+                <CustomAttributenBeheer
+                  medewerker_id={params.id}
+                  definities={attribuutDefinities}
+                  initial_waarden={attribuutWaarden}
+                />
+              </CardBody>
+            </Card>
+          )}
+
+          {/* Werkrooster */}
+          <Card>
+            <CardBody>
+              <RoosterBeheer
+                medewerker_id={params.id}
+                initial={roosters}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Skills */}
+          <Card>
+            <CardBody>
+              <SkillBeheer
+                medewerker_id={params.id}
+                initial={skills.map(s => s.skill_naam)}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Bestanden */}
+          <Card>
+            <CardBody>
+              <BestandenBeheer
+                medewerker_id={params.id}
+                initial={bestanden}
+              />
+            </CardBody>
+          </Card>
+        </div>
       </div>
     </div>
   );

@@ -70,12 +70,44 @@ function toForm(m: Medewerker): FormState {
   }
 }
 
+const labelStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700,
+  color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
+  display: 'block', marginBottom: 4,
+}
+const valueStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }
+const mutedStyle: React.CSSProperties = { ...valueStyle, color: 'var(--fg-muted)' }
+const sectieKopStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px',
+}
+
+/**
+ * Eén veld-cel die in beide modi dezelfde plek en hoogte inneemt: label boven,
+ * content eronder met vaste min-hoogte (= input-hoogte), zodat wisselen tussen
+ * bekijken en bewerken niets laat verspringen.
+ */
+function Veld({ label, span, children }: { label: React.ReactNode; span?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={span ? { gridColumn: '1 / -1' } : undefined}>
+      <span style={labelStyle}>{label}</span>
+      <div style={{ minHeight: 32, display: 'flex', alignItems: 'center' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Waarde({ value }: { value: string | null | undefined }) {
+  return <span style={value ? valueStyle : mutedStyle}>{value || '—'}</span>
+}
+
 // ── BSN-veld ──────────────────────────────────────────────────────────────────
-function BsnVeld({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function BsnVeld({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const [revealed, setRevealed] = useState(false)
   const masked = value ? value.slice(0, -4).replace(/./g, '*') + value.slice(-4) : ''
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', width: '100%' }}>
       <Input
         type={revealed ? 'text' : 'password'}
         value={value}
@@ -83,6 +115,7 @@ function BsnVeld({ value, onChange }: { value: string; onChange: (v: string) => 
         placeholder="BSN"
         style={{ width: '100%', paddingRight: 70 }}
         autoComplete="off"
+        disabled={disabled}
       />
       {value && (
         <Button
@@ -113,7 +146,7 @@ function ComboSelect({
 
   if (vrije) {
     return (
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6, width: '100%' }}>
         <Input style={{ flex: 1 }} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus />
         <Button type="button" variant="ghost" size="sm" style={{ flexShrink: 0 }} onClick={() => { setVrije(false); onChange('') }}>
           ←
@@ -141,6 +174,7 @@ function CaoSelectie({
   medewerker_wm_id,
   werkmaatschappijenMap,
   onChange,
+  editing,
 }: {
   documenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   schalen:    CaoLoonschaal[]
@@ -150,13 +184,14 @@ function CaoSelectie({
   medewerker_wm_id?: string
   werkmaatschappijenMap?: Record<string, string>
   onChange: (field: 'cao_document_id' | 'cao_schaal' | 'cao_trede', value: string) => void
+  editing: boolean
 }) {
   // Filter: toon alleen CAOs die overeenkomen met de medewerker's werkmaatschappij (of organisatiebrede)
   const gefilterdeDocumenten = medewerker_wm_id
     ? documenten.filter(d => !d.werkmaatschappij_id || d.werkmaatschappij_id === medewerker_wm_id)
     : documenten
 
-  const doc = gefilterdeDocumenten.find(d => d.id === cao_document_id)
+  const doc = gefilterdeDocumenten.find(d => d.id === cao_document_id) ?? documenten.find(d => d.id === cao_document_id)
   const docSchalen = useMemo(() => {
     const uniek = [...new Set(schalen.filter(s => s.cao_id === cao_document_id).map(s => s.schaal))]
     return uniek.sort()
@@ -171,10 +206,23 @@ function CaoSelectie({
   const geselecteerdeTrede = tredeLijst.find(t => t.trede === cao_trede)
   const bruto = geselecteerdeTrede?.bruto_maand
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10, fontWeight: 700,
-    color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-    display: 'block', marginBottom: 4,
+  if (!editing) {
+    return (
+      <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <Veld label="CAO document"><Waarde value={doc?.naam} /></Veld>
+        <Veld label="Loonschaal"><Waarde value={cao_schaal ? `Schaal ${cao_schaal}` : null} /></Veld>
+        <Veld label="Trede">
+          <span style={cao_trede ? valueStyle : mutedStyle}>
+            {cao_trede ? `Trede ${cao_trede}` : '—'}
+            {bruto != null && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                € {bruto.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}/mnd
+              </span>
+            )}
+          </span>
+        </Veld>
+      </div>
+    )
   }
 
   return (
@@ -293,232 +341,160 @@ export default function MedewerkerGegevensForm({
     })
   }
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10, fontWeight: 700,
-    color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-    display: 'block', marginBottom: 4,
-  }
-  const valueStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }
-  const mutedStyle: React.CSSProperties = { ...valueStyle, color: 'var(--fg-muted)' }
-
-  function Field({ label, value }: { label: string; value: string | null | undefined }) {
-    return (
-      <div>
-        <span style={labelStyle}>{label}</span>
-        <span style={value ? valueStyle : mutedStyle}>{value || '—'}</span>
-      </div>
-    )
-  }
-
-  // Loonschaal lookup voor read-only weergave
-  const gekozenTrede = caoSchalen.find(
-    s => s.cao_id === medewerker.cao_document_id && s.schaal === medewerker.cao_schaal && s.trede === medewerker.cao_trede
-  )
-  const caoNaam = caoDocumenten.find(d => d.id === medewerker.cao_document_id)?.naam
-
-  if (!editing) {
-    return (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--fg)', margin: 0 }}>Gegevens</h3>
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>Bewerken</Button>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
-          <Field label="Voornaam" value={medewerker.voornaam} />
-          <Field label="Achternaam" value={[medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' ')} />
-          <Field label="E-mail" value={medewerker.email} />
-          <Field label="Telefoon" value={medewerker.telefoon} />
-          <Field label="Adres" value={[medewerker.adres_straat, medewerker.adres_postcode, medewerker.adres_plaats].filter(Boolean).join(', ')} />
-          <Field label="Geboortedatum" value={medewerker.geboortedatum} />
-          <div>
-            <span style={labelStyle}>BSN</span>
-            <BsnVeld value={medewerker.bsn ?? ''} onChange={() => {}} />
-          </div>
-          <Field label="Functie" value={medewerker.functie} />
-          <Field label="Afdeling" value={medewerker.afdeling} />
-          <Field label="Uursoort (werkvoorraad)" value={uursoorten.find(u => u.id === medewerker.standaard_uursoort_id)?.naam} />
-          <Field label="In dienst vanaf" value={medewerker.in_dienst_vanaf} />
-          <Field label="Uit dienst per" value={medewerker.uit_dienst_per} />
-          <Field label="Type" value={medewerker.extern ? 'Extern' : 'Intern'} />
-          <Field label="Status" value={medewerker.actief ? 'Actief' : 'Inactief'} />
-          <Field label="Administratie" value={werkmaatschappijen.find(w => w.id === medewerker.werkmaatschappij_id)?.naam} />
-          {medewerker.extern && <Field label="Relatie" value={relaties.find(r => r.id === medewerker.relatie_id)?.naam} />}
-          <Field label="Kostprijs uurtarief" value={medewerker.uurtarief_kostprijs != null ? `€ ${medewerker.uurtarief_kostprijs}` : null} />
-          <Field label="Verkoop uurtarief" value={medewerker.uurtarief_verkoop != null ? `€ ${medewerker.uurtarief_verkoop}` : null} />
-          {(caoNaam || medewerker.cao_schaal) && (
-            <div style={{ gridColumn: '1 / -1' }}>
-              <span style={labelStyle}>CAO loonschaal</span>
-              <span style={valueStyle}>
-                {[caoNaam, medewerker.cao_schaal && `Schaal ${medewerker.cao_schaal}`, medewerker.cao_trede && `Trede ${medewerker.cao_trede}`].filter(Boolean).join(' · ')}
-                {gekozenTrede?.bruto_maand != null && (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
-                    € {gekozenTrede.bruto_maand.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}/mnd
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-          <div>
-            <span style={labelStyle}>Kleur in planning</span>
-            {medewerker.kleur ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 20, height: 20, borderRadius: 4, background: medewerker.kleur, border: '1px solid var(--border)' }} />
-                <span style={{ ...valueStyle, fontSize: 12 }}>{medewerker.kleur}</span>
-              </div>
-            ) : (
-              <span style={mutedStyle}>Automatisch (op basis van naam)</span>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const functieopties = functies.filter(f => f.actief).sort((a, b) => a.volgorde - b.volgorde).map(f => f.naam)
   const afdelingopties = afdelingen.filter(a => a.actief).sort((a, b) => a.volgorde - b.volgorde).map(a => a.naam)
 
+  // In view-modus tonen we de opgeslagen medewerker-waarden; in edit-modus de formulier-state.
+  const m = medewerker
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--fg)', margin: 0 }}>Gegevens bewerken</h3>
+      {/* Kop met knoppen — zelfde plek in beide modi */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, minHeight: 32 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--fg)', margin: 0 }}>Gegevens</h3>
+        {editing ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { setState(toForm(medewerker)); setEditing(false) }} disabled={isPending}>Annuleren</Button>
+            <Button type="button" variant="primary" size="sm" onClick={save} loading={isPending} disabled={isPending || !state.voornaam || !state.achternaam}>
+              {isPending ? 'Opslaan…' : 'Opslaan'}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" size="sm" onClick={() => { setState(toForm(medewerker)); setEditing(true) }}>Bewerken</Button>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {/* Persoonlijk */}
         <section>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Persoonlijk</p>
+          <p style={sectieKopStyle}>Persoonlijk</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={labelStyle}>Voornaam</label>
-              <Input style={{ width: '100%' }} value={state.voornaam} onChange={e => set('voornaam', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Tussenvoegsel</label>
-              <Input style={{ width: '100%' }} value={state.tussenvoegsel} onChange={e => set('tussenvoegsel', e.target.value)} placeholder="optioneel" />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Achternaam</label>
-              <Input style={{ width: '100%' }} value={state.achternaam} onChange={e => set('achternaam', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>E-mail</label>
-              <Input type="email" style={{ width: '100%' }} value={state.email} onChange={e => set('email', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Telefoon</label>
-              <Input type="tel" style={{ width: '100%' }} value={state.telefoon} onChange={e => set('telefoon', e.target.value)} />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Adres</label>
-              <Input style={{ width: '100%' }} value={state.adres_straat} onChange={e => set('adres_straat', e.target.value)} placeholder="Straat en huisnummer" />
-            </div>
-            <div>
-              <label style={labelStyle}>Postcode</label>
-              <Input style={{ width: '100%' }} value={state.adres_postcode} onChange={e => set('adres_postcode', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Plaats</label>
-              <Input style={{ width: '100%' }} value={state.adres_plaats} onChange={e => set('adres_plaats', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Geboortedatum</label>
-              <Input type="date" style={{ width: '100%' }} value={state.geboortedatum} onChange={e => set('geboortedatum', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></label>
-              <BsnVeld value={state.bsn} onChange={v => set('bsn', v)} />
-            </div>
+            <Veld label="Voornaam">
+              {editing ? <Input style={{ width: '100%' }} value={state.voornaam} onChange={e => set('voornaam', e.target.value)} /> : <Waarde value={m.voornaam} />}
+            </Veld>
+            <Veld label="Tussenvoegsel">
+              {editing ? <Input style={{ width: '100%' }} value={state.tussenvoegsel} onChange={e => set('tussenvoegsel', e.target.value)} placeholder="optioneel" /> : <Waarde value={m.tussenvoegsel} />}
+            </Veld>
+            <Veld label="Achternaam" span>
+              {editing ? <Input style={{ width: '100%' }} value={state.achternaam} onChange={e => set('achternaam', e.target.value)} /> : <Waarde value={m.achternaam} />}
+            </Veld>
+            <Veld label="E-mail">
+              {editing ? <Input type="email" style={{ width: '100%' }} value={state.email} onChange={e => set('email', e.target.value)} /> : <Waarde value={m.email} />}
+            </Veld>
+            <Veld label="Telefoon">
+              {editing ? <Input type="tel" style={{ width: '100%' }} value={state.telefoon} onChange={e => set('telefoon', e.target.value)} /> : <Waarde value={m.telefoon} />}
+            </Veld>
+            <Veld label="Adres" span>
+              {editing ? <Input style={{ width: '100%' }} value={state.adres_straat} onChange={e => set('adres_straat', e.target.value)} placeholder="Straat en huisnummer" /> : <Waarde value={m.adres_straat} />}
+            </Veld>
+            <Veld label="Postcode">
+              {editing ? <Input style={{ width: '100%' }} value={state.adres_postcode} onChange={e => set('adres_postcode', e.target.value)} /> : <Waarde value={m.adres_postcode} />}
+            </Veld>
+            <Veld label="Plaats">
+              {editing ? <Input style={{ width: '100%' }} value={state.adres_plaats} onChange={e => set('adres_plaats', e.target.value)} /> : <Waarde value={m.adres_plaats} />}
+            </Veld>
+            <Veld label="Geboortedatum">
+              {editing ? <Input type="date" style={{ width: '100%' }} value={state.geboortedatum} onChange={e => set('geboortedatum', e.target.value)} /> : <Waarde value={m.geboortedatum} />}
+            </Veld>
+            <Veld label={<>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></>}>
+              <BsnVeld value={editing ? state.bsn : (m.bsn ?? '')} onChange={v => set('bsn', v)} disabled={!editing} />
+            </Veld>
           </div>
         </section>
 
         {/* Organisatie */}
         <section>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Organisatie</p>
+          <p style={sectieKopStyle}>Organisatie</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={labelStyle}>Functie</label>
-              <ComboSelect opties={functieopties} value={state.functie} onChange={v => set('functie', v)} placeholder="bijv. Timmerman" />
-            </div>
-            <div>
-              <label style={labelStyle}>Afdeling</label>
-              <ComboSelect opties={afdelingopties} value={state.afdeling} onChange={v => set('afdeling', v)} placeholder="bijv. Uitvoering" />
-            </div>
-            <div>
-              <label style={labelStyle}>Ploeg</label>
-              <select className="eva-input" style={{ width: '100%' }} value={state.ploeg_id} onChange={e => set('ploeg_id', e.target.value)}>
-                <option value="">— Geen ploeg —</option>
-                {ploegen.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Uursoort (werkvoorraad)</label>
-              <select className="eva-input" style={{ width: '100%' }} value={state.standaard_uursoort_id} onChange={e => set('standaard_uursoort_id', e.target.value)}>
-                <option value="">— Geen —</option>
-                {uursoorten.map(u => <option key={u.id} value={u.id}>{u.naam}</option>)}
-              </select>
-              <p style={{ margin: '4px 0 0', fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
-                Uitvoerende discipline — bepaalt onder welke groep de capaciteit valt in Management → Werkvoorraad.
-              </p>
-            </div>
-            <div>
-              <label style={labelStyle}>In dienst vanaf</label>
-              <Input type="date" style={{ width: '100%' }} value={state.in_dienst_vanaf} onChange={e => set('in_dienst_vanaf', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Uit dienst per</label>
-              <Input type="date" style={{ width: '100%' }} value={state.uit_dienst_per} onChange={e => set('uit_dienst_per', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Administratie</label>
-              <select className="eva-input" style={{ width: '100%' }} value={state.werkmaatschappij_id} onChange={e => set('werkmaatschappij_id', e.target.value)}>
-                <option value="">— Geen —</option>
-                {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
-                <input type="checkbox" checked={state.extern} onChange={e => set('extern', e.target.checked)} />
+            <Veld label="Functie">
+              {editing ? <ComboSelect opties={functieopties} value={state.functie} onChange={v => set('functie', v)} placeholder="bijv. Timmerman" /> : <Waarde value={m.functie} />}
+            </Veld>
+            <Veld label="Afdeling">
+              {editing ? <ComboSelect opties={afdelingopties} value={state.afdeling} onChange={v => set('afdeling', v)} placeholder="bijv. Uitvoering" /> : <Waarde value={m.afdeling} />}
+            </Veld>
+            <Veld label="Ploeg">
+              {editing ? (
+                <select className="eva-input" style={{ width: '100%' }} value={state.ploeg_id} onChange={e => set('ploeg_id', e.target.value)}>
+                  <option value="">— Geen ploeg —</option>
+                  {ploegen.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
+                </select>
+              ) : <Waarde value={ploegen.find(p => p.id === m.ploeg_id)?.naam} />}
+            </Veld>
+            <Veld label="Uursoort (werkvoorraad)">
+              {editing ? (
+                <select className="eva-input" style={{ width: '100%' }} value={state.standaard_uursoort_id} onChange={e => set('standaard_uursoort_id', e.target.value)}>
+                  <option value="">— Geen —</option>
+                  {uursoorten.map(u => <option key={u.id} value={u.id}>{u.naam}</option>)}
+                </select>
+              ) : <Waarde value={uursoorten.find(u => u.id === m.standaard_uursoort_id)?.naam} />}
+            </Veld>
+            <Veld label="In dienst vanaf">
+              {editing ? <Input type="date" style={{ width: '100%' }} value={state.in_dienst_vanaf} onChange={e => set('in_dienst_vanaf', e.target.value)} /> : <Waarde value={m.in_dienst_vanaf} />}
+            </Veld>
+            <Veld label="Uit dienst per">
+              {editing ? <Input type="date" style={{ width: '100%' }} value={state.uit_dienst_per} onChange={e => set('uit_dienst_per', e.target.value)} /> : <Waarde value={m.uit_dienst_per} />}
+            </Veld>
+            <Veld label="Administratie">
+              {editing ? (
+                <select className="eva-input" style={{ width: '100%' }} value={state.werkmaatschappij_id} onChange={e => set('werkmaatschappij_id', e.target.value)}>
+                  <option value="">— Geen —</option>
+                  {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
+                </select>
+              ) : <Waarde value={werkmaatschappijen.find(w => w.id === m.werkmaatschappij_id)?.naam} />}
+            </Veld>
+            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', paddingBottom: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: editing ? 'pointer' : 'default', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
+                <input type="checkbox" checked={editing ? state.extern : m.extern} disabled={!editing} onChange={e => set('extern', e.target.checked)} />
                 Extern
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
-                <input type="checkbox" checked={state.actief} onChange={e => set('actief', e.target.checked)} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: editing ? 'pointer' : 'default', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
+                <input type="checkbox" checked={editing ? state.actief : m.actief} disabled={!editing} onChange={e => set('actief', e.target.checked)} />
                 Actief
               </label>
             </div>
-            {state.extern && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>Relatie (ZZP-bedrijf / uitzendbureau)</label>
-                <select className="eva-input" style={{ width: '100%' }} value={state.relatie_id} onChange={e => set('relatie_id', e.target.value)}>
-                  <option value="">— Geen —</option>
-                  {relaties.map(r => <option key={r.id} value={r.id}>{r.naam} ({r.types.join(', ')})</option>)}
-                </select>
-              </div>
+            {(editing ? state.extern : m.extern) && (
+              <Veld label="Relatie (ZZP-bedrijf / uitzendbureau)" span>
+                {editing ? (
+                  <select className="eva-input" style={{ width: '100%' }} value={state.relatie_id} onChange={e => set('relatie_id', e.target.value)}>
+                    <option value="">— Geen —</option>
+                    {relaties.map(r => <option key={r.id} value={r.id}>{r.naam} ({r.types.join(', ')})</option>)}
+                  </select>
+                ) : <Waarde value={relaties.find(r => r.id === m.relatie_id)?.naam} />}
+              </Veld>
             )}
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Kleur in planning</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="color"
-                  value={state.kleur || '#3b82f6'}
-                  onChange={e => set('kleur', e.target.value)}
-                  style={{ width: 36, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', background: 'none' }}
-                />
-                <Input
-                  type="text"
-                  value={state.kleur}
-                  onChange={e => {
-                    const v = e.target.value
-                    set('kleur', v)
-                  }}
-                  placeholder="#3b82f6 — leeg = automatisch"
-                  maxLength={7}
-                  style={{ width: 160, fontSize: 12 }}
-                />
-                {state.kleur && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => set('kleur', '')}>
-                    Wissen
-                  </Button>
+              <span style={labelStyle}>Kleur in planning</span>
+              <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {editing ? (
+                  <>
+                    <input
+                      type="color"
+                      value={state.kleur || '#3b82f6'}
+                      onChange={e => set('kleur', e.target.value)}
+                      style={{ width: 36, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', background: 'none' }}
+                    />
+                    <Input
+                      type="text"
+                      value={state.kleur}
+                      onChange={e => set('kleur', e.target.value)}
+                      placeholder="#3b82f6 — leeg = automatisch"
+                      maxLength={7}
+                      style={{ width: 160, fontSize: 12 }}
+                    />
+                    {state.kleur && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => set('kleur', '')}>
+                        Wissen
+                      </Button>
+                    )}
+                  </>
+                ) : m.kleur ? (
+                  <>
+                    <div style={{ width: 20, height: 20, borderRadius: 4, background: m.kleur, border: '1px solid var(--border)' }} />
+                    <span style={{ ...valueStyle, fontSize: 12 }}>{m.kleur}</span>
+                  </>
+                ) : (
+                  <span style={mutedStyle}>Automatisch (op basis van naam)</span>
                 )}
               </div>
               <p style={{ margin: '4px 0 0', fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
@@ -530,35 +506,31 @@ export default function MedewerkerGegevensForm({
 
         {/* Tarieven + CAO */}
         <section>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>Beloning</p>
+          <p style={sectieKopStyle}>Beloning</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={labelStyle}>Kostprijs / uur</label>
-              <Input type="number" min={0} step={0.01} style={{ width: '100%' }} value={state.uurtarief_kostprijs} onChange={e => set('uurtarief_kostprijs', e.target.value)} placeholder="0.00" />
-            </div>
-            <div>
-              <label style={labelStyle}>Verkoop / uur</label>
-              <Input type="number" min={0} step={0.01} style={{ width: '100%' }} value={state.uurtarief_verkoop} onChange={e => set('uurtarief_verkoop', e.target.value)} placeholder="0.00" />
-            </div>
+            <Veld label="Kostprijs / uur">
+              {editing
+                ? <Input type="number" min={0} step={0.01} style={{ width: '100%' }} value={state.uurtarief_kostprijs} onChange={e => set('uurtarief_kostprijs', e.target.value)} placeholder="0.00" />
+                : <Waarde value={m.uurtarief_kostprijs != null ? `€ ${m.uurtarief_kostprijs}` : null} />}
+            </Veld>
+            <Veld label="Verkoop / uur">
+              {editing
+                ? <Input type="number" min={0} step={0.01} style={{ width: '100%' }} value={state.uurtarief_verkoop} onChange={e => set('uurtarief_verkoop', e.target.value)} placeholder="0.00" />
+                : <Waarde value={m.uurtarief_verkoop != null ? `€ ${m.uurtarief_verkoop}` : null} />}
+            </Veld>
             <CaoSelectie
+              editing={editing}
               documenten={caoDocumenten}
               schalen={caoSchalen}
-              cao_document_id={state.cao_document_id}
-              cao_schaal={state.cao_schaal}
-              cao_trede={state.cao_trede}
-              medewerker_wm_id={state.werkmaatschappij_id || undefined}
+              cao_document_id={editing ? state.cao_document_id : (m.cao_document_id ?? '')}
+              cao_schaal={editing ? state.cao_schaal : (m.cao_schaal ?? '')}
+              cao_trede={editing ? state.cao_trede : (m.cao_trede ?? '')}
+              medewerker_wm_id={(editing ? state.werkmaatschappij_id : m.werkmaatschappij_id) || undefined}
               werkmaatschappijenMap={Object.fromEntries(werkmaatschappijen.map(w => [w.id, w.naam]))}
               onChange={(field, value) => set(field, value)}
             />
           </div>
         </section>
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <Button type="button" variant="ghost" onClick={() => { setState(toForm(medewerker)); setEditing(false) }} disabled={isPending}>Annuleren</Button>
-          <Button type="button" variant="primary" onClick={save} loading={isPending} disabled={isPending || !state.voornaam || !state.achternaam}>
-            {isPending ? 'Opslaan…' : 'Opslaan'}
-          </Button>
-        </div>
       </div>
     </div>
   )

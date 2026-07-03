@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
@@ -15,6 +15,7 @@ type Medewerker = {
   achternaam: string
   email: string | null
   telefoon: string | null
+  foto_url: string | null
   functie: string | null
   afdeling: string | null
   extern: boolean
@@ -22,7 +23,35 @@ type Medewerker = {
   uurtarief_verkoop: number | null
   uurtarief_kostprijs: number | null
   cao_schaal: string | null
+  cao_document_id: string | null
+  cao_trede: string | null
   in_dienst_vanaf: string | null
+  uit_dienst_per: string | null
+  adres_straat: string | null
+  adres_postcode: string | null
+  adres_plaats: string | null
+  geboortedatum: string | null
+  werkmaatschappij_id: string | null
+  relatie_id: string | null
+  kleur: string | null
+  ploeg_id: string | null
+  standaard_uursoort_id: string | null
+  gebruiker_type: string | null
+  o365_email: string | null
+  handtekening_url: string | null
+  bouw7_id: string | null
+  bouw7_laatst_sync: string | null
+  bouw7_sync_status: string | null
+  created_at: string
+  updated_at: string
+}
+
+type Lookups = {
+  ploegen: Record<string, string>
+  werkmaatschappijen: Record<string, string>
+  uursoorten: Record<string, string>
+  relaties: Record<string, string>
+  caoDocumenten: Record<string, string>
 }
 
 function volledigeNaam(m: Medewerker): string {
@@ -43,132 +72,342 @@ function formatDatum(iso: string | null): string {
   return new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const KOLOMMEN: KolomDefinitie<Medewerker>[] = [
-  {
-    key: 'naam',
-    label: 'Naam',
-    vast: true,
-    filterType: 'tekst',
-    sorteerWaarde: m => volledigeNaam(m),
-    render: m => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg, var(--accent), var(--accent))',
-          display: 'grid', placeItems: 'center',
-          fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700, color: 'white',
-        }}>
-          {initials(m)}
-        </div>
-        <div>
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
-            {volledigeNaam(m)}
-          </div>
-          {m.email && (
-            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 1 }}>
-              {m.email}
+function formatDatumTijd(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const GEBRUIKER_TYPE_LABELS: Record<string, string> = {
+  geen:               'Geen',
+  app_gebruiker:      'App-gebruiker',
+  platform_gebruiker: 'Platform-gebruiker',
+}
+
+const tekstStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }
+const mutedStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }
+
+function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
+  return [
+    {
+      key: 'naam',
+      label: 'Naam',
+      vast: true,
+      filterType: 'tekst',
+      sorteerWaarde: m => volledigeNaam(m),
+      render: m => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {m.foto_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={m.foto_url} alt="" style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+          ) : (
+            <div style={{
+              width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent))',
+              display: 'grid', placeItems: 'center',
+              fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700, color: 'white',
+            }}>
+              {initials(m)}
             </div>
           )}
+          <div>
+            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
+              {volledigeNaam(m)}
+            </div>
+            {m.email && (
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginTop: 1 }}>
+                {m.email}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    ),
-  },
-  {
-    key: 'email',
-    label: 'E-mail',
-    standaard_zichtbaar: false,
-    filterType: 'tekst',
-    sorteerWaarde: m => m.email ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>{m.email ?? '—'}</span>,
-  },
-  {
-    key: 'telefoon',
-    label: 'Telefoon',
-    standaard_zichtbaar: false,
-    filterType: 'tekst',
-    sorteerWaarde: m => m.telefoon ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>{m.telefoon ?? '—'}</span>,
-  },
-  {
-    key: 'functie',
-    label: 'Functie',
-    filterType: 'tekst',
-    sorteerWaarde: m => m.functie ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>{m.functie ?? '—'}</span>,
-  },
-  {
-    key: 'afdeling',
-    label: 'Afdeling',
-    standaard_zichtbaar: false,
-    filterType: 'tekst',
-    sorteerWaarde: m => m.afdeling ?? '',
-    render: m => <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>{m.afdeling ?? '—'}</span>,
-  },
-  {
-    key: 'type',
-    label: 'Type',
-    filterType: 'select',
-    filterOpties: ['Intern', 'Extern'],
-    sorteerWaarde: m => m.extern ? 'Extern' : 'Intern',
-    render: m => (
-      <Badge tone={m.extern ? 'warning' : 'success'}>
-        {m.extern ? 'Extern' : 'Intern'}
-      </Badge>
-    ),
-  },
-  {
-    key: 'uurtarief_verkoop',
-    label: 'Tarief verkoop',
-    standaard_zichtbaar: false,
-    sorteerWaarde: m => m.uurtarief_verkoop ?? -1,
-    render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_verkoop)}</span>,
-  },
-  {
-    key: 'uurtarief_kostprijs',
-    label: 'Tarief kostprijs',
-    standaard_zichtbaar: false,
-    sorteerWaarde: m => m.uurtarief_kostprijs ?? -1,
-    render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_kostprijs)}</span>,
-  },
-  {
-    key: 'cao_schaal',
-    label: 'CAO schaal',
-    standaard_zichtbaar: false,
-    filterType: 'tekst',
-    sorteerWaarde: m => m.cao_schaal ?? '',
-    render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_schaal ?? '—'}</span>,
-  },
-  {
-    key: 'in_dienst_vanaf',
-    label: 'In dienst vanaf',
-    standaard_zichtbaar: false,
-    sorteerWaarde: m => m.in_dienst_vanaf ?? '',
-    render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.in_dienst_vanaf)}</span>,
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    filterType: 'select',
-    filterOpties: ['Actief', 'Inactief'],
-    sorteerWaarde: m => m.actief ? 'Actief' : 'Inactief',
-    render: m => (
-      <Badge variant="outline" tone={m.actief ? 'success' : 'neutral'} dot>
-        {m.actief ? 'Actief' : 'Inactief'}
-      </Badge>
-    ),
-  },
-]
+      ),
+    },
+    {
+      key: 'voornaam',
+      label: 'Voornaam',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.voornaam,
+      render: m => <span style={tekstStyle}>{m.voornaam}</span>,
+    },
+    {
+      key: 'tussenvoegsel',
+      label: 'Tussenvoegsel',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.tussenvoegsel ?? '',
+      render: m => <span style={mutedStyle}>{m.tussenvoegsel ?? '—'}</span>,
+    },
+    {
+      key: 'achternaam',
+      label: 'Achternaam',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.achternaam,
+      render: m => <span style={tekstStyle}>{m.achternaam}</span>,
+    },
+    {
+      key: 'email',
+      label: 'E-mail',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.email ?? '',
+      render: m => <span style={mutedStyle}>{m.email ?? '—'}</span>,
+    },
+    {
+      key: 'telefoon',
+      label: 'Telefoon',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.telefoon ?? '',
+      render: m => <span style={mutedStyle}>{m.telefoon ?? '—'}</span>,
+    },
+    {
+      key: 'adres_straat',
+      label: 'Adres',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.adres_straat ?? '',
+      render: m => <span style={mutedStyle}>{m.adres_straat ?? '—'}</span>,
+    },
+    {
+      key: 'adres_postcode',
+      label: 'Postcode',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.adres_postcode ?? '',
+      render: m => <span style={mutedStyle}>{m.adres_postcode ?? '—'}</span>,
+    },
+    {
+      key: 'adres_plaats',
+      label: 'Plaats',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.adres_plaats ?? '',
+      render: m => <span style={mutedStyle}>{m.adres_plaats ?? '—'}</span>,
+    },
+    {
+      key: 'geboortedatum',
+      label: 'Geboortedatum',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.geboortedatum ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.geboortedatum)}</span>,
+    },
+    {
+      key: 'functie',
+      label: 'Functie',
+      filterType: 'tekst',
+      sorteerWaarde: m => m.functie ?? '',
+      render: m => <span style={tekstStyle}>{m.functie ?? '—'}</span>,
+    },
+    {
+      key: 'afdeling',
+      label: 'Afdeling',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.afdeling ?? '',
+      render: m => <span style={mutedStyle}>{m.afdeling ?? '—'}</span>,
+    },
+    {
+      key: 'ploeg',
+      label: 'Ploeg',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => (m.ploeg_id && lookups.ploegen[m.ploeg_id]) || '',
+      render: m => <span style={mutedStyle}>{(m.ploeg_id && lookups.ploegen[m.ploeg_id]) || '—'}</span>,
+    },
+    {
+      key: 'uursoort',
+      label: 'Uursoort',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => (m.standaard_uursoort_id && lookups.uursoorten[m.standaard_uursoort_id]) || '',
+      render: m => <span style={mutedStyle}>{(m.standaard_uursoort_id && lookups.uursoorten[m.standaard_uursoort_id]) || '—'}</span>,
+    },
+    {
+      key: 'werkmaatschappij',
+      label: 'Administratie',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => (m.werkmaatschappij_id && lookups.werkmaatschappijen[m.werkmaatschappij_id]) || '',
+      render: m => <span style={mutedStyle}>{(m.werkmaatschappij_id && lookups.werkmaatschappijen[m.werkmaatschappij_id]) || '—'}</span>,
+    },
+    {
+      key: 'relatie',
+      label: 'Relatie',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => (m.relatie_id && lookups.relaties[m.relatie_id]) || '',
+      render: m => <span style={mutedStyle}>{(m.relatie_id && lookups.relaties[m.relatie_id]) || '—'}</span>,
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      filterType: 'select',
+      filterOpties: ['Intern', 'Extern'],
+      sorteerWaarde: m => m.extern ? 'Extern' : 'Intern',
+      render: m => (
+        <Badge tone={m.extern ? 'warning' : 'success'}>
+          {m.extern ? 'Extern' : 'Intern'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'uurtarief_verkoop',
+      label: 'Tarief verkoop',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.uurtarief_verkoop ?? -1,
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_verkoop)}</span>,
+    },
+    {
+      key: 'uurtarief_kostprijs',
+      label: 'Tarief kostprijs',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.uurtarief_kostprijs ?? -1,
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg)' }}>{formatTarief(m.uurtarief_kostprijs)}</span>,
+    },
+    {
+      key: 'cao_document',
+      label: 'CAO document',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => (m.cao_document_id && lookups.caoDocumenten[m.cao_document_id]) || '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{(m.cao_document_id && lookups.caoDocumenten[m.cao_document_id]) || '—'}</span>,
+    },
+    {
+      key: 'cao_schaal',
+      label: 'CAO schaal',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.cao_schaal ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_schaal ?? '—'}</span>,
+    },
+    {
+      key: 'cao_trede',
+      label: 'CAO trede',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.cao_trede ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_trede ?? '—'}</span>,
+    },
+    {
+      key: 'in_dienst_vanaf',
+      label: 'In dienst vanaf',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.in_dienst_vanaf ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.in_dienst_vanaf)}</span>,
+    },
+    {
+      key: 'uit_dienst_per',
+      label: 'Uit dienst per',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.uit_dienst_per ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.uit_dienst_per)}</span>,
+    },
+    {
+      key: 'kleur',
+      label: 'Kleur planning',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.kleur ?? '',
+      render: m => m.kleur ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 14, height: 14, borderRadius: 3, background: m.kleur, border: '1px solid var(--border)' }} />
+          <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.kleur}</span>
+        </div>
+      ) : <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Automatisch</span>,
+    },
+    {
+      key: 'gebruiker_type',
+      label: 'Gebruikerstype',
+      standaard_zichtbaar: false,
+      filterType: 'select',
+      filterOpties: Object.values(GEBRUIKER_TYPE_LABELS),
+      sorteerWaarde: m => GEBRUIKER_TYPE_LABELS[m.gebruiker_type ?? 'geen'] ?? 'Geen',
+      render: m => <span style={mutedStyle}>{GEBRUIKER_TYPE_LABELS[m.gebruiker_type ?? 'geen'] ?? 'Geen'}</span>,
+    },
+    {
+      key: 'o365_email',
+      label: 'O365 e-mail',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.o365_email ?? '',
+      render: m => <span style={mutedStyle}>{m.o365_email ?? '—'}</span>,
+    },
+    {
+      key: 'handtekening',
+      label: 'Handtekening',
+      standaard_zichtbaar: false,
+      filterType: 'select',
+      filterOpties: ['Ja', 'Nee'],
+      sorteerWaarde: m => m.handtekening_url ? 'Ja' : 'Nee',
+      render: m => <span style={mutedStyle}>{m.handtekening_url ? 'Ja' : 'Nee'}</span>,
+    },
+    {
+      key: 'bouw7_id',
+      label: 'Bouw7 ID',
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: m => m.bouw7_id ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.bouw7_id ?? '—'}</span>,
+    },
+    {
+      key: 'bouw7_sync_status',
+      label: 'Bouw7 sync-status',
+      standaard_zichtbaar: false,
+      filterType: 'select',
+      filterOpties: ['synced', 'pending', 'error'],
+      sorteerWaarde: m => m.bouw7_sync_status ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.bouw7_sync_status ?? '—'}</span>,
+    },
+    {
+      key: 'bouw7_laatst_sync',
+      label: 'Bouw7 laatste sync',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.bouw7_laatst_sync ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatumTijd(m.bouw7_laatst_sync)}</span>,
+    },
+    {
+      key: 'created_at',
+      label: 'Aangemaakt',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.created_at,
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.created_at)}</span>,
+    },
+    {
+      key: 'updated_at',
+      label: 'Bijgewerkt',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.updated_at,
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.updated_at)}</span>,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      filterType: 'select',
+      filterOpties: ['Actief', 'Inactief'],
+      sorteerWaarde: m => m.actief ? 'Actief' : 'Inactief',
+      render: m => (
+        <Badge variant="outline" tone={m.actief ? 'success' : 'neutral'} dot>
+          {m.actief ? 'Actief' : 'Inactief'}
+        </Badge>
+      ),
+    },
+  ]
+}
 
 type Props = {
   medewerkers: Medewerker[]
   layouts: GebruikerLayout[]
   user_id: string | null
   functies: { id: string; naam: string }[]
+  lookups: Lookups
 }
 
-export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, functies }: Props) {
+export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, functies, lookups }: Props) {
   const router = useRouter()
   const [showNieuw, setShowNieuw] = useState(false)
+  const kolommen = useMemo(() => maakKolommen(lookups), [lookups])
 
   return (
     <div className="eva-page-full">
@@ -179,7 +418,7 @@ export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, fu
       <OverzichtTabel
         scherm="medewerkers"
         data={medewerkers}
-        kolommen={KOLOMMEN}
+        kolommen={kolommen}
         layouts={layouts}
         user_id={user_id}
         onRijKlik={m => router.push(`/medewerkers/${m.id}`)}
