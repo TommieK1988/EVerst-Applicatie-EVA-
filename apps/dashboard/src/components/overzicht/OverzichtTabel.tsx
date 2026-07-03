@@ -18,6 +18,7 @@ import {
   type RowSelectionState,
   type PaginationState,
   type ColumnSizingState,
+  type FilterFn,
 } from '@tanstack/react-table'
 import {
   DndContext,
@@ -147,6 +148,130 @@ function SortIco({ dir }: { dir: false | 'asc' | 'desc' }) {
   )
 }
 
+// ─── Multiselect kolomfilter ──────────────────────────────────────────────────
+
+/** Filterwaarde is een array van gekozen opties; lege array of undefined = geen filter. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const inLijstFilter: FilterFn<any> = (row, columnId, filterValue) => {
+  const gekozen = filterValue as string[]
+  if (!Array.isArray(gekozen) || gekozen.length === 0) return true
+  return gekozen.includes(String(row.getValue(columnId) ?? ''))
+}
+
+function MultiSelectFilter({
+  opties, value, onChange,
+}: {
+  opties: string[]
+  value: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onMouseDown(e: MouseEvent) {
+      if (popRef.current?.contains(e.target as Node) || btnRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    // Popover staat position:fixed — bij scrollen sluiten zodat hij niet loskomt van de knop.
+    function onScroll(e: Event) {
+      if (popRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [open])
+
+  function toggleOpen() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 170) })
+    }
+    setOpen(o => !o)
+  }
+
+  function toggleOptie(o: string) {
+    onChange(value.includes(o) ? value.filter(v => v !== o) : [...value, o])
+  }
+
+  const label = value.length === 0 ? 'Alle' : value.length === 1 ? value[0] : `${value.length} geselecteerd`
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={e => { e.stopPropagation(); toggleOpen() }}
+        className="eva-input"
+        style={{
+          width: '100%', fontSize: 11, padding: '3px 8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4,
+          cursor: 'pointer', textAlign: 'left',
+          color: value.length > 0 ? 'var(--fg)' : 'var(--fg-muted)',
+          fontWeight: value.length > 0 ? 600 : 400,
+          textTransform: 'none', letterSpacing: 'normal',
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <ChevronDownSm size={11} strokeWidth={2} style={{ flexShrink: 0, color: 'var(--fg-muted)' }} />
+      </button>
+
+      {open && pos && (
+        <div
+          ref={popRef}
+          style={{
+            position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 400,
+            background: 'white', border: '1px solid var(--border)', borderRadius: 8,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '4px 0',
+            maxHeight: 260, overflowY: 'auto',
+          }}
+        >
+          {opties.map(o => {
+            const checked = value.includes(o)
+            return (
+              <label
+                key={o}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+                  cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--fg)',
+                  textTransform: 'none', letterSpacing: 'normal', fontWeight: checked ? 600 : 400,
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggleOptie(o)} style={{ display: 'none' }} />
+                <Checkbox checked={checked} onChange={() => toggleOptie(o)} />
+                {o}
+              </label>
+            )
+          })}
+          {value.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { onChange([]); setOpen(false) }}
+              style={{
+                width: '100%', textAlign: 'left', border: 'none', borderTop: '1px solid var(--border-soft)',
+                background: 'none', cursor: 'pointer', padding: '6px 12px', marginTop: 2,
+                fontFamily: 'var(--font-ui)', fontSize: 11.5, color: 'var(--fg-muted)',
+              }}
+            >
+              Wis filter
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
@@ -263,7 +388,7 @@ export default function OverzichtTabel<T extends { id: string }>({
       enableSorting: !!k.sorteerWaarde,
       enableColumnFilter: !!k.filterType,
       enableResizing: true,
-      filterFn: (k.filterType === 'select' ? 'equals' : 'includesString') as 'equals' | 'includesString',
+      filterFn: k.filterType === 'select' ? inLijstFilter : ('includesString' as const),
       size: k.breedte ?? 150,
       minSize: 60,
     })),
@@ -356,7 +481,10 @@ export default function OverzichtTabel<T extends { id: string }>({
     .filter(Boolean) as KolomDefinitie<T>[]
 
   const hasFilters = kolommen.some(k => k.filterType)
-  const activeFilters = columnFilters.filter(f => f.value !== '' && f.value !== undefined && f.value !== null)
+  const activeFilters = columnFilters.filter(f =>
+    f.value !== '' && f.value !== undefined && f.value !== null
+    && !(Array.isArray(f.value) && f.value.length === 0)
+  )
   const hasActiveChips = activeFilters.length > 0 || globalFilter.length > 0
   const filteredCount  = table.getFilteredRowModel().rows.length
   const selectedCount  = table.getFilteredSelectedRowModel().rows.length
@@ -644,7 +772,7 @@ export default function OverzichtTabel<T extends { id: string }>({
               return (
                 <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', border: '1px solid var(--brand-200)', background: 'var(--brand-50)', color: 'var(--brand-700)', borderRadius: 999, fontFamily: 'var(--font-ui)', fontSize: 11.5, fontWeight: 500 }}>
                   <span style={{ color: 'var(--fg-muted)', marginRight: 1 }}>{kol?.label ?? f.id}:</span>
-                  {String(f.value)}
+                  {Array.isArray(f.value) ? (f.value as string[]).join(', ') : String(f.value)}
                   <button onClick={() => table.getColumn(f.id)?.setFilterValue(undefined)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 0 0', color: 'var(--brand-700)', display: 'flex', alignItems: 'center' }}><X size={11} /></button>
                 </span>
               )
@@ -733,13 +861,11 @@ export default function OverzichtTabel<T extends { id: string }>({
                               />
                             )}
                             {kol.filterType === 'select' && (
-                              <select className="eva-input" style={{ width: '100%', fontSize: 11, padding: '3px 8px' }}
-                                value={(header.column.getFilterValue() as string) ?? ''}
-                                onChange={e => { header.column.setFilterValue(e.target.value || undefined); setPagination(p => ({ ...p, pageIndex: 0 })) }}
-                              >
-                                <option value="">Alle</option>
-                                {kol.filterOpties?.map(o => <option key={o} value={o}>{o}</option>)}
-                              </select>
+                              <MultiSelectFilter
+                                opties={kol.filterOpties ?? []}
+                                value={(header.column.getFilterValue() as string[]) ?? []}
+                                onChange={v => { header.column.setFilterValue(v.length ? v : undefined); setPagination(p => ({ ...p, pageIndex: 0 })) }}
+                              />
                             )}
                           </th>
                         )
