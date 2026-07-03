@@ -122,7 +122,7 @@ export type DossierQuoteRij = {
  */
 export async function getQuotesVoorDossier(
   dossierId: string,
-): Promise<{ projectId: string | null; rijen: DossierQuoteRij[] }> {
+): Promise<{ projectId: string | null; projectAangemaakt: string | null; rijen: DossierQuoteRij[] }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const platformClient = createAdminClient() as any
   const { data: dossier } = await platformClient
@@ -131,9 +131,18 @@ export async function getQuotesVoorDossier(
     .eq('id', dossierId)
     .single()
   const projectId: string | null = dossier?.everts_calc_project_id ?? null
-  if (!projectId) return { projectId: null, rijen: [] }
+  if (!projectId) return { projectId: null, projectAangemaakt: null, rijen: [] }
 
   const supabase = await getDb()
+
+  // Aanmaakdatum van het calculatieproject (voor de calculatie-regel in de tabel).
+  // maybeSingle: oudere project-id's uit het localStorage-tijdperk bestaan soms niet meer.
+  const { data: project } = await supabase
+    .from('projects')
+    .select('created_at')
+    .eq('id', projectId)
+    .maybeSingle()
+  const projectAangemaakt: string | null = project?.created_at ?? null
   const { data, error } = await supabase
     .from('quotes')
     .select(`
@@ -160,7 +169,7 @@ export async function getQuotesVoorDossier(
     return { ...rest, totaal_kostprijs, marge, marge_pct } as DossierQuoteRij
   })
 
-  return { projectId, rijen }
+  return { projectId, projectAangemaakt, rijen }
 }
 
 export async function getQuotes(): Promise<Quote[]> {

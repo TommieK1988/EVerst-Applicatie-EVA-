@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Calculator, ArrowLeft } from 'lucide-react'
@@ -8,6 +8,7 @@ import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
 import { koppelCalculatieProject } from '@/lib/dossiers/actions'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
+import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
 
@@ -38,14 +39,23 @@ type Props = {
   nummer: string
   /** Gekoppeld everts-calc project (dossiers.everts_calc_project_id). */
   projectId: string | null
+  /** Aanmaakdatum van het calculatieproject (projects.created_at). */
+  projectAangemaakt: string | null
   /** Alle aan het dossier gekoppelde calculaties/offertes (incl. meerwerk), server-side opgehaald. */
   rijen: DossierQuoteRij[]
 }
 
-export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, rijen }: Props) {
+export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, projectAangemaakt, rijen }: Props) {
   const router = useRouter()
   const [toonCalculatie, setToonCalculatie] = useState(false)
   const [bezig, setBezig] = useState(false)
+  // Totalen van de calculatie zelf — client-side uit localStorage (net als InformatieTab),
+  // want de calculatieregels zijn (nog) niet server-side opgeslagen.
+  const [calcTotalen, setCalcTotalen] = useState<CalcTotalen | null>(null)
+  useEffect(() => {
+    if (!projectId) { setCalcTotalen(null); return }
+    try { setCalcTotalen(berekenCalcTotalenVoorProject(projectId)) } catch { setCalcTotalen(null) }
+  }, [projectId, toonCalculatie])
 
   async function aanmaken() {
     setBezig(true)
@@ -106,14 +116,6 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, rije
                 offertes en meerwerk-calculaties aan dit dossier te koppelen.
               </div>
             </div>
-          ) : rijen.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <div className="text-[14px] font-semibold text-neutral-800">Nog geen calculaties</div>
-              <div className="mx-auto mt-1.5 max-w-[380px] text-[12.5px] text-neutral-500">
-                Er is een calculatieproject gekoppeld, maar er zijn nog geen offertes of
-                interne begrotingen aangemaakt. Open de calculatie om te starten.
-              </div>
-            </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -129,6 +131,25 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, rije
                 </tr>
               </thead>
               <tbody>
+                {/* De calculatie zelf — altijd bovenaan; totalen client-side uit de calc-omgeving. */}
+                <tr
+                  onClick={() => setToonCalculatie(true)}
+                  className="cursor-pointer hover:bg-neutral-50"
+                  title="Calculatie openen"
+                >
+                  <TD vet>{nummer || '—'}</TD>
+                  <TD>{`Calculatie — ${naam}`}</TD>
+                  <TD><Badge tone="info">Calculatie</Badge></TD>
+                  <TD>—</TD>
+                  <TD>{fmtDatum(projectAangemaakt)}</TD>
+                  <TD right>{calcTotalen ? fmt(calcTotalen.subtotaal_ex_btw, true) : '—'}</TD>
+                  <TD right vet>{calcTotalen ? fmt(calcTotalen.totaal_incl_btw, true) : '—'}</TD>
+                  <TD right kleur={calcTotalen && calcTotalen.marge_pct < 10 ? '#d9534f' : undefined}>
+                    {calcTotalen
+                      ? `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(calcTotalen.marge_pct)} %`
+                      : '—'}
+                  </TD>
+                </tr>
                 {rijen.map(r => (
                   <tr
                     key={r.id}
@@ -165,10 +186,10 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, rije
           )}
         </CardBody>
       </Card>
-      {rijen.length > 0 && (
+      {projectId && (
         <div className="text-[11.5px] leading-normal text-neutral-500">
-          Alle calculaties en offertes die via het calculatieproject aan dit dossier gekoppeld zijn,
-          inclusief meerwerk-offertes. Klik op een regel om deze in Everts Calc te openen.
+          De calculatie en alle offertes die via het calculatieproject aan dit dossier gekoppeld zijn,
+          inclusief meerwerk-offertes. Klik op een regel om deze te openen.
         </div>
       )}
     </div>

@@ -103,7 +103,8 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   // Opdracht: tabel met alle gekoppelde calculaties/offertes (incl. meerwerk) i.p.v.
   // de embedded calculatie-omgeving; die is via "Calculatie openen" alsnog bereikbaar.
   if (tab === 'calculatie' && sectie === 'opdracht') {
-    const { projectId, rijen } = await getQuotesVoorDossier(id).catch(() => ({ projectId: null, rijen: [] }))
+    const { projectId, projectAangemaakt, rijen } = await getQuotesVoorDossier(id)
+      .catch(() => ({ projectId: null, projectAangemaakt: null, rijen: [] }))
     return (
       <>
         {titleInjector}
@@ -112,6 +113,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           naam={dossier?.titel ?? 'Opdracht'}
           nummer={dossier?.dossiernummer ?? ''}
           projectId={projectId}
+          projectAangemaakt={projectAangemaakt}
           rijen={rijen}
         />
       </>
