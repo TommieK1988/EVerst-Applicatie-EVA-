@@ -289,13 +289,15 @@ export function parseC4y(xmlString: string, scenarioId: string): C4yParseResulta
       id: nieuweId(), calculatieregel_id: regel.id,
       type: 'arbeid', norm_hoeveelheid: arbU, tarief: node.uurloon, eenheid: 'uur',
     })
+    // Geen generieke "Materiaal"-omschrijving: de regel-omschrijving (het werkitem) is leidend.
+    // De materiaalkoppeling loopt via het Materiaal-veld in de Specificatie-kolom.
     if (maaU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'materieel', norm_hoeveelheid: 1, tarief: maaU, omschrijving: 'Materiaal',
+      type: 'materieel', norm_hoeveelheid: 1, tarief: maaU,
     })
     if (meeU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,
-      type: 'materieel', norm_hoeveelheid: 1, tarief: meeU, omschrijving: 'Materiaal',
+      type: 'materieel', norm_hoeveelheid: 1, tarief: meeU,
     })
     if (ondU > 0) componentregels.push({
       id: nieuweId(), calculatieregel_id: regel.id,

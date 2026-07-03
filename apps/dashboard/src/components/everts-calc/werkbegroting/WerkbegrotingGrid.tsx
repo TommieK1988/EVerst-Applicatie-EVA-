@@ -994,7 +994,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           <td key={id} className={`px-1 py-1 ${base}`}>
             <input
               className={`${inputCls} text-slate-700 font-medium w-full min-w-0`}
-              value={comp.omschrijving ?? ''}
+              value={comp.omschrijving ?? regel.omschrijving ?? ''}
               placeholder="Omschrijving…"
               onChange={e => onComponentWijzig(comp.id, { omschrijving: e.target.value || undefined })}
             />
