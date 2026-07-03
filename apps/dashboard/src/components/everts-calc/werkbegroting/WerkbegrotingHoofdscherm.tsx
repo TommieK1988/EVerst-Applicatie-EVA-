@@ -1,18 +1,22 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { Loader2, ChevronLeft, Clock, ClipboardCheck, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie,
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
+  getWerkbegrotingWijzigingen,
   slaWerkbegrotingOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
-import { maakWerkbegrotingControleTaak, previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, type ControleTaakResultaat, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk } from '@/app/(platform)/everts-calc/actions/werkbegroting'
-import type { Werkbegroting, WerkbegrotingStatus } from '@/lib/everts-calc/types'
+import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { vraagGoedkeuringAan } from '@/lib/goedkeuring/actions'
+import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
-import GoedkeuringModal from './GoedkeuringModal'
+import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
+import BestellingenPaneel from './BestellingenPaneel'
+import { X, ClipboardCheck as ClipboardIcon, Package } from 'lucide-react'
 
 interface Props {
   projectId: string
@@ -29,7 +33,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [scenarioId, setScenarioId] = useState<string | null>(null)
   const [refreshTeller, setRefreshTeller] = useState(0)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
-  const [controleTaak, setControleTaak] = useState<ControleTaakResultaat | null>(null)
+  const [bestellingenOpen, setBestellingenOpen] = useState(false)
+  /** Aantal actieve regels dat (nog) niet geaccordeerd is (server-side berekend). */
+  const [nietGeaccordeerd, setNietGeaccordeerd] = useState<number>(0)
   const [prognoseOpen, setPrognoseOpen] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
   const [prognoseBezig, setPrognoseBezig] = useState(false)
@@ -68,9 +74,37 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     return () => { actief = false }
   }, [dossierId])
 
+  /** Volledige client-toestand van de werkbegroting opbouwen voor sync + gates. */
+  const bouwPayload = useCallback((): WerkbegrotingPayload | null => {
+    if (!wb) return null
+    const regels = getWerkbegrotingRegels(wb.id)
+    const regelIds = new Set(regels.map(r => r.id))
+    const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id))
+    const wijzigingen = getWerkbegrotingWijzigingen().filter(w => w.werkbegroting_id === wb.id)
+    return { wb, regels, componenten, wijzigingen, dossierId: dossierId ?? null }
+  }, [wb, dossierId])
+
+  /** Regel-goedkeuringsstatus verversen (badges + headerteller). */
+  const verversStatus = useCallback(async () => {
+    if (!wb) return
+    try {
+      const status = await getWerkbegrotingGoedkeuringStatus(wb.id)
+      setNietGeaccordeerd(status.regels.filter(r => !r.goedgekeurd).length)
+    } catch { /* stil */ }
+  }, [wb])
+
+  // Debounced sync na wijzigingen — houdt Supabase (bron voor de gates) actueel.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleWijziging = useCallback(() => {
     setRefreshTeller(t => t + 1)
-  }, [])
+    if (syncTimer.current) clearTimeout(syncTimer.current)
+    syncTimer.current = setTimeout(async () => {
+      const payload = bouwPayload()
+      if (payload) { await syncWerkbegrotingNaarSupabase(payload); await verversStatus() }
+    }, 2000)
+  }, [bouwPayload, verversStatus])
+
+  useEffect(() => { verversStatus() }, [verversStatus, wb])
 
   const totaalBedrag = useMemo(() => {
     if (!wb) return 0
@@ -139,7 +173,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     setPrognoseBezig(true)
     try {
       if (doelHoofdstukId != null) localStorage.setItem(`eva_prognose_hoofdstuk_${dossierId}`, String(doelHoofdstukId))
-      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen(), doelHoofdstukId)
+      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen(), doelHoofdstukId, bouwPayload() ?? undefined)
       if (res.ok) {
         const delen = [`${res.geschreven} bijgewerkt`]
         if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
@@ -154,32 +188,34 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     } finally {
       setPrognoseBezig(false)
     }
-  }, [dossierId, berekenPrognoseTotalen, doelHoofdstukId])
+  }, [dossierId, berekenPrognoseTotalen, doelHoofdstukId, bouwPayload])
 
-  const handleStatusWijzig = useCallback(async (nieuweStatus: WerkbegrotingStatus, notitie?: string) => {
-    if (!wb) return
-    const bijgewerkt: Werkbegroting = { ...wb, status: nieuweStatus, bijgewerkt_op: new Date().toISOString() }
-    slaWerkbegrotingOp(bijgewerkt)
-    setWb(bijgewerkt)
-    setGoedkeuringOpen(false)
-    const labels: Record<WerkbegrotingStatus, string> = {
-      concept: 'Teruggezet naar concept',
-      definitief: 'Ingediend ter goedkeuring',
-      geaccordeerd: 'Werkbegroting geaccordeerd',
+  // Goedkeuring aanvragen: eerst de payload syncen zodat de aanvraag op echte data slaat.
+  const handleAanvragen = useCallback(async (toelichting?: string) => {
+    if (!wb) return { ok: false, error: 'Geen werkbegroting geladen.' }
+    const payload = bouwPayload()
+    if (payload) await syncWerkbegrotingNaarSupabase(payload)
+    const res = await vraagGoedkeuringAan({ objectType: 'werkbegroting', objectId: wb.id, dossierId: dossierId ?? null, toelichting })
+    if (res.ok) {
+      const bij: Werkbegroting = { ...wb, status: 'definitief', bijgewerkt_op: new Date().toISOString() }
+      slaWerkbegrotingOp(bij); setWb(bij)
     }
-    toast.success(labels[nieuweStatus])
-    if (notitie) console.info('[GoedkeuringNotitie]', notitie)
+    return res.ok ? { ok: true } : { ok: false, error: res.error }
+  }, [wb, dossierId, bouwPayload])
 
-    // Bij indienen ter goedkeuring: controletaak voor de controller aanmaken.
-    if (nieuweStatus === 'definitief' && dossierId) {
-      try {
-        const resultaat = await maakWerkbegrotingControleTaak(dossierId)
-        setControleTaak(resultaat)
-      } catch {
-        toast.error('Controletaak kon niet worden aangemaakt')
-      }
+  // Accorderen: payload + snapshot via de server-action, dan lokaal 'geaccordeerd' markeren.
+  const handleAccorderen = useCallback(async (goedkeuringId: string, opmerking?: string) => {
+    if (!wb) return { ok: false, error: 'Geen werkbegroting geladen.' }
+    const payload = bouwPayload()
+    if (!payload) return { ok: false, error: 'Kon werkbegroting niet opbouwen.' }
+    const res = await accordeerWerkbegroting(goedkeuringId, payload, opmerking)
+    if (res.ok) {
+      const bij: Werkbegroting = { ...wb, status: 'geaccordeerd', bijgewerkt_op: new Date().toISOString() }
+      slaWerkbegrotingOp(bij); setWb(bij)
+      await verversStatus()
     }
-  }, [wb, dossierId])
+    return res
+  }, [wb, bouwPayload, verversStatus])
 
   const toegestaneStatussen = ['gewonnen', 'opdracht', 'uitvoering', 'afgerond']
   const magAanmaken = toegestaneStatussen.includes(projectStatus)
@@ -224,6 +260,11 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           <p className="text-xs text-slate-400 ">{projectNummer}</p>
           <h1 className="text-sm font-semibold text-slate-800 truncate">{projectNaam} — Werkbegroting</h1>
         </div>
+        {nietGeaccordeerd > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700" title="Aantal regels met niet-geaccordeerde wijzigingen">
+            {nietGeaccordeerd} niet geaccordeerd
+          </span>
+        )}
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           wb.status === 'geaccordeerd' ? 'bg-green-100 text-green-700' :
           wb.status === 'definitief'   ? 'bg-blue-100 text-blue-700' :
@@ -244,6 +285,14 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         >
           <ClipboardCheck className="w-3.5 h-3.5" />
           {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Ter beoordeling' : 'Goedkeuring'}
+        </button>
+        <button
+          onClick={() => setBestellingenOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          title="Bestellingen klaarzetten en verzenden"
+        >
+          <Package className="w-3.5 h-3.5" />
+          Bestellingen
         </button>
         <button
           onClick={openPrognose}
@@ -270,56 +319,37 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       </div>
 
       {goedkeuringOpen && (
-        <GoedkeuringModal
-          wb={wb}
-          totaalBedrag={totaalBedrag}
-          onStatusWijzig={handleStatusWijzig}
-          onSluit={() => setGoedkeuringOpen(false)}
-        />
-      )}
-
-      {controleTaak && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setControleTaak(null) }}
+          onClick={(e) => { if (e.target === e.currentTarget) setGoedkeuringOpen(false) }}
         >
-          <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-blue-700">
-                <ClipboardCheck className="h-5 w-5" />
+          <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <ClipboardIcon className="h-5 w-5 text-blue-700" />
+                <h2 className="text-base font-bold text-gray-900">Goedkeuring werkbegroting</h2>
               </div>
-              <h2 className="text-base font-bold text-gray-900">Controletaak aangemaakt</h2>
-            </div>
-            <div className="px-6 py-5 text-sm leading-relaxed text-gray-700">
-              <p>
-                Er is een taak <strong>&ldquo;Werkbegroting controleren&rdquo;</strong>
-                {controleTaak.bestond ? ' beschikbaar' : ' toegevoegd'} bij dit dossier
-                {controleTaak.toegewezenAan
-                  ? <> voor <strong>{controleTaak.toegewezenAan}</strong>.</>
-                  : <>.</>}
-              </p>
-              {controleTaak.isFallback && (
-                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
-                  Er was geen controller ingesteld op dit dossier — de taak is daarom toegewezen aan
-                  {' '}<strong>Tom Kamminga</strong>.
-                </p>
-              )}
-              {controleTaak.bestond && (
-                <p className="mt-2 text-[13px] text-gray-500">
-                  Er stond al een openstaande controletaak open; er is geen dubbele taak aangemaakt.
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <button
-                onClick={() => setControleTaak(null)}
-                className="rounded-lg bg-everts px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-everts/90"
-              >
-                Begrepen
+              <button onClick={() => setGoedkeuringOpen(false)} className="text-gray-400 hover:text-gray-600 rounded-md p-1 hover:bg-gray-200">
+                <X className="w-5 h-5" />
               </button>
+            </div>
+            <div className="px-6 py-5 max-h-[75vh] overflow-y-auto">
+              <GoedkeuringPaneel
+                objectType="werkbegroting"
+                objectId={wb.id}
+                dossierId={dossierId ?? null}
+                totaalBedrag={totaalBedrag}
+                aanvragen={handleAanvragen}
+                accordeer={handleAccorderen}
+                onVeranderd={verversStatus}
+              />
             </div>
           </div>
         </div>
+      )}
+
+      {bestellingenOpen && (
+        <BestellingenPaneel wb={wb} dossierId={dossierId ?? null} onSluit={() => setBestellingenOpen(false)} />
       )}
 
       {prognoseOpen && (

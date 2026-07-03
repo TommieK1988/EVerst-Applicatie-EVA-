@@ -13,25 +13,47 @@ export interface SyncWerkbegrotingResultaat {
   fout?: string
 }
 
+/** Volledige client-toestand van een werkbegroting (localStorage) voor sync + gates. */
+export interface WerkbegrotingPayload {
+  wb: Werkbegroting
+  regels: WerkbegrotingRegel[]
+  componenten: WerkbegrotingComponent[]
+  wijzigingen: WerkbegrotingWijziging[]
+  dossierId: string | null
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // ─── Sync werkbegroting naar Supabase ─────────────────────────────────────────
+//
+// De werkbegroting leeft localStorage-first; deze sync maakt Supabase de waarheid
+// op momentopname zodat de server-side gates (accorderen, bestellingen, prognose)
+// op echte data kunnen controleren. Regels/componenten die niet (meer) in de
+// payload staan worden server-side soft-deleted (is_verwijderd = true).
 
 export async function syncWerkbegrotingNaarSupabase(
-  wb: Werkbegroting,
-  regels: WerkbegrotingRegel[],
-  componenten: WerkbegrotingComponent[],
-  wijzigingen: WerkbegrotingWijziging[]
+  payload: WerkbegrotingPayload
 ): Promise<SyncWerkbegrotingResultaat> {
-  const db = await createClient()
+  // Cast naar any: de gegenereerde everts-calc-types lopen achter op de nieuwe
+  // kolommen (is_verwijderd, dossier_id, nullable project_id).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (await createClient()) as any
   const nu = new Date().toISOString()
+  const { wb, regels, componenten, wijzigingen, dossierId } = payload
 
   try {
-    // 1. Upsert werkbegroting header
+    // 1. Upsert werkbegroting header. Synthetische project-ids ("wb-direct-…",
+    //    geen uuid, niet in projects) gaan als null mee; dossier_id is het anker.
+    const projectId = UUID_RE.test(wb.project_id) ? wb.project_id : null
     const { error: wbErr } = await db
       .from('werkbegrotingen')
-      .upsert({ id: wb.id, project_id: wb.project_id, scenario_id: wb.scenario_id, naam: wb.naam, status: wb.status, bijgewerkt_op: nu }, { onConflict: 'id' })
+      .upsert({
+        id: wb.id, project_id: projectId, scenario_id: wb.scenario_id,
+        naam: wb.naam, status: wb.status, dossier_id: dossierId, bijgewerkt_op: nu,
+      }, { onConflict: 'id' })
     if (wbErr) throw new Error(`Werkbegroting header sync: ${wbErr.message}`)
 
-    // 2. Upsert regels
+    // 2. Upsert regels (incl. is_verwijderd)
     if (regels.length > 0) {
       const { error: regelErr } = await db
         .from('werkbegroting_regels')
@@ -44,6 +66,7 @@ export async function syncWerkbegrotingNaarSupabase(
             kostengroep: r.kostengroep ?? null, volgorde: r.volgorde,
             opslag_pct: r.opslag_pct ?? null, btw_pct: r.btw_pct ?? null,
             opmerking: r.opmerking ?? null, is_stelpost: r.is_stelpost ?? false,
+            is_verwijderd: r.is_verwijderd ?? false,
             bijgewerkt_op: nu,
           })),
           { onConflict: 'id' }
@@ -51,7 +74,7 @@ export async function syncWerkbegrotingNaarSupabase(
       if (regelErr) throw new Error(`Regels sync: ${regelErr.message}`)
     }
 
-    // 3. Upsert componenten
+    // 3. Upsert componenten (incl. is_verwijderd)
     if (componenten.length > 0) {
       const { error: compErr } = await db
         .from('werkbegroting_componenten')
@@ -64,6 +87,7 @@ export async function syncWerkbegrotingNaarSupabase(
             omschrijving: c.omschrijving ?? null, relatie_id: c.relatie_id ?? null,
             leverancier_naam: c.leverancier_naam ?? null,
             aannemersnaam: c.aannemersnaam ?? null, offertenummer: c.offertenummer ?? null,
+            is_verwijderd: c.is_verwijderd ?? false,
             bijgewerkt_op: nu,
           })),
           { onConflict: 'id' }
@@ -71,7 +95,34 @@ export async function syncWerkbegrotingNaarSupabase(
       if (compErr) throw new Error(`Componenten sync: ${compErr.message}`)
     }
 
-    // 4. Wijzigingen (append-only)
+    // 4. Server-side rijen die niet (meer) in de payload staan → soft delete.
+    //    (Client verwijdert regels soms hard uit localStorage; de server bewaart
+    //    ze als is_verwijderd zodat snapshots en bestellingen verklaarbaar blijven.)
+    const inLijst = (ids: string[]) => `(${ids.map(id => `"${id}"`).join(',')})`
+    const regelIds = regels.map(r => r.id)
+    if (regelIds.length > 0) {
+      await db
+        .from('werkbegroting_regels')
+        .update({ is_verwijderd: true, bijgewerkt_op: nu })
+        .eq('werkbegroting_id', wb.id)
+        .not('id', 'in', inLijst(regelIds))
+    } else {
+      await db
+        .from('werkbegroting_regels')
+        .update({ is_verwijderd: true, bijgewerkt_op: nu })
+        .eq('werkbegroting_id', wb.id)
+    }
+    const compIds = componenten.map(c => c.id)
+    if (regelIds.length > 0) {
+      let verwijderQuery = db
+        .from('werkbegroting_componenten')
+        .update({ is_verwijderd: true, bijgewerkt_op: nu })
+        .in('werkbegroting_regel_id', regelIds)
+      if (compIds.length > 0) verwijderQuery = verwijderQuery.not('id', 'in', inLijst(compIds))
+      await verwijderQuery
+    }
+
+    // 5. Wijzigingen (append-only)
     if (wijzigingen.length > 0) {
       const { error: wijzErr } = await db
         .from('werkbegroting_wijzigingen')
@@ -88,6 +139,12 @@ export async function syncWerkbegrotingNaarSupabase(
       if (wijzErr) throw new Error(`Wijzigingen sync: ${wijzErr.message}`)
     }
 
+    // 6. WB!-dossiervlag verversen (wijzigingen na accordering zichtbaar op kaart/tab).
+    if (dossierId) {
+      const { refreshDossierWbVlag } = await import('@/lib/goedkeuring/actions')
+      await refreshDossierWbVlag(dossierId).catch(() => {})
+    }
+
     return { gelukt: true, regels_geschreven: regels.length }
   } catch (err) {
     return { gelukt: false, regels_geschreven: 0, fout: err instanceof Error ? err.message : 'Onbekende fout' }
@@ -99,7 +156,8 @@ export async function syncWerkbegrotingNaarSupabase(
 export async function syncBestellingenNaarSupabase(
   bestellingen: WerkbegrotingBestelling[]
 ): Promise<{ gelukt: boolean; fout?: string }> {
-  const db = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (await createClient()) as any
   const nu = new Date().toISOString()
 
   try {
@@ -191,90 +249,213 @@ export interface ControleTaakResultaat {
  * Staat er geen controller op het dossier, dan valt de taak terug op Tom Kamminga.
  */
 export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<ControleTaakResultaat> {
+  const { maakBeoordeelTaak } = await import('@/lib/goedkeuring/taken')
+  return maakBeoordeelTaak(dossierId, 'Werkbegroting controleren')
+}
+
+// ─── Goedkeuring: accorderen met regel-snapshot + gates ───────────────────────
+//
+// De goedkeuringsstatus wordt op regelniveau bijgehouden: bij accorderen wordt per
+// actieve regel een hash (regelvelden + actieve componenten) vastgelegd in
+// werkbegroting_goedkeuring_regels. Een regel is "geaccordeerd" zolang zijn actuele
+// hash matcht met dat snapshot. Alle gates syncen eerst de client-payload en
+// rekenen daarna server-side — de client kan niets forceren.
+
+export type WerkbegrotingGoedkeuringStatusResultaat = {
+  laatsteGoedkeuringId: string | null
+  ooitGoedgekeurd: boolean
+  regels: { regel_id: string; goedgekeurd: boolean }[]
+  volledigGoedgekeurd: boolean
+  /** Snapshot van de laatste goedgekeurde ronde — voor client-side badges. */
+  snapshot: { regel_id: string; regel_hash: string }[]
+}
+
+/** Regel-goedkeuringsstatus voor de UI (badges + headerteller). */
+export async function getWerkbegrotingGoedkeuringStatus(
+  werkbegrotingId: string,
+): Promise<WerkbegrotingGoedkeuringStatusResultaat> {
+  const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
+  const status = await berekenWerkbegrotingStatus(werkbegrotingId)
+  return {
+    laatsteGoedkeuringId: status.laatsteGoedkeuringId,
+    ooitGoedgekeurd: status.ooitGoedgekeurd,
+    regels: status.regels,
+    volledigGoedgekeurd: status.volledigGoedgekeurd,
+    snapshot: status.snapshot,
+  }
+}
+
+export type AccordeerResultaat = { ok: true } | { ok: false; error: string }
+
+/**
+ * Accordeert een openstaande goedkeuringsaanvraag: synct de payload, legt per
+ * actieve regel het snapshot vast, zet de aanvraag op 'goedgekeurd' en de
+ * werkbegroting op 'geaccordeerd'. Autorisatie (controller/Directie/gedelegeerde)
+ * wordt in keurGoed server-side afgedwongen.
+ */
+export async function accordeerWerkbegroting(
+  goedkeuringId: string,
+  payload: WerkbegrotingPayload,
+  opmerking?: string,
+): Promise<AccordeerResultaat> {
+  const { bepaalBeoordeelContext } = await import('@/lib/goedkeuring/autorisatie')
+  const { keurGoed, refreshDossierWbVlag } = await import('@/lib/goedkeuring/actions')
+  const { hashWerkbegrotingRegel } = await import('@/lib/everts-calc/goedkeuring-hash')
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
 
-  // 1. Controller van het dossier ophalen
-  const { data: dossier } = await db
-    .from('dossiers')
-    .select('controller_id')
-    .eq('id', dossierId)
-    .single()
+  // 1. Aanvraag + autorisatie vooraf controleren (vóór we snapshots schrijven).
+  const { data: goedkeuring } = await db
+    .from('goedkeuringen')
+    .select('id, status, dossier_id, gedelegeerd_aan, meekijkers, aangevraagd_door')
+    .eq('id', goedkeuringId)
+    .maybeSingle()
+  if (!goedkeuring) return { ok: false, error: 'Goedkeuringsaanvraag niet gevonden.' }
+  if (goedkeuring.status !== 'aangevraagd') return { ok: false, error: 'Deze aanvraag staat niet meer open.' }
+  const ctx = await bepaalBeoordeelContext(goedkeuring.dossier_id, goedkeuring)
+  if (!ctx.magBeoordelen) return { ok: false, error: 'Je bent niet bevoegd om deze werkbegroting te accorderen.' }
 
-  let medewerkerId: string | null = dossier?.controller_id ?? null
-  let isFallback = false
+  // 2. Payload syncen — Supabase is de waarheid op accordeermoment.
+  const sync = await syncWerkbegrotingNaarSupabase(payload)
+  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
 
-  // 2. Geen controller → terugvallen op Tom Kamminga
-  if (!medewerkerId) {
-    isFallback = true
-    const { data: tom } = await db
-      .from('medewerkers')
-      .select('id')
-      .ilike('voornaam', 'Tom')
-      .ilike('achternaam', 'Kamminga')
-      .limit(1)
-      .maybeSingle()
-    medewerkerId = tom?.id ?? null
+  // 3. Snapshot per actieve regel.
+  const actieveRegels = payload.regels.filter(r => !r.is_verwijderd)
+  const compsPerRegel = new Map<string, WerkbegrotingComponent[]>()
+  for (const c of payload.componenten) {
+    if (c.is_verwijderd) continue
+    const arr = compsPerRegel.get(c.werkbegroting_regel_id) ?? []
+    arr.push(c)
+    compsPerRegel.set(c.werkbegroting_regel_id, arr)
+  }
+  const snapshotRijen = await Promise.all(
+    actieveRegels.map(async r => ({
+      goedkeuring_id: goedkeuringId,
+      regel_id: r.id,
+      regel_hash: await hashWerkbegrotingRegel(r, compsPerRegel.get(r.id) ?? []),
+    })),
+  )
+  await db.from('werkbegroting_goedkeuring_regels').delete().eq('goedkeuring_id', goedkeuringId)
+  if (snapshotRijen.length > 0) {
+    const { error: snapErr } = await db.from('werkbegroting_goedkeuring_regels').insert(snapshotRijen)
+    if (snapErr) return { ok: false, error: `Snapshot opslaan mislukt: ${snapErr.message}` }
   }
 
-  // 3. Naam + auth-koppeling van de toegewezen medewerker
-  let naam: string | null = null
-  let authUserId: string | null = null
-  if (medewerkerId) {
-    const { data: med } = await db
-      .from('medewerkers')
-      .select('voornaam, tussenvoegsel, achternaam, auth_user_id')
-      .eq('id', medewerkerId)
-      .single()
-    if (med) {
-      naam = [med.voornaam, med.tussenvoegsel, med.achternaam].filter(Boolean).join(' ')
-      authUserId = med.auth_user_id ?? null
+  // 4. Goedkeuren (autorisatie + taak sluiten + audit in keurGoed).
+  const res = await keurGoed(goedkeuringId, { opmerking })
+  if (!res.ok) return res
+
+  // 5. Werkbegroting-status → geaccordeerd + dossiervlag verversen.
+  await db.from('werkbegrotingen').update({ status: 'geaccordeerd' }).eq('id', payload.wb.id)
+  if (payload.dossierId) await refreshDossierWbVlag(payload.dossierId)
+
+  return { ok: true }
+}
+
+// ─── Gate: bestellingen ───────────────────────────────────────────────────────
+
+export type ZetBestellingKlaarResultaat = { ok: true } | { ok: false; error: string }
+
+/**
+ * Zet een bestelling klaar (of werkt hem bij): synct de payload en de bestelling,
+ * en legt de componenten-hash vast waarmee later veroudering wordt gedetecteerd.
+ * Klaarzetten is altijd toegestaan — alleen verzenden is gated.
+ */
+export async function zetBestellingKlaar(
+  bestelling: WerkbegrotingBestelling,
+  payload: WerkbegrotingPayload,
+): Promise<ZetBestellingKlaarResultaat> {
+  const { hashComponentenSet } = await import('@/lib/everts-calc/goedkeuring-hash')
+
+  const sync = await syncWerkbegrotingNaarSupabase(payload)
+  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
+
+  const bestellingSync = await syncBestellingenNaarSupabase([bestelling])
+  if (!bestellingSync.gelukt) return { ok: false, error: `Bestelling opslaan mislukt: ${bestellingSync.fout}` }
+
+  const componenten = payload.componenten.filter(c => bestelling.component_ids.includes(c.id) && !c.is_verwijderd)
+  const hash = await hashComponentenSet(componenten)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { error } = await db
+    .from('werkbegroting_bestellingen')
+    .update({ componenten_hash: hash, klaargezet_op: new Date().toISOString() })
+    .eq('id', bestelling.id)
+  if (error) return { ok: false, error: error.message }
+
+  return { ok: true }
+}
+
+export type VerzendBestellingResultaat =
+  | { ok: true }
+  | { ok: false; reden: 'niet_goedgekeurd' | 'verouderd' | 'fout'; error: string; regels?: string[] }
+
+/**
+ * Gate: verzend een klaargezette bestelling. Alleen toegestaan als (a) alle
+ * werkbegroting-regels achter de bestelde componenten onder de laatste accordering
+ * vallen en (b) de componenten sinds het klaarzetten niet zijn gewijzigd.
+ */
+export async function verzendBestelling(
+  bestellingId: string,
+  payload: WerkbegrotingPayload,
+): Promise<VerzendBestellingResultaat> {
+  const { hashComponentenSet } = await import('@/lib/everts-calc/goedkeuring-hash')
+  const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
+
+  const sync = await syncWerkbegrotingNaarSupabase(payload)
+  if (!sync.gelukt) return { ok: false, reden: 'fout', error: `Synchroniseren mislukt: ${sync.fout}` }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data: bestelling } = await db
+    .from('werkbegroting_bestellingen')
+    .select('id, werkbegroting_id, componenten_hash, status')
+    .eq('id', bestellingId)
+    .maybeSingle()
+  if (!bestelling) return { ok: false, reden: 'fout', error: 'Bestelling niet gevonden — zet hem eerst klaar.' }
+
+  const { data: junction } = await db
+    .from('werkbegroting_bestelling_regels')
+    .select('component_id')
+    .eq('bestelling_id', bestellingId)
+  const componentIds = new Set<string>(((junction ?? []) as { component_id: string }[]).map(j => j.component_id))
+  if (componentIds.size === 0) return { ok: false, reden: 'fout', error: 'Bestelling heeft geen componenten.' }
+
+  const componenten = payload.componenten.filter(c => componentIds.has(c.id) && !c.is_verwijderd)
+  if (componenten.length !== componentIds.size) {
+    return { ok: false, reden: 'verouderd', error: 'Eén of meer bestelde componenten bestaan niet meer — werk de bestelling bij.' }
+  }
+
+  // (b) Verouderd-check: componenten gewijzigd sinds klaarzetten?
+  const actueleHash = await hashComponentenSet(componenten)
+  if (!bestelling.componenten_hash || actueleHash !== bestelling.componenten_hash) {
+    return { ok: false, reden: 'verouderd', error: 'De werkbegroting is gewijzigd sinds deze bestelling is klaargezet — werk de bestelling bij.' }
+  }
+
+  // (a) Regel-goedkeuring: elke regel achter de bestelde componenten moet geaccordeerd zijn.
+  const status = await berekenWerkbegrotingStatus(bestelling.werkbegroting_id)
+  const goedgekeurdPerRegel = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
+  const regelIds = [...new Set(componenten.map(c => c.werkbegroting_regel_id))]
+  const geblokkeerd = regelIds.filter(id => goedgekeurdPerRegel.get(id) !== true)
+  if (geblokkeerd.length > 0) {
+    const regelById = new Map(payload.regels.map(r => [r.id, r]))
+    const namen = geblokkeerd.map(id => regelById.get(id)?.omschrijving || 'Onbekende regel')
+    return {
+      ok: false, reden: 'niet_goedgekeurd',
+      error: 'Deze bestelling bevat regels die (nog) niet zijn geaccordeerd.',
+      regels: namen,
     }
   }
 
-  // 4. Bestaat er al een openstaande controletaak? Dan niet dubbel aanmaken.
-  const { data: bestaand } = await db
-    .from('tasks')
-    .select('id')
-    .eq('dossier_id', dossierId)
-    .eq('titel', 'Werkbegroting controleren')
-    .not('status', 'in', '("gereed","vervallen")')
-    .limit(1)
-    .maybeSingle()
+  const { error } = await db
+    .from('werkbegroting_bestellingen')
+    .update({ status: 'verzonden', verzonden_op: new Date().toISOString() })
+    .eq('id', bestellingId)
+  if (error) return { ok: false, reden: 'fout', error: error.message }
 
-  if (bestaand) {
-    return { toegewezenAan: naam, isFallback, bestond: true, taakId: bestaand.id }
-  }
-
-  // 5. Taak aanmaken, rechtstreeks aan het dossier gekoppeld
-  const { data: taak, error } = await db
-    .from('tasks')
-    .insert({
-      titel:          'Werkbegroting controleren',
-      dossier_id:     dossierId,
-      status:         'open',
-      prioriteit:     'hoog',
-      assignee_type:  'direct',
-      dossier_rollen: [],
-    })
-    .select('id')
-    .single()
-
-  if (error) throw new Error(`Fout bij aanmaken controletaak: ${error.message}`)
-
-  // 6. Toewijzen aan de controller (of Tom Kamminga)
-  if (authUserId) {
-    await db.from('task_assignees').insert({
-      task_id: taak.id,
-      user_id: authUserId,
-      rol:     'verantwoordelijke',
-    })
-  }
-
-  revalidatePath('/opdrachten')
-  revalidatePath('/taken')
-
-  return { toegewezenAan: naam, isFallback, bestond: false, taakId: taak.id }
+  return { ok: true }
 }
 
 // ─── Werkbegroting-prognose naar Bouw7 (per bewakingscode) ────────────────────
@@ -714,7 +895,19 @@ export type StuurPrognoseResultaat =
  * kostensoort). Ontbrekende (code × kostensoort) — en zo nodig de code zelf — worden eerst
  * aangemaakt (begroot 0), daarna wordt de prognose weggeschreven.
  */
-export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen, doelHoofdstukId: number | null = null): Promise<StuurPrognoseResultaat> {
+export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen, doelHoofdstukId: number | null = null, payload?: WerkbegrotingPayload): Promise<StuurPrognoseResultaat> {
+  // Gate: prognose is een aggregaat over de hele werkbegroting en mag alleen bij
+  // een volledig geaccordeerde werkbegroting (geen niet-geaccordeerde wijzigingen).
+  if (payload) {
+    const sync = await syncWerkbegrotingNaarSupabase(payload)
+    if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
+    const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
+    const status = await berekenWerkbegrotingStatus(payload.wb.id)
+    if (!status.volledigGoedgekeurd) {
+      return { ok: false, error: 'De werkbegroting bevat niet-geaccordeerde wijzigingen. Laat de werkbegroting eerst (opnieuw) accorderen voordat je de prognose naar Bouw7 stuurt.' }
+    }
+  }
+
   const berekend = await berekenPrognoseRegels(dossierId, totalen)
   if (!berekend.ok) return { ok: false, error: berekend.error }
 

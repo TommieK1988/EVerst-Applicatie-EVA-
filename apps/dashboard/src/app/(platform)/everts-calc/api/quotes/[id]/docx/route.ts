@@ -40,6 +40,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const searchParams = request.nextUrl.searchParams
   const bedrijfParam = searchParams.get('bedrijf')
 
+  // Gate: downloaden mag pas na controller-goedkeuring (on-screen preview blijft vrij).
+  const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+  const goedkeuring = await assertOfferteVerzendbaar(id)
+  if (!goedkeuring.ok) {
+    return NextResponse.json({ error: goedkeuring.error }, { status: 403 })
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = (await createClient()) as any

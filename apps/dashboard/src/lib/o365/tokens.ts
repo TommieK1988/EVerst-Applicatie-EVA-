@@ -168,7 +168,14 @@ export async function getAppAccessToken(): Promise<string> {
   })
 
   if (!res.ok) {
-    throw new O365TokenError('refresh_mislukt', `App-token ophalen mislukt: HTTP ${res.status}`)
+    let detail = ''
+    try {
+      const j = (await res.json()) as { error?: string; error_description?: string }
+      detail = j.error_description?.split('\n')[0] || j.error || ''
+    } catch {
+      /* geen JSON-body */
+    }
+    throw new O365TokenError('refresh_mislukt', `App-token ophalen mislukt: HTTP ${res.status} — ${detail}`)
   }
 
   const data = (await res.json()) as { access_token: string; expires_in: number }

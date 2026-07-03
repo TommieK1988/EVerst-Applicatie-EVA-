@@ -971,7 +971,7 @@ export function InformatieTab({
 
       {/* ── Actie-indicatoren projectleider (bewaking-vlaggen uit Bouw7-sync) ── */}
       {(sectie === 'opdracht' || sectie === 'servicedesk')
-        && (dossier.bouw7_uren_overschrijding || dossier.bouw7_bestelregels_afwijking) && (
+        && (dossier.bouw7_uren_overschrijding || dossier.bouw7_bestelregels_afwijking || dossier.wb_ongeaccordeerde_wijzigingen) && (
         <div style={{
           marginBottom: 14, padding: '12px 16px', borderRadius: 8,
           background: 'var(--warning-50, #fff7ed)', border: '1px solid var(--warning-200, #fed7aa)',
@@ -979,6 +979,9 @@ export function InformatieTab({
         }}>
           <strong>⚠ Actie projectleider</strong>
           <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>
+            {dossier.wb_ongeaccordeerde_wijzigingen && (
+              <li><strong>WB!</strong> — de werkbegroting bevat niet-geaccordeerde wijzigingen. Laat de werkbegroting opnieuw accorderen voordat je bestelt of de prognose verstuurt.</li>
+            )}
             {dossier.bouw7_bestelregels_afwijking && (
               <li>Bestelregels sluiten niet aan op de prognose — laat de werkbegroting goedkeuren of werk de bestelregels bij.</li>
             )}

@@ -365,14 +365,29 @@ export async function updateQuoteHeader(id: string, data: {
   type?: QuoteType
   betalingsconditie_id?: string | null
   voorwaarden_id?: string | null
-}): Promise<void> {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await getDb()
+
+  // Gate: naar 'verzonden' (of direct 'geaccepteerd') mag alleen na controller-
+  // goedkeuring — server-side afgedwongen, de UI toont de foutmelding als toast.
+  if (data.status === 'verzonden' || data.status === 'geaccepteerd') {
+    const { data: huidig } = await supabase.from('quotes').select('status').eq('id', id).maybeSingle()
+    // Alleen de overgang vanuit concept is gated; een al verzonden offerte die de
+    // klant accepteert hoeft niet opnieuw langs de controller.
+    if (huidig?.status === 'concept') {
+      const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+      const check = await assertOfferteVerzendbaar(id)
+      if (!check.ok) return { ok: false, error: check.error }
+    }
+  }
+
   const { error } = await supabase
     .from('quotes')
     .update({ ...data, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) return { ok: false, error: error.message }
   revalidatePath(`${PAD}/${id}`)
+  return { ok: true }
 }
 
 export async function updateQuoteSettings(id: string, data: {

@@ -193,6 +193,11 @@ export function DossierKaart({
               <Badge tone="warning" size="sm">Begroting</Badge>
             </span>
           )}
+          {dossier.wb_ongeaccordeerde_wijzigingen && (
+            <span title="Werkbegroting bevat niet-geaccordeerde wijzigingen — laat de werkbegroting opnieuw accorderen">
+              <Badge tone="warning" size="sm">WB!</Badge>
+            </span>
+          )}
           <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
             {formatDatum(kaartDatum)}
           </span>

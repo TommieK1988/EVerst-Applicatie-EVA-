@@ -132,6 +132,8 @@ export interface Quote {
   opties_subtotaal: number
   betalingsconditie_id?: string | null
   voorwaarden_id?: string | null
+  dossier_id?: string | null
+  meerwerk_regel_id?: string | null
   created_at: string
   updated_at: string
   // Nested (optioneel, wordt ingeladen via joins)

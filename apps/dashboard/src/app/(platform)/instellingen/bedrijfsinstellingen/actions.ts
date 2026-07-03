@@ -48,6 +48,23 @@ export async function setBtwTarieven(
   return result
 }
 
+/** Instelbaar drempelbedrag (excl. btw) waarboven Mutatie/Dagelijks-onderhoud-offertes goedkeuring vereisen. */
+export async function getGoedkeuringDrempelOfferte(): Promise<number> {
+  const inst = await getBedrijfsinstellingen()
+  const v = (inst.overige as any)?.goedkeuring_drempel_offerte
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? n : 1000
+}
+
+export async function setGoedkeuringDrempelOfferte(
+  bedrag: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const inst = await getBedrijfsinstellingen()
+  return updateBedrijfsinstellingen({
+    overige: { ...(inst.overige as any), goedkeuring_drempel_offerte: bedrag },
+  })
+}
+
 export async function getDossierCategorieen(): Promise<string[]> {
   const inst = await getBedrijfsinstellingen()
   const cats = (inst.overige as any)?.dossier_categorieen

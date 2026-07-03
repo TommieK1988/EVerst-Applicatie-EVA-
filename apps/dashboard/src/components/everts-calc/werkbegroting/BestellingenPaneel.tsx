@@ -1,0 +1,229 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { X, Package, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus } from 'lucide-react'
+import toast from 'react-hot-toast'
+import {
+  getWerkbegrotingRegels, getWerkbegrotingComponenten,
+  getWerkbegrotingWijzigingen, getWerkbegrotingBestellingen, slaBestellingOp,
+} from '@/lib/everts-calc/local-store'
+import { nieuweId } from '@/lib/everts-calc/utils'
+import { formatEuro } from '@/lib/everts-calc/calculations'
+import {
+  zetBestellingKlaar, verzendBestelling, getWerkbegrotingGoedkeuringStatus,
+  type WerkbegrotingPayload,
+} from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
+
+interface Props {
+  wb: Werkbegroting
+  dossierId: string | null
+  onSluit: () => void
+}
+
+const compLabel = (c: WerkbegrotingComponent) =>
+  c.omschrijving || (c.type === 'arbeid' ? 'Arbeid' : c.type === 'materieel' ? 'Materieel' : 'Onderaanneming')
+
+export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
+  const [tick, setTick] = useState(0)
+  const [bezigId, setBezigId] = useState<string | null>(null)
+  const [nieuw, setNieuw] = useState(false)
+  const [selectie, setSelectie] = useState<Set<string>>(new Set())
+  const [omschrijving, setOmschrijving] = useState('')
+  const [goedgekeurdRegels, setGoedgekeurdRegels] = useState<Set<string>>(new Set())
+
+  const regels = useMemo(() => getWerkbegrotingRegels(wb.id).filter(r => !r.is_verwijderd), [wb.id, tick])
+  const componenten = useMemo(() => {
+    const ids = new Set(regels.map(r => r.id))
+    return getWerkbegrotingComponenten().filter(c => ids.has(c.werkbegroting_regel_id) && !c.is_verwijderd)
+  }, [regels, tick])
+  const bestellingen = useMemo(() => getWerkbegrotingBestellingen(wb.id), [wb.id, tick])
+
+  const bouwPayload = useCallback((): WerkbegrotingPayload => ({
+    wb,
+    regels: getWerkbegrotingRegels(wb.id),
+    componenten: getWerkbegrotingComponenten().filter(c => getWerkbegrotingRegels(wb.id).some(r => r.id === c.werkbegroting_regel_id)),
+    wijzigingen: getWerkbegrotingWijzigingen().filter(w => w.werkbegroting_id === wb.id),
+    dossierId,
+  }), [wb, dossierId])
+
+  const verversStatus = useCallback(async () => {
+    try {
+      const status = await getWerkbegrotingGoedkeuringStatus(wb.id)
+      setGoedgekeurdRegels(new Set(status.regels.filter(r => r.goedgekeurd).map(r => r.regel_id)))
+    } catch { /* stil */ }
+  }, [wb.id])
+
+  useEffect(() => { verversStatus() }, [verversStatus, tick])
+
+  const compById = useMemo(() => new Map(componenten.map(c => [c.id, c])), [componenten])
+  const regelVanComp = useCallback((compId: string) => compById.get(compId)?.werkbegroting_regel_id ?? null, [compById])
+
+  /** Bevat de bestelling regels die (nog) niet geaccordeerd zijn? */
+  const bestellingGeblokkeerd = useCallback((b: WerkbegrotingBestelling): string[] => {
+    const blokkerend: string[] = []
+    for (const cid of b.component_ids) {
+      const regelId = regelVanComp(cid)
+      if (!regelId || !goedgekeurdRegels.has(regelId)) {
+        const c = compById.get(cid)
+        blokkerend.push(c ? compLabel(c) : 'Onbekende regel')
+      }
+    }
+    return [...new Set(blokkerend)]
+  }, [regelVanComp, goedgekeurdRegels, compById])
+
+  async function maakBestelling() {
+    if (!omschrijving.trim() || selectie.size === 0) return
+    const bestelling: WerkbegrotingBestelling = {
+      id: nieuweId(),
+      werkbegroting_id: wb.id,
+      omschrijving: omschrijving.trim(),
+      status: 'concept',
+      component_ids: [...selectie],
+    }
+    slaBestellingOp(bestelling)
+    setBezigId(bestelling.id)
+    try {
+      const res = await zetBestellingKlaar(bestelling, bouwPayload())
+      if (res.ok) toast.success('Bestelling klaargezet')
+      else toast.error(res.error)
+    } finally {
+      setBezigId(null)
+      setNieuw(false); setSelectie(new Set()); setOmschrijving('')
+      setTick(t => t + 1)
+    }
+  }
+
+  async function verzend(b: WerkbegrotingBestelling) {
+    setBezigId(b.id)
+    try {
+      const res = await verzendBestelling(b.id, bouwPayload())
+      if (res.ok) { toast.success('Bestelling verzonden'); setTick(t => t + 1) }
+      else if (res.reden === 'niet_goedgekeurd') toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`)
+      else toast.error(res.error)
+    } finally { setBezigId(null) }
+  }
+
+  async function werkBij(b: WerkbegrotingBestelling) {
+    setBezigId(b.id)
+    try {
+      const res = await zetBestellingKlaar(b, bouwPayload())
+      if (res.ok) { toast.success('Bestelling bijgewerkt'); setTick(t => t + 1) }
+      else toast.error(res.error)
+    } finally { setBezigId(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onSluit() }}>
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-everts" />
+            <h2 className="text-base font-bold text-gray-900">Bestellingen</h2>
+          </div>
+          <button onClick={onSluit} className="text-gray-400 hover:text-gray-600 rounded-md p-1 hover:bg-gray-200"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto flex-1">
+          <p className="text-xs text-slate-500 mb-3">
+            Bestellingen kunnen altijd worden <strong>klaargezet</strong>. Verzenden kan pas als de bijbehorende
+            werkbegroting-regels zijn <strong>geaccordeerd</strong>. Wijzigt de werkbegroting daarna, dan moet de
+            bestelling eerst worden bijgewerkt.
+          </p>
+
+          {/* Bestaande bestellingen */}
+          {bestellingen.length === 0 && !nieuw && (
+            <p className="text-sm text-slate-400 italic py-4 text-center">Nog geen bestellingen klaargezet.</p>
+          )}
+
+          <div className="space-y-2">
+            {bestellingen.map(b => {
+              const blokkerend = bestellingGeblokkeerd(b)
+              const isVerzonden = b.status !== 'concept'
+              const bezig = bezigId === b.id
+              return (
+                <div key={b.id} className="rounded-lg border border-slate-200 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{b.omschrijving}</p>
+                      <p className="text-xs text-slate-400">{b.component_ids.length} regel(s)</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isVerzonden ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Verzonden
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => verzend(b)}
+                          disabled={bezig || blokkerend.length > 0}
+                          title={blokkerend.length > 0 ? `Bevat niet-geaccordeerde regels: ${blokkerend.join(', ')}` : 'Bestelling verzenden'}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-everts text-white hover:bg-everts/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Verzenden
+                        </button>
+                      )}
+                      {!isVerzonden && (
+                        <button onClick={() => werkBij(b)} disabled={bezig} title="Snapshot bijwerken naar de huidige werkbegroting"
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                          <RefreshCw className="w-3.5 h-3.5" /> Bijwerken
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {!isVerzonden && blokkerend.length > 0 && (
+                    <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      Bevat niet-geaccordeerde regels: {blokkerend.join(', ')}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Nieuwe bestelling */}
+          {nieuw ? (
+            <div className="mt-4 rounded-lg border border-everts/30 bg-everts-50/40 p-4">
+              <input
+                value={omschrijving} onChange={e => setOmschrijving(e.target.value)}
+                placeholder="Omschrijving, bijv. Levering steigermateriaal week 12"
+                className="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg mb-3 focus:outline-none focus:border-everts/40"
+              />
+              <p className="text-xs font-semibold text-slate-500 mb-1">Componenten selecteren:</p>
+              <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
+                {componenten.map(c => {
+                  const regelGoedgekeurd = goedgekeurdRegels.has(c.werkbegroting_regel_id)
+                  return (
+                    <label key={c.id} className="flex items-center gap-2 text-xs py-1 cursor-pointer">
+                      <input type="checkbox" checked={selectie.has(c.id)} className="accent-everts"
+                        onChange={() => setSelectie(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })} />
+                      <span className="flex-1 truncate text-slate-700">{compLabel(c)}</span>
+                      <span className="text-slate-400">{formatEuro(c.norm_hoeveelheid * c.tarief)}</span>
+                      {regelGoedgekeurd
+                        ? <span className="text-[10px] text-green-600">✓ geaccordeerd</span>
+                        : <span className="text-[10px] text-amber-600">niet geaccordeerd</span>}
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setNieuw(false); setSelectie(new Set()); setOmschrijving('') }}
+                  className="text-sm px-3 py-1.5 text-slate-500 hover:text-slate-700">Annuleren</button>
+                <button onClick={maakBestelling} disabled={!omschrijving.trim() || selectie.size === 0 || bezigId != null}
+                  className="text-sm px-4 py-1.5 bg-everts text-white rounded-lg hover:bg-everts/90 disabled:opacity-40 font-semibold">
+                  Klaarzetten
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setNieuw(true)}
+              className="mt-4 flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+              <Plus className="w-4 h-4" /> Nieuwe bestelling klaarzetten
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
