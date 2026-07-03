@@ -10,8 +10,8 @@ export type DossierBestand = {
   extensie: string | null
   grootte: number | null
   categorie: string | null
-  /** Hash voor de download-proxy (/api/bouw7/bestand/{secureHash}). */
-  secureHash: string | null
+  /** Storage-hash voor de download-proxy (GET /storage/{fileHash}/download). */
+  fileHash: string | null
   aangemaaktDoor: string | null
   datum: string | null
 }
@@ -41,7 +41,7 @@ export async function getDossierBestanden(dossierId: string): Promise<DossierBes
       extensie: f.extension ?? null,
       grootte: f.fileSize ?? null,
       categorie: f.category?.name ?? null,
-      secureHash: f.secureHash ?? null,
+      fileHash: f.fileHash ?? null,
       aangemaaktDoor: f.createdBy?.username ?? null,
       datum: f.createdAt ? f.createdAt.slice(0, 10) : null,
     }))

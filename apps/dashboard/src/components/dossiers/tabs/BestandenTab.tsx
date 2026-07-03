@@ -12,11 +12,11 @@ const fmtGrootte = (bytes: number | null): string => {
 }
 
 const downloadHref = (b: DossierBestand): string | null => {
-  if (!b.secureHash) return null
+  if (!b.fileHash && !b.id) return null
   const naam = b.extensie && !b.naam.toLowerCase().endsWith(`.${b.extensie.toLowerCase()}`)
     ? `${b.naam}.${b.extensie}`
     : b.naam
-  return `/api/bouw7/bestand/${encodeURIComponent(b.secureHash)}?naam=${encodeURIComponent(naam)}`
+  return `/api/bouw7/bestand/${encodeURIComponent(b.fileHash ?? '-')}?id=${b.id}&naam=${encodeURIComponent(naam)}`
 }
 
 export default function BestandenTab({ dossierId }: { dossierId: string }) {
