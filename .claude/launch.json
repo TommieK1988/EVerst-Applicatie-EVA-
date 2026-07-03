@@ -9,6 +9,13 @@
       "autoPort": false
     },
     {
+      "name": "dashboard-alt",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set NEXT_DIST_DIR=.next-preview&& npm run dev -w eva -- -p 3005"],
+      "port": 3005,
+      "autoPort": false
+    },
+    {
       "name": "docs",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "docs", "-l", "4000", "--no-clipboard"],
