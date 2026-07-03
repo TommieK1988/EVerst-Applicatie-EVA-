@@ -223,8 +223,9 @@ export async function setMeerwerkStatus(
 
   let waarschuwing: string | undefined
 
-  // Bij akkoord: eigen bewakingscode in Bouw7 aanmaken (eenmalig — alleen als nog geen Bouw7-code).
-  if (status === 'akkoord' && r.bouw7_chapter_id == null) {
+  // Bij akkoord: eigen bewakingscode in Bouw7 aanmaken (alleen voor EVA-native regels die nog geen
+  // Bouw7-koppeling hebben — geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
+  if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_line_id == null && r.bouw7_chapter_id == null) {
     const code = r.bewakingscode?.trim() || `MW${String(r.volgnummer).padStart(2, '0')}`
     // Seed-bedrag: alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
     const bedrag = r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null
@@ -242,6 +243,16 @@ export async function setMeerwerkStatus(
 
   const { error } = await supabase.from('meerwerk_regels').update(velden).eq('id', id)
   if (error) return { ok: false, error: error.message }
+
+  // Statuswijziging terugschrijven naar Bouw7 als de regel aan een Bouw7-meerwerkregel hangt.
+  if (r.bouw7_line_id != null) {
+    const res = await updateMeerwerkInBouw7({ ...r, ...(velden as Partial<MeerwerkRegel>), status })
+    if (!res.ok) {
+      waarschuwing = [waarschuwing, `Status in EVA bijgewerkt, maar terugschrijven naar Bouw7 mislukt: ${res.error}`]
+        .filter(Boolean).join(' ')
+    }
+  }
+
   revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
   return { ok: true, waarschuwing }
 }
@@ -480,11 +491,42 @@ const EVA_STATUS_NAAR_BOUW7: Record<MeerwerkStatus, number> = {
 }
 
 /**
+ * Bouwt de Bouw7 additional-work-line-body uit een EVA-regel. `executor` (Aangevraagd door) = de
+ * Bouw7-klant van het dossier; ontbreekt die, dan wordt het veld weggelaten (leeg in Bouw7).
+ * `id` wordt door de aanroeper toegevoegd bij een update.
+ */
+async function bouwBouw7MeerwerkBody(regel: MeerwerkRegel): Promise<Record<string, unknown>> {
+  const supabase = createAdminClient() as any
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('klant:relaties(bouw7_id)')
+    .eq('id', regel.dossier_id)
+    .single()
+  const executorId = dossier?.klant?.bouw7_id
+
+  const mw = await getDossierMeerwerk(regel.dossier_id)
+  const view = mw.regels.find(r => r.id === regel.id)
+  const verkoop = rond(view?.effectiefExcl ?? (Number(regel.bedrag_excl_btw) || 0))
+  const begroot = rond(regel.begroot_bedrag != null ? Number(regel.begroot_bedrag) : 0)
+
+  const body: Record<string, unknown> = {
+    description: regel.omschrijving,
+    cost: String(verkoop),
+    budgetAmount: String(begroot),
+    date: (regel.created_at ? String(regel.created_at) : new Date().toISOString()).slice(0, 10),
+    note: regel.factuurreferentie ?? '',
+    status: EVA_STATUS_NAAR_BOUW7[regel.status] ?? 0,
+    isProvisional: !!regel.is_stelpost,
+  }
+  if (executorId) body.executor = { id: Number(executorId) }
+  return body
+}
+
+/**
  * Schrijft een EVA-meerwerkregel als echte meerwerkregel naar Bouw7
  * (`POST /project/{projectId}/additional-work-line`, Heimdall — upsert; `id` weggelaten = create).
- * "Aangevraagd door" (executor) = de Bouw7-klant van het dossier. Na aanmaken worden het teruggegeven
- * Bouw7-id + MW-nummer op de EVA-regel vastgelegd (en de bronsleutel, tegen dubbele import).
- * Regels die al aan een Bouw7-regel hangen worden overgeslagen.
+ * Na aanmaken worden het teruggegeven Bouw7-id + MW-nummer op de EVA-regel vastgelegd (en de
+ * bronsleutel, tegen dubbele import). Regels die al aan een Bouw7-regel hangen worden overgeslagen.
  */
 export async function stuurMeerwerkNaarBouw7(
   regelId: string,
@@ -498,31 +540,7 @@ export async function stuurMeerwerkNaarBouw7(
   if (!ctx) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
   const { client, bouw7Id } = ctx
 
-  // "Aangevraagd door" = de Bouw7-klant (relatie) van het dossier.
-  const { data: dossier } = await supabase
-    .from('dossiers')
-    .select('klant:relaties(bouw7_id)')
-    .eq('id', regel.dossier_id)
-    .single()
-  const executorId = dossier?.klant?.bouw7_id
-  if (!executorId) return { ok: false, error: 'Geen Bouw7-klant aan dossier gekoppeld (nodig voor "Aangevraagd door").' }
-
-  // Verkoopprijs = effectief bedrag (aangenomen/stelpost/regie berekend); begroot uit begroot_bedrag.
-  const mw = await getDossierMeerwerk(regel.dossier_id)
-  const view = mw.regels.find(r => r.id === regelId)
-  const verkoop = rond(view?.effectiefExcl ?? (Number(regel.bedrag_excl_btw) || 0))
-  const begroot = rond(regel.begroot_bedrag != null ? Number(regel.begroot_bedrag) : 0)
-
-  const body = {
-    executor: { id: Number(executorId) },
-    description: regel.omschrijving,
-    cost: String(verkoop),
-    budgetAmount: String(begroot),
-    date: (regel.created_at ? String(regel.created_at) : new Date().toISOString()).slice(0, 10),
-    note: regel.factuurreferentie ?? '',
-    status: EVA_STATUS_NAAR_BOUW7[regel.status as MeerwerkStatus] ?? 0,
-    isProvisional: !!regel.is_stelpost,
-  }
+  const body = await bouwBouw7MeerwerkBody(regel as MeerwerkRegel)
 
   let created: { id?: number; number?: string }
   try {
@@ -544,4 +562,22 @@ export async function stuurMeerwerkNaarBouw7(
 
   revalidatePath(`/opdrachten/${regel.dossier_id}/meerwerk`)
   return { ok: true, nummer: created.number ?? null }
+}
+
+/**
+ * Werkt een al aan Bouw7 gekoppelde meerwerkregel bij (zelfde POST-endpoint mét `id` = update in het
+ * Bouw7-upsertpatroon). Gebruikt voor het terugschrijven van o.a. statuswijzigingen. Best effort.
+ */
+async function updateMeerwerkInBouw7(regel: MeerwerkRegel): Promise<{ ok: boolean; error?: string }> {
+  if (regel.bouw7_line_id == null) return { ok: true }
+  const ctx = await bouw7VoorDossier(regel.dossier_id)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling.' }
+  const body = await bouwBouw7MeerwerkBody(regel)
+  body.id = regel.bouw7_line_id
+  try {
+    await ctx.client.post(`/project/${ctx.bouw7Id}/additional-work-line`, body)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }
+  }
 }
