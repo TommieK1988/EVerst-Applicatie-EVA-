@@ -15,6 +15,7 @@
         "O365_REDIRECT_URI",
         "O365_PDF_DRIVE_ID",
         "O365_SHAREPOINT_SITE_ID",
+        "O365_DOSSIER_DRIVE_ID",
         "DATABASE_URL",
         "ULU_EMAIL",
         "ULU_PASSWORD",
