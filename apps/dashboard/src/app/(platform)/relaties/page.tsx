@@ -3,6 +3,7 @@ import { createAdminClient, createClient as createServerClient } from '@everts/d
 import { laadLayouts } from '@/app/actions/layouts'
 import { getAlleContactpersonen } from '@/lib/relaties/contactpersonen-actions'
 import { getAlleParticulieren } from '@/lib/relaties/particulieren-actions'
+import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import RelatiesOverzicht from './RelatiesOverzicht'
 
 export const metadata: Metadata = { title: 'Relaties' }
@@ -21,7 +22,7 @@ export default async function RelatiesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [relatiesRes, contactpersonenRes, particulierenRes, layouts] = await Promise.all([
+  const [relatiesRes, contactpersonenRes, particulierenRes, layouts, laatsteSync] = await Promise.all([
     supabase
       .from('relaties')
       .select('id, types, naam, email, telefoon, website, kvk_nummer, btw_nummer, adres_straat, adres_postcode, adres_plaats, adres_land, actief, created_at')
@@ -29,6 +30,7 @@ export default async function RelatiesPage() {
     getAlleContactpersonen(),
     getAlleParticulieren(),
     user_id ? laadLayouts(user_id, 'relaties-organisaties') : [],
+    getLaatsteSyncTijd('relaties'),
   ])
 
   return (
@@ -38,6 +40,7 @@ export default async function RelatiesPage() {
       particulieren={particulierenRes}
       layouts={layouts}
       user_id={user_id}
+      laatsteSync={laatsteSync}
     />
   )
 }

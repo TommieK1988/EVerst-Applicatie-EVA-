@@ -1,10 +1,11 @@
 'use client'
 
-import { createContext, useContext, useMemo, useState, useTransition } from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { syncManagementAction } from '@/app/(platform)/management/actions'
 import { Button } from '@/components/ui/button'
+import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { CalendarCheck } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import type {
@@ -54,21 +55,13 @@ type Props = {
   children: React.ReactNode
 }
 
-function fDatum(iso: string | null): string {
-  if (!iso) return 'Nooit'
-  return new Date(iso).toLocaleString('nl-NL', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
-}
-
 export default function ManagementShell({
   projecten, akData, doelstellingen, funnel, calculators, snapshots,
   laatstGesynchroniseerd, user_id, layouts, children,
 }: Props) {
   const pathname = usePathname()
-  const [syncResult, setSyncResult] = useState<string | null>(null)
   const [modalOpen, setModalOpen]   = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [snapshotMelding, setSnapshotMelding] = useState<string | null>(null)
 
   const lopend      = useMemo(() => projecten.filter(p => p.dossier_sectie === 'opdrachten' && !p.is_gereed), [projecten])
   const gereed      = useMemo(() => projecten.filter(p => p.is_gereed), [projecten])
@@ -80,23 +73,20 @@ export default function ManagementShell({
   }), [projecten, akData, doelstellingen, lopend, gereed, servicedesk, funnel, calculators, snapshots, layouts, user_id])
 
   const opDashboard = pathname === '/management/dashboard'
+  const opWerkvoorraad = pathname === '/management/werkvoorraad'
 
-  function handleSync() {
-    setSyncResult(null)
-    startTransition(async () => {
-      try {
-        const r = await syncManagementAction()
-        setSyncResult(
-          r.fouten > 0
-            ? `⚠ ${r.fouten} fouten — ${r.foutMelding ?? ''}`
-            : `✓ ${r.nieuw} nieuw · ${r.bijgewerkt} bijgewerkt`,
-        )
-      } catch {
-        // Server-action gekilld (bv. 300s-timeout) of netwerkfout: nooit de pagina
-        // laten crashen — toon een nette melding. De geplande sync houdt de data actueel.
-        setSyncResult('⚠ Synchronisatie afgebroken (duurde te lang). De geplande sync houdt de cijfers actueel; probeer het later opnieuw.')
-      }
-    })
+  async function handleSync(): Promise<SyncUitkomst> {
+    try {
+      // Verlof/vrije dagen alleen meesyncen op de Werkvoorraad-tab (capaciteit);
+      // de overige tabs hebben alleen management_projecten nodig.
+      const r = await syncManagementAction({ metVerlof: opWerkvoorraad })
+      if (r.fouten > 0) return { ok: false, melding: `${r.fouten} fouten — ${r.foutMelding ?? ''}` }
+      return { ok: true, melding: `${r.nieuw} nieuw · ${r.bijgewerkt} bijgewerkt` }
+    } catch {
+      // Server-action gekilld (bv. 300s-timeout) of netwerkfout: nooit de pagina
+      // laten crashen — toon een nette melding. De geplande sync houdt de data actueel.
+      return { ok: false, melding: 'Synchronisatie afgebroken (duurde te lang). De geplande sync houdt de cijfers actueel; probeer het later opnieuw.' }
+    }
   }
 
   return (
@@ -108,15 +98,12 @@ export default function ManagementShell({
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
           marginBottom: 16, flexShrink: 0, gap: 8,
         }}>
-          <span style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
-            Sync: {fDatum(laatstGesynchroniseerd)}
-          </span>
-          {syncResult && (
+          {snapshotMelding && (
             <span style={{
               fontSize: 12, fontWeight: 600,
-              color: syncResult.startsWith('⚠') ? 'var(--error-500)' : 'var(--success-700)',
+              color: snapshotMelding.startsWith('⚠') ? 'var(--error-500)' : 'var(--success-700)',
             }}>
-              {syncResult}
+              {snapshotMelding}
             </span>
           )}
           {opDashboard && (
@@ -129,9 +116,7 @@ export default function ManagementShell({
               </Button>
             </>
           )}
-          <Button variant="primary" size="md" loading={isPending} onClick={handleSync}>
-            {isPending ? 'Synchroniseren…' : 'Synchroniseer'}
-          </Button>
+          <SyncKnop laatsteSync={laatstGesynchroniseerd} onSync={handleSync} />
         </div>
 
         {/* ── Content ── */}
@@ -143,7 +128,7 @@ export default function ManagementShell({
           open={modalOpen}
           onOpenChange={setModalOpen}
           bestaandePeriodes={snapshots.map(s => s.periode)}
-          onDone={(msg) => setSyncResult(msg)}
+          onDone={(msg) => setSnapshotMelding(msg)}
         />
       </div>
     </ManagementContext.Provider>

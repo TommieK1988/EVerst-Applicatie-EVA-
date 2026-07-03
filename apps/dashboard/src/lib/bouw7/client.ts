@@ -170,9 +170,49 @@ export class Bouw7Client {
     return res.json()
   }
 
+  /** Download een binair bestand van Heimdall (bv. GET /storage/{hash}/download). */
+  async getBinary(path: string): Promise<{ data: ArrayBuffer; contentType: string | null; fileName: string | null }> {
+    await this.ensureAuth()
+    const res = await fetch(new URL(path, HEIMDALL_URL).toString(), {
+      headers: { Authorization: `Bearer ${this.token}` },
+    })
+    if (res.status === 401) { await this.login(); return this.getBinary(path) }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Bouw7 download ${path} mislukt (${res.status}): ${text}`)
+    }
+    const cd = res.headers.get('content-disposition')
+    const m = cd?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+    return {
+      data: await res.arrayBuffer(),
+      contentType: res.headers.get('content-type'),
+      fileName: m?.[1] ? decodeURIComponent(m[1]) : null,
+    }
+  }
+
   private async ensureAuth(): Promise<void> {
     if (!this.token) await this.login()
   }
+}
+
+/** Projectbestand — GET /list/project-files (Heimdall, q-DSL op `project.id`). */
+export type Bouw7ProjectFile = {
+  id: number
+  name?: string
+  description?: string | null
+  fileId?: number
+  fileName?: string
+  fileHash?: string
+  /** Hash voor de download-URL: GET /storage/{secureHash}/download. */
+  secureHash?: string
+  fileSize?: number
+  extension?: string
+  category?: { id: number; name?: string } | null
+  contact?: { id: number; name?: string } | null
+  createdBy?: { id: number; username?: string } | null
+  createdAt?: string
+  updatedBy?: { id: number; username?: string } | null
+  updatedAt?: string
 }
 
 /* ── Response types (gebaseerd op Bouw7 API spec) ─────────────────── */
@@ -354,6 +394,33 @@ export type Bouw7Quotation = {
   quotationStatus?: { id: number; name?: string }
   createdAt?: string
   updatedAt?: string
+}
+
+/**
+ * Meerwerkregel — GET /list/additional-work-lines (Heimdall, q-DSL op `projectId`).
+ * De echte Bouw7-meerwerkregel-entiteit (MW-nummer). LET OP: `cost` is de **verkoopprijs** excl. btw,
+ * `budgetAmount` is het **begrote** bedrag (kostprijs). `status`: 0=Geregistreerd, 1=Akkoord,
+ * 2=Niet akkoord, 3=Opgeleverd, 4=Gefactureerd. `isProvisional`=stelpost.
+ */
+export type Bouw7AdditionalWorkLine = {
+  id: number
+  number?: string
+  executor?: { id: number; name?: string; emailAddress?: string; type?: string } | null
+  executorContactPerson?: { id: number; firstName?: string; lastName?: string; emailAddress?: string; phoneNumber?: string } | null
+  description?: string
+  cost?: string | number
+  budgetAmount?: string | number
+  date?: string
+  note?: string
+  status?: number
+  projectId?: number
+  quotation?: { id: number; subject?: string; number?: string } | null
+  invoiceId?: number | null
+  invoiceTermStatementId?: number | null
+  invoiceTermId?: number | null
+  isProvisional?: boolean
+  respondedAt?: string | null
+  respondedBy?: string | null
 }
 
 /**

@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
 import { syncRelaties } from '@/app/(platform)/instellingen/integraties/actions'
 import type { GebruikerLayout, OrganisatieType, Contactpersoon, Particulier } from '@everts/database'
 import { organisatieTypeLabels, organisatieTypeTone } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { PageHeader, Button, Badge } from '@/components/ui'
+import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { IconPlus } from '@/components/eva/Icons'
 import NieuweOrganisatieModal from '@/components/relaties/NieuweOrganisatieModal'
 import NieuweContactpersoonModal from '@/components/relaties/NieuweContactpersoonModal'
@@ -461,41 +461,32 @@ type Props = {
   particulieren: ParticulierRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
+  laatsteSync: string | null
 }
 
-export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, layouts, user_id }: Props) {
+export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, layouts, user_id, laatsteSync }: Props) {
   const router = useRouter()
   const [actieveTab, setActieveTab] = useState<Tab>('organisaties')
   const [showNieuweOrganisatie, setShowNieuweOrganisatie] = useState(false)
   const [showNieuweContactpersoon, setShowNieuweContactpersoon] = useState(false)
   const [showNieuweParticulier, setShowNieuweParticulier] = useState(false)
-  const [syncing, setSyncing] = useState(false)
 
-  async function handleSync() {
-    setSyncing(true)
-    try {
-      const res = await syncRelaties()
-      if (!res.ok) {
-        toast.error(`Sync mislukt: ${res.error}`)
-        return
-      }
-      const fouten = res.organisaties.fouten + res.contactpersonen.fouten
-      const nieuw = res.organisaties.nieuw + res.contactpersonen.nieuw
-      const bijgewerkt = res.organisaties.bijgewerkt + res.contactpersonen.bijgewerkt
+  async function handleSync(): Promise<SyncUitkomst> {
+    const res = await syncRelaties()
+    if (!res.ok) return { ok: false, melding: res.error }
 
-      if (fouten > 0 && nieuw + bijgewerkt === 0) {
-        const foutMelding = res.organisaties.foutMelding ?? res.contactpersonen.foutMelding ?? 'onbekende fout'
-        toast.error(`Sync mislukt (${fouten} fouten): ${foutMelding}`)
-      } else if (fouten > 0) {
-        toast.success(`Sync klaar met waarschuwingen: +${res.organisaties.nieuw} org., +${res.contactpersonen.nieuw} contacten — ${fouten} fout(en)`)
-        router.refresh()
-      } else {
-        toast.success(`Sync klaar: +${res.organisaties.nieuw} org., +${res.contactpersonen.nieuw} contacten (${bijgewerkt} bijgewerkt)`)
-        if (nieuw + bijgewerkt > 0) router.refresh()
-      }
-    } finally {
-      setSyncing(false)
+    const fouten = res.organisaties.fouten + res.contactpersonen.fouten
+    const nieuw = res.organisaties.nieuw + res.contactpersonen.nieuw
+    const bijgewerkt = res.organisaties.bijgewerkt + res.contactpersonen.bijgewerkt
+
+    if (fouten > 0 && nieuw + bijgewerkt === 0) {
+      const foutMelding = res.organisaties.foutMelding ?? res.contactpersonen.foutMelding ?? 'onbekende fout'
+      return { ok: false, melding: `${fouten} fout(en): ${foutMelding}` }
     }
+    if (fouten > 0) {
+      return { ok: true, melding: `+${nieuw} nieuw, ${bijgewerkt} bijgewerkt — ${fouten} fout(en)` }
+    }
+    return { ok: true, melding: `+${nieuw} nieuw · ${bijgewerkt} bijgewerkt` }
   }
 
   function wisselTab(tab: Tab) {
@@ -512,14 +503,9 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
     <div className="eva-page-full">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <PageHeader eyebrow="CRM" title="Relaties" />
-        <Button
-          variant="secondary"
-          onClick={handleSync}
-          disabled={syncing}
-          style={{ marginTop: 8, flexShrink: 0 }}
-        >
-          {syncing ? 'Bezig met synchen...' : '↻ Sync Bouw7'}
-        </Button>
+        <div style={{ marginTop: 8 }}>
+          <SyncKnop laatsteSync={laatsteSync} onSync={handleSync} />
+        </div>
       </div>
 
       <TabBalk actief={actieveTab} setActief={wisselTab} counts={counts} />

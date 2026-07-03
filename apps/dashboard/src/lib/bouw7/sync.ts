@@ -25,6 +25,13 @@ export type SyncResult = {
  */
 export type SyncMode = 'incremental' | 'full'
 
+/**
+ * Sectie-scope voor `syncProjects`: de sync-knop op een lijstpagina ververst alleen de
+ * dossiers van die sectie (aanvragen/offertes/opdrachten/servicedesk). De cron en de
+ * volledige sync vanuit Instellingen draaien ongescoped.
+ */
+export type DossierSyncScope = 'aanvraag' | 'offerte' | 'opdracht' | 'servicedesk'
+
 /** ISO-datumstring → "YYYY-MM-DD" voor `date`-kolommen (bv. "1965-04-04T00:00:00+01:00" → "1965-04-04"). */
 function toDate(dt?: string | null): string | null {
   if (!dt) return null
@@ -773,6 +780,11 @@ type EvaStatusVelden = {
   verzonden_op?: string | null
 }
 
+/** In welke lijst-sectie hoort een dossier thuis? Servicedesk wint (die dossiers hebben hoofdstatus 'aanvraag'). */
+function sectieVan(s: { hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht'; servicedesk_substatus: string | null }): DossierSyncScope {
+  return s.servicedesk_substatus != null ? 'servicedesk' : s.hoofdstatus
+}
+
 /**
  * Map de Bouw7-offertestatus (quotationStatus.name) naar een EVA offerte-substatus.
  * Match op naamdeel (niet op nummerprefix) zodat hernummering in Bouw7 de mapping niet breekt.
@@ -976,10 +988,13 @@ async function berekenBewakingsVlaggen(
   return { bestelregelsAfwijking, urenOverschrijding }
 }
 
-export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[]; scope?: DossierSyncScope }): Promise<SyncResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
   // Scoped run (ververs één dossier): alleen deze bouw7_ids, geforceerd, en geen soft-delete.
   const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  // Sectie-scope (sync-knop per lijstpagina): detail-calls + writes alleen voor dossiers in
+  // (of net verhuisd uit) deze sectie. De cron draait altijd ongescoped.
+  const scope = opts?.scope ?? null
   const start = Date.now()
   const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
 
@@ -1039,7 +1054,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     const { data: dossierData } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, bouw7_sync_hash')
+      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
@@ -1122,6 +1137,29 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         changedIds.add(key)
       }
     }
+    // Sectie-scope: beperk de dure detail-calls + writes tot dossiers die in de gevraagde
+    // sectie thuishoren — of er net uit verhuisd zijn (die update moet ook doorkomen, zodat
+    // het dossier van de lijst verdwijnt). Nieuwe sectie wordt bepaald met dezelfde
+    // status-mapping als de upsert-loop verderop; alleen lijstdata nodig, dus goedkoop.
+    if (scope && !scoped) {
+      for (const p of projects) {
+        const key = String(p.id)
+        if (!changedIds.has(key)) continue
+        const existing = dossierMap.get(key)
+        const nieuweStatus = mapBouw7NaarEvaStatus(
+          p.status?.name,
+          p.category?.name,
+          existing?.aanvraag_substatus ?? null,
+          existing?.offerte_substatus ?? null,
+          existing?.verzonden_op ?? null,
+          quotationMap.get(key)?.quotationStatus?.name ?? null,
+        )
+        const nieuweSectie = sectieVan(nieuweStatus)
+        const huidigeSectie = existing ? sectieVan(existing) : null
+        if (nieuweSectie !== scope && huidigeSectie !== scope) changedIds.delete(key)
+      }
+    }
+
     const changedProjects = projects.filter(p => changedIds.has(String(p.id)))
     result.overgeslagen = scoped ? 0 : projects.length - changedProjects.length
 
@@ -1310,6 +1348,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     const rows: Record<string, unknown>[] = []
     // Servicedesk-substatuswijzigingen voor de doorlooptijd-historie (na de upsert weggeschreven).
     const substatusWijzigingen: { bouw7_id: string; substatus: string }[] = []
+    // Dossiers die in deze sync offerte → gewonnen/opdracht gingen: everts-calc werkbegroting
+    // automatisch overnemen als planningsbudget (na de upsert).
+    const werkbegrotingKandidaten: string[] = []
 
     for (const p of changedProjects) {
       const bouw7IdStr = String(p.id)
@@ -1331,6 +1372,14 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       if (evaStatus.servicedesk_substatus
           && existing?.servicedesk_substatus !== evaStatus.servicedesk_substatus) {
         substatusWijzigingen.push({ bouw7_id: bouw7IdStr, substatus: evaStatus.servicedesk_substatus })
+      }
+
+      // Offerte → gewonnen of → opdracht: kandidaat voor automatische werkbegroting-overname.
+      if (existing && (
+        (evaStatus.hoofdstatus === 'opdracht' && existing.hoofdstatus !== 'opdracht')
+        || (evaStatus.offerte_substatus === 'gewonnen' && existing.offerte_substatus !== 'gewonnen')
+      )) {
+        werkbegrotingKandidaten.push(bouw7IdStr)
       }
 
       const det = quoteDetailMap.get(bouw7IdStr)
@@ -1444,8 +1493,8 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     }
 
     // Zachte delete: dossiers die niet meer in Bouw7 staan markeren.
-    // Overslaan bij een scoped run (ververs één dossier) — we keken dan niet naar de hele set.
-    const toDeactivate = scoped ? [] : (dossierData ?? [])
+    // Overslaan bij een scoped run (ververs één dossier of sectie) — we keken dan niet naar de hele set.
+    const toDeactivate = (scoped || scope) ? [] : (dossierData ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((d: any) => !bouw7IdsInResponse.has(d.bouw7_id))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1455,6 +1504,22 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         .from('dossiers')
         .update({ bouw7_sync_status: 'inactief_in_bouw7' })
         .in('id', toDeactivate)
+    }
+
+    // Offerte → gewonnen/opdracht: everts-calc werkbegroting automatisch overnemen als
+    // planningsbudget (alleen dossiers mét calc-koppeling; stil, sync faalt hier nooit op).
+    if (werkbegrotingKandidaten.length > 0) {
+      try {
+        const { data: overnameDossiers } = await supabase
+          .from('dossiers')
+          .select('id')
+          .in('bouw7_id', werkbegrotingKandidaten)
+          .not('everts_calc_project_id', 'is', null)
+        const { neemWerkbegrotingOverStil } = await import('@/lib/planning/werkbegroting')
+        for (const d of (overnameDossiers ?? []) as { id: string }[]) {
+          await neemWerkbegrotingOverStil(d.id)
+        }
+      } catch { /* overname is best-effort */ }
     }
 
     // De DB-trigger heeft dossier-events ge-enqueued voor dossiers die via de sync wijzigden;

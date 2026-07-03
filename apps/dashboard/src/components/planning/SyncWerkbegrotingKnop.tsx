@@ -1,45 +1,34 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
-import { Button } from '@/components/ui'
+import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { syncWerkbegrotingVanEvertsCalc } from '@/app/(platform)/planning/actions'
 
-export default function SyncWerkbegrotingKnop({ dossier_id }: { dossier_id: string }) {
-  const router = useRouter()
-  const [, startTransition] = useTransition()
-  const [pending, setPending] = useState(false)
-
-  async function handleSync() {
-    setPending(true)
+/**
+ * Handmatige overname van de everts-calc werkbegroting. De overname gebeurt ook
+ * automatisch zodra een offerte opdracht wordt — deze knop is het vangnet voor
+ * bijv. een later gewijzigde calculatie.
+ */
+export default function SyncWerkbegrotingKnop({
+  dossier_id,
+  laatstSync,
+}: {
+  dossier_id: string
+  laatstSync?: string | null
+}) {
+  async function handleSync(): Promise<SyncUitkomst> {
     const result = await syncWerkbegrotingVanEvertsCalc(dossier_id)
-    setPending(false)
-
-    if (!result.ok) {
-      toast.error(result.error)
-      return
-    }
-
+    if (!result.ok) return { ok: false, melding: result.error }
     if (result.ongematch.length > 0) {
-      toast(`${result.gematch} uursoort(en) gesynchroniseerd. Niet gematcht: ${result.ongematch.join(', ')}`, { icon: '⚠️' })
-    } else {
-      toast.success(`Werkbegroting gesynchroniseerd (${result.gematch} uursoort(en))`)
+      return { ok: true, melding: `${result.gematch} uursoort(en) gesynchroniseerd. Niet gematcht: ${result.ongematch.join(', ')}` }
     }
-
-    startTransition(() => router.refresh())
+    return { ok: true, melding: `${result.gematch} uursoort(en) overgenomen` }
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleSync}
-        loading={pending}
-      >
-        {pending ? 'Synchroniseren…' : '↻ Sync werkbegroting vanuit everts-calc'}
-      </Button>
-    </div>
+    <SyncKnop
+      laatsteSync={laatstSync ?? null}
+      onSync={handleSync}
+      label="Sync werkbegroting (everts-calc)"
+    />
   )
 }

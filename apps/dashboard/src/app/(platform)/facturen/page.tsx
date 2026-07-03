@@ -4,6 +4,7 @@ import { laadLayouts } from '@/app/actions/layouts'
 import { vereisModuleToegang, getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
 import { getDebiteuren, getRedencodes, getMedewerkerOpties } from '@/lib/debiteuren/actions'
+import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import DebiteurenOverzicht from './DebiteurenOverzicht'
 
 export const metadata: Metadata = { title: 'Facturen — Debiteuren' }
@@ -23,11 +24,12 @@ export default async function FacturenPage() {
   const rechten = await getEffectieveRechten(medewerker)
   const magBewerken = isBeheerder(rechten) || heeftModuleToegang(rechten, 'financieel', 'schrijven')
 
-  const [debiteuren, redencodes, medewerkers, layouts] = await Promise.all([
+  const [debiteuren, redencodes, medewerkers, layouts, laatsteSync] = await Promise.all([
     getDebiteuren(),
     getRedencodes(),
     getMedewerkerOpties(),
     user_id ? laadLayouts(user_id, 'debiteuren') : Promise.resolve([]),
+    getLaatsteSyncTijd('debiteuren'),
   ])
 
   return (
@@ -40,6 +42,7 @@ export default async function FacturenPage() {
       currentMedewerkerId={medewerker?.id ?? null}
       magBewerken={magBewerken}
       defaultScopeAlle={magBewerken}
+      laatsteSync={laatsteSync}
     />
   )
 }

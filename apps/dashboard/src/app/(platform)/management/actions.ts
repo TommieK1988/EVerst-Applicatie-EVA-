@@ -14,13 +14,16 @@ import {
 } from '@/lib/dashboard/queries'
 import { berekenManagementKpi } from '@/lib/dashboard/aggregaties'
 
-export async function syncManagementAction(): Promise<{ nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }> {
+export async function syncManagementAction(
+  opts?: { metVerlof?: boolean },
+): Promise<{ nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }> {
   // Handmatig verversen = incrementeel: gerede (financieel afgesloten) projecten overslaan,
   // zodat de knop ruim binnen de functietimeout blijft. De ochtend-cron doet de volledige sync.
-  // Verlof/vrije dagen (Bouw7 days-off) meenemen zodat de Werkvoorraad-capaciteit meeloopt.
+  // `metVerlof` (alleen op de Werkvoorraad-tab): verlof/vrije dagen (Bouw7 days-off) meenemen
+  // zodat de capaciteit meeloopt — de andere tabs hebben die call niet nodig.
   const [result] = await Promise.all([
     syncManagementProjecten('incremental'),
-    syncDaysOff().catch(() => null),
+    opts?.metVerlof ? syncDaysOff().catch(() => null) : Promise.resolve(null),
   ])
   revalidatePath('/management')
   return result

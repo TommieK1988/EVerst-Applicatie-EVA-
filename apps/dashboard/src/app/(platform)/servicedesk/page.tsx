@@ -52,7 +52,7 @@ export default async function ServicedeskPage({
         user_id={user_id}
         extraActies={
           <div className="flex items-center gap-2">
-            <BouwSyncKnop lasteSyncIso={lasteSyncIso} />
+            <BouwSyncKnop lasteSyncIso={lasteSyncIso} scope="servicedesk" />
             <Suspense fallback={null}>
               <ArchiefToggle />
             </Suspense>
@@ -81,7 +81,7 @@ export default async function ServicedeskPage({
       onStatusChange={updateServicedeskSubstatus}
       extraActies={
         <div className="flex items-center gap-2">
-          <BouwSyncKnop lasteSyncIso={lasteSyncIso} />
+          <BouwSyncKnop lasteSyncIso={lasteSyncIso} scope="servicedesk" />
           <Suspense fallback={null}>
             <ArchiefToggle />
           </Suspense>

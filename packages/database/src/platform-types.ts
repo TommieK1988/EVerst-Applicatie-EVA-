@@ -392,7 +392,7 @@ export type MeerwerkAfrekenwijze = 'regie' | 'aangenomen'
 export type MeerwerkStelpostGrondslag = 'geboekte_kosten' | 'eenheidsprijzen'
 export type MeerwerkTermijnWijze = 'eigen_termijnstaat' | 'een_regel'
 /** Herkomst van een meerwerkregel: handmatig in EVA of geïmporteerd uit Bouw7. */
-export type MeerwerkBron = 'eva' | 'bouw7_code' | 'bouw7_offerte'
+export type MeerwerkBron = 'eva' | 'bouw7_code' | 'bouw7_offerte' | 'bouw7_line'
 
 export type MeerwerkRegel = {
   id: string
@@ -417,6 +417,9 @@ export type MeerwerkRegel = {
   afgewezen_reden: string | null
   bron: MeerwerkBron
   bouw7_bron_sleutel: string | null
+  bouw7_line_id: number | null
+  bouw7_nummer: string | null
+  begroot_bedrag: number | null
   created_at: string
   updated_at: string
   created_by: string | null

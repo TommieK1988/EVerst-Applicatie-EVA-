@@ -9,6 +9,8 @@ import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import { InformatieTab } from './tabs/InformatieTab'
 import ActielijstenTab from './tabs/ActielijstenTab'
 import { AanvraagCalculatieTab } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
+import { OpdrachtCalculatieTab } from '@/components/everts-calc/calculatie/OpdrachtCalculatieTab'
+import { getQuotesVoorDossier } from '@/lib/everts-calc/services/quotes'
 import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting/OpdrachtWerkbegrotingTab'
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import VcaTab from './tabs/VcaTab'
@@ -17,6 +19,7 @@ import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
+import BestandenTab from './tabs/BestandenTab'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import type { DossierSectie } from './types'
 
@@ -92,6 +95,24 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           aanvraagId={id}
           naam={dossier?.titel ?? 'Opdracht'}
           nummer={dossier?.dossiernummer ?? ''}
+        />
+      </>
+    )
+  }
+
+  // Opdracht: tabel met alle gekoppelde calculaties/offertes (incl. meerwerk) i.p.v.
+  // de embedded calculatie-omgeving; die is via "Calculatie openen" alsnog bereikbaar.
+  if (tab === 'calculatie' && sectie === 'opdracht') {
+    const { projectId, rijen } = await getQuotesVoorDossier(id).catch(() => ({ projectId: null, rijen: [] }))
+    return (
+      <>
+        {titleInjector}
+        <OpdrachtCalculatieTab
+          dossierId={id}
+          naam={dossier?.titel ?? 'Opdracht'}
+          nummer={dossier?.dossiernummer ?? ''}
+          projectId={projectId}
+          rijen={rijen}
         />
       </>
     )
@@ -186,6 +207,15 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       <>
         {titleInjector}
         <MeerwerkTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'bestanden') {
+    return (
+      <>
+        {titleInjector}
+        <BestandenTab dossierId={id} />
       </>
     )
   }

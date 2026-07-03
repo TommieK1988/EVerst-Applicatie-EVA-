@@ -899,7 +899,7 @@ export function InformatieTab({
                   Open in Bouw7
                 </a>
               </Button>
-              <DossierVerversKnop dossierId={dossier.id} />
+              <DossierVerversKnop dossierId={dossier.id} laatsteSync={dossier.bouw7_laatst_sync ?? null} />
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}

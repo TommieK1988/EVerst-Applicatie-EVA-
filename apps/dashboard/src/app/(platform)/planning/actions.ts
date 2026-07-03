@@ -316,72 +316,22 @@ export async function upsertWerkbegrotingRegel(
   return { ok: true }
 }
 
+/**
+ * Handmatige overname van de everts-calc werkbegroting (sync-knop op de Planning-tab).
+ * De overname zelf gebeurt ook automatisch bij offerte → opdracht — deze knop is het
+ * vangnet voor o.a. een later gewijzigde calculatie. Logica leeft in lib/planning/werkbegroting.
+ */
 export async function syncWerkbegrotingVanEvertsCalc(
   dossier_id: string,
 ): Promise<{ ok: true; gematch: number; ongematch: string[] } | { ok: false; error: string }> {
-  const supabase = db()
-
-  const { data: dossier, error: dossierErr } = await supabase
-    .from('dossiers')
-    .select('everts_calc_project_id')
-    .eq('id', dossier_id)
-    .single()
-
-  if (dossierErr) return { ok: false, error: dossierErr.message }
-  if (!dossier?.everts_calc_project_id) return { ok: false, error: 'Geen everts-calc project gekoppeld aan dit dossier.' }
-
-  const { data: componenten, error: compErr } = await supabase
-    .from('werkbegroting_componenten')
-    .select(`omschrijving, norm_hoeveelheid, type, werkbegroting_regels ( hoeveelheid )`)
-    .eq('project_id', dossier.everts_calc_project_id)
-    .eq('type', 'arbeid')
-
-  if (compErr) return { ok: false, error: compErr.message }
-
-  const urenPerOmschrijving: Record<string, number> = {}
-  for (const comp of (componenten ?? [])) {
-    const uren = (comp.werkbegroting_regels ?? []).reduce(
-      (sum: number, r: any) => sum + (r.hoeveelheid * comp.norm_hoeveelheid),
-      0,
-    )
-    urenPerOmschrijving[comp.omschrijving] = (urenPerOmschrijving[comp.omschrijving] ?? 0) + uren
-  }
-
-  const { data: uursoorten, error: uursoortErr } = await supabase
-    .from('planning_uursoorten')
-    .select('id, everts_calc_omschrijvingen')
-    .eq('actief', true)
-
-  if (uursoortErr) return { ok: false, error: uursoortErr.message }
-
-  const urenPerUursoort: Record<string, number> = {}
-  const ongematch: string[] = []
-
-  for (const [omschrijving, uren] of Object.entries(urenPerOmschrijving)) {
-    const match = (uursoorten ?? []).find(
-      (u: any) => (u.everts_calc_omschrijvingen ?? []).includes(omschrijving),
-    )
-    if (match) {
-      urenPerUursoort[match.id] = (urenPerUursoort[match.id] ?? 0) + uren
-    } else {
-      ongematch.push(omschrijving)
-    }
-  }
-
-  for (const [uursoort_id, begrote_uren] of Object.entries(urenPerUursoort)) {
-    const { error } = await supabase
-      .from('planning_werkbegroting_regels')
-      .upsert(
-        { dossier_id, uursoort_id, begrote_uren },
-        { onConflict: 'dossier_id,uursoort_id' },
-      )
-    if (error) return { ok: false, error: error.message }
-  }
+  const { neemWerkbegrotingOver } = await import('@/lib/planning/werkbegroting')
+  const result = await neemWerkbegrotingOver(dossier_id)
+  if (!result.ok) return result
 
   revalidatePath(`/aanvragen/${dossier_id}/planning`)
   revalidatePath(`/opdrachten/${dossier_id}/planning`)
 
-  return { ok: true, gematch: Object.keys(urenPerUursoort).length, ongematch }
+  return result
 }
 
 // ─── Fasen ────────────────────────────────────────────────────────────────────

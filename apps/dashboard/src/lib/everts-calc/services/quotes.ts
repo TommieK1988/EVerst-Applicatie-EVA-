@@ -94,6 +94,75 @@ export async function getQuotesMetMarge(): Promise<OfferteRij[]> {
   })
 }
 
+// ─── Quotes per dossier (Calculatie-tab in Opdrachten) ────────────────────────
+
+export type DossierQuoteRij = {
+  id: string
+  quote_nummer: string
+  type: 'verkoopofferte' | 'interne_calculatie'
+  status: 'concept' | 'verzonden' | 'geaccepteerd' | 'afgewezen' | 'verlopen'
+  titel: string
+  referentie: string | null
+  datum: string | null
+  geldig_tot: string | null
+  subtotaal_ex_btw: number
+  btw_bedrag: number
+  totaal_inc_btw: number
+  totaal_kostprijs: number
+  marge: number
+  marge_pct: number | null
+  /** Gevuld wanneer dit een meerwerk-offerte is (back-reference naar meerwerk_regels). */
+  meerwerk_regel_id: string | null
+}
+
+/**
+ * Alle everts-calc quotes die aan een platform-dossier gekoppeld zijn, via
+ * dossiers.everts_calc_project_id → quotes.project_id. Meerwerk-offertes hangen
+ * aan hetzelfde project en komen dus automatisch mee (herkenbaar aan meerwerk_regel_id).
+ */
+export async function getQuotesVoorDossier(
+  dossierId: string,
+): Promise<{ projectId: string | null; rijen: DossierQuoteRij[] }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const platformClient = createAdminClient() as any
+  const { data: dossier } = await platformClient
+    .from('dossiers')
+    .select('everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+  const projectId: string | null = dossier?.everts_calc_project_id ?? null
+  if (!projectId) return { projectId: null, rijen: [] }
+
+  const supabase = await getDb()
+  const { data, error } = await supabase
+    .from('quotes')
+    .select(`
+      id, quote_nummer, type, status, titel, referentie,
+      datum, geldig_tot, subtotaal_ex_btw, btw_bedrag, totaal_inc_btw,
+      meerwerk_regel_id, created_at,
+      lines:quote_lines(hoeveelheid, kostprijs_pe)
+    `)
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rijen = (data ?? []).map((q: any) => {
+    const totaal_kostprijs = (q.lines ?? []).reduce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sum: number, l: any) => sum + ((l.hoeveelheid ?? 0) * (l.kostprijs_pe ?? 0)),
+      0,
+    )
+    const subtotaal = q.subtotaal_ex_btw ?? 0
+    const marge = subtotaal - totaal_kostprijs
+    const marge_pct = subtotaal > 0 ? (marge / subtotaal) * 100 : null
+    const { lines: _lines, created_at: _created_at, ...rest } = q
+    return { ...rest, totaal_kostprijs, marge, marge_pct } as DossierQuoteRij
+  })
+
+  return { projectId, rijen }
+}
+
 export async function getQuotes(): Promise<Quote[]> {
   const supabase = await getDb()
   const { data, error } = await supabase

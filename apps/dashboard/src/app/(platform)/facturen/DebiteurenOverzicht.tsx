@@ -1,11 +1,9 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import toast from 'react-hot-toast'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
-import { Button } from '@/components/ui'
+import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import DebiteurPaneel from '@/components/debiteuren/DebiteurPaneel'
 import {
   ververDebiteuren,
@@ -173,15 +171,14 @@ type Props = {
   currentMedewerkerId: string | null
   magBewerken: boolean
   defaultScopeAlle: boolean
+  laatsteSync: string | null
 }
 
 export default function DebiteurenOverzicht({
-  debiteuren, redencodes, medewerkers, layouts, user_id, currentMedewerkerId, magBewerken, defaultScopeAlle,
+  debiteuren, redencodes, medewerkers, layouts, user_id, currentMedewerkerId, magBewerken, defaultScopeAlle, laatsteSync,
 }: Props) {
-  const router = useRouter()
   const [scope, setScope] = useState<Scope>(defaultScopeAlle ? 'alle' : 'mijn')
   const [geselecteerd, setGeselecteerd] = useState<DebiteurRij | null>(null)
-  const [verversen, setVerversen] = useState(false)
 
   const zichtbaar = useMemo(() => {
     if (scope === 'alle') return debiteuren
@@ -194,16 +191,10 @@ export default function DebiteurenOverzicht({
   )
   const aantalRood = useMemo(() => zichtbaar.filter(d => d.stoplicht === 'rood').length, [zichtbaar])
 
-  async function handleVerversen() {
-    setVerversen(true)
-    try {
-      const res = await ververDebiteuren()
-      if (!res.ok) { toast.error(`Verversen mislukt: ${res.error}`); return }
-      toast.success(`Bijgewerkt: +${res.nieuw} nieuw, ${res.bijgewerkt} bijgewerkt`)
-      router.refresh()
-    } finally {
-      setVerversen(false)
-    }
+  async function handleVerversen(): Promise<SyncUitkomst> {
+    const res = await ververDebiteuren()
+    if (!res.ok) return { ok: false, melding: res.error }
+    return { ok: true, melding: `+${res.nieuw} nieuw · ${res.bijgewerkt} bijgewerkt` }
   }
 
   return (
@@ -236,9 +227,7 @@ export default function DebiteurenOverzicht({
           <Stat label="Aantal" value={String(zichtbaar.length)} />
           <Stat label="30+ dgn te laat" value={String(aantalRood)} tone={aantalRood > 0 ? '#dc2626' : undefined} />
         </div>
-        <Button variant="secondary" onClick={handleVerversen} disabled={verversen} style={{ flexShrink: 0 }}>
-          {verversen ? 'Bezig met verversen…' : '↻ Ververs uit Bouw7'}
-        </Button>
+        <SyncKnop laatsteSync={laatsteSync} onSync={handleVerversen} />
       </div>
 
       <OverzichtTabel

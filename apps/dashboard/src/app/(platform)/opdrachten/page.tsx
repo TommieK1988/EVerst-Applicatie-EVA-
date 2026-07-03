@@ -52,7 +52,7 @@ export default async function OpdrachtenPage({
         user_id={user_id}
         extraActies={
           <div className="flex items-center gap-2">
-            <BouwSyncKnop lasteSyncIso={lasteSyncIso} />
+            <BouwSyncKnop lasteSyncIso={lasteSyncIso} scope="opdracht" />
             <Suspense fallback={null}>
               <AfgeslotenToggle />
             </Suspense>
@@ -79,7 +79,7 @@ export default async function OpdrachtenPage({
       mijnNaam={mijnNaam}
       extraActies={
         <div className="flex items-center gap-2">
-          <BouwSyncKnop lasteSyncIso={lasteSyncIso} />
+          <BouwSyncKnop lasteSyncIso={lasteSyncIso} scope="opdracht" />
           <Suspense fallback={null}>
             <AfgeslotenToggle />
           </Suspense>

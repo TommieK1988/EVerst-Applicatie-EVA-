@@ -49,7 +49,7 @@ export default async function AanvragenPage({
       mijnNaam={mijnNaam}
       kanNieuwAanmaken
       categorieen={categorieen}
-      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} />}
+      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
     />
   )
 }

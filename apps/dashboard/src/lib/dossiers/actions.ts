@@ -375,6 +375,46 @@ export async function maakOfferteVoorServicedesk(
 }
 
 /**
+ * Koppelt (idempotent) een everts-calc calculatieproject aan een dossier. Generieke
+ * variant van maakOfferteVoorServicedesk — gebruikt door de Calculatie-tab in Opdrachten
+ * zodat ook Bouw7-native opdrachten (zonder offertetraject in EVA) een calculatieproject
+ * kunnen krijgen, o.a. als voorwaarde voor meerwerk-calculaties.
+ */
+export async function koppelCalculatieProject(
+  dossierId: string,
+): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { data: dossier, error } = await supabase
+    .from('dossiers')
+    .select('id, titel, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+  if (error) return { ok: false, error: error.message }
+
+  // Al gekoppeld? Hergebruik het bestaande project (idempotent).
+  if (dossier?.everts_calc_project_id) {
+    return { ok: true, projectId: dossier.everts_calc_project_id as string }
+  }
+
+  try {
+    const { maakProjectVanAanvraag } = await import('@/app/(platform)/everts-calc/actions/projecten')
+    const naam = dossier?.titel ?? 'Opdracht'
+    const { id: projectId } = await maakProjectVanAanvraag(naam, '')
+
+    const { error: koppelFout } = await supabase
+      .from('dossiers')
+      .update({ everts_calc_project_id: projectId })
+      .eq('id', dossierId)
+    if (koppelFout) return { ok: false, error: koppelFout.message }
+
+    revalidatePath(`/opdrachten/${dossierId}/calculatie`)
+    return { ok: true, projectId }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij aanmaken calculatie.' }
+  }
+}
+
+/**
  * Servicedesk: markeer de gekoppelde offerte als Akkoord. Zet de aanneemsom (uit de
  * gegenereerde quote) in het dossier, schakelt naar termijn-facturatie (tenzij handmatig
  * vastgezet) en werkt de substatus bij. Het Calculatie-tab blijft zichtbaar.
@@ -625,6 +665,13 @@ export async function updateDossierSubstatus(
 
   // De DB-trigger heeft een dossier-event ge-enqueued; evalueer triggers en activeer nu direct.
   await verwerkDossierTriggers(id).catch(() => {})
+
+  // Offerte gewonnen → opdracht: neem de everts-calc werkbegroting automatisch over als
+  // planningsbudget. Stil vangnet — de sync-knop op de Planning-tab blijft beschikbaar.
+  if (huidig.hoofdstatus === 'offerte' && nieuweSubstatus === 'gewonnen') {
+    const { neemWerkbegrotingOverStil } = await import('@/lib/planning/werkbegroting')
+    await neemWerkbegrotingOverStil(id)
+  }
 
   // Two-way: opdracht-substatus terugschrijven naar Bouw7 (alleen opdracht-dossiers met koppeling).
   let bouw7: Bouw7WriteResult | undefined

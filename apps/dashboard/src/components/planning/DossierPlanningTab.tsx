@@ -89,8 +89,17 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const heeftCalcProject  = !!(dossierRes.data?.everts_calc_project_id)
   const heeftBouw7        = !!(dossierRes.data?.bouw7_id)
   const bouw7LaatstSync   = activiteiten
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((a: any) => a.bron === 'bouw7' && a.bouw7_laatst_sync)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((a: any) => a.bouw7_laatst_sync as string)
+    .sort()
+    .pop() ?? null
+  // Laatste werkbegroting-overname = jongste updated_at van de begrote regels.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const werkbegrotingLaatstSync = ((werkbegrotingRes.data ?? []) as any[])
+    .map(r => r.updated_at as string | null)
+    .filter(Boolean)
     .sort()
     .pop() ?? null
   const bedrijfsinstellingen = await getBedrijfsinstellingen()
@@ -125,7 +134,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
       {budgetRegels.length > 0 && <BudgetHeader regels={budgetRegels} />}
       {(heeftCalcProject || heeftBouw7) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          {heeftCalcProject && <SyncWerkbegrotingKnop dossier_id={dossier_id} />}
+          {heeftCalcProject && <SyncWerkbegrotingKnop dossier_id={dossier_id} laatstSync={werkbegrotingLaatstSync} />}
           {heeftBouw7 && <SyncBouw7PlanningKnop dossier_id={dossier_id} laatstSync={bouw7LaatstSync} />}
         </div>
       )}

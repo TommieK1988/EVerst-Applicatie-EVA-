@@ -166,6 +166,7 @@ const AANVRAAG_TABS: DossierTab[] = [
 const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'informatie',    label: 'Informatie',    d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'bestanden',     label: 'Bestanden',     d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { slug: 'calculatie',    label: 'Calculatie',    d: 'M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M16 3l2 2-9 9m0 0H7m2 0V9' },
   { slug: 'werkbegroting', label: 'Werkbegroting', d: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { slug: 'planning',      label: 'Planning',      d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { slug: 'taken',         label: 'Taken',         d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
@@ -460,18 +461,6 @@ export default function Sidebar({
             active={false}
           />
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 13px 2px' }}/>
-          {/* Offerte-koppeling: alleen zichtbaar vanuit opdracht */}
-          {dossierSectie === 'opdrachten' && (
-            <>
-              <NavItem
-                href={`/offertes/${dossierId}/informatie`}
-                icon={<SubIcon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8" size={16}/>}
-                label="Offerte"
-                active={isActive(`/offertes/${dossierId}`)}
-              />
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 13px 2px' }}/>
-            </>
-          )}
           {/* Dossier tabs */}
           {zichtbareTabs.map(t => (
             <NavItem

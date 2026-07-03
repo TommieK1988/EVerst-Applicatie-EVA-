@@ -33,7 +33,7 @@ export default async function OffertesPage() {
       dossiers={dossiers}
       layouts={layouts}
       user_id={user_id}
-      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} />}
+      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="offerte" />}
     />
   )
 }
