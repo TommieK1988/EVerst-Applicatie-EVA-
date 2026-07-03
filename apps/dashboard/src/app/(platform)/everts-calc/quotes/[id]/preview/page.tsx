@@ -8,6 +8,7 @@ import PdfDownloadButton from './PdfDownloadButton'
 import DocxDownloadButton from './DocxDownloadButton'
 import PrintButton from './PrintButton'
 import BedrijfLoader from './BedrijfLoader'
+import GoedkeuringKnop from './GoedkeuringKnop'
 
 export const metadata: Metadata = { title: 'Offerte voorvertoning' }
 
@@ -33,6 +34,13 @@ export default async function QuotePreviewPage({ params }: Props) {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          {quote.type !== 'interne_calculatie' && (
+            <GoedkeuringKnop
+              quoteId={quote.id}
+              dossierId={quote.dossier_id ?? null}
+              totaalBedrag={quote.subtotaal_ex_btw}
+            />
+          )}
           <PrintButton />
           <DocxDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
           <PdfDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
