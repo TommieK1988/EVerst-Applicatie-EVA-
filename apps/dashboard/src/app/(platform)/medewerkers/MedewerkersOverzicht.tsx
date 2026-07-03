@@ -86,7 +86,18 @@ const GEBRUIKER_TYPE_LABELS: Record<string, string> = {
 const tekstStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }
 const mutedStyle: React.CSSProperties = { fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }
 
-function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
+function maakKolommen(lookups: Lookups, data: Medewerker[]): KolomDefinitie<Medewerker>[] {
+  // Distincte, gesorteerde opties uit de data — voor keuzelijst-filters op kolommen
+  // die in het formulier via een dropdown/lookup gevuld worden.
+  const distinct = (fn: (m: Medewerker) => string | null | undefined): string[] =>
+    [...new Set(data.map(fn).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, 'nl'))
+
+  const ploegNaam        = (m: Medewerker) => (m.ploeg_id && lookups.ploegen[m.ploeg_id]) || ''
+  const uursoortNaam     = (m: Medewerker) => (m.standaard_uursoort_id && lookups.uursoorten[m.standaard_uursoort_id]) || ''
+  const administratieNaam = (m: Medewerker) => (m.werkmaatschappij_id && lookups.werkmaatschappijen[m.werkmaatschappij_id]) || ''
+  const relatieNaam      = (m: Medewerker) => (m.relatie_id && lookups.relaties[m.relatie_id]) || ''
+  const caoDocumentNaam  = (m: Medewerker) => (m.cao_document_id && lookups.caoDocumenten[m.cao_document_id]) || ''
+
   return [
     {
       key: 'naam',
@@ -196,7 +207,8 @@ function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
     {
       key: 'functie',
       label: 'Functie',
-      filterType: 'tekst',
+      filterType: 'select',
+      filterOpties: distinct(m => m.functie),
       sorteerWaarde: m => m.functie ?? '',
       render: m => <span style={tekstStyle}>{m.functie ?? '—'}</span>,
     },
@@ -204,7 +216,8 @@ function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
       key: 'afdeling',
       label: 'Afdeling',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
+      filterType: 'select',
+      filterOpties: distinct(m => m.afdeling),
       sorteerWaarde: m => m.afdeling ?? '',
       render: m => <span style={mutedStyle}>{m.afdeling ?? '—'}</span>,
     },
@@ -212,33 +225,37 @@ function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
       key: 'ploeg',
       label: 'Ploeg',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: m => (m.ploeg_id && lookups.ploegen[m.ploeg_id]) || '',
-      render: m => <span style={mutedStyle}>{(m.ploeg_id && lookups.ploegen[m.ploeg_id]) || '—'}</span>,
+      filterType: 'select',
+      filterOpties: distinct(ploegNaam),
+      sorteerWaarde: ploegNaam,
+      render: m => <span style={mutedStyle}>{ploegNaam(m) || '—'}</span>,
     },
     {
       key: 'uursoort',
       label: 'Uursoort',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: m => (m.standaard_uursoort_id && lookups.uursoorten[m.standaard_uursoort_id]) || '',
-      render: m => <span style={mutedStyle}>{(m.standaard_uursoort_id && lookups.uursoorten[m.standaard_uursoort_id]) || '—'}</span>,
+      filterType: 'select',
+      filterOpties: distinct(uursoortNaam),
+      sorteerWaarde: uursoortNaam,
+      render: m => <span style={mutedStyle}>{uursoortNaam(m) || '—'}</span>,
     },
     {
       key: 'werkmaatschappij',
       label: 'Administratie',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: m => (m.werkmaatschappij_id && lookups.werkmaatschappijen[m.werkmaatschappij_id]) || '',
-      render: m => <span style={mutedStyle}>{(m.werkmaatschappij_id && lookups.werkmaatschappijen[m.werkmaatschappij_id]) || '—'}</span>,
+      filterType: 'select',
+      filterOpties: distinct(administratieNaam),
+      sorteerWaarde: administratieNaam,
+      render: m => <span style={mutedStyle}>{administratieNaam(m) || '—'}</span>,
     },
     {
       key: 'relatie',
       label: 'Relatie',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: m => (m.relatie_id && lookups.relaties[m.relatie_id]) || '',
-      render: m => <span style={mutedStyle}>{(m.relatie_id && lookups.relaties[m.relatie_id]) || '—'}</span>,
+      filterType: 'select',
+      filterOpties: distinct(relatieNaam),
+      sorteerWaarde: relatieNaam,
+      render: m => <span style={mutedStyle}>{relatieNaam(m) || '—'}</span>,
     },
     {
       key: 'type',
@@ -270,15 +287,17 @@ function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
       key: 'cao_document',
       label: 'CAO document',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: m => (m.cao_document_id && lookups.caoDocumenten[m.cao_document_id]) || '',
-      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{(m.cao_document_id && lookups.caoDocumenten[m.cao_document_id]) || '—'}</span>,
+      filterType: 'select',
+      filterOpties: distinct(caoDocumentNaam),
+      sorteerWaarde: caoDocumentNaam,
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{caoDocumentNaam(m) || '—'}</span>,
     },
     {
       key: 'cao_schaal',
       label: 'CAO schaal',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
+      filterType: 'select',
+      filterOpties: distinct(m => m.cao_schaal),
       sorteerWaarde: m => m.cao_schaal ?? '',
       render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_schaal ?? '—'}</span>,
     },
@@ -286,7 +305,8 @@ function maakKolommen(lookups: Lookups): KolomDefinitie<Medewerker>[] {
       key: 'cao_trede',
       label: 'CAO trede',
       standaard_zichtbaar: false,
-      filterType: 'tekst',
+      filterType: 'select',
+      filterOpties: distinct(m => m.cao_trede),
       sorteerWaarde: m => m.cao_trede ?? '',
       render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{m.cao_trede ?? '—'}</span>,
     },
@@ -407,7 +427,7 @@ type Props = {
 export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, functies, lookups }: Props) {
   const router = useRouter()
   const [showNieuw, setShowNieuw] = useState(false)
-  const kolommen = useMemo(() => maakKolommen(lookups), [lookups])
+  const kolommen = useMemo(() => maakKolommen(lookups, medewerkers), [lookups, medewerkers])
 
   return (
     <div className="eva-page-full">
