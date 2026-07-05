@@ -118,29 +118,37 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 3. Geen params: token OK + huidige O365_PDF_DRIVE_ID valideren
-  const pdfDriveId = process.env.O365_PDF_DRIVE_ID
-  let driveStatus = `<p>⚠️ <code>O365_PDF_DRIVE_ID</code> is nog niet ingesteld.</p>`
-  if (pdfDriveId) {
+  // 3. Geen params: token OK + de ingestelde drive-id's valideren
+  async function checkDrive(envNaam: string): Promise<string> {
+    const id = process.env[envNaam]
+    if (!id) return `<p>⚠️ <code>${envNaam}</code> is nog niet ingesteld.</p>`
     try {
-      const drive = await appGraphGet<Drive>(`/drives/${pdfDriveId}?$select=id,name,driveType,webUrl`)
-      driveStatus = `<p class="ok">✅ <code>O365_PDF_DRIVE_ID</code> is geldig.</p>
+      const drive = await appGraphGet<Drive>(`/drives/${id}?$select=id,name,driveType,webUrl`)
+      return `<p class="ok">✅ <code>${envNaam}</code> is geldig.</p>
         <table>
           <tr><th>Naam</th><td>${drive.name ?? '—'}</td></tr>
           <tr><th>Type</th><td>${drive.driveType ?? '—'}</td></tr>
           <tr><th>WebUrl</th><td><a href="${drive.webUrl ?? '#'}">${drive.webUrl ?? '—'}</a></td></tr>
         </table>`
     } catch (err) {
-      driveStatus = `<p class="fout">❌ <code>O365_PDF_DRIVE_ID</code> is ingesteld maar werkt niet:
+      return `<p class="fout">❌ <code>${envNaam}</code> is ingesteld maar werkt niet:
         ${String(err).replace(/</g, '&lt;')}</p>`
     }
   }
+
+  const [pdfStatus, dossierStatus] = await Promise.all([
+    checkDrive('O365_PDF_DRIVE_ID'),
+    checkDrive('O365_DOSSIER_DRIVE_ID'),
+  ])
 
   return page(`
     <h1>Office 365 — diagnose</h1>
     <div class="kaart">
       <p class="ok big">✅ App-only token werkt (consent OK)</p>
-      ${driveStatus}
+      <h2 style="margin-top:1rem">Offerte-PDF (conversie-drive)</h2>
+      ${pdfStatus}
+      <h2 style="margin-top:1rem">Dossierbestanden (SharePoint-bibliotheek)</h2>
+      ${dossierStatus}
     </div>
     ${FORM}`)
 }

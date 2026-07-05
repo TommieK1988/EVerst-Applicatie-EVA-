@@ -128,16 +128,26 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
   const [bezig, start] = useTransition()
 
   useEffect(() => {
-    getDossierSharePointBestanden(dossierId).then(setData).catch(() => setData(null))
+    getDossierSharePointBestanden(dossierId)
+      .then(setData)
+      .catch(e => setData({ geconfigureerd: true, status: null, mapUrl: null, bestanden: [], fout: String(e) }))
   }, [dossierId])
 
   // Niet geconfigureerd → kaart helemaal verbergen
   if (data && !data.geconfigureerd) return null
 
-  const opnieuw = () => start(async () => { setData(await hermatchDossierSharePoint(dossierId)) })
+  const fallbackFout = (e: unknown): DossierSharePointData =>
+    ({ geconfigureerd: true, status: 'niet_gevonden', mapUrl: null, bestanden: [], fout: String(e) })
+
+  const opnieuw = () => start(async () => {
+    try { setData(await hermatchDossierSharePoint(dossierId)) } catch (e) { setData(fallbackFout(e)) }
+  })
   const koppel = () => {
     if (!link.trim()) return
-    start(async () => { const r = await koppelDossierMapViaLink(dossierId, link.trim()); setData(r); setLink('') })
+    start(async () => {
+      try { const r = await koppelDossierMapViaLink(dossierId, link.trim()); setData(r); setLink('') }
+      catch (e) { setData(fallbackFout(e)) }
+    })
   }
 
   return (
@@ -202,6 +212,11 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
                   ? 'Geen SharePoint-map automatisch gevonden voor dit dossier.'
                   : 'SharePoint is nu niet bereikbaar.'}
             </p>
+            {data.fout && (
+              <p className="rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11.5px] text-red-700 break-words">
+                {data.fout}
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <input
                 value={link}
