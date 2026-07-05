@@ -48,6 +48,7 @@ interface Layout {
   koptekst?: string | null
   voettekst?: string | null
   footer_html?: string | null
+  briefpapier_pdf_url?: string | null
 }
 
 interface Props {
@@ -59,6 +60,10 @@ interface Props {
 // ─── Word template variabelen ─────────────────────────────────────────────────
 
 const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[] = [
+  { groep: 'Afbeeldingen', items: [
+    { v: '%logo',                    label: 'Bedrijfslogo (afbeelding — tag begint met %)' },
+    { v: '%handtekening',            label: 'Handtekening (afbeelding — tag begint met %)' },
+  ]},
   { groep: 'Offerte', items: [
     { v: 'offerte.nummer',           label: 'Offertenummer (bv. OFF-2024-001)' },
     { v: 'offerte.titel',            label: 'Titel van de offerte' },
@@ -72,6 +77,9 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'offerte.inleiding',        label: 'Inleidingstekst' },
     { v: 'offerte.slottekst',        label: 'Slottekst' },
     { v: 'offerte.betalingscondities', label: 'Betalingscondities tekst' },
+    { v: 'offerte.status',           label: 'Status (bv. concept, verzonden)' },
+    { v: 'offerte.type',             label: 'Type (verkoopofferte / interne_calculatie)' },
+    { v: 'offerte.is_intern',        label: 'Boolean: is dit een interne calculatie' },
   ]},
   { groep: 'Klant', items: [
     { v: 'klant.naam',               label: 'Volledige naam contactpersoon' },
@@ -96,15 +104,18 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'bedrijf.iban',             label: 'IBAN rekeningnummer' },
   ]},
   { groep: 'Totalen', items: [
-    { v: 'totalen.subtotaal',            label: 'Subtotaal excl. BTW (bv. € 10.000,00)' },
-    { v: 'totalen.subtotaal_raw',        label: 'Subtotaal als getal (bv. 10000)' },
-    { v: 'totalen.btw_pct',              label: 'BTW percentage (bv. 21)' },
-    { v: 'totalen.btw_bedrag',           label: 'BTW bedrag (bv. € 2.100,00)' },
-    { v: 'totalen.btw_bedrag_raw',       label: 'BTW bedrag als getal' },
-    { v: 'totalen.totaal',               label: 'Totaal incl. BTW (bv. € 12.100,00)' },
-    { v: 'totalen.totaal_raw',           label: 'Totaal incl. BTW als getal' },
-    { v: 'totalen.stelposten_subtotaal', label: 'Totaal stelposten' },
-    { v: 'totalen.opties_subtotaal',     label: 'Totaal opties (niet inbegrepen)' },
+    { v: 'totalen.subtotaal',              label: 'Subtotaal excl. BTW (bv. € 10.000,00)' },
+    { v: 'totalen.subtotaal_raw',          label: 'Subtotaal als getal (bv. 10000)' },
+    { v: 'totalen.btw_pct',                label: 'BTW percentage (bv. 21)' },
+    { v: 'totalen.btw_bedrag',             label: 'BTW bedrag (bv. € 2.100,00)' },
+    { v: 'totalen.btw_bedrag_raw',         label: 'BTW bedrag als getal' },
+    { v: 'totalen.totaal',                 label: 'Totaal incl. BTW (bv. € 12.100,00)' },
+    { v: 'totalen.totaal_raw',             label: 'Totaal incl. BTW als getal' },
+    { v: 'totalen.stelposten_subtotaal',   label: 'Totaal stelposten' },
+    { v: 'totalen.stelposten_subtotaal_raw', label: 'Totaal stelposten als getal' },
+    { v: 'totalen.stelposten_in_totaal',   label: 'Boolean: stelposten in totaal meegeteld' },
+    { v: 'totalen.opties_subtotaal',       label: 'Totaal opties (niet inbegrepen)' },
+    { v: 'totalen.opties_subtotaal_raw',   label: 'Totaal opties als getal' },
   ]},
   { groep: 'Teksten', items: [
     { v: 'voorwaarden',              label: 'Algemene voorwaarden (plain text)' },
@@ -112,7 +123,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'opmerkingen',              label: 'Opmerkingen (plain text)' },
   ]},
   { groep: 'Loop: normale_secties', items: [
-    { v: '#normale_secties',         label: 'Begin loop — alle calculatiegroepen (excl. leeg)' },
+    { v: '#normale_secties',         label: 'Begin loop — alle calculatiegroepen (excl. opties/leeg)' },
     { v: '/normale_secties',         label: 'Einde loop' },
     { v: 'display_naam',             label: 'Genummerde naam (bv. "1.1  Metselwerk")' },
     { v: 'naam',                     label: 'Naam van de groep' },
@@ -127,7 +138,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'is_stelpost_sectie',       label: 'Boolean: bevat stelpost-regels' },
     { v: 'is_optioneel',             label: 'Boolean: is dit een optie-groep' },
   ]},
-  { groep: 'Loop: regels (binnen normale_secties)', items: [
+  { groep: 'Loop: regels (binnen een sectie)', items: [
     { v: '#regels',                  label: 'Begin loop — regels binnen een groep' },
     { v: '/regels',                  label: 'Einde loop' },
     { v: 'omschrijving',             label: 'Omschrijving van de regel' },
@@ -135,11 +146,45 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'hoeveelheid',              label: 'Hoeveelheid (bv. 10,500)' },
     { v: 'eenheid',                  label: 'Eenheid (bv. m², uur, stuk)' },
     { v: 'eenheidsprijs',            label: 'Prijs per eenheid (bv. € 12,50)' },
+    { v: 'eenheidsprijs_raw',        label: 'Prijs per eenheid als getal' },
     { v: 'totaal',                   label: 'Totaalbedrag regel (bv. € 131,25)' },
     { v: 'totaal_raw',               label: 'Totaal als getal' },
     { v: 'btw_pct',                  label: 'BTW percentage (bv. 21)' },
     { v: 'is_stelpost',              label: 'Boolean: is dit een stelpost' },
     { v: 'opmerking',                label: 'Opmerking bij de regel' },
+    { v: 'werkomschrijving',         label: 'Uitgebreide werkomschrijving (= opmerking)' },
+    { v: 'heeft_opmerking',          label: 'Boolean: heeft een opmerking' },
+    { v: 'schilderbehandeling',      label: 'Schilderbehandeling van de regel' },
+    { v: 'heeft_schilderbehandeling',label: 'Boolean: heeft een schilderbehandeling' },
+    { v: 'kostprijs',                label: 'Kostprijs p/e (alleen intern; anders "—")' },
+    { v: 'uren',                     label: 'Uren p/e (alleen intern; anders "—")' },
+    { v: 'marge_pct',                label: 'Marge % (alleen intern; anders "—")' },
+  ]},
+  { groep: 'Loop: optie_secties', items: [
+    { v: '#optie_secties',           label: 'Begin loop — alleen optionele groepen' },
+    { v: '/optie_secties',           label: 'Einde loop' },
+    { v: 'display_naam',             label: 'Zelfde velden als normale_secties (naam, subtotaal, #regels…)' },
+  ]},
+  { groep: 'Loop: stelpost_regels (plat)', items: [
+    { v: '#stelpost_regels',         label: 'Begin loop — alle stelposten over alle groepen' },
+    { v: '/stelpost_regels',         label: 'Einde loop' },
+    { v: 'omschrijving',             label: 'Omschrijving van de stelpost' },
+    { v: 'sectie_naam',              label: 'Naam van de groep waar de stelpost in zit' },
+    { v: 'totaal',                   label: 'Bedrag stelpost (bv. € 750,00)' },
+    { v: 'totaal_raw',               label: 'Bedrag als getal' },
+  ]},
+  { groep: 'Loop: behandelingen_overzicht', items: [
+    { v: '#behandelingen_overzicht', label: 'Begin loop — unieke schilderbehandelingen' },
+    { v: '.',                        label: 'De behandeling zelf (losse tekstwaarde)' },
+    { v: '/behandelingen_overzicht', label: 'Einde loop' },
+  ]},
+  { groep: 'Loop: per niveau', items: [
+    { v: '#normale_secties_niveau1', label: 'Begin loop — alleen niveau-1 groepen' },
+    { v: '/normale_secties_niveau1', label: 'Einde loop' },
+    { v: '#normale_secties_niveau2', label: 'Begin loop — alleen niveau-2 groepen' },
+    { v: '/normale_secties_niveau2', label: 'Einde loop' },
+    { v: '#normale_secties_niveau3', label: 'Begin loop — alleen niveau-3 groepen' },
+    { v: '/normale_secties_niveau3', label: 'Einde loop' },
   ]},
   { groep: 'Conditionele blokken', items: [
     { v: '#heeft_stelposten',        label: 'Als er stelposten zijn' },
@@ -147,6 +192,10 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: '#heeft_opties',            label: 'Als er opties zijn' },
     { v: '/heeft_opties',            label: 'Einde conditioneel blok' },
     { v: '^heeft_opties',            label: 'Als er GEEN opties zijn (inverse)' },
+    { v: '#heeft_behandelingen',     label: 'Als er schilderbehandelingen zijn' },
+    { v: '/heeft_behandelingen',     label: 'Einde conditioneel blok' },
+    { v: '#heeft_terms',             label: 'Als er voorwaarden/uitsluitingen/opmerkingen zijn' },
+    { v: '/heeft_terms',             label: 'Einde conditioneel blok' },
   ]},
 ]
 
@@ -181,6 +230,7 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
     docx_template_drive_id: layout.docx_template_drive_id ?? '',
     docx_template_item_id: layout.docx_template_item_id ?? '',
     docx_template_web_url: layout.docx_template_web_url ?? '',
+    briefpapier_pdf_url: layout.briefpapier_pdf_url ?? '',
   })
 
   const [previewKey, setPreviewKey] = useState(0)
@@ -190,19 +240,36 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
   const [stForm, setStForm] = useState({ naam: '', inhoud_html: '', categorie: 'algemeen' })
   const [, startStTransition] = useTransition()
 
+  // Preview: 'word' = snelle client-render (docx-preview, geen briefpapier),
+  //          'pdf'  = echte PDF via Graph mét briefpapier-achtergrond.
+  const [previewModus, setPreviewModus] = useState<'word' | 'pdf'>('word')
+  // Databron: 'demo' = volledig gevulde testgegevens, 'echt' = een echte offerte.
+  const [previewBron, setPreviewBron] = useState<'demo' | 'echt'>('demo')
+
   const bedrijfJson = typeof window !== 'undefined'
     ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
     : '{}'
 
+  const previewQuoteId = previewBron === 'echt' && voorbeeldQuoteId ? voorbeeldQuoteId : 'demo'
+
   // Word-only: voorbeeld vereist een gekoppelde .docx-template (SharePoint/OneDrive of Supabase)
   const isGraphTemplate = form.docx_template_bron === 'sharepoint' || form.docx_template_bron === 'onedrive'
-  const previewUrl = !voorbeeldQuoteId
-    ? null
-    : isGraphTemplate && form.docx_template_drive_id && form.docx_template_item_id
-      ? `/everts-calc/api/quotes/${voorbeeldQuoteId}/docx-preview?drive_id=${encodeURIComponent(form.docx_template_drive_id)}&item_id=${encodeURIComponent(form.docx_template_item_id)}&bedrijf=${encodeURIComponent(bedrijfJson)}`
+  const templateParams =
+    isGraphTemplate && form.docx_template_drive_id && form.docx_template_item_id
+      ? `drive_id=${encodeURIComponent(form.docx_template_drive_id)}&item_id=${encodeURIComponent(form.docx_template_item_id)}`
       : form.docx_template_url
-        ? `/everts-calc/api/quotes/${voorbeeldQuoteId}/docx-preview?template_url=${encodeURIComponent(form.docx_template_url)}&bedrijf=${encodeURIComponent(bedrijfJson)}`
-        : null
+        ? `template_url=${encodeURIComponent(form.docx_template_url)}`
+        : ''
+  const heeftTemplate = templateParams !== ''
+
+  const wordPreviewUrl = heeftTemplate
+    ? `/everts-calc/api/quotes/${previewQuoteId}/docx-preview?${templateParams}&bedrijf=${encodeURIComponent(bedrijfJson)}&_k=${previewKey}`
+    : null
+  const pdfPreviewUrl = heeftTemplate
+    ? `/everts-calc/api/quotes/${previewQuoteId}/pdf-preview?${templateParams}` +
+      `&briefpapier_url=${encodeURIComponent(form.briefpapier_pdf_url)}` +
+      `&bedrijf=${encodeURIComponent(bedrijfJson)}&_k=${previewKey}`
+    : null
 
   function slaOp() {
     startTransition(async () => {
@@ -235,6 +302,7 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
           docx_template_drive_id: form.docx_template_drive_id || null,
           docx_template_item_id: form.docx_template_item_id || null,
           docx_template_web_url: form.docx_template_web_url || null,
+          briefpapier_pdf_url: form.briefpapier_pdf_url || null,
         }
         await updateLayout(layout.id, data)
         toast.success('Layout opgeslagen')
@@ -340,31 +408,81 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
                   ...f, docx_template_bron: '', docx_template_drive_id: '', docx_template_item_id: '', docx_template_web_url: '',
                 }))}
               />
+
+              <BriefpapierPaneel
+                layoutId={layout.id}
+                briefpapierUrl={form.briefpapier_pdf_url}
+                onChange={url => setForm(f => ({ ...f, briefpapier_pdf_url: url }))}
+              />
             </div>
           </div>
         </div>
 
         {/* Rechter preview */}
         <div className="flex-1 overflow-hidden flex flex-col bg-slate-100">
-          <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-slate-200 flex-shrink-0 flex-wrap">
             <Eye className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">Voorbeeld Word-template</span>
-            <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">Word</span>
-            {!voorbeeldQuoteId && (
-              <span className="text-xs text-amber-600 ml-2">⚠ Geen offerte gevonden voor preview</span>
+            <span className="text-xs text-slate-500 font-medium">Voorbeeld</span>
+
+            {/* Weergavemodus */}
+            <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden ml-1">
+              <button
+                onClick={() => setPreviewModus('word')}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${previewModus === 'word' ? 'bg-everts text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                title="Snelle Word-render (zonder briefpapier)"
+              >
+                Word (snel)
+              </button>
+              <button
+                onClick={() => setPreviewModus('pdf')}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${previewModus === 'pdf' ? 'bg-everts text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                title="Echte PDF via Word-renderer, inclusief briefpapier"
+              >
+                PDF + briefpapier
+              </button>
+            </div>
+
+            {/* Databron */}
+            <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setPreviewBron('demo')}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${previewBron === 'demo' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                title="Volledig gevulde testgegevens"
+              >
+                Testgegevens
+              </button>
+              <button
+                onClick={() => voorbeeldQuoteId && setPreviewBron('echt')}
+                disabled={!voorbeeldQuoteId}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${previewBron === 'echt' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                title={voorbeeldQuoteId ? 'Een echte offerte' : 'Geen echte offerte beschikbaar'}
+              >
+                Echte offerte
+              </button>
+            </div>
+
+            {previewModus === 'pdf' && (
+              <span className="text-[11px] text-slate-400">Word-renderer via Microsoft 365 — kan enkele seconden duren.</span>
             )}
+
             <button onClick={ververs} className="ml-auto p-1 text-slate-400 hover:text-slate-600 transition-colors" title="Verversen">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
-          {previewUrl ? (
-            <DocxViewer key={previewKey} src={previewUrl} className="flex-1" />
-          ) : (
+
+          {!heeftTemplate ? (
             <div className="flex-1 flex items-center justify-center text-slate-400 text-sm px-6 text-center">
-              {voorbeeldQuoteId
-                ? 'Koppel een Word-template om een voorbeeld te zien.'
-                : 'Geen voorbeeld-offerte beschikbaar.'}
+              Koppel een Word-template in het linkerpaneel om een voorbeeld te zien.
             </div>
+          ) : previewModus === 'word' ? (
+            <DocxViewer key={`word-${previewKey}-${previewQuoteId}`} src={wordPreviewUrl!} className="flex-1" />
+          ) : (
+            <iframe
+              key={`pdf-${previewKey}-${previewQuoteId}`}
+              src={pdfPreviewUrl!}
+              className="flex-1 w-full border-0 bg-white"
+              title="PDF-voorbeeld met briefpapier"
+            />
           )}
         </div>
       </div>
@@ -616,6 +734,87 @@ function WordTemplatePaneel({
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Briefpapier paneel ───────────────────────────────────────────────────────
+
+function BriefpapierPaneel({
+  layoutId,
+  briefpapierUrl,
+  onChange,
+}: {
+  layoutId: string
+  briefpapierUrl: string
+  onChange: (url: string) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Alleen .pdf bestanden zijn toegestaan')
+      return
+    }
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('layoutId', layoutId)
+      const res = await fetch('/everts-calc/api/briefpapier/upload', { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+      onChange(json.url)
+      toast.success('Briefpapier geüpload — klik op Opslaan')
+    } catch (err) {
+      toast.error('Upload mislukt: ' + String(err))
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="border-t border-slate-200 pt-4 space-y-2">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+        <FileText className="w-3 h-3" /> Briefpapier
+      </h3>
+      <p className="text-[11px] text-slate-400 leading-snug">
+        PDF-achtergrond onder elke offerte-pagina. Zichtbaar in de <strong>PDF + briefpapier</strong>-preview
+        en in de gedownloade offerte. Zorg dat je marges genoeg ruimte laten voor het briefhoofd/-voet.
+      </p>
+
+      {briefpapierUrl ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+            <FileText className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+            <span className="text-xs text-green-800 flex-1 truncate font-medium">Briefpapier ingesteld</span>
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 border border-slate-300 rounded text-xs text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-60">
+              <Upload className="w-3 h-3" /> Vervangen
+            </button>
+            <a href={briefpapierUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2 py-1 border border-slate-300 rounded text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+              <FileText className="w-3 h-3" /> Bekijk
+            </a>
+            <button onClick={() => { onChange(''); toast.success('Briefpapier verwijderd — klik op Opslaan') }}
+              className="p-1 border border-red-200 rounded text-red-500 hover:bg-red-50 transition-colors" title="Verwijderen">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-everts hover:text-everts transition-colors disabled:opacity-60">
+          {uploading ? '⟳ Uploaden...' : <><Upload className="w-3.5 h-3.5" /> Briefpapier-PDF uploaden</>}
+        </button>
+      )}
+      <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={upload} />
     </div>
   )
 }
