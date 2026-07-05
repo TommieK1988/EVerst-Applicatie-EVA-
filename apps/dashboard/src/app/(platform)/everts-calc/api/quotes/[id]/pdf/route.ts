@@ -27,6 +27,7 @@ import {
 } from '@/lib/everts-calc/render-quote-docx'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const formaatParam = searchParams.get('formaat') as 'A4' | 'A3' | null
   const orientatieParam = searchParams.get('orientatie') as 'portrait' | 'landscape' | null
   const bedrijfParam = searchParams.get('bedrijf') // JSON string
+
+  // Object-level authz: offerte-PDF's mogen alleen door gebruikers met everts_calc-leesrecht worden opgehaald.
+  try {
+    await vereisRecht('everts_calc', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
 
   // Gate: downloaden mag pas na controller-goedkeuring (on-screen preview blijft vrij).
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
@@ -124,9 +133,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           { status: 422 },
         )
       }
+      // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
       console.error('Docx render fout:', err)
       return NextResponse.json(
-        { error: 'Template render fout — controleer de tag-syntax in het .docx bestand', detail: String(err) },
+        { error: 'Template render fout — controleer de tag-syntax in het .docx bestand' },
         { status: 500 },
       )
     }
@@ -184,7 +194,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (err) {
+    // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('PDF generatie fout:', err)
-    return NextResponse.json({ error: 'PDF generatie mislukt', detail: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 })
   }
 }

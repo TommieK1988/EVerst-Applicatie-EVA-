@@ -13,10 +13,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { listDocxTags } from '@/lib/everts-calc/docx-utils'
+import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // M1: template-beheer schrijft met de service-role naar storage — alleen voor beheerders.
+  try {
+    await vereisBeheerder()
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
@@ -64,7 +73,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: publicUrl, tags })
   } catch (err) {
+    // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('Docx template upload fout:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 })
   }
 }

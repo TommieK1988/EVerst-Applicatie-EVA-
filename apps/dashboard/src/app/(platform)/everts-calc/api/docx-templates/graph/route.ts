@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { appGraphGet } from '@/lib/o365/graph'
+import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,14 @@ function encodeShareUrl(url: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // M2: deze route gebruikt een krachtig app-only Graph-token — alleen voor beheerders.
+  try {
+    await vereisBeheerder()
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
+
   try {
     const body = (await request.json()) as { shareLink?: string; driveId?: string; itemId?: string }
 
@@ -70,7 +79,8 @@ export async function POST(request: NextRequest) {
       naam: item.name ?? null,
     })
   } catch (err) {
+    // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('Graph template resolve fout:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 })
   }
 }

@@ -79,3 +79,51 @@ export async function vereisModuleToegang(
   const rechten = await getEffectieveRechten()
   if (!heeftModuleToegang(rechten, module, min)) redirect('/')
 }
+
+/**
+ * Fout die een muterende server-action gooit als de aanroeper onvoldoende
+ * rechten heeft. Bewust een gewone Error (geen redirect): server-actions worden
+ * ook vanuit fetch/RPC aangeroepen, en dan moet de mutatie hard falen.
+ */
+export class GeenToegangError extends Error {
+  constructor(message = 'Geen toegang') {
+    super(message)
+    this.name = 'GeenToegangError'
+  }
+}
+
+/**
+ * Autorisatie-gate voor server-actions en route-handlers. Gooit `GeenToegangError`
+ * als er geen geldige sessie is óf de gebruiker het gevraagde niveau op `module`
+ * mist. Retourneert de ingelogde medewerker + effectieve rechten voor hergebruik.
+ *
+ * Gebruik dit aan het begin van ELKE muterende action die de admin-client
+ * (service-role, bypast RLS) gebruikt — anders kan elke ingelogde gebruiker de
+ * action als kale RPC aanroepen.
+ */
+export async function vereisRecht(
+  module: RechtenModule,
+  min: ModuleRechten = 'schrijven',
+): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet }> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) throw new GeenToegangError('Niet ingelogd')
+  const rechten = await getEffectieveRechten(medewerker)
+  if (!heeftModuleToegang(rechten, module, min)) {
+    throw new GeenToegangError(`Onvoldoende rechten voor ${module} (${min})`)
+  }
+  return { medewerker, rechten }
+}
+
+/**
+ * Zwaarste gate: alleen echte beheerders (instellingen = beheren). Voor
+ * rechten-mutaties, gebruikersbeheer en uitnodigingen.
+ */
+export async function vereisBeheerder(): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet }> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) throw new GeenToegangError('Niet ingelogd')
+  const rechten = await getEffectieveRechten(medewerker)
+  if (rechten.instellingen !== 'beheren') {
+    throw new GeenToegangError('Alleen beheerders')
+  }
+  return { medewerker, rechten }
+}

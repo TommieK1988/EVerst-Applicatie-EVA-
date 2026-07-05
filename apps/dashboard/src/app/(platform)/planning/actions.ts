@@ -243,6 +243,139 @@ export async function maakPlanningItem(
   return { ok: true, data: data as PlanningItem }
 }
 
+const snelItemSchema = z.object({
+  dossier_id:         z.string().uuid(),
+  medewerker_id:      z.string().uuid(),
+  bewakingscode:      z.string().min(1),
+  bewakingscode_naam: z.string().nullable().optional(),
+  bouw7_security_code_id: z.number().nullable().optional(),
+  titel:              z.string().max(200).optional(),
+  uursoort_id:        z.string().uuid().nullable().optional(),
+  start_dt:           z.string(),
+  eind_dt:            z.string(),
+  uren:               z.number().min(0),
+  overrule:           z.boolean().optional(),
+})
+
+/**
+ * Snel inplannen vanuit de Medewerkerplanning: maakt (of hergebruikt) een EVA-activiteit
+ * op de gekozen bewakingscode en hangt daar een planitem aan. Een planitem staat altijd
+ * op een bewakingscode — vandaar dat die hier verplicht is.
+ */
+export async function maakSnelPlanningItem(
+  input: z.infer<typeof snelItemSchema>,
+): Promise<
+  | { ok: true; data: PlanningItem }
+  | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
+> {
+  const parsed = snelItemSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.message }
+  const inp = parsed.data
+  const supabase = db()
+
+  const titel = inp.titel?.trim() || inp.bewakingscode_naam?.trim() || inp.bewakingscode
+
+  if (!inp.overrule) {
+    const budget = await checkBudget(inp.dossier_id, inp.uursoort_id ?? null, inp.uren)
+    if (!budget.ok) return budget
+  }
+
+  // Hergebruik een bestaande EVA-activiteit op dezelfde bewakingscode + titel,
+  // zodat herhaald inplannen niet telkens een nieuwe activiteit aanmaakt.
+  const { data: bestaande } = await supabase
+    .from('planning_activiteiten')
+    .select('id')
+    .eq('dossier_id', inp.dossier_id)
+    .eq('bron', 'eva')
+    .eq('bewakingscode', inp.bewakingscode)
+    .eq('titel', titel)
+    .limit(1)
+    .maybeSingle()
+
+  let activiteitId: string = bestaande?.id
+  if (!activiteitId) {
+    const { data: act, error: actErr } = await supabase
+      .from('planning_activiteiten')
+      .insert({
+        dossier_id:             inp.dossier_id,
+        titel,
+        uursoort_id:            inp.uursoort_id ?? null,
+        bewakingscode:          inp.bewakingscode,
+        bouw7_security_code_id: inp.bouw7_security_code_id ?? null,
+        status:                 'gepland',
+        bron:                   'eva',
+      })
+      .select('id')
+      .single()
+    if (actErr || !act) return { ok: false, error: actErr?.message ?? 'Activiteit aanmaken mislukt' }
+    activiteitId = act.id
+  }
+
+  const { data, error } = await supabase
+    .from('planning_items')
+    .insert({
+      activiteit_id: activiteitId,
+      medewerker_id: inp.medewerker_id,
+      start_dt:      inp.start_dt,
+      eind_dt:       inp.eind_dt,
+      uren:          inp.uren,
+      overrule:      inp.overrule ?? false,
+      bron:          'eva',
+    })
+    .select('*')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/planning')
+  return { ok: true, data: data as PlanningItem }
+}
+
+/**
+ * Kopieert een bestaand planitem naar een (andere) medewerker + moment. De client rekent
+ * start/eind uit (tijdstip + duur blijven gelijk, tijdzone van de gebruiker); de kopie hangt
+ * aan dezelfde activiteit (zelfde dossier + bewakingscode) en is altijd bron='eva'.
+ */
+export async function kopieerPlanningItem(
+  id: string,
+  doel: { medewerker_id: string; start_dt: string; eind_dt: string },
+): Promise<
+  | { ok: true; data: PlanningItem }
+  | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
+> {
+  const supabase = db()
+
+  const { data: bron, error: bronErr } = await supabase
+    .from('planning_items')
+    .select('*, planning_activiteiten!activiteit_id ( dossier_id, uursoort_id )')
+    .eq('id', id)
+    .single()
+  if (bronErr || !bron) return { ok: false, error: bronErr?.message ?? 'Planitem niet gevonden' }
+
+  const budget = await checkBudget(
+    bron.planning_activiteiten?.dossier_id ?? '',
+    bron.planning_activiteiten?.uursoort_id ?? null,
+    bron.uren,
+  )
+  if (!budget.ok) return budget
+
+  const { data, error } = await supabase
+    .from('planning_items')
+    .insert({
+      activiteit_id: bron.activiteit_id,
+      medewerker_id: doel.medewerker_id,
+      start_dt:      doel.start_dt,
+      eind_dt:       doel.eind_dt,
+      uren:          bron.uren,
+      bron:          'eva',
+    })
+    .select('*')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/planning')
+  return { ok: true, data: data as PlanningItem }
+}
+
 export async function verplaatsPlanningItem(
   id: string,
   input: {

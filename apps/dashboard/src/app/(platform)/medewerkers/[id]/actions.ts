@@ -14,14 +14,31 @@ import type {
   GebruikerType,
   RechtenSet,
   RechtenModule,
+  ModuleRechten,
 } from '@everts/database/platform-types'
 import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { vereisRecht, vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Autorisatie-guards voor de medewerker-administratie. Dit bestand muteert met
+ * de service-role client (bypast RLS); zonder deze checks kan elke ingelogde
+ * gebruiker via een kale RPC salaris/BSN lezen of zichzelf rechten toekennen.
+ * Retourneert een fout-result i.p.v. te gooien, passend bij de ActionResult-stijl.
+ */
+async function eisMedewerkers(min: ModuleRechten): Promise<{ ok: false; error: string } | null> {
+  try { await vereisRecht('medewerkers', min); return null }
+  catch (e) { if (e instanceof GeenToegangError) return { ok: false, error: e.message }; throw e }
+}
+async function eisBeheer(): Promise<{ ok: false; error: string } | null> {
+  try { await vereisBeheerder(); return null }
+  catch (e) { if (e instanceof GeenToegangError) return { ok: false, error: e.message }; throw e }
+}
 
 // ── Roosters ──────────────────────────────────────────────────────────
 
@@ -43,6 +60,7 @@ const roosterSchema = z.object({
 export async function laadRoosters(
   medewerker_id: string
 ): Promise<{ ok: true; data: (MedewerkerRooster & { pauzes: MedewerkerRoosterPauze[] })[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_roosters')
     .select('*, medewerker_rooster_pauzes(*)')
@@ -62,6 +80,7 @@ export async function upsertRooster(
   raw: unknown,
   existing_id?: string
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const parsed = roosterSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
@@ -116,6 +135,7 @@ export async function upsertRooster(
 }
 
 export async function verwijderRooster(id: string, medewerker_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const { error } = await db().from('medewerker_roosters').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
@@ -127,6 +147,7 @@ export async function verwijderRooster(id: string, medewerker_id: string): Promi
 export async function laadSkills(
   medewerker_id: string
 ): Promise<{ ok: true; data: MedewerkerSkill[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_skills')
     .select('*')
@@ -141,6 +162,7 @@ export async function upsertSkills(
   medewerker_id: string,
   skills: string[]
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const cleaned = [...new Set(skills.map(s => s.trim()).filter(Boolean))]
 
   const { error: delErr } = await db()
@@ -197,6 +219,7 @@ export async function updateMedewerkerGegevens(
   id: string,
   raw: unknown
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const parsed = gegevensSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
@@ -271,6 +294,7 @@ const bedrijfsmiddelSchema = z.object({
 export async function laadBedrijfsmiddelen(
   medewerker_id: string
 ): Promise<{ ok: true; data: MedewerkerBedrijfsmiddel[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_bedrijfsmiddelen')
     .select('*')
@@ -285,6 +309,7 @@ export async function upsertBedrijfsmiddel(
   raw: unknown,
   existing_id?: string
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const parsed = bedrijfsmiddelSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
@@ -299,6 +324,7 @@ export async function upsertBedrijfsmiddel(
 }
 
 export async function verwijderBedrijfsmiddel(id: string, medewerker_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const { error } = await db().from('medewerker_bedrijfsmiddelen').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
@@ -308,6 +334,7 @@ export async function verwijderBedrijfsmiddel(id: string, medewerker_id: string)
 // ── Custom attributen ─────────────────────────────────────────────────
 
 export async function laadAttribuutDefinities(): Promise<{ ok: true; data: MedewerkerAttribuutDefinitie[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_attribuut_definities')
     .select('*')
@@ -320,6 +347,7 @@ export async function laadAttribuutDefinities(): Promise<{ ok: true; data: Medew
 export async function laadAttribuutWaarden(
   medewerker_id: string
 ): Promise<{ ok: true; data: MedewerkerAttribuutWaarde[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_attribuut_waarden')
     .select('*')
@@ -332,6 +360,7 @@ export async function upsertAttribuutWaarden(
   medewerker_id: string,
   waarden: { definitie_id: string; waarde: string | null }[]
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   for (const w of waarden) {
     const { error } = await db()
       .from('medewerker_attribuut_waarden')
@@ -352,6 +381,7 @@ const definitieSchema = z.object({
 })
 
 export async function upsertAttribuutDefinitie(raw: unknown, existing_id?: string): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const parsed = definitieSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
@@ -365,6 +395,7 @@ export async function upsertAttribuutDefinitie(raw: unknown, existing_id?: strin
 }
 
 export async function verwijderAttribuutDefinitie(id: string): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const { error } = await db()
     .from('medewerker_attribuut_definities')
     .update({ actief: false })
@@ -379,6 +410,7 @@ export async function verwijderAttribuutDefinitie(id: string): Promise<ActionRes
 export async function laadBestanden(
   medewerker_id: string
 ): Promise<{ ok: true; data: MedewerkerBestand[] } | { ok: false; error: string }> {
+  const nope = await eisMedewerkers('lezen'); if (nope) return nope
   const { data, error } = await db()
     .from('medewerker_bestanden')
     .select('*')
@@ -392,6 +424,7 @@ export async function registreerBestand(
   medewerker_id: string,
   bestand: { naam: string; url: string; categorie: string; bestandstype?: string; grootte?: number }
 ): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const { error } = await db().from('medewerker_bestanden').insert({
     medewerker_id,
     naam:         bestand.naam,
@@ -406,6 +439,7 @@ export async function registreerBestand(
 }
 
 export async function verwijderBestand(id: string, medewerker_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const { error } = await db().from('medewerker_bestanden').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
@@ -415,6 +449,7 @@ export async function verwijderBestand(id: string, medewerker_id: string): Promi
 // ── Handtekening ──────────────────────────────────────────────────────
 
 export async function updateHandtekening(medewerker_id: string, url: string | null): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const { error } = await db().from('medewerkers').update({ handtekening_url: url }).eq('id', medewerker_id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
@@ -429,6 +464,7 @@ export async function updateGebruikerType(
   medewerker_id: string,
   type: GebruikerType
 ): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const parsed = gebruikerTypeSchema.safeParse(type)
   if (!parsed.success) return { ok: false, error: 'Ongeldig gebruiker type' }
 
@@ -441,6 +477,7 @@ export async function updateGebruikerType(
 export async function verstuurUitnodiging(
   medewerker_id: string
 ): Promise<{ ok: true; auth_user_id: string | null } | { ok: false; error: string }> {
+  const nope = await eisBeheer(); if (nope) return nope
   const { data: med, error: fetchErr } = await db()
     .from('medewerkers')
     .select('email, voornaam, achternaam')
@@ -487,6 +524,7 @@ export async function updateRechtenOverride(
   medewerker_id: string,
   rechten: RechtenSet
 ): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const parsed = rechtenSetSchema.safeParse(rechten)
   if (!parsed.success) return { ok: false, error: 'Ongeldige rechten' }
 
@@ -501,6 +539,7 @@ export async function updateRechtenOverride(
 // net als de rest van de wagenpark-module — niet via de Supabase JS client.
 
 export async function koppelBestuurder(medewerker_id: string, ulu_user_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   try {
     // Eén bestuurder per medewerker: maak een eventuele bestaande koppeling eerst los.
     await pgQuery('UPDATE public.ulu_users SET medewerker_id = NULL, updated_at = now() WHERE medewerker_id = $1', [medewerker_id])
@@ -513,6 +552,7 @@ export async function koppelBestuurder(medewerker_id: string, ulu_user_id: strin
 }
 
 export async function ontkoppelBestuurder(medewerker_id: string, ulu_user_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   try {
     await pgQuery('UPDATE public.ulu_users SET medewerker_id = NULL, updated_at = now() WHERE id = $1', [ulu_user_id])
     revalidatePath(`/medewerkers/${medewerker_id}`)
@@ -523,6 +563,7 @@ export async function ontkoppelBestuurder(medewerker_id: string, ulu_user_id: st
 }
 
 export async function ontkoppelOffice365(medewerker_id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   await db().from('medewerker_o365_tokens').delete().eq('medewerker_id', medewerker_id)
 
   const { error } = await db()

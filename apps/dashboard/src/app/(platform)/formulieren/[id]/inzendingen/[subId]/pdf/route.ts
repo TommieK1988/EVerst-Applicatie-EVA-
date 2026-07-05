@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { FormField } from '@/components/formulieren/types'
@@ -23,6 +24,15 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string; subId: string }> }
 ) {
+  // Object-level authz: de PDF wordt met de admin-client (bypast RLS) opgebouwd — vereis
+  // lees-recht op de formulieren-module zodat niet elke ingelogde gebruiker een inzending kan ophalen.
+  try {
+    await vereisRecht('formulieren', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
+
   const { subId } = await params
   const supabase  = createAdminClient()
 

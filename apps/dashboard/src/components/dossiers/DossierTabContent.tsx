@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
@@ -20,6 +21,7 @@ import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
 import BestandenTab from './tabs/BestandenTab'
+import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import type { DossierSectie } from './types'
 
@@ -167,11 +169,16 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     }
   }
 
+  // De onderstaande tabs halen hun data live uit Bouw7. Ze zitten elk in een
+  // <Suspense> zodat de pagina-shell + tabbalk meteen renderen en de (soms trage)
+  // Bouw7-data daarna instreamt — een sloom Bouw7 blokkeert de navigatie niet meer.
   if (tab === 'financieel' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
-        <FinancieelTab dossierId={id} sectie={sectie} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <FinancieelTab dossierId={id} sectie={sectie} />
+        </Suspense>
       </>
     )
   }
@@ -181,7 +188,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <InkoopTab dossierId={id} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <InkoopTab dossierId={id} />
+        </Suspense>
       </>
     )
   }
@@ -190,7 +199,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <VerkoopTab dossierId={id} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <VerkoopTab dossierId={id} />
+        </Suspense>
       </>
     )
   }
@@ -199,7 +210,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <UrenTab dossierId={id} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <UrenTab dossierId={id} />
+        </Suspense>
       </>
     )
   }
@@ -208,7 +221,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <MeerwerkTab dossierId={id} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <MeerwerkTab dossierId={id} />
+        </Suspense>
       </>
     )
   }
@@ -217,7 +232,9 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
     return (
       <>
         {titleInjector}
-        <BestandenTab dossierId={id} />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <BestandenTab dossierId={id} />
+        </Suspense>
       </>
     )
   }

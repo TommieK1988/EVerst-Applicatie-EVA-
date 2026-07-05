@@ -29,11 +29,14 @@ export type PlanningShellProps = {
   labelHeader?:     ReactNode
   /** Custom width voor de label-kolom (default: LABEL_W). */
   labelW?:          number
+  /** Max-hoogte van het scrollgebied. Zet dit om verticaal binnen de shell te scrollen
+   *  met de datumbalk sticky in beeld (bv. 'calc(100dvh - 150px)'). */
+  maxHoogte?:       number | string
 }
 
 export default function PlanningShell({
   layout, scrollRef, toolbar, scrubber, preHeaderStrip,
-  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W,
+  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W, maxHoogte,
 }: PlanningShellProps) {
   const { spans, cols, gridUnits, totalW } = layout
 
@@ -56,110 +59,121 @@ export default function PlanningShell({
         {scrubber}
         {preHeaderStrip}
 
-        <div style={{ display: 'flex' }}>
-          {/* Sticky label-kolom */}
-          <div style={{
-            width: labelW, flexShrink: 0,
-            background: KLEUR.bgElev,
-            borderRight: `1px solid ${KLEUR.border}`,
-            zIndex: 2,
-          }}>
-            <div style={{
-              height: headerHoogte,
-              borderBottom: `1px solid ${KLEUR.border}`,
-              display: 'flex', alignItems: 'flex-end',
-              padding: '0 12px 6px',
-              fontSize: 10, fontWeight: 700,
-              color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
-            }}>
-              {labelHeader}
-            </div>
-            {labelKolom}
-          </div>
+        {/* Eén scroller voor beide assen: datumbalk sticky top, labelkolom sticky left.
+            Zonder maxHoogte scrollt alleen de horizontale as (gedrag als voorheen). */}
+        <div ref={scrollRef} style={{ overflow: 'auto', maxHeight: maxHoogte }}>
+          <div style={{ width: labelW + totalW, minWidth: labelW + totalW, position: 'relative' }}>
 
-          {/* Scrollbare grid-area */}
-          <div ref={scrollRef} style={{ overflow: 'auto', flex: 1 }}>
-            <div style={{ width: totalW, minWidth: totalW, position: 'relative' }}>
-              {/* Header — spans (boven) */}
+            {/* Header-rij — blijft in beeld bij verticaal scrollen */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 30, display: 'flex' }}>
               <div style={{
-                position: 'relative', height: HEADER_SPAN_HOOGTE,
+                position: 'sticky', left: 0, zIndex: 31,
+                width: labelW, flexShrink: 0,
+                height: headerHoogte,
                 background: KLEUR.bgElev,
+                borderRight: `1px solid ${KLEUR.border}`,
                 borderBottom: `1px solid ${KLEUR.border}`,
+                display: 'flex', alignItems: 'flex-end',
+                padding: '0 12px 6px',
+                fontSize: 10, fontWeight: 700,
+                color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
               }}>
-                {spans.map(s => (
-                  <div key={s.key} style={{
-                    position: 'absolute', left: s.left, width: s.width, top: 0, bottom: 0,
-                    padding: '4px 8px',
-                    fontSize: 10, fontWeight: 700,
-                    color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
-                    borderRight: `1px solid ${KLEUR.border}`,
-                    overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                  }}>
-                    {s.label}
-                  </div>
-                ))}
+                {labelHeader}
               </div>
 
-              {/* Header — cols (onder) */}
-              <div style={{
-                position: 'relative', height: HEADER_COL_HOOGTE,
-                background: KLEUR.bgElev,
-                borderBottom: `1px solid ${KLEUR.border}`,
-              }}>
-                {cols.map(c => (
-                  <div key={c.key} style={{
-                    position: 'absolute', left: c.left, width: c.width, top: 0, bottom: 0,
-                    textAlign: 'center', padding: '4px 0',
-                    fontSize: 9,
-                    color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fgSoft,
-                    fontWeight: c.isToday ? 700 : 400,
-                    background: c.isToday ? KLEUR.vandaagHeaderBg : 'transparent',
-                    borderRight: c.isBorder ? `1px solid ${KLEUR.border}` : 'none',
-                    lineHeight: 1.1,
-                    overflow: 'visible',
-                  }}>
-                    {/* Vandaag-vlag chip — DS spec: bovenin de vandaag-kolom */}
-                    {c.isToday && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -1,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: 'var(--accent)',
-                        color: '#fff',
-                        fontSize: 8.5,
-                        fontWeight: 700,
-                        letterSpacing: '0.06em',
-                        textTransform: 'uppercase',
-                        padding: '2px 6px',
-                        borderRadius: '0 0 5px 5px',
-                        whiteSpace: 'nowrap',
-                        zIndex: 22,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
-                        lineHeight: 1.4,
-                      }}>
-                        Vandaag
-                      </div>
-                    )}
-                    <div style={{
-                      fontSize: 11,
-                      fontWeight: c.isToday ? 700 : 600,
-                      color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fg,
-                      lineHeight: 1.1,
+              <div style={{ width: totalW, flexShrink: 0 }}>
+                {/* Header — spans (boven) */}
+                <div style={{
+                  position: 'relative', height: HEADER_SPAN_HOOGTE,
+                  background: KLEUR.bgElev,
+                  borderBottom: `1px solid ${KLEUR.border}`,
+                }}>
+                  {spans.map(s => (
+                    <div key={s.key} style={{
+                      position: 'absolute', left: s.left, width: s.width, top: 0, bottom: 0,
+                      padding: '4px 8px',
+                      fontSize: 10, fontWeight: 700,
+                      color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
+                      borderRight: `1px solid ${KLEUR.border}`,
+                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                     }}>
-                      {c.label}
+                      {s.label}
                     </div>
-                    {c.subLabel && (
-                      <div style={{ fontSize: 8, color: KLEUR.fgMuted, marginTop: 1 }}>
-                        {c.subLabel}
+                  ))}
+                </div>
+
+                {/* Header — cols (onder) */}
+                <div style={{
+                  position: 'relative', height: HEADER_COL_HOOGTE,
+                  background: KLEUR.bgElev,
+                  borderBottom: `1px solid ${KLEUR.border}`,
+                }}>
+                  {cols.map(c => (
+                    <div key={c.key} style={{
+                      position: 'absolute', left: c.left, width: c.width, top: 0, bottom: 0,
+                      textAlign: 'center', padding: '4px 0',
+                      fontSize: 9,
+                      color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fgSoft,
+                      fontWeight: c.isToday ? 700 : 400,
+                      background: c.isToday ? KLEUR.vandaagHeaderBg : 'transparent',
+                      borderRight: c.isBorder ? `1px solid ${KLEUR.border}` : 'none',
+                      lineHeight: 1.1,
+                      overflow: 'visible',
+                    }}>
+                      {/* Vandaag-vlag chip — DS spec: bovenin de vandaag-kolom */}
+                      {c.isToday && (
+                        <div style={{
+                          position: 'absolute',
+                          top: -1,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          background: 'var(--accent)',
+                          color: '#fff',
+                          fontSize: 8.5,
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          padding: '2px 6px',
+                          borderRadius: '0 0 5px 5px',
+                          whiteSpace: 'nowrap',
+                          zIndex: 22,
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+                          lineHeight: 1.4,
+                        }}>
+                          Vandaag
+                        </div>
+                      )}
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: c.isToday ? 700 : 600,
+                        color: c.isToday ? KLEUR.accent : c.isWeekend ? KLEUR.fgMuted : KLEUR.fg,
+                        lineHeight: 1.1,
+                      }}>
+                        {c.label}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {c.subLabel && (
+                        <div style={{ fontSize: 8, color: KLEUR.fgMuted, marginTop: 1 }}>
+                          {c.subLabel}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Body-rij — labelkolom sticky left, grid met consumer-content */}
+            <div style={{ display: 'flex' }}>
+              <div style={{
+                position: 'sticky', left: 0, zIndex: 10,
+                width: labelW, flexShrink: 0,
+                background: KLEUR.bgElev,
+                borderRight: `1px solid ${KLEUR.border}`,
+              }}>
+                {labelKolom}
               </div>
 
-              {/* Body — grid-achtergrond + content */}
-              <div style={{ position: 'relative', height: bodyHoogte }}>
+              <div style={{ width: totalW, flexShrink: 0, position: 'relative', height: bodyHoogte }}>
                 {/* Grid-units (weekend, today, kolom-borders) */}
                 {gridUnits.map(u => {
                   const bg = u.isWeekend ? KLEUR.weekend : u.isToday ? KLEUR.vandaagBg : 'transparent'

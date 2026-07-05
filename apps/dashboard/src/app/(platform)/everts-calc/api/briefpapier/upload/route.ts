@@ -14,12 +14,20 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
 const BUCKET = 'docx-templates'
 
 export async function POST(request: NextRequest) {
+  // Service-role upload naar een publieke bucket → alleen beheerders (layoutbeheer).
+  try {
+    await vereisBeheerder()
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
@@ -53,6 +61,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: publicUrl })
   } catch (err) {
     console.error('Briefpapier upload fout:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 })
   }
 }

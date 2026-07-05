@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers';
 import type { Database } from './database.types'
+import { alsSessieCookie } from './cookies'
 
 /** Client met anon key + user-sessie (RLS actief). */
 export async function createClient() {
@@ -21,7 +22,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, alsSessieCookie(options))
             )
           } catch {
             // setAll wordt ook aangeroepen vanuit Server Components waar je niet kunt schrijven.

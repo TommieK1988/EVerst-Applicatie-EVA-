@@ -8,8 +8,28 @@ export default async function PlatformLayout({ children }: { children: React.Rea
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  /* Ongelezen-teller parallel aan het medewerker-record ophalen (draait bij elke
+     navigatie; niet meer sequentieel achter de rechten aan). */
+  const telOngelezen = async (): Promise<number> => {
+    if (!user) return 0
+    try {
+      const admin = createAdminClient()
+      const { count } = await admin
+        .from('notificaties')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('gelezen', false)
+      return count ?? 0
+    } catch {
+      return 0 // tabel bestaat mogelijk nog niet
+    }
+  }
+
   /* Medewerker-record + effectieve rechten van de ingelogde gebruiker */
-  const medewerker = await getCurrentMedewerker()
+  const [medewerker, aantalOngelezen] = await Promise.all([
+    getCurrentMedewerker(),
+    telOngelezen(),
+  ])
   const rechten = await getEffectieveRechten(medewerker)
 
   /* Naam: medewerker-record heeft prioriteit boven auth metadata */
@@ -26,20 +46,6 @@ export default async function PlatformLayout({ children }: { children: React.Rea
 
   /* Onderschrift in het gebruikersblok */
   const userSub = [medewerker?.functie, medewerker?.afdeling].filter(Boolean).join(' · ') || 'Everts Team'
-
-  /* Notificaties — ongelezen teller */
-  let aantalOngelezen = 0
-  if (user) {
-    try {
-      const admin = createAdminClient()
-      const { count } = await admin
-        .from('notificaties')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('gelezen', false)
-      aantalOngelezen = count ?? 0
-    } catch { /* tabel bestaat mogelijk nog niet */ }
-  }
 
   return (
     <PlatformShell

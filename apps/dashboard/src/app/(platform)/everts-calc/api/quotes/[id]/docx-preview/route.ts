@@ -25,6 +25,7 @@ import {
 } from '@/lib/everts-calc/render-quote-docx'
 import { appGraphGetRaw } from '@/lib/o365/graph'
 import { buildDemoQuote, DEMO_BEDRIJF } from '@/lib/everts-calc/demo-quote'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const driveIdParam = searchParams.get('drive_id')
   const itemIdParam = searchParams.get('item_id')
   const bedrijfParam = searchParams.get('bedrijf')
+
+  // Object-level authz: offerte-preview mag alleen door gebruikers met everts_calc-leesrecht worden opgehaald.
+  try {
+    await vereisRecht('everts_calc', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return htmlMelding('<p>Geen toegang</p>', 403)
+    throw e
+  }
 
   // Demo/testgegevens: geen DB nodig — bouw een volledig gevulde voorbeeld-offerte.
   const isDemo = id === 'demo'
@@ -146,11 +155,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
       output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer)
     } catch (renderErr) {
-      const detail = String(renderErr).replace(/</g, '&lt;')
+      // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
+      console.error('Docx preview render fout:', renderErr)
       return new NextResponse(
         `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;color:#dc2626">
           <h2>Template render fout</h2>
-          <p style="word-break:break-word">${detail}</p>
           <p style="color:#64748b;font-size:0.875rem;margin-top:1rem">
             Controleer de tag-syntax in het .docx template. Veelvoorkomende oorzaak: Word heeft een
             tag zoals <code>{variabele}</code> in losse fragmenten opgeknipt — verwijder de tag en
@@ -168,7 +177,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (err) {
+    // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('Docx preview fout:', err)
-    return htmlMelding(`<p style="color:#dc2626">Preview fout: ${String(err).replace(/</g, '&lt;')}</p>`, 500)
+    return htmlMelding('<p style="color:#dc2626">Er ging iets mis</p>', 500)
   }
 }

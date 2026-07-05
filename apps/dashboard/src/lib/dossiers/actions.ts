@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, unstable_cache } from 'next/cache'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
@@ -458,19 +458,27 @@ export async function offerteAkkoordServicedesk(
   return { ok: true }
 }
 
-/** Haal unieke Bouw7-categorieën op uit de dossiers-tabel (voor de categorie-dropdown in InformatieTab). */
-export async function getUniekeBouw7Categorieen(): Promise<string[]> {
-  const supabase = createAdminClient() as any
+/**
+ * Haal unieke Bouw7-categorieën op uit de dossiers-tabel (voor de categorie-dropdown
+ * in InformatieTab). De lijst wijzigt zelden, maar werd op elke informatietab opnieuw
+ * over de volledige dossiers-tabel berekend. Daarom 1 uur gecachet (revalidate 3600).
+ */
+export const getUniekeBouw7Categorieen = unstable_cache(
+  async (): Promise<string[]> => {
+    const supabase = createAdminClient() as any
 
-  const { data } = await supabase
-    .from('dossiers')
-    .select('bouw7_categorie_naam')
-    .not('bouw7_categorie_naam', 'is', null)
+    const { data } = await supabase
+      .from('dossiers')
+      .select('bouw7_categorie_naam')
+      .not('bouw7_categorie_naam', 'is', null)
 
-  if (!data) return []
-  const uniek = [...new Set((data as any[]).map(d => d.bouw7_categorie_naam as string))]
-  return uniek.sort()
-}
+    if (!data) return []
+    const uniek = [...new Set((data as any[]).map(d => d.bouw7_categorie_naam as string))]
+    return uniek.sort()
+  },
+  ['unieke-bouw7-categorieen'],
+  { revalidate: 3600 },
+)
 
 /** Rol-kolommen waarop een dossier aan een medewerker gekoppeld kan zijn. */
 const DOSSIER_ROL_KOLOMMEN = [

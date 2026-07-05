@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { alsSessieCookie } from '@everts/database/cookies'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
@@ -15,7 +16,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, alsSessieCookie(options))
             )
           } catch {
             // setAll kan worden aangeroepen vanuit Server Components

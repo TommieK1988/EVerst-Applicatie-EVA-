@@ -2,6 +2,7 @@
  * Supabase server client — gebruik in Server Components, Route Handlers en Server Actions
  */
 import { createServerClient } from '@supabase/ssr'
+import { alsSessieCookie } from '@everts/database/cookies'
 import { cookies, type UnsafeUnwrappedCookies } from 'next/headers';
 import type { Database } from './database.types'
 
@@ -19,7 +20,7 @@ export function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, alsSessieCookie(options))
             )
           } catch {
             // setAll wordt ook aangeroepen vanuit Server Components waar je niet kunt schrijven.

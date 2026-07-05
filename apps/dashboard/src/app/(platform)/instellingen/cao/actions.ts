@@ -3,16 +3,24 @@
 import { createAdminClient } from '@everts/database/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
+import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
+
+// CAO-documenten/loonschalen zijn salarisgegevens → alleen beheerders.
+async function eisBeheer(): Promise<{ ok: false; error: string } | null> {
+  try { await vereisBeheerder(); return null }
+  catch (e) { if (e instanceof GeenToegangError) return { ok: false, error: e.message }; throw e }
+}
 
 // ── CAO document uploaden + aanmaken ─────────────────────────────────────────
 
 export async function uploadCaoDocument(
   formData: FormData
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const nope = await eisBeheer(); if (nope) return nope
   const supabase = db()
   const naam = (formData.get('naam') as string | null)?.trim()
   const werkmaatschappij_id = (formData.get('werkmaatschappij_id') as string | null) || null
@@ -47,6 +55,7 @@ export async function uploadCaoDocument(
 }
 
 export async function verwijderCaoDocument(id: string): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const { error } = await db().from('cao_documenten').update({ actief: false }).eq('id', id)
   if (error) return { ok: false, error: error.message }
   return { ok: true }
@@ -63,6 +72,7 @@ const loonregelSchema = z.array(z.object({
 }))
 
 export async function extraheerLoonschalen(cao_id: string, pdf_url: string): Promise<ActionResult & { regels?: Loonregel[]; raw?: string }> {
+  const nope = await eisBeheer(); if (nope) return nope
   const supabase = db()
 
   // Status: bezig
@@ -147,6 +157,7 @@ Regels:
 // ── Loonschalen handmatig bijwerken ──────────────────────────────────────────
 
 export async function upsertLoonschaal(cao_id: string, raw: unknown, id?: string): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const schema = z.object({
     schaal:      z.string().min(1),
     trede:       z.string().min(1),
@@ -163,6 +174,7 @@ export async function upsertLoonschaal(cao_id: string, raw: unknown, id?: string
 }
 
 export async function verwijderLoonschaal(id: string): Promise<ActionResult> {
+  const nope = await eisBeheer(); if (nope) return nope
   const { error } = await db().from('cao_loonschalen').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   return { ok: true }

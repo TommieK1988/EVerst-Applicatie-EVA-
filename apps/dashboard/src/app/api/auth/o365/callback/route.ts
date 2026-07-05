@@ -1,17 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
+import { getCurrentMedewerker, isBeheerder, getEffectieveRechten } from '@/lib/auth/rechten'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code         = searchParams.get('code')
-  const medewerker_id = searchParams.get('state')
+  const state        = searchParams.get('state')
   const errorParam   = searchParams.get('error')
 
   if (errorParam) {
     return NextResponse.redirect(`${origin}/medewerkers?fout=o365_afgebroken`)
   }
-  if (!code || !medewerker_id) {
+  if (!code || !state) {
     return NextResponse.redirect(`${origin}/medewerkers?fout=o365_ongeldig`)
+  }
+
+  // CSRF-check: state = `nonce:medewerker_id`; de nonce moet matchen met de httpOnly-cookie.
+  const [nonce, medewerker_id] = state.split(':')
+  const cookieNonce = request.cookies.get('o365_oauth_state')?.value
+  if (!nonce || !medewerker_id || !cookieNonce || nonce !== cookieNonce) {
+    return NextResponse.redirect(`${origin}/medewerkers?fout=o365_state`)
+  }
+
+  // Object-level authz: alleen de EIGEN medewerker mag gekoppeld worden (tenzij beheerder).
+  const huidige = await getCurrentMedewerker()
+  if (!huidige) {
+    return NextResponse.redirect(`${origin}/medewerkers?fout=o365_ongeldig`)
+  }
+  const magBeheren = isBeheerder(await getEffectieveRechten(huidige))
+  if (huidige.id !== medewerker_id && !magBeheren) {
+    return NextResponse.redirect(`${origin}/medewerkers?fout=o365_state`)
   }
 
   const clientId     = process.env.O365_CLIENT_ID!
@@ -88,5 +106,8 @@ export async function GET(request: NextRequest) {
       updated_at:       new Date().toISOString(),
     }, { onConflict: 'medewerker_id' })
 
-  return NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?o365=gekoppeld`)
+  // State-cookie is verbruikt — opruimen.
+  const done = NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?o365=gekoppeld`)
+  done.cookies.delete('o365_oauth_state')
+  return done
 }

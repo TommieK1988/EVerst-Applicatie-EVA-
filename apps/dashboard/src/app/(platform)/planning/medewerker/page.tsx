@@ -71,7 +71,8 @@ export default async function MedewerkerplanningPage() {
     <div className="eva-page-full">
       <PageHeader eyebrow="Planning" title="Medewerkerplanning" className="mb-2" />
       <p className="mb-[22px] text-sm text-neutral-500">
-        Capaciteitsoverzicht — sleep entries om medewerkers te herplannen.
+        Capaciteitsoverzicht — sleep om te herplannen · klik op een lege dag om in te plannen ·
+        dubbelklik op een balk voor het dossier · rechtsklik of Ctrl+slepen om te kopiëren.
       </p>
 
       <MedewerkerTimeline

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,15 @@ export const dynamic = 'force-dynamic'
  * project-file-id meegegeven, dan valt het terug op GET /project/file/{id}. `naam` = weergavenaam.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ hash: string }> }) {
+  // Object-level authz: bestanden horen bij dossiers — vereis lees-recht op de dossiers-module
+  // zodat niet elke ingelogde gebruiker willekeurige Bouw7-bestanden kan ophalen.
+  try {
+    await vereisRecht('dossiers', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
+    throw e
+  }
+
   const { hash } = await ctx.params
   const id = req.nextUrl.searchParams.get('id')
   if (!hash && !id) return new NextResponse('Geen bestand opgegeven', { status: 400 })

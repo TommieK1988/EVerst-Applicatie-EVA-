@@ -32,6 +32,7 @@ import GebruikerToegangBeheer from '@/components/medewerkers/GebruikerToegangBeh
 import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -49,6 +50,8 @@ export async function generateMetadata(props: { params: Promise<{ id: string }> 
 }
 
 export default async function MedewerkerDetailPage(props: { params: Promise<{ id: string }> }) {
+  // Salaris/BSN/persoonsgegevens: alleen met medewerkers-recht (beheerders altijd).
+  await vereisModuleToegang('medewerkers')
   const params = await props.params;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any

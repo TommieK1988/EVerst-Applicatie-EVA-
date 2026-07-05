@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { alsSessieCookie } from '@everts/database/cookies'
 import { isMobileUA } from '@/lib/isMobileUA'
 
 export async function middleware(request: NextRequest) {
@@ -24,7 +25,9 @@ export async function middleware(request: NextRequest) {
             request: { headers: request.headers },
           })
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            // Sessie-cookies: login vervalt bij het sluiten van de browser/app,
+            // zodat elke opstart via het inlogscherm loopt.
+            response.cookies.set(name, value, alsSessieCookie(options))
           )
         },
       },

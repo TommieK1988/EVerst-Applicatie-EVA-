@@ -108,6 +108,7 @@ export async function syncDossierPlanning(
           e:   pi.endDate ?? null,
           nm:  pi.name ?? null,
           ch:  pi.securityPlanningLink?.securityCode?.chapter?.id ?? null,
+          sc:  pi.securityPlanningLink?.securityCode?.id ?? null,
           rm:  pi.remark ?? null,
           dep: pi.department?.name ?? null,
         }))
@@ -206,6 +207,8 @@ export async function syncDossierPlanning(
       const remark = (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null
       const omschrijving = crew ? (pi.project?.name ?? remark) : remark
 
+      const secCode = pi.securityPlanningLink?.securityCode ?? null
+
       const { data: act, error: actErr } = await supabase
         .from('planning_activiteiten')
         .insert({
@@ -213,6 +216,8 @@ export async function syncDossierPlanning(
           fase_id: faseMap.get(faseKeyVan(pi)) ?? null,
           titel,
           omschrijving,
+          bewakingscode: secCode?.code?.trim() || null,
+          bouw7_security_code_id: secCode?.id ?? null,
           geschatte_uren: pi.hours ?? null,
           gewenste_start: toDate(pi.startDate),
           deadline: toDate(pi.endDate),

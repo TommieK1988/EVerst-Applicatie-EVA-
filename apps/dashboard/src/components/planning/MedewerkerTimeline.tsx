@@ -8,7 +8,8 @@ import {
   addDays, addMinutes, differenceInCalendarDays, differenceInMinutes,
   eachDayOfInterval, format, isWeekend, parseISO, startOfDay,
 } from 'date-fns'
-import { AlertTriangle, Trash2, X } from 'lucide-react'
+import { nl } from 'date-fns/locale'
+import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
@@ -20,7 +21,10 @@ import type {
   BedrijfsagendaItemMetDoelgroep, BedrijfsagendaType, BedrijfsagendaVirtueel,
 } from '@everts/database/platform-types'
 import { bedrijfsagendaTypeKleur, medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
-import { verplaatsPlanningItem, verwijderPlanningItem } from '@/app/(platform)/planning/actions'
+import {
+  kopieerPlanningItem, maakSnelPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
+} from '@/app/(platform)/planning/actions'
+import { resolveBewakingscodes, type BewakingscodeRef } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import {
   KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
   usePlanningController, verschuifTs, type PlanningLayout,
@@ -40,10 +44,19 @@ const DAG_MS = 86_400_000
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
 
 const AFWEZIGHEID_KLEUR: Record<MedewerkerAfwezigheidType, string> = {
-  verlof:   '#3b82f6',
-  ziek:     '#ef4444',
+  verlof:   '#f87171',
+  ziek:     '#dc2626',
   training: '#10b981',
   overig:   '#6b7280',
+}
+
+/** Dag-achtergrond per afwezigheidstype. Verlof = duidelijk licht rood — bewust een
+ *  lichte achtergrond-tint zodat het niet verward wordt met verzadigde (rode) PL-balkkleuren. */
+const AFWEZIGHEID_BG: Record<MedewerkerAfwezigheidType, string> = {
+  verlof:   'rgba(248,113,113,0.32)',
+  ziek:     'rgba(220,38,38,0.16)',
+  training: 'rgba(16,185,129,0.12)',
+  overig:   'rgba(107,114,128,0.12)',
 }
 
 const dialogLabelStyle: React.CSSProperties = {
@@ -64,25 +77,41 @@ const SORT_OPTIES: { key: SortKey; label: string }[] = [
 
 type Interval = { s: number; e: number } // ms-bereik [start, eind)
 
+type EntryMetDossier = PlanningItemVerrijkt & { dossier_id?: string }
+
+type WerkInterval = Interval & { entry: EntryMetDossier }
+type BlokInterval = Interval & { label: string }
+
+/** Conflictsegment inclusief de bron: welke planitems overlappen, of welk blok geraakt wordt. */
+export type ConflictDetail = Interval & (
+  | { soort: 'overlap'; a: EntryMetDossier; b: EntryMetDossier }
+  | { soort: 'blok';    a: EntryMetDossier; blokLabel: string }
+)
+
 /**
  * Conflictsegmenten op basis van werkelijke tijdstippen, los van de gerenderde
  * balkbreedte: (a) waar twee werk-taken in tijd overlappen, en (b) waar werk binnen
- * een blok-periode valt (verlof/afwezigheid/feestdag/ATV).
+ * een blok-periode valt (verlof/afwezigheid/feestdag/ATV). Elk segment houdt bij
+ * wát er conflicteert, zodat de conflict-popup dat kan tonen.
  */
-function berekenConflicten(work: Interval[], blokken: Interval[]): Interval[] {
-  const segs: Interval[] = []
+function berekenConflicten(work: WerkInterval[], blokken: BlokInterval[]): ConflictDetail[] {
+  const segs: ConflictDetail[] = []
   const sorted = [...work].sort((a, b) => a.s - b.s)
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
       if (sorted[j].s >= sorted[i].e) break
-      segs.push({ s: Math.max(sorted[i].s, sorted[j].s), e: Math.min(sorted[i].e, sorted[j].e) })
+      segs.push({
+        s: Math.max(sorted[i].s, sorted[j].s),
+        e: Math.min(sorted[i].e, sorted[j].e),
+        soort: 'overlap', a: sorted[i].entry, b: sorted[j].entry,
+      })
     }
   }
   for (const w of work) {
     for (const b of blokken) {
       const s = Math.max(w.s, b.s)
       const e = Math.min(w.e, b.e)
-      if (s < e) segs.push({ s, e })
+      if (s < e) segs.push({ s, e, soort: 'blok', a: w.entry, blokLabel: b.label })
     }
   }
   return segs
@@ -125,13 +154,14 @@ function volledigeNaam(m: Pick<Medewerker, 'voornaam' | 'tussenvoegsel' | 'achte
 // ─── PlanningItemEditDialog ───────────────────────────────────────────────────
 
 function PlanningItemEditDialog({
-  entry, medewerkers, dossierMap, onClose, onSaved,
+  entry, medewerkers, dossierMap, onClose, onSaved, onKopieer,
 }: {
   entry:       PlanningItemVerrijkt & { dossier_id?: string }
   medewerkers: Medewerker[]
   dossierMap:  Record<string, string>
   onClose:     () => void
   onSaved:     () => void
+  onKopieer:   () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const startDt = parseISO(entry.start_dt)
@@ -268,22 +298,392 @@ function PlanningItemEditDialog({
 
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isPending}
-              className="eva-btn-ghost"
-              style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              <Trash2 size={13} />
-              Verwijderen
-            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isPending}
+                className="eva-btn-ghost"
+                style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <Trash2 size={13} />
+                Verwijderen
+              </button>
+              <button
+                type="button"
+                onClick={onKopieer}
+                disabled={isPending}
+                className="eva-btn-ghost"
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                title="Start kopieermodus: klik daarna op één of meer dagen om dit planitem te plakken"
+              >
+                <Copy size={13} />
+                Kopiëren
+              </button>
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={onClose} className="eva-btn-ghost">Annuleren</button>
               <button type="submit" disabled={isPending} className="eva-btn-primary">
                 {isPending ? 'Bezig…' : 'Opslaan'}
               </button>
             </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── ConflictDialog ───────────────────────────────────────────────────────────
+
+function ConflictDialog({
+  medewerker, conflicten, dossierMap, onClose,
+}: {
+  medewerker: Medewerker
+  conflicten: ConflictDetail[]
+  dossierMap: Record<string, string>
+  onClose:    () => void
+}) {
+  const titelVan = (e: EntryMetDossier) => {
+    const dossier = dossierMap[e.dossier_id ?? ''] ?? 'Onbekend dossier'
+    const taak    = e.planning_activiteiten?.titel
+    return taak && taak !== dossier ? `${dossier} — ${taak}` : dossier
+  }
+  const fmt = (ms: number) => format(new Date(ms), 'EEE d MMM HH:mm', { locale: nl })
+  const gesorteerd = [...conflicten].sort((a, b) => a.s - b.s)
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        background: 'var(--bg-elev)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        width: 480,
+        maxHeight: '80vh',
+        overflowY: 'auto',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={16} color="#ef4444" />
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
+              Conflicten — {volledigeNaam(medewerker)}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="eva-btn-ghost" style={{ padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {gesorteerd.map((c, i) => (
+            <div key={i} style={{
+              border: '1px solid rgba(239,68,68,0.35)',
+              background: 'rgba(239,68,68,0.06)',
+              borderRadius: 8, padding: '10px 12px',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 4 }}>
+                {fmt(c.s)} – {fmt(c.e)}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg)', lineHeight: 1.5 }}>
+                {c.soort === 'overlap' ? (
+                  <>
+                    <strong>{titelVan(c.a)}</strong>
+                    {' overlapt met '}
+                    <strong>{titelVan(c.b)}</strong>
+                  </>
+                ) : (
+                  <>
+                    <strong>{titelVan(c.a)}</strong>
+                    {' valt tijdens '}
+                    <strong>{c.blokLabel}</strong>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          {gesorteerd.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Geen conflicten gevonden.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── NieuwPlanItemDialog ──────────────────────────────────────────────────────
+
+function NieuwPlanItemDialog({
+  medewerker_id, datum, medewerkers, dossierMap, uursoorten, onClose, onSaved,
+}: {
+  medewerker_id: string
+  datum:         string
+  medewerkers:   Medewerker[]
+  dossierMap:    Record<string, string>
+  uursoorten:    PlanningUursoort[]
+  onClose:       () => void
+  onSaved:       () => void
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  const [form, setForm] = useState({
+    medewerker_id,
+    dossier_id:    '',
+    bewakingscode: '',
+    titel:         '',
+    uursoort_id:   '',
+    start_datum:   datum,
+    start_tijd:    '07:00',
+    eind_datum:    datum,
+    eind_tijd:     '16:00',
+    uren:          '8',
+  })
+
+  const [codes, setCodes]           = useState<BewakingscodeRef[] | null>(null)
+  const [codesLaden, setCodesLaden] = useState(false)
+  const [codesFout, setCodesFout]   = useState<string | null>(null)
+  const [overschrijding, setOverschrijding] = useState<string | null>(null)
+
+  // Bewakingscodes van het gekozen dossier live uit Bouw7 ophalen.
+  useEffect(() => {
+    if (!form.dossier_id) { setCodes(null); setCodesFout(null); return }
+    let actief = true
+    setCodesLaden(true)
+    setCodes(null)
+    setCodesFout(null)
+    resolveBewakingscodes(form.dossier_id).then(res => {
+      if (!actief) return
+      setCodesLaden(false)
+      if (res.ok) setCodes([...res.codes].sort((a, b) => a.code.localeCompare(b.code, 'nl')))
+      else setCodesFout(res.error)
+    }).catch(e => {
+      if (!actief) return
+      setCodesLaden(false)
+      setCodesFout(e instanceof Error ? e.message : 'Ophalen bewakingscodes mislukt')
+    })
+    return () => { actief = false }
+  }, [form.dossier_id])
+
+  const dossierOpties = useMemo(
+    () => Object.entries(dossierMap).sort((a, b) => a[1].localeCompare(b[1], 'nl')),
+    [dossierMap],
+  )
+
+  const geselecteerdeCode = codes?.find(c => c.code === form.bewakingscode) ?? null
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.dossier_id)    { toast.error('Kies een dossier'); return }
+    if (!form.bewakingscode) { toast.error('Kies een bewakingscode — een planitem staat altijd op een bewakingscode'); return }
+    startTransition(async () => {
+      const result = await maakSnelPlanningItem({
+        dossier_id:         form.dossier_id,
+        medewerker_id:      form.medewerker_id,
+        bewakingscode:      form.bewakingscode,
+        bewakingscode_naam: geselecteerdeCode?.naam ?? null,
+        titel:              form.titel.trim() || undefined,
+        uursoort_id:        form.uursoort_id || null,
+        start_dt:           new Date(`${form.start_datum}T${form.start_tijd}`).toISOString(),
+        eind_dt:            new Date(`${form.eind_datum}T${form.eind_tijd}`).toISOString(),
+        uren:               Number(form.uren),
+        overrule:           overschrijding != null, // tweede poging = bewust overrulen
+      })
+      if (!result.ok) {
+        if (result.overschrijding) {
+          setOverschrijding(result.error)
+          return
+        }
+        toast.error(result.error)
+        return
+      }
+      toast.success('Planitem ingepland')
+      onSaved()
+    })
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        background: 'var(--bg-elev)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        width: 440,
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
+            Nieuw planitem
+          </div>
+          <button type="button" onClick={onClose} className="eva-btn-ghost" style={{ padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Medewerker */}
+          <div>
+            <label style={dialogLabelStyle}>Medewerker *</label>
+            <select
+              className="eva-input"
+              value={form.medewerker_id}
+              onChange={e => setForm(f => ({ ...f, medewerker_id: e.target.value }))}
+              required
+            >
+              {medewerkers.map(m => (
+                <option key={m.id} value={m.id}>{volledigeNaam(m)}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dossier */}
+          <div>
+            <label style={dialogLabelStyle}>Dossier *</label>
+            <select
+              className="eva-input"
+              value={form.dossier_id}
+              onChange={e => setForm(f => ({ ...f, dossier_id: e.target.value, bewakingscode: '' }))}
+              required
+            >
+              <option value="">— Kies dossier —</option>
+              {dossierOpties.map(([id, label]) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Bewakingscode */}
+          <div>
+            <label style={dialogLabelStyle}>Bewakingscode *</label>
+            <select
+              className="eva-input"
+              value={form.bewakingscode}
+              onChange={e => setForm(f => ({ ...f, bewakingscode: e.target.value }))}
+              disabled={!form.dossier_id || codesLaden || !!codesFout}
+              required
+            >
+              <option value="">
+                {!form.dossier_id ? '— Kies eerst een dossier —'
+                  : codesLaden ? 'Bewakingscodes laden…'
+                  : '— Kies bewakingscode —'}
+              </option>
+              {(codes ?? []).map(c => (
+                <option key={c.code} value={c.code}>
+                  {c.code}{c.naam ? ` — ${c.naam}` : ''}{c.hoofdstuk ? ` (${c.hoofdstuk})` : ''}
+                </option>
+              ))}
+            </select>
+            {codesFout && (
+              <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>{codesFout}</div>
+            )}
+            {codes && codes.length === 0 && (
+              <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
+                Dit dossier heeft (nog) geen bewakingscodes in Bouw7.
+              </div>
+            )}
+          </div>
+
+          {/* Omschrijving */}
+          <div>
+            <label style={dialogLabelStyle}>Omschrijving</label>
+            <input
+              type="text" className="eva-input" value={form.titel}
+              placeholder={geselecteerdeCode?.naam ?? 'Naam van de taak (optioneel)'}
+              maxLength={200}
+              onChange={e => setForm(f => ({ ...f, titel: e.target.value }))}
+            />
+          </div>
+
+          {/* Uursoort */}
+          {uursoorten.length > 0 && (
+            <div>
+              <label style={dialogLabelStyle}>Uursoort</label>
+              <select
+                className="eva-input"
+                value={form.uursoort_id}
+                onChange={e => setForm(f => ({ ...f, uursoort_id: e.target.value }))}
+              >
+                <option value="">— Geen —</option>
+                {uursoorten.map(u => (
+                  <option key={u.id} value={u.id}>{u.naam}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Start */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={dialogLabelStyle}>Startdatum *</label>
+              <input type="date" className="eva-input" value={form.start_datum}
+                onChange={e => setForm(f => ({ ...f, start_datum: e.target.value, eind_datum: f.eind_datum < e.target.value ? e.target.value : f.eind_datum }))} required />
+            </div>
+            <div>
+              <label style={dialogLabelStyle}>Starttijd *</label>
+              <input type="time" className="eva-input" value={form.start_tijd}
+                onChange={e => setForm(f => ({ ...f, start_tijd: e.target.value }))} required />
+            </div>
+          </div>
+
+          {/* Eind */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={dialogLabelStyle}>Einddatum *</label>
+              <input type="date" className="eva-input" value={form.eind_datum}
+                onChange={e => setForm(f => ({ ...f, eind_datum: e.target.value }))} required />
+            </div>
+            <div>
+              <label style={dialogLabelStyle}>Eindtijd *</label>
+              <input type="time" className="eva-input" value={form.eind_tijd}
+                onChange={e => setForm(f => ({ ...f, eind_tijd: e.target.value }))} required />
+            </div>
+          </div>
+
+          {/* Uren */}
+          <div>
+            <label style={dialogLabelStyle}>Uren *</label>
+            <input type="number" className="eva-input" value={form.uren}
+              min="0" step="0.5"
+              onChange={e => { setOverschrijding(null); setForm(f => ({ ...f, uren: e.target.value })) }} required />
+          </div>
+
+          {overschrijding && (
+            <div style={{
+              border: '1px solid rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.08)',
+              borderRadius: 8, padding: '8px 12px', fontSize: 11, color: 'var(--fg)',
+            }}>
+              <strong>Werkbegroting overschreden:</strong> {overschrijding}
+              <br />Klik nogmaals op opslaan om tóch in te plannen.
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <button type="button" onClick={onClose} className="eva-btn-ghost">Annuleren</button>
+            <button type="submit" disabled={isPending} className="eva-btn-primary">
+              {isPending ? 'Bezig…' : overschrijding ? 'Toch inplannen' : 'Inplannen'}
+            </button>
           </div>
         </form>
       </div>
@@ -300,7 +700,8 @@ const hdlStyle: React.CSSProperties = {
 }
 
 function TimelineEntry({
-  entry, left, width, top, dossier_id, dossier_titel, kleur: kleurOverride, ppd, onEdit, onResized,
+  entry, left, width, top, dossier_id, dossier_titel, kleur: kleurOverride, ppd,
+  onEdit, onResized, onOpenDossier, onStartKopie,
 }: {
   entry:         PlanningItemVerrijkt
   left:          number
@@ -312,6 +713,8 @@ function TimelineEntry({
   ppd:           number
   onEdit:        () => void
   onResized:     (id: string, newStartDt: string, newEindDt: string) => void
+  onOpenDossier: () => void
+  onStartKopie:  () => void
 }) {
   const kleur = kleurOverride ?? dossierKleur(dossier_id)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -322,6 +725,9 @@ function TimelineEntry({
 
   const resizeRef        = useRef<{ type: 'left' | 'right'; startX: number } | null>(null)
   const suppressClickRef = useRef(false)
+  // Enkelklik licht vertraagd zodat een dubbelklik (→ dossier) hem kan annuleren.
+  const clickTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current) }, [])
 
   function startResize(ev: React.PointerEvent, type: 'left' | 'right') {
     ev.stopPropagation()
@@ -356,7 +762,16 @@ function TimelineEntry({
       {...listeners}
       onClick={() => {
         if (suppressClickRef.current) { suppressClickRef.current = false; return }
-        onEdit()
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+        clickTimerRef.current = setTimeout(() => { clickTimerRef.current = null; onEdit() }, 250)
+      }}
+      onDoubleClick={() => {
+        if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null }
+        onOpenDossier()
+      }}
+      onContextMenu={e => {
+        e.preventDefault()
+        onStartKopie()
       }}
       style={{
         position: 'absolute',
@@ -373,7 +788,7 @@ function TimelineEntry({
         zIndex: 4,
         boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
       }}
-      title={`${dossier_titel} — ${taakTitel} (${entry.uren}u)`}
+      title={`${dossier_titel} — ${taakTitel} (${entry.uren}u)\nKlik = bewerken · dubbelklik = dossier openen · rechtsklik = kopiëren · Ctrl+slepen = kopie`}
     >
       {/* DS white left-highlight strip */}
       <div style={{
@@ -409,6 +824,7 @@ function TimelineEntry({
 
 function DroppableTimelineCell({
   id, medewerker_id, datum, left, width, top, hoogte, background, isOver, geblokkeerd, title,
+  kopieerModus, onCelKlik,
 }: {
   id:            string
   medewerker_id: string
@@ -421,19 +837,22 @@ function DroppableTimelineCell({
   isOver:        boolean
   geblokkeerd?:  boolean
   title?:        string
+  kopieerModus:  boolean
+  onCelKlik:     (medewerker_id: string, datum: string) => void
 }) {
   const { setNodeRef } = useDroppable({ id, data: { medewerker_id, datum } })
   return (
     <div
       ref={geblokkeerd ? undefined : setNodeRef}
-      title={title}
+      title={title ?? (kopieerModus ? 'Klik om het gekopieerde planitem hier te plakken' : 'Klik om een planitem in te plannen')}
+      onClick={() => { if (!geblokkeerd) onCelKlik(medewerker_id, datum) }}
       style={{
         position: 'absolute',
         top, height: hoogte,
         left, width,
         background: isOver && !geblokkeerd ? 'rgba(31,122,58,0.15)' : background,
         transition: 'background 0.1s',
-        cursor: geblokkeerd ? 'not-allowed' : undefined,
+        cursor: geblokkeerd ? 'not-allowed' : kopieerModus ? 'copy' : 'pointer',
       }}
     />
   )
@@ -525,13 +944,14 @@ function TimelineRij({
   medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
   overCellId, dossierMap, projectleiders,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
+  onOpenDossier, onStartKopie, onCelKlik, kopieerModus,
 }: {
   medewerker:        Medewerker
   top:               number
   dagen:             Date[]
   layout:            PlanningLayout
-  entries:           (PlanningItemVerrijkt & { dossier_id?: string })[]
-  conflicten:        Interval[]
+  entries:           EntryMetDossier[]
+  conflicten:        ConflictDetail[]
   roosters:          MedewerkerRooster[]
   afwezigheid:       MedewerkerAfwezigheid[]
   overCellId:        string | null
@@ -540,8 +960,12 @@ function TimelineRij({
   feestdagenDagen:   Set<string>
   feestdagenNamen:   Record<string, string>
   atvDagen:          Set<string>
-  onEditEntry:       (entry: PlanningItemVerrijkt & { dossier_id?: string }) => void
+  onEditEntry:       (entry: EntryMetDossier) => void
   onResizedEntry:    (id: string, ns: string, ne: string) => void
+  onOpenDossier:     (entry: EntryMetDossier) => void
+  onStartKopie:      (entry: EntryMetDossier) => void
+  onCelKlik:         (medewerker_id: string, datum: string) => void
+  kopieerModus:      boolean
 }) {
   const { ppd, totalW, xVoor, breedteVoor } = layout
   const dagLenW = totalW
@@ -574,7 +998,7 @@ function TimelineRij({
         const cellId = `tcell-${medewerker.id}-${iso}`
         const bg     = feest ? 'rgba(251,146,60,0.12)'
                      : atv   ? 'rgba(8,145,178,0.10)'
-                     : afwez ? `${AFWEZIGHEID_KLEUR[afwez.type]}1f`
+                     : afwez ? AFWEZIGHEID_BG[afwez.type]
                      : (buiten && !isWeekend(dag)) ? 'rgba(0,0,0,0.04)'
                      : 'transparent'
         const geblokkeerd = feest || atv
@@ -596,6 +1020,8 @@ function TimelineRij({
             isOver={overCellId === cellId}
             geblokkeerd={geblokkeerd}
             title={cellTitle}
+            kopieerModus={kopieerModus}
+            onCelKlik={onCelKlik}
           />
         )
       })}
@@ -635,6 +1061,8 @@ function TimelineRij({
             ppd={ppd}
             onEdit={() => onEditEntry(entry)}
             onResized={onResizedEntry}
+            onOpenDossier={() => onOpenDossier(entry)}
+            onStartKopie={() => onStartKopie(entry)}
           />
         )
       })}
@@ -688,7 +1116,7 @@ type Props = {
 
 export default function MedewerkerTimeline({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
-  projectleiders = {}, ploegNamen = {}, agendaItems = [], feestdagen = [],
+  projectleiders = {}, ploegNamen = {}, uursoorten = [], agendaItems = [], feestdagen = [],
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -703,12 +1131,35 @@ export default function MedewerkerTimeline({
   const [activeItem,    setActiveItem]    = useState<{ entry: PlanningItemVerrijkt; dossier_id: string } | null>(null)
   const [overCellId,    setOverCellId]    = useState<string | null>(null)
   const [verlofModalOpen, setVerlofModalOpen] = useState(false)
-  const [editingEntry,  setEditingEntry]  = useState<(PlanningItemVerrijkt & { dossier_id?: string }) | null>(null)
+  const [editingEntry,  setEditingEntry]  = useState<EntryMetDossier | null>(null)
+  const [nieuwItem,     setNieuwItem]     = useState<{ medewerker_id: string; datum: string } | null>(null)
+  const [kopieerBron,   setKopieerBron]   = useState<EntryMetDossier | null>(null)
+  const [conflictInfo,  setConflictInfo]  = useState<{ medewerker: Medewerker; conflicten: ConflictDetail[] } | null>(null)
 
   const [selAfdelingen, setSelAfdelingen] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortKey>('voornaam')
 
   useEffect(() => { setEntries(initialEntries) }, [initialEntries])
+
+  // Ctrl/Alt ingedrukt tijdens slepen → kopie i.p.v. verplaatsen.
+  const kopieToetsRef = useRef(false)
+  useEffect(() => {
+    const bijwerken = (e: KeyboardEvent) => { kopieToetsRef.current = e.ctrlKey || e.altKey || e.metaKey }
+    window.addEventListener('keydown', bijwerken)
+    window.addEventListener('keyup', bijwerken)
+    return () => {
+      window.removeEventListener('keydown', bijwerken)
+      window.removeEventListener('keyup', bijwerken)
+    }
+  }, [])
+
+  // Esc beëindigt de kopieermodus.
+  useEffect(() => {
+    if (!kopieerBron) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setKopieerBron(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [kopieerBron])
 
   const dagen = useMemo(() => eachDayOfInterval({ start: vs, end: ve }), [vs, ve])
 
@@ -774,12 +1225,19 @@ export default function MedewerkerTimeline({
   }, [agendaItems])
 
   // Blok-intervallen die voor iedereen gelden (feestdag/ATV) — voor conflictdetectie.
-  const feestAtvIntervals = useMemo<Interval[]>(() => {
-    const arr: Interval[] = []
-    for (const iso of feestdagenDagen) { const t = parseISO(iso).getTime(); arr.push({ s: t, e: t + DAG_MS }) }
-    for (const iso of atvDagen)        { const t = parseISO(iso).getTime(); arr.push({ s: t, e: t + DAG_MS }) }
+  const feestAtvIntervals = useMemo<BlokInterval[]>(() => {
+    const arr: BlokInterval[] = []
+    for (const iso of feestdagenDagen) {
+      const t = parseISO(iso).getTime()
+      const naam = feestdagenNamen[iso]
+      arr.push({ s: t, e: t + DAG_MS, label: naam ? `feestdag (${naam})` : 'een feestdag' })
+    }
+    for (const iso of atvDagen) {
+      const t = parseISO(iso).getTime()
+      arr.push({ s: t, e: t + DAG_MS, label: 'een ATV-dag' })
+    }
     return arr
-  }, [feestdagenDagen, atvDagen])
+  }, [feestdagenDagen, feestdagenNamen, atvDagen])
 
   const agendaItemsInBereik = useMemo(() => {
     const start = vs.toISOString().slice(0, 10)
@@ -808,8 +1266,13 @@ export default function MedewerkerTimeline({
         return en >= vsMs && s <= veMs
       })
       const myAfw = afwezigheidPerMedewerker[m.id] ?? []
-      const work: Interval[]   = myEntries.map(e => ({ s: parseISO(e.start_dt).getTime(), e: parseISO(e.eind_dt).getTime() }))
-      const blokken: Interval[] = [...feestAtvIntervals, ...myAfw.map(afwezigheidInterval)]
+      const work: WerkInterval[] = myEntries.map(e => ({
+        s: parseISO(e.start_dt).getTime(), e: parseISO(e.eind_dt).getTime(), entry: e,
+      }))
+      const blokken: BlokInterval[] = [
+        ...feestAtvIntervals,
+        ...myAfw.map(a => ({ ...afwezigheidInterval(a), label: medewerkerAfwezigheidLabels[a.type].toLowerCase() })),
+      ]
       const conflicten = berekenConflicten(work, blokken)
       const row = { medewerker: m, top: accTop, entries: myEntries, conflicten, heeftConflict: conflicten.length > 0 }
       accTop += RIJ_VAST
@@ -818,6 +1281,47 @@ export default function MedewerkerTimeline({
   }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, heeftAgendaRij])
 
   const bodyHoogte = (heeftAgendaRij ? RIJ_HOOGTE : 0) + zichtbareMedewerkers.length * RIJ_VAST
+
+  /** Nieuwe start/eind voor een entry op een doel-dag: tijdstip + duur blijven gelijk. */
+  function verplaatsNaarDag(entry: PlanningItemVerrijkt, datum: string): { start: Date; eind: Date } {
+    const origStart = parseISO(entry.start_dt)
+    const origEind  = parseISO(entry.eind_dt)
+    const duur      = differenceInMinutes(origEind, origStart)
+    const start     = new Date(`${datum}T${format(origStart, 'HH:mm:ss')}`)
+    return { start, eind: addMinutes(start, duur) }
+  }
+
+  /** Plak een kopie van `bron` op (medewerker, dag). Gebruikt door kopieermodus én Ctrl+slepen. */
+  async function plakKopie(bron: EntryMetDossier, medewerker_id: string, datum: string) {
+    const { start, eind } = verplaatsNaarDag(bron, datum)
+    const result = await kopieerPlanningItem(bron.id, {
+      medewerker_id,
+      start_dt: start.toISOString(),
+      eind_dt:  eind.toISOString(),
+    })
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success('Planitem gekopieerd')
+    setEntries(prev => [...prev, {
+      ...result.data,
+      medewerkers: null,
+      planning_activiteiten: bron.planning_activiteiten,
+      dossier_id: bron.dossier_id,
+    }])
+    startTransition(() => router.refresh())
+  }
+
+  function handleCelKlik(medewerker_id: string, datum: string) {
+    if (kopieerBron) {
+      void plakKopie(kopieerBron, medewerker_id, datum)
+      return
+    }
+    setNieuwItem({ medewerker_id, datum })
+  }
+
+  function openDossier(entry: EntryMetDossier) {
+    if (!entry.dossier_id) { toast.error('Geen dossier gekoppeld aan dit planitem'); return }
+    router.push(`/opdrachten/${entry.dossier_id}/informatie`)
+  }
 
   async function onDragEnd(event: DragEndEvent) {
     setActiveItem(null)
@@ -829,6 +1333,13 @@ export default function MedewerkerTimeline({
 
     const entry      = active.entry as PlanningItemVerrijkt
     const dossier_id = active.dossier_id as string
+
+    // Ctrl/Alt/Cmd + slepen = kopie i.p.v. verplaatsen.
+    if (kopieToetsRef.current) {
+      await plakKopie({ ...entry, dossier_id }, cellData.medewerker_id, cellData.datum)
+      return
+    }
+
     const origStart  = parseISO(entry.start_dt)
     const origEind   = parseISO(entry.eind_dt)
     const duur       = differenceInMinutes(origEind, origStart)
@@ -883,7 +1394,7 @@ export default function MedewerkerTimeline({
           }}>Bedrijfsagenda</span>
         </div>
       )}
-      {medewerkerLayout.map(({ medewerker: m, heeftConflict }) => (
+      {medewerkerLayout.map(({ medewerker: m, heeftConflict, conflicten }) => (
         <Link key={m.id} href={`/medewerkers/${m.id}`} style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{
             height: RIJ_VAST, display: 'flex', alignItems: 'center',
@@ -914,9 +1425,21 @@ export default function MedewerkerTimeline({
               )}
             </div>
             {heeftConflict && (
-              <span title="Dubbel ingepland / conflict" style={{ display: 'inline-flex', color: '#ef4444', flexShrink: 0 }}>
+              <button
+                type="button"
+                title="Dubbel ingepland / conflict — klik voor details"
+                onClick={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setConflictInfo({ medewerker: m, conflicten })
+                }}
+                style={{
+                  display: 'inline-flex', color: '#ef4444', flexShrink: 0,
+                  background: 'transparent', border: 'none', padding: 2, cursor: 'pointer',
+                }}
+              >
                 <AlertTriangle size={15} />
-              </span>
+              </button>
             )}
           </div>
         </Link>
@@ -953,9 +1476,36 @@ export default function MedewerkerTimeline({
           atvDagen={atvDagen}
           onEditEntry={entry => setEditingEntry(entry)}
           onResizedEntry={onResizedEntry}
+          onOpenDossier={openDossier}
+          onStartKopie={entry => setKopieerBron(entry)}
+          onCelKlik={handleCelKlik}
+          kopieerModus={!!kopieerBron}
         />
       ))}
     </>
+  )
+
+  // Legenda — verklaart de dag-achtergronden (m.n. verlof = licht rood).
+  const legenda = (
+    <div style={{ marginTop: 10, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      {([
+        ['Verlof',    AFWEZIGHEID_BG.verlof],
+        ['Ziek',      AFWEZIGHEID_BG.ziek],
+        ['Training',  AFWEZIGHEID_BG.training],
+        ['Overig',    AFWEZIGHEID_BG.overig],
+        ['Feestdag',  'rgba(251,146,60,0.25)'],
+        ['ATV',       'rgba(8,145,178,0.20)'],
+      ] as const).map(([label, kleur]) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 12, height: 12, borderRadius: 2, background: kleur, border: '1px solid var(--border)' }} />
+          <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>{label}</span>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <AlertTriangle size={12} color="#ef4444" />
+        <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>Conflict — klik op het icoon voor details</span>
+      </div>
+    </div>
   )
 
   // ─── Slicer + sorteer-balk (bovenin) ─────────────────────────────────────────
@@ -1053,8 +1603,35 @@ export default function MedewerkerTimeline({
           labelKolom={labelKolom}
           body={body}
           bodyHoogte={bodyHoogte}
+          legenda={legenda}
+          maxHoogte="calc(100dvh - 150px)"
         />
       </div>
+
+      {/* Kopieermodus-hint */}
+      {kopieerBron && (
+        <div style={{
+          position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 1100,
+          background: 'var(--fg)', color: 'var(--bg)',
+          borderRadius: 10, padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          fontSize: 12, fontWeight: 600, maxWidth: '90vw',
+        }}>
+          <Copy size={14} style={{ flexShrink: 0 }} />
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Kopieermodus — klik op een dag om &ldquo;{dossierMap[kopieerBron.dossier_id ?? ''] ?? 'planitem'}&rdquo; te plakken (meerdere keren kan) · Esc om te stoppen
+          </span>
+          <button
+            type="button"
+            onClick={() => setKopieerBron(null)}
+            style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'inline-flex', padding: 2, flexShrink: 0 }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <DragOverlay>
         {activeItem && (
@@ -1095,6 +1672,34 @@ export default function MedewerkerTimeline({
             setEditingEntry(null)
             startTransition(() => router.refresh())
           }}
+          onKopieer={() => {
+            setKopieerBron(editingEntry)
+            setEditingEntry(null)
+          }}
+        />
+      )}
+
+      {nieuwItem && (
+        <NieuwPlanItemDialog
+          medewerker_id={nieuwItem.medewerker_id}
+          datum={nieuwItem.datum}
+          medewerkers={medewerkers}
+          dossierMap={dossierMap}
+          uursoorten={uursoorten}
+          onClose={() => setNieuwItem(null)}
+          onSaved={() => {
+            setNieuwItem(null)
+            startTransition(() => router.refresh())
+          }}
+        />
+      )}
+
+      {conflictInfo && (
+        <ConflictDialog
+          medewerker={conflictInfo.medewerker}
+          conflicten={conflictInfo.conflicten}
+          dossierMap={dossierMap}
+          onClose={() => setConflictInfo(null)}
         />
       )}
     </DndContext>

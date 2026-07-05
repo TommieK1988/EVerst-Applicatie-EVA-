@@ -1,11 +1,14 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 import MedewerkersOverzicht from './MedewerkersOverzicht'
 
 export const metadata: Metadata = { title: 'Medewerkers' }
 
 export default async function MedewerkersPage() {
+  // Salaris/persoonsgegevens: alleen zichtbaar met medewerkers-recht (beheerders altijd).
+  await vereisModuleToegang('medewerkers')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   // Alle kolommen behalve bsn (AVG-gevoelig — alleen op de medewerkerkaart, gemaskeerd)

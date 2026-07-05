@@ -28,6 +28,7 @@ import {
   loadQuoteTemplateBuffer,
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params
   const searchParams = request.nextUrl.searchParams
   const bedrijfParam = searchParams.get('bedrijf')
+
+  // Object-level authz: offerte-documenten mogen alleen door gebruikers met everts_calc-leesrecht worden opgehaald.
+  try {
+    await vereisRecht('everts_calc', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
+    throw e
+  }
 
   // Gate: downloaden mag pas na controller-goedkeuring (on-screen preview blijft vrij).
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
@@ -121,9 +130,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           { status: 422 },
         )
       }
+      // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
       console.error('Docx render fout:', err)
       return NextResponse.json(
-        { error: 'Template render fout — controleer de tag-syntax in het .docx bestand', detail: String(err) },
+        { error: 'Template render fout — controleer de tag-syntax in het .docx bestand' },
         { status: 500 },
       )
     }
@@ -138,7 +148,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (err) {
+    // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('Docx generatie fout:', err)
-    return NextResponse.json({ error: 'Docx generatie mislukt', detail: String(err) }, { status: 500 })
+    return NextResponse.json({ error: 'Er ging iets mis' }, { status: 500 })
   }
 }

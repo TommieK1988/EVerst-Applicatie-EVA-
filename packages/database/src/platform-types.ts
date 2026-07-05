@@ -829,6 +829,10 @@ export type PlanningActiviteit = {
   locatie_adres: string | null
   status: PlanningActiviteitStatus
   volgorde: number
+  /** Kale Bouw7-bewakingscode (securityCode.code) waar dit werk op geboekt wordt */
+  bewakingscode: string | null
+  /** Bouw7 securityCode.id behorend bij `bewakingscode` (voor latere write-back) */
+  bouw7_security_code_id: number | null
   /** 'eva' = in EVA gemaakt, 'bouw7' = uit Bouw7 gesynct */
   bron: PlanningBron
   /** Externe sleutel bij bron='bouw7' (Bouw7 plan-item id) */
