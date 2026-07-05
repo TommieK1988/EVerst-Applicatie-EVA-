@@ -168,7 +168,7 @@ export async function updateLayout(id: string, data: Record<string, unknown>): P
     .eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/instellingen/offertes')
-  revalidatePath(`/instellingen/offertes/layouts/${id}`)
+  revalidatePath(`/instellingen/offerte-layout/${id}`)
 }
 
 export async function kopieerLayout(id: string): Promise<string> {

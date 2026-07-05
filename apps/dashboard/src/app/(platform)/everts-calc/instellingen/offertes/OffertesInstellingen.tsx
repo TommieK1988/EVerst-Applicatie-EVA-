@@ -357,7 +357,7 @@ function LayoutsTab({ layouts: init }: { layouts: LayoutItem[] }) {
         setShowNieuw(false)
         setNieuwNaam('')
         // Redirect naar editor
-        window.location.href = `/instellingen/offertes/layouts/${id}`
+        window.location.href = `/instellingen/offerte-layout/${id}`
       } catch { toast.error('Fout bij aanmaken') }
     })
   }
@@ -367,7 +367,7 @@ function LayoutsTab({ layouts: init }: { layouts: LayoutItem[] }) {
       try {
         const nieuwId = await kopieerLayout(id)
         toast.success('Layout gekopieerd')
-        window.location.href = `/instellingen/offertes/layouts/${nieuwId}`
+        window.location.href = `/instellingen/offerte-layout/${nieuwId}`
       } catch { toast.error('Fout bij kopiëren') }
     })
   }
@@ -491,7 +491,7 @@ function LayoutsTab({ layouts: init }: { layouts: LayoutItem[] }) {
                     <Copy className="w-4 h-4" />
                   </Button>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href={`/instellingen/offertes/layouts/${l.id}`}>
+                    <Link href={`/instellingen/offerte-layout/${l.id}`}>
                       <Pencil className="w-3.5 h-3.5" />
                       Bewerken
                     </Link>
