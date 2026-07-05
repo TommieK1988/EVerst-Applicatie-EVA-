@@ -5,6 +5,7 @@ import {
   matchDossierFolder,
   listFolderChildren,
   resolveShareLink,
+  resolveDriveContext,
   type SharePointBestand,
   type MatchStatus,
 } from '@/lib/o365/sharepoint'
@@ -48,8 +49,8 @@ function netteFout(err: unknown): string {
  * Gooit nooit — geeft bij fouten een `fout`-melding terug.
  */
 export async function getDossierSharePointBestanden(dossierId: string): Promise<DossierSharePointData> {
-  const driveId = process.env.O365_DOSSIER_DRIVE_ID
-  if (!driveId) return LEEG
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return LEEG
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,9 +67,19 @@ export async function getDossierSharePointBestanden(dossierId: string): Promise<
     // Nog niet (succesvol) gematcht → nu proberen en cachen
     if (status !== 'gematcht' || !spItemId || !spDriveId) {
       try {
+        const ctx = await resolveDriveContext(envValue)
+        if (!ctx) {
+          return {
+            geconfigureerd: true,
+            status: null,
+            mapUrl: null,
+            bestanden: [],
+            fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden — geef een geldige drive-id of een SharePoint-link naar de dossierbibliotheek/-map.',
+          }
+        }
         const m = await matchDossierFolder(
           { dossiernummer: d.dossiernummer, bouw7Id: d.bouw7_id != null ? String(d.bouw7_id) : null, titel: d.titel },
-          driveId,
+          ctx,
         )
         status = m.status
         spDriveId = m.driveId ?? null

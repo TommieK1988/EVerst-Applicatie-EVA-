@@ -16,6 +16,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAppAccessToken } from '@/lib/o365/tokens'
 import { appGraphGet } from '@/lib/o365/graph'
+import { resolveDriveContext } from '@/lib/o365/sharepoint'
+import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +67,14 @@ const FORM = `
   </div>`
 
 export async function GET(request: NextRequest) {
+  // M1: diagnose gebruikt een krachtig app-only Graph-token en toont config-details — alleen voor beheerders.
+  try {
+    await vereisBeheerder()
+  } catch (e) {
+    if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
+    throw e
+  }
+
   const shareLink = request.nextUrl.searchParams.get('shareLink')
 
   // 1. App-only token (consent-check)
@@ -120,11 +130,14 @@ export async function GET(request: NextRequest) {
 
   // 3. Geen params: token OK + de ingestelde drive-id's valideren
   async function checkDrive(envNaam: string): Promise<string> {
-    const id = process.env[envNaam]
-    if (!id) return `<p>⚠️ <code>${envNaam}</code> is nog niet ingesteld.</p>`
+    const raw = process.env[envNaam]
+    if (!raw) return `<p>⚠️ <code>${envNaam}</code> is nog niet ingesteld.</p>`
     try {
-      const drive = await appGraphGet<Drive>(`/drives/${id}?$select=id,name,driveType,webUrl`)
-      return `<p class="ok">✅ <code>${envNaam}</code> is geldig.</p>
+      const ctx = await resolveDriveContext(raw)
+      if (!ctx) return `<p class="fout">❌ <code>${envNaam}</code> kon niet herleid worden naar een drive/map.</p>`
+      const drive = await appGraphGet<Drive>(`/drives/${ctx.driveId}?$select=id,name,driveType,webUrl`)
+      const bron = /^https?:\/\//i.test(raw) ? ' (herleid uit link)' : ''
+      return `<p class="ok">✅ <code>${envNaam}</code> is geldig${bron}.</p>
         <table>
           <tr><th>Naam</th><td>${drive.name ?? '—'}</td></tr>
           <tr><th>Type</th><td>${drive.driveType ?? '—'}</td></tr>
