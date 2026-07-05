@@ -26,6 +26,7 @@ import {
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
+import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,7 +132,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // ── 5. .docx → PDF via Microsoft Graph ───────────────────────────────────
-    const pdfBuffer = await convertDocxToPdf(docxBuffer)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let pdfBuffer: Uint8Array = await convertDocxToPdf(docxBuffer)
+
+    // Briefpapier van de layout als achtergrond onder de content-pagina's.
+    const briefpapier = await fetchBriefpapier(rawLayout.briefpapier_pdf_url ?? null)
+    if (briefpapier) {
+      try {
+        pdfBuffer = await mergeBriefpapierBackground(pdfBuffer, briefpapier)
+      } catch (mergeErr) {
+        console.warn('Briefpapier-merge mislukt, PDF zonder briefpapier:', mergeErr)
+      }
+    }
 
     const filename = encodeURIComponent(`offerte-${quote.quote_nummer}.pdf`)
 

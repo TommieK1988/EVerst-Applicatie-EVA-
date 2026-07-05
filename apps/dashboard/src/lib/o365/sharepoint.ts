@@ -63,31 +63,57 @@ function alsMatch(item: DriveItem, driveId: string): MatchResultaat {
   return { status: 'gematcht', driveId: item.parentReference?.driveId ?? driveId, itemId: item.id, webUrl: item.webUrl ?? null }
 }
 
+/** Lijst alle mappen in de root van de drive (gepagineerd) — deterministische fallback. */
+async function listRootFolders(driveId: string): Promise<DriveItem[]> {
+  const folders: DriveItem[] = []
+  let url: string | undefined = `/drives/${driveId}/root/children?$select=id,name,webUrl,folder,parentReference&$top=200`
+  for (let i = 0; i < 50 && url; i++) {
+    const res: { value?: DriveItem[]; '@odata.nextLink'?: string } = await appGraphGet(url)
+    for (const it of res.value ?? []) if (it.folder) folders.push(it)
+    url = res['@odata.nextLink']
+  }
+  return folders
+}
+
+/** Filtert mappen waarvan de (genormaliseerde) naam met het (genormaliseerde) prefix begint. */
+function opPrefix(folders: DriveItem[], prefix: string): DriveItem[] {
+  const p = normaliseer(prefix)
+  if (!p) return []
+  return folders.filter((f) => f.name && normaliseer(f.name).startsWith(p))
+}
+
 /**
- * Bepaalt autonoom welke SharePoint-map bij een dossier hoort. Volgorde:
- * 1. exact op dossiernummer, 2. op bouw7-id, 3. fuzzy op titel.
+ * Bepaalt autonoom welke SharePoint-map bij een dossier hoort. De mapnaam begint
+ * met het dossiernummer (of bouw7-id), gevolgd door het adres. Volgorde:
+ * 1. Graph-zoekindex op nummer-prefix, 2. deterministische root-listing op prefix
+ * (vangt gevallen waar de zoekindex een cijfer-prefix niet teruggeeft), 3. fuzzy titel.
+ * Vergelijking is punctuatie-ongevoelig (2024.00123 == 2024-00123).
  * Stopt bij de eerste unieke match; >1 kandidaat → 'meerdere'; 0 → 'niet_gevonden'.
  */
 export async function matchDossierFolder(dossier: DossierMatchInput, driveId: string): Promise<MatchResultaat> {
-  // 1. Dossiernummer
-  if (dossier.dossiernummer) {
-    const kandidaten = await zoekMappen(driveId, dossier.dossiernummer)
-    const raak = kandidaten.filter((f) => f.name?.includes(dossier.dossiernummer!))
+  const prefixes = [dossier.dossiernummer, dossier.bouw7Id].filter((x): x is string => !!x)
+
+  // 1. Snel: Graph-zoekindex, mapnaam begint met dossiernummer/bouw7-id
+  for (const p of prefixes) {
+    const raak = opPrefix(await zoekMappen(driveId, p), p)
     if (raak.length === 1) return alsMatch(raak[0], driveId)
     if (raak.length > 1) return { status: 'meerdere' }
   }
 
-  // 2. Bouw7-id
-  if (dossier.bouw7Id) {
-    const kandidaten = await zoekMappen(driveId, dossier.bouw7Id)
-    const raak = kandidaten.filter((f) => f.name?.includes(dossier.bouw7Id!))
-    if (raak.length === 1) return alsMatch(raak[0], driveId)
+  // 2. Deterministisch: alle root-mappen oplijsten en op prefix filteren
+  if (prefixes.length) {
+    const rootFolders = await listRootFolders(driveId)
+    for (const p of prefixes) {
+      const raak = opPrefix(rootFolders, p)
+      if (raak.length === 1) return alsMatch(raak[0], driveId)
+      if (raak.length > 1) return { status: 'meerdere' }
+    }
   }
 
-  // 3. Titel (fuzzy, genormaliseerd)
+  // 3. Fuzzy op titel (laatste redmiddel)
   if (dossier.titel) {
-    const kandidaten = await zoekMappen(driveId, dossier.titel)
     const doel = normaliseer(dossier.titel)
+    const kandidaten = await zoekMappen(driveId, dossier.titel)
     const raak = kandidaten.filter((f) => f.name && (normaliseer(f.name).includes(doel) || doel.includes(normaliseer(f.name))))
     if (raak.length === 1) return alsMatch(raak[0], driveId)
     if (raak.length > 1) return { status: 'meerdere' }
