@@ -197,34 +197,71 @@ export async function syncDossierPlanning(
       .eq('dossier_id', dossierId)
       .eq('bron', 'bouw7')
 
-    let activiteitVolg = 0
-    for (const pi of planItems) {
-      const crew = isCrewblok(pi)
-      const titel = crew
+    // Titel van een plan-item bepalen (crewblok → afdeling, anders naam).
+    const titelVan = (pi: Bouw7PlanItem): string =>
+      isCrewblok(pi)
         ? (pi.department?.name?.trim() || pi.name?.trim() || 'Planning')
         : (pi.name?.trim() || 'Taak')
-      // Opmerking van het plan-item (search-veld `remark`, anders detail-`notes`).
-      const remark = (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null
-      const omschrijving = crew ? (pi.project?.name ?? remark) : remark
 
-      const secCode = pi.securityPlanningLink?.securityCode ?? null
+    // Plan-items met dezelfde naam bínnen dezelfde fase samenvoegen tot één activiteit.
+    // Zonder deze groepering wordt elk Bouw7 plan-item een aparte activiteit — wat bij
+    // veel gelijknamige plan-items (elk met één medewerker/datum) een onbruikbaar lange
+    // lijst oplevert. De onderliggende planitems houden hun eigen medewerker/datums/uren.
+    type Groep = { faseKey: string; titel: string; items: Bouw7PlanItem[] }
+    const groepen = new Map<string, Groep>()
+    for (const pi of planItems) {
+      const faseKey = faseKeyVan(pi)
+      const titel = titelVan(pi)
+      const key = `${faseKey}::${titel.toLowerCase()}`
+      const g = groepen.get(key)
+      if (g) g.items.push(pi)
+      else groepen.set(key, { faseKey, titel, items: [pi] })
+    }
+
+    // Sorteer op vroegste start (dan titel) zodat de volgorde stabiel en chronologisch is.
+    const vroegsteStart = (g: Groep): string =>
+      g.items.map(pi => pi.startDate).filter(Boolean).sort()[0] ?? '￿'
+    const gesorteerdeGroepen = [...groepen.values()].sort(
+      (a, b) => vroegsteStart(a).localeCompare(vroegsteStart(b)) || a.titel.localeCompare(b.titel),
+    )
+
+    let activiteitVolg = 0
+    for (const groep of gesorteerdeGroepen) {
+      const { faseKey, titel, items } = groep
+      const eerste = items[0]
+      const crew = isCrewblok(eerste)
+
+      // Datums spannen de hele groep; uren zijn de som over de plan-items.
+      const starts = items.map(pi => pi.startDate).filter(Boolean).sort()
+      const ends = items.map(pi => pi.endDate).filter(Boolean).sort()
+      const gewensteStart = starts[0] ?? null
+      const deadline = ends[ends.length - 1] ?? null
+      const urenTotaal = items.reduce((sum, pi) => sum + (pi.hours ?? 0), 0)
+
+      // Eerste niet-lege opmerking (search-veld `remark`, anders detail-`notes`).
+      const remark =
+        items.map(pi => (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null).find(Boolean) ?? null
+      const omschrijving = crew ? (eerste.project?.name ?? remark) : remark
+
+      // Bewakingscode uit het eerste plan-item (groep zit binnen één fase).
+      const secCode = eerste.securityPlanningLink?.securityCode ?? null
 
       const { data: act, error: actErr } = await supabase
         .from('planning_activiteiten')
         .insert({
           dossier_id: dossierId,
-          fase_id: faseMap.get(faseKeyVan(pi)) ?? null,
+          fase_id: faseMap.get(faseKey) ?? null,
           titel,
           omschrijving,
           bewakingscode: secCode?.code?.trim() || null,
           bouw7_security_code_id: secCode?.id ?? null,
-          geschatte_uren: pi.hours ?? null,
-          gewenste_start: toDate(pi.startDate),
-          deadline: toDate(pi.endDate),
+          geschatte_uren: urenTotaal || null,
+          gewenste_start: toDate(gewensteStart),
+          deadline: toDate(deadline),
           status: 'gepland',
           volgorde: activiteitVolg++,
           bron: 'bouw7',
-          bouw7_id: String(pi.id),
+          bouw7_id: `group:${faseKey}:${titel.toLowerCase()}`,
           bouw7_laatst_sync: nu,
         })
         .select('id')
@@ -236,25 +273,28 @@ export async function syncDossierPlanning(
       }
       result.nieuw++
 
-      // ── 4. Planitems per toegewezen medewerker ──────────────────────
-      const emps = detailMap.get(pi.id)?.employees ?? []
+      // ── 4. Planitems per plan-item × toegewezen medewerker ──────────
+      // Elk planitem behoudt de eigen datums/uren van zijn plan-item.
       const itemRows: Record<string, unknown>[] = []
-      for (const emp of emps) {
-        const medewerkerId = empMap.get(String(emp.id))
-        if (!medewerkerId) {
-          result.fouten++
-          continue
+      for (const pi of items) {
+        const emps = detailMap.get(pi.id)?.employees ?? []
+        for (const emp of emps) {
+          const medewerkerId = empMap.get(String(emp.id))
+          if (!medewerkerId) {
+            result.fouten++
+            continue
+          }
+          itemRows.push({
+            activiteit_id: act.id,
+            medewerker_id: medewerkerId,
+            start_dt: toTimestamp(pi.startDate),
+            eind_dt: toTimestamp(pi.endDate),
+            uren: pi.hours ?? 0,
+            bron: 'bouw7',
+            bouw7_id: `${pi.id}:${emp.id}`,
+            bouw7_laatst_sync: nu,
+          })
         }
-        itemRows.push({
-          activiteit_id: act.id,
-          medewerker_id: medewerkerId,
-          start_dt: toTimestamp(pi.startDate),
-          eind_dt: toTimestamp(pi.endDate),
-          uren: pi.hours ?? 0,
-          bron: 'bouw7',
-          bouw7_id: `${pi.id}:${emp.id}`,
-          bouw7_laatst_sync: nu,
-        })
       }
       if (itemRows.length > 0) {
         await supabase.from('planning_items').insert(itemRows)
