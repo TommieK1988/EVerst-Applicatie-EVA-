@@ -15,6 +15,30 @@ async function eisBeheer(): Promise<{ ok: false; error: string } | null> {
   catch (e) { if (e instanceof GeenToegangError) return { ok: false, error: e.message }; throw e }
 }
 
+/** Storage-pad van een CAO-PDF afleiden uit de opgeslagen pdf_url (volledige URL of kaal pad). */
+function caoPad(pdfUrl?: string | null): string | null {
+  if (!pdfUrl) return null
+  const i = pdfUrl.indexOf('/cao-documenten/')
+  if (i >= 0) return pdfUrl.slice(i + '/cao-documenten/'.length)
+  return pdfUrl.startsWith('cao/') ? pdfUrl : null
+}
+
+/**
+ * Verse signed URL (5 min) voor het inzien/downloaden van een CAO-PDF. De bucket
+ * is privaat (salarisdata), dus er is geen publieke URL meer — beheerders halen
+ * per klik een kortstondige link op.
+ */
+export async function getCaoSignedUrl(cao_id: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const nope = await eisBeheer(); if (nope) return nope
+  const supabase = db()
+  const { data: doc } = await supabase.from('cao_documenten').select('pdf_url').eq('id', cao_id).maybeSingle()
+  const pad = caoPad(doc?.pdf_url)
+  if (!pad) return { ok: false, error: 'Geen PDF gekoppeld' }
+  const { data, error } = await supabase.storage.from('cao-documenten').createSignedUrl(pad, 300)
+  if (error || !data?.signedUrl) return { ok: false, error: 'Kon downloadlink niet maken' }
+  return { ok: true, url: data.signedUrl }
+}
+
 // ── CAO document uploaden + aanmaken ─────────────────────────────────────────
 
 export async function uploadCaoDocument(
@@ -29,8 +53,9 @@ export async function uploadCaoDocument(
   if (!naam) return { ok: false, error: 'Naam is verplicht' }
   if (!file || !file.size) return { ok: false, error: 'Geen bestand meegegeven' }
 
-  // Bucket aanmaken als die nog niet bestaat (public zodat server-side fetch werkt)
-  await supabase.storage.createBucket('cao-documenten', { public: true }).catch(() => null)
+  // Bucket aanmaken als die nog niet bestaat. Privaat: salarisdata — inzien via
+  // kortstondige signed URLs (getCaoSignedUrl), niet via een publieke URL.
+  await supabase.storage.createBucket('cao-documenten', { public: false }).catch(() => null)
 
   const veiligNaam = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `cao/${Date.now()}_${veiligNaam}`
@@ -71,18 +96,23 @@ const loonregelSchema = z.array(z.object({
   bruto_maand: z.number().nullable(),
 }))
 
-export async function extraheerLoonschalen(cao_id: string, pdf_url: string): Promise<ActionResult & { regels?: Loonregel[]; raw?: string }> {
+export async function extraheerLoonschalen(cao_id: string): Promise<ActionResult & { regels?: Loonregel[]; raw?: string }> {
   const nope = await eisBeheer(); if (nope) return nope
   const supabase = db()
+
+  // pdf_url ophalen en storage-pad afleiden (bucket is privaat → download via service-role)
+  const { data: doc } = await supabase.from('cao_documenten').select('pdf_url').eq('id', cao_id).maybeSingle()
+  const pad = caoPad(doc?.pdf_url)
+  if (!pad) return { ok: false, error: 'Geen PDF gekoppeld aan dit document' }
 
   // Status: bezig
   await supabase.from('cao_documenten').update({ extractie_status: 'bezig', extractie_fout: null }).eq('id', cao_id)
 
   try {
-    // PDF ophalen als base64
-    const response = await fetch(pdf_url)
-    if (!response.ok) throw new Error(`PDF ophalen mislukt: ${response.statusText}`)
-    const buffer = await response.arrayBuffer()
+    // PDF ophalen als base64 via service-role download (privaat bucket)
+    const { data: blob, error: dlErr } = await supabase.storage.from('cao-documenten').download(pad)
+    if (dlErr || !blob) throw new Error('PDF ophalen mislukt')
+    const buffer = await blob.arrayBuffer()
     const base64 = Buffer.from(buffer).toString('base64')
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
