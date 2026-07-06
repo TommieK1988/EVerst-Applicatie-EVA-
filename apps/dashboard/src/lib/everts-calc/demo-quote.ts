@@ -17,7 +17,7 @@
  */
 
 import type { Quote, QuoteLine, QuoteSection } from './types-quotes'
-import type { BedrijfContext } from './quote-renderer'
+import type { BedrijfContext, DossierContext } from './quote-renderer'
 
 const NU = new Date()
 const OVER_30_DAGEN = new Date(NU.getTime() + 30 * 24 * 60 * 60 * 1000)
@@ -74,17 +74,48 @@ function sectie(
   }
 }
 
-/** Representatief bedrijf voor de preview (kan worden overschreven met echte gegevens). */
+/** Representatieve werkmaatschappij voor de preview (kan worden overschreven met echte gegevens). */
 export const DEMO_BEDRIJF: BedrijfContext = {
-  naam: 'Everts Groep B.V.',
+  naam: 'Everts Onderhoudsschilders B.V.',
+  code: '001',
   adres: 'Voorbeeldstraat 1',
   postcode_plaats: '1234 AB Amstelveen',
+  land: 'Nederland',
   telefoon: '020 - 123 45 67',
   email: 'offerte@evertsgroep.nl',
   website: 'www.evertsgroep.nl',
   kvk: '12345678',
   btw: 'NL123456789B01',
   iban: 'NL00 BANK 0000 0000 00',
+  logo_url: '',
+  logo_wit_url: '',
+  is_werkmaatschappij: true,
+}
+
+/** Demo dossier-context (informatie-tab) voor de preview. */
+export function buildDemoDossierContext(): DossierContext {
+  return {
+    heeft: true,
+    dossiernummer: 'D-2026-0042',
+    titel: 'Onderhoud- en schilderwerk Voorbeeldpand',
+    referentie: 'Inkoopnr. 2026-0042',
+    opdracht_referentie: 'OPO-2026-0042',
+    werkadres: 'Projectstraat 12, 3511 AB Utrecht',
+    werkadres_naam: 'Voorbeeldpand VvE',
+    werkadres_straat: 'Projectstraat 12',
+    werkadres_postcode: '3511 AB',
+    werkadres_plaats: 'Utrecht',
+    werkadres_telefoon: '030 - 111 22 33',
+    werkadres_email: 'beheer@voorbeeldpand.nl',
+    calculator: 'A. Calculator',
+    projectleider: 'P. Projectleider',
+    teamleider: 'T. Teamleider',
+    werkvoorbereider: 'W. Werkvoorbereider',
+    uitvoerder: 'U. Uitvoerder',
+    contactpersoon: 'J. de Vries',
+    contactpersoon_email: 'j.devries@corporatie-voorbeeld.nl',
+    contactpersoon_telefoon: '030 - 765 43 21',
+  }
 }
 
 /** Bouwt de volledige synthetische demo-offerte. */
@@ -96,14 +127,14 @@ export function buildDemoQuote(): Quote {
     [
       regel('demo-sec-1', 0, {
         omschrijving: 'Schilderwerk kozijnen voorgevel',
-        hoeveelheid: 48.5, eenheid: 'm²', eenheidsprijs: 27.5,
+        hoeveelheid: 48.5, eenheid: 'm²', eenheidsprijs: 27.5, btw_pct: 9,
         opmerking: 'Twee lagen dekkend op basis van hoogglans lakverf.',
         schilderbehandeling: 'Schuren, plamuren, gronden en 2× aflakken',
         kostprijs_pe: 18.2, uren_pe: 0.35,
       }),
       regel('demo-sec-1', 1, {
         omschrijving: 'Houtrotherstel dorpels',
-        hoeveelheid: 6, eenheid: 'st', eenheidsprijs: 85,
+        hoeveelheid: 6, eenheid: 'st', eenheidsprijs: 85, btw_pct: 9,
         opmerking: 'Aanhelen met 2-componenten reparatiemortel.',
         schilderbehandeling: 'Uitfrezen, epoxy-injectie en afwerken',
       }),

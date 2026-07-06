@@ -20,8 +20,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import {
   STANDAARD_LAYOUT,
-  BEDRIJF_FALLBACK,
   type BedrijfContext,
+  type DossierContext,
   type LayoutContext,
 } from '@/lib/everts-calc/quote-renderer'
 import {
@@ -29,10 +29,11 @@ import {
   loadQuoteTemplateBuffer,
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
+import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { appGraphGetRaw } from '@/lib/o365/graph'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
-import { buildDemoQuote, DEMO_BEDRIJF } from '@/lib/everts-calc/demo-quote'
+import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,16 +117,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // ── 2. Bedrijfsgegevens ──────────────────────────────────────────────────
-    const bedrijfBasis = isDemo ? DEMO_BEDRIJF : BEDRIJF_FALLBACK
-    let bedrijf: BedrijfContext = bedrijfBasis
+    // Bedrijf (werkmaatschappij) + dossier: demo → testgegevens, anders uit de DB.
+    let bedrijf: BedrijfContext
+    let dossier: DossierContext
+    if (isDemo) {
+      bedrijf = DEMO_BEDRIJF
+      dossier = buildDemoDossierContext()
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = (await createClient()) as any
+      const bron = await laadBedrijfEnDossier(sb, quote)
+      bedrijf = bron.bedrijf
+      dossier = bron.dossier
+    }
     if (bedrijfParam) {
       try {
         const parsed = JSON.parse(bedrijfParam) as Record<string, unknown>
         const gevuld = Object.fromEntries(
           Object.entries(parsed).filter(([, v]) => v != null && v !== ''),
         )
-        bedrijf = { ...bedrijfBasis, ...gevuld }
-      } catch { /* basis gebruiken */ }
+        bedrijf = { ...bedrijf, ...gevuld }
+      } catch { /* db/demo-bedrijf gebruiken */ }
     }
 
     // ── 3. Template ophalen + vullen → ingevuld .docx ────────────────────────
@@ -141,7 +153,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       } else {
         templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
       }
-      docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer)
+      docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
     } catch (err) {
       if (err instanceof GeenTemplateError) {
         return foutHtml(

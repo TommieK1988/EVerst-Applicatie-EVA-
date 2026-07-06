@@ -13,7 +13,7 @@
  * `stripHtml` is een veiligheidsnet voor eventuele legacy-HTML in oude offertes.
  */
 
-import { buildRenderContext, type BedrijfContext, type LayoutContext } from './quote-renderer'
+import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
 import { fixSplitDocxTags, stripHtml } from './docx-utils'
 import type { Quote } from './types-quotes'
 import { appGraphGetRaw } from '../o365/graph'
@@ -65,6 +65,8 @@ const LOGO_MAX = { w: 240, h: 120 }
 interface ExtraImages {
   /** Handtekening-bytes (optioneel; tag {%handtekening}). */
   handtekening?: Buffer | null
+  /** Gekoppeld dossier (werkadres, calculator, referenties); leeg als niet gekoppeld. */
+  dossier?: DossierContext
 }
 
 /**
@@ -78,10 +80,11 @@ export async function renderQuoteDocx(
   templateBuffer: ArrayBuffer | Buffer,
   extra: ExtraImages = {},
 ): Promise<Buffer> {
-  const ctx = buildRenderContext(quote, bedrijf, layout)
+  const ctx = buildRenderContext(quote, bedrijf, layout, extra.dossier)
 
-  // Logo ophalen (best-effort) en image-context opbouwen
+  // Logo's ophalen (best-effort) en image-context opbouwen
   const logo = await fetchImage(bedrijf.logo_url)
+  const logoWit = await fetchImage(bedrijf.logo_wit_url)
 
   // Docx-vriendelijke context: HTML uit vrije-tekstvelden strippen naar platte tekst
   const docxCtx = {
@@ -96,6 +99,7 @@ export async function renderQuoteDocx(
     opmerkingen: stripHtml(ctx.opmerkingen),
     // Image-tags
     logo: logo ?? '',
+    logo_wit: logoWit ?? '',
     handtekening: extra.handtekening ?? '',
   }
 

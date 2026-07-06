@@ -19,7 +19,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import {
   STANDAARD_LAYOUT,
-  BEDRIJF_FALLBACK,
   type BedrijfContext,
   type LayoutContext,
 } from '@/lib/everts-calc/quote-renderer'
@@ -28,6 +27,7 @@ import {
   loadQuoteTemplateBuffer,
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
+import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
@@ -108,13 +108,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       papier_orientatie: rawLayout.papier_orientatie ?? STANDAARD_LAYOUT.papier_orientatie,
     }
 
-    // ── 3. Bedrijfsgegevens ──────────────────────────────────────────────────
-    let bedrijf: BedrijfContext = BEDRIJF_FALLBACK
+    // ── 3. Bedrijf (werkmaatschappij) + dossier uit de database ──────────────
+    const { bedrijf: dbBedrijf, dossier } = await laadBedrijfEnDossier(supabase, quote)
+    let bedrijf: BedrijfContext = dbBedrijf
     if (bedrijfParam) {
       try {
-        bedrijf = { ...BEDRIJF_FALLBACK, ...JSON.parse(bedrijfParam) }
+        const parsed = JSON.parse(bedrijfParam) as Record<string, unknown>
+        const gevuld = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v != null && v !== ''))
+        bedrijf = { ...dbBedrijf, ...gevuld }
       } catch {
-        /* gebruik fallback */
+        /* db-bedrijf gebruiken */
       }
     }
 
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     let output: Buffer
     try {
       const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
-      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer)
+      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
     } catch (err) {
       if (err instanceof GeenTemplateError) {
         return NextResponse.json(
