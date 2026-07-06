@@ -72,6 +72,8 @@ type Props<T extends { id: string }> = {
   beginSortering?: SortingState
   /** Compacte rij-dichtheid (minder verticaal padding) — opt-in voor data-dichte schermen. */
   dicht?: boolean
+  /** Toon de per-rij actieknop (⋯) rechts (default true). Rijen blijven klikbaar zonder de knop. */
+  toonRijActie?: boolean
 }
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
@@ -275,7 +277,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -797,7 +799,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                     if (columnVisibility[header.id] === false) return null
                     return <col key={header.id} style={{ width: header.getSize() }} />
                   })}
-                  <col style={{ width: 44 }} />
+                  {toonRijActie && <col style={{ width: 44 }} />}
                 </colgroup>
                 <thead>
                   <tr>
@@ -840,7 +842,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                     })}
 
                     {/* Acties kolom */}
-                    <th style={{ ...thStyle, width: 44 }} />
+                    {toonRijActie && <th style={{ ...thStyle, width: 44 }} />}
                   </tr>
 
                   {/* Filter row */}
@@ -870,7 +872,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                           </th>
                         )
                       })}
-                      <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />
+                      {toonRijActie && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
                     </tr>
                   )}
                 </thead>
@@ -904,22 +906,24 @@ export default function OverzichtTabel<T extends { id: string }>({
                         })}
 
                         {/* ⋯ actie-knop */}
-                        <td style={{ ...tdStyle, width: 44, padding: '12px 8px' }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); onRijKlik ? onRijKlik(row.original) : router.push(`/${scherm}/${row.original.id}`) }}
-                            style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 0, width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', color: 'var(--fg-muted)' }}
-                            className="tbl-action-btn"
-                          >
-                            <MoreHorizontal size={15} />
-                          </button>
-                        </td>
+                        {toonRijActie && (
+                          <td style={{ ...tdStyle, width: 44, padding: '12px 8px' }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); onRijKlik ? onRijKlik(row.original) : router.push(`/${scherm}/${row.original.id}`) }}
+                              style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 0, width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', color: 'var(--fg-muted)' }}
+                              className="tbl-action-btn"
+                            >
+                              <MoreHorizontal size={15} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
 
                   {table.getRowModel().rows.length === 0 && (
                     <tr>
-                      <td colSpan={columnOrder.filter(k => columnVisibility[k] !== false).length + 2}
+                      <td colSpan={columnOrder.filter(k => columnVisibility[k] !== false).length + (selecteerbaar ? 1 : 0) + (toonRijActie ? 1 : 0)}
                         style={{ ...tdStyle, textAlign: 'center', color: 'var(--fg-muted)', padding: '40px 0', borderBottom: 'none' }}
                       >Geen resultaten</td>
                     </tr>
