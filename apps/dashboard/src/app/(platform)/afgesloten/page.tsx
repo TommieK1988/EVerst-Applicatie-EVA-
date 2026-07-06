@@ -8,7 +8,7 @@ import { AfgeslotenLijst } from './AfgeslotenLijst'
 export const metadata: Metadata = { title: 'Afgesloten' }
 
 export default async function AfgeslotenPage() {
-  await vereisModuleToegang('afgesloten')
+  await vereisModuleToegang('dossiers')
 
   let user_id: string | null = null
   try {

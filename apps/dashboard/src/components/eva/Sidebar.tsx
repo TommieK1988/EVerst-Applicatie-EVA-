@@ -52,7 +52,7 @@ const NAV: NavEntry[] = [
   { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes,   module: 'dossiers'    },
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
   { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
-  { href: '/afgesloten',   label: 'Afgesloten',  Icon: IconAfgesloten, module: 'afgesloten' },
+  { href: '/afgesloten',   label: 'Afgesloten',  Icon: IconAfgesloten, module: 'dossiers' },
 ]
 
 const BEHEER: NavEntry[] = [

@@ -46,6 +46,30 @@ export function getDossierSubstatus(dossier: Dossier): DossierSubstatus {
   return dossier.opdracht_substatus!
 }
 
+/**
+ * True als een dossier definitief is afgesloten en daarmee overal **alleen-lezen**:
+ * Afgewezen/Vervallen (aanvraag), Verloren/Vervallen (offerte), Financieel afgesloten
+ * (opdracht), of een Bouw7-projectstatus in de 07-reeks (afgesloten projecten).
+ * Structureel getypeerd zodat zowel een volledige `DossierRij` als een kale status-select
+ * (zie `lib/dossiers/guards.ts`) hierin passen.
+ */
+export function isDossierAfgesloten(dossier: {
+  hoofdstatus?: Hoofdstatus | null
+  aanvraag_substatus?: AanvraagSubstatus | null
+  offerte_substatus?: OfferteSubstatus | null
+  opdracht_substatus?: OpdrachtSubstatus | null
+  bouw7_projectstatus_naam?: string | null
+}): boolean {
+  const b7 = dossier.bouw7_projectstatus_naam?.trim()
+  if (b7 && b7.startsWith('07')) return true
+  switch (dossier.hoofdstatus) {
+    case 'aanvraag': return dossier.aanvraag_substatus === 'afgewezen' || dossier.aanvraag_substatus === 'vervallen'
+    case 'offerte':  return dossier.offerte_substatus === 'verloren'  || dossier.offerte_substatus === 'vervallen'
+    case 'opdracht': return dossier.opdracht_substatus === 'financieel_afgesloten'
+    default:         return false
+  }
+}
+
 export const AANVRAAG_STATUSSEN: StatusDef<AanvraagSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'               },
   { key: 'inlezen_aanvraag',    label: 'Inlezen aanvraag'    },
