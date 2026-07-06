@@ -30,14 +30,18 @@ const AlertDialogContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay />
-    <AlertDialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        'fixed left-1/2 top-1/2 z-50 flex w-[calc(100vw-32px)] max-w-[440px] -translate-x-1/2 -translate-y-1/2 flex-col gap-2 rounded-xl bg-white p-6 shadow-[0_24px_48px_-12px_rgba(16,24,40,0.22)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-        className,
-      )}
-      {...props}
-    />
+    {/* Centrering via de flex-wrapper, niet via transform op de content: de zoom-in-animatie
+        zet een eigen (scale-)transform en zou een translate-centrering overschrijven. Zie dialog.tsx. */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      <AlertDialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          'pointer-events-auto relative flex max-h-[85vh] w-[calc(100vw-32px)] max-w-[440px] flex-col gap-2 overflow-y-auto rounded-xl bg-white p-6 shadow-[0_24px_48px_-12px_rgba(16,24,40,0.22)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+          className,
+        )}
+        {...props}
+      />
+    </div>
   </AlertDialogPortal>
 ))
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName

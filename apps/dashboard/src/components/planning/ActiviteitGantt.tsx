@@ -175,7 +175,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   onClose: () => void; onCreated: (e: PlanningItemVerrijkt) => void
   defaultStart?: string
 }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = format(new Date(), 'yyyy-MM-dd') // lokale datum, geen UTC-verschuiving
   const [medId, setMedId] = useState(medewerkers[0]?.id ?? '')
   const [start, setStart] = useState(defaultStart ?? activiteit.gewenste_start ?? today)
   const [eind,  setEind]  = useState(defaultStart ?? activiteit.deadline ?? activiteit.gewenste_start ?? today)

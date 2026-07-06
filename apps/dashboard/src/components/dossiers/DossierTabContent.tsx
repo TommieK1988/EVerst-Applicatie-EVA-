@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel } from '@/lib/dossiers/actions'
+import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getGoedgekeurdMeerwerkExcl } from '@/lib/dossiers/meerwerk'
@@ -48,7 +48,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker] = await Promise.all([
+    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen] = await Promise.all([
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
@@ -61,6 +61,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
       getGoedgekeurdMeerwerkExcl(id).catch(() => 0),
       getDossierNotities(id).catch(() => []),
       getCurrentMedewerker().catch(() => null),
+      getWerkmaatschappijen().catch(() => []),
     ])
 
     // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
@@ -84,6 +85,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
           meerwerk={meerwerk}
           notities={notities}
           currentMedewerkerId={currentMedewerker?.id ?? null}
+          werkmaatschappijen={werkmaatschappijen}
         />
       </>
     )

@@ -147,3 +147,112 @@ function mergeSplitTagsInXml(xml: string): string {
 
   return result
 }
+
+// ─── Template-analyse (proactieve controle) ─────────────────────────────────────
+
+export type TagType = 'waarde' | 'loop-open' | 'loop-sluit' | 'inverse' | 'afbeelding'
+
+export interface TemplateTag {
+  naam: string
+  type: TagType
+  context: string
+}
+
+export interface TemplateProbleem {
+  ernst: 'fout' | 'let_op'
+  uitleg: string
+  tag?: string
+  context?: string
+}
+
+export interface TemplateAnalyse {
+  tags: TemplateTag[]
+  problemen: TemplateProbleem[]
+}
+
+/** ~48 tekens rond een positie in de tekst, whitespace-genormaliseerd, met …-randen. */
+function contextRond(tekst: string, index: number, lengte: number): string {
+  const W = 48
+  const start = Math.max(0, index - W)
+  const end = Math.min(tekst.length, index + lengte + W)
+  const snippet = tekst.slice(start, end).replace(/\s+/g, ' ').trim()
+  return (start > 0 ? '…' : '') + snippet + (end < tekst.length ? '…' : '')
+}
+
+/**
+ * Analyseert een .docx-template proactief: alle tags mét omringende tekst, plus
+ * structurele problemen (ongebalanceerde loops, losse accolades). Draait op de al
+ * gerepareerde tekst (`mergeSplitTagsInXml`), zodat alleen écht kapotte tags overblijven.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function analyseerTemplate(zip: any): TemplateAnalyse {
+  const xmlFiles = Object.keys(zip.files as Record<string, unknown>).filter(
+    (name) => name.startsWith('word/') && name.endsWith('.xml') && !name.includes('_rels'),
+  )
+
+  const tags: TemplateTag[] = []
+  const problemen: TemplateProbleem[] = []
+  const open: Record<string, { n: number; context: string }> = {}
+  let losseAccolades = 0
+
+  for (const fileName of xmlFiles) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const file = (zip.files as any)[fileName]
+    if (!file || file.dir) continue
+    const tekst = mergeSplitTagsInXml(file.asText()).replace(/<[^>]+>/g, ' ')
+
+    const re = /\{([^{}]*)\}/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(tekst)) !== null) {
+      const rauw = m[1].trim()
+      const ctx = contextRond(tekst, m.index, m[0].length)
+      if (!rauw) {
+        problemen.push({ ernst: 'fout', uitleg: 'Lege accolades {} gevonden.', context: ctx })
+        continue
+      }
+      const prefix = rauw[0]
+      const naam = rauw.replace(/^[#/^%]/, '').trim()
+      const type: TagType =
+        prefix === '#' ? 'loop-open' :
+        prefix === '/' ? 'loop-sluit' :
+        prefix === '^' ? 'inverse' :
+        prefix === '%' ? 'afbeelding' : 'waarde'
+      tags.push({ naam, type, context: ctx })
+
+      if (type === 'loop-open' || type === 'inverse') {
+        open[naam] = { n: (open[naam]?.n ?? 0) + 1, context: ctx }
+      } else if (type === 'loop-sluit') {
+        if (!open[naam] || open[naam].n <= 0) {
+          problemen.push({
+            ernst: 'fout', tag: `/${naam}`, context: ctx,
+            uitleg: `Sluit-tag {/${naam}} zonder bijbehorende {#${naam}} of {^${naam}}.`,
+          })
+        } else {
+          open[naam].n--
+        }
+      }
+    }
+
+    // Losse accolades: verwijder alle geldige {..} en tel wat overblijft.
+    const rest = tekst.replace(/\{[^{}]*\}/g, '')
+    losseAccolades += (rest.match(/[{}]/g) ?? []).length
+  }
+
+  for (const naam of Object.keys(open)) {
+    if (open[naam].n > 0) {
+      problemen.push({
+        ernst: 'fout', tag: `#${naam}`, context: open[naam].context,
+        uitleg: `Loop {#${naam}} is niet afgesloten met {/${naam}}.`,
+      })
+    }
+  }
+
+  if (losseAccolades > 0) {
+    problemen.push({
+      ernst: 'fout',
+      uitleg: `${losseAccolades} losse accolade(s) ({ of }) gevonden — waarschijnlijk een tag die Word heeft opgeknipt. Verwijder de tag en typ hem in één keer opnieuw.`,
+    })
+  }
+
+  return { tags, problemen }
+}

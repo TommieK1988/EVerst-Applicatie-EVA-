@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client, logSync, type SyncResult, type SyncMode } from './sync'
 import { fingerprint } from './fingerprint'
+import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -36,13 +37,16 @@ const DETAIL_BATCH = 10
 /**
  * Haal per plan-item het Heimdall-detail (`/plan-item/{id}`) op — de enige plek waar de
  * toegewezen `employees[]` staan; de Apollo-search levert die niet. Gebatcht (Promise.allSettled),
- * net als de Athena-/offerte-calls in syncProjects. Geeft een map plan-item-id → detail.
+ * net als de Athena-/offerte-calls in syncProjects. Geeft een map plan-item-id → detail plus het
+ * aantal mislukte calls, zodat de aanroeper een rebuild op onvolledige data kan afbreken
+ * (anders zouden toewijzingen stilletjes verdwijnen bij een haperende API).
  */
 export async function fetchPlanItemDetails(
   ids: number[],
   client: Bouw7Client,
-): Promise<Map<number, Bouw7PlanItemDetail>> {
+): Promise<{ map: Map<number, Bouw7PlanItemDetail>; mislukt: number }> {
   const map = new Map<number, Bouw7PlanItemDetail>()
+  const gefaald: number[] = []
   for (let i = 0; i < ids.length; i += DETAIL_BATCH) {
     const batch = ids.slice(i, i + DETAIL_BATCH)
     const results = await Promise.allSettled(
@@ -50,9 +54,21 @@ export async function fetchPlanItemDetails(
     )
     results.forEach((r, j) => {
       if (r.status === 'fulfilled' && r.value) map.set(batch[j], r.value)
+      else gefaald.push(batch[j])
     })
   }
-  return map
+  // Eén rustige (sequentiële) herkansing — vangt throttling door de parallelle batches.
+  let mislukt = 0
+  for (const id of gefaald) {
+    try {
+      const det = await client.get<Bouw7PlanItemDetail>(`/plan-item/${id}`)
+      if (det) map.set(id, det)
+      else mislukt++
+    } catch {
+      mislukt++
+    }
+  }
+  return { map, mislukt }
 }
 
 /** Een plan-item zonder bewakingscode + met dezelfde naam als het project = crewblok. */
@@ -98,6 +114,12 @@ export async function syncDossierPlanning(
 
     // Planning-fingerprint uit de goedkope Apollo-lijst (id/updatedAt/uren/datums/naam/chapter/remark).
     // Is die gelijk aan de opgeslagen hash → de dure /plan-item/{id} detail-calls + rebuild overslaan.
+    // KANTTEKENING: de medewerker-TOEWIJZINGEN zitten alléén in het detail-endpoint en bumpen
+    // updatedAt níet (geverifieerd tegen de live API — Apollo kent geen employees-veld). Een pure
+    // toewijzingswissel is dus onzichtbaar voor deze hash; `req` (requisite, benodigd aantal) vangt
+    // een deel. De dagelijkse cron in mode 'full' negeert de hash en herbouwt alles — daarmee zijn
+    // toewijzingen maximaal één dag verouderd. Verwijder de hash-skip niet "voor de zekerheid":
+    // dat zou elke incrementele run honderden detail-calls per dossier terugbrengen.
     const planningHash = fingerprint(
       planItems
         .map(pi => ({
@@ -111,6 +133,7 @@ export async function syncDossierPlanning(
           sc:  pi.securityPlanningLink?.securityCode?.id ?? null,
           rm:  pi.remark ?? null,
           dep: pi.department?.name ?? null,
+          req: pi.requisite ?? null,
         }))
         .sort((a, b) => a.id - b.id),
     )
@@ -120,7 +143,14 @@ export async function syncDossierPlanning(
     }
 
     // De toegewezen medewerkers staan alleen in het detail-endpoint, niet in de search-response.
-    const detailMap = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
+    const { map: detailMap, mislukt: detailsMislukt } = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
+    if (detailsMislukt > 0) {
+      // Onvolledige details → rebuild afbreken en hash NIET opslaan; volgende run probeert opnieuw.
+      // Doorgaan zou bestaande (correcte) planitems wissen zonder vervanging.
+      result.fouten++
+      result.foutMelding = `${detailsMislukt} plan-item-details niet opgehaald; rebuild overgeslagen`
+      return result
+    }
     const nu = new Date().toISOString()
 
     // ── 1. Fasen (Hoofdtaken) ────────────────────────────────────────
@@ -297,12 +327,23 @@ export async function syncDossierPlanning(
         }
       }
       if (itemRows.length > 0) {
-        await supabase.from('planning_items').insert(itemRows)
+        const { error: itemErr } = await supabase.from('planning_items').insert(itemRows)
+        if (itemErr) {
+          // Bv. FK-fout doordat een gelijktijdige sync de activiteit al wiste — telt als fout
+          // zodat de hash hieronder niet wordt opgeslagen en de volgende run herstelt.
+          result.fouten++
+          result.foutMelding = itemErr.message
+        }
       }
     }
 
-    // Sla de nieuwe planning-fingerprint op zodat een volgende incrementele sync dit dossier overslaat.
-    await supabase.from('dossiers').update({ bouw7_planning_hash: planningHash }).eq('id', dossierId)
+    // Sla de nieuwe planning-fingerprint op zodat een volgende incrementele sync dit dossier
+    // overslaat — maar alléén bij een foutloze rebuild. Bij fouten (bv. twee gelijktijdige syncs
+    // die elkaars rijen wissen) blijft de oude hash staan, zodat de volgende run dit dossier
+    // opnieuw opbouwt in plaats van een half leeggeraakte planning te bevriezen.
+    if (result.fouten === 0) {
+      await supabase.from('dossiers').update({ bouw7_planning_hash: planningHash }).eq('id', dossierId)
+    }
 
     return result
   } catch (e: unknown) {
@@ -385,22 +426,48 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
     // Scope: planning bestaat in Bouw7 alleen voor dossiers in uitvoering. Aanvraag/offerte-dossiers
     // hebben geen plan-items, dus die slaan we volledig over (geen Apollo-call). Binnen de scope zorgt
     // de planning-hash dat ongewijzigde dossiers de dure detail-calls overslaan.
-    const { data: dossiers } = await supabase
+    // LET OP: 'servicedesk' is GEEN hoofdstatus-enumwaarde (alleen aanvraag/offerte/opdracht) —
+    // servicedesk = Bouw7-status "LB.*" of categorie Dagelijks onderhoud/Mutatie, zoals
+    // getDossiersVoorServicedesk. De oude `.in('hoofdstatus', [...,'servicedesk'])` gaf een stille
+    // enum-fout waardoor deze bulk-sync maandenlang níets synchroniseerde.
+    // Afgeronde dossiers (opdracht financieel_afgesloten, servicedesk financieel_gereed, gearchiveerd)
+    // filteren we hieronder met isActiefDossier — hun planning wijzigt niet meer, dus de Apollo-/detail-
+    // calls zijn verspild. De statusvelden halen we mee zodat die canonieke helper kan beslissen.
+    const { data: dossiers, error: dossierErr } = await supabase
       .from('dossiers')
-      .select('id')
+      .select('id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd')
       .not('bouw7_id', 'is', null)
-      .in('hoofdstatus', ['opdracht', 'servicedesk'])
+      .or('hoofdstatus.eq.opdracht,bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
+
+    // Een query-fout mag nooit meer stil tot "0 dossiers" leiden.
+    if (dossierErr) {
+      totaal.fouten++
+      totaal.foutMelding = `Dossier-scope query mislukt: ${dossierErr.message}`
+      return totaal
+    }
 
     // Eén gedeelde client → niet per dossier opnieuw inloggen bij Bouw7.
     const client = await getBouw7Client()
 
-    for (const d of (dossiers ?? []) as { id: string }[]) {
+    const meldingen: string[] = []
+    for (const d of (dossiers ?? []) as (DossierActiefVelden & { id: string })[]) {
+      // Afgesloten/vervallen/gearchiveerd → planning is bevroren, sla over (geen Bouw7-calls).
+      if (!isActiefDossier(d)) {
+        totaal.overgeslagen = (totaal.overgeslagen ?? 0) + 1
+        continue
+      }
       const r = await syncDossierPlanning(d.id, { mode, client, silent: true })
       totaal.nieuw += r.nieuw
       totaal.bijgewerkt += r.bijgewerkt
       totaal.fouten += r.fouten
       totaal.overgeslagen = (totaal.overgeslagen ?? 0) + (r.overgeslagen ?? 0)
+      // Eerste paar per-dossier foutmeldingen bewaren voor de samenvattende sync_log-regel,
+      // anders is "115 fouten" achteraf niet te herleiden.
+      if (r.fouten > 0 && r.foutMelding && meldingen.length < 3) {
+        meldingen.push(`${d.id.slice(0, 8)}: ${r.foutMelding}`)
+      }
     }
+    if (meldingen.length > 0) totaal.foutMelding = meldingen.join(' | ')
     return totaal
   } catch (e: unknown) {
     totaal.fouten++

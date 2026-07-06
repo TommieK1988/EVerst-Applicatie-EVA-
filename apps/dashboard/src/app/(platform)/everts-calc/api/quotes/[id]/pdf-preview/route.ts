@@ -162,7 +162,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           200,
         )
       }
-      return foutHtml('Template render fout', String(err))
+      console.error('PDF-preview render fout:', err)
+      // Preview van het eigen template: toon de tag + omringende tekst (vindbaar in Word).
+      const detail = String((err as Error)?.message ?? err)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+      return new NextResponse(
+        `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;color:#dc2626">
+          <h2 style="margin:0 0 .4rem">Template render fout</h2>
+          <p style="color:#64748b;font-size:.8rem;margin:.2rem 0 1rem;line-height:1.5">
+            Onderstaande tag(s) konden niet verwerkt worden. Zoek de aangegeven tekst in je Word-template en
+            typ de tag opnieuw. Gebruik de knop <strong>Template controleren</strong> voor een volledig overzicht.
+          </p>
+          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;line-height:1.6;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1rem;color:#7f1d1d;white-space:pre-wrap">${detail}</div>
+        </body></html>`,
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 500 },
+      )
     }
 
     // ── 4. .docx → PDF via Microsoft Graph ───────────────────────────────────
