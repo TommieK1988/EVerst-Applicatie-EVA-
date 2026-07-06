@@ -1922,6 +1922,7 @@ export async function updateDossierInfo(
     werkadres_postcode?: string | null
     werkadres_stad?: string | null
     opdracht_referentie?: string | null
+    werkmaatschappij_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
@@ -1938,6 +1939,18 @@ export async function updateDossierInfo(
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
   return { ok: true }
+}
+
+/** Werkmaatschappijen (bedrijfsgegevens type=werkmaatschappij) voor de dossier-dropdown. */
+export async function getWerkmaatschappijen(): Promise<{ id: string; naam: string; code: string | null }[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('bedrijfsgegevens')
+    .select('id, naam, code')
+    .eq('type', 'werkmaatschappij')
+    .order('naam')
+  return data ?? []
 }
 
 // ─── Dossier-toggles ──────────────────────────────────────────────────────────
@@ -2221,5 +2234,146 @@ export async function updateUurlogBewakingscode(
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }
+  }
+}
+
+/* — Delete calculaties & offertes — */
+
+/**
+ * Verwijdert de everts-calc calculatie/offerte van een dossier.
+ * - Haalt everts_calc_project_id op
+ * - Vindt alle quotes voor dat project in everts-calc
+ * - Verwijdert de quote(s) uit everts-calc
+ * - Cleart everts_calc_project_id in EVA
+ * - RLS-beveiligd: user moet eigenaar zijn van het dossier
+ */
+export async function deleteCalculatieVanDossier(dossierId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dossierId) return { ok: false, error: 'Dossier-ID ontbreekt.' }
+
+  const supabase = createAdminClient()
+
+  // 1. Haal dossier op (RLS-beveiligd door admin client + eventuele user-context)
+  const { data: dossier, error: dossierError } = await supabase
+    .from('dossiers')
+    .select('id, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+
+  if (dossierError || !dossier) {
+    return { ok: false, error: 'Dossier niet gevonden.' }
+  }
+
+  if (!dossier.everts_calc_project_id) {
+    return { ok: false, error: 'Geen calculatie gekoppeld aan dit dossier.' }
+  }
+
+  try {
+    // 2. Roep delete aan in everts-calc (dynamisch import)
+    const { createClient: createEventsCalcClient } = await import('@/lib/everts-calc/supabase/server')
+    const eventsCalcSupa = createEventsCalcClient()
+
+    // Vind quotes voor dit project
+    const { data: quotes, error: quotesError } = await eventsCalcSupa
+      .from('quotes')
+      .select('id')
+      .eq('project_id', dossier.everts_calc_project_id)
+
+    if (quotesError) {
+      return { ok: false, error: `Fout bij ophalen quotes: ${quotesError.message}` }
+    }
+
+    // Verwijder alle quotes
+    if (quotes && quotes.length > 0) {
+      for (const quote of quotes) {
+        const { error: deleteError } = await eventsCalcSupa
+          .from('quotes')
+          .delete()
+          .eq('id', quote.id)
+
+        if (deleteError) {
+          return { ok: false, error: `Fout bij verwijderen quote: ${deleteError.message}` }
+        }
+      }
+    }
+
+    // 3. Clear everts_calc_project_id in EVA
+    const { error: clearError } = await supabase
+      .from('dossiers')
+      .update({ everts_calc_project_id: null })
+      .eq('id', dossierId)
+
+    if (clearError) {
+      return { ok: false, error: `Fout bij clearing calculatie-koppeling: ${clearError.message}` }
+    }
+
+    // 4. Revalidate
+    revalidatePath(`/opdrachten/${dossierId}/calculatie`)
+    revalidatePath(`/servicedesk/${dossierId}/calculatie`)
+
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen calculatie.' }
+  }
+}
+
+/**
+ * Verwijdert een offerte-dossier of zet het terug naar 'aanvraag' status.
+ * - Reset hoofdstatus naar 'aanvraag' (soft delete)
+ * - Cleart everts_calc_project_id als aanwezig
+ * - RLS-beveiligd
+ */
+export async function deleteOfferteDossier(dossierId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dossierId) return { ok: false, error: 'Dossier-ID ontbreekt.' }
+
+  const supabase = createAdminClient()
+
+  // 1. Haal dossier op
+  const { data: dossier, error: dossierError } = await supabase
+    .from('dossiers')
+    .select('id, hoofdstatus, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+
+  if (dossierError || !dossier) {
+    return { ok: false, error: 'Dossier niet gevonden.' }
+  }
+
+  // 2. Check of het een offerte-dossier is
+  if (dossier.hoofdstatus !== 'offerte') {
+    return { ok: false, error: 'Dit dossier is geen offerte.' }
+  }
+
+  try {
+    // 3. If there's a calculatie, delete it first
+    if (dossier.everts_calc_project_id) {
+      const calcResult = await deleteCalculatieVanDossier(dossierId)
+      if (!calcResult.ok) {
+        // Ga door, maar log warning
+        console.warn(`Warning: calculatie delete faalde voor ${dossierId}, ga toch verder met dossier-reset`)
+      }
+    }
+
+    // 4. Reset dossier status naar 'aanvraag'
+    const { error: updateError } = await supabase
+      .from('dossiers')
+      .update({
+        hoofdstatus: 'aanvraag',
+        offerte_substatus: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', dossierId)
+
+    if (updateError) {
+      return { ok: false, error: `Fout bij resetten dossier: ${updateError.message}` }
+    }
+
+    // 5. Revalidate
+    revalidatePath(`/offertes`)
+    revalidatePath(`/opdrachten/${dossierId}`)
+    revalidatePath(`/servicedesk/${dossierId}`)
+
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen offerte.' }
   }
 }
