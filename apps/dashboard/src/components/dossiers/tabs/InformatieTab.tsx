@@ -11,6 +11,7 @@ import {
   type DossierSectie, type DossierRij,
 } from '../types'
 import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
@@ -88,6 +89,7 @@ type FormValues = {
   controller_id: string
   opdracht_referentie: string
   factuuradres_id: string
+  werkmaatschappij_id: string
 }
 
 const DEFAULT_CATEGORIEEN = ['Schilderwerk', 'Houtrotherstel', 'Stukadoorwerk', 'Gevelrenovatie', 'Binnenwerk', 'Overig']
@@ -534,12 +536,14 @@ type Props = {
   notities?: DossierNotitie[]
   /** Ingelogde medewerker — bepaalt welke notities verwijderbaar zijn. */
   currentMedewerkerId?: string | null
+  /** Werkmaatschappijen (bedrijfsgegevens) voor de werkmaatschappij-dropdown. */
+  werkmaatschappijen?: WerkmaatschappijOptie[]
 }
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
   relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
-  notities = [], currentMedewerkerId = null,
+  notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
 }: Props) {
   const router = useRouter()
   const [editMode, setEditMode]     = React.useState(false)
@@ -620,6 +624,9 @@ export function InformatieTab({
     controller_id:           dossier.controller_id        ?? '',
     opdracht_referentie:     dossier.opdracht_referentie  ?? '',
     factuuradres_id:         dossier.factuuradres_id      ?? '',
+    // Handmatige keuze wint; anders afgeleid uit dossiernummer/bouw7_filiaal.
+    werkmaatschappij_id:     (dossier as any).werkmaatschappij_id
+                               ?? leidWerkmaatschappijAf(dossier.dossiernummer, (dossier as any).bouw7_filiaal, werkmaatschappijen),
   })
   const [opgeslagen, setOpgeslagen] = React.useState<FormValues>(form)
 
@@ -691,6 +698,8 @@ export function InformatieTab({
       werkadres_naam:       form.werkadres_naam       || null,
       werkadres_telefoon:   form.werkadres_telefoon   || null,
       werkadres_email:      form.werkadres_email      || null,
+      // Werkmaatschappij is een EVA-eigen classificatie → altijd bewerkbaar.
+      werkmaatschappij_id:  form.werkmaatschappij_id  || null,
       ...(bouw7Vergrendeld ? {} : {
         categorie:            form.categorie            || null,
         contactpersoon_id:    form.contactpersoon_id    || null,
@@ -742,6 +751,8 @@ export function InformatieTab({
   const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
+  const werkmaatschappijOpties = werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))
+  const werkmaatschappijNaam   = werkmaatschappijen.find(w => w.id === form.werkmaatschappij_id)?.naam ?? null
   const categorieOpties    = (categorieen?.length ? categorieen : DEFAULT_CATEGORIEEN).map(c => ({ value: c, label: c }))
   const factuuradresOpties = factuuradressen.map(fa => ({
     value: fa.id,
@@ -949,6 +960,7 @@ export function InformatieTab({
               <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
               <InfoVeld label="Categorie" waarde={form.categorie || null} />
               <InfoVeld label="Referentie" waarde={form.referentie || null} />
+              <InfoVeld label="Werkmaatschappij" waarde={werkmaatschappijNaam} />
               {sectie === 'opdracht' && (
                 <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
               )}
@@ -1014,6 +1026,14 @@ export function InformatieTab({
                           <Input value={form.referentie} onChange={e => set('referentie')(e.target.value)} placeholder="kenmerk van opdrachtgever" />
                         </FormField>
                       )}
+                    <FormField upper label="Werkmaatschappij">
+                      <DsSelect
+                        value={form.werkmaatschappij_id}
+                        onChange={set('werkmaatschappij_id')}
+                        options={werkmaatschappijOpties}
+                        placeholder="— Kies werkmaatschappij —"
+                      />
+                    </FormField>
                     {sectie === 'opdracht' && (
                       <FormField upper label="Opdracht referentie">
                         <Input value={form.opdracht_referentie} onChange={e => set('opdracht_referentie')(e.target.value)} placeholder="Referentie opdrachtgever" />

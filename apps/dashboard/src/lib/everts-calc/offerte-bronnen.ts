@@ -20,9 +20,10 @@ import {
   type DossierContext,
 } from './quote-renderer'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
+import { leidWerkmaatschappijAf } from '@/lib/dossiers/werkmaatschappij'
 
 const DOSSIER_SELECT = `
-  dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal,
+  dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id,
   werkadres_naam, werkadres_straat, werkadres_postcode, werkadres_stad,
   werkadres_telefoon, werkadres_email,
   calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
@@ -110,29 +111,21 @@ export async function laadBedrijfEnDossier(
       dossierRow = data ?? null
     }
 
-    // 2. Werkmaatschappij bij het dossier (naam == bouw7_filiaal), anders de organisatie.
+    // 2. Bedrijfsgegevens: alle werkmaatschappijen + organisatie in één query.
+    const { data: bedrijven } = await supabase
+      .from('bedrijfsgegevens')
+      .select('*')
+      .in('type', ['werkmaatschappij', 'organisatie'])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let bedrijfRow: any = null
-    if (dossierRow?.bouw7_filiaal) {
-      const { data } = await supabase
-        .from('bedrijfsgegevens')
-        .select('*')
-        .eq('naam', dossierRow.bouw7_filiaal)
-        .eq('type', 'werkmaatschappij')
-        .limit(1)
-        .maybeSingle()
-      bedrijfRow = data ?? null
-    }
-    if (!bedrijfRow) {
-      const { data } = await supabase
-        .from('bedrijfsgegevens')
-        .select('*')
-        .eq('type', 'organisatie')
-        .is('parent_id', null)
-        .limit(1)
-        .maybeSingle()
-      bedrijfRow = data ?? null
-    }
+    const lijst: any[] = bedrijven ?? []
+    const werkmaatschappijen = lijst.filter(b => b.type === 'werkmaatschappij')
+    const organisatie = lijst.find(b => b.type === 'organisatie' && b.parent_id == null) ?? null
+
+    // Handmatig gekozen werkmaatschappij wint; anders afgeleid uit dossiernummer/bouw7_filiaal.
+    const wmId =
+      dossierRow?.werkmaatschappij_id ||
+      leidWerkmaatschappijAf(dossierRow?.dossiernummer, dossierRow?.bouw7_filiaal, werkmaatschappijen)
+    const bedrijfRow = (wmId && werkmaatschappijen.find(w => w.id === wmId)) || organisatie
 
     return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow) }
   } catch {

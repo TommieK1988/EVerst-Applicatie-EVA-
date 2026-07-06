@@ -1922,6 +1922,7 @@ export async function updateDossierInfo(
     werkadres_postcode?: string | null
     werkadres_stad?: string | null
     opdracht_referentie?: string | null
+    werkmaatschappij_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
@@ -1938,6 +1939,18 @@ export async function updateDossierInfo(
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
   return { ok: true }
+}
+
+/** Werkmaatschappijen (bedrijfsgegevens type=werkmaatschappij) voor de dossier-dropdown. */
+export async function getWerkmaatschappijen(): Promise<{ id: string; naam: string; code: string | null }[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('bedrijfsgegevens')
+    .select('id, naam, code')
+    .eq('type', 'werkmaatschappij')
+    .order('naam')
+  return data ?? []
 }
 
 // ─── Dossier-toggles ──────────────────────────────────────────────────────────
