@@ -914,6 +914,370 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Verversen en rechten', body: 'Met de knop "↻ Ververs uit Bouw7" haal je direct de meest actuele facturen op zonder op de dagelijkse synchronisatie te wachten. Bewerken van de opvolging (en verversen) is voorbehouden aan administratie en directie; andere gebruikers zien het overzicht alleen-lezen. De keuzelijst met redenen beheer je onder Instellingen → "Debiteuren — redencodes".' },
     ],
   }],
+
+  // ── Hoofdproces: Afgesloten ────────────────────────────────────────────
+  [/^\/afgesloten$/, {
+    title: 'Afgesloten',
+    description: 'Archief van alle afgeronde en afgesloten dossiers: financieel afgesloten opdrachten, verloren offertes, afgewezen en vervallen aanvragen. Vanuit hier bekijk je oude dossiers zonder ze per ongeluk te wijzigen.',
+    sections: [
+      { title: 'Wat staat hier', body: 'Alle dossiers die het proces hebben verlaten: opdrachten met status "financieel afgesloten", niet-gewonnen offertes en aanvragen die zijn afgewezen of vervallen. Actieve dossiers vind je in Aanvragen, Offertes, Opdrachten of Servicedesk.' },
+      { title: 'Filteren en openen', body: 'Met de filter "Soort" schakel je tussen opdracht-/servicedesk-dossiers en aanvraag-/offerte-dossiers. Klik op een regel om het dossier te openen; standaard staat de lijst gesorteerd op laatst gewijzigd.' },
+      { title: 'Alleen-lezen', body: 'Afgesloten dossiers zijn overal in EVA alleen-lezen — je kunt ze bekijken en gebruiken als naslag, maar niet meer bewerken. Wil je toch iets aanpassen, dan moet het dossier eerst heropend worden vanuit de opdracht.' },
+    ],
+  }],
+
+  // ── Persoonlijk: Mijn account ──────────────────────────────────────────
+  [/^\/account$/, {
+    title: 'Mijn account',
+    description: 'Je persoonlijke accountpagina. Beheer hier je profielfoto, persoonsgegevens, handtekening, inloggegevens en de instellingen voor je meldingen.',
+    sections: [
+      { title: 'Profiel & foto', body: 'Upload een profielfoto (anders worden je initialen getoond). Je foto verschijnt in de navigatie en bij berichten. Pas je naam, telefoon, functie en afdeling aan.' },
+      { title: 'Persoonsgegevens & handtekening', body: 'Deze blokken verschijnen alleen als je account gekoppeld is aan een medewerker-record. De handtekening wordt automatisch op digitale offertes en opdrachtbevestigingen geplaatst wanneer jij als ondertekenaar bent ingesteld.' },
+      { title: 'Inloggegevens', body: 'Wijzig hier je wachtwoord of e-mailadres. Als je met Microsoft 365 inlogt, verloopt je aanmelding via je O365-account.' },
+      { title: 'Meldingen', body: 'Zet per categorie in- en uit of je een melding in de app en/of per e-mail wilt ontvangen. Beide kanalen stel je onafhankelijk in.' },
+    ],
+  }],
+
+  // ── Persoonlijk: Mijn taken ────────────────────────────────────────────
+  [/^\/mijn-taken$/, {
+    title: 'Mijn taken',
+    description: 'Alle openstaande taken die aan jou zijn toegewezen, verzameld uit alle lopende dossiers. Dé werklijst om je eigen dag te plannen — gesorteerd op deadline zodat het meest urgente bovenaan staat.',
+    sections: [
+      { title: 'Werken met de lijst', body: 'Klik op een taak om direct naar het tabblad Taken van het bijbehorende dossier te springen. De lijst toont alleen jouw taken; de kolom "Toegewezen aan" is daarom verborgen.' },
+      { title: 'Filteren en sorteren', body: 'Filter op fase, status (Open, In behandeling, Wacht op, Gereed, Vervallen), prioriteit en deadline (Overschreden, Deze week, Later, Geen). Standaard staat de lijst op deadline oplopend.' },
+      { title: 'Kolommen', body: 'Naast de taak zie je het dossiernummer, de dossiertitel, fase, prioriteit, actielijst en de betrokken rollen (projectleider, uitvoerder, calculator, werkvoorbereider). Via "Kolommen beheren" kies je wat zichtbaar is.' },
+    ],
+  }],
+
+  // ── Actielijsten: Taken-overzicht (team) ───────────────────────────────
+  [/^\/taken\/overzicht$/, {
+    title: 'Actielijsten — Openstaande taken',
+    description: 'Team-breed overzicht van alle openstaande taken uit actieve dossiers — niet alleen die van jou. Handig voor binnendienst en projectleiders om te bewaken dat er niets blijft liggen.',
+    sections: [
+      { title: 'Verschil met "Mijn taken"', body: 'Deze lijst toont taken van het hele team; "Mijn taken" toont alleen die aan jou zijn toegewezen. Gebruik de filter "Toegewezen aan" om per medewerker (of "Niet toegewezen") in te zoomen.' },
+      { title: 'Filteren', body: 'Combineer filters op fase, status, prioriteit, deadline en toegewezen medewerker. De deadline-filter markeert ook overschreden taken van nog niet afgeronde acties.' },
+      { title: 'Openen', body: 'Klik op een taak om naar het tabblad Taken van het dossier te gaan en de taak daar af te handelen.' },
+    ],
+  }],
+
+  // ── Formulieren: Overzicht (dossier-inzendingen) ───────────────────────
+  [/^\/formulieren\/overzicht$/, {
+    title: 'Formulieren — Overzicht',
+    description: 'Overzicht van formulier-inzendingen en concepten uit actieve dossiers. Hier volg je welke werkbonnen, inspecties en checklists nog open staan of al zijn ingediend.',
+    sections: [
+      { title: 'Wat je ziet', body: 'Alle nog niet afgeronde formulieren (concepten) en ingediende inzendingen die aan een lopend dossier hangen, met formuliernaam, categorie, dossier, status en deadline.' },
+      { title: 'Openen en hervatten', body: 'Klik op een regel om een concept verder in te vullen of een ingediende inzending te bekijken. Bij een bestaand concept kun je kiezen om verder te gaan of een nieuwe inzending te starten.' },
+      { title: 'Filteren', body: 'Filter op fase, status (Open, Bezig, Ingediend, Afgekeurd, Afgerond), toegewezen medewerker en deadline.' },
+    ],
+  }],
+
+  // ── Formulieren: Sjablonen ─────────────────────────────────────────────
+  [/^\/formulieren\/sjablonen$/, {
+    title: 'Formulieren — Sjablonen',
+    description: 'Beheer de formulier-sjablonen: gedigitaliseerde werkbonnen, inspecties, opleveringen en checklists. Vanuit hier maak, bewerk, publiceer en archiveer je formulieren en bekijk je hun inzendingen.',
+    sections: [
+      { title: 'Sjabloon beheren', body: 'Klik op "Bewerken" om een sjabloon in de formulier-builder te openen, op "Inzendingen" voor alle ingevulde exemplaren, en op "Nieuw formulier" om een sjabloon te maken.' },
+      { title: 'Publiceren', body: 'Alleen gepubliceerde sjablonen tonen de knop "Invullen". Een sjabloon doorloopt de statussen Concept → Gepubliceerd → Gearchiveerd. Gearchiveerde sjablonen staan onderaan met verminderde nadruk; hun inzendingen blijven bewaard.' },
+      { title: 'Versies', body: 'Elke opgeslagen wijziging maakt een nieuwe versie. Bestaande inzendingen blijven gekoppeld aan de versie waarop ze zijn ingevuld.' },
+    ],
+  }],
+
+  // ── EvertsCalc: Calculaties-overzicht ──────────────────────────────────
+  [/^\/everts-calc\/calculaties$/, {
+    title: 'EvertsCalc — Calculaties',
+    description: 'Overzicht van alle calculaties en kostenramingen met verkoopprijzen, marges en stelposten. Gebruik dit als centrale ingang om calculaties te vergelijken en snel naar het onderliggende dossier te springen.',
+    sections: [
+      { title: 'Kolommen', body: 'Per calculatie zie je naam en projectnummer, dossier, klant, dossierstatus, offertenummer, verkoopprijs (excl./incl. BTW), BTW, marge in euro\'s én procenten, stelposten en opties.' },
+      { title: 'Marge-kleuring', body: 'De marge wordt groen (positief), rood (negatief) of neutraal weergegeven zodat je in één oogopslag ziet waar de winstgevendheid onder druk staat.' },
+      { title: 'Openen', body: 'Klik op een regel om de calculatie te openen. Voor aanvragen en offertes land je op het tabblad Calculatie; bij opdrachten gebruik je de Werkbegroting, dus daar open je het dossier zelf.' },
+    ],
+  }],
+
+  // ── Relaties: Contactpersoon-detail ────────────────────────────────────
+  [/^\/relaties\/contactpersonen\/[^/]+$/, {
+    title: 'Relaties — Contactpersoon',
+    description: 'Volledig profiel van een contactpersoon met werk- en privégegevens en de organisaties waaraan de persoon is gekoppeld. Eén contactpersoon kan bij meerdere organisaties horen.',
+    sections: [
+      { title: 'Gegevens bewerken', body: 'Klik op "Bewerken" om aanhef, geslacht, naam, werk-e-mail/telefoon/mobiel/LinkedIn en de privégegevens (e-mail, telefoon, adres, geboortedatum) en opmerkingen aan te passen. Voor- en achternaam zijn verplicht.' },
+      { title: 'Gekoppelde organisaties', body: 'In de zijbalk staan alle organisaties waaraan de contactpersoon is gekoppeld, met hun rol. De organisatie met een "Primair"-badge is de hoofdorganisatie. Klik op de × om een koppeling te verwijderen (na bevestiging).' },
+    ],
+  }],
+
+  // ── Relaties: Particulier-detail ───────────────────────────────────────
+  [/^\/relaties\/particulieren\/[^/]+$/, {
+    title: 'Relaties — Particulier',
+    description: 'Contactrecord van een particuliere klant. Particulieren worden niet aan organisaties gekoppeld en hebben een eenvoudiger profiel dan zakelijke relaties.',
+    sections: [
+      { title: 'Gegevens bewerken', body: 'Klik op "Bewerken" om naam, e-mail, telefoon, mobiel, adres, geboortedatum en opmerkingen aan te passen. Wijzigingen worden opgeslagen met een bevestiging. Ontbreekt het land, dan wordt "Nederland" aangehouden.' },
+      { title: 'Inactief', body: 'Is de relatie op inactief gezet, dan wordt dat op de kaart getoond. Inactieve relaties blijven zichtbaar in historische dossiers maar verschijnen niet meer in keuzelijsten.' },
+    ],
+  }],
+
+  // ── Instellingen: Algemene voorwaarden ─────────────────────────────────
+  [/^\/instellingen\/algemene-voorwaarden$/, {
+    title: 'Instellingen — Algemene voorwaarden',
+    description: 'Beheer de PDF-documenten met algemene voorwaarden die je als bijlage aan offertes meestuurt. Upload nieuwe versies en stel de standaard in.',
+    sections: [
+      { title: 'Document uploaden', body: 'Klik op "+ PDF uploaden", kies het bestand en geef een naam en optioneel een versienummer. Het bestand wordt veilig opgeslagen; speciale tekens in de bestandsnaam worden automatisch opgeschoond.' },
+      { title: 'Standaard instellen', body: 'Markeer één document als standaard — dat wordt automatisch voorgesteld bij nieuwe offertes. Oude versies kun je bewaren voor traceerbaarheid of definitief verwijderen.' },
+    ],
+  }],
+
+  // ── Instellingen: Betalingscondities ───────────────────────────────────
+  [/^\/instellingen\/betalingscondities$/, {
+    title: 'Instellingen — Betalingscondities',
+    description: 'Definieer termijnschema\'s die je op offertes en opdrachten kunt toepassen, zoals "50% aanbetaling, 50% bij oplevering". Elke conditie bestaat uit één of meer termijnen met een percentage.',
+    sections: [
+      { title: 'Conditie aanmaken', body: 'Klik op "Nieuwe betalingsconditie", geef een naam en voeg met "+ Termijn toevoegen" regels toe met omschrijving en percentage. De percentages moeten samen 100% zijn — bij afwijking krijg je een waarschuwing.' },
+      { title: 'Standaard vs. betaaltermijn', body: 'Je kunt één conditie als standaard markeren. Let op: het aantal dagen tot betaling (de betaaltermijn) stel je per relatie in, niet hier — hier gaat het puur over de verdeling in termijnen.' },
+    ],
+  }],
+
+  // ── Instellingen: BTW-tarieven ─────────────────────────────────────────
+  [/^\/instellingen\/btw-tarieven$/, {
+    title: 'Instellingen — BTW-tarieven',
+    description: 'Inzage in de actieve BTW-tarieven. Deze worden automatisch afgeleid uit Bouw7 en zijn in EVA alleen-lezen.',
+    sections: [
+      { title: 'Alleen-lezen', body: 'De tarieven (percentage, label en of het om verlegde BTW gaat) komen rechtstreeks uit Bouw7 en worden bij elke synchronisatie bijgewerkt. Wijzigen kan alleen in Bouw7.' },
+      { title: 'Legacy-waarschuwing', body: 'Bevat een oude, handmatig ingestelde configuratie percentages die niet meer in Bouw7 voorkomen, dan toont EVA een waarschuwing zodat je de mismatch kunt opschonen.' },
+    ],
+  }],
+
+  // ── Instellingen: Debiteuren — redencodes ──────────────────────────────
+  [/^\/instellingen\/debiteur-redencodes$/, {
+    title: 'Instellingen — Debiteuren-redencodes',
+    description: 'Beheer de keuzelijst met redenen "waarom nog niet betaald" die projectleiders gebruiken op het Facturen-scherm (debiteurenbeheer).',
+    sections: [
+      { title: 'Reden toevoegen', body: 'Typ een omschrijving en klik op "Toevoegen". De reden verschijnt daarna in de keuzelijst bij het vastleggen van factuuropvolging.' },
+      { title: 'Activeren / deactiveren', body: 'Redenen verwijder je nooit echt: met deactiveren haal je een reden uit de keuzelijst terwijl de historie behouden blijft. Heractiveren kan altijd.' },
+    ],
+  }],
+
+  // ── Instellingen: Dossiercategorieën ───────────────────────────────────
+  [/^\/instellingen\/dossier-categorieen$/, {
+    title: 'Instellingen — Dossiercategorieën',
+    description: 'Beheer de categorieën die je aan aanvragen, offertes en opdrachten kunt toekennen (bijv. Dakrenovatie, Schilderwerk, Mutatie). Categorieën sturen ook de goedkeuringsdrempel voor offertes.',
+    sections: [
+      { title: 'Categorieën', body: 'Voeg categorieën toe met "+ Toevoegen" en verwijder ze via het kruisje op de tag. Klik op "Opslaan" om de wijzigingen te bewaren. De volgorde bepaalt de weergave in keuzelijsten.' },
+      { title: 'Goedkeuring offertes', body: 'Stel een drempelbedrag in waaronder offertes in de categorieën "Dagelijks onderhoud" en "Mutatie" zonder goedkeuring de deur uit mogen. Alle overige categorieën vereisen altijd goedkeuring vóór verzending.' },
+    ],
+  }],
+
+  // ── Instellingen: Dossier-tabbladen (toggles) ──────────────────────────
+  [/^\/instellingen\/dossier-toggles$/, {
+    title: 'Instellingen — Dossier-tabbladen',
+    description: 'Beheer de aan/uit-schakelaars (toggles) die per dossier gezet kunnen worden, zoals "Spoed" of "Onder garantie". Toggles sturen welke tabbladen zichtbaar zijn en dienen als voorwaarde voor het automatisch koppelen van actielijst-sjablonen.',
+    sections: [
+      { title: 'Toggle aanmaken', body: 'Voeg een toggle toe met "+ Toevoegen" en geef een label. Elke toggle krijgt een technische sleutel die je gebruikt in trigger-regels van actielijst-sjablonen. Met de "Actief"-schakelaar zet je een toggle beschikbaar of verberg je hem.' },
+      { title: 'Gebruik', body: 'Op een dossier bepaalt een aangezette toggle of gerelateerde tabbladen verschijnen en of gekoppelde sjablonen automatisch worden geactiveerd. Wijzig de sleutel niet meer nadat je hem in triggers hebt gebruikt.' },
+    ],
+  }],
+
+  // ── Instellingen: Kostensoorten ────────────────────────────────────────
+  [/^\/instellingen\/kostensoorten$/, {
+    title: 'Instellingen — Kostensoorten',
+    description: 'Inzage in de zes vaste kostensoorten uit Bouw7 die worden gebruikt in projectbewaking, inkoop en calculatie. Dit scherm is informatief en alleen-lezen.',
+    sections: [
+      { title: 'De zes kostensoorten', body: 'De lijst toont per kostensoort (1 t/m 6) de naam en een toelichting, bijvoorbeeld "Eigen en ingehuurde arbeid (uren × tarief)". Ze bepalen hoe kosten in de financiële overzichten worden gegroepeerd.' },
+      { title: 'Alleen-lezen', body: 'De kostensoorten komen volautomatisch uit Bouw7 en kunnen niet in EVA worden gewijzigd — aanpassen kan alleen in Bouw7.' },
+    ],
+  }],
+
+  // ── Instellingen: Uursoorten & tarieven ────────────────────────────────
+  [/^\/instellingen\/uursoorten-tarieven$/, {
+    title: 'Instellingen — Uursoorten & tarieven',
+    description: 'Beheer de uurtarieven en bekijk de uursoorten die gebruikt worden in planning, urenregistratie en calculatie.',
+    sections: [
+      { title: 'Uurtarieven', body: 'Stel de globale standaard-uurtarieven in. Deze vormen de basis in een hiërarchie: een specifiek tarief op een medewerker of uursoort gaat vóór het globale standaardtarief.' },
+      { title: 'Uursoorten (alleen-lezen)', body: 'De uursoorten worden afgeleid uit Bouw7 en zijn leidend — je kunt ze niet lokaal wijzigen. De volgorde bepaalt de weergave in urenregistratie- en planningsformulieren.' },
+    ],
+  }],
+
+  // ── Instellingen: Offerte-opmaak (layouts) ─────────────────────────────
+  [/^\/instellingen\/offerte-layout\/[^/]+$/, {
+    title: 'Instellingen — Offerte-opmaak (editor)',
+    description: 'Bewerk één offerte-lay-out: het Word-sjabloon, de kleuren, het lettertype, de marges, de zichtbare secties en de sjabloonteksten. Rechts zie je een live DOCX-preview met voorbeelddata.',
+    sections: [
+      { title: 'Sjabloon & opmaak', body: 'Koppel of upload een Word-template (DOCX) en stel de primaire/secundaire/accentkleur, het lettertype, papierformaat, oriëntatie en marges in. Met toggles schakel je voorblad, specificatie, voorwaarden en paginanummers in of uit.' },
+      { title: 'Sjabloonteksten & variabelen', body: 'In het Word-sjabloon gebruik je variabelen die automatisch worden ingevuld: afbeeldingen (%logo, %logo_wit, %handtekening) en velden als offerte.nummer, klant.bedrijfsnaam, bedrijf.iban en dossier.referentie. Beheer eigen placeholder-teksten voor terugkerende alinea\'s.' },
+      { title: 'Preview & opslaan', body: 'De DOCX-preview toont het resultaat met een voorbeeldofferte, inclusief ingevulde variabelen. Klik op "Opslaan" om je wijzigingen te bewaren.' },
+    ],
+  }],
+
+  [/^\/instellingen\/offerte-layout$/, {
+    title: 'Instellingen — Offerte-opmaak',
+    description: 'Beheer de Word-sjablonen (lay-outs) voor offertes: huisstijl, kleuren en papierindeling. Gebruik meerdere lay-outs voor verschillende klanttypen of werksoorten.',
+    sections: [
+      { title: 'Lay-outs beheren', body: 'Klik op "+ Layout aanmaken" voor een nieuwe lay-out, "Bewerk" om de editor te openen, "Kopieer" om een bestaande te dupliceren en "Verwijderen" om er een te wissen.' },
+      { title: 'Standaard', body: 'Stel één lay-out in als standaard — die wordt automatisch geselecteerd bij nieuwe offertes.' },
+    ],
+  }],
+
+  // ── Management ─────────────────────────────────────────────────────────
+  [/^\/management\/dashboard$/, {
+    title: 'Management — Dashboard',
+    description: 'Realtime overzicht van de financiële prestaties, projectstatus en KPI\'s over alle werkmaatschappijen en projectleiders. De centrale stuurinformatie voor directie en management.',
+    sections: [
+      { title: 'KPI-tegels', body: 'Bovenaan zie je het aantal projecten, de AK-dekking (op zowel gereed als onderhanden werk) en het nettoresultaat. Alle bedragen zijn netto ná OHW-aftrek (onderhanden werk vorig boekjaar).' },
+      { title: 'Pivots & trend', body: 'De draaitabellen tonen omzet, resultaat en dekking per werkmaatschappij (met status-subregels) en per projectleider. De trendgrafiek toont het jaarresultaat als percentage van de doelstelling.' },
+      { title: 'Doelstellingen', body: 'De doelkolommen vullen zich pas als je per werkmaatschappij en projectleider doelstellingen hebt ingesteld onder Management → Instellingen. De branche­verdeling verschijnt zodra relaties een branche hebben.' },
+      { title: 'Maandcijfers vaststellen', body: 'Met "Maandcijfers vaststellen" (rechtsboven) bevries je de cijfers van de lopende maand als momentopname. Die snapshots bekijk je later terug onder Historie.' },
+    ],
+  }],
+
+  [/^\/management\/lopend$/, {
+    title: 'Management — Lopende werken',
+    description: 'Gedetailleerde tabel van alle lopende projecten met budget, voortgang en marge. Gebruik dit om onderhanden werk financieel te bewaken en afwijkingen vroeg te signaleren.',
+    sections: [
+      { title: 'Kolommen', body: 'Per project zie je nummer, status, opdrachtgever, naam en projectleider, plus de financiën: geboekte kosten, totale opdracht, % gereed, prognose, verwacht resultaat, % marge en omzet/resultaat op basis van het gereedheidspercentage.' },
+      { title: 'Filteren & sorteren', body: 'Met de slicerbalk bovenaan filter je op werkmaatschappij, categorie, projectleider en status. Klik op een kolomkop om te sorteren; de totalenbalk telt de gefilterde regels op.' },
+      { title: 'Alleen lopend', body: 'Dit overzicht toont uitsluitend projecten met status "lopend". Afgeronde projecten vind je onder Gereed werken. Prognose en marge worden herrekend op het % gereed; bedragen zijn netto ná OHW-aftrek.' },
+    ],
+  }],
+
+  [/^\/management\/gereed$/, {
+    title: 'Management — Gereed werken',
+    description: 'Overzicht van afgeronde projecten met gefactureerde bedragen, werkelijke kosten en behaalde marges. Zo zie je de eindresultaten en de afwijking ten opzichte van de prognose.',
+    sections: [
+      { title: 'Kolommen', body: 'Per project: nummer, status, opdrachtgever, naam, projectleider, gefactureerd bedrag, geboekte kosten, resultaat, % marge en Δ marge (werkelijk vs. geprognosticeerd).' },
+      { title: 'Scope', body: 'Toont projecten met status "gereed" en substatus "financieel gereed"; financieel afgesloten projecten vallen hierbuiten (die staan in het archief Afgesloten). Bedragen zijn netto ná OHW-aftrek.' },
+      { title: 'Filteren', body: 'Filter met de slicerbalk op werkmaatschappij, categorie, projectleider en status; de totalenbalk werkt mee met je selectie.' },
+    ],
+  }],
+
+  [/^\/management\/servicedesk$/, {
+    title: 'Management — Servicedesk',
+    description: 'Financiële bewaking van servicedesk-dossiers (storingen, garantie, klein onderhoud), met dezelfde budget- en margekolommen als de lopende werken.',
+    sections: [
+      { title: 'Kolommen', body: 'Nummer, status, opdrachtgever, naam, projectleider en de financiën: geboekte kosten, totale opdracht, % gereed, prognose, verwacht resultaat en % marge.' },
+      { title: 'Filteren', body: 'Met de slicerbalk filter je op werkmaatschappij, categorie, projectleider en status. Bedragen zijn netto ná OHW-aftrek.' },
+    ],
+  }],
+
+  [/^\/management\/werkvoorraad$/, {
+    title: 'Management — Werkvoorraad',
+    description: 'Live vergelijking van vraag en capaciteit: hoeveel arbeidsuren er nog uitgevoerd moeten worden versus de beschikbare capaciteit per uursoort. Zo zie je onder- of overbezetting aankomen.',
+    sections: [
+      { title: 'KPI\'s', body: 'Drie tegels: nog uit te voeren uren (de projectvoorraad uit Bouw7), beschikbare uren (op basis van roosters minus verlof) en de bezettingsgraad. Onder 60% = leegloop (waarschuwing), 60–100% = gezond, boven 100% = onderbezet.' },
+      { title: 'Capaciteit per uursoort', body: 'De grafiek en tabel splitsen de beschikbare capaciteit uit per uursoort en naar intern/extern, met aantal medewerkers en aandeel. De capaciteit wordt live berekend uit roosters en verlof — niet uit een cache.' },
+      { title: 'Voorwaarde: standaard-uursoort', body: 'Medewerkers zonder toegewezen standaard-uursoort tellen niet mee in de capaciteit. Ontbreken er toewijzingen, dan verschijnt een waarschuwing — wijs de uursoort dan toe op het medewerkerprofiel.' },
+    ],
+  }],
+
+  [/^\/management\/verkoop$/, {
+    title: 'Management — Verkoop',
+    description: 'Verkooppijplijn en conversietrechter: van aanvraag naar offerte naar opdracht. Bewaak win-rate, gemiddelde offertewaarde, doorlooptijd en verliesredenen.',
+    sections: [
+      { title: 'Pijplijn & dit jaar', body: 'Bovenaan zie je de huidige pijplijn (open aanvragen, open offertes, gewonnen) en de jaarcijfers: instroom, verstuurde offertes, gemiddelde offertewaarde en doorlooptijd. De trendgrafiek zet instroom af tegen verstuurde offertes per maand.' },
+      { title: 'Conversie & verliesredenen', body: 'De conversietabellen tonen per werkmaatschappij en categorie het aantal offertes, gewonnen, verloren, win-rate en waarde. De tabel Verliesredenen laat zien waarom offertes zijn afgewezen.' },
+      { title: 'Let op de databasis', body: 'De win-rate is nog indicatief: de volledige trechter is pas recent in EVA vastgelegd. Oudere verloren offertes en opdrachten van vóór die registratie kunnen ontbreken; de cijfers worden nauwkeuriger naarmate meer trajecten volledig zijn vastgelegd.' },
+    ],
+  }],
+
+  [/^\/management\/calculators$/, {
+    title: 'Management — Calculators',
+    description: 'Prestatiecijfers per calculator: aantal offertes, gewonnen en verloren trajecten, win-rate en gewonnen waarde. Standaard gesorteerd op hoogste gewonnen waarde.',
+    sections: [
+      { title: 'Kolommen', body: 'Per calculator: aantal offertes, gewonnen, verloren, win-rate, waarde gewonnen, gemiddelde offertewaarde, doorlooptijd (dagen) en open pipeline. De totaalregel telt alles op.' },
+      { title: 'Sorteren', body: 'Klik op een kolomkop om op- of aflopend te sorteren — bijvoorbeeld op win-rate of gewonnen waarde. "Offertes" telt dossiers die minimaal de offertefase hebben bereikt; win/verlies volgt de huidige dossierstatus.' },
+    ],
+  }],
+
+  [/^\/management\/historie$/, {
+    title: 'Management — Historie',
+    description: 'Maandelijkse momentopnamen van de management-KPI\'s. Bekijk hoe de cijfers er in eerdere maanden bij stonden en volg de trend over de tijd.',
+    sections: [
+      { title: 'Vastgestelde maanden', body: 'De tabel toont per vastgestelde maand het aantal projecten, het gerealiseerde resultaat, de mutatie t.o.v. de vorige maand, de AK-dekking en wie de maand wanneer heeft vastgesteld. Klik op "Bekijk" om het volledige dashboard van die maand terug te zien (alleen-lezen).' },
+      { title: 'Snapshots', body: 'De cijfers zijn bevroren momentopnamen — ze veranderen niet meer mee. Er verschijnt pas historie nadat je op het dashboard "Maandcijfers vaststellen" hebt gebruikt.' },
+    ],
+  }],
+
+  // ── Planning ───────────────────────────────────────────────────────────
+  [/^\/planning\/project$/, {
+    title: 'Projectplanning',
+    description: 'Gantt-tijdlijn van alle lopende opdrachten. Verschuif projecten door balken te slepen en bekijk de planning per maand, kwartaal of jaar.',
+    sections: [
+      { title: 'Plannen', body: 'Sleep een balk om de geplande start- en einddatum te verzetten. Hover over een balk voor projectdetails. Wissel de tijdlijn tussen maand-, kwartaal- en jaarweergave en gebruik de scrubber voor de datumperiode.' },
+      { title: 'Kleur & filter', body: 'Met "Kleurweergave" kleur je de balken op projectleider of op substatus. Filter met de categorie-checkboxes en sorteer op startdatum, einddatum of projectnaam.' },
+      { title: 'Welke projecten', body: 'Alleen opdrachten met hoofdstatus "opdracht" worden getoond (financieel gereed/afgesloten valt weg). De data komt uit planning_start/eind indien gezet, anders uit de verwachte start- en einddatum.' },
+    ],
+  }],
+
+  [/^\/planning\/medewerker$/, {
+    title: 'Medewerkerplanning',
+    description: 'Capaciteitstijdlijn per medewerker: geplande werkzaamheden, afwezigheid en vrije ruimte. Hét scherm om mensen op werk in te delen en conflicten te zien.',
+    sections: [
+      { title: 'Inplannen', body: 'Klik op een lege cel om snel een planning-item toe te voegen (bewakingscode verplicht). Sleep een balk om te verschuiven; met Ctrl+slepen of rechtsklik+slepen kopieer je een item. Dubbelklik op een balk opent het dossier.' },
+      { title: 'Afwezigheid & conflicten', body: 'Roosters staan als grijze achtergrond; verlof is licht rood, ziek donkerrood, training en overige eigen kleuren, feestdagen worden automatisch berekend. Hover toont conflictwaarschuwingen bij overlap of werk binnen een verlof-/ziek-/feestdagblok.' },
+      { title: 'Filteren', body: 'Filter op voornaam, afdeling, functie of ploeg. Kantoorafdelingen (Projectbureau, Administratie, Directie) worden weggelaten — alleen uitvoerend personeel verschijnt.' },
+    ],
+  }],
+
+  [/^\/planning\/bedrijfsagenda$/, {
+    title: 'Bedrijfsagenda',
+    description: 'Bedrijfsbrede agenda met feestdagen, verjaardagen, jubilea, ATV-dagen, teamoverleg, VCA-toolboxen en andere niet-declarabele items. Beschikbaar als maand- of lijstweergave.',
+    sections: [
+      { title: 'Weergave & navigatie', body: 'Schakel tussen Maand (kalender) en Lijst. Blader met de pijlen of spring met "Vandaag" naar nu. Klik op een dag om een item toe te voegen en op een item om het te bekijken of te bewerken.' },
+      { title: 'Items & herhaling', body: 'Items zijn berekend (bijv. feestdagen; alleen-lezen) of handmatig (zelf aangemaakt en bewerkbaar). Bewerk je een item uit een reeks, dan kies je of je alleen deze keer of de hele reeks aanpast.' },
+      { title: 'Filteren', body: 'Filter op type via de checkboxes: Feestdag, Verjaardag, Jubileum, ATV-dag, Teamoverleg, VCA Toolbox, Audit, Activiteit, Herinnering en Overig.' },
+    ],
+  }],
+
+  [/^\/planning\/mijn-werkbonnen$/, {
+    title: 'Planning — Mijn werkbonnen',
+    description: 'Je persoonlijke werklijst voor de komende zeven dagen. Open een werkbon om te starten, uren te loggen, foto\'s te maken en af te tekenen. Geoptimaliseerd voor gebruik op je telefoon.',
+    sections: [
+      { title: 'Overzicht', body: 'De werkbonnen staan gegroepeerd per dag (Vandaag, Morgen, of de datum). Elke kaart toont de activiteit, klant, locatie, starttijd, uren en de status (Gepland, Bezig, Klaar).' },
+      { title: 'Openen', body: 'Klik op een kaart om de werkbon-flow te openen. Afgeronde (klaar gemelde) werkbonnen verdwijnen uit de lijst; alleen de komende zeven dagen worden getoond.' },
+    ],
+  }],
+
+  [/^\/planning\/werkbon\/[^/]+$/, {
+    title: 'Werkbon',
+    description: 'De werkbon-flow voor de buitendienst: start je taak, houd de tijd bij, upload foto\'s, noteer opmerkingen en teken af. Werkt prettig op de telefoon.',
+    sections: [
+      { title: 'Starten', body: 'Klik op "Start werkbon" om de timer te starten. Bestaat er al een lopende werkbon, dan opent hij direct in de status "Bezig". Onder "Ook aanwezig" zie je collega\'s die op dezelfde activiteit staan.' },
+      { title: 'Bezig', body: 'De timer loopt in uu:mm:ss; de gewerkte uren worden automatisch afgerond op 0,1 uur. Voeg tijdens het werk foto\'s en een opmerking toe.' },
+      { title: 'Afronden', body: 'Controleer de gewerkte uren, zet je handtekening op de pad (verplicht) en klik op "Werkbon afronden". Daarna is de werkbon gemeld als klaar.' },
+    ],
+  }],
+
+  [/^\/planning$/, {
+    title: 'Planning',
+    description: 'De planningsmodule van EVA. Plan projecten en medewerkers in, beheer de bedrijfsagenda en werk werkbonnen af.',
+    sections: [
+      { title: 'Onderdelen', body: 'Projectplanning (opdrachten op een tijdlijn) · Medewerkerplanning (capaciteit en afwezigheid) · Bedrijfsagenda (feestdagen, overleg, evenementen) · Mijn werkbonnen (jouw komende werk).' },
+      { title: 'Bewakingscode', body: 'Nieuwe planning-items op de medewerkerplanning vragen om een bewakingscode, zodat de geplande uren aan het juiste project/onderdeel in Bouw7 hangen.' },
+    ],
+  }],
+
+  // ── Hoofdproces: Servicedesk ───────────────────────────────────────────
+  [/^\/servicedesk\/[^/]+\/[^/]+$/, {
+    title: 'Servicedesk — dossier',
+    description: 'Detailpagina van een servicedesk-dossier met tabbladen voor informatie, bestanden, calculatie, planning, VCA en financieel. Hier handel je een storing of serviceklus af, van melding tot facturatie.',
+    sections: [
+      { title: 'Regie of aangenomen', body: 'Een serviceklus loopt op regie (nacalculatie op basis van bestede uren en materiaal tegen contract- of standaardtarief) of aangenomen (vaste prijs). De gekozen vorm bepaalt hoe het dossier wordt bewaakt en gefactureerd.' },
+      { title: 'Doorlooptijd & mandaat', body: 'De doorlooptijd wordt bijgehouden vanaf de melding. Een indicator toont of het werk binnen het afgesproken mandaat (bedragsgrens) valt; daarboven is akkoord van de klant of projectleider nodig vóór uitvoering.' },
+      { title: 'Tabblad Financieel', body: 'Regie-factuurregels leg je hier vast; goedgekeurde regels worden doorgezet naar Bouw7. Bij een aangenomen klus werk je met de calculatie en termijnen zoals bij een reguliere opdracht.' },
+      { title: 'Vervolgtraject', body: 'Leidt een storing tot groter werk (definitieve reparatie of renovatie), dan start je dat als nieuw regulier traject vanuit Aanvragen — met behoud van de koppeling naar deze melding.' },
+    ],
+  }],
+
+  [/^\/servicedesk\/[^/]+$/, {
+    title: 'Servicedesk — dossier',
+    description: 'Detailpagina van een servicedesk-dossier. Je wordt automatisch doorgestuurd naar het tabblad Informatie.',
+  }],
+
+  [/^\/servicedesk$/, {
+    title: 'Servicedesk',
+    description: 'Kanbanbord met alle servicedesk-dossiers: storingen, garantie en klein onderhoud voor bestaande klanten. De servicedesk is een snelle, aparte ingang naast het reguliere aanvraagproces.',
+    sections: [
+      { title: 'Kanban-kolommen', body: 'De kolommen tonen de status van elke melding. Sleep een kaart naar een andere kolom om de status te wijzigen; elke overgang wordt gelogd met datum en gebruiker.' },
+      { title: 'Nieuwe melding', body: 'Maak een melding aan voor een bestaande klant. Leg de urgentie, aard (lekkage, glas, verwarmingsuitval, e.d.) en locatie vast, en wijs een uitvoerder toe voor directe opvolging.' },
+      { title: 'Regie vs. aangenomen', body: 'Kaarten tonen of een klus op regie (nacalculatie) of aangenomen (vaste prijs) loopt, plus de doorlooptijd. Zo zie je in één oogopslag wat aandacht nodig heeft.' },
+      { title: 'Filteren', body: 'Gebruik de zoekbalk en filters om op klant, uitvoerder of status in te zoomen. Klik op een kaart voor het volledige dossier.' },
+    ],
+  }],
 ]
 
 export function getPageHelp(pathname: string): PageHelp | null {

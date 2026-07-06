@@ -137,11 +137,94 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/formulieren$/, { title: 'Formulieren', breadcrumb: 'Apps' }],
 ]
 
-function resolveLabel(pathname: string) {
+/* ── Fallback-logica ──────────────────────────────────────────────────────
+   Routes zonder expliciete ROUTE_LABELS-regel kregen voorheen het rauwe pad
+   als titel (bijv. "/instellingen/btw-tarieven"). Onderstaande maps leiden
+   voor élke route een nette, consistent opgemaakte titel af uit de URL, zodat
+   de topbar nooit meer leeg of onopgemaakt is.
+
+   SLUG_LABELS: nette weergavenaam per pad-segment (overschrijft de generieke
+   title-caser). BREADCRUMB_BY_ROOT: koppelt het eerste segment aan de groep
+   uit de sidebar. Onbekende segmenten worden automatisch title-cased. */
+const SLUG_LABELS: Record<string, string> = {
+  // Hoofdproces / financieel
+  'aanvragen': 'Aanvragen', 'offertes': 'Offertes', 'opdrachten': 'Opdrachten',
+  'servicedesk': 'Servicedesk', 'afgesloten': 'Afgesloten', 'facturen': 'Facturen',
+  // Planning
+  'planning': 'Planning', 'project': 'Projectplanning', 'medewerker': 'Medewerkerplanning',
+  'bedrijfsagenda': 'Bedrijfsagenda', 'mijn-werkbonnen': 'Mijn werkbonnen', 'werkbon': 'Werkbon',
+  // Management
+  'management': 'Management', 'lopend': 'Lopende werken', 'gereed': 'Gereed werken',
+  'werkvoorraad': 'Werkvoorraad', 'verkoop': 'Verkoop', 'calculators': 'Calculators',
+  'historie': 'Historie',
+  // Beheer
+  'relaties': 'Relaties', 'medewerkers': 'Medewerkers', 'wagenpark': 'Wagenpark',
+  'kam': 'KAM / VGM', 'contactpersonen': 'Contactpersoon', 'particulieren': 'Particulier',
+  // EVA / persoonlijk
+  'vraag-eva': 'Vraag EVA', 'bronnen': 'Bronnen', 'bibliotheek': 'Bibliotheek',
+  'mijn-taken': 'Mijn taken', 'account': 'Mijn account',
+  // Apps
+  'formulieren': 'Formulieren', 'taken': 'Actielijsten', 'houtrotherstel': 'Houtrotherstel',
+  'everts-calc': 'EvertsCalc', 'calculaties': 'Calculaties', 'quotes': 'Offertes',
+  'sjablonen': 'Sjablonen', 'overzicht': 'Overzicht',
+  // Instellingen
+  'instellingen': 'Instellingen', 'bedrijfsgegevens': 'Bedrijfsgegevens', 'huisstijl': 'Huisstijl',
+  'algemene-voorwaarden': 'Algemene voorwaarden', 'betalingscondities': 'Betalingscondities',
+  'btw-tarieven': 'BTW-tarieven', 'debiteur-redencodes': 'Debiteuren — redencodes',
+  'dossier-categorieen': 'Dossiercategorieën', 'dossier-toggles': 'Dossier-tabbladen',
+  'kostensoorten': 'Kostensoorten', 'uursoorten-tarieven': 'Uursoorten & tarieven',
+  'offerte-layout': 'Offerte-opmaak', 'functies-afdelingen': 'Functies & afdelingen',
+  'gebruikers': 'Gebruikers & rechten', 'medewerker-attributen': 'Medewerker-attributen',
+  'integraties': 'Integraties', 'cao': 'CAO-beheer', 'formulieren-pdf': 'Formulier PDF-opmaak',
+  // Overige
+  'nieuw': 'Nieuw', 'bewerken': 'Bewerken', 'import': 'Importeren', 'sync': 'Synchroniseren',
+  'zones': 'Zones', 'rapportage': 'Rapportage', 'rapportages': 'Rapportages',
+  'registraties': 'Registraties', 'voertuigen': 'Voertuigen', 'bestuurders': 'Bestuurders',
+  'ritten': 'Ritten', 'parkeren': 'Parkeren', 'leasecontracten': 'Leasecontracten',
+  'bevindingen': 'Bevindingen', 'diagnose': 'Diagnose', 'dashboard': 'Dashboard',
+  'projecten': 'Projecten', 'standaard-reparaties': 'Standaard reparaties',
+  'meetstaat': 'Meetstaat', 'inzendingen': 'Inzendingen', 'invullen': 'Invullen',
+}
+
+const BREADCRUMB_BY_ROOT: Record<string, string> = {
+  'vraag-eva': 'EVA', 'bronnen': 'EVA', 'bibliotheek': 'EVA',
+  'aanvragen': 'Hoofdproces', 'offertes': 'Hoofdproces', 'opdrachten': 'Hoofdproces',
+  'servicedesk': 'Hoofdproces', 'afgesloten': 'Hoofdproces',
+  'planning': 'Planning',
+  'relaties': 'Beheer', 'medewerkers': 'Beheer', 'wagenpark': 'Beheer', 'kam': 'Beheer',
+  'facturen': 'Financieel', 'management': 'Financieel',
+  'formulieren': 'Apps', 'taken': 'Apps', 'houtrotherstel': 'Apps', 'everts-calc': 'Apps',
+  'instellingen': 'Platform', 'account': 'Account', 'mijn-taken': 'Persoonlijk',
+}
+
+/** Segment lijkt op een record-id (uuid, getal, lange hex) → weglaten uit de titel. */
+function isIdLike(seg: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(seg) // uuid
+    || /^\d+$/.test(seg)                         // numeriek id
+    || /^[0-9a-f]{16,}$/i.test(seg)              // lange hex hash
+}
+
+function labelForSlug(seg: string): string {
+  if (SLUG_LABELS[seg]) return SLUG_LABELS[seg]
+  return seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' ')
+}
+
+/** Leidt titel + breadcrumb af uit de URL wanneer er geen expliciete regel is. */
+function deriveLabel(pathname: string): { title: string; breadcrumb?: string } {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments.length === 0) return { title: 'Overzicht' }
+  const root = segments[0]
+  const parts = segments.filter(s => !isIdLike(s)).map(labelForSlug)
+  const title = parts.join(' › ') || labelForSlug(root)
+  const breadcrumb = BREADCRUMB_BY_ROOT[root]
+  return { title, breadcrumb: breadcrumb === title ? undefined : breadcrumb }
+}
+
+function resolveLabel(pathname: string): { title: string; breadcrumb?: string; withTabs?: boolean } {
   for (const [pattern, label] of ROUTE_LABELS) {
     if (pattern.test(pathname)) return label
   }
-  return { title: pathname }
+  return deriveLabel(pathname)
 }
 
 function iconBtn(): React.CSSProperties {
