@@ -13,6 +13,7 @@ import {
   type GeboekteKostenRegel, type ProjectBewakingscode,
 } from '@/lib/dossiers/actions'
 import { SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 type OrderOptie = { orderId: number; nummer: string | null; leverancier: string | null; omschrijving: string | null }
 type ContractOptie = { contractId: number; onderaannemer: string | null; omschrijving: string | null }
@@ -50,6 +51,7 @@ const GROEPEERBARE_KEYS = new Set(['leverancier', 'typeKosten', 'code'])
 
 export default function GeboekteKostenTabel({ dossierId, data, orders, contracten, projectcodes }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [pending, start] = useTransition()
   const [actief, setActief] = useState<GeboekteKostenRegel | null>(null)
   const [sel, setSel] = useState<Set<number>>(new Set())
@@ -226,7 +228,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
       </div>
 
       {/* Bulk-balk: zichtbaar zodra er regels geselecteerd zijn */}
-      {sel.size > 0 && (
+      {!readOnly && sel.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', background: 'var(--brand-50, #eff6ff)', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--fg)' }}>{sel.size} geselecteerd</span>
           <select
@@ -292,13 +294,15 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
           <thead>
             <tr>
               <th style={{ ...thStyle(), width: 36, cursor: 'default', textAlign: 'center' }}>
-                <input
-                  type="checkbox"
-                  aria-label="Alles selecteren"
-                  checked={rijen.length > 0 && rijen.every((r) => sel.has(r.bronId))}
-                  ref={(el) => { if (el) el.indeterminate = sel.size > 0 && !rijen.every((r) => sel.has(r.bronId)) }}
-                  onChange={(e) => setSel(e.target.checked ? new Set(rijen.map((r) => r.bronId)) : new Set())}
-                />
+                {!readOnly && (
+                  <input
+                    type="checkbox"
+                    aria-label="Alles selecteren"
+                    checked={rijen.length > 0 && rijen.every((r) => sel.has(r.bronId))}
+                    ref={(el) => { if (el) el.indeterminate = sel.size > 0 && !rijen.every((r) => sel.has(r.bronId)) }}
+                    onChange={(e) => setSel(e.target.checked ? new Set(rijen.map((r) => r.bronId)) : new Set())}
+                  />
+                )}
               </th>
               {kolommen.map((k) => (
                 <th key={k.key} style={thStyle(k.right)} onClick={() => sorteer(k.key)}>
@@ -334,17 +338,21 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
               return (
                 <tr key={r.bronId} style={{ background: sel.has(r.bronId) ? 'color-mix(in srgb, var(--brand-50, #eff6ff) 70%, transparent)' : r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
                   <td style={{ ...tdStyle(), textAlign: 'center' }}>
-                    <input type="checkbox" aria-label="Selecteer regel" checked={sel.has(r.bronId)} onChange={() => toggleSel(r.bronId)} />
+                    {!readOnly && (
+                      <input type="checkbox" aria-label="Selecteer regel" checked={sel.has(r.bronId)} onChange={() => toggleSel(r.bronId)} />
+                    )}
                   </td>
                   {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
                   <td style={{ ...tdStyle(true) }}>
-                    <button
-                      onClick={() => setActief(r)}
-                      title="Toewijzen / hercoderen"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
-                    >
-                      <SlidersHorizontal size={12} /> Corrigeren
-                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => setActief(r)}
+                        title="Toewijzen / hercoderen"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
+                      >
+                        <SlidersHorizontal size={12} /> Corrigeren
+                      </button>
+                    )}
                   </td>
                 </tr>
               )

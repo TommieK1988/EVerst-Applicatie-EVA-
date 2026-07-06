@@ -2,6 +2,7 @@
 
 import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { syncPlanningVoorDossier } from '@/app/(platform)/planning/actions'
+import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
 export default function SyncBouw7PlanningKnop({
   dossier_id,
@@ -10,6 +11,9 @@ export default function SyncBouw7PlanningKnop({
   dossier_id: string
   laatstSync?: string | null
 }) {
+  const readOnly = useDossierReadOnly()
+  if (readOnly) return null
+
   async function handleSync(): Promise<SyncUitkomst> {
     const result = await syncPlanningVoorDossier(dossier_id)
     if (!result.ok) return { ok: false, melding: result.error }

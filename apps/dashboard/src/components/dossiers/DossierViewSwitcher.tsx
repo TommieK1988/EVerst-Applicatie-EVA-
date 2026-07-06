@@ -3,6 +3,7 @@ import React from 'react'
 import { DossierKanban } from './DossierKanban'
 import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
+import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { InternDossiersKnop } from './InternDossiersKnop'
 import { IconGrid, IconList } from '@/components/eva/Icons'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
@@ -18,7 +19,8 @@ type Props = {
   layouts: GebruikerLayout[]
   user_id: string | null
   kanNieuwAanmaken?: boolean
-  categorieen?: string[]
+  categorieen?: AanvraagCategorie[]
+  werkmaatschappijen?: AanvraagWerkmaatschappij[]
   extraActies?: React.ReactNode
   kolomKeyModus?: KolomKeyModus
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
@@ -26,7 +28,7 @@ type Props = {
   mijnNaam?: string | null
 }
 
-export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, extraActies, kolomKeyModus, onStatusChange, mijnNaam }: Props) {
+export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam }: Props) {
   const storageKey = `dossier-view-${sectie}`
 
   const [view, setView] = React.useState<ViewMode>(() => {
@@ -207,6 +209,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           user_id={user_id}
           kanNieuwAanmaken={kanNieuwAanmaken}
           categorieen={categorieen}
+          werkmaatschappijen={werkmaatschappijen}
           extraActies={extraActies}
           viewToggle={toggle}
         />
@@ -223,6 +226,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         dossiers={zichtbareDossiers}
         kanNieuwAanmaken={kanNieuwAanmaken}
         categorieen={categorieen}
+        werkmaatschappijen={werkmaatschappijen}
         extraActies={extraActies}
         kolomKeyModus={kolomKeyModus}
         onStatusChange={onStatusChange}

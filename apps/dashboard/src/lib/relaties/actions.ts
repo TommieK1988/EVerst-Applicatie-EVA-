@@ -55,6 +55,31 @@ export async function createOrganisatie(input: {
     .single()
 
   if (error) return { ok: false, error: error.message }
+
+  // Direct in Bouw7 aanmaken (best-effort): het Bouw7-id is nodig om later een project aan
+  // deze relatie te koppelen. Faalt de Bouw7-kant, dan blijft de EVA-relatie gewoon bestaan.
+  try {
+    const { maakBouw7Relatie } = await import('@/lib/bouw7/create-contact')
+    const bouw7Id = await maakBouw7Relatie({
+      naam: input.naam,
+      types: input.types,
+      kvk_nummer: input.kvk_nummer,
+      btw_nummer: input.btw_nummer,
+      email: input.email,
+      telefoon: input.telefoon,
+      adres_straat: input.adres_straat,
+      adres_postcode: input.adres_postcode,
+      adres_plaats: input.adres_plaats,
+      adres_land: input.adres_land,
+      opmerkingen: input.opmerkingen,
+    })
+    if (bouw7Id) {
+      await supabase.from('relaties').update({ bouw7_id: String(bouw7Id), bouw7_sync_status: 'synced' }).eq('id', data.id)
+    }
+  } catch {
+    // Bouw7 optioneel bij aanmaken; niet blokkerend.
+  }
+
   revalidatePath('/relaties')
   return { ok: true, id: data.id }
 }

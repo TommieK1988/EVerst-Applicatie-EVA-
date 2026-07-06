@@ -3,7 +3,7 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
-import { NieuweAanvraagModal } from './NieuweAanvraagModal'
+import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { getDossierSubstatus } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -140,10 +140,13 @@ type Props = {
   layouts: GebruikerLayout[]
   user_id: string | null
   kanNieuwAanmaken?: boolean
-  categorieen?: string[]
+  categorieen?: AanvraagCategorie[]
+  werkmaatschappijen?: AanvraagWerkmaatschappij[]
   viewToggle?: React.ReactNode
   extraActies?: React.ReactNode
   onDossierKlik?: (d: DossierRij) => void
+  /** Override voor de layout-sleutel (OverzichtTabel `scherm`); standaard afgeleid uit `sectie`. */
+  scherm?: string
 }
 
 // ── Hoofd-component ───────────────────────────────────────────────────────────
@@ -156,15 +159,17 @@ export function DossierLijst({
   user_id,
   kanNieuwAanmaken = false,
   categorieen,
+  werkmaatschappijen,
   viewToggle,
   extraActies,
   onDossierKlik,
+  scherm: schermProp,
 }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = React.useState(false)
   const [data, setData] = React.useState<DossierRij[]>(dossiers)
 
-  const scherm = sectie ? `dossiers-${sectie}` : 'dossiers'
+  const scherm = schermProp ?? (sectie ? `dossiers-${sectie}` : 'dossiers')
 
   // ── Stat-kaart waarden ──────────────────────────────────────────────────────
   const totaalActief   = data.filter(d => {
@@ -328,6 +333,7 @@ export function DossierLijst({
           onClose={() => setModalOpen(false)}
           onAanmaken={nieuw => setData(prev => [nieuw, ...prev])}
           categorieen={categorieen}
+          werkmaatschappijen={werkmaatschappijen}
         />
       )}
 

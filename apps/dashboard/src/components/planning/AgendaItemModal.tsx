@@ -74,7 +74,11 @@ type FormState = {
   doelgroep_medewerkers:       string[]
 }
 
-function vandaagStr() { return new Date().toISOString().slice(0, 10) }
+function vandaagStr() {
+  // Lokale datum — toISOString() (UTC) geeft vóór 01:00/02:00 NL de vorige dag.
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 function bereikType(form: FormState): BereikType {
   if (form.herhaling_aantal !== null) return 'na_keer'

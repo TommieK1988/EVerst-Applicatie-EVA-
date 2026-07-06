@@ -12,6 +12,7 @@ import {
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
   type Bouw7MeerwerkData, type Bouw7MeerwerkLine,
 } from '@/lib/dossiers/meerwerk'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -31,6 +32,7 @@ const LEGE_NIEUW: NieuweMeerwerkData = {
 
 export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
   const [bouw7, setBouw7] = useState<Bouw7MeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
@@ -124,9 +126,11 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <span>Meerwerk</span>
-            <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
-              {formOpen ? 'Annuleren' : 'Nieuwe meerwerkregel'}
-            </Button>
+            {!readOnly && (
+              <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
+                {formOpen ? 'Annuleren' : 'Nieuwe meerwerkregel'}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardBody>
@@ -231,20 +235,26 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                     <td className="py-2 px-2">
                       <div className="flex flex-col gap-1">
                         <Badge tone={STATUS_TONE[r.status]} size="sm">{meerwerkStatusLabels[r.status]}</Badge>
+                        {!readOnly && (
                         <select className={selectCls} value={r.status} disabled={bezig}
                           onChange={e => { if (e.target.value !== r.status) wijzigStatus(r, e.target.value as MeerwerkStatus) }}>
                           {(Object.keys(meerwerkStatusLabels) as MeerwerkStatus[]).map(s => (
                             <option key={s} value={s}>{meerwerkStatusLabels[s]}</option>
                           ))}
                         </select>
+                        )}
                       </div>
                     </td>
                     <td className="py-2 px-2">
+                      {readOnly ? (
+                        <span className="text-neutral-700">{r.afrekenwijze === 'regie' ? 'Regie' : 'Aangenomen'}</span>
+                      ) : (
                       <select className={selectCls} value={r.afrekenwijze} disabled={bezig}
                         onChange={e => wijzigVeld(r.id, { afrekenwijze: e.target.value as MeerwerkAfrekenwijze })}>
                         <option value="aangenomen">Aangenomen</option>
                         <option value="regie">Regie</option>
                       </select>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-neutral-700">
                       {r.bewakingscode ?? '—'}
@@ -253,30 +263,43 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                       )}
                     </td>
                     <td className="py-2 px-2">
+                      {readOnly ? (
+                        <span className="text-neutral-700">
+                          {r.termijn_wijze === 'een_regel' ? '1 regel in termijnstaat'
+                            : r.termijn_wijze === 'eigen_termijnstaat' ? 'Eigen termijnstaat' : '—'}
+                        </span>
+                      ) : (
                       <select className={selectCls} value={r.termijn_wijze ?? ''} disabled={bezig}
                         onChange={e => wijzigVeld(r.id, { termijn_wijze: (e.target.value || null) as MeerwerkTermijnWijze | null })}>
                         <option value="">—</option>
                         <option value="een_regel">1 regel in termijnstaat</option>
                         <option value="eigen_termijnstaat">Eigen termijnstaat</option>
                       </select>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-right tabular-nums font-semibold text-neutral-900">{fmt(r.effectiefExcl)}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-neutral-500">{fmt(r.effectiefIncl)}</td>
                     <td className="py-2 pl-2 text-right whitespace-nowrap">
-                      {!r.bouw7_line_id && (
+                      {readOnly ? (
+                        <span className="text-neutral-300">—</span>
+                      ) : (
                         <>
+                          {!r.bouw7_line_id && (
+                            <>
+                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                                onClick={() => naarBouw7(r)}>Naar Bouw7</button>
+                              <span className="mx-1 text-neutral-300">·</span>
+                            </>
+                          )}
                           <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                            onClick={() => naarBouw7(r)}>Naar Bouw7</button>
+                            onClick={() => calculatie(r)}>
+                            {r.quote_id ? 'Open offerte' : 'Calculatie'}
+                          </button>
                           <span className="mx-1 text-neutral-300">·</span>
+                          <button className="text-[11px] font-medium text-error-600 hover:underline" disabled={bezig}
+                            onClick={() => verwijder(r)}>Verwijder</button>
                         </>
                       )}
-                      <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                        onClick={() => calculatie(r)}>
-                        {r.quote_id ? 'Open offerte' : 'Calculatie'}
-                      </button>
-                      <span className="mx-1 text-neutral-300">·</span>
-                      <button className="text-[11px] font-medium text-error-600 hover:underline" disabled={bezig}
-                        onClick={() => verwijder(r)}>Verwijder</button>
                     </td>
                   </tr>
                 ))}
@@ -299,7 +322,7 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
           <CardHeader>
             <div className="flex items-center justify-between">
               <span>Meerwerkregels in Bouw7 (read-only)</span>
-              {bouw7.regels.some(r => !r.alGeimporteerd) && (
+              {!readOnly && bouw7.regels.some(r => !r.alGeimporteerd) && (
                 <Button variant="secondary" onClick={importAlles} disabled={bezig}>Alles importeren</Button>
               )}
             </div>
@@ -343,7 +366,9 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                     <td className="py-1.5 pl-2 pr-4 text-right">
                       {r.alGeimporteerd
                         ? <span className="text-[11px] text-neutral-400">Geïmporteerd</span>
-                        : <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig} onClick={() => importLine(r)}>Importeer</button>}
+                        : readOnly
+                          ? <span className="text-neutral-300">—</span>
+                          : <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig} onClick={() => importLine(r)}>Importeer</button>}
                     </td>
                   </tr>
                 ))}

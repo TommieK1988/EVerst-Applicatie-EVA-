@@ -9,6 +9,7 @@ import type {
   PlanningWerkbegrotingRegelMetUursoort,
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType,
 } from '@everts/database/platform-types'
+import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 
 const db = () => createAdminClient() as any
 
@@ -85,6 +86,7 @@ export async function maakPlanningActiviteit(
 ): Promise<{ ok: true; data: PlanningActiviteit } | { ok: false; error: string }> {
   const parsed = activiteitSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
+  await assertDossierBewerkbaar(input.dossier_id)
 
   const { data, error } = await db()
     .from('planning_activiteiten')
@@ -217,6 +219,7 @@ export async function maakPlanningItem(
 > {
   const parsed = itemSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
+  await assertDossierBewerkbaar(input.dossier_id)
 
   if (!input.overrule) {
     const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, input.uren)
@@ -271,6 +274,7 @@ export async function maakSnelPlanningItem(
   const parsed = snelItemSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
   const inp = parsed.data
+  await assertDossierBewerkbaar(inp.dossier_id)
   const supabase = db()
 
   const titel = inp.titel?.trim() || inp.bewakingscode_naam?.trim() || inp.bewakingscode
@@ -350,6 +354,7 @@ export async function kopieerPlanningItem(
     .eq('id', id)
     .single()
   if (bronErr || !bron) return { ok: false, error: bronErr?.message ?? 'Planitem niet gevonden' }
+  await assertDossierBewerkbaar(bron.planning_activiteiten?.dossier_id ?? null)
 
   const budget = await checkBudget(
     bron.planning_activiteiten?.dossier_id ?? '',
@@ -392,6 +397,7 @@ export async function verplaatsPlanningItem(
   | { ok: true }
   | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
 > {
+  await assertDossierBewerkbaar(input.dossier_id)
   if (!input.overrule) {
     const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, input.uren, id)
     if (!budget.ok) return budget
@@ -420,6 +426,13 @@ export async function verplaatsPlanningItem(
 export async function verwijderPlanningItem(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: bron } = await db()
+    .from('planning_items')
+    .select('planning_activiteiten!activiteit_id ( dossier_id )')
+    .eq('id', id)
+    .maybeSingle()
+  if (bron?.planning_activiteiten?.dossier_id) await assertDossierBewerkbaar(bron.planning_activiteiten.dossier_id)
+
   const { error } = await db()
     .from('planning_items')
     .delete()
@@ -437,6 +450,7 @@ export async function upsertWerkbegrotingRegel(
   uursoort_id: string,
   begrote_uren: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   const { error } = await db()
     .from('planning_werkbegroting_regels')
     .upsert(
@@ -457,6 +471,7 @@ export async function upsertWerkbegrotingRegel(
 export async function syncWerkbegrotingVanEvertsCalc(
   dossier_id: string,
 ): Promise<{ ok: true; gematch: number; ongematch: string[] } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   const { neemWerkbegrotingOver } = await import('@/lib/planning/werkbegroting')
   const result = await neemWerkbegrotingOver(dossier_id)
   if (!result.ok) return result
@@ -474,6 +489,7 @@ export async function maakPlanningFase(
   naam: string,
   volgorde?: number,
 ): Promise<{ ok: true; data: PlanningFase } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   const supabase = db()
 
   let vol = volgorde
@@ -602,8 +618,12 @@ export async function verwijderAfhankelijkheid(
 export async function syncPlanningVoorDossier(
   dossier_id: string,
 ): Promise<{ ok: true; nieuw: number; fouten: number } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   const { syncDossierPlanning } = await import('@/lib/bouw7/sync-planning')
-  const result = await syncDossierPlanning(dossier_id)
+  // Handmatige ververs = altijd volledig herbouwen (mode 'full'). Anders slaat de
+  // planning-hash de rebuild over als de Bouw7 plan-items zelf niet wijzigden, en
+  // zie je bijv. de activiteit-samenvoeging niet. De cron/bulk blijft incrementeel.
+  const result = await syncDossierPlanning(dossier_id, { mode: 'full' })
   if (result.foutMelding) return { ok: false, error: result.foutMelding }
   revalidatePath('/planning')
   return { ok: true, nieuw: result.nieuw, fouten: result.fouten }

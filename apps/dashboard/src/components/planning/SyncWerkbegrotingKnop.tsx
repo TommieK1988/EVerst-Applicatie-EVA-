@@ -2,6 +2,7 @@
 
 import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { syncWerkbegrotingVanEvertsCalc } from '@/app/(platform)/planning/actions'
+import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
 /**
  * Handmatige overname van de everts-calc werkbegroting. De overname gebeurt ook
@@ -15,6 +16,9 @@ export default function SyncWerkbegrotingKnop({
   dossier_id: string
   laatstSync?: string | null
 }) {
+  const readOnly = useDossierReadOnly()
+  if (readOnly) return null
+
   async function handleSync(): Promise<SyncUitkomst> {
     const result = await syncWerkbegrotingVanEvertsCalc(dossier_id)
     if (!result.ok) return { ok: false, melding: result.error }

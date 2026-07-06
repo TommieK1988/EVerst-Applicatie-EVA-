@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
 import {
   Bouw7Client,
@@ -280,11 +281,42 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
   return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
+/**
+ * Haal alle definitief afgeronde dossiers op voor de "Afgesloten"-tab, over alle secties heen:
+ * - Opdrachten: Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
+ * - Offertes:   Verloren of Vervallen
+ * - Aanvragen:  Vervallen
+ * Hoofdstatus-gated zodat een oude substatus-waarde op een inmiddels doorgeschoven dossier geen
+ * vals-positief oplevert.
+ */
+export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select(`*, ${ROL_SELECT}`)
+    .or(
+      'and(hoofdstatus.eq.opdracht,opdracht_substatus.eq.financieel_afgesloten),' +
+      'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
+      'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.eq.vervallen),' +
+      'bouw7_projectstatus_naam.ilike.07.%'
+    )
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
+    return { ok: false, error: error.message, missingTable }
+  }
+
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+}
+
 /** Update de servicedesk substatus van een dossier (voor kanban drag & drop). */
 export async function updateServicedeskSubstatus(
   id: string,
   nieuweSubstatus: ServicedeskSubstatus | string,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertDossierBewerkbaar(id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -383,6 +415,7 @@ export async function maakOfferteVoorServicedesk(
 export async function koppelCalculatieProject(
   dossierId: string,
 ): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: dossier, error } = await supabase
     .from('dossiers')
@@ -607,6 +640,135 @@ export async function maakDossier(input: {
   return { ok: true, data: mapRij(data) }
 }
 
+/** Bouw7-projectcategorieën voor de aanvraag-modal (id + naam). Faalt zacht → lege lijst. */
+export async function getAanvraagCategorieen(): Promise<{ id: number; name: string }[]> {
+  try {
+    const { getBouw7Categorieen } = await import('@/lib/bouw7/create-project')
+    return await getBouw7Categorieen()
+  } catch {
+    return []
+  }
+}
+
+/** Resultaat van `maakAanvraag`: het EVA-dossier + de status van de synchrone Bouw7-push. */
+export type MaakAanvraagResult =
+  | { ok: true; data: DossierRij; bouw7: { ok: boolean; error?: string; dossiernummer?: string | null } }
+  | { ok: false; error: string }
+
+/**
+ * Maak een nieuwe aanvraag aan in EVA én (synchroon) als project in Bouw7 (status "01. Offerte").
+ * De EVA-aanvraag blijft altijd bestaan; faalt de Bouw7-push, dan komt dat terug in `bouw7`
+ * (de UI toont een melding + biedt later een retry).
+ */
+export async function maakAanvraag(input: {
+  titel: string
+  klant_id: string | null
+  contactpersoon_id?: string | null
+  categorie?: string | null
+  bouw7_categorie_id?: number | null
+  referentie?: string | null
+  werkmaatschappij_id?: string | null
+  vve_code?: string | null
+  aanvraagdatum?: string | null
+  deadline?: string | null
+  opmerkingen?: string | null
+  werkadres_straat?: string | null
+  werkadres_huisnummer?: string | null
+  werkadres_postcode?: string | null
+  werkadres_stad?: string | null
+}): Promise<MaakAanvraagResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .insert({
+      titel:                input.titel,
+      klant_id:             input.klant_id ?? null,
+      contactpersoon_id:    input.contactpersoon_id ?? null,
+      hoofdstatus:          'aanvraag' as Hoofdstatus,
+      aanvraag_substatus:   'nieuw'   as AanvraagSubstatus,
+      categorie:            input.categorie ?? null,
+      bouw7_categorie_id:   input.bouw7_categorie_id ?? null,
+      bouw7_categorie_naam: input.categorie ?? null,
+      referentie:           input.referentie ?? null,
+      werkmaatschappij_id:  input.werkmaatschappij_id ?? null,
+      vve_code:             input.vve_code ?? null,
+      aanvraagdatum:        input.aanvraagdatum ?? null,
+      deadline:             input.deadline ?? null,
+      opmerkingen:          input.opmerkingen ?? null,
+      werkadres_straat:     input.werkadres_straat ?? null,
+      werkadres_huisnummer: input.werkadres_huisnummer ?? null,
+      werkadres_postcode:   input.werkadres_postcode ?? null,
+      werkadres_stad:       input.werkadres_stad ?? null,
+      bouw7_sync_status:    'pending',
+    })
+    .select(`*, ${ROL_SELECT}`)
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+
+  await verwerkDossierTriggers(data.id).catch(() => {})
+
+  // Synchroon naar Bouw7 als project (status 01. Offerte). Losgekoppeld van de EVA-insert:
+  // een fout hier laat de aanvraag staan met bouw7_sync_status='error'.
+  let bouw7: { ok: boolean; error?: string; dossiernummer?: string | null } = { ok: false, error: 'Niet naar Bouw7 verstuurd.' }
+  try {
+    // Bouw7-referenties resolven.
+    const [klantRow, cpRow, wmRow] = await Promise.all([
+      input.klant_id ? supabase.from('relaties').select('bouw7_id').eq('id', input.klant_id).maybeSingle() : Promise.resolve({ data: null }),
+      input.contactpersoon_id ? supabase.from('contactpersonen').select('bouw7_id').eq('id', input.contactpersoon_id).maybeSingle() : Promise.resolve({ data: null }),
+      input.werkmaatschappij_id ? supabase.from('bedrijfsgegevens').select('naam, bouw7_branch_id').eq('id', input.werkmaatschappij_id).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+
+    let branchId: number | null = wmRow?.data?.bouw7_branch_id ?? null
+    if (branchId == null && wmRow?.data?.naam) {
+      const { getBouw7Branches } = await import('@/lib/bouw7/create-project')
+      const branches = await getBouw7Branches()
+      branchId = branches.find(b => b.name === wmRow.data.naam)?.id ?? null
+    }
+
+    const { maakBouw7Project } = await import('@/lib/bouw7/create-project')
+    const res = await maakBouw7Project({
+      name: input.titel,
+      contactBouw7Id: klantRow?.data?.bouw7_id ? Number(klantRow.data.bouw7_id) : null,
+      contactPersonBouw7Id: cpRow?.data?.bouw7_id ? Number(cpRow.data.bouw7_id) : null,
+      categoryId: input.bouw7_categorie_id ?? null,
+      branchId,
+      reference: input.referentie ?? null,
+      information: input.opmerkingen ?? null,
+      street: input.werkadres_straat ?? null,
+      houseNumber: input.werkadres_huisnummer ?? null,
+      zipCode: input.werkadres_postcode ?? null,
+      city: input.werkadres_stad ?? null,
+      deliveryDate: input.deadline ?? null,
+      vveCode: input.vve_code ?? null,
+    })
+
+    if (res.ok) {
+      await supabase.from('dossiers').update({
+        bouw7_id:          String(res.bouw7Id),
+        dossiernummer:     res.dossiernummer,
+        bouw7_sync_status: 'synced',
+        bouw7_sync_fout:   null,
+        bouw7_laatst_sync: new Date().toISOString(),
+      }).eq('id', data.id)
+      data.bouw7_id = String(res.bouw7Id)
+      data.dossiernummer = res.dossiernummer
+      bouw7 = { ok: true, dossiernummer: res.dossiernummer }
+    } else {
+      await supabase.from('dossiers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: res.error }).eq('id', data.id)
+      bouw7 = { ok: false, error: res.error }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout bij Bouw7-sync.'
+    await supabase.from('dossiers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: msg }).eq('id', data.id)
+    bouw7 = { ok: false, error: msg }
+  }
+
+  revalidatePath('/aanvragen')
+  return { ok: true, data: mapRij(data), bouw7 }
+}
+
 /** Haal één dossier op via id, verrijkt met klant- en rolnamen. */
 export async function getDossierById(id: string): Promise<{ ok: true; data: DossierRij } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
@@ -635,6 +797,7 @@ export async function updateDossierSubstatus(
   nieuweSubstatus: DossierSubstatus,
   opts?: { schrijfBouw7?: boolean }
 ): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient()
 
   const { data: huidig, error: fetchError } = await supabase
@@ -721,6 +884,7 @@ export async function updateDossierRollen(
     controller_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
 
   // Zet lege strings om naar null (select kan "" retourneren bij geen keuze)
@@ -1525,6 +1689,7 @@ export async function verplaatsGeboekteKost(
   bronId: number,
   doel: { orderId?: number | null; contractId?: number | null },
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   return upsertInkoopCorrectie(dossierId, bronId, {
     toegewezen_order_id: doel.orderId ?? null,
     toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
@@ -1538,6 +1703,7 @@ export async function hercodeerGeboekteKost(
   code: string,
   naam: string | null,
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
   // "Alleen bestaande projectcodes": valideer tegen de codes die al op het project voorkomen.
@@ -1554,6 +1720,7 @@ export async function hercodeerGeboekteKost(
 /** Verwijder de EVA-correctie van een geboekte kost (terug naar de Bouw7-waarde). */
 export async function wisInkoopCorrectie(dossierId: string, bronId: number): Promise<InkoopCorrectieResult> {
   if (!dossierId || !Number.isFinite(bronId)) return { ok: false, error: 'Ongeldige parameters.' }
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('inkoop_correcties')
@@ -1596,6 +1763,7 @@ export async function hercodeerGeboekteKostenBulk(
   code: string,
   naam: string | null,
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
   const data = await getDossierInkoop(dossierId)
@@ -1614,6 +1782,7 @@ export async function verplaatsGeboekteKostenBulk(
   bronIds: number[],
   doel: { orderId?: number | null; contractId?: number | null },
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   return upsertInkoopCorrectiesBulk(dossierId, bronIds, {
     toegewezen_order_id: doel.orderId ?? null,
     toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
@@ -1624,6 +1793,7 @@ export async function verplaatsGeboekteKostenBulk(
 export async function wisInkoopCorrectiesBulk(dossierId: string, bronIds: number[]): Promise<InkoopCorrectieResult> {
   const ids = [...new Set(bronIds.filter((n) => Number.isFinite(n)))]
   if (!dossierId || ids.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('inkoop_correcties')
@@ -1889,21 +2059,65 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   }
 }
 
-/** Zoek relaties op naam (voor de aanvraag-combobox). Optioneel filteren op relatie-type. */
+/** Resultaat van de opdrachtgever-zoek: de relatie + optioneel de matchende contactpersoon. */
+export type OpdrachtgeverZoekResultaat = {
+  id: string
+  naam: string
+  types: string[]
+  contactpersoon?: { id: string; naam: string } | null
+}
+
+/**
+ * Zoek opdrachtgevers voor de aanvraag-combobox. Doorzoekt zowel relaties (naam + adres/plaats)
+ * als contactpersonen (voor-/achternaam + e-mail); bij een contactpersoon-match wordt de
+ * gekoppelde organisatie teruggegeven met de contactpersoon erbij zodat de modal die kan voorselecteren.
+ * De geselecteerde waarde is altijd een relatie (klant_id). Optioneel filteren op relatie-type.
+ */
 export async function zoekRelaties(
   query: string,
   opts?: { type?: string },
-): Promise<{ id: string; naam: string; types: string[] }[]> {
-  if (!query.trim()) return []
+): Promise<OpdrachtgeverZoekResultaat[]> {
+  const term = query.trim()
+  if (!term) return []
   const supabase = createAdminClient() as any
-  let q = supabase
+  const like = `%${term}%`
+
+  // 1. Relaties op naam of adres/plaats.
+  let relQ = supabase
     .from('relaties')
     .select('id, naam, types')
-    .ilike('naam', `%${query.trim()}%`)
+    .or(`naam.ilike.${like},adres_straat.ilike.${like},adres_plaats.ilike.${like}`)
     .eq('actief', true)
-  if (opts?.type) q = q.contains('types', [opts.type])
-  const { data } = await q.order('naam', { ascending: true }).limit(8)
-  return (data ?? []) as { id: string; naam: string; types: string[] }[]
+  if (opts?.type) relQ = relQ.contains('types', [opts.type])
+  const relRes = await relQ.order('naam', { ascending: true }).limit(8)
+
+  // 2. Contactpersonen op naam/e-mail → hun (primaire) organisatie.
+  const cpRes = await supabase
+    .from('contactpersonen')
+    .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief))')
+    .or(`voornaam.ilike.${like},achternaam.ilike.${like},email.ilike.${like}`)
+    .eq('actief', true)
+    .limit(8)
+
+  const resultaten = new Map<string, OpdrachtgeverZoekResultaat>()
+  for (const r of (relRes.data ?? []) as { id: string; naam: string; types: string[] }[]) {
+    resultaten.set(r.id, { id: r.id, naam: r.naam, types: r.types ?? [], contactpersoon: null })
+  }
+  for (const cp of (cpRes.data ?? []) as any[]) {
+    const koppelingen = (cp.koppelingen ?? []).filter((k: any) => k.organisatie?.actief !== false)
+    const primair = koppelingen.find((k: any) => k.is_primair) ?? koppelingen[0]
+    const org = primair?.organisatie
+    if (!org?.id) continue
+    if (opts?.type && !(org.types ?? []).includes(opts.type)) continue
+    const naam = [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ')
+    // Contactpersoon-match wint van een kale relatie-match (voegt de persoon toe).
+    resultaten.set(org.id, {
+      id: org.id, naam: org.naam, types: org.types ?? [],
+      contactpersoon: { id: cp.id, naam },
+    })
+  }
+
+  return Array.from(resultaten.values()).slice(0, 8)
 }
 
 /** Sla vrije inhoudsvelden op (categorie, referentie, contactpersoon, datums, werkadres). */
@@ -1925,6 +2139,7 @@ export async function updateDossierInfo(
     werkmaatschappij_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('dossiers')
@@ -1998,6 +2213,7 @@ export async function setDossierToggle(
   definitie_id: string,
   aan: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -2218,6 +2434,7 @@ export async function updateUurlogBewakingscode(
   hourLog: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number },
   nieuwePslId: number,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
   const { client } = ctx
@@ -2234,5 +2451,147 @@ export async function updateUurlogBewakingscode(
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }
+  }
+}
+
+/* — Delete calculaties & offertes — */
+
+/**
+ * Verwijdert de everts-calc calculatie/offerte van een dossier.
+ * - Haalt everts_calc_project_id op
+ * - Vindt alle quotes voor dat project in everts-calc
+ * - Verwijdert de quote(s) uit everts-calc
+ * - Cleart everts_calc_project_id in EVA
+ * - RLS-beveiligd: user moet eigenaar zijn van het dossier
+ */
+export async function deleteCalculatieVanDossier(dossierId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dossierId) return { ok: false, error: 'Dossier-ID ontbreekt.' }
+  await assertDossierBewerkbaar(dossierId)
+
+  const supabase = createAdminClient()
+
+  // 1. Haal dossier op (RLS-beveiligd door admin client + eventuele user-context)
+  const { data: dossier, error: dossierError } = await supabase
+    .from('dossiers')
+    .select('id, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+
+  if (dossierError || !dossier) {
+    return { ok: false, error: 'Dossier niet gevonden.' }
+  }
+
+  if (!dossier.everts_calc_project_id) {
+    return { ok: false, error: 'Geen calculatie gekoppeld aan dit dossier.' }
+  }
+
+  try {
+    // 2. Roep delete aan in everts-calc (dynamisch import)
+    const { createClient: createEventsCalcClient } = await import('@/lib/everts-calc/supabase/server')
+    const eventsCalcSupa = createEventsCalcClient()
+
+    // Vind quotes voor dit project
+    const { data: quotes, error: quotesError } = await eventsCalcSupa
+      .from('quotes')
+      .select('id')
+      .eq('project_id', dossier.everts_calc_project_id)
+
+    if (quotesError) {
+      return { ok: false, error: `Fout bij ophalen quotes: ${quotesError.message}` }
+    }
+
+    // Verwijder alle quotes
+    if (quotes && quotes.length > 0) {
+      for (const quote of quotes) {
+        const { error: deleteError } = await eventsCalcSupa
+          .from('quotes')
+          .delete()
+          .eq('id', quote.id)
+
+        if (deleteError) {
+          return { ok: false, error: `Fout bij verwijderen quote: ${deleteError.message}` }
+        }
+      }
+    }
+
+    // 3. Clear everts_calc_project_id in EVA
+    const { error: clearError } = await supabase
+      .from('dossiers')
+      .update({ everts_calc_project_id: null })
+      .eq('id', dossierId)
+
+    if (clearError) {
+      return { ok: false, error: `Fout bij clearing calculatie-koppeling: ${clearError.message}` }
+    }
+
+    // 4. Revalidate
+    revalidatePath(`/opdrachten/${dossierId}/calculatie`)
+    revalidatePath(`/servicedesk/${dossierId}/calculatie`)
+
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen calculatie.' }
+  }
+}
+
+/**
+ * Verwijdert een offerte-dossier of zet het terug naar 'aanvraag' status.
+ * - Reset hoofdstatus naar 'aanvraag' (soft delete)
+ * - Cleart everts_calc_project_id als aanwezig
+ * - RLS-beveiligd
+ */
+export async function deleteOfferteDossier(dossierId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!dossierId) return { ok: false, error: 'Dossier-ID ontbreekt.' }
+
+  const supabase = createAdminClient()
+
+  // 1. Haal dossier op
+  const { data: dossier, error: dossierError } = await supabase
+    .from('dossiers')
+    .select('id, hoofdstatus, everts_calc_project_id')
+    .eq('id', dossierId)
+    .single()
+
+  if (dossierError || !dossier) {
+    return { ok: false, error: 'Dossier niet gevonden.' }
+  }
+
+  // 2. Check of het een offerte-dossier is
+  if (dossier.hoofdstatus !== 'offerte') {
+    return { ok: false, error: 'Dit dossier is geen offerte.' }
+  }
+
+  try {
+    // 3. If there's a calculatie, delete it first
+    if (dossier.everts_calc_project_id) {
+      const calcResult = await deleteCalculatieVanDossier(dossierId)
+      if (!calcResult.ok) {
+        // Ga door, maar log warning
+        console.warn(`Warning: calculatie delete faalde voor ${dossierId}, ga toch verder met dossier-reset`)
+      }
+    }
+
+    // 4. Reset dossier status naar 'aanvraag'
+    const { error: updateError } = await supabase
+      .from('dossiers')
+      .update({
+        hoofdstatus: 'aanvraag',
+        offerte_substatus: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', dossierId)
+
+    if (updateError) {
+      return { ok: false, error: `Fout bij resetten dossier: ${updateError.message}` }
+    }
+
+    // 5. Revalidate
+    revalidatePath(`/offertes`)
+    revalidatePath(`/opdrachten/${dossierId}`)
+    revalidatePath(`/servicedesk/${dossierId}`)
+
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen offerte.' }
   }
 }

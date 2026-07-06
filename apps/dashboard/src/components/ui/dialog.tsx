@@ -26,10 +26,15 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+// Centrering gebeurt via de flex-wrapper (DialogContent), NIET via een transform op de content
+// zelf. De zoom-in/out-animatie zet namelijk een eigen transform (scale) op de content; zou de
+// centrering óók een transform (-translate-1/2) gebruiken, dan overschrijft de animatie die en
+// zakt een lange modal onder de viewport — met de footer (Opslaan) buiten beeld tot gevolg.
+// Layout-centrering is immuun voor de animatie-transform.
 const contentVariants = cva(
-  'fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-white shadow-[0_24px_48px_-12px_rgba(16,24,40,0.22)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+  'pointer-events-auto relative flex max-h-[85vh] w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl bg-white shadow-[0_24px_48px_-12px_rgba(16,24,40,0.22)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
   {
-    variants: { size: { sm: 'max-w-[440px]', md: 'max-w-[560px]', lg: 'max-w-[720px]' } },
+    variants: { size: { sm: 'max-w-[440px]', md: 'max-w-[560px]', lg: 'max-w-[720px]', xl: 'max-w-[920px]' } },
     defaultVariants: { size: 'md' },
   },
 )
@@ -46,15 +51,20 @@ const DialogContent = React.forwardRef<
 >(({ className, size, children, hideClose, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
-    <DialogPrimitive.Content ref={ref} className={cn(contentVariants({ size }), className)} {...props}>
-      {children}
-      {!hideClose && (
+    {/* Fixed, viewport-vullende flex-wrapper centreert de modal via layout (immuun voor de
+        animatie-transform). pointer-events-none laat kliks náást de modal door naar de overlay
+        (sluiten); de content zelf zet ze weer op auto. */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      <DialogPrimitive.Content ref={ref} className={cn(contentVariants({ size }), className)} {...props}>
+        {children}
+        {!hideClose && (
         <DialogPrimitive.Close className="absolute right-5 top-5 grid h-7 w-7 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-100">
           <X className="h-4 w-4" />
           <span className="sr-only">Sluiten</span>
         </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
+        )}
+      </DialogPrimitive.Content>
+    </div>
   </DialogPortal>
 ))
 DialogContent.displayName = DialogPrimitive.Content.displayName
@@ -84,7 +94,9 @@ const DialogDescription = React.forwardRef<
 DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 function DialogBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex-1 overflow-y-auto px-6 py-5 text-[13.5px] leading-relaxed text-neutral-700', className)} {...props} />
+  // min-h-0 borgt dat deze flex-body altijd mag krimpen en zelf scrollt (i.p.v. de sticky
+  // footer weg te duwen). Safety-net voor content die de min-content-hoogte zou triggeren.
+  return <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-5 text-[13.5px] leading-relaxed text-neutral-700', className)} {...props} />
 }
 
 function DialogFooter({ className, split, ...props }: React.HTMLAttributes<HTMLDivElement> & { split?: boolean }) {

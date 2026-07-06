@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { assertDossierBewerkbaar } from './guards'
 
 export type DossierNotitie = {
   id: string
@@ -43,6 +44,7 @@ export async function plaatsDossierNotitie(
 ): Promise<{ ok: true; notitie: DossierNotitie } | { ok: false; error: string }> {
   const tekst = inhoud.trim()
   if (!tekst) return { ok: false, error: 'Lege notitie' }
+  await assertDossierBewerkbaar(dossierId)
 
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd' }
@@ -78,6 +80,15 @@ export async function verwijderDossierNotitie(
   if (!mw) return { ok: false, error: 'Niet ingelogd' }
 
   const supabase = createAdminClient() as any
+
+  // Vangnet: notities van een afgesloten (alleen-lezen) dossier mogen niet verwijderd worden.
+  const { data: notitie } = await supabase
+    .from('dossier_notities')
+    .select('dossier_id')
+    .eq('id', notitieId)
+    .maybeSingle()
+  if (notitie?.dossier_id) await assertDossierBewerkbaar(notitie.dossier_id)
+
   const { error } = await supabase
     .from('dossier_notities')
     .delete()

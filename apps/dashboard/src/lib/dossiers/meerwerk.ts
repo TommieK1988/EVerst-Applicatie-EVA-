@@ -11,6 +11,7 @@ import type {
 } from '@everts/database'
 import { getServicedeskRegie } from './servicedesk'
 import { bouw7VoorDossier } from './actions'
+import { assertDossierBewerkbaar } from './guards'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { maakMeerwerkOfferte } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { Bouw7AdditionalWorkLine } from '@/lib/bouw7/client'
@@ -126,6 +127,7 @@ export async function maakMeerwerkRegel(
   dossierId: string,
   data: NieuweMeerwerkData,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
     .from('meerwerk_regels')
@@ -164,6 +166,8 @@ export async function updateMeerwerkRegel(
   patch: Partial<NieuweMeerwerkData> & { termijn_wijze?: MeerwerkTermijnWijze | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
+  const { data: bestaand } = await supabase.from('meerwerk_regels').select('dossier_id').eq('id', id).single()
+  if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
   const velden: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of ['omschrijving', 'afrekenwijze', 'is_stelpost', 'stelpost_grondslag', 'bedrag_excl_btw',
     'eenheid', 'eenheidsprijs', 'hoeveelheid_werkelijk', 'btw_pct', 'factuurreferentie', 'termijn_wijze'] as const) {
@@ -188,6 +192,7 @@ export async function verwijderMeerwerkRegel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
   const { data: row } = await supabase.from('meerwerk_regels').select('dossier_id').eq('id', id).single()
+  if (row?.dossier_id) await assertDossierBewerkbaar(row.dossier_id)
   const { error } = await supabase.from('meerwerk_regels').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   if (row?.dossier_id) revalidatePath(`/opdrachten/${row.dossier_id}/meerwerk`)
@@ -212,6 +217,7 @@ export async function setMeerwerkStatus(
     .single()
   if (leesFout || !regel) return { ok: false, error: leesFout?.message ?? 'Meerwerkregel niet gevonden.' }
   const r = regel as MeerwerkRegel
+  await assertDossierBewerkbaar(r.dossier_id)
 
   if (r.status !== status && !TRANSITIES[r.status].includes(status)) {
     return { ok: false, error: `Ongeldige statusovergang: ${r.status} → ${status}.` }
@@ -271,6 +277,7 @@ export async function maakMeerwerkCalculatie(
     .eq('id', regelId)
     .single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
+  await assertDossierBewerkbaar(regel.dossier_id)
   if (regel.quote_id) return { ok: true, quoteId: regel.quote_id }
 
   const { data: dossier } = await supabase
@@ -415,6 +422,7 @@ export async function importeerBouw7Meerwerk(
   dossierId: string,
   item: ImporteerMeerwerkLine,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
 
   const { data: bestaand } = await supabase
@@ -465,6 +473,7 @@ export async function importeerBouw7Meerwerk(
 export async function importeerAlleBouw7Meerwerk(
   dossierId: string,
 ): Promise<{ ok: true; aantal: number } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const data = await getBouw7Meerwerk(dossierId)
   const teImporteren = data.regels.filter(r => !r.alGeimporteerd)
   let aantal = 0
@@ -534,6 +543,7 @@ export async function stuurMeerwerkNaarBouw7(
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
+  await assertDossierBewerkbaar(regel.dossier_id)
   if (regel.bouw7_line_id) return { ok: true, nummer: regel.bouw7_nummer ?? null }
 
   const ctx = await bouw7VoorDossier(regel.dossier_id)

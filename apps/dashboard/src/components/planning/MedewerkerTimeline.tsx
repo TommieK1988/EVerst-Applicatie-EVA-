@@ -219,7 +219,7 @@ function PlanningItemEditDialog({
         background: 'var(--bg-elev)',
         border: '1px solid var(--border)',
         borderRadius: 12,
-        width: 420,
+        width: 'min(480px, calc(100vw - 32px))',
         maxHeight: '90vh',
         overflowY: 'auto',
         boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
@@ -296,8 +296,9 @@ function PlanningItemEditDialog({
               onChange={e => setForm(f => ({ ...f, uren: e.target.value }))} required />
           </div>
 
-          {/* Actions */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          {/* Actions — mag wrappen zodat de knoppen nooit buiten de modal vallen (rechter groep
+              blijft rechts uitgelijnd via marginLeft:auto, ook wanneer hij naar een 2e regel wrapt). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 4 }}>
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 type="button"
@@ -321,7 +322,7 @@ function PlanningItemEditDialog({
                 Kopiëren
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
               <button type="button" onClick={onClose} className="eva-btn-ghost">Annuleren</button>
               <button type="submit" disabled={isPending} className="eva-btn-primary">
                 {isPending ? 'Bezig…' : 'Opslaan'}
@@ -971,7 +972,8 @@ function TimelineRij({
   const dagLenW = totalW
 
   function buitenRooster(dag: Date): boolean {
-    const iso    = dag.toISOString().slice(0, 10)
+    // Lokale datum — dag.toISOString() zou vóór 01:00/02:00 NL de vórige dag geven (UTC).
+    const iso    = format(dag, 'yyyy-MM-dd')
     const dagNum = dag.getDay() === 0 ? 7 : dag.getDay()
     const actief = roosters.find(r => {
       const tot = r.geldig_tot ?? '9999-12-31'
@@ -982,7 +984,7 @@ function TimelineRij({
   }
 
   function afwezigheidOpDag(dag: Date): MedewerkerAfwezigheid | undefined {
-    const iso = dag.toISOString().slice(0, 10)
+    const iso = format(dag, 'yyyy-MM-dd')
     return afwezigheid.find(a => iso >= a.start_datum && iso <= a.eind_datum)
   }
 
@@ -990,7 +992,9 @@ function TimelineRij({
     <>
       {/* Drop-cells + dag-achtergrond (verlof/afwezigheid/feestdag/ATV als shading) */}
       {dagen.map((dag, i) => {
-        const iso    = dag.toISOString().slice(0, 10)
+        // Lokale datum: de cel die visueel op dag X ligt moet ook datum X dragen
+        // (toISOString() is UTC en gaf de vorige dag → verlof-shading 1 dag verschoven).
+        const iso    = format(dag, 'yyyy-MM-dd')
         const buiten = buitenRooster(dag)
         const afwez  = afwezigheidOpDag(dag)
         const feest  = feestdagenDagen.has(iso)
@@ -1215,10 +1219,10 @@ export default function MedewerkerTimeline({
     const set = new Set<string>()
     for (const item of agendaItems) {
       if (item.type === 'atv_dag') {
-        const s = new Date(item.start_datum)
-        const e = new Date(item.eind_datum)
-        for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1))
-          set.add(d.toISOString().slice(0, 10))
+        // Lokale dag-iteratie: parseISO (lokale middernacht) + format, geen UTC-mix.
+        const e = parseISO(item.eind_datum)
+        for (let d = parseISO(item.start_datum); d <= e; d = addDays(d, 1))
+          set.add(format(d, 'yyyy-MM-dd'))
       }
     }
     return set
@@ -1240,14 +1244,14 @@ export default function MedewerkerTimeline({
   }, [feestdagenDagen, feestdagenNamen, atvDagen])
 
   const agendaItemsInBereik = useMemo(() => {
-    const start = vs.toISOString().slice(0, 10)
-    const einde = ve.toISOString().slice(0, 10)
+    const start = format(vs, 'yyyy-MM-dd')
+    const einde = format(ve, 'yyyy-MM-dd')
     return agendaItems.filter(a => a.eind_datum >= start && a.start_datum <= einde)
   }, [agendaItems, vs, ve])
 
   const feestdagenInBereik = useMemo(() => {
-    const start = vs.toISOString().slice(0, 10)
-    const einde = ve.toISOString().slice(0, 10)
+    const start = format(vs, 'yyyy-MM-dd')
+    const einde = format(ve, 'yyyy-MM-dd')
     return feestdagen.filter(f => f.eind_datum >= start && f.start_datum <= einde)
   }, [feestdagen, vs, ve])
 
@@ -1652,8 +1656,8 @@ export default function MedewerkerTimeline({
       {verlofModalOpen && (
         <VerlofModal
           medewerkers={medewerkers}
-          periodeStart={vs.toISOString().slice(0, 10)}
-          periodeEinde={ve.toISOString().slice(0, 10)}
+          periodeStart={format(vs, 'yyyy-MM-dd')}
+          periodeEinde={format(ve, 'yyyy-MM-dd')}
           onClose={() => setVerlofModalOpen(false)}
           onSaved={() => {
             setVerlofModalOpen(false)

@@ -115,6 +115,7 @@ export const IconOffertes  = (p: IconProps) => <IconBase {...p}><path d="M6 3h8l
 export const IconOpdrachten = (p: IconProps) => <IconBase {...p}><path d="M6 4s1-.8 3.5-.8S13 4.6 16 4.6 19 4 19 4v8s-1 .6-3 .6-4.5-1.4-7-1.4S6 12 6 12z"/><path d="M6 21V4"/></IconBase>;
 export const IconServicedesk = (p: IconProps) => <IconBase {...p}><path d="M4 16v-4a8 8 0 0 1 16 0v4"/><rect x="2.5" y="14.5" width="4" height="6.5" rx="2"/><rect x="17.5" y="14.5" width="4" height="6.5" rx="2"/><path d="M20 19v.5a3 3 0 0 1-3 3h-3"/></IconBase>;
 export const IconManagement = (p: IconProps) => <IconBase {...p}><path d="M4 20v-16h16"/><rect x="7" y="12" width="3" height="5" rx="0.6"/><rect x="12" y="8" width="3" height="9" rx="0.6"/><rect x="17" y="5" width="3" height="12" rx="0.6"/></IconBase>;
+export const IconAfgesloten = (p: IconProps) => <IconBase {...p}><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M9 12l2 2 4-4"/></IconBase>;
 
 // Beheer
 export const IconRelatiesNav    = IconRelaties; // alias

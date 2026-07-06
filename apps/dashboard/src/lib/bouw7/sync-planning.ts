@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client, logSync, type SyncResult, type SyncMode } from './sync'
 import { fingerprint } from './fingerprint'
+import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -24,6 +25,23 @@ function toTimestamp(dt?: string | null): string | null {
   return dt.replace(' ', 'T')
 }
 
+/**
+ * Bouw7-einddatums van (hele-dag-)plan-items zijn **dag-inclusief**: een eendaags item heeft
+ * start == eind (beide 00:00:00), en een item 18→20 mei met 24 uur beslaat 3 dagen (18+19+20).
+ * EVA's planning_items gebruiken een exclusieve eindtijd ([start, eind), constraint eind > start).
+ * Hele-dag-einddatums (tijd 00:00:00) krijgen daarom +1 dag; echte eindtijden blijven staan.
+ * Zonder deze correctie faalden eendaagse items op de tijdvolgorde-constraint (en ontbraken ze
+ * geruisloos in EVA) en waren meerdaagse items één dag te kort.
+ */
+function eindExclusief(dt?: string | null): string | null {
+  if (!dt) return null
+  const tijd = dt.slice(11, 19)
+  if (tijd && tijd !== '00:00:00') return toTimestamp(dt)
+  const [y, m, d] = dt.slice(0, 10).split('-').map(Number)
+  const volgende = new Date(Date.UTC(y, m - 1, d + 1))
+  return `${volgende.toISOString().slice(0, 10)}T00:00:00`
+}
+
 /** Plan-items van één Bouw7-project (alle pagina's, via Apollo-search). */
 export async function fetchPlanItems(projectId: string, client?: Bouw7Client): Promise<Bouw7PlanItem[]> {
   const c = client ?? (await getBouw7Client())
@@ -36,13 +54,16 @@ const DETAIL_BATCH = 10
 /**
  * Haal per plan-item het Heimdall-detail (`/plan-item/{id}`) op — de enige plek waar de
  * toegewezen `employees[]` staan; de Apollo-search levert die niet. Gebatcht (Promise.allSettled),
- * net als de Athena-/offerte-calls in syncProjects. Geeft een map plan-item-id → detail.
+ * net als de Athena-/offerte-calls in syncProjects. Geeft een map plan-item-id → detail plus het
+ * aantal mislukte calls, zodat de aanroeper een rebuild op onvolledige data kan afbreken
+ * (anders zouden toewijzingen stilletjes verdwijnen bij een haperende API).
  */
 export async function fetchPlanItemDetails(
   ids: number[],
   client: Bouw7Client,
-): Promise<Map<number, Bouw7PlanItemDetail>> {
+): Promise<{ map: Map<number, Bouw7PlanItemDetail>; mislukt: number }> {
   const map = new Map<number, Bouw7PlanItemDetail>()
+  const gefaald: number[] = []
   for (let i = 0; i < ids.length; i += DETAIL_BATCH) {
     const batch = ids.slice(i, i + DETAIL_BATCH)
     const results = await Promise.allSettled(
@@ -50,9 +71,21 @@ export async function fetchPlanItemDetails(
     )
     results.forEach((r, j) => {
       if (r.status === 'fulfilled' && r.value) map.set(batch[j], r.value)
+      else gefaald.push(batch[j])
     })
   }
-  return map
+  // Eén rustige (sequentiële) herkansing — vangt throttling door de parallelle batches.
+  let mislukt = 0
+  for (const id of gefaald) {
+    try {
+      const det = await client.get<Bouw7PlanItemDetail>(`/plan-item/${id}`)
+      if (det) map.set(id, det)
+      else mislukt++
+    } catch {
+      mislukt++
+    }
+  }
+  return { map, mislukt }
 }
 
 /** Een plan-item zonder bewakingscode + met dezelfde naam als het project = crewblok. */
@@ -98,6 +131,12 @@ export async function syncDossierPlanning(
 
     // Planning-fingerprint uit de goedkope Apollo-lijst (id/updatedAt/uren/datums/naam/chapter/remark).
     // Is die gelijk aan de opgeslagen hash → de dure /plan-item/{id} detail-calls + rebuild overslaan.
+    // KANTTEKENING: de medewerker-TOEWIJZINGEN zitten alléén in het detail-endpoint en bumpen
+    // updatedAt níet (geverifieerd tegen de live API — Apollo kent geen employees-veld). Een pure
+    // toewijzingswissel is dus onzichtbaar voor deze hash; `req` (requisite, benodigd aantal) vangt
+    // een deel. De dagelijkse cron in mode 'full' negeert de hash en herbouwt alles — daarmee zijn
+    // toewijzingen maximaal één dag verouderd. Verwijder de hash-skip niet "voor de zekerheid":
+    // dat zou elke incrementele run honderden detail-calls per dossier terugbrengen.
     const planningHash = fingerprint(
       planItems
         .map(pi => ({
@@ -111,6 +150,7 @@ export async function syncDossierPlanning(
           sc:  pi.securityPlanningLink?.securityCode?.id ?? null,
           rm:  pi.remark ?? null,
           dep: pi.department?.name ?? null,
+          req: pi.requisite ?? null,
         }))
         .sort((a, b) => a.id - b.id),
     )
@@ -120,7 +160,14 @@ export async function syncDossierPlanning(
     }
 
     // De toegewezen medewerkers staan alleen in het detail-endpoint, niet in de search-response.
-    const detailMap = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
+    const { map: detailMap, mislukt: detailsMislukt } = await fetchPlanItemDetails(planItems.map(pi => pi.id), client)
+    if (detailsMislukt > 0) {
+      // Onvolledige details → rebuild afbreken en hash NIET opslaan; volgende run probeert opnieuw.
+      // Doorgaan zou bestaande (correcte) planitems wissen zonder vervanging.
+      result.fouten++
+      result.foutMelding = `${detailsMislukt} plan-item-details niet opgehaald; rebuild overgeslagen`
+      return result
+    }
     const nu = new Date().toISOString()
 
     // ── 1. Fasen (Hoofdtaken) ────────────────────────────────────────
@@ -197,34 +244,71 @@ export async function syncDossierPlanning(
       .eq('dossier_id', dossierId)
       .eq('bron', 'bouw7')
 
-    let activiteitVolg = 0
-    for (const pi of planItems) {
-      const crew = isCrewblok(pi)
-      const titel = crew
+    // Titel van een plan-item bepalen (crewblok → afdeling, anders naam).
+    const titelVan = (pi: Bouw7PlanItem): string =>
+      isCrewblok(pi)
         ? (pi.department?.name?.trim() || pi.name?.trim() || 'Planning')
         : (pi.name?.trim() || 'Taak')
-      // Opmerking van het plan-item (search-veld `remark`, anders detail-`notes`).
-      const remark = (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null
-      const omschrijving = crew ? (pi.project?.name ?? remark) : remark
 
-      const secCode = pi.securityPlanningLink?.securityCode ?? null
+    // Plan-items met dezelfde naam bínnen dezelfde fase samenvoegen tot één activiteit.
+    // Zonder deze groepering wordt elk Bouw7 plan-item een aparte activiteit — wat bij
+    // veel gelijknamige plan-items (elk met één medewerker/datum) een onbruikbaar lange
+    // lijst oplevert. De onderliggende planitems houden hun eigen medewerker/datums/uren.
+    type Groep = { faseKey: string; titel: string; items: Bouw7PlanItem[] }
+    const groepen = new Map<string, Groep>()
+    for (const pi of planItems) {
+      const faseKey = faseKeyVan(pi)
+      const titel = titelVan(pi)
+      const key = `${faseKey}::${titel.toLowerCase()}`
+      const g = groepen.get(key)
+      if (g) g.items.push(pi)
+      else groepen.set(key, { faseKey, titel, items: [pi] })
+    }
+
+    // Sorteer op vroegste start (dan titel) zodat de volgorde stabiel en chronologisch is.
+    const vroegsteStart = (g: Groep): string =>
+      g.items.map(pi => pi.startDate).filter(Boolean).sort()[0] ?? '￿'
+    const gesorteerdeGroepen = [...groepen.values()].sort(
+      (a, b) => vroegsteStart(a).localeCompare(vroegsteStart(b)) || a.titel.localeCompare(b.titel),
+    )
+
+    let activiteitVolg = 0
+    for (const groep of gesorteerdeGroepen) {
+      const { faseKey, titel, items } = groep
+      const eerste = items[0]
+      const crew = isCrewblok(eerste)
+
+      // Datums spannen de hele groep; uren zijn de som over de plan-items.
+      const starts = items.map(pi => pi.startDate).filter(Boolean).sort()
+      const ends = items.map(pi => pi.endDate).filter(Boolean).sort()
+      const gewensteStart = starts[0] ?? null
+      const deadline = ends[ends.length - 1] ?? null
+      const urenTotaal = items.reduce((sum, pi) => sum + (pi.hours ?? 0), 0)
+
+      // Eerste niet-lege opmerking (search-veld `remark`, anders detail-`notes`).
+      const remark =
+        items.map(pi => (pi.remark ?? detailMap.get(pi.id)?.notes)?.trim() || null).find(Boolean) ?? null
+      const omschrijving = crew ? (eerste.project?.name ?? remark) : remark
+
+      // Bewakingscode uit het eerste plan-item (groep zit binnen één fase).
+      const secCode = eerste.securityPlanningLink?.securityCode ?? null
 
       const { data: act, error: actErr } = await supabase
         .from('planning_activiteiten')
         .insert({
           dossier_id: dossierId,
-          fase_id: faseMap.get(faseKeyVan(pi)) ?? null,
+          fase_id: faseMap.get(faseKey) ?? null,
           titel,
           omschrijving,
           bewakingscode: secCode?.code?.trim() || null,
           bouw7_security_code_id: secCode?.id ?? null,
-          geschatte_uren: pi.hours ?? null,
-          gewenste_start: toDate(pi.startDate),
-          deadline: toDate(pi.endDate),
+          geschatte_uren: urenTotaal || null,
+          gewenste_start: toDate(gewensteStart),
+          deadline: toDate(deadline),
           status: 'gepland',
           volgorde: activiteitVolg++,
           bron: 'bouw7',
-          bouw7_id: String(pi.id),
+          bouw7_id: `group:${faseKey}:${titel.toLowerCase()}`,
           bouw7_laatst_sync: nu,
         })
         .select('id')
@@ -236,33 +320,59 @@ export async function syncDossierPlanning(
       }
       result.nieuw++
 
-      // ── 4. Planitems per toegewezen medewerker ──────────────────────
-      const emps = detailMap.get(pi.id)?.employees ?? []
+      // ── 4. Planitems per plan-item × toegewezen medewerker ──────────
+      // Elk planitem behoudt de eigen datums/uren van zijn plan-item.
       const itemRows: Record<string, unknown>[] = []
-      for (const emp of emps) {
-        const medewerkerId = empMap.get(String(emp.id))
-        if (!medewerkerId) {
-          result.fouten++
+      for (const pi of items) {
+        // Rijen die de CHECK/NOT NULL-constraints van planning_items zouden schenden
+        // (start/eind niet null, eind_dt > start_dt, uren > 0) vooraf overslaan. Cruciaal
+        // sinds de samenvoeging: alle medewerkers van één activiteit gaan in ÉÉN batch-insert,
+        // en Postgres maakt die atomair — dus één ongeldige rij (bv. een plan-item zonder uren)
+        // zou anders de hele batch laten mislukken en álle planitems van die activiteit wissen.
+        const start = toTimestamp(pi.startDate)
+        const eind = eindExclusief(pi.endDate)
+        const uren = pi.hours ?? 0
+        if (!start || !eind || eind <= start || uren <= 0) {
+          result.overgeslagen = (result.overgeslagen ?? 0) + 1
           continue
         }
-        itemRows.push({
-          activiteit_id: act.id,
-          medewerker_id: medewerkerId,
-          start_dt: toTimestamp(pi.startDate),
-          eind_dt: toTimestamp(pi.endDate),
-          uren: pi.hours ?? 0,
-          bron: 'bouw7',
-          bouw7_id: `${pi.id}:${emp.id}`,
-          bouw7_laatst_sync: nu,
-        })
+        const emps = detailMap.get(pi.id)?.employees ?? []
+        for (const emp of emps) {
+          const medewerkerId = empMap.get(String(emp.id))
+          if (!medewerkerId) {
+            result.fouten++
+            continue
+          }
+          itemRows.push({
+            activiteit_id: act.id,
+            medewerker_id: medewerkerId,
+            start_dt: start,
+            eind_dt: eind,
+            uren,
+            bron: 'bouw7',
+            bouw7_id: `${pi.id}:${emp.id}`,
+            bouw7_laatst_sync: nu,
+          })
+        }
       }
       if (itemRows.length > 0) {
-        await supabase.from('planning_items').insert(itemRows)
+        const { error: itemErr } = await supabase.from('planning_items').insert(itemRows)
+        if (itemErr) {
+          // Bv. FK-fout doordat een gelijktijdige sync de activiteit al wiste — telt als fout
+          // zodat de hash hieronder niet wordt opgeslagen en de volgende run herstelt.
+          result.fouten++
+          result.foutMelding = itemErr.message
+        }
       }
     }
 
-    // Sla de nieuwe planning-fingerprint op zodat een volgende incrementele sync dit dossier overslaat.
-    await supabase.from('dossiers').update({ bouw7_planning_hash: planningHash }).eq('id', dossierId)
+    // Sla de nieuwe planning-fingerprint op zodat een volgende incrementele sync dit dossier
+    // overslaat — maar alléén bij een foutloze rebuild. Bij fouten (bv. twee gelijktijdige syncs
+    // die elkaars rijen wissen) blijft de oude hash staan, zodat de volgende run dit dossier
+    // opnieuw opbouwt in plaats van een half leeggeraakte planning te bevriezen.
+    if (result.fouten === 0) {
+      await supabase.from('dossiers').update({ bouw7_planning_hash: planningHash }).eq('id', dossierId)
+    }
 
     return result
   } catch (e: unknown) {
@@ -345,22 +455,48 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
     // Scope: planning bestaat in Bouw7 alleen voor dossiers in uitvoering. Aanvraag/offerte-dossiers
     // hebben geen plan-items, dus die slaan we volledig over (geen Apollo-call). Binnen de scope zorgt
     // de planning-hash dat ongewijzigde dossiers de dure detail-calls overslaan.
-    const { data: dossiers } = await supabase
+    // LET OP: 'servicedesk' is GEEN hoofdstatus-enumwaarde (alleen aanvraag/offerte/opdracht) —
+    // servicedesk = Bouw7-status "LB.*" of categorie Dagelijks onderhoud/Mutatie, zoals
+    // getDossiersVoorServicedesk. De oude `.in('hoofdstatus', [...,'servicedesk'])` gaf een stille
+    // enum-fout waardoor deze bulk-sync maandenlang níets synchroniseerde.
+    // Afgeronde dossiers (opdracht financieel_afgesloten, servicedesk financieel_gereed, gearchiveerd)
+    // filteren we hieronder met isActiefDossier — hun planning wijzigt niet meer, dus de Apollo-/detail-
+    // calls zijn verspild. De statusvelden halen we mee zodat die canonieke helper kan beslissen.
+    const { data: dossiers, error: dossierErr } = await supabase
       .from('dossiers')
-      .select('id')
+      .select('id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd')
       .not('bouw7_id', 'is', null)
-      .in('hoofdstatus', ['opdracht', 'servicedesk'])
+      .or('hoofdstatus.eq.opdracht,bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
+
+    // Een query-fout mag nooit meer stil tot "0 dossiers" leiden.
+    if (dossierErr) {
+      totaal.fouten++
+      totaal.foutMelding = `Dossier-scope query mislukt: ${dossierErr.message}`
+      return totaal
+    }
 
     // Eén gedeelde client → niet per dossier opnieuw inloggen bij Bouw7.
     const client = await getBouw7Client()
 
-    for (const d of (dossiers ?? []) as { id: string }[]) {
+    const meldingen: string[] = []
+    for (const d of (dossiers ?? []) as (DossierActiefVelden & { id: string })[]) {
+      // Afgesloten/vervallen/gearchiveerd → planning is bevroren, sla over (geen Bouw7-calls).
+      if (!isActiefDossier(d)) {
+        totaal.overgeslagen = (totaal.overgeslagen ?? 0) + 1
+        continue
+      }
       const r = await syncDossierPlanning(d.id, { mode, client, silent: true })
       totaal.nieuw += r.nieuw
       totaal.bijgewerkt += r.bijgewerkt
       totaal.fouten += r.fouten
       totaal.overgeslagen = (totaal.overgeslagen ?? 0) + (r.overgeslagen ?? 0)
+      // Eerste paar per-dossier foutmeldingen bewaren voor de samenvattende sync_log-regel,
+      // anders is "115 fouten" achteraf niet te herleiden.
+      if (r.fouten > 0 && r.foutMelding && meldingen.length < 3) {
+        meldingen.push(`${d.id.slice(0, 8)}: ${r.foutMelding}`)
+      }
     }
+    if (meldingen.length > 0) totaal.foutMelding = meldingen.join(' | ')
     return totaal
   } catch (e: unknown) {
     totaal.fouten++

@@ -23,7 +23,9 @@ import MeerwerkTab from './tabs/MeerwerkTab'
 import BestandenTab from './tabs/BestandenTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
-import type { DossierSectie } from './types'
+import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
+import { isDossierAfgesloten } from './types'
+import type { DossierSectie, DossierRij } from './types'
 
 const TAB_LABELS: Record<string, string> = {
   bestanden:     'Bestanden',
@@ -41,10 +43,38 @@ const TAB_LABELS: Record<string, string> = {
 
 type Props = { id: string; tab: string; sectie: DossierSectie }
 
+/** Alleen-lezen banner voor afgesloten/vervallen/verloren dossiers. */
+function AfgeslotenBanner() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '9px 32px', fontSize: 12.5, fontWeight: 600,
+      color: 'var(--neutral-700, #3a444c)',
+      background: 'var(--neutral-100, #eef1f2)',
+      borderBottom: '1px solid var(--neutral-200, #e3e8ea)',
+    }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+      Dit dossier is afgesloten en alleen-lezen — er kan niets meer worden gewijzigd.
+    </div>
+  )
+}
+
 export async function DossierTabContent({ id, tab, sectie }: Props) {
   const result = await getDossierById(id)
   const dossier = result.ok ? result.data : null
+  const readOnly = dossier ? isDossierAfgesloten(dossier) : false
 
+  return (
+    <DossierReadOnlyProvider value={readOnly}>
+      {readOnly && <AfgeslotenBanner />}
+      {await renderTabContent({ id, tab, sectie }, dossier)}
+    </DossierReadOnlyProvider>
+  )
+}
+
+async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij | null) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {

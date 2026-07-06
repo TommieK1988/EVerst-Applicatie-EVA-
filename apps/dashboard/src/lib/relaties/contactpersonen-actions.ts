@@ -107,6 +107,28 @@ export async function createContactpersoon(input: {
       functie: functie ?? null,
       is_primair: true,
     })
+
+    // Direct in Bouw7 aanmaken (best-effort) als de moederrelatie een Bouw7-id heeft.
+    try {
+      const { data: org } = await supabase.from('relaties').select('bouw7_id').eq('id', organisatie_id).single()
+      const parentBouw7Id = org?.bouw7_id ? Number(org.bouw7_id) : null
+      if (parentBouw7Id) {
+        const { maakBouw7Contactpersoon } = await import('@/lib/bouw7/create-contact')
+        const bouw7Id = await maakBouw7Contactpersoon(parentBouw7Id, {
+          voornaam: input.voornaam,
+          achternaam: input.achternaam,
+          email: input.email,
+          telefoon: input.telefoon,
+          functie: functie ?? null,
+          aanhef: input.aanhef,
+        })
+        if (bouw7Id) {
+          await supabase.from('contactpersonen').update({ bouw7_id: String(bouw7Id), bouw7_sync_status: 'synced' }).eq('id', data.id)
+        }
+      }
+    } catch {
+      // Bouw7 optioneel bij aanmaken; niet blokkerend.
+    }
   }
 
   revalidatePath('/relaties')

@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Calculator, ArrowLeft } from 'lucide-react'
+import { Calculator, ArrowLeft, Trash2 } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
-import { koppelCalculatieProject } from '@/lib/dossiers/actions'
+import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossiers/actions'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
+import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
 const TYPE_LABELS: Record<string, string> = {
   verkoopofferte:     'Offerte',
@@ -47,8 +48,10 @@ type Props = {
 
 export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, projectAangemaakt, rijen }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [toonCalculatie, setToonCalculatie] = useState(false)
   const [bezig, setBezig] = useState(false)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
   // Totalen van de calculatie zelf — client-side uit localStorage (net als InformatieTab),
   // want de calculatieregels zijn (nog) niet server-side opgeslagen.
   const [calcTotalen, setCalcTotalen] = useState<CalcTotalen | null>(null)
@@ -68,6 +71,19 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
     router.refresh()
   }
 
+  async function handleDelete() {
+    if (!confirm('Alle calculaties en offertes verwijderen? Dit kan niet ongedaan worden.')) return
+    setDeleteInProgress(true)
+    const result = await deleteCalculatieVanDossier(dossierId)
+    setDeleteInProgress(false)
+    if (!result.ok) {
+      toast.error(result.error || 'Verwijderen mislukt')
+      return
+    }
+    toast.success('Calculatie verwijderd')
+    router.refresh()
+  }
+
   // Volledige calculatie-omgeving (zoals in de offerte-fase), met terugknop naar de tabel.
   if (toonCalculatie && projectId) {
     return (
@@ -83,6 +99,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
           projectNaam={naam}
           projectNummer={nummer}
           toonProjectDetail
+          readOnly={readOnly}
         />
       </div>
     )
@@ -94,17 +111,32 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
         <CardHeader>
           <div className="flex items-center justify-between">
             <span>Calculaties</span>
-            {projectId ? (
-              <Button variant="primary" onClick={() => setToonCalculatie(true)}>
-                <Calculator className="h-3.5 w-3.5" />
-                Calculatie openen
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={aanmaken} disabled={bezig}>
-                <Calculator className="h-3.5 w-3.5" />
-                {bezig ? 'Bezig…' : 'Calculatie aanmaken'}
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {projectId ? (
+                <>
+                  <Button variant="primary" onClick={() => setToonCalculatie(true)}>
+                    <Calculator className="h-3.5 w-3.5" />
+                    Calculatie openen
+                  </Button>
+                  {!readOnly && (
+                    <Button
+                      variant="ghost"
+                      onClick={handleDelete}
+                      disabled={deleteInProgress}
+                      title="Verwijder all calculaties en offertes"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
+                    </Button>
+                  )}
+                </>
+              ) : !readOnly ? (
+                <Button variant="primary" onClick={aanmaken} disabled={bezig}>
+                  <Calculator className="h-3.5 w-3.5" />
+                  {bezig ? 'Bezig…' : 'Calculatie aanmaken'}
+                </Button>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
         <CardBody style={{ padding: 0 }}>

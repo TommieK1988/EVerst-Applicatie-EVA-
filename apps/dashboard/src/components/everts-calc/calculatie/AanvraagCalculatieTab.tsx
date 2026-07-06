@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
+import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
 const MAP_KEY = 'aanvraag_project_ids'
 
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjectId }: Props) {
+  const readOnly = useDossierReadOnly()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [isLaden, setIsLaden]     = useState(false)
   const [fout, setFout]           = useState<string | null>(null)
@@ -85,24 +87,27 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjec
           Calculatie koppelen aan overzicht
         </p>
         <p style={{ fontSize: 13, color: 'var(--fg-muted)', textAlign: 'center', maxWidth: 320, margin: 0, lineHeight: 1.6 }}>
-          Deze aanvraag heeft nog geen calculatie in het EvertsCalc-overzicht.
-          Klik hieronder om het eenmalig aan te maken.
+          {readOnly
+            ? 'Deze aanvraag heeft geen calculatie in het EvertsCalc-overzicht. Het dossier is afgesloten en alleen-lezen.'
+            : 'Deze aanvraag heeft nog geen calculatie in het EvertsCalc-overzicht. Klik hieronder om het eenmalig aan te maken.'}
         </p>
-        <button
-          onClick={handleKoppelen}
-          disabled={isLaden}
-          style={{
-            marginTop: 4,
-            padding: '9px 24px', borderRadius: 8, border: 'none',
-            background: 'var(--accent)', color: 'white',
-            fontSize: 13, fontWeight: 700,
-            cursor: isLaden ? 'not-allowed' : 'pointer',
-            opacity: isLaden ? 0.6 : 1,
-            transition: 'opacity 0.15s',
-          }}
-        >
-          {isLaden ? 'Bezig…' : 'Calculatie aanmaken in overzicht'}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={handleKoppelen}
+            disabled={isLaden}
+            style={{
+              marginTop: 4,
+              padding: '9px 24px', borderRadius: 8, border: 'none',
+              background: 'var(--accent)', color: 'white',
+              fontSize: 13, fontWeight: 700,
+              cursor: isLaden ? 'not-allowed' : 'pointer',
+              opacity: isLaden ? 0.6 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          >
+            {isLaden ? 'Bezig…' : 'Calculatie aanmaken in overzicht'}
+          </button>
+        )}
         {fout && (
           <p style={{ fontSize: 12, color: 'var(--color-red, #dc2626)', margin: 0 }}>{fout}</p>
         )}
@@ -116,6 +121,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjec
       projectNaam={naam}
       projectNummer={nummer}
       toonProjectDetail
+      readOnly={readOnly}
     />
   )
 }
