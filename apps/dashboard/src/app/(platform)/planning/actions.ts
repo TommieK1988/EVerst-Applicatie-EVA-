@@ -603,7 +603,10 @@ export async function syncPlanningVoorDossier(
   dossier_id: string,
 ): Promise<{ ok: true; nieuw: number; fouten: number } | { ok: false; error: string }> {
   const { syncDossierPlanning } = await import('@/lib/bouw7/sync-planning')
-  const result = await syncDossierPlanning(dossier_id)
+  // Handmatige ververs = altijd volledig herbouwen (mode 'full'). Anders slaat de
+  // planning-hash de rebuild over als de Bouw7 plan-items zelf niet wijzigden, en
+  // zie je bijv. de activiteit-samenvoeging niet. De cron/bulk blijft incrementeel.
+  const result = await syncDossierPlanning(dossier_id, { mode: 'full' })
   if (result.foutMelding) return { ok: false, error: result.foutMelding }
   revalidatePath('/planning')
   return { ok: true, nieuw: result.nieuw, fouten: result.fouten }
