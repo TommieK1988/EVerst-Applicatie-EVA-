@@ -131,6 +131,7 @@ export async function renderQuoteDocx(
     modules: [imageModule],
     paragraphLoop: true,
     linebreaks: true,
+    parser: dottedTagParser,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     nullGetter: (part: any) => (part.module ? '' : ''),
   })
@@ -142,6 +143,43 @@ export async function renderQuoteDocx(
   }
 
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+/**
+ * Dotted-path parser voor docxtemplater.
+ *
+ * docxtemplater lost standaard alleen platte tags (`{naam}`) en scope-tags op —
+ * NIET de dotted notatie (`{offerte.nummer}`, `{klant.naam}`, `{totalen.totaal}`)
+ * waar het hele variabelenpaneel op is gebaseerd. Zonder deze parser bleven al die
+ * variabelen leeg. De parser splitst op `.` en zoekt de waarde in de huidige scope
+ * en — voor gebruik binnen loops — in de omliggende scopes. `{.}` geeft de scope
+ * zelf terug (voor string-array-loops zoals `behandelingen_overzicht`).
+ */
+function dottedTagParser(tag: string): {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get: (scope: any, context?: any) => any
+} {
+  const naam = tag.trim()
+  if (naam === '.') return { get: (scope) => scope }
+  const path = naam.split('.')
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get(scope: any, context?: any) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const list: any[] = (context && context.scopeList) || [scope]
+      // Innermost scope eerst, dan naar buiten (voor tags binnen loops).
+      for (let i = list.length - 1; i >= 0; i--) {
+        let cur = list[i]
+        let ok = true
+        for (const key of path) {
+          if (cur != null && typeof cur === 'object' && cur[key] !== undefined) cur = cur[key]
+          else { ok = false; break }
+        }
+        if (ok) return cur
+      }
+      return undefined
+    },
+  }
 }
 
 /** Schaalt (w,h) zodat het binnen `max` past, met behoud van beeldverhouding. */
