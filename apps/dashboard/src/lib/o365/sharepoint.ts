@@ -80,14 +80,24 @@ export async function resolveDriveContext(envValue: string): Promise<DriveContex
   return ctx
 }
 
-/** Zoekt mappen binnen de container die matchen op de query (alleen folders). */
+/**
+ * Zoekt mappen binnen de container die matchen op de query (alleen folders).
+ * Best-effort: de Graph-`search`-index is met app-only tokens niet altijd
+ * toegankelijk (HTTP 403 accessDenied). In dat geval geven we een lege lijst
+ * terug zodat `matchDossierFolder` doorvalt naar de deterministische
+ * `/children`-listing, die wél met app-only rechten werkt.
+ */
 async function zoekMappen(ctx: DriveContext, query: string): Promise<DriveItem[]> {
   const q = query.replace(/'/g, '').trim()
   if (!q) return []
-  const res = await appGraphGet<{ value?: DriveItem[] }>(
-    `/drives/${ctx.driveId}/${ctx.containerPath}/search(q='${encodeURIComponent(q)}')?$select=id,name,webUrl,folder,parentReference&$top=50`,
-  )
-  return (res.value ?? []).filter((it) => it.folder)
+  try {
+    const res = await appGraphGet<{ value?: DriveItem[] }>(
+      `/drives/${ctx.driveId}/${ctx.containerPath}/search(q='${encodeURIComponent(q)}')?$select=id,name,webUrl,folder,parentReference&$top=50`,
+    )
+    return (res.value ?? []).filter((it) => it.folder)
+  } catch {
+    return []
+  }
 }
 
 function alsMatch(item: DriveItem, driveId: string): MatchResultaat {
