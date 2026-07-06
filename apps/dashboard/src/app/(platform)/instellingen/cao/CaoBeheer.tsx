@@ -10,6 +10,7 @@ import {
   verwijderCaoDocument,
   upsertLoonschaal,
   verwijderLoonschaal,
+  getCaoSignedUrl,
 } from './actions'
 
 const labelStyle: React.CSSProperties = {
@@ -112,12 +113,21 @@ function CaoDocumentKaart({
   const [nieuwTrede, setNieuwTrede]   = useState('')
   const [nieuwBruto, setNieuwBruto]   = useState('')
 
+  // PDF inzien: privaat bucket → verse signed URL ophalen en openen.
+  function handlePdfOpenen() {
+    startTransition(async () => {
+      const result = await getCaoSignedUrl(doc.id)
+      if (!result.ok) { toast.error(result.error); return }
+      window.open(result.url, '_blank', 'noopener,noreferrer')
+    })
+  }
+
   function handleExtraheer() {
     if (!doc.pdf_url) { toast.error('Geen PDF beschikbaar'); return }
     startTransition(async () => {
       setStatus('bezig')
       toast.loading('AI analyseert CAO PDF…', { id: 'cao-extract' })
-      const result = await extraheerLoonschalen(doc.id, doc.pdf_url!)
+      const result = await extraheerLoonschalen(doc.id)
       toast.dismiss('cao-extract')
       if (!result.ok) { toast.error(result.error); setStatus('fout'); return }
       setSchalen(result.regels?.map((r, i) => ({
@@ -191,10 +201,8 @@ function CaoDocumentKaart({
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {doc.pdf_url && (
-            <Button asChild variant="ghost" size="sm">
-              <a href={doc.pdf_url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                PDF openen
-              </a>
+            <Button onClick={handlePdfOpenen} variant="ghost" size="sm" disabled={isPending}>
+              PDF openen
             </Button>
           )}
           {doc.pdf_url && status !== 'bezig' && (
