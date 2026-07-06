@@ -24,6 +24,7 @@ import DossierNotitiesBlok from './DossierNotitiesBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
@@ -231,6 +232,7 @@ function TakenBlok({
   urgenteTaken: UrgenteTaak[]
 }) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [geselecteerd, setGeselecteerd] = React.useState<TaakMetDetails | null>(null)
   const [afgevinkt, setAfgevinkt] = React.useState<Set<string>>(new Set())
   const [, startTransition] = React.useTransition()
@@ -260,26 +262,28 @@ function TakenBlok({
       <Card>
         <CardHeader>
           <span>Taken · {openTaken.length} open</span>
-          <div className="flex items-center gap-1.5">
-            {sjablonen.length > 0 && (
-              <ActiveerSjabloonDialog dossier_id={dossierId} sjablonen={sjablonen} compact />
-            )}
-            <NieuweTaakDialog
-              defaultDossier={{ id: dossierId, titel: dossierTitel }}
-              onSuccess={() => router.refresh()}
-              trigger={
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
-                >
-                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M10 4v12M4 10h12" />
-                  </svg>
-                  Nieuwe taak
-                </button>
-              }
-            />
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-1.5">
+              {sjablonen.length > 0 && (
+                <ActiveerSjabloonDialog dossier_id={dossierId} sjablonen={sjablonen} compact />
+              )}
+              <NieuweTaakDialog
+                defaultDossier={{ id: dossierId, titel: dossierTitel }}
+                onSuccess={() => router.refresh()}
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M10 4v12M4 10h12" />
+                    </svg>
+                    Nieuwe taak
+                  </button>
+                }
+              />
+            </div>
+          )}
         </CardHeader>
         <CardBody className="py-3">
           {openTaken.length === 0 ? (
@@ -302,9 +306,10 @@ function TakenBlok({
                 >
                   <button
                     type="button"
-                    onClick={() => vinkAf(t.id)}
-                    title="Taak afvinken"
-                    className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-neutral-300 bg-transparent text-white outline-none transition-colors hover:border-brand-500 hover:bg-brand-50"
+                    onClick={() => { if (!readOnly) vinkAf(t.id) }}
+                    disabled={readOnly}
+                    title={readOnly ? 'Alleen-lezen' : 'Taak afvinken'}
+                    className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-neutral-300 bg-transparent text-white outline-none transition-colors enabled:hover:border-brand-500 enabled:hover:bg-brand-50 disabled:cursor-default"
                   />
                   <button
                     onClick={() => setGeselecteerd(urgenteTaakNaarDetails(t))}
@@ -546,7 +551,10 @@ export function InformatieTab({
   notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
 }: Props) {
   const router = useRouter()
-  const [editMode, setEditMode]     = React.useState(false)
+  const readOnly = useDossierReadOnly()
+  const [editModeRaw, setEditMode]  = React.useState(false)
+  // Bij een afgesloten (alleen-lezen) dossier kan de bewerkmodus nooit actief zijn.
+  const editMode = editModeRaw && !readOnly
   const [substatus, setSubstatus]   = React.useState<string>(
     // Servicedesk gebruikt servicedesk_substatus; getDossierSubstatus kent alleen aanvraag/offerte/opdracht
     // en zou anders terugvallen op aanvraag_substatus ('nieuw').
@@ -777,6 +785,19 @@ export function InformatieTab({
             {dossier.titel}
           </h1>
           <div className="mt-2 flex items-center gap-2.5">
+            {readOnly ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                style={{
+                  background: `color-mix(in srgb,${statusKleur(substatus)} 12%,transparent)`,
+                  color: statusKleur(substatus),
+                  border: `1px solid color-mix(in srgb,${statusKleur(substatus)} 30%,transparent)`,
+                }}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusKleur(substatus) }} />
+                {statusLabel(substatus)}
+              </span>
+            ) : (
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -814,6 +835,7 @@ export function InformatieTab({
                 </PopoverBody>
               </PopoverContent>
             </Popover>
+            )}
             <span className="text-[12px] font-medium text-neutral-500">{dossier.klant_naam}</span>
           </div>
         </div>
@@ -845,18 +867,22 @@ export function InformatieTab({
                   Calculatie openen
                 </Link>
               </Button>
-              <Button variant="ghost" onClick={() => { setModalType('verkoopofferte'); setModalOpen(true) }}>
-                <FileText className="h-3.5 w-3.5" />
-                Offerte aanmaken
-              </Button>
-              <Button variant="ghost" onClick={() => { setModalType('interne_calculatie'); setModalOpen(true) }}>
-                <FileText className="h-3.5 w-3.5" />
-                Interne begroting
-              </Button>
+              {!readOnly && (
+                <>
+                  <Button variant="ghost" onClick={() => { setModalType('verkoopofferte'); setModalOpen(true) }}>
+                    <FileText className="h-3.5 w-3.5" />
+                    Offerte aanmaken
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setModalType('interne_calculatie'); setModalOpen(true) }}>
+                    <FileText className="h-3.5 w-3.5" />
+                    Interne begroting
+                  </Button>
+                </>
+              )}
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}
-          {sectie === 'opdracht' && substatus === 'uitvoering_gereed' && (
+          {sectie === 'opdracht' && substatus === 'uitvoering_gereed' && !readOnly && (
             <>
               <AlertDialog open={finDialoogOpen} onOpenChange={setFinDialoogOpen}>
                 <AlertDialogTrigger asChild>
@@ -892,14 +918,14 @@ export function InformatieTab({
               <Button variant="primary" onClick={opslaan}>Opslaan</Button>
               <Button variant="ghost" onClick={annuleer}>Annuleer</Button>
             </div>
-          ) : (
+          ) : !readOnly ? (
             <Button variant="primary" onClick={() => setEditMode(true)}>
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14.5 2.5a2.121 2.121 0 0 1 3 3L6 17l-4 1 1-4L14.5 2.5z" />
               </svg>
               Bewerken
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1362,8 +1388,8 @@ export function InformatieTab({
         </Card>
         )}
 
-        {/* Calculatie importeren (.c4y) — niet voor servicedesk */}
-        {sectie !== 'servicedesk' && (
+        {/* Calculatie importeren (.c4y) — niet voor servicedesk, niet bij alleen-lezen */}
+        {sectie !== 'servicedesk' && !readOnly && (
         <div className="col-span-2">
           <C4yDropCard
             dossierId={dossier.id}

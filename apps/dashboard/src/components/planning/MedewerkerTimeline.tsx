@@ -219,7 +219,7 @@ function PlanningItemEditDialog({
         background: 'var(--bg-elev)',
         border: '1px solid var(--border)',
         borderRadius: 12,
-        width: 'min(460px, calc(100vw - 32px))',
+        width: 'min(480px, calc(100vw - 32px))',
         maxHeight: '90vh',
         overflowY: 'auto',
         boxShadow: '0 24px 64px rgba(0,0,0,0.3)',

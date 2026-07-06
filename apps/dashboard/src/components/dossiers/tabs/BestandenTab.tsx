@@ -10,6 +10,7 @@ import {
   type DossierSharePointData,
   type SharePointBestand,
 } from '@/lib/dossiers/sharepoint-bestanden'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 const fmtGrootte = (bytes: number | null): string => {
   if (bytes == null) return '—'
@@ -123,6 +124,7 @@ function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
 // ─── SharePoint ─────────────────────────────────────────────────────────────────
 
 function SharePointKaart({ dossierId }: { dossierId: string }) {
+  const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierSharePointData | null>(null)
   const [link, setLink] = useState('')
   const [bezig, start] = useTransition()
@@ -217,22 +219,24 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
                 {data.fout}
               </p>
             )}
-            <div className="flex items-center gap-2">
-              <input
-                value={link}
-                onChange={e => setLink(e.target.value)}
-                placeholder="Plak SharePoint-link naar de dossiermap"
-                className="flex-1 rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-              />
-              <button onClick={koppel} disabled={bezig}
-                className="rounded bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-700 disabled:opacity-60">
-                Koppelen
-              </button>
-              <button onClick={opnieuw} disabled={bezig}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
-                Opnieuw zoeken
-              </button>
-            </div>
+            {!readOnly && (
+              <div className="flex items-center gap-2">
+                <input
+                  value={link}
+                  onChange={e => setLink(e.target.value)}
+                  placeholder="Plak SharePoint-link naar de dossiermap"
+                  className="flex-1 rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                />
+                <button onClick={koppel} disabled={bezig}
+                  className="rounded bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+                  Koppelen
+                </button>
+                <button onClick={opnieuw} disabled={bezig}
+                  className="rounded border border-neutral-300 px-3 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
+                  Opnieuw zoeken
+                </button>
+              </div>
+            )}
           </div>
         )}
       </CardBody>

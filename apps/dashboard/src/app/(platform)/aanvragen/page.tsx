@@ -5,7 +5,6 @@ import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import { AANVRAAG_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersVoorAanvragen, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
-import { getDossierCategorieen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 export const metadata: Metadata = { title: 'Aanvragen' }
@@ -31,13 +30,15 @@ export default async function AanvragenPage({
     // niet ingelogd of session unavailable
   }
 
-  const [result, categorieen, layouts, lasteSyncIso] = await Promise.all([
+  const wmClient = (await createServerClient()) as any
+  const [result, werkmaatschappijenRes, layouts, lasteSyncIso] = await Promise.all([
     getDossiersVoorAanvragen(),
-    getDossierCategorieen(),
+    wmClient.from('bedrijfsgegevens').select('id, naam, code').eq('type', 'werkmaatschappij').order('naam'),
     user_id ? laadLayouts(user_id, 'dossiers-aanvraag') : Promise.resolve([]),
     getLastBouw7SyncTijd(),
   ])
   const dossiers = result.ok ? result.data : []
+  const werkmaatschappijen = (werkmaatschappijenRes?.data ?? []) as { id: string; naam: string; code: string | null }[]
 
   return (
     <DossierViewSwitcher
@@ -48,7 +49,7 @@ export default async function AanvragenPage({
       user_id={user_id}
       mijnNaam={mijnNaam}
       kanNieuwAanmaken
-      categorieen={categorieen}
+      werkmaatschappijen={werkmaatschappijen}
       extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
     />
   )

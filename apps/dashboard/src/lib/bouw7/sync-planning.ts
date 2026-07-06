@@ -25,6 +25,23 @@ function toTimestamp(dt?: string | null): string | null {
   return dt.replace(' ', 'T')
 }
 
+/**
+ * Bouw7-einddatums van (hele-dag-)plan-items zijn **dag-inclusief**: een eendaags item heeft
+ * start == eind (beide 00:00:00), en een item 18→20 mei met 24 uur beslaat 3 dagen (18+19+20).
+ * EVA's planning_items gebruiken een exclusieve eindtijd ([start, eind), constraint eind > start).
+ * Hele-dag-einddatums (tijd 00:00:00) krijgen daarom +1 dag; echte eindtijden blijven staan.
+ * Zonder deze correctie faalden eendaagse items op de tijdvolgorde-constraint (en ontbraken ze
+ * geruisloos in EVA) en waren meerdaagse items één dag te kort.
+ */
+function eindExclusief(dt?: string | null): string | null {
+  if (!dt) return null
+  const tijd = dt.slice(11, 19)
+  if (tijd && tijd !== '00:00:00') return toTimestamp(dt)
+  const [y, m, d] = dt.slice(0, 10).split('-').map(Number)
+  const volgende = new Date(Date.UTC(y, m - 1, d + 1))
+  return `${volgende.toISOString().slice(0, 10)}T00:00:00`
+}
+
 /** Plan-items van één Bouw7-project (alle pagina's, via Apollo-search). */
 export async function fetchPlanItems(projectId: string, client?: Bouw7Client): Promise<Bouw7PlanItem[]> {
   const c = client ?? (await getBouw7Client())
@@ -307,6 +324,18 @@ export async function syncDossierPlanning(
       // Elk planitem behoudt de eigen datums/uren van zijn plan-item.
       const itemRows: Record<string, unknown>[] = []
       for (const pi of items) {
+        // Rijen die de CHECK/NOT NULL-constraints van planning_items zouden schenden
+        // (start/eind niet null, eind_dt > start_dt, uren > 0) vooraf overslaan. Cruciaal
+        // sinds de samenvoeging: alle medewerkers van één activiteit gaan in ÉÉN batch-insert,
+        // en Postgres maakt die atomair — dus één ongeldige rij (bv. een plan-item zonder uren)
+        // zou anders de hele batch laten mislukken en álle planitems van die activiteit wissen.
+        const start = toTimestamp(pi.startDate)
+        const eind = eindExclusief(pi.endDate)
+        const uren = pi.hours ?? 0
+        if (!start || !eind || eind <= start || uren <= 0) {
+          result.overgeslagen = (result.overgeslagen ?? 0) + 1
+          continue
+        }
         const emps = detailMap.get(pi.id)?.employees ?? []
         for (const emp of emps) {
           const medewerkerId = empMap.get(String(emp.id))
@@ -317,9 +346,9 @@ export async function syncDossierPlanning(
           itemRows.push({
             activiteit_id: act.id,
             medewerker_id: medewerkerId,
-            start_dt: toTimestamp(pi.startDate),
-            eind_dt: toTimestamp(pi.endDate),
-            uren: pi.hours ?? 0,
+            start_dt: start,
+            eind_dt: eind,
+            uren,
             bron: 'bouw7',
             bouw7_id: `${pi.id}:${emp.id}`,
             bouw7_laatst_sync: nu,

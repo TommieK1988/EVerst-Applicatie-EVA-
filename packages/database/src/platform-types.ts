@@ -43,6 +43,8 @@ export type Bedrijfsgegevens = {
   font_secundair: string | null
   // Huisstijl notities
   huisstijl_notities: string | null
+  /** Bouw7 branch/vestiging-id van deze werkmaatschappij (GET /list/branches). Bepaalt de projectnummer-reeks bij aanmaken. */
+  bouw7_branch_id: number | null
   created_at: string
   updated_at: string
 }
@@ -484,8 +486,17 @@ export type Dossier = {
   verzonden_op: string | null
   opmerkingen: string | null
   werkadres_straat: string | null
+  werkadres_huisnummer: string | null
   werkadres_postcode: string | null
   werkadres_stad: string | null
+  /** VvE-code van het object; gesynct naar Bouw7 als custom attribute caVveCode. */
+  vve_code: string | null
+  /** Datum van de aanvraag (default vandaag, bewerkbaar). */
+  aanvraagdatum: string | null
+  /** Gewenste deadline/opleverdatum (optioneel). */
+  deadline: string | null
+  /** Werkmaatschappij (bedrijfsgegevens.type=werkmaatschappij); zie migratie 20260706_dossier_werkmaatschappij. */
+  werkmaatschappij_id: string | null
   created_at: string
   updated_at: string
   created_by: string | null

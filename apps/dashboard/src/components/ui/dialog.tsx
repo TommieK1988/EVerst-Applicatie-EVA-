@@ -34,7 +34,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const contentVariants = cva(
   'pointer-events-auto relative flex max-h-[85vh] w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl bg-white shadow-[0_24px_48px_-12px_rgba(16,24,40,0.22)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
   {
-    variants: { size: { sm: 'max-w-[440px]', md: 'max-w-[560px]', lg: 'max-w-[720px]' } },
+    variants: { size: { sm: 'max-w-[440px]', md: 'max-w-[560px]', lg: 'max-w-[720px]', xl: 'max-w-[920px]' } },
     defaultVariants: { size: 'md' },
   },
 )

@@ -6,6 +6,7 @@ import type { ActielijstMetTaken, TaakMetDetails } from '@/lib/taken/supabase/da
 import TaakLijstWeergave from '@/components/taken/TaakLijstWeergave'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import { Badge, Card, EmptyState, Progress } from '@/components/ui'
+import { useDossierReadOnly } from './DossierReadOnlyContext'
 
 interface Props {
   lijsten: ActielijstMetTaken[]
@@ -16,6 +17,7 @@ interface Props {
 
 export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   // Standaard alle lijsten open
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
 
@@ -123,6 +125,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props
                     detailAlsDialog
                   />
                 )}
+                {!readOnly && (
                 <div style={{ marginTop: 12 }}>
                   <NieuweTaakDialog
                     defaultLijstId={lijst.id}
@@ -147,6 +150,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props
                     }
                   />
                 </div>
+                )}
               </div>
             )}
           </Card>
@@ -222,7 +226,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props
                   takenInLijst={losseTaken.map(t => ({ id: t.id, titel: t.titel }))}
                   detailAlsDialog
                 />
-                {dossier && (
+                {dossier && !readOnly && (
                   <div style={{ marginTop: 12 }}>
                     <NieuweTaakDialog
                       defaultDossier={dossier}

@@ -21,6 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui'
+import { useDossierReadOnly } from './DossierReadOnlyContext'
 
 interface Props {
   dossier_id: string
@@ -30,6 +31,7 @@ interface Props {
 
 export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact = false }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [open, setOpen]           = useState(false)
   const [pending, startTransition] = useTransition()
   const [templateId, setTemplateId] = useState('')
@@ -56,6 +58,8 @@ export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact 
       router.push(`/taken/lijsten/${result.lijst_id}`)
     })
   }
+
+  if (readOnly) return null
 
   return (
     <>

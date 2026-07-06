@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { IconPlus, IconSearch, IconDomeinOnderhoud } from '../eva/Icons'
 import { Button, Input, EmptyState } from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
-import { NieuweAanvraagModal } from './NieuweAanvraagModal'
+import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { getDossierSubstatus, isBouw7Substatus } from './types'
@@ -44,7 +44,8 @@ type Props<K extends string> = {
   statussen: StatusDef<K>[]
   dossiers: DossierRij[]
   kanNieuwAanmaken?: boolean
-  categorieen?: string[]
+  categorieen?: AanvraagCategorie[]
+  werkmaatschappijen?: AanvraagWerkmaatschappij[]
   viewToggle?: React.ReactNode
   extraActies?: React.ReactNode
   /** Welk veld als kolomsleutel gebruiken (serialiseerbaar). Default: 'auto'. */
@@ -54,7 +55,7 @@ type Props<K extends string> = {
 }
 
 export function DossierKanban<K extends string>({
-  sectie, statussen, dossiers: initieel, kanNieuwAanmaken = false, categorieen, viewToggle, extraActies,
+  sectie, statussen, dossiers: initieel, kanNieuwAanmaken = false, categorieen, werkmaatschappijen, viewToggle, extraActies,
   kolomKeyModus = 'auto', onStatusChange,
 }: Props<K>) {
   const router    = useRouter()
@@ -138,6 +139,7 @@ export function DossierKanban<K extends string>({
           onClose={() => setModalOpen(false)}
           onAanmaken={nieuw => setDossiers(prev => [nieuw, ...prev])}
           categorieen={categorieen}
+          werkmaatschappijen={werkmaatschappijen}
         />
       )}
 

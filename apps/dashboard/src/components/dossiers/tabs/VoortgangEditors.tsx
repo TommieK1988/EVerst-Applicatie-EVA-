@@ -11,6 +11,7 @@
 import React, { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { bewaarVoortgang, type VoortgangNiveau } from '@/lib/dossiers/voortgang'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 const fmtPct = (v: number | null): string =>
   v == null ? '—' : `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(v)} %`
@@ -56,11 +57,17 @@ function parsePct(tekst: string): number {
 export function BewakingProgressCel({
   dossierId, bouw7Id, code, initial,
 }: { dossierId: string; bouw7Id: string | null; code: string; initial: number | null }) {
+  const readOnly = useDossierReadOnly()
   const [waarde, setWaarde] = useState<number | null>(initial)
   const [editing, setEditing] = useState(false)
   const [tekst, setTekst] = useState('')
   const { bezig, opslaan } = useVoortgangOpslaan({ dossierId, bouw7Id, niveau: 'bewakingscode', bewakingscode: code })
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Alleen-lezen dossier: toon de waarde zonder klik-om-te-bewerken.
+  if (readOnly) {
+    return <span style={{ color: 'var(--neutral-800)' }}>{fmtPct(waarde)}</span>
+  }
 
   const start = () => {
     setTekst(waarde != null ? String(waarde) : '')
@@ -116,6 +123,8 @@ export function BewakingProgressCel({
 export function ProjectVoortgangEditor({
   dossierId, bouw7Id, initial, readOnly = false,
 }: { dossierId: string; bouw7Id: string | null; initial: number | null; readOnly?: boolean }) {
+  const ctxReadOnly = useDossierReadOnly()
+  const isReadOnly = readOnly || ctxReadOnly
   const [waarde, setWaarde] = useState<number | null>(initial)
   const [tekst, setTekst] = useState(initial != null ? String(initial) : '')
   const { bezig, opslaan } = useVoortgangOpslaan({ dossierId, bouw7Id, niveau: 'project' })
@@ -128,7 +137,7 @@ export function ProjectVoortgangEditor({
   }
 
   // Read-only weergave: % gereed wordt uitsluitend in Management gewijzigd.
-  if (readOnly) {
+  if (isReadOnly) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',

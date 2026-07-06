@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import type { UrenRegel, BewakingscodeOptie } from '@/lib/dossiers/actions'
 import { updateUurlogBewakingscode } from '@/lib/dossiers/actions'
 import { fmt, fmtUren, fmtTarief, fmtDatum, TH, TD } from './tab-ui'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 /* ─── Week helpers ─────────────────────────────────────────────────────────── */
 
@@ -131,6 +132,7 @@ interface Props {
 
 export default function UrenDetailTable({ dossierId, regels, totalen, bewakingscodes, perMedewerker }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [pending, start] = useTransition()
   const [sortKey, setSortKey] = useState<SortKey>('datum')
   const [sortAsc, setSortAsc] = useState(false)
@@ -298,7 +300,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
                   <TD>{fmtWeek(r.datum)}</TD>
                   <TD>{r.uursoort ?? '—'}</TD>
                   <TD>
-                    {r.bouw7Id != null && bewakingscodes.length > 0 ? (
+                    {!readOnly && r.bouw7Id != null && bewakingscodes.length > 0 ? (
                       <select
                         disabled={pending}
                         value={r.code ?? ''}

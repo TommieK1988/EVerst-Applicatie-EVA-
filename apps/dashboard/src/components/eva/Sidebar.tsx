@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   IconMore, IconBase,
   IconRelaties, IconMedewerkers, IconInstellingen,
-  IconAanvragen, IconOffertes, IconOpdrachten, IconManagement, IconServicedesk,
+  IconAanvragen, IconOffertes, IconOpdrachten, IconManagement, IconServicedesk, IconAfgesloten,
   IconProjectplanning, IconCrewplanning, IconAgenda,
   IconFacturen, IconInkoop,
   IconKam,
@@ -52,7 +52,7 @@ const NAV: NavEntry[] = [
   { href: '/offertes',    label: 'Offertes',    Icon: IconOffertes,   module: 'dossiers'    },
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
   { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
-  { href: '/management/dashboard', label: 'Management', Icon: IconManagement, module: 'management' },
+  { href: '/afgesloten',   label: 'Afgesloten',  Icon: IconAfgesloten, module: 'afgesloten' },
 ]
 
 const BEHEER: NavEntry[] = [
@@ -71,6 +71,7 @@ const PLANNING_INKOOP: NavEntry[] = [
 const FINANCIEEL: NavEntry[] = [
   { href: '/facturen', label: 'Facturen', Icon: IconFacturen, module: 'financieel' },
   { label: 'Inkoop',   Icon: IconInkoop,   comingSoon: true, module: 'financieel' },
+  { href: '/management/dashboard', label: 'Management', Icon: IconManagement, module: 'management' },
 ]
 
 const APPS: NavEntry[] = [

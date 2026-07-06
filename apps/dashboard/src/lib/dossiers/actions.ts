@@ -280,6 +280,36 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
   return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
 }
 
+/**
+ * Haal alle definitief afgeronde dossiers op voor de "Afgesloten"-tab, over alle secties heen:
+ * - Opdrachten: Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
+ * - Offertes:   Verloren of Vervallen
+ * - Aanvragen:  Vervallen
+ * Hoofdstatus-gated zodat een oude substatus-waarde op een inmiddels doorgeschoven dossier geen
+ * vals-positief oplevert.
+ */
+export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select(`*, ${ROL_SELECT}`)
+    .or(
+      'and(hoofdstatus.eq.opdracht,opdracht_substatus.eq.financieel_afgesloten),' +
+      'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
+      'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.eq.vervallen),' +
+      'bouw7_projectstatus_naam.ilike.07.%'
+    )
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
+    return { ok: false, error: error.message, missingTable }
+  }
+
+  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+}
+
 /** Update de servicedesk substatus van een dossier (voor kanban drag & drop). */
 export async function updateServicedeskSubstatus(
   id: string,
@@ -605,6 +635,135 @@ export async function maakDossier(input: {
 
   revalidatePath('/aanvragen')
   return { ok: true, data: mapRij(data) }
+}
+
+/** Bouw7-projectcategorieën voor de aanvraag-modal (id + naam). Faalt zacht → lege lijst. */
+export async function getAanvraagCategorieen(): Promise<{ id: number; name: string }[]> {
+  try {
+    const { getBouw7Categorieen } = await import('@/lib/bouw7/create-project')
+    return await getBouw7Categorieen()
+  } catch {
+    return []
+  }
+}
+
+/** Resultaat van `maakAanvraag`: het EVA-dossier + de status van de synchrone Bouw7-push. */
+export type MaakAanvraagResult =
+  | { ok: true; data: DossierRij; bouw7: { ok: boolean; error?: string; dossiernummer?: string | null } }
+  | { ok: false; error: string }
+
+/**
+ * Maak een nieuwe aanvraag aan in EVA én (synchroon) als project in Bouw7 (status "01. Offerte").
+ * De EVA-aanvraag blijft altijd bestaan; faalt de Bouw7-push, dan komt dat terug in `bouw7`
+ * (de UI toont een melding + biedt later een retry).
+ */
+export async function maakAanvraag(input: {
+  titel: string
+  klant_id: string | null
+  contactpersoon_id?: string | null
+  categorie?: string | null
+  bouw7_categorie_id?: number | null
+  referentie?: string | null
+  werkmaatschappij_id?: string | null
+  vve_code?: string | null
+  aanvraagdatum?: string | null
+  deadline?: string | null
+  opmerkingen?: string | null
+  werkadres_straat?: string | null
+  werkadres_huisnummer?: string | null
+  werkadres_postcode?: string | null
+  werkadres_stad?: string | null
+}): Promise<MaakAanvraagResult> {
+  const supabase = createAdminClient() as any
+
+  const { data, error } = await supabase
+    .from('dossiers')
+    .insert({
+      titel:                input.titel,
+      klant_id:             input.klant_id ?? null,
+      contactpersoon_id:    input.contactpersoon_id ?? null,
+      hoofdstatus:          'aanvraag' as Hoofdstatus,
+      aanvraag_substatus:   'nieuw'   as AanvraagSubstatus,
+      categorie:            input.categorie ?? null,
+      bouw7_categorie_id:   input.bouw7_categorie_id ?? null,
+      bouw7_categorie_naam: input.categorie ?? null,
+      referentie:           input.referentie ?? null,
+      werkmaatschappij_id:  input.werkmaatschappij_id ?? null,
+      vve_code:             input.vve_code ?? null,
+      aanvraagdatum:        input.aanvraagdatum ?? null,
+      deadline:             input.deadline ?? null,
+      opmerkingen:          input.opmerkingen ?? null,
+      werkadres_straat:     input.werkadres_straat ?? null,
+      werkadres_huisnummer: input.werkadres_huisnummer ?? null,
+      werkadres_postcode:   input.werkadres_postcode ?? null,
+      werkadres_stad:       input.werkadres_stad ?? null,
+      bouw7_sync_status:    'pending',
+    })
+    .select(`*, ${ROL_SELECT}`)
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+
+  await verwerkDossierTriggers(data.id).catch(() => {})
+
+  // Synchroon naar Bouw7 als project (status 01. Offerte). Losgekoppeld van de EVA-insert:
+  // een fout hier laat de aanvraag staan met bouw7_sync_status='error'.
+  let bouw7: { ok: boolean; error?: string; dossiernummer?: string | null } = { ok: false, error: 'Niet naar Bouw7 verstuurd.' }
+  try {
+    // Bouw7-referenties resolven.
+    const [klantRow, cpRow, wmRow] = await Promise.all([
+      input.klant_id ? supabase.from('relaties').select('bouw7_id').eq('id', input.klant_id).maybeSingle() : Promise.resolve({ data: null }),
+      input.contactpersoon_id ? supabase.from('contactpersonen').select('bouw7_id').eq('id', input.contactpersoon_id).maybeSingle() : Promise.resolve({ data: null }),
+      input.werkmaatschappij_id ? supabase.from('bedrijfsgegevens').select('naam, bouw7_branch_id').eq('id', input.werkmaatschappij_id).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+
+    let branchId: number | null = wmRow?.data?.bouw7_branch_id ?? null
+    if (branchId == null && wmRow?.data?.naam) {
+      const { getBouw7Branches } = await import('@/lib/bouw7/create-project')
+      const branches = await getBouw7Branches()
+      branchId = branches.find(b => b.name === wmRow.data.naam)?.id ?? null
+    }
+
+    const { maakBouw7Project } = await import('@/lib/bouw7/create-project')
+    const res = await maakBouw7Project({
+      name: input.titel,
+      contactBouw7Id: klantRow?.data?.bouw7_id ? Number(klantRow.data.bouw7_id) : null,
+      contactPersonBouw7Id: cpRow?.data?.bouw7_id ? Number(cpRow.data.bouw7_id) : null,
+      categoryId: input.bouw7_categorie_id ?? null,
+      branchId,
+      reference: input.referentie ?? null,
+      information: input.opmerkingen ?? null,
+      street: input.werkadres_straat ?? null,
+      houseNumber: input.werkadres_huisnummer ?? null,
+      zipCode: input.werkadres_postcode ?? null,
+      city: input.werkadres_stad ?? null,
+      deliveryDate: input.deadline ?? null,
+      vveCode: input.vve_code ?? null,
+    })
+
+    if (res.ok) {
+      await supabase.from('dossiers').update({
+        bouw7_id:          String(res.bouw7Id),
+        dossiernummer:     res.dossiernummer,
+        bouw7_sync_status: 'synced',
+        bouw7_sync_fout:   null,
+        bouw7_laatst_sync: new Date().toISOString(),
+      }).eq('id', data.id)
+      data.bouw7_id = String(res.bouw7Id)
+      data.dossiernummer = res.dossiernummer
+      bouw7 = { ok: true, dossiernummer: res.dossiernummer }
+    } else {
+      await supabase.from('dossiers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: res.error }).eq('id', data.id)
+      bouw7 = { ok: false, error: res.error }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout bij Bouw7-sync.'
+    await supabase.from('dossiers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: msg }).eq('id', data.id)
+    bouw7 = { ok: false, error: msg }
+  }
+
+  revalidatePath('/aanvragen')
+  return { ok: true, data: mapRij(data), bouw7 }
 }
 
 /** Haal één dossier op via id, verrijkt met klant- en rolnamen. */
@@ -1889,21 +2048,65 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   }
 }
 
-/** Zoek relaties op naam (voor de aanvraag-combobox). Optioneel filteren op relatie-type. */
+/** Resultaat van de opdrachtgever-zoek: de relatie + optioneel de matchende contactpersoon. */
+export type OpdrachtgeverZoekResultaat = {
+  id: string
+  naam: string
+  types: string[]
+  contactpersoon?: { id: string; naam: string } | null
+}
+
+/**
+ * Zoek opdrachtgevers voor de aanvraag-combobox. Doorzoekt zowel relaties (naam + adres/plaats)
+ * als contactpersonen (voor-/achternaam + e-mail); bij een contactpersoon-match wordt de
+ * gekoppelde organisatie teruggegeven met de contactpersoon erbij zodat de modal die kan voorselecteren.
+ * De geselecteerde waarde is altijd een relatie (klant_id). Optioneel filteren op relatie-type.
+ */
 export async function zoekRelaties(
   query: string,
   opts?: { type?: string },
-): Promise<{ id: string; naam: string; types: string[] }[]> {
-  if (!query.trim()) return []
+): Promise<OpdrachtgeverZoekResultaat[]> {
+  const term = query.trim()
+  if (!term) return []
   const supabase = createAdminClient() as any
-  let q = supabase
+  const like = `%${term}%`
+
+  // 1. Relaties op naam of adres/plaats.
+  let relQ = supabase
     .from('relaties')
     .select('id, naam, types')
-    .ilike('naam', `%${query.trim()}%`)
+    .or(`naam.ilike.${like},adres_straat.ilike.${like},adres_plaats.ilike.${like}`)
     .eq('actief', true)
-  if (opts?.type) q = q.contains('types', [opts.type])
-  const { data } = await q.order('naam', { ascending: true }).limit(8)
-  return (data ?? []) as { id: string; naam: string; types: string[] }[]
+  if (opts?.type) relQ = relQ.contains('types', [opts.type])
+  const relRes = await relQ.order('naam', { ascending: true }).limit(8)
+
+  // 2. Contactpersonen op naam/e-mail → hun (primaire) organisatie.
+  const cpRes = await supabase
+    .from('contactpersonen')
+    .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief))')
+    .or(`voornaam.ilike.${like},achternaam.ilike.${like},email.ilike.${like}`)
+    .eq('actief', true)
+    .limit(8)
+
+  const resultaten = new Map<string, OpdrachtgeverZoekResultaat>()
+  for (const r of (relRes.data ?? []) as { id: string; naam: string; types: string[] }[]) {
+    resultaten.set(r.id, { id: r.id, naam: r.naam, types: r.types ?? [], contactpersoon: null })
+  }
+  for (const cp of (cpRes.data ?? []) as any[]) {
+    const koppelingen = (cp.koppelingen ?? []).filter((k: any) => k.organisatie?.actief !== false)
+    const primair = koppelingen.find((k: any) => k.is_primair) ?? koppelingen[0]
+    const org = primair?.organisatie
+    if (!org?.id) continue
+    if (opts?.type && !(org.types ?? []).includes(opts.type)) continue
+    const naam = [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ')
+    // Contactpersoon-match wint van een kale relatie-match (voegt de persoon toe).
+    resultaten.set(org.id, {
+      id: org.id, naam: org.naam, types: org.types ?? [],
+      contactpersoon: { id: cp.id, naam },
+    })
+  }
+
+  return Array.from(resultaten.values()).slice(0, 8)
 }
 
 /** Sla vrije inhoudsvelden op (categorie, referentie, contactpersoon, datums, werkadres). */

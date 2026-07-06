@@ -7,6 +7,7 @@ import { Card, CardHeader, CardBody, Textarea } from '@/components/ui'
 import {
   plaatsDossierNotitie, verwijderDossierNotitie, type DossierNotitie,
 } from '@/lib/dossiers/notities-actions'
+import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 function fmtTijd(iso: string): string {
   const d = new Date(iso)
@@ -23,6 +24,7 @@ export default function DossierNotitiesBlok({
   currentMedewerkerId: string | null
   className?: string
 }) {
+  const readOnly = useDossierReadOnly()
   const [items, setItems]   = React.useState<DossierNotitie[]>(notities)
   const [tekst, setTekst]   = React.useState('')
   const [pending, setPending] = React.useState(false)
@@ -68,7 +70,7 @@ export default function DossierNotitiesBlok({
                   <div className="mb-0.5 flex items-center gap-2">
                     <span className="text-[11px] font-semibold text-neutral-700">{n.auteur_naam}</span>
                     <span className="text-[10.5px] text-neutral-400">{fmtTijd(n.created_at)}</span>
-                    {currentMedewerkerId && n.medewerker_id === currentMedewerkerId && (
+                    {!readOnly && currentMedewerkerId && n.medewerker_id === currentMedewerkerId && (
                       <button
                         type="button"
                         onClick={() => verwijder(n.id)}
@@ -88,7 +90,8 @@ export default function DossierNotitiesBlok({
           )}
         </div>
 
-        {/* Invoer — onderaan vastgezet */}
+        {/* Invoer — onderaan vastgezet; verborgen bij alleen-lezen dossier */}
+        {!readOnly && (
         <form onSubmit={plaats} className="flex items-end gap-2 border-t border-neutral-200 px-[18px] py-3">
           <Textarea
             value={tekst}
@@ -108,6 +111,7 @@ export default function DossierNotitiesBlok({
             Plaatsen
           </button>
         </form>
+        )}
       </CardBody>
     </Card>
   )

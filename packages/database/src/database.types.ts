@@ -236,6 +236,7 @@ export type Database = {
           adres_plaats: string | null
           adres_postcode: string | null
           adres_straat: string | null
+          bouw7_branch_id: number | null
           btw_nummer: string | null
           code: string | null
           created_at: string
@@ -294,6 +295,7 @@ export type Database = {
           logo_primair_url?: string | null
           logo_url?: string | null
           logo_wit_url?: string | null
+          bouw7_branch_id?: number | null
           naam: string
           parent_id?: string | null
           telefoon?: string | null
@@ -329,6 +331,7 @@ export type Database = {
           logo_primair_url?: string | null
           logo_url?: string | null
           logo_wit_url?: string | null
+          bouw7_branch_id?: number | null
           naam?: string
           parent_id?: string | null
           telefoon?: string | null
@@ -1171,6 +1174,11 @@ export type Database = {
           werkadres_stad: string | null
           werkadres_straat: string | null
           werkadres_telefoon: string | null
+          aanvraagdatum: string | null
+          deadline: string | null
+          vve_code: string | null
+          werkadres_huisnummer: string | null
+          werkmaatschappij_id: string | null
           werkvoorbereider_id: string | null
         }
         Insert: {
@@ -1233,6 +1241,11 @@ export type Database = {
           werkadres_stad?: string | null
           werkadres_straat?: string | null
           werkadres_telefoon?: string | null
+          aanvraagdatum?: string | null
+          deadline?: string | null
+          vve_code?: string | null
+          werkadres_huisnummer?: string | null
+          werkmaatschappij_id?: string | null
           werkvoorbereider_id?: string | null
         }
         Update: {
@@ -1295,6 +1308,11 @@ export type Database = {
           werkadres_stad?: string | null
           werkadres_straat?: string | null
           werkadres_telefoon?: string | null
+          aanvraagdatum?: string | null
+          deadline?: string | null
+          vve_code?: string | null
+          werkadres_huisnummer?: string | null
+          werkmaatschappij_id?: string | null
           werkvoorbereider_id?: string | null
         }
         Relationships: [

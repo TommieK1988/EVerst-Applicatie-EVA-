@@ -21,13 +21,6 @@
       "runtimeArgs": ["serve", "docs", "-l", "4000", "--no-clipboard"],
       "port": 4000,
       "autoPort": false
-    },
-    {
-      "name": "dialogtest",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "C:/Users/TED70~1.KAM/AppData/Local/Temp/claude/C--Users-t-kamminga-everts-platform/e6747f61-60a0-4c4b-b3c8-ccffa5b345cb/scratchpad/dialogtest", "-l", "4321", "--no-clipboard"],
-      "port": 4321,
-      "autoPort": false
     }
   ]
 }
