@@ -450,6 +450,8 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
                 docxTemplateUrl={form.docx_template_url}
                 bron={form.docx_template_bron}
                 webUrl={form.docx_template_web_url}
+                driveId={form.docx_template_drive_id}
+                itemId={form.docx_template_item_id}
                 onUrlChange={url => setForm(f => ({
                   ...f, docx_template_url: url,
                   docx_template_bron: '', docx_template_drive_id: '', docx_template_item_id: '', docx_template_web_url: '',
@@ -579,6 +581,8 @@ function WordTemplatePaneel({
   docxTemplateUrl,
   bron,
   webUrl,
+  driveId,
+  itemId,
   onUrlChange,
   onGraphLink,
   onClearGraph,
@@ -587,6 +591,8 @@ function WordTemplatePaneel({
   docxTemplateUrl: string
   bron: string
   webUrl: string
+  driveId: string
+  itemId: string
   onUrlChange: (url: string) => void
   onGraphLink: (r: { drive_id: string; item_id: string; web_url: string | null; naam: string | null }) => void
   onClearGraph: () => void
@@ -596,9 +602,52 @@ function WordTemplatePaneel({
   const [openGroep, setOpenGroep] = useState<string | null>('Offerte')
   const [shareLink, setShareLink] = useState('')
   const [linking, setLinking] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [checkResult, setCheckResult] = useState<{
+    problemen: { ernst: string; uitleg: string; tag?: string; context?: string }[]
+    onbekend: { naam: string; context: string }[]
+    tagCount: number
+  } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const isGraph = bron === 'sharepoint' || bron === 'onedrive'
+  const heeftTemplate = (isGraph && driveId && itemId) || !!docxTemplateUrl
+
+  async function controleerTemplate() {
+    setChecking(true)
+    setCheckResult(null)
+    try {
+      const body = isGraph && driveId && itemId
+        ? { drive_id: driveId, item_id: itemId }
+        : { template_url: docxTemplateUrl }
+      const res = await fetch('/everts-calc/api/docx-templates/valideer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+      // Onbekende variabelen: tags die niet in het variabelenpaneel voorkomen (soft "let op").
+      const geldig = new Set(WORD_VARIABELEN.flatMap(g => g.items.map(i => i.v.replace(/^[#/^%]/, ''))))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tags: { naam: string; type: string; context: string }[] = json.tags ?? []
+      const onbekendMap = new Map<string, string>()
+      for (const t of tags) {
+        if (t.naam && t.naam !== '.' && !geldig.has(t.naam)) {
+          if (!onbekendMap.has(t.naam)) onbekendMap.set(t.naam, t.context)
+        }
+      }
+      setCheckResult({
+        problemen: json.problemen ?? [],
+        onbekend: Array.from(onbekendMap, ([naam, context]) => ({ naam, context })),
+        tagCount: tags.length,
+      })
+    } catch (err) {
+      toast.error('Controleren mislukt: ' + String(err))
+    } finally {
+      setChecking(false)
+    }
+  }
 
   async function koppelGraph() {
     if (!shareLink.trim()) { toast.error('Plak eerst een SharePoint/OneDrive-link'); return }
@@ -727,6 +776,46 @@ function WordTemplatePaneel({
         ))}
         <input ref={fileRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={uploadTemplate} />
       </div>
+
+      {/* Template controleren */}
+      {heeftTemplate && (
+        <div className="p-3 border-b border-slate-200 space-y-2 flex-shrink-0">
+          <button onClick={controleerTemplate} disabled={checking}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-60">
+            {checking ? '⟳ Controleren...' : <><Check className="w-3.5 h-3.5" /> Template controleren</>}
+          </button>
+          {checkResult && (
+            <div className="space-y-1.5">
+              {checkResult.problemen.length === 0 && checkResult.onbekend.length === 0 ? (
+                <div className="flex items-center gap-2 px-2.5 py-1.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
+                  <Check className="w-3.5 h-3.5 flex-shrink-0" /> Geen problemen gevonden — {checkResult.tagCount} tags herkend.
+                </div>
+              ) : (
+                <>
+                  {checkResult.problemen.map((p, i) => (
+                    <div key={`p${i}`} className="px-2.5 py-2 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-xs font-semibold text-red-800 leading-snug">
+                        {p.tag ? `{${p.tag}} — ` : ''}{p.uitleg}
+                      </p>
+                      {p.context && (
+                        <p className="mt-1 text-[11px] text-red-600 font-mono break-words leading-snug">zoek in Word: “{p.context}”</p>
+                      )}
+                    </div>
+                  ))}
+                  {checkResult.onbekend.map((o, i) => (
+                    <div key={`o${i}`} className="px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-xs font-semibold text-amber-800 leading-snug">Let op: onbekende variabele {`{${o.naam}}`}</p>
+                      {o.context && (
+                        <p className="mt-1 text-[11px] text-amber-700 font-mono break-words leading-snug">bij: “{o.context}”</p>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Syntax uitleg */}
       <div className="px-3 py-2.5 border-b border-slate-200 bg-amber-50 flex-shrink-0">

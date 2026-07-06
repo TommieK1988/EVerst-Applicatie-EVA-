@@ -167,16 +167,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
       output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
     } catch (renderErr) {
-      // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
       console.error('Docx preview render fout:', renderErr)
+      // Preview van het eigen template (ingelogde beheerder): toon de tag + omringende
+      // tekst zodat de fout in Word te vinden is. Downloads blijven generiek.
+      const detail = String((renderErr as Error)?.message ?? renderErr)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
       return new NextResponse(
         `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;color:#dc2626">
-          <h2>Template render fout</h2>
-          <p style="color:#64748b;font-size:0.875rem;margin-top:1rem">
-            Controleer de tag-syntax in het .docx template. Veelvoorkomende oorzaak: Word heeft een
-            tag zoals <code>{variabele}</code> in losse fragmenten opgeknipt — verwijder de tag en
-            typ hem in één keer opnieuw.
+          <h2 style="margin:0 0 .4rem">Template render fout</h2>
+          <p style="color:#64748b;font-size:0.8rem;margin:.2rem 0 1rem;line-height:1.5">
+            Onderstaande tag(s) konden niet verwerkt worden. Zoek de aangegeven tekst in je Word-template,
+            verwijder de tag en typ hem in één keer opnieuw (of gebruik de kopieerknop in het variabelenpaneel).
+            Gebruik de knop <strong>Template controleren</strong> voor een volledig overzicht.
           </p>
+          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;line-height:1.6;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1rem;color:#7f1d1d;white-space:pre-wrap">${detail}</div>
         </body></html>`,
         { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 500 },
       )
