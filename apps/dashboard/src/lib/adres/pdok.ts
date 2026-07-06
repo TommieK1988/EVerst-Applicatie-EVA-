@@ -26,6 +26,7 @@ type PdokDoc = {
   type?: string
   weergavenaam?: string
   straatnaam?: string
+  straatnaam_verkort?: string
   huisnummer?: number
   huis_nlt?: string
   postcode?: string
@@ -34,7 +35,7 @@ type PdokDoc = {
 
 function mapDoc(d: PdokDoc): AdresResultaat {
   return {
-    straat: d.straatnaam ?? '',
+    straat: d.straatnaam ?? d.straatnaam_verkort ?? '',
     huisnummer: d.huis_nlt ?? (d.huisnummer != null ? String(d.huisnummer) : ''),
     postcode: (d.postcode ?? '').replace(/(\d{4})\s*([A-Za-z]{2})/, '$1 $2').toUpperCase(),
     stad: d.woonplaatsnaam ?? '',
@@ -68,6 +69,7 @@ export async function zoekAdres(opts: {
 }): Promise<AdresResultaat[]> {
   const rows = opts.rows ?? 10
   const delen: string[] = []
+  const fq: string[] = ['type:adres']
 
   if (opts.vrij?.trim()) {
     delen.push(opts.vrij.trim())
@@ -76,6 +78,9 @@ export async function zoekAdres(opts: {
     const hn = eersteHuisnummer(opts.huisnummer ?? '')
     if (pc && hn) {
       delen.push(pc, hn)
+      // Beperk tot de exacte postcode (PDOK slaat postcodes zonder spatie/uppercase op) zodat
+      // een niet-bestaand huisnummer niet fuzzy naar een ander adres matcht.
+      fq.push(`postcode:${pc.replace(/\s+/g, '').toUpperCase()}`)
     } else {
       if (opts.straat?.trim()) delen.push(opts.straat.trim())
       if (opts.huisnummer?.trim()) delen.push(eersteHuisnummer(opts.huisnummer))
@@ -87,7 +92,8 @@ export async function zoekAdres(opts: {
   const q = delen.filter(Boolean).join(' ').trim()
   if (!q) return []
 
-  const url = `${PDOK_FREE}?q=${encodeURIComponent(q)}&fq=${encodeURIComponent('type:adres')}&rows=${rows}`
+  const fqParams = fq.map((f) => `fq=${encodeURIComponent(f)}`).join('&')
+  const url = `${PDOK_FREE}?q=${encodeURIComponent(q)}&${fqParams}&rows=${rows}`
   try {
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
     if (!res.ok) return []

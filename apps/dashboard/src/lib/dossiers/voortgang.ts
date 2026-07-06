@@ -15,6 +15,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { schrijfBouw7VoortgangProject, schrijfBouw7VoortgangCode } from './bouw7-voortgang'
+import { assertDossierBewerkbaar } from './guards'
 
 export type VoortgangNiveau = 'project' | 'bewakingscode'
 
@@ -42,6 +43,8 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
 
   if (!bouw7Id) return { ok: false, error: 'Geen Bouw7-koppeling voor dit project.' }
   if (niveau === 'bewakingscode' && !bewakingscode) return { ok: false, error: 'Bewakingscode ontbreekt.' }
+
+  await assertDossierBewerkbaar(dossierId)
 
   const supabase = createAdminClient() as any
 

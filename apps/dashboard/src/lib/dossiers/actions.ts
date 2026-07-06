@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
 import {
   Bouw7Client,
@@ -315,6 +316,7 @@ export async function updateServicedeskSubstatus(
   id: string,
   nieuweSubstatus: ServicedeskSubstatus | string,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertDossierBewerkbaar(id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -413,6 +415,7 @@ export async function maakOfferteVoorServicedesk(
 export async function koppelCalculatieProject(
   dossierId: string,
 ): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: dossier, error } = await supabase
     .from('dossiers')
@@ -794,6 +797,7 @@ export async function updateDossierSubstatus(
   nieuweSubstatus: DossierSubstatus,
   opts?: { schrijfBouw7?: boolean }
 ): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient()
 
   const { data: huidig, error: fetchError } = await supabase
@@ -880,6 +884,7 @@ export async function updateDossierRollen(
     controller_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
 
   // Zet lege strings om naar null (select kan "" retourneren bij geen keuze)
@@ -1684,6 +1689,7 @@ export async function verplaatsGeboekteKost(
   bronId: number,
   doel: { orderId?: number | null; contractId?: number | null },
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   return upsertInkoopCorrectie(dossierId, bronId, {
     toegewezen_order_id: doel.orderId ?? null,
     toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
@@ -1697,6 +1703,7 @@ export async function hercodeerGeboekteKost(
   code: string,
   naam: string | null,
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
   // "Alleen bestaande projectcodes": valideer tegen de codes die al op het project voorkomen.
@@ -1713,6 +1720,7 @@ export async function hercodeerGeboekteKost(
 /** Verwijder de EVA-correctie van een geboekte kost (terug naar de Bouw7-waarde). */
 export async function wisInkoopCorrectie(dossierId: string, bronId: number): Promise<InkoopCorrectieResult> {
   if (!dossierId || !Number.isFinite(bronId)) return { ok: false, error: 'Ongeldige parameters.' }
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('inkoop_correcties')
@@ -1755,6 +1763,7 @@ export async function hercodeerGeboekteKostenBulk(
   code: string,
   naam: string | null,
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
   const data = await getDossierInkoop(dossierId)
@@ -1773,6 +1782,7 @@ export async function verplaatsGeboekteKostenBulk(
   bronIds: number[],
   doel: { orderId?: number | null; contractId?: number | null },
 ): Promise<InkoopCorrectieResult> {
+  await assertDossierBewerkbaar(dossierId)
   return upsertInkoopCorrectiesBulk(dossierId, bronIds, {
     toegewezen_order_id: doel.orderId ?? null,
     toegewezen_contract_id: doel.orderId != null ? null : doel.contractId ?? null,
@@ -1783,6 +1793,7 @@ export async function verplaatsGeboekteKostenBulk(
 export async function wisInkoopCorrectiesBulk(dossierId: string, bronIds: number[]): Promise<InkoopCorrectieResult> {
   const ids = [...new Set(bronIds.filter((n) => Number.isFinite(n)))]
   if (!dossierId || ids.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+  await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('inkoop_correcties')
@@ -2128,6 +2139,7 @@ export async function updateDossierInfo(
     werkmaatschappij_id?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
   const { error } = await supabase
     .from('dossiers')
@@ -2201,6 +2213,7 @@ export async function setDossierToggle(
   definitie_id: string,
   aan: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossier_id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -2421,6 +2434,7 @@ export async function updateUurlogBewakingscode(
   hourLog: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number },
   nieuwePslId: number,
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertDossierBewerkbaar(dossierId)
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
   const { client } = ctx
@@ -2452,6 +2466,7 @@ export async function updateUurlogBewakingscode(
  */
 export async function deleteCalculatieVanDossier(dossierId: string): Promise<{ ok: boolean; error?: string }> {
   if (!dossierId) return { ok: false, error: 'Dossier-ID ontbreekt.' }
+  await assertDossierBewerkbaar(dossierId)
 
   const supabase = createAdminClient()
 

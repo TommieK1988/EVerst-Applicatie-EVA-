@@ -11,6 +11,7 @@ import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
+import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
 const TYPE_LABELS: Record<string, string> = {
   verkoopofferte:     'Offerte',
@@ -47,6 +48,7 @@ type Props = {
 
 export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, projectAangemaakt, rijen }: Props) {
   const router = useRouter()
+  const readOnly = useDossierReadOnly()
   const [toonCalculatie, setToonCalculatie] = useState(false)
   const [bezig, setBezig] = useState(false)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
@@ -97,6 +99,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
           projectNaam={naam}
           projectNummer={nummer}
           toonProjectDetail
+          readOnly={readOnly}
         />
       </div>
     )
@@ -115,22 +118,24 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
                     <Calculator className="h-3.5 w-3.5" />
                     Calculatie openen
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={handleDelete}
-                    disabled={deleteInProgress}
-                    title="Verwijder all calculaties en offertes"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      variant="ghost"
+                      onClick={handleDelete}
+                      disabled={deleteInProgress}
+                      title="Verwijder all calculaties en offertes"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
+                    </Button>
+                  )}
                 </>
-              ) : (
+              ) : !readOnly ? (
                 <Button variant="primary" onClick={aanmaken} disabled={bezig}>
                   <Calculator className="h-3.5 w-3.5" />
                   {bezig ? 'Bezig…' : 'Calculatie aanmaken'}
                 </Button>
-              )}
+              ) : null}
             </div>
           </div>
         </CardHeader>

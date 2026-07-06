@@ -6,7 +6,7 @@ import type { DossierRij } from './types'
 import { maakAanvraag, zoekRelaties, getAanvraagCategorieen, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { createOrganisatie } from '@/lib/relaties/actions'
 import { createContactpersoon } from '@/lib/relaties/contactpersonen-actions'
-import { zoekAdres, isHuisnummerReeks } from '@/lib/adres/pdok'
+import { zoekAdres, isHuisnummerReeks, eersteHuisnummer } from '@/lib/adres/pdok'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 import { slaAanvraagProjectIdOp } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
 
@@ -136,11 +136,15 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
     adresTimerRef.current = setTimeout(async () => {
       const res = await zoekAdres({ postcode: pc, huisnummer: hn })
       if (res.length > 0) {
-        const a = res[0]
-        setStraat(a.straat)
-        setStad(a.stad)
-        if (a.postcode) setPostcode(a.postcode)
-        setAdresStatus('gevonden')
+        // Straat/plaats zijn postcode-consistent → altijd aanvullen. Status 'gevonden' alleen
+        // als het exacte huisnummer bestaat (of het een gebouw met meerdere huisnummers is).
+        const num = eersteHuisnummer(hn)
+        const exact = res.find(a => eersteHuisnummer(a.huisnummer) === num)
+        const gekozen = exact ?? res[0]
+        setStraat(gekozen.straat)
+        setStad(gekozen.stad)
+        if (gekozen.postcode) setPostcode(gekozen.postcode)
+        setAdresStatus(exact || isHuisnummerReeks(hn) ? 'gevonden' : 'niet_gevonden')
       } else {
         setAdresStatus('niet_gevonden')
       }
