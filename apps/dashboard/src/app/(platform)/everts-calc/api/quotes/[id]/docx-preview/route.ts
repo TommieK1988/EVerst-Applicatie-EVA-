@@ -14,8 +14,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import {
   STANDAARD_LAYOUT,
-  BEDRIJF_FALLBACK,
   type BedrijfContext,
+  type DossierContext,
   type LayoutContext,
 } from '@/lib/everts-calc/quote-renderer'
 import {
@@ -23,8 +23,9 @@ import {
   loadQuoteTemplateBuffer,
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
+import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { appGraphGetRaw } from '@/lib/o365/graph'
-import { buildDemoQuote, DEMO_BEDRIJF } from '@/lib/everts-calc/demo-quote'
+import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
@@ -115,18 +116,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       papier_orientatie: rawLayout.papier_orientatie ?? STANDAARD_LAYOUT.papier_orientatie,
     }
 
-    const bedrijfBasis = isDemo ? DEMO_BEDRIJF : BEDRIJF_FALLBACK
-    let bedrijf: BedrijfContext = bedrijfBasis
+    // Bedrijf (werkmaatschappij) + dossier: demo → testgegevens, anders uit de DB.
+    let bedrijf: BedrijfContext
+    let dossier: DossierContext
+    if (isDemo) {
+      bedrijf = DEMO_BEDRIJF
+      dossier = buildDemoDossierContext()
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = (await createClient()) as any
+      const bron = await laadBedrijfEnDossier(sb, quote)
+      bedrijf = bron.bedrijf
+      dossier = bron.dossier
+    }
     if (bedrijfParam) {
       try {
-        // Alleen niet-lege velden uit de bedrijfsgegevens overschrijven de basis.
+        // Alleen niet-lege velden uit de meegegeven bedrijfsgegevens overschrijven.
         const parsed = JSON.parse(bedrijfParam) as Record<string, unknown>
         const gevuld = Object.fromEntries(
           Object.entries(parsed).filter(([, v]) => v != null && v !== ''),
         )
-        bedrijf = { ...bedrijfBasis, ...gevuld }
+        bedrijf = { ...bedrijf, ...gevuld }
       } catch {
-        /* gebruik fallback */
+        /* db/demo-bedrijf gebruiken */
       }
     }
 
@@ -153,7 +165,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     let output: Buffer
     try {
-      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer)
+      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
     } catch (renderErr) {
       // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
       console.error('Docx preview render fout:', renderErr)
