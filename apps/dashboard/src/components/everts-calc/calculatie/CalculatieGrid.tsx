@@ -21,9 +21,13 @@ import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid, Eenheid
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
+import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
 import { slaRegelOpAlsRecept } from '@/app/(platform)/everts-calc/actions/bibliotheek'
+import { haalHuidigeGebruikerId } from '@/app/(platform)/everts-calc/actions/layouts-calc'
+import { laadLayouts, slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
 
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
+import type { KolomConfig, GebruikerLayout } from '@everts/database/platform-types'
 
 interface Props {
   scenarioId: string
@@ -88,6 +92,34 @@ const COL_DEFS: ColDef[] = [
 const COL_MAP     = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Record<ColId, ColDef>
 const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
 const DEFAULT_WIDTHS = Object.fromEntries(COL_DEFS.map(c => [c.id, c.dw])) as Record<ColId, number>
+
+// ─── Kolom-layouts (per gebruiker, tabel gebruiker_layouts, scherm 'evc_calculatie') ──
+const LAYOUT_SCHERM = 'evc_calculatie'
+const NON_HIDEABLE_COLS: ColId[] = ['omschrijving', 'acties']
+
+/** Huidige gridstaat → KolomConfig[] voor opslag. */
+function stateNaarLayout(order: ColId[], hidden: Set<ColId>, widths: Record<ColId, number>): KolomConfig[] {
+  return order.map((id, i) => ({ key: id, zichtbaar: !hidden.has(id), volgorde: i, breedte: widths[id] }))
+}
+
+/** Opgeslagen KolomConfig[] → gridstaat, tolerant voor toegevoegde/verwijderde kolommen. */
+function layoutNaarState(cfg: KolomConfig[]): { colOrder: ColId[]; hiddenCols: Set<ColId>; colWidths: Record<ColId, number> } {
+  const geldig = cfg.filter(c => (c.key as ColId) in COL_MAP)
+  const gesorteerd = [...geldig].sort((a, b) => a.volgorde - b.volgorde).map(c => c.key as ColId)
+  // Ontbrekende kolommen (nieuw sinds opslaan) achteraan toevoegen, zichtbaar
+  const colOrder = [...gesorteerd, ...DEFAULT_ORDER.filter(id => !gesorteerd.includes(id))]
+  const hiddenCols = new Set<ColId>(
+    geldig.filter(c => !c.zichtbaar).map(c => c.key as ColId).filter(id => !NON_HIDEABLE_COLS.includes(id)),
+  )
+  const colWidths: Record<ColId, number> = { ...DEFAULT_WIDTHS }
+  for (const c of geldig) {
+    if (typeof c.breedte === 'number') {
+      const min = COL_MAP[c.key as ColId]?.minW ?? 28
+      colWidths[c.key as ColId] = Math.max(min, c.breedte)
+    }
+  }
+  return { colOrder, hiddenCols, colWidths }
+}
 
 // ─── TabelHeader ──────────────────────────────────────────────────────────────
 
@@ -1331,27 +1363,18 @@ function CalculatieregelRij({
           {schilderbehandelingOpen && (
             <tr className="border-b border-blue-100 bg-blue-50/30">
               <td colSpan={colOrder.length} className="px-3 py-2" style={{ paddingLeft: `${indent + 20}px` }}>
-                <div className="flex items-center gap-2">
-                  <PaintBucket className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={regel.schilderbehandeling ?? ''}
-                    placeholder="Schilderbehandeling (bv. grondverf + 2× lakverf glans wit)..."
-                    className="flex-1 text-xs px-2 py-1.5 border border-blue-200 rounded bg-white
-                      focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100
-                      text-slate-700 placeholder-slate-300"
-                    onChange={e => onWijzig(regel.id, { schilderbehandeling: e.target.value || undefined })}
-                  />
-                  {regel.schilderbehandeling && (
-                    <button
-                      onClick={() => { onWijzig(regel.id, { schilderbehandeling: undefined }); setSchilderbehandelingOpen(false) }}
-                      className="p-1 text-slate-300 hover:text-red-500 rounded transition-colors"
-                      title="Behandeling verwijderen"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
+                <SchilderbehandelingZoekveld
+                  behandelingId={regel.schilderbehandeling_id}
+                  behandelingTekst={regel.schilderbehandeling}
+                  onSelecteer={b => onWijzig(regel.id, {
+                    schilderbehandeling_id: b.id,
+                    schilderbehandeling: (b.uitgebreide_werkomschrijving?.trim() || b.korte_omschrijving?.trim() || b.naam),
+                  })}
+                  onWis={() => {
+                    onWijzig(regel.id, { schilderbehandeling: undefined, schilderbehandeling_id: undefined })
+                    setSchilderbehandelingOpen(false)
+                  }}
+                />
               </td>
             </tr>
           )}
@@ -1749,6 +1772,96 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   }
   const [colPickerOpen, setColPickerOpen] = useState(false)
   const colPickerRef = useRef<HTMLDivElement>(null)
+
+  // Kolom-layouts per gebruiker (gebruiker_layouts)
+  const [userId, setUserId]               = useState<string | null>(null)
+  const [layouts, setLayouts]             = useState<GebruikerLayout[]>([])
+  const [actiefLayoutId, setActiefLayoutId] = useState<string | null>(null)
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
+  const layoutMenuRef = useRef<HTMLDivElement>(null)
+
+  const pasLayoutToe = useCallback((cfg: KolomConfig[], layoutId: string | null) => {
+    const { colOrder: o, hiddenCols: h, colWidths: w } = layoutNaarState(cfg)
+    setColOrder(o); setHiddenCols(h); setColWidths(w); setActiefLayoutId(layoutId)
+  }, [])
+
+  // Layouts laden bij mount; standaard-layout toepassen indien aanwezig
+  useEffect(() => {
+    let afgebroken = false
+    ;(async () => {
+      const id = await haalHuidigeGebruikerId()
+      if (afgebroken || !id) return
+      setUserId(id)
+      const rijen = await laadLayouts(id, LAYOUT_SCHERM)
+      if (afgebroken) return
+      setLayouts(rijen)
+      const standaard = rijen.find(l => l.is_standaard)
+      if (standaard) pasLayoutToe(standaard.kolommen, standaard.id)
+    })()
+    return () => { afgebroken = true }
+  }, [pasLayoutToe])
+
+  const herlaadLayouts = useCallback(async () => {
+    if (!userId) return
+    setLayouts(await laadLayouts(userId, LAYOUT_SCHERM))
+  }, [userId])
+
+  const layoutOpslaanAlsNieuw = useCallback(async () => {
+    if (!userId) return
+    const naam = window.prompt('Naam voor nieuwe kolom-layout')?.trim()
+    if (!naam) return
+    if (layouts.some(l => l.naam.toLowerCase() === naam.toLowerCase())) {
+      toast.error('Er bestaat al een layout met deze naam'); return
+    }
+    const res = await slaLayoutOp(userId, LAYOUT_SCHERM, naam, stateNaarLayout(colOrder, hiddenCols, colWidths))
+    if (!res.ok) { toast.error(res.error); return }
+    setActiefLayoutId(res.id ?? null)
+    await herlaadLayouts()
+    toast.success(`Layout "${naam}" opgeslagen`)
+    setLayoutMenuOpen(false)
+  }, [userId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts])
+
+  const layoutBijwerken = useCallback(async () => {
+    if (!userId || !actiefLayoutId) return
+    const huidig = layouts.find(l => l.id === actiefLayoutId)
+    if (!huidig) return
+    const res = await slaLayoutOp(userId, LAYOUT_SCHERM, huidig.naam, stateNaarLayout(colOrder, hiddenCols, colWidths), actiefLayoutId)
+    if (!res.ok) { toast.error(res.error); return }
+    await herlaadLayouts()
+    toast.success(`Layout "${huidig.naam}" bijgewerkt`)
+    setLayoutMenuOpen(false)
+  }, [userId, actiefLayoutId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts])
+
+  const layoutVerwijderen = useCallback(async (id: string) => {
+    if (!userId) return
+    const res = await verwijderLayout(id, userId)
+    if (!res.ok) { toast.error(res.error); return }
+    if (actiefLayoutId === id) {
+      setActiefLayoutId(null)
+      setColOrder(DEFAULT_ORDER); setColWidths(DEFAULT_WIDTHS); setHiddenCols(new Set())
+    }
+    await herlaadLayouts()
+    toast.success('Layout verwijderd')
+  }, [userId, actiefLayoutId, herlaadLayouts])
+
+  const layoutStandaardZetten = useCallback(async (id: string) => {
+    if (!userId) return
+    const res = await stelStandaardIn(id, userId, LAYOUT_SCHERM)
+    if (!res.ok) { toast.error(res.error); return }
+    await herlaadLayouts()
+    toast.success('Standaard-layout ingesteld')
+  }, [userId, herlaadLayouts])
+
+  // Layout-menu klik-buiten sluiten
+  useEffect(() => {
+    if (!layoutMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node))
+        setLayoutMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [layoutMenuOpen])
 
   const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
 
@@ -2348,7 +2461,78 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       ).join(' ')}</style>
 
       {/* Kolom-picker toolbar */}
-      <div className="flex items-center justify-end px-3 py-1 border-b border-slate-100 bg-slate-50/60 flex-shrink-0">
+      <div className="flex items-center justify-end gap-2 px-3 py-1 border-b border-slate-100 bg-slate-50/60 flex-shrink-0">
+        {userId && (
+          <div ref={layoutMenuRef} className="relative">
+            <button
+              onClick={() => setLayoutMenuOpen(v => !v)}
+              className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+                actiefLayoutId
+                  ? 'border-everts/40 bg-everts-50 text-everts font-medium'
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+              }`}
+              title="Kolom-layouts (per gebruiker)"
+            >
+              <ChevronDown className="w-3 h-3" />
+              {actiefLayoutId ? (layouts.find(l => l.id === actiefLayoutId)?.naam ?? 'Layout') : 'Layouts'}
+            </button>
+            {layoutMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-[150] min-w-[240px]">
+                <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
+                  Kolom-layouts
+                </div>
+                {layouts.length === 0 && (
+                  <div className="px-3 py-1.5 text-xs text-slate-400">Nog geen opgeslagen layouts</div>
+                )}
+                {layouts.map(l => (
+                  <div
+                    key={l.id}
+                    className={`flex items-center gap-1 px-2 py-1 hover:bg-slate-50 ${actiefLayoutId === l.id ? 'bg-everts-50/60' : ''}`}
+                  >
+                    <button
+                      onClick={() => { pasLayoutToe(l.kolommen, l.id); setLayoutMenuOpen(false) }}
+                      className="flex-1 min-w-0 text-left text-xs text-slate-700 truncate px-1 py-0.5"
+                      title="Layout toepassen"
+                    >
+                      {l.is_standaard && <span className="text-amber-500 mr-1">★</span>}
+                      {l.naam}
+                    </button>
+                    {!l.is_standaard && (
+                      <button
+                        onClick={() => layoutStandaardZetten(l.id)}
+                        className="flex-shrink-0 p-1 text-slate-300 hover:text-amber-500 rounded"
+                        title="Als standaard instellen"
+                      >★</button>
+                    )}
+                    <button
+                      onClick={() => layoutVerwijderen(l.id)}
+                      className="flex-shrink-0 p-1 text-slate-300 hover:text-red-500 rounded"
+                      title="Layout verwijderen"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <div className="border-t border-slate-100 mt-1 pt-1">
+                  {actiefLayoutId && (
+                    <button
+                      onClick={layoutBijwerken}
+                      className="w-full text-left px-3 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                    >
+                      Actieve layout bijwerken
+                    </button>
+                  )}
+                  <button
+                    onClick={layoutOpslaanAlsNieuw}
+                    className="w-full text-left px-3 py-1 text-xs text-everts hover:bg-everts-50 font-medium"
+                  >
+                    Huidige kolommen opslaan als nieuw…
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div ref={colPickerRef} className="relative">
           <button
             onClick={() => setColPickerOpen(v => !v)}

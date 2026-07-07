@@ -22,6 +22,11 @@ export async function laadSchilderwerkData(): Promise<{
   return { onderdelen, types, behandelingen }
 }
 
+/** Alleen de behandelingen-bibliotheek (voor de regel-zoeker in de calculatie). */
+export async function laadBehandelingen(): Promise<SchilderBehandeling[]> {
+  return getSchilderBehandelingen()
+}
+
 // ─── Data ophalen ─────────────────────────────────────────────────────────────
 
 export async function haalSchilderDropdownData() {

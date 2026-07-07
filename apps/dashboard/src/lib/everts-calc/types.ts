@@ -228,7 +228,8 @@ export interface Calculatieregel {
   gemarkeerd?: boolean       // visuele markering (oranje)
   btw_pct?: number       // BTW percentage bijv. 21
   opmerking?: string     // interne opmerking (niet zichtbaar voor opdrachtgever)
-  schilderbehandeling?: string  // schilderbehandeling omschrijving (voor behandelingsblad)
+  schilderbehandeling?: string  // volledige behandelingstekst (uit bibliotheek; voor behandelingsblad in offerte)
+  schilderbehandeling_id?: string  // gekozen schilder_behandelingen.id (alleen localStorage; niet mee naar offerte)
   meetstaat_aggregaat_id?: string  // gekoppeld aan MeetregelAggregaat (indicator: uit meetstaat)
   werkomschrijving_afbeeldingen?: string[]  // base64 afbeeldingen bij de werkomschrijving
   kostengroep?: string  // optionele groeperingslabel voor werkbegroting (bijv. 'Bouwplaats')
