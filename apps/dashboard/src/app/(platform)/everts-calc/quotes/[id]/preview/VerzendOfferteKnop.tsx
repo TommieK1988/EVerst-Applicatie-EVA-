@@ -9,10 +9,12 @@ interface Props {
   quoteId: string
   /** True als de offerte is goedgekeurd en dus verzonden mag worden. */
   verzendbaar: boolean
+  /** Aangeroepen na een geslaagde verzending (om afhankelijke status te herladen). */
+  onDone?: () => void
 }
 
 /** Knop + venster om een goedgekeurde offerte per Outlook naar de opdrachtgever te mailen. */
-export default function VerzendOfferteKnop({ quoteId, verzendbaar }: Props) {
+export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Props) {
   const [open, setOpen] = useState(false)
   const [laden, setLaden] = useState(false)
   const [pending, startVerzend] = useTransition()
@@ -44,6 +46,7 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar }: Props) {
       if (res.ok) {
         toast.success(`Offerte verzonden · SharePoint: ${res.sharepoint}`)
         setOpen(false)
+        onDone?.()
       } else {
         toast.error(res.error)
       }

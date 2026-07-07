@@ -14,6 +14,46 @@ export interface MailConcept {
   bodyHtml: string
 }
 
+export interface OfferteDetailStatus {
+  quoteNummer: string
+  status: string
+  isIntern: boolean
+  verzendbaar: boolean
+  totaalBedrag: number
+  dossierId: string | null
+}
+
+/** Laadt de toolbar-status voor de inline offerte-detailweergave in het dossier. */
+export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteDetailStatus> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data: q } = await admin
+    .from('quotes')
+    .select('quote_nummer, status, type, subtotaal_ex_btw, dossier_id, project_id')
+    .eq('id', quoteId)
+    .maybeSingle()
+  if (!q) throw new Error('Offerte niet gevonden')
+
+  const isIntern = q.type === 'interne_calculatie'
+  const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+  const verzendbaar = !isIntern && (await assertOfferteVerzendbaar(quoteId)).ok
+
+  let dossierId: string | null = q.dossier_id ?? null
+  if (!dossierId && q.project_id) {
+    const { data: d } = await admin.from('dossiers').select('id').eq('everts_calc_project_id', q.project_id).maybeSingle()
+    dossierId = d?.id ?? null
+  }
+
+  return {
+    quoteNummer: q.quote_nummer,
+    status: q.status,
+    isIntern,
+    verzendbaar,
+    totaalBedrag: q.subtotaal_ex_btw ?? 0,
+    dossierId,
+  }
+}
+
 /** Prefill voor het verzendvenster: ontvanger + gerenderd onderwerp/tekst. */
 export async function getOfferteMailConcept(quoteId: string): Promise<MailConcept> {
   const { ctx } = await laadOfferteContext(quoteId)

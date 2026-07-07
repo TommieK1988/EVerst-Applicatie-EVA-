@@ -55,7 +55,7 @@ export default async function QuotePreviewPage({ params }: Props) {
 
       {/* Preview */}
       <div className="flex-1 overflow-hidden print:overflow-visible">
-        <BedrijfLoader quote={quote} />
+        <BedrijfLoader quoteId={quote.id} />
       </div>
     </div>
   )

@@ -142,9 +142,14 @@ export default function OfferteAanmakenModal({
         structuur,
       })
 
-      // In het dossier blijven: terug naar de meegegeven dossier-tab (offertelijst),
-      // anders de losse offerte-preview.
-      router.push(terugNaarUrl ?? `/everts-calc/quotes/${id}/preview`)
+      // In het dossier blijven: terug naar de dossier-tab en direct de nieuwe offerte
+      // inline openen (?offerte={id}); anders de losse offerte-preview.
+      if (terugNaarUrl) {
+        const sep = terugNaarUrl.includes('?') ? '&' : '?'
+        router.push(`${terugNaarUrl}${sep}offerte=${id}`)
+      } else {
+        router.push(`/everts-calc/quotes/${id}/preview`)
+      }
     } catch (e) {
       console.error('Offerte aanmaken mislukt:', e)
       setLoading(false)

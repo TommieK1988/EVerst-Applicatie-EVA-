@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import OfferteDetail from './OfferteDetail'
 import toast from 'react-hot-toast'
 import { Calculator, ArrowLeft, Trash2 } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
@@ -48,8 +49,15 @@ type Props = {
 
 export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, projectAangemaakt, rijen }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const readOnly = useDossierReadOnly()
   const [toonCalculatie, setToonCalculatie] = useState(false)
+  // Inline geopende offerte (master-detail); ook via ?offerte={id} na aanmaken.
+  const [offerteId, setOfferteId] = useState<string | null>(null)
+  useEffect(() => {
+    const q = searchParams.get('offerte')
+    if (q) setOfferteId(q)
+  }, [searchParams])
   const [bezig, setBezig] = useState(false)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   // Totalen van de calculatie zelf — client-side uit localStorage (net als InformatieTab),
@@ -82,6 +90,20 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
     }
     toast.success('Calculatie verwijderd')
     router.refresh()
+  }
+
+  // Inline offerte-detail (bekijken/goedkeuren/verzenden) binnen het dossier.
+  if (offerteId) {
+    return (
+      <div className="px-8 py-6">
+        <OfferteDetail
+          quoteId={offerteId}
+          dossierId={dossierId}
+          onTerug={() => setOfferteId(null)}
+          onOpenOfferte={setOfferteId}
+        />
+      </div>
+    )
   }
 
   // Volledige calculatie-omgeving (zoals in de offerte-fase), met terugknop naar de tabel.
@@ -185,9 +207,9 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
                 {rijen.map(r => (
                   <tr
                     key={r.id}
-                    onClick={() => router.push(`/everts-calc/quotes/${r.id}`)}
+                    onClick={() => setOfferteId(r.id)}
                     className="cursor-pointer hover:bg-neutral-50"
-                    title="Openen in Everts Calc"
+                    title="Offerte openen"
                   >
                     <TD vet>{r.quote_nummer}</TD>
                     <TD>{r.titel}</TD>

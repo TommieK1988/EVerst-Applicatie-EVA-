@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import nextDynamic from 'next/dynamic'
-import type { Quote } from '@/lib/everts-calc/types-quotes'
 
 const DocxViewer = nextDynamic(() => import('@/components/everts-calc/DocxViewer'), { ssr: false })
 
@@ -13,17 +12,17 @@ const BEDRIJF_KEY = 'evc_offerte_bedrijf'
  * zolang niet goedgekeurd — CONCEPT-watermerk) via de /pdf-preview-route in een
  * iframe. Met de schakelaar is de snellere Word-render ook te bekijken.
  */
-export default function BedrijfLoader({ quote }: { quote: Quote }) {
+export default function BedrijfLoader({ quoteId }: { quoteId: string }) {
   const [modus, setModus] = useState<'pdf' | 'word'>('pdf')
   const [bedrijfQuery, setBedrijfQuery] = useState('')
 
   useEffect(() => {
     const bedrijfRaw = localStorage.getItem(BEDRIJF_KEY)
     setBedrijfQuery(bedrijfRaw ? `?bedrijf=${encodeURIComponent(bedrijfRaw)}` : '')
-  }, [quote.id])
+  }, [quoteId])
 
-  const pdfSrc = `/everts-calc/api/quotes/${quote.id}/pdf-preview${bedrijfQuery}`
-  const docxSrc = `/everts-calc/api/quotes/${quote.id}/docx-preview${bedrijfQuery}`
+  const pdfSrc = `/everts-calc/api/quotes/${quoteId}/pdf-preview${bedrijfQuery}`
+  const docxSrc = `/everts-calc/api/quotes/${quoteId}/docx-preview${bedrijfQuery}`
 
   return (
     <div className="flex flex-col h-full">
