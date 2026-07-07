@@ -5,15 +5,14 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, D
 import type { DossierRij } from './types'
 import { maakAanvraag, zoekRelaties, getAanvraagCategorieen, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { createOrganisatie } from '@/lib/relaties/actions'
-import { createContactpersoon } from '@/lib/relaties/contactpersonen-actions'
+import { createContactpersoon, getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres, isHuisnummerReeks, eersteHuisnummer } from '@/lib/adres/pdok'
+import { uploadDossierBestandenNaarSharePoint } from '@/lib/dossiers/sharepoint-bestanden'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 import { slaAanvraagProjectIdOp } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
 
 export type AanvraagCategorie = { id: number; name: string }
 export type AanvraagWerkmaatschappij = { id: string; naam: string; code: string | null }
-
-type Bestand = { naam: string; grootte: number }
 
 type Props = {
   open: boolean
@@ -29,6 +28,18 @@ function vandaag(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Splitst een gecombineerd "Straat + huisnummer"-veld in straat en huisnummer.
+ * Het huisnummer = vanaf het eerste losse getal (incl. toevoeging/reeks), de rest is straat.
+ * Bv. "Oude Delft 169A" → { straat: "Oude Delft", huisnummer: "169A" }.
+ */
+function parseAdres(waarde: string): { straat: string; huisnummer: string } {
+  const s = waarde.trim()
+  const m = s.match(/^(.*?)[\s,]+(\d+.*)$/)
+  if (m) return { straat: m[1].trim(), huisnummer: m[2].trim() }
+  return { straat: s, huisnummer: '' }
+}
+
 export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, werkmaatschappijen = [] }: Props) {
   const [klantId,        setKlantId]        = React.useState<string | null>(null)
   const [klantNaam,      setKlantNaam]      = React.useState('')
@@ -38,6 +49,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   const [zoekBezig,      setZoekBezig]      = React.useState(false)
   const [contactpersoonId,   setContactpersoonId]   = React.useState<string | null>(null)
   const [contactpersoonNaam, setContactpersoonNaam] = React.useState('')
+  const [contactpersonenLijst, setContactpersonenLijst] = React.useState<{ id: string; naam: string; functie: string | null }[]>([])
   const [titel,          setTitel]          = React.useState('')
   const [werkmaatschappijId, setWerkmaatschappijId] = React.useState('')
   const [categorieId,    setCategorieId]    = React.useState('')   // Bouw7 category-id als string ('' = geen)
@@ -45,13 +57,12 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   const [vveCode,        setVveCode]        = React.useState('')
   const [aanvraagdatum,  setAanvraagdatum]  = React.useState(vandaag())
   const [deadline,       setDeadline]       = React.useState('')
-  const [straat,         setStraat]         = React.useState('')
-  const [huisnummer,     setHuisnummer]     = React.useState('')
+  const [straatHuisnr,   setStraatHuisnr]   = React.useState('')  // gecombineerd "Straat + huisnummer"
   const [postcode,       setPostcode]       = React.useState('')
   const [stad,           setStad]           = React.useState('')
   const [adresStatus,    setAdresStatus]    = React.useState<'idle' | 'zoeken' | 'gevonden' | 'niet_gevonden'>('idle')
   const [opmerkingen,    setOpmerkingen]    = React.useState('')
-  const [bestanden,      setBestanden]      = React.useState<Bestand[]>([])
+  const [bestanden,      setBestanden]      = React.useState<File[]>([])
   const [isLaden,        setIsLaden]        = React.useState(false)
   const [nieuweOrgOpen,  setNieuweOrgOpen]  = React.useState(false)
   const [nieuweCpOpen,   setNieuweCpOpen]   = React.useState(false)
@@ -64,10 +75,10 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
 
   function reset() {
     setKlantId(null); setKlantNaam(''); setZoekQuery(''); setZoekResultaten([]); setZoekOpen(false)
-    setContactpersoonId(null); setContactpersoonNaam('')
+    setContactpersoonId(null); setContactpersoonNaam(''); setContactpersonenLijst([])
     setTitel(''); setWerkmaatschappijId(''); setCategorieId(''); setReferentie(''); setVveCode('')
     setAanvraagdatum(vandaag()); setDeadline('')
-    setStraat(''); setHuisnummer(''); setPostcode(''); setStad(''); setAdresStatus('idle')
+    setStraatHuisnr(''); setPostcode(''); setStad(''); setAdresStatus('idle')
     setOpmerkingen(''); setBestanden([])
   }
 
@@ -81,6 +92,21 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
     getAanvraagCategorieen().then(cats => { if (actief) setCatGeladen(cats) }).catch(() => {})
     return () => { actief = false }
   }, [open, categorieen])
+
+  // Contactpersonen van de gekozen opdrachtgever laden voor het keuzeveld.
+  React.useEffect(() => {
+    if (!klantId) { setContactpersonenLijst([]); return }
+    let actief = true
+    getContactpersonenVoorOrganisatie(klantId).then(rows => {
+      if (!actief) return
+      setContactpersonenLijst(rows.map((r: any) => ({
+        id: r.contactpersoon.id,
+        naam: [r.contactpersoon.voornaam, r.contactpersoon.tussenvoegsel, r.contactpersoon.achternaam].filter(Boolean).join(' '),
+        functie: r.functie ?? null,
+      })))
+    }).catch(() => {})
+    return () => { actief = false }
+  }, [klantId])
 
   // Sluit dropdown bij klik buiten
   React.useEffect(() => {
@@ -127,21 +153,21 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   }
 
   // ── Werkadres-controle via PDOK ─────────────────────────────────────
+  // Richting 1: postcode + huisnummer → straat + plaats aanvullen.
   React.useEffect(() => {
     if (adresTimerRef.current) clearTimeout(adresTimerRef.current)
     const pc = postcode.trim()
-    const hn = huisnummer.trim()
+    const { straat: pStraat, huisnummer: hn } = parseAdres(straatHuisnr)
     if (!pc || !hn) { setAdresStatus('idle'); return }
     setAdresStatus('zoeken')
     adresTimerRef.current = setTimeout(async () => {
       const res = await zoekAdres({ postcode: pc, huisnummer: hn })
       if (res.length > 0) {
-        // Straat/plaats zijn postcode-consistent → altijd aanvullen. Status 'gevonden' alleen
-        // als het exacte huisnummer bestaat (of het een gebouw met meerdere huisnummers is).
         const num = eersteHuisnummer(hn)
         const exact = res.find(a => eersteHuisnummer(a.huisnummer) === num)
         const gekozen = exact ?? res[0]
-        setStraat(gekozen.straat)
+        // Straat aanvullen als die nog ontbreekt (bv. bij enkel een huisnummer); niet overschrijven wat de gebruiker typt.
+        if (!pStraat && gekozen.straat) setStraatHuisnr(`${gekozen.straat} ${gekozen.huisnummer || hn}`.trim())
         setStad(gekozen.stad)
         if (gekozen.postcode) setPostcode(gekozen.postcode)
         setAdresStatus(exact || isHuisnummerReeks(hn) ? 'gevonden' : 'niet_gevonden')
@@ -150,11 +176,34 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
       }
     }, 500)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postcode, huisnummer])
+  }, [postcode, straatHuisnr])
+
+  // Richting 2: straat + huisnummer → postcode (+ plaats) aanvullen. Alleen zolang de postcode
+  // nog leeg is, zodat de twee richtingen elkaar niet tegenwerken.
+  React.useEffect(() => {
+    if (postcode.trim()) return
+    const { straat: st, huisnummer: hn } = parseAdres(straatHuisnr)
+    if (!st || !hn) return
+    setAdresStatus('zoeken')
+    const timer = setTimeout(async () => {
+      const res = await zoekAdres({ straat: st, huisnummer: hn, stad: stad.trim() || undefined })
+      const num = eersteHuisnummer(hn)
+      const gekozen = res.find(a => eersteHuisnummer(a.huisnummer) === num) ?? res[0]
+      if (gekozen?.postcode) {
+        setPostcode(gekozen.postcode)
+        if (!stad.trim() && gekozen.stad) setStad(gekozen.stad)
+        setAdresStatus('gevonden')
+      } else {
+        setAdresStatus('idle')
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [straatHuisnr, stad, postcode])
 
   function handleFiles(files: FileList | null) {
     if (!files) return
-    setBestanden(p => [...p, ...Array.from(files).map(f => ({ naam: f.name, grootte: f.size }))])
+    setBestanden(p => [...p, ...Array.from(files)])
   }
 
   async function handleNieuweOrg(naam: string) {
@@ -170,19 +219,21 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
     if (!klantId) { toast.error('Kies eerst een opdrachtgever.'); return }
     const res = await createContactpersoon({ voornaam: voornaam.trim(), achternaam: achternaam.trim(), functie: functie.trim() || null, organisatie_id: klantId })
     if (!res.ok) { toast.error(res.error); return }
+    const naam = [voornaam.trim(), achternaam.trim()].filter(Boolean).join(' ')
+    setContactpersonenLijst(prev => [{ id: res.id, naam, functie: functie.trim() || null }, ...prev.filter(c => c.id !== res.id)])
     setContactpersoonId(res.id)
-    setContactpersoonNaam([voornaam.trim(), achternaam.trim()].filter(Boolean).join(' '))
+    setContactpersoonNaam(naam)
     setNieuweCpOpen(false)
     toast.success('Contactpersoon aangemaakt')
   }
 
   async function handleAanmaken() {
-    if (!klantId || !titel.trim() || !werkmaatschappijId) return
+    if (!geldig) return
     setIsLaden(true)
     try {
       const cat = catOpties.find(c => String(c.id) === categorieId)
       const result = await maakAanvraag({
-        titel: titel.trim(),
+        titel: projectnaam,
         klant_id: klantId,
         contactpersoon_id: contactpersoonId,
         categorie: cat?.name ?? null,
@@ -193,8 +244,8 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         aanvraagdatum: aanvraagdatum || null,
         deadline: deadline || null,
         opmerkingen: opmerkingen.trim() || null,
-        werkadres_straat: straat.trim() || null,
-        werkadres_huisnummer: huisnummer.trim() || null,
+        werkadres_straat: parsedAdres.straat || null,
+        werkadres_huisnummer: parsedAdres.huisnummer || null,
         werkadres_postcode: postcode.trim() || null,
         werkadres_stad: stad.trim() || null,
       })
@@ -202,7 +253,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
 
       const dossier = result.data
       try {
-        const { id: projectId } = await maakProjectVanAanvraag(titel.trim(), klantNaam)
+        const { id: projectId } = await maakProjectVanAanvraag(projectnaam, klantNaam)
         slaAanvraagProjectIdOp(dossier.id, projectId)
       } catch {
         // Koppeling kan later via de calculatie-tab worden aangemaakt
@@ -214,6 +265,19 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         toast.error(`Aanvraag opgeslagen in EVA, maar niet naar Bouw7: ${result.bouw7.error ?? 'onbekende fout'}`)
       }
 
+      // Meegestuurde bestanden naar de SharePoint-dossiermap (best-effort, niet blokkerend).
+      if (bestanden.length > 0) {
+        try {
+          const fd = new FormData()
+          bestanden.forEach(f => fd.append('bestanden', f))
+          const up = await uploadDossierBestandenNaarSharePoint(dossier.id, fd)
+          if (up.ok && up.geuploaded > 0) toast.success(`${up.geuploaded} bestand(en) naar SharePoint`)
+          else if (up.fout) toast.error(`Bestanden: ${up.fout}`)
+        } catch {
+          toast.error('Uploaden van bestanden naar SharePoint mislukt.')
+        }
+      }
+
       onAanmaken({ ...dossier, klant_naam: klantNaam, projectleider_naam: null })
       reset()
       onClose()
@@ -223,7 +287,12 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   }
 
   const catOpties = catGeladen
-  const geldig = Boolean(klantId && titel.trim() && werkmaatschappijId)
+  // Projectnaam wordt automatisch opgebouwd: "Adres, Plaats - Omschrijving".
+  const parsedAdres  = parseAdres(straatHuisnr)
+  const adresPlaats  = [straatHuisnr.trim(), stad.trim()].filter(Boolean).join(', ')
+  const projectnaam  = (adresPlaats ? `${adresPlaats} - ${titel.trim()}` : titel.trim()).trim()
+  const adresCompleet = Boolean(postcode.trim() && parsedAdres.straat && parsedAdres.huisnummer && stad.trim())
+  const geldig = Boolean(klantId && titel.trim() && werkmaatschappijId && categorieId && adresCompleet)
 
   return (
     <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) handleClose() }}>
@@ -287,55 +356,78 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                     ))}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                <div style={{ marginTop: 6 }}>
                   <button type="button" onClick={() => setNieuweOrgOpen(true)} style={linkKnopStijl}>+ Nieuwe opdrachtgever</button>
-                  <button type="button" onClick={() => klantId ? setNieuweCpOpen(true) : toast.error('Kies eerst een opdrachtgever.')} style={{ ...linkKnopStijl, opacity: klantId ? 1 : 0.5 }}>+ Nieuwe contactpersoon</button>
                 </div>
-                {contactpersoonNaam && (
-                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg)' }}>
-                    <span style={{ color: 'var(--fg-muted)' }}>Contactpersoon:</span>
-                    <span style={{ fontWeight: 600 }}>{contactpersoonNaam}</span>
-                    <button type="button" onClick={() => { setContactpersoonId(null); setContactpersoonNaam('') }} style={{ ...linkKnopStijl, color: 'var(--fg-muted)' }}>wissen</button>
-                  </div>
-                )}
               </div>
 
-              <Input label="Omschrijving *" waarde={titel} onChange={setTitel} placeholder="Korte omschrijving" />
+              <Input label="Omschrijving *" waarde={titel} onChange={setTitel} placeholder="bijv. Schilderwerk buitenzijde" />
             </Rij>
             <Rij>
+              {/* Contactpersoon-keuze binnen de gekozen opdrachtgever */}
+              <div>
+                <div style={labelStijl}>Contactpersoon</div>
+                <select
+                  value={contactpersoonId ?? ''}
+                  disabled={!klantId}
+                  onChange={e => {
+                    const id = e.target.value || null
+                    setContactpersoonId(id)
+                    setContactpersoonNaam(contactpersonenLijst.find(c => c.id === id)?.naam ?? '')
+                  }}
+                  style={{ ...inputStijl, marginTop: 4, opacity: klantId ? 1 : 0.6 }}
+                >
+                  <option value="">{klantId ? '— Selecteer —' : 'Kies eerst een opdrachtgever'}</option>
+                  {contactpersonenLijst.map(c => (
+                    <option key={c.id} value={c.id}>{c.naam}{c.functie ? ` — ${c.functie}` : ''}</option>
+                  ))}
+                </select>
+                <div style={{ marginTop: 6 }}>
+                  <button type="button" onClick={() => klantId ? setNieuweCpOpen(true) : toast.error('Kies eerst een opdrachtgever.')} style={{ ...linkKnopStijl, opacity: klantId ? 1 : 0.5 }}>+ Nieuwe contactpersoon</button>
+                </div>
+              </div>
               <Input
                 label="Werkmaatschappij *" waarde={werkmaatschappijId} onChange={setWerkmaatschappijId} type="select"
                 opties={[{ value: '', label: '— Selecteer —' }, ...werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))]}
               />
-              <Input
-                label="Categorie" waarde={categorieId} onChange={setCategorieId} type="select"
-                opties={[{ value: '', label: '— Selecteer —' }, ...catOpties.map(c => ({ value: String(c.id), label: c.name }))]}
-              />
             </Rij>
             <Rij>
+              <Input
+                label="Categorie *" waarde={categorieId} onChange={setCategorieId} type="select"
+                opties={[{ value: '', label: '— Selecteer —' }, ...catOpties.map(c => ({ value: String(c.id), label: c.name }))]}
+              />
               <Input label="Referentie" waarde={referentie} onChange={setReferentie} placeholder="Klantreferentie" />
-              <Input label="VvE-code" waarde={vveCode} onChange={setVveCode} placeholder="Bijv. VVE-1234" />
             </Rij>
             <Rij>
               <Input label="Aanvraagdatum" waarde={aanvraagdatum} onChange={setAanvraagdatum} type="date" />
               <Input label="Deadline" waarde={deadline} onChange={setDeadline} type="date" />
             </Rij>
+            <Rij>
+              <Input label="VvE-code" waarde={vveCode} onChange={setVveCode} placeholder="Bijv. VVE-1234" />
+            </Rij>
           </Groep>
 
           <Groep titel="Werkadres">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 10 }}>
-              <Input label="Postcode" waarde={postcode} onChange={setPostcode} placeholder="1234 AB" />
               <div>
-                <div style={labelStijl}>Huisnummer</div>
-                <input type="text" value={huisnummer} onChange={e => setHuisnummer(e.target.value)} placeholder="1 of 1-15" style={{ ...inputStijl, marginTop: 4 }} />
+                <div style={labelStijl}>Straat + huisnummer *</div>
+                <input type="text" value={straatHuisnr} onChange={e => setStraatHuisnr(e.target.value)} placeholder="bijv. Oude Delft 169A" style={{ ...inputStijl, marginTop: 4 }} />
                 {adresStatus === 'zoeken' && <div style={adresHintStijl('var(--fg-muted)')}>Adres controleren…</div>}
-                {adresStatus === 'gevonden' && <div style={adresHintStijl('var(--succes, #16a34a)')}>✓ Adres gevonden{isHuisnummerReeks(huisnummer) ? ' (gebouw met meerdere huisnummers)' : ''}</div>}
+                {adresStatus === 'gevonden' && <div style={adresHintStijl('var(--succes, #16a34a)')}>✓ Adres gevonden{isHuisnummerReeks(parsedAdres.huisnummer) ? ' (gebouw met meerdere huisnummers)' : ''}</div>}
                 {adresStatus === 'niet_gevonden' && <div style={adresHintStijl('var(--waarschuwing, #d97706)')}>⚠ Adres niet gevonden — controleer de gegevens</div>}
               </div>
+              <Input label="Postcode *" waarde={postcode} onChange={setPostcode} placeholder="1234 AB" />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-              <Input label="Straat" waarde={straat} onChange={setStraat} placeholder="Straatnaam" />
-              <Input label="Stad" waarde={stad} onChange={setStad} placeholder="Plaatsnaam" />
+              <Input label="Stad *" waarde={stad} onChange={setStad} placeholder="Plaatsnaam" />
+            </div>
+            <div style={{
+              marginTop: 12, padding: '9px 12px', borderRadius: 8,
+              background: 'var(--bg-active)', border: '1px solid var(--border)',
+              fontSize: 12, color: 'var(--fg)',
+            }}>
+              <span style={{ color: 'var(--fg-muted)' }}>Projectnaam (automatisch): </span>
+              <span style={{ fontWeight: 600 }}>{projectnaam || '—'}</span>
             </div>
           </Groep>
 
@@ -370,7 +462,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                 Klik of sleep bestanden hierheen
               </div>
               <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                PDF, Word, afbeeldingen — meerdere bestanden tegelijk
+                PDF, Word, afbeeldingen — worden opgeslagen in de SharePoint-dossiermap
               </div>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleFiles(e.target.files)} />
             </div>
@@ -388,8 +480,8 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                         <path d="M13 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7l-3-5z"/>
                         <path d="M13 2v5h5"/>
                       </svg>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)' }}>{b.naam}</span>
-                      <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{fmtSize(b.grootte)}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)' }}>{b.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{fmtSize(b.size)}</span>
                     </div>
                     <Button
                       variant="ghost"

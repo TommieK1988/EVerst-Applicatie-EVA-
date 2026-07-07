@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
 import {
@@ -882,8 +883,9 @@ export async function updateDossierRollen(
     calculator_id?: string | null
     uitvoerder_id?: string | null
     controller_id?: string | null
-  }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  },
+  opts?: { schrijfBouw7?: boolean }
+): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
 
@@ -891,6 +893,12 @@ export async function updateDossierRollen(
   const payload: Record<string, string | null> = {}
   for (const [k, v] of Object.entries(rollen)) {
     payload[k] = v === '' ? null : (v ?? null)
+  }
+  // Calculator ≡ Werkvoorbereider (Bouw7 workPlanner). Op de informatietab bestaat alleen nog de
+  // rol "Calculator"; houd beide kolommen gelijk zodat taak-triggers op `werkvoorbereider` én de
+  // Bouw7-round-trip (workPlanner) consistent blijven.
+  if ('calculator_id' in payload && !('werkvoorbereider_id' in rollen)) {
+    payload.werkvoorbereider_id = payload.calculator_id
   }
 
   const { error } = await supabase
@@ -903,10 +911,80 @@ export async function updateDossierRollen(
   // Rol-velden zijn gevolgde triggervelden (rol_toegewezen); evalueer direct.
   await verwerkDossierTriggers(id).catch(() => {})
 
+  // Terugschrijven naar Bouw7 (best-effort; faalt nooit de EVA-update).
+  let bouw7: Bouw7WriteResult | undefined
+  if (opts?.schrijfBouw7) {
+    bouw7 = await schrijfDossierRollenNaarBouw7(supabase, id, payload)
+      .catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
+  }
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
-  return { ok: true }
+  return { ok: true, bouw7 }
+}
+
+/**
+ * Resolveert de EVA-rol-uuids naar Bouw7-employee-id's (+ controller-naam voor het custom attribute)
+ * en schrijft ze naar het gekoppelde Bouw7-project. Alleen rollen die in `payload` voorkomen worden
+ * meegenomen; een rol met waarde `null` maakt het Bouw7-veld leeg.
+ */
+async function schrijfDossierRollenNaarBouw7(
+  supabase: any,
+  dossierId: string,
+  payload: Record<string, string | null>,
+): Promise<Bouw7WriteResult> {
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('bouw7_id')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!dossier?.bouw7_id) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
+
+  // Verzamel de medewerker-uuids die we moeten opzoeken (projectleider / calculator / uitvoerder / controller).
+  const uuids = ['project_manager_id', 'calculator_id', 'uitvoerder_id', 'controller_id']
+    .map((k) => payload[k])
+    .filter((v): v is string => !!v)
+
+  const medMap = new Map<string, { bouw7_id: string | null; naam: string }>()
+  if (uuids.length) {
+    const { data: meds } = await supabase
+      .from('medewerkers')
+      .select('id, bouw7_id, voornaam, tussenvoegsel, achternaam')
+      .in('id', uuids)
+    for (const m of (meds ?? []) as any[]) {
+      medMap.set(m.id, {
+        bouw7_id: m.bouw7_id ?? null,
+        naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      })
+    }
+  }
+
+  // Vertaal een EVA-rol-uuid naar een Bouw7-employee-id.
+  //  - kolom niet in payload → `undefined` (niet wijzigen)
+  //  - waarde leeg          → `null` (leegmaken)
+  //  - waarde met bouw7_id  → nummer
+  //  - waarde zonder bouw7_id → `undefined` (kan niet gemapt worden → Bouw7 onaangeroerd laten)
+  const naarEmployeeId = (kolom: string): number | null | undefined => {
+    if (!(kolom in payload)) return undefined
+    const uuid = payload[kolom]
+    if (!uuid) return null
+    const b7 = medMap.get(uuid)?.bouw7_id
+    return b7 ? Number(b7) : undefined
+  }
+
+  const rollen: Bouw7RollenInput = {
+    projectLeaderId: naarEmployeeId('project_manager_id'),
+    workPlannerId:   naarEmployeeId('calculator_id'),
+    executorId:      naarEmployeeId('uitvoerder_id'),
+  }
+  // Controller → custom attribute (vrije tekst = naam; lege waarde maakt het veld leeg).
+  if ('controller_id' in payload) {
+    const uuid = payload.controller_id
+    rollen.controllerNaam = uuid ? (medMap.get(uuid)?.naam ?? '') : ''
+  }
+
+  return schrijfBouw7Rollen(dossier.bouw7_id, rollen)
 }
 
 /** Haal factuuradressen op voor een specifieke relatie (opdrachtgever). */
@@ -2137,6 +2215,9 @@ export async function updateDossierInfo(
     werkadres_stad?: string | null
     opdracht_referentie?: string | null
     werkmaatschappij_id?: string | null
+    aanvraagdatum?: string | null
+    deadline?: string | null
+    vve_code?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)

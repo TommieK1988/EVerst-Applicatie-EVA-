@@ -91,6 +91,9 @@ type FormValues = {
   opdracht_referentie: string
   factuuradres_id: string
   werkmaatschappij_id: string
+  aanvraagdatum: string
+  deadline: string
+  vve_code: string
 }
 
 const DEFAULT_CATEGORIEEN = ['Schilderwerk', 'Houtrotherstel', 'Stukadoorwerk', 'Gevelrenovatie', 'Binnenwerk', 'Overig']
@@ -635,6 +638,9 @@ export function InformatieTab({
     // Handmatige keuze wint; anders afgeleid uit dossiernummer/bouw7_filiaal.
     werkmaatschappij_id:     (dossier as any).werkmaatschappij_id
                                ?? leidWerkmaatschappijAf(dossier.dossiernummer, (dossier as any).bouw7_filiaal, werkmaatschappijen),
+    aanvraagdatum:           (dossier as any).aanvraagdatum ?? '',
+    deadline:                (dossier as any).deadline      ?? '',
+    vve_code:                (dossier as any).vve_code      ?? '',
   })
   const [opgeslagen, setOpgeslagen] = React.useState<FormValues>(form)
 
@@ -686,19 +692,23 @@ export function InformatieTab({
     } else if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
       updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
     }
-    // Rollen: voor Bouw7-dossiers alleen de EVA-eigen rollen (teamleider/controller) wegschrijven;
-    // de Bouw7-rollen blijven onaangeroerd.
-    updateDossierRollen(dossier.id, bouw7Vergrendeld ? {
-      teamleider_id:       form.teamleider_id       || null,
-      controller_id:       form.controller_id       || null,
-    } : {
-      project_manager_id:  form.projectleider_id   || null,
-      teamleider_id:       form.teamleider_id       || null,
-      werkvoorbereider_id: form.werkvoorbereider_id || null,
-      calculator_id:       form.calculator_id       || null,
-      uitvoerder_id:       form.uitvoerder_id       || null,
-      controller_id:       form.controller_id       || null,
-    }).catch(() => {})
+    // Rollen zijn nu volledig bewerkbaar en worden bij Bouw7-dossiers direct teruggeschreven naar Bouw7
+    // (projectleider→projectLeader, calculator→workPlanner, uitvoerder→executor, controller→custom attr
+    // "Eindverantwoordelijke offerte"). Teamleider is EVA-eigen. `calculator_id` wordt server-side naar
+    // `werkvoorbereider_id` gemirrord (Calculator ≡ Werkvoorbereider / Bouw7 workPlanner).
+    updateDossierRollen(dossier.id, {
+      project_manager_id:  form.projectleider_id  || null,
+      calculator_id:       form.calculator_id     || null,
+      uitvoerder_id:       form.uitvoerder_id     || null,
+      teamleider_id:       form.teamleider_id     || null,
+      controller_id:       form.controller_id     || null,
+    }, { schrijfBouw7: bouw7Vergrendeld })
+      .then(res => {
+        if (res.ok && res.bouw7 && !res.bouw7.ok) {
+          toast.error(`Rollen opgeslagen in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+        }
+      })
+      .catch(() => {})
     // Inhoudsvelden: EVA-eigen velden altijd; Bouw7-bron-velden alleen voor niet-Bouw7-dossiers.
     updateDossierInfo(dossier.id, {
       referentie:           form.referentie           || null,
@@ -708,6 +718,10 @@ export function InformatieTab({
       werkadres_email:      form.werkadres_email      || null,
       // Werkmaatschappij is een EVA-eigen classificatie → altijd bewerkbaar.
       werkmaatschappij_id:  form.werkmaatschappij_id  || null,
+      // Aanvraagdatum, deadline en VvE-code zijn EVA-eigen velden → altijd bewerkbaar.
+      aanvraagdatum:        form.aanvraagdatum        || null,
+      deadline:             form.deadline             || null,
+      vve_code:             form.vve_code             || null,
       ...(bouw7Vergrendeld ? {} : {
         categorie:            form.categorie            || null,
         contactpersoon_id:    form.contactpersoon_id    || null,
@@ -976,56 +990,31 @@ export function InformatieTab({
               <InfoVeld label="Opdrachtgever"  waarde={dossier.klant_naam} />
               <InfoVeld label="Projectnaam"    waarde={dossier.titel} />
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
+              <InfoVeld label="Aanvraagdatum" waarde={form.aanvraagdatum ? fmtDatum(form.aanvraagdatum) : null} />
               <InfoVeld
                 label="Deadline"
-                waarde={form.uiterlijkeIndiendatum || null}
-                urgentie={!!form.uiterlijkeIndiendatum && (new Date(form.uiterlijkeIndiendatum).getTime() - Date.now()) < 86_400_000 * 7}
+                waarde={form.deadline ? fmtDatum(form.deadline) : null}
+                urgentie={!!form.deadline && (new Date(form.deadline).getTime() - Date.now()) < 86_400_000 * 7}
               />
               <InfoVeld label="Begindatum" waarde={form.verwacht_startdatum ? fmtDatum(form.verwacht_startdatum) : null} />
               <InfoVeld label="Einddatum"  waarde={form.verwacht_einddatum  ? fmtDatum(form.verwacht_einddatum)  : null} />
               <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
               <InfoVeld label="Categorie" waarde={form.categorie || null} />
               <InfoVeld label="Referentie" waarde={form.referentie || null} />
+              <InfoVeld label="VvE-code" waarde={form.vve_code || null} />
               <InfoVeld label="Werkmaatschappij" waarde={werkmaatschappijNaam} />
               {sectie === 'opdracht' && (
                 <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
               )}
             </div>
 
-            {/* Rollen — altijd zichtbaar (lege rollen tonen "—"). */}
-            {!editMode && (
-              <>
-                <Separator className="my-3" />
-                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Rollen</p>
-                <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <InfoVeld label="Projectleider"    waarde={dossier.projectleider_naam} />
-                  <InfoVeld label="Werkvoorbereider" waarde={dossier.werkvoorbereider_naam} />
-                  <InfoVeld label="Uitvoerder"       waarde={dossier.uitvoerder_naam} />
-                  <InfoVeld label="Calculator"       waarde={dossier.calculator_naam} />
-                  <InfoVeld label="Teamleider"       waarde={dossier.teamleider_naam} />
-                  <InfoVeld label="Controller"       waarde={dossier.controller_naam} />
-                </div>
-              </>
-            )}
-
-            {!editMode && (
-              <>
-                <Separator className="my-3" />
-                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Werkadres</p>
-                <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
-                  <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
-                  <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
-                </div>
-              </>
-            )}
-
             {editMode && (
               <div className="mt-4">
                 {bouw7Vergrendeld && (
                   <p className="mb-3 rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
-                    Velden uit Bouw7 zijn alleen-lezen en worden in Bouw7 beheerd. EVA-eigen velden
-                    (teamleider, controller, werkadres-contact, referenties, datums, interne opmerkingen) blijven bewerkbaar.
+                    Overige velden uit Bouw7 zijn alleen-lezen en worden in Bouw7 beheerd. Rollen worden
+                    bij opslaan direct in Bouw7 bijgewerkt; EVA-eigen velden (referenties, datums,
+                    werkadres-contact, interne opmerkingen) blijven bewerkbaar.
                   </p>
                 )}
                 <FormSection title="Identificatie">
@@ -1060,6 +1049,9 @@ export function InformatieTab({
                         placeholder="— Kies werkmaatschappij —"
                       />
                     </FormField>
+                    <FormField upper label="VvE-code">
+                      <Input value={form.vve_code} onChange={e => set('vve_code')(e.target.value)} placeholder="bijv. VVE-1234" />
+                    </FormField>
                     {sectie === 'opdracht' && (
                       <FormField upper label="Opdracht referentie">
                         <Input value={form.opdracht_referentie} onChange={e => set('opdracht_referentie')(e.target.value)} placeholder="Referentie opdrachtgever" />
@@ -1070,6 +1062,18 @@ export function InformatieTab({
 
                 <FormSection title="Datums">
                   <FormRow cols="2">
+                    <FormField upper label="Aanvraagdatum">
+                      <DatePicker
+                        value={form.aanvraagdatum ? new Date(form.aanvraagdatum) : undefined}
+                        onChange={d => set('aanvraagdatum')(d ? d.toISOString().slice(0, 10) : '')}
+                      />
+                    </FormField>
+                    <FormField upper label="Deadline">
+                      <DatePicker
+                        value={form.deadline ? new Date(form.deadline) : undefined}
+                        onChange={d => set('deadline')(d ? d.toISOString().slice(0, 10) : '')}
+                      />
+                    </FormField>
                     {(sectie === 'offerte' || sectie === 'opdracht') && (
                       <FormField upper label="Datum offerte verzonden">
                         <DatePicker
@@ -1117,76 +1121,6 @@ export function InformatieTab({
                     )}
                   </FormRow>
                 </FormSection>
-
-                <FormSection title="Rollen">
-                  <FormRow cols="2">
-                    {bouw7Vergrendeld ? (
-                      <>
-                        <InfoVeld label="Projectleider"    waarde={dossier.projectleider_naam} />
-                        <InfoVeld label="Werkvoorbereider" waarde={dossier.werkvoorbereider_naam} />
-                        <InfoVeld label="Uitvoerder"       waarde={dossier.uitvoerder_naam} />
-                        <InfoVeld label="Calculator"       waarde={dossier.calculator_naam} />
-                      </>
-                    ) : (
-                      <>
-                        <FormField upper label="Projectleider">
-                          <RolSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
-                        </FormField>
-                        <FormField upper label="Werkvoorbereider">
-                          <RolSelect value={form.werkvoorbereider_id} onChange={set('werkvoorbereider_id')} options={medewerkersOpties} placeholder="Selecteer werkvoorbereider" />
-                        </FormField>
-                        <FormField upper label="Uitvoerder">
-                          <RolSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
-                        </FormField>
-                        {sectie === 'opdracht' && (
-                          <FormField upper label="Calculator">
-                            <RolSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
-                          </FormField>
-                        )}
-                      </>
-                    )}
-                    {/* Teamleider & Controller zijn EVA-eigen → altijd bewerkbaar. */}
-                    <FormField upper label="Teamleider">
-                      <RolSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
-                    </FormField>
-                    <FormField upper label="Controller">
-                      <RolSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
-                    </FormField>
-                  </FormRow>
-                </FormSection>
-
-                <FormSection title="Werkadres">
-                  <FormRow cols="2">
-                    <FormField upper label="Naam" className="col-span-2">
-                      <Input value={form.werkadres_naam} onChange={e => set('werkadres_naam')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="Telefoon">
-                      <Input value={form.werkadres_telefoon} onChange={e => set('werkadres_telefoon')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="E-mail">
-                      <Input type="email" value={form.werkadres_email} onChange={e => set('werkadres_email')(e.target.value)} />
-                    </FormField>
-                    {bouw7Vergrendeld ? (
-                      <>
-                        <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
-                        <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
-                        <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
-                      </>
-                    ) : (
-                      <>
-                        <FormField upper label="Straat + nummer" className="col-span-2">
-                          <Input value={form.werkadres_straat} onChange={e => set('werkadres_straat')(e.target.value)} />
-                        </FormField>
-                        <FormField upper label="Postcode">
-                          <Input value={form.werkadres_postcode} onChange={e => set('werkadres_postcode')(e.target.value)} />
-                        </FormField>
-                        <FormField upper label="Stad">
-                          <Input value={form.werkadres_stad} onChange={e => set('werkadres_stad')(e.target.value)} />
-                        </FormField>
-                      </>
-                    )}
-                  </FormRow>
-                </FormSection>
               </div>
             )}
           </CardBody>
@@ -1204,8 +1138,89 @@ export function InformatieTab({
           />
         </div>
 
-        {/* Dossier-toggles */}
-        <DossierTogglesPaneel dossierId={dossier.id} />
+        {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): rollen worden bij opslaan
+            direct naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider" (workPlanner),
+            Controller → custom attribute "Eindverantwoordelijke offerte". */}
+        <Card>
+          <CardHeader>Rollen</CardHeader>
+          <CardBody>
+            {editMode ? (
+              <FormRow cols="2">
+                <FormField upper label="Projectleider">
+                  <RolSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
+                </FormField>
+                <FormField upper label="Calculator">
+                  <RolSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
+                </FormField>
+                <FormField upper label="Uitvoerder">
+                  <RolSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
+                </FormField>
+                <FormField upper label="Teamleider">
+                  <RolSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
+                </FormField>
+                <FormField upper label="Controller">
+                  <RolSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
+                </FormField>
+              </FormRow>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                <InfoVeld label="Projectleider" waarde={dossier.projectleider_naam} />
+                <InfoVeld label="Calculator"    waarde={dossier.calculator_naam} />
+                <InfoVeld label="Uitvoerder"    waarde={dossier.uitvoerder_naam} />
+                <InfoVeld label="Teamleider"    waarde={dossier.teamleider_naam} />
+                <InfoVeld label="Controller"    waarde={dossier.controller_naam} />
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        {/* Werkadres — eigen blok, alle velden zichtbaar. */}
+        <Card>
+          <CardHeader>Werkadres</CardHeader>
+          <CardBody>
+            {editMode ? (
+              <FormRow cols="2">
+                <FormField upper label="Naam" className="col-span-2">
+                  <Input value={form.werkadres_naam} onChange={e => set('werkadres_naam')(e.target.value)} />
+                </FormField>
+                <FormField upper label="Telefoon">
+                  <Input value={form.werkadres_telefoon} onChange={e => set('werkadres_telefoon')(e.target.value)} />
+                </FormField>
+                <FormField upper label="E-mail">
+                  <Input type="email" value={form.werkadres_email} onChange={e => set('werkadres_email')(e.target.value)} />
+                </FormField>
+                {bouw7Vergrendeld ? (
+                  <>
+                    <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
+                    <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
+                    <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
+                  </>
+                ) : (
+                  <>
+                    <FormField upper label="Straat + nummer" className="col-span-2">
+                      <Input value={form.werkadres_straat} onChange={e => set('werkadres_straat')(e.target.value)} />
+                    </FormField>
+                    <FormField upper label="Postcode">
+                      <Input value={form.werkadres_postcode} onChange={e => set('werkadres_postcode')(e.target.value)} />
+                    </FormField>
+                    <FormField upper label="Stad">
+                      <Input value={form.werkadres_stad} onChange={e => set('werkadres_stad')(e.target.value)} />
+                    </FormField>
+                  </>
+                )}
+              </FormRow>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                <div className="col-span-2"><InfoVeld label="Naam" waarde={form.werkadres_naam || null} /></div>
+                <InfoVeld label="Telefoon" waarde={form.werkadres_telefoon || null} mono />
+                <InfoVeld label="E-mail"   waarde={form.werkadres_email    || null} />
+                <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
+                <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
+                <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
+              </div>
+            )}
+          </CardBody>
+        </Card>
 
         {/* Opdrachtgever */}
         <Card>
@@ -1308,6 +1323,9 @@ export function InformatieTab({
             )}
           </CardBody>
         </Card>
+
+        {/* Dossier-toggles */}
+        <DossierTogglesPaneel dossierId={dossier.id} />
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (

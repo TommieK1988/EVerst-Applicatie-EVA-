@@ -1,11 +1,13 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
+import { appGraphFetch } from '@/lib/o365/graph'
 import {
   matchDossierFolder,
   listFolderChildren,
   resolveShareLink,
   resolveDriveContext,
+  type DriveContext,
   type SharePointBestand,
   type MatchStatus,
 } from '@/lib/o365/sharepoint'
@@ -165,5 +167,120 @@ export async function koppelDossierMapViaLink(dossierId: string, shareLink: stri
     return { geconfigureerd: true, status: 'gematcht', mapUrl: m.webUrl ?? null, bestanden, fout: null }
   } catch (err) {
     return { geconfigureerd: true, status: 'gematcht', mapUrl: m.webUrl ?? null, bestanden: [], fout: netteFout(err) }
+  }
+}
+
+/* ─── Upload (bestanden meegestuurd bij een nieuwe aanvraag) ─────────────── */
+
+export type UploadResultaat = { ok: boolean; geuploaded: number; mapUrl?: string | null; fout?: string }
+
+/** Container-pad ('root' of 'items/{id}') → Graph children-endpoint. */
+function childrenPad(ctx: DriveContext): string {
+  return ctx.containerPath === 'root'
+    ? `/drives/${ctx.driveId}/root/children`
+    : `/drives/${ctx.driveId}/${ctx.containerPath}/children`
+}
+
+/**
+ * Bepaalt de dossiermap: bestaande cache → autonome match → anders **aanmaken**.
+ * Een gloednieuwe aanvraag heeft nog geen map; die maken we hier aan met een naam die
+ * begint met het dossiernummer, zodat de autonome match hem later terugvindt.
+ */
+async function bepaalOfMaakDossierMap(
+  ctx: DriveContext,
+  d: DossierRij,
+): Promise<{ driveId: string; itemId: string; webUrl: string | null }> {
+  const matchInput = {
+    dossiernummer: d.dossiernummer,
+    bouw7Id: d.bouw7_id != null ? String(d.bouw7_id) : null,
+    titel: d.titel,
+  }
+  const m = await matchDossierFolder(matchInput, ctx)
+  if (m.status === 'gematcht' && m.driveId && m.itemId) {
+    return { driveId: m.driveId, itemId: m.itemId, webUrl: m.webUrl ?? null }
+  }
+
+  // Niet gevonden → map aanmaken onder de container.
+  const naam = ([d.dossiernummer, d.titel].filter(Boolean).join(' ').trim()) || `Dossier ${d.dossiernummer ?? ''}`.trim()
+  const res = await appGraphFetch(childrenPad(ctx), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: naam, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
+  })
+  if (res.status === 409) {
+    // Bestaat toch al → opnieuw matchen.
+    const m2 = await matchDossierFolder(matchInput, ctx)
+    if (m2.status === 'gematcht' && m2.driveId && m2.itemId) {
+      return { driveId: m2.driveId, itemId: m2.itemId, webUrl: m2.webUrl ?? null }
+    }
+  }
+  if (!res.ok) throw new Error(`Kon SharePoint-map niet aanmaken (${res.status}): ${await res.text().catch(() => '')}`)
+  const item = (await res.json()) as { id: string; webUrl?: string }
+  return { driveId: ctx.driveId, itemId: item.id, webUrl: item.webUrl ?? null }
+}
+
+/**
+ * Upload de meegestuurde bestanden van een (nieuwe) aanvraag naar de SharePoint-dossiermap.
+ * Bestaat de map nog niet, dan wordt hij aangemaakt. Gooit nooit — geeft per saldo een
+ * `fout`-melding terug zodat de UI het kan tonen zonder de aanvraag te blokkeren.
+ */
+export async function uploadDossierBestandenNaarSharePoint(dossierId: string, formData: FormData): Promise<UploadResultaat> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return { ok: false, geuploaded: 0, fout: 'SharePoint niet geconfigureerd (O365_DOSSIER_DRIVE_ID).' }
+
+  const files = formData.getAll('bestanden').filter((f): f is File => f instanceof File)
+  if (files.length === 0) return { ok: true, geuploaded: 0 }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+    const { data: dossier } = await supabase.from('dossiers').select(SELECT).eq('id', dossierId).single()
+    const d = dossier as DossierRij | null
+    if (!d) return { ok: false, geuploaded: 0, fout: 'Dossier niet gevonden.' }
+
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return { ok: false, geuploaded: 0, fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden naar een drive/map.' }
+
+    // Map bepalen (of aanmaken) en cachen op het dossier.
+    let driveId = d.sharepoint_drive_id
+    let itemId = d.sharepoint_item_id
+    let mapUrl = d.sharepoint_web_url
+    if (!(d.sharepoint_match_status === 'gematcht' && driveId && itemId)) {
+      const map = await bepaalOfMaakDossierMap(ctx, d)
+      driveId = map.driveId; itemId = map.itemId; mapUrl = map.webUrl
+      await supabase.from('dossiers').update({
+        sharepoint_drive_id: driveId,
+        sharepoint_item_id: itemId,
+        sharepoint_web_url: mapUrl,
+        sharepoint_match_status: 'gematcht',
+      }).eq('id', dossierId)
+    }
+
+    // Bestanden uploaden (simple upload; geschikt voor gangbare offerte-/foto-bestanden).
+    let geuploaded = 0
+    const fouten: string[] = []
+    for (const f of files) {
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer())
+        const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}:/${encodeURIComponent(f.name)}:/content`, {
+          method: 'PUT',
+          headers: { 'Content-Type': f.type || 'application/octet-stream' },
+          body: bytes,
+        })
+        if (res.ok) geuploaded++
+        else fouten.push(`${f.name} (${res.status})`)
+      } catch (e) {
+        fouten.push(`${f.name}: ${netteFout(e)}`)
+      }
+    }
+
+    return {
+      ok: fouten.length === 0,
+      geuploaded,
+      mapUrl,
+      fout: fouten.length ? `Niet geüpload: ${fouten.join(', ')}` : undefined,
+    }
+  } catch (err) {
+    return { ok: false, geuploaded: 0, fout: netteFout(err) }
   }
 }

@@ -1414,11 +1414,13 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         uitvoerder_id:            p.executor?.id
                                     ? (medewerkerMap.get(String(p.executor.id)) ?? null)
                                     : null,
-        calculator_id:            quote?.employee?.id
-                                    ? (medewerkerMap.get(String(quote.employee.id)) ?? null)
-                                    : p.projectLeader?.id
-                                      ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null)
-                                      : null,
+        // Calculator ≡ Werkvoorbereider (Bouw7 workPlanner): op de informatietab is de calculator-rol
+        // gelijkgetrokken met werkvoorbereider en wordt hij naar Bouw7 `workPlanner` teruggeschreven.
+        // Daarom leest calculator_id óók van workPlanner (mirror van werkvoorbereider_id), zodat de
+        // rol round-trip't. Fallback: bestaande (handmatig gezette) waarde.
+        calculator_id:            p.workPlanner?.id
+                                    ? (medewerkerMap.get(String(p.workPlanner.id)) ?? null)
+                                    : (existing?.calculator_id ?? null),
         contactpersoon_id:        (() => {
                                     // Voorkeur: de contactpersoon die direct op het Bouw7-project staat.
                                     if (p.contactPerson?.id) {
