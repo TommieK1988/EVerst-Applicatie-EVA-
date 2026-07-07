@@ -31,26 +31,37 @@ export type Bouw7RollenInput = {
   controllerNaam?: string | undefined
 }
 
-/** Normaliseer een Bouw7-respons naar een array (envelope `{items}` of kale array). */
-function toItems<T>(res: unknown): T[] {
-  if (Array.isArray(res)) return res as T[]
-  const items = (res as { items?: unknown })?.items
-  return Array.isArray(items) ? (items as T[]) : []
+/** Custom-attribuutwaarde zoals die op een Bouw7-project meekomt (GET /project/{id}). */
+type Bouw7CustomAttrValue = {
+  id?: number
+  customAttribute?: { id: number; name?: string; code?: string }
+  value?: string | null
 }
 
+/** Herkent het custom attribute "Eindverantwoordelijke offerte" op naam of code. */
+const isEindverantwoordelijke = (c?: { name?: string; code?: string }): boolean =>
+  /eindverantwoordelijke/i.test(c?.name ?? '') || /eindverantwoordelijke/i.test(c?.code ?? '')
+
 /**
- * Bepaal de id van het custom attribute "Eindverantwoordelijke offerte" (`caEindverantwoordelijkeOfferte`).
- * Gematcht op naam/code — het exacte schema staat niet vast, dus best-effort.
+ * Bouw de terug te schrijven `customAttributeValues[]` op basis van de bestaande waarden op het project
+ * (read-modify-write). Het custom attribute "Eindverantwoordelijke offerte" krijgt de controller-naam;
+ * alle andere maatwerkvelden (bv. VvE-code) blijven ongewijzigd behouden.
+ *
+ * De attribuut-definitie is niet los op te vragen (`GET /organization/custom-attributes` bestaat niet —
+ * die route is POST-only), dus het attribuut-id komt uit het project zelf. Staat het attribuut niet op
+ * het project, dan retourneren we `null` en wordt de controller-waarde (best-effort) overgeslagen.
  */
-async function resolveEindverantwoordelijkeAttrId(
-  client: Awaited<ReturnType<typeof getBouw7Client>>,
-): Promise<number | null> {
-  const res = await client.get<unknown>('/organization/custom-attributes')
-  const attrs = toItems<{ id: number; name?: string; code?: string }>(res)
-  const attr = attrs.find(
-    (a) => /eindverantwoordelijke/i.test(a.name ?? '') || /eindverantwoordelijke/i.test(a.code ?? ''),
-  )
-  return attr?.id ?? null
+function bouwCustomAttributeValues(
+  bestaand: Bouw7CustomAttrValue[],
+  controllerNaam: string,
+): { customAttribute: { id: number }; value: string }[] | null {
+  if (!bestaand.some((v) => isEindverantwoordelijke(v.customAttribute))) return null
+  return bestaand
+    .filter((v) => v.customAttribute?.id != null)
+    .map((v) => ({
+      customAttribute: { id: v.customAttribute!.id },
+      value: isEindverantwoordelijke(v.customAttribute) ? controllerNaam : (v.value ?? ''),
+    }))
 }
 
 /**
@@ -65,9 +76,12 @@ export async function schrijfBouw7Rollen(
   try {
     const client = await getBouw7Client()
 
-    // Read-modify-write: huidig project ophalen voor het verplichte `type`.
-    const project = await client.get<Bouw7Project & { type?: number }>(`/project/${bouw7Id}`)
-    const type = (project as { type?: number }).type
+    // Read-modify-write: huidig project ophalen voor het verplichte `type` én de bestaande maatwerkvelden.
+    const project = await client.get<Bouw7Project & {
+      type?: number
+      customAttributeValues?: Bouw7CustomAttrValue[]
+    }>(`/project/${bouw7Id}`)
+    const type = project.type
     if (type == null) return { ok: false, error: 'Bouw7-projecttype onbekend; rollen niet teruggeschreven.' }
 
     const body: Record<string, unknown> = { id: Number(bouw7Id), type }
@@ -76,11 +90,12 @@ export async function schrijfBouw7Rollen(
     if (rollen.executorId !== undefined)      body.executor      = rollen.executorId      != null ? { id: rollen.executorId }      : null
 
     // Controller → custom attribute "Eindverantwoordelijke offerte" (vrije tekst = medewerkersnaam).
+    // Faalt nooit de rest van de rol-write: kan het attribuut-id niet uit het project worden gehaald,
+    // dan slaan we alléén dit veld over.
     if (rollen.controllerNaam !== undefined) {
-      const attrId = await resolveEindverantwoordelijkeAttrId(client)
-      if (attrId != null) {
-        body.customAttributeValues = [{ customAttribute: { id: attrId }, value: rollen.controllerNaam }]
-      }
+      const bestaand = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
+      const cav = bouwCustomAttributeValues(bestaand, rollen.controllerNaam)
+      if (cav) body.customAttributeValues = cav
     }
 
     // Niets te schrijven behalve id/type → geen call nodig.
