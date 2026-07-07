@@ -1076,6 +1076,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // Dit is een goedkope lijst-call en gebeurt vóór de fingerprint-bepaling, want de offerte-velden
     // bepalen mede of een dossier is gewijzigd.
     let quotationMap = new Map<string, Bouw7Quotation>()
+    // Aggregaat per project van offertes met status "Verstuurd" (aantal + som subtotaal excl. btw).
+    // Een project kan meerdere verstuurde offertes hebben; de kanban-kaart toont dan een indicator
+    // + het totaalbedrag i.p.v. alleen het bedrag van de laatst opgestelde offerte.
+    const verstuurdAggMap = new Map<string, { aantal: number; somExcl: number }>()
     let quotationLogInfo = 'niet opgehaald'
     try {
       const quotations = await fetchAllPages<Bouw7Quotation>(bouw7, '/list/quotations')
@@ -1089,6 +1093,13 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         if (!existing || (q.quotationDate ?? '') >= (existing.quotationDate ?? '')) {
           quotationMap.set(key, q)
           mapped++
+        }
+        // Verstuurd-aggregaat: tel elke offerte met status "Verstuurd" mee.
+        if ((q.quotationStatus?.name ?? '').toLowerCase().includes('verstuurd')) {
+          const agg = verstuurdAggMap.get(key) ?? { aantal: 0, somExcl: 0 }
+          agg.aantal += 1
+          agg.somExcl += Number(q.subtotal ?? 0) || 0
+          verstuurdAggMap.set(key, agg)
         }
       }
       quotationLogInfo = `${quotations.length} opgehaald, ${mapped} gekoppeld`
@@ -1128,6 +1139,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         price:     p.fixedPrice ?? null,
         ctrl:      p.caEindverantwoordelijkeOfferte ?? null,
         q:         q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
+        vst:       verstuurdAggMap.get(key) ? { n: verstuurdAggMap.get(key)!.aantal, s: Math.round(verstuurdAggMap.get(key)!.somExcl * 100) } : null,
       })
       hashMap.set(key, fp)
       const existing = dossierMap.get(key)
@@ -1439,6 +1451,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         bedrag_incl_btw:          verkoopIncl,
         kostprijs_excl_btw:       kostprijs,
         btw_splitsing:            btwSplitsing,
+        offerte_verstuurd_aantal:       verstuurdAggMap.get(bouw7IdStr)?.aantal ?? 0,
+        offerte_verstuurd_som_excl_btw: verstuurdAggMap.get(bouw7IdStr)
+                                          ? Math.round(verstuurdAggMap.get(bouw7IdStr)!.somExcl * 100) / 100
+                                          : null,
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,
         bouw7_aanmaakdatum:       p.createdAt ?? null,

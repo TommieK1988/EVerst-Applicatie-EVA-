@@ -43,10 +43,19 @@ export function DossierKaart({
   const persoonsKleur = persoonsDbKleur ?? (persoonsNaam ? crewKleur(crewInitialen(persoonsNaam)) : 'var(--neutral-300)')
   const persoonsInit  = persoonsNaam ? crewInitialen(persoonsNaam) : ''
 
+  // Meerdere offertes op status "Verstuurd": toon een indicator + de som (excl. btw) van álle
+  // verstuurde offertes i.p.v. automatisch het bedrag van de laatst opgestelde offerte.
+  const verstuurdAantal = dossier.offerte_verstuurd_aantal ?? 0
+  const verstuurdSom     = dossier.offerte_verstuurd_som_excl_btw ?? null
+  const meerdereVerstuurd = sectie === 'offerte' && verstuurdAantal > 1 && verstuurdSom != null
+
   // Kostprijs + opslag voor offertes
   const verkoopprijs = dossier.bedrag_excl_btw
   const kostprijs    = dossier.kostprijs_excl_btw
-  const toonFinancieel = sectie === 'offerte'
+  // Weer te geven bedrag: bij meerdere verstuurde offertes de som, anders de (laatste) offerteprijs.
+  const toonBedrag   = meerdereVerstuurd ? verstuurdSom! : verkoopprijs
+  // Opslag alleen tonen bij één offerte — de som vs. één kostprijs zou een misleidend % geven.
+  const toonFinancieel = sectie === 'offerte' && !meerdereVerstuurd
     && kostprijs != null && kostprijs > 0
     && verkoopprijs != null && verkoopprijs > 0
   const opslagPct = toonFinancieel
@@ -122,13 +131,30 @@ export function DossierKaart({
             </a>
           )}
         </div>
-        {verkoopprijs != null && verkoopprijs > 0 && (
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            {formatBedrag(verkoopprijs)}
-          </span>
+        {toonBedrag != null && toonBedrag > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            {meerdereVerstuurd && (
+              <span
+                title={`${verstuurdAantal} offertes op status Verstuurd — totaal excl. btw`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  padding: '1px 6px', borderRadius: 999,
+                  fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+                  color: 'var(--primary-700, #1d4ed8)',
+                  background: 'var(--primary-50, #eff6ff)',
+                  border: '1px solid var(--primary-200, #bfdbfe)',
+                }}
+              >
+                {verstuurdAantal}× verstuurd
+              </span>
+            )}
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              color: 'var(--neutral-800)', whiteSpace: 'nowrap',
+            }}>
+              {formatBedrag(toonBedrag)}
+            </span>
+          </div>
         )}
       </div>
 

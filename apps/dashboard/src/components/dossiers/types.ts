@@ -35,6 +35,10 @@ export type DossierRij = Dossier & {
   bouw7_uren_overschrijding?:    boolean | null
   /** Werkbegroting is geaccordeerd geweest maar bevat nu niet-geaccordeerde wijzigingen (WB!-badge). */
   wb_ongeaccordeerde_wijzigingen?: boolean | null
+  /** Aantal Bouw7-offertes met status "Verstuurd" (sync). >1 → indicator + som op de offerte-kaart. */
+  offerte_verstuurd_aantal?: number | null
+  /** Som van de subtotalen (excl. btw) van alle offertes met status "Verstuurd". */
+  offerte_verstuurd_som_excl_btw?: number | null
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
   intern: boolean
 }
