@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/everts-calc/shared/PageHeader'
 import {
-  Save, RefreshCw, Plus, X, FileText, ChevronRight, Calculator, Package,
+  Save, Plus, X, FileText, ChevronRight, Calculator, Package,
 } from 'lucide-react'
-import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-store'
+import { getInstellingen, slaInstellingenOp, hydrateInstellingen } from '@/lib/everts-calc/local-store'
+import { getCalcInstellingen } from '@/app/(platform)/everts-calc/actions/calc-instellingen'
+import type { EenheidConfig } from '@/lib/everts-calc/types'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
 import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
 import MateriaalgroepenBeheer from '@/components/everts-calc/bibliotheek/MateriaalgroepenBeheer'
@@ -41,14 +43,6 @@ type TabKey = 'calculatie' | 'offerte' | 'materialen'
 
 export default function Instellingen() {
   const [activeTab, setActiveTab] = useState<TabKey>('calculatie')
-
-  const resetData = () => {
-    if (typeof window === 'undefined') return
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('evc_'))
-    keys.forEach(k => localStorage.removeItem(k))
-    toast.success('Data gereset naar demo-stand')
-    setTimeout(() => window.location.reload(), 500)
-  }
 
   const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: 'calculatie', label: 'Calculatie',          icon: Calculator },
@@ -91,17 +85,6 @@ export default function Instellingen() {
         </div>
       )}
 
-      {/* Reset */}
-      <div className="flex justify-start pt-2 border-t border-slate-100">
-        <button
-          onClick={resetData}
-          className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-red-500 transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Demo data herladen
-        </button>
-      </div>
-
       {/* Over */}
       <div className="bg-everts-dark rounded-xl p-5 text-center">
         <img src="/logo-wit.svg" alt="Everts Groep" className="h-8 mx-auto mb-3" />
@@ -121,9 +104,8 @@ export default function Instellingen() {
 function CalculatieTab() {
   const inst = getInstellingen()
 
-  const [opslagen, setOpslagen] = useState({ ak: 8, wr: 10, overhead: 0 })
-  const [eenheden, setEenheden] = useState<string[]>(
-    () => inst.eenheden ?? ['m²', 'm¹', 'st', 'uur', 'dag', 'm³', 'ltr', 'kg', 'set']
+  const [eenheden, setEenheden] = useState<EenheidConfig[]>(
+    () => inst.eenheden ?? []
   )
   const [categorieen, setCategorieen] = useState<string[]>(
     () => inst.categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
@@ -131,19 +113,39 @@ function CalculatieTab() {
   const [kolomNamen, setKolomNamen] = useState<Record<string, string>>(
     () => (inst.kolom_namen ?? {}) as Record<string, string>
   )
-  const [nieuwEenheid,      setNieuwEenheid]      = useState('')
+  const [nieuwEenheidAfk,   setNieuwEenheidAfk]   = useState('')
+  const [nieuwEenheidOms,   setNieuwEenheidOms]   = useState('')
   const [nieuwCategorie,    setNieuwCategorie]    = useState('')
   const [kostengroepen,     setKostengroepen]     = useState<string[]>(
     () => inst.standaard_kostengroepen ?? ['Bouwplaats', 'Bereikbaarheid', 'Arbeid', 'Materieel', 'Onderaanneming']
   )
   const [nieuwKostengroep,  setNieuwKostengroep]  = useState('')
 
+  // De editor moet de authoritative Supabase-stand tonen. De synchrone init hierboven
+  // gebruikt de localStorage-cache voor een snelle eerste render; deze effect herlaadt
+  // uit Supabase zodra beschikbaar (voorkomt dat verse apparaten defaults overschrijven).
+  useEffect(() => {
+    let actief = true
+    getCalcInstellingen()
+      .then(data => {
+        if (!actief) return
+        hydrateInstellingen(data)
+        const fresh = getInstellingen()
+        setEenheden(fresh.eenheden ?? [])
+        setCategorieen(fresh.categorieen ?? [])
+        setKolomNamen((fresh.kolom_namen ?? {}) as Record<string, string>)
+        setKostengroepen(fresh.standaard_kostengroepen ?? [])
+      })
+      .catch(() => { /* offline: cache-init blijft staan */ })
+    return () => { actief = false }
+  }, [])
+
   const opslaan = () => {
     const schoonKolomNamen = Object.fromEntries(
       Object.entries(kolomNamen).filter(([, v]) => v.trim() !== '')
     )
     slaInstellingenOp({
-      ...inst,
+      ...getInstellingen(),   // verse basis (btw, uurtarieven, categorieCodes)
       kolom_namen: schoonKolomNamen,
       eenheden,
       categorieen,
@@ -167,93 +169,86 @@ function CalculatieTab() {
         </p>
       </div>
 
-      {/* Standaard opslagen */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-800 mb-1">Standaard opslagen (nieuwe projecten)</h3>
-        <p className="text-xs text-slate-400 mb-4">
-          Deze opslagen worden gebruikt als standaard bij het aanmaken van een nieuw project.
-        </p>
-        <div className="space-y-3">
-          {([
-            { key: 'ak'       as const, label: 'Algemene kosten (AK)', help: 'Kantoorkosten, overhead, etc.' },
-            { key: 'wr'       as const, label: 'Winst & Risico (W&R)', help: 'Winstmarge + risicobuffer' },
-            { key: 'overhead' as const, label: 'Extra overhead',        help: 'Optioneel extra opslag' },
-          ]).map(({ key, label, help }) => (
-            <div key={key} className="flex items-center gap-3">
-              <div className="flex-1">
-                <div className="text-sm text-slate-700 font-medium">{label}</div>
-                <div className="text-xs text-slate-400">{help}</div>
-              </div>
-              <div className="relative w-28">
-                <input
-                  type="number" step="0.1" min="0" max="100"
-                  value={opslagen[key]}
-                  onChange={e => setOpslagen(o => ({ ...o, [key]: parseFloat(e.target.value) || 0 }))}
-                  className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-lg text-sm  text-right focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50 rounded-lg p-3">
-          <div className="text-xs text-slate-500 mb-2 font-medium">Preview verkoopprijs bij € 10.000 kostprijs:</div>
-          {(() => {
-            const kp = 10000
-            const na_ak = kp * (1 + opslagen.ak / 100)
-            const na_wr = na_ak * (1 + opslagen.wr / 100)
-            const vkp = na_wr * (1 + opslagen.overhead / 100)
-            const marge = ((vkp - kp) / vkp) * 100
-            return (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Kostprijs: <strong>€ 10.000</strong></span>
-                <span className="text-slate-400">→</span>
-                <span className="text-everts font-bold">Verkoop: € {vkp.toFixed(0)}</span>
-                <span className="text-slate-500">Marge: {marge.toFixed(1)}%</span>
-              </div>
-            )
-          })()}
-        </div>
-      </div>
-
       {/* Eenheden */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
         <h3 className="font-semibold text-slate-800 mb-1">Eenheden</h3>
         <p className="text-xs text-slate-400 mb-4">
-          Beschikbare eenheden voor recepten en het calculatiegrid.
+          Beschikbare eenheden voor recepten en het calculatiegrid. Elke eenheid heeft een korte
+          afkorting (getoond in het grid) en een volledige omschrijving. De afkortingen{' '}
+          <strong>STP</strong> en <strong>VRR</strong> zetten in het grid automatisch het vinkje{' '}
+          <em>Stelpost</em> resp. <em>Verrekenbaar</em> aan.
         </p>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {eenheden.map(e => (
-            <div key={e} className="inline-flex items-center gap-1 bg-slate-100 rounded-lg px-2.5 py-1">
-              <span className="text-sm  text-slate-700">{e}</span>
-              <button onClick={() => setEenheden(prev => prev.filter(x => x !== e))} className="text-slate-400 hover:text-red-500 transition-colors ml-0.5">
-                <X className="w-3 h-3" />
+
+        <div className="space-y-2 mb-3">
+          {eenheden.map((e, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={e.afkorting}
+                onChange={ev => {
+                  const v = ev.target.value
+                  setEenheden(prev => prev.map((x, j) => j === i ? { ...x, afkorting: v } : x))
+                }}
+                placeholder="Afk."
+                className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+              />
+              <input
+                type="text"
+                value={e.omschrijving}
+                onChange={ev => {
+                  const v = ev.target.value
+                  setEenheden(prev => prev.map((x, j) => j === i ? { ...x, omschrijving: v } : x))
+                }}
+                placeholder="Volledige omschrijving"
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+              />
+              <button
+                onClick={() => setEenheden(prev => prev.filter((_, j) => j !== i))}
+                className="text-slate-400 hover:text-red-500 transition-colors p-2"
+                title="Eenheid verwijderen"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           ))}
+          {eenheden.length === 0 && (
+            <span className="text-xs text-slate-400 italic">Nog geen eenheden aangemaakt</span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="text" value={nieuwEenheid}
-            onChange={e => setNieuwEenheid(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && nieuwEenheid.trim() && !eenheden.includes(nieuwEenheid.trim())) {
-                setEenheden(prev => [...prev, nieuwEenheid.trim()]); setNieuwEenheid('')
-              }
-            }}
-            placeholder="bijv. raam"
-            className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
-          />
-          <button
-            onClick={() => {
-              if (nieuwEenheid.trim() && !eenheden.includes(nieuwEenheid.trim())) {
-                setEenheden(prev => [...prev, nieuwEenheid.trim()]); setNieuwEenheid('')
-              }
-            }}
-            className="inline-flex items-center gap-1 text-sm text-everts hover:text-everts-dark border border-everts/30 hover:border-everts/60 px-3 py-2 rounded-lg transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Toevoegen
-          </button>
+
+        <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+          {(() => {
+            const voegToe = () => {
+              const afk = nieuwEenheidAfk.trim()
+              if (!afk || eenheden.some(x => x.afkorting.toLowerCase() === afk.toLowerCase())) return
+              setEenheden(prev => [...prev, { afkorting: afk, omschrijving: nieuwEenheidOms.trim() || afk }])
+              setNieuwEenheidAfk(''); setNieuwEenheidOms('')
+            }
+            return (
+              <>
+                <input
+                  type="text" value={nieuwEenheidAfk}
+                  onChange={e => setNieuwEenheidAfk(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') voegToe() }}
+                  placeholder="Afk. (bijv. raam)"
+                  className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                />
+                <input
+                  type="text" value={nieuwEenheidOms}
+                  onChange={e => setNieuwEenheidOms(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') voegToe() }}
+                  placeholder="Omschrijving (bijv. Per raam)"
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                />
+                <button
+                  onClick={voegToe}
+                  className="inline-flex items-center gap-1 text-sm text-everts hover:text-everts-dark border border-everts/30 hover:border-everts/60 px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Toevoegen
+                </button>
+              </>
+            )
+          })()}
         </div>
       </div>
 

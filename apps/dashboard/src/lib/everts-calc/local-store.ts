@@ -1,7 +1,7 @@
 import type {
   Project, Deelproject, Locatie, Element, Activiteit,
   CalculatieLijn, Scenario, BibliotheekActiviteit,
-  Groep, Calculatieregel, Componentregel, Instellingen,
+  Groep, Calculatieregel, Componentregel, Instellingen, EenheidConfig,
   Meetstaat, Meetregel, MeetregelAggregaat,
   Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent,
   WerkbegrotingWijziging, WerkbegrotingBestelling,
@@ -33,21 +33,57 @@ const KEYS = {
   meetregel_aggregaten: 'evc_meetregel_aggregaten',
 }
 
+// Standaard-eenheden met afkorting + volledige omschrijving.
+// 'STP' (Stelpost) en 'VRR' (Verrekenbaar) zetten automatisch het bijbehorende vinkje aan.
+const STANDAARD_EENHEDEN: EenheidConfig[] = [
+  { afkorting: 'm²',  omschrijving: 'Vierkante meter' },
+  { afkorting: 'm¹',  omschrijving: 'Strekkende meter' },
+  { afkorting: 'st',  omschrijving: 'Stuks' },
+  { afkorting: 'uur', omschrijving: 'Uur' },
+  { afkorting: 'dag', omschrijving: 'Dag' },
+  { afkorting: 'm³',  omschrijving: 'Kubieke meter' },
+  { afkorting: 'ltr', omschrijving: 'Liter' },
+  { afkorting: 'kg',  omschrijving: 'Kilogram' },
+  { afkorting: 'set', omschrijving: 'Set' },
+  { afkorting: 'STP', omschrijving: 'Stelpost' },
+  { afkorting: 'VRR', omschrijving: 'Verrekenbaar' },
+]
+
 const STANDAARD_INSTELLINGEN: Instellingen = {
   btw_tarieven: [0, 9, 21],
-  uurtarieven: [
-    { label: 'Schilder A',       tarief: 58 },
-    { label: 'Timmerman',        tarief: 62 },
-    { label: 'Metselaar',        tarief: 65 },
-    { label: 'Dakdekker',        tarief: 68 },
-    { label: 'Hulp / Assistent', tarief: 45 },
-  ],
-  eenheden: ['m²', 'm¹', 'st', 'uur', 'dag', 'm³', 'ltr', 'kg', 'set'],
+  // Uurtarieven komen uit EVA → Bedrijfsinstellingen → Planning (geen demo-data hier).
+  uurtarieven: [],
+  eenheden: STANDAARD_EENHEDEN,
   categorieen: ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig'],
   categorieCodes: {
     Schilderwerk: 'SC', Timmerwerk: 'TI', Metselwerk: 'ME',
     Dakwerk: 'DA', Voegwerk: 'VO', Overig: 'OV',
   },
+}
+
+/** Normaliseert eenheden: oude opslag was string[] → converteer naar EenheidConfig[]. */
+function normaliseerEenheden(raw: unknown): EenheidConfig[] {
+  if (!Array.isArray(raw)) return STANDAARD_EENHEDEN
+  const uit: EenheidConfig[] = []
+  for (const e of raw) {
+    if (typeof e === 'string') {
+      const s = e.trim()
+      if (s) uit.push({ afkorting: s, omschrijving: s })
+    } else if (e && typeof e === 'object' && typeof (e as EenheidConfig).afkorting === 'string') {
+      const c = e as EenheidConfig
+      uit.push({ afkorting: c.afkorting.trim(), omschrijving: (c.omschrijving ?? '').trim() || c.afkorting.trim() })
+    }
+  }
+  return uit.length ? uit : STANDAARD_EENHEDEN
+}
+
+/** Normaliseert een ruwe Instellingen (uit localStorage of Supabase). */
+function normaliseerInstellingen(raw: Partial<Instellingen> | null | undefined): Instellingen {
+  return {
+    ...STANDAARD_INSTELLINGEN,
+    ...(raw ?? {}),
+    eenheden: normaliseerEenheden(raw?.eenheden),
+  }
 }
 
 function lees<T>(key: string, fallback: T[]): T[] {
@@ -413,17 +449,45 @@ export function berekenScenarioKostprijsNieuw(scenario_id: string): number {
 
 // ─── Instellingen ─────────────────────────────────────────────────────────────
 
+// In-memory cache zodat getInstellingen() synchroon blijft. Bron van waarheid is
+// Supabase; localStorage is een offline-mirror. De cache wordt gevuld door
+// hydrateInstellingen() (bij opstart) en door slaInstellingenOp().
+let _instellingenCache: Instellingen | null = null
+
 export function getInstellingen(): Instellingen {
   if (typeof window === 'undefined') return STANDAARD_INSTELLINGEN
+  if (_instellingenCache) return _instellingenCache
   try {
     const raw = localStorage.getItem(KEYS.instellingen)
-    return raw ? { ...STANDAARD_INSTELLINGEN, ...JSON.parse(raw) } : STANDAARD_INSTELLINGEN
-  } catch { return STANDAARD_INSTELLINGEN }
+    _instellingenCache = normaliseerInstellingen(raw ? JSON.parse(raw) : null)
+  } catch {
+    _instellingenCache = STANDAARD_INSTELLINGEN
+  }
+  return _instellingenCache
+}
+
+/** Vul cache + localStorage met instellingen uit Supabase (aangeroepen bij opstart). */
+export function hydrateInstellingen(raw: Partial<Instellingen> | null): void {
+  if (typeof window === 'undefined') return
+  const inst = normaliseerInstellingen(raw)
+  _instellingenCache = inst
+  try { localStorage.setItem(KEYS.instellingen, JSON.stringify(inst)) } catch { /* quota */ }
+}
+
+// Optionele persist-callback (Supabase). Wordt gezet door de client-provider zodat
+// local-store geen directe afhankelijkheid op de server-action heeft.
+let _persist: ((inst: Instellingen) => Promise<void>) | null = null
+export function setInstellingenPersister(fn: (inst: Instellingen) => Promise<void>): void {
+  _persist = fn
 }
 
 export function slaInstellingenOp(inst: Instellingen): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(KEYS.instellingen, JSON.stringify(inst))
+  const genormaliseerd = normaliseerInstellingen(inst)
+  _instellingenCache = genormaliseerd
+  try { localStorage.setItem(KEYS.instellingen, JSON.stringify(genormaliseerd)) } catch { /* quota */ }
+  // Wegschrijven naar Supabase (fire-and-forget; localStorage-mirror blijft bij falen).
+  _persist?.(genormaliseerd).catch(() => { /* stil: mirror is al bijgewerkt */ })
 }
 
 // ─── Kostprijs berekening voor heel project ───────────────────────────────────

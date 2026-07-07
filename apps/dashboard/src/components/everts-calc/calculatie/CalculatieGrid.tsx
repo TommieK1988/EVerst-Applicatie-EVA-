@@ -17,8 +17,7 @@ import {
   berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal,
 } from '@/lib/everts-calc/calculations'
 import { nieuweId, cn } from '@/lib/everts-calc/utils'
-import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid } from '@/lib/everts-calc/types'
-import { EENHEDEN } from '@/lib/everts-calc/types'
+import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
@@ -154,7 +153,7 @@ function ComponentRegelRij({
 }: {
   comp: Componentregel
   uurtarieven: { label: string; tarief: number }[]
-  eenheden: string[]
+  eenheden: EenheidConfig[]
   colOrder: ColId[]
   indent: number
   regelHoeveelheid: number
@@ -284,7 +283,9 @@ function ComponentRegelRij({
               hover:bg-slate-50 hover:border hover:border-slate-200
               focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-600"
           >
-            {eenheden.filter(e => e !== 'Stelpost' && e !== 'Verrekenbaar').map(e => <option key={e} value={e}>{e}</option>)}
+            {eenheden
+              .filter(e => !['STP', 'VRR', 'Stelpost', 'Verrekenbaar'].includes(e.afkorting))
+              .map(e => <option key={e.afkorting} value={e.afkorting} title={e.omschrijving}>{e.afkorting}</option>)}
           </select>
         </td>
       )
@@ -578,7 +579,7 @@ interface RegelRijProps {
   colOrder: ColId[]
   btwTarieven: number[]
   uurtarieven: { label: string; tarief: number }[]
-  eenheden: string[]
+  eenheden: EenheidConfig[]
   scenarioId: string
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponent: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
@@ -880,14 +881,15 @@ function CalculatieregelRij({
               onChange={e => {
                 const eenh = e.target.value as Eenheid
                 const patch: Partial<Calculatieregel> = { eenheid: eenh }
-                patch.is_stelpost = eenh === 'Stelpost'
-                patch.is_verrekenbaar = eenh === 'Verrekenbaar'
+                // STP → Stelpost, VRR → Verrekenbaar (legacy volledige woorden blijven werken)
+                patch.is_stelpost = eenh === 'STP' || eenh === 'Stelpost'
+                patch.is_verrekenbaar = eenh === 'VRR' || eenh === 'Verrekenbaar'
                 onWijzig(regel.id, patch)
               }}
             >
-              {eenheden.map(e => <option key={e} value={e}>{e}</option>)}
+              {eenheden.map(e => <option key={e.afkorting} value={e.afkorting} title={e.omschrijving}>{e.afkorting}</option>)}
               {/* Toon huidige eenheid als die niet in de lijst staat */}
-              {!eenheden.includes(regel.eenheid) && (
+              {!eenheden.some(e => e.afkorting === regel.eenheid) && (
                 <option key={regel.eenheid} value={regel.eenheid}>{regel.eenheid}</option>
               )}
             </select>
@@ -1380,7 +1382,7 @@ interface GroepSectieProps {
   colOrder: ColId[]
   btwTarieven: number[]
   uurtarieven: { label: string; tarief: number }[]
-  eenheden: string[]
+  eenheden: EenheidConfig[]
   scenarioId: string
   onHerlaad: () => void
   onKlik: (id: string) => void
@@ -1721,7 +1723,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const btwTarieven  = _inst.btw_tarieven
   const kolomNamen   = (_inst.kolom_namen ?? {}) as Record<string, string>
   const uurtarieven  = _inst.uurtarieven ?? []
-  const eenheden     = _inst.eenheden ?? Array.from(EENHEDEN)
+  const eenheden     = _inst.eenheden ?? []
 
   // Kolom breedte + volgorde
   const [colWidths, setColWidths] = useState<Record<ColId, number>>(DEFAULT_WIDTHS)

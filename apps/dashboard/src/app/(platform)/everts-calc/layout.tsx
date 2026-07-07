@@ -1,3 +1,5 @@
+import InstellingenSync from '@/components/everts-calc/InstellingenSync'
+
 export default function EvertsCalcLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -10,6 +12,7 @@ export default function EvertsCalcLayout({ children }: { children: React.ReactNo
         '--ring':   '141 85% 26%',
       } as React.CSSProperties}
     >
+      <InstellingenSync />
       {children}
     </div>
   )

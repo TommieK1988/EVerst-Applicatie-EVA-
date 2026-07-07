@@ -38,8 +38,17 @@ export const HOUTROT_METHODES = {
   lamineren: 'Lamineren (glasvezel)',
 } as const
 
-export const EENHEDEN = ['m²', 'm¹', 'st', 'uur', 'dag', 'm³', 'ltr', 'kg', 'set', 'Stelpost', 'Verrekenbaar'] as const
-export type Eenheid = typeof EENHEDEN[number]
+export const EENHEDEN = ['m²', 'm¹', 'st', 'uur', 'dag', 'm³', 'ltr', 'kg', 'set', 'STP', 'VRR'] as const
+// Eenheid = de afkorting die op een calculatieregel wordt opgeslagen.
+// Vrije string zodat zelf toegevoegde eenheden ook toegestaan zijn.
+export type Eenheid = string
+
+// Configureerbare eenheid: korte afkorting (getoond in het grid) + volledige omschrijving.
+// De afkortingen 'STP' en 'VRR' zetten automatisch het Stelpost- resp. Verrekenbaar-vinkje aan.
+export interface EenheidConfig {
+  afkorting: string
+  omschrijving: string
+}
 
 // ─── Kern datamodellen ────────────────────────────────────────────────────────
 
@@ -231,7 +240,7 @@ export interface Instellingen {
   btw_tarieven: number[]                         // bijv. [0, 9, 21]
   kolom_namen?: Partial<Record<string, string>>  // ColId → aangepaste naam
   uurtarieven?: { label: string; tarief: number; is_favoriet?: boolean }[]
-  eenheden?: string[]                            // bijv. ['m²', 'm¹', 'st', ...]
+  eenheden?: EenheidConfig[]                     // afkorting + omschrijving; STP/VRR = auto-vinkje
   categorieen?: string[]                         // bijv. ['Schilderwerk', 'Timmerwerk', ...]
   categorieCodes?: Record<string, string>        // bijv. { 'Schilderwerk': 'SC', ... }
   standaard_kostengroepen?: string[]             // bijv. ['Bouwplaats', 'Bereikbaarheid', 'Arbeid']

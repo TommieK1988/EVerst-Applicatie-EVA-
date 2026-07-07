@@ -13,7 +13,7 @@ import { formatEuro } from '@/lib/everts-calc/calculations'
 import { getInstellingen } from '@/lib/everts-calc/local-store'
 import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { PaintItemMetNormen, LaborNorm, MaterialNorm } from '@/lib/everts-calc/services/bibliotheek'
-import type { Materiaal } from '@/lib/everts-calc/types'
+import type { Materiaal, EenheidConfig } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -22,7 +22,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
 } from '@/components/ui/dialog'
 
-const STANDAARD_EENHEDEN = ['m²', 'm¹', 'st', 'uur', 'dag', 'm³', 'ltr', 'kg', 'set']
 const STANDAARD_CATEGORIEEN = ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
 const STANDAARD_CATEGORIE_CODES: Record<string, string> = {
   Schilderwerk: 'SC', Timmerwerk: 'TI', Metselwerk: 'ME',
@@ -371,7 +370,7 @@ function BewerkPaneel({
   onSluiten,
 }: {
   item: PaintItemMetNormen
-  eenheden: string[]
+  eenheden: EenheidConfig[]
   categorieen: string[]
   onSluiten: () => void
 }) {
@@ -493,8 +492,8 @@ function BewerkPaneel({
                 <label className="block text-xs text-slate-500 mb-1">Eenheid</label>
                 <select value={eenh} onChange={e => setEenh(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
-                  {eenheden.map(e => <option key={e} value={e}>{e}</option>)}
-                  {!eenheden.includes(eenh) && eenh && <option value={eenh}>{eenh}</option>}
+                  {eenheden.map(e => <option key={e.afkorting} value={e.afkorting} title={e.omschrijving}>{e.afkorting}</option>)}
+                  {!eenheden.some(e => e.afkorting === eenh) && eenh && <option value={eenh}>{eenh}</option>}
                 </select>
               </div>
               <div>
@@ -753,7 +752,7 @@ function NieuwReceptModal({
   onAangemaakt,
 }: {
   items: PaintItemMetNormen[]
-  eenheden: string[]
+  eenheden: EenheidConfig[]
   categorieen: string[]
   categorieCodes: Record<string, string>
   onSluiten: () => void
@@ -822,7 +821,7 @@ function NieuwReceptModal({
               <label className="block text-sm font-medium text-slate-700 mb-1">Eenheid *</label>
               <select value={eenh} onChange={e => setEenh(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
-                {eenheden.map(e => <option key={e} value={e}>{e}</option>)}
+                {eenheden.map(e => <option key={e.afkorting} value={e.afkorting} title={e.omschrijving}>{e.afkorting}</option>)}
               </select>
             </div>
           </div>
@@ -875,7 +874,7 @@ export default function BiblioteekBeheer({ items }: Props) {
   const [importBezig, setImportBezig] = useState(false)
 
   const inst = getInstellingen()
-  const eenheden      = inst.eenheden      ?? STANDAARD_EENHEDEN
+  const eenheden      = inst.eenheden      ?? []
   const categorieen   = inst.categorieen   ?? STANDAARD_CATEGORIEEN
   const categorieCodes = inst.categorieCodes ?? STANDAARD_CATEGORIE_CODES
   const fileRef = useRef<HTMLInputElement>(null)
