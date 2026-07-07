@@ -15,6 +15,11 @@
 
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7Project, Bouw7ListResponse, Bouw7ProjectStatus } from '@/lib/bouw7/client'
+import {
+  resolveCustomAttributeId,
+  mergeCustomAttributeValue,
+  type Bouw7CustomAttrValue,
+} from '@/lib/bouw7/custom-attributes'
 
 /** Bouw7-projectcategorie (GET /organization/project-categories). */
 export type Bouw7ProjectCategory = { id: number; name: string; code?: string | null }
@@ -147,9 +152,12 @@ export async function maakBouw7Project(input: Bouw7ProjectCreateInput): Promise<
 }
 
 /**
- * Schrijf de VvE-code als Bouw7 custom attribute (`caVveCode`). Best-effort: het exacte write-schema
- * is nog niet bevestigd, dus we resolven de attribute-definitie op naam en proberen de bekende vorm.
- * Bij twijfel faalt deze stap stil — de VvE-code blijft dan alleen in EVA staan.
+ * Schrijf de VvE-code als Bouw7 custom attribute (`caVveCode`). Best-effort — mag de create nooit blokkeren.
+ *
+ * Attribuut-id via `GET /list/custom-attributes` (werkt ook als het veld nog leeg is; `GET
+ * /organization/custom-attributes` bestaat niet). Read-modify-write op de bestaande customAttributeValues
+ * zodat andere maatwerkvelden (bv. Eindverantwoordelijke offerte) niet worden overschreven. Is het
+ * VvE-attribuut niet gedefinieerd, dan faalt deze stap stil (VvE-code blijft dan alleen in EVA).
  */
 async function schrijfVveCode(
   client: Awaited<ReturnType<typeof getBouw7Client>>,
@@ -157,15 +165,18 @@ async function schrijfVveCode(
   type: number,
   vveCode: string,
 ): Promise<void> {
-  const res = await client.get<unknown>('/organization/custom-attributes')
-  const attrs = toItems<{ id: number; name?: string; code?: string }>(res)
-  const attr = attrs.find(
-    (a) => /vve/i.test(a.code ?? '') || /vve/i.test(a.name ?? ''),
+  const attrId = await resolveCustomAttributeId(
+    client,
+    (d) => /vve/i.test(d.code ?? '') || /vve/i.test(d.name ?? '') || /vve/i.test(d.propertyName ?? ''),
   )
-  if (!attr) return
+  if (attrId == null) return
+
+  const project = await client.get<{ customAttributeValues?: Bouw7CustomAttrValue[] }>(`/project/${projectId}`)
+  const bestaand = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
+
   await client.post('/project', {
     id: projectId,
     type,
-    customAttributeValues: [{ customAttribute: { id: attr.id }, value: vveCode }],
+    customAttributeValues: mergeCustomAttributeValue(bestaand, attrId, vveCode),
   })
 }

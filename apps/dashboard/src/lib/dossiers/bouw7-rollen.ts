@@ -19,6 +19,11 @@
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7Project } from '@/lib/bouw7/client'
 import type { Bouw7WriteResult } from './bouw7-status'
+import {
+  resolveCustomAttributeId,
+  mergeCustomAttributeValue,
+  type Bouw7CustomAttrValue,
+} from '@/lib/bouw7/custom-attributes'
 
 /** Eén rol-referentie: `undefined` = niet wijzigen, `null` = leegmaken, `number` = zetten. */
 type RolRef = number | null | undefined
@@ -31,38 +36,11 @@ export type Bouw7RollenInput = {
   controllerNaam?: string | undefined
 }
 
-/** Custom-attribuutwaarde zoals die op een Bouw7-project meekomt (GET /project/{id}). */
-type Bouw7CustomAttrValue = {
-  id?: number
-  customAttribute?: { id: number; name?: string; code?: string }
-  value?: string | null
-}
-
-/** Herkent het custom attribute "Eindverantwoordelijke offerte" op naam of code. */
-const isEindverantwoordelijke = (c?: { name?: string; code?: string }): boolean =>
-  /eindverantwoordelijke/i.test(c?.name ?? '') || /eindverantwoordelijke/i.test(c?.code ?? '')
-
-/**
- * Bouw de terug te schrijven `customAttributeValues[]` op basis van de bestaande waarden op het project
- * (read-modify-write). Het custom attribute "Eindverantwoordelijke offerte" krijgt de controller-naam;
- * alle andere maatwerkvelden (bv. VvE-code) blijven ongewijzigd behouden.
- *
- * De attribuut-definitie is niet los op te vragen (`GET /organization/custom-attributes` bestaat niet —
- * die route is POST-only), dus het attribuut-id komt uit het project zelf. Staat het attribuut niet op
- * het project, dan retourneren we `null` en wordt de controller-waarde (best-effort) overgeslagen.
- */
-function bouwCustomAttributeValues(
-  bestaand: Bouw7CustomAttrValue[],
-  controllerNaam: string,
-): { customAttribute: { id: number }; value: string }[] | null {
-  if (!bestaand.some((v) => isEindverantwoordelijke(v.customAttribute))) return null
-  return bestaand
-    .filter((v) => v.customAttribute?.id != null)
-    .map((v) => ({
-      customAttribute: { id: v.customAttribute!.id },
-      value: isEindverantwoordelijke(v.customAttribute) ? controllerNaam : (v.value ?? ''),
-    }))
-}
+/** Herkent het custom attribute "Eindverantwoordelijke Offerte" (`caEindverantwoordelijkeOfferte`). */
+const isEindverantwoordelijke = (d: { name?: string; code?: string; propertyName?: string }): boolean =>
+  /eindverantwoordelijke/i.test(d.name ?? '') ||
+  /eindverantwoordelijke/i.test(d.code ?? '') ||
+  /eindverantwoordelijke/i.test(d.propertyName ?? '')
 
 /**
  * Schrijf de rollen van een Bouw7-project terug. `rollen` bevat al opgeloste Bouw7-employee-id's
@@ -89,13 +67,16 @@ export async function schrijfBouw7Rollen(
     if (rollen.workPlannerId !== undefined)   body.workPlanner   = rollen.workPlannerId   != null ? { id: rollen.workPlannerId }   : null
     if (rollen.executorId !== undefined)      body.executor      = rollen.executorId      != null ? { id: rollen.executorId }      : null
 
-    // Controller → custom attribute "Eindverantwoordelijke offerte" (vrije tekst = medewerkersnaam).
-    // Faalt nooit de rest van de rol-write: kan het attribuut-id niet uit het project worden gehaald,
-    // dan slaan we alléén dit veld over.
+    // Controller → custom attribute "Eindverantwoordelijke Offerte" (vrije tekst = medewerkersnaam).
+    // Attribuut-id via GET /list/custom-attributes (werkt ook als het veld nog leeg is); read-modify-write
+    // op de bestaande customAttributeValues zodat andere maatwerkvelden (bv. VvE-code) behouden blijven.
+    // Faalt nooit de rest van de rol-write: is het attribuut onvindbaar, dan slaan we alléén dit veld over.
     if (rollen.controllerNaam !== undefined) {
-      const bestaand = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
-      const cav = bouwCustomAttributeValues(bestaand, rollen.controllerNaam)
-      if (cav) body.customAttributeValues = cav
+      const attrId = await resolveCustomAttributeId(client, isEindverantwoordelijke)
+      if (attrId != null) {
+        const bestaand: Bouw7CustomAttrValue[] = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
+        body.customAttributeValues = mergeCustomAttributeValue(bestaand, attrId, rollen.controllerNaam)
+      }
     }
 
     // Niets te schrijven behalve id/type → geen call nodig.
