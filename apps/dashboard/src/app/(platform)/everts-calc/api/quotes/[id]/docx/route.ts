@@ -49,12 +49,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     throw e
   }
 
-  // Gate: downloaden mag pas na controller-goedkeuring (on-screen preview blijft vrij).
+  // Gate: downloaden mag altijd; zolang niet goedgekeurd is het een concept
+  // (de Word-template kan {#is_concept}…{/is_concept} tonen).
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
   const goedkeuring = await assertOfferteVerzendbaar(id)
-  if (!goedkeuring.ok) {
-    return NextResponse.json({ error: goedkeuring.error }, { status: 403 })
-  }
+  const isConcept = !goedkeuring.ok
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,7 +124,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     let output: Buffer
     try {
       const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
-      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
+      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier, is_concept: isConcept })
     } catch (err) {
       if (err instanceof GeenTemplateError) {
         return NextResponse.json(

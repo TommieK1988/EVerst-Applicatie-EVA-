@@ -32,7 +32,7 @@ import {
 import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { appGraphGetRaw } from '@/lib/o365/graph'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
-import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
 
 export const dynamic = 'force-dynamic'
@@ -192,6 +192,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       } catch (mergeErr) {
         console.warn('Briefpapier-merge mislukt, PDF zonder briefpapier:', mergeErr)
       }
+    }
+
+    // ── 6. CONCEPT-watermerk voor een echte, nog niet goedgekeurde offerte ────
+    // (niet bij demo of een template-override-preview in de layout-editor).
+    const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
+    if (!isDemo && !templateOverride) {
+      try {
+        const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+        const goedkeuring = await assertOfferteVerzendbaar(id)
+        if (!goedkeuring.ok) pdfBytes = await tekenConceptWatermerk(pdfBytes)
+      } catch { /* bij twijfel geen watermerk forceren */ }
     }
 
     return new NextResponse(pdfBytes as unknown as BodyInit, {

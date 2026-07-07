@@ -57,3 +57,44 @@ export async function mergeBriefpapierBackground(
 
   return out.save()
 }
+
+/**
+ * Tekent een diagonaal "CONCEPT"-watermerk over elke pagina. Gebruikt zolang de
+ * offerte nog niet is goedgekeurd (zie goedkeuring-gate), zodat previews en
+ * downloads herkenbaar concept zijn tot de controller akkoord geeft.
+ * @returns nieuwe PDF-bytes, of de originele bytes ongewijzigd bij een fout.
+ */
+export async function tekenConceptWatermerk(
+  pdf: Buffer | Uint8Array,
+  tekst = 'CONCEPT',
+): Promise<Uint8Array> {
+  try {
+    const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib')
+    const doc = await PDFDocument.load(pdf)
+    const font = await doc.embedFont(StandardFonts.HelveticaBold)
+
+    for (const page of doc.getPages()) {
+      const { width, height } = page.getSize()
+      // Schaal de tekstgrootte op de kleinste paginadimensie zodat het diagonaal past.
+      const fontSize = Math.min(width, height) * 0.22
+      const tekstBreedte = font.widthOfTextAtSize(tekst, fontSize)
+      // Middelpunt van de pagina; verschuif zodat de geroteerde tekst gecentreerd staat.
+      const hoek = 45
+      const rad = (hoek * Math.PI) / 180
+      const x = width / 2 - (tekstBreedte / 2) * Math.cos(rad)
+      const y = height / 2 - (tekstBreedte / 2) * Math.sin(rad)
+      page.drawText(tekst, {
+        x, y,
+        size: fontSize,
+        font,
+        color: rgb(0.6, 0.6, 0.6),
+        rotate: degrees(hoek),
+        opacity: 0.18,
+      })
+    }
+
+    return doc.save()
+  } catch {
+    return pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf)
+  }
+}

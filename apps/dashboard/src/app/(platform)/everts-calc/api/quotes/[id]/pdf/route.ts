@@ -26,7 +26,7 @@ import {
 } from '@/lib/everts-calc/render-quote-docx'
 import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
-import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
@@ -50,12 +50,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     throw e
   }
 
-  // Gate: downloaden mag pas na controller-goedkeuring (on-screen preview blijft vrij).
+  // Gate: downloaden mag altijd, maar zolang de offerte niet is goedgekeurd door de
+  // controller krijgt de PDF een CONCEPT-watermerk. Na goedkeuring is hij schoon.
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
   const goedkeuring = await assertOfferteVerzendbaar(id)
-  if (!goedkeuring.ok) {
-    return NextResponse.json({ error: goedkeuring.error }, { status: 403 })
-  }
+  const verzendbaar = goedkeuring.ok
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,6 +160,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const filename = encodeURIComponent(`offerte-${quote.quote_nummer}.pdf`)
 
     // ── 6. Algemene voorwaarden als bijlage samenvoegen ──────────────────────
+    let finalPdf: Uint8Array = pdfBuffer
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const avBestand = (quote as any).algemene_voorwaarden
 
@@ -174,22 +174,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           const avDoc = await PDFDocument.load(avBytes)
           const avPages = await mainDoc.copyPages(avDoc, avDoc.getPageIndices())
           avPages.forEach((p) => mainDoc.addPage(p))
-          const merged = await mainDoc.save()
-
-          return new NextResponse(merged.buffer as ArrayBuffer, {
-            headers: {
-              'Content-Type': 'application/pdf',
-              'Content-Disposition': `attachment; filename="${filename}"`,
-              'Cache-Control': 'no-store',
-            },
-          })
+          finalPdf = await mainDoc.save()
         }
       } catch (mergeErr) {
         console.warn('AV samenvoegen mislukt, PDF zonder bijlage:', mergeErr)
       }
     }
 
-    return new NextResponse(pdfBuffer.buffer as ArrayBuffer, {
+    // ── 7. CONCEPT-watermerk zolang niet goedgekeurd ─────────────────────────
+    if (!verzendbaar) {
+      finalPdf = await tekenConceptWatermerk(finalPdf)
+    }
+
+    return new NextResponse(finalPdf.buffer as ArrayBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,

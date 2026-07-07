@@ -67,6 +67,8 @@ interface ExtraImages {
   handtekening?: Buffer | null
   /** Gekoppeld dossier (werkadres, calculator, referenties); leeg als niet gekoppeld. */
   dossier?: DossierContext
+  /** True zolang de offerte niet is goedgekeurd; template kan {#is_concept}…{/is_concept} tonen. */
+  is_concept?: boolean
 }
 
 /**
@@ -101,6 +103,8 @@ export async function renderQuoteDocx(
     logo: logo ?? '',
     logo_wit: logoWit ?? '',
     handtekening: extra.handtekening ?? '',
+    // Conditioneel CONCEPT-blok in de Word-template.
+    is_concept: extra.is_concept ?? false,
   }
 
   const PizZip = (await import('pizzip')).default
