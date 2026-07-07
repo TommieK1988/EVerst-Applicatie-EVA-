@@ -19,10 +19,31 @@ function toDate(dt?: string | null): string | null {
   return dt.slice(0, 10)
 }
 
-/** "2026-02-23 07:00:00" → "2026-02-23T07:00:00" (timestamptz-kolom). */
+/**
+ * Offset-suffix (bv. "+02:00") voor Europe/Amsterdam op de gegeven datum, zomertijd-bewust.
+ * Bepaald via Intl zodat het klopt ongeacht de servertijdzone (Vercel = UTC, lokaal = NL).
+ */
+function nlOffsetSuffix(y: number, m: number, d: number): string {
+  const utcNoon = new Date(Date.UTC(y, m - 1, d, 12))
+  const naam = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Amsterdam', timeZoneName: 'longOffset' })
+    .formatToParts(utcNoon)
+    .find(p => p.type === 'timeZoneName')?.value // "GMT+02:00"
+  const offset = naam?.replace('GMT', '')
+  return offset && offset.length > 0 ? offset : '+01:00'
+}
+
+/**
+ * "2026-02-23 07:00:00" → "2026-02-23T07:00:00+01:00" (timestamptz-kolom).
+ * Bouw7-tijden zijn Nederlandse kloktijden zónder tijdzone-aanduiding. Zonder expliciete offset
+ * interpreteert Postgres (UTC op Supabase) ze als UTC, waardoor alles in de UI 1–2 uur opschoof
+ * ("werkdag start om 02:00"). De NL-offset verankeren houdt 07:00 NL ook echt 07:00 NL.
+ */
 function toTimestamp(dt?: string | null): string | null {
   if (!dt) return null
-  return dt.replace(' ', 'T')
+  const datum = dt.slice(0, 10)
+  const tijd  = dt.slice(11, 19) || '00:00:00'
+  const [y, m, d] = datum.split('-').map(Number)
+  return `${datum}T${tijd}${nlOffsetSuffix(y, m, d)}`
 }
 
 /**
@@ -39,7 +60,28 @@ function eindExclusief(dt?: string | null): string | null {
   if (tijd && tijd !== '00:00:00') return toTimestamp(dt)
   const [y, m, d] = dt.slice(0, 10).split('-').map(Number)
   const volgende = new Date(Date.UTC(y, m - 1, d + 1))
-  return `${volgende.toISOString().slice(0, 10)}T00:00:00`
+  const [ny, nm, nd] = volgende.toISOString().slice(0, 10).split('-').map(Number)
+  return `${volgende.toISOString().slice(0, 10)}T00:00:00${nlOffsetSuffix(ny, nm, nd)}`
+}
+
+/** Vandaag als NL-datum ("YYYY-MM-DD"), servertijdzone-onafhankelijk (en-CA = ISO-datum). */
+function nlVandaag(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date())
+}
+
+/** Standaard werkdag-tijden als een medewerker (nog) geen rooster heeft. */
+const DEFAULT_DAGSTART = '07:00:00'
+const DEFAULT_DAGEIND  = '16:00:00'
+
+/**
+ * Hele-dag-plan-item: Bouw7 zet start én eind op 00:00:00 (of `isAllDay`). Alleen deze items
+ * krijgen roostertijden; items met een echte kloktijd (07:00 e.d.) blijven ongemoeid.
+ */
+function isHeleDag(pi: Bouw7PlanItem): boolean {
+  if (pi.isAllDay) return true
+  const st = (pi.startDate ?? '').slice(11, 19)
+  const et = (pi.endDate ?? '').slice(11, 19)
+  return (!st || st === '00:00:00') && (!et || et === '00:00:00')
 }
 
 /** Plan-items van één Bouw7-project (alle pagina's, via Apollo-search). */
@@ -236,6 +278,32 @@ export async function syncDossierPlanning(
     // De toewijzingen komen uit de plan-item-details (Apollo-search levert ze niet).
     const empMap = await resolveMedewerkers(supabase, [...detailMap.values()], nu)
 
+    // Roosters van de toegewezen medewerkers ophalen. Toekomstige hele-dag-items krijgen
+    // hun roostertijden (bv. 07:30–16:15) i.p.v. 00:00 — anders "start werkdag om middernacht".
+    // Historische hele-dag-items blijven bewust op 00:00 (geen roostertijd terugprojecteren).
+    const vandaagNL = nlVandaag()
+    const medIds = [...new Set(empMap.values())]
+    type RoosterVenster = { vanaf: string; tot: string | null; dagstart: string; dageind: string }
+    const roosterPerMed = new Map<string, RoosterVenster[]>()
+    if (medIds.length > 0) {
+      const { data: roosterRows } = await supabase
+        .from('medewerker_roosters')
+        .select('medewerker_id, geldig_vanaf, geldig_tot, dagstart, dageind')
+        .in('medewerker_id', medIds)
+      for (const r of (roosterRows ?? []) as (RoosterVenster & { medewerker_id: string; geldig_vanaf: string; geldig_tot: string | null })[]) {
+        const arr = roosterPerMed.get(r.medewerker_id) ?? []
+        arr.push({ vanaf: r.geldig_vanaf, tot: r.geldig_tot, dagstart: r.dagstart, dageind: r.dageind })
+        roosterPerMed.set(r.medewerker_id, arr)
+      }
+    }
+    // Actieve roostertijden van een medewerker op een datum (laatst-ingegane venster wint).
+    const roostertijden = (medId: string, datum: string): { start: string; eind: string } => {
+      const actief = (roosterPerMed.get(medId) ?? [])
+        .filter(r => r.vanaf <= datum && (r.tot === null || r.tot >= datum))
+        .sort((a, b) => b.vanaf.localeCompare(a.vanaf))[0]
+      return { start: actief?.dagstart ?? DEFAULT_DAGSTART, eind: actief?.dageind ?? DEFAULT_DAGEIND }
+    }
+
     // ── 3. Activiteiten (Taken) volledig herbouwen ────────────────────
     // Bestaande Bouw7-activiteiten verwijderen → planning_items cascaden mee.
     await supabase
@@ -336,6 +404,8 @@ export async function syncDossierPlanning(
           result.overgeslagen = (result.overgeslagen ?? 0) + 1
           continue
         }
+        // Toekomstig hele-dag-item → roostertijden (per medewerker, want roosters verschillen).
+        const heleDagToekomst = isHeleDag(pi) && (pi.startDate?.slice(0, 10) ?? '') >= vandaagNL
         const emps = detailMap.get(pi.id)?.employees ?? []
         for (const emp of emps) {
           const medewerkerId = empMap.get(String(emp.id))
@@ -343,11 +413,20 @@ export async function syncDossierPlanning(
             result.fouten++
             continue
           }
+          let itemStart = start
+          let itemEind = eind
+          if (heleDagToekomst && pi.startDate && pi.endDate) {
+            const { start: ds, eind: de } = roostertijden(medewerkerId, pi.startDate.slice(0, 10))
+            const rs = toTimestamp(`${pi.startDate.slice(0, 10)} ${ds}`)
+            const re = toTimestamp(`${pi.endDate.slice(0, 10)} ${de}`)
+            // Alleen overnemen als het een geldig interval blijft (eind > start).
+            if (rs && re && re > rs) { itemStart = rs; itemEind = re }
+          }
           itemRows.push({
             activiteit_id: act.id,
             medewerker_id: medewerkerId,
-            start_dt: start,
-            eind_dt: eind,
+            start_dt: itemStart,
+            eind_dt: itemEind,
             uren,
             bron: 'bouw7',
             bouw7_id: `${pi.id}:${emp.id}`,

@@ -31,7 +31,9 @@ export default async function MedewerkerplanningPage() {
     supabase.from('medewerker_afwezigheid').select('*').gte('eind_datum', vandaag),
     supabase.from('dossiers')
       .select('id, titel, dossiernummer, project_manager_id, medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam, kleur )')
-      .eq('hoofdstatus', 'opdracht'),
+      // Zelfde scope als de planning-sync: opdracht + servicedesk (LB-status/categorie) —
+      // anders tonen balken van servicedesk-dossiers een rauwe dossier-UUID als titel.
+      .or('hoofdstatus.eq.opdracht,bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)'),
     supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true),
     supabase.from('ploegen').select('id, naam').eq('actief', true),
     haalPlanningItemsMetExpansie(jaar),
