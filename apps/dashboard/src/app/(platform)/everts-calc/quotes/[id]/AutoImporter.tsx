@@ -35,6 +35,22 @@ function buildNummers(groepen: Groep[]): Map<string, string> {
   return result
 }
 
+/**
+ * Vergelijkt twee dotted nummers (1, 1.1, 1.10, 2.1) hiërarchisch: eerst op het
+ * eerste segment, dan het tweede, enz. Zo komen secties in outline-volgorde
+ * (1.1, 1.2, 2.1, 3.1) i.p.v. op de per-ouder tellende groep-volgorde.
+ */
+function vergelijkNummer(a: string, b: string): number {
+  const da = (a || '').split('.').map(Number)
+  const db = (b || '').split('.').map(Number)
+  for (let i = 0; i < Math.max(da.length, db.length); i++) {
+    const va = da[i] ?? -1
+    const vb = db[i] ?? -1
+    if (va !== vb) return va - vb
+  }
+  return 0
+}
+
 export default function AutoImporter({ quoteId, hasSections }: Props) {
   const router = useRouter()
   const hasRun = useRef(false)
@@ -64,7 +80,10 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
         const DEFAULT_OPSLAG = 18
         const importRegels: Parameters<typeof importeerRegels>[1] = []
 
-        for (const groep of alleGroepen.sort((a, b) => a.volgorde - b.volgorde)) {
+        const groepenOpNummer = [...alleGroepen].sort((a, b) =>
+          vergelijkNummer(nummers.get(a.id) ?? '', nummers.get(b.id) ?? ''),
+        )
+        for (const groep of groepenOpNummer) {
           const regelsBijGroep = alleRegels
             .filter(r => r.groep_id === groep.id)
             .sort((a, b) => a.volgorde - b.volgorde)
