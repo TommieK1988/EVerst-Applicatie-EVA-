@@ -155,6 +155,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
   }
 
   if (tab === 'calculatie' && (sectie === 'aanvraag' || sectie === 'offerte' || sectie === 'servicedesk')) {
+    const { rijen } = await getQuotesVoorDossier(id).catch(() => ({ rijen: [] }))
     return (
       <>
         {titleInjector}
@@ -163,6 +164,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           naam={dossier?.titel ?? 'Aanvraag'}
           nummer={dossier?.dossiernummer ?? ''}
           initieelProjectId={(dossier as any)?.everts_calc_project_id ?? null}
+          rijen={rijen}
         />
       </>
     )

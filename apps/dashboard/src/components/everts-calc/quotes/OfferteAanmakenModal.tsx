@@ -29,6 +29,9 @@ interface Props {
   clientNaam: string | null
   projectNummer: string | null
   type: QuoteType
+  /** Waar je naartoe gaat na aanmaken. Standaard de losse offerte-preview; geef een
+   *  dossier-tab-URL mee om in het dossier te blijven. */
+  terugNaarUrl?: string
 }
 
 interface Layout {
@@ -40,7 +43,7 @@ interface Layout {
 
 export default function OfferteAanmakenModal({
   open, onClose,
-  projectId, projectNaam, clientNaam, projectNummer, type,
+  projectId, projectNaam, clientNaam, projectNummer, type, terugNaarUrl,
 }: Props) {
   const router = useRouter()
   const [layouts, setLayouts] = useState<Layout[]>([])
@@ -139,7 +142,9 @@ export default function OfferteAanmakenModal({
         structuur,
       })
 
-      router.push(`/everts-calc/quotes/${id}/preview`)
+      // In het dossier blijven: terug naar de meegegeven dossier-tab (offertelijst),
+      // anders de losse offerte-preview.
+      router.push(terugNaarUrl ?? `/everts-calc/quotes/${id}/preview`)
     } catch (e) {
       console.error('Offerte aanmaken mislukt:', e)
       setLoading(false)

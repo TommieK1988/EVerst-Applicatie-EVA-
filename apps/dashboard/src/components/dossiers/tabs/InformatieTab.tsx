@@ -1439,6 +1439,10 @@ export function InformatieTab({
       clientNaam={dossier.klant_naam ?? ''}
       projectNummer={dossier.dossiernummer ?? ''}
       type={modalType}
+      terugNaarUrl={`/${
+        sectie === 'aanvraag' ? 'aanvragen' :
+        sectie === 'offerte'  ? 'offertes'  : 'opdrachten'
+      }/${dossier.id}/calculatie`}
     />
   )
 

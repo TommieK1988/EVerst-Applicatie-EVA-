@@ -1,9 +1,69 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
+import { Card, CardHeader, CardBody, Badge } from '@/components/ui'
+import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
+import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
+
+const TYPE_LABELS: Record<string, string> = {
+  verkoopofferte:     'Offerte',
+  interne_calculatie: 'Interne begroting',
+}
+const STATUS_LABELS: Record<string, string> = {
+  concept: 'Concept', verzonden: 'Verzonden', geaccepteerd: 'Geaccepteerd',
+  afgewezen: 'Afgewezen', verlopen: 'Verlopen',
+}
+const STATUS_TONE: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
+  concept: 'neutral', verzonden: 'info', geaccepteerd: 'success',
+  afgewezen: 'error', verlopen: 'warning',
+}
+
+/** Compacte lijst van aan het dossier gekoppelde offertes/calculaties. */
+function OffertesLijst({ rijen }: { rijen: DossierQuoteRij[] }) {
+  const router = useRouter()
+  if (rijen.length === 0) return null
+  return (
+    <Card className="mb-4">
+      <CardHeader>Offertes &amp; calculaties</CardHeader>
+      <CardBody>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <TH>Nummer</TH><TH>Titel</TH><TH>Type</TH><TH>Status</TH>
+              <TH>Datum</TH><TH right>Excl. BTW</TH><TH right>Incl. BTW</TH>
+            </tr>
+          </thead>
+          <tbody>
+            {rijen.map(r => (
+              <tr
+                key={r.id}
+                onClick={() => router.push(`/everts-calc/quotes/${r.id}`)}
+                className="cursor-pointer hover:bg-neutral-50"
+                title="Openen in Everts Calc"
+              >
+                <TD vet>{r.quote_nummer}</TD>
+                <TD>{r.titel}</TD>
+                <TD>
+                  {r.meerwerk_regel_id
+                    ? <Badge tone="brand">Meerwerk</Badge>
+                    : <Badge tone="neutral">{TYPE_LABELS[r.type] ?? r.type}</Badge>}
+                </TD>
+                <TD><Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{STATUS_LABELS[r.status] ?? r.status}</Badge></TD>
+                <TD>{fmtDatum(r.datum)}</TD>
+                <TD right>{fmt(r.subtotaal_ex_btw, true)}</TD>
+                <TD right vet>{fmt(r.totaal_inc_btw, true)}</TD>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardBody>
+    </Card>
+  )
+}
 
 const MAP_KEY = 'aanvraag_project_ids'
 
@@ -39,9 +99,11 @@ interface Props {
   /** Server-side gekoppeld everts-calc project (dossiers.everts_calc_project_id). Seedt de
    *  localStorage-mapping zodat de calculatie ook in een verse browser zichtbaar is. */
   initieelProjectId?: string | null
+  /** Aan het dossier gekoppelde offertes/calculaties (server-side opgehaald). */
+  rijen?: DossierQuoteRij[]
 }
 
-export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjectId }: Props) {
+export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjectId, rijen = [] }: Props) {
   const readOnly = useDossierReadOnly()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [isLaden, setIsLaden]     = useState(false)
@@ -116,12 +178,15 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjec
   }
 
   return (
-    <CalculatieHoofdscherm
-      projectId={projectId}
-      projectNaam={naam}
-      projectNummer={nummer}
-      toonProjectDetail
-      readOnly={readOnly}
-    />
+    <div>
+      <OffertesLijst rijen={rijen} />
+      <CalculatieHoofdscherm
+        projectId={projectId}
+        projectNaam={naam}
+        projectNummer={nummer}
+        toonProjectDetail
+        readOnly={readOnly}
+      />
+    </div>
   )
 }
