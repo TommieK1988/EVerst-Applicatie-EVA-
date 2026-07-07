@@ -11,6 +11,7 @@
  *   bedrijf.*       - bedrijfsgegevens
  *   secties[]       - secties met regels
  *   normale_secties[] - secties excl. opties
+ *   boom[]          - geneste structuurboom (niveau 1 > kinderen > regels) met opgerolde totalen
  *   optie_secties[] - alleen optie-secties
  *   stelpost_regels[] - alle stelpost-regels plat
  *   voorwaarden / uitsluitingen / opmerkingen
@@ -148,6 +149,7 @@ export interface RenderContext {
   normale_secties_niveau1: SectieContext[]
   normale_secties_niveau2: SectieContext[]
   normale_secties_niveau3: SectieContext[]
+  boom: BoomNode[]
   optie_secties: SectieContext[]
   stelpost_regels: StelpostContext[]
   behandelingen_overzicht: string[]
@@ -192,6 +194,7 @@ interface SectieContext {
   nummer: string
   discipline: string
   niveau: number
+  volgorde: number
   subtotaal: string         // formatted (€)
   subtotaal_raw: number
   subtotaal_bedrag: string  // 5.000,00 (zonder €)
@@ -201,6 +204,19 @@ interface SectieContext {
   regels: RegelContext[]
   heeft_regels: boolean
   aantal_regels: number
+}
+
+/**
+ * Eén knoop in de geneste structuurboom (`boom`). Bevat alle velden van een
+ * SectieContext, plus `kinderen` (subgroepen op het volgende niveau) en de
+ * opgerolde totalen (`subtotaal_incl*` = eigen regels + alle kinderen).
+ */
+interface BoomNode extends SectieContext {
+  kinderen: BoomNode[]
+  heeft_kinderen: boolean
+  subtotaal_incl: string        // opgerold, geformatteerd (€ 12.500,00)
+  subtotaal_incl_raw: number    // opgerold, kaal getal
+  subtotaal_incl_bedrag: string // opgerold, zonder € (12.500,00)
 }
 
 interface RegelContext {
@@ -263,6 +279,49 @@ function numEuroPlain(n: number | null | undefined): string {
   return num.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/**
+ * Bouwt een geneste structuurboom uit een platte, op volgorde gesorteerde lijst
+ * secties. Elke sectie wordt kind van de dichtstbijzijnde voorgaande sectie met
+ * een lager niveau (stack-algoritme — werkt voor strikte 1→2→3 nesting én als een
+ * niveau ooit wordt overgeslagen). Totalen rollen bottom-up op:
+ * `subtotaal_incl` = eigen regels + som van alle kinderen.
+ */
+function bouwBoom(items: SectieContext[]): BoomNode[] {
+  const gesorteerd = [...items].sort((a, b) => a.volgorde - b.volgorde)
+  const roots: BoomNode[] = []
+  const stack: BoomNode[] = []
+
+  for (const s of gesorteerd) {
+    const node: BoomNode = {
+      ...s,
+      kinderen: [],
+      heeft_kinderen: false,
+      subtotaal_incl: '',
+      subtotaal_incl_raw: 0,
+      subtotaal_incl_bedrag: '',
+    }
+    // Ga terug tot de bovenkant van de stack een lager niveau heeft: die is de ouder.
+    while (stack.length && stack[stack.length - 1].niveau >= node.niveau) stack.pop()
+    if (stack.length) stack[stack.length - 1].kinderen.push(node)
+    else roots.push(node)
+    stack.push(node)
+  }
+
+  // Bottom-up de opgerolde subtotalen berekenen.
+  function roll(n: BoomNode): number {
+    let som = n.subtotaal_raw
+    for (const k of n.kinderen) som += roll(k)
+    n.subtotaal_incl_raw = Math.round(som * 100) / 100
+    n.subtotaal_incl = euro(n.subtotaal_incl_raw)
+    n.subtotaal_incl_bedrag = numEuroPlain(n.subtotaal_incl_raw)
+    n.heeft_kinderen = n.kinderen.length > 0
+    return n.subtotaal_incl_raw
+  }
+  roots.forEach(roll)
+
+  return roots
+}
+
 // ─── Context builder ─────────────────────────────────────────────────────────
 
 export function buildRenderContext(
@@ -317,6 +376,7 @@ export function buildRenderContext(
       nummer: s.nummer ?? '',
       discipline: s.discipline ?? '',
       niveau: s.niveau,
+      volgorde: s.volgorde,
       subtotaal: euro(s.subtotaal),
       subtotaal_raw: s.subtotaal,
       subtotaal_bedrag: numEuroPlain(s.subtotaal),
@@ -335,6 +395,10 @@ export function buildRenderContext(
   const normale_secties_niveau2 = normale_secties.filter(s => s.niveau === 2)
   const normale_secties_niveau3 = normale_secties.filter(s => s.niveau === 3)
   const optie_secties = secties.filter(s => s.is_optioneel && s.regels.length > 0)
+
+  // Geneste structuurboom: niveau-1 knopen met kinderen (niveau 2), enz.
+  // Kop-groepen zonder eigen regels blijven behouden zodat de boomstructuur klopt.
+  const boom = bouwBoom(secties.filter(s => !s.is_optioneel))
 
   const stelpost_regels: StelpostContext[] = []
   for (const s of normale_secties) {
@@ -438,6 +502,7 @@ export function buildRenderContext(
     normale_secties_niveau1,
     normale_secties_niveau2,
     normale_secties_niveau3,
+    boom,
     optie_secties,
     stelpost_regels,
     behandelingen_overzicht,
