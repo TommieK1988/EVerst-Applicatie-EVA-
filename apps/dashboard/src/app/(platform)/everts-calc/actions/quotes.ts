@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import type { NieuweQuoteData, QuoteType, QuoteStatus, Discipline, TermType } from '@/lib/everts-calc/types-quotes'
+import type { StructuurGroep } from '@/lib/everts-calc/import-structuur'
 
 const PAD = '/quotes'
 
@@ -175,6 +176,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   type: QuoteType
   layoutId: string | null
   importRegels: ImportRegel[]
+  structuur?: StructuurGroep[]
 }): Promise<{ id: string }> {
   const supabase = await getDb()
 
@@ -242,7 +244,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
 
   // Importeer calculatieregels direct (geen AutoImporter nodig)
   if (params.importRegels.length > 0) {
-    await importeerRegels(quote.id, params.importRegels)
+    await importeerRegels(quote.id, params.importRegels, params.structuur)
   }
 
   revalidatePath(PAD)
@@ -767,7 +769,11 @@ export async function importeerRegels(
     is_stelpost?: boolean
     btw_pct?: number | null
     schilderbehandeling?: string | null
-  }[]
+  }[],
+  // Optioneel: de volledige sectie-structuur in outline-volgorde, inclusief lege
+  // hoofdstuk-groepen (niveau 1) die zelf geen regels hebben. Wordt dit meegegeven,
+  // dan bepaalt het de secties én hun volgorde; anders leiden we ze af uit de regels.
+  structuur?: StructuurGroep[],
 ): Promise<void> {
   const supabase = await getDb()
 
@@ -788,15 +794,28 @@ export async function importeerRegels(
     .single()
   let sectionVolgorde = (bestaandeSections?.volgorde ?? -1) + 1
 
-  for (const [groepId, groepRegels] of Array.from(groepenMap)) {
-    const eerste = groepRegels[0]
+  // Sectie-definities in de juiste volgorde: uit de meegegeven structuur (incl.
+  // lege hoofdstukken) of afgeleid uit de regels zelf.
+  const sectieDefs: { groep_id: string; naam: string; niveau: number; nummer: string | null; optioneel: boolean }[] =
+    structuur && structuur.length > 0
+      ? structuur.map(s => ({ groep_id: s.groep_id, naam: s.naam, niveau: s.niveau, nummer: s.nummer, optioneel: s.optioneel }))
+      : Array.from(groepenMap.entries()).map(([groepId, gr]) => ({
+          groep_id: groepId,
+          naam: gr[0].groep_naam,
+          niveau: gr[0].groep_niveau ?? 1,
+          nummer: gr[0].groep_nummer ?? null,
+          optioneel: gr[0].groep_optioneel ?? false,
+        }))
+
+  for (const def of sectieDefs) {
+    const groepRegels = groepenMap.get(def.groep_id) ?? []
 
     // Basis insert (werkt ook zonder migratie v3)
     const { data: section, error: sErr } = await supabase
       .from('quote_sections')
       .insert({
         quote_id: quoteId,
-        naam: eerste.groep_naam,
+        naam: def.naam,
         volgorde: sectionVolgorde++,
       })
       .select('id')
@@ -807,18 +826,21 @@ export async function importeerRegels(
     await supabase
       .from('quote_sections')
       .update({
-        is_optioneel: eerste.groep_optioneel ?? false,
-        niveau: eerste.groep_niveau ?? 1,
-        nummer: eerste.groep_nummer ?? null,
+        is_optioneel: def.optioneel,
+        niveau: def.niveau,
+        nummer: def.nummer,
       })
       .eq('id', section.id)
       .then(() => {/* negeer fouten */})
+
+    // Lege hoofdstuk-sectie (geen eigen regels): alleen de kop, door naar de volgende.
+    if (groepRegels.length === 0) continue
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const linesToInsert = (groepRegels as any[]).map((r: any, i: number) => ({
       quote_id: quoteId,
       section_id: section.id,
-      groep_id: groepId,
+      groep_id: def.groep_id,
       calculatieregel_id: r.calculatieregel_id ?? null,
       omschrijving: r.omschrijving,
       hoeveelheid: r.hoeveelheid,

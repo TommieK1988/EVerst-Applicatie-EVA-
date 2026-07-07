@@ -8,6 +8,7 @@ import { getBetalingscondities } from '@/app/(platform)/everts-calc/actions/beta
 import { maakQuoteVanuitProjectMetImport } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
+import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -35,26 +36,6 @@ interface Layout {
   naam: string
   beschrijving?: string | null
   is_standaard: boolean
-}
-
-/** Bouwt dotted nummering (1, 1.1, 1.1.1) vanuit niveau + volgorde */
-function buildNummers(groepen: Groep[]): Map<string, string> {
-  const result = new Map<string, string>()
-  const n1 = groepen.filter(g => g.niveau === 1).sort((a, b) => a.volgorde - b.volgorde)
-  const n2 = groepen.filter(g => g.niveau === 2).sort((a, b) => a.volgorde - b.volgorde)
-  const n3 = groepen.filter(g => g.niveau === 3).sort((a, b) => a.volgorde - b.volgorde)
-  n1.forEach((g, i) => {
-    const num = String(i + 1)
-    result.set(g.id, num)
-    n2.filter(k => k.parent_id === g.id).forEach((k, j) => {
-      const num2 = `${num}.${j + 1}`
-      result.set(k.id, num2)
-      n3.filter(k3 => k3.parent_id === k.id).forEach((k3, l) => {
-        result.set(k3.id, `${num2}.${l + 1}`)
-      })
-    })
-  })
-  return result
 }
 
 export default function OfferteAanmakenModal({
@@ -143,6 +124,10 @@ export default function OfferteAanmakenModal({
         }
       }
 
+      // Structuur incl. lege hoofdstuk-groepen (niveau 1), in outline-volgorde.
+      const groepenMetRegels = new Set(importRegels.map(r => r.groep_id))
+      const structuur = buildStructuur(alleGroepen, gid => groepenMetRegels.has(gid), nummers)
+
       const { id } = await maakQuoteVanuitProjectMetImport({
         projectId,
         projectNaam,
@@ -151,6 +136,7 @@ export default function OfferteAanmakenModal({
         type,
         layoutId: gekozenLayoutId,
         importRegels,
+        structuur,
       })
 
       router.push(`/everts-calc/quotes/${id}/preview`)

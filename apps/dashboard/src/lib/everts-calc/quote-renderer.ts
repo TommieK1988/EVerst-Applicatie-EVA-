@@ -307,6 +307,15 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
     stack.push(node)
   }
 
+  // Snoei lege takken: een hoofdstuk zonder eigen regels én zonder (overgebleven)
+  // kinderen heeft niets te tonen (bv. als het enige kind een optie was die al is
+  // uitgefilterd). Bottom-up zodat een ouder pas wegvalt nadat zijn kinderen weg zijn.
+  function heeftInhoud(n: BoomNode): boolean {
+    n.kinderen = n.kinderen.filter(heeftInhoud)
+    return n.aantal_regels > 0 || n.kinderen.length > 0
+  }
+  const behouden = roots.filter(heeftInhoud)
+
   // Bottom-up de opgerolde subtotalen berekenen.
   function roll(n: BoomNode): number {
     let som = n.subtotaal_raw
@@ -317,9 +326,9 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
     n.heeft_kinderen = n.kinderen.length > 0
     return n.subtotaal_incl_raw
   }
-  roots.forEach(roll)
+  behouden.forEach(roll)
 
-  return roots
+  return behouden
 }
 
 // ─── Context builder ─────────────────────────────────────────────────────────

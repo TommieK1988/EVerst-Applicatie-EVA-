@@ -4,51 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { importeerRegels } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
+import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
 
 interface Props {
   quoteId: string
   hasSections: boolean
-}
-
-/** Bouwt dotted nummering (1, 1.1, 1.1.1) vanuit niveau + volgorde */
-function buildNummers(groepen: Groep[]): Map<string, string> {
-  const result = new Map<string, string>()
-
-  const niveau1 = groepen.filter(g => g.niveau === 1).sort((a, b) => a.volgorde - b.volgorde)
-  const niveau2 = groepen.filter(g => g.niveau === 2).sort((a, b) => a.volgorde - b.volgorde)
-  const niveau3 = groepen.filter(g => g.niveau === 3).sort((a, b) => a.volgorde - b.volgorde)
-
-  niveau1.forEach((g, i) => {
-    const num = String(i + 1)
-    result.set(g.id, num)
-
-    niveau2.filter(k => k.parent_id === g.id).forEach((k, j) => {
-      const num2 = `${num}.${j + 1}`
-      result.set(k.id, num2)
-
-      niveau3.filter(k3 => k3.parent_id === k.id).forEach((k3, l) => {
-        result.set(k3.id, `${num2}.${l + 1}`)
-      })
-    })
-  })
-
-  return result
-}
-
-/**
- * Vergelijkt twee dotted nummers (1, 1.1, 1.10, 2.1) hiërarchisch: eerst op het
- * eerste segment, dan het tweede, enz. Zo komen secties in outline-volgorde
- * (1.1, 1.2, 2.1, 3.1) i.p.v. op de per-ouder tellende groep-volgorde.
- */
-function vergelijkNummer(a: string, b: string): number {
-  const da = (a || '').split('.').map(Number)
-  const db = (b || '').split('.').map(Number)
-  for (let i = 0; i < Math.max(da.length, db.length); i++) {
-    const va = da[i] ?? -1
-    const vb = db[i] ?? -1
-    if (va !== vb) return va - vb
-  }
-  return 0
 }
 
 export default function AutoImporter({ quoteId, hasSections }: Props) {
@@ -80,10 +40,7 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
         const DEFAULT_OPSLAG = 18
         const importRegels: Parameters<typeof importeerRegels>[1] = []
 
-        const groepenOpNummer = [...alleGroepen].sort((a, b) =>
-          vergelijkNummer(nummers.get(a.id) ?? '', nummers.get(b.id) ?? ''),
-        )
-        for (const groep of groepenOpNummer) {
+        for (const groep of alleGroepen) {
           const regelsBijGroep = alleRegels
             .filter(r => r.groep_id === groep.id)
             .sort((a, b) => a.volgorde - b.volgorde)
@@ -116,7 +73,10 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
         }
 
         if (importRegels.length > 0) {
-          await importeerRegels(quoteId, importRegels)
+          // Structuur incl. lege hoofdstuk-groepen (niveau 1), in outline-volgorde.
+          const groepenMetRegels = new Set(importRegels.map(r => r.groep_id))
+          const structuur = buildStructuur(alleGroepen, id => groepenMetRegels.has(id), nummers)
+          await importeerRegels(quoteId, importRegels, structuur)
           // Refresh pagina zodat nieuwe secties geladen worden
           router.refresh()
         }
