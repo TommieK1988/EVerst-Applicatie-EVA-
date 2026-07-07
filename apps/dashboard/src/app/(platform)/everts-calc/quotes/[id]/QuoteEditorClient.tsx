@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Eye, Trash2, GripVertical, ClipboardCheck, X } from 'lucide-react'
+import { ArrowLeft, Eye, Trash2, GripVertical, ClipboardCheck, X, Copy, Lock } from 'lucide-react'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
 import {
   DndContext,
@@ -22,7 +23,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { updateQuoteHeader, verwijderQuote, herorderSections } from '@/app/(platform)/everts-calc/actions/quotes'
+import { updateQuoteHeader, verwijderQuote, herorderSections, dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
 import QuoteHeaderCard from '@/components/everts-calc/quotes/QuoteHeaderCard'
 import QuoteSectionBlock from '@/components/everts-calc/quotes/QuoteSectionBlock'
 import QuoteTotalsCard from '@/components/everts-calc/quotes/QuoteTotalsCard'
@@ -116,8 +117,24 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
     [...(quote.sections ?? [])].sort((a, b) => a.volgorde - b.volgorde)
   )
 
+  const router = useRouter()
+  const [kopieerPending, startKopieer] = useTransition()
   const terms = quote.terms ?? []
   const isIntern = quote.type === 'interne_calculatie'
+  // Vergrendeld: verzonden/definitieve offerte — inhoud niet meer wijzigbaar, alleen kopiëren.
+  const vergrendeld = ['verzonden', 'geaccepteerd', 'afgewezen'].includes(quote.status)
+
+  function handleKopieer() {
+    startKopieer(async () => {
+      try {
+        const { id } = await dupliceerQuoteAlsNieuweVersie(quote.id)
+        toast.success('Nieuwe versie aangemaakt')
+        router.push(`/everts-calc/quotes/${id}`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Kopiëren mislukt')
+      }
+    })
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -213,6 +230,15 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleKopieer}
+            disabled={kopieerPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            title="Kopiëren naar een nieuwe versie (concept)"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            {kopieerPending ? 'Bezig…' : 'Nieuwe versie'}
+          </button>
           <Link
             href={`/quotes/${quote.id}/preview`}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors"
@@ -220,19 +246,33 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
             <Eye className="w-3.5 h-3.5" />
             Voorvertoning
           </Link>
-          <button
-            onClick={handleVerwijder}
-            disabled={verwijderPending}
-            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-            title="Offerte verwijderen"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {!vergrendeld && (
+            <button
+              onClick={handleVerwijder}
+              disabled={verwijderPending}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+              title="Offerte verwijderen"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Vergrendeld-banner */}
+      {vergrendeld && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
+          <Lock className="w-4 h-4 flex-shrink-0" />
+          <span>
+            Deze offerte is <strong>{STATUS_LABELS[quote.status]}</strong> en kan niet meer gewijzigd worden.
+            Klik op <strong>Nieuwe versie</strong> om verder te werken aan een kopie.
+          </span>
+        </div>
+      )}
+
       {/* Hoofd scroll-gebied */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4">
+       <div className={`space-y-4 ${vergrendeld ? 'pointer-events-none opacity-70 select-none' : ''}`}>
         {/* 2-kolom: inhoud + totalen */}
         <div className="flex gap-4 items-start">
           {/* Links: header + secties */}
@@ -293,6 +333,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
           terms={terms}
           templates={templates}
         />
+       </div>
       </div>
 
       {goedkeuringOpen && (

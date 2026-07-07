@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import type { NieuweQuoteData, QuoteType, QuoteStatus, Discipline, TermType } from '@/lib/everts-calc/types-quotes'
 import type { StructuurGroep } from '@/lib/everts-calc/import-structuur'
+import { assertQuoteBewerkbaar } from '@/lib/everts-calc/quote-guards'
 
 const PAD = '/quotes'
 
@@ -351,6 +352,89 @@ export async function verwijderQuote(id: string): Promise<never> {
   redirect(PAD)
 }
 
+/**
+ * Kopieert een offerte naar een nieuwe versie: nieuwe rij met status 'concept',
+ * verwijzing naar de oorspronkelijke offerte (parent_quote_id = wortel) en een
+ * ophogend versienummer in het offertenummer (bv. OFT-2026-046-v2). Secties,
+ * regels en voorwaarden worden meegekopieerd. Zo blijft een verzonden/definitieve
+ * offerte onaangetast terwijl je verder werkt aan de kopie.
+ */
+export async function dupliceerQuoteAlsNieuweVersie(quoteId: string): Promise<{ id: string }> {
+  const supabase = await getDb()
+
+  const { data: orig, error: oErr } = await supabase
+    .from('quotes')
+    .select('*, sections:quote_sections(*, lines:quote_lines(*)), terms:quote_terms(*)')
+    .eq('id', quoteId)
+    .single()
+  if (oErr || !orig) throw new Error('Offerte niet gevonden')
+
+  // Versienummer bepalen op basis van de hele familie (wortel + alle versies).
+  const rootId: string = orig.parent_quote_id ?? orig.id
+  const { data: familie } = await supabase
+    .from('quotes')
+    .select('versie')
+    .or(`id.eq.${rootId},parent_quote_id.eq.${rootId}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maxVersie = Math.max(1, ...(((familie ?? []) as any[]).map(q => q.versie ?? 1)))
+  const nieuweVersie = maxVersie + 1
+  const basisNummer = String(orig.quote_nummer ?? '').replace(/-v\d+$/, '')
+  const nieuwNummer = `${basisNummer}-v${nieuweVersie}`
+
+  // Headervelden kopiëren; id/audit/relatie-arrays en versie-/verzendvelden weglaten.
+  const {
+    id: _id, created_at: _c, updated_at: _u, sections, terms,
+    quote_nummer: _qn, status: _st, parent_quote_id: _pp, versie: _vv,
+    verzonden_at: _va, verzonden_door: _vd, verzonden_naar: _vn,
+    ...rest
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } = orig as any
+
+  const { data: nieuw, error: nErr } = await supabase
+    .from('quotes')
+    .insert({
+      ...rest,
+      quote_nummer: nieuwNummer,
+      status: 'concept',
+      parent_quote_id: rootId,
+      versie: nieuweVersie,
+      verzonden_at: null, verzonden_door: null, verzonden_naar: null,
+    })
+    .select('id')
+    .single()
+  if (nErr || !nieuw) throw new Error(nErr?.message ?? 'Kopiëren mislukt')
+
+  // Secties + regels kopiëren met nieuwe id-mapping.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const s of ((sections ?? []) as any[])) {
+    const { id: _sid, quote_id: _sq, created_at: _sc, lines, ...srest } = s
+    const { data: nieuweSectie } = await supabase
+      .from('quote_sections')
+      .insert({ ...srest, quote_id: nieuw.id })
+      .select('id')
+      .single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nieuweRegels = ((lines ?? []) as any[]).map(l => {
+      const { id: _lid, quote_id: _lq, section_id: _lsid, created_at: _lc, updated_at: _lu, ...lrest } = l
+      return { ...lrest, quote_id: nieuw.id, section_id: nieuweSectie?.id ?? null }
+    })
+    if (nieuweRegels.length) await supabase.from('quote_lines').insert(nieuweRegels)
+  }
+
+  // Voorwaarden kopiëren.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nieuweTerms = ((terms ?? []) as any[]).map(t => {
+    const { id: _tid, quote_id: _tq, created_at: _tc, ...trest } = t
+    return { ...trest, quote_id: nieuw.id }
+  })
+  if (nieuweTerms.length) await supabase.from('quote_terms').insert(nieuweTerms)
+
+  await herbereken(nieuw.id)
+  revalidatePath(PAD)
+  revalidatePath(`${PAD}/${nieuw.id}`)
+  return { id: nieuw.id }
+}
+
 // ─── Header bijwerken ─────────────────────────────────────────────────────────
 
 export async function updateQuoteHeader(id: string, data: {
@@ -368,6 +452,14 @@ export async function updateQuoteHeader(id: string, data: {
   betalingsconditie_id?: string | null
   voorwaarden_id?: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Vergrendeling: op een verzonden/definitieve offerte mag alleen de status nog
+  // wijzigen (bv. verzonden → geaccepteerd), geen inhoudelijke velden.
+  const wijzigtInhoud = Object.keys(data).some(k => k !== 'status')
+  if (wijzigtInhoud) {
+    try { await assertQuoteBewerkbaar(id) }
+    catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Offerte vergrendeld' } }
+  }
+
   const supabase = await getDb()
 
   // Gate: naar 'verzonden' (of direct 'geaccepteerd') mag alleen na controller-
@@ -397,6 +489,7 @@ export async function updateQuoteSettings(id: string, data: {
   btw_pct?: number
   stelposten_in_totaal?: boolean
 }): Promise<void> {
+  await assertQuoteBewerkbaar(id)
   const supabase = await getDb()
   const { error } = await supabase
     .from('quotes')
@@ -417,6 +510,7 @@ export async function maakSection(quoteId: string, data: {
   niveau?: number
   nummer?: string | null
 }): Promise<string> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
 
   // Bepaal volgorde als niet opgegeven
@@ -459,6 +553,7 @@ export async function updateSection(id: string, quoteId: string, data: {
   niveau?: number
   nummer?: string | null
 }): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
   const { error } = await supabase.from('quote_sections').update(data).eq('id', id)
   if (error) throw new Error(error.message)
@@ -466,6 +561,7 @@ export async function updateSection(id: string, quoteId: string, data: {
 }
 
 export async function verwijderSection(id: string, quoteId: string): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
   const { error } = await supabase.from('quote_sections').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -480,6 +576,7 @@ export async function herorderSections(
   quoteId: string,
   items: { id: string; volgorde: number }[],
 ): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
   await Promise.all(
     items.map(({ id, volgorde }) =>
@@ -506,6 +603,7 @@ export async function maakLine(data: {
   calculatieregel_id?: string | null
   groep_id?: string | null
 }): Promise<string> {
+  await assertQuoteBewerkbaar(data.quote_id)
   const supabase = await getDb()
   const hoeveelheid = data.hoeveelheid ?? 1
   const eenheidsprijs = data.eenheidsprijs ?? 0
@@ -548,6 +646,7 @@ export async function updateLine(id: string, quoteId: string, data: {
   opmerking?: string | null
   section_id?: string | null
 }): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
 
   // Herbereken line_total als hoeveelheid of prijs wijzigt
@@ -575,6 +674,7 @@ export async function updateLine(id: string, quoteId: string, data: {
 }
 
 export async function verwijderLine(id: string, quoteId: string): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
   const { error } = await supabase.from('quote_lines').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -775,6 +875,7 @@ export async function importeerRegels(
   // dan bepaalt het de secties én hun volgorde; anders leiden we ze af uit de regels.
   structuur?: StructuurGroep[],
 ): Promise<void> {
+  await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
 
   // Groepeer regels per groep (altijd sectie per groep)
