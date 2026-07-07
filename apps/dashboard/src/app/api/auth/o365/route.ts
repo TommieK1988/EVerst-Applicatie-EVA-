@@ -46,7 +46,10 @@ export async function GET(request: NextRequest) {
     redirect_uri:  redirectUri,
     scope:         scopes,
     state,
-    prompt:        'select_account',
+    // 'consent' forceert het toestemmingsscherm, zodat nieuwe scopes (bijv. Mail.Send)
+    // ook echt worden gevraagd/verleend bij een herkoppeling — anders slaat Microsoft
+    // het scherm over en mist het token het nieuwe recht.
+    prompt:        'consent',
   })
 
   const authUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`
