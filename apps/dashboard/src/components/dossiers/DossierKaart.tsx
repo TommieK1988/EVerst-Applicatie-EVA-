@@ -132,31 +132,32 @@ export function DossierKaart({
           )}
         </div>
         {toonBedrag != null && toonBedrag > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-            {meerdereVerstuurd && (
-              <span
-                title={`${verstuurdAantal} offertes op status Verstuurd — totaal excl. btw`}
-                style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  padding: '1px 6px', borderRadius: 999,
-                  fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
-                  color: 'var(--primary-700, #1d4ed8)',
-                  background: 'var(--primary-50, #eff6ff)',
-                  border: '1px solid var(--primary-200, #bfdbfe)',
-                }}
-              >
-                {verstuurdAantal}× verstuurd
-              </span>
-            )}
-            <span style={{
-              fontSize: 12, fontWeight: 700,
-              color: 'var(--neutral-800)', whiteSpace: 'nowrap',
-            }}>
-              {formatBedrag(toonBedrag)}
-            </span>
-          </div>
+          <span style={{
+            fontSize: 12, fontWeight: 700,
+            color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {formatBedrag(toonBedrag)}
+          </span>
         )}
       </div>
+
+      {/* Indicator: meerdere offertes op status Verstuurd — eigen regel zodat het bedrag rechtsboven past. */}
+      {meerdereVerstuurd && (
+        <span
+          title={`${verstuurdAantal} offertes op status Verstuurd — bedrag rechtsboven is het totaal excl. btw`}
+          style={{
+            alignSelf: 'flex-start',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '1px 7px', borderRadius: 999,
+            fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+            color: 'var(--primary-700, #1d4ed8)',
+            background: 'var(--primary-50, #eff6ff)',
+            border: '1px solid var(--primary-200, #bfdbfe)',
+          }}
+        >
+          {verstuurdAantal}× verstuurd
+        </span>
+      )}
 
       {/* Titel */}
       <div style={{
