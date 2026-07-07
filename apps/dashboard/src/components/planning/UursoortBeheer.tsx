@@ -100,24 +100,36 @@ function TagInput({
 
 /* ── Per-uursoort tarief (laag 3 van de hiërarchie) ─────────────── */
 
-function TariefCel({ item }: { item: PlanningUursoort }) {
-  const [waarde, setWaarde] = useState<string>(item.tarief_verkoop != null ? String(item.tarief_verkoop) : '')
+/** Eén tariefveld (verkoop óf kostprijs) dat op blur opslaat. */
+function TariefVeld({
+  item,
+  soort,
+}: {
+  item: PlanningUursoort
+  soort: 'verkoop' | 'kostprijs'
+}) {
+  const huidigeWaarde = soort === 'verkoop' ? item.tarief_verkoop : item.tarief_kostprijs
+  const [waarde, setWaarde] = useState<string>(huidigeWaarde != null ? String(huidigeWaarde) : '')
   const [busy, setBusy] = useState(false)
 
   async function opslaan() {
     const parsed = waarde.trim() === '' ? null : parseFloat(waarde)
-    const huidig = item.tarief_verkoop ?? null
+    const huidig = huidigeWaarde ?? null
     if (parsed === huidig) return
     if (parsed != null && isNaN(parsed)) return
     setBusy(true)
-    const r = await setUursoortTarief(item.id, { tarief_verkoop: parsed })
+    const patch = soort === 'verkoop' ? { tarief_verkoop: parsed } : { tarief_kostprijs: parsed }
+    const r = await setUursoortTarief(item.id, patch)
     setBusy(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Uursoort-tarief opgeslagen')
+    toast.success(soort === 'verkoop' ? 'Verkooptarief opgeslagen' : 'Kostprijs opgeslagen')
   }
 
   return (
-    <div style={{ width: 120 }} title="Per-uursoort default verkooptarief (overschrijfbaar per medewerker)">
+    <div style={{ width: 108 }}>
+      <label style={{ display: 'block', fontSize: 9, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+        {soort === 'verkoop' ? 'Verkoop' : 'Kostprijs'}
+      </label>
       <Input
         type="number" min="0" step="0.5" inputSize="sm"
         value={waarde}
@@ -129,6 +141,19 @@ function TariefCel({ item }: { item: PlanningUursoort }) {
         prefix={<span style={{ fontSize: 11 }}>€</span>}
         suffix={<span style={{ fontSize: 9 }}>/uur</span>}
       />
+    </div>
+  )
+}
+
+/** Verkoop- én kostprijstarief per uursoort (laag 3 van de hiërarchie). */
+function TariefCel({ item }: { item: PlanningUursoort }) {
+  return (
+    <div
+      style={{ display: 'flex', gap: 8 }}
+      title="Per-uursoort default tarieven — verkoop is overschrijfbaar per medewerker; kostprijs wordt gebruikt in de werkbegroting"
+    >
+      <TariefVeld item={item} soort="verkoop" />
+      <TariefVeld item={item} soort="kostprijs" />
     </div>
   )
 }

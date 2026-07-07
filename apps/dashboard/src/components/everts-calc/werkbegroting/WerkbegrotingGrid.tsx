@@ -10,6 +10,8 @@ import {
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
 } from '@/lib/everts-calc/local-store'
 import { getBouw7BewakingscodesImport } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { laadUursoorten } from '@/app/(platform)/instellingen/planning/actions'
+import type { PlanningUursoort } from '@everts/database/platform-types'
 import { formatEuro } from '@/lib/everts-calc/calculations'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type {
@@ -454,8 +456,18 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const [dragCompId,  setDragCompId]  = useState<string | null>(null)
   const [dragOverSep, setDragOverSep] = useState<string | null>(null)
 
-  // Instellingen (uurtarieven, standaard kostengroepen)
+  // Instellingen (standaard kostengroepen)
   const instellingen = useMemo(() => getInstellingen(), [])
+
+  // Uursoorten uit de instellingen (bron voor de arbeid-specificatie + kostprijs-tarief).
+  const [uursoorten, setUursoorten] = useState<PlanningUursoort[]>([])
+  useEffect(() => {
+    let actief = true
+    laadUursoorten()
+      .then(res => { if (actief && res.ok) setUursoorten(res.data.filter(u => u.actief)) })
+      .catch(() => { /* stil — dropdown valt terug op vrije tekst */ })
+    return () => { actief = false }
+  }, [])
 
   // Calculatie lookup maps voor verschil-berekening en sortering
   const calcCompMap  = useMemo(() => new Map(calcComponenten.map(c => [c.id, c])), [calcComponenten])
@@ -705,13 +717,13 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     onComponentWijzig(compId, patch)
   }, [onComponentWijzig])
 
-  // Uurtype selecteren → automatisch tarief invullen vanuit instellingen
-  const onUurtypeKies = useCallback((compId: string, uurtype: string) => {
-    const gevonden = instellingen.uurtarieven?.find(u => u.label === uurtype)
-    const patch: Partial<WerkbegrotingComponent> = { uurtype: uurtype || undefined }
-    if (gevonden) patch.tarief = gevonden.tarief
+  // Uursoort selecteren → automatisch het ingestelde kostprijs-tarief invullen.
+  const onUurtypeKies = useCallback((compId: string, uursoortNaam: string) => {
+    const gevonden = uursoorten.find(u => u.naam === uursoortNaam)
+    const patch: Partial<WerkbegrotingComponent> = { uurtype: uursoortNaam || undefined }
+    if (gevonden) patch.tarief = gevonden.tarief_kostprijs ?? 0
     onComponentWijzig(compId, patch)
-  }, [instellingen, onComponentWijzig])
+  }, [uursoorten, onComponentWijzig])
 
   // Materiaal selecteren uit bibliotheek
   const onMateriaalKies = useCallback((compId: string, materiaal: Materiaal) => {
@@ -1125,7 +1137,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         return (
           <td key={id} className={`px-1 py-1 ${base}`}>
             {comp.type === 'arbeid' && (
-              instellingen.uurtarieven && instellingen.uurtarieven.length > 0 ? (
+              uursoorten.length > 0 ? (
                 <div className="relative flex items-center">
                   <select
                     value={comp.uurtype ?? ''}
@@ -1135,15 +1147,21 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                       text-slate-600 cursor-pointer"
                     onChange={e => onUurtypeKies(comp.id, e.target.value)}
                   >
-                    <option value="">— Uurtype —</option>
-                    {instellingen.uurtarieven.map(u => (
-                      <option key={u.label} value={u.label}>{u.label} ({formatEuro(u.tarief)}/uur)</option>
+                    <option value="">— Uursoort —</option>
+                    {uursoorten.map(u => (
+                      <option key={u.id} value={u.naam}>
+                        {u.naam}{u.tarief_kostprijs != null ? ` (${formatEuro(u.tarief_kostprijs)}/uur)` : ''}
+                      </option>
                     ))}
+                    {/* Bewaar een eerder gekozen (of vrije-tekst) waarde die niet meer in de lijst staat. */}
+                    {comp.uurtype && !uursoorten.some(u => u.naam === comp.uurtype) && (
+                      <option value={comp.uurtype}>{comp.uurtype}</option>
+                    )}
                   </select>
                   <ChevronDown className="absolute right-0.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-300 pointer-events-none flex-shrink-0" />
                 </div>
               ) : (
-                <input className={`${inputCls} text-slate-600`} value={comp.uurtype ?? ''} placeholder="Uurtype…"
+                <input className={`${inputCls} text-slate-600`} value={comp.uurtype ?? ''} placeholder="Uursoort…"
                   onChange={e => onComponentWijzig(comp.id, { uurtype: e.target.value || undefined })} />
               )
             )}
