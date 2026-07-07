@@ -284,3 +284,67 @@ export async function uploadDossierBestandenNaarSharePoint(dossierId: string, fo
     return { ok: false, geuploaded: 0, fout: netteFout(err) }
   }
 }
+
+/**
+ * Upload één of meer in-memory buffers (bv. offerte-PDF, .eml) naar de SharePoint-
+ * dossiermap. Server-to-server variant van uploadDossierBestandenNaarSharePoint;
+ * maakt de map zo nodig aan en cachet hem op het dossier. Gooit nooit.
+ */
+export async function uploadBuffersNaarDossierMap(
+  dossierId: string,
+  bestanden: { naam: string; contentType: string; bytes: Uint8Array }[],
+): Promise<UploadResultaat> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return { ok: false, geuploaded: 0, fout: 'SharePoint niet geconfigureerd (O365_DOSSIER_DRIVE_ID).' }
+  if (bestanden.length === 0) return { ok: true, geuploaded: 0 }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+    const { data: dossier } = await supabase.from('dossiers').select(SELECT).eq('id', dossierId).single()
+    const d = dossier as DossierRij | null
+    if (!d) return { ok: false, geuploaded: 0, fout: 'Dossier niet gevonden.' }
+
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return { ok: false, geuploaded: 0, fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden naar een drive/map.' }
+
+    let driveId = d.sharepoint_drive_id
+    let itemId = d.sharepoint_item_id
+    let mapUrl = d.sharepoint_web_url
+    if (!(d.sharepoint_match_status === 'gematcht' && driveId && itemId)) {
+      const map = await bepaalOfMaakDossierMap(ctx, d)
+      driveId = map.driveId; itemId = map.itemId; mapUrl = map.webUrl
+      await supabase.from('dossiers').update({
+        sharepoint_drive_id: driveId,
+        sharepoint_item_id: itemId,
+        sharepoint_web_url: mapUrl,
+        sharepoint_match_status: 'gematcht',
+      }).eq('id', dossierId)
+    }
+
+    let geuploaded = 0
+    const fouten: string[] = []
+    for (const b of bestanden) {
+      try {
+        const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}:/${encodeURIComponent(b.naam)}:/content`, {
+          method: 'PUT',
+          headers: { 'Content-Type': b.contentType || 'application/octet-stream' },
+          body: b.bytes as unknown as BodyInit,
+        })
+        if (res.ok) geuploaded++
+        else fouten.push(`${b.naam} (${res.status})`)
+      } catch (e) {
+        fouten.push(`${b.naam}: ${netteFout(e)}`)
+      }
+    }
+
+    return {
+      ok: fouten.length === 0,
+      geuploaded,
+      mapUrl,
+      fout: fouten.length ? `Niet geüpload: ${fouten.join(', ')}` : undefined,
+    }
+  } catch (err) {
+    return { ok: false, geuploaded: 0, fout: netteFout(err) }
+  }
+}

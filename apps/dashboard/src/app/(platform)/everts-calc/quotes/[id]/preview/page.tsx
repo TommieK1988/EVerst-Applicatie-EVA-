@@ -9,6 +9,8 @@ import DocxDownloadButton from './DocxDownloadButton'
 import PrintButton from './PrintButton'
 import BedrijfLoader from './BedrijfLoader'
 import GoedkeuringKnop from './GoedkeuringKnop'
+import VerzendOfferteKnop from './VerzendOfferteKnop'
+import { assertOfferteVerzendbaar } from '@/lib/goedkeuring/offerte'
 
 export const metadata: Metadata = { title: 'Offerte voorvertoning' }
 
@@ -20,6 +22,9 @@ export default async function QuotePreviewPage({ params }: Props) {
   const { id } = await params
   const quote = await getQuote(id)
   if (!quote) notFound()
+
+  const isIntern = quote.type === 'interne_calculatie'
+  const verzendbaar = !isIntern && (await assertOfferteVerzendbaar(id)).ok
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-100">
@@ -34,7 +39,7 @@ export default async function QuotePreviewPage({ params }: Props) {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
-          {quote.type !== 'interne_calculatie' && (
+          {!isIntern && (
             <GoedkeuringKnop
               quoteId={quote.id}
               dossierId={quote.dossier_id ?? null}
@@ -44,6 +49,7 @@ export default async function QuotePreviewPage({ params }: Props) {
           <PrintButton />
           <DocxDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
           <PdfDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
+          {!isIntern && <VerzendOfferteKnop quoteId={quote.id} verzendbaar={verzendbaar} />}
         </div>
       </div>
 

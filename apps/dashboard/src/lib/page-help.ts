@@ -1107,6 +1107,15 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/offerte-mail$/, {
+    title: 'Instellingen — Offerte-e-mail',
+    description: 'Het standaard e-mailsjabloon (onderwerp + tekst met variabelen) waarmee een goedgekeurde offerte naar de opdrachtgever wordt gemaild.',
+    sections: [
+      { title: 'Sjabloon', body: 'Stel het onderwerp en de berichttekst in. Gebruik variabelen als {offerte.nummer}, {dossier.contactpersoon} en {bedrijf.naam}; die worden bij verzenden automatisch ingevuld. Bij het verzenden zie je een venster waar je de tekst nog kunt aanpassen voordat de mail weggaat.' },
+      { title: 'Verzenden', body: 'Een offerte kan pas gemaild worden nadat de controller hem heeft goedgekeurd. De mail gaat vanuit het Outlook-postvak van de ingelogde medewerker; de offerte-PDF en de algemene voorwaarden gaan als bijlage mee, en na verzenden worden de PDF én de verzonden mail in de SharePoint-dossiermap bewaard.' },
+    ],
+  }],
+
   [/^\/instellingen\/offerte-layout$/, {
     title: 'Instellingen — Offerte-opmaak',
     description: 'Beheer de Word-sjablonen (lay-outs) voor offertes: huisstijl, kleuren en papierindeling. Gebruik meerdere lay-outs voor verschillende klanttypen of werksoorten.',

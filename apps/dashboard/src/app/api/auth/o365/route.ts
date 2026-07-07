@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     'Tasks.ReadWrite',
     'Calendars.ReadWrite',
     'Mail.Read',
+    'Mail.Send',
   ].join(' ')
 
   // CSRF-bescherming: random nonce in een httpOnly-cookie én in de state-parameter.

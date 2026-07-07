@@ -154,6 +154,14 @@ const calcOfferteItems: SettingsItem[] = [
     kicker: 'Offerte',
     module: 'dossiers',
   },
+  {
+    href: '/instellingen/offerte-mail',
+    title: 'Offerte-e-mail',
+    description: 'Standaard onderwerp en tekst (met variabelen) voor het mailen van offertes.',
+    ready: true,
+    kicker: 'Offerte',
+    module: 'dossiers',
+  },
 ]
 
 const appItems: SettingsItem[] = [
