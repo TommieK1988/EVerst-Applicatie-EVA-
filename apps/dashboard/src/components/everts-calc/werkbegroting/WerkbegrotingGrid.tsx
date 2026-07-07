@@ -546,6 +546,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     return [...new Set([...fromRegels, ...fromInst])].sort().map(v => ({ value: v, label: null }))
   }, [regels, instellingen, bewakingscodes])
 
+  // Bewakingscode → omschrijving/naam, voor het tonen van de codenaam in de groepskoppen.
+  const codeNaam = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const b of bewakingscodes ?? []) {
+      if (b.naam) m.set(bareCode(b.code), b.naam)
+    }
+    return m
+  }, [bewakingscodes])
+
   // ─── Actieve en verwijderde componenten ───────────────────────────────────
   const actieveComponenten  = useMemo(() => componenten.filter(c => !c.is_verwijderd), [componenten])
   const verwijderdeComponenten = useMemo(() => componenten.filter(c => c.is_verwijderd), [componenten])
@@ -1376,6 +1385,11 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                               <GitBranch className="w-3 h-3 flex-shrink-0 opacity-50" />
                             )}
                             {rij.label}
+                            {sortering === 'kostengroep' && codeNaam.get(bareCode(rij.label)) && (
+                              <span className="ml-1.5 normal-case font-normal tracking-normal text-slate-400">
+                                — {codeNaam.get(bareCode(rij.label))}
+                              </span>
+                            )}
                             {isHovered && <span className="ml-2 normal-case font-normal text-everts/70">↓ Hier neerzetten</span>}
                           </span>
                           <div className="flex items-center gap-3 flex-shrink-0">

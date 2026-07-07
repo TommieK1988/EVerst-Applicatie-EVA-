@@ -11,7 +11,7 @@ import {
   slaWerkbegrotingOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
 import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload } from '@/app/(platform)/everts-calc/actions/werkbegroting'
-import { vraagGoedkeuringAan } from '@/lib/goedkeuring/actions'
+import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
@@ -36,6 +36,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [bestellingenOpen, setBestellingenOpen] = useState(false)
   /** Aantal actieve regels dat (nog) niet geaccordeerd is (server-side berekend). */
   const [nietGeaccordeerd, setNietGeaccordeerd] = useState<number>(0)
+  /** True als er een open goedkeuringsaanvraag is die de ingelogde gebruiker mag accorderen (controller/Directie). */
+  const [magGoedkeuren, setMagGoedkeuren] = useState(false)
   const [prognoseOpen, setPrognoseOpen] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
   const [prognoseBezig, setPrognoseBezig] = useState(false)
@@ -90,6 +92,10 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     try {
       const status = await getWerkbegrotingGoedkeuringStatus(wb.id)
       setNietGeaccordeerd(status.regels.filter(r => !r.goedgekeurd).length)
+    } catch { /* stil */ }
+    try {
+      const overzicht = await getGoedkeuring('werkbegroting', wb.id)
+      setMagGoedkeuren(overzicht.actueel?.status === 'aangevraagd' && overzicht.magBeoordelen)
     } catch { /* stil */ }
   }, [wb])
 
@@ -272,20 +278,31 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         }`}>
           {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Definitief' : 'Concept'}
         </span>
-        <button
-          onClick={() => setGoedkeuringOpen(true)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-            wb.status === 'geaccordeerd'
-              ? 'border border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-              : wb.status === 'definitief'
-              ? 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-              : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-          title="Goedkeuringsproces beheren"
-        >
-          <ClipboardCheck className="w-3.5 h-3.5" />
-          {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Ter beoordeling' : 'Goedkeuring'}
-        </button>
+        {magGoedkeuren ? (
+          <button
+            onClick={() => setGoedkeuringOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors bg-green-600 text-white border border-green-600 hover:bg-green-700 shadow-sm"
+            title="Deze werkbegroting goedkeuren"
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            WB goedkeuren
+          </button>
+        ) : (
+          <button
+            onClick={() => setGoedkeuringOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              wb.status === 'geaccordeerd'
+                ? 'border border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                : wb.status === 'definitief'
+                ? 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Goedkeuringsproces beheren"
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Ter beoordeling' : 'Goedkeuring'}
+          </button>
+        )}
         <button
           onClick={() => setBestellingenOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"

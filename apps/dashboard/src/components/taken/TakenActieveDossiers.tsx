@@ -8,6 +8,7 @@ import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import type { TaakRij } from '@/lib/taken/services/taken'
+import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   open:            { label: 'Open',           bg: '#eff6ff', color: '#1d4ed8' },
@@ -214,7 +215,11 @@ export default function TakenActieveDossiers({
         layouts={layouts}
         user_id={user_id}
         beginSortering={beginSortering}
-        onRijKlik={r => router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`)}
+        onRijKlik={r => {
+          // WB-controletaak opent direct de werkbegroting-tab i.p.v. de takenlijst.
+          const tab = r.titel === BEOORDEEL_TAAK_TITEL.werkbegroting ? 'werkbegroting' : 'taken'
+          router.push(`/${r.dossier_sectie}/${r.dossier_id}/${tab}`)
+        }}
       />
     </div>
   )

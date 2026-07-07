@@ -270,7 +270,53 @@ export async function keurGoed(
     if (g.object_type === 'offerte') await zetAanvraagSubstatus(g.dossier_id, 'offerte_gereed')
   }
 
+  // Notificatie voor de aanvrager (PL): de goedkeuring is rond. Best effort — mag de
+  // goedkeuring zelf niet laten falen.
+  try {
+    await notificeerAanvrager(g)
+  } catch { /* ondersteunend */ }
+
   return { ok: true }
+}
+
+/**
+ * Zet een belletje-notificatie klaar voor de aanvrager (PL) zodra zijn aanvraag is
+ * goedgekeurd. Slaat over als de aanvrager de aanvraag zelf goedkeurde of geen
+ * gekoppeld auth-account heeft.
+ */
+async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
+  if (!g.aangevraagd_door) return
+  const db = admin()
+
+  const { data: pl } = await db
+    .from('medewerkers')
+    .select('auth_user_id')
+    .eq('id', g.aangevraagd_door)
+    .maybeSingle()
+  const authUserId: string | null = pl?.auth_user_id ?? null
+  if (!authUserId) return
+
+  let dossierTitel: string | null = null
+  if (g.dossier_id) {
+    const { data: dossier } = await db.from('dossiers').select('titel, dossiernummer').eq('id', g.dossier_id).maybeSingle()
+    dossierTitel = dossier ? [dossier.dossiernummer, dossier.titel].filter(Boolean).join(' — ') : null
+  }
+
+  const isWb = g.object_type === 'werkbegroting'
+  const url = g.dossier_id
+    ? (isWb ? `/opdrachten/${g.dossier_id}/werkbegroting` : `/opdrachten/${g.dossier_id}`)
+    : null
+
+  await db.from('notificaties').insert({
+    user_id: authUserId,
+    type:    'algemeen',
+    titel:   isWb ? 'Werkbegroting goedgekeurd' : 'Offerte goedgekeurd',
+    body:    dossierTitel
+      ? `${isWb ? 'De werkbegroting' : 'De offerte'} van ${dossierTitel} is goedgekeurd.`
+      : `${isWb ? 'De werkbegroting' : 'De offerte'} is goedgekeurd.`,
+    url,
+    gelezen: false,
+  })
 }
 
 /** Terugsturen met verplichte opmerking; maakt een aanpas-taak voor de aanvrager. */

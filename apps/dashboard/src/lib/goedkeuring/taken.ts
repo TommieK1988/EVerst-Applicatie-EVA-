@@ -82,7 +82,12 @@ export async function maakBeoordeelTaak(
     return { toegewezenAan: naam, isFallback, bestond: true, taakId: bestaand.id }
   }
 
-  // 5. Taak aanmaken, rechtstreeks aan het dossier gekoppeld.
+  // 5. Taak aanmaken, rechtstreeks aan het dossier gekoppeld. Beoordelen is urgent:
+  //    prioriteit hoog + deadline op uiterlijk morgen (max 1 dag later).
+  const morgen = new Date()
+  morgen.setDate(morgen.getDate() + 1)
+  const deadline = morgen.toISOString().slice(0, 10)
+
   const { data: taak, error } = await db
     .from('tasks')
     .insert({
@@ -90,6 +95,7 @@ export async function maakBeoordeelTaak(
       dossier_id:     dossierId,
       status:         'open',
       prioriteit:     'hoog',
+      deadline,
       assignee_type:  'direct',
       dossier_rollen: [],
     })

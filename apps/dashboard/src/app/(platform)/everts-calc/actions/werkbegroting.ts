@@ -24,6 +24,15 @@ export interface WerkbegrotingPayload {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * Coerce een waarde naar een geldig UUID of null. Werkbegroting-regels/componenten
+ * leven localStorage-first en krijgen bij aanmaken (nieuwe regel, Bouw7-import) soms
+ * een lege string ("") voor uuid-velden als groep_id of source_*_id. Postgres weigert
+ * die met `invalid input syntax for type uuid: ""`; null is de juiste representatie.
+ */
+const uuidOfNull = (v: unknown): string | null =>
+  typeof v === 'string' && UUID_RE.test(v) ? v : null
+
 // ─── Sync werkbegroting naar Supabase ─────────────────────────────────────────
 //
 // De werkbegroting leeft localStorage-first; deze sync maakt Supabase de waarheid
@@ -60,8 +69,8 @@ export async function syncWerkbegrotingNaarSupabase(
         .upsert(
           regels.map(r => ({
             id: r.id, werkbegroting_id: r.werkbegroting_id,
-            source_calculatieregel_id: r.source_calculatieregel_id,
-            groep_id: r.groep_id, omschrijving: r.omschrijving,
+            source_calculatieregel_id: uuidOfNull(r.source_calculatieregel_id),
+            groep_id: uuidOfNull(r.groep_id), omschrijving: r.omschrijving,
             hoeveelheid: r.hoeveelheid, eenheid: r.eenheid,
             kostengroep: r.kostengroep ?? null, volgorde: r.volgorde,
             opslag_pct: r.opslag_pct ?? null, btw_pct: r.btw_pct ?? null,
@@ -81,10 +90,10 @@ export async function syncWerkbegrotingNaarSupabase(
         .upsert(
           componenten.map(c => ({
             id: c.id, werkbegroting_regel_id: c.werkbegroting_regel_id,
-            source_component_id: c.source_component_id, type: c.type,
+            source_component_id: uuidOfNull(c.source_component_id), type: c.type,
             norm_hoeveelheid: c.norm_hoeveelheid, eenheid: c.eenheid ?? null,
             tarief: c.tarief, opslag_pct: c.opslag_pct ?? null,
-            omschrijving: c.omschrijving ?? null, relatie_id: c.relatie_id ?? null,
+            omschrijving: c.omschrijving ?? null, relatie_id: uuidOfNull(c.relatie_id),
             leverancier_naam: c.leverancier_naam ?? null,
             aannemersnaam: c.aannemersnaam ?? null, offertenummer: c.offertenummer ?? null,
             is_verwijderd: c.is_verwijderd ?? false,
@@ -129,8 +138,8 @@ export async function syncWerkbegrotingNaarSupabase(
         .upsert(
           wijzigingen.map(w => ({
             id: w.id, werkbegroting_id: w.werkbegroting_id,
-            werkbegroting_regel_id: w.werkbegroting_regel_id,
-            component_id: w.component_id, veld: w.veld,
+            werkbegroting_regel_id: uuidOfNull(w.werkbegroting_regel_id),
+            component_id: uuidOfNull(w.component_id), veld: w.veld,
             oude_waarde: w.oude_waarde, nieuwe_waarde: w.nieuwe_waarde,
             user_id: w.user_id, aangemaakt_op: w.aangemaakt_op,
           })),
@@ -164,7 +173,7 @@ export async function syncBestellingenNaarSupabase(
     for (const b of bestellingen) {
       const { error: bErr } = await db
         .from('werkbegroting_bestellingen')
-        .upsert({ id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving, relatie_id: b.relatie_id ?? null, status: b.status, bijgewerkt_op: nu }, { onConflict: 'id' })
+        .upsert({ id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving, relatie_id: uuidOfNull(b.relatie_id), status: b.status, bijgewerkt_op: nu }, { onConflict: 'id' })
       if (bErr) throw new Error(`Bestelling sync: ${bErr.message}`)
 
       await db.from('werkbegroting_bestelling_regels').delete().eq('bestelling_id', b.id)
