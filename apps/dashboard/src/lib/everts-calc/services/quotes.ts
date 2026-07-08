@@ -111,6 +111,8 @@ export type DossierQuoteRij = {
   totaal_kostprijs: number
   marge: number
   marge_pct: number | null
+  /** Scenario (calculatie) waaruit de offerte gemaakt is; null bij oudere offertes. */
+  scenario_id: string | null
   /** Gevuld wanneer dit een meerwerk-offerte is (back-reference naar meerwerk_regels). */
   meerwerk_regel_id: string | null
 }
@@ -148,7 +150,7 @@ export async function getQuotesVoorDossier(
     .select(`
       id, quote_nummer, type, status, titel, referentie,
       datum, geldig_tot, subtotaal_ex_btw, btw_bedrag, totaal_inc_btw,
-      meerwerk_regel_id, created_at,
+      scenario_id, meerwerk_regel_id, created_at,
       lines:quote_lines(hoeveelheid, kostprijs_pe)
     `)
     .eq('project_id', projectId)

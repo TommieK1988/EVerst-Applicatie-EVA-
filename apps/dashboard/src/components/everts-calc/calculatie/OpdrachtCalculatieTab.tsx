@@ -5,40 +5,22 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import OfferteDetail from './OfferteDetail'
 import toast from 'react-hot-toast'
 import { Calculator, ArrowLeft, Trash2 } from 'lucide-react'
-import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
-import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
+import { Card, CardHeader, CardBody, Button } from '@/components/ui'
 import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossiers/actions'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
-import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
+import CalculatiesTabel from './CalculatiesTabel'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
+import { getScenarios, kopieerScenario } from '@/lib/everts-calc/local-store'
+import type { Scenario } from '@/lib/everts-calc/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-
-const TYPE_LABELS: Record<string, string> = {
-  verkoopofferte:     'Offerte',
-  interne_calculatie: 'Interne begroting',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  concept:      'Concept',
-  verzonden:    'Verzonden',
-  geaccepteerd: 'Geaccepteerd',
-  afgewezen:    'Afgewezen',
-  verlopen:     'Verlopen',
-}
-
-const STATUS_TONE: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
-  concept:      'neutral',
-  verzonden:    'info',
-  geaccepteerd: 'success',
-  afgewezen:    'error',
-  verlopen:     'warning',
-}
 
 type Props = {
   dossierId: string
   naam: string
   nummer: string
+  /** Klantnaam (opdrachtgever) — voor het aanmaken van offertes vanuit de calculatie. */
+  clientNaam?: string | null
   /** Gekoppeld everts-calc project (dossiers.everts_calc_project_id). */
   projectId: string | null
   /** Aanmaakdatum van het calculatieproject (projects.created_at). */
@@ -47,7 +29,7 @@ type Props = {
   rijen: DossierQuoteRij[]
 }
 
-export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, projectAangemaakt, rijen }: Props) {
+export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, projectId, rijen }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const readOnly = useDossierReadOnly()
@@ -60,13 +42,24 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
   }, [searchParams])
   const [bezig, setBezig] = useState(false)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
-  // Totalen van de calculatie zelf — client-side uit localStorage (net als InformatieTab),
-  // want de calculatieregels zijn (nog) niet server-side opgeslagen.
-  const [calcTotalen, setCalcTotalen] = useState<CalcTotalen | null>(null)
+  // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
+  const [scenarios, setScenarios]                   = useState<Scenario[]>([])
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const [calcTick, setCalcTick]                     = useState(0)
   useEffect(() => {
-    if (!projectId) { setCalcTotalen(null); return }
-    try { setCalcTotalen(berekenCalcTotalenVoorProject(projectId)) } catch { setCalcTotalen(null) }
-  }, [projectId, toonCalculatie])
+    setScenarios(projectId ? getScenarios(projectId) : [])
+  }, [projectId, toonCalculatie, calcTick])
+
+  const handleScenariosGewijzigd = (nieuwId?: string) => {
+    setCalcTick(t => t + 1)
+    if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
+  }
+  const handleKopieer = (sid: string) => {
+    const kopie = kopieerScenario(sid)
+    if (!kopie) { toast.error('Kopiëren mislukt'); return }
+    toast.success('Calculatie gekopieerd')
+    handleScenariosGewijzigd(kopie.id)
+  }
 
   async function aanmaken() {
     setBezig(true)
@@ -106,12 +99,12 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
     )
   }
 
-  // Volledige calculatie-omgeving (zoals in de offerte-fase), met terugknop naar de tabel.
+  // Volledige calculatie-omgeving, met terugknop naar het overzicht.
   if (toonCalculatie && projectId) {
     return (
       <div>
         <div className="px-8 pt-4">
-          <Button variant="ghost" onClick={() => setToonCalculatie(false)}>
+          <Button variant="ghost" onClick={() => { setToonCalculatie(false); setSelectedScenarioId(null) }}>
             <ArrowLeft className="h-3.5 w-3.5" />
             Terug naar overzicht
           </Button>
@@ -122,47 +115,31 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
           projectNummer={nummer}
           toonProjectDetail
           readOnly={readOnly}
+          scenarioId={selectedScenarioId ?? undefined}
+          dossierContext={{ dossierId, clientNaam }}
+          onScenariosGewijzigd={handleScenariosGewijzigd}
         />
       </div>
     )
   }
 
-  return (
-    <div className="px-8 py-7 space-y-5">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <span>Calculaties</span>
-            <div className="flex gap-2">
-              {projectId ? (
-                <>
-                  <Button variant="primary" onClick={() => setToonCalculatie(true)}>
-                    <Calculator className="h-3.5 w-3.5" />
-                    Calculatie openen
-                  </Button>
-                  {!readOnly && (
-                    <Button
-                      variant="ghost"
-                      onClick={handleDelete}
-                      disabled={deleteInProgress}
-                      title="Verwijder all calculaties en offertes"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
-                    </Button>
-                  )}
-                </>
-              ) : !readOnly ? (
+  // Geen calculatieproject → aanmaken.
+  if (!projectId) {
+    return (
+      <div className="px-8 py-7 space-y-5">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <span>Calculaties</span>
+              {!readOnly && (
                 <Button variant="primary" onClick={aanmaken} disabled={bezig}>
                   <Calculator className="h-3.5 w-3.5" />
                   {bezig ? 'Bezig…' : 'Calculatie aanmaken'}
                 </Button>
-              ) : null}
+              )}
             </div>
-          </div>
-        </CardHeader>
-        <CardBody style={{ padding: 0 }}>
-          {!projectId ? (
+          </CardHeader>
+          <CardBody style={{ padding: 0 }}>
             <div className="px-4 py-8 text-center">
               <div className="text-[14px] font-semibold text-neutral-800">Nog geen calculatie gekoppeld</div>
               <div className="mx-auto mt-1.5 max-w-[380px] text-[12.5px] text-neutral-500">
@@ -170,82 +147,37 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, projectId, proj
                 offertes en meerwerk-calculaties aan dit dossier te koppelen.
               </div>
             </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <TH>Nummer</TH>
-                  <TH>Titel</TH>
-                  <TH>Type</TH>
-                  <TH>Status</TH>
-                  <TH>Datum</TH>
-                  <TH right>Excl. BTW</TH>
-                  <TH right>Incl. BTW</TH>
-                  <TH right>Marge</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {/* De calculatie zelf — altijd bovenaan; totalen client-side uit de calc-omgeving. */}
-                <tr
-                  onClick={() => setToonCalculatie(true)}
-                  className="cursor-pointer hover:bg-neutral-50"
-                  title="Calculatie openen"
-                >
-                  <TD vet>{nummer || '—'}</TD>
-                  <TD>{`Calculatie — ${naam}`}</TD>
-                  <TD><Badge tone="info">Calculatie</Badge></TD>
-                  <TD>—</TD>
-                  <TD>{fmtDatum(projectAangemaakt)}</TD>
-                  <TD right>{calcTotalen ? fmt(calcTotalen.subtotaal_ex_btw, true) : '—'}</TD>
-                  <TD right vet>{calcTotalen ? fmt(calcTotalen.totaal_incl_btw, true) : '—'}</TD>
-                  <TD right kleur={calcTotalen && calcTotalen.marge_pct < 10 ? '#d9534f' : undefined}>
-                    {calcTotalen
-                      ? `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(calcTotalen.marge_pct)} %`
-                      : '—'}
-                  </TD>
-                </tr>
-                {rijen.map(r => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setOfferteId(r.id)}
-                    className="cursor-pointer hover:bg-neutral-50"
-                    title="Offerte openen"
-                  >
-                    <TD vet>{r.quote_nummer}</TD>
-                    <TD>{r.titel}</TD>
-                    <TD>
-                      {r.meerwerk_regel_id ? (
-                        <Badge tone="brand">Meerwerk</Badge>
-                      ) : (
-                        <Badge tone="neutral">{TYPE_LABELS[r.type] ?? r.type}</Badge>
-                      )}
-                    </TD>
-                    <TD>
-                      <Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>
-                        {STATUS_LABELS[r.status] ?? r.status}
-                      </Badge>
-                    </TD>
-                    <TD>{fmtDatum(r.datum)}</TD>
-                    <TD right>{fmt(r.subtotaal_ex_btw, true)}</TD>
-                    <TD right vet>{fmt(r.totaal_inc_btw, true)}</TD>
-                    <TD right kleur={r.marge_pct != null && r.marge_pct < 10 ? '#d9534f' : undefined}>
-                      {r.marge_pct != null
-                        ? `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(r.marge_pct)} %`
-                        : '—'}
-                    </TD>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          </CardBody>
+        </Card>
+      </div>
+    )
+  }
+
+  // Overzicht van alle calculaties + offertes.
+  return (
+    <CalculatiesTabel
+      projectId={projectId}
+      scenarios={scenarios}
+      rijen={rijen}
+      tick={calcTick}
+      readOnly={readOnly}
+      onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
+      onOpenOfferte={setOfferteId}
+      onKopieer={handleKopieer}
+      headerExtra={
+        <div className="flex gap-2">
+          <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>
+            <Calculator className="h-3.5 w-3.5" />
+            Calculatie openen
+          </Button>
+          {!readOnly && (
+            <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleteInProgress} title="Verwijder alle calculaties en offertes">
+              <Trash2 className="h-3.5 w-3.5" />
+              {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
+            </Button>
           )}
-        </CardBody>
-      </Card>
-      {projectId && (
-        <div className="text-[11.5px] leading-normal text-neutral-500">
-          De calculatie en alle offertes die via het calculatieproject aan dit dossier gekoppeld zijn,
-          inclusief meerwerk-offertes. Klik op een regel om deze te openen.
         </div>
-      )}
-    </div>
+      }
+    />
   )
 }

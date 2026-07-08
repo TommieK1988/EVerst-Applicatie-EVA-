@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import toast from 'react-hot-toast'
+import { ArrowLeft } from 'lucide-react'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
+import CalculatiesTabel from './CalculatiesTabel'
 import OfferteDetail from './OfferteDetail'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
+import { getScenarios, kopieerScenario } from '@/lib/everts-calc/local-store'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-import { Card, CardHeader, CardBody, Badge } from '@/components/ui'
+import { Card, CardHeader, CardBody, Badge, Button } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
+import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -96,6 +101,8 @@ interface Props {
   aanvraagId: string
   naam: string
   nummer: string
+  /** Klantnaam (opdrachtgever) — voor het aanmaken van offertes vanuit de calculatie. */
+  clientNaam?: string | null
   /** Server-side gekoppeld everts-calc project (dossiers.everts_calc_project_id). Seedt de
    *  localStorage-mapping zodat de calculatie ook in een verse browser zichtbaar is. */
   initieelProjectId?: string | null
@@ -103,7 +110,7 @@ interface Props {
   rijen?: DossierQuoteRij[]
 }
 
-export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjectId, rijen = [] }: Props) {
+export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, initieelProjectId, rijen = [] }: Props) {
   const readOnly = useDossierReadOnly()
   const searchParams = useSearchParams()
   const [projectId, setProjectId] = useState<string | null>(null)
@@ -127,6 +134,25 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjec
       setProjectId(initieelProjectId)
     }
   }, [aanvraagId, initieelProjectId])
+
+  // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
+  const [scenarios, setScenarios]                   = useState<Scenario[]>([])
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const [calcTick, setCalcTick]                     = useState(0)
+  useEffect(() => {
+    setScenarios(projectId ? getScenarios(projectId) : [])
+  }, [projectId, calcTick])
+
+  const handleScenariosGewijzigd = (nieuwId?: string) => {
+    setCalcTick(t => t + 1)
+    if (nieuwId) setSelectedScenarioId(nieuwId)
+  }
+  const handleKopieer = (sid: string) => {
+    const kopie = kopieerScenario(sid)
+    if (!kopie) { toast.error('Kopiëren mislukt'); return }
+    toast.success('Calculatie gekopieerd')
+    handleScenariosGewijzigd(kopie.id)
+  }
 
   async function handleKoppelen() {
     setIsLaden(true)
@@ -198,15 +224,46 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, initieelProjec
     )
   }
 
+  const meerdere = scenarios.length > 1
+
+  // Meerdere calculaties én geen specifieke gekozen → overzichtstabel.
+  if (meerdere && !selectedScenarioId) {
+    return (
+      <CalculatiesTabel
+        projectId={projectId}
+        scenarios={scenarios}
+        rijen={rijen}
+        tick={calcTick}
+        readOnly={readOnly}
+        onOpenCalculatie={setSelectedScenarioId}
+        onOpenOfferte={setOfferteId}
+        onKopieer={handleKopieer}
+      />
+    )
+  }
+
+  // Eén calculatie (of een gekozen calculatie) → de calculatie-omgeving.
   return (
     <div>
-      <OffertesLijst rijen={rijen} onOpen={setOfferteId} />
+      {meerdere && selectedScenarioId ? (
+        <div className="px-8 pt-4">
+          <Button variant="ghost" onClick={() => setSelectedScenarioId(null)}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Terug naar calculaties
+          </Button>
+        </div>
+      ) : (
+        <OffertesLijst rijen={rijen} onOpen={setOfferteId} />
+      )}
       <CalculatieHoofdscherm
         projectId={projectId}
         projectNaam={naam}
         projectNummer={nummer}
         toonProjectDetail
         readOnly={readOnly}
+        scenarioId={selectedScenarioId ?? undefined}
+        dossierContext={{ dossierId: aanvraagId, clientNaam }}
+        onScenariosGewijzigd={handleScenariosGewijzigd}
       />
     </div>
   )

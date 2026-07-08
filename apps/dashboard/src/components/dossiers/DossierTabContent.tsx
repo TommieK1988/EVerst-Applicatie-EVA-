@@ -146,6 +146,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           dossierId={id}
           naam={dossier?.titel ?? 'Opdracht'}
           nummer={dossier?.dossiernummer ?? ''}
+          clientNaam={dossier?.klant_naam ?? ''}
           projectId={projectId}
           projectAangemaakt={projectAangemaakt}
           rijen={rijen}
@@ -163,6 +164,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           aanvraagId={id}
           naam={dossier?.titel ?? 'Aanvraag'}
           nummer={dossier?.dossiernummer ?? ''}
+          clientNaam={dossier?.klant_naam ?? ''}
           initieelProjectId={(dossier as any)?.everts_calc_project_id ?? null}
           rijen={rijen}
         />

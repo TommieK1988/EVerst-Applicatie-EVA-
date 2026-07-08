@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   GitBranch, Pin, Ruler, CloudUpload, Check, Undo2,
   ChevronsUp, Keyboard, BookOpen, Paintbrush, Package, X,
   FileUp, FileDown, ChevronDown, Library, Table2,
+  SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -15,10 +17,14 @@ import CalculatieGrid, { type CalculatieGridHandle } from './CalculatieGrid'
 import TotalsBar from './TotalsBar'
 import BibliotheekDrawer from './BibliotheekDrawer'
 import CufImportModal from './CufImportModal'
+import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
+import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog'
+import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { serialiseerNaarCuf } from '@/lib/everts-calc/cuf-serializer'
 import { exportCalculatieNaarExcel } from '@/lib/everts-calc/excel-export'
 import {
-  getScenarios, maakStandaardScenario, slaScenarioOp,
+  getScenarios, maakStandaardScenario, slaScenarioOp, kopieerScenario,
   getGroepen, getCalculatieregels, getComponentregels,
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
@@ -33,12 +39,26 @@ interface Props {
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
   toonProjectDetail?: boolean
   readOnly?: boolean
+  /** Specifiek scenario (calculatie) openen. Zonder dit → standaard/eerste scenario. */
+  scenarioId?: string
+  /** Dossier-context — aanwezig wanneer de calculatie binnen een dossier draait.
+   *  Activeert de offerte-functies (Offerte aanmaken / Interne begroting) in het
+   *  Opties-menu. */
+  dossierContext?: {
+    dossierId: string
+    clientNaam?: string | null
+  }
+  /** Aangeroepen na een wijziging in de set scenario's (bijv. na kopiëren). De
+   *  optionele parameter is het id van een nieuw/te-openen scenario. */
+  onScenariosGewijzigd?: (nieuwScenarioId?: string) => void
 }
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
-  bibliotheekItems = [], readOnly = false,
+  bibliotheekItems = [], readOnly = false, scenarioId, dossierContext,
+  onScenariosGewijzigd,
 }: Props) {
+  const pathname = usePathname()
   const [scenario, setScenario]                       = useState<Scenario | null>(null)
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
@@ -54,6 +74,11 @@ export default function CalculatieHoofdscherm({
   const [schilderwerkOpen, setSchilderwerkOpen]       = useState(false)
   const [materialenOpen, setMaterialenOpen]           = useState(false)
   const [toonCufImport, setToonCufImport]             = useState(false)
+  const [offerteModalOpen, setOfferteModalOpen]       = useState(false)
+  const [offerteModalType, setOfferteModalType]       = useState<QuoteType>('verkoopofferte')
+  const [instellingenOpen, setInstellingenOpen]       = useState(false)
+  const [instellingenVereist, setInstellingenVereist] = useState(false)
+  const [pendingOfferteType, setPendingOfferteType]   = useState<QuoteType | null>(null)
   const [isPending, startTransition]                  = useTransition()
   const sluitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
@@ -96,12 +121,15 @@ export default function CalculatieHoofdscherm({
   /* ── Scenario laden ──────────────────────────────────────────────── */
   useEffect(() => {
     const scs = getScenarios(projectId)
-    if (scs.length === 0) {
+    if (scenarioId) {
+      // Specifiek scenario openen (uit de calculaties-tabel); fallback op standaard.
+      setScenario(scs.find(s => s.id === scenarioId) ?? scs.find(s => s.is_standaard) ?? scs[0] ?? null)
+    } else if (scs.length === 0) {
       setScenario(maakStandaardScenario(projectId))
     } else {
       setScenario(scs.find(s => s.is_standaard) ?? scs[0])
     }
-  }, [projectId])
+  }, [projectId, scenarioId])
 
   /* ── Totalen herberekenen ────────────────────────────────────────── */
   useEffect(() => {
@@ -189,6 +217,41 @@ export default function CalculatieHoofdscherm({
     setScenario(bijgewerkt)
   }
 
+  /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
+   *  betalingsconditie én algemene voorwaarden op de calculatie; anders opent
+   *  eerst het instellingen-dialoog (verplicht-modus). */
+  const startOfferte = (type: QuoteType) => {
+    const scs = getScenarios(projectId)
+    const actief = scs.find(s => s.is_standaard) ?? scs[0]
+    if (!actief?.betalingsconditie_id || !actief?.algemene_voorwaarden_id) {
+      setPendingOfferteType(type)
+      setInstellingenVereist(true)
+      setInstellingenOpen(true)
+    } else {
+      setOfferteModalType(type)
+      setOfferteModalOpen(true)
+    }
+  }
+
+  /** Beide keuzes gemaakt in verplicht-modus → door naar het offerte-dialoog. */
+  const handleInstellingenVoltooid = () => {
+    const type = pendingOfferteType
+    setInstellingenOpen(false)
+    setInstellingenVereist(false)
+    setPendingOfferteType(null)
+    if (type) { setOfferteModalType(type); setOfferteModalOpen(true) }
+  }
+
+  /** Dupliceert deze calculatie (scenario) — bv. als er na verzending nog een
+   *  aanpassing nodig is. Opent daarna de kopie ter bewerking. */
+  const handleKopieerCalculatie = () => {
+    if (!scenario) return
+    const kopie = kopieerScenario(scenario.id)
+    if (!kopie) { toast.error('Kopiëren mislukt'); return }
+    toast.success('Calculatie gekopieerd')
+    onScenariosGewijzigd?.(kopie.id)
+  }
+
   const ddItem = 'flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md'
 
   return (
@@ -274,27 +337,60 @@ export default function CalculatieHoofdscherm({
               </a>
             </Button>
 
-            {/* CUF dropdown */}
+            {/* Opties dropdown (offerte, instellingen, CUF/Excel) */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="CUF importeren of exporteren">
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">CUF</span>
+                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Opties</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
-                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[180px] z-[200]"
+                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[200px] z-[200]"
                   align="start" sideOffset={4}
                 >
+                  {/* Offerte-functies — alleen binnen een dossier en niet in alleen-lezen. */}
+                  {dossierContext && !readOnly && (
+                    <>
+                      <DropdownMenu.Item
+                        className={ddItem}
+                        onSelect={() => startOfferte('verkoopofferte')}
+                      >
+                        <FileText className="w-3.5 h-3.5 text-slate-400" /> Offerte aanmaken
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        className={ddItem}
+                        onSelect={() => startOfferte('interne_calculatie')}
+                      >
+                        <ClipboardList className="w-3.5 h-3.5 text-slate-400" /> Interne begroting
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
+                    </>
+                  )}
+                  {/* Betalingscondities + Algemene voorwaarden (per calculatie/offerte). */}
+                  <DropdownMenu.Item
+                    className={ddItem}
+                    onSelect={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
+                    disabled={readOnly}
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className={ddItem}
+                    onSelect={handleKopieerCalculatie}
+                    disabled={readOnly}
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-400" /> Calculatie kopiëren
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
                     <FileUp className="w-3.5 h-3.5 text-slate-400" /> CUF importeren
                   </DropdownMenu.Item>
                   <DropdownMenu.Item className={ddItem} onSelect={handleCufExport}>
                     <FileDown className="w-3.5 h-3.5 text-slate-400" /> CUF exporteren
                   </DropdownMenu.Item>
-                  <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item className={ddItem} onSelect={handleExcelExport}>
                     <Table2 className="w-3.5 h-3.5 text-green-600" /> Excel exporteren
                   </DropdownMenu.Item>
@@ -461,6 +557,47 @@ export default function CalculatieHoofdscherm({
           onImport={() => { setToonCufImport(false); handleWijziging(); toast.success('CUF-bestand geïmporteerd') }}
         />
       )}
+
+      {/* Offerte / interne begroting aanmaken vanuit de calculatie (dossier-context). */}
+      {dossierContext && offerteModalOpen && (
+        <OfferteAanmakenModal
+          open={offerteModalOpen}
+          onClose={() => setOfferteModalOpen(false)}
+          projectId={projectId}
+          scenarioId={scenario.id}
+          dossierId={dossierContext.dossierId}
+          projectNaam={projectNaam}
+          clientNaam={dossierContext.clientNaam ?? ''}
+          projectNummer={projectNummer}
+          type={offerteModalType}
+          terugNaarUrl={pathname}
+        />
+      )}
+
+      {/* Betalingscondities & Algemene voorwaarden — per calculatie/offerte (scenario). */}
+      <Dialog
+        open={instellingenOpen}
+        onOpenChange={(o) => {
+          setInstellingenOpen(o)
+          if (!o) { setInstellingenVereist(false); setPendingOfferteType(null) }
+        }}
+      >
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>Betalingscondities &amp; voorwaarden</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-xs text-slate-500 mb-3">
+              Deze keuze geldt voor deze calculatie en wordt overgenomen op offertes die je hiervan aanmaakt.
+            </p>
+            <CalculatieInstellingenKaarten
+              projectId={projectId}
+              vereist={instellingenVereist}
+              onVoltooid={handleInstellingenVoltooid}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

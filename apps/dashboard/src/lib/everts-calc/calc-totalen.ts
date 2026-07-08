@@ -25,9 +25,15 @@ export type CalcTotalen = {
   btw_groepen: { pct: number; btw: number }[]
 }
 
-export function berekenCalcTotalenVoorProject(projectId: string): CalcTotalen | null {
+/**
+ * Totalen van één calculatie (scenario). Zonder `scenarioId` wordt het
+ * standaard/eerste scenario van het project gebruikt (backward compatible).
+ */
+export function berekenCalcTotalenVoorProject(projectId: string, scenarioId?: string): CalcTotalen | null {
   const scenarios = getScenarios(projectId)
-  const scenario = scenarios.find(s => s.is_standaard) ?? scenarios[0]
+  const scenario = scenarioId
+    ? scenarios.find(s => s.id === scenarioId)
+    : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
   if (!scenario) return null
 
   const groepen = getGroepen(scenario.id)

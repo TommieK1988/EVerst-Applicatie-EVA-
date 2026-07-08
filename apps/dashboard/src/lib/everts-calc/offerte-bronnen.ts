@@ -23,7 +23,7 @@ import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import { leidWerkmaatschappijAf } from '@/lib/dossiers/werkmaatschappij'
 
 const DOSSIER_SELECT = `
-  dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id,
+  dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id, klant_id,
   werkadres_naam, werkadres_straat, werkadres_postcode, werkadres_stad,
   werkadres_telefoon, werkadres_email,
   calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
@@ -31,6 +31,7 @@ const DOSSIER_SELECT = `
   teamleider:medewerkers!teamleider_id ( voornaam, tussenvoegsel, achternaam ),
   werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam ),
   uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
+  controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam ),
   contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
 `.trim()
 
@@ -80,9 +81,18 @@ function bouwDossier(row: any): DossierContext {
     teamleider: medewerkerNaam(row.teamleider) ?? '',
     werkvoorbereider: medewerkerNaam(row.werkvoorbereider) ?? '',
     uitvoerder: medewerkerNaam(row.uitvoerder) ?? '',
+    controller: medewerkerNaam(row.controller) ?? '',
     contactpersoon: medewerkerNaam(row.contactpersoon) ?? '',
     contactpersoon_email: row.contactpersoon?.email ?? '',
     contactpersoon_telefoon: row.contactpersoon?.telefoon ?? '',
+    klant_naam: row.opdrachtgever?.naam ?? '',
+    klant_adres: row.opdrachtgever?.adres_straat ?? '',
+    klant_postcode: row.opdrachtgever?.adres_postcode ?? '',
+    klant_plaats: row.opdrachtgever?.adres_plaats ?? '',
+    klant_email: row.opdrachtgever?.email ?? '',
+    klant_telefoon: row.opdrachtgever?.telefoon ?? '',
+    klant_kvk: row.opdrachtgever?.kvk_nummer ?? '',
+    klant_btw: row.opdrachtgever?.btw_nummer ?? '',
   }
 }
 
@@ -111,6 +121,22 @@ export async function laadBedrijfEnDossier(
       dossierRow = data ?? null
     }
 
+    // Opdrachtgever (relaties) apart en best-effort ophalen: een aparte query zodat
+    // een RLS-blokkade op `relaties` niet de hele dossier-embed laat falen (en het
+    // werkadres meesleurt). Levert het klant-adres voor het offerte-klantblok.
+    if (dossierRow?.klant_id) {
+      try {
+        const { data: rel } = await supabase
+          .from('relaties')
+          .select('naam, adres_straat, adres_postcode, adres_plaats, email, telefoon, kvk_nummer, btw_nummer')
+          .eq('id', dossierRow.klant_id)
+          .maybeSingle()
+        if (rel) dossierRow.opdrachtgever = rel
+      } catch {
+        /* relaties niet leesbaar — klant-adres blijft leeg */
+      }
+    }
+
     // 2. Bedrijfsgegevens: alle werkmaatschappijen + organisatie in één query.
     const { data: bedrijven } = await supabase
       .from('bedrijfsgegevens')
@@ -126,6 +152,24 @@ export async function laadBedrijfEnDossier(
       dossierRow?.werkmaatschappij_id ||
       leidWerkmaatschappijAf(dossierRow?.dossiernummer, dossierRow?.bouw7_filiaal, werkmaatschappijen)
     const bedrijfRow = (wmId && werkmaatschappijen.find(w => w.id === wmId)) || organisatie
+
+    // Betalingsconditie-fallback: offertes uit de inline-flow krijgen geen expliciete
+    // keuze mee. Zonder gekozen conditie tonen we de standaard (of de eerste), zodat
+    // het betalingsblok niet leeg blijft. `quote` wordt in-place aangevuld zodat elke
+    // aanroeper (alle render-routes) het meekrijgt zonder signatuurwijziging.
+    if (quote && !quote.betalingsconditie) {
+      try {
+        const { data: bcs } = await supabase
+          .from('betalingscondities')
+          .select('*')
+          .order('is_standaard', { ascending: false })
+          .order('volgorde', { ascending: true })
+          .limit(1)
+        if (bcs && bcs[0]) quote.betalingsconditie = bcs[0]
+      } catch {
+        /* geen betalingsconditie beschikbaar */
+      }
+    }
 
     return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow) }
   } catch {

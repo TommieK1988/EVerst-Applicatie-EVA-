@@ -7,10 +7,21 @@ import type { Scenario } from '@/lib/everts-calc/types'
 import type { Betalingsconditie } from '@/app/(platform)/everts-calc/actions/betalingscondities'
 import type { AlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/algemene-voorwaarden'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Alert } from '@/components/ui/alert'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function CalculatieInstellingenKaarten({ projectId }: { projectId: string }) {
+interface Props {
+  projectId: string
+  /** Verplicht-modus: toon een waarschuwing + "Doorgaan"-knop die pas actief is als
+   *  beide keuzes gemaakt zijn (gebruikt vóór het aanmaken van een offerte). */
+  vereist?: boolean
+  /** Aangeroepen wanneer in vereist-modus op Doorgaan wordt geklikt (beide gekozen). */
+  onVoltooid?: () => void
+}
+
+export default function CalculatieInstellingenKaarten({ projectId, vereist = false, onVoltooid }: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
@@ -39,8 +50,16 @@ export default function CalculatieInstellingenKaarten({ projectId }: { projectId
     setScenario(bijgewerkt)
   }
 
+  const beideGekozen = !!scenario.betalingsconditie_id && !!scenario.algemene_voorwaarden_id
+
   return (
     <div className="grid grid-cols-1 gap-4">
+
+      {vereist && !beideGekozen && (
+        <Alert tone="warning" title="Kies eerst betalingscondities én algemene voorwaarden">
+          Deze zijn verplicht voordat je een offerte kunt aanmaken. Ze worden vastgelegd op deze calculatie.
+        </Alert>
+      )}
 
       {/* ─── Offerte-instellingen ────────────────────────────────────────────── */}
       <Card>
@@ -80,6 +99,14 @@ export default function CalculatieInstellingenKaarten({ projectId }: { projectId
           </div>
         </CardBody>
       </Card>
+
+      {vereist && (
+        <div className="flex justify-end">
+          <Button variant="primary" size="md" disabled={!beideGekozen} onClick={onVoltooid}>
+            Doorgaan naar offerte
+          </Button>
+        </div>
+      )}
 
     </div>
   )

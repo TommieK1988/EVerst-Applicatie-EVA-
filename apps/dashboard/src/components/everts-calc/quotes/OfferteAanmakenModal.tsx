@@ -25,6 +25,10 @@ interface Props {
   open: boolean
   onClose: () => void
   projectId: string
+  /** Scenario (calculatie) waarvan de offerte gemaakt wordt. Zonder → standaard/eerste. */
+  scenarioId?: string
+  /** Dossier waarin de offerte inline wordt aangemaakt — koppelt project ⇄ dossier. */
+  dossierId?: string | null
   projectNaam: string
   clientNaam: string | null
   projectNummer: string | null
@@ -43,7 +47,7 @@ interface Layout {
 
 export default function OfferteAanmakenModal({
   open, onClose,
-  projectId, projectNaam, clientNaam, projectNummer, type, terugNaarUrl,
+  projectId, scenarioId, dossierId, projectNaam, clientNaam, projectNummer, type, terugNaarUrl,
 }: Props) {
   const router = useRouter()
   const [layouts, setLayouts] = useState<Layout[]>([])
@@ -65,11 +69,13 @@ export default function OfferteAanmakenModal({
       setFetchingData(false)
     }).catch(() => setFetchingData(false))
 
-    // Tel calculatieregels voor dit project (gefilterd op actief scenario)
+    // Tel calculatieregels voor het gekozen (of standaard) scenario
     import('@/lib/everts-calc/local-store').then(({ getScenarios, getGroepen, getCalculatieregels }) => {
       try {
         const scenarios = getScenarios(projectId)
-        const actief = scenarios.find(s => s.is_standaard) ?? scenarios[0]
+        const actief = scenarioId
+          ? scenarios.find(s => s.id === scenarioId)
+          : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
         const groepen = actief ? getGroepen(actief.id) : getGroepen()
         const count = groepen.reduce((sum, g) => sum + getCalculatieregels(g.id).length, 0)
         setAantalRegels(count)
@@ -77,7 +83,7 @@ export default function OfferteAanmakenModal({
         setAantalRegels(0)
       }
     })
-  }, [open, projectId])
+  }, [open, projectId, scenarioId])
 
   async function handleAanmaken() {
     setLoading(true)
@@ -85,9 +91,11 @@ export default function OfferteAanmakenModal({
       const { getGroepen, getCalculatieregels, getComponentregels, getScenarios } = await import('@/lib/everts-calc/local-store')
       const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
 
-      // Filter op actief scenario van dit project
+      // Filter op het gekozen (of standaard) scenario van dit project
       const scenarios = getScenarios(projectId)
-      const actiefScenario = scenarios.find(s => s.is_standaard) ?? scenarios[0]
+      const actiefScenario = scenarioId
+        ? scenarios.find(s => s.id === scenarioId)
+        : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
 
       const alleGroepen: Groep[] = actiefScenario ? getGroepen(actiefScenario.id) : getGroepen()
       const alleRegels: Calculatieregel[] = getCalculatieregels()
@@ -133,11 +141,16 @@ export default function OfferteAanmakenModal({
 
       const { id } = await maakQuoteVanuitProjectMetImport({
         projectId,
+        scenarioId: actiefScenario?.id ?? null,
+        dossierId,
         projectNaam,
         clientNaam,
         projectNummer,
         type,
         layoutId: gekozenLayoutId,
+        // Keuzes uit het Offerte-instellingen-blok (scenario).
+        betalingsconditieId: actiefScenario?.betalingsconditie_id ?? null,
+        voorwaardenId: actiefScenario?.algemene_voorwaarden_id ?? null,
         importRegels,
         structuur,
       })

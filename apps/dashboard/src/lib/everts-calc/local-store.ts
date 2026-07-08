@@ -232,6 +232,52 @@ export function maakStandaardScenario(project_id: string): Scenario {
   return nieuw
 }
 
+/**
+ * Dupliceert een scenario (calculatie) volledig: het scenario zelf (incl.
+ * opslagen, betalingsconditie en algemene voorwaarden) plus de hele boom
+ * groepen → calculatieregels → componentregels, met verse id's en geremapte
+ * parent/foreign-keys. De kopie is nooit de standaard. Retourneert het nieuwe
+ * scenario (of null als het bronscenario niet bestaat).
+ */
+export function kopieerScenario(scenarioId: string, naam?: string): Scenario | null {
+  const bron = getScenario(scenarioId)
+  if (!bron) return null
+
+  const nieuwScenario: Scenario = {
+    ...bron,
+    id: nieuweId(),
+    naam: naam ?? `Kopie van ${bron.naam}`,
+    is_standaard: false,
+  }
+  slaScenarioOp(nieuwScenario)
+
+  // Groepen kopiëren; eerst alle nieuwe id's bepalen zodat parent_id remapt.
+  const bronGroepen = getGroepen(scenarioId)
+  const groepIdMap = new Map<string, string>()
+  for (const g of bronGroepen) groepIdMap.set(g.id, nieuweId())
+  for (const g of bronGroepen) {
+    slaGroepOp({
+      ...g,
+      id: groepIdMap.get(g.id)!,
+      scenario_id: nieuwScenario.id,
+      parent_id: g.parent_id ? (groepIdMap.get(g.parent_id) ?? null) : null,
+    })
+  }
+
+  // Calculatieregels + componentregels kopiëren met geremapte foreign-keys.
+  for (const g of bronGroepen) {
+    for (const r of getCalculatieregels(g.id)) {
+      const nieuweRegelId = nieuweId()
+      slaCalculatieregelOp({ ...r, id: nieuweRegelId, groep_id: groepIdMap.get(g.id)! })
+      for (const c of getComponentregels(r.id)) {
+        slaComponentregelOp({ ...c, id: nieuweId(), calculatieregel_id: nieuweRegelId })
+      }
+    }
+  }
+
+  return nieuwScenario
+}
+
 // ─── Activiteiten ─────────────────────────────────────────────────────────────
 
 export function getActiviteiten(element_id?: string, scenario_id?: string): Activiteit[] {

@@ -112,9 +112,18 @@ export function buildDemoDossierContext(): DossierContext {
     teamleider: 'T. Teamleider',
     werkvoorbereider: 'W. Werkvoorbereider',
     uitvoerder: 'U. Uitvoerder',
+    controller: 'C. Controller',
     contactpersoon: 'J. de Vries',
     contactpersoon_email: 'j.devries@corporatie-voorbeeld.nl',
     contactpersoon_telefoon: '030 - 765 43 21',
+    klant_naam: 'Woningcorporatie Voorbeeld',
+    klant_adres: 'Klantlaan 25',
+    klant_postcode: '5678 CD',
+    klant_plaats: 'Utrecht',
+    klant_email: 'info@corporatie-voorbeeld.nl',
+    klant_telefoon: '030 - 765 43 21',
+    klant_kvk: '87654321',
+    klant_btw: 'NL876543210B01',
   }
 }
 

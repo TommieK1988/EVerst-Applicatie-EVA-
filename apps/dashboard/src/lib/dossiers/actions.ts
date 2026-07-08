@@ -449,6 +449,43 @@ export async function koppelCalculatieProject(
 }
 
 /**
+ * Persisteert (idempotent) een bestaand everts-calc `projectId` als
+ * `dossiers.everts_calc_project_id`. Nodig omdat de aanvraag/offerte-fase het
+ * project alleen in localStorage bewaarde, waardoor de offerte-render het dossier
+ * niet terugvond (leeg werkadres/werkmaatschappij/contactpersoon). Wordt aangeroepen
+ * bij het aanmaken van een inline-offerte én als zelfherstel wanneer een dossier met
+ * een localStorage-project nog geen koppeling heeft. Overschrijft nooit een
+ * bestaande koppeling en is best-effort (faalt stil).
+ */
+export async function koppelDossierAanProject(
+  dossierId: string,
+  projectId: string,
+): Promise<{ ok: boolean; projectId?: string }> {
+  if (!dossierId || !projectId) return { ok: false }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  try {
+    const { data: dossier } = await supabase
+      .from('dossiers')
+      .select('everts_calc_project_id')
+      .eq('id', dossierId)
+      .single()
+    // Al gekoppeld? Niet overschrijven (idempotent).
+    if (dossier?.everts_calc_project_id) {
+      return { ok: true, projectId: dossier.everts_calc_project_id as string }
+    }
+    const { error } = await supabase
+      .from('dossiers')
+      .update({ everts_calc_project_id: projectId })
+      .eq('id', dossierId)
+    if (error) return { ok: false }
+    return { ok: true, projectId }
+  } catch {
+    return { ok: false }
+  }
+}
+
+/**
  * Servicedesk: markeer de gekoppelde offerte als Akkoord. Zet de aanneemsom (uit de
  * gegenereerde quote) in het dossier, schakelt naar termijn-facturatie (tenzij handmatig
  * vastgezet) en werkt de substatus bij. Het Calculatie-tab blijft zichtbaar.

@@ -59,9 +59,19 @@ export interface DossierContext {
   teamleider: string
   werkvoorbereider: string
   uitvoerder: string
+  controller: string
   contactpersoon: string
   contactpersoon_email: string
   contactpersoon_telefoon: string
+  // Opdrachtgever van het dossier (relaties!klant_id) — bron voor het klant-blok.
+  klant_naam: string
+  klant_adres: string
+  klant_postcode: string
+  klant_plaats: string
+  klant_email: string
+  klant_telefoon: string
+  klant_kvk: string
+  klant_btw: string
 }
 
 /** Lege dossier-context (offerte zonder gekoppeld dossier). */
@@ -71,7 +81,10 @@ export const LEEG_DOSSIER: DossierContext = {
   werkadres: '', werkadres_naam: '', werkadres_straat: '', werkadres_postcode: '',
   werkadres_plaats: '', werkadres_telefoon: '', werkadres_email: '',
   calculator: '', projectleider: '', teamleider: '', werkvoorbereider: '', uitvoerder: '',
+  controller: '',
   contactpersoon: '', contactpersoon_email: '', contactpersoon_telefoon: '',
+  klant_naam: '', klant_adres: '', klant_postcode: '', klant_plaats: '',
+  klant_email: '', klant_telefoon: '', klant_kvk: '', klant_btw: '',
 }
 
 /** Eén BTW-tarief-groep met grondslag + BTW-bedrag (voor meerdere tarieven in één offerte). */
@@ -79,10 +92,10 @@ export interface BtwGroepContext {
   pct: number
   pct_str: string          // "21%"
   grondslag: string        // € geformatteerd
-  grondslag_raw: number
+  grondslag_raw: string    // kaal met duizendpunt (10.000)
   grondslag_bedrag: string // 10.000,00 (zonder €)
   btw_bedrag: string       // € geformatteerd
-  btw_bedrag_raw: number
+  btw_bedrag_raw: string   // kaal met duizendpunt (2.100)
   btw_bedrag_getal: string // 2.100,00 (zonder €)
 }
 
@@ -139,6 +152,9 @@ export interface RenderContext {
     postcode_plaats: string
     email: string
     telefoon: string
+    contactpersoon: string           // uit het dossier, anders offerte.contactpersoon
+    contactpersoon_email: string
+    contactpersoon_telefoon: string
     kvk: string
     btw: string
   }
@@ -165,21 +181,21 @@ export interface RenderContext {
   opmerkingen: string
   totalen: {
     subtotaal: string          // formatted (€)
-    subtotaal_raw: number
+    subtotaal_raw: string      // kaal met duizendpunt (10.000)
     subtotaal_bedrag: string   // 10.000,00 (zonder €)
     btw_pct: number
     btw_bedrag: string         // formatted (€)
-    btw_bedrag_raw: number
+    btw_bedrag_raw: string     // kaal met duizendpunt
     btw_bedrag_getal: string   // 2.100,00 (zonder €)
     totaal: string             // formatted (€)
-    totaal_raw: number
+    totaal_raw: string         // kaal met duizendpunt
     totaal_bedrag: string      // 12.100,00 (zonder €)
     stelposten_subtotaal: string
-    stelposten_subtotaal_raw: number
+    stelposten_subtotaal_raw: string
     stelposten_subtotaal_bedrag: string
     stelposten_in_totaal: boolean
     opties_subtotaal: string
-    opties_subtotaal_raw: number
+    opties_subtotaal_raw: string
     opties_subtotaal_bedrag: string
     btw_groepen: BtwGroepContext[]
     heeft_meerdere_btw: boolean
@@ -196,7 +212,8 @@ interface SectieContext {
   niveau: number
   volgorde: number
   subtotaal: string         // formatted (€)
-  subtotaal_raw: number
+  subtotaal_raw: string     // kaal met duizendpunt (5.000)
+  subtotaal_num: number     // intern: numerieke waarde voor de boom-optelling
   subtotaal_bedrag: string  // 5.000,00 (zonder €)
   toon_detail: boolean
   is_optioneel: boolean
@@ -215,7 +232,7 @@ interface BoomNode extends SectieContext {
   kinderen: BoomNode[]
   heeft_kinderen: boolean
   subtotaal_incl: string        // opgerold, geformatteerd (€ 12.500,00)
-  subtotaal_incl_raw: number    // opgerold, kaal getal
+  subtotaal_incl_raw: string    // opgerold, kaal met duizendpunt (12.500)
   subtotaal_incl_bedrag: string // opgerold, zonder € (12.500,00)
 }
 
@@ -226,10 +243,10 @@ interface RegelContext {
   hoeveelheid: string       // formatted number
   eenheid: string
   eenheidsprijs: string     // formatted (€)
-  eenheidsprijs_raw: number
+  eenheidsprijs_raw: string // kaal met duizendpunt
   eenheidsprijs_bedrag: string // 12,50 (zonder €)
   totaal: string            // formatted (€)
-  totaal_raw: number
+  totaal_raw: string        // kaal met duizendpunt
   totaal_bedrag: string     // 131,25 (zonder €)
   btw_pct: number           // BTW percentage bijv. 21
   is_stelpost: boolean
@@ -248,7 +265,7 @@ interface StelpostContext {
   omschrijving: string
   sectie_naam: string
   totaal: string
-  totaal_raw: number
+  totaal_raw: string
   totaal_bedrag: string
 }
 
@@ -280,6 +297,18 @@ function numEuroPlain(n: number | null | undefined): string {
 }
 
 /**
+ * "Kaal" bedrag mét duizendscheiding, zonder euroteken en zonder verplichte
+ * decimalen (bv. 10000 → "10.000", 12.5 → "12,5", 131.25 → "131,25"). Voor de
+ * `*_raw`-variabelen: nummer-look, maar wél met duizendpunt zodat grote bedragen
+ * leesbaar blijven.
+ */
+function numRaw(n: number | null | undefined): string {
+  const num = n == null ? 0 : Number(n)
+  if (isNaN(num)) return '—'
+  return num.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+/**
  * Bouwt een geneste structuurboom uit een platte, op volgorde gesorteerde lijst
  * secties. Elke sectie wordt kind van de dichtstbijzijnde voorgaande sectie met
  * een lager niveau (stack-algoritme — werkt voor strikte 1→2→3 nesting én als een
@@ -297,7 +326,7 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
       kinderen: [],
       heeft_kinderen: false,
       subtotaal_incl: '',
-      subtotaal_incl_raw: 0,
+      subtotaal_incl_raw: '',
       subtotaal_incl_bedrag: '',
     }
     // Ga terug tot de bovenkant van de stack een lager niveau heeft: die is de ouder.
@@ -318,13 +347,14 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
 
   // Bottom-up de opgerolde subtotalen berekenen.
   function roll(n: BoomNode): number {
-    let som = n.subtotaal_raw
+    let som = n.subtotaal_num
     for (const k of n.kinderen) som += roll(k)
-    n.subtotaal_incl_raw = Math.round(som * 100) / 100
-    n.subtotaal_incl = euro(n.subtotaal_incl_raw)
-    n.subtotaal_incl_bedrag = numEuroPlain(n.subtotaal_incl_raw)
+    const inclNum = Math.round(som * 100) / 100
+    n.subtotaal_incl = euro(inclNum)
+    n.subtotaal_incl_raw = numRaw(inclNum)
+    n.subtotaal_incl_bedrag = numEuroPlain(inclNum)
     n.heeft_kinderen = n.kinderen.length > 0
-    return n.subtotaal_incl_raw
+    return inclNum
   }
   behouden.forEach(roll)
 
@@ -356,10 +386,10 @@ export function buildRenderContext(
       hoeveelheid: numNL(line.hoeveelheid),
       eenheid: line.eenheid,
       eenheidsprijs: euro(line.eenheidsprijs),
-      eenheidsprijs_raw: line.eenheidsprijs,
+      eenheidsprijs_raw: numRaw(line.eenheidsprijs),
       eenheidsprijs_bedrag: numEuroPlain(line.eenheidsprijs),
       totaal: euro(line.line_total),
-      totaal_raw: line.line_total,
+      totaal_raw: numRaw(line.line_total),
       totaal_bedrag: numEuroPlain(line.line_total),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       btw_pct: (line as any).btw_pct ?? 21,
@@ -387,7 +417,8 @@ export function buildRenderContext(
       niveau: s.niveau,
       volgorde: s.volgorde,
       subtotaal: euro(s.subtotaal),
-      subtotaal_raw: s.subtotaal,
+      subtotaal_raw: numRaw(s.subtotaal),
+      subtotaal_num: s.subtotaal,
       subtotaal_bedrag: numEuroPlain(s.subtotaal),
       toon_detail: s.toon_detail,
       is_optioneel: s.is_optioneel,
@@ -418,7 +449,7 @@ export function buildRenderContext(
           sectie_naam: s.naam,
           totaal: r.totaal,
           totaal_raw: r.totaal_raw,
-          totaal_bedrag: numEuroPlain(r.totaal_raw),
+          totaal_bedrag: r.totaal_bedrag,
         })
       }
     }
@@ -437,8 +468,24 @@ export function buildRenderContext(
   const uitsluitingen = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''
   const opmerkingen   = terms.find(t => t.type === 'opmerkingen')?.inhoud   ?? ''
 
+  // Klantgegevens: voorkeur voor de opdrachtgever van het gekoppelde dossier
+  // (relaties!klant_id), anders de losse `clients`-tabel van de offerte. De
+  // inline-flow vult `clients` alleen met de naam, dus zonder dossier bleef het
+  // adres leeg.
   const klant = quote.client
-  const postcode_plaats = [klant?.postcode, klant?.plaats].filter(Boolean).join(' ')
+  const d = dossier
+  const kNaam     = (d.heeft && d.klant_naam)     || klant?.naam     || ''
+  const kAdres    = (d.heeft && d.klant_adres)    || klant?.adres    || ''
+  const kPostcode = (d.heeft && d.klant_postcode) || klant?.postcode || ''
+  const kPlaats   = (d.heeft && d.klant_plaats)   || klant?.plaats   || ''
+  const kEmail    = (d.heeft && d.klant_email)    || klant?.email    || ''
+  const kTelefoon = (d.heeft && d.klant_telefoon) || klant?.telefoon || ''
+  const kKvk      = (d.heeft && d.klant_kvk)      || klant?.kvk      || ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const kBtw      = (d.heeft && d.klant_btw)      || (klant as any)?.btw_nummer || ''
+  const kContact  = d.contactpersoon || quote.contactpersoon || ''
+  const bedrijfsnaam = klant?.bedrijfsnaam ?? ''
+  const postcode_plaats = [kPostcode, kPlaats].filter(Boolean).join(' ')
 
   // BTW-uitsplitsing per tarief: groepeer alle niet-optionele regels op btw_pct.
   const grondslagPerTarief = new Map<number, number>()
@@ -458,10 +505,10 @@ export function buildRenderContext(
         pct,
         pct_str: `${pct}%`,
         grondslag: euro(grondslag),
-        grondslag_raw: grondslag,
+        grondslag_raw: numRaw(grondslag),
         grondslag_bedrag: numEuroPlain(grondslag),
         btw_bedrag: euro(btwBedrag),
-        btw_bedrag_raw: btwBedrag,
+        btw_bedrag_raw: numRaw(btwBedrag),
         btw_bedrag_getal: numEuroPlain(btwBedrag),
       }
     })
@@ -490,19 +537,21 @@ export function buildRenderContext(
       betalingscondities_naam: betalingsconditie?.naam ?? '',
     },
     klant: {
-      naam: klant?.naam ?? '',
-      bedrijfsnaam: klant?.bedrijfsnaam ?? '',
-      bedrijf_of_naam: klant?.bedrijfsnaam ?? klant?.naam ?? '',
+      naam: kNaam,
+      bedrijfsnaam,
+      bedrijf_of_naam: bedrijfsnaam || kNaam,
       aanhef: quote.aanhef ?? '',
-      adres: klant?.adres ?? '',
-      postcode: klant?.postcode ?? '',
-      plaats: klant?.plaats ?? '',
+      adres: kAdres,
+      postcode: kPostcode,
+      plaats: kPlaats,
       postcode_plaats,
-      email: klant?.email ?? '',
-      telefoon: klant?.telefoon ?? '',
-      kvk: klant?.kvk ?? '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      btw: (klant as any)?.btw_nummer ?? '',
+      email: kEmail,
+      telefoon: kTelefoon,
+      contactpersoon: kContact,
+      contactpersoon_email: d.contactpersoon_email || '',
+      contactpersoon_telefoon: d.contactpersoon_telefoon || '',
+      kvk: kKvk,
+      btw: kBtw,
     },
     bedrijf,
     dossier,
@@ -527,19 +576,19 @@ export function buildRenderContext(
     opmerkingen,
     totalen: {
       subtotaal: euro(quote.subtotaal_ex_btw),
-      subtotaal_raw: quote.subtotaal_ex_btw,
+      subtotaal_raw: numRaw(quote.subtotaal_ex_btw),
       subtotaal_bedrag: numEuroPlain(quote.subtotaal_ex_btw),
       btw_pct: quote.btw_pct,
       btw_bedrag: euro(quote.btw_bedrag),
-      btw_bedrag_raw: quote.btw_bedrag,
+      btw_bedrag_raw: numRaw(quote.btw_bedrag),
       btw_bedrag_getal: numEuroPlain(quote.btw_bedrag),
       totaal: euro(quote.totaal_inc_btw),
-      totaal_raw: quote.totaal_inc_btw,
+      totaal_raw: numRaw(quote.totaal_inc_btw),
       totaal_bedrag: numEuroPlain(quote.totaal_inc_btw),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stelposten_subtotaal: euro((quote as any).stelposten_subtotaal ?? 0),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      stelposten_subtotaal_raw: Number((quote as any).stelposten_subtotaal ?? 0),
+      stelposten_subtotaal_raw: numRaw(Number((quote as any).stelposten_subtotaal ?? 0)),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stelposten_subtotaal_bedrag: numEuroPlain(Number((quote as any).stelposten_subtotaal ?? 0)),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -547,7 +596,7 @@ export function buildRenderContext(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       opties_subtotaal: euro((quote as any).opties_subtotaal ?? 0),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      opties_subtotaal_raw: Number((quote as any).opties_subtotaal ?? 0),
+      opties_subtotaal_raw: numRaw(Number((quote as any).opties_subtotaal ?? 0)),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       opties_subtotaal_bedrag: numEuroPlain(Number((quote as any).opties_subtotaal ?? 0)),
       btw_groepen,

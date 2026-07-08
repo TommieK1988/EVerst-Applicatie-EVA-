@@ -178,6 +178,16 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   layoutId: string | null
   importRegels: ImportRegel[]
   structuur?: StructuurGroep[]
+  /** Dossier waarin de offerte inline wordt aangemaakt — koppelt project ⇄ dossier
+   *  zodat de render werkadres/werkmaatschappij/contactpersoon terugvindt. */
+  dossierId?: string | null
+  /** Scenario (calculatie) waaruit de offerte gemaakt is — onthouden op de quote
+   *  zodat offertes per calculatie gegroepeerd kunnen worden. */
+  scenarioId?: string | null
+  /** Gekozen betalingsconditie uit het Offerte-instellingen-blok. */
+  betalingsconditieId?: string | null
+  /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
+  voorwaardenId?: string | null
 }): Promise<{ id: string }> {
   const supabase = await getDb()
 
@@ -187,6 +197,15 @@ export async function maakQuoteVanuitProjectMetImport(params: {
     .select('id, geldigheid_dagen, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
     .eq('is_standaard', true)
     .single()
+
+  // Standaard betalingsconditie (of de eerste) — de inline-flow heeft geen picker.
+  const { data: standaardBc } = await supabase
+    .from('betalingscondities')
+    .select('id')
+    .order('is_standaard', { ascending: false })
+    .order('volgorde', { ascending: true })
+    .limit(1)
+    .maybeSingle()
 
   // Maak of zoek klant op basis van naam
   let clientId: string | null = null
@@ -226,13 +245,26 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       datum,
       geldig_tot,
       project_id: params.projectId,
+      scenario_id: params.scenarioId ?? null,
       template_id: template?.id ?? null,
       layout_id: params.layoutId ?? null,
+      // Gekozen betalingsconditie (Offerte-instellingen) wint; anders de standaard.
+      betalingsconditie_id: params.betalingsconditieId ?? standaardBc?.id ?? null,
+      voorwaarden_id: params.voorwaardenId ?? null,
     })
     .select('id')
     .single()
 
   if (error) throw new Error(error.message)
+
+  // Dossier ⇄ project persisteren (idempotent) zodat de offerte-render het dossier
+  // terugvindt. Best-effort: een fout hier mag het aanmaken niet blokkeren.
+  if (params.dossierId) {
+    try {
+      const { koppelDossierAanProject } = await import('@/lib/dossiers/actions')
+      await koppelDossierAanProject(params.dossierId, params.projectId)
+    } catch { /* koppeling is best-effort */ }
+  }
 
   // Voeg standaard voorwaarden in
   if (template) {

@@ -3,29 +3,25 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Calculator, FileText } from 'lucide-react'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
   getDossierSubstatus, isBouw7Substatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, koppelDossierAanProject } from '@/lib/dossiers/actions'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
-import CalculatieInstellingenKaarten from '@/components/everts-calc/calculatie/CalculatieInstellingenKaarten'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
 import { DossierAutoVervers } from '../DossierAutoVervers'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
-import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
-import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
 import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
@@ -645,8 +641,6 @@ export function InformatieTab({
   const [opgeslagen, setOpgeslagen] = React.useState<FormValues>(form)
 
   const [projectId,    setProjectId]    = useState<string | null>(null)
-  const [modalOpen,    setModalOpen]    = useState(false)
-  const [modalType,    setModalType]    = useState<QuoteType>('verkoopofferte')
   const [quoteTotalen, setQuoteTotalen] = useState<{
     subtotaal_ex_btw: number
     stelposten_subtotaal: number
@@ -667,6 +661,15 @@ export function InformatieTab({
       setProjectId(map[dossier.id] ?? null)
     } catch { /* localStorage niet beschikbaar */ }
   }, [dossier.id, importTick])
+
+  // Zelfherstel: aanvraag/offerte-fase bewaarde het project alleen in localStorage.
+  // Persisteer de dossier ⇄ project-koppeling zodat de offerte-render het dossier
+  // (werkadres, werkmaatschappij, contactpersoon, opdrachtgever) terugvindt.
+  useEffect(() => {
+    if (projectId && !dossier.everts_calc_project_id) {
+      koppelDossierAanProject(dossier.id, projectId).catch(() => {})
+    }
+  }, [projectId, dossier.id, dossier.everts_calc_project_id])
 
   useEffect(() => {
     if (!projectId) { setQuoteTotalen(null); return }
@@ -735,7 +738,6 @@ export function InformatieTab({
   }
   function annuleer() { setForm(opgeslagen); setEditMode(false) }
 
-  const heeftCalcKnoppen      = sectie === 'aanvraag' && projectId != null
   const geselecteerdFa        = factuuradressen.find(fa => fa.id === form.factuuradres_id) ?? null
   // Voorkeur: gegenereerde offerte (Supabase) → anders live calculatietotalen → anders Bouw7.
   const T                     = quoteTotalen ?? calcTotalen
@@ -870,29 +872,6 @@ export function InformatieTab({
                 </a>
               </Button>
               <DossierVerversKnop dossierId={dossier.id} laatsteSync={dossier.bouw7_laatst_sync ?? null} />
-              <div className="h-6 w-px shrink-0 bg-neutral-200" />
-            </>
-          )}
-          {heeftCalcKnoppen && (
-            <>
-              <Button variant="ghost" asChild>
-                <Link href={`/aanvragen/${dossier.id}/calculatie`}>
-                  <Calculator className="h-3.5 w-3.5" />
-                  Calculatie openen
-                </Link>
-              </Button>
-              {!readOnly && (
-                <>
-                  <Button variant="ghost" onClick={() => { setModalType('verkoopofferte'); setModalOpen(true) }}>
-                    <FileText className="h-3.5 w-3.5" />
-                    Offerte aanmaken
-                  </Button>
-                  <Button variant="ghost" onClick={() => { setModalType('interne_calculatie'); setModalOpen(true) }}>
-                    <FileText className="h-3.5 w-3.5" />
-                    Interne begroting
-                  </Button>
-                </>
-              )}
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}
@@ -1419,46 +1398,20 @@ export function InformatieTab({
         </div>
         )}
 
-        {/* Calculatie-instellingen — alleen voor aanvraag met gekoppeld project */}
-        {heeftCalcKnoppen && (
-          <div className="col-span-2">
-            <CalculatieInstellingenKaarten projectId={projectId!} />
-          </div>
-        )}
-
       </div>
     </div>
   )
 
-  const modal = projectId && modalOpen && (
-    <OfferteAanmakenModal
-      open={modalOpen}
-      onClose={() => setModalOpen(false)}
-      projectId={projectId}
-      projectNaam={dossier.titel}
-      clientNaam={dossier.klant_naam ?? ''}
-      projectNummer={dossier.dossiernummer ?? ''}
-      type={modalType}
-      terugNaarUrl={`/${
-        sectie === 'aanvraag' ? 'aanvragen' :
-        sectie === 'offerte'  ? 'offertes'  : 'opdrachten'
-      }/${dossier.id}/calculatie`}
-    />
-  )
-
   if (sectie === 'offerte') {
     return (
-      <>
-        <div style={{ display: 'flex', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>{inhoud}</div>
-          <div style={{ width: 460, flexShrink: 0 }}>
-            <OffertePreview dossier={dossier} />
-          </div>
+      <div style={{ display: 'flex', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>{inhoud}</div>
+        <div style={{ width: 460, flexShrink: 0 }}>
+          <OffertePreview dossier={dossier} />
         </div>
-        {modal}
-      </>
+      </div>
     )
   }
 
-  return <>{inhoud}{modal}</>
+  return inhoud
 }
