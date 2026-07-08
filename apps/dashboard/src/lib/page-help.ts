@@ -1292,7 +1292,173 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
 ]
 
+// ── Dossier-detailpagina's: hulp per tabblad ───────────────────────────
+// Een dossier (aanvraag/offerte/opdracht/servicedesk) toont per tabblad andere
+// inhoud. De tab zit als laatste segment in de URL, dus resolven we de hulp op
+// (sectie, tab) i.p.v. één generieke tekst voor de hele detailpagina. Welke tabs
+// per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
+//   aanvragen & offertes → informatie · bestanden · calculatie · taken
+//   opdrachten           → + werkbegroting · planning · vca · uren · inkoop · verkoop · meerwerk · oplevering · financieel · formulieren
+//   servicedesk          → informatie · bestanden · calculatie · planning · vca · financieel
+const DOSSIER_ROOT_LABELS: Record<string, string> = {
+  aanvragen:   'Aanvraag',
+  offertes:    'Offerte',
+  opdrachten:  'Opdracht',
+  servicedesk: 'Servicedesk',
+}
+
+function dossierTabHelp(root: string, tab: string): PageHelp | null {
+  const rootLabel = DOSSIER_ROOT_LABELS[root]
+  if (!rootLabel) return null
+  const isOpdracht = root === 'opdrachten'
+  const isServicedesk = root === 'servicedesk'
+  const T = (tabLabel: string, description: string, sections?: HelpSection[]): PageHelp =>
+    ({ title: `${rootLabel} — ${tabLabel}`, description, sections })
+
+  switch (tab) {
+    case 'informatie':
+      return T('Informatie',
+        'De kern van het dossier: klant- en contactgegevens, het werkadres, de betrokken rollen, de status, kenmerken en interne notities. Wat je hier vastlegt stuurt de rest van het traject.',
+        [
+          { title: 'Rollen & verantwoordelijken', body: 'Wijs de projectleider, uitvoerder, calculator en eindverantwoordelijke toe in het blok Rollen. Bij een aan Bouw7 gekoppeld dossier worden rolwijzigingen teruggeschreven naar Bouw7, zodat beide systemen gelijk lopen.' },
+          { title: 'Werkadres', body: 'Het werkadres — de locatie van de werkzaamheden — staat los van het factuuradres van de klant. Vul het volledig in; het verschijnt op de planning, werkbonnen en documenten.' },
+          { title: 'Status wijzigen', body: 'Met de statusknop leid je het dossier door het proces. Elke overgang wordt gelogd met datum en gebruiker. Bij afwijzen, verliezen of vervallen leg je een reden vast — die telt mee in de conversie-analyse.' },
+          { title: 'Notities & kenmerken', body: 'In de rechterkolom houd je interne notities bij (niet zichtbaar voor de klant). Met kenmerken/toggles (bijv. Spoed of Onder garantie) stuur je welke tabbladen verschijnen en welke actielijst-sjablonen automatisch worden gekoppeld.' },
+        ])
+
+    case 'bestanden':
+      return T('Bestanden',
+        'Alle documenten bij dit dossier: foto\'s, tekeningen, opnamerapporten, offertes en correspondentie. De bestanden komen live uit Bouw7 en (indien gekoppeld) uit de SharePoint-dossiermap.',
+        [
+          { title: 'Bronnen', body: 'De lijst toont de projectbestanden uit Bouw7 en, als de koppeling actief is, de bestanden uit de SharePoint-map van het dossier — samengevoegd in één overzicht.' },
+          { title: 'Downloaden', body: 'Klik op een bestand om het te downloaden. Downloads lopen via een beveiligde EVA-proxy, dus je hebt geen aparte Bouw7- of SharePoint-login nodig.' },
+        ])
+
+    case 'calculatie':
+      if (isOpdracht) {
+        return T('Calculatie',
+          'Overzicht van alle calculaties en offertes die aan deze opdracht zijn gekoppeld, inclusief goedgekeurd meerwerk. Bij een opdracht doe je het rekenwerk in de Werkbegroting; de onderliggende calculatie open je met "Calculatie openen".',
+          [
+            { title: 'Gekoppelde calculaties', body: 'De tabel toont de geaccepteerde offerte(s) en calculaties met hun verkoopprijs en marge. Goedgekeurd meerwerk telt mee in het contracttotaal.' },
+            { title: 'Werkbegroting is de werkplek', body: 'De uitvoeringsbegroting beheer je op het tabblad Werkbegroting. Dit tabblad is vooral een overzicht en een ingang naar de brondocumenten.' },
+          ])
+      }
+      return T('Calculatie',
+        'De calculatie-omgeving waarin je op basis van de opname een calculatie/kostenraming opbouwt die de basis vormt voor de offerte. Voeg posten toe via de meetstaat of handmatig; kostprijs, verkoopprijs en marge rekenen automatisch mee.',
+        [
+          { title: 'Calculatie opbouwen', body: 'Werk met de vier kostensoorten — eigen arbeid, ingehuurde arbeid, onderaanneming en materiaal — aangevuld met overige kosten en opslagen. De meetstaat is de snelste route voor schilderwerk.' },
+          { title: 'Naar offerte', body: 'De goedgekeurde calculatie is de basis voor de offerte. Vanuit hier genereer je de offerte-PDF en zet je het dossier door naar de offertefase.' },
+          ...(isServicedesk ? [{ title: 'Servicedesk', body: 'Bij een serviceklus verschijnt dit tabblad pas zodra er via "Offerte maken" een calculatie/offerte is gekoppeld — een storing loopt vaak op regie (nacalculatie) en dan is er geen calculatie vooraf.' }] : []),
+        ])
+
+    case 'werkbegroting':
+      return T('Werkbegroting',
+        'De uitvoeringsbegroting van de opdracht op regelniveau: normuren, tarieven, materiaal en onderaanneming per bewakingscode. De werkbegroting is gedeeld en cross-device — iedereen ziet dezelfde, actuele versie.',
+        [
+          { title: 'Regels & componenten', body: 'Werk per regel met normhoeveelheden, tarieven en uurtypes. Bij de overgang offerte → opdracht wordt de calculatie automatisch overgenomen als startpunt van de werkbegroting.' },
+          { title: 'Bestellen via Bouw7', body: 'Vanuit de regels maak je bestelregels aan in Bouw7. Bestelde codes worden vergrendeld in het grid; wijzigen loopt per regel (aanmaken/bijwerken) zonder de rest te verstoren.' },
+          { title: 'Goedkeuring & prognose', body: 'De werkbegroting moet op regelniveau geaccordeerd worden (door controller of directie) voordat er besteld of geprognosticeerd kan worden. Een WB!-badge geeft aan dat er ná akkoord nog wijzigingen zijn. De prognose is voorbehouden aan controller/directie.' },
+        ])
+
+    case 'planning':
+      return T('Planning',
+        'De planning-items van dit dossier: wie er wanneer op staat ingepland. Wijzigingen synchroniseren met de centrale planningsmodule.',
+        [
+          { title: 'Inplannen', body: 'Voeg planning-items toe met een verplichte bewakingscode, zodat de geplande uren aan het juiste onderdeel in Bouw7 hangen. De items verschijnen ook op de medewerker- en projectplanning.' },
+          { title: 'Samenhang', body: 'Dit tabblad toont dezelfde items als de centrale planningsmodule, maar gefilterd op dit dossier — handig om snel te zien of het werk belegd is.' },
+        ])
+
+    case 'taken':
+      return T('Taken',
+        'De actielijsten en losse taken bij dit dossier. Houd hier bij welke acties nog open staan, wie ze oppakt en wanneer ze af moeten.',
+        [
+          { title: 'Actielijsten', body: 'Een dossier kan één of meer actielijsten hebben. Sjabloon-lijsten worden automatisch gekoppeld zodra het dossier aan de trigger-voorwaarden voldoet (bijv. een bepaalde status of toggle).' },
+          { title: 'Taken afwerken', body: 'Vink taken af als ze klaar zijn en wijs een verantwoordelijke en deadline toe. Openstaande taken verschijnen ook bij de betrokkene onder "Mijn taken".' },
+        ])
+
+    case 'vca':
+      return T('VCA',
+        'Kwaliteit, Arbo en Milieu voor dit dossier: de ingediende VCA-/KAM-formulieren en de openstaande VCA-taken. Dit tabblad verschijnt alleen als de VCA-toggle voor het dossier aanstaat.',
+        [
+          { title: 'Ingediende formulieren', body: 'De VCA-/KAM-formulieren (toolbox, inspectie, LMRA) die voor dit dossier zijn ingediend staan hier bij elkaar. Klik door naar de inzending voor de volledige inhoud en de PDF.' },
+          { title: 'Openstaande taken', body: 'Nog uit te voeren VCA-taken worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat.' },
+        ])
+
+    case 'uren':
+      return T('Uren',
+        'De op deze opdracht geboekte uren, live uit Bouw7, afgezet tegen de werkbegroting. Zo zie je of de bestede uren binnen de begrote normuren blijven.',
+        [
+          { title: 'Geboekt vs. begroot', body: 'De uren komen rechtstreeks uit Bouw7 (kostensoort arbeid) en worden per bewakingscode vergeleken met de normuren uit de werkbegroting. Zonder werkbegroting toont het tabblad alleen de geboekte uren.' },
+          { title: 'Intern en ingehuurd', body: 'Eigen monteurs en ingehuurde krachten (ZZP/uitzend) staan beide in de urenregistratie. De inkoopkant van ingehuurde uren wordt via de inkoopfactuur afgestemd.' },
+        ])
+
+    case 'inkoop':
+      return T('Inkoop',
+        'De op deze opdracht geboekte inkoop- en kostenregels uit Bouw7, met een EVA-rekenlaag om regels te hercoderen of aan een order/contract toe te wijzen — zonder de Bouw7-bron te wijzigen.',
+        [
+          { title: 'Geboekte kosten', body: 'De geboekte inkoopkosten staan als filterbare tabel. Ze komen uit Bouw7; EVA leest ze alleen en schrijft niets terug.' },
+          { title: 'Correcties', body: 'Met de EVA-rekenlaag kun je een kostenregel hercoderen of toewijzen aan een order/contract voor een zuiverder financieel beeld. De correctie leeft in EVA en laat Bouw7 ongemoeid.' },
+        ])
+
+    case 'verkoop':
+      return T('Verkoop',
+        'De verkoopfacturen van deze opdracht, live uit Bouw7. Zo zie je wat er al gefactureerd en betaald is zonder Bouw7 te hoeven openen.',
+        [
+          { title: 'Facturen', body: 'De uitgaande facturen (termijnen, eindfactuur, creditnota\'s) komen rechtstreeks uit Bouw7 met status en bedrag. Het opvolgen van openstaande facturen doe je centraal op het Facturen-scherm (debiteurenbeheer).' },
+        ])
+
+    case 'meerwerk':
+      return T('Meerwerk',
+        'Het meer- en minderwerk op deze opdracht: EVA-native regels met status, prijsvorm (regie/aangenomen) en factuurreferentie. De som van goedgekeurd meerwerk is leidend in het contracttotaal.',
+        [
+          { title: 'Meerwerk vastleggen', body: 'Leg per post de omschrijving, het bedrag en de prijsvorm vast. Bij bedragen boven de drempel (bijv. > €500 of > 10% contractsom) is schriftelijk klantakkoord verplicht vóór uitvoering; zonder bewijs mag de post niet op "Geaccepteerd".' },
+          { title: 'Doorzetten naar Bouw7', body: 'Bij akkoord wordt een bewakingscode voor het meerwerk in Bouw7 aangemaakt. Het goedgekeurde bedrag telt automatisch mee in het contracttotaal en de financiële overzichten.' },
+        ])
+
+    case 'oplevering':
+      return T('Oplevering',
+        'De oplevering van de opdracht: opleverpunten (restpunten), de klant- en onderaannemerportalen en de opleverrapportage. Hier start ook de garantietermijn.',
+        [
+          { title: 'Opleverpunten', body: 'Leg restpunten vast met foto, verantwoordelijke en deadline. Een opleverpunt kan extra werk opleveren — dat zet je door als meerwerk. Openstaande punten kunnen een inhouding (standaard 5%) op de eindfactuur veroorzaken.' },
+          { title: 'Portalen', body: 'Via een publieke tokenlink melden onderaannemers zich af, geeft de opdrachtgever akkoord op de oplevering en kunnen bewoners feedback geven — zonder EVA-account.' },
+          { title: 'Rapportage', body: 'Genereer een opleverrapport met de punten en foto\'s. Bij akkoord van de opdrachtgever gaat de status naar Opgeleverd (evt. onder voorbehoud) en start de garantietermijn.' },
+        ])
+
+    case 'financieel':
+      if (isServicedesk) {
+        return T('Financieel',
+          'Het samengevoegde financiële tabblad van een servicedesk-dossier: regie-factuurregels, inkoop en verkoop bij elkaar. Passend bij een snelle serviceklus die op regie of aangenomen loopt.',
+          [
+            { title: 'Regie-factuurregels', body: 'Bij een regie-klus leg je hier de te factureren uren en materialen vast tegen contract- of standaardtarief. Goedgekeurde regels worden doorgezet naar Bouw7.' },
+            { title: 'Aangenomen', body: 'Loopt de klus aangenomen (vaste prijs), dan werk je met de calculatie en termijnen zoals bij een reguliere opdracht.' },
+          ])
+      }
+      return T('Financieel',
+        'De financiële bewaking van de opdracht per bewakingscode, live uit Bouw7: begrote versus geboekte kosten, prognose en marge. Hier stel je ook termijnfacturen en de eindfactuur op.',
+        [
+          { title: 'Per bewakingscode', body: 'De kosten worden per bewakingscode getoond met begroot, geboekt en het saldo — inclusief geboekte uren. Zo zie je waar de marge onder druk staat.' },
+          { title: 'Facturatie', body: 'Stel termijnfacturen op tijdens de uitvoering en de eindfactuur ná goedgekeurde oplevering. Goedgekeurd meerwerk telt mee; bij openstaande opleverpunten wordt een inhouding van 5% aangehouden.' },
+        ])
+
+    case 'formulieren':
+      return T('Formulieren',
+        'De formulier-inzendingen die aan deze opdracht hangen: werkbonnen, inspecties, opleveringen en checklists. Volg welke nog open staan en welke al zijn ingediend.',
+        [
+          { title: 'Inzendingen', body: 'Concepten en ingediende formulieren staan hier bij elkaar met status en datum. Klik door om een concept verder in te vullen of een inzending te bekijken en als PDF te downloaden.' },
+        ])
+
+    default:
+      return null
+  }
+}
+
 export function getPageHelp(pathname: string): PageHelp | null {
+  // Dossier-detailpagina's krijgen tab-specifieke hulp (op basis van sectie + laatste segment).
+  const dossierMatch = pathname.match(/^\/(aanvragen|offertes|opdrachten|servicedesk)\/[^/]+\/([^/]+)$/)
+  if (dossierMatch) {
+    const tabHelp = dossierTabHelp(dossierMatch[1], dossierMatch[2])
+    if (tabHelp) return tabHelp
+  }
   for (const [pattern, help] of PAGE_HELP) {
     if (pattern.test(pathname)) return help
   }
