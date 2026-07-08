@@ -1373,3 +1373,291 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
 
   return { ok: true, codes: resolved.codes.map(c => ({ code: c.code, naam: c.naam })), bestelregels }
 }
+
+// ─── Werkbegroting-regels als bestelregels naar Bouw7 (upsert per regel) ──────
+//
+// Elke werkbegroting-COMPONENT → één contract-order-line ("verwachte kosten") in Bouw7.
+// Identiteit via werkbegroting_componenten.bouw7_line_id:
+//   null  → aanmaken   (POST zonder id) → id opslaan
+//   gevuld→ bijwerken  (POST mét id)     → geen duplicaat
+//   soft-deleted + id → neutraliseren   (POST mét id, quantity "0")
+// Bestelde regels (code met inkooporder/OA/geboekte factuur) worden overgeslagen en
+// nooit aangeraakt (fiscale bescherming; zie getVergrendeldeBewakingscodes).
+//
+// LET OP: dat POST /project/{project}/contract-order-line een `id` als UPDATE honoreert
+// (i.p.v. een nieuwe regel maken) is niet gedocumenteerd — te verifiëren op een
+// testproject (zie WRITE-ENDPOINTS.md). De preview toont per regel de bedoelde actie
+// zodat een eventuele verdubbeling vroeg zichtbaar wordt.
+
+/**
+ * Bewakingscodes waarop al inkoop "verbruikt" is: er staat een inkooporder, een
+ * onderaannemerscontract of een geboekte inkoopfactuur op. Regels op zo'n code worden
+ * in EVA vergrendeld en bij de sync overgeslagen. Bron: dezelfde reads als getDossierInkoop.
+ */
+export async function getVergrendeldeBewakingscodes(
+  dossierId: string,
+): Promise<{ ok: true; codes: string[] } | { ok: false; error: string }> {
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
+  const { client, bouw7Id } = ctx
+  const codes = new Set<string>()
+  try {
+    type CodeLink = { projectSecurityLink?: { code?: string | null } | null }
+    type ApolloInv = { deliveryTicket?: { securityLink?: { code?: { code?: string | null } | null } | null } | null }
+    const [orderResp, subResp, apolloInvoices] = await Promise.all([
+      client.get<{ items?: CodeLink[] }>('/list/purchase-order-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
+      client.get<{ items?: CodeLink[] }>('/list/subcontractor-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
+      client.getApolloAll<ApolloInv>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => [] as ApolloInv[]),
+    ])
+    for (const o of orderResp.items ?? []) { const c = (o.projectSecurityLink?.code ?? '').trim(); if (c) codes.add(c) }
+    for (const s of subResp.items ?? []) { const c = (s.projectSecurityLink?.code ?? '').trim(); if (c) codes.add(c) }
+    for (const inv of apolloInvoices) { const c = (inv.deliveryTicket?.securityLink?.code?.code ?? '').trim(); if (c) codes.add(c) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen vergrendelde codes mislukt.' }
+  }
+  return { ok: true, codes: [...codes] }
+}
+
+export type BestelregelActie = 'aanmaken' | 'bijwerken' | 'neutraliseren' | 'skip'
+
+/** Eén geplande bestelregel-actie voor een werkbegroting-component. */
+export type BestelregelPlanRegel = {
+  componentId: string
+  code: string
+  codeNaam: string | null
+  type: 'arbeid' | 'onderaanneming' | 'materieel'
+  label: string
+  ct: number
+  omschrijving: string
+  aantal: number
+  prijs: number
+  bedrag: number
+  eenheid: string
+  bouw7LineId: number | null
+  pslId: number | null
+  actie: BestelregelActie
+  vergrendeld: boolean
+  reden?: string
+}
+export type BestelregelPreviewResultaat =
+  | { ok: true; bouw7Id: string; regels: BestelregelPlanRegel[]; vergrendeldeCodes: string[] }
+  | { ok: false; error: string }
+
+/** Gedeelde planner: bepaal per component welke actie naar Bouw7 nodig is. */
+async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayload): Promise<BestelregelPreviewResultaat> {
+  const resolved = await resolveBewakingscodes(dossierId)
+  if (!resolved.ok) return resolved
+  const verg = await getVergrendeldeBewakingscodes(dossierId)
+  const vergrendeldeCodes = verg.ok ? verg.codes : []
+  const vergSet = new Set(vergrendeldeCodes)
+
+  const refsByCode = new Map<string, BewakingscodeRef[]>()
+  for (const c of resolved.codes) { const a = refsByCode.get(c.code) ?? []; a.push(c); refsByCode.set(c.code, a) }
+  const refVoor = (code: string, naam: string | null): BewakingscodeRef | undefined => {
+    const arr = refsByCode.get(code)
+    if (!arr) return undefined
+    return arr.find(r => codeIdentity(r.code, r.naam) === codeIdentity(code, naam)) ?? arr[0]
+  }
+
+  const regelById = new Map(payload.regels.map(r => [r.id, r]))
+  const regels: BestelregelPlanRegel[] = []
+  for (const comp of payload.componenten) {
+    const regel = regelById.get(comp.werkbegroting_regel_id)
+    if (!regel) continue
+    const verwijderd = !!comp.is_verwijderd || !!regel.is_verwijderd
+    const code = kaleCode(regel.kostengroep)
+    const naam = kgNaamDeel(regel.kostengroep)
+    const map = TYPE_NAAR_BOUW7[comp.type]
+    const ref = code ? refVoor(code, naam) : undefined
+    const pslId = ref?.pslPerCt[map.ct] ?? null
+    // Aantal/prijs mirroren de EVA-werkbegroting-som (tarief zonder opslag, net als de UI-totalen).
+    const aantal = rond(regel.hoeveelheid * comp.norm_hoeveelheid)
+    const prijs = rond(comp.tarief)
+    const bedrag = rond(aantal * prijs)
+    const bouw7LineId = comp.bouw7_line_id ?? null
+    const vergrendeld = !!code && vergSet.has(code)
+
+    let actie: BestelregelActie = 'aanmaken'
+    let reden: string | undefined
+    if (!code) { actie = 'skip'; reden = 'Regel zonder bewakingscode (kostengroep leeg).' }
+    else if (vergrendeld) { actie = 'skip'; reden = 'Besteld in Bouw7 — vergrendeld.' }
+    else if (verwijderd) {
+      if (bouw7LineId != null) actie = 'neutraliseren'
+      else { actie = 'skip'; reden = 'Verwijderd, nooit verzonden.' }
+    }
+    else if (bedrag === 0 && bouw7LineId == null) { actie = 'skip'; reden = 'Geen bedrag.' }
+    else if (bouw7LineId == null) actie = 'aanmaken'
+    else actie = 'bijwerken'
+
+    regels.push({
+      componentId: comp.id, code, codeNaam: ref?.naam ?? naam, type: comp.type, label: map.label, ct: map.ct,
+      omschrijving: (comp.omschrijving?.trim() || regel.omschrijving || '').trim(),
+      aantal, prijs, bedrag, eenheid: String(comp.eenheid || regel.eenheid || 'st'),
+      bouw7LineId, pslId, actie, vergrendeld, reden,
+    })
+  }
+  return { ok: true, bouw7Id: resolved.bouw7Id, regels, vergrendeldeCodes }
+}
+
+/** Preview (read-only): bereken per component welke actie naar Bouw7 nodig is. Schrijft niets. */
+export async function previewWerkbegrotingBestelregelsBouw7(dossierId: string, payload: WerkbegrotingPayload): Promise<BestelregelPreviewResultaat> {
+  return bouwBestelregelPlan(dossierId, payload)
+}
+
+export type StuurBestelregelsResultaat =
+  | { ok: true; aangemaakt: number; bijgewerkt: number; geneutraliseerd: number; overgeslagen: number; fouten: string[]; lineIdPerComponent: Record<string, number> }
+  | { ok: false; error: string }
+
+/**
+ * Upsert de werkbegroting-componenten als bestelregels in Bouw7 (aanmaken/bijwerken/neutraliseren),
+ * bestelde regels overgeslagen. Ontbrekende PSL's worden eerst aangemaakt (begroot 0). Het
+ * teruggekregen contract-order-line-id wordt naar `werkbegroting_componenten.bouw7_line_id`
+ * geschreven zodat een volgende sync bijwerkt i.p.v. dupliceert.
+ */
+export async function stuurWerkbegrotingBestelregelsBouw7(
+  dossierId: string,
+  payload: WerkbegrotingPayload,
+  doelHoofdstukId: number | null = null,
+): Promise<StuurBestelregelsResultaat> {
+  // Sync eerst zodat de bouw7_line_id-backfill straks op bestaande Supabase-rijen landt.
+  const sync = await syncWerkbegrotingNaarSupabase(payload)
+  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
+
+  const plan = await bouwBestelregelPlan(dossierId, payload)
+  if (!plan.ok) return { ok: false, error: plan.error }
+
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return { ok: false, error: ctx.error }
+  const { client, bouw7Id } = ctx
+  const fouten: string[] = []
+
+  // 1) Ontbrekende PSL's aanmaken (begroot 0) voor te schrijven regels zonder pslId.
+  const teMaken = plan.regels
+    .filter(r => (r.actie === 'aanmaken' || r.actie === 'bijwerken') && r.pslId == null && r.code)
+    .map(r => ({ code: r.code, naam: r.codeNaam, ct: r.ct }))
+  if (teMaken.length > 0) {
+    try {
+      const res = await zorgVoorOntbrekendePsls(client, bouw7Id, teMaken, doelHoofdstukId)
+      fouten.push(...res.fouten)
+      const naResolve = await resolveBewakingscodes(dossierId)
+      if (naResolve.ok) {
+        const refsByCode = new Map<string, BewakingscodeRef[]>()
+        for (const c of naResolve.codes) { const a = refsByCode.get(c.code) ?? []; a.push(c); refsByCode.set(c.code, a) }
+        for (const r of plan.regels) {
+          if (r.pslId != null || !r.code) continue
+          const ref = refsByCode.get(r.code)?.find(x => codeIdentity(x.code, x.naam) === codeIdentity(r.code, r.codeNaam)) ?? refsByCode.get(r.code)?.[0]
+          r.pslId = ref?.pslPerCt[r.ct] ?? null
+        }
+      }
+    } catch (e) {
+      return { ok: false, error: `Aanmaken bewakingscodes mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+    }
+  }
+
+  // 2) Contact-id's (relaties.bouw7_id) ophalen voor de te schrijven componenten.
+  const compById = new Map(payload.componenten.map(c => [c.id, c]))
+  const relatieIds = [...new Set(payload.componenten.map(c => c.relatie_id).filter((x): x is string => !!x && UUID_RE.test(x)))]
+  const contactPerRelatie = new Map<string, number>()
+  if (relatieIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = createAdminClient() as any
+    const { data } = await db.from('relaties').select('id, bouw7_id').in('id', relatieIds)
+    for (const r of data ?? []) { const bid = Number(r.bouw7_id); if (Number.isFinite(bid) && bid > 0) contactPerRelatie.set(r.id, bid) }
+  }
+
+  // 3) Upsert per regel.
+  let aangemaakt = 0, bijgewerkt = 0, geneutraliseerd = 0
+  const lineIdPerComponent: Record<string, number> = {}
+  try {
+    for (const r of plan.regels) {
+      if (r.actie === 'skip') continue
+      const comp = compById.get(r.componentId)
+      const relatieId = comp?.relatie_id && UUID_RE.test(comp.relatie_id) ? comp.relatie_id : null
+      const contactId = relatieId ? contactPerRelatie.get(relatieId) : undefined
+      const quantity = r.actie === 'neutraliseren' ? '0' : String(r.aantal)
+      const body: Record<string, unknown> = {
+        project: { id: Number(bouw7Id) },
+        description: r.omschrijving || r.label,
+        quantity,
+        unitPrice: String(r.prijs),
+        ...(r.eenheid ? { unit: r.eenheid } : {}),
+        ...(r.pslId != null ? { projectSecurityLink: { id: r.pslId } } : {}),
+        ...(contactId != null ? { contact: { id: contactId } } : {}),
+        ...(r.bouw7LineId != null ? { id: r.bouw7LineId } : {}),
+      }
+      const resp = await client.post<{ id?: number } | undefined>(`/project/${bouw7Id}/contract-order-line`, body)
+      const nieuwId = resp?.id ?? r.bouw7LineId ?? null
+      if (nieuwId != null) lineIdPerComponent[r.componentId] = nieuwId
+      if (r.actie === 'aanmaken') aangemaakt++
+      else if (r.actie === 'bijwerken') bijgewerkt++
+      else geneutraliseerd++
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Onbekende fout'
+    return { ok: false, error: /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — schrijfrechten of ids niet toegestaan.` : msg }
+  }
+
+  // 4) Backfill: gaf de POST geen id terug bij aanmaken, match de nieuwe regel op inhoud via /list.
+  const zonderId = plan.regels.filter(r => r.actie === 'aanmaken' && lineIdPerComponent[r.componentId] == null)
+  if (zonderId.length > 0) {
+    try {
+      const lines = await client
+        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })
+        .then(r => r.items ?? [])
+      const gebruikt = new Set<number>(Object.values(lineIdPerComponent))
+      for (const r of zonderId) {
+        const match = lines.find(ol =>
+          !gebruikt.has(ol.id) &&
+          (ol.projectSecurityLink?.code ?? '').trim() === r.code &&
+          (ol.description ?? '') === (r.omschrijving || r.label) &&
+          Math.abs(getal(ol.unitPrice) - r.prijs) < 0.005,
+        )
+        if (match) { lineIdPerComponent[r.componentId] = match.id; gebruikt.add(match.id) }
+      }
+    } catch { /* backfill best effort */ }
+  }
+
+  // 5) bouw7_line_id terugschrijven naar Supabase (client patcht ook zijn localStorage).
+  if (Object.keys(lineIdPerComponent).length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = createAdminClient() as any
+    const nu = new Date().toISOString()
+    for (const [componentId, lineId] of Object.entries(lineIdPerComponent)) {
+      await db.from('werkbegroting_componenten').update({ bouw7_line_id: lineId, bijgewerkt_op: nu }).eq('id', componentId).catch(() => {})
+    }
+  }
+
+  const overgeslagen = plan.regels.filter(r => r.actie === 'skip').length
+  return { ok: true, aangemaakt, bijgewerkt, geneutraliseerd, overgeslagen, fouten, lineIdPerComponent }
+}
+
+/**
+ * Optioneel "schoon opnieuw": verwijder ALLE bestelregels van het project in één keer
+ * (`DELETE /project/{id}/contract-order-lines`) en wis de EVA-koppelingen. Alleen toegestaan
+ * als er nog GEEN inkoop op het project staat (anders zou het bestelde regels meeslepen).
+ * Na afloop moeten de regels opnieuw gepusht worden (alle bouw7_line_id zijn gewist).
+ */
+export async function resetBouw7Bestelregels(
+  dossierId: string,
+  payload: WerkbegrotingPayload,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const verg = await getVergrendeldeBewakingscodes(dossierId)
+  if (verg.ok && verg.codes.length > 0) {
+    return { ok: false, error: 'Er staat al inkoop op dit project — een volledige reset zou bestelde regels verwijderen. Niet toegestaan.' }
+  }
+  const ctx = await bouw7Context(dossierId)
+  if (!ctx.ok) return ctx
+  try {
+    await ctx.client.del(`/project/${ctx.bouw7Id}/contract-order-lines`)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Verwijderen mislukt.' }
+  }
+  // EVA-koppelingen wissen zodat een volgende push alles opnieuw aanmaakt.
+  const compIds = payload.componenten.map(c => c.id)
+  if (compIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = createAdminClient() as any
+    await db.from('werkbegroting_componenten').update({ bouw7_line_id: null }).in('id', compIds).catch(() => {})
+  }
+  return { ok: true }
+}

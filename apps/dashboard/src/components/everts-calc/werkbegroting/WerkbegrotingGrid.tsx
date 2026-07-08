@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch, DownloadCloud } from 'lucide-react'
+import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch, DownloadCloud, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getGroepen, getWerkbegrotingRegels, getWerkbegrotingComponenten,
@@ -33,11 +33,49 @@ interface Props {
   bewakingscodes?: { code: string; naam: string | null }[] | null
   /** Dossier-id van het gekoppelde Bouw7-project — nodig om codes/bestelregels te importeren. */
   dossierId?: string
+  /**
+   * Kale bewakingscodes waarop al inkoop verbruikt is (inkooporder/OA-contract/geboekte factuur).
+   * Regels op zo'n code worden read-only: ze zijn besteld in Bouw7 en mogen niet meer wijzigen.
+   */
+  vergrendeldeCodes?: string[] | null
 }
 
 /** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
 function bareCode(kostengroep?: string | null): string {
   return (kostengroep ?? '').split(/\s[—-]\s/)[0].trim()
+}
+
+/** Kostengroep → omschrijving-deel ("CODE — Naam" → "Naam"), of null. */
+function kgNaamDeel(kostengroep?: string | null): string | null {
+  const d = (kostengroep ?? '').split(/\s[—-]\s/)
+  return d.length > 1 ? (d.slice(1).join(' — ').trim() || null) : null
+}
+
+/** Kostengroep-waarde: "CODE — Naam" (met omschrijving) of "CODE". */
+function kostengroepLabel(code: string, naam?: string | null): string {
+  const n = (naam ?? '').trim()
+  return n ? `${code} — ${n}` : code
+}
+
+/** Identiteit van een kostengroep = code + omschrijving (onderscheidt dubbele codes). */
+function codeIdentiteit(code: string, naam?: string | null): string {
+  return `${code.trim()}${(naam ?? '').trim()}`
+}
+
+/**
+ * Leverancier-velden voor een geïmporteerde bestelregel: onderaanneming vult
+ * `aannemersnaam`, alle andere types `leverancier_naam`. De tegenhanger wordt gewist
+ * zodat er nooit twee namen tegelijk staan.
+ */
+function leverancierVelden(
+  type: WerkbegrotingComponent['type'],
+  naam: string | null,
+): Partial<Pick<WerkbegrotingComponent, 'leverancier_naam' | 'aannemersnaam'>> {
+  const n = naam?.trim() || undefined
+  if (!n) return {}
+  return type === 'onderaanneming'
+    ? { aannemersnaam: n, leverancier_naam: undefined }
+    : { leverancier_naam: n, aannemersnaam: undefined }
 }
 
 // ─── Kolom definities ──────────────────────────────────────────────────────────
@@ -426,7 +464,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, dossierId }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, dossierId, vergrendeldeCodes }: Props) {
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
@@ -551,7 +589,9 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   // Anders (EVA-origine): de eerder gebruikte kostengroepen + de standaardlijst.
   const alleKostengroepen = useMemo((): { value: string; label: string | null }[] => {
     if (bewakingscodes && bewakingscodes.length > 0) {
-      return bewakingscodes.map(b => ({ value: b.code, label: b.naam }))
+      // Waarde = "CODE — Naam" zodat gelijk-genummerde codes apart kiesbaar zijn en de
+      // kostengroep-string de omschrijving draagt (identiteit code + omschrijving).
+      return bewakingscodes.map(b => ({ value: kostengroepLabel(b.code, b.naam), label: b.naam }))
     }
     const fromRegels = regels.map(r => r.kostengroep).filter(Boolean) as string[]
     const fromInst   = instellingen.standaard_kostengroepen ?? []
@@ -685,9 +725,31 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     else setSelectie(new Set(displayRijen.map(r => r.comp.id)))
   }
 
+  // ─── Vergrendeling (bestelde regels in Bouw7) ───────────────────────────────
+  // Regels waarvan de kostengroep (kale bewakingscode) al besteld is, zijn read-only:
+  // ze mogen in EVA niet meer wijzigen zodat de sync ze in Bouw7 nooit hoeft aan te raken.
+  const vergrendeldSet = useMemo(
+    () => new Set((vergrendeldeCodes ?? []).map(c => c.trim()).filter(Boolean)),
+    [vergrendeldeCodes],
+  )
+  const regelVergrendeld = useCallback(
+    (kostengroep?: string | null) => vergrendeldSet.size > 0 && vergrendeldSet.has(bareCode(kostengroep)),
+    [vergrendeldSet],
+  )
+  const lockToastTs = useRef(0)
+  const meldVergrendeld = useCallback(() => {
+    const nu = Date.now()
+    if (nu - lockToastTs.current > 1500) {
+      lockToastTs.current = nu
+      toast('Deze regel is besteld in Bouw7 en daarom vergrendeld.', { icon: '🔒' })
+    }
+  }, [])
+
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const onComponentWijzig = useCallback((compId: string, patch: Partial<WerkbegrotingComponent>) => {
     const comp = componenten.find(c => c.id === compId); if (!comp) return
+    const regel0 = regels.find(r => r.id === comp.werkbegroting_regel_id)
+    if (regelVergrendeld(regel0?.kostengroep)) { meldVergrendeld(); return }
     for (const [veld, nw] of Object.entries(patch)) {
       const ow = (comp as unknown as Record<string, unknown>)[veld]; if (ow === nw) continue
       voegWijzigingToe({ id: nieuweId(), werkbegroting_id: werkbegrotingId,
@@ -700,15 +762,16 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     slaWerkbegrotingComponentOp(bij)
     setComponenten(prev => prev.map(c => c.id === compId ? bij : c))
     onWijziging()
-  }, [componenten, werkbegrotingId, onWijziging])
+  }, [componenten, regels, werkbegrotingId, onWijziging, regelVergrendeld, meldVergrendeld])
 
   const onRegelWijzig = useCallback((regelId: string, patch: Partial<WerkbegrotingRegel>) => {
     const regel = regels.find(r => r.id === regelId); if (!regel) return
+    if (regelVergrendeld(regel.kostengroep)) { meldVergrendeld(); return }
     const bij = { ...regel, ...patch }
     slaWerkbegrotingRegelOp(bij)
     setRegels(prev => prev.map(r => r.id === regelId ? bij : r))
     onWijziging()
-  }, [regels, onWijziging])
+  }, [regels, onWijziging, regelVergrendeld, meldVergrendeld])
 
   // Type wijzigen → eenheid auto-instellen bij arbeid
   const onTypeWijzig = useCallback((compId: string, type: WerkbegrotingComponent['type']) => {
@@ -766,13 +829,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       const res = await getBouw7BewakingscodesImport(dossierId)
       if (!res.ok) { toast.error(res.error); return }
 
-      // Bestaande codes (kostengroep) → regel-id, zodat we niet dubbel seeden.
-      const regelVoorCode = new Map<string, string>()
+      // Bestaande regels indexeren op identiteit (code + omschrijving), zodat gelijk-genummerde
+      // bewakingscodes elk hun eigen kostengroep-regel krijgen en niet samenvallen.
+      const regelVoorIdentity = new Map<string, string>()
       for (const r of regels) {
         const c = bareCode(r.kostengroep)
-        if (c && !regelVoorCode.has(c)) regelVoorCode.set(c, r.id)
+        if (!c) continue
+        const key = codeIdentiteit(c, kgNaamDeel(r.kostengroep))
+        if (!regelVoorIdentity.has(key)) regelVoorIdentity.set(key, r.id)
       }
-      const codeNaam = new Map(res.codes.map(c => [c.code, c.naam]))
 
       // Reeds overgehaalde bestelregels herkennen zodat ze niet dubbel toegevoegd worden.
       // Primair op het stabiele Bouw7-line-id; voor componenten van vóór deze wijziging
@@ -799,20 +864,21 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       const nieuweComps: WerkbegrotingComponent[] = []
       const updates: { id: string; patch: Partial<WerkbegrotingComponent> }[] = []
       let volg = regels.length + 1
-      const ensureRegel = (code: string): string => {
-        const bestaand = regelVoorCode.get(code)
+      const ensureRegel = (code: string, naam: string | null): string => {
+        const key = codeIdentiteit(code, naam)
+        const bestaand = regelVoorIdentity.get(key)
         if (bestaand) return bestaand
         const regel: WerkbegrotingRegel = {
           id: nieuweId(), werkbegroting_id: werkbegrotingId, source_calculatieregel_id: null,
-          groep_id: '', omschrijving: codeNaam.get(code) ?? '', hoeveelheid: 1, eenheid: 'st',
-          volgorde: volg++, kostengroep: code,
+          groep_id: '', omschrijving: naam ?? '', hoeveelheid: 1, eenheid: 'st',
+          volgorde: volg++, kostengroep: kostengroepLabel(code, naam),
         }
-        nieuweRegels.push(regel); regelVoorCode.set(code, regel.id)
+        nieuweRegels.push(regel); regelVoorIdentity.set(key, regel.id)
         return regel.id
       }
 
-      // 1) Placeholder-regel per Bouw7-code die nog niet bestaat.
-      for (const c of res.codes) ensureRegel(c.code)
+      // 1) Placeholder-regel per Bouw7-bewakingscode (identiteit = code + omschrijving) die nog niet bestaat.
+      for (const c of res.codes) ensureRegel(c.code, c.naam)
       // 2) Bestelregels onder de juiste code: nieuw toevoegen, GEWIJZIGDE bijwerken, ongewijzigde overslaan.
       const regelMetComponent = new Set<string>()
       for (const b of res.bestelregels) {
@@ -821,21 +887,33 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         if (bestaand) {
           // Bewust verwijderde regel mag niet terugkeren.
           if (bestaand.is_verwijderd) { overgeslagen++; continue }
-          const huidigeCode = bareCode(regels.find(x => x.id === bestaand.werkbegroting_regel_id)?.kostengroep)
+          const huidigeRegel = regels.find(x => x.id === bestaand.werkbegroting_regel_id)
+          const huidigeIdentity = codeIdentiteit(bareCode(huidigeRegel?.kostengroep), kgNaamDeel(huidigeRegel?.kostengroep))
+          const doelIdentity = codeIdentiteit(b.code, b.codeNaam)
+          const verplaatst = huidigeIdentity !== doelIdentity
+          // Leverancier aanvullen als die nog ontbreekt (handmatige keuze nooit overschrijven).
+          const heeftLeverancier = !!(bestaand.leverancier_naam || bestaand.aannemersnaam || bestaand.relatie_id)
+          const leverancierAanvulbaar = !heeftLeverancier && !!b.leverancierNaam
           const gewijzigd =
             Math.abs((bestaand.norm_hoeveelheid ?? 0) - b.aantal) > 0.0001 ||
             Math.abs((bestaand.tarief ?? 0) - b.prijs) > 0.0001 ||
             (bestaand.eenheid ?? 'st') !== (b.eenheid || 'st') ||
             (bestaand.omschrijving ?? '') !== (b.omschrijving ?? '') ||
             bestaand.type !== b.type ||
-            huidigeCode !== b.code
+            verplaatst ||
+            leverancierAanvulbaar
           if (!gewijzigd) { overgeslagen++; continue }
           const patch: Partial<WerkbegrotingComponent> = {
             norm_hoeveelheid: b.aantal, tarief: b.prijs, eenheid: nieuweEenheid,
             type: b.type, omschrijving: b.omschrijving || undefined,
           }
-          // Verplaatst naar een andere bewakingscode → koppel aan (zo nodig nieuwe) regel.
-          if (huidigeCode !== b.code) patch.werkbegroting_regel_id = ensureRegel(b.code)
+          if (leverancierAanvulbaar) Object.assign(patch, leverancierVelden(b.type, b.leverancierNaam))
+          // Verplaatst naar een andere bewakingscode (code + omschrijving) → koppel aan (zo nodig nieuwe) regel.
+          if (verplaatst) {
+            const rid = ensureRegel(b.code, b.codeNaam)
+            patch.werkbegroting_regel_id = rid
+            regelMetComponent.add(rid)
+          }
           updates.push({ id: bestaand.id, patch })
           bijgewerkt++
           continue
@@ -844,13 +922,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         if (bestaandeContentKeys.has(contentKey(b.code, b.type, b.omschrijving ?? '', b.aantal, b.prijs, b.eenheid || 'st'))) {
           overgeslagen++; continue
         }
-        const regelId = ensureRegel(b.code)
+        const regelId = ensureRegel(b.code, b.codeNaam)
         nieuweComps.push({
           id: nieuweId(), werkbegroting_regel_id: regelId, source_component_id: null,
           bouw7_line_id: b.bouw7LineId,
           type: b.type, norm_hoeveelheid: b.aantal, tarief: b.prijs,
           eenheid: nieuweEenheid,
           omschrijving: b.omschrijving || undefined,
+          ...leverancierVelden(b.type, b.leverancierNaam),
         })
         regelMetComponent.add(regelId)
       }
@@ -995,20 +1074,28 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           </td>
         )
 
-      case 'kostengroep':
+      case 'kostengroep': {
+        const kgVergrendeld = regelVergrendeld(regel.kostengroep)
         return (
           <td key={id} className={`px-1 py-1 ${base}`}>
-            <input
-              list="kg-datalist"
-              value={regel.kostengroep ?? ''}
-              onChange={e => onRegelWijzig(regel.id, { kostengroep: e.target.value })}
-              placeholder="—"
-              title={regel.kostengroep ?? (bewakingscodes ? 'Kies een bewakingscode' : 'Kostengroep')}
-              className="w-full text-xs text-slate-600 px-1 py-0.5 bg-transparent border border-transparent rounded truncate
-                hover:border-slate-200 focus:border-everts focus:bg-white focus:outline-none"
-            />
+            <div className="flex items-center gap-1">
+              {kgVergrendeld && (
+                <Lock className="w-3 h-3 shrink-0 text-slate-400" aria-label="Besteld in Bouw7 — vergrendeld" />
+              )}
+              <input
+                list="kg-datalist"
+                value={regel.kostengroep ?? ''}
+                onChange={e => onRegelWijzig(regel.id, { kostengroep: e.target.value })}
+                readOnly={kgVergrendeld}
+                placeholder="—"
+                title={kgVergrendeld ? 'Besteld in Bouw7 — vergrendeld' : (regel.kostengroep ?? (bewakingscodes ? 'Kies een bewakingscode' : 'Kostengroep'))}
+                className={`w-full text-xs px-1 py-0.5 bg-transparent border border-transparent rounded truncate
+                  ${kgVergrendeld ? 'text-slate-400 cursor-not-allowed' : 'text-slate-600 hover:border-slate-200 focus:border-everts focus:bg-white focus:outline-none'}`}
+              />
+            </div>
           </td>
         )
+      }
 
       case 'omschrijving':
         return (

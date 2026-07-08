@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
-import { Loader2, ChevronLeft, Clock, ClipboardCheck, Send } from 'lucide-react'
+import { Loader2, ChevronLeft, Clock, ClipboardCheck, Send, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie,
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
   getWerkbegrotingWijzigingen, hydrateWerkbegroting,
-  slaWerkbegrotingOp, getScenarios,
+  slaWerkbegrotingOp, slaWerkbegrotingComponentOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
-import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelregelsBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
@@ -50,6 +50,12 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   /** Bestaande Bouw7-hoofdstukken + het gekozen doelhoofdstuk voor nieuwe codes (onthouden per dossier). */
   const [hoofdstukken, setHoofdstukken] = useState<Hoofdstuk[]>([])
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
+  /** Kale bewakingscodes waarop al inkoop verbruikt is → regels in de grid worden read-only. */
+  const [vergrendeldeCodes, setVergrendeldeCodes] = useState<string[]>([])
+  /** Bestelregels → Bouw7: preview-modal state. */
+  const [bestelOpen, setBestelOpen] = useState(false)
+  const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
+  const [bestelBezig, setBestelBezig] = useState(false)
 
   /** Directe (niet-gedebouncede) sync van een vers/lokaal aangemaakte WB → meteen gedeeld. */
   const syncWbNu = useCallback(async (w: Werkbegroting) => {
@@ -119,6 +125,16 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     resolveBewakingscodes(dossierId)
       .then(res => { if (actief) setBewakingscodes(res.ok ? res.codes.map(c => ({ code: c.code, naam: c.naam })) : null) })
       .catch(() => { if (actief) setBewakingscodes(null) })
+    return () => { actief = false }
+  }, [dossierId])
+
+  // Vergrendelde (bestelde) bewakingscodes ophalen → grid maakt die regels read-only.
+  useEffect(() => {
+    if (!dossierId) { setVergrendeldeCodes([]); return }
+    let actief = true
+    getVergrendeldeBewakingscodes(dossierId)
+      .then(res => { if (actief) setVergrendeldeCodes(res.ok ? res.codes : []) })
+      .catch(() => { if (actief) setVergrendeldeCodes([]) })
     return () => { actief = false }
   }, [dossierId])
 
@@ -243,6 +259,55 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       setPrognoseBezig(false)
     }
   }, [dossierId, berekenPrognoseTotalen, doelHoofdstukId, bouwPayload])
+
+  // ─── Bestelregels naar Bouw7 ────────────────────────────────────────────────
+  const openBestel = useCallback(async () => {
+    if (!dossierId) return
+    const payload = bouwPayload()
+    if (!payload) return
+    setBestelOpen(true)
+    setBestelPreview(null)
+    setBestelBezig(true)
+    try {
+      setBestelPreview(await previewWerkbegrotingBestelregelsBouw7(dossierId, payload))
+    } finally {
+      setBestelBezig(false)
+    }
+  }, [dossierId, bouwPayload])
+
+  const verstuurBestel = useCallback(async () => {
+    if (!dossierId) return
+    const payload = bouwPayload()
+    if (!payload) return
+    setBestelBezig(true)
+    try {
+      const res = await stuurWerkbegrotingBestelregelsBouw7(dossierId, payload)
+      if (res.ok) {
+        // Local bouw7_line_id bijwerken zodat een volgende sync de koppeling behoudt.
+        const comps = getWerkbegrotingComponenten()
+        let gewijzigd = false
+        for (const [compId, lineId] of Object.entries(res.lineIdPerComponent)) {
+          const c = comps.find(x => x.id === compId)
+          if (c && c.bouw7_line_id !== lineId) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: lineId }); gewijzigd = true }
+        }
+        if (gewijzigd) { const p = bouwPayload(); if (p) await syncWerkbegrotingNaarSupabase(p) }
+        const delen: string[] = []
+        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
+        if (res.bijgewerkt) delen.push(`${res.bijgewerkt} bijgewerkt`)
+        if (res.geneutraliseerd) delen.push(`${res.geneutraliseerd} verwijderd`)
+        if (res.overgeslagen) delen.push(`${res.overgeslagen} overgeslagen`)
+        toast.success(`Bestelregels naar Bouw7: ${delen.join(', ') || 'niets te doen'}.`)
+        if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
+        // Vergrendelde codes kunnen veranderd zijn (nieuwe inkoop) — verversen.
+        getVergrendeldeBewakingscodes(dossierId).then(r => { if (r.ok) setVergrendeldeCodes(r.codes) }).catch(() => {})
+        setBestelOpen(false)
+      } else {
+        toast.error(`Verzenden mislukt: ${res.error}`)
+      }
+    } finally {
+      setBestelBezig(false)
+    }
+  }, [dossierId, bouwPayload])
 
   // Goedkeuring aanvragen: eerst de payload syncen zodat de aanvraag op echte data slaat.
   const handleAanvragen = useCallback(async (toelichting?: string) => {
@@ -377,6 +442,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           <Package className="w-3.5 h-3.5" />
           Bestellingen
         </button>
+        {dossierId && (
+          <button
+            onClick={openBestel}
+            title="Stuur de werkbegroting-regels als bestelregels (verwachte kosten) naar Bouw7"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+              border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Regels naar Bouw7
+          </button>
+        )}
         {magPrognose && (
           <button
             onClick={openPrognose}
@@ -400,6 +476,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           onWijziging={handleWijziging}
           bewakingscodes={bewakingscodes}
           dossierId={dossierId}
+          vergrendeldeCodes={vergrendeldeCodes}
         />
       </div>
 
@@ -553,6 +630,108 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           </div>
         </div>
       )}
+
+      {bestelOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !bestelBezig) setBestelOpen(false) }}
+        >
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-700">
+                <Upload className="h-5 w-5" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Bestelregels naar Bouw7</h2>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="mb-3 text-sm text-gray-600">
+                Elke werkbegroting-regel wordt als <strong>bestelregel (&ldquo;verwachte kosten&rdquo;)</strong> in
+                Bouw7 gezet, per bewakingscode. Nieuwe regels worden aangemaakt, eerder verzonden regels bijgewerkt.
+                <strong> Bestelde regels zijn vergrendeld</strong> en worden overgeslagen.
+              </p>
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Let op: gebruik dit náást de prognose-knop niet voor dezelfde bedragen — anders telt Bouw7 de
+                kosten dubbel (verwachte kosten én &ldquo;Niet/anders begroot&rdquo;).
+              </p>
+
+              {bestelBezig && !bestelPreview && (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Regels vergelijken met Bouw7…
+                </div>
+              )}
+
+              {bestelPreview && !bestelPreview.ok && (
+                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{bestelPreview.error}</div>
+              )}
+
+              {bestelPreview?.ok && (
+                <div className="max-h-[55vh] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
+                        <th className="py-1.5">Regel</th>
+                        <th className="py-1.5 text-right">Aantal</th>
+                        <th className="py-1.5 text-right">Stukprijs</th>
+                        <th className="py-1.5 text-right">Bedrag</th>
+                        <th className="py-1.5 text-right">Actie</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groepeerBestelPerCode(bestelPreview.regels).map(([code, rs]) => (
+                        <Fragment key={code || '∅'}>
+                          <tr className="bg-gray-50">
+                            <td colSpan={5} className="py-1 px-1 text-xs font-semibold text-gray-600">
+                              {code ? code : 'Zonder bewakingscode'}
+                              {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
+                              {rs[0]?.vergrendeld && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">🔒 besteld</span>}
+                            </td>
+                          </tr>
+                          {rs.map((r) => (
+                            <tr key={r.componentId} className={`border-b border-gray-100 ${r.actie === 'skip' ? 'text-gray-400' : 'text-gray-800'}`}>
+                              <td className="py-1.5 pl-3">
+                                <span className="text-gray-700">{r.omschrijving || r.label}</span>
+                                <span className="ml-1 text-[11px] text-gray-400">({r.label})</span>
+                                {r.actie === 'skip' && r.reden && <span className="ml-1 text-[11px] text-gray-400">— {r.reden}</span>}
+                              </td>
+                              <td className="py-1.5 text-right tabular-nums">{r.aantal}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.prijs)}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.bedrag)}</td>
+                              <td className="py-1.5 text-right">
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${bestelActieStijl(r.actie)}`}>
+                                  {bestelActieLabel(r.actie)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                onClick={() => setBestelOpen(false)}
+                disabled={bestelBezig}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={verstuurBestel}
+                disabled={bestelBezig || !bestelPreview?.ok || !bestelPreview.regels.some(r => r.actie !== 'skip')}
+                className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bestelBezig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Verstuur naar Bouw7
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -571,6 +750,41 @@ function bareCode(kostengroep?: string | null): string {
 function kgNaam(kostengroep?: string | null): string | null {
   const d = (kostengroep ?? '').split(/\s[—-]\s/)
   return d.length > 1 ? (d.slice(1).join(' — ').trim() || null) : null
+}
+
+/** Groepeer bestelregels per bewakingscode (lege code achteraan). */
+function groepeerBestelPerCode(regels: BestelregelPlanRegel[]): [string, BestelregelPlanRegel[]][] {
+  const map = new Map<string, BestelregelPlanRegel[]>()
+  for (const r of regels) {
+    const arr = map.get(r.code) ?? []
+    arr.push(r)
+    map.set(r.code, arr)
+  }
+  return [...map.entries()].sort((a, b) => {
+    if (!a[0]) return 1
+    if (!b[0]) return -1
+    return a[0].localeCompare(b[0], 'nl')
+  })
+}
+
+/** Leesbaar label per bestelregel-actie. */
+function bestelActieLabel(actie: BestelregelPlanRegel['actie']): string {
+  switch (actie) {
+    case 'aanmaken': return 'nieuw'
+    case 'bijwerken': return 'bijwerken'
+    case 'neutraliseren': return 'verwijderen'
+    default: return 'overslaan'
+  }
+}
+
+/** Badge-kleur per bestelregel-actie. */
+function bestelActieStijl(actie: BestelregelPlanRegel['actie']): string {
+  switch (actie) {
+    case 'aanmaken': return 'bg-green-100 text-green-700'
+    case 'bijwerken': return 'bg-blue-100 text-blue-700'
+    case 'neutraliseren': return 'bg-rose-100 text-rose-700'
+    default: return 'bg-slate-100 text-slate-500'
+  }
 }
 
 /** Groepeer prognose-regels per bewakingscode, met de codes gesorteerd (lege code achteraan). */
