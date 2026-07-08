@@ -5,11 +5,14 @@
 
 import {
   getGroepen,
+  getCalculatieregels,
+  getComponentregels,
+  getScenarios,
   getCalculatieregelsVoorScenario,
   getComponentregelsVoorScenario,
 } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, berekeningNummers } from '@/lib/everts-calc/calculations'
-import type { SyncGroep, SyncRegel } from '@/app/(platform)/everts-calc/actions/sync'
+import type { SyncGroep, SyncRegel, CalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 
 export function verzamelSyncData(scenarioId: string): {
   groepen: SyncGroep[]
@@ -45,4 +48,21 @@ export function verzamelSyncData(scenarioId: string): {
   })
 
   return { groepen: syncGroepen, regels: syncRegels }
+}
+
+/**
+ * Verzamelt het volledige, verliesloze calculatie-model van een project (alle
+ * scenario's + hun groepen/regels/componenten) uit localStorage, voor opslag als
+ * JSONB-snapshot in Supabase. Zo kan de calculatie op elk apparaat/elke gebruiker
+ * exact worden teruggeladen (zie hydrateCalculatie).
+ */
+export function verzamelCalculatieSnapshot(projectId: string): CalculatieSnapshot {
+  const scenarios   = getScenarios(projectId)
+  const scenarioIds = new Set(scenarios.map(s => s.id))
+  const groepen     = getGroepen().filter(g => scenarioIds.has(g.scenario_id))
+  const groepIds    = new Set(groepen.map(g => g.id))
+  const regels      = getCalculatieregels().filter(r => groepIds.has(r.groep_id))
+  const regelIds    = new Set(regels.map(r => r.id))
+  const componenten = getComponentregels().filter(c => regelIds.has(c.calculatieregel_id))
+  return { scenarios, groepen, regels, componenten }
 }

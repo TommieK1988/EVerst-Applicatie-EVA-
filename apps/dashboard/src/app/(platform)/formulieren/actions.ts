@@ -576,3 +576,65 @@ export async function getGepubliceerdeFormulieren(): Promise<
     .order('naam')
   return (data ?? []) as { id: string; naam: string; categorie: string | null }[]
 }
+
+// ── Formulier-concepten (gedeeld per gebruiker) ──────────────────────
+//
+// Een nog-niet-ingediend formulier stond in localStorage (form_draft_${scope}) →
+// device-lokaal. We bewaren het concept nu per (gebruiker, scope) in Supabase zodat
+// het meereist naar een ander apparaat/browser. De actions scopen expliciet op de
+// ingelogde gebruiker; de admin-client omzeilt RLS. formulier_concepten staat (nog)
+// niet in de gegenereerde types → cast naar any.
+
+/** Laadt het opgeslagen concept van de huidige gebruiker voor deze scope. */
+export async function laadFormulierConcept(scope: string): Promise<Record<string, unknown> | null> {
+  const { data: { user } } = await (await createClient()).auth.getUser()
+  if (!user) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('formulier_concepten')
+    .select('waarden')
+    .eq('user_id', user.id)
+    .eq('scope', scope)
+    .maybeSingle()
+  return (data?.waarden as Record<string, unknown> | undefined) ?? null
+}
+
+/** Slaat (upsert) het concept van de huidige gebruiker voor deze scope op. */
+export async function bewaarFormulierConcept(
+  scope: string,
+  waarden: Record<string, unknown>,
+  templateId?: string | null,
+  dossierId?: string | null,
+): Promise<void> {
+  const { data: { user } } = await (await createClient()).auth.getUser()
+  if (!user) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('formulier_concepten')
+    .upsert(
+      {
+        user_id: user.id,
+        scope,
+        template_id: templateId ?? null,
+        dossier_id: dossierId ?? null,
+        waarden: waarden as Json,
+        bijgewerkt_op: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,scope' },
+    )
+}
+
+/** Verwijdert het concept van de huidige gebruiker voor deze scope (na indienen). */
+export async function verwijderFormulierConcept(scope: string): Promise<void> {
+  const { data: { user } } = await (await createClient()).auth.getUser()
+  if (!user) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('formulier_concepten')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('scope', scope)
+}

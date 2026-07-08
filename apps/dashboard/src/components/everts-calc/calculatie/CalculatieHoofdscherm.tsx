@@ -28,9 +28,9 @@ import {
   getGroepen, getCalculatieregels, getComponentregels,
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
-import { syncCalculatieNaarSupabase } from '@/app/(platform)/everts-calc/actions/sync'
+import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
-import { verzamelSyncData } from '@/lib/everts-calc/sync-utils'
+import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
 interface Props {
@@ -171,14 +171,19 @@ export default function CalculatieHoofdscherm({
     startTransition(async () => {
       try {
         const { groepen, regels } = verzamelSyncData(scenario.id)
-        const resultaat = await syncCalculatieNaarSupabase(projectId, groepen, regels)
-        if (resultaat.gelukt) {
+        // Genormaliseerde projectie (werkbegroting/rapportage) + verliesloze
+        // editor-snapshot (cross-device) samen wegschrijven.
+        const [resultaat, snapRes] = await Promise.all([
+          syncCalculatieNaarSupabase(projectId, groepen, regels),
+          bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId)),
+        ])
+        if (resultaat.gelukt && snapRes.gelukt) {
           setSyncStatus('gelukt')
           toast.success(`Opgeslagen: ${resultaat.groepen_geschreven} groepen, ${resultaat.regels_geschreven} regels`)
           setTimeout(() => setSyncStatus('idle'), 3000)
         } else {
           setSyncStatus('fout')
-          toast.error(resultaat.fout ?? 'Sync mislukt')
+          toast.error(resultaat.fout ?? snapRes.fout ?? 'Sync mislukt')
           setTimeout(() => setSyncStatus('idle'), 4000)
         }
       } catch (err) {

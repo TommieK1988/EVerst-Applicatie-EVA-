@@ -96,6 +96,8 @@ export async function syncWerkbegrotingNaarSupabase(
             omschrijving: c.omschrijving ?? null, relatie_id: uuidOfNull(c.relatie_id),
             leverancier_naam: c.leverancier_naam ?? null,
             aannemersnaam: c.aannemersnaam ?? null, offertenummer: c.offertenummer ?? null,
+            artikelnummer: c.artikelnummer ?? null, uurtype: c.uurtype ?? null,
+            bouw7_line_id: c.bouw7_line_id ?? null,
             is_verwijderd: c.is_verwijderd ?? false,
             bijgewerkt_op: nu,
           })),
@@ -190,6 +192,147 @@ export async function syncBestellingenNaarSupabase(
   } catch (err) {
     return { gelukt: false, fout: err instanceof Error ? err.message : 'Onbekende fout' }
   }
+}
+
+// ─── Laden: gedeelde werkbegroting uit Supabase (bron van waarheid) ───────────
+//
+// De werkbegroting is Supabase-first: elke gebruiker/elk apparaat laadt dezelfde
+// werkbegroting van de server. De client hydrateert hiermee zijn localStorage-cache
+// (waar het grid + de calculaties op draaien) vóór het rendert. Alle rijen worden
+// meegegeven — óók soft-deleted — zodat dedup en de latere sync consistent blijven.
+
+export interface WerkbegrotingSnapshot {
+  wb: Werkbegroting
+  regels: WerkbegrotingRegel[]
+  componenten: WerkbegrotingComponent[]
+  wijzigingen: WerkbegrotingWijziging[]
+  bestellingen: WerkbegrotingBestelling[]
+}
+
+/**
+ * Haalt de (meest recente) werkbegroting van een dossier volledig uit Supabase op,
+ * inclusief regels, componenten, wijzigingen en bestellingen. Retourneert null als er
+ * nog geen gedeelde werkbegroting bestaat (dan valt de client terug op lokaal aanmaken
+ * uit de calculatie).
+ */
+export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<WerkbegrotingSnapshot | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  const { data: wbRow } = await db
+    .from('werkbegrotingen')
+    .select('*')
+    .eq('dossier_id', dossierId)
+    .order('bijgewerkt_op', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!wbRow) return null
+
+  const [{ data: regelRows }, { data: bestellingRows }] = await Promise.all([
+    db.from('werkbegroting_regels').select('*').eq('werkbegroting_id', wbRow.id),
+    db.from('werkbegroting_bestellingen').select('*').eq('werkbegroting_id', wbRow.id),
+  ])
+  const regels = (regelRows ?? []) as Record<string, unknown>[]
+  const regelIds = regels.map(r => r.id as string)
+
+  const [{ data: compRows }, { data: wijzRows }, { data: junctionRows }] = await Promise.all([
+    regelIds.length > 0
+      ? db.from('werkbegroting_componenten').select('*').in('werkbegroting_regel_id', regelIds)
+      : Promise.resolve({ data: [] }),
+    db.from('werkbegroting_wijzigingen').select('*').eq('werkbegroting_id', wbRow.id),
+    (bestellingRows ?? []).length > 0
+      ? db.from('werkbegroting_bestelling_regels').select('*').in('bestelling_id', (bestellingRows ?? []).map((b: { id: string }) => b.id))
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const compIdsPerBestelling = new Map<string, string[]>()
+  for (const j of (junctionRows ?? []) as { bestelling_id: string; component_id: string }[]) {
+    const arr = compIdsPerBestelling.get(j.bestelling_id) ?? []
+    arr.push(j.component_id)
+    compIdsPerBestelling.set(j.bestelling_id, arr)
+  }
+
+  const wb: Werkbegroting = {
+    id: wbRow.id,
+    project_id: wbRow.project_id ?? `wb-direct-${wbRow.id}`,
+    scenario_id: wbRow.scenario_id,
+    naam: wbRow.naam ?? 'Werkbegroting',
+    status: (wbRow.status ?? 'concept') as Werkbegroting['status'],
+    aangemaakt_op: wbRow.aangemaakt_op,
+    bijgewerkt_op: wbRow.bijgewerkt_op,
+  }
+
+  return {
+    wb,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    regels: regels.map((r: any): WerkbegrotingRegel => ({
+      id: r.id, werkbegroting_id: r.werkbegroting_id,
+      source_calculatieregel_id: r.source_calculatieregel_id ?? null,
+      groep_id: r.groep_id ?? '', omschrijving: r.omschrijving ?? '',
+      hoeveelheid: Number(r.hoeveelheid ?? 0), eenheid: r.eenheid ?? 'st',
+      kostengroep: r.kostengroep ?? undefined, volgorde: r.volgorde ?? 0,
+      opslag_pct: r.opslag_pct ?? undefined, btw_pct: r.btw_pct ?? undefined,
+      opmerking: r.opmerking ?? undefined, is_stelpost: r.is_stelpost ?? false,
+      is_verwijderd: r.is_verwijderd ?? false,
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    componenten: ((compRows ?? []) as any[]).map((c: any): WerkbegrotingComponent => ({
+      id: c.id, werkbegroting_regel_id: c.werkbegroting_regel_id,
+      source_component_id: c.source_component_id ?? null, type: c.type,
+      norm_hoeveelheid: Number(c.norm_hoeveelheid ?? 0), eenheid: c.eenheid ?? undefined,
+      tarief: Number(c.tarief ?? 0), opslag_pct: c.opslag_pct ?? undefined,
+      omschrijving: c.omschrijving ?? undefined, relatie_id: c.relatie_id ?? undefined,
+      leverancier_naam: c.leverancier_naam ?? undefined, aannemersnaam: c.aannemersnaam ?? undefined,
+      offertenummer: c.offertenummer ?? undefined, artikelnummer: c.artikelnummer ?? undefined,
+      uurtype: c.uurtype ?? undefined,
+      bouw7_line_id: c.bouw7_line_id ?? undefined,
+      is_verwijderd: c.is_verwijderd ?? false,
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    wijzigingen: ((wijzRows ?? []) as any[]).map((w: any): WerkbegrotingWijziging => ({
+      id: w.id, werkbegroting_id: w.werkbegroting_id,
+      werkbegroting_regel_id: w.werkbegroting_regel_id ?? null, component_id: w.component_id ?? null,
+      veld: w.veld, oude_waarde: w.oude_waarde ?? null, nieuwe_waarde: w.nieuwe_waarde ?? null,
+      user_id: w.user_id ?? null, aangemaakt_op: w.aangemaakt_op,
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bestellingen: ((bestellingRows ?? []) as any[]).map((b: any): WerkbegrotingBestelling => ({
+      id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving ?? '',
+      relatie_id: b.relatie_id ?? undefined, status: (b.status ?? 'concept') as WerkbegrotingBestelling['status'],
+      component_ids: compIdsPerBestelling.get(b.id) ?? [],
+    })),
+  }
+}
+
+// ─── Prognose-doelhoofdstuk per dossier (gedeeld) ─────────────────────────────
+//
+// Welk Bouw7-hoofdstuk de werkbegroting-prognose naartoe schrijft, is een dossier-
+// scoped keuze die door alle gebruikers/apparaten gedeeld hoort te worden (stond
+// eerder in localStorage → per apparaat verschillend).
+
+export async function laadPrognoseDoelHoofdstuk(dossierId: string): Promise<number | null> {
+  if (!dossierId) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data } = await db
+    .from('wb_prognose_instellingen')
+    .select('doel_hoofdstuk_id')
+    .eq('dossier_id', dossierId)
+    .maybeSingle()
+  const id = data?.doel_hoofdstuk_id
+  return id == null ? null : Number(id)
+}
+
+export async function bewaarPrognoseDoelHoofdstuk(dossierId: string, hoofdstukId: number | null): Promise<void> {
+  if (!dossierId) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  await db
+    .from('wb_prognose_instellingen')
+    .upsert(
+      { dossier_id: dossierId, doel_hoofdstuk_id: hoofdstukId, bijgewerkt_op: new Date().toISOString() },
+      { onConflict: 'dossier_id' }
+    )
 }
 
 // ─── Zoek relaties (leveranciers / onderaannemers) ────────────────────────────
@@ -294,18 +437,22 @@ export async function getWerkbegrotingGoedkeuringStatus(
   }
 }
 
-export type AccordeerResultaat = { ok: true } | { ok: false; error: string }
+export type AccordeerResultaat =
+  | { ok: true; prognose?: { verstuurd: boolean; melding: string } }
+  | { ok: false; error: string }
 
 /**
  * Accordeert een openstaande goedkeuringsaanvraag: synct de payload, legt per
  * actieve regel het snapshot vast, zet de aanvraag op 'goedgekeurd' en de
  * werkbegroting op 'geaccordeerd'. Autorisatie (controller/Directie/gedelegeerde)
- * wordt in keurGoed server-side afgedwongen.
+ * wordt in keurGoed server-side afgedwongen. Accordeert een controller of de directie,
+ * dan wordt de prognose direct (best effort) naar Bouw7 gestuurd.
  */
 export async function accordeerWerkbegroting(
   goedkeuringId: string,
   payload: WerkbegrotingPayload,
   opmerking?: string,
+  doelHoofdstukId?: number | null,
 ): Promise<AccordeerResultaat> {
   const { bepaalBeoordeelContext } = await import('@/lib/goedkeuring/autorisatie')
   const { keurGoed, refreshDossierWbVlag } = await import('@/lib/goedkeuring/actions')
@@ -358,6 +505,31 @@ export async function accordeerWerkbegroting(
   // 5. Werkbegroting-status → geaccordeerd + dossiervlag verversen.
   await db.from('werkbegrotingen').update({ status: 'geaccordeerd' }).eq('id', payload.wb.id)
   if (payload.dossierId) await refreshDossierWbVlag(payload.dossierId)
+
+  // 6. Auto-prognose naar Bouw7 — alleen als de accorderende gebruiker controller of
+  //    directie is (een gedelegeerde mag wél accorderen, maar niet de prognose sturen).
+  //    Best effort: het accorderen zelf blijft geslaagd, ook als de prognose faalt.
+  if (payload.dossierId && (ctx.isController || ctx.isDirectie)) {
+    try {
+      // Doelhoofdstuk voor evt. nieuwe codes: meegegeven door de client → anders 'WB' → anders het eerste.
+      let hoofdstuk = doelHoofdstukId ?? null
+      if (hoofdstuk == null) {
+        const hs = await getProjectHoofdstukken(payload.dossierId)
+        if (hs.ok) hoofdstuk = (hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB') ?? hs.hoofdstukken[0])?.id ?? null
+      }
+      const totalen = berekenPrognoseTotalenUitPayload(payload)
+      const res = await stuurWerkbegrotingPrognoseBouw7(payload.dossierId, totalen, hoofdstuk, payload)
+      if (res.ok) {
+        const delen = [`${res.geschreven} bijgewerkt`]
+        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
+        if (res.gereset) delen.push(`${res.gereset} gereset`)
+        return { ok: true, prognose: { verstuurd: true, melding: `Prognose naar Bouw7: ${delen.join(', ')}.` } }
+      }
+      return { ok: true, prognose: { verstuurd: false, melding: `Prognose niet automatisch verstuurd: ${res.error}` } }
+    } catch (e) {
+      return { ok: true, prognose: { verstuurd: false, melding: `Prognose niet automatisch verstuurd: ${e instanceof Error ? e.message : 'onbekende fout'}` } }
+    }
+  }
 
   return { ok: true }
 }
@@ -491,8 +663,10 @@ const TYPE_NAAR_BOUW7: Record<'arbeid' | 'materieel' | 'onderaanneming', { ct: n
 
 /** Werkbegroting-totalen per bewakingscode (client berekent ze uit regels × componenten). */
 export type WerkbegrotingCodeTotaal = {
-  /** Bewakingscode = regel.kostengroep (kale code). Leeg = regel zonder code. */
+  /** Kale bewakingscode = regel.kostengroep zonder "— omschrijving". Leeg = regel zonder code. */
   code: string
+  /** Omschrijving-deel van de kostengroep — onderscheidt gelijk-genummerde codes. */
+  naam?: string | null
   arbeid?: { bedrag: number; uren: number }
   materieel?: { bedrag: number }
   onderaanneming?: { bedrag: number }
@@ -505,6 +679,26 @@ const getal = (v: unknown): number => {
   return 0
 }
 const rond = (n: number): number => Math.round(n * 100) / 100
+
+// ── Bewakingscode-identiteit (code + omschrijving) ──────────────────────────────
+// Bouw7 kan meerdere bewakingscodes met hetzelfde nummer hebben (andere omschrijving).
+// De koppeling met een EVA-kostengroep gebeurt daarom op code + omschrijving, niet op
+// code alleen. De kostengroep-string draagt beide: "CODE — Omschrijving" (of enkel "CODE").
+
+/** Kale bewakingscode uit een kostengroep-string ("CODE — Naam" → "CODE"). */
+const kaleCode = (kg?: string | null): string => (kg ?? '').split(/\s[—-]\s/)[0].trim()
+/** Omschrijving-deel uit een kostengroep-string ("CODE — Naam" → "Naam"), of null. */
+const kgNaamDeel = (kg?: string | null): string | null => {
+  const d = (kg ?? '').split(/\s[—-]\s/)
+  return d.length > 1 ? (d.slice(1).join(' — ').trim() || null) : null
+}
+/** Identiteit = code + omschrijving; onderscheidt gelijk-genummerde bewakingscodes. */
+const codeIdentity = (code: string, naam?: string | null): string => `${code.trim()}${(naam ?? '').trim()}`
+/** Kostengroep-waarde/label: "CODE — Naam" (met omschrijving) of "CODE". */
+const kostengroepLabel = (code: string, naam?: string | null): string => {
+  const n = (naam ?? '').trim()
+  return n ? `${code} — ${n}` : code
+}
 
 /** Gedeelde Bouw7-context (bouw7_id + ingelogde client) voor een dossier. */
 async function bouw7Context(dossierId: string): Promise<{ ok: true; bouw7Id: string; client: Bouw7Client } | { ok: false; error: string }> {
@@ -524,7 +718,15 @@ export type BewakingscodeRef = {
   code: string
   naam: string | null
   hoofdstuk: string | null
+  /** Primaire PSL-id per kostensoort (= eerste van pslsPerCt) — voor de prognose-write. */
   pslPerCt: Record<number, number>
+  /**
+   * Álle PSL-ids per kostensoort. In Bouw7 kunnen meerdere bewakingscodes dezelfde code
+   * (nummer) hebben — verspreid over hoofdstukken. Die worden hier onder één code-groep
+   * verzameld i.p.v. weggevallen: hun begrote bedragen worden gesommeerd en al hun PSL-ids
+   * bewaard, zodat bij de prognose geen enkele wordt gedropt.
+   */
+  pslsPerCt: Record<number, number[]>
   begrootPerCt: Record<number, number>
   urenPerCt: Record<number, number>
   /** Meerwerk (additionalWorkAmount) per kostensoort — grondslag naast begroot voor de prognose. */
@@ -548,11 +750,20 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
   if (!ctx.ok) return ctx
   const { client, bouw7Id } = ctx
 
+  // Gekeyd op identiteit (code + omschrijving): gelijk-genummerde bewakingscodes met een
+  // andere omschrijving blijven zo apart en vallen niet tegen elkaar weg.
   const map = new Map<string, BewakingscodeRef>()
-  const ensure = (code: string): BewakingscodeRef => {
-    let r = map.get(code)
-    if (!r) { r = { code, naam: null, hoofdstuk: null, pslPerCt: {}, begrootPerCt: {}, urenPerCt: {}, meerwerkPerCt: {}, meerwerkUrenPerCt: {}, prognosisOtherPerCt: {} }; map.set(code, r) }
+  const ensure = (code: string, naam: string | null): BewakingscodeRef => {
+    const key = codeIdentity(code, naam)
+    let r = map.get(key)
+    if (!r) { r = { code, naam: naam?.trim() || null, hoofdstuk: null, pslPerCt: {}, pslsPerCt: {}, begrootPerCt: {}, urenPerCt: {}, meerwerkPerCt: {}, meerwerkUrenPerCt: {}, prognosisOtherPerCt: {} }; map.set(key, r) }
     return r
+  }
+  /** PSL registreren voor een code×kostensoort: primair (eerste) + volledige lijst, gededupliceerd. */
+  const registreerPsl = (ref: BewakingscodeRef, ct: number, psl: number): void => {
+    const lijst = ref.pslsPerCt[ct] ?? (ref.pslsPerCt[ct] = [])
+    if (!lijst.includes(psl)) lijst.push(psl)
+    if (ref.pslPerCt[ct] == null) ref.pslPerCt[ct] = psl
   }
 
   try {
@@ -570,16 +781,16 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
         for (const sc of item.securityCodes ?? []) {
           const code = (sc.code ?? '').trim()
           if (!code) continue
-          const ref = ensure(code)
-          if (!ref.naam) ref.naam = sc.name ?? null
+          const ref = ensure(code, sc.name ?? null)
           if (!ref.hoofdstuk) ref.hoofdstuk = ci?.name ?? null
-          const psl = sc.pslIds?.[0]
-          if (psl != null) ref.pslPerCt[ct] = psl
-          ref.begrootPerCt[ct] = getal(sc.budgetAmount)
-          ref.urenPerCt[ct] = getal(sc.hourInfo?.budgetHours)
-          ref.meerwerkPerCt[ct] = getal(sc.additionalWorkAmount)
-          ref.meerwerkUrenPerCt[ct] = getal(sc.hourInfo?.additionalWorkHours)
-          ref.prognosisOtherPerCt[ct] = getal((sc as { prognosisOtherAmount?: number | string }).prognosisOtherAmount)
+          // Dubbele codes (zelfde nummer, ander hoofdstuk) NIET overschrijven maar optellen,
+          // en álle PSL-ids bewaren zodat er geen bewakingscode wegvalt.
+          for (const psl of sc.pslIds ?? []) registreerPsl(ref, ct, psl)
+          ref.begrootPerCt[ct] = (ref.begrootPerCt[ct] ?? 0) + getal(sc.budgetAmount)
+          ref.urenPerCt[ct] = (ref.urenPerCt[ct] ?? 0) + getal(sc.hourInfo?.budgetHours)
+          ref.meerwerkPerCt[ct] = (ref.meerwerkPerCt[ct] ?? 0) + getal(sc.additionalWorkAmount)
+          ref.meerwerkUrenPerCt[ct] = (ref.meerwerkUrenPerCt[ct] ?? 0) + getal(sc.hourInfo?.additionalWorkHours)
+          ref.prognosisOtherPerCt[ct] = (ref.prognosisOtherPerCt[ct] ?? 0) + getal((sc as { prognosisOtherAmount?: number | string }).prognosisOtherAmount)
         }
       }
     })
@@ -591,13 +802,21 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
         .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })
         .then(r => r.items ?? [])
         .catch(() => [] as Bouw7ContractOrderLine[])
+      // Map is op identiteit gekeyd; hier matchen we op code (bestelregels dragen geen
+      // omschrijving) en vullen de PSL bij op de eerste ref van die code die er nog geen heeft.
+      const refsByCode = new Map<string, BewakingscodeRef[]>()
+      for (const r of map.values()) {
+        const arr = refsByCode.get(r.code) ?? []
+        arr.push(r); refsByCode.set(r.code, arr)
+      }
       for (const ol of orderLines) {
         const code = (ol.projectSecurityLink?.code ?? '').trim()
         const ct = ol.projectSecurityLink?.costType ?? ol.costType
         const psl = ol.projectSecurityLink?.id
         if (!code || ct == null || psl == null) continue
-        const ref = map.get(code)
-        if (ref && ref.pslPerCt[ct] == null) ref.pslPerCt[ct] = psl
+        const refs = refsByCode.get(code) ?? []
+        const target = refs.find(r => (r.pslsPerCt[ct]?.length ?? 0) === 0) ?? refs[0]
+        if (target) registreerPsl(target, ct, psl)
       }
     }
   } catch (e) {
@@ -811,9 +1030,11 @@ export async function maakMeerwerkBewakingscodeBouw7(
 }
 
 export type PrognoseRegel = {
-  /** Bewakingscode (= kostengroep). */
+  /** Kale bewakingscode (= kostengroep zonder omschrijving). */
   code: string
   codeNaam: string | null
+  /** Identiteit (code + omschrijving) waarmee de Bouw7-PSL/reset wordt gematcht. */
+  identity: string
   type: 'arbeid' | 'materieel' | 'onderaanneming'
   label: string
   ct: number
@@ -842,12 +1063,23 @@ export type PrognoseResultaat =
 async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
   const resolved = await resolveBewakingscodes(dossierId)
   if (!resolved.ok) return resolved
-  const codeMap = new Map(resolved.codes.map(c => [c.code, c]))
+  // Match op identiteit (code + omschrijving); val terug op code alleen voor bestaande
+  // kostengroepen die (nog) zonder omschrijving zijn vastgelegd.
+  const byIdentity = new Map(resolved.codes.map(c => [codeIdentity(c.code, c.naam), c]))
+  const byCode = new Map<string, BewakingscodeRef[]>()
+  for (const c of resolved.codes) {
+    const arr = byCode.get(c.code) ?? []
+    arr.push(c); byCode.set(c.code, arr)
+  }
 
   const regels: PrognoseRegel[] = []
   for (const codeTotaal of totalen) {
     const code = (codeTotaal.code ?? '').trim()
-    const ref = code ? codeMap.get(code) : undefined
+    const naam = codeTotaal.naam ?? null
+    const ref = code ? (byIdentity.get(codeIdentity(code, naam)) ?? byCode.get(code)?.[0]) : undefined
+    // Identiteit voor de reset-sync/PSL-lookup: die van de gematchte Bouw7-code, anders
+    // de identiteit uit de werkbegroting (nieuw aan te maken code).
+    const identity = ref ? codeIdentity(ref.code, ref.naam) : codeIdentity(code, naam)
 
     ;(['arbeid', 'onderaanneming', 'materieel'] as const).forEach(type => {
       const invoer = codeTotaal[type]
@@ -883,7 +1115,7 @@ async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPr
         verschilUren = tarief > 0 ? rond(verschil / tarief) : 0
       }
 
-      regels.push({ code, codeNaam: ref?.naam ?? null, type, label: map.label, ct, begroot, meerwerk, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, actie, nieuweCode, reden })
+      regels.push({ code, codeNaam: ref?.naam ?? naam, identity, type, label: map.label, ct, begroot, meerwerk, werkbegroting, verschil, verschilUren, pslId, schrijfbaar, actie, nieuweCode, reden })
     })
   }
 
@@ -893,6 +1125,53 @@ async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPr
 /** Preview: bereken (read-only) wat er naar Bouw7 geschreven zou worden. Schrijft niets. */
 export async function previewWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
   return berekenPrognoseRegels(dossierId, totalen)
+}
+
+// ─── Autorisatie: prognose naar Bouw7 — alleen controller of directie ─────────
+//
+// De prognose is een besluit dat de begroting in Bouw7 raakt; alleen de toegewezen
+// controller van het dossier of iemand uit afdeling Directie mag hem versturen.
+// Andere rollen (projectleider, calculator, gedelegeerde) niet.
+
+async function magPrognoseSturenIntern(dossierId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { bepaalBeoordeelContext } = await import('@/lib/goedkeuring/autorisatie')
+  const ctx = await bepaalBeoordeelContext(dossierId)
+  if (!ctx.medewerker) return { ok: false, error: 'Niet ingelogd of geen medewerker-profiel.' }
+  if (!ctx.isController && !ctx.isDirectie) {
+    return { ok: false, error: 'Alleen de controller of de directie mag de prognose naar Bouw7 sturen.' }
+  }
+  return { ok: true }
+}
+
+/** Mag de ingelogde gebruiker de prognose naar Bouw7 sturen? (controller of directie) */
+export async function magPrognoseSturen(dossierId: string): Promise<boolean> {
+  return (await magPrognoseSturenIntern(dossierId)).ok
+}
+
+/** Werkbegroting-prognosetotalen server-side afleiden uit de payload (regels × componenten). */
+function berekenPrognoseTotalenUitPayload(payload: WerkbegrotingPayload): WerkbegrotingPrognoseTotalen {
+  const regelById = new Map(payload.regels.filter(r => !r.is_verwijderd).map(r => [r.id, r]))
+  const perCode = new Map<string, WerkbegrotingCodeTotaal>()
+  const ensure = (code: string, naam: string | null): WerkbegrotingCodeTotaal => {
+    const key = codeIdentity(code, naam)
+    let t = perCode.get(key)
+    if (!t) { t = { code, naam }; perCode.set(key, t) }
+    return t
+  }
+  for (const comp of payload.componenten) {
+    if (comp.is_verwijderd) continue
+    const regel = regelById.get(comp.werkbegroting_regel_id)
+    if (!regel) continue
+    const code = kaleCode(regel.kostengroep)
+    const naam = kgNaamDeel(regel.kostengroep)
+    const hoeveelheid = regel.hoeveelheid * comp.norm_hoeveelheid
+    const bedrag = hoeveelheid * comp.tarief
+    const t = ensure(code, naam)
+    if (comp.type === 'arbeid') { t.arbeid = t.arbeid ?? { bedrag: 0, uren: 0 }; t.arbeid.bedrag += bedrag; t.arbeid.uren += hoeveelheid }
+    else if (comp.type === 'onderaanneming') { t.onderaanneming = t.onderaanneming ?? { bedrag: 0 }; t.onderaanneming.bedrag += bedrag }
+    else if (comp.type === 'materieel') { t.materieel = t.materieel ?? { bedrag: 0 }; t.materieel.bedrag += bedrag }
+  }
+  return [...perCode.values()]
 }
 
 export type StuurPrognoseResultaat =
@@ -905,6 +1184,10 @@ export type StuurPrognoseResultaat =
  * aangemaakt (begroot 0), daarna wordt de prognose weggeschreven.
  */
 export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen: WerkbegrotingPrognoseTotalen, doelHoofdstukId: number | null = null, payload?: WerkbegrotingPayload): Promise<StuurPrognoseResultaat> {
+  // Autorisatie: alleen de controller van het dossier of de directie mag de prognose sturen.
+  const autor = await magPrognoseSturenIntern(dossierId)
+  if (!autor.ok) return { ok: false, error: autor.error }
+
   // Gate: prognose is een aggregaat over de hele werkbegroting en mag alleen bij
   // een volledig geaccordeerde werkbegroting (geen niet-geaccordeerde wijzigingen).
   if (payload) {
@@ -941,15 +1224,22 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
   // 2) Eén keer resolven na het aanmaken → nieuwe PSL-id's invullen + huidige "Niet/anders begroot"
   //    per code ophalen (voor de reset-sync hieronder).
   const naResolve = await resolveBewakingscodes(dossierId)
-  const codeMap = naResolve.ok ? new Map(naResolve.codes.map(c => [c.code, c])) : new Map<string, BewakingscodeRef>()
+  const codeMap = naResolve.ok ? new Map(naResolve.codes.map(c => [codeIdentity(c.code, c.naam), c])) : new Map<string, BewakingscodeRef>()
   for (const r of berekend.regels) {
     if (r.actie === 'aanmaken' && r.pslId == null) {
-      r.pslId = codeMap.get(r.code)?.pslPerCt[r.ct] ?? null
+      r.pslId = codeMap.get(r.identity)?.pslPerCt[r.ct] ?? null
       if (r.pslId == null) fouten.push(`PSL voor ${r.code} / ${r.label} niet gevonden na aanmaken.`)
     }
   }
 
+  // Helper: secundaire PSL's van een code-identiteit × kostensoort (alle PSL's behalve de primaire).
+  const secundairePsls = (identity: string, ct: number, primair: number | null): number[] =>
+    (codeMap.get(identity)?.pslsPerCt[ct] ?? []).filter(p => p !== primair)
+
   // 3) Prognose ("Niet/anders begroot") wegschrijven voor alle regels met een PSL.
+  //    Heeft een code meerdere PSL's (dubbele bewakingscode, zelfde nummer/ander hoofdstuk),
+  //    dan gaat het verschil naar de primaire PSL en worden de secundaire PSL's op 0 gezet —
+  //    zo blijft het totaal per code exact gelijk aan de werkbegroting zonder dubbeltelling.
   let geschreven = 0
   try {
     for (const r of berekend.regels) {
@@ -958,24 +1248,38 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
       if (r.type === 'arbeid') body.prognosisOtherHours = String(r.verschilUren ?? 0)
       await client.post('/project/update-prognosis-other', body)
       geschreven++
+      for (const psl of secundairePsls(r.identity, r.ct, r.pslId)) {
+        const nul: Record<string, unknown> = { id: psl, prognosisOtherAmount: '0' }
+        if (r.type === 'arbeid') nul.prognosisOtherHours = '0'
+        await client.post('/project/update-prognosis-other', nul)
+        geschreven++
+      }
     }
 
     // 4) Reset-sync: elke bestaande PSL (Arbeid/OA/Materiaal) die NIET in de werkbegroting staat →
     //    prognose moet 0 worden (werkbegroting is exact leidend). Omdat prognose = begroot +
-    //    meerwerk + "Niet/anders begroot", zetten we Niet/anders begroot op −(begroot + meerwerk)
-    //    (en −(begrote uren + meerwerk-uren) voor arbeid). Onvoorwaardelijk, want het chapters-
-    //    endpoint geeft de huidige waarde niet terug.
-    const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.code}|${r.ct}`))
+    //    meerwerk + "Niet/anders begroot", zetten we op de primaire PSL Niet/anders begroot op
+    //    −(begroot + meerwerk) (gesommeerd over dubbele codes) en de secundaire PSL's op 0, zodat
+    //    het codetotaal 0 wordt. Onvoorwaardelijk, want het chapters-endpoint geeft de huidige
+    //    waarde niet terug.
+    const inWerkbegroting = new Set(berekend.regels.filter(r => r.actie !== 'skip').map(r => `${r.identity}|${r.ct}`))
     let gereset = 0
     for (const c of codeMap.values()) {
+      const identity = codeIdentity(c.code, c.naam)
       for (const ct of PROGNOSE_KOSTENSOORTEN) {
         const psl = c.pslPerCt[ct]
         if (psl == null) continue
-        if (inWerkbegroting.has(`${c.code}|${ct}`)) continue
+        if (inWerkbegroting.has(`${identity}|${ct}`)) continue
         const body: Record<string, unknown> = { id: psl, prognosisOtherAmount: String(rond(-((c.begrootPerCt[ct] ?? 0) + (c.meerwerkPerCt[ct] ?? 0)))) }
         if (ct === 1) body.prognosisOtherHours = String(rond(-((c.urenPerCt[ct] ?? 0) + (c.meerwerkUrenPerCt[ct] ?? 0))))
         await client.post('/project/update-prognosis-other', body)
         gereset++
+        for (const sec of secundairePsls(identity, ct, psl)) {
+          const nul: Record<string, unknown> = { id: sec, prognosisOtherAmount: '0' }
+          if (ct === 1) nul.prognosisOtherHours = '0'
+          await client.post('/project/update-prognosis-other', nul)
+          gereset++
+        }
       }
     }
 
@@ -994,6 +1298,8 @@ export type BestelregelImport = {
   /** Stabiel Bouw7 contract-order-line id — voor dedup bij herhaald overhalen. */
   bouw7LineId: number
   code: string
+  /** Omschrijving van de bijbehorende bewakingscode (via PSL-id opgezocht) — onderscheidt dubbele codes. */
+  codeNaam: string | null
   omschrijving: string
   /** Werkelijk aantal = quantity × quantityFactor. */
   aantal: number
@@ -1001,6 +1307,10 @@ export type BestelregelImport = {
   /** Prijs per eenheid (unitPrice). */
   prijs: number
   type: 'arbeid' | 'onderaanneming' | 'materieel'
+  /** Leverancier/onderaannemer (Bouw7 contact.name), indien bekend. */
+  leverancierNaam: string | null
+  /** Bouw7 contact.type ('subcontractor' = onderaanneming, anders inkoop/leverancier). */
+  leverancierType: string | null
 }
 export type ImportBewakingscodesResultaat =
   | { ok: true; codes: { code: string; naam: string | null }[]; bestelregels: BestelregelImport[] }
@@ -1017,6 +1327,20 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
   const ctx = await bouw7Context(dossierId)
   if (!ctx.ok) return ctx
 
+  // PSL-id → bewakingscode-ref, zodat elke bestelregel aan de juiste (code + omschrijving)
+  // gekoppeld wordt — óók als twee bewakingscodes hetzelfde nummer hebben.
+  const pslToRef = new Map<number, BewakingscodeRef>()
+  const refsByCode = new Map<string, BewakingscodeRef[]>()
+  for (const c of resolved.codes) {
+    for (const ct of PROGNOSE_KOSTENSOORTEN) for (const psl of c.pslsPerCt[ct] ?? []) pslToRef.set(psl, c)
+    const arr = refsByCode.get(c.code) ?? []
+    arr.push(c); refsByCode.set(c.code, arr)
+  }
+  const naamVoorRegel = (code: string, pslId: number | undefined): string | null => {
+    if (pslId != null) { const r = pslToRef.get(pslId); if (r) return r.naam }
+    return refsByCode.get(code)?.[0]?.naam ?? null
+  }
+
   let bestelregels: BestelregelImport[] = []
   try {
     const lines = await ctx.client
@@ -1028,14 +1352,18 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
         const type = ct === 1 ? 'arbeid' : ct === 3 ? 'onderaanneming' : 'materieel'
         const factor = getal(ol.quantityFactor)
         const aantal = getal(ol.quantity) * (factor || 1)
+        const code = (ol.projectSecurityLink?.code ?? '').trim()
         return {
           bouw7LineId: ol.id,
-          code: (ol.projectSecurityLink?.code ?? '').trim(),
+          code,
+          codeNaam: naamVoorRegel(code, ol.projectSecurityLink?.id),
           omschrijving: ol.description ?? '',
           aantal,
           eenheid: ol.unit ?? 'st',
           prijs: getal(ol.unitPrice),
           type,
+          leverancierNaam: ol.contact?.name?.trim() || null,
+          leverancierType: ol.contact?.type ?? null,
         }
       })
       .filter(b => b.code)

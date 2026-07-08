@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import type { Scenario, Groep, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,4 +121,51 @@ export async function syncCalculatieNaarSupabase(
       fout: err instanceof Error ? err.message : 'Onbekende fout',
     }
   }
+}
+
+// ─── Verliesloze editor-snapshot (cross-device / gedeeld) ─────────────────────
+//
+// De genormaliseerde upsert hierboven is een *platgeslagen* projectie voor de
+// werkbegroting/rapportage en verliest de rijke editor-velden (werkomschrijving,
+// opslag/BTW per regel, schilderbehandeling, afbeeldingen, scenario-opslagen,
+// betalingsconditie, componenten…). Om de calculatie op elk apparaat/elke
+// gebruiker exact terug te kunnen laden bewaren we het volledige localStorage-
+// model verliesloos als JSONB per project (bron van waarheid voor de editor).
+
+export interface CalculatieSnapshot {
+  scenarios: Scenario[]
+  groepen: Groep[]
+  regels: Calculatieregel[]
+  componenten: Componentregel[]
+}
+
+/** Schrijft de volledige calculatie (alle scenario's van het project) als JSONB. */
+export async function bewaarCalculatieSnapshot(
+  projectId: string,
+  snapshot: CalculatieSnapshot
+): Promise<{ gelukt: boolean; fout?: string }> {
+  // calculatie_snapshots staat (nog) niet in de gegenereerde types → any (zoals werkbegroting).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (await createClient()) as any
+  const { error } = await db
+    .from('calculatie_snapshots')
+    .upsert(
+      { project_id: projectId, data: snapshot, bijgewerkt_op: new Date().toISOString() },
+      { onConflict: 'project_id' }
+    )
+  if (error) return { gelukt: false, fout: error.message }
+  return { gelukt: true }
+}
+
+/** Haalt de gedeelde calculatie-snapshot op; null als er nog nooit is opgeslagen. */
+export async function laadCalculatieSnapshot(projectId: string): Promise<CalculatieSnapshot | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (await createClient()) as any
+  const { data, error } = await db
+    .from('calculatie_snapshots')
+    .select('data')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error || !data?.data) return null
+  return data.data as CalculatieSnapshot
 }

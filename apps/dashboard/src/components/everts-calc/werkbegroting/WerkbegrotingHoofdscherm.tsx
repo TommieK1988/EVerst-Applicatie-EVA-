@@ -7,10 +7,10 @@ import Link from 'next/link'
 import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie,
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
-  getWerkbegrotingWijzigingen,
+  getWerkbegrotingWijzigingen, hydrateWerkbegroting,
   slaWerkbegrotingOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
-import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
@@ -31,6 +31,10 @@ interface Props {
 export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, projectNummer, projectStatus, dossierId, ingesloten = false }: Props) {
   const [wb, setWb] = useState<Werkbegroting | null>(null)
   const [scenarioId, setScenarioId] = useState<string | null>(null)
+  /** True zolang de gedeelde werkbegroting uit Supabase wordt geladen. */
+  const [initBezig, setInitBezig] = useState(true)
+  /** Mag de ingelogde gebruiker de prognose naar Bouw7 sturen (controller/directie)? */
+  const [magPrognose, setMagPrognose] = useState(false)
   const [refreshTeller, setRefreshTeller] = useState(0)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
   const [bestellingenOpen, setBestellingenOpen] = useState(false)
@@ -47,24 +51,66 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [hoofdstukken, setHoofdstukken] = useState<Hoofdstuk[]>([])
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
 
+  /** Directe (niet-gedebouncede) sync van een vers/lokaal aangemaakte WB → meteen gedeeld. */
+  const syncWbNu = useCallback(async (w: Werkbegroting) => {
+    if (!dossierId) return
+    const regels = getWerkbegrotingRegels(w.id)
+    const regelIds = new Set(regels.map(r => r.id))
+    const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id))
+    const wijzigingen = getWerkbegrotingWijzigingen().filter(x => x.werkbegroting_id === w.id)
+    await syncWerkbegrotingNaarSupabase({ wb: w, regels, componenten, wijzigingen, dossierId }).catch(() => {})
+  }, [dossierId])
+
+  // Laden: de werkbegroting is gedeeld — Supabase is de bron van waarheid. Op een
+  // apparaat zonder de lokale calculatie wordt hij uit Supabase gehydrateerd; bestaat
+  // er nog geen gedeelde WB, dan wordt hij lokaal uit de calculatie aangemaakt en
+  // meteen gesynct zodat collega's hem ook zien.
   useEffect(() => {
-    const scenarios = getScenarios(projectId)
-    const standaard = scenarios.find(s => s.is_standaard) ?? scenarios[0]
-    if (!standaard) return
-
-    setScenarioId(standaard.id)
-
     const toegestaneStatussen = ['gewonnen', 'opdracht', 'uitvoering', 'afgerond']
-    if (!toegestaneStatussen.includes(projectStatus)) return
+    if (!toegestaneStatussen.includes(projectStatus)) { setInitBezig(false); return }
 
-    const bestaand = getWerkbegrotingVoorScenario(standaard.id)
-    if (bestaand) {
-      setWb(bestaand)
-    } else {
-      const nieuw = maakWerkbegrotingVanCalculatie(projectId, standaard.id)
-      setWb(nieuw)
-    }
-  }, [projectId, projectStatus])
+    let actief = true
+    setInitBezig(true)
+    ;(async () => {
+      if (dossierId) {
+        try {
+          const snap = await laadWerkbegrotingSnapshot(dossierId)
+          if (!actief) return
+          if (snap) {
+            hydrateWerkbegroting(snap)
+            setScenarioId(snap.wb.scenario_id)
+            setWb(snap.wb)
+            setInitBezig(false)
+            return
+          }
+        } catch { /* val terug op lokaal aanmaken */ }
+        if (!actief) return
+      }
+
+      // Nog geen gedeelde WB → lokaal uit de calculatie (vereist de calculatie op dit apparaat).
+      const scenarios = getScenarios(projectId)
+      const standaard = scenarios.find(s => s.is_standaard) ?? scenarios[0]
+      if (!standaard) { setInitBezig(false); return }
+      setScenarioId(standaard.id)
+      const bestaand = getWerkbegrotingVoorScenario(standaard.id)
+      const w = bestaand ?? maakWerkbegrotingVanCalculatie(projectId, standaard.id)
+      setWb(w)
+      setInitBezig(false)
+      void syncWbNu(w)
+    })()
+
+    return () => { actief = false }
+  }, [projectId, projectStatus, dossierId, syncWbNu])
+
+  // Prognose-recht (controller/directie) bepalen voor de knop-zichtbaarheid.
+  useEffect(() => {
+    if (!dossierId) { setMagPrognose(false); return }
+    let actief = true
+    magPrognoseSturen(dossierId)
+      .then(m => { if (actief) setMagPrognose(m) })
+      .catch(() => { if (actief) setMagPrognose(false) })
+    return () => { actief = false }
+  }, [dossierId])
 
   // Bewakingscodes van het gekoppelde Bouw7-project ophalen → kostengroep-picker + prognose-match.
   useEffect(() => {
@@ -132,18 +178,20 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     const regelIds = new Set(regels.map(r => r.id))
     const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id) && !c.is_verwijderd)
     const perCode = new Map<string, WerkbegrotingCodeTotaal>()
-    const ensure = (code: string): WerkbegrotingCodeTotaal => {
-      let t = perCode.get(code)
-      if (!t) { t = { code }; perCode.set(code, t) }
+    const ensure = (code: string, naam: string | null): WerkbegrotingCodeTotaal => {
+      const key = `${code}${naam ?? ''}`
+      let t = perCode.get(key)
+      if (!t) { t = { code, naam }; perCode.set(key, t) }
       return t
     }
     for (const comp of componenten) {
       const regel = regelById.get(comp.werkbegroting_regel_id)
       if (!regel) continue
       const code = bareCode(regel.kostengroep)
+      const naam = kgNaam(regel.kostengroep)
       const hoeveelheid = regel.hoeveelheid * comp.norm_hoeveelheid
       const bedrag = hoeveelheid * comp.tarief
-      const t = ensure(code)
+      const t = ensure(code, naam)
       if (comp.type === 'arbeid') { t.arbeid = t.arbeid ?? { bedrag: 0, uren: 0 }; t.arbeid.bedrag += bedrag; t.arbeid.uren += hoeveelheid }
       else if (comp.type === 'onderaanneming') { t.onderaanneming = t.onderaanneming ?? { bedrag: 0 }; t.onderaanneming.bedrag += bedrag }
       else if (comp.type === 'materieel') { t.materieel = t.materieel ?? { bedrag: 0 }; t.materieel.bedrag += bedrag }
@@ -157,15 +205,15 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     setPrognosePreview(null)
     setPrognoseBezig(true)
     try {
-      const [preview, hs] = await Promise.all([
+      const [preview, hs, opgeslagen] = await Promise.all([
         previewWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen()),
         getProjectHoofdstukken(dossierId),
+        laadPrognoseDoelHoofdstuk(dossierId),
       ])
       setPrognosePreview(preview)
       if (hs.ok) {
         setHoofdstukken(hs.hoofdstukken)
-        const opgeslagen = Number(localStorage.getItem(`eva_prognose_hoofdstuk_${dossierId}`))
-        const geldig = hs.hoofdstukken.some(h => h.id === opgeslagen)
+        const geldig = opgeslagen != null && hs.hoofdstukken.some(h => h.id === opgeslagen)
         const wb = hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB')
         setDoelHoofdstukId(geldig ? opgeslagen : (wb?.id ?? hs.hoofdstukken[0]?.id ?? null))
       }
@@ -178,7 +226,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     if (!dossierId) return
     setPrognoseBezig(true)
     try {
-      if (doelHoofdstukId != null) localStorage.setItem(`eva_prognose_hoofdstuk_${dossierId}`, String(doelHoofdstukId))
+      if (doelHoofdstukId != null) await bewaarPrognoseDoelHoofdstuk(dossierId, doelHoofdstukId)
       const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen(), doelHoofdstukId, bouwPayload() ?? undefined)
       if (res.ok) {
         const delen = [`${res.geschreven} bijgewerkt`]
@@ -214,14 +262,21 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     if (!wb) return { ok: false, error: 'Geen werkbegroting geladen.' }
     const payload = bouwPayload()
     if (!payload) return { ok: false, error: 'Kon werkbegroting niet opbouwen.' }
-    const res = await accordeerWerkbegroting(goedkeuringId, payload, opmerking)
+    const doelHoofdstukId = dossierId ? await laadPrognoseDoelHoofdstuk(dossierId) : null
+    const res = await accordeerWerkbegroting(goedkeuringId, payload, opmerking, doelHoofdstukId)
     if (res.ok) {
       const bij: Werkbegroting = { ...wb, status: 'geaccordeerd', bijgewerkt_op: new Date().toISOString() }
       slaWerkbegrotingOp(bij); setWb(bij)
       await verversStatus()
+      // Auto-prognose naar Bouw7 (alleen bij accorderen door controller/directie).
+      if (res.prognose) {
+        if (res.prognose.verstuurd) toast.success(res.prognose.melding)
+        else toast(res.prognose.melding, { icon: '⚠️' })
+      }
+      return { ok: true }
     }
     return res
-  }, [wb, bouwPayload, verversStatus])
+  }, [wb, bouwPayload, verversStatus, dossierId])
 
   const toegestaneStatussen = ['gewonnen', 'opdracht', 'uitvoering', 'afgerond']
   const magAanmaken = toegestaneStatussen.includes(projectStatus)
@@ -242,9 +297,20 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   }
 
   if (!wb || !scenarioId) {
+    if (initBezig) {
+      return (
+        <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Werkbegroting laden…
+        </div>
+      )
+    }
     return (
-      <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" /> Werkbegroting laden…
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-500">
+        <Clock className="w-10 h-10 text-slate-300" />
+        <div className="text-center">
+          <p className="font-semibold text-slate-700">Nog geen werkbegroting</p>
+          <p className="text-sm mt-1">Er is voor dit dossier nog geen werkbegroting aangemaakt. De calculator maakt deze aan vanuit de calculatie.</p>
+        </div>
       </div>
     )
   }
@@ -311,17 +377,19 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           <Package className="w-3.5 h-3.5" />
           Bestellingen
         </button>
-        <button
-          onClick={openPrognose}
-          disabled={!dossierId}
-          title={dossierId ? 'Stuur de werkbegroting-bedragen als prognose naar Bouw7' : 'Geen dossier gekoppeld'}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-            border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
-            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <Send className="w-3.5 h-3.5" />
-          Prognose naar Bouw7
-        </button>
+        {magPrognose && (
+          <button
+            onClick={openPrognose}
+            disabled={!dossierId}
+            title={dossierId ? 'Stuur de werkbegroting-bedragen als prognose naar Bouw7' : 'Geen dossier gekoppeld'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+              border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
+              disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" />
+            Prognose naar Bouw7
+          </button>
+        )}
       </div>
 
       {/* Grid + totalen panel */}
@@ -497,6 +565,12 @@ function euro(n: number): string {
 /** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
 function bareCode(kostengroep?: string | null): string {
   return (kostengroep ?? '').split(/\s[—-]\s/)[0].trim()
+}
+
+/** Kostengroep → omschrijving-deel ("CODE — Naam" → "Naam"), of null. */
+function kgNaam(kostengroep?: string | null): string | null {
+  const d = (kostengroep ?? '').split(/\s[—-]\s/)
+  return d.length > 1 ? (d.slice(1).join(' — ').trim() || null) : null
 }
 
 /** Groepeer prognose-regels per bewakingscode, met de codes gesorteerd (lege code achteraan). */

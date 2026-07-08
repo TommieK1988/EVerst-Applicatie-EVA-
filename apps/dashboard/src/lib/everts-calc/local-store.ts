@@ -416,6 +416,42 @@ export function verwijderCalculatieregel(id: string): void {
   sla(KEYS.calculatieregels, getCalculatieregels().filter(r => r.id !== id))
 }
 
+/**
+ * Hydrateert de localStorage-cache met de gedeelde calculatie van een project
+ * uit Supabase (verliesloze JSONB-snapshot). Supabase is de bron van waarheid;
+ * deze functie vervangt álle lokale rijen van dit project (scenario's, groepen,
+ * calculatieregels, componentregels) door de server-versie, zodat elke gebruiker/
+ * elk apparaat exact hetzelfde ziet. Aan te roepen bij het openen van de
+ * calculatie, vóór het grid rendert. Spiegelt hydrateWerkbegroting().
+ */
+export function hydrateCalculatie(
+  projectId: string,
+  snapshot: { scenarios: Scenario[]; groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
+): void {
+  if (typeof window === 'undefined') return
+  const { scenarios, groepen, regels, componenten } = snapshot
+
+  // Bepaal — vóór het schrijven — welke id's bij dit project horen: oud (lokaal)
+  // én nieuw (server). Zo ruimen we ook server-verwijderde rijen lokaal op.
+  const projectScenarioIds = new Set<string>([
+    ...getScenarios(projectId).map(s => s.id),
+    ...scenarios.map(s => s.id),
+  ])
+  const projectGroepIds = new Set<string>([
+    ...getGroepen().filter(g => projectScenarioIds.has(g.scenario_id)).map(g => g.id),
+    ...groepen.map(g => g.id),
+  ])
+  const projectRegelIds = new Set<string>([
+    ...getCalculatieregels().filter(r => projectGroepIds.has(r.groep_id)).map(r => r.id),
+    ...regels.map(r => r.id),
+  ])
+
+  sla(KEYS.scenarios,        [...getScenarios().filter(s => s.project_id !== projectId), ...scenarios])
+  sla(KEYS.groepen,          [...getGroepen().filter(g => !projectScenarioIds.has(g.scenario_id)), ...groepen])
+  sla(KEYS.calculatieregels, [...getCalculatieregels().filter(r => !projectGroepIds.has(r.groep_id)), ...regels])
+  sla(KEYS.componentregels,  [...getComponentregels().filter(c => !projectRegelIds.has(c.calculatieregel_id)), ...componenten])
+}
+
 // ─── Undo snapshot (nieuwe structuur) ────────────────────────────────────────
 
 /** Herstel een volledig calculatie-snapshot voor een scenario (voor undo). */

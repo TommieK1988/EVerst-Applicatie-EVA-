@@ -8,7 +8,9 @@ import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import OfferteDetail from './OfferteDetail'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
-import { getScenarios, kopieerScenario } from '@/lib/everts-calc/local-store'
+import { koppelDossierAanProject } from '@/lib/dossiers/actions'
+import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { getScenarios, kopieerScenario, hydrateCalculatie } from '@/lib/everts-calc/local-store'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import { Card, CardHeader, CardBody, Badge, Button } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
@@ -139,9 +141,31 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
   const [calcTick, setCalcTick]                     = useState(0)
+  const [gehydrateerd, setGehydrateerd]             = useState(false)
+
+  // Hydrateer de gedeelde calculatie uit Supabase (één keer per project, vóór het
+  // grid rendert). Zo is de calculatie op elk apparaat/elke gebruiker zichtbaar —
+  // dezelfde fix als bij de werkbegroting. Draait bewust NIET op calcTick, anders
+  // zou een lokaal net-gekopieerde (nog niet opgeslagen) calculatie overschreven worden.
   useEffect(() => {
-    setScenarios(projectId ? getScenarios(projectId) : [])
-  }, [projectId, calcTick])
+    let actief = true
+    setGehydrateerd(false)
+    if (!projectId) return
+    ;(async () => {
+      try {
+        const snap = await laadCalculatieSnapshot(projectId)
+        if (actief && snap) hydrateCalculatie(projectId, snap)
+      } catch { /* val terug op lokaal */ }
+      finally { if (actief) setGehydrateerd(true) }
+    })()
+    return () => { actief = false }
+  }, [projectId])
+
+  // Lokale scenario's lezen — na hydratie en na lokale wijzigingen (kopiëren e.d.).
+  useEffect(() => {
+    if (!projectId || !gehydrateerd) { setScenarios([]); return }
+    setScenarios(getScenarios(projectId))
+  }, [projectId, gehydrateerd, calcTick])
 
   const handleScenariosGewijzigd = (nieuwId?: string) => {
     setCalcTick(t => t + 1)
@@ -159,6 +183,10 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     setFout(null)
     try {
       const { id } = await maakProjectVanAanvraag(naam, '')
+      // Koppeling server-side vastleggen (dossiers.everts_calc_project_id) zodat de
+      // calculatie ook op een vers apparaat/andere gebruiker teruggevonden wordt en
+      // niet enkel in localStorage leeft. Best-effort; localStorage blijft cache.
+      await koppelDossierAanProject(aanvraagId, id)
       migreerCalculatieData(aanvraagId, id)
       const mapping = leesMapping()
       mapping[aanvraagId] = id
@@ -220,6 +248,16 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
         {fout && (
           <p style={{ fontSize: 12, color: 'var(--color-red, #dc2626)', margin: 0 }}>{fout}</p>
         )}
+      </div>
+    )
+  }
+
+  // Wacht tot de gedeelde calculatie uit Supabase gehydrateerd is, zodat het grid
+  // niet met lege/oude cache flitst voordat de server-versie geladen is.
+  if (!gehydrateerd) {
+    return (
+      <div style={{ padding: '56px 40px', display: 'flex', justifyContent: 'center' }}>
+        <p style={{ fontSize: 13, color: 'var(--fg-muted)', margin: 0 }}>Calculatie laden…</p>
       </div>
     )
   }

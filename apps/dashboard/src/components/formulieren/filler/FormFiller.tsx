@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
@@ -10,6 +10,9 @@ import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import {
   saveFormInzending,
   submitFormInzending,
+  laadFormulierConcept,
+  bewaarFormulierConcept,
+  verwijderFormulierConcept,
 } from '@/app/(platform)/formulieren/actions'
 
 type Props = {
@@ -43,8 +46,9 @@ const DRAFT_KEY = (scope: string) => `form_draft_${scope}`
 export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, draftScope, mobiel = false, terugHref, medewerkers, dossierWaarden }: Props) {
   const router = useRouter()
   // Cache-sleutel per exemplaar: voorkomt dat verschillende invullingen van
-  // hetzelfde sjabloon dezelfde localStorage-draft delen.
-  const draftKey = DRAFT_KEY(draftScope ?? template.id)
+  // hetzelfde sjabloon dezelfde draft delen.
+  const scope = draftScope ?? template.id
+  const draftKey = DRAFT_KEY(scope)
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     // Priority: bestaande inzending > vooringevuld > localStorage draft > leeg
     let initial: Record<string, unknown> = {}
@@ -85,12 +89,36 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Sla concept automatisch op in localStorage
+  // Hervat een gedeeld concept uit Supabase (meereist over apparaten). Alleen als er
+  // geen bestaande inzending en geen vooringevulde waarden zijn — die gaan vóór het
+  // concept (zie priority-volgorde). Dossierwaarden blijven altijd leidend.
+  const conceptGeladen = useRef(false)
+  useEffect(() => {
+    if (conceptGeladen.current) return
+    if (bestaandeInzending || (vooringevuld && Object.keys(vooringevuld).length > 0)) return
+    let actief = true
+    laadFormulierConcept(scope).then(concept => {
+      if (!actief || !concept || Object.keys(concept).length === 0) return
+      conceptGeladen.current = true
+      setValues(prev => ({ ...prev, ...concept, ...(dossierWaarden ?? {}) }))
+    }).catch(() => { /* val terug op lokaal/leeg */ })
+    return () => { actief = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope])
+
+  // Sla concept automatisch op: direct in localStorage (offline-mirror) + debounced
+  // gedeeld naar Supabase, zodat het concept op een ander apparaat/browser terugkomt.
   useEffect(() => {
     try {
       localStorage.setItem(draftKey, JSON.stringify(values))
     } catch { /* storage full */ }
-  }, [values, draftKey])
+    // Leeg concept niet naar de server schrijven (voorkomt lege rijen bij mount).
+    if (bestaandeInzending || Object.keys(values).length === 0) return
+    const t = setTimeout(() => {
+      bewaarFormulierConcept(scope, values, template.id, dossierId ?? null).catch(() => { /* stil */ })
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [values, draftKey, scope, bestaandeInzending, template.id, dossierId])
 
   function updateValue(fieldId: string, value: unknown) {
     setValues(prev => ({ ...prev, [fieldId]: value }))
@@ -180,8 +208,9 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         return
       }
 
-      // Verwijder localStorage draft
+      // Verwijder het concept: lokaal (offline-mirror) én het gedeelde server-concept.
       try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
+      verwijderFormulierConcept(scope).catch(() => { /* stil */ })
 
       toast.success(taskId ? 'Formulier ingediend — taak voltooid!' : 'Formulier ingediend!')
       router.push(terugHref ?? (mobiel ? '/m/taken' : `/formulieren/${template.id}/inzendingen`))
