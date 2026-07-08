@@ -46,10 +46,12 @@ export async function GET(request: NextRequest) {
     redirect_uri:  redirectUri,
     scope:         scopes,
     state,
-    // 'consent' forceert het toestemmingsscherm, zodat nieuwe scopes (bijv. Mail.Send)
-    // ook echt worden gevraagd/verleend bij een herkoppeling — anders slaat Microsoft
-    // het scherm over en mist het token het nieuwe recht.
-    prompt:        'consent',
+    // Alleen het account laten kiezen — NIET prompt=consent. In een tenant waar
+    // gebruikers zelf niet mogen consenten zou prompt=consent de gebruiker om
+    // toestemming vragen en dus blokkeren, óók als de beheerder al org-brede
+    // toestemming (admin consent) heeft gegeven. Met select_account gebruikt de
+    // koppeling die beheerdersgoedkeuring en wordt het token (incl. Mail.Send) uitgegeven.
+    prompt:        'select_account',
   })
 
   const authUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`
