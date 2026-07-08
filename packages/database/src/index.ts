@@ -65,6 +65,23 @@ export type {
   Werkbon,
   WerkbonFoto,
   UrenRegel,
+  // Oplevering-module
+  OpleverMomentType,
+  OpleverMomentStatus,
+  OpleverPuntStatus,
+  OpleverToewijzingType,
+  OpleverReactieAuteurType,
+  OpleverReactieSoort,
+  OpleverFotoSoort,
+  OpleverHandtekeningRol,
+  OpleverHandtekeningMethode,
+  OpleverTokenScope,
+  OpleverMoment,
+  OpleverPunt,
+  OpleverPuntReactie,
+  OpleverFoto,
+  OpleverHandtekening,
+  OpleverToegangToken,
 } from './platform-types'
 export {
   logoSlotLabels,
@@ -74,6 +91,9 @@ export {
   offerteSubstatusLabels,
   opdrachtSubstatusLabels,
   meerwerkStatusLabels,
+  opleverMomentTypeLabels,
+  opleverMomentStatusLabels,
+  opleverPuntStatusLabels,
   getDossierSubstatus,
   // Planning-module
   afhankelijkheidsTypeLabels,

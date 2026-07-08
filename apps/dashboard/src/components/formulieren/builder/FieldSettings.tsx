@@ -91,7 +91,7 @@ const OPERATORS = [
 // Veldtypen die toegestaan zijn als sub-veld (geen nesting van herhalende secties,
 // geen dossier-gegeven binnen een rij)
 const SUB_FIELD_TYPES: FormFieldType[] = [
-  'text', 'textarea', 'number', 'date', 'time',
+  'text', 'textarea', 'number', 'rating', 'date', 'time',
   'dropdown', 'radio', 'checkbox', 'boolean',
   'photo', 'file', 'signature', 'medewerker',
   'heading', 'paragraph', 'divider',
@@ -407,6 +407,7 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
   const hasOptions   = field.type === 'dropdown' || field.type === 'radio' || field.type === 'checkbox'
   const isRepeatable = field.type === 'repeatable'
   const isDossier    = field.type === 'dossier'
+  const isRating     = field.type === 'rating'
   const otherFields  = allFields.filter(f => f.id !== field.id && isInvoerVeld(f))
 
   function update(patch: Partial<FormField>) {
@@ -568,6 +569,30 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
               Optie toevoegen
             </button>
           </div>
+        </InputRow>
+      )}
+
+      {/* Cijferbereik voor rating */}
+      {isRating && (
+        <InputRow label="Cijferbereik">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TextInput
+              type="number"
+              value={String(field.validation?.min ?? 1)}
+              onChange={e => update({ validation: { ...field.validation, min: e.target.value === '' ? undefined : Number(e.target.value) } })}
+              style={{ width: 70 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>t/m</span>
+            <TextInput
+              type="number"
+              value={String(field.validation?.max ?? 10)}
+              onChange={e => update({ validation: { ...field.validation, max: e.target.value === '' ? undefined : Number(e.target.value) } })}
+              style={{ width: 70 }}
+            />
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+            Bijv. 1 t/m 10 of 1 t/m 5. De invuller kiest één cijfer.
+          </p>
         </InputRow>
       )}
 

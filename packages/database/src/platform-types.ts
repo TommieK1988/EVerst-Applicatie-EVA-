@@ -1175,3 +1175,131 @@ export type DossierVoortgang = {
   created_at:         string
   updated_at:         string
 }
+
+// ── Oplevering-module ─────────────────────────────────────────────────────────
+
+export type OpleverMomentType = 'vooroplevering' | 'eindoplevering' | 'tussenoplevering' | 'overig'
+
+export const opleverMomentTypeLabels: Record<OpleverMomentType, string> = {
+  vooroplevering:   'Vooroplevering',
+  eindoplevering:   'Eindoplevering',
+  tussenoplevering: 'Tussenoplevering',
+  overig:           'Overig',
+}
+
+export type OpleverMomentStatus =
+  | 'concept'
+  | 'in_uitvoering'
+  | 'gereed_voor_ondertekening'
+  | 'ondertekend'
+  | 'afgerond'
+
+export const opleverMomentStatusLabels: Record<OpleverMomentStatus, string> = {
+  concept:                   'Concept',
+  in_uitvoering:             'In uitvoering',
+  gereed_voor_ondertekening: 'Gereed voor ondertekening',
+  ondertekend:               'Ondertekend',
+  afgerond:                  'Afgerond',
+}
+
+/** Opleverpunt-statusmachine (domein): Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd. */
+export type OpleverPuntStatus = 'open' | 'in_behandeling' | 'opgelost' | 'geaccepteerd' | 'geweigerd'
+
+export const opleverPuntStatusLabels: Record<OpleverPuntStatus, string> = {
+  open:          'Open',
+  in_behandeling:'In behandeling',
+  opgelost:      'Opgelost',
+  geaccepteerd:  'Geaccepteerd',
+  geweigerd:     'Geweigerd',
+}
+
+export type OpleverToewijzingType = 'medewerker' | 'relatie'
+export type OpleverReactieAuteurType = 'intern' | 'onderaannemer'
+export type OpleverReactieSoort = 'afmelding' | 'review' | 'opmerking'
+export type OpleverFotoSoort = 'voor' | 'na' | 'algemeen'
+export type OpleverHandtekeningRol = 'opdrachtgever' | 'opzichter' | 'uitvoerder'
+export type OpleverHandtekeningMethode = 'pad' | 'akkoord_knop'
+export type OpleverTokenScope = 'onderaannemer' | 'ondertekening' | 'feedback'
+
+export type OpleverMoment = {
+  id: string
+  dossier_id: string
+  titel: string
+  type: OpleverMomentType
+  status: OpleverMomentStatus
+  opgeleverd_op: string | null
+  opmerking: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export type OpleverPunt = {
+  id: string
+  moment_id: string
+  dossier_id: string
+  volgnummer: number
+  omschrijving: string
+  ruimte: string | null
+  status: OpleverPuntStatus
+  toegewezen_type: OpleverToewijzingType | null
+  toegewezen_medewerker_id: string | null
+  toegewezen_relatie_id: string | null
+  deadline: string | null
+  is_extra_werk: boolean
+  meerwerk_regel_id: string | null
+  geweigerd_reden: string | null
+  afgemeld_op: string | null
+  geaccepteerd_op: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export type OpleverPuntReactie = {
+  id: string
+  punt_id: string
+  auteur_type: OpleverReactieAuteurType
+  auteur_naam: string | null
+  auteur_medewerker_id: string | null
+  soort: OpleverReactieSoort
+  opmerking: string | null
+  foto_urls: string[]
+  created_at: string
+}
+
+export type OpleverFoto = {
+  id: string
+  punt_id: string
+  url: string
+  soort: OpleverFotoSoort
+  created_at: string
+  created_by: string | null
+}
+
+export type OpleverHandtekening = {
+  id: string
+  moment_id: string
+  rol: OpleverHandtekeningRol
+  naam: string | null
+  methode: OpleverHandtekeningMethode
+  handtekening_url: string | null
+  akkoord_op: string
+  ip: string | null
+  created_at: string
+}
+
+export type OpleverToegangToken = {
+  id: string
+  token_hash: string
+  dossier_id: string
+  scope: OpleverTokenScope
+  relatie_id: string | null
+  moment_id: string | null
+  form_template_id: string | null
+  omschrijving: string | null
+  verloopt_op: string | null
+  gebruikt_op: string | null
+  created_at: string
+  created_by: string | null
+}

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Van aanvraag tot betaling — Handleiding | EVA · Everts Onderhoud &amp; Renovatie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand:#1f7a3a; --brand-deep:#155d2b; --brand-light:#2d9a4c; --brand-xlight:#3daa35;
+      --brand-pale:#f0faf3; --brand-soft:#d3f0dc;
+      --bg:#fafaf8; --bg-elev:#ffffff; --bg-sidebar:#f4f3ef; --border:#e5e4dc;
+      --fg:#13201a; --fg-soft:#3d4a44; --fg-muted:#8a8c86;
+      --green:#16a34a; --green-light:#dcfce7; --orange:#ea580c; --orange-light:#ffedd5;
+      --red:#dc2626; --red-light:#fee2e2; --blue:#2563eb; --blue-light:#dbeafe;
+      --purple:#7c3aed; --purple-light:#ede9fe; --teal:#0d9488; --teal-light:#ccfbf1; --gold:#c8a020;
+      --font:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body { font-family:var(--font); background:var(--bg); color:var(--fg); line-height:1.7; font-size:16px; }
+
+    /* NAV */
+    nav { position:sticky; top:0; z-index:100; background:var(--brand-deep); padding:0 1.5rem;
+      display:flex; align-items:center; overflow-x:auto; white-space:nowrap;
+      box-shadow:0 2px 12px rgba(0,0,0,.25); border-bottom:2px solid var(--gold); }
+    .nav-brand { display:flex; align-items:center; gap:.6rem; padding:.6rem 1.25rem .6rem 0;
+      border-right:1px solid rgba(255,255,255,.15); margin-right:.5rem; flex-shrink:0; }
+    .nav-brand img { height:28px; width:auto; }
+    .nav-brand span { color:#fff; font-weight:800; font-size:.95rem; letter-spacing:-.3px; }
+    nav a { color:rgba(255,255,255,.7); text-decoration:none; padding:1rem .65rem; font-size:.82rem; font-weight:600; transition:color .15s; }
+    nav a:hover { color:#fff; }
+
+    /* HERO */
+    .hero { position:relative; overflow:hidden; background:var(--brand-deep); color:#fff;
+      padding:3.5rem 1.5rem 3rem; text-align:center; border-bottom:3px solid var(--gold); }
+    .hero-bg { position:absolute; inset:0; background-image:url('brand-bg.svg'); background-size:cover; background-position:center; opacity:.5; }
+    .hero-content { position:relative; z-index:1; }
+    .hero-logo { display:flex; align-items:center; justify-content:center; gap:1.25rem; margin-bottom:1.5rem; }
+    .hero-logo img { height:60px; width:auto; filter:drop-shadow(0 4px 12px rgba(0,0,0,.35)); }
+    .hero-logo-text { text-align:left; }
+    .hero-logo-text .company { font-size:.9rem; font-weight:600; opacity:.85; letter-spacing:.05em; text-transform:uppercase; }
+    .hero-logo-text .product { font-size:1.7rem; font-weight:800; letter-spacing:-.5px; line-height:1.1; }
+    .hero h1 { font-size:1.5rem; font-weight:800; max-width:720px; margin:0 auto .8rem; line-height:1.3; }
+    .hero p { font-size:1.02rem; font-weight:500; opacity:.85; max-width:640px; margin:0 auto 1.4rem; line-height:1.6; }
+    .hero-badge { display:inline-flex; align-items:center; gap:.4rem; background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:.4rem 1.1rem; font-size:.85rem; font-weight:600; }
+    .hero-badge::before { content:'📖'; }
+
+    .container { max-width:1080px; margin:0 auto; padding:2.5rem 1.5rem; }
+
+    /* SECTION */
+    .section { margin-bottom:4rem; scroll-margin-top:70px; }
+    .section-header { display:flex; align-items:center; gap:.75rem; border-bottom:3px solid var(--brand); padding-bottom:.6rem; margin-bottom:1.8rem; }
+    .section-header .icon { font-size:1.5rem; }
+    .section-header h2 { font-size:1.5rem; font-weight:800; color:var(--brand-deep); }
+    .lead { font-size:1rem; color:var(--fg-soft); max-width:820px; margin-bottom:1.5rem; }
+
+    /* CALLOUT */
+    .callout { border-left:4px solid; border-radius:0 10px 10px 0; padding:1rem 1.25rem; margin:1.25rem 0; font-size:.92rem; color:var(--fg-soft); }
+    .callout.brand { background:var(--brand-pale); border-color:var(--brand); }
+    .callout.gold  { background:#fdf6e3; border-color:var(--gold); }
+    .callout.orange{ background:var(--orange-light); border-color:var(--orange); }
+    .callout.red   { background:var(--red-light); border-color:var(--red); }
+    .callout strong.h { display:block; font-weight:800; margin-bottom:.3rem; color:var(--brand-deep); }
+    .callout ul { margin:.4rem 0 0 1.1rem; }
+    .callout li { margin-bottom:.25rem; }
+
+    /* TABLE */
+    .data-table-wrap { overflow-x:auto; border-radius:10px; border:1px solid var(--border); margin:1.25rem 0; }
+    table { width:100%; border-collapse:collapse; font-size:.87rem; }
+    th { background:var(--brand-deep); color:#fff; padding:.65rem 1rem; text-align:left; font-weight:700; white-space:nowrap; }
+    td { padding:.6rem 1rem; border-bottom:1px solid var(--border); vertical-align:top; color:var(--fg-soft); }
+    tr:last-child td { border-bottom:none; }
+    tr:nth-child(even) td { background:var(--brand-pale); }
+    td strong { color:var(--fg); }
+
+    /* BADGE */
+    .badge { display:inline-block; padding:.15rem .55rem; border-radius:999px; font-size:.72rem; font-weight:700; white-space:nowrap; }
+    .badge-green { background:var(--green-light); color:var(--green); }
+    .badge-orange{ background:var(--orange-light); color:var(--orange); }
+    .badge-gray  { background:var(--bg-sidebar); color:var(--fg-muted); border:1px solid var(--border); }
+    .badge-brand { background:var(--brand-soft); color:var(--brand-deep); }
+
+    /* STATUS FLOW */
+    .flow-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--fg-muted); margin:1.2rem 0 .6rem; }
+    .flow { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; margin-bottom:.4rem; }
+    .pill { background:var(--bg-elev); border:1.5px solid var(--border); border-radius:999px;
+      padding:.32rem .7rem; font-size:.76rem; font-weight:700; color:var(--fg-soft); }
+    .pill.start { background:var(--brand); border-color:var(--brand); color:#fff; }
+    .pill.win { background:var(--green-light); border-color:var(--green); color:var(--green); }
+    .pill.end { background:var(--brand-deep); border-color:var(--brand-deep); color:#fff; }
+    .pill.stop{ background:var(--red-light); border-color:var(--red); color:var(--red); }
+    .arrow { color:var(--fg-muted); font-weight:700; font-size:.85rem; }
+
+    /* FASE */
+    .fase { background:var(--bg-elev); border:1px solid var(--border); border-radius:14px;
+      box-shadow:0 2px 8px rgba(21,93,43,.07); margin-bottom:1.25rem; overflow:hidden; }
+    .fase-head { display:flex; align-items:center; gap:.9rem; padding:1.1rem 1.4rem; background:var(--brand-pale); border-bottom:1px solid var(--border); }
+    .fase-num { flex-shrink:0; width:2.2rem; height:2.2rem; border-radius:50%; background:var(--brand); color:#fff;
+      font-weight:800; font-size:1rem; display:flex; align-items:center; justify-content:center; }
+    .fase-head h3 { font-size:1.12rem; font-weight:800; color:var(--brand-deep); }
+    .fase-head .who { font-size:.8rem; color:var(--fg-muted); font-weight:600; margin-top:.1rem; }
+    .fase-body { padding:1.2rem 1.4rem; }
+    .fase-grid { display:grid; grid-template-columns:auto 1fr; gap:.55rem 1rem; align-items:baseline; }
+    .fase-grid dt { font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--brand); white-space:nowrap; padding-top:.15rem; }
+    .fase-grid dd { font-size:.9rem; color:var(--fg-soft); }
+    .fase-grid dd strong { color:var(--fg); }
+    .tag { display:inline-block; background:var(--bg-sidebar); border:1px solid var(--border); border-radius:6px;
+      padding:.05rem .4rem; font-size:.8rem; font-weight:700; color:var(--brand-deep); font-family:ui-monospace,monospace; }
+
+    /* CARDS */
+    .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; margin:1.25rem 0; }
+    .card { background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:1.1rem 1.2rem;
+      box-shadow:0 1px 4px rgba(21,93,43,.06); border-top:4px solid var(--brand); }
+    .card.blue{ border-top-color:var(--blue);} .card.gold{ border-top-color:var(--gold);}
+    .card.purple{ border-top-color:var(--purple);} .card.teal{ border-top-color:var(--teal);}
+    .card.orange{ border-top-color:var(--orange);}
+    .card h4 { font-size:.95rem; font-weight:800; margin-bottom:.35rem; color:var(--brand-deep); display:flex; gap:.4rem; align-items:center; }
+    .card .when { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-muted); margin-bottom:.5rem; }
+    .card p { font-size:.86rem; color:var(--fg-soft); line-height:1.55; }
+    .card code { font-size:.78rem; background:var(--brand-pale); padding:.05rem .3rem; border-radius:4px; color:var(--brand-deep); }
+
+    .parallel-note { background:var(--teal-light); border:1px solid var(--teal); border-radius:12px; padding:1.2rem 1.4rem; margin:1.5rem 0; }
+    .parallel-note h4 { color:var(--teal); font-weight:800; margin-bottom:.4rem; font-size:1rem; }
+    .parallel-note p { font-size:.88rem; color:var(--fg-soft); }
+
+    hr { border:none; border-top:2px solid var(--brand-soft); margin:3rem 0; }
+
+    footer { background:var(--brand-deep); border-top:3px solid var(--gold); color:rgba(255,255,255,.55);
+      text-align:center; padding:1.75rem 1.5rem; font-size:.83rem; margin-top:3rem; }
+    footer .footer-brand { display:flex; align-items:center; justify-content:center; gap:.6rem; margin-bottom:.5rem; }
+    footer .footer-brand img { height:22px; opacity:.75; }
+    footer .footer-brand span { color:rgba(255,255,255,.8); font-weight:700; font-size:.95rem; }
+
+    @media (max-width:640px){
+      .fase-grid { grid-template-columns:1fr; gap:.2rem .5rem; }
+      .fase-grid dt { padding-top:.5rem; }
+      .hero-logo { flex-direction:column; gap:.6rem; }
+      .hero-logo-text { text-align:center; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand"><img src="logo-beeldmerk.svg" alt="Everts logo" /><span>EVA · Handleiding</span></div>
+  <a href="#intro">Introductie</a>
+  <a href="#entiteiten">Entiteiten</a>
+  <a href="#proces">Het proces</a>
+  <a href="#servicedesk">Servicedesk</a>
+  <a href="#automatiseringen">Automatiseringen</a>
+  <a href="#handmatig">Handmatig vs. automatisch</a>
+</nav>
+
+<div class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <div class="hero-logo">
+      <img src="logo-beeldmerk.svg" alt="Everts logo" />
+      <div class="hero-logo-text">
+        <div class="company">Everts Onderhoud &amp; Renovatie</div>
+        <div class="product">EVA Platform</div>
+      </div>
+    </div>
+    <h1>Van aanvraag tot de laatste betaling</h1>
+    <p>Stap voor stap door Eva: hoe een klus binnenkomt, een offerte wordt, wordt uitgevoerd, gefactureerd en uiteindelijk afgeboekt.</p>
+    <div class="hero-badge">Praktische handleiding — geen technische kennis nodig</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- INTRO -->
+  <section class="section" id="intro">
+    <div class="section-header"><span class="icon">🧭</span><h2>1 · Korte introductie</h2></div>
+    <p class="lead"><strong>Eva</strong> is het centrale platform van Everts. Alle onderdelen — dossiers, calculatie &amp; offertes, planning, werkbegroting, servicedesk, facturen en taken — zitten in één omgeving.</p>
+
+    <div class="callout gold">
+      <strong class="h">Eva werkt samen met Bouw7 — dat is belangrijk om te snappen</strong>
+      Voor de projectstatus en de cijfers is <strong>Bouw7 leidend</strong>. Eva haalt die informatie op en zet er een prettige werkomgeving, planning, offertes, taken en signalering bovenop. <strong>Twee keer per dag</strong> synchroniseert Eva automatisch met Bouw7. Dus: een status die je in Bouw7 wijzigt, verschijnt vanzelf in Eva — en een opdracht die je in Eva versleept, schrijft Eva terug naar Bouw7.
+    </div>
+  </section>
+
+  <!-- ENTITEITEN -->
+  <section class="section" id="entiteiten">
+    <div class="section-header"><span class="icon">🗂️</span><h2>De entiteiten die het systeem kent</h2></div>
+    <p class="lead">Een "entiteit" is een soort kaart die het systeem bijhoudt. Dit zijn de belangrijkste, en of Eva ze zelf beheert of alleen toont vanuit Bouw7.</p>
+
+    <div class="data-table-wrap">
+      <table>
+        <thead><tr><th>Entiteit</th><th>Wat het is</th><th>Beheer</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Aanvraag</strong></td><td>Een binnengekomen klus die je opneemt en calculeert. Wordt een <em>dossier</em>.</td><td><span class="badge badge-green">Eva</span></td></tr>
+          <tr><td><strong>Offerte</strong></td><td>De prijsopgave naar de klant (Everts-Calc), met versiebeheer.</td><td><span class="badge badge-green">Eva</span></td></tr>
+          <tr><td><strong>Project / Opdracht</strong></td><td>Een gewonnen offerte die wordt uitgevoerd. Ook een <em>dossier</em>.</td><td><span class="badge badge-green">Eva</span> <span class="badge badge-brand">two-way Bouw7</span></td></tr>
+          <tr><td><strong>Servicedesk / Storing</strong></td><td>Dagelijks onderhoud &amp; mutatie; op regie (nacalculatie).</td><td><span class="badge badge-green">Eva</span></td></tr>
+          <tr><td><strong>Meerwerk</strong></td><td>Extra werk t.o.v. de opdracht, met eigen akkoord.</td><td><span class="badge badge-green">Eva</span> <span class="badge badge-brand">sync Bouw7</span></td></tr>
+          <tr><td><strong>Verkoopfactuur</strong></td><td>De factuur naar de klant.</td><td><span class="badge badge-orange">Tonen (uit Bouw7)</span></td></tr>
+          <tr><td><strong>Inkoopfactuur</strong></td><td>Factuur van leverancier/onderaannemer.</td><td><span class="badge badge-orange">Tonen + toewijzen</span></td></tr>
+          <tr><td><strong>Onderaannemersopdracht</strong></td><td>Vaste-prijs-opdracht aan onderaannemer.</td><td><span class="badge badge-orange">Alleen tonen (Bouw7)</span></td></tr>
+          <tr><td><strong>Opleverpunt</strong></td><td>Restpunt na oplevering.</td><td><span class="badge badge-gray">Nog niet gebouwd</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout orange">
+      <strong class="h">Wat (nog) niet in Eva zit — verzin het dus niet</strong>
+      <ul>
+        <li><strong>Onderaannemersopdracht aanmaken/beheren</strong> — Eva <em>toont</em> alleen de contracten uit Bouw7 (in de Inkoop-tab). Aanmaken en wijzigen doe je in Bouw7.</li>
+        <li><strong>Opleverpunten / oplevering</strong> — er is geen scherm om restpunten vast te leggen.</li>
+        <li><strong>Exact Online</strong> — niet gekoppeld. Boekhouding loopt via Bouw7.</li>
+        <li><strong>Automatische aanmaningsmails</strong> naar klanten — bestaan niet; alleen interne signalen.</li>
+        <li><strong>Offerte die vanzelf verloopt</strong> — de "geldig tot"-datum kleurt alleen rood, Eva zet niets automatisch op <em>verlopen</em>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- PROCES -->
+  <section class="section" id="proces">
+    <div class="section-header"><span class="icon">🔄</span><h2>2 · Het complete proces van A tot Z</h2></div>
+
+    <div class="flow-label">De hoofdroute in één oogopslag</div>
+    <div class="flow">
+      <span class="pill start">Aanvraag</span><span class="arrow">→</span>
+      <span class="pill">Opnemen &amp; calculeren</span><span class="arrow">→</span>
+      <span class="pill">Goedkeuren</span><span class="arrow">→</span>
+      <span class="pill">Offerte</span><span class="arrow">→</span>
+      <span class="pill win">Gewonnen</span><span class="arrow">→</span>
+      <span class="pill">Opdracht &amp; uitvoering</span><span class="arrow">→</span>
+      <span class="pill">Facturatie</span><span class="arrow">→</span>
+      <span class="pill">Debiteuren</span><span class="arrow">→</span>
+      <span class="pill end">Afgesloten</span>
+    </div>
+    <p class="lead" style="margin-top:.6rem;font-size:.9rem;">De statusnamen hieronder zijn exact die uit het systeem. Per fase: <strong>wat jij doet</strong>, <strong>welke status Eva zet</strong>, <strong>wie verantwoordelijk is</strong>, en <strong>wat Eva automatisch voor je doet</strong>.</p>
+
+    <!-- FASE 1 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">1</div><div><h3>Aanvraag binnen (intake)</h3><div class="who">Planner / binnendienst</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Klik <strong>Nieuwe aanvraag</strong>, vul werkmaatschappij, klant, contactpersoon, werkadres (postcodecheck), categorie en omschrijving in. Klik <strong>Aanmaken</strong>.</dd>
+          <dt>Status</dt><dd>hoofdstatus <span class="tag">aanvraag</span> · substatus <span class="tag">nieuw</span></dd>
+          <dt>Eva doet</dt><dd>Maakt in één keer: het <strong>dossier</strong> + een <strong>Bouw7-project</strong> (status "01. Offerte") + een <strong>calculatieproject</strong> in Everts-Calc + zet bijlagen in de <strong>SharePoint-map</strong>. Nieuwe klant/contact wordt ook in Bouw7 aangemaakt.</dd>
+        </dl>
+        <div class="flow-label">Aanvraag-statussen</div>
+        <div class="flow">
+          <span class="pill start">nieuw</span><span class="arrow">→</span>
+          <span class="pill">inlezen_aanvraag</span><span class="arrow">→</span>
+          <span class="pill">werkopname</span><span class="arrow">→</span>
+          <span class="pill">uitwerken_begroting</span><span class="arrow">→</span>
+          <span class="pill">controle_begroting</span><span class="arrow">→</span>
+          <span class="pill">offerte_gereed</span><span class="arrow">→</span>
+          <span class="pill">verzonden</span>
+          <span class="arrow">·</span><span class="pill stop">afgewezen</span><span class="pill stop">vervallen</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 2 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">2</div><div><h3>Opnemen &amp; calculeren</h3><div class="who">Calculator / werkvoorbereider</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Zet de aanvraag op <span class="tag">werkopname</span>, voer de opname uit en bouw de calculatie op in Everts-Calc: arbeid, onderaanneming, materiaal, overige kosten, opslag en BTW per post. Zet daarna op <span class="tag">uitwerken_begroting</span>.</dd>
+          <dt>Status</dt><dd>Je stuurt deze zelf — geen automatische overgang tussen opname en calculatie.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- FASE 3 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">3</div><div><h3>Offerte laten goedkeuren — de "poort"</h3><div class="who">Calculator vraagt aan · Controller / Directie keurt</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Klik in de offerte-preview op <strong>Goedkeuring aanvragen</strong>.</dd>
+          <dt>Eva doet</dt><dd>Zet de substatus automatisch op <span class="tag">controle_begroting</span> en maakt een <strong>beoordeeltaak</strong> voor de controller (prioriteit hoog). Bij <strong>goedkeuren</strong> → <span class="tag">offerte_gereed</span> + melding. Bij <strong>afkeuren</strong> → aanpas-taak voor de aanvrager.</dd>
+          <dt>Regel</dt><dd>Goedkeuring is verplicht voor <strong>alle categorieën</strong>, behalve Dagelijks onderhoud/Mutatie (daar pas vanaf de drempel, standaard <strong>€ 1.000 excl. btw</strong>). Interne calculaties nooit.</dd>
+        </dl>
+        <div class="callout brand" style="margin-bottom:0;">
+          <strong class="h">🔒 Harde poort</strong>
+          De goedkeuring wordt vastgeklonken aan de exacte inhoud van de offerte. Wijzig je daarna nog iets, dan vervalt de goedkeuring. Zonder geldige goedkeuring kun je de offerte <strong>niet versturen en niet definitief downloaden</strong>.
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 4 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">4</div><div><h3>Offerte versturen</h3><div class="who">Calculator / werkvoorbereider</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Klik <strong>Offerte verzenden</strong> (grijs zolang niet goedgekeurd), loop de mail na en verstuur.</dd>
+          <dt>Eva doet</dt><dd>Maakt de PDF's, verstuurt de mail via <strong>Outlook namens jou</strong>, zet <em>daarna pas</em> de offerte op <span class="tag">verzonden</span> (vergrendeld), en <strong>archiveert PDF + mail in SharePoint</strong>.</dd>
+          <dt>Let op</dt><dd>Zet je het dossier op <span class="tag">verzonden</span>, dan promoveert Eva het <strong>automatisch</strong> naar hoofdstatus <span class="tag">offerte</span>.</dd>
+          <dt>Versies</dt><dd>Aanpassen na verzenden? Gebruik <strong>Kopiëren naar nieuwe versie</strong> — nieuwe concept-offerte (bv. <span class="tag">OFT-2026-046-v2</span>); de verzonden versie blijft bewaard.</dd>
+        </dl>
+        <div class="flow-label">Offerte-statussen (dossier)</div>
+        <div class="flow">
+          <span class="pill start">verzonden</span><span class="arrow">→</span>
+          <span class="pill">nabellen</span><span class="arrow">→</span>
+          <span class="pill">in_behandeling</span><span class="arrow">→</span>
+          <span class="pill">mondelinge_toezegging</span><span class="arrow">→</span>
+          <span class="pill win">gewonnen</span>
+          <span class="arrow">·</span><span class="pill stop">verloren</span><span class="pill stop">vervallen</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 5 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">5</div><div><h3>Klant reageert → opdracht</h3><div class="who">Calculator / projectleider</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Volg de offerte op. Klant akkoord → zet op <span class="tag">gewonnen</span>. Afgewezen → <span class="tag">verloren</span> (reden vastleggen).</dd>
+          <dt>Eva doet</dt><dd>Bij <span class="tag">gewonnen</span> promoveert Eva het dossier <strong>automatisch</strong> naar <span class="tag">opdracht</span> / <span class="tag">nieuwe_opdracht</span> én neemt de <strong>werkbegroting automatisch over</strong> naar de planning.</dd>
+          <dt>Let op</dt><dd>Vaak wordt het winnen in <strong>Bouw7</strong> vastgelegd; de sync spiegelt dat naar Eva. Niet dubbel doen.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- FASE 6 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">6</div><div><h3>Werkvoorbereiding, planning &amp; inkoop</h3><div class="who">Uitvoerder / projectleider · werkvoorbereider</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Sleep de opdracht over het <strong>Opdrachten-bord</strong>, werk de werkbegroting af en laat die <strong>accorderen</strong> op regelniveau, plan mensen in en zet bestellingen klaar.</dd>
+          <dt>Eva doet</dt><dd>Schrijft je statuswijziging <strong>terug naar Bouw7</strong>. Een bestelling kun je pas verzenden als alle regels geaccordeerd zijn én de begroting niet gewijzigd is — anders verschijnt de <strong>"WB!"-melding</strong>. Bij bepaalde statussen hangt Eva automatisch een <strong>takenlijst</strong> aan.</dd>
+        </dl>
+        <div class="flow-label">Opdracht-statussen</div>
+        <div class="flow">
+          <span class="pill start">nieuwe_opdracht</span><span class="arrow">→</span>
+          <span class="pill">werkvoorbereiding</span><span class="arrow">→</span>
+          <span class="pill">onderhanden</span><span class="arrow">→</span>
+          <span class="pill">uitvoering_gereed</span><span class="arrow">→</span>
+          <span class="pill">financieel_gereed</span><span class="arrow">→</span>
+          <span class="pill end">financieel_afgesloten</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 7 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">7</div><div><h3>Uitvoering</h3><div class="who">Monteur/vakman · uitvoerder</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Monteurs schrijven <strong>uren</strong> en boeken <strong>materiaal</strong> (via Bouw7; Eva toont het live). <strong>Meerwerk</strong> leg je vast in de Meerwerk-tab.</dd>
+          <dt>Meerwerk</dt><dd><span class="tag">aangevraagd</span> → <span class="tag">offerte_verstuurd</span> → <span class="tag">akkoord</span> → <span class="tag">voltooid</span>. Pas bij <em>akkoord/voltooid</em> telt het mee in het contracttotaal.</dd>
+          <dt>Eva doet</dt><dd>Bij <span class="tag">akkoord</span> maakt Eva automatisch de <strong>bewakingscode in Bouw7</strong> aan zodat erop geboekt kan worden.</dd>
+          <dt>Status</dt><dd>Opdracht op <span class="tag">onderhanden</span> en later <span class="tag">uitvoering_gereed</span>.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- FASE 8 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">8</div><div><h3>Facturatie</h3><div class="who">Projectleider / administratie</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Aangenomen werk</dt><dd>De verkoopfactuur wordt <strong>in Bouw7</strong> opgesteld en verzonden. Eva <strong>toont</strong> hem live in de Verkoop-tab.</dd>
+          <dt>Servicedesk / regie</dt><dd>Eva bouwt de factuurregels op uit geboekte uren (contracttarief) + kosten (<strong>+25% opslag</strong>) en pusht ze met één knop als <strong>concept-verkoopfactuur naar Bouw7</strong>. Definitief maken doe je in Bouw7.</dd>
+          <dt>Inkoop</dt><dd>Geboekte kosten kun je in de Inkoop-tab <strong>toewijzen</strong> aan een order of onderaannemerscontract. Deze correcties leven alleen in Eva. Geen automatische matching tegen uren.</dd>
+          <dt>Status</dt><dd>Opdracht <span class="tag">financieel_gereed</span> · Servicedesk <span class="tag">uitgevoerd</span> → <span class="tag">kosten_compleet</span> → <span class="tag">financieel_gereed</span>.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- FASE 9 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">9</div><div><h3>Debiteuren — tot de betaling binnen is</h3><div class="who">Administratie / financieel · projectleider</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Werk per openstaande factuur de <strong>opvolging</strong> bij (redencode, actie, actiehouder, verwachte betaaldatum) en voeg <strong>logboekregels</strong> toe. Zet de opvolgstatus <span class="tag">nieuw</span> → <span class="tag">loopt</span> → <span class="tag">wacht_op_klant</span> → <span class="tag">opgelost</span>.</dd>
+          <dt>Eva doet</dt><dd><strong>Verkeerslicht</strong> (groen / oranje &lt;30d / rood 30d+), een <strong>reminder</strong> bij verstreken opvolgdatum, en bij <strong>&gt; 60 dagen te laat</strong> automatisch een <strong>taak</strong> naar de projectleider. Bij &gt;60 dagen markeert Eva de factuur "incompleet" tot alle opvolgvelden ingevuld zijn.</dd>
+          <dt>Let op</dt><dd>Eva stuurt <strong>geen</strong> aanmaningsmails naar de klant. Reminders en taken zijn interne signalen.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- FASE 10 -->
+    <div class="fase">
+      <div class="fase-head"><div class="fase-num">10</div><div><h3>Afsluiten</h3><div class="who">Administratie / directie</div></div></div>
+      <div class="fase-body">
+        <dl class="fase-grid">
+          <dt>Jij doet</dt><dd>Laatste betaling binnen en alles afgehandeld → zet de opdracht op <span class="tag">financieel_afgesloten</span>.</dd>
+          <dt>Gevolg</dt><dd>Het dossier wordt overal <strong>alleen-lezen</strong> en verhuist naar de <strong>Afgesloten-tab</strong>.</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICEDESK -->
+  <section class="section" id="servicedesk">
+    <div class="parallel-note">
+      <h4>🚨 De Servicedesk — parallelle, snellere route</h4>
+      <p>Projecten met categorie <strong>Dagelijks onderhoud</strong> of <strong>Mutatie</strong> (of een "LB"-status) komen automatisch in de <strong>Servicedesk</strong>, zonder offertetraject. Ze worden op <strong>regie</strong> (nacalculatie) afgerekend.</p>
+      <div class="flow-label" style="margin-top:1rem;">Servicedesk-statussen</div>
+      <div class="flow">
+        <span class="pill start">nieuw</span><span class="arrow">→</span>
+        <span class="pill">mandaat_verhoging</span><span class="arrow">→</span>
+        <span class="pill">offerte_uitgebracht</span><span class="arrow">→</span>
+        <span class="pill">uitgezet</span><span class="arrow">→</span>
+        <span class="pill">ingepland</span><span class="arrow">→</span>
+        <span class="pill">loopt</span><span class="arrow">→</span>
+        <span class="pill">uitgevoerd</span><span class="arrow">→</span>
+        <span class="pill">kosten_compleet</span><span class="arrow">→</span>
+        <span class="pill end">financieel_gereed</span>
+      </div>
+      <p style="margin-top:.9rem;"><strong>Mandaat-indicator</strong> waarschuwt bij overschrijding (signaal, blokkeert niet) · <strong>regie-facturatie</strong> (uren op contracttarief, kosten +25%) · <strong>doorlooptijd per fase</strong> wordt automatisch berekend.</p>
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- AUTOMATISERINGEN -->
+  <section class="section" id="automatiseringen">
+    <div class="section-header"><span class="icon">⚙️</span><h2>3 · Automatiseringen</h2></div>
+    <p class="lead">Wat Eva <strong>zelf</strong> doet — wanneer het afgaat en hoe je er het beste gebruik van maakt.</p>
+
+    <div class="cards">
+      <div class="card">
+        <h4>🔁 Bouw7-sync</h4>
+        <div class="when">2× per dag · 04:30 volledig, 10:45 incrementeel</div>
+        <p>Haalt alles op uit Bouw7: relaties, medewerkers, verlof, projecten (status, financiën, BTW), planning, debiteuren en het management-dashboard. <strong>Tip:</strong> 's ochtends staat alles klaar; tussendoor verversen kan met de Sync-knop op de pagina.</p>
+      </div>
+      <div class="card blue">
+        <h4>⬆️ Automatische fase-promotie</h4>
+        <div class="when">Direct bij de statuswijziging</div>
+        <p>Aanvraag op <code>verzonden</code> wordt automatisch <strong>offerte</strong>; offerte op <code>gewonnen</code> wordt automatisch <strong>opdracht / nieuwe_opdracht</strong>. <strong>Tip:</strong> je hoeft niet handmatig door te klikken.</p>
+      </div>
+      <div class="card blue">
+        <h4>🔃 Bouw7-status spiegelen</h4>
+        <div class="when">2× per dag</div>
+        <p>Opdracht- en servicedesk-statussen worden altijd overschreven vanuit Bouw7. <strong>Tip:</strong> wijzig de projectfase op de leidende plek — een Eva-kaart die niet wordt teruggeschreven, springt terug bij de volgende sync.</p>
+      </div>
+      <div class="card">
+        <h4>✉️ Offerte → "verzonden" na mailen</h4>
+        <div class="when">Direct na succesvolle mail</div>
+        <p>Zet de status op <code>verzonden</code> en archiveert PDF + mail in SharePoint. <strong>Tip:</strong> verstuur altijd via de knop in Eva, dan klopt status én archief.</p>
+      </div>
+      <div class="card gold">
+        <h4>🔒 Goedkeuringspoort + taken</h4>
+        <div class="when">Bij aanvragen / goedkeuren / afkeuren</div>
+        <p>Automatische substatus, beoordeeltaken en meldingen. Zonder geldige, ongewijzigde goedkeuring geen verzending of definitieve download. <strong>Tip:</strong> na wijzigen opnieuw laten goedkeuren.</p>
+      </div>
+      <div class="card purple">
+        <h4>📋 Actielijst-triggers (IFTTT)</h4>
+        <div class="when">Bij de statuswijziging</div>
+        <p>Koppel sjabloon-takenlijsten aan een status; Eva hangt ze automatisch aan het dossier (max. 1× per dossier). <strong>Tip:</strong> stel de sjablonen één keer goed in, daarna gaat het vanzelf.</p>
+      </div>
+      <div class="card purple">
+        <h4>✅ Taken met vervolgactie</h4>
+        <div class="when">Zodra je een taak afvinkt</div>
+        <p>Een taak kan bij afronding een status wijzigen, een rol toewijzen, een melding sturen of een sjabloon activeren. <strong>Let op:</strong> afvinken kan meer doen dan alleen de taak sluiten.</p>
+      </div>
+      <div class="card teal">
+        <h4>📥 Werkbegroting overnemen</h4>
+        <div class="when">Bij offerte → opdracht (gewonnen)</div>
+        <p>Begrote arbeidsuren gaan automatisch naar de planning-werkbegroting. <strong>Tip:</strong> er is ook een handmatige "overnemen"-knop op de Planning-tab.</p>
+      </div>
+      <div class="card orange">
+        <h4>🚦 Debiteuren-reminders &amp; auto-taken</h4>
+        <div class="when">Bij elke debiteuren-sync (2× per dag)</div>
+        <p>Verkeerslicht, reminder bij verstreken opvolgdatum en een automatische taak bij &gt;60 dagen te laat. <strong>Tip:</strong> houd opvolgvelden en logboek bij — dan werken de signalen voor je.</p>
+      </div>
+    </div>
+
+    <div class="callout red">
+      <strong class="h">Wat er bewust NIET automatisch gebeurt</strong>
+      <ul>
+        <li>Geen automatische offerte-vervaldatum (alleen kleur; Bouw7 bepaalt vervallen/verloren).</li>
+        <li>Geen automatische aanmaningsmails naar klanten — alleen interne reminders/taken.</li>
+        <li>Geen Exact Online-koppeling.</li>
+        <li>Terugschrijven naar Bouw7 gebeurt bij het verslepen van de opdrachtstatus; termijnen terugschrijven is nog toekomst.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- HANDMATIG VS AUTOMATISCH -->
+  <section class="section" id="handmatig">
+    <div class="section-header"><span class="icon">⚖️</span><h2>4 · Handmatig vs. automatisch</h2></div>
+    <div class="data-table-wrap">
+      <table>
+        <thead><tr><th>Stap</th><th>Handmatig (jij)</th><th>Automatisch (Eva)</th><th>Grootste tijdwinst</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Aanvraag aanmaken</strong></td><td>Modal invullen</td><td>Dossier + Bouw7-project + calculatie + SharePoint-map</td><td>Geen dubbele invoer in Bouw7</td></tr>
+          <tr><td><strong>Goedkeuring</strong></td><td>Aanvragen (knop)</td><td>Substatus, beoordeeltaak, meldingen, poort</td><td>Niets glipt door de controle</td></tr>
+          <tr><td><strong>Offerte versturen</strong></td><td>Knop, mail nalopen</td><td>Mail via Outlook, status <code>verzonden</code>, archief in SharePoint</td><td>Geen handmatig archiveren</td></tr>
+          <tr><td><strong>Offerte → opdracht</strong></td><td>"Gewonnen" zetten</td><td>Promotie + werkbegroting overnemen</td><td>Geen handmatige overzetting</td></tr>
+          <tr><td><strong>Opdrachtstatus</strong></td><td>Kaart verslepen</td><td>Status terug naar Bouw7 + evt. takenlijst</td><td>Eén plek bijwerken</td></tr>
+          <tr><td><strong>Meerwerk akkoord</strong></td><td>Op <code>akkoord</code> zetten</td><td>Bewakingscode in Bouw7 aanmaken</td><td>Geen handmatige code</td></tr>
+          <tr><td><strong>Regie-factuur</strong></td><td>Regels nalopen, knop</td><td>Regels opbouwen + concept-factuur naar Bouw7</td><td>Niet met de hand samenstellen</td></tr>
+          <tr><td><strong>Debiteuren opvolgen</strong></td><td>Redencode/actie/logboek</td><td>Verkeerslicht, reminders, auto-taak &gt;60d</td><td>Niets blijft liggen</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout brand">
+      <strong class="h">Waar Eva je het meeste werk uit handen neemt</strong>
+      <ul>
+        <li><strong>Aanvraag aanmaken</strong> — één invoer wordt dossier, Bouw7-project én calculatie tegelijk.</li>
+        <li><strong>Goedkeurings- en verzendketen</strong> — taken, statussen, mail en archivering lopen vanzelf, met een harde poort.</li>
+        <li><strong>Offerte → opdracht</strong> — automatische promotie + werkbegroting overnemen.</li>
+        <li><strong>Debiteurenbewaking</strong> — verkeerslicht, reminders en de auto-taak bij &gt;60 dagen zorgen dat geen factuur blijft liggen.</li>
+      </ul>
+    </div>
+
+    <p class="lead" style="font-size:.82rem;color:var(--fg-muted);margin-top:2rem;">
+      Gebaseerd op de daadwerkelijke code: statusmachines in <code>components/dossiers/types.ts</code>, sync in <code>lib/bouw7/</code>, goedkeuring in <code>lib/goedkeuring/</code>, debiteuren in <code>lib/debiteuren/</code>, servicedesk in <code>lib/dossiers/servicedesk.ts</code>, en de databasetriggers in <code>supabase/migrations/</code>. Stappen die het bedrijfsproces voorschrijft maar die nog niet gebouwd zijn (onderaannemersopdracht, opleverpunten, Exact Online, klant-aanmaningen, offerte auto-verloop) zijn expliciet als "nog niet gebouwd" benoemd.
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <div class="footer-brand"><img src="logo-beeldmerk.svg" alt="Everts logo" /><span>EVA Platform</span></div>
+  Handleiding · Van aanvraag tot betaling — Everts Onderhoud &amp; Renovatie
+</footer>
+
+</body>
+</html>

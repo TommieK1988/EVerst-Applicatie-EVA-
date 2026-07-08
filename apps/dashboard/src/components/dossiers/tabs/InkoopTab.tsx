@@ -1,8 +1,38 @@
 import { Suspense } from 'react'
 import { getDossierInkoop } from '@/lib/dossiers/actions'
+import { getOpleverBetaalsignaal } from '@/lib/dossiers/oplevering'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, TH, TD, LegeStaat, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
+
+/** Signaleringsbanner (alleen informatief): partijen met nog niet-geaccepteerde opleverpunten. */
+async function BetaalSignaal({ dossierId }: { dossierId: string }) {
+  const signaal = (await getOpleverBetaalsignaal(dossierId).catch(() => [])).filter(s => s.open > 0)
+  if (signaal.length === 0) return null
+  return (
+    <div style={{
+      border: '1px solid var(--warning-200, #f4d9a8)', background: 'var(--warning-50, #fdf6e9)',
+      borderRadius: 10, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--warning-800, #7a5a17)' }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        Betaling nog niet vrijgeven — openstaande opleverpunten
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--warning-800, #7a5a17)' }}>
+        {signaal.map(s => (
+          <span key={s.relatieId} style={{ marginRight: 14 }}>
+            <strong>{s.naam ?? 'Onbekende partij'}</strong>: {s.open} van {s.totaal} punt{s.totaal > 1 ? 'en' : ''} nog niet afgemeld
+          </span>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
+        Puur informatief — betalingen worden niet automatisch geblokkeerd.
+      </div>
+    </div>
+  )
+}
 
 async function InkoopInhoud({ dossierId }: { dossierId: string }) {
   const data = await getDossierInkoop(dossierId)
@@ -32,6 +62,8 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <BetaalSignaal dossierId={dossierId} />
+
       {/* Inkooporders */}
       <Card>
         <CardHeader>Inkooporders</CardHeader>

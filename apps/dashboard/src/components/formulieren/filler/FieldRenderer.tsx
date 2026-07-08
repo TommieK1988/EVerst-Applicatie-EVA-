@@ -123,6 +123,42 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
     )
   }
 
+  // ── Cijfer / rating ───────────────────────────────────────────────
+  if (field.type === 'rating') {
+    const min = field.validation?.min ?? 1
+    const max = field.validation?.max ?? 10
+    const huidig = typeof value === 'number' ? value : null
+    const opties: number[] = []
+    for (let n = min; n <= max; n++) opties.push(n)
+    const knopMaat = mobiel ? 40 : 34
+    return wrap(
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {opties.map(n => {
+          const actief = huidig === n
+          return (
+            <button
+              key={n}
+              type="button"
+              disabled={field.readOnly}
+              onClick={() => onChange(actief ? null : n)}
+              aria-pressed={actief}
+              style={{
+                width: knopMaat, height: knopMaat, borderRadius: 8,
+                border: `1px solid ${actief ? 'hsl(var(--primary))' : 'var(--border)'}`,
+                background: actief ? 'hsl(var(--primary))' : 'var(--bg)',
+                color: actief ? 'white' : 'var(--text)',
+                fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: field.readOnly ? 'default' : 'pointer',
+                transition: 'background 0.12s, border-color 0.12s',
+              }}
+            >
+              {n}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
   if (field.type === 'date') {
     return wrap(
       <input

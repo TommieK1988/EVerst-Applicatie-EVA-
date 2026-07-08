@@ -20,6 +20,7 @@ import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
+import OpleveringTab from './tabs/OpleveringTab'
 import BestandenTab from './tabs/BestandenTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
@@ -37,6 +38,7 @@ const TAB_LABELS: Record<string, string> = {
   verkoop:       'Verkoop',
   uren:          'Uren',
   meerwerk:      'Meerwerk',
+  oplevering:    'Oplevering',
   financieel:    'Financieel',
   formulieren:   'Formulieren',
 }
@@ -260,6 +262,15 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
         <Suspense fallback={<DossierTabSkeleton />}>
           <MeerwerkTab dossierId={id} />
         </Suspense>
+      </>
+    )
+  }
+
+  if (tab === 'oplevering' && sectie === 'opdracht') {
+    return (
+      <>
+        {titleInjector}
+        <OpleveringTab dossierId={id} />
       </>
     )
   }

@@ -4,6 +4,7 @@ export type FormFieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'rating'
   | 'date'
   | 'time'
   | 'dropdown'
@@ -176,6 +177,7 @@ export const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   text:        'Tekst',
   textarea:    'Lange tekst',
   number:      'Getal',
+  rating:      'Cijfer / rating',
   date:        'Datum',
   time:        'Tijd',
   dropdown:    'Dropdown',
@@ -202,7 +204,7 @@ export const FIELD_TYPE_GROUPS: { label: string; types: FormFieldType[] }[] = [
   },
   {
     label: 'Keuze',
-    types: ['dropdown', 'radio', 'checkbox', 'boolean'],
+    types: ['dropdown', 'radio', 'checkbox', 'boolean', 'rating'],
   },
   {
     label: 'Media & Locatie',
@@ -290,6 +292,11 @@ export function defaultField(type: FormFieldType, existingNames: string[]): Form
 
   if (type === 'boolean') {
     base.defaultValue = null
+  }
+
+  if (type === 'rating') {
+    // Cijfer 1–10; de bouwer kan het bereik via validatie (min/max) aanpassen.
+    base.validation = { min: 1, max: 10 }
   }
 
   if (type === 'repeatable') {
