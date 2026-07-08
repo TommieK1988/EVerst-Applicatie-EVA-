@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
       access_token:     tokens.access_token,
       refresh_token:    tokens.refresh_token ?? null,
       token_expires_at: tokenExpiresAt,
-      scopes:           ['offline_access', 'User.Read', 'Tasks.ReadWrite', 'Calendars.ReadWrite', 'Mail.Read', 'Mail.Send'],
+      scopes:           ['offline_access', 'User.Read', 'Mail.Send'],
       updated_at:       new Date().toISOString(),
     }, { onConflict: 'medewerker_id' })
 

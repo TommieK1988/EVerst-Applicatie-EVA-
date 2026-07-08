@@ -26,12 +26,14 @@ export async function GET(request: NextRequest) {
   const tenant = process.env.O365_TENANT_ID ?? 'common'
   const redirectUri = process.env.O365_REDIRECT_URI ?? `${request.nextUrl.origin}/api/auth/o365/callback`
 
+  // Alleen de rechten die de app daadwerkelijk gebruikt én die in de app-registratie
+  // (met admin consent) verleend zijn: User.Read (/me) en Mail.Send (offerte mailen).
+  // Tasks.ReadWrite/Calendars.ReadWrite werden nergens gebruikt; Mail.Read (voor het
+  // .eml-archief) is bewust weggelaten omdat het niet is goedgekeurd — anders blokkeert
+  // Microsoft de hele koppeling in een tenant zonder gebruikers-consent.
   const scopes = [
     'offline_access',
     'User.Read',
-    'Tasks.ReadWrite',
-    'Calendars.ReadWrite',
-    'Mail.Read',
     'Mail.Send',
   ].join(' ')
 
