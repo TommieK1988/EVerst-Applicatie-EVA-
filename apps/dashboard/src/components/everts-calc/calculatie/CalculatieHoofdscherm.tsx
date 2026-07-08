@@ -24,11 +24,12 @@ import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { serialiseerNaarCuf } from '@/lib/everts-calc/cuf-serializer'
 import { exportCalculatieNaarExcel } from '@/lib/everts-calc/excel-export'
 import {
-  getScenarios, maakStandaardScenario, slaScenarioOp, kopieerScenario,
+  getScenarios, getScenario, maakStandaardScenario, slaScenarioOp, kopieerScenario,
   getGroepen, getCalculatieregels, getComponentregels,
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
 import { syncCalculatieNaarSupabase } from '@/app/(platform)/everts-calc/actions/sync'
+import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
 import { verzamelSyncData } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
@@ -130,6 +131,24 @@ export default function CalculatieHoofdscherm({
       setScenario(scs.find(s => s.is_standaard) ?? scs[0])
     }
   }, [projectId, scenarioId])
+
+  /* ── Offertenummer reserveren zodra een calculatie er nog geen heeft ── */
+  useEffect(() => {
+    if (!scenario || scenario.nummer) return
+    const sid = scenario.id
+    let geannuleerd = false
+    reserveerOfferteNummer().then(nr => {
+      if (geannuleerd || !nr) return   // scenario gewisseld → deze reservering vervalt
+      const huidige = getScenario(sid)  // vers uit localStorage, om edits niet te overschrijven
+      if (!huidige || huidige.nummer) return
+      const bijgewerkt = { ...huidige, nummer: nr }
+      slaScenarioOp(bijgewerkt)
+      setScenario(prev => (prev && prev.id === sid ? bijgewerkt : prev))
+      onScenariosGewijzigd?.()
+    })
+    return () => { geannuleerd = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario?.id, scenario?.nummer])
 
   /* ── Totalen herberekenen ────────────────────────────────────────── */
   useEffect(() => {
@@ -337,67 +356,6 @@ export default function CalculatieHoofdscherm({
               </a>
             </Button>
 
-            {/* Opties dropdown (offerte, instellingen, CUF/Excel) */}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Opties</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[200px] z-[200]"
-                  align="start" sideOffset={4}
-                >
-                  {/* Offerte-functies — alleen binnen een dossier en niet in alleen-lezen. */}
-                  {dossierContext && !readOnly && (
-                    <>
-                      <DropdownMenu.Item
-                        className={ddItem}
-                        onSelect={() => startOfferte('verkoopofferte')}
-                      >
-                        <FileText className="w-3.5 h-3.5 text-slate-400" /> Offerte aanmaken
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        className={ddItem}
-                        onSelect={() => startOfferte('interne_calculatie')}
-                      >
-                        <ClipboardList className="w-3.5 h-3.5 text-slate-400" /> Interne begroting
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                    </>
-                  )}
-                  {/* Betalingscondities + Algemene voorwaarden (per calculatie/offerte). */}
-                  <DropdownMenu.Item
-                    className={ddItem}
-                    onSelect={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
-                    disabled={readOnly}
-                  >
-                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className={ddItem}
-                    onSelect={handleKopieerCalculatie}
-                    disabled={readOnly}
-                  >
-                    <Copy className="w-3.5 h-3.5 text-slate-400" /> Calculatie kopiëren
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                  <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
-                    <FileUp className="w-3.5 h-3.5 text-slate-400" /> CUF importeren
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={handleCufExport}>
-                    <FileDown className="w-3.5 h-3.5 text-slate-400" /> CUF exporteren
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={handleExcelExport}>
-                    <Table2 className="w-3.5 h-3.5 text-green-600" /> Excel exporteren
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-
             <span className="w-px h-4 bg-slate-200 mx-0.5" />
 
             {/* Bibliotheek dropdown */}
@@ -463,6 +421,57 @@ export default function CalculatieHoofdscherm({
                 </table>
               </div>
             </div>
+
+            {/* Opties dropdown — helemaal rechts */}
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export" className="ml-auto">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Opties</span>
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[200px] z-[200]"
+                  align="end" sideOffset={4}
+                >
+                  {/* Offerte-functies — alleen binnen een dossier en niet in alleen-lezen. */}
+                  {dossierContext && !readOnly && (
+                    <>
+                      <DropdownMenu.Item className={ddItem} onSelect={() => startOfferte('verkoopofferte')}>
+                        <FileText className="w-3.5 h-3.5 text-slate-400" /> Offerte aanmaken
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item className={ddItem} onSelect={() => startOfferte('interne_calculatie')}>
+                        <ClipboardList className="w-3.5 h-3.5 text-slate-400" /> Interne begroting
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
+                    </>
+                  )}
+                  {/* Betalingscondities + Algemene voorwaarden (per calculatie/offerte). */}
+                  <DropdownMenu.Item
+                    className={ddItem}
+                    onSelect={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
+                    disabled={readOnly}
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item className={ddItem} onSelect={handleKopieerCalculatie} disabled={readOnly}>
+                    <Copy className="w-3.5 h-3.5 text-slate-400" /> Calculatie kopiëren
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
+                  <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
+                    <FileUp className="w-3.5 h-3.5 text-slate-400" /> CUF importeren
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item className={ddItem} onSelect={handleCufExport}>
+                    <FileDown className="w-3.5 h-3.5 text-slate-400" /> CUF exporteren
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item className={ddItem} onSelect={handleExcelExport}>
+                    <Table2 className="w-3.5 h-3.5 text-green-600" /> Excel exporteren
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
       </div>
 
       {/* ─── Boom + Grid ── */}

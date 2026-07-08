@@ -88,7 +88,7 @@ export default function OfferteAanmakenModal({
   async function handleAanmaken() {
     setLoading(true)
     try {
-      const { getGroepen, getCalculatieregels, getComponentregels, getScenarios } = await import('@/lib/everts-calc/local-store')
+      const { getGroepen, getCalculatieregels, getComponentregels, getScenarios, slaScenarioOp } = await import('@/lib/everts-calc/local-store')
       const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
 
       // Filter op het gekozen (of standaard) scenario van dit project
@@ -96,6 +96,16 @@ export default function OfferteAanmakenModal({
       const actiefScenario = scenarioId
         ? scenarios.find(s => s.id === scenarioId)
         : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
+
+      // Zorg dat de calculatie een nummer heeft (kan nog ontbreken als het
+      // reserve-effect nog niet klaar was) zodat offerte en calculatie hetzelfde
+      // nummer krijgen.
+      let offerteNummer = actiefScenario?.nummer ?? null
+      if (actiefScenario && !offerteNummer) {
+        const { reserveerOfferteNummer } = await import('@/app/(platform)/everts-calc/actions/quotes')
+        offerteNummer = await reserveerOfferteNummer()
+        if (offerteNummer) slaScenarioOp({ ...actiefScenario, nummer: offerteNummer })
+      }
 
       const alleGroepen: Groep[] = actiefScenario ? getGroepen(actiefScenario.id) : getGroepen()
       const alleRegels: Calculatieregel[] = getCalculatieregels()
@@ -142,6 +152,8 @@ export default function OfferteAanmakenModal({
       const { id } = await maakQuoteVanuitProjectMetImport({
         projectId,
         scenarioId: actiefScenario?.id ?? null,
+        // Offerte neemt het nummer van de calculatie over (leeg → DB genereert er een).
+        quoteNummer: offerteNummer,
         dossierId,
         projectNaam,
         clientNaam,

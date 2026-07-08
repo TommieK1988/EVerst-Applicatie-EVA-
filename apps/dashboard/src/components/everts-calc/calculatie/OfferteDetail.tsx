@@ -123,8 +123,8 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOffer
             {kopieerPending ? 'Bezig…' : 'Nieuwe versie'}
           </button>
           <PrintButton />
-          <DocxDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} />
-          <PdfDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} />
+          <DocxDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />
+          <PdfDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />
           {!isIntern && info && (
             <VerzendOfferteKnop quoteId={quoteId} verzendbaar={info.verzendbaar} onDone={ververs} />
           )}

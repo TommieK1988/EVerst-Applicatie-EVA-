@@ -47,8 +47,8 @@ export default async function QuotePreviewPage({ params }: Props) {
             />
           )}
           <PrintButton />
-          <DocxDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
-          <PdfDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} />
+          <DocxDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} isConcept={!verzendbaar} />
+          <PdfDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} isConcept={!verzendbaar} />
           {!isIntern && <VerzendOfferteKnop quoteId={quote.id} verzendbaar={verzendbaar} />}
         </div>
       </div>

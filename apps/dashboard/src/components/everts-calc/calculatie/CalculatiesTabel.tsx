@@ -1,11 +1,10 @@
 'use client'
 
 /**
- * CalculatiesTabel — overzicht van alle calculaties (scenario's) van één
- * calc-project, met per calculatie de bijbehorende offertes. Wordt getoond
- * zodra er meer dan één calculatie per dossier is (kopiëren). Klikken op een
- * calculatie opent die in de calculatie-omgeving; klikken op een offerte opent
- * de offerte inline.
+ * CalculatiesTabel — tussenscherm met alle calculaties (scenario's) van één
+ * calc-project. Elke calculatie heeft een eigen nummer en maximaal één offerte
+ * (inline zichtbaar). Wordt getoond zodra er meer dan één calculatie per dossier
+ * is. Klikken op een calculatie opent die in de calculatie-omgeving.
  */
 
 import { useMemo, type ReactNode } from 'react'
@@ -42,33 +41,6 @@ interface Props {
   headerExtra?: ReactNode
 }
 
-function OfferteRegels({ rijen, onOpen }: { rijen: DossierQuoteRij[]; onOpen: (id: string) => void }) {
-  return (
-    <>
-      {rijen.map(r => (
-        <tr key={r.id} onClick={() => onOpen(r.id)} className="cursor-pointer hover:bg-neutral-50" title="Offerte openen">
-          <TD vet>{r.quote_nummer}</TD>
-          <TD>{r.titel}</TD>
-          <TD>
-            {r.meerwerk_regel_id
-              ? <Badge tone="brand">Meerwerk</Badge>
-              : <Badge tone="neutral">{TYPE_LABELS[r.type] ?? r.type}</Badge>}
-          </TD>
-          <TD><Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{STATUS_LABELS[r.status] ?? r.status}</Badge></TD>
-          <TD>{fmtDatum(r.datum)}</TD>
-          <TD right>{fmt(r.subtotaal_ex_btw, true)}</TD>
-          <TD right vet>{fmt(r.totaal_inc_btw, true)}</TD>
-          <TD right kleur={r.marge_pct != null && r.marge_pct < 10 ? '#d9534f' : undefined}>
-            {r.marge_pct != null
-              ? `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(r.marge_pct)} %`
-              : '—'}
-          </TD>
-        </tr>
-      ))}
-    </>
-  )
-}
-
 export default function CalculatiesTabel({
   projectId, scenarios, rijen, tick = 0, readOnly = false,
   onOpenCalculatie, onOpenOfferte, onKopieer, headerExtra,
@@ -82,7 +54,9 @@ export default function CalculatiesTabel({
   }, [projectId, scenarios, tick])
 
   const scenarioIds = new Set(scenarios.map(s => s.id))
-  const offertesPerScenario = (sid: string) => rijen.filter(r => r.scenario_id === sid)
+  // Eén offerte per calculatie: pak de (eerste) offerte van dit scenario.
+  const offerteVan = (sid: string) => rijen.find(r => r.scenario_id === sid) ?? null
+  // Meerwerk-/legacy-offertes zonder gekoppelde calculatie.
   const overigeOffertes = rijen.filter(r => !r.scenario_id || !scenarioIds.has(r.scenario_id))
 
   return (
@@ -98,8 +72,9 @@ export default function CalculatiesTabel({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <TH>Nummer</TH>
                 <TH>Calculatie</TH>
-                <TH>Offertes</TH>
+                <TH>Offerte</TH>
                 <TH right>Excl. BTW</TH>
                 <TH right>Incl. BTW</TH>
                 <TH right>Marge</TH>
@@ -109,7 +84,7 @@ export default function CalculatiesTabel({
             <tbody>
               {scenarios.map(s => {
                 const t = totalenPerScenario.get(s.id)
-                const aantal = offertesPerScenario(s.id).length
+                const offerte = offerteVan(s.id)
                 return (
                   <tr
                     key={s.id}
@@ -117,11 +92,27 @@ export default function CalculatiesTabel({
                     className="cursor-pointer hover:bg-neutral-50"
                     title="Calculatie openen"
                   >
-                    <TD vet>
+                    <TD vet>{s.nummer || '—'}</TD>
+                    <TD>
                       {s.naam}{' '}
                       {s.is_standaard && <Badge tone="info">standaard</Badge>}
                     </TD>
-                    <TD>{aantal > 0 ? `${aantal} offerte${aantal !== 1 ? 's' : ''}` : '—'}</TD>
+                    <TD>
+                      {offerte ? (
+                        <span
+                          onClick={e => { e.stopPropagation(); onOpenOfferte(offerte.id) }}
+                          className="cursor-pointer"
+                          title="Offerte openen"
+                        >
+                          <Badge tone={STATUS_TONE[offerte.status] ?? 'neutral'}>
+                            {offerte.meerwerk_regel_id ? 'Meerwerk' : (TYPE_LABELS[offerte.type] ?? offerte.type)}
+                            {' · '}{STATUS_LABELS[offerte.status] ?? offerte.status}
+                          </Badge>
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400 text-[12.5px]">Geen offerte</span>
+                      )}
+                    </TD>
                     <TD right>{t ? fmt(t.subtotaal_ex_btw, true) : '—'}</TD>
                     <TD right vet>{t ? fmt(t.totaal_incl_btw, true) : '—'}</TD>
                     <TD right kleur={t && t.marge_pct < 10 ? '#d9534f' : undefined}>
@@ -147,28 +138,7 @@ export default function CalculatiesTabel({
         </CardBody>
       </Card>
 
-      {/* Offertes per calculatie */}
-      {scenarios.map(s => {
-        const eigen = offertesPerScenario(s.id)
-        if (eigen.length === 0) return null
-        return (
-          <Card key={`off-${s.id}`}>
-            <CardHeader>Offertes — {s.naam}</CardHeader>
-            <CardBody style={{ padding: 0 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <TH>Nummer</TH><TH>Titel</TH><TH>Type</TH><TH>Status</TH>
-                    <TH>Datum</TH><TH right>Excl. BTW</TH><TH right>Incl. BTW</TH><TH right>Marge</TH>
-                  </tr>
-                </thead>
-                <tbody><OfferteRegels rijen={eigen} onOpen={onOpenOfferte} /></tbody>
-              </table>
-            </CardBody>
-          </Card>
-        )
-      })}
-
+      {/* Meerwerk-/losse offertes zonder gekoppelde calculatie. */}
       {overigeOffertes.length > 0 && (
         <Card>
           <CardHeader>Overige offertes</CardHeader>
@@ -177,10 +147,26 @@ export default function CalculatiesTabel({
               <thead>
                 <tr>
                   <TH>Nummer</TH><TH>Titel</TH><TH>Type</TH><TH>Status</TH>
-                  <TH>Datum</TH><TH right>Excl. BTW</TH><TH right>Incl. BTW</TH><TH right>Marge</TH>
+                  <TH>Datum</TH><TH right>Excl. BTW</TH><TH right>Incl. BTW</TH>
                 </tr>
               </thead>
-              <tbody><OfferteRegels rijen={overigeOffertes} onOpen={onOpenOfferte} /></tbody>
+              <tbody>
+                {overigeOffertes.map(r => (
+                  <tr key={r.id} onClick={() => onOpenOfferte(r.id)} className="cursor-pointer hover:bg-neutral-50" title="Offerte openen">
+                    <TD vet>{r.quote_nummer}</TD>
+                    <TD>{r.titel}</TD>
+                    <TD>
+                      {r.meerwerk_regel_id
+                        ? <Badge tone="brand">Meerwerk</Badge>
+                        : <Badge tone="neutral">{TYPE_LABELS[r.type] ?? r.type}</Badge>}
+                    </TD>
+                    <TD><Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{STATUS_LABELS[r.status] ?? r.status}</Badge></TD>
+                    <TD>{fmtDatum(r.datum)}</TD>
+                    <TD right>{fmt(r.subtotaal_ex_btw, true)}</TD>
+                    <TD right vet>{fmt(r.totaal_inc_btw, true)}</TD>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </CardBody>
         </Card>

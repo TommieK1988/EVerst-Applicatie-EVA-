@@ -96,6 +96,9 @@ export interface Scenario {
   id: string
   project_id: string
   naam: string
+  /** Offertenummer (OFT-YYYY-NNN) — gereserveerd bij aanmaken van de calculatie;
+   *  de offerte die ervan gemaakt wordt neemt dit nummer over. */
+  nummer?: string | null
   is_standaard: boolean
   opslag_algemene_kosten: number   // percentage bijv. 8
   opslag_winst_risico: number      // percentage bijv. 10

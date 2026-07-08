@@ -15,6 +15,18 @@ async function getDb(): Promise<any> {
   return createClient()
 }
 
+/**
+ * Reserveert het volgende offertenummer (OFT-YYYY-NNN) uit de DB-sequence, zonder
+ * een offerte aan te maken. Wordt bij het aanmaken van een calculatie aangeroepen,
+ * zodat de calculatie al een nummer heeft dat de offerte later overneemt.
+ */
+export async function reserveerOfferteNummer(): Promise<string | null> {
+  const supabase = await getDb()
+  const { data, error } = await supabase.rpc('reserveer_offerte_nummer')
+  if (error) return null
+  return (data as string) ?? null
+}
+
 // ─── Offerte vanuit project (één-klik aanmaken) ───────────────────────────────
 
 export async function maakQuoteVanuitProject(
@@ -182,8 +194,10 @@ export async function maakQuoteVanuitProjectMetImport(params: {
    *  zodat de render werkadres/werkmaatschappij/contactpersoon terugvindt. */
   dossierId?: string | null
   /** Scenario (calculatie) waaruit de offerte gemaakt is — onthouden op de quote
-   *  zodat offertes per calculatie gegroepeerd kunnen worden. */
+   *  zodat er precies één offerte per calculatie is. */
   scenarioId?: string | null
+  /** Offertenummer van de calculatie; leeg → de DB genereert er een (OFT-…). */
+  quoteNummer?: string | null
   /** Gekozen betalingsconditie uit het Offerte-instellingen-blok. */
   betalingsconditieId?: string | null
   /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
@@ -233,10 +247,22 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   d.setDate(d.getDate() + dagen)
   const geldig_tot = d.toISOString().split('T')[0]
 
+  // Eén offerte per calculatie: een eventuele bestaande offerte van dit scenario
+  // wordt vervangen (cascade ruimt secties/regels/voorwaarden op).
+  if (params.scenarioId) {
+    await supabase
+      .from('quotes')
+      .delete()
+      .eq('project_id', params.projectId)
+      .eq('scenario_id', params.scenarioId)
+  }
+
   const { data: quote, error } = await supabase
     .from('quotes')
     .insert({
       type: params.type,
+      // Nummer van de calculatie overnemen; leeg → DB-trigger genereert een OFT-nummer.
+      quote_nummer: params.quoteNummer || '',
       client_id: clientId,
       titel: params.type === 'interne_calculatie'
         ? `Interne begroting — ${params.projectNaam}`

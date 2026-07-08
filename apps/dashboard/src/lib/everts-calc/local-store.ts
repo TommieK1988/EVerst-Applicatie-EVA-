@@ -248,6 +248,7 @@ export function kopieerScenario(scenarioId: string, naam?: string): Scenario | n
     id: nieuweId(),
     naam: naam ?? `Kopie van ${bron.naam}`,
     is_standaard: false,
+    nummer: null,   // kopie krijgt een eigen offertenummer (niet dat van de bron)
   }
   slaScenarioOp(nieuwScenario)
 
@@ -659,6 +660,46 @@ export function verwijderWerkbegroting(id: string): void {
   // Volledige wijzigingshistorie (incl. historie van verwijderde regels) van deze WB leegmaken.
   const alleWijzigingen = lees<WerkbegrotingWijziging>(KEYS.werkbegroting_wijzigingen, [])
   sla(KEYS.werkbegroting_wijzigingen, alleWijzigingen.filter(w => w.werkbegroting_id !== id))
+}
+
+/**
+ * Hydrateert de localStorage-cache met een gedeelde werkbegroting uit Supabase.
+ * Supabase is de bron van waarheid; deze functie vervangt álle lokale rijen van
+ * deze werkbegroting (regels, componenten, wijzigingen, bestellingen) door de
+ * server-versie zodat elke gebruiker/elk apparaat exact hetzelfde ziet. Wordt
+ * aangeroepen bij het openen van de werkbegroting, vóór het grid rendert.
+ */
+export function hydrateWerkbegroting(snapshot: {
+  wb: Werkbegroting
+  regels: WerkbegrotingRegel[]
+  componenten: WerkbegrotingComponent[]
+  wijzigingen: WerkbegrotingWijziging[]
+  bestellingen: WerkbegrotingBestelling[]
+}): void {
+  if (typeof window === 'undefined') return
+  const { wb, regels, componenten, wijzigingen, bestellingen } = snapshot
+
+  // Header
+  const andereWb = getWerkbegrotingen().filter(w => w.id !== wb.id)
+  sla(KEYS.werkbegrotingen, [...andereWb, wb])
+
+  // Regels — vervang alle regels van deze WB.
+  const andereRegels = getWerkbegrotingRegels().filter(r => r.werkbegroting_id !== wb.id)
+  sla(KEYS.werkbegroting_regels, [...andereRegels, ...regels])
+
+  // Componenten — vervang alle componenten die bij regels van deze WB horen.
+  const regelIds = new Set(regels.map(r => r.id))
+  const andereComps = getWerkbegrotingComponenten().filter(c => !regelIds.has(c.werkbegroting_regel_id))
+  sla(KEYS.werkbegroting_componenten, [...andereComps, ...componenten])
+
+  // Wijzigingen (audit) — vervang de historie van deze WB.
+  const andereWijz = lees<WerkbegrotingWijziging>(KEYS.werkbegroting_wijzigingen, [])
+    .filter(w => w.werkbegroting_id !== wb.id)
+  sla(KEYS.werkbegroting_wijzigingen, [...andereWijz, ...wijzigingen])
+
+  // Bestellingen — vervang de bestellingen van deze WB.
+  const andereBest = getWerkbegrotingBestellingen().filter(b => b.werkbegroting_id !== wb.id)
+  sla(KEYS.werkbegroting_bestellingen, [...andereBest, ...bestellingen])
 }
 
 // ─── WERKBEGROTING REGELS ────────────────────────────────────────────────────

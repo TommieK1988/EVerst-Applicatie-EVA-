@@ -7,9 +7,11 @@ import toast from 'react-hot-toast'
 interface Props {
   quoteId: string
   quoteNummer: string
+  /** Concept-offerte: bestandsnaam begint met "Concept". */
+  isConcept?: boolean
 }
 
-export default function DocxDownloadButton({ quoteId, quoteNummer }: Props) {
+export default function DocxDownloadButton({ quoteId, quoteNummer, isConcept = false }: Props) {
   const [loading, setLoading] = useState(false)
 
   async function download() {
@@ -35,7 +37,7 @@ export default function DocxDownloadButton({ quoteId, quoteNummer }: Props) {
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objectUrl
-      a.download = `${quoteNummer}.docx`
+      a.download = `${isConcept ? 'Concept ' : ''}${quoteNummer}.docx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

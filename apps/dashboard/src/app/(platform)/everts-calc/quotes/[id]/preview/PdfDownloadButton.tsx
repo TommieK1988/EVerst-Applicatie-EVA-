@@ -7,6 +7,8 @@ import toast from 'react-hot-toast'
 interface Props {
   quoteId: string
   quoteNummer: string
+  /** Concept-offerte: bestandsnaam begint met "Concept". */
+  isConcept?: boolean
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * Briefpapier (per layout) en algemene voorwaarden worden server-side
  * samengevoegd — de Word-template wordt via Microsoft Graph naar PDF gerenderd.
  */
-export default function PdfDownloadButton({ quoteId, quoteNummer }: Props) {
+export default function PdfDownloadButton({ quoteId, quoteNummer, isConcept = false }: Props) {
   const [loading, setLoading] = useState(false)
 
   async function download() {
@@ -39,7 +41,7 @@ export default function PdfDownloadButton({ quoteId, quoteNummer }: Props) {
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objectUrl
-      a.download = `${quoteNummer}.pdf`
+      a.download = `${isConcept ? 'Concept ' : ''}${quoteNummer}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

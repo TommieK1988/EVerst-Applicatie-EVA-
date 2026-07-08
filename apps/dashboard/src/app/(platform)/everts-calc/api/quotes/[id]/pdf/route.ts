@@ -186,6 +186,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       finalPdf = await tekenConceptWatermerk(finalPdf)
     }
 
+    // ── 8. Concept-offerte in SharePoint archiveren (net als de goedgekeurde ──
+    // offerte bij verzenden). Best-effort; blokkeert de download nooit.
+    if (!verzendbaar) {
+      try {
+        let dossierId: string | null = (quote as any).dossier_id ?? null
+        if (!dossierId && quote.project_id) {
+          const { data: dRow } = await supabase
+            .from('dossiers')
+            .select('id')
+            .eq('everts_calc_project_id', quote.project_id)
+            .limit(1)
+            .maybeSingle()
+          dossierId = dRow?.id ?? null
+        }
+        if (dossierId) {
+          const { uploadBuffersNaarDossierMap } = await import('@/lib/dossiers/sharepoint-bestanden')
+          await uploadBuffersNaarDossierMap(dossierId, [{
+            naam: `Concept ${quote.quote_nummer}.pdf`,
+            contentType: 'application/pdf',
+            bytes: finalPdf,
+          }])
+        }
+      } catch (e) {
+        console.warn('Concept-offerte archiveren in SharePoint mislukt:', e)
+      }
+    }
+
     return new NextResponse(finalPdf.buffer as ArrayBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
