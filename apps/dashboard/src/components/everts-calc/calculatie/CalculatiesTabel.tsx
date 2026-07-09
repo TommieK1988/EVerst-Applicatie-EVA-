@@ -19,12 +19,10 @@ const TYPE_LABELS: Record<string, string> = {
   verkoopofferte: 'Offerte', interne_calculatie: 'Interne begroting',
 }
 const STATUS_LABELS: Record<string, string> = {
-  concept: 'Concept', verzonden: 'Verzonden', geaccepteerd: 'Geaccepteerd',
-  afgewezen: 'Afgewezen', verlopen: 'Verlopen',
+  concept: 'Concept', verzonden: 'Definitief',
 }
 const STATUS_TONE: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
-  concept: 'neutral', verzonden: 'info', geaccepteerd: 'success',
-  afgewezen: 'error', verlopen: 'warning',
+  concept: 'neutral', verzonden: 'success',
 }
 
 interface Props {

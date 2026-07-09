@@ -238,14 +238,16 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   d.setDate(d.getDate() + dagen)
   const geldig_tot = d.toISOString().split('T')[0]
 
-  // Eén offerte per calculatie: een eventuele bestaande offerte van dit scenario
-  // wordt vervangen (cascade ruimt secties/regels/voorwaarden op).
+  // Eén concept-offerte per calculatie: een eventuele bestaande CONCEPT-offerte van
+  // dit scenario wordt vervangen (cascade ruimt secties/regels/voorwaarden op). Een
+  // reeds definitieve (verzonden) offerte blijft staan — die mag niet verwijderd.
   if (params.scenarioId) {
     await supabase
       .from('quotes')
       .delete()
       .eq('project_id', params.projectId)
       .eq('scenario_id', params.scenarioId)
+      .eq('status', 'concept')
   }
 
   const { data: quote, error } = await supabase
@@ -396,6 +398,9 @@ export async function maakQuote(data: NieuweQuoteData): Promise<never> {
 }
 
 export async function verwijderQuote(id: string): Promise<never> {
+  // Definitieve (verzonden) offertes zijn onveranderbaar en mogen niet worden
+  // verwijderd — server-side backstop naast het verbergen van de UI-knop.
+  await assertQuoteBewerkbaar(id)
   const supabase = await getDb()
   const { error } = await supabase.from('quotes').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -503,8 +508,8 @@ export async function updateQuoteHeader(id: string, data: {
   betalingsconditie_id?: string | null
   voorwaarden_id?: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  // Vergrendeling: op een verzonden/definitieve offerte mag alleen de status nog
-  // wijzigen (bv. verzonden → geaccepteerd), geen inhoudelijke velden.
+  // Vergrendeling: een definitieve (verzonden) offerte is onveranderbaar; geen
+  // inhoudelijke velden meer wijzigbaar.
   const wijzigtInhoud = Object.keys(data).some(k => k !== 'status')
   if (wijzigtInhoud) {
     try { await assertQuoteBewerkbaar(id) }
@@ -513,12 +518,10 @@ export async function updateQuoteHeader(id: string, data: {
 
   const supabase = await getDb()
 
-  // Gate: naar 'verzonden' (of direct 'geaccepteerd') mag alleen na controller-
+  // Gate: definitief maken (concept → verzonden) mag alleen na controller-
   // goedkeuring — server-side afgedwongen, de UI toont de foutmelding als toast.
-  if (data.status === 'verzonden' || data.status === 'geaccepteerd') {
+  if (data.status === 'verzonden') {
     const { data: huidig } = await supabase.from('quotes').select('status').eq('id', id).maybeSingle()
-    // Alleen de overgang vanuit concept is gated; een al verzonden offerte die de
-    // klant accepteert hoeft niet opnieuw langs de controller.
     if (huidig?.status === 'concept') {
       const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
       const check = await assertOfferteVerzendbaar(id)
@@ -1050,7 +1053,6 @@ export async function getQuoteTotalenVoorProject(projectId: string): Promise<{
       sections:quote_sections(id, is_optioneel)
     `)
     .eq('project_id', projectId)
-    .neq('status', 'afgewezen')
     .order('updated_at', { ascending: false })
     .limit(1)
     .single()

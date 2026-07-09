@@ -18,7 +18,7 @@ export type CalculatieRij = {
   // Beste offerte per project (optioneel)
   quote_id: string | null
   quote_nummer: string | null
-  quote_status: 'concept' | 'verzonden' | 'geaccepteerd' | 'afgewezen' | 'verlopen' | null
+  quote_status: 'concept' | 'verzonden' | null
 
   // Financieel (null als geen offerte)
   subtotaal_ex_btw: number | null
@@ -38,8 +38,9 @@ export type CalculatieRij = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function kiesBesteQuote(quotes: any[]): any | null {
   if (!quotes.length) return null
-  const geaccepteerd = quotes.find(q => q.status === 'geaccepteerd')
-  if (geaccepteerd) return geaccepteerd
+  // Een definitieve (verzonden) offerte gaat voor; anders de meest recente concept.
+  const verzonden = quotes.find(q => q.status === 'verzonden')
+  if (verzonden) return verzonden
   return quotes.reduce((a, b) => (a.created_at > b.created_at ? a : b))
 }
 

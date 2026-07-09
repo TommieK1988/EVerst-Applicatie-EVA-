@@ -58,11 +58,8 @@ function MargeEur({ marge, heeftRegels }: { marge: number; heeftRegels: boolean 
 // ── Status filter opties ───────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
-  concept:      'Concept',
-  verzonden:    'Verzonden',
-  geaccepteerd: 'Geaccepteerd',
-  afgewezen:    'Afgewezen',
-  verlopen:     'Verlopen',
+  concept:   'Concept',
+  verzonden: 'Definitief',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -138,7 +135,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       filterType: 'select',
       filterOpties: Object.values(STATUS_LABELS),
       sorteerWaarde: q => {
-        const volgorde = ['concept', 'verzonden', 'geaccepteerd', 'afgewezen', 'verlopen']
+        const volgorde = ['concept', 'verzonden']
         const idx = volgorde.indexOf(q.status)
         return idx >= 0 ? idx : 99
       },

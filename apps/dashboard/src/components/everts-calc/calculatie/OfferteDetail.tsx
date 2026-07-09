@@ -11,15 +11,9 @@ import PrintButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PrintB
 import GoedkeuringKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/GoedkeuringKnop'
 import VerzendOfferteKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/VerzendOfferteKnop'
 import QuoteStatusBadge from '@/components/everts-calc/quotes/QuoteStatusBadge'
-import { updateQuoteHeader, dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
+import { dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
 import { laadOfferteDetailStatus, type OfferteDetailStatus } from '@/app/(platform)/everts-calc/actions/offerte-verzenden'
 import type { QuoteStatus } from '@/lib/everts-calc/types-quotes'
-
-const STATUS_OPTIES: QuoteStatus[] = ['concept', 'verzonden', 'geaccepteerd', 'afgewezen', 'verlopen']
-const STATUS_LABELS: Record<QuoteStatus, string> = {
-  concept: 'Concept', verzonden: 'Verzonden', geaccepteerd: 'Geaccepteerd',
-  afgewezen: 'Afgewezen', verlopen: 'Verlopen',
-}
 
 interface Props {
   quoteId: string
@@ -39,8 +33,6 @@ interface Props {
 export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOfferte }: Props) {
   const router = useRouter()
   const [info, setInfo] = useState<OfferteDetailStatus | null>(null)
-  const [statusReset, setStatusReset] = useState(0)
-  const [pending, start] = useTransition()
   const [kopieerPending, startKopieer] = useTransition()
 
   async function ververs() {
@@ -53,17 +45,6 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOffer
   }
 
   useEffect(() => { laadOfferteDetailStatus(quoteId).then(setInfo).catch(() => setInfo(null)) }, [quoteId])
-
-  function wijzigStatus(status: QuoteStatus) {
-    start(async () => {
-      const res = await updateQuoteHeader(quoteId, { status })
-      if (res && !res.ok) {
-        toast.error(res.error)
-        setStatusReset(r => r + 1)
-      }
-      await ververs()
-    })
-  }
 
   function nieuweVersie() {
     startKopieer(async () => {
@@ -94,19 +75,6 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOffer
 
         <span className="text-sm font-semibold text-slate-700">{info?.quoteNummer ?? '…'}</span>
         {info && <QuoteStatusBadge status={info.status as QuoteStatus} />}
-
-        {/* Status-dropdown */}
-        {info && (
-          <select
-            key={statusReset}
-            defaultValue={info.status}
-            disabled={pending}
-            onChange={(e) => wijzigStatus(e.target.value as QuoteStatus)}
-            className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-everts/30"
-          >
-            {STATUS_OPTIES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-          </select>
-        )}
 
         {!isIntern && info && (
           <GoedkeuringKnop quoteId={quoteId} dossierId={dossierId} totaalBedrag={info.totaalBedrag} onDone={ververs} />

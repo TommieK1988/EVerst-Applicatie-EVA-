@@ -3,12 +3,12 @@ import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 
 /** Statussen waarin een offerte niet meer gewijzigd mag worden (alleen kopiëren). */
-export const VERGRENDELDE_QUOTE_STATUSSEN = ['verzonden', 'geaccepteerd', 'afgewezen'] as const
+export const VERGRENDELDE_QUOTE_STATUSSEN = ['verzonden'] as const
 
 /**
- * Server-side vangnet: gooit `GeenToegangError` als de offerte een vergrendelde
- * status heeft (verzonden / geaccepteerd / afgewezen). Zulke offertes zijn
- * definitief; wijzigen kan alleen door te kopiëren naar een nieuwe versie.
+ * Server-side vangnet: gooit `GeenToegangError` als de offerte definitief
+ * (verzonden) is. Zulke offertes zijn onveranderbaar; wijzigen kan alleen door
+ * te kopiëren naar een nieuwe versie.
  * Roep dit aan bovenin elke muterende offerte-server-action.
  *
  * Tolerant: niet-gevonden offerte laat de mutatie door (guard blokkeert alleen

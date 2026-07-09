@@ -18,7 +18,7 @@ export type OfferteRij = {
   id: string
   quote_nummer: string
   type: 'verkoopofferte' | 'interne_calculatie'
-  status: 'concept' | 'verzonden' | 'geaccepteerd' | 'afgewezen' | 'verlopen'
+  status: 'concept' | 'verzonden'
   titel: string
   referentie: string | null
   datum: string | null
@@ -100,7 +100,7 @@ export type DossierQuoteRij = {
   id: string
   quote_nummer: string
   type: 'verkoopofferte' | 'interne_calculatie'
-  status: 'concept' | 'verzonden' | 'geaccepteerd' | 'afgewezen' | 'verlopen'
+  status: 'concept' | 'verzonden'
   titel: string
   referentie: string | null
   datum: string | null

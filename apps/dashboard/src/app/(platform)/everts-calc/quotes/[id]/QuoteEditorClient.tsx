@@ -23,7 +23,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { updateQuoteHeader, verwijderQuote, herorderSections, dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
+import { verwijderQuote, herorderSections, dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
 import QuoteHeaderCard from '@/components/everts-calc/quotes/QuoteHeaderCard'
 import QuoteSectionBlock from '@/components/everts-calc/quotes/QuoteSectionBlock'
 import QuoteTotalsCard from '@/components/everts-calc/quotes/QuoteTotalsCard'
@@ -31,18 +31,9 @@ import QuoteTermsEditor from '@/components/everts-calc/quotes/QuoteTermsEditor'
 import QuoteStatusBadge from '@/components/everts-calc/quotes/QuoteStatusBadge'
 import AutoImporter from './AutoImporter'
 import QuoteConditionsCard from '@/components/everts-calc/quotes/QuoteConditionsCard'
-import type { Quote, QuoteSection, QuoteStatus, QuoteTemplate } from '@/lib/everts-calc/types-quotes'
+import type { Quote, QuoteSection, QuoteTemplate } from '@/lib/everts-calc/types-quotes'
 import type { Betalingsconditie } from '@/app/(platform)/everts-calc/actions/betalingscondities'
 import type { AlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/algemene-voorwaarden'
-
-const STATUS_OPTIES: QuoteStatus[] = ['concept', 'verzonden', 'geaccepteerd', 'afgewezen', 'verlopen']
-const STATUS_LABELS: Record<QuoteStatus, string> = {
-  concept:      'Concept',
-  verzonden:    'Verzonden',
-  geaccepteerd: 'Geaccepteerd',
-  afgewezen:    'Afgewezen',
-  verlopen:     'Verlopen',
-}
 
 interface Props {
   quote: Quote
@@ -110,7 +101,6 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
   const [verwijderPending, startVerwijder] = useTransition()
   const [isDragging, setIsDragging] = useState(false)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
-  const [statusReset, setStatusReset] = useState(0)
 
   // Lokale sectievolgorde voor optimistische UI
   const [sections, setSections] = useState<QuoteSection[]>(
@@ -121,8 +111,8 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
   const [kopieerPending, startKopieer] = useTransition()
   const terms = quote.terms ?? []
   const isIntern = quote.type === 'interne_calculatie'
-  // Vergrendeld: verzonden/definitieve offerte — inhoud niet meer wijzigbaar, alleen kopiëren.
-  const vergrendeld = ['verzonden', 'geaccepteerd', 'afgewezen'].includes(quote.status)
+  // Vergrendeld: definitieve (verzonden) offerte — inhoud niet meer wijzigbaar, alleen kopiëren.
+  const vergrendeld = quote.status === 'verzonden'
 
   function handleKopieer() {
     startKopieer(async () => {
@@ -162,16 +152,6 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
     })
   }
 
-  function handleStatusChange(status: QuoteStatus) {
-    startTransition(async () => {
-      const res = await updateQuoteHeader(quote.id, { status })
-      if (res && !res.ok) {
-        toast.error(res.error)
-        setStatusReset(r => r + 1) // select terugzetten naar de echte status
-      }
-    })
-  }
-
   function handleVerwijder() {
     if (!confirm(`Offerte "${quote.quote_nummer}" definitief verwijderen?`)) return
     startVerwijder(() => {
@@ -202,20 +182,8 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
           )}
         </div>
 
-        {/* Status selector */}
-        <div className="flex items-center gap-1.5">
-          <QuoteStatusBadge status={quote.status} />
-          <select
-            key={statusReset}
-            defaultValue={quote.status}
-            onChange={(e) => handleStatusChange(e.target.value as QuoteStatus)}
-            className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-everts/30"
-          >
-            {STATUS_OPTIES.map(s => (
-              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-            ))}
-          </select>
-        </div>
+        {/* Status (automatisch: concept → definitief bij verzenden) */}
+        <QuoteStatusBadge status={quote.status} />
 
         {/* Goedkeuring (niet voor interne calculaties) */}
         {!isIntern && (
@@ -264,7 +232,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
         <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
           <Lock className="w-4 h-4 flex-shrink-0" />
           <span>
-            Deze offerte is <strong>{STATUS_LABELS[quote.status]}</strong> en kan niet meer gewijzigd worden.
+            Deze offerte is <strong>definitief</strong> en kan niet meer gewijzigd worden.
             Klik op <strong>Nieuwe versie</strong> om verder te werken aan een kopie.
           </span>
         </div>

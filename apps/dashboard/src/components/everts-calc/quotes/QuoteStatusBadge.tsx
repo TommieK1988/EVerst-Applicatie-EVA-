@@ -2,11 +2,8 @@ import { cn } from '@/lib/everts-calc/utils'
 import type { QuoteStatus } from '@/lib/everts-calc/types-quotes'
 
 const CONFIG: Record<QuoteStatus, { label: string; cls: string }> = {
-  concept:      { label: 'Concept',      cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-  verzonden:    { label: 'Verzonden',    cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  geaccepteerd: { label: 'Geaccepteerd', cls: 'bg-green-50 text-green-700 border-green-200' },
-  afgewezen:    { label: 'Afgewezen',    cls: 'bg-red-50 text-red-600 border-red-200' },
-  verlopen:     { label: 'Verlopen',     cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  concept:   { label: 'Concept',    cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+  verzonden: { label: 'Definitief', cls: 'bg-green-50 text-green-700 border-green-200' },
 }
 
 export default function QuoteStatusBadge({

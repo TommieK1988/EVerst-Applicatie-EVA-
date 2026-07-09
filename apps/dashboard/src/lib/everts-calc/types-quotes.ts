@@ -1,11 +1,10 @@
 export type QuoteType = 'verkoopofferte' | 'interne_calculatie'
 
+// Twee statussen: 'concept' (bewerkbaar) en 'verzonden' (= definitief, vergrendeld).
+// De overgang concept → verzonden gebeurt automatisch bij het verzenden van de offerte.
 export type QuoteStatus =
   | 'concept'
   | 'verzonden'
-  | 'geaccepteerd'
-  | 'afgewezen'
-  | 'verlopen'
 
 export type TermType = 'voorwaarden' | 'uitsluitingen' | 'opmerkingen'
 
