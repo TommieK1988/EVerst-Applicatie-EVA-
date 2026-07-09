@@ -179,6 +179,7 @@ export type ImportRegel = {
   opmerking?: string | null
   is_stelpost?: boolean
   schilderbehandeling?: string | null
+  werkomschrijving_afbeeldingen?: string[] | null
 }
 
 export async function maakQuoteVanuitProjectMetImport(params: {
@@ -923,6 +924,7 @@ export async function importeerRegels(
     is_stelpost?: boolean
     btw_pct?: number | null
     schilderbehandeling?: string | null
+    werkomschrijving_afbeeldingen?: string[] | null
   }[],
   // Optioneel: de volledige sectie-structuur in outline-volgorde, inclusief lege
   // hoofdstuk-groepen (niveau 1) die zelf geen regels hebben. Wordt dit meegegeven,
@@ -1013,10 +1015,13 @@ export async function importeerRegels(
     // Optioneel: is_stelpost + schilderbehandeling per regel bijwerken (v3)
     if (insertedLines) {
       for (let i = 0; i < groepRegels.length; i++) {
-        const r = groepRegels[i] as typeof groepRegels[0] & { is_stelpost?: boolean; schilderbehandeling?: string | null }
+        const r = groepRegels[i] as typeof groepRegels[0] & { is_stelpost?: boolean; schilderbehandeling?: string | null; werkomschrijving_afbeeldingen?: string[] | null }
         const updates: Record<string, unknown> = {}
         if (r.is_stelpost) updates.is_stelpost = true
         if (r.schilderbehandeling) updates.schilderbehandeling = r.schilderbehandeling
+        if (r.werkomschrijving_afbeeldingen && r.werkomschrijving_afbeeldingen.length > 0) {
+          updates.werkomschrijving_afbeeldingen = r.werkomschrijving_afbeeldingen
+        }
         if (Object.keys(updates).length > 0 && insertedLines[i]) {
           await supabase
             .from('quote_lines')

@@ -68,6 +68,7 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
               is_stelpost: regel.is_stelpost ?? false,
               btw_pct: regel.btw_pct ?? null,
               schilderbehandeling: regel.schilderbehandeling ?? null,
+              werkomschrijving_afbeeldingen: regel.werkomschrijving_afbeeldingen ?? null,
             })
           }
         }

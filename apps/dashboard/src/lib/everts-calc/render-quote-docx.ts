@@ -61,6 +61,8 @@ const LEGE_PIXEL = Buffer.from(
 
 /** Max afmetingen (px @96dpi) waarbinnen een afbeelding wordt geschaald. */
 const LOGO_MAX = { w: 240, h: 120 }
+/** Max afmetingen voor werkomschrijving-foto's (groter dan een logo). */
+const PHOTO_MAX = { w: 480, h: 360 }
 
 interface ExtraImages {
   /** Handtekening-bytes (optioneel; tag {%handtekening}). */
@@ -121,16 +123,30 @@ export async function renderQuoteDocx(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getImage(tagValue: any) {
       if (!tagValue) return LEGE_PIXEL
-      return Buffer.isBuffer(tagValue) ? tagValue : Buffer.from(tagValue)
+      if (Buffer.isBuffer(tagValue)) return tagValue
+      // Foto's komen binnen als base64 data-URL ("data:image/…;base64,XXXX") of als
+      // kale base64-string; beide moeten binair worden gedecodeerd (niet als utf8).
+      if (typeof tagValue === 'string') {
+        const komma = tagValue.indexOf(',')
+        const base64 = tagValue.startsWith('data:') && komma >= 0 ? tagValue.slice(komma + 1) : tagValue
+        try {
+          const buf = Buffer.from(base64, 'base64')
+          return buf.length > 0 ? buf : LEGE_PIXEL
+        } catch {
+          return LEGE_PIXEL
+        }
+      }
+      return Buffer.from(tagValue)
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getSize(img: Buffer, tagValue: any) {
+    getSize(img: Buffer, tagValue: any, tagName?: string) {
       if (!tagValue) return [1, 1]
+      const max = tagName === 'foto' ? PHOTO_MAX : LOGO_MAX
       try {
         const dim = imageSize(new Uint8Array(img))
-        return fitSize(dim.width ?? LOGO_MAX.w, dim.height ?? LOGO_MAX.h, LOGO_MAX)
+        return fitSize(dim.width ?? max.w, dim.height ?? max.h, max)
       } catch {
-        return [LOGO_MAX.w, LOGO_MAX.h]
+        return [max.w, max.h]
       }
     },
   })

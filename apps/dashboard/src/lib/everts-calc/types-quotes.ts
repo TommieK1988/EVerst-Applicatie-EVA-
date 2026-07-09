@@ -83,6 +83,8 @@ export interface QuoteLine {
   uren_pe?: number | null
   opmerking?: string | null
   schilderbehandeling?: string | null
+  /** Base64 data-URL's van foto's bij de werkomschrijving (overgenomen uit de calculatie). */
+  werkomschrijving_afbeeldingen?: string[] | null
   is_stelpost: boolean
   created_at: string
   updated_at: string

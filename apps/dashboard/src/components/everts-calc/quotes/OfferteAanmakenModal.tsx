@@ -141,6 +141,8 @@ export default function OfferteAanmakenModal({
             calculatieregel_id: regel.id,
             opmerking: regel.werkomschrijving ?? null,
             is_stelpost: regel.is_stelpost ?? false,
+            schilderbehandeling: regel.schilderbehandeling ?? null,
+            werkomschrijving_afbeeldingen: regel.werkomschrijving_afbeeldingen ?? null,
           })
         }
       }

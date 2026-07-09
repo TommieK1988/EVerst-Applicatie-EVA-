@@ -296,6 +296,9 @@ interface RegelContext {
   heeft_opmerking: boolean
   schilderbehandeling: string
   heeft_schilderbehandeling: boolean
+  // Foto's bij de werkomschrijving. Loop in de template: {#afbeeldingen}{%foto}{/afbeeldingen}
+  afbeeldingen: { foto: string }[]
+  heeft_afbeeldingen: boolean
   // intern
   kostprijs: string
   uren: string
@@ -450,6 +453,8 @@ export function buildRenderContext(
       heeft_opmerking: !!line.opmerking,
       schilderbehandeling: line.schilderbehandeling ?? '',
       heeft_schilderbehandeling: !!line.schilderbehandeling,
+      afbeeldingen: (line.werkomschrijving_afbeeldingen ?? []).map(foto => ({ foto })),
+      heeft_afbeeldingen: (line.werkomschrijving_afbeeldingen ?? []).length > 0,
       kostprijs: kp > 0 ? euro(kp) : '—',
       uren: line.uren_pe != null ? numNL(line.uren_pe) : '—',
       marge_pct: marge != null ? marge.toFixed(1) + '%' : '—',
