@@ -2,9 +2,13 @@
  * offerte-bronnen.ts
  *
  * Resolvet de bedrijfs- en dossiergegevens voor een offerte-render:
- *  - **Dossier** (informatie-tab: werkadres, calculator/rollen, referenties) via
- *    `dossiers.everts_calc_project_id = quote.project_id`. Offertes koppelen NIET
- *    via `quotes.dossier_id` (ongebruikt), maar via het everts-calc project.
+ *  - **Dossier** (informatie-tab: werkadres, calculator/rollen, referenties). Voorkeur:
+ *    de directe koppeling `quotes.dossier_id` (gezet bij het aanmaken vanuit een
+ *    dossier). Fallback: de omgekeerde link `dossiers.everts_calc_project_id =
+ *    quote.project_id`, voor oudere offertes en de losse everts-calc-flow. De directe
+ *    koppeling is robuuster: ze faalt niet als een dossier al aan een ánder project
+ *    hing (koppelDossierAanProject overschrijft niet) of als de link enkel in
+ *    localStorage leefde.
  *  - **Bedrijf/werkmaatschappij**: de werkmaatschappij hoort bij het dossier
  *    (`dossiers.bouw7_filiaal` == `bedrijfsgegevens.naam`); zonder match valt hij
  *    terug op de hoofdorganisatie, zodat `bedrijf.*` nooit leeg is.
@@ -130,10 +134,20 @@ export async function laadBedrijfEnDossier(
   quote: any,
 ): Promise<{ bedrijf: BedrijfContext; dossier: DossierContext }> {
   try {
-    // 1. Dossier via het everts-calc project (project_id is text, kolom is uuid → PostgREST cast).
+    // 1. Dossier ophalen. Voorkeur: de directe koppeling `quotes.dossier_id`.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let dossierRow: any = null
-    if (quote?.project_id) {
+    if (quote?.dossier_id) {
+      const { data } = await supabase
+        .from('dossiers')
+        .select(DOSSIER_SELECT)
+        .eq('id', quote.dossier_id)
+        .maybeSingle()
+      dossierRow = data ?? null
+    }
+    // Fallback: de omgekeerde link via het everts-calc project (project_id is text,
+    // kolom is uuid → PostgREST cast). Voor oudere offertes zonder directe dossier_id.
+    if (!dossierRow && quote?.project_id) {
       const { data } = await supabase
         .from('dossiers')
         .select(DOSSIER_SELECT)

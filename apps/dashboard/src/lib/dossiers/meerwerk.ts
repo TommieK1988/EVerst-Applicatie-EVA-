@@ -295,6 +295,7 @@ export async function maakMeerwerkCalculatie(
     meerwerkRegelId: regelId,
     omschrijving: regel.omschrijving,
     referentie: regel.factuurreferentie ?? null,
+    dossierId: regel.dossier_id,
   })
   if (!res.ok) return res
 

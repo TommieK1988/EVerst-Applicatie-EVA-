@@ -117,6 +117,8 @@ export async function maakMeerwerkOfferte(opts: {
   omschrijving: string
   clientId?: string | null
   referentie?: string | null
+  /** Dossier van de meerwerkregel — directe koppeling voor de offerte-render. */
+  dossierId?: string | null
 }): Promise<{ ok: true; quoteId: string } | { ok: false; error: string }> {
   const supabase = await getDb()
 
@@ -142,6 +144,7 @@ export async function maakMeerwerkOfferte(opts: {
       datum,
       geldig_tot,
       project_id: opts.projectId,
+      dossier_id: opts.dossierId ?? null,
       template_id: template?.id ?? null,
       meerwerk_regel_id: opts.meerwerkRegelId,
     })
@@ -265,6 +268,9 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       datum,
       geldig_tot,
       project_id: params.projectId,
+      // Directe dossier-koppeling: robuuster dan alleen de omgekeerde link via het
+      // everts-calc project. De offerte-render leest hier als eerste uit.
+      dossier_id: params.dossierId ?? null,
       scenario_id: params.scenarioId ?? null,
       template_id: template?.id ?? null,
       layout_id: params.layoutId ?? null,
