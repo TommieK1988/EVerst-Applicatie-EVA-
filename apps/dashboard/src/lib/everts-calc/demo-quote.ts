@@ -116,6 +116,15 @@ export function buildDemoDossierContext(): DossierContext {
     contactpersoon: 'J. de Vries',
     contactpersoon_email: 'j.devries@corporatie-voorbeeld.nl',
     contactpersoon_telefoon: '030 - 765 43 21',
+    contactpersoon_aanhef: 'Mevrouw',
+    contactpersoon_voornaam: 'Janneke',
+    contactpersoon_tussenvoegsel: 'de',
+    contactpersoon_achternaam: 'Vries',
+    contactpersoon_voorletter: 'J.',
+    contactpersoon_geslacht: 'Vrouw',
+    contactpersoon_mobiel: '06 - 12 34 56 78',
+    contactpersoon_linkedin: 'https://www.linkedin.com/in/janneke-de-vries',
+    contactpersoon_opmerkingen: 'Bereikbaar op dinsdag en donderdag.',
     klant_naam: 'Woningcorporatie Voorbeeld',
     klant_adres: 'Klantlaan 25',
     klant_postcode: '5678 CD',
@@ -124,6 +133,7 @@ export function buildDemoDossierContext(): DossierContext {
     klant_telefoon: '030 - 765 43 21',
     klant_kvk: '87654321',
     klant_btw: 'NL876543210B01',
+    klant_betalingstermijn_dagen: '30',
   }
 }
 
@@ -286,6 +296,11 @@ export function buildDemoQuote(): Quote {
       id: 'demo-bc',
       naam: '30 dagen netto',
       tekst: 'Betaling in twee termijnen: 50% bij aanvang, 50% bij oplevering, telkens binnen 30 dagen na factuurdatum.',
+      termijnen: [
+        { percentage: 50, omschrijving: '1e termijn: 50 % bij opdracht. Deze dient uiterlijk 8 dagen voor aanvang te zijn bijgeschreven.' },
+        { percentage: 40, omschrijving: '2e termijn: 40 % bij start van de werkzaamheden.' },
+        { percentage: 10, omschrijving: '3e termijn: 10 % wanneer het gehele werk opgeleverd is.' },
+      ],
     },
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
@@ -80,7 +80,6 @@ export default function CalculatieHoofdscherm({
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
   const [instellingenVereist, setInstellingenVereist] = useState(false)
   const [pendingOfferteType, setPendingOfferteType]   = useState<QuoteType | null>(null)
-  const [isPending, startTransition]                  = useTransition()
   const sluitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
 
@@ -164,35 +163,72 @@ export default function CalculatieHoofdscherm({
     setComponentenVoorBtw(cs)
   }, [refreshTotalen, scenario])
 
-  /* ── Sync ────────────────────────────────────────────────────────── */
-  const handleSync = useCallback(() => {
-    if (!scenario) return
+  /* ── Opslaan (automatisch + handmatig) ───────────────────────────── */
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dirtyRef     = useRef(false)
+
+  // Kernsave: schrijft de genormaliseerde projectie (werkbegroting/rapportage) én
+  // de verliesloze editor-snapshot (cross-device) weg. `stil` = auto-save zonder
+  // succes-toast; fouten worden altijd getoond.
+  const slaCalculatieOp = useCallback(async (stil = false) => {
+    if (!scenario || readOnly) return
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
+    dirtyRef.current = false
     setSyncStatus('bezig')
-    startTransition(async () => {
-      try {
-        const { groepen, regels } = verzamelSyncData(scenario.id)
-        // Genormaliseerde projectie (werkbegroting/rapportage) + verliesloze
-        // editor-snapshot (cross-device) samen wegschrijven.
-        const [resultaat, snapRes] = await Promise.all([
-          syncCalculatieNaarSupabase(projectId, groepen, regels),
-          bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId)),
-        ])
-        if (resultaat.gelukt && snapRes.gelukt) {
-          setSyncStatus('gelukt')
-          toast.success(`Opgeslagen: ${resultaat.groepen_geschreven} groepen, ${resultaat.regels_geschreven} regels`)
-          setTimeout(() => setSyncStatus('idle'), 3000)
-        } else {
-          setSyncStatus('fout')
-          toast.error(resultaat.fout ?? snapRes.fout ?? 'Sync mislukt')
-          setTimeout(() => setSyncStatus('idle'), 4000)
-        }
-      } catch (err) {
+    try {
+      const { groepen, regels } = verzamelSyncData(scenario.id)
+      const [resultaat, snapRes] = await Promise.all([
+        syncCalculatieNaarSupabase(projectId, groepen, regels),
+        bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId)),
+      ])
+      if (resultaat.gelukt && snapRes.gelukt) {
+        setSyncStatus('gelukt')
+        if (!stil) toast.success(`Opgeslagen: ${resultaat.groepen_geschreven} groepen, ${resultaat.regels_geschreven} regels`)
+        setTimeout(() => setSyncStatus('idle'), stil ? 1500 : 3000)
+      } else {
         setSyncStatus('fout')
-        toast.error(err instanceof Error ? err.message : 'Sync mislukt')
+        toast.error(resultaat.fout ?? snapRes.fout ?? 'Opslaan mislukt')
         setTimeout(() => setSyncStatus('idle'), 4000)
       }
-    })
-  }, [scenario, projectId, startTransition])
+    } catch (err) {
+      setSyncStatus('fout')
+      toast.error(err instanceof Error ? err.message : 'Opslaan mislukt')
+      setTimeout(() => setSyncStatus('idle'), 4000)
+    }
+  }, [scenario, projectId, readOnly])
+
+  // Altijd de actuele save-functie beschikbaar voor debounce/flush (geen stale closure).
+  const saveRef = useRef(slaCalculatieOp)
+  useEffect(() => { saveRef.current = slaCalculatieOp }, [slaCalculatieOp])
+
+  // Debounced auto-save: elke wijziging plant ~1,5s later een stille opslag. Zo hoeft
+  // de gebruiker niet op Opslaan te klikken en blijft de gedeelde snapshot actueel.
+  const planAutoSave = useCallback(() => {
+    if (readOnly) return
+    dirtyRef.current = true
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      void saveRef.current(true)
+    }, 1500)
+  }, [readOnly])
+
+  // Nog-niet-weggeschreven wijziging direct flushen bij tab-wissel of verlaten van
+  // het scherm, zodat de laatste edit niet in de debounce blijft hangen (en de
+  // re-hydratie bij heropenen niet een oudere snapshot terugzet).
+  useEffect(() => {
+    const flush = () => {
+      if (!dirtyRef.current) return
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
+      void saveRef.current(true)
+    }
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      flush()
+    }
+  }, [])
 
   const handleCufExport = useCallback(() => {
     if (!scenario) return
@@ -233,12 +269,16 @@ export default function CalculatieHoofdscherm({
 
   if (!scenario) return null
 
-  const handleWijziging = () => setRefreshTotalen(r => r + 1)
+  const handleWijziging = () => {
+    setRefreshTotalen(r => r + 1)
+    planAutoSave()
+  }
 
   const handleScenarioWijzig = (patch: Partial<Scenario>) => {
     const bijgewerkt = { ...scenario, ...patch }
     slaScenarioOp(bijgewerkt)
     setScenario(bijgewerkt)
+    planAutoSave()
   }
 
   /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
@@ -325,27 +365,28 @@ export default function CalculatieHoofdscherm({
               <span className="hidden lg:inline">Ongedaan{undoCount > 0 ? ` (${undoCount})` : ''}</span>
             </Button>
 
-            {/* Opslaan */}
+            {/* Opslaan — wijzigingen worden automatisch opgeslagen; deze knop
+                forceert een directe opslag en toont de status. */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleSync}
-              disabled={isPending || syncStatus === 'bezig' || readOnly}
-              loading={isPending || syncStatus === 'bezig'}
-              title={readOnly ? 'Bevroren' : 'Opslaan naar cloud'}
+              onClick={() => slaCalculatieOp(false)}
+              disabled={syncStatus === 'bezig' || readOnly}
+              loading={syncStatus === 'bezig'}
+              title={readOnly ? 'Bevroren' : 'Wijzigingen worden automatisch opgeslagen — klik om nu op te slaan'}
               className={
                 syncStatus === 'gelukt' ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-50 hover:border-green-200' :
                 syncStatus === 'fout'   ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-50 hover:border-red-200' :
                 undefined
               }
             >
-              {!(isPending || syncStatus === 'bezig') && (
+              {syncStatus !== 'bezig' && (
                 syncStatus === 'gelukt'
                   ? <Check className="w-3.5 h-3.5" />
                   : <CloudUpload className="w-3.5 h-3.5" />
               )}
               <span className="hidden lg:inline">
-                {syncStatus === 'bezig' || isPending ? 'Bezig…' :
+                {syncStatus === 'bezig' ? 'Opslaan…' :
                  syncStatus === 'gelukt' ? 'Opgeslagen' :
                  syncStatus === 'fout'   ? 'Fout' : 'Opslaan'}
               </span>

@@ -57,7 +57,7 @@ export async function updateCalculatieregel(id: string, data: {
       material_cost:  data.material_cost  ?? undefined,
       equipment_cost: data.equipment_cost ?? undefined,
       subcontract_cost: data.subcontract_cost ?? undefined,
-      total_cost:     data.total_cost,
+      // total_cost is een GENERATED-kolom in Supabase — niet zelf schrijven.
       updated_at:     new Date().toISOString(),
     })
     .eq('id', id)

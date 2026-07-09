@@ -4437,6 +4437,7 @@ export type Database = {
           adres_plaats: string | null
           adres_postcode: string | null
           adres_straat: string | null
+          betalingstermijn_dagen: number | null
           bouw7_id: string | null
           bouw7_laatst_sync: string | null
           bouw7_sync_fout: string | null
@@ -4463,6 +4464,7 @@ export type Database = {
           adres_plaats?: string | null
           adres_postcode?: string | null
           adres_straat?: string | null
+          betalingstermijn_dagen?: number | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
           bouw7_sync_fout?: string | null
@@ -4489,6 +4491,7 @@ export type Database = {
           adres_plaats?: string | null
           adres_postcode?: string | null
           adres_straat?: string | null
+          betalingstermijn_dagen?: number | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
           bouw7_sync_fout?: string | null

@@ -76,7 +76,7 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
                 <option value="">— Geen voorkeur —</option>
                 {betalingscondities.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.naam}{b.is_standaard ? ' (standaard)' : ''}
+                    {b.naam}
                   </option>
                 ))}
               </select>

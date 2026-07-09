@@ -84,7 +84,9 @@ export async function syncCalculatieNaarSupabase(
             material_cost:    r.material_cost,
             equipment_cost:   0,
             subcontract_cost: r.subcontract_cost,
-            total_cost:       r.total_cost,
+            // total_cost is een GENERATED-kolom in Supabase
+            // (labor_cost + material_cost + equipment_cost + subcontract_cost) —
+            // niet zelf schrijven, anders faalt de upsert.
             kostengroep:      r.kostengroep ?? null,
             updated_at:       nu,
           })),

@@ -212,15 +212,6 @@ export async function maakQuoteVanuitProjectMetImport(params: {
     .eq('is_standaard', true)
     .single()
 
-  // Standaard betalingsconditie (of de eerste) — de inline-flow heeft geen picker.
-  const { data: standaardBc } = await supabase
-    .from('betalingscondities')
-    .select('id')
-    .order('is_standaard', { ascending: false })
-    .order('volgorde', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
   // Maak of zoek klant op basis van naam
   let clientId: string | null = null
   if (params.clientNaam) {
@@ -274,8 +265,10 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       scenario_id: params.scenarioId ?? null,
       template_id: template?.id ?? null,
       layout_id: params.layoutId ?? null,
-      // Gekozen betalingsconditie (Offerte-instellingen) wint; anders de standaard.
-      betalingsconditie_id: params.betalingsconditieId ?? standaardBc?.id ?? null,
+      // Betalingsconditie = uitsluitend de keuze uit de calculatie (Offerte-
+      // instellingen). Géén blinde standaard-fallback: zonder keuze blijft dit leeg,
+      // zodat de offerte nooit een verkeerde staffel toont.
+      betalingsconditie_id: params.betalingsconditieId ?? null,
       voorwaarden_id: params.voorwaardenId ?? null,
     })
     .select('id')

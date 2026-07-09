@@ -32,7 +32,10 @@ const DOSSIER_SELECT = `
   werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam ),
   uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
   controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam ),
-  contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
+  contactpersoon:contactpersonen!contactpersoon_id (
+    voornaam, tussenvoegsel, achternaam, email, telefoon,
+    aanhef, voorletter, geslacht, mobiel, linkedin_url, opmerkingen
+  )
 `.trim()
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,6 +88,15 @@ function bouwDossier(row: any): DossierContext {
     contactpersoon: medewerkerNaam(row.contactpersoon) ?? '',
     contactpersoon_email: row.contactpersoon?.email ?? '',
     contactpersoon_telefoon: row.contactpersoon?.telefoon ?? '',
+    contactpersoon_aanhef: row.contactpersoon?.aanhef ?? '',
+    contactpersoon_voornaam: row.contactpersoon?.voornaam ?? '',
+    contactpersoon_tussenvoegsel: row.contactpersoon?.tussenvoegsel ?? '',
+    contactpersoon_achternaam: row.contactpersoon?.achternaam ?? '',
+    contactpersoon_voorletter: row.contactpersoon?.voorletter ?? '',
+    contactpersoon_geslacht: geslachtLabel(row.contactpersoon?.geslacht),
+    contactpersoon_mobiel: row.contactpersoon?.mobiel ?? '',
+    contactpersoon_linkedin: row.contactpersoon?.linkedin_url ?? '',
+    contactpersoon_opmerkingen: row.contactpersoon?.opmerkingen ?? '',
     klant_naam: row.opdrachtgever?.naam ?? '',
     klant_adres: row.opdrachtgever?.adres_straat ?? '',
     klant_postcode: row.opdrachtgever?.adres_postcode ?? '',
@@ -93,7 +105,17 @@ function bouwDossier(row: any): DossierContext {
     klant_telefoon: row.opdrachtgever?.telefoon ?? '',
     klant_kvk: row.opdrachtgever?.kvk_nummer ?? '',
     klant_btw: row.opdrachtgever?.btw_nummer ?? '',
+    klant_betalingstermijn_dagen:
+      row.opdrachtgever?.betalingstermijn_dagen != null ? String(row.opdrachtgever.betalingstermijn_dagen) : '',
   }
+}
+
+/** Zet de geslacht-enum om naar een leesbaar label voor de offerte. */
+function geslachtLabel(g: string | null | undefined): string {
+  if (g === 'man') return 'Man'
+  if (g === 'vrouw') return 'Vrouw'
+  if (g === 'overig') return 'Overig'
+  return ''
 }
 
 /**
@@ -128,7 +150,7 @@ export async function laadBedrijfEnDossier(
       try {
         const { data: rel } = await supabase
           .from('relaties')
-          .select('naam, adres_straat, adres_postcode, adres_plaats, email, telefoon, kvk_nummer, btw_nummer')
+          .select('naam, adres_straat, adres_postcode, adres_plaats, email, telefoon, kvk_nummer, btw_nummer, betalingstermijn_dagen')
           .eq('id', dossierRow.klant_id)
           .maybeSingle()
         if (rel) dossierRow.opdrachtgever = rel
@@ -153,23 +175,10 @@ export async function laadBedrijfEnDossier(
       leidWerkmaatschappijAf(dossierRow?.dossiernummer, dossierRow?.bouw7_filiaal, werkmaatschappijen)
     const bedrijfRow = (wmId && werkmaatschappijen.find(w => w.id === wmId)) || organisatie
 
-    // Betalingsconditie-fallback: offertes uit de inline-flow krijgen geen expliciete
-    // keuze mee. Zonder gekozen conditie tonen we de standaard (of de eerste), zodat
-    // het betalingsblok niet leeg blijft. `quote` wordt in-place aangevuld zodat elke
-    // aanroeper (alle render-routes) het meekrijgt zonder signatuurwijziging.
-    if (quote && !quote.betalingsconditie) {
-      try {
-        const { data: bcs } = await supabase
-          .from('betalingscondities')
-          .select('*')
-          .order('is_standaard', { ascending: false })
-          .order('volgorde', { ascending: true })
-          .limit(1)
-        if (bcs && bcs[0]) quote.betalingsconditie = bcs[0]
-      } catch {
-        /* geen betalingsconditie beschikbaar */
-      }
-    }
+    // Bewust GÉÉN betalingsconditie-fallback: de betalingsconditie (en dus het
+    // termijnschema) komt uitsluitend uit de keuze op de calculatie, doorgezet naar
+    // quotes.betalingsconditie_id. Zonder keuze blijft het betalingsblok leeg i.p.v.
+    // een willekeurige standaard-staffel te tonen.
 
     return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow) }
   } catch {

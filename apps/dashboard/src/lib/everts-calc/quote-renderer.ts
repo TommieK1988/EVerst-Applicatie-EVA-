@@ -63,6 +63,16 @@ export interface DossierContext {
   contactpersoon: string
   contactpersoon_email: string
   contactpersoon_telefoon: string
+  // Uitgebreide contactpersoon-velden (uit de relaties-module, excl. het privé-blok).
+  contactpersoon_aanhef: string
+  contactpersoon_voornaam: string
+  contactpersoon_tussenvoegsel: string
+  contactpersoon_achternaam: string
+  contactpersoon_voorletter: string
+  contactpersoon_geslacht: string
+  contactpersoon_mobiel: string
+  contactpersoon_linkedin: string
+  contactpersoon_opmerkingen: string
   // Opdrachtgever van het dossier (relaties!klant_id) — bron voor het klant-blok.
   klant_naam: string
   klant_adres: string
@@ -72,6 +82,28 @@ export interface DossierContext {
   klant_telefoon: string
   klant_kvk: string
   klant_btw: string
+  klant_betalingstermijn_dagen: string
+}
+
+/**
+ * Contactpersoon van de klant (uit de relaties-module, gekoppeld via het dossier).
+ * Bevat alle vrij-invulbare velden **behalve** het privé-blok (privé-mail/-telefoon/
+ * -adres en geboortedatum).
+ */
+export interface ContactpersoonContext {
+  heeft: boolean
+  volledige_naam: string
+  aanhef: string
+  voornaam: string
+  tussenvoegsel: string
+  achternaam: string
+  voorletter: string
+  geslacht: string
+  email: string
+  telefoon: string
+  mobiel: string
+  linkedin: string
+  opmerkingen: string
 }
 
 /** Lege dossier-context (offerte zonder gekoppeld dossier). */
@@ -83,8 +115,12 @@ export const LEEG_DOSSIER: DossierContext = {
   calculator: '', projectleider: '', teamleider: '', werkvoorbereider: '', uitvoerder: '',
   controller: '',
   contactpersoon: '', contactpersoon_email: '', contactpersoon_telefoon: '',
+  contactpersoon_aanhef: '', contactpersoon_voornaam: '', contactpersoon_tussenvoegsel: '',
+  contactpersoon_achternaam: '', contactpersoon_voorletter: '', contactpersoon_geslacht: '',
+  contactpersoon_mobiel: '', contactpersoon_linkedin: '', contactpersoon_opmerkingen: '',
   klant_naam: '', klant_adres: '', klant_postcode: '', klant_plaats: '',
   klant_email: '', klant_telefoon: '', klant_kvk: '', klant_btw: '',
+  klant_betalingstermijn_dagen: '',
 }
 
 /** Eén BTW-tarief-groep met grondslag + BTW-bedrag (voor meerdere tarieven in één offerte). */
@@ -140,6 +176,9 @@ export interface RenderContext {
     is_intern: boolean
     betalingscondities: string
     betalingscondities_naam: string
+    termijnschema: string                 // termijnen tekstueel uitgeschreven (één per regel)
+    betalingstermijnen: TermijnContext[]   // loop-variant: {#offerte.betalingstermijnen}…{/}
+    heeft_termijnschema: boolean
   }
   klant: {
     naam: string
@@ -157,7 +196,9 @@ export interface RenderContext {
     contactpersoon_telefoon: string
     kvk: string
     btw: string
+    betalingstermijn_dagen: string   // aantal dagen betalen, uit de relatiegegevens
   }
+  contactpersoon: ContactpersoonContext
   bedrijf: BedrijfContext
   dossier: DossierContext
   secties: SectieContext[]
@@ -267,6 +308,15 @@ interface StelpostContext {
   totaal: string
   totaal_raw: string
   totaal_bedrag: string
+}
+
+/** Eén betalingstermijn uit het termijnschema van de gekozen betalingsconditie. */
+interface TermijnContext {
+  nummer: number           // 1-based volgnummer
+  percentage: string       // "50" (kaal), leeg als niet gezet
+  percentage_str: string   // "50%"
+  omschrijving: string     // vrije omschrijving van de termijn
+  regel: string            // volledige regel zoals in termijnschema (percentage + omschrijving)
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -487,6 +537,24 @@ export function buildRenderContext(
   const bedrijfsnaam = klant?.bedrijfsnaam ?? ''
   const postcode_plaats = [kPostcode, kPlaats].filter(Boolean).join(' ')
 
+  // Contactpersoon van de klant (uit de relaties-module via het dossier), zonder
+  // het privé-blok. De volledige naam valt terug op de losse offerte-contactpersoon.
+  const contactpersoon: ContactpersoonContext = {
+    heeft: !!(d.heeft && (d.contactpersoon || d.contactpersoon_email || d.contactpersoon_achternaam)),
+    volledige_naam: kContact,
+    aanhef: d.contactpersoon_aanhef,
+    voornaam: d.contactpersoon_voornaam,
+    tussenvoegsel: d.contactpersoon_tussenvoegsel,
+    achternaam: d.contactpersoon_achternaam,
+    voorletter: d.contactpersoon_voorletter,
+    geslacht: d.contactpersoon_geslacht,
+    email: d.contactpersoon_email,
+    telefoon: d.contactpersoon_telefoon,
+    mobiel: d.contactpersoon_mobiel,
+    linkedin: d.contactpersoon_linkedin,
+    opmerkingen: d.contactpersoon_opmerkingen,
+  }
+
   // BTW-uitsplitsing per tarief: groepeer alle niet-optionele regels op btw_pct.
   const grondslagPerTarief = new Map<number, number>()
   for (const s of sections) {
@@ -517,6 +585,21 @@ export function buildRenderContext(
   const betalingsconditie = (quote as any).betalingsconditie ?? null
   const betalingscondities_tekst: string = betalingsconditie?.tekst ?? ''
 
+  // Termijnschema: de termijnen van de gekozen betalingsconditie tekstueel
+  // uitgeschreven. `termijnen` is een JSONB-array [{ percentage, omschrijving }].
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ruweTermijnen: any[] = Array.isArray(betalingsconditie?.termijnen) ? betalingsconditie.termijnen : []
+  const betalingstermijnen: TermijnContext[] = ruweTermijnen.map((t, i) => {
+    const pct = t?.percentage != null && t.percentage !== '' ? String(t.percentage) : ''
+    const oms = (t?.omschrijving ?? '').toString().trim()
+    const pctStr = pct ? `${pct}%` : ''
+    // Regel: neem de omschrijving als die er is (bevat vaak al het percentage),
+    // anders "50% termijn". Nooit een lege regel.
+    const regel = oms || (pctStr ? `${pctStr} termijn` : `Termijn ${i + 1}`)
+    return { nummer: i + 1, percentage: pct, percentage_str: pctStr, omschrijving: oms, regel }
+  })
+  const termijnschema: string = betalingstermijnen.map(t => t.regel).join('\n')
+
   return {
     offerte: {
       nummer: quote.quote_nummer,
@@ -535,6 +618,9 @@ export function buildRenderContext(
       is_intern: isIntern,
       betalingscondities: betalingscondities_tekst,
       betalingscondities_naam: betalingsconditie?.naam ?? '',
+      termijnschema,
+      betalingstermijnen,
+      heeft_termijnschema: betalingstermijnen.length > 0,
     },
     klant: {
       naam: kNaam,
@@ -552,7 +638,9 @@ export function buildRenderContext(
       contactpersoon_telefoon: d.contactpersoon_telefoon || '',
       kvk: kKvk,
       btw: kBtw,
+      betalingstermijn_dagen: d.klant_betalingstermijn_dagen || '',
     },
+    contactpersoon,
     bedrijf,
     dossier,
     secties,

@@ -97,6 +97,7 @@ export async function updateOrganisatieGegevens(
     adres_postcode?: string | null
     adres_plaats?: string | null
     adres_land?: string | null
+    betalingstermijn_dagen?: number | null
     opmerkingen?: string | null
   }
 ): Promise<ActionResult> {

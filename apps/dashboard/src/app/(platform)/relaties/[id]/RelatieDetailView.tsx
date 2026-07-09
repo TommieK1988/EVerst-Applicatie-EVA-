@@ -157,6 +157,7 @@ function BasisgegevensBlok({ relatie }: { relatie: Relatie }) {
     adres_postcode: relatie.adres_postcode ?? '',
     adres_plaats: relatie.adres_plaats ?? '',
     adres_land: relatie.adres_land ?? 'Nederland',
+    betalingstermijn_dagen: relatie.betalingstermijn_dagen != null ? String(relatie.betalingstermijn_dagen) : '',
   })
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
@@ -175,6 +176,7 @@ function BasisgegevensBlok({ relatie }: { relatie: Relatie }) {
       adres_postcode: form.adres_postcode || null,
       adres_plaats: form.adres_plaats || null,
       adres_land: form.adres_land || null,
+      betalingstermijn_dagen: form.betalingstermijn_dagen.trim() === '' ? null : Number(form.betalingstermijn_dagen),
     })
     setBezig(false)
     if (!res.ok) { setFout(res.error); return }
@@ -229,6 +231,9 @@ function BasisgegevensBlok({ relatie }: { relatie: Relatie }) {
             <FormField label="Land" upper>
               <Input value={form.adres_land} onChange={set('adres_land')} />
             </FormField>
+            <FormField label="Betalingstermijn (dagen)" upper>
+              <Input type="number" inputMode="numeric" value={form.betalingstermijn_dagen} onChange={set('betalingstermijn_dagen')} placeholder="bijv. 30" />
+            </FormField>
           </FormRow>
           <div className="flex gap-2">
             <Button variant="primary" onClick={opslaan} disabled={bezig || !form.naam.trim()}>
@@ -249,6 +254,7 @@ function BasisgegevensBlok({ relatie }: { relatie: Relatie }) {
             [relatie.adres_postcode, relatie.adres_plaats].filter(Boolean).join('  '),
             relatie.adres_land !== 'Nederland' ? relatie.adres_land : null,
           ].filter(Boolean).join(', ') || null} />
+          <Rij label="Betalingstermijn" waarde={relatie.betalingstermijn_dagen != null ? `${relatie.betalingstermijn_dagen} dagen` : null} />
         </div>
       )}
     </Blok>

@@ -9,7 +9,6 @@ import {
   maakBetalingsconditie,
   updateBetalingsconditie,
   verwijderBetalingsconditie,
-  setStandaardBetalingsconditie,
 } from './actions'
 
 const LEEG_TERMIJN: Termijn = { omschrijving: '', percentage: 0 }
@@ -116,7 +115,7 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
         const id = await maakBetalingsconditie({ naam: edit.naam, termijnen: edit.termijnen })
         setCondities(prev => [...prev, {
           id, naam: edit.naam, termijnen: edit.termijnen,
-          is_standaard: false, volgorde: 0, created_at: new Date().toISOString(),
+          volgorde: 0, created_at: new Date().toISOString(),
         }])
         toast.success('Aangemaakt')
       }
@@ -141,16 +140,6 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
     }
   }
 
-  async function setStandaard(id: string) {
-    try {
-      await setStandaardBetalingsconditie(id)
-      setCondities(prev => prev.map(c => ({ ...c, is_standaard: c.id === id })))
-      startT(() => router.refresh())
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {condities.length === 0 && !edit.open && (
@@ -161,15 +150,6 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
         <Card key={c.id}>
           <CardBody>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: c.termijnen.length > 0 ? 10 : 0 }}>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setStandaard(c.id)}
-                title={c.is_standaard ? 'Standaard conditie' : 'Instellen als standaard'}
-                className={c.is_standaard ? 'text-amber-500' : 'text-neutral-400'}
-              >
-                {c.is_standaard ? '★' : '☆'}
-              </Button>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)', flex: 1 }}>{c.naam}</span>
               <Button variant="ghost" size="sm" onClick={() => openBewerk(c)}>Bewerken</Button>
               <Button variant="ghost" size="sm" onClick={() => verwijder(c.id, c.naam)}>Verwijder</Button>

@@ -57,7 +57,7 @@ export default function QuoteConditionsCard({
               <option value="">— Geen betalingsconditie —</option>
               {betalingscondities.map(b => (
                 <option key={b.id} value={b.id}>
-                  {b.naam}{b.is_standaard ? ' ★' : ''}
+                  {b.naam}
                 </option>
               ))}
             </select>
