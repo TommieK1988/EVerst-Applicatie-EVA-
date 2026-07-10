@@ -63,7 +63,16 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
                   <TD right>{fmtUren(r.geboekte_uren)}</TD>
                   <TD right accent={r.geboekte_kosten > 0}>{fmt(r.geboekte_kosten)}</TD>
                   <TD right>{fmtPct(r.standopname_pct)}</TD>
-                  <TD right>{r.prognose_uren_100 != null ? fmtUren(r.prognose_uren_100) : '—'}</TD>
+                  <TD
+                    right
+                    kleur={
+                      r.prognose_uren_100 != null && r.prognose_uren_100 > r.prognose_uren
+                        ? ROOD
+                        : undefined
+                    }
+                  >
+                    {r.prognose_uren_100 != null ? fmtUren(r.prognose_uren_100) : '—'}
+                  </TD>
                   <TD right>{r.prognose_kosten_100 != null ? fmt(r.prognose_kosten_100) : '—'}</TD>
                   <TD right kleur={KLEUR_SALDO(r.uren_saldo)}>
                     {fmtUren(r.uren_saldo)}
