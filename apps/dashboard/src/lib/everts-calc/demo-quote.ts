@@ -22,6 +22,10 @@ import type { BedrijfContext, DossierContext } from './quote-renderer'
 const NU = new Date()
 const OVER_30_DAGEN = new Date(NU.getTime() + 30 * 24 * 60 * 60 * 1000)
 
+/** Kleine demo-foto (groen "FOTO"-tegeltje) zodat de preview de {%foto}-tag toont. */
+const DEMO_FOTO =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACCCAYAAAADm4eUAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANKSURBVHhe7dkxTtxAGIZhbpL7pOUg9JG4AxInoKbgDNDScwAkKg7hCAIsjMefx/ZmV9p5RnqayGP/xbyOgbNff34PQN1Z+Q/AjkAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgOLFAroaHYd16uC3vVXH7WG7brde74by8vuL8/qXcuWzNPWcPM7IjkI+VAll2qB+Hy8o91t2rsiYO+bL75hnZEcjHmgrk8qm8sm1N3W/ZQa6sSiD7npEdgXys2mFZe/D+rZfh5np8z30H8j9mZOfEA9nwKTH1Lf90Nb72+m54Lq97W5W3/aTyebXnlMo9n6u2dx8zdkggVRfDzeuPG72v2v8y39Xe5nN7vpSHvXbIfzjCjB0SSE3lbft8fzG+bqRyaFvf0EsDOcaMHRJIxfjnhPb7rN67MJDVz9m4tzcnHkjLGh+O0WfIzGH9YfRmb/xBeGEgR5mxQwLZdyCVGZq+8Q8ZyNoZOySQhkDavu2nZ2g6fBsDOciMHRJIQyBzh3VuhqbDtzGQuet/Wjljh048kPHhbzE6fEt+y7P2+35rIIeYsUMCqdjyW57VexcGsvo5G/f2RiA1ozds6zd++fwFb/aFgRxlxg4JpKryx7SG7/TRZ0/Dni9LAznGjB0SyJTywH6u2tu28jZ/X7Vrp5TPmw2ksudz1Z67jxk7JJCg9rZtXwt/8C0Pe0sgh56xQwKZsfYALv5sWRnIm4PN2CGBNBj/1ietlc/cEMibg8zYIYEsUR7i72vrt3x574WBTN7n+9o6Y4dOLBDYL4FAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFAIBAIBAKBQCAQCAQCgUAgEAgEAoFA8BeDTWXzS/6UaQAAAABJRU5ErkJggg=='
+
 function regel(
   section_id: string,
   volgorde: number,
@@ -149,6 +153,7 @@ export function buildDemoQuote(): Quote {
         hoeveelheid: 48.5, eenheid: 'm²', eenheidsprijs: 27.5, btw_pct: 9,
         opmerking: 'Twee lagen dekkend op basis van hoogglans lakverf.',
         schilderbehandeling: 'Schuren, plamuren, gronden en 2× aflakken',
+        werkomschrijving_afbeeldingen: [DEMO_FOTO],
         kostprijs_pe: 18.2, uren_pe: 0.35,
       }),
       regel('demo-sec-1', 1, {
