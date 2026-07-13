@@ -469,6 +469,54 @@ export type Bouw7QuotationDetail = {
   /** W&R-opslag als percentage over de regelsom, bv. "5". */
   profitAndRisk?: string | number | null
   profitAndRiskVatTariff?: Bouw7VatTariff | null
+  /** Layout-identifier (string, bv. "default"). */
+  layout?: string | null
+}
+
+/** Bouw7-offertestatus (GET /organization/quotation-statuses, of afgeleid uit /list/quotations). */
+export type Bouw7QuotationStatus = { id: number; name?: string }
+
+/** Eén (samenvattings)regel binnen een te schrijven offertehoofdstuk. */
+export type Bouw7QuotationLineWrite = {
+  description?: string
+  quantity?: number | string
+  price?: number | string
+  unit?: string
+  /** BTW-tarief-referentie (zelfde property als de leeskant: `vatTariffObject`). */
+  vatTariffObject?: { id: number }
+  /** Optionele regel — telt niet mee in de aanneemsom. */
+  option?: boolean
+}
+
+/** Eén hoofdstuk (chapter) binnen een te schrijven offerte. */
+export type Bouw7QuotationChapterWrite = {
+  name?: string
+  hasPrice?: boolean
+  additionalWork?: boolean
+  lines?: Bouw7QuotationLineWrite[]
+}
+
+/**
+ * Body voor `POST /quotation` (create/update — upsert op `id`). Alleen de velden die EVA schrijft.
+ * Zie WRITE-ENDPOINTS.md §2. Verplicht bij create: `subject`, `employee{id}`, `contact{id}`,
+ * `quotationStatus{id}`, `quotationDate`, `language`, `layout`. Het (samenvattings)bedrag zit in
+ * `chapters[].lines[]`; Bouw7 leidt het offertetotaal daar zelf uit af (geen los totaalveld).
+ */
+export type Bouw7QuotationCreate = {
+  id?: number
+  subject: string
+  /** EVA-offertenummer → Bouw7-offertenummerveld (zie discovery: honoreert Bouw7 een meegegeven nummer?). */
+  quotationNumber?: string
+  reference?: string
+  quotationDate?: string
+  language?: string
+  /** Layout is een string-identifier (bv. "default"), GEEN object met id. */
+  layout?: string
+  employee?: { id: number }
+  contact?: { id: number }
+  project?: { id: number }
+  quotationStatus?: { id: number }
+  chapters?: Bouw7QuotationChapterWrite[]
 }
 
 /**

@@ -44,7 +44,7 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Pro
         to, cc, subject, bodyHtml: body.replace(/\n/g, '<br>'),
       })
       if (res.ok) {
-        toast.success(`Offerte verzonden · SharePoint: ${res.sharepoint}`)
+        toast.success(`Offerte verzonden · SharePoint: ${res.sharepoint} · Bouw7: ${res.bouw7}`)
         setOpen(false)
         onDone?.()
       } else {

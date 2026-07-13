@@ -78,7 +78,7 @@ function splitAdressen(v: string | undefined): string[] {
 export async function verstuurOfferte(
   quoteId: string,
   input: { to: string; cc?: string; subject: string; bodyHtml: string },
-): Promise<{ ok: true; sharepoint: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; sharepoint: string; bouw7: string } | { ok: false; error: string }> {
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd.' }
 
@@ -144,6 +144,18 @@ export async function verstuurOfferte(
     await bevriesCalculatieVoorOfferte(quoteId)
   } catch { /* niet blokkerend voor de verzending */ }
 
+  // ── Offerte als Bouw7-offerte registreren (POST /quotation) ─────────────────
+  // Best-effort: schrijft de kopgegevens + totaal excl. BTW als samenvattingsregel weg naar het
+  // gekoppelde Bouw7-project. Faalt nooit de verzending; resultaat gaat mee terug voor een toast.
+  let bouw7 = 'niet naar Bouw7 geschreven'
+  try {
+    const { stuurOfferteNaarBouw7 } = await import('@/lib/dossiers/bouw7-offerte')
+    const res = await stuurOfferteNaarBouw7(quoteId)
+    bouw7 = res.ok ? 'naar Bouw7 geschreven' : res.error
+  } catch (e) {
+    bouw7 = e instanceof Error ? e.message : 'Bouw7-offerte schrijven mislukt'
+  }
+
   // ── SharePoint-archief (fail-soft) ──────────────────────────────────────────
   let sharepoint = 'niet gearchiveerd'
   // Dossier-UUID bepalen: directe koppeling of via het calc-project.
@@ -168,5 +180,5 @@ export async function verstuurOfferte(
 
   revalidatePath(`/quotes/${quoteId}`)
   revalidatePath(`/everts-calc/quotes/${quoteId}`)
-  return { ok: true, sharepoint }
+  return { ok: true, sharepoint, bouw7 }
 }
