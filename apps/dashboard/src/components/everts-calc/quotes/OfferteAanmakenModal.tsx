@@ -99,12 +99,22 @@ export default function OfferteAanmakenModal({
 
       // Zorg dat de calculatie een nummer heeft (kan nog ontbreken als het
       // reserve-effect nog niet klaar was) zodat offerte en calculatie hetzelfde
-      // nummer krijgen.
+      // nummer krijgen, en dat de versie-velden geïnitialiseerd zijn (v1, root =
+      // zichzelf) zodat de versiereeks vanaf de eerste offerte klopt.
       let offerteNummer = actiefScenario?.nummer ?? null
-      if (actiefScenario && !offerteNummer) {
-        const { reserveerOfferteNummer } = await import('@/app/(platform)/everts-calc/actions/quotes')
-        offerteNummer = await reserveerOfferteNummer()
-        if (offerteNummer) slaScenarioOp({ ...actiefScenario, nummer: offerteNummer })
+      const scenarioVersie = actiefScenario?.versie ?? 1
+      if (actiefScenario) {
+        const patch: Record<string, unknown> = {}
+        if (!offerteNummer) {
+          const { reserveerOfferteNummer } = await import('@/app/(platform)/everts-calc/actions/quotes')
+          offerteNummer = await reserveerOfferteNummer()
+          if (offerteNummer) patch.nummer = offerteNummer
+        }
+        if (actiefScenario.versie == null) patch.versie = 1
+        if (actiefScenario.versie_root_id == null) patch.versie_root_id = actiefScenario.id
+        if (Object.keys(patch).length > 0) {
+          slaScenarioOp({ ...actiefScenario, ...patch })
+        }
       }
 
       const alleGroepen: Groep[] = actiefScenario ? getGroepen(actiefScenario.id) : getGroepen()
@@ -156,6 +166,8 @@ export default function OfferteAanmakenModal({
         scenarioId: actiefScenario?.id ?? null,
         // Offerte neemt het nummer van de calculatie over (leeg → DB genereert er een).
         quoteNummer: offerteNummer,
+        // Offerte erft ook de versie van de calculatie.
+        versie: scenarioVersie,
         dossierId,
         projectNaam,
         clientNaam,

@@ -96,9 +96,16 @@ export interface Scenario {
   id: string
   project_id: string
   naam: string
-  /** Offertenummer (OFT-YYYY-NNN) — gereserveerd bij aanmaken van de calculatie;
-   *  de offerte die ervan gemaakt wordt neemt dit nummer over. */
+  /** Offertenummer (OFT-YYYY-NNN, met -vN bij revisies) — gereserveerd bij aanmaken
+   *  van de calculatie; de offerte die ervan gemaakt wordt neemt dit nummer over. */
   nummer?: string | null
+  /** Familie-anker: id van de eerste calculatie (v1) in de versiereeks. Leeg =
+   *  legacy/1-versie-familie (wordt behandeld als root = zichzelf). */
+  versie_root_id?: string | null
+  /** Versienummer binnen de familie (1 = origineel). Leeg = 1. */
+  versie?: number
+  /** Gezet bij verzenden van de offerte: de calculatie is dan onveranderbaar. */
+  bevroren_op?: string | null
   is_standaard: boolean
   opslag_algemene_kosten: number   // percentage bijv. 8
   opslag_winst_risico: number      // percentage bijv. 10

@@ -11,7 +11,8 @@ import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
-import { getScenarios, kopieerScenario } from '@/lib/everts-calc/local-store'
+import { getScenarios } from '@/lib/everts-calc/local-store'
+import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import type { Scenario } from '@/lib/everts-calc/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
@@ -54,11 +55,12 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     setCalcTick(t => t + 1)
     if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
   }
-  const handleKopieer = (sid: string) => {
-    const kopie = kopieerScenario(sid)
-    if (!kopie) { toast.error('Kopiëren mislukt'); return }
-    toast.success('Calculatie gekopieerd')
-    handleScenariosGewijzigd(kopie.id)
+  const handleReviseer = async (sid: string) => {
+    if (!projectId) return
+    const nieuw = await reviseerCalculatie(projectId, sid)
+    if (!nieuw) { toast.error('Reviseren mislukt'); return }
+    toast.success('Nieuwe versie aangemaakt')
+    handleScenariosGewijzigd(nieuw.id)
   }
 
   async function aanmaken() {
@@ -93,7 +95,6 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
           quoteId={offerteId}
           dossierId={dossierId}
           onTerug={() => setOfferteId(null)}
-          onOpenOfferte={setOfferteId}
         />
       </div>
     )
@@ -163,7 +164,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
       readOnly={readOnly}
       onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
       onOpenOfferte={setOfferteId}
-      onKopieer={handleKopieer}
+      onReviseer={handleReviseer}
       headerExtra={
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>

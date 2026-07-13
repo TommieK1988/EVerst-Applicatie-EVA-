@@ -10,65 +10,12 @@ import OfferteDetail from './OfferteDetail'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 import { koppelDossierAanProject } from '@/lib/dossiers/actions'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
-import { getScenarios, kopieerScenario, hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-import { Card, CardHeader, CardBody, Badge, Button } from '@/components/ui'
-import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
+import { Button } from '@/components/ui'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
-
-const TYPE_LABELS: Record<string, string> = {
-  verkoopofferte:     'Offerte',
-  interne_calculatie: 'Interne begroting',
-}
-const STATUS_LABELS: Record<string, string> = {
-  concept: 'Concept', verzonden: 'Definitief',
-}
-const STATUS_TONE: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
-  concept: 'neutral', verzonden: 'success',
-}
-
-/** Compacte lijst van aan het dossier gekoppelde offertes/calculaties. */
-function OffertesLijst({ rijen, onOpen }: { rijen: DossierQuoteRij[]; onOpen: (id: string) => void }) {
-  if (rijen.length === 0) return null
-  return (
-    <Card className="mb-4">
-      <CardHeader>Offertes &amp; calculaties</CardHeader>
-      <CardBody>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <TH>Nummer</TH><TH>Titel</TH><TH>Type</TH><TH>Status</TH>
-              <TH>Datum</TH><TH right>Excl. BTW</TH><TH right>Incl. BTW</TH>
-            </tr>
-          </thead>
-          <tbody>
-            {rijen.map(r => (
-              <tr
-                key={r.id}
-                onClick={() => onOpen(r.id)}
-                className="cursor-pointer hover:bg-neutral-50"
-                title="Offerte openen"
-              >
-                <TD vet>{r.quote_nummer}</TD>
-                <TD>{r.titel}</TD>
-                <TD>
-                  {r.meerwerk_regel_id
-                    ? <Badge tone="brand">Meerwerk</Badge>
-                    : <Badge tone="neutral">{TYPE_LABELS[r.type] ?? r.type}</Badge>}
-                </TD>
-                <TD><Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{STATUS_LABELS[r.status] ?? r.status}</Badge></TD>
-                <TD>{fmtDatum(r.datum)}</TD>
-                <TD right>{fmt(r.subtotaal_ex_btw, true)}</TD>
-                <TD right vet>{fmt(r.totaal_inc_btw, true)}</TD>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardBody>
-    </Card>
-  )
-}
 
 const MAP_KEY = 'aanvraag_project_ids'
 
@@ -138,6 +85,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
   // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const [toonCalculatie, setToonCalculatie]         = useState(false)
   const [calcTick, setCalcTick]                     = useState(0)
   const [gehydrateerd, setGehydrateerd]             = useState(false)
 
@@ -159,21 +107,29 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     return () => { actief = false }
   }, [projectId])
 
-  // Lokale scenario's lezen — na hydratie en na lokale wijzigingen (kopiëren e.d.).
+  // Lokale scenario's lezen — na hydratie en na lokale wijzigingen (reviseren e.d.).
   useEffect(() => {
     if (!projectId || !gehydrateerd) { setScenarios([]); return }
     setScenarios(getScenarios(projectId))
   }, [projectId, gehydrateerd, calcTick])
 
+  // Verse aanvraag zonder calculatie → meteen de calculatie-omgeving in om de
+  // begroting te bouwen (geen lege versie-kiezer). Zodra er ≥1 versie is landt de
+  // tab op de versie-kiezer.
+  useEffect(() => {
+    if (projectId && gehydrateerd && scenarios.length === 0) setToonCalculatie(true)
+  }, [projectId, gehydrateerd, scenarios.length])
+
   const handleScenariosGewijzigd = (nieuwId?: string) => {
     setCalcTick(t => t + 1)
-    if (nieuwId) setSelectedScenarioId(nieuwId)
+    if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
   }
-  const handleKopieer = (sid: string) => {
-    const kopie = kopieerScenario(sid)
-    if (!kopie) { toast.error('Kopiëren mislukt'); return }
-    toast.success('Calculatie gekopieerd')
-    handleScenariosGewijzigd(kopie.id)
+  const handleReviseer = async (sid: string) => {
+    if (!projectId) return
+    const nieuw = await reviseerCalculatie(projectId, sid)
+    if (!nieuw) { toast.error('Reviseren mislukt'); return }
+    toast.success('Nieuwe versie aangemaakt')
+    handleScenariosGewijzigd(nieuw.id)
   }
 
   async function handleKoppelen() {
@@ -205,7 +161,6 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
           quoteId={offerteId}
           dossierId={aanvraagId}
           onTerug={() => setOfferteId(null)}
-          onOpenOfferte={setOfferteId}
         />
       </div>
     )
@@ -260,10 +215,9 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     )
   }
 
-  const meerdere = scenarios.length > 1
-
-  // Meerdere calculaties én geen specifieke gekozen → overzichtstabel.
-  if (meerdere && !selectedScenarioId) {
+  // Landt op de versie-kiezer zodra er ≥1 calculatie is en de omgeving niet expliciet
+  // geopend is. Een verse aanvraag (0 versies) gaat via het effect direct de editor in.
+  if (scenarios.length > 0 && !toonCalculatie) {
     return (
       <CalculatiesTabel
         projectId={projectId}
@@ -271,26 +225,22 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
         rijen={rijen}
         tick={calcTick}
         readOnly={readOnly}
-        onOpenCalculatie={setSelectedScenarioId}
+        onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
         onOpenOfferte={setOfferteId}
-        onKopieer={handleKopieer}
+        onReviseer={handleReviseer}
       />
     )
   }
 
-  // Eén calculatie (of een gekozen calculatie) → de calculatie-omgeving.
+  // Een gekozen (of nieuwe) calculatie → de calculatie-omgeving.
   return (
     <div>
-      {meerdere && selectedScenarioId ? (
-        <div className="px-8 pt-4">
-          <Button variant="ghost" onClick={() => setSelectedScenarioId(null)}>
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Terug naar calculaties
-          </Button>
-        </div>
-      ) : (
-        <OffertesLijst rijen={rijen} onOpen={setOfferteId} />
-      )}
+      <div className="px-8 pt-4">
+        <Button variant="ghost" onClick={() => { setToonCalculatie(false); setSelectedScenarioId(null) }}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Terug naar versies
+        </Button>
+      </div>
       <CalculatieHoofdscherm
         projectId={projectId}
         projectNaam={naam}
