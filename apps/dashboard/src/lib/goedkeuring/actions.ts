@@ -308,14 +308,16 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
     : null
 
   await db.from('notificaties').insert({
-    user_id: authUserId,
-    type:    'algemeen',
-    titel:   isWb ? 'Werkbegroting goedgekeurd' : 'Offerte goedgekeurd',
-    body:    dossierTitel
+    user_id:      authUserId,
+    type:         'algemeen',
+    titel:        isWb ? 'Werkbegroting goedgekeurd' : 'Offerte goedgekeurd',
+    body:         dossierTitel
       ? `${isWb ? 'De werkbegroting' : 'De offerte'} van ${dossierTitel} is goedgekeurd.`
       : `${isWb ? 'De werkbegroting' : 'De offerte'} is goedgekeurd.`,
     url,
-    gelezen: false,
+    dossier_id:   g.dossier_id ?? null,
+    dossier_naam: dossierTitel,
+    gelezen:      false,
   })
 }
 

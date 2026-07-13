@@ -3,10 +3,12 @@ import React from 'react'
 import Sidebar from './Sidebar'
 import TopBar  from './TopBar'
 import IdleLogout from './IdleLogout'
+import NotificatieToasts from './NotificatieToasts'
 import { GlobalSearchProvider } from './GlobalSearch'
 import { BreadcrumbProvider } from '@/lib/breadcrumb-context'
 import type { Tweaks } from './types'
 import type { RechtenSet } from '@everts/database/platform-types'
+import type { Notificatie } from '@/app/(platform)/notificaties/actions'
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme:               'light',
@@ -26,16 +28,17 @@ function loadTweaks(): Tweaks {
 }
 
 type Props = {
-  children:          React.ReactNode
-  userName?:         string
-  userInitials?:     string
-  userSub?:          string
-  userFotoUrl?:      string | null
-  aantalOngelezen?:  number
-  rechten?:          RechtenSet
+  children:              React.ReactNode
+  userName?:             string
+  userInitials?:         string
+  userSub?:              string
+  userFotoUrl?:          string | null
+  aantalOngelezen?:      number
+  ongelezenNotificaties?: Notificatie[]
+  rechten?:              RechtenSet
 }
 
-export default function PlatformShell({ children, userName, userInitials, userSub, userFotoUrl, aantalOngelezen = 0, rechten }: Props) {
+export default function PlatformShell({ children, userName, userInitials, userSub, userFotoUrl, aantalOngelezen = 0, ongelezenNotificaties = [], rechten }: Props) {
   const [tweaks,    setTweaks]    = React.useState<Tweaks>(TWEAK_DEFAULTS)
   const [collapsed, setCollapsed] = React.useState(true)
   const [hovering,  setHovering]  = React.useState(false)
@@ -108,6 +111,8 @@ export default function PlatformShell({ children, userName, userInitials, userSu
           {children}
         </main>
       </div>
+
+      <NotificatieToasts notificaties={ongelezenNotificaties} />
     </div>
     </GlobalSearchProvider>
     </BreadcrumbProvider>

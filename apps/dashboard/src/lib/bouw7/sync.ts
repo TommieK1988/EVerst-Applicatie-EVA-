@@ -1765,9 +1765,9 @@ async function verwerkDebiteurTakenEnReminders(supabase: any, nu: Date, vandaag:
     projectleider_id: string | null; task_id: string | null; laatste_reminder_op: string | null
   }
 
-  async function notify(userIds: string[], titel: string, body: string) {
+  async function notify(userIds: string[], titel: string, body: string, dossierNaam?: string | null) {
     for (const uid of userIds) {
-      await supabase.from('notificaties').insert({ user_id: uid, type: 'debiteur', titel, body, url: '/facturen', gelezen: false })
+      await supabase.from('notificaties').insert({ user_id: uid, type: 'debiteur', titel, body, url: '/facturen', dossier_naam: dossierNaam ?? null, gelezen: false })
     }
   }
 
@@ -1797,16 +1797,18 @@ async function verwerkDebiteurTakenEnReminders(supabase: any, nu: Date, vandaag:
       }
       await supabase.from('debiteuren').update({ task_id: taak.id }).eq('id', d.id)
 
+      const debNaam = [d.factuurnummer, d.klant_naam].filter(Boolean).join(' — ') || null
       const body = `Factuur ${d.factuurnummer ?? ''} (${d.klant_naam ?? ''}) is meer dan 60 dagen te laat. Vul de verplichte opvolging in.`
-      if (plAuth) await notify([plAuth], 'Debiteur >60 dagen te laat', body)
-      else await notify(administratieAuthIds, 'Onbeheerde debiteur >60 dagen te laat', `${body} (geen projectleider gekoppeld)`)
+      if (plAuth) await notify([plAuth], 'Debiteur >60 dagen te laat', body, debNaam)
+      else await notify(administratieAuthIds, 'Onbeheerde debiteur >60 dagen te laat', `${body} (geen projectleider gekoppeld)`, debNaam)
     }
 
     // 2. Reminder zodra de opvolgdatum is verstreken (dedupe via laatste_reminder_op).
     if (d.opvolgdatum && d.opvolgdatum < vandaag && (!d.laatste_reminder_op || d.laatste_reminder_op < d.opvolgdatum)) {
       const ontvangers = plAuth ? [plAuth] : administratieAuthIds
       await notify(ontvangers, 'Opvolgdatum debiteur verstreken',
-        `De opvolgdatum (${d.opvolgdatum}) voor factuur ${d.factuurnummer ?? ''} (${d.klant_naam ?? ''}) is verstreken.`)
+        `De opvolgdatum (${d.opvolgdatum}) voor factuur ${d.factuurnummer ?? ''} (${d.klant_naam ?? ''}) is verstreken.`,
+        [d.factuurnummer, d.klant_naam].filter(Boolean).join(' — ') || null)
       await supabase.from('debiteuren').update({ laatste_reminder_op: vandaag }).eq('id', d.id)
     }
   }

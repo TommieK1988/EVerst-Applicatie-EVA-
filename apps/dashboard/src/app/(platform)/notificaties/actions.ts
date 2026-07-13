@@ -9,6 +9,8 @@ export type Notificatie = {
   titel: string
   body: string | null
   url: string | null
+  dossier_id: string | null
+  dossier_naam: string | null
   gelezen: boolean
   aangemaakt_op: string
 }
@@ -43,6 +45,28 @@ export async function getNotificaties(limit = 10): Promise<{ notificaties: Notif
   }
 }
 
+/** Alleen de ongelezen meldingen (voor de auto-popup rechtsboven). */
+export async function getOngelezenNotificaties(limit = 8): Promise<Notificatie[]> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('notificaties')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('gelezen', false)
+      .order('aangemaakt_op', { ascending: false })
+      .limit(limit)
+
+    return (data ?? []) as Notificatie[]
+  } catch {
+    return []
+  }
+}
+
 export async function markeerAlsGelezen(id: string): Promise<void> {
   const admin = createAdminClient()
   await admin.from('notificaties').update({ gelezen: true }).eq('id', id)
@@ -64,6 +88,8 @@ export async function maakNotificatie(input: {
   titel: string
   body?: string
   url?: string
+  dossier_id?: string | null
+  dossier_naam?: string | null
 }): Promise<void> {
   const admin = createAdminClient()
   await admin.from('notificaties').insert({
@@ -72,6 +98,8 @@ export async function maakNotificatie(input: {
     titel:        input.titel,
     body:         input.body ?? null,
     url:          input.url  ?? null,
+    dossier_id:   input.dossier_id   ?? null,
+    dossier_naam: input.dossier_naam ?? null,
     gelezen:      false,
   })
 }

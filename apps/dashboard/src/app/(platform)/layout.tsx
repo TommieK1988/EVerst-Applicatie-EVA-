@@ -3,6 +3,7 @@ import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
 import MobileRedirect from '@/components/mobiel/MobileRedirect'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
+import { getOngelezenNotificaties } from '@/app/(platform)/notificaties/actions'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -25,10 +26,11 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     }
   }
 
-  /* Medewerker-record + effectieve rechten van de ingelogde gebruiker */
-  const [medewerker, aantalOngelezen] = await Promise.all([
+  /* Medewerker-record + ongelezen-teller + ongelezen-lijst (voor auto-popup) parallel */
+  const [medewerker, aantalOngelezen, ongelezenNotificaties] = await Promise.all([
     getCurrentMedewerker(),
     telOngelezen(),
+    getOngelezenNotificaties(8),
   ])
   const rechten = await getEffectieveRechten(medewerker)
 
@@ -54,6 +56,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       userSub={userSub}
       userFotoUrl={medewerker?.foto_url}
       aantalOngelezen={aantalOngelezen}
+      ongelezenNotificaties={ongelezenNotificaties}
       rechten={rechten}
     >
       <MobileRedirect />

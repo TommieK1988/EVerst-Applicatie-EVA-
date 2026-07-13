@@ -2541,6 +2541,8 @@ export type Database = {
         Row: {
           aangemaakt_op: string
           body: string | null
+          dossier_id: string | null
+          dossier_naam: string | null
           gelezen: boolean
           id: string
           titel: string
@@ -2551,6 +2553,8 @@ export type Database = {
         Insert: {
           aangemaakt_op?: string
           body?: string | null
+          dossier_id?: string | null
+          dossier_naam?: string | null
           gelezen?: boolean
           id?: string
           titel: string
@@ -2561,6 +2565,8 @@ export type Database = {
         Update: {
           aangemaakt_op?: string
           body?: string | null
+          dossier_id?: string | null
+          dossier_naam?: string | null
           gelezen?: boolean
           id?: string
           titel?: string

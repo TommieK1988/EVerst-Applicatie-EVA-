@@ -10,12 +10,11 @@ const TYPE_ICOON: Record<string, string> = {
   algemeen:            '🔔',
 }
 
-function tijdGeleden(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000
-  if (diff < 60)    return 'zojuist'
-  if (diff < 3600)  return `${Math.floor(diff / 60)} min geleden`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} uur geleden`
-  return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+function datumTijd(iso: string): string {
+  const d = new Date(iso)
+  const datum = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+  const tijd  = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+  return `${datum} · ${tijd}`
 }
 
 type Props = {
@@ -183,16 +182,16 @@ export default function NotificatiesDropdown({ aantalOngelezen: initialCount }: 
                   {TYPE_ICOON[n.type] ?? '🔔'}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: n.gelezen ? 400 : 600, color: 'var(--fg)', lineHeight: 1.3 }}>
+                  <div style={{ fontSize: 13, fontWeight: n.gelezen ? 500 : 700, color: 'var(--fg)', lineHeight: 1.3 }}>
                     {n.titel}
                   </div>
-                  {n.body && (
-                    <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 2, lineHeight: 1.4 }}>
-                      {n.body}
+                  {(n.dossier_naam ?? n.body) && (
+                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg-soft)', marginTop: 2, lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {n.dossier_naam ?? n.body}
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
-                    {tijdGeleden(n.aangemaakt_op)}
+                  <div style={{ fontSize: 10.5, color: 'var(--fg-muted)', marginTop: 4 }}>
+                    {datumTijd(n.aangemaakt_op)}
                   </div>
                 </div>
                 {!n.gelezen && (
