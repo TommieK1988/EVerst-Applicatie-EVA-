@@ -63,6 +63,12 @@ const LEGE_PIXEL = Buffer.from(
 const LOGO_MAX = { w: 240, h: 120 }
 /** Max afmetingen voor werkomschrijving-foto's (groter dan een logo). */
 const PHOTO_MAX = { w: 480, h: 360 }
+/**
+ * Kleiner max-kader voor foto's binnen een tabelcel (tag {%foto_klein}). 3,7 inch
+ * breed @96dpi, zodat de foto in een tabelkolom past en niet wordt afgesneden.
+ * Zelfde 4:3-verhouding als PHOTO_MAX.
+ */
+const PHOTO_MAX_KLEIN = { w: 355, h: 266 }
 
 interface ExtraImages {
   /** Handtekening-bytes (optioneel; tag {%handtekening}). */
@@ -141,13 +147,23 @@ export async function renderQuoteDocx(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getSize(img: Buffer, tagValue: any, tagName?: string) {
       if (!tagValue) return [1, 1]
-      const max = tagName === 'foto' ? PHOTO_MAX : LOGO_MAX
+      const max =
+        tagName === 'foto' ? PHOTO_MAX : tagName === 'foto_klein' ? PHOTO_MAX_KLEIN : LOGO_MAX
       try {
         const dim = imageSize(new Uint8Array(img))
-        return fitSize(dim.width ?? max.w, dim.height ?? max.h, max)
+        // Alleen schalen als beide werkelijke afmetingen bekend zijn — dan blijft
+        // de verhouding gegarandeerd behouden. Bij onbekende afmeting NIET naar het
+        // max-kader forceren (dat zou de foto uitrekken/vervormen).
+        if (dim.width && dim.height) {
+          return fitSize(dim.width, dim.height, max)
+        }
       } catch {
-        return [max.w, max.h]
+        // valt door naar de veilige fallback hieronder
       }
+      // Verhouding onbekend: kies een vierkant binnen de max zodat de foto niet
+      // actief naar een afwijkende verhouding wordt uitgerekt.
+      const veilig = Math.min(max.w, max.h)
+      return [veilig, veilig]
     },
   })
 
@@ -207,8 +223,17 @@ function dottedTagParser(tag: string): {
 }
 
 /** Schaalt (w,h) zodat het binnen `max` past, met behoud van beeldverhouding. */
+/**
+ * Schaalt (w×h) proportioneel zodat het binnen `max` past. Er wordt nooit
+ * vergroot (ratio ≤ 1), nooit bijgesneden en de verhouding wordt nooit gewijzigd:
+ * dezelfde schaalfactor gaat op breedte én hoogte. Bij ongeldige invoer een
+ * vierkant binnen de max i.p.v. het volledige (mogelijk vervormende) kader.
+ */
 function fitSize(w: number, h: number, max: { w: number; h: number }): [number, number] {
-  if (w <= 0 || h <= 0) return [max.w, max.h]
+  if (w <= 0 || h <= 0) {
+    const veilig = Math.min(max.w, max.h)
+    return [veilig, veilig]
+  }
   const ratio = Math.min(max.w / w, max.h / h, 1)
   return [Math.round(w * ratio), Math.round(h * ratio)]
 }
