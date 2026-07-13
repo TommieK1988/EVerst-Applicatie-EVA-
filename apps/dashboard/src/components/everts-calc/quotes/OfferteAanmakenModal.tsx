@@ -177,6 +177,10 @@ export default function OfferteAanmakenModal({
         // Keuzes uit het Offerte-instellingen-blok (scenario).
         betalingsconditieId: actiefScenario?.betalingsconditie_id ?? null,
         voorwaardenId: actiefScenario?.algemene_voorwaarden_id ?? null,
+        // Vrije offerte-teksten van de calculatie (leeg → standaardsjabloon).
+        voorwaardenTekst: actiefScenario?.voorwaarden_tekst ?? null,
+        uitsluitingenTekst: actiefScenario?.uitsluitingen_tekst ?? null,
+        opmerkingenTekst: actiefScenario?.opmerkingen_tekst ?? null,
         importRegels,
         structuur,
       })

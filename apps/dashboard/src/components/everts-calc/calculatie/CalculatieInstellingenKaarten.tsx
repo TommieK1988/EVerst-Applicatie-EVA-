@@ -25,6 +25,12 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
+  // Standaard offerte-sjabloon (quote_templates) — bron voor "Laden uit standaardsjabloon".
+  const [standaardSjabloon, setStandaardSjabloon]   = useState<{
+    standaard_voorwaarden: string | null
+    standaard_uitsluitingen: string | null
+    standaard_opmerkingen: string | null
+  } | null>(null)
 
   useEffect(() => {
     const scs = getScenarios(projectId)
@@ -39,6 +45,11 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
       .then(({ data }: { data: Betalingsconditie[] | null }) => setBetalingscondities(data ?? []))
     supabase.from('algemene_voorwaarden').select('*').order('naam')
       .then(({ data }: { data: AlgemeneVoorwaarden[] | null }) => setAlgVoorwaarden(data ?? []))
+    supabase.from('quote_templates')
+      .select('standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+      .eq('is_standaard', true).maybeSingle()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }: { data: any }) => setStandaardSjabloon(data ?? null))
   }, [projectId])
 
   if (!scenario) return null
@@ -49,6 +60,23 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
     slaScenarioOp(bijgewerkt)
     setScenario(bijgewerkt)
   }
+
+  /** Laad de drie teksten uit het standaard offerte-sjabloon (overschrijft huidige). */
+  const laadUitSjabloon = () => {
+    if (!standaardSjabloon) return
+    if (!confirm('Huidige teksten overschrijven met het standaardsjabloon?')) return
+    wijzig({
+      voorwaarden_tekst:   standaardSjabloon.standaard_voorwaarden ?? '',
+      uitsluitingen_tekst: standaardSjabloon.standaard_uitsluitingen ?? '',
+      opmerkingen_tekst:   standaardSjabloon.standaard_opmerkingen ?? '',
+    })
+  }
+
+  const TEKSTVELDEN: { key: 'voorwaarden_tekst' | 'uitsluitingen_tekst' | 'opmerkingen_tekst'; label: string; placeholder: string }[] = [
+    { key: 'voorwaarden_tekst',   label: 'Voorwaarden',   placeholder: 'Voorwaarden voor deze offerte…' },
+    { key: 'uitsluitingen_tekst', label: 'Uitsluitingen', placeholder: 'Wat is niet inbegrepen…' },
+    { key: 'opmerkingen_tekst',   label: 'Opmerkingen',   placeholder: 'Aanvullende opmerkingen…' },
+  ]
 
   const beideGekozen = !!scenario.betalingsconditie_id && !!scenario.algemene_voorwaarden_id
 
@@ -97,6 +125,37 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
               </select>
             </div>
           </div>
+        </CardBody>
+      </Card>
+
+      {/* ─── Vrije offerte-teksten (per calculatie) ──────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <span>Voorwaarden &amp; opmerkingen</span>
+          {standaardSjabloon && (
+            <Button variant="secondary" size="sm" onClick={laadUitSjabloon}>
+              Laden uit standaardsjabloon
+            </Button>
+          )}
+        </CardHeader>
+        <CardBody>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {TEKSTVELDEN.map(veld => (
+              <div key={veld.key}>
+                <label className="text-xs font-medium text-slate-500 block mb-1.5">{veld.label}</label>
+                <textarea
+                  value={scenario[veld.key] ?? ''}
+                  onChange={e => wijzig({ [veld.key]: e.target.value })}
+                  rows={8}
+                  placeholder={veld.placeholder}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-y leading-relaxed"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            Deze teksten worden op de offerte overgenomen. Laat je een veld leeg, dan gebruikt de offerte het standaardsjabloon.
+          </p>
         </CardBody>
       </Card>
 

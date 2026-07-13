@@ -114,6 +114,11 @@ export interface Scenario {
   standaard_uurtarief?: number     // standaard uurtarief voor nieuwe arbeid-componenten
   betalingsconditie_id?: string | null
   algemene_voorwaarden_id?: string | null
+  // Vrije offerte-teksten per calculatie. Winnen bij het aanmaken van de offerte;
+  // leeg → terugval op het standaard offerte-sjabloon (quote_templates).
+  voorwaarden_tekst?: string | null
+  uitsluitingen_tekst?: string | null
+  opmerkingen_tekst?: string | null
 }
 
 export interface Activiteit {

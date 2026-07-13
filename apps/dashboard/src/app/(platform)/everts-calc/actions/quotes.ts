@@ -208,6 +208,10 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   betalingsconditieId?: string | null
   /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
   voorwaardenId?: string | null
+  /** Vrije offerte-teksten van de calculatie; leeg → terugval op standaardsjabloon. */
+  voorwaardenTekst?: string | null
+  uitsluitingenTekst?: string | null
+  opmerkingenTekst?: string | null
 }): Promise<{ id: string }> {
   const supabase = await getDb()
 
@@ -298,12 +302,21 @@ export async function maakQuoteVanuitProjectMetImport(params: {
     } catch { /* koppeling is best-effort */ }
   }
 
-  // Voeg standaard voorwaarden in
-  if (template) {
-    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] = []
-    if (template.standaard_voorwaarden) terms.push({ quote_id: quote.id, type: 'voorwaarden', inhoud: template.standaard_voorwaarden, volgorde: 0 })
-    if (template.standaard_uitsluitingen) terms.push({ quote_id: quote.id, type: 'uitsluitingen', inhoud: template.standaard_uitsluitingen, volgorde: 0 })
-    if (template.standaard_opmerkingen) terms.push({ quote_id: quote.id, type: 'opmerkingen', inhoud: template.standaard_opmerkingen, volgorde: 0 })
+  // Voeg de vrije offerte-teksten in. De calculatie-teksten (Offerte-instellingen)
+  // winnen; is een veld daar leeg, dan valt het terug op het standaardsjabloon.
+  {
+    const kies = (calc: string | null | undefined, sjabloon: string | null | undefined) => {
+      const c = (calc ?? '').trim()
+      return c !== '' ? c : (sjabloon ?? '')
+    }
+    const teksten: Record<TermType, string> = {
+      voorwaarden:   kies(params.voorwaardenTekst,   template?.standaard_voorwaarden),
+      uitsluitingen: kies(params.uitsluitingenTekst, template?.standaard_uitsluitingen),
+      opmerkingen:   kies(params.opmerkingenTekst,   template?.standaard_opmerkingen),
+    }
+    const terms = (Object.keys(teksten) as TermType[])
+      .filter(type => teksten[type] !== '')
+      .map(type => ({ quote_id: quote.id, type, inhoud: teksten[type], volgorde: 0 }))
     if (terms.length) await supabase.from('quote_terms').insert(terms)
   }
 
