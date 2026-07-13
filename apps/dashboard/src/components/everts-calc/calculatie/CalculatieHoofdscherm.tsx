@@ -532,7 +532,7 @@ export default function CalculatieHoofdscherm({
                   )}
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
-                    <FileUp className="w-3.5 h-3.5 text-slate-400" /> CUF importeren
+                    <FileUp className="w-3.5 h-3.5 text-slate-400" /> Importeren (CUF / C4Y)
                   </DropdownMenu.Item>
                   <DropdownMenu.Item className={ddItem} onSelect={handleCufExport}>
                     <FileDown className="w-3.5 h-3.5 text-slate-400" /> CUF exporteren
@@ -635,7 +635,7 @@ export default function CalculatieHoofdscherm({
         <CufImportModal
           scenarioId={scenario.id}
           onClose={() => setToonCufImport(false)}
-          onImport={() => { setToonCufImport(false); handleWijziging(); toast.success('CUF-bestand geïmporteerd') }}
+          onImport={() => { setToonCufImport(false); handleWijziging(); toast.success('Calculatie geïmporteerd') }}
         />
       )}
 

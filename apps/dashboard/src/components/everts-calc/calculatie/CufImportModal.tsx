@@ -1,16 +1,19 @@
 'use client'
 
 /**
- * CUF Import Modal
+ * CUF / C4Y Import Modal
  *
  * Stap 1 — Selecteer bron (Calc4You of Gilde)
- * Stap 2 — Sleep/kies een CUF-XML bestand (.xml)
+ * Stap 2 — Sleep/kies een bestand:
+ *            • Calc4You → CUF-XML (.xml) óf native werkbegroting (.c4y)
+ *            • Gilde     → CUF-XML (.xml)
  * Stap 3 — Preview en bevestiging
  */
 
 import { useState, useCallback, DragEvent, ChangeEvent } from 'react'
-import { Upload, FileCode2, ChevronRight } from 'lucide-react'
+import { Upload, FileCode2, ChevronRight, AlertTriangle } from 'lucide-react'
 import { parseerCufXml, type CufParseResultaat } from '@/lib/everts-calc/cuf-parser'
+import { parseC4y } from '@/lib/everts-calc/c4y-parser'
 import {
   getGroepen,
   slaGroepOp, slaCalculatieregelOp, slaComponentregelOp,
@@ -64,6 +67,7 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
   const [dragOver, setDragOver]           = useState(false)
   const [bestandsnaam, setBestandsnaam]   = useState<string | null>(null)
   const [preview, setPreview]             = useState<CufParseResultaat | null>(null)
+  const [btwWaarschuwing, setBtwWaarschuwing] = useState<string[]>([])
   const [fout, setFout]                   = useState<string | null>(null)
   const [bezig, setBezig]                 = useState(false)
   const [modus, setModus]                 = useState<'toevoegen' | 'vervangen'>('toevoegen')
@@ -79,13 +83,23 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
   // ─── Bestand verwerken ───────────────────────────────────────────────────
 
   const verwerkBestand = useCallback((bestand: File) => {
-    if (!bestand.name.toLowerCase().endsWith('.xml')) {
-      setFout('Selecteer een .xml bestand (CUF-formaat).')
+    const naamLower = bestand.name.toLowerCase()
+    const isC4y = naamLower.endsWith('.c4y')
+    const isXml = naamLower.endsWith('.xml')
+
+    if (!isC4y && !isXml) {
+      setFout('Selecteer een .xml (CUF) of .c4y (Calc4You) bestand.')
+      return
+    }
+    // Het native .c4y-formaat hoort bij Calc4You, niet bij Gilde.
+    if (isC4y && bron === 'gilde') {
+      setFout('Een .c4y-bestand hoort bij Calc4You. Kies eerst Calc4You als bron, of gebruik een CUF-export (.xml).')
       return
     }
 
     setFout(null)
     setPreview(null)
+    setBtwWaarschuwing([])
     setBestandsnaam(bestand.name)
     setBezig(true)
 
@@ -93,12 +107,19 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
     reader.onload = (e) => {
       try {
         const inhoud = e.target?.result as string
-        const resultaat = parseerCufXml(inhoud, scenarioId, bron ?? 'calc4you', opslagPct)
+        // .c4y = native Calc4You (opslag zit in het bestand zelf → opslagPct niet nodig).
+        // .xml = CUF-uitwisselformaat (opslag% wordt hier toegepast).
+        const resultaat: CufParseResultaat = isC4y
+          ? parseC4y(inhoud, scenarioId)
+          : parseerCufXml(inhoud, scenarioId, bron ?? 'calc4you', opslagPct)
 
         if (resultaat.groepen.length === 0 && resultaat.calculatieregels.length === 0) {
-          setFout('Geen calculatiedata gevonden in dit CUF-bestand.')
+          setFout(`Geen calculatiedata gevonden in dit ${isC4y ? 'C4Y' : 'CUF'}-bestand.`)
           setBestandsnaam(null)
         } else {
+          if (isC4y && 'onbekendeBtwCodes' in resultaat) {
+            setBtwWaarschuwing((resultaat as { onbekendeBtwCodes: string[] }).onbekendeBtwCodes)
+          }
           setPreview(resultaat)
           setStap('preview')
         }
@@ -114,7 +135,7 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
       setBezig(false)
     }
     reader.readAsText(bestand, 'UTF-8')
-  }, [scenarioId, bron])
+  }, [scenarioId, bron, opslagPct])
 
   // ─── Drag & drop ─────────────────────────────────────────────────────────
 
@@ -156,10 +177,13 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
 
   // ─── Titels per stap ─────────────────────────────────────────────────────
 
+  // Calc4You levert zowel CUF-XML (.xml) als het native .c4y-formaat; Gilde alleen CUF-XML.
+  const acceptTypes = bron === 'gilde' ? '.xml' : '.xml,.c4y'
+
   const stapTitel = stap === 'bron'
-    ? 'CUF-bestand importeren'
+    ? 'Calculatie importeren'
     : stap === 'bestand'
-    ? `CUF importeren — ${bron === 'calc4you' ? 'Calc4You' : 'Gilde'}`
+    ? `Importeren — ${bron === 'calc4you' ? 'Calc4You' : 'Gilde'}`
     : 'Importoverzicht'
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -176,7 +200,7 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
             </div>
             <div>
               <DialogTitle>{stapTitel}</DialogTitle>
-              <DialogDescription>Calculatie Uitwisselings Formaat (.xml)</DialogDescription>
+              <DialogDescription>CUF-uitwisselformaat (.xml) of Calc4You (.c4y)</DialogDescription>
             </div>
           </div>
           {/* Stapindicator */}
@@ -203,7 +227,7 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
           {stap === 'bron' && (
             <div className="space-y-3">
               <p className="text-sm text-slate-600">
-                Selecteer het softwarepakket waarmee het CUF-bestand is aangemaakt:
+                Selecteer het softwarepakket waarmee het bestand is aangemaakt:
               </p>
               <div className="space-y-2">
                 {BRONNEN.map(optie => (
@@ -247,12 +271,13 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                 ← Andere software kiezen
               </button>
 
-              {/* Opslag % invoer (alleen voor Calc4You) */}
+              {/* Opslag % invoer — alleen relevant voor de CUF-export (.xml). In het native
+                  .c4y-formaat zit de opslag al in het bestand en wordt dit veld genegeerd. */}
               {bron === 'calc4you' && (
-                <Alert tone="warning" title="Opslag % (uit Calc4You)">
+                <Alert tone="warning" title="Opslag % (alleen voor CUF-export .xml)">
                   <div className="flex items-center gap-2 mt-1.5">
                     <span className="text-xs text-amber-800 flex-1">
-                      Prijzen in Calc4You zijn verkoopprijzen incl. opslag. Vul de opslag% in zodat de kostprijs correct berekend wordt.
+                      Prijzen in een Calc4You CUF-export (.xml) zijn verkoopprijzen incl. opslag. Vul de opslag% in zodat de kostprijs correct berekend wordt. Bij een .c4y-bestand is dit niet nodig.
                     </span>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <input
@@ -289,7 +314,9 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                   <>
                     <Upload className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-medium text-slate-700">
-                      Sleep een {bron === 'calc4you' ? 'Calc4You' : 'Gilde'} CUF-bestand hierheen
+                      {bron === 'calc4you'
+                        ? 'Sleep een Calc4You-bestand (.c4y of CUF .xml) hierheen'
+                        : 'Sleep een Gilde CUF-bestand (.xml) hierheen'}
                     </p>
                     <p className="text-xs text-slate-400 mt-1">of</p>
                     <label className="mt-3 inline-block cursor-pointer">
@@ -298,14 +325,14 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                       </Button>
                       <input
                         type="file"
-                        accept=".xml"
+                        accept={acceptTypes}
                         className="sr-only"
                         onChange={handleFileChange}
                       />
                     </label>
                     <p className="text-xs text-slate-400 mt-3">
                       {bron === 'calc4you'
-                        ? 'Exporteer vanuit Calc4You via Bestand → Exporteren → CUF'
+                        ? 'Native .c4y (Bestand → Opslaan als) of CUF-export (Bestand → Exporteren → CUF)'
                         : 'Exporteer vanuit Gilde via het exportmenu'
                       }
                     </p>
@@ -326,6 +353,13 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                   </p>
                 )}
               </Alert>
+
+              {btwWaarschuwing.length > 0 && (
+                <p className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-700">
+                  <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+                  Onbekende BTW-code(s): {btwWaarschuwing.join(', ')} — op 21% gezet. Controleer de tarieven.
+                </p>
+              )}
 
               <div className="grid grid-cols-3 gap-2">
                 {[
@@ -386,10 +420,11 @@ export default function CufImportModal({ scenarioId, onClose, onImport }: Props)
                 </span>
                 <input
                   type="file"
-                  accept=".xml"
+                  accept={acceptTypes}
                   className="sr-only"
                   onChange={(e) => {
                     setPreview(null)
+                    setBtwWaarschuwing([])
                     setBestandsnaam(null)
                     setStap('bestand')
                     const bestand = e.target.files?.[0]
