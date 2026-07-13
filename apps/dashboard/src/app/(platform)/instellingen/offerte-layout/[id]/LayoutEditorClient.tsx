@@ -110,6 +110,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'contactpersoon.achternaam',     label: 'Achternaam' },
     { v: 'contactpersoon.voorletter',     label: 'Voorletter(s)' },
     { v: 'contactpersoon.geslacht',       label: 'Geslacht (Man / Vrouw / Overig)' },
+    { v: 'contactpersoon.aanspreekvorm',  label: 'Aanspreekvorm (heer / mevrouw)' },
     { v: 'contactpersoon.email',          label: 'E-mailadres' },
     { v: 'contactpersoon.telefoon',       label: 'Telefoon' },
     { v: 'contactpersoon.mobiel',         label: 'Mobiel' },

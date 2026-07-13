@@ -126,6 +126,7 @@ export function buildDemoDossierContext(): DossierContext {
     contactpersoon_achternaam: 'Vries',
     contactpersoon_voorletter: 'J.',
     contactpersoon_geslacht: 'Vrouw',
+    contactpersoon_aanspreekvorm: 'mevrouw',
     contactpersoon_mobiel: '06 - 12 34 56 78',
     contactpersoon_linkedin: 'https://www.linkedin.com/in/janneke-de-vries',
     contactpersoon_opmerkingen: 'Bereikbaar op dinsdag en donderdag.',

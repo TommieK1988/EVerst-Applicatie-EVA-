@@ -98,6 +98,7 @@ function bouwDossier(row: any): DossierContext {
     contactpersoon_achternaam: row.contactpersoon?.achternaam ?? '',
     contactpersoon_voorletter: row.contactpersoon?.voorletter ?? '',
     contactpersoon_geslacht: geslachtLabel(row.contactpersoon?.geslacht),
+    contactpersoon_aanspreekvorm: aanspreekvorm(row.contactpersoon?.geslacht),
     contactpersoon_mobiel: row.contactpersoon?.mobiel ?? '',
     contactpersoon_linkedin: row.contactpersoon?.linkedin_url ?? '',
     contactpersoon_opmerkingen: row.contactpersoon?.opmerkingen ?? '',
@@ -119,6 +120,18 @@ function geslachtLabel(g: string | null | undefined): string {
   if (g === 'man') return 'Man'
   if (g === 'vrouw') return 'Vrouw'
   if (g === 'overig') return 'Overig'
+  return ''
+}
+
+/**
+ * Aanspreekvorm voor de aanhef: 'heer' / 'mevrouw' afgeleid uit het geslacht.
+ * Bij onbekend/overig geslacht → 'heer/mevrouw', zodat "Geachte {aanspreekvorm}"
+ * altijd een nette regel oplevert.
+ */
+function aanspreekvorm(g: string | null | undefined): string {
+  if (g === 'man') return 'heer'
+  if (g === 'vrouw') return 'mevrouw'
+  if (g === 'overig') return 'heer/mevrouw'
   return ''
 }
 

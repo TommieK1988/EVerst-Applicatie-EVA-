@@ -70,6 +70,7 @@ export interface DossierContext {
   contactpersoon_achternaam: string
   contactpersoon_voorletter: string
   contactpersoon_geslacht: string
+  contactpersoon_aanspreekvorm: string // 'heer' / 'mevrouw', afgeleid uit het geslacht
   contactpersoon_mobiel: string
   contactpersoon_linkedin: string
   contactpersoon_opmerkingen: string
@@ -99,6 +100,7 @@ export interface ContactpersoonContext {
   achternaam: string
   voorletter: string
   geslacht: string
+  aanspreekvorm: string // 'heer' / 'mevrouw', afgeleid uit het geslacht
   email: string
   telefoon: string
   mobiel: string
@@ -117,6 +119,7 @@ export const LEEG_DOSSIER: DossierContext = {
   contactpersoon: '', contactpersoon_email: '', contactpersoon_telefoon: '',
   contactpersoon_aanhef: '', contactpersoon_voornaam: '', contactpersoon_tussenvoegsel: '',
   contactpersoon_achternaam: '', contactpersoon_voorletter: '', contactpersoon_geslacht: '',
+  contactpersoon_aanspreekvorm: '',
   contactpersoon_mobiel: '', contactpersoon_linkedin: '', contactpersoon_opmerkingen: '',
   klant_naam: '', klant_adres: '', klant_postcode: '', klant_plaats: '',
   klant_email: '', klant_telefoon: '', klant_kvk: '', klant_btw: '',
@@ -555,6 +558,7 @@ export function buildRenderContext(
     achternaam: d.contactpersoon_achternaam,
     voorletter: d.contactpersoon_voorletter,
     geslacht: d.contactpersoon_geslacht,
+    aanspreekvorm: d.contactpersoon_aanspreekvorm,
     email: d.contactpersoon_email,
     telefoon: d.contactpersoon_telefoon,
     mobiel: d.contactpersoon_mobiel,
