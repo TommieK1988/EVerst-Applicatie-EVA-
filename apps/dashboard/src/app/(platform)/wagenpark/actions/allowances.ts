@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 /**
  * Voeg een "altijd toestaan" regel toe voor een bestuurder.
@@ -17,6 +18,7 @@ export async function addAllowanceAction(opts: {
   categorie?: string | null
   reden?: string | null
 }): Promise<{ ok: boolean; error?: string }> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const pool = getPgPool()
   const client = await pool.connect()
   try {
@@ -79,6 +81,7 @@ export async function addAllowanceAction(opts: {
 
 /** Trek een allowance weer in. */
 export async function removeAllowanceAction(id: string): Promise<void> {
+  await vereisRecht('wagenpark', 'schrijven')
   const pool = getPgPool()
   await pool.query(
     `update public.compliance_allowances

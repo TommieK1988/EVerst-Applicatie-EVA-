@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import type { PoolClient } from 'pg'
 import { UluApi, RDW, type UluTripInput } from '@everts/wagenpark-core'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 import { runComplianceAction } from './compliance'
 
 export type UluSyncResult = {
@@ -33,6 +34,7 @@ export async function syncUluAction(
   periodeStart?: string,
   periodeEind?: string,
 ): Promise<UluSyncResult> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const t0 = Date.now()
 
   const email = process.env.ULU_EMAIL

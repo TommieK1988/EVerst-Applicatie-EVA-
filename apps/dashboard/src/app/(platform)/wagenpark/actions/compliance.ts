@@ -10,8 +10,10 @@ import {
 import type { UluUserInfo } from '@everts/wagenpark-core/compliance'
 import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { pgQuery, getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 export async function runComplianceAction(): Promise<{ totaal: number; perRegel: Record<string, number> }> {
+  await vereisRecht('wagenpark', 'schrijven')
   const supabase = createServiceRoleClient()
 
   // Periode: lopend jaar t/m vandaag
@@ -173,6 +175,7 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
   // allowance matcht, anders 'open'.
   const pool = getPgPool()
   const client = await pool.connect()
+  const nieuweWerktijdSignalen: { regel_code: string; omschrijving: string; user_id_ulu: number | null }[] = []
   try {
     await client.query('begin')
 
@@ -191,7 +194,7 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
     for (const b of uniek) {
       const autoAllowed = isAutoToegestaan(b)
       const nieuweStatus = autoAllowed ? 'geaccepteerd_uitzondering' : 'open'
-      await client.query(
+      const ins = await client.query<{ was_insert: boolean }>(
         `insert into public.compliance_bevindingen
            (fingerprint, regel_code, voertuig_id, medewerker_id, trip_id,
             periode_start, periode_eind, ernst, omschrijving, data, status)
@@ -209,7 +212,8 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
            voertuig_id   = excluded.voertuig_id,
            periode_start = excluded.periode_start,
            periode_eind  = excluded.periode_eind,
-           updated_at    = now()`,
+           updated_at    = now()
+         returning (xmax = 0) as was_insert`,
         [
           b.fingerprint,
           b.regel_code,
@@ -224,6 +228,21 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
           nieuweStatus,
         ],
       )
+      // Nieuw ingevoegde (xmax = 0), nog openstaande werktijd-signalen verzamelen
+      // voor een actieve melding naar beheer. Update-conflicts (bestaande
+      // bevindingen) worden niet opnieuw gemeld.
+      if (
+        ins.rows[0]?.was_insert &&
+        nieuweStatus === 'open' &&
+        (b.regel_code === 'R9' || b.regel_code === 'R10')
+      ) {
+        const uid = (b.data as Record<string, unknown> | undefined)?.user_id_ulu
+        nieuweWerktijdSignalen.push({
+          regel_code: b.regel_code,
+          omschrijving: b.omschrijving,
+          user_id_ulu: typeof uid === 'number' ? uid : null,
+        })
+      }
     }
     await client.query('commit')
   } catch (err) {
@@ -234,12 +253,94 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
     client.release()
   }
 
+  // Actieve bel-melding naar beheer voor nieuwe werktijd-signalen (te laat / te vroeg).
+  if (nieuweWerktijdSignalen.length > 0) {
+    try {
+      await notificeerWerktijdSignalen(nieuweWerktijdSignalen)
+    } catch (err) {
+      // Notificatie mag de compliance-run nooit laten falen.
+      console.error('[compliance] notificatie werktijd-signalen mislukt', err)
+    }
+  }
+
   revalidatePath('/wagenpark/bevindingen')
   revalidatePath('/wagenpark/dashboard')
   return { totaal: result.samenvatting.totaal, perRegel: result.perRegel }
 }
 
+/**
+ * Stuur één in-app melding PER BESTUURDER naar elke beheer-ontvanger, met de
+ * nieuwe werktijd-signalen (te laat / te vroeg) van die bestuurder. Ontvangers =
+ * Directie (afdeling), beheerders (instellingen=beheren) of wagenpark=beheren.
+ * Insert via de directe pooler, consistent met de rest van de wagenpark-module.
+ */
+async function notificeerWerktijdSignalen(
+  signalen: { regel_code: string; omschrijving: string; user_id_ulu: number | null }[],
+): Promise<void> {
+  const ontvangers = await pgQuery<{ auth_user_id: string }>(
+    `
+    select distinct m.auth_user_id::text as auth_user_id
+      from public.medewerkers m
+      left join public.medewerker_afdelingen ad on ad.naam = m.afdeling and ad.actief = true
+     where m.actief = true
+       and m.auth_user_id is not null
+       and (
+         lower(coalesce(m.afdeling, '')) = 'directie'
+         or coalesce(m.rechten_override->>'instellingen', ad.standaard_rechten->>'instellingen') = 'beheren'
+         or coalesce(m.rechten_override->>'wagenpark', ad.standaard_rechten->>'wagenpark') = 'beheren'
+       )
+    `,
+  )
+  if (ontvangers.length === 0) return
+
+  // Groepeer de signalen per bestuurder.
+  const perBestuurder = new Map<number, string[]>()
+  const zonderBestuurder: string[] = []
+  for (const s of signalen) {
+    if (s.user_id_ulu == null) { zonderBestuurder.push(s.omschrijving); continue }
+    const lijst = perBestuurder.get(s.user_id_ulu) ?? []
+    lijst.push(s.omschrijving)
+    perBestuurder.set(s.user_id_ulu, lijst)
+  }
+
+  // Namen van de betrokken bestuurders ophalen.
+  const namen = new Map<number, string>()
+  const ids = [...perBestuurder.keys()]
+  if (ids.length > 0) {
+    const rows = await pgQuery<{ id: number; volledige_naam: string | null }>(
+      `select id, volledige_naam from public.ulu_users where id = any($1::bigint[])`,
+      [ids],
+    )
+    for (const r of rows) namen.set(r.id, r.volledige_naam ?? `Bestuurder #${r.id}`)
+  }
+
+  type Melding = { titel: string; body: string; url: string }
+  const meldingen: Melding[] = []
+  for (const [uid, omschrijvingen] of perBestuurder) {
+    const naam = namen.get(uid) ?? `Bestuurder #${uid}`
+    meldingen.push({
+      titel: `Werktijd-signaal: ${naam}`,
+      body: omschrijvingen.join(' · '),
+      url: `/wagenpark/bestuurders/${uid}`,
+    })
+  }
+  for (const omschrijving of zonderBestuurder) {
+    meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/bevindingen' })
+  }
+
+  for (const o of ontvangers) {
+    for (const m of meldingen) {
+      await pgQuery(
+        `insert into public.notificaties (user_id, type, titel, body, url, gelezen)
+         values ($1, 'algemeen', $2, $3, $4, false)`,
+        [o.auth_user_id, m.titel, m.body, m.url],
+      )
+    }
+  }
+}
+
 export async function markeerUitzonderingAction(bevinding_id: string, toelichting: string) {
+  await vereisRecht('wagenpark', 'schrijven')
   const supabase = createServiceRoleClient()
   await supabase
     .from('compliance_bevindingen')
@@ -254,6 +355,7 @@ export async function markeerUitzonderingAction(bevinding_id: string, toelichtin
 }
 
 export async function bevestigOvertredingAction(bevinding_id: string, toelichting: string) {
+  await vereisRecht('wagenpark', 'schrijven')
   const supabase = createServiceRoleClient()
   await supabase
     .from('compliance_bevindingen')

@@ -1,4 +1,7 @@
-export default function WagenparkLayout({ children }: { children: React.ReactNode }) {
+import { vereisModuleToegang } from '@/lib/auth/rechten'
+
+export default async function WagenparkLayout({ children }: { children: React.ReactNode }) {
+  await vereisModuleToegang('wagenpark')
   return (
     <div
       className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto"

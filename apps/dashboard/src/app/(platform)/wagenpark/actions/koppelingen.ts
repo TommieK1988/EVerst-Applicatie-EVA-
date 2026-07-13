@@ -2,12 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 export async function setVoertuigBestuurderAction(
   voertuig_id: string,
   ulu_user_id: number | null,
   start_datum?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const pool = getPgPool()
   const client = await pool.connect()
   try {

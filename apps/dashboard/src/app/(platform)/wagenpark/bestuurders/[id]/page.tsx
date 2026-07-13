@@ -9,7 +9,9 @@ import BevindingRij from '@/components/wagenpark/bevindingen/BevindingRij'
 import KmPrognose from '@/components/wagenpark/bestuurders/KmPrognose'
 import AllowancesPaneel, { type AllowanceRij } from '@/components/wagenpark/bestuurders/AllowancesPaneel'
 import RitTypeToggle from '@/components/wagenpark/ritten/RitTypeToggle'
+import MedewerkerKoppeling, { type MedewerkerOptie } from '@/components/wagenpark/bestuurders/MedewerkerKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +46,7 @@ type Rit = {
   id: string
   start_datum: string
   start_tijd: string
+  stop_tijd: string | null
   kenteken: string
   afstand_km: number | null
   rit_type_berekend: 'zakelijk' | 'prive' | null
@@ -81,9 +84,13 @@ export default async function BestuurderDetailPage(
   const params = await props.params;
   const userId = Number(params.id)
   if (!Number.isFinite(userId)) notFound()
-  const typeFilter = searchParams.type === 'zakelijk' || searchParams.type === 'prive'
+  const magPrive = await magPriveRittenZien()
+  const gevraagdType = searchParams.type === 'zakelijk' || searchParams.type === 'prive'
     ? searchParams.type
     : 'alle'
+  // Zonder privé-recht: nooit privé tonen — forceer naar zakelijk.
+  const typeFilter = !magPrive && gevraagdType !== 'zakelijk' ? 'zakelijk' : gevraagdType
+  const eff = ritTypeEffectiefSql('t')
 
   const users = await pgQuery<UluUserDetail>(
     `select id, volledige_naam, firstname, lastname, email, actief, bijtelling_betaald,
@@ -106,19 +113,21 @@ export default async function BestuurderDetailPage(
   )
 
   const ritten = await pgQuery<Rit>(
-    `select id, start_datum::text, start_tijd::text, kenteken,
-            afstand_km::float,
-            rit_type_berekend::text,
-            rit_type_override::text,
-            rit_type_handmatig,
-            score, adres_stop,
-            coalesce(rit_type_override, rit_type_berekend)::text as rit_type_effectief
-       from public.ulu_trips
-      where user_id_ulu = $1
-        and ($2 = 'alle' or coalesce(rit_type_override, rit_type_berekend)::text = $2)
-      order by start_datum desc, start_tijd desc
+    `select t.id, t.start_datum::text, t.start_tijd::text, t.stop_tijd::text,
+            t.kenteken,
+            t.afstand_km::float,
+            t.rit_type_berekend::text,
+            t.rit_type_override::text,
+            t.rit_type_handmatig,
+            t.score, t.adres_stop,
+            (${eff})::text as rit_type_effectief
+       from public.ulu_trips t
+      where t.user_id_ulu = $1
+        and ($2 = 'alle' or (${eff})::text = $2)
+        and ($3::boolean or (${eff})::text = 'zakelijk')
+      order by t.start_datum desc, t.start_tijd desc
       limit 100`,
-    [userId, typeFilter],
+    [userId, typeFilter, magPrive],
   )
 
   // Bevindingen voor deze bestuurder (via trip OF via data->>user_id_ulu)
@@ -155,19 +164,20 @@ export default async function BestuurderDetailPage(
     dagen_in_periode: number
   }>(
     `
-    -- Gebruik effectief rit_type (override > berekend) voor totalen
+    -- Gebruik effectief rit_type (override > berekend, verlof telt als privé).
+    -- Privé km alleen meetellen als de gebruiker privé mag zien.
     select
-      coalesce(sum(case when coalesce(rit_type_override, rit_type_berekend) = 'zakelijk' then afstand_km else 0 end), 0)::float as km_zakelijk,
-      coalesce(sum(case when coalesce(rit_type_override, rit_type_berekend) = 'prive'    then afstand_km else 0 end), 0)::float as km_prive,
+      coalesce(sum(case when (${eff}) = 'zakelijk' then t.afstand_km else 0 end), 0)::float as km_zakelijk,
+      coalesce(sum(case when $2::boolean and (${eff}) = 'prive' then t.afstand_km else 0 end), 0)::float as km_prive,
       coalesce(
-        greatest(1, (current_date - min(start_datum) + 1))::int,
+        greatest(1, (current_date - min(t.start_datum) + 1))::int,
         greatest(1, (current_date - date_trunc('year', now())::date + 1))::int
       ) as dagen_in_periode
-    from public.ulu_trips
-    where user_id_ulu = $1
-      and start_datum >= date_trunc('year', now())::date
+    from public.ulu_trips t
+    where t.user_id_ulu = $1
+      and t.start_datum >= date_trunc('year', now())::date
     `,
-    [userId],
+    [userId, magPrive],
   )
   const tot = kmTotalen[0] ?? { km_zakelijk: 0, km_prive: 0, dagen_in_periode: 1 }
 
@@ -179,6 +189,43 @@ export default async function BestuurderDetailPage(
       order by regel_code, categorie nulls first`,
     [userId],
   )
+  // Medewerker-koppeling (spiegelbeeld van de koppeling op de medewerker-pagina)
+  let medewerkerGekoppeld: MedewerkerOptie | null = null
+  let medewerkersBeschikbaar: MedewerkerOptie[] = []
+  let medewerkerSuggestieId: string | null = null
+  let koppelingFout: string | null = null
+  try {
+    const [gekoppeldRows, beschikbaarRows] = await Promise.all([
+      pgQuery<MedewerkerOptie>(
+        `select m.id::text as id,
+                trim(concat_ws(' ', m.voornaam, m.tussenvoegsel, m.achternaam)) as naam,
+                m.email
+           from public.ulu_users uu
+           join public.medewerkers m on m.id = uu.medewerker_id
+          where uu.id = $1
+          limit 1`,
+        [userId],
+      ),
+      pgQuery<MedewerkerOptie>(
+        `select m.id::text as id,
+                trim(concat_ws(' ', m.voornaam, m.tussenvoegsel, m.achternaam)) as naam,
+                m.email
+           from public.medewerkers m
+          where m.actief = true
+            and not exists (select 1 from public.ulu_users u where u.medewerker_id = m.id)
+          order by naam`,
+      ),
+    ])
+    medewerkerGekoppeld = gekoppeldRows[0] ?? null
+    medewerkersBeschikbaar = beschikbaarRows
+    if (!medewerkerGekoppeld && user.email) {
+      const mail = user.email.trim().toLowerCase()
+      medewerkerSuggestieId = beschikbaarRows.find((m) => m.email?.trim().toLowerCase() === mail)?.id ?? null
+    }
+  } catch (e: unknown) {
+    koppelingFout = e instanceof Error ? e.message : 'Onbekende fout'
+  }
+
   const factor = 365 / tot.dagen_in_periode
   const prognoseZakelijk = Math.round(tot.km_zakelijk * factor)
   const prognosePrive = Math.round(tot.km_prive * factor)
@@ -213,6 +260,7 @@ export default async function BestuurderDetailPage(
           target_prive={targetPrive}
           dagen={tot.dagen_in_periode}
           bijtelling={user.bijtelling_betaald}
+          verbergPrive={!magPrive}
         />
       </div>
 
@@ -247,6 +295,13 @@ export default async function BestuurderDetailPage(
             <div>E-mail: {user.email ?? '—'}</div>
             <div>Laatst gezien: {formatDatum(user.laatst_gezien)}</div>
           </div>
+          <MedewerkerKoppeling
+            ulu_user_id={user.id}
+            gekoppeld={medewerkerGekoppeld}
+            beschikbaar={medewerkersBeschikbaar}
+            suggestie_id={medewerkerSuggestieId}
+            fout={koppelingFout}
+          />
         </section>
 
         <section className="bg-white rounded-lg border p-5">
@@ -333,14 +388,16 @@ export default async function BestuurderDetailPage(
               >
                 Alleen zakelijk
               </a>
-              <a
-                href={`/bestuurders/${userId}?type=prive`}
-                className={typeFilter === 'prive'
-                  ? 'px-3 py-1 rounded-full bg-slate-900 text-white'
-                  : 'px-3 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200'}
-              >
-                Alleen privé
-              </a>
+              {magPrive && (
+                <a
+                  href={`/bestuurders/${userId}?type=prive`}
+                  className={typeFilter === 'prive'
+                    ? 'px-3 py-1 rounded-full bg-slate-900 text-white'
+                    : 'px-3 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200'}
+                >
+                  Alleen privé
+                </a>
+              )}
             </div>
           </div>
 
@@ -362,6 +419,7 @@ export default async function BestuurderDetailPage(
                 <tr>
                   <th>Datum</th>
                   <th>Start</th>
+                  <th>Einde rit</th>
                   <th>Kenteken</th>
                   <th>Bestemming</th>
                   <th>Afstand</th>
@@ -376,6 +434,7 @@ export default async function BestuurderDetailPage(
                     <tr key={r.id}>
                       <td>{formatDatumMetDag(r.start_datum)}</td>
                       <td>{r.start_tijd.slice(0, 5)}</td>
+                      <td>{r.stop_tijd ? r.stop_tijd.slice(0, 5) : '—'}</td>
                       <td className="">{r.kenteken}</td>
                       <td className="max-w-[240px] truncate">{r.adres_stop ?? '—'}</td>
                       <td>{formatKm(r.afstand_km, 1)}</td>

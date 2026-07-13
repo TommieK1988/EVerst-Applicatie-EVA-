@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { Importers } from '@everts/wagenpark-core'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 export type ParkingImportResult = {
   ok: boolean
@@ -14,6 +15,7 @@ export type ParkingImportResult = {
 }
 
 export async function importParkingAction(formData: FormData): Promise<ParkingImportResult> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const file = formData.get('parking') as File | null
   if (!file || file.size === 0) {
     return { ok: false, error: 'Geen bestand geselecteerd.' }

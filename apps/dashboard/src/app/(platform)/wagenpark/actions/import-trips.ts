@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { Importers } from '@everts/wagenpark-core'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 import { runComplianceAction } from './compliance'
 
 export type TripsImportResult = {
@@ -28,6 +29,7 @@ export type TripsImportResult = {
  *  - Bestuurder-naam → ulu_users (fuzzy op volledige_naam)
  */
 export async function importTripsAction(formData: FormData): Promise<TripsImportResult> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const file = formData.get('trips') as File | null
   if (!file || file.size === 0) {
     return { ok: false, error: 'Geen bestand geselecteerd.' }

@@ -3,6 +3,7 @@ import { ParkingCircle, Upload, LayoutGrid } from 'lucide-react'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { formatDatum } from '@/lib/wagenpark/utils'
 
 export const dynamic = 'force-dynamic'
@@ -24,8 +25,12 @@ export default async function ParkerenPage(
 ) {
   const searchParams = await props.searchParams;
   const filterKenteken = searchParams.kenteken?.trim() ?? ''
+  const magPrive = await magPriveRittenZien()
+  const eff = ritTypeEffectiefSql('t')
 
-  // Haal per parkeer-record ook de bijbehorende bestuurder op (via trip op zelfde dag/kenteken)
+  // Haal per parkeer-record ook de bijbehorende bestuurder op (via trip op zelfde dag/kenteken).
+  // Zonder privé-recht matchen we alleen op effectief-zakelijke ritten, zodat we geen
+  // bestuurder onthullen via een privé-rit.
   const rijen = await pgQuery<ParkingRij>(
     `
     select
@@ -38,6 +43,7 @@ export default async function ParkerenPage(
       (select t.bestuurder_naam_raw from public.ulu_trips t
         where t.kenteken = p.kenteken
           and t.start_datum = (p.parkeer_starttijd::date)
+          and ($2::boolean or (${eff}) = 'zakelijk')
         order by abs(extract(epoch from (t.start_datum::timestamp + t.start_tijd) - p.parkeer_starttijd))
         limit 1)                                             as bestuurder_naam_raw
     from public.ulu_parking p
@@ -45,7 +51,7 @@ export default async function ParkerenPage(
     order by p.parkeer_starttijd desc
     limit 200
     `,
-    [filterKenteken],
+    [filterKenteken, magPrive],
   )
 
   const totalen = await pgQuery<{

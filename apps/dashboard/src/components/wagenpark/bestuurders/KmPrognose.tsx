@@ -9,6 +9,8 @@ type Props = {
   target_prive: number
   dagen: number
   bijtelling: boolean
+  /** Verberg de privé-kaart (voor gebruikers zonder recht op privé-ritten). */
+  verbergPrive?: boolean
 }
 
 function categoriseerPrognose(prognose: number, target: number): {
@@ -26,7 +28,7 @@ export default function KmPrognose({
   km_zakelijk, km_prive,
   prognose_zakelijk, prognose_prive,
   target_zakelijk, target_prive,
-  dagen, bijtelling,
+  dagen, bijtelling, verbergPrive = false,
 }: Props) {
   const prog = Math.round((100 * dagen) / 365)
   const zakCat = categoriseerPrognose(prognose_zakelijk, target_zakelijk)
@@ -44,7 +46,7 @@ export default function KmPrognose({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${verbergPrive ? '' : 'sm:grid-cols-2'}`}>
         {/* Zakelijk */}
         <div className={`rounded border p-4 ${zakCat.kleur.replace('text-', 'border-').replace('-700', '-200')}`}>
           <div className="flex items-center gap-2 mb-2">
@@ -63,7 +65,8 @@ export default function KmPrognose({
           <ProgressBar value={prognose_zakelijk} max={target_zakelijk} kleur={zakCat.kleur} />
         </div>
 
-        {/* Privé */}
+        {/* Privé — alleen voor gebruikers met recht op privé-ritten */}
+        {!verbergPrive && (
         <div className={`rounded border p-4 ${prvCat.kleur.replace('text-', 'border-').replace('-700', '-200')}`}>
           <div className="flex items-center gap-2 mb-2">
             <div className={`p-1 rounded ${prvCat.kleur}`}>
@@ -82,6 +85,7 @@ export default function KmPrognose({
           </div>
           <ProgressBar value={prognose_prive} max={target_prive} kleur={prvCat.kleur} />
         </div>
+        )}
       </div>
 
       <p className="text-xs text-slate-500 mt-3">

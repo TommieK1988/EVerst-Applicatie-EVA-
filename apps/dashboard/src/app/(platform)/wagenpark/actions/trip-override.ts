@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getPgPool } from '@/lib/wagenpark/db'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 /**
  * Zet een rit op zakelijk/privé (handmatige override) of verwijder de override.
@@ -12,6 +13,7 @@ export async function updateRitTypeAction(
   trip_id: string,
   nieuwType: 'zakelijk' | 'prive' | null,
 ): Promise<{ ok: boolean; error?: string }> {
+  try { await vereisRecht('wagenpark', 'schrijven') } catch { return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' } }
   const pool = getPgPool()
   try {
     if (nieuwType === null) {

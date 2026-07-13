@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/bouw7-sync/incremental",
       "schedule": "45 10 * * *"
+    },
+    {
+      "path": "/api/cron/wagenpark-weeksamenvatting",
+      "schedule": "0 7 * * 1"
     }
   ]
 }

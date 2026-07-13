@@ -5,6 +5,7 @@ import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import Livetracker from '@/components/wagenpark/shared/Livetracker'
 import RijscoreRanking from '@/components/wagenpark/dashboard/RijscoreRanking'
 import { createClient } from '@/lib/wagenpark/supabase/server'
+import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ type BevindingRij = {
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+  const magPrive = await magPriveRittenZien()
 
   // Parallel queries
   const [voertuigenRes, bevindingenRes, rittenMaandRes, topBevindingenRes] =
@@ -112,18 +114,22 @@ export default async function DashboardPage() {
           icon={Route}
           kleur="groen"
         />
-        <StatCard
-          label="Privé (maand)"
-          waarde={`${Math.round(kmPrive).toLocaleString('nl-NL')} km`}
-          icon={Users}
-          kleur="grijs"
-        />
+        {magPrive && (
+          <StatCard
+            label="Privé (maand)"
+            waarde={`${Math.round(kmPrive).toLocaleString('nl-NL')} km`}
+            icon={Users}
+            kleur="grijs"
+          />
+        )}
       </div>
 
-      {/* Livetracker embed */}
-      <div className="mb-8">
-        <Livetracker />
-      </div>
+      {/* Livetracker embed — externe ULU-kaart toont álle voertuigen, dus alleen Directie/beheerder */}
+      {magPrive && (
+        <div className="mb-8">
+          <Livetracker />
+        </div>
+      )}
 
       {/* Rijscore ranking */}
       <RijscoreRanking />
