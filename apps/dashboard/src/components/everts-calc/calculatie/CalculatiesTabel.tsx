@@ -38,8 +38,9 @@ interface Props {
   readOnly?: boolean
   onOpenCalculatie: (scenarioId: string) => void
   onOpenOfferte: (quoteId: string) => void
-  /** Reviseren: maak een nieuwe versie van deze (definitieve) calculatie. */
-  onReviseer: (scenarioId: string) => void
+  /** Reviseren: maak een nieuwe versie van deze (definitieve) calculatie.
+   *  Weglaten (bijv. in de Opdracht-fase) verbergt de Reviseren-knop. */
+  onReviseer?: (scenarioId: string) => void
   /** Extra knoppen in de kaartkop (bijv. Verwijderen op de opdracht-tab). */
   headerExtra?: ReactNode
 }
@@ -144,7 +145,7 @@ export default function CalculatiesTabel({
                         <Button variant="ghost" size="sm" onClick={() => onOpenCalculatie(s.id)}>
                           <Calculator className="h-3.5 w-3.5" /> Openen
                         </Button>
-                        {definitief && !readOnly && (
+                        {definitief && !readOnly && onReviseer && (
                           <Button variant="ghost" size="sm" onClick={() => onReviseer(s.id)} title="Nieuwe versie op basis van deze calculatie">
                             <Copy className="h-3.5 w-3.5" /> Reviseren
                           </Button>

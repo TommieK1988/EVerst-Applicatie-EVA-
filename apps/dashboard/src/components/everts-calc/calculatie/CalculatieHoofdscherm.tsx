@@ -28,6 +28,7 @@ import {
   getGroepen, getCalculatieregels, getComponentregels,
 } from '@/lib/everts-calc/local-store'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
+import { resetDossierNaarAanvraagBijRevisie } from '@/lib/dossiers/actions'
 import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
 import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
@@ -53,12 +54,15 @@ interface Props {
   /** Aangeroepen na een wijziging in de set scenario's (bijv. na kopiëren). De
    *  optionele parameter is het id van een nieuw/te-openen scenario. */
   onScenariosGewijzigd?: (nieuwScenarioId?: string) => void
+  /** Of reviseren toegestaan is. In de Opdracht-fase mag een verzonden offerte
+   *  niet meer gereviseerd worden (Bouw7 is dan leidend). */
+  magReviseren?: boolean
 }
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
   bibliotheekItems = [], readOnly: readOnlyProp = false, scenarioId, dossierContext,
-  onScenariosGewijzigd,
+  onScenariosGewijzigd, magReviseren = true,
 }: Props) {
   const pathname = usePathname()
   const [scenario, setScenario]                       = useState<Scenario | null>(null)
@@ -316,6 +320,14 @@ export default function CalculatieHoofdscherm({
     if (!scenario) return
     const nieuw = await reviseerCalculatie(projectId, scenario.id)
     if (!nieuw) { toast.error('Reviseren mislukt'); return }
+    // Zet het gekoppelde dossier terug naar Aanvraag · Nieuw (aanvraag-fase, of een
+    // EVA-gedreven offerte zonder Bouw7-koppeling). Fail-soft: revisie is al gelukt.
+    if (dossierContext) {
+      try {
+        const res = await resetDossierNaarAanvraagBijRevisie(projectId)
+        if (res.ok && res.gewijzigd) toast.success('Dossier teruggezet naar Aanvraag · Nieuw')
+      } catch { /* niet blokkerend */ }
+    }
     toast.success('Nieuwe versie aangemaakt')
     onScenariosGewijzigd?.(nieuw.id)
   }
@@ -474,10 +486,15 @@ export default function CalculatieHoofdscherm({
               </div>
             </div>
 
+            {/* Rechtercluster: kolom-layouts + kolommen (gerenderd vanuit het grid via
+                portal in #calc-grid-toolbar-slot) naast Opties. */}
+            <div className="ml-auto flex items-center gap-2">
+              <div id="calc-grid-toolbar-slot" className="flex items-center gap-2" />
+
             {/* Opties dropdown — helemaal rechts */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export" className="ml-auto">
+                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export">
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                   <span className="hidden lg:inline">Opties</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -508,7 +525,7 @@ export default function CalculatieHoofdscherm({
                   >
                     <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
                   </DropdownMenu.Item>
-                  {scenario?.bevroren_op && (
+                  {scenario?.bevroren_op && magReviseren && (
                     <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
                       <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
                     </DropdownMenu.Item>
@@ -526,6 +543,7 @@ export default function CalculatieHoofdscherm({
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
+            </div>
       </div>
 
       {/* ─── Boom + Grid ── */}
@@ -584,7 +602,6 @@ export default function CalculatieHoofdscherm({
           className="flex-1 flex flex-col overflow-hidden min-w-0 relative"
           onMouseDown={() => { if (boomUitgeklapt && !boomVastgezet) handleSluitBoom() }}
         >
-          {readOnly && <div className="absolute inset-0 z-10 cursor-not-allowed" />}
           <CalculatieGrid
             ref={gridRef}
             scenarioId={scenario.id}
@@ -594,6 +611,7 @@ export default function CalculatieHoofdscherm({
             onWijziging={handleWijziging}
             onUndoCountChange={setUndoCount}
             bibliotheekItems={bibliotheekItems}
+            readOnly={readOnly}
           />
         </div>
 

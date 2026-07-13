@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, cloneElement, forwardRef, useImperativeHandle, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -37,6 +38,9 @@ interface Props {
   onWijziging: () => void
   onUndoCountChange?: (count: number) => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
+  /** Alleen-lezen (bevroren calculatie): inhoud is te bekijken en in/uit te klappen,
+   *  maar niets is bewerkbaar. */
+  readOnly?: boolean
 }
 
 export interface CalculatieGridHandle {
@@ -630,6 +634,7 @@ interface RegelRijProps {
   onDrop?: () => void
   onDragEnd?: () => void
   collapseSignal?: number
+  readOnly?: boolean
 }
 
 function CalculatieregelRij({
@@ -638,7 +643,7 @@ function CalculatieregelRij({
   bibliotheekItems,
   isGeselecteerd, onSelecteer,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
-  collapseSignal,
+  collapseSignal, readOnly = false,
 }: RegelRijProps) {
   const regelComps = componenten.filter(c => c.calculatieregel_id === regel.id)
   const ab = regelComps.find(c => c.type === 'arbeid')
@@ -823,9 +828,11 @@ function CalculatieregelRij({
               maxLength={150}
               onChange={e => onWijzig(regel.id, { omschrijving: e.target.value })}
             />
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={() => setWerkUitgeklapt(v => !v)}
-              className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+              className={`flex-shrink-0 p-0.5 rounded transition-colors cursor-pointer ${
                 werkUitgeklapt || regel.werkomschrijving
                   ? 'text-everts bg-everts-50'
                   : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
@@ -833,11 +840,13 @@ function CalculatieregelRij({
               title="Uitgebreide werkomschrijving"
             >
               <AlignLeft className="w-3 h-3" />
-            </button>
+            </span>
             {/* Expand componentregels: rechts */}
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={e => { e.stopPropagation(); setCompsUitgeklapt(v => !v) }}
-              className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+              className={`flex-shrink-0 p-0.5 rounded transition-colors cursor-pointer ${
                 compsUitgeklapt
                   ? 'text-everts bg-everts-50'
                   : regelComps.length > 0
@@ -850,7 +859,7 @@ function CalculatieregelRij({
                 ? <ChevronDown className="w-3 h-3" />
                 : <ChevronRight className="w-3 h-3" />
               }
-            </button>
+            </span>
             {regel.opmerking && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Heeft interne opmerking" />
             )}
@@ -1179,7 +1188,7 @@ function CalculatieregelRij({
           isDragging ? 'opacity-40' : '',
           isDragOver ? 'border-t-2 border-t-everts' : ''
         )}
-        draggable={!!onDragStart}
+        draggable={!!onDragStart && !readOnly}
         onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', regel.id); onDragStart?.(e) }}
         onDragOver={onDragOver}
         onDrop={e => { e.preventDefault(); onDrop?.() }}
@@ -1432,6 +1441,7 @@ interface GroepSectieProps {
   geselecteerdeRegels?: Set<string>
   onSelecteerRegel?: (regelId: string, ctrlKey: boolean, shiftKey: boolean) => void
   collapseSignal?: number
+  readOnly?: boolean
 }
 
 function GroepSectie({
@@ -1444,7 +1454,7 @@ function GroepSectie({
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems,
   geselecteerdeRegels, onSelecteerRegel,
-  collapseSignal,
+  collapseSignal, readOnly = false,
 }: GroepSectieProps) {
   const [ingeklapt,       setIngeklapt]       = useState(groep.ingeklapt ?? false)
   useLayoutEffect(() => { setIngeklapt(groep.ingeklapt ?? false) }, [groep.ingeklapt])
@@ -1518,7 +1528,7 @@ function GroepSectie({
 
       <tr
         id={`groepkop-${groep.id}`}
-        draggable
+        draggable={!readOnly}
         className={`border-b cursor-pointer group/kop select-none ${kopStijl} ${isActief ? 'ring-1 ring-inset ring-everts/50' : ''} ${isRegelDropTarget ? 'ring-2 ring-inset ring-blue-400' : ''}`}
         style={kopBgStijl}
         onClick={() => onKlik(groep.id)}
@@ -1530,12 +1540,14 @@ function GroepSectie({
         <td colSpan={colCount} className={kopPadding} style={{ paddingLeft: `${indent}px` }}>
           <div className="flex items-center gap-2">
             <span className={`text-[10px] opacity-30 cursor-grab select-none ${diepte <= 1 ? 'text-white' : 'text-slate-400'}`}>⠿</span>
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={e => { e.stopPropagation(); setIngeklapt(v => !v) }}
-              className={`p-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
+              className={`p-0.5 rounded cursor-pointer ${diepte <= 1 ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
             >
               {ingeklapt ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+            </span>
             <span className={` opacity-50 text-[11px] ${diepte <= 1 ? 'text-white' : ''}`}>{nummer}</span>
             {editingNaam ? (
               <input
@@ -1663,6 +1675,7 @@ function GroepSectie({
               onDrop={() => handleRegelDrop(r.id)}
               onDragEnd={handleRegelDragEnd}
               collapseSignal={collapseSignal}
+              readOnly={readOnly}
             />
           ))}
           {subGroepen.map(sub => (
@@ -1687,6 +1700,7 @@ function GroepSectie({
               geselecteerdeRegels={geselecteerdeRegels}
               onSelecteerRegel={onSelecteerRegel}
               collapseSignal={collapseSignal}
+              readOnly={readOnly}
             />
           ))}
 
@@ -1708,7 +1722,7 @@ function GroepSectie({
 // ─── Hoofd CalculatieGrid ─────────────────────────────────────────────────────
 
 const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function CalculatieGrid(
-  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onUndoCountChange, bibliotheekItems = [] },
+  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onUndoCountChange, bibliotheekItems = [], readOnly = false },
   ref
 ) {
   const [groepen,     setGroepen]     = useState<Groep[]>([])
@@ -1772,6 +1786,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   }
   const [colPickerOpen, setColPickerOpen] = useState(false)
   const colPickerRef = useRef<HTMLDivElement>(null)
+
+  // Kolom-layouts + kolommen-picker worden via een portal in de actiebalk getoond
+  // (naast "Opties"); de slot leeft in CalculatieHoofdscherm.
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => { setToolbarSlot(document.getElementById('calc-grid-toolbar-slot')) }, [])
 
   // Kolom-layouts per gebruiker (gebruiker_layouts)
   const [userId, setUserId]               = useState<string | null>(null)
@@ -1953,6 +1972,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   // ─── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (readOnly) return  // bevroren calculatie: geen bewerk-sneltoetsen
       const ctrl   = e.ctrlKey || e.metaKey
       const shift  = e.shiftKey
       const tag    = (e.target as HTMLElement).tagName
@@ -2066,7 +2086,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [undo, geselecteerdeRegels, actiefGroepId, regels, componenten, duwSnapshot, laadAlles, onWijziging])
+  }, [undo, geselecteerdeRegels, actiefGroepId, regels, componenten, duwSnapshot, laadAlles, onWijziging, readOnly])
 
   // ─── Multi-select acties ───────────────────────────────────────────────────
   const handleKopieerRegels = useCallback(() => {
@@ -2460,8 +2480,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         `#calc-tabel[data-hcol="${id}"] [data-col="${id}"] { background-color: rgba(219,234,254,0.35) !important; }`
       ).join(' ')}</style>
 
-      {/* Kolom-picker toolbar */}
-      <div className="flex items-center justify-end gap-2 px-3 py-1 border-b border-slate-100 bg-slate-50/60 flex-shrink-0">
+      {/* Kolom-layouts + kolommen-picker: gerenderd in de actiebalk (naast "Opties")
+          via een portal in #calc-grid-toolbar-slot. */}
+      {toolbarSlot && createPortal(
+        <>
         {userId && (
           <div ref={layoutMenuRef} className="relative">
             <button
@@ -2580,10 +2602,20 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             </div>
           )}
         </div>
-      </div>
+        </>,
+        toolbarSlot,
+      )}
 
-      {/* Tabel */}
-      <div className="flex-1 overflow-auto min-h-0">
+      {/* Bevroren: houd disabled velden goed leesbaar (geen UA-grijs) */}
+      {readOnly && (
+        <style>{`fieldset.calc-fs:disabled input, fieldset.calc-fs:disabled select, fieldset.calc-fs:disabled textarea {
+          -webkit-text-fill-color: currentColor !important; opacity: 1 !important; cursor: default !important;
+        }`}</style>
+      )}
+
+      {/* Tabel — bij een bevroren calculatie disablen we alle formuliervelden via
+          <fieldset disabled>; in/uitklappen blijft werken (die knoppen zijn <span>). */}
+      <fieldset disabled={readOnly} className="calc-fs flex-1 overflow-auto min-h-0 min-w-0 border-0 p-0 m-0">
         {roots.length > 0 ? (
           <table
             id="calc-tabel"
@@ -2635,6 +2667,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   geselecteerdeRegels={geselecteerdeRegels}
                   onSelecteerRegel={handleSelecteerRegel}
                   collapseSignal={collapseSignal}
+                  readOnly={readOnly}
                 />
               ))}
             </tbody>
@@ -2687,7 +2720,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             </button>
           </div>
         )}
-      </div>
+      </fieldset>
 
       {/* ─── Verplaats naar groep modal ──────────────────────────────────── */}
       {verplaatsModalOpen && (

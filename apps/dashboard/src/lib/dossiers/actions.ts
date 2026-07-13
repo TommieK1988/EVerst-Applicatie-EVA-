@@ -895,6 +895,59 @@ export async function updateDossierSubstatus(
   return { ok: true, bouw7 }
 }
 
+/**
+ * Zet het dossier terug naar **Aanvraag · Nieuw** wanneer een verzonden offerte
+ * gereviseerd wordt (nieuwe, bewerkbare calculatie-versie). Wordt aangeroepen met
+ * het everts-calc `projectId`; het bijbehorende dossier wordt zelf opgezocht.
+ *
+ * Scope (bewust beperkt):
+ * - Aanvraag-fase → `aanvraag_substatus = 'nieuw'`.
+ * - Offerte-fase **zonder** Bouw7-koppeling → terug naar Aanvraag · Nieuw
+ *   (offerte-substatus + verzonden-vlag gewist).
+ * - Offerte-fase mét Bouw7-koppeling, of een opdracht-dossier → **ongemoeid**:
+ *   Bouw7 is daar leidend en zou een reset bij de volgende sync terugschrijven.
+ * - Afgesloten/verloren/vervallen dossiers → ongemoeid.
+ */
+export async function resetDossierNaarAanvraagBijRevisie(
+  projectId: string
+): Promise<{ ok: true; gewijzigd: boolean; reden?: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient()
+
+  const { data: dossier, error: fetchError } = await supabase
+    .from('dossiers')
+    .select('id, hoofdstatus, aanvraag_substatus, offerte_substatus, bouw7_id')
+    .eq('everts_calc_project_id', projectId)
+    .maybeSingle()
+
+  if (fetchError) return { ok: false, error: fetchError.message }
+  if (!dossier) return { ok: true, gewijzigd: false, reden: 'geen gekoppeld dossier' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let update: any = null
+  if (dossier.hoofdstatus === 'aanvraag') {
+    if (dossier.aanvraag_substatus === 'nieuw') return { ok: true, gewijzigd: false, reden: 'al Aanvraag · Nieuw' }
+    update = { aanvraag_substatus: 'nieuw' as AanvraagSubstatus }
+  } else if (dossier.hoofdstatus === 'offerte' && dossier.bouw7_id == null) {
+    // Alleen EVA-gedreven offertes mogen terug; Bouw7-offertes laten we met rust.
+    update = {
+      hoofdstatus:        'aanvraag' as Hoofdstatus,
+      aanvraag_substatus: 'nieuw' as AanvraagSubstatus,
+      offerte_substatus:  null,
+      verzonden_op:       null,
+    }
+  } else {
+    return { ok: true, gewijzigd: false, reden: 'buiten scope (Bouw7-offerte of opdracht)' }
+  }
+
+  const { error } = await supabase.from('dossiers').update(update).eq('id', dossier.id)
+  if (error) return { ok: false, error: error.message }
+
+  await verwerkDossierTriggers(dossier.id).catch(() => {})
+  revalidatePath('/aanvragen')
+  revalidatePath('/offertes')
+  return { ok: true, gewijzigd: true }
+}
+
 /** Haal actieve medewerkers op voor rol-dropdowns. */
 export async function getMedewerkers(): Promise<{ id: string; naam: string }[]> {
   const supabase = createAdminClient()

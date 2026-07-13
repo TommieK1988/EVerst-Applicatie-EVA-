@@ -12,7 +12,6 @@ import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
 import { getScenarios } from '@/lib/everts-calc/local-store'
-import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import type { Scenario } from '@/lib/everts-calc/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
@@ -55,13 +54,8 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     setCalcTick(t => t + 1)
     if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
   }
-  const handleReviseer = async (sid: string) => {
-    if (!projectId) return
-    const nieuw = await reviseerCalculatie(projectId, sid)
-    if (!nieuw) { toast.error('Reviseren mislukt'); return }
-    toast.success('Nieuwe versie aangemaakt')
-    handleScenariosGewijzigd(nieuw.id)
-  }
+  // In de Opdracht-fase is reviseren niet toegestaan (Bouw7 is dan leidend);
+  // de Reviseren-knop/optie wordt hier bewust weggelaten.
 
   async function aanmaken() {
     setBezig(true)
@@ -119,6 +113,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
           scenarioId={selectedScenarioId ?? undefined}
           dossierContext={{ dossierId, clientNaam }}
           onScenariosGewijzigd={handleScenariosGewijzigd}
+          magReviseren={false}
         />
       </div>
     )
@@ -164,7 +159,6 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
       readOnly={readOnly}
       onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
       onOpenOfferte={setOfferteId}
-      onReviseer={handleReviseer}
       headerExtra={
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>
