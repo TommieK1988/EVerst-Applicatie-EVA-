@@ -3,12 +3,14 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import type { FormField, FormFieldType, FormSchema, FormTemplate, FormVersie } from '../types'
-import { defaultField } from '../types'
+import type { FormField, FormFieldType, FormSchema, FormInstellingen, FormPdfConfig, FormTemplate, FormVersie } from '../types'
+import { defaultField, STANDAARD_ACCENT, CALLOUT_VARIANTEN } from '../types'
+import type { VeldOpmaak } from '../types'
 import FieldPalette from './FieldPalette'
 import FormCanvas from './FormCanvas'
 import FieldSettings from './FieldSettings'
 import FormTester from './FormTester'
+import BriefpapierUpload from './BriefpapierUpload'
 import { saveFormVersie, updateFormTemplate, publishFormTemplate } from '@/app/(platform)/formulieren/actions'
 
 type Props = {
@@ -28,6 +30,13 @@ export default function FormBuilder({ template, versie }: Props) {
   const [showTester, setShowTester] = useState(false)
   const [showInstellingen, setShowInstellingen] = useState(false)
   const [isKamVgm, setIsKamVgm] = useState(template.is_kam_vgm ?? false)
+  const [accentkleur, setAccentkleur] = useState<string>(versie.schema.instellingen?.accentkleur ?? '')
+  const [pdfCfg, setPdfCfg] = useState<FormPdfConfig>(versie.schema.instellingen?.pdf ?? {})
+
+  function patchPdf(patch: Partial<FormPdfConfig>) {
+    setPdfCfg(prev => ({ ...prev, ...patch }))
+    markDirty()
+  }
 
   const selectedField = fields.find(f => f.id === selectedId) ?? null
 
@@ -65,7 +74,19 @@ export default function FormBuilder({ template, versie }: Props) {
         await updateFormTemplate(template.id, { naam: templateNaam, is_kam_vgm: isKamVgm })
       }
 
-      const schema: FormSchema = { version: 1, fields }
+      // Instellingen alleen meesturen als er iets is ingesteld (leeg = val terug op standaard/globaal).
+      const cleanPdf: FormPdfConfig = Object.fromEntries(
+        Object.entries(pdfCfg).filter(([, v]) => v !== undefined && v !== '' && v !== null)
+      )
+      const instellingen: FormInstellingen = {}
+      if (accentkleur) instellingen.accentkleur = accentkleur
+      if (Object.keys(cleanPdf).length > 0) instellingen.pdf = cleanPdf
+
+      const schema: FormSchema = {
+        version: 1,
+        fields,
+        ...(Object.keys(instellingen).length > 0 ? { instellingen } : {}),
+      }
       const result = await saveFormVersie(template.id, schema)
       if (!result.ok) {
         toast.error('Opslaan mislukt: ' + result.error)
@@ -252,7 +273,7 @@ export default function FormBuilder({ template, versie }: Props) {
           {showInstellingen && (
             <div style={{
               position: 'absolute', top: '100%', right: 0, marginTop: 6,
-              width: 260, padding: 14, borderRadius: 8,
+              width: 300, maxHeight: '70vh', overflowY: 'auto', padding: 14, borderRadius: 8,
               background: 'var(--bg-elev, white)',
               border: '1px solid var(--border)',
               boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
@@ -283,6 +304,98 @@ export default function FormBuilder({ template, versie }: Props) {
                   </div>
                 </div>
               </label>
+
+              {/* Accentkleur */}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0', paddingTop: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Accentkleur
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="color"
+                    value={accentkleur || '#009439'}
+                    onChange={e => { setAccentkleur(e.target.value); markDirty() }}
+                    style={{ width: 34, height: 26, padding: 0, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text)' }}>{accentkleur || 'Standaard (thema)'}</span>
+                  {accentkleur && (
+                    <button
+                      type="button"
+                      onClick={() => { setAccentkleur(''); markDirty() }}
+                      style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.4 }}>
+                  Kleurt knoppen, rating en de PDF-tabelkop.
+                </p>
+              </div>
+
+              {/* PDF & briefpapier */}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0 0', paddingTop: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                  PDF & briefpapier
+                </p>
+
+                <BriefpapierUpload
+                  templateId={template.id}
+                  url={pdfCfg.briefpapierUrl ?? null}
+                  onChange={url => patchPdf({ briefpapierUrl: url })}
+                />
+
+                {/* Tri-state overrides van de globale PDF-instelling */}
+                {([
+                  { key: 'toonLogo' as const, label: 'Logo tonen' },
+                  { key: 'toonInvuller' as const, label: 'Invuller/datum tonen' },
+                  { key: 'toonProjectRef' as const, label: 'Projectreferentie tonen' },
+                ]).map(({ key, label }) => (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
+                    <select
+                      value={pdfCfg[key] === undefined ? '' : pdfCfg[key] ? 'ja' : 'nee'}
+                      onChange={e => {
+                        const v = e.target.value
+                        patchPdf({ [key]: v === '' ? undefined : v === 'ja' } as Partial<FormPdfConfig>)
+                      }}
+                      style={{ fontSize: 12, padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                    >
+                      <option value="">Algemeen</option>
+                      <option value="ja">Tonen</option>
+                      <option value="nee">Verbergen</option>
+                    </select>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Koptekst (optioneel)</label>
+                  <input
+                    value={pdfCfg.koptekst ?? ''}
+                    onChange={e => patchPdf({ koptekst: e.target.value })}
+                    placeholder="Laat leeg voor algemene instelling"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                  />
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Voettekst (optioneel)</label>
+                  <input
+                    value={pdfCfg.voettekst ?? ''}
+                    onChange={e => patchPdf({ voettekst: e.target.value })}
+                    placeholder="Laat leeg voor algemene instelling"
+                    style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                  />
+                </div>
+
+                <a
+                  href="/instellingen/formulieren-pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-block', marginTop: 10, fontSize: 11, color: '#009439', textDecoration: 'none' }}
+                >
+                  Algemene PDF-instellingen →
+                </a>
+              </div>
             </div>
           )}
         </div>
@@ -328,9 +441,9 @@ export default function FormBuilder({ template, versie }: Props) {
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           {showTester ? (
-            <FormTester fields={fields} />
+            <FormTester fields={fields} accent={accentkleur || STANDAARD_ACCENT} />
           ) : showPreview ? (
-            <FormPreview fields={fields} />
+            <FormPreview fields={fields} accent={accentkleur || STANDAARD_ACCENT} />
           ) : (
             <FormCanvas
               fields={fields}
@@ -347,6 +460,7 @@ export default function FormBuilder({ template, versie }: Props) {
           <FieldSettings
             field={selectedField}
             allFields={fields}
+            templateId={template.id}
             onChange={updateField}
           />
         )}
@@ -378,7 +492,7 @@ export default function FormBuilder({ template, versie }: Props) {
 
 // ── Eenvoudig preview ────────────────────────────────────────────────
 
-function FormPreview({ fields }: { fields: FormField[] }) {
+function FormPreview({ fields, accent }: { fields: FormField[]; accent: string }) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', background: 'var(--bg)' }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -392,22 +506,82 @@ function FormPreview({ fields }: { fields: FormField[] }) {
           <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Geen velden.</p>
         )}
         {fields.map(field => (
-          <PreviewField key={field.id} field={field} />
+          <PreviewField key={field.id} field={field} accent={accent} />
         ))}
       </div>
     </div>
   )
 }
 
-function PreviewField({ field }: { field: FormField }) {
+/** CSS-uitlijning uit een opmaak-object. */
+function tekstAlign(o?: VeldOpmaak): React.CSSProperties['textAlign'] {
+  return o?.uitlijning === 'midden' ? 'center' : o?.uitlijning === 'rechts' ? 'right' : 'left'
+}
+
+function PreviewField({ field, accent }: { field: FormField; accent: string }) {
   if (field.type === 'divider') {
     return <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '20px 0' }}/>
   }
+  if (field.type === 'pagebreak') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '24px 0', color: 'var(--text-muted)' }}>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pagina-einde</span>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+      </div>
+    )
+  }
   if (field.type === 'heading') {
-    return <h3 style={{ fontSize: 17, fontWeight: 600, margin: '20px 0 8px' }}>{field.label}</h3>
+    const niveau = field.opmaak?.niveau ?? 'middel'
+    const grootte = niveau === 'groot' ? 22 : niveau === 'klein' ? 15 : 17
+    return (
+      <h3 style={{ fontSize: grootte, fontWeight: 600, margin: '20px 0 8px', color: field.opmaak?.kleur ?? 'var(--text)', textAlign: tekstAlign(field.opmaak) }}>
+        {field.label}
+      </h3>
+    )
   }
   if (field.type === 'paragraph') {
-    return <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 16 }}>{field.label}</p>
+    return (
+      <p style={{
+        fontSize: 14, marginBottom: 16,
+        color: field.opmaak?.kleur ?? 'var(--text-muted)',
+        textAlign: tekstAlign(field.opmaak),
+        fontWeight: field.opmaak?.vet ? 600 : 400,
+        fontStyle: field.opmaak?.cursief ? 'italic' : 'normal',
+      }}>
+        {field.label}
+      </p>
+    )
+  }
+  if (field.type === 'callout') {
+    const cfg = CALLOUT_VARIANTEN[field.opmaak?.variant ?? 'info']
+    return (
+      <div style={{
+        display: 'flex', gap: 8, alignItems: 'flex-start', margin: '12px 0 16px',
+        padding: '10px 12px', borderRadius: 8,
+        background: cfg.achtergrond, border: `1px solid ${cfg.rand}`, color: cfg.tekst,
+      }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }}>
+          <circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>
+        </svg>
+        <span style={{ fontSize: 13, lineHeight: 1.5 }}>{field.label}</span>
+      </div>
+    )
+  }
+  if (field.type === 'image') {
+    const align = field.opmaak?.uitlijning === 'midden' ? 'center' : field.opmaak?.uitlijning === 'rechts' ? 'flex-end' : 'flex-start'
+    return (
+      <div style={{ display: 'flex', justifyContent: align, margin: '12px 0 16px' }}>
+        {field.afbeeldingUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={field.afbeeldingUrl} alt={field.label} style={{ width: field.afbeeldingBreedte ?? 200, maxWidth: '100%', borderRadius: 6 }} />
+        ) : (
+          <div style={{ width: field.afbeeldingBreedte ?? 200, height: 80, border: '1px dashed var(--border)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+            Geen afbeelding
+          </div>
+        )}
+      </div>
+    )
   }
 
   const inputStyle: React.CSSProperties = {
@@ -471,6 +645,30 @@ function PreviewField({ field }: { field: FormField }) {
           </label>
         </div>
       )}
+      {field.type === 'rating' && (() => {
+        const min = field.validation?.min ?? 1
+        const max = field.validation?.max ?? 10
+        const opties: number[] = []
+        for (let n = min; n <= max; n++) opties.push(n)
+        if (field.ratingStijl === 'sterren') {
+          return (
+            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+              {opties.map(n => (
+                <svg key={n} width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth={1.5} style={{ color: accent }}>
+                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                </svg>
+              ))}
+            </div>
+          )
+        }
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {opties.map(n => (
+              <span key={n} style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: 'var(--text)' }}>{n}</span>
+            ))}
+          </div>
+        )
+      })()}
       {field.type === 'photo' && (
         <div style={{ ...inputStyle, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
           Foto uploaden

@@ -21,11 +21,27 @@ export type FormFieldType =
   | 'repeatable'
   | 'heading'
   | 'paragraph'
+  | 'callout'
   | 'divider'
+  | 'image'
+  | 'pagebreak'
 
 export interface FieldOption {
   label: string
   value: string
+}
+
+// ── Opmaak (kleur/uitlijning/nadruk) voor weergave-velden ────────────
+
+export type CalloutVariant = 'info' | 'let_op' | 'waarschuwing' | 'succes'
+
+export interface VeldOpmaak {
+  niveau?: 'groot' | 'middel' | 'klein'      // heading
+  kleur?: string                              // tekstkleur (hex)
+  uitlijning?: 'links' | 'midden' | 'rechts'
+  vet?: boolean
+  cursief?: boolean
+  variant?: CalloutVariant                    // callout
 }
 
 export type ConditionOperator =
@@ -67,13 +83,17 @@ export interface FormField {
   dossierVariabele?: string   // dossier: welke variabele uit het gekoppelde dossier
   conditions?: FieldCondition[]
   validation?: FieldValidation
+  ratingStijl?: 'cijfers' | 'sterren'  // rating: weergave als cijfers of sterren
+  opmaak?: VeldOpmaak                   // heading | paragraph | callout | image
+  afbeeldingUrl?: string                // image: geüploade afbeelding (public URL)
+  afbeeldingBreedte?: number            // image: weergavebreedte in px
 }
 
 // ── Weergave-only veldtypen ──────────────────────────────────────────
 // Kop, tekstblok en scheidingslijn zijn puur opmaak: ze renderen geen
 // invoer en mogen dus nooit als "verplichte vraag" worden behandeld.
 
-export const DISPLAY_ONLY_FIELD_TYPES: FormFieldType[] = ['heading', 'paragraph', 'divider']
+export const DISPLAY_ONLY_FIELD_TYPES: FormFieldType[] = ['heading', 'paragraph', 'callout', 'divider', 'image', 'pagebreak']
 
 export function isInvoerVeld(field: { type: FormFieldType }): boolean {
   return !DISPLAY_ONLY_FIELD_TYPES.includes(field.type)
@@ -81,9 +101,25 @@ export function isInvoerVeld(field: { type: FormFieldType }): boolean {
 
 // ── Schema (opgeslagen als JSONB) ────────────────────────────────────
 
+/** PDF-instellingen per sjabloon; overschrijven de globale formulier_pdf_config. */
+export interface FormPdfConfig {
+  briefpapierUrl?: string | null
+  toonLogo?: boolean
+  toonInvuller?: boolean
+  toonProjectRef?: boolean
+  koptekst?: string | null
+  voettekst?: string | null
+}
+
+export interface FormInstellingen {
+  accentkleur?: string
+  pdf?: FormPdfConfig
+}
+
 export interface FormSchema {
   version: 1
   fields: FormField[]
+  instellingen?: FormInstellingen
 }
 
 /**
@@ -194,7 +230,10 @@ export const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   repeatable:  'Herhalende sectie',
   heading:     'Kop (vaste titel)',
   paragraph:   'Tekst­blok',
+  callout:     'Aandacht-blok',
   divider:     'Scheidingslijn',
+  image:       'Afbeelding / Logo',
+  pagebreak:   'Pagina-einde',
 }
 
 export const FIELD_TYPE_GROUPS: { label: string; types: FormFieldType[] }[] = [
@@ -216,13 +255,36 @@ export const FIELD_TYPE_GROUPS: { label: string; types: FormFieldType[] }[] = [
   },
   {
     label: 'Opmaak & Structuur',
-    types: ['heading', 'paragraph', 'divider'],
+    types: ['heading', 'paragraph', 'callout', 'divider', 'image', 'pagebreak'],
   },
   {
     label: 'Sectie',
     types: ['repeatable'],
   },
 ]
+
+/** Standaard-accentkleur wanneer een sjabloon er geen kiest (huidig thema). */
+export const STANDAARD_ACCENT = 'hsl(var(--primary))'
+
+/** De door het sjabloon gekozen accentkleur, of de thema-standaard. */
+export function resolveAccent(schema: FormSchema | undefined | null): string {
+  return schema?.instellingen?.accentkleur || STANDAARD_ACCENT
+}
+
+/** Kleur/achtergrond/rand + label per aandacht-blok-variant. Gedeeld door builder, filler en PDF. */
+export const CALLOUT_VARIANTEN: Record<CalloutVariant, {
+  label: string
+  tekst: string       // tekstkleur (hex)
+  rand: string        // randkleur (hex)
+  achtergrond: string // achtergrondkleur (hex)
+  pdfTekst: [number, number, number]
+  pdfAchtergrond: [number, number, number]
+}> = {
+  info:         { label: 'Info',         tekst: '#1e40af', rand: '#93c5fd', achtergrond: '#eff6ff', pdfTekst: [30, 64, 175],  pdfAchtergrond: [239, 246, 255] },
+  let_op:       { label: 'Let op',       tekst: '#854d0e', rand: '#fde047', achtergrond: '#fefce8', pdfTekst: [133, 77, 14],  pdfAchtergrond: [254, 252, 232] },
+  waarschuwing: { label: 'Waarschuwing', tekst: '#991b1b', rand: '#fca5a5', achtergrond: '#fef2f2', pdfTekst: [153, 27, 27],  pdfAchtergrond: [254, 242, 242] },
+  succes:       { label: 'Succes',       tekst: '#166534', rand: '#86efac', achtergrond: '#f0fdf4', pdfTekst: [22, 101, 52],  pdfAchtergrond: [240, 253, 244] },
+}
 
 export const TEMPLATE_CATEGORIE_LABELS: Record<string, string> = {
   werkbon:    'Werkbon',
@@ -297,6 +359,18 @@ export function defaultField(type: FormFieldType, existingNames: string[]): Form
   if (type === 'rating') {
     // Cijfer 1–10; de bouwer kan het bereik via validatie (min/max) aanpassen.
     base.validation = { min: 1, max: 10 }
+    base.ratingStijl = 'cijfers'
+  }
+
+  if (type === 'callout') {
+    base.label = 'Let op: vul dit zorgvuldig in.'
+    base.opmaak = { variant: 'info' }
+  }
+
+  if (type === 'image') {
+    base.label = 'Afbeelding'
+    base.afbeeldingBreedte = 200
+    base.opmaak = { uitlijning: 'links' }
   }
 
   if (type === 'repeatable') {

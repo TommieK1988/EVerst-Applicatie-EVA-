@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react'
 import type { FormField, FieldCondition } from '../types'
-import { evaluateConditions, conditionMatches } from '../types'
+import { evaluateConditions, conditionMatches, STANDAARD_ACCENT } from '../types'
 import FieldRenderer from '../filler/FieldRenderer'
 import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
 
 type Props = {
   fields: FormField[]
+  accent?: string
 }
 
 function getVandaag() {
@@ -48,7 +49,7 @@ function operatorLabel(op: FieldCondition['operator']): string {
   }
 }
 
-export default function FormTester({ fields }: Props) {
+export default function FormTester({ fields, accent = STANDAARD_ACCENT }: Props) {
   const [values, setValues]   = useState<Record<string, unknown>>(() => initValues(fields))
   const [ingediend, setIngediend] = useState(false)
   const [showDebug, setShowDebug] = useState(true)
@@ -168,6 +169,7 @@ export default function FormTester({ fields }: Props) {
                     value={values[field.id]}
                     onChange={val => updateValue(field.id, val)}
                     medewerkers={medewerkers}
+                    accent={accent}
                   />
                   {field.conditions && field.conditions.length > 0 && (
                     <span style={{

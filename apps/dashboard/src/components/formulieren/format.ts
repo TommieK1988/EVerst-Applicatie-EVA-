@@ -60,6 +60,15 @@ export function formatVeldwaardeTekst(field: FormField, value: unknown): string 
       return String(value)
     }
 
+    case 'rating': {
+      // Platte tekst voor detailweergave én PDF (jsPDF-standaardfont kent geen
+      // ster-glyphs, dus bewust géén ★). De visuele sterren staan in het formulier zelf.
+      const n = Number(value)
+      if (!Number.isFinite(n)) return String(value)
+      const max = field.validation?.max ?? 10
+      return field.ratingStijl === 'sterren' ? `${n} / ${max} sterren` : `${n} / ${max}`
+    }
+
     case 'date':
       return formatDatum(String(value))
 

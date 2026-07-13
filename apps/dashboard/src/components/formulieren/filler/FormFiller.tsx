@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
-import { evaluateConditions, isInvoerVeld } from '../types'
+import { evaluateConditions, isInvoerVeld, resolveAccent } from '../types'
 import FieldRenderer from './FieldRenderer'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import {
@@ -88,6 +88,9 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   const [isSaving, setIsSaving] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [currentStep, setCurrentStep] = useState(0)
+
+  const accent = resolveAccent(versie.schema)
 
   // Hervat een gedeeld concept uit Supabase (meereist over apparaten). Alleen als er
   // geen bestaande inzending en geen vooringevulde waarden zijn — die gaan vóór het
@@ -127,10 +130,10 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     }
   }
 
-  /** Zichtbare, verplichte invoervelden die nog leeg zijn. */
-  function getMissingFields(): FormField[] {
-    return getVisibleFields(versie.schema.fields).filter(field => {
-      // Weergave-only velden (kop/tekstblok/scheidingslijn) hebben geen invoer
+  /** Verplichte invoervelden binnen een set die nog leeg zijn. */
+  function missendeInVelden(velden: FormField[]): FormField[] {
+    return velden.filter(field => {
+      // Weergave-only velden (kop/tekstblok/scheidingslijn/…) hebben geen invoer
       // en mogen het indienen nooit blokkeren.
       if (!isInvoerVeld(field)) return false
       if (!field.required) return false
@@ -140,8 +143,26 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     })
   }
 
+  /** Alle zichtbare, verplichte invoervelden die nog leeg zijn. */
+  function getMissingFields(): FormField[] {
+    return missendeInVelden(getVisibleFields(versie.schema.fields))
+  }
+
   function getVisibleFields(fields: FormField[]): FormField[] {
     return fields.filter(f => evaluateConditions(f, fields, values))
+  }
+
+  /** Splits de zichtbare velden in pagina's op elk pagina-einde. */
+  function splitInPaginas(velden: FormField[]): FormField[][] {
+    const paginas: FormField[][] = [[]]
+    for (const f of velden) {
+      if (f.type === 'pagebreak') { paginas.push([]); continue }
+      paginas[paginas.length - 1].push(f)
+    }
+    // Verwijder lege pagina's die door een pagina-einde aan begin/eind ontstaan.
+    return paginas.filter(p => p.length > 0).length > 0
+      ? paginas.filter(p => p.length > 0)
+      : [[]]
   }
 
   async function handleSaveDraft() {
@@ -179,8 +200,13 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
           ? `Nog 1 verplicht veld in te vullen: ${namen}.`
           : `Nog ${missing.length} verplichte velden in te vullen: ${namen}${missing.length > 3 ? '…' : ''}.`
       )
-      document.getElementById(`veld-${missing[0].id}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // In een wizard: spring eerst naar de stap met het eerste ontbrekende veld.
+      const doelStap = paginas.findIndex(p => p.some(f => f.id === missing[0].id))
+      if (doelStap >= 0 && doelStap !== stap) setCurrentStep(doelStap)
+      setTimeout(() => {
+        document.getElementById(`veld-${missing[0].id}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, doelStap !== stap ? 60 : 0)
       return
     }
 
@@ -221,6 +247,39 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
 
   const fields = versie.schema.fields
   const visibleFields = getVisibleFields(fields)
+  const paginas = splitInPaginas(visibleFields)
+  const isWizard = paginas.length > 1
+  const stap = Math.min(currentStep, paginas.length - 1)
+  const laatsteStap = stap >= paginas.length - 1
+  const stapVelden = paginas[stap] ?? []
+
+  function scrollNaarTop() {
+    setTimeout(() => {
+      document.getElementById('form-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
+  function volgende() {
+    const missing = missendeInVelden(stapVelden)
+    if (missing.length > 0) {
+      setErrors(Object.fromEntries(missing.map(f => [f.id, `${f.label} is verplicht.`])))
+      const namen = missing.slice(0, 3).map(f => f.label).join(', ')
+      toast.error(
+        missing.length === 1
+          ? `Nog 1 verplicht veld in te vullen: ${namen}.`
+          : `Nog ${missing.length} verplichte velden in te vullen: ${namen}${missing.length > 3 ? '…' : ''}.`
+      )
+      document.getElementById(`veld-${missing[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    setCurrentStep(Math.min(stap + 1, paginas.length - 1))
+    scrollNaarTop()
+  }
+
+  function vorige() {
+    setCurrentStep(Math.max(stap - 1, 0))
+    scrollNaarTop()
+  }
 
   const terug = () => router.push(terugHref ?? (mobiel ? '/m/taken' : '/formulieren/sjablonen'))
 
@@ -258,9 +317,24 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         )}
       </div>
 
+      <div id="form-top" style={{ scrollMarginTop: 80 }} />
+
+      {/* Voortgang (wizard) */}
+      {isWizard && (
+        <div style={{ marginBottom: mobiel ? 18 : 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Stap {stap + 1} van {paginas.length}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{Math.round(((stap + 1) / paginas.length) * 100)}%</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+            <div style={{ width: `${((stap + 1) / paginas.length) * 100}%`, height: '100%', background: accent, transition: 'width 0.25s' }} />
+          </div>
+        </div>
+      )}
+
       {/* Fields */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: mobiel ? 18 : 20 }}>
-        {visibleFields.map(field => (
+        {stapVelden.map(field => (
           <div key={field.id} id={`veld-${field.id}`} style={{ scrollMarginTop: 80 }}>
             <FieldRenderer
               field={field}
@@ -269,6 +343,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
               onChange={val => updateValue(field.id, val)}
               mobiel={mobiel}
               medewerkers={medewerkers}
+              accent={accent}
             />
           </div>
         ))}
@@ -281,39 +356,36 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       {/* Actions — sticky onderbalk op mobiel (binnen de scroll-container, dus
           nooit achter de bottom-nav), inline onderaan op desktop. */}
       {fields.length > 0 && (() => {
-        const knoppen = (
-          <>
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              disabled={isSaving}
-              style={{
-                padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: mobiel ? 15 : 14, cursor: 'pointer',
-              }}
-            >
-              {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              style={{
-                flex: 1,
-                padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
-                border: 'none',
-                background: 'hsl(var(--primary))',
-                color: 'white',
-                fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              {isSubmitting ? 'Indienen...' : 'Indienen'}
-            </button>
-          </>
+        const secundairStijl: React.CSSProperties = {
+          padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
+          border: '1px solid var(--border)', background: 'var(--surface)',
+          color: 'var(--text)', fontSize: mobiel ? 15 : 14, cursor: 'pointer',
+        }
+        const primairStijl: React.CSSProperties = {
+          flex: 1, padding: mobiel ? '13px 16px' : '9px 18px', borderRadius: 9,
+          border: 'none', background: accent, color: 'white',
+          fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: 'pointer',
+        }
+
+        // Linkerknop: in een wizard vanaf stap 2 is dat "Vorige"; anders "Concept".
+        const linkerKnop = isWizard && stap > 0 ? (
+          <button type="button" onClick={vorige} style={secundairStijl}>Vorige</button>
+        ) : (
+          <button type="button" onClick={handleSaveDraft} disabled={isSaving} style={secundairStijl}>
+            {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
+          </button>
         )
+
+        // Rechterknop: "Volgende" tot de laatste stap, daarna "Indienen".
+        const rechterKnop = isWizard && !laatsteStap ? (
+          <button type="button" onClick={volgende} style={primairStijl}>Volgende</button>
+        ) : (
+          <button type="button" onClick={handleSubmit} disabled={isSubmitting} style={primairStijl}>
+            {isSubmitting ? 'Indienen...' : 'Indienen'}
+          </button>
+        )
+
+        const knoppen = <>{linkerKnop}{rechterKnop}</>
 
         return mobiel ? (
           <MobielStickyFooter style={{ marginLeft: -14, marginRight: -14, marginTop: 'auto' }}>

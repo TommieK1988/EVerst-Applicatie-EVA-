@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import type { FormField } from '@/components/formulieren/types'
+import type { FormField, FormInstellingen } from '@/components/formulieren/types'
 import { formatVeldwaardeTekst } from '@/components/formulieren/format'
+import {
+  mergePdfConfig, hexNaarRgb, renderPdfItems, pasBriefpapierToe,
+  type PdfItem, type GlobalePdfConfig,
+} from '@/components/formulieren/pdf-schema'
 
 // Hulpfunctie: URL → base64 data-URL
 async function urlNaarBase64(url: string): Promise<string | null> {
@@ -48,9 +51,10 @@ export async function GET(
   }
 
   const template = inzending.template as { naam: string } | null
-  const versie   = inzending.versie   as unknown as { schema: { fields: FormField[] }; versienummer: number } | null
+  const versie   = inzending.versie   as unknown as { schema: { fields: FormField[]; instellingen?: FormInstellingen }; versienummer: number } | null
   const fields   = versie?.schema?.fields ?? []
   const waarden  = inzending.waarden as Record<string, unknown>
+  const instellingen = versie?.schema?.instellingen
 
   // Laad PDF-config + bedrijfsgegevens
   const [pdfConfigResult, bedrijfResult] = await Promise.all([
@@ -58,10 +62,9 @@ export async function GET(
     supabase.from('bedrijfsgegevens').select('naam, logo_primair_url, logo_url').limit(1).maybeSingle(),
   ])
 
-  const pdfConfig = pdfConfigResult.data as {
-    toon_logo: boolean; toon_invuller: boolean; toon_project_ref: boolean;
-    koptekst: string | null; voettekst: string | null;
-  } | null
+  // Per-sjabloon PDF-instellingen over de globale singleton leggen.
+  const pdfConfig = mergePdfConfig(pdfConfigResult.data as GlobalePdfConfig, instellingen?.pdf)
+  const accentRgb = hexNaarRgb(instellingen?.accentkleur)
 
   const bedrijf = bedrijfResult.data as {
     naam: string | null; logo_primair_url: string | null; logo_url: string | null
@@ -75,7 +78,7 @@ export async function GET(
   let y = margin
 
   // Logo
-  const toonLogo = pdfConfig?.toon_logo ?? true
+  const toonLogo = pdfConfig.toonLogo
   if (toonLogo) {
     const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
     if (logoUrl) {
@@ -101,7 +104,7 @@ export async function GET(
   y += toonLogo ? 14 : 20
 
   // Koptekst
-  if (pdfConfig?.koptekst) {
+  if (pdfConfig.koptekst) {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'italic')
     doc.setTextColor(120, 120, 120)
@@ -112,7 +115,7 @@ export async function GET(
   // Meta-regel
   const metaDelen: string[] = []
 
-  const toonInvuller = pdfConfig?.toon_invuller ?? true
+  const toonInvuller = pdfConfig.toonInvuller
   if (toonInvuller && inzending.ingediend_op) {
     const datumStr = new Date(inzending.ingediend_op as string).toLocaleDateString('nl-NL', {
       day: 'numeric', month: 'long', year: 'numeric',
@@ -120,7 +123,7 @@ export async function GET(
     metaDelen.push(`Ingediend: ${datumStr}`)
   }
 
-  const toonProjectRef = pdfConfig?.toon_project_ref ?? true
+  const toonProjectRef = pdfConfig.toonProjectRef
   if (toonProjectRef && inzending.project_ref) {
     metaDelen.push(`Project: ${inzending.project_ref}`)
   }
@@ -140,77 +143,50 @@ export async function GET(
   doc.line(margin, y, pageW - margin, y)
   y += 6
 
-  // ── Veldwaarden tabel ─────────────────────────────────────────────
-  const rows: [string, string][] = []
+  // ── Veldwaarden → renderbare items (tabel + pagina-einden + afbeeldingen) ──
+  const items: PdfItem[] = []
 
   for (const field of fields) {
     if (field.type === 'divider') continue
-    if (field.type === 'heading') {
-      rows.push([`▶ ${field.label}`, ''])
+    if (field.type === 'pagebreak') { items.push({ kind: 'pagebreak' }); continue }
+    if (field.type === 'image') {
+      if (field.afbeeldingUrl) items.push({ kind: 'image', url: field.afbeeldingUrl, breedte: field.afbeeldingBreedte ?? 200, uitlijning: field.opmaak?.uitlijning })
       continue
     }
-    if (field.type === 'paragraph') {
-      rows.push([field.label, ''])
-      continue
-    }
+    if (field.type === 'callout') { items.push({ kind: 'row', cells: [field.label, ''], callout: field.opmaak?.variant ?? 'info' }); continue }
+    if (field.type === 'heading') { items.push({ kind: 'row', cells: [field.label, ''], stijl: 'heading' }); continue }
+    if (field.type === 'paragraph') { items.push({ kind: 'row', cells: [field.label, ''] }); continue }
     if (field.type === 'signature' || field.type === 'photo') {
-      rows.push([field.label, '[Afbeelding — zie digitale inzending]'])
+      items.push({ kind: 'row', cells: [field.label, '[Afbeelding — zie digitale inzending]'] })
       continue
     }
 
     // Herhalende sectie: elke rij met zijn sub-velden uitschrijven.
     if (field.type === 'repeatable') {
       const rijen = Array.isArray(waarden[field.id]) ? (waarden[field.id] as Record<string, unknown>[]) : []
-      rows.push([`▶ ${field.label}`, rijen.length === 0 ? '(geen rijen)' : ''])
+      items.push({ kind: 'row', cells: [field.label, rijen.length === 0 ? '(geen rijen)' : ''], stijl: 'heading' })
       rijen.forEach((row, i) => {
-        rows.push([`#${i + 1}`, ''])
+        items.push({ kind: 'row', cells: [`#${i + 1}`, ''], stijl: 'rijkop' })
         for (const child of field.children ?? []) {
-          if (child.type === 'divider' || child.type === 'heading' || child.type === 'paragraph') continue
+          if (child.type === 'divider' || child.type === 'heading' || child.type === 'paragraph' || child.type === 'callout' || child.type === 'image' || child.type === 'pagebreak') continue
           const disp = (child.type === 'signature' || child.type === 'photo')
             ? '[Afbeelding — zie digitale inzending]'
             : formatVeldwaardeTekst(child, row[child.id])
-          rows.push([`    ${child.label}`, disp])
+          items.push({ kind: 'row', cells: [`    ${child.label}`, disp] })
         }
       })
       continue
     }
 
-    rows.push([field.label, formatVeldwaardeTekst(field, waarden[field.id])])
+    items.push({ kind: 'row', cells: [field.label, formatVeldwaardeTekst(field, waarden[field.id])] })
   }
 
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    head: [['Veld', 'Antwoord']],
-    body: rows,
-    styles: { fontSize: 9, cellPadding: { top: 4, bottom: 4, left: 5, right: 5 } },
-    headStyles: { fillColor: [0, 148, 57], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: {
-      0: { cellWidth: 65, fontStyle: 'bold', textColor: [45, 55, 72] },
-      1: { cellWidth: 'auto' },
-    },
-    didParseCell: (data) => {
-      const raw = typeof data.cell.raw === 'string' ? data.cell.raw : ''
-      // Kopregel-stijl (sectiekop / heading)
-      if (data.section === 'body' && raw.startsWith('▶')) {
-        data.cell.styles.fillColor = [240, 244, 255]
-        data.cell.styles.fontStyle = 'bold'
-        data.cell.styles.textColor = [0, 100, 200]
-      }
-      // Rij-kop binnen een herhalende sectie (#1, #2, …)
-      if (data.section === 'body' && /^#\d+$/.test(raw)) {
-        data.cell.styles.fillColor = [243, 244, 246]
-        data.cell.styles.fontStyle = 'bold'
-        data.cell.styles.textColor = [90, 90, 90]
-      }
-    },
-  })
+  await renderPdfItems(doc, items, { startY: y, margin, pageW, pageH, accentRgb })
 
   // ── Footer per pagina ─────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totalPages: number = (doc as any).internal.getNumberOfPages()
-  const voettekst = pdfConfig?.voettekst ?? bedrijf?.naam ?? ''
+  const voettekst = pdfConfig.voettekst ?? bedrijf?.naam ?? ''
 
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i)
@@ -222,10 +198,11 @@ export async function GET(
     doc.text(`Pagina ${i} van ${totalPages}`, pageW - margin, pageH - 8, { align: 'right' })
   }
 
-  const pdfBytes = doc.output('arraybuffer')
+  // Briefpapier als achtergrond onder elke pagina (best-effort).
+  const pdfBytes = await pasBriefpapierToe(doc.output('arraybuffer'), pdfConfig.briefpapierUrl)
   const veiligNaam = (template?.naam ?? 'formulier').replace(/[^a-z0-9]/gi, '-').toLowerCase()
 
-  return new NextResponse(pdfBytes, {
+  return new NextResponse(pdfBytes as ArrayBuffer, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${veiligNaam}-${subId.slice(0, 8)}.pdf"`,

@@ -1,19 +1,22 @@
 'use client'
 
 import React, { useState } from 'react'
-import type { FormField, FormFieldType, FieldCondition, FieldOption } from '../types'
+import type { FormField, FormFieldType, FieldCondition, FieldOption, VeldOpmaak, CalloutVariant } from '../types'
 import {
   FIELD_TYPE_LABELS,
   FIELD_TYPE_GROUPS,
+  CALLOUT_VARIANTEN,
   labelToName,
   defaultField,
   isInvoerVeld,
 } from '../types'
 import { DOSSIER_VARIABELEN } from '../dossier-variabelen'
+import { createClient } from '@everts/database/client'
 
 type Props = {
   field: FormField
   allFields: FormField[]
+  templateId: string
   onChange: (updated: FormField) => void
 }
 
@@ -400,18 +403,179 @@ function SubFieldsEditor({
   )
 }
 
+// ── Opmaak-hulpcomponenten ────────────────────────────────────────────
+
+function SegmentedControl({
+  options, value, onChange,
+}: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+      {options.map((opt, i) => {
+        const actief = value === opt.value
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            style={{
+              flex: 1, padding: '5px 6px', fontSize: 12, cursor: 'pointer',
+              border: 'none', borderLeft: i === 0 ? 'none' : '1px solid var(--border)',
+              background: actief ? '#009439' : 'var(--bg)',
+              color: actief ? 'white' : 'var(--text)', fontWeight: actief ? 600 : 500,
+            }}
+          >
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function UitlijningKiezer({
+  value, onChange,
+}: { value?: VeldOpmaak['uitlijning']; onChange: (u: VeldOpmaak['uitlijning']) => void }) {
+  return (
+    <SegmentedControl
+      options={[
+        { value: 'links', label: 'Links' },
+        { value: 'midden', label: 'Midden' },
+        { value: 'rechts', label: 'Rechts' },
+      ]}
+      value={value ?? 'links'}
+      onChange={u => onChange(u as VeldOpmaak['uitlijning'])}
+    />
+  )
+}
+
+function KleurKiezer({ value, onChange }: { value?: string; onChange: (k: string | undefined) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        type="color"
+        value={value ?? '#161b20'}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: 34, height: 26, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', cursor: 'pointer' }}
+      />
+      <span style={{ fontSize: 12, color: 'var(--text)' }}>{value ?? 'Standaard'}</span>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+        >
+          Reset
+        </button>
+      )}
+    </div>
+  )
+}
+
+function StijlKnop({
+  actief, onClick, label, bold, cursief,
+}: { actief: boolean; onClick: () => void; label: string; bold?: boolean; cursief?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: 34, height: 30, borderRadius: 6, cursor: 'pointer',
+        border: `1px solid ${actief ? '#009439' : 'var(--border)'}`,
+        background: actief ? 'rgba(0,148,57,0.08)' : 'var(--bg)',
+        color: actief ? '#009439' : 'var(--text)',
+        fontSize: 14, fontWeight: bold ? 700 : 500, fontStyle: cursief ? 'italic' : 'normal',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+// Statische sjabloon-afbeelding uploaden naar de publieke `brand-assets` bucket.
+// Patroon uit components/LogoUpload.tsx; de URL wordt in het schema-JSONB bewaard.
+function AfbeeldingUpload({
+  templateId, fieldId, url, onChange,
+}: { templateId: string; fieldId: string; url?: string; onChange: (url: string | undefined) => void }) {
+  const [bezig, setBezig] = useState(false)
+  const [fout, setFout] = useState<string | null>(null)
+
+  async function upload(file: File) {
+    setFout(null)
+    if (!file.type.startsWith('image/')) { setFout('Alleen afbeeldingen.'); return }
+    if (file.size > 5 * 1024 * 1024) { setFout('Maximaal 5 MB.'); return }
+    setBezig(true)
+    try {
+      const supabase = createClient()
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+      const pad = `form-templates/${templateId}/${fieldId}_${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('brand-assets').upload(pad, file, { upsert: true })
+      if (error) { setFout(error.message); return }
+      const { data } = supabase.storage.from('brand-assets').getPublicUrl(pad)
+      onChange(data.publicUrl)
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <div>
+      {url && (
+        <div style={{ marginBottom: 8, position: 'relative', display: 'inline-block' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)' }} />
+          <button
+            type="button"
+            onClick={() => onChange(undefined)}
+            style={{
+              position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.55)', border: 'none',
+              borderRadius: '50%', width: 20, height: 20, color: 'white', cursor: 'pointer', fontSize: 11,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >✕</button>
+        </div>
+      )}
+      <label style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 6,
+        border: '1px dashed var(--border)', cursor: bezig ? 'default' : 'pointer', fontSize: 12,
+        color: 'var(--text-muted)', background: 'var(--bg)',
+      }}>
+        {bezig ? 'Uploaden…' : (url ? 'Vervangen' : 'Afbeelding kiezen')}
+        <input
+          type="file"
+          accept="image/*"
+          disabled={bezig}
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }}
+        />
+      </label>
+      {fout && <p style={{ fontSize: 11, color: '#e53e3e', margin: '6px 0 0' }}>{fout}</p>}
+    </div>
+  )
+}
+
 // ── Hoofd FieldSettings component ──────────────────────────────────────
 
-export default function FieldSettings({ field, allFields, onChange }: Props) {
+export default function FieldSettings({ field, allFields, templateId, onChange }: Props) {
   const isStructural = !isInvoerVeld(field)
   const hasOptions   = field.type === 'dropdown' || field.type === 'radio' || field.type === 'checkbox'
   const isRepeatable = field.type === 'repeatable'
   const isDossier    = field.type === 'dossier'
   const isRating     = field.type === 'rating'
+  const isCallout    = field.type === 'callout'
+  const isImage      = field.type === 'image'
+  const isPagebreak  = field.type === 'pagebreak'
+  const isHeading    = field.type === 'heading'
+  const isParagraph  = field.type === 'paragraph'
+  // Velden zonder tekst-label: scheidingslijn, pagina-einde en afbeelding.
+  const heeftLabel   = field.type !== 'divider' && !isPagebreak && !isImage
   const otherFields  = allFields.filter(f => f.id !== field.id && isInvoerVeld(f))
 
   function update(patch: Partial<FormField>) {
     onChange({ ...field, ...patch })
+  }
+
+  function updateOpmaak(patch: Partial<VeldOpmaak>) {
+    update({ opmaak: { ...field.opmaak, ...patch } })
   }
 
   function updateOption(idx: number, patch: Partial<FieldOption>) {
@@ -478,9 +642,17 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
         </p>
       )}
 
+      {/* Pagina-einde has no settings */}
+      {isPagebreak && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Splitst het formulier hier in een nieuwe stap bij het invullen, en begint
+          een nieuwe pagina in de PDF-export.
+        </p>
+      )}
+
       {/* Label */}
-      {field.type !== 'divider' && (
-        <InputRow label="Tekst / Label">
+      {heeftLabel && (
+        <InputRow label={isCallout ? 'Bloktekst' : 'Tekst / Label'}>
           <TextInput
             value={field.label}
             onChange={e => {
@@ -489,9 +661,94 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
               const nameWasAuto = field.name === labelToName(field.label)
               update({ label, ...(nameWasAuto ? { name: autoName } : {}) })
             }}
-            placeholder={field.type === 'heading' ? 'Kopregel tekst' : field.type === 'paragraph' ? 'Tekst­blok inhoud' : 'Veldlabel'}
+            placeholder={isHeading ? 'Kopregel tekst' : isParagraph ? 'Tekst­blok inhoud' : isCallout ? 'Bloktekst' : 'Veldlabel'}
           />
         </InputRow>
+      )}
+
+      {/* Aandacht-blok: variant-keuze */}
+      {isCallout && (
+        <InputRow label="Type / kleur">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {(Object.keys(CALLOUT_VARIANTEN) as CalloutVariant[]).map(v => {
+              const cfg = CALLOUT_VARIANTEN[v]
+              const actief = (field.opmaak?.variant ?? 'info') === v
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => updateOpmaak({ variant: v })}
+                  style={{
+                    padding: '6px 8px', borderRadius: 6, cursor: 'pointer',
+                    border: `1px solid ${actief ? cfg.tekst : 'var(--border)'}`,
+                    background: actief ? cfg.achtergrond : 'var(--bg)',
+                    color: cfg.tekst, fontSize: 12, fontWeight: actief ? 700 : 500,
+                  }}
+                >
+                  {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        </InputRow>
+      )}
+
+      {/* Kop-opmaak */}
+      {isHeading && (
+        <InputRow label="Opmaak">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SegmentedControl
+              options={[
+                { value: 'groot', label: 'Groot' },
+                { value: 'middel', label: 'Middel' },
+                { value: 'klein', label: 'Klein' },
+              ]}
+              value={field.opmaak?.niveau ?? 'middel'}
+              onChange={v => updateOpmaak({ niveau: v as VeldOpmaak['niveau'] })}
+            />
+            <UitlijningKiezer value={field.opmaak?.uitlijning} onChange={u => updateOpmaak({ uitlijning: u })} />
+            <KleurKiezer value={field.opmaak?.kleur} onChange={k => updateOpmaak({ kleur: k })} />
+          </div>
+        </InputRow>
+      )}
+
+      {/* Tekstblok-opmaak */}
+      {isParagraph && (
+        <InputRow label="Opmaak">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <StijlKnop actief={!!field.opmaak?.vet} onClick={() => updateOpmaak({ vet: !field.opmaak?.vet })} label="B" bold />
+              <StijlKnop actief={!!field.opmaak?.cursief} onClick={() => updateOpmaak({ cursief: !field.opmaak?.cursief })} label="I" cursief />
+            </div>
+            <UitlijningKiezer value={field.opmaak?.uitlijning} onChange={u => updateOpmaak({ uitlijning: u })} />
+            <KleurKiezer value={field.opmaak?.kleur} onChange={k => updateOpmaak({ kleur: k })} />
+          </div>
+        </InputRow>
+      )}
+
+      {/* Afbeelding / Logo */}
+      {isImage && (
+        <>
+          <InputRow label="Afbeelding">
+            <AfbeeldingUpload
+              templateId={templateId}
+              fieldId={field.id}
+              url={field.afbeeldingUrl}
+              onChange={url => update({ afbeeldingUrl: url })}
+            />
+          </InputRow>
+          <InputRow label={`Breedte (${field.afbeeldingBreedte ?? 200}px)`}>
+            <input
+              type="range" min={60} max={520} step={10}
+              value={field.afbeeldingBreedte ?? 200}
+              onChange={e => update({ afbeeldingBreedte: Number(e.target.value) })}
+              style={{ width: '100%', accentColor: '#009439' }}
+            />
+          </InputRow>
+          <InputRow label="Uitlijning">
+            <UitlijningKiezer value={field.opmaak?.uitlijning} onChange={u => updateOpmaak({ uitlijning: u })} />
+          </InputRow>
+        </>
       )}
 
       {/* Internal field name */}
@@ -572,28 +829,50 @@ export default function FieldSettings({ field, allFields, onChange }: Props) {
         </InputRow>
       )}
 
-      {/* Cijferbereik voor rating */}
+      {/* Weergave + bereik voor rating */}
       {isRating && (
-        <InputRow label="Cijferbereik">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TextInput
-              type="number"
-              value={String(field.validation?.min ?? 1)}
-              onChange={e => update({ validation: { ...field.validation, min: e.target.value === '' ? undefined : Number(e.target.value) } })}
-              style={{ width: 70 }}
+        <>
+          <InputRow label="Weergave">
+            <SegmentedControl
+              options={[
+                { value: 'cijfers', label: 'Cijfers' },
+                { value: 'sterren', label: 'Sterren' },
+              ]}
+              value={field.ratingStijl ?? 'cijfers'}
+              onChange={v => {
+                // Bij overschakelen naar sterren een handig standaardbereik (1 t/m 5) voorstellen.
+                const naarSterren = v === 'sterren'
+                const patch: Partial<FormField> = { ratingStijl: v as 'cijfers' | 'sterren' }
+                if (naarSterren && (field.validation?.max ?? 10) > 6) {
+                  patch.validation = { ...field.validation, min: 1, max: 5 }
+                }
+                update(patch)
+              }}
             />
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>t/m</span>
-            <TextInput
-              type="number"
-              value={String(field.validation?.max ?? 10)}
-              onChange={e => update({ validation: { ...field.validation, max: e.target.value === '' ? undefined : Number(e.target.value) } })}
-              style={{ width: 70 }}
-            />
-          </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-            Bijv. 1 t/m 10 of 1 t/m 5. De invuller kiest één cijfer.
-          </p>
-        </InputRow>
+          </InputRow>
+          <InputRow label={field.ratingStijl === 'sterren' ? 'Aantal sterren' : 'Cijferbereik'}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                type="number"
+                value={String(field.validation?.min ?? 1)}
+                onChange={e => update({ validation: { ...field.validation, min: e.target.value === '' ? undefined : Number(e.target.value) } })}
+                style={{ width: 70 }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>t/m</span>
+              <TextInput
+                type="number"
+                value={String(field.validation?.max ?? 10)}
+                onChange={e => update({ validation: { ...field.validation, max: e.target.value === '' ? undefined : Number(e.target.value) } })}
+                style={{ width: 70 }}
+              />
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+              {field.ratingStijl === 'sterren'
+                ? 'Bijv. 1 t/m 5. De invuller kiest een aantal sterren.'
+                : 'Bijv. 1 t/m 10 of 1 t/m 5. De invuller kiest één cijfer.'}
+            </p>
+          </InputRow>
+        </>
       )}
 
       {/* Dossier-variabele keuze */}

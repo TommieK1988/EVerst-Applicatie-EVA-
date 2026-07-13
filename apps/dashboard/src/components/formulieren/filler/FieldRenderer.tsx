@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
-import type { FormField } from '../types'
+import React, { useRef, useEffect, useState } from 'react'
+import type { FormField, VeldOpmaak } from '../types'
+import { CALLOUT_VARIANTEN, STANDAARD_ACCENT } from '../types'
 import type { MedewerkerWaarde } from '../format'
 import { Combobox } from '@/components/ui/combobox'
 
@@ -14,6 +15,13 @@ type Props = {
   mobiel?: boolean
   /** Keuzelijst voor `medewerker`-velden (actieve medewerkers). */
   medewerkers?: { id: string; naam: string }[]
+  /** Accentkleur van het sjabloon (knoppen, rating, selectie). */
+  accent?: string
+}
+
+/** CSS-uitlijning uit een opmaak-object. */
+function tekstAlign(o?: VeldOpmaak): React.CSSProperties['textAlign'] {
+  return o?.uitlijning === 'midden' ? 'center' : o?.uitlijning === 'rechts' ? 'right' : 'left'
 }
 
 const inputBase: React.CSSProperties = {
@@ -50,7 +58,7 @@ function Label({ field }: { field: FormField }) {
   )
 }
 
-export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers }: Props) {
+export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers, accent = STANDAARD_ACCENT }: Props) {
 
   const inputStyle: React.CSSProperties = mobiel ? { ...inputBase, ...inputMobiel } : inputBase
   const optieFont = mobiel ? 15 : 14
@@ -59,12 +67,61 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
     return <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '4px 0' }}/>
   }
 
+  // Pagina-einde is een wizard-splitspunt; als het toch los gerenderd wordt, tonen
+  // we een subtiele markering.
+  if (field.type === 'pagebreak') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-muted)' }}>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pagina-einde</span>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+      </div>
+    )
+  }
+
   if (field.type === 'heading') {
-    return <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{field.label}</h3>
+    const niveau = field.opmaak?.niveau ?? 'middel'
+    const grootte = niveau === 'groot' ? (mobiel ? 20 : 22) : niveau === 'klein' ? 15 : 17
+    return <h3 style={{ fontSize: grootte, fontWeight: 600, color: field.opmaak?.kleur ?? 'var(--text)', margin: 0, textAlign: tekstAlign(field.opmaak) }}>{field.label}</h3>
   }
 
   if (field.type === 'paragraph') {
-    return <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>{field.label}</p>
+    return (
+      <p style={{
+        fontSize: 14, margin: 0,
+        color: field.opmaak?.kleur ?? 'var(--text-muted)',
+        textAlign: tekstAlign(field.opmaak),
+        fontWeight: field.opmaak?.vet ? 600 : 400,
+        fontStyle: field.opmaak?.cursief ? 'italic' : 'normal',
+      }}>{field.label}</p>
+    )
+  }
+
+  if (field.type === 'callout') {
+    const cfg = CALLOUT_VARIANTEN[field.opmaak?.variant ?? 'info']
+    return (
+      <div style={{
+        display: 'flex', gap: 10, alignItems: 'flex-start',
+        padding: mobiel ? '12px 14px' : '10px 12px', borderRadius: 8,
+        background: cfg.achtergrond, border: `1px solid ${cfg.rand}`, color: cfg.tekst,
+      }}>
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }}>
+          <circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>
+        </svg>
+        <span style={{ fontSize: mobiel ? 14 : 13, lineHeight: 1.5 }}>{field.label}</span>
+      </div>
+    )
+  }
+
+  if (field.type === 'image') {
+    const align = field.opmaak?.uitlijning === 'midden' ? 'center' : field.opmaak?.uitlijning === 'rechts' ? 'flex-end' : 'flex-start'
+    if (!field.afbeeldingUrl) return null
+    return (
+      <div style={{ display: 'flex', justifyContent: align }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={field.afbeeldingUrl} alt={field.label} style={{ width: field.afbeeldingBreedte ?? 200, maxWidth: '100%', borderRadius: 6 }} />
+      </div>
+    )
   }
 
   const errorStyle: React.CSSProperties = error
@@ -130,6 +187,12 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
     const huidig = typeof value === 'number' ? value : null
     const opties: number[] = []
     for (let n = min; n <= max; n++) opties.push(n)
+
+    // Sterren-weergave: gevuld t/m de gekozen waarde, klik = kies, klik op zelfde = deselect.
+    if (field.ratingStijl === 'sterren') {
+      return wrap(<SterrenRating opties={opties} huidig={huidig} accent={accent} readOnly={field.readOnly} mobiel={mobiel} onChange={onChange} />)
+    }
+
     const knopMaat = mobiel ? 40 : 34
     return wrap(
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -144,8 +207,8 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
               aria-pressed={actief}
               style={{
                 width: knopMaat, height: knopMaat, borderRadius: 8,
-                border: `1px solid ${actief ? 'hsl(var(--primary))' : 'var(--border)'}`,
-                background: actief ? 'hsl(var(--primary))' : 'var(--bg)',
+                border: `1px solid ${actief ? accent : 'var(--border)'}`,
+                background: actief ? accent : 'var(--bg)',
                 color: actief ? 'white' : 'var(--text)',
                 fontSize: mobiel ? 15 : 14, fontWeight: 600, cursor: field.readOnly ? 'default' : 'pointer',
                 transition: 'background 0.12s, border-color 0.12s',
@@ -219,7 +282,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
               checked={value === opt.value}
               onChange={() => onChange(opt.value)}
               disabled={field.readOnly}
-              style={{ accentColor: 'hsl(var(--primary))' }}
+              style={{ accentColor: accent }}
             />
             {opt.label}
           </label>
@@ -251,7 +314,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                 onChange(next)
               }}
               disabled={field.readOnly}
-              style={{ accentColor: 'hsl(var(--primary))' }}
+              style={{ accentColor: accent }}
             />
             {opt.label}
           </label>
@@ -278,7 +341,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
               checked={value === (opt === 'Ja' ? true : false)}
               onChange={() => onChange(opt === 'Ja' ? true : false)}
               disabled={field.readOnly}
-              style={{ accentColor: 'hsl(var(--primary))' }}
+              style={{ accentColor: accent }}
             />
             {opt}
           </label>
@@ -553,7 +616,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
             onClick={() => onChange([...rows, {}])}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
-              background: 'hsl(var(--primary))', color: 'white',
+              background: accent, color: 'white',
               border: 'none', borderRadius: 5, padding: '4px 10px',
               fontSize: 12, cursor: 'pointer',
             }}
@@ -587,6 +650,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                   value={row[child.id]}
                   mobiel={mobiel}
                   medewerkers={medewerkers}
+                  accent={accent}
                   onChange={val => {
                     const next = [...rows]
                     next[i] = { ...next[i], [child.id]: val }
@@ -604,6 +668,55 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
   return (
     <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
       [Veldtype '{field.type}' niet ondersteund in invulweergave]
+    </div>
+  )
+}
+
+// ── Sterren-rating ────────────────────────────────────────────────────
+
+function SterrenRating({
+  opties, huidig, accent, readOnly, mobiel, onChange,
+}: {
+  opties: number[]
+  huidig: number | null
+  accent: string
+  readOnly?: boolean
+  mobiel?: boolean
+  onChange: (v: number | null) => void
+}) {
+  const [hover, setHover] = useState<number | null>(null)
+  const maat = mobiel ? 34 : 28
+  const actiefTot = hover ?? huidig ?? 0
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {opties.map(n => {
+        const gevuld = n <= actiefTot
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={readOnly}
+            aria-label={`${n}`}
+            aria-pressed={huidig === n}
+            onClick={() => onChange(huidig === n ? null : n)}
+            onMouseEnter={() => !readOnly && setHover(n)}
+            onMouseLeave={() => !readOnly && setHover(null)}
+            style={{
+              background: 'none', border: 'none', padding: 0, lineHeight: 0,
+              cursor: readOnly ? 'default' : 'pointer',
+            }}
+          >
+            <svg
+              width={maat} height={maat} viewBox="0 0 24 24"
+              fill={gevuld ? accent : 'none'}
+              stroke={gevuld ? accent : 'var(--border)'}
+              strokeWidth={1.5}
+            >
+              <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+            </svg>
+          </button>
+        )
+      })}
     </div>
   )
 }

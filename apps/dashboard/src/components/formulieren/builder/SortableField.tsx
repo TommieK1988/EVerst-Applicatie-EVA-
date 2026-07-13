@@ -4,7 +4,7 @@ import React from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { FormField } from '../types'
-import { FIELD_TYPE_LABELS } from '../types'
+import { FIELD_TYPE_LABELS, CALLOUT_VARIANTEN, isInvoerVeld } from '../types'
 
 type Props = {
   field: FormField
@@ -31,7 +31,7 @@ export default function SortableField({ field, isSelected, onSelect, onDelete, o
     position: 'relative',
   }
 
-  const isStructural = field.type === 'heading' || field.type === 'paragraph' || field.type === 'divider'
+  const isStructural = !isInvoerVeld(field)
 
   return (
     <div
@@ -78,10 +78,36 @@ export default function SortableField({ field, isSelected, onSelect, onDelete, o
           <div style={{ flex: 1, minWidth: 0 }}>
             {field.type === 'divider' ? (
               <hr style={{ border: 'none', borderTop: '2px solid var(--border)', margin: '2px 0' }}/>
+            ) : field.type === 'pagebreak' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
+                <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Pagina-einde</span>
+                <div style={{ flex: 1, borderTop: '1px dashed var(--border)' }}/>
+              </div>
             ) : field.type === 'heading' ? (
-              <strong style={{ fontSize: 15, color: 'var(--text)' }}>{field.label || 'Titel'}</strong>
+              <strong style={{ fontSize: 15, color: field.opmaak?.kleur ?? 'var(--text)' }}>{field.label || 'Titel'}</strong>
             ) : field.type === 'paragraph' ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{field.label || 'Toelichting'}</p>
+              <p style={{ fontSize: 13, color: field.opmaak?.kleur ?? 'var(--text-muted)', margin: 0, fontWeight: field.opmaak?.vet ? 600 : 400, fontStyle: field.opmaak?.cursief ? 'italic' : 'normal' }}>{field.label || 'Toelichting'}</p>
+            ) : field.type === 'callout' ? (
+              (() => {
+                const cfg = CALLOUT_VARIANTEN[field.opmaak?.variant ?? 'info']
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 6, background: cfg.achtergrond, border: `1px solid ${cfg.rand}`, color: cfg.tekst }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase' }}>{cfg.label}</span>
+                    <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{field.label}</span>
+                  </div>
+                )
+              })()
+            ) : field.type === 'image' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {field.afbeeldingUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={field.afbeeldingUrl} alt="" style={{ height: 34, maxWidth: 120, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border)' }} />
+                ) : (
+                  <div style={{ height: 34, width: 60, border: '1px dashed var(--border)', borderRadius: 4 }}/>
+                )}
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Afbeelding</span>
+              </div>
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
