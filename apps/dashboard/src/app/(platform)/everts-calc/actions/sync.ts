@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { createAdminClient } from '@everts/database/server'
 import type { Scenario, Groep, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -141,6 +142,52 @@ export interface CalculatieSnapshot {
   componenten: Componentregel[]
 }
 
+/**
+ * Beschermt bevroren (verzonden) scenario's tegen overschrijven. Een verzonden
+ * offerte bevriest zijn calculatie (`bevroren_op` op het scenario in de blob).
+ * Omdat alle versies van een project in één blob leven, kan een oude tab via de
+ * autosave anders een verzonden versie stil overschrijven. Deze merge houdt elk
+ * bevroren scenario (incl. groepen/regels/componenten) exact op de serverversie
+ * en accepteert alleen wijzigingen aan niet-bevroren scenario's.
+ */
+// Niet geëxporteerd: dit is een 'use server'-bestand en mag alleen async
+// server-actions exporteren. Interne (sync) helper voor bewaarCalculatieSnapshot.
+function beschermBevrorenScenarios(
+  server: CalculatieSnapshot,
+  incoming: CalculatieSnapshot
+): CalculatieSnapshot {
+  const bevrorenScenarioIds = new Set(
+    (server.scenarios ?? []).filter(s => s.bevroren_op).map(s => s.id)
+  )
+  if (bevrorenScenarioIds.size === 0) return incoming
+
+  const bevrorenGroepIds = new Set(
+    (server.groepen ?? []).filter(g => bevrorenScenarioIds.has(g.scenario_id)).map(g => g.id)
+  )
+  const bevrorenRegelIds = new Set(
+    (server.regels ?? []).filter(r => bevrorenGroepIds.has(r.groep_id)).map(r => r.id)
+  )
+
+  return {
+    scenarios: [
+      ...incoming.scenarios.filter(s => !bevrorenScenarioIds.has(s.id)),
+      ...server.scenarios.filter(s => bevrorenScenarioIds.has(s.id)),
+    ],
+    groepen: [
+      ...incoming.groepen.filter(g => !bevrorenScenarioIds.has(g.scenario_id)),
+      ...server.groepen.filter(g => bevrorenScenarioIds.has(g.scenario_id)),
+    ],
+    regels: [
+      ...incoming.regels.filter(r => !bevrorenGroepIds.has(r.groep_id)),
+      ...server.regels.filter(r => bevrorenGroepIds.has(r.groep_id)),
+    ],
+    componenten: [
+      ...incoming.componenten.filter(c => !bevrorenRegelIds.has(c.calculatieregel_id)),
+      ...server.componenten.filter(c => bevrorenRegelIds.has(c.calculatieregel_id)),
+    ],
+  }
+}
+
 /** Schrijft de volledige calculatie (alle scenario's van het project) als JSONB. */
 export async function bewaarCalculatieSnapshot(
   projectId: string,
@@ -149,14 +196,110 @@ export async function bewaarCalculatieSnapshot(
   // calculatie_snapshots staat (nog) niet in de gegenereerde types → any (zoals werkbegroting).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = (await createClient()) as any
+
+  // Herlaad de serverversie en bescherm bevroren scenario's tegen overschrijven.
+  const { data: bestaand } = await db
+    .from('calculatie_snapshots')
+    .select('data')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  const teSchrijven = bestaand?.data
+    ? beschermBevrorenScenarios(bestaand.data as CalculatieSnapshot, snapshot)
+    : snapshot
+
   const { error } = await db
     .from('calculatie_snapshots')
     .upsert(
-      { project_id: projectId, data: snapshot, bijgewerkt_op: new Date().toISOString() },
+      { project_id: projectId, data: teSchrijven, bijgewerkt_op: new Date().toISOString() },
       { onConflict: 'project_id' }
     )
   if (error) return { gelukt: false, fout: error.message }
   return { gelukt: true }
+}
+
+/** Bevroren calculatie-subboom zoals bewaard bij een verzonden offerteversie. */
+export interface CalculatieVersieSnapshot {
+  scenario: Scenario
+  groepen: Groep[]
+  regels: Calculatieregel[]
+  componenten: Componentregel[]
+}
+
+/**
+ * Bevriest de calculatie van een zojuist verzonden offerte: bewaart een
+ * onveranderbare kopie van de scenario-subboom bij de offerteversie
+ * (`calculatie_versie_snapshots`) én markeert het scenario bevroren in de live
+ * blob. Fail-soft: zonder gekoppeld scenario/blob is er niets te bevriezen.
+ */
+export async function bevriesCalculatieVoorOfferte(
+  quoteId: string
+): Promise<{ gelukt: boolean; fout?: string }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+
+  const { data: q } = await admin
+    .from('quotes')
+    .select('scenario_id, project_id')
+    .eq('id', quoteId)
+    .maybeSingle()
+  if (!q?.scenario_id || !q?.project_id) return { gelukt: true }
+  const scenarioId = q.scenario_id as string
+  const projectId = q.project_id as string
+
+  const { data: snap } = await admin
+    .from('calculatie_snapshots')
+    .select('data')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  const blob = snap?.data as CalculatieSnapshot | undefined
+  if (!blob) return { gelukt: true }
+
+  const scenario = blob.scenarios.find(s => s.id === scenarioId)
+  if (!scenario) return { gelukt: true }
+
+  const groepen = blob.groepen.filter(g => g.scenario_id === scenarioId)
+  const groepIds = new Set(groepen.map(g => g.id))
+  const regels = blob.regels.filter(r => groepIds.has(r.groep_id))
+  const regelIds = new Set(regels.map(r => r.id))
+  const componenten = blob.componenten.filter(c => regelIds.has(c.calculatieregel_id))
+  const nu = new Date().toISOString()
+
+  // Onveranderbare kopie bij de offerteversie.
+  await admin.from('calculatie_versie_snapshots').upsert(
+    {
+      quote_id: quoteId,
+      scenario_id: scenarioId,
+      project_id: projectId,
+      data: { scenario: { ...scenario, bevroren_op: nu }, groepen, regels, componenten },
+      bevroren_op: nu,
+    },
+    { onConflict: 'quote_id' }
+  )
+
+  // Markeer het scenario bevroren in de live blob (direct, read-modify-write).
+  const nieuweScenarios = blob.scenarios.map(s =>
+    s.id === scenarioId ? { ...s, bevroren_op: nu } : s
+  )
+  await admin
+    .from('calculatie_snapshots')
+    .update({ data: { ...blob, scenarios: nieuweScenarios }, bijgewerkt_op: nu })
+    .eq('project_id', projectId)
+
+  return { gelukt: true }
+}
+
+/** Laadt de bevroren calculatie-subboom van een verzonden offerte (of null). */
+export async function laadCalculatieVersieSnapshot(
+  quoteId: string
+): Promise<CalculatieVersieSnapshot | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data } = await admin
+    .from('calculatie_versie_snapshots')
+    .select('data')
+    .eq('quote_id', quoteId)
+    .maybeSingle()
+  return (data?.data as CalculatieVersieSnapshot) ?? null
 }
 
 /** Haalt de gedeelde calculatie-snapshot op; null als er nog nooit is opgeslagen. */

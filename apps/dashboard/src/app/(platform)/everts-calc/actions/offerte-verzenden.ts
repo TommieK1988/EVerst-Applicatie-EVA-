@@ -135,6 +135,15 @@ export async function verstuurOfferte(
     updated_at: new Date().toISOString(),
   }).eq('id', quoteId)
 
+  // ── Calculatie bevriezen bij deze offerteversie (audit-proof) ───────────────
+  // Onveranderbare kopie van de scenario-subboom + `bevroren_op` op het scenario,
+  // zodat de verzonden versie exact reproduceerbaar blijft. Fail-soft: de
+  // quote_lines blijven het primaire record.
+  try {
+    const { bevriesCalculatieVoorOfferte } = await import('./sync')
+    await bevriesCalculatieVoorOfferte(quoteId)
+  } catch { /* niet blokkerend voor de verzending */ }
+
   // ── SharePoint-archief (fail-soft) ──────────────────────────────────────────
   let sharepoint = 'niet gearchiveerd'
   // Dossier-UUID bepalen: directe koppeling of via het calc-project.

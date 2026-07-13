@@ -202,6 +202,8 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   scenarioId?: string | null
   /** Offertenummer van de calculatie; leeg → de DB genereert er een (OFT-…). */
   quoteNummer?: string | null
+  /** Versienummer van de calculatie (erft de offerte over; default 1). */
+  versie?: number | null
   /** Gekozen betalingsconditie uit het Offerte-instellingen-blok. */
   betalingsconditieId?: string | null
   /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
@@ -272,6 +274,8 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       // everts-calc project. De offerte-render leest hier als eerste uit.
       dossier_id: params.dossierId ?? null,
       scenario_id: params.scenarioId ?? null,
+      // Offerte erft het versienummer van zijn calculatie (1:1 per versie).
+      versie: params.versie ?? 1,
       template_id: template?.id ?? null,
       layout_id: params.layoutId ?? null,
       // Betalingsconditie = uitsluitend de keuze uit de calculatie (Offerte-

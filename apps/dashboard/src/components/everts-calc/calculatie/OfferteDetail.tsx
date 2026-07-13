@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Copy } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import BedrijfLoader from '@/app/(platform)/everts-calc/quotes/[id]/preview/BedrijfLoader'
 import PdfDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PdfDownloadButton'
 import DocxDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/DocxDownloadButton'
@@ -11,7 +11,6 @@ import PrintButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PrintB
 import GoedkeuringKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/GoedkeuringKnop'
 import VerzendOfferteKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/VerzendOfferteKnop'
 import QuoteStatusBadge from '@/components/everts-calc/quotes/QuoteStatusBadge'
-import { dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
 import { laadOfferteDetailStatus, type OfferteDetailStatus } from '@/app/(platform)/everts-calc/actions/offerte-verzenden'
 import type { QuoteStatus } from '@/lib/everts-calc/types-quotes'
 
@@ -21,19 +20,18 @@ interface Props {
   dossierId: string | null
   /** Terug naar de offertelijst. */
   onTerug: () => void
-  /** Open een andere offerte inline (bv. de zojuist gemaakte kopie). */
-  onOpenOfferte: (id: string) => void
 }
 
 /**
  * Inline offerte-detail binnen het dossier: PDF-preview + toolbar (status,
- * goedkeuren, verzenden, downloaden, printen, nieuwe versie). Geen route-sprong
- * naar /everts-calc; alle acties gebeuren in de dossier-tab.
+ * goedkeuren, verzenden, downloaden, printen). Geen route-sprong naar
+ * /everts-calc; alle acties gebeuren in de dossier-tab. Een nieuwe versie maak je
+ * niet hier maar via "Reviseren" op de definitieve versie in de versie-kiezer —
+ * dat kopieert de calculatie; de offerte wordt daarna opnieuw gemaakt.
  */
-export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOfferte }: Props) {
+export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
   const router = useRouter()
   const [info, setInfo] = useState<OfferteDetailStatus | null>(null)
-  const [kopieerPending, startKopieer] = useTransition()
 
   async function ververs() {
     try {
@@ -45,19 +43,6 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOffer
   }
 
   useEffect(() => { laadOfferteDetailStatus(quoteId).then(setInfo).catch(() => setInfo(null)) }, [quoteId])
-
-  function nieuweVersie() {
-    startKopieer(async () => {
-      try {
-        const { id } = await dupliceerQuoteAlsNieuweVersie(quoteId)
-        toast.success('Nieuwe versie aangemaakt')
-        router.refresh()
-        onOpenOfferte(id)
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Kopiëren mislukt')
-      }
-    })
-  }
 
   const isIntern = info?.isIntern ?? false
 
@@ -81,15 +66,6 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug, onOpenOffer
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={nieuweVersie}
-            disabled={kopieerPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
-            title="Kopiëren naar een nieuwe versie (concept)"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            {kopieerPending ? 'Bezig…' : 'Nieuwe versie'}
-          </button>
           <PrintButton />
           <DocxDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />
           <PdfDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />

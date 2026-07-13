@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Eye, Trash2, GripVertical, ClipboardCheck, X, Copy, Lock } from 'lucide-react'
+import { ArrowLeft, Eye, Trash2, GripVertical, ClipboardCheck, X, Lock } from 'lucide-react'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
 import {
   DndContext,
@@ -23,7 +23,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { verwijderQuote, herorderSections, dupliceerQuoteAlsNieuweVersie } from '@/app/(platform)/everts-calc/actions/quotes'
+import { verwijderQuote, herorderSections } from '@/app/(platform)/everts-calc/actions/quotes'
 import QuoteHeaderCard from '@/components/everts-calc/quotes/QuoteHeaderCard'
 import QuoteSectionBlock from '@/components/everts-calc/quotes/QuoteSectionBlock'
 import QuoteTotalsCard from '@/components/everts-calc/quotes/QuoteTotalsCard'
@@ -108,23 +108,11 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
   )
 
   const router = useRouter()
-  const [kopieerPending, startKopieer] = useTransition()
   const terms = quote.terms ?? []
   const isIntern = quote.type === 'interne_calculatie'
-  // Vergrendeld: definitieve (verzonden) offerte — inhoud niet meer wijzigbaar, alleen kopiëren.
+  // Vergrendeld: definitieve (verzonden) offerte — inhoud niet meer wijzigbaar.
+  // Een nieuwe versie maak je via "Reviseren" op de calculatie in het dossier.
   const vergrendeld = quote.status === 'verzonden'
-
-  function handleKopieer() {
-    startKopieer(async () => {
-      try {
-        const { id } = await dupliceerQuoteAlsNieuweVersie(quote.id)
-        toast.success('Nieuwe versie aangemaakt')
-        router.push(`/everts-calc/quotes/${id}`)
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Kopiëren mislukt')
-      }
-    })
-  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -198,15 +186,6 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={handleKopieer}
-            disabled={kopieerPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
-            title="Kopiëren naar een nieuwe versie (concept)"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            {kopieerPending ? 'Bezig…' : 'Nieuwe versie'}
-          </button>
           <Link
             href={`/quotes/${quote.id}/preview`}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors"
@@ -233,7 +212,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
           <Lock className="w-4 h-4 flex-shrink-0" />
           <span>
             Deze offerte is <strong>definitief</strong> en kan niet meer gewijzigd worden.
-            Klik op <strong>Nieuwe versie</strong> om verder te werken aan een kopie.
+            Maak een nieuwe versie via <strong>Reviseren</strong> op de calculatie in het dossier.
           </span>
         </div>
       )}

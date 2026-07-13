@@ -24,9 +24,10 @@ import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { serialiseerNaarCuf } from '@/lib/everts-calc/cuf-serializer'
 import { exportCalculatieNaarExcel } from '@/lib/everts-calc/excel-export'
 import {
-  getScenarios, getScenario, maakStandaardScenario, slaScenarioOp, kopieerScenario,
+  getScenarios, getScenario, maakStandaardScenario, slaScenarioOp,
   getGroepen, getCalculatieregels, getComponentregels,
 } from '@/lib/everts-calc/local-store'
+import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
 import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
@@ -56,11 +57,14 @@ interface Props {
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
-  bibliotheekItems = [], readOnly = false, scenarioId, dossierContext,
+  bibliotheekItems = [], readOnly: readOnlyProp = false, scenarioId, dossierContext,
   onScenariosGewijzigd,
 }: Props) {
   const pathname = usePathname()
   const [scenario, setScenario]                       = useState<Scenario | null>(null)
+  // Een verzonden (definitieve) calculatie is bevroren: read-only, ook als het
+  // dossier zelf bewerkbaar is. Zo kan een verzonden versie nooit wijzigen.
+  const readOnly = readOnlyProp || !!scenario?.bevroren_op
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
   const [kostprijs, setKostprijs]                     = useState(0)
@@ -306,14 +310,14 @@ export default function CalculatieHoofdscherm({
     if (type) { setOfferteModalType(type); setOfferteModalOpen(true) }
   }
 
-  /** Dupliceert deze calculatie (scenario) — bv. als er na verzending nog een
-   *  aanpassing nodig is. Opent daarna de kopie ter bewerking. */
-  const handleKopieerCalculatie = () => {
+  /** Reviseren: maakt een nieuwe, bewerkbare versie van deze (definitieve)
+   *  calculatie en opent die. De offerte maak je daarna opnieuw. */
+  const handleReviseer = async () => {
     if (!scenario) return
-    const kopie = kopieerScenario(scenario.id)
-    if (!kopie) { toast.error('Kopiëren mislukt'); return }
-    toast.success('Calculatie gekopieerd')
-    onScenariosGewijzigd?.(kopie.id)
+    const nieuw = await reviseerCalculatie(projectId, scenario.id)
+    if (!nieuw) { toast.error('Reviseren mislukt'); return }
+    toast.success('Nieuwe versie aangemaakt')
+    onScenariosGewijzigd?.(nieuw.id)
   }
 
   const ddItem = 'flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md'
@@ -324,7 +328,9 @@ export default function CalculatieHoofdscherm({
       {/* ─── Bevroren banner ── */}
       {readOnly && (
         <Alert tone="warning" title="Calculatie bevroren" className="rounded-none border-x-0 border-t-0 flex-shrink-0">
-          De offerte is gewonnen en omgezet naar opdracht. De calculatie is nu alleen-lezen.
+          {scenario?.bevroren_op
+            ? 'De offerte van deze versie is verzonden (definitief). De calculatie is alleen-lezen — reviseer om een nieuwe versie te maken.'
+            : 'De calculatie is alleen-lezen.'}
         </Alert>
       )}
 
@@ -502,9 +508,11 @@ export default function CalculatieHoofdscherm({
                   >
                     <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={handleKopieerCalculatie} disabled={readOnly}>
-                    <Copy className="w-3.5 h-3.5 text-slate-400" /> Calculatie kopiëren
-                  </DropdownMenu.Item>
+                  {scenario?.bevroren_op && (
+                    <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
+                    </DropdownMenu.Item>
+                  )}
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
                     <FileUp className="w-3.5 h-3.5 text-slate-400" /> CUF importeren

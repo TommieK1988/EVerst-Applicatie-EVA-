@@ -248,7 +248,8 @@ export function kopieerScenario(scenarioId: string, naam?: string): Scenario | n
     id: nieuweId(),
     naam: naam ?? `Kopie van ${bron.naam}`,
     is_standaard: false,
-    nummer: null,   // kopie krijgt een eigen offertenummer (niet dat van de bron)
+    nummer: null,       // kopie krijgt een eigen offertenummer (niet dat van de bron)
+    bevroren_op: null,  // een kopie is altijd weer bewerkbaar concept
   }
   slaScenarioOp(nieuwScenario)
 

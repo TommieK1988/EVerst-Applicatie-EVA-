@@ -115,6 +115,10 @@ export type DossierQuoteRij = {
   scenario_id: string | null
   /** Gevuld wanneer dit een meerwerk-offerte is (back-reference naar meerwerk_regels). */
   meerwerk_regel_id: string | null
+  /** Versienummer van de offerte (erft van de calculatie; null bij legacy). */
+  versie: number | null
+  /** Verzenddatum (gezet bij status=verzonden); null bij concept/legacy. */
+  verzonden_at: string | null
 }
 
 /**
@@ -150,7 +154,7 @@ export async function getQuotesVoorDossier(
     .select(`
       id, quote_nummer, type, status, titel, referentie,
       datum, geldig_tot, subtotaal_ex_btw, btw_bedrag, totaal_inc_btw,
-      scenario_id, meerwerk_regel_id, created_at,
+      scenario_id, meerwerk_regel_id, versie, verzonden_at, created_at,
       lines:quote_lines(hoeveelheid, kostprijs_pe)
     `)
     .eq('project_id', projectId)
