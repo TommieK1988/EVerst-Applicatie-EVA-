@@ -66,6 +66,7 @@ export function buildMailVars(ctx: RenderContext): Record<string, string> {
     'klant.bedrijf_of_naam': ctx.klant.bedrijf_of_naam,
     'bedrijf.naam': ctx.bedrijf.naam,
     'dossier.contactpersoon': ctx.dossier.contactpersoon || ctx.klant.bedrijf_of_naam || 'heer/mevrouw',
+    'contactpersoon.aanspreekvorm': ctx.contactpersoon.aanspreekvorm || 'heer/mevrouw',
     'dossier.werkadres': ctx.dossier.werkadres,
     'dossier.referentie': ctx.dossier.referentie,
   }

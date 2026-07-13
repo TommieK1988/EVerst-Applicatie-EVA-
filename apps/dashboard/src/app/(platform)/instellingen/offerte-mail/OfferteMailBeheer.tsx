@@ -7,7 +7,8 @@ import type { OfferteMailSjabloon } from '@/lib/everts-calc/offerte-mail'
 
 const VARIABELEN = [
   '{offerte.nummer}', '{offerte.titel}', '{offerte.datum}', '{offerte.geldig_tot}',
-  '{klant.bedrijf_of_naam}', '{dossier.contactpersoon}', '{dossier.werkadres}', '{bedrijf.naam}',
+  '{klant.bedrijf_of_naam}', '{dossier.contactpersoon}', '{contactpersoon.aanspreekvorm}',
+  '{dossier.werkadres}', '{bedrijf.naam}',
 ]
 
 export default function OfferteMailBeheer({ initieel }: { initieel: OfferteMailSjabloon }) {
