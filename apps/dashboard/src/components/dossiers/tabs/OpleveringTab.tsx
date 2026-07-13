@@ -76,6 +76,8 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
         )}
       </div>
 
+      <UitlegBlok />
+
       {nieuwOpen && (
         <Card>
           <CardBody>
@@ -113,6 +115,38 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
       )}
 
       <FeedbackBlok dossierId={dossierId} readOnly={readOnly} />
+    </div>
+  )
+}
+
+/* ─────────────────────────────── Uitleg ──────────────────────────────────── */
+
+function UitlegBlok() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/60">
+      <button onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left">
+        <span className="flex items-center gap-2 text-[12.5px] font-semibold text-brand-800">
+          <span aria-hidden>ℹ️</span> Hoe werkt de oplevering? {!open && <span className="font-normal text-brand-600">— klik voor uitleg</span>}
+        </span>
+        <span className="text-[11px] font-medium text-brand-600">{open ? 'Verbergen' : 'Tonen'}</span>
+      </button>
+      {open && (
+        <div className="space-y-2.5 border-t border-brand-200 px-4 py-3 text-[12.5px] leading-relaxed text-neutral-700">
+          <p>
+            De oplevering is <strong>geen formulier</strong> — je bouwt hem hier op. Maak een <strong>oplevermoment</strong> aan
+            (bijv. &ldquo;Eindoplevering blok A&rdquo;) en voeg daaronder <strong>opleverpunten</strong> (restpunten) toe.
+            Zodra alle punten geaccepteerd zijn, kun je laten ondertekenen.
+          </p>
+          <ul className="ml-4 list-disc space-y-1.5">
+            <li><strong>Op locatie + foto&rsquo;s:</strong> deze tab werkt op je telefoon. Bij &ldquo;Foto toevoegen&rdquo; opent direct de camera, en ondertekenen kan ter plekke op het scherm. Geen aparte app nodig.</li>
+            <li><strong>Onderaannemers:</strong> wijs een punt aan een onderaannemer toe → er verschijnt een <em>afmeldlink</em> bij Deel-links. Stuur die link; hij ziet alleen zijn eigen punten en meldt ze af met foto — zonder EVA-account.</li>
+            <li><strong>Opdrachtgever:</strong> laat ter plekke tekenen, of deel de <em>akkoordlink</em> voor akkoord op afstand.</li>
+            <li><strong>Bewonersfeedback (optioneel):</strong> maak in de Formulieren-module één feedbackformulier (categorie &ldquo;Oplevering&rdquo;), en deel hieronder de feedback-link. Reacties worden bewaard en samengevat (gemiddelde per cijfer).</li>
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

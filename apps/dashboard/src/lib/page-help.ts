@@ -1417,11 +1417,15 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
 
     case 'oplevering':
       return T('Oplevering',
-        'De oplevering van de opdracht: opleverpunten (restpunten), de klant- en onderaannemerportalen en de opleverrapportage. Hier start ook de garantietermijn.',
+        'De oplevering van de opdracht. Belangrijk: de oplevering zélf is géén formulier — je bouwt hem hier op met oplevermomenten en opleverpunten. Alleen de bewonersfeedback is een los formulier, en dat is optioneel. Je hoeft dus maar één formulier te maken, niet twee.',
         [
-          { title: 'Opleverpunten', body: 'Leg restpunten vast met foto, verantwoordelijke en deadline. Een opleverpunt kan extra werk opleveren — dat zet je door als meerwerk. Openstaande punten kunnen een inhouding (standaard 5%) op de eindfactuur veroorzaken.' },
-          { title: 'Portalen', body: 'Via een publieke tokenlink melden onderaannemers zich af, geeft de opdrachtgever akkoord op de oplevering en kunnen bewoners feedback geven — zonder EVA-account.' },
-          { title: 'Rapportage', body: 'Genereer een opleverrapport met de punten en foto\'s. Bij akkoord van de opdrachtgever gaat de status naar Opgeleverd (evt. onder voorbehoud) en start de garantietermijn.' },
+          { title: 'Zo werkt het (in het kort)', body: 'Maak eerst een Oplevermoment aan (bijv. "Eindoplevering blok A"). Voeg daaronder Opleverpunten toe: de restpunten. Zodra alle punten geaccepteerd zijn, springt het moment naar "gereed voor ondertekening" en kun je laten tekenen. Dit alles doe je in deze tab, niet via de Formulieren-module.' },
+          { title: 'Opleverpunten', body: 'Leg per restpunt de omschrijving, ruimte/locatie, deadline en foto\'s vast, en wijs het toe aan een eigen medewerker of aan een onderaannemer/leverancier. De status loopt van open → in behandeling → opgelost → geaccepteerd (of geweigerd). Vink "Extra werk" aan om er automatisch een meerwerkregel (regie) van te maken. Openstaande punten kunnen een inhouding (standaard 5%) op de eindfactuur veroorzaken.' },
+          { title: 'Op locatie opleveren + foto\'s', body: 'De tab is mobiel-first: op je telefoon in de browser maak je punten aan, en bij "Foto toevoegen" opent direct de camera. Ter plekke laten ondertekenen kan met het handtekening-vlak op het scherm. Er is geen aparte app nodig — het werkt via de browser op je telefoon.' },
+          { title: 'Onderaannemers: afmeldlink', body: 'Wijs eerst één of meer opleverpunten toe aan een onderaannemer. Daarna verschijnt bij "Deel-links" een knop "Afmeldlink: [naam]". Kopieer die link en stuur hem (nu handmatig) naar de onderaannemer. Hij ziet alleen zijn eigen punten, voegt foto + toelichting toe en meldt het punt af als opgelost — zonder EVA-account. Geen toewijzing = geen afmeldlink.' },
+          { title: 'Opdrachtgever-akkoord', body: 'Naast ondertekenen ter plekke kun je met "Akkoordlink opdrachtgever" een publieke link maken waarmee de opdrachtgever op afstand akkoord geeft op de oplevering.' },
+          { title: 'Bewonersfeedback (optioneel)', body: 'Maak in de Formulieren-module één feedbackformulier aan (categorie "Oplevering", bijv. met cijfer/rating-velden). Klik hier op "Feedback-link maken & kopiëren" en deel die met bewoners. Zij vullen de vragenlijst in zonder in te loggen; meerdere bewoners kunnen dezelfde link gebruiken. De ingevulde reacties worden bij het dossier bewaard en samengevat in het blok "Feedback-ronde bewoners" — met het aantal reacties en het gemiddelde per cijfer.' },
+          { title: 'Rapportage', body: 'Via "Rapportage (print/PDF)" open je een opleverrapport met de punten en foto\'s; opslaan als PDF gaat via Printen → Opslaan als PDF. Automatisch mailen van de rapportage en herinneringsmails naar onderaannemers zijn nog niet actief (wacht op de mailconfiguratie); links deel je voorlopig handmatig.' },
         ])
 
     case 'financieel':
