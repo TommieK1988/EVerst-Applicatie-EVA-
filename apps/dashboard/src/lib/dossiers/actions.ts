@@ -999,6 +999,8 @@ export async function updateDossierRollen(
   if (error) return { ok: false, error: error.message }
 
   // Rol-velden zijn gevolgde triggervelden (rol_toegewezen); evalueer direct.
+  // (Het herkoppelen van reeds-geactiveerde dossier-rol-taken aan de nieuwe rolhouder
+  //  gebeurt automatisch via de DB-trigger tg_dossier_rol_taken_reconcile.)
   await verwerkDossierTriggers(id).catch(() => {})
 
   // Terugschrijven naar Bouw7 (best-effort; faalt nooit de EVA-update).

@@ -254,6 +254,8 @@ async function verwerkVoltooiingsActies(taakId: string, dossierId: string | null
           .from('dossiers')
           .update({ [config.dossier_veld]: config.medewerker_id })
           .eq('id', dossierId)
+        // De DB-trigger tg_dossier_rol_taken_reconcile koppelt wachtende dossier-rol-taken
+        // automatisch aan de (nieuwe) rolhouder — ongeacht via welke weg de rol wijzigt.
       } else if (actie.actie_type === 'sjabloon_activeren' && dossierId && config.template_id) {
         await activeerSjabloon({ template_id: config.template_id, dossier_id: dossierId })
       }
