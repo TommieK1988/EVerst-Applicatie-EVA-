@@ -242,6 +242,7 @@ export function DossierKanban<K extends string>({
                       <DossierKaart
                         dossier={d}
                         sectie={sectie}
+                        draggingActief={draggingId != null}
                         onClick={() => { if (draggingId) return; router.push(`/${routeBase}/${d.id}/informatie`) }}
                       />
                     </div>

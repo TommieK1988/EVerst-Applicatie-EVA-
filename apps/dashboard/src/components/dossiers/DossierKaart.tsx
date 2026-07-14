@@ -1,8 +1,17 @@
 'use client'
 import React from 'react'
 import type { DossierRij, DossierSectie } from './types'
-import { Badge } from '@/components/ui'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
+import { DossierKaartDetail } from './DossierKaartDetail'
+import {
+  getKaartIndicatoren, heeftKaartDetail, IndicatorIcoon, TONE_KLEUREN,
+  type KaartIndicator,
+} from './kaart-indicatoren'
+
+/** Hoe lang de muis moet blijven hangen voordat het detailpaneel uitschuift. */
+const OPEN_VERTRAGING_MS = 400
+/** Korte sluitvertraging tegen geflikker als de muis net langs de rand van de kaart schuift. */
+const SLUIT_VERTRAGING_MS = 120
 
 function formatBedrag(bedrag: number) {
   return new Intl.NumberFormat('nl-NL', {
@@ -17,20 +26,88 @@ function formatDatum(iso: string) {
   })
 }
 
-function opslagKleur(pct: number): string {
-  if (pct >= 25) return 'var(--success-600, #009439)'
-  if (pct >= 15) return 'var(--warning-600, #d97706)'
-  return 'var(--error-600, #d9534f)'
+/** Compacte indicator: gekleurd icoon met optioneel een getal. De uitleg staat in het paneel. */
+function IndicatorChip({ indicator }: { indicator: KaartIndicator }) {
+  const kleur = TONE_KLEUREN[indicator.tone]
+  return (
+    <span
+      aria-label={indicator.uitleg}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 2,
+        height: 16, padding: indicator.chip ? '0 4px 0 3px' : '0 3px',
+        borderRadius: 4, flexShrink: 0,
+        color: kleur.fg, background: kleur.bg, border: `1px solid ${kleur.border}`,
+        fontSize: 9.5, fontWeight: 700, lineHeight: 1,
+      }}
+    >
+      <IndicatorIcoon soort={indicator.soort} size={10} />
+      {indicator.chip}
+    </span>
+  )
 }
 
 export function DossierKaart({
-  dossier, onClick, sectie,
+  dossier, onClick, sectie, draggingActief = false,
 }: {
   dossier: DossierRij
   onClick?: () => void
   sectie?: DossierSectie
+  /** Er wordt ergens op het bord gesleept — dan mag geen enkele kaart uitklappen. */
+  draggingActief?: boolean
 }) {
   const [hovered, setHovered] = React.useState(false)
+  const [open,    setOpen]    = React.useState(false)
+
+  const kaartRef      = React.useRef<HTMLDivElement>(null)
+  const openTimerRef  = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sluitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const indicatoren = getKaartIndicatoren(dossier, sectie)
+  const heeftDetail = heeftKaartDetail(dossier, indicatoren)
+
+  const wisTimers = React.useCallback(() => {
+    if (openTimerRef.current)  clearTimeout(openTimerRef.current)
+    if (sluitTimerRef.current) clearTimeout(sluitTimerRef.current)
+    openTimerRef.current  = null
+    sluitTimerRef.current = null
+  }, [])
+
+  React.useEffect(() => wisTimers, [wisTimers])
+
+  // Tijdens het slepen mag er niets openstaan: de browser maakt de sleep-afbeelding van de
+  // kaart zoals hij op dat moment in de DOM staat.
+  React.useEffect(() => {
+    if (draggingActief) { wisTimers(); setOpen(false) }
+  }, [draggingActief, wisTimers])
+
+  // Staat de kaart onderaan een kolom, dan valt het uitgeklapte paneel buiten de scroll-container.
+  // Na de uitklap-animatie minimaal bijscrollen zodat het paneel in beeld komt.
+  React.useEffect(() => {
+    if (!open) return
+    const t = setTimeout(() => {
+      kaartRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 220)
+    return () => clearTimeout(t)
+  }, [open])
+
+  function handleEnter() {
+    setHovered(true)
+    if (!heeftDetail || draggingActief) return
+    if (sluitTimerRef.current) clearTimeout(sluitTimerRef.current)
+    openTimerRef.current = setTimeout(() => setOpen(true), OPEN_VERTRAGING_MS)
+  }
+
+  function handleLeave() {
+    setHovered(false)
+    if (openTimerRef.current) clearTimeout(openTimerRef.current)
+    sluitTimerRef.current = setTimeout(() => setOpen(false), SLUIT_VERTRAGING_MS)
+  }
+
+  // mousedown gaat vooraf aan dragstart: hier sluiten we vóórdat de browser de sleep-afbeelding maakt.
+  function handleMouseDown() {
+    wisTimers()
+    setOpen(false)
+  }
 
   // Voor aanvraag/offerte: toon calculator; anders: projectleider
   const toonCalculator = sectie === 'aanvraag' || sectie === 'offerte'
@@ -43,24 +120,13 @@ export function DossierKaart({
   const persoonsKleur = persoonsDbKleur ?? (persoonsNaam ? crewKleur(crewInitialen(persoonsNaam)) : 'var(--neutral-300)')
   const persoonsInit  = persoonsNaam ? crewInitialen(persoonsNaam) : ''
 
-  // Meerdere offertes op status "Verstuurd": toon een indicator + de som (excl. btw) van álle
-  // verstuurde offertes i.p.v. automatisch het bedrag van de laatst opgestelde offerte.
-  const verstuurdAantal = dossier.offerte_verstuurd_aantal ?? 0
-  const verstuurdSom     = dossier.offerte_verstuurd_som_excl_btw ?? null
-  const meerdereVerstuurd = sectie === 'offerte' && verstuurdAantal > 1 && verstuurdSom != null
-
-  // Kostprijs + opslag voor offertes
-  const verkoopprijs = dossier.bedrag_excl_btw
-  const kostprijs    = dossier.kostprijs_excl_btw
-  // Weer te geven bedrag: bij meerdere verstuurde offertes de som, anders de (laatste) offerteprijs.
-  const toonBedrag   = meerdereVerstuurd ? verstuurdSom! : verkoopprijs
-  // Opslag alleen tonen bij één offerte — de som vs. één kostprijs zou een misleidend % geven.
-  const toonFinancieel = sectie === 'offerte' && !meerdereVerstuurd
-    && kostprijs != null && kostprijs > 0
-    && verkoopprijs != null && verkoopprijs > 0
-  const opslagPct = toonFinancieel
-    ? ((verkoopprijs! - kostprijs!) / kostprijs!) * 100
-    : 0
+  // Meerdere offertes op status "Verstuurd": toon de som (excl. btw) van álle verstuurde offertes
+  // i.p.v. automatisch het bedrag van de laatst opgestelde offerte. (De indicator zit in de chips.)
+  const verstuurdSom      = dossier.offerte_verstuurd_som_excl_btw ?? null
+  const meerdereVerstuurd = sectie === 'offerte'
+    && (dossier.offerte_verstuurd_aantal ?? 0) > 1
+    && verstuurdSom != null
+  const toonBedrag = meerdereVerstuurd ? verstuurdSom! : dossier.bedrag_excl_btw
 
   const bouw7Url = dossier.bouw7_id
     ? `https://start.bouw7.nl/project/view?id=${dossier.bouw7_id}#/`
@@ -73,9 +139,11 @@ export function DossierKaart({
 
   return (
     <div
+      ref={kaartRef}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onMouseDown={handleMouseDown}
       style={{
         position: 'relative',
         padding: '12px 14px 12px 17px',
@@ -83,9 +151,6 @@ export function DossierKaart({
         borderRadius: 8,
         background: hovered ? 'var(--neutral-50)' : 'var(--neutral-0)',
         cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
         transition: 'background 0.12s, box-shadow 0.12s, transform 0.12s',
         boxShadow: hovered ? '0 4px 8px -2px rgba(16,24,40,0.10)' : 'none',
         transform: hovered ? 'translateY(-1px)' : 'none',
@@ -98,138 +163,98 @@ export function DossierKaart({
         borderRadius: '0 2px 2px 0',
       }} />
 
-      {/* Dossiernummer + Bouw7-link + bedrag */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{
-            fontSize: 10.5,
-            color: 'var(--neutral-400)', letterSpacing: '0.01em',
-          }}>
-            {dossier.dossiernummer ?? 'Nieuw'}
-          </span>
-          {bouw7Url && (
-            <a
-              href={bouw7Url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Openen in Bouw7"
-              style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 14, height: 14, opacity: 0.4, color: 'var(--neutral-500)',
-                transition: 'opacity 0.12s', flexShrink: 0,
-              }}
-              onMouseEnter={(e) => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.opacity = '1' }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.4' }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </a>
+      {/* Compacte body */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Dossiernummer + Bouw7-link + bedrag */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{
+              fontSize: 10.5,
+              color: 'var(--neutral-400)', letterSpacing: '0.01em',
+            }}>
+              {dossier.dossiernummer ?? 'Nieuw'}
+            </span>
+            {bouw7Url && (
+              <a
+                href={bouw7Url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Openen in Bouw7"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 14, height: 14, opacity: 0.4, color: 'var(--neutral-500)',
+                  transition: 'opacity 0.12s', flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.4' }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            )}
+          </div>
+          {toonBedrag != null && toonBedrag > 0 && (
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
+            }}>
+              {formatBedrag(toonBedrag)}
+            </span>
           )}
         </div>
-        {toonBedrag != null && toonBedrag > 0 && (
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            {formatBedrag(toonBedrag)}
-          </span>
-        )}
-      </div>
 
-      {/* Indicator: meerdere offertes op status Verstuurd — eigen regel zodat het bedrag rechtsboven past. */}
-      {meerdereVerstuurd && (
-        <span
-          title={`${verstuurdAantal} offertes op status Verstuurd — bedrag rechtsboven is het totaal excl. btw`}
-          style={{
-            alignSelf: 'flex-start',
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '1px 7px', borderRadius: 999,
-            fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
-            color: 'var(--primary-700, #1d4ed8)',
-            background: 'var(--primary-50, #eff6ff)',
-            border: '1px solid var(--primary-200, #bfdbfe)',
-          }}
-        >
-          {verstuurdAantal}× verstuurd
-        </span>
-      )}
-
-      {/* Titel */}
-      <div style={{
-        fontSize: 13, fontWeight: 600, color: 'var(--neutral-900)',
-        lineHeight: 1.35, letterSpacing: '-0.005em',
-      }}>
-        {dossier.titel}
-      </div>
-
-      {/* Klant */}
-      {dossier.klant_naam && (
-        <div style={{ fontSize: 12, color: 'var(--neutral-500)', fontWeight: 500 }}>
-          {dossier.klant_naam}
+        {/* Titel */}
+        <div style={{
+          fontSize: 13, fontWeight: 600, color: 'var(--neutral-900)',
+          lineHeight: 1.35, letterSpacing: '-0.005em',
+        }}>
+          {dossier.titel}
         </div>
-      )}
 
-      {/* Kostprijs + opslag (alleen voor offerte-sectie) */}
-      {toonFinancieel && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
-            Kostprijs {formatBedrag(kostprijs!)}
-          </span>
-          <span style={{
-            fontSize: 11, fontWeight: 700,
-            color: opslagKleur(opslagPct),
-          }}>
-            {opslagPct.toFixed(1)}% opslag
-          </span>
-        </div>
-      )}
-
-      {/* Footer: persoons-badge + datum */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-        {persoonsNaam ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{
-              display: 'inline-grid', placeItems: 'center',
-              width: 20, height: 20, borderRadius: '50%',
-              background: `linear-gradient(135deg, ${persoonsKleur}, ${persoonsKleur}cc)`,
-              boxShadow: '0 0 0 1.5px white',
-              color: '#fff', fontSize: 8.5, fontWeight: 700, flexShrink: 0,
-            }}>
+        {/* Footer: persoons-badge + indicator-chips + datum */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 2 }}>
+          {persoonsNaam ? (
+            <span
+              title={persoonsNaam}
+              style={{
+                display: 'inline-grid', placeItems: 'center',
+                width: 20, height: 20, borderRadius: '50%',
+                background: `linear-gradient(135deg, ${persoonsKleur}, ${persoonsKleur}cc)`,
+                boxShadow: '0 0 0 1.5px white',
+                color: '#fff', fontSize: 8.5, fontWeight: 700, flexShrink: 0,
+              }}
+            >
               {persoonsInit}
             </span>
-            <span style={{ fontSize: 11.5, color: 'var(--neutral-600)', fontWeight: 500 }}>
-              {persoonsNaam}
+          ) : (
+            <span />
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+            {indicatoren.map(ind => <IndicatorChip key={ind.soort} indicator={ind} />)}
+            <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
+              {formatDatum(kaartDatum)}
             </span>
           </div>
-        ) : (
-          <span />
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
-          {dossier.bouw7_uren_overschrijding && (
-            <span title="Arbeid: uren op 100% overschrijden de prognose-uren">
-              <Badge tone="error" size="sm">Uren</Badge>
-            </span>
-          )}
-          {dossier.bouw7_bestelregels_afwijking && (
-            <span title="Bestelregels sluiten niet aan op de prognose — projectleider: werkbegroting laten goedkeuren">
-              <Badge tone="warning" size="sm">Begroting</Badge>
-            </span>
-          )}
-          {dossier.wb_ongeaccordeerde_wijzigingen && (
-            <span title="Werkbegroting bevat niet-geaccordeerde wijzigingen — laat de werkbegroting opnieuw accorderen">
-              <Badge tone="warning" size="sm">WB!</Badge>
-            </span>
-          )}
-          <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
-            {formatDatum(kaartDatum)}
-          </span>
         </div>
       </div>
+
+      {/* Uitklappaneel — animeert op hoogte via grid-template-rows (0fr → 1fr) */}
+      {heeftDetail && (
+        <div style={{
+          display: 'grid',
+          gridTemplateRows: open ? '1fr' : '0fr',
+          transition: 'grid-template-rows 180ms ease',
+        }}>
+          <div style={{ overflow: 'hidden', minHeight: 0 }}>
+            <DossierKaartDetail dossier={dossier} sectie={sectie} indicatoren={indicatoren} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

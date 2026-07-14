@@ -40,6 +40,9 @@ export type DossierRij = Dossier & {
   offerte_verstuurd_aantal?: number | null
   /** Som van de subtotalen (excl. btw) van alle offertes met status "Verstuurd". */
   offerte_verstuurd_som_excl_btw?: number | null
+  /** Taken-tellers (server-side geteld over losse taken + actielijst-taken; zie verrijkDossiers). */
+  taken_open?: number
+  taken_totaal?: number
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
   intern: boolean
 }

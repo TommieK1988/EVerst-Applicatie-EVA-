@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
@@ -23,6 +24,8 @@ import {
   type Bouw7PurchaseOrderContract,
   type Bouw7EmployeeHourLogResponse,
   type Bouw7ProjectInvoiceTerm,
+  type Bouw7ProjectInvoiceTermStatement,
+  type Bouw7PurchaseInvoiceDetail,
   type Bouw7SalesInvoice,
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
@@ -114,11 +117,74 @@ async function getInternDossierIds(ids: string[]): Promise<Set<string>> {
   return new Set((data ?? []).map((d: any) => d.dossier_id as string))
 }
 
-/** Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit). */
-async function verrijkMetIntern(rijen: DossierRij[]): Promise<DossierRij[]> {
-  const internSet = await getInternDossierIds(rijen.map(r => r.id))
-  if (internSet.size === 0) return rijen
-  return rijen.map(r => (internSet.has(r.id) ? { ...r, intern: true } : r))
+/**
+ * Telt per dossier de open en totale taken. Taken hangen via twee paden aan een dossier:
+ * direct (`tasks.dossier_id`, losse taken) en via een actielijst (`tasks.lijst_id` →
+ * `task_lists.dossier_id`). Beide paden zijn nodig; een taak die in beide zit telt één keer.
+ * Semantiek conform `lib/taken/services/taken.ts`: afgerond = 'gereed', open = alles behalve
+ * 'gereed'/'vervallen', subtaken tellen niet mee.
+ */
+async function getTakenTellingen(ids: string[]): Promise<Map<string, { open: number; totaal: number }>> {
+  const tellingen = new Map<string, { open: number; totaal: number }>()
+  if (ids.length === 0) return tellingen
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: lijsten } = await supabase
+    .from('task_lists')
+    .select('id, dossier_id')
+    .eq('is_template', false)
+    .in('dossier_id', ids)
+
+  const lijstNaarDossier = new Map<string, string>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (lijsten ?? []).map((l: any) => [l.id as string, l.dossier_id as string])
+  )
+  const lijstIds = [...lijstNaarDossier.keys()]
+
+  const [directRes, viaLijstRes] = await Promise.all([
+    supabase.from('tasks').select('id, status, dossier_id').is('parent_task_id', null).in('dossier_id', ids),
+    lijstIds.length
+      ? supabase.from('tasks').select('id, status, lijst_id').is('parent_task_id', null).in('lijst_id', lijstIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const geteld = new Set<string>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tel = (taak: any, dossierId: string | undefined) => {
+    if (!dossierId || geteld.has(taak.id)) return
+    geteld.add(taak.id)
+    if (taak.status === 'vervallen') return
+    const huidig = tellingen.get(dossierId) ?? { open: 0, totaal: 0 }
+    huidig.totaal += 1
+    if (taak.status !== 'gereed') huidig.open += 1
+    tellingen.set(dossierId, huidig)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const t of (directRes.data ?? []) as any[]) tel(t, t.dossier_id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const t of (viaLijstRes.data ?? []) as any[]) tel(t, lijstNaarDossier.get(t.lijst_id))
+
+  return tellingen
+}
+
+/** Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit) en de taken-tellers. */
+async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
+  const ids = rijen.map(r => r.id)
+  const [internSet, taken] = await Promise.all([getInternDossierIds(ids), getTakenTellingen(ids)])
+  if (internSet.size === 0 && taken.size === 0) return rijen
+
+  return rijen.map(r => {
+    const telling = taken.get(r.id)
+    return {
+      ...r,
+      intern: internSet.has(r.id) || r.intern,
+      taken_open:   telling?.open   ?? 0,
+      taken_totaal: telling?.totaal ?? 0,
+    }
+  })
 }
 
 /** Haal alle dossiers op voor een fase, verrijkt met klant- en rolnamen. */
@@ -136,7 +202,7 @@ export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResu
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -167,7 +233,7 @@ export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofd
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -197,7 +263,7 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -224,7 +290,7 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /** Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit '08. Afgewezen' uit. */
@@ -243,7 +309,7 @@ export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
@@ -262,7 +328,7 @@ export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /** Haal financieel afgesloten dossiers op (Bouw7 status 07). */
@@ -280,7 +346,7 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /**
@@ -310,7 +376,7 @@ export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: await verrijkMetIntern((data ?? []).map(mapRij)) }
+  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
 }
 
 /** Update de servicedesk substatus van een dossier (voor kanban drag & drop). */

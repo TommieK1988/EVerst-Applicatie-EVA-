@@ -5,6 +5,7 @@ import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { getDossierSubstatus } from './types'
+import { isVerlopen } from './kaart-indicatoren'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { IconPlusDS } from '@/components/eva/Icons'
@@ -54,11 +55,6 @@ function formatDatum(iso: string | null): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function isVerlopen(iso: string | null): boolean {
-  if (!iso) return false
-  return new Date(iso) < new Date()
 }
 
 /** Servicedesk gebruikt een eigen substatus-veld; overige secties gaan via getDossierSubstatus. */
