@@ -1022,7 +1022,8 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     )
 
     // Naam → medewerker-id, voor het matchen van vrije-tekst-namen uit Bouw7-maatwerkvelden
-    // (bv. custom attribute "Eindverantwoordelijke offerte" → rol Controller). Normaliseer naar
+    // (custom attributes "Eindverantwoordelijke offerte" → rol Controller en "Calculator" → rol
+    // Calculator; beide zijn van het type `employee` en bevatten dus een naam). Normaliseer naar
     // lowercase, non-breaking spaces → spatie, witruimte inklappen. Keys voor zowel
     // "voornaam achternaam" als "voornaam tussenvoegsel achternaam". Namen die naar meerdere
     // medewerkers wijzen worden ambigu en niet gematcht.
@@ -1043,18 +1044,18 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       }
     }
     /** Match een vrije-tekstnaam (custom attribute) op een medewerker-id; null als leeg/onbekend/ambigu. */
-    const matchControllerUitCa = (raw: string | null | undefined): string | null => {
+    const matchMedewerkerUitCa = (raw: string | null | undefined, veld: string): string | null => {
       const key = normNaam(raw)
       if (!key) return null
       const hit = naamMap.get(key)
       if (hit) return hit
-      console.warn(`[sync] Controller-naam "${raw}" niet gematcht op een medewerker`)
+      console.warn(`[sync] ${veld}-naam "${raw}" niet gematcht op een medewerker`)
       return null
     }
 
     const { data: dossierData } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, bouw7_sync_hash')
+      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, calculator_id, bouw7_sync_hash')
       .not('bouw7_id', 'is', null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
@@ -1138,7 +1139,11 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         catNm:     p.category?.name ?? null,
         price:     p.fixedPrice ?? null,
         ctrl:      p.caEindverantwoordelijkeOfferte ?? null,
-        q:         q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
+        // Uitwijkveld voor de calculator als `workPlanner` bezet is door de projectleider — moet
+        // in de fingerprint, anders slaat de incrementele sync een dossier over waarvan alléén
+        // dit veld is gewijzigd.
+        cacalc:    p.caCalculator ?? null,
+        q:       q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
         vst:       verstuurdAggMap.get(key) ? { n: verstuurdAggMap.get(key)!.aantal, s: Math.round(verstuurdAggMap.get(key)!.somExcl * 100) } : null,
       })
       hashMap.set(key, fp)
@@ -1415,24 +1420,29 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       const kostprijs    = quoteIsBron ? (det?.kostprijs ?? null) : null
       const btwSplitsing = quoteIsBron ? (det?.btwSplitsing ?? null) : null
 
+      // Calculator ≡ Werkvoorbereider (Bouw7 `workPlanner`): op de informatietab bestaat alleen nog
+      // de rol Calculator. Bouw7 verbiedt echter dat de projectleider tevens werkvoorbereider is,
+      // terwijl EVA dat wél toestaat. Voor die dossiers laat EVA `workPlanner` leeg en draagt het
+      // maatwerkveld "Calculator" (`caCalculator`, vrije-tekstnaam) de rol — zie bouw7-rollen.ts.
+      // Leesvolgorde: workPlanner → caCalculator → bestaande (handmatig gezette) waarde.
+      const calculatorId =
+        (p.workPlanner?.id ? (medewerkerMap.get(String(p.workPlanner.id)) ?? null) : null)
+        ?? matchMedewerkerUitCa(p.caCalculator, 'Calculator')
+        ?? existing?.calculator_id
+        ?? null
+
       rows.push({
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
         titel:                    p.name,
         klant_id:                 p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
         project_manager_id:       p.projectLeader?.id ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null) : null,
-        werkvoorbereider_id:      p.workPlanner?.id
-                                    ? (medewerkerMap.get(String(p.workPlanner.id)) ?? null)
-                                    : null,
         uitvoerder_id:            p.executor?.id
                                     ? (medewerkerMap.get(String(p.executor.id)) ?? null)
                                     : null,
-        // Calculator ≡ Werkvoorbereider (Bouw7 workPlanner): op de informatietab is de calculator-rol
-        // gelijkgetrokken met werkvoorbereider en wordt hij naar Bouw7 `workPlanner` teruggeschreven.
-        // Daarom leest calculator_id óók van workPlanner (mirror van werkvoorbereider_id), zodat de
-        // rol round-trip't. Fallback: bestaande (handmatig gezette) waarde.
-        calculator_id:            p.workPlanner?.id
-                                    ? (medewerkerMap.get(String(p.workPlanner.id)) ?? null)
-                                    : (existing?.calculator_id ?? null),
+        calculator_id:            calculatorId,
+        // Spiegelkolom: EVA kent alleen nog de rol Calculator, maar taak-triggers draaien deels nog
+        // op `werkvoorbereider`. Houd hem gelijk aan calculator_id (zoals updateDossierRollen doet).
+        werkvoorbereider_id:      calculatorId,
         contactpersoon_id:        (() => {
                                     // Voorkeur: de contactpersoon die direct op het Bouw7-project staat.
                                     if (p.contactPerson?.id) {
@@ -1446,7 +1456,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         // Custom attribute "Eindverantwoordelijke offerte" (vrije tekst, alleen in de Offerte-fase)
         // → rol Controller. Vult/overschrijft bij een gevulde, matchende naam; valt anders terug op
         // de bestaande (eventueel handmatig gezette) controller. Het veld blijft in de UI bewerkbaar.
-        controller_id:            matchControllerUitCa(p.caEindverantwoordelijkeOfferte) ?? existing?.controller_id ?? null,
+        controller_id:            matchMedewerkerUitCa(p.caEindverantwoordelijkeOfferte, 'Controller') ?? existing?.controller_id ?? null,
         bedrag_excl_btw:          verkoopExcl,
         bedrag_incl_btw:          verkoopIncl,
         kostprijs_excl_btw:       kostprijs,
