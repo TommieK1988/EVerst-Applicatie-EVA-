@@ -41,6 +41,8 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   )
   // "Niet toegewezen": toon alleen dossiers zonder gekoppelde persoon (sectie-afhankelijk).
   const [alleenNietToegewezen, setAlleenNietToegewezen] = React.useState(false)
+  // Tweede, onafhankelijke slicer: filtert op controller (staat rechts in dezelfde balk).
+  const [geselecteerdeControllers, setGeselecteerdeControllers] = React.useState<string[]>([])
 
   function switchView(v: ViewMode) {
     setView(v)
@@ -60,6 +62,12 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       if (next) setGeselecteerdeLeiders([]) // sluit personen-selectie uit
       return next
     })
+  }
+
+  function toggleController(naam: string) {
+    setGeselecteerdeControllers(prev =>
+      prev.includes(naam) ? prev.filter(n => n !== naam) : [...prev, naam]
+    )
   }
 
   // Voor aanvraag/offerte: filter op calculator; voor opdracht/servicedesk: op projectleider
@@ -104,13 +112,38 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     [dossiers, sectie],
   )
 
-  // Gefilterde dossiers op basis van geselecteerde personen / "Niet toegewezen"
+  const uniekeControllers = React.useMemo(
+    () => [...new Set(dossiers.map(d => d.controller_naam).filter((n): n is string => !!n))].sort(),
+    [dossiers],
+  )
+
+  const kleurPerController = React.useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const d of dossiers) {
+      if (d.controller_naam && d.controller_kleur && !map[d.controller_naam]) {
+        map[d.controller_naam] = d.controller_kleur
+      }
+    }
+    return map
+  }, [dossiers])
+
+  // Gefilterde dossiers: personen-slicer (of "Niet toegewezen") én controller-slicer.
   const gefilterdeDossiers = React.useMemo(() => {
-    if (alleenNietToegewezen) return dossiers.filter(d => persoonsNaamVoorFilter(d) == null)
-    if (geselecteerdeLeiders.length === 0) return dossiers
-    return dossiers.filter(d => geselecteerdeLeiders.includes(persoonsNaamVoorFilter(d) ?? ''))
+    return dossiers.filter(d => {
+      if (alleenNietToegewezen) {
+        if (persoonsNaamVoorFilter(d) != null) return false
+      } else if (geselecteerdeLeiders.length > 0
+        && !geselecteerdeLeiders.includes(persoonsNaamVoorFilter(d) ?? '')) {
+        return false
+      }
+      if (geselecteerdeControllers.length > 0
+        && !geselecteerdeControllers.includes(d.controller_naam ?? '')) {
+        return false
+      }
+      return true
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, sectie])
+  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, sectie])
 
   // Interne dossiers (Intern-toggle aan) worden verborgen op het bord/lijst en
   // alleen via de Intern-popup getoond.
@@ -156,14 +189,18 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   // Slicer balk — tonen bij ≥ 2 unieke personen, of als er een filter actief is
   // (bv. voorgeselecteerd via ?mijn=1) zodat de gebruiker die kan wissen, of als er
   // niet-toegewezen dossiers zijn (dan tonen we de "Niet toegewezen"-knop).
-  const slicerBalk = (uniekePLs.length >= 2 || geselecteerdeLeiders.length > 0 || heeftNietToegewezen || alleenNietToegewezen) ? (
+  const toontPersonen = uniekePLs.length >= 2 || geselecteerdeLeiders.length > 0 || heeftNietToegewezen || alleenNietToegewezen
+  const toontControllers = uniekeControllers.length >= 1
+
+  const slicerBalk = (toontPersonen || toontControllers) ? (
     <div style={{
-      display: 'flex', gap: 6, flexWrap: 'wrap',
+      display: 'flex', alignItems: 'center', gap: 16,
       padding: '8px 16px',
       borderBottom: '1px solid var(--border)',
       flexShrink: 0,
     }}>
-      {uniekePLs.map(naam => {
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {toontPersonen && uniekePLs.map(naam => {
         const actief = !alleenNietToegewezen && (geselecteerdeLeiders.length === 0 || geselecteerdeLeiders.includes(naam))
         const kleur  = kleurPerLeider[naam] ?? crewKleur(crewInitialen(naam))
         return (
@@ -196,7 +233,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           </button>
         )
       })}
-      {(heeftNietToegewezen || alleenNietToegewezen) && (
+      {toontPersonen && (heeftNietToegewezen || alleenNietToegewezen) && (
         <button
           onClick={toggleNietToegewezen}
           title="Toon alleen dossiers zonder gekoppelde persoon"
@@ -221,9 +258,13 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           Niet toegewezen
         </button>
       )}
-      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen) && (
+      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen || geselecteerdeControllers.length > 0) && (
         <button
-          onClick={() => { setGeselecteerdeLeiders([]); setAlleenNietToegewezen(false) }}
+          onClick={() => {
+            setGeselecteerdeLeiders([])
+            setAlleenNietToegewezen(false)
+            setGeselecteerdeControllers([])
+          }}
           style={{
             padding: '3px 9px',
             borderRadius: 99,
@@ -236,6 +277,55 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         >
           Wis filter
         </button>
+      )}
+      </div>
+
+      {toontControllers && (
+        <div style={{
+          display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+          marginLeft: 'auto',
+        }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            textTransform: 'uppercase', color: 'var(--neutral-400)',
+          }}>
+            Controller
+          </span>
+          {uniekeControllers.map(naam => {
+            const actief = geselecteerdeControllers.length === 0 || geselecteerdeControllers.includes(naam)
+            const kleur  = kleurPerController[naam] ?? crewKleur(crewInitialen(naam))
+            return (
+              <button
+                key={naam}
+                onClick={() => toggleController(naam)}
+                title={`Filter op controller ${naam}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px 3px 4px',
+                  borderRadius: 99,
+                  border: `1.5px solid ${actief ? kleur : 'var(--border)'}`,
+                  background: actief ? `${kleur}18` : 'transparent',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  color: actief ? 'var(--neutral-900)' : 'var(--neutral-400)',
+                  transition: 'all 0.12s',
+                }}
+              >
+                <span style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  display: 'inline-grid', placeItems: 'center',
+                  background: actief
+                    ? `linear-gradient(135deg, ${kleur}, ${kleur}cc)`
+                    : 'var(--neutral-200)',
+                  color: actief ? '#fff' : 'var(--neutral-500)',
+                  fontSize: 8, fontWeight: 700, flexShrink: 0,
+                }}>
+                  {crewInitialen(naam)}
+                </span>
+                {naam}
+              </button>
+            )
+          })}
+        </div>
       )}
     </div>
   ) : null

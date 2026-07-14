@@ -43,7 +43,7 @@ const ROL_SELECT = `
   werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
-  controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam ),
+  controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
 `.trim()
 
@@ -88,6 +88,7 @@ function mapRij(row: any): DossierRij {
     calculator_kleur:      row.calculator?.kleur        ?? null,
     uitvoerder_naam:       medNaam(row.uitvoerder),
     controller_naam:       medNaam(row.controller),
+    controller_kleur:      row.controller?.kleur        ?? null,
     contactpersoon_naam:     medNaam(row.contactpersoon),
     contactpersoon_email:    row.contactpersoon?.email    ?? null,
     contactpersoon_telefoon: row.contactpersoon?.telefoon ?? null,
