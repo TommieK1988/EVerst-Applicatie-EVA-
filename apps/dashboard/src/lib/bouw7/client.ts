@@ -215,6 +215,54 @@ export type Bouw7ProjectFile = {
   updatedAt?: string
 }
 
+/**
+ * Offerte-herinnering — GET /list/quotation-reminders (Heimdall, q-DSL).
+ * Filters: `processed = false` (open) · `quotation.projectId = {id}` (per dossier).
+ */
+export type Bouw7QuotationReminder = {
+  id: number
+  description: string | null
+  /** Herinnerdatum (ISO). */
+  remindAt: string | null
+  /** true = afgehandeld/afgevinkt; open herinneringen hebben false. */
+  processed: boolean
+  quotation: {
+    id: number
+    subject?: string | null
+    number?: string | null
+    employeeId?: number | null
+    /** Koppelt aan dossiers.bouw7_id. */
+    projectId: number
+  } | null
+  /** Aanmaker; `username` = e-mailadres (te matchen op medewerkers.email). */
+  createdBy?: { id: number; username: string | null } | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+/**
+ * To-do — GET /list/todos (Heimdall, q-DSL).
+ * Filters: `isDone = false` (open) · `project.id = {id}` (per dossier).
+ * Let op: toewijzing alleen als vrije-tekst namen (`associatedEmployeeNames`), geen employee-id's.
+ */
+export type Bouw7Todo = {
+  id: number
+  name: string
+  description: string | null
+  priority: number | null
+  /** Deadline (ISO). */
+  executeBefore: string | null
+  isDone: boolean
+  project: {
+    id: number
+    name?: string | null
+    number?: string | null
+    status?: string | null
+  } | null
+  /** Komma-gescheiden volledige namen, bv. "Marco Veltman, Teunis Hoefnagel". */
+  associatedEmployeeNames: string | null
+}
+
 /* ── Response types (gebaseerd op Bouw7 API spec) ─────────────────── */
 
 export type Bouw7Contact = {

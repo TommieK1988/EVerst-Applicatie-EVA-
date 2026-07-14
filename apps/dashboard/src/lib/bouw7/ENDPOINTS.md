@@ -335,6 +335,42 @@ totaal-velden). Live opgehaald, géén opslag — defensief met `.catch` per bro
 
 ---
 
+## Offerte-herinneringen · To-do's · Notities (Heimdall `/list/*`, geverifieerd jul 2026)
+
+Bulk-lijstendpoints met `q`-HQL-filter. Beide lijsten zijn klein (tientallen records org-breed),
+dus de sync haalt ze **volledig** op en groepeert per `bouw7_id`; per-dossier scoping via `q`.
+
+| Wat | Endpoint | Filter (`q`) | Belangrijke velden |
+|---|---|---|---|
+| **Offerte-herinneringen** | `GET /list/quotation-reminders` | `processed = false` (open) · `quotation.projectId = {id}` | `id`, `description` (tekst), `remindAt` (datum), `processed` (bool = afgehandeld), `quotation{id,subject,number,employeeId,projectId}`, `createdBy{id,username}` (username = e-mail) |
+| **To-do's** | `GET /list/todos` | `isDone = false` (open) · `project.id = {id}` | `id`, `name` (titel), `description` (vaak null), `priority` (int), `executeBefore` (deadline), `isDone` (bool), `project{id,name,number,status}`, `associatedEmployeeNames` (komma-string van volledige namen — **géén** employee-id's) |
+
+**Koppeling → dossier:** herinnering via `quotation.projectId`, to-do via `project.id`, beide = `dossiers.bouw7_id`.
+
+**Notities:** géén lijst-endpoint (`/list/notes`, `/list/project-notes` → 404). De interne projectnotitie is
+het enkele veld **`note`** op `GET /project/{id}` (detail-call; **niet** aanwezig op `/list/projects`).
+`information` op de projectlijst is de offerte-/projectomschrijving, geen notitie.
+
+> **Geen detail-endpoint per item:** `GET /todo/{id}` en `/list/todos/{id}` geven 404 — alleen de
+> lijstvorm bestaat. Toewijzing van een to-do is dus alleen op **naam** te matchen (`associatedEmployeeNames`).
+
+### EVA-mapping (zie `sync.ts`)
+
+| Bron | EVA-doel | idempotentie |
+|---|---|---|
+| Offerte-herinnering (open) | `dossier_notities` (`bouw7_bron='reminder'`, `bouw7_ref='reminder:{id}'`) | unieke `(dossier_id, bouw7_ref)` |
+| Interne projectnotitie (`note`) | `dossier_notities` (`bouw7_bron='note'`, `bouw7_ref='note:project'`) | 1 per dossier; leeg → verwijderd |
+| To-do (open) | `tasks` (`bouw7_todo_id`, `dossier_id`) + `task_assignees` | unieke `(dossier_id, bouw7_todo_id)` |
+
+> **Auteur/toewijzing:** herinnering-auteur via `createdBy.username` → `medewerkers.email`. To-do-toewijzing via
+> `associatedEmployeeNames` → naam-match op `medewerkers` → `auth_user_id` (alleen medewerkers mét auth-user
+> zijn toewijsbaar; `task_assignees.user_id` is NOT NULL). Geen match → notitie zonder auteur / taak ontoegewezen.
+>
+> **Notitie-sync is duur** (1 detail-call per dossier): draait in `full`-modus en bij de per-dossier verversknop,
+> **niet** in de incrementele cron. Herinneringen + to-do's (goedkope bulk) draaien altijd volledig.
+
+---
+
 ## EVA-intern (Supabase)
 
 Financiële data die wél in de EVA-database staat.

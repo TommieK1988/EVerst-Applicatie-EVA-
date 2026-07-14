@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo } from './client'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
@@ -1812,5 +1812,296 @@ async function verwerkDebiteurTakenEnReminders(supabase: any, nu: Date, vandaag:
       await supabase.from('debiteuren').update({ laatste_reminder_op: vandaag }).eq('id', d.id)
     }
   }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * SYNC: Offerte-herinneringen + interne notities → dossier_notities · To-do's → tasks
+ *
+ * Alle drie koppelen op dossiers.bouw7_id en moeten dus ná syncProjects draaien.
+ * Herinneringen en to-do's zijn goedkope bulk-lijsten (tientallen records) en draaien
+ * altijd volledig; de interne notitie kost een detail-call per dossier en draait alleen
+ * in `full`-modus of bij de per-dossier verversknop.
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/** Normaliseer een naam voor matching (lowercase, nbsp→spatie, witruimte inklappen). */
+function normNaamVoorMatch(s: string | null | undefined): string {
+  return (s ?? '').replace(/ /g, ' ').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/** Bouw7-dossier-ids uit een scope-set omzetten naar EVA-dossier-ids (voor .in()-filters). */
+function scopeNaarDossierIds(scoped: Set<string> | null, dossierMap: Map<string, string>): string[] | null {
+  if (!scoped) return null
+  return [...scoped].map(id => dossierMap.get(id)).filter(Boolean) as string[]
+}
+
+/**
+ * Offerte-herinneringen (GET /list/quotation-reminders, open = `processed=false`) → dossier-notitie.
+ * Reconcilieert: nieuwe erbij, gewijzigde bijgewerkt, afgehandelde/verdwenen verwijderd.
+ * Auteur via `createdBy.username` (e-mail) → medewerkers.email.
+ */
+export async function syncOfferteHerinneringen(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  try {
+    const bouw7 = await getBouw7Client()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+
+    const { data: dossierData } = await supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
+    const dossierMap = new Map<string, string>((dossierData ?? []).map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
+
+    const { data: mwData } = await supabase.from('medewerkers').select('id, email').not('email', 'is', null)
+    const emailMap = new Map<string, string>()
+    for (const m of (mwData ?? []) as { id: string; email: string | null }[]) {
+      if (m.email) emailMap.set(m.email.toLowerCase(), m.id)
+    }
+
+    const reminders = await fetchAllPages<Bouw7QuotationReminder>(bouw7, '/list/quotation-reminders')
+    const gewenst = new Map<string, { dossier_id: string; inhoud: string; medewerker_id: string | null }>()
+    for (const r of reminders) {
+      if (r.processed) continue
+      const pid = r.quotation?.projectId != null ? String(r.quotation.projectId) : null
+      if (!pid || (scoped && !scoped.has(pid))) continue
+      const dossierId = dossierMap.get(pid)
+      if (!dossierId) continue
+      const datum = r.remindAt ? r.remindAt.slice(0, 10) : null
+      const tekst = (r.description ?? '').trim() || '(geen omschrijving)'
+      const inhoud = `📌 Offerte-herinnering${datum ? ` (${datum})` : ''}: ${tekst}`
+      const auteur = r.createdBy?.username ? (emailMap.get(r.createdBy.username.toLowerCase()) ?? null) : null
+      gewenst.set(`reminder:${r.id}`, { dossier_id: dossierId, inhoud, medewerker_id: auteur })
+    }
+
+    let bq = supabase.from('dossier_notities')
+      .select('id, dossier_id, bouw7_ref, inhoud, medewerker_id').eq('bouw7_bron', 'reminder')
+    const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
+    if (scopeDossierIds) {
+      bq = scopeDossierIds.length ? bq.in('dossier_id', scopeDossierIds) : bq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
+    }
+    const { data: bestaand } = await bq
+    const bestaandByRef = new Map<string, { id: string; inhoud: string; medewerker_id: string | null }>(
+      (bestaand ?? []).map((n: { id: string; bouw7_ref: string; inhoud: string; medewerker_id: string | null }) => [n.bouw7_ref, n])
+    )
+
+    for (const [ref, wens] of gewenst) {
+      const cur = bestaandByRef.get(ref)
+      if (!cur) {
+        const { error } = await supabase.from('dossier_notities').insert({
+          dossier_id: wens.dossier_id, bouw7_bron: 'reminder', bouw7_ref: ref,
+          inhoud: wens.inhoud, medewerker_id: wens.medewerker_id,
+        })
+        if (error) { result.fouten++; console.error('[sync herinneringen] insert:', error.message) } else { result.nieuw++ }
+      } else {
+        bestaandByRef.delete(ref)
+        if (cur.inhoud !== wens.inhoud || cur.medewerker_id !== wens.medewerker_id) {
+          const { error } = await supabase.from('dossier_notities').update({
+            inhoud: wens.inhoud, medewerker_id: wens.medewerker_id,
+          }).eq('id', cur.id)
+          if (error) { result.fouten++ } else { result.bijgewerkt++ }
+        }
+      }
+    }
+    const teVerwijderen = [...bestaandByRef.values()].map(n => n.id)
+    if (teVerwijderen.length) {
+      await supabase.from('dossier_notities').delete().in('id', teVerwijderen)
+    }
+  } catch (e: unknown) {
+    result.fouten++
+    result.foutMelding = e instanceof Error ? e.message : String(e)
+  }
+  await logSync('offerte_herinneringen', 'in', result, Date.now() - start)
+  return result
+}
+
+/**
+ * To-do's (GET /list/todos) → taken (tasks + task_assignees).
+ * Open (`isDone=false`) worden aangemaakt/behouden; afgevinkte → bestaande taak op `gereed`;
+ * in Bouw7 verdwenen → `vervallen`. Titel/omschrijving/toewijzing van bestaande taken worden
+ * niet overschreven (EVA-edits blijven behouden); alleen deadline + status reconcilieren.
+ * Toewijzing via `associatedEmployeeNames` (naam-match → medewerkers.auth_user_id).
+ */
+export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  try {
+    const bouw7 = await getBouw7Client()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+
+    const { data: dossierData } = await supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
+    const dossierMap = new Map<string, string>((dossierData ?? []).map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
+
+    // Naam → auth_user_id (alleen medewerkers met auth-user; ambigu → null).
+    const { data: mwData } = await supabase.from('medewerkers')
+      .select('voornaam, tussenvoegsel, achternaam, auth_user_id').not('auth_user_id', 'is', null)
+    const naamNaarAuth = new Map<string, string | null>()
+    for (const m of (mwData ?? []) as { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null; auth_user_id: string }[]) {
+      const keys = new Set([
+        normNaamVoorMatch([m.voornaam, m.achternaam].filter(Boolean).join(' ')),
+        normNaamVoorMatch([m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')),
+      ])
+      for (const k of keys) {
+        if (!k) continue
+        if (naamNaarAuth.has(k) && naamNaarAuth.get(k) !== m.auth_user_id) naamNaarAuth.set(k, null)
+        else naamNaarAuth.set(k, m.auth_user_id)
+      }
+    }
+    const matchAuth = (naam: string): string | null => {
+      const k = normNaamVoorMatch(naam)
+      return k ? (naamNaarAuth.get(k) ?? null) : null
+    }
+
+    const todos = await fetchAllPages<Bouw7Todo>(bouw7, '/list/todos')
+    const relevant = todos.filter(t => {
+      const pid = t.project?.id != null ? String(t.project.id) : null
+      return !!pid && dossierMap.has(pid) && (!scoped || scoped.has(pid))
+    })
+
+    let tq = supabase.from('tasks')
+      .select('id, dossier_id, bouw7_todo_id, status, deadline').not('bouw7_todo_id', 'is', null)
+    const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
+    if (scopeDossierIds) {
+      tq = scopeDossierIds.length ? tq.in('dossier_id', scopeDossierIds) : tq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
+    }
+    const { data: bestaandeTaken } = await tq
+    const taakByTodoId = new Map<string, { id: string; status: string; deadline: string | null }>(
+      (bestaandeTaken ?? []).map((t: { id: string; bouw7_todo_id: number; status: string; deadline: string | null }) => [String(t.bouw7_todo_id), t])
+    )
+
+    for (const t of relevant) {
+      const dossierId = dossierMap.get(String(t.project!.id))!
+      const cur = taakByTodoId.get(String(t.id))
+      const deadline = t.executeBefore ?? null
+
+      if (t.isDone) {
+        if (cur && cur.status !== 'gereed') {
+          const { error } = await supabase.from('tasks').update({ status: 'gereed' }).eq('id', cur.id)
+          if (error) { result.fouten++ } else { result.bijgewerkt++ }
+        }
+        taakByTodoId.delete(String(t.id))
+        continue
+      }
+
+      if (cur) {
+        taakByTodoId.delete(String(t.id))
+        const patch: Record<string, unknown> = {}
+        if ((cur.deadline ?? null) !== deadline) patch.deadline = deadline
+        // Weer open in Bouw7 → heropen een eerder afgesloten taak.
+        if (cur.status === 'gereed' || cur.status === 'vervallen') patch.status = 'open'
+        if (Object.keys(patch).length) {
+          const { error } = await supabase.from('tasks').update(patch).eq('id', cur.id)
+          if (error) { result.fouten++ } else { result.bijgewerkt++ }
+        }
+        continue
+      }
+
+      const omschrijving = t.description && t.description.trim() ? { text: t.description.trim() } : null
+      const { data: nieuweTaak, error } = await supabase.from('tasks').insert({
+        titel: t.name || '(naamloze taak)',
+        omschrijving,
+        dossier_id: dossierId,
+        bouw7_todo_id: t.id,
+        status: 'open',
+        deadline,
+        assignee_type: 'direct',
+      }).select('id').single()
+      if (error || !nieuweTaak) { result.fouten++; console.error('[sync todos] insert:', error?.message); continue }
+      result.nieuw++
+
+      const namen = (t.associatedEmployeeNames ?? '').split(',').map(s => s.trim()).filter(Boolean)
+      const gezien = new Set<string>()
+      let eerste = true
+      for (const naam of namen) {
+        const auth = matchAuth(naam)
+        if (!auth || gezien.has(auth)) continue
+        gezien.add(auth)
+        await supabase.from('task_assignees').insert({
+          task_id: nieuweTaak.id, user_id: auth, rol: eerste ? 'verantwoordelijke' : 'mede-uitvoerder',
+        })
+        eerste = false
+      }
+    }
+
+    // Overgebleven geïmporteerde taken = to-do niet meer aanwezig in Bouw7 → vervallen.
+    for (const t of taakByTodoId.values()) {
+      if (t.status !== 'vervallen' && t.status !== 'gereed') {
+        const { error } = await supabase.from('tasks').update({ status: 'vervallen' }).eq('id', t.id)
+        if (error) { result.fouten++ } else { result.bijgewerkt++ }
+      }
+    }
+  } catch (e: unknown) {
+    result.fouten++
+    result.foutMelding = e instanceof Error ? e.message : String(e)
+  }
+  await logSync('bouw7_todos', 'in', result, Date.now() - start)
+  return result
+}
+
+/**
+ * Interne projectnotitie (GET /project/{id}.note) → dossier-notitie (1 per dossier, ref 'note:project').
+ * Kost een detail-call per dossier: draait alléén bij `full`-sync of per-dossier verversknop (scoped),
+ * niet in de incrementele cron. Leeg geworden notitie → verwijderd.
+ */
+export async function syncDossierNotities(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const mode: SyncMode = opts?.mode ?? 'incremental'
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  try {
+    if (!scoped && mode !== 'full') {
+      result.overgeslagen = 1
+      await logSync('dossier_notities', 'in', result, Date.now() - start)
+      return result
+    }
+    const bouw7 = await getBouw7Client()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+
+    let dq = supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
+    if (scoped) dq = dq.in('bouw7_id', [...scoped])
+    const { data: dossierData } = await dq
+    const dossiers = (dossierData ?? []) as { id: string; bouw7_id: string }[]
+
+    const dossierIds = dossiers.map(d => d.id)
+    const bestaandByDossier = new Map<string, { id: string; inhoud: string }>()
+    if (dossierIds.length) {
+      const { data: bestaand } = await supabase.from('dossier_notities')
+        .select('id, dossier_id, inhoud').eq('bouw7_bron', 'note').in('dossier_id', dossierIds)
+      for (const n of (bestaand ?? []) as { id: string; dossier_id: string; inhoud: string }[]) bestaandByDossier.set(n.dossier_id, n)
+    }
+
+    const BATCH = 10
+    for (let i = 0; i < dossiers.length; i += BATCH) {
+      const batch = dossiers.slice(i, i + BATCH)
+      const details = await Promise.allSettled(batch.map(d => bouw7.get<{ note?: string | null }>(`/project/${d.bouw7_id}`)))
+      for (let j = 0; j < batch.length; j++) {
+        const d = batch[j]
+        const r = details[j]
+        if (r.status !== 'fulfilled') { result.overgeslagen = (result.overgeslagen ?? 0) + 1; continue } // bv. gearchiveerd project (404)
+        const note = (r.value?.note ?? '').trim()
+        const cur = bestaandByDossier.get(d.id)
+        if (!note) {
+          if (cur) { await supabase.from('dossier_notities').delete().eq('id', cur.id); result.bijgewerkt++ }
+          continue
+        }
+        const inhoud = `📝 Interne notitie (Bouw7): ${note}`
+        if (!cur) {
+          const { error } = await supabase.from('dossier_notities').insert({
+            dossier_id: d.id, bouw7_bron: 'note', bouw7_ref: 'note:project', inhoud, medewerker_id: null,
+          })
+          if (error) { result.fouten++ } else { result.nieuw++ }
+        } else if (cur.inhoud !== inhoud) {
+          const { error } = await supabase.from('dossier_notities').update({ inhoud }).eq('id', cur.id)
+          if (error) { result.fouten++ } else { result.bijgewerkt++ }
+        }
+      }
+    }
+  } catch (e: unknown) {
+    result.fouten++
+    result.foutMelding = e instanceof Error ? e.message : String(e)
+  }
+  await logSync('dossier_notities', 'in', result, Date.now() - start)
+  return result
 }
 

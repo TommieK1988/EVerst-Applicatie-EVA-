@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
+import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 
 type Integratie = {
@@ -93,7 +93,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -108,9 +108,14 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     const projects = await syncProjects({ mode })
     const planning = await syncAllPlanning({ mode })
     const debiteuren = await syncDebiteuren({ mode })
+    // Bouw7-aantekeningen op het dossier (koppelen op bouw7_id → ná syncProjects).
+    // Herinneringen + to-do's zijn goedkope bulk; notities alleen bij full-sync (detail-call per dossier).
+    const herinneringen = await syncOfferteHerinneringen({ mode })
+    const todos = await syncBouw7Todos({ mode })
+    const notities = await syncDossierNotities({ mode })
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -122,7 +127,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }
@@ -149,8 +154,13 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     const bouw7Id = (dossier as { bouw7_id: string | null } | null)?.bouw7_id
     if (!bouw7Id) return { ok: false, error: 'Dit dossier heeft geen Bouw7-koppeling.' }
 
-    const projects = await syncProjects({ onlyBouw7Ids: [String(bouw7Id)] })
+    const ids = [String(bouw7Id)]
+    const projects = await syncProjects({ onlyBouw7Ids: ids })
     const planning = await syncDossierPlanning(dossierId, { mode: 'full' })
+    // Bouw7-aantekeningen op dit dossier meepakken (scoped op dit ene bouw7_id).
+    await syncOfferteHerinneringen({ onlyBouw7Ids: ids })
+    await syncBouw7Todos({ onlyBouw7Ids: ids })
+    await syncDossierNotities({ onlyBouw7Ids: ids })
 
     revalidatePath(`/dossiers/${dossierId}`)
     return { ok: true, projects, planning }
