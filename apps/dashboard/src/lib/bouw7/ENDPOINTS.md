@@ -53,7 +53,8 @@ totalExclVat        — HISTORISCH: komt niet meer voor in de response én bevat
 fixedPrice          — vaste aanneemsom (excl. BTW) als string
 budgetAmount        — begroting
 information, reference
-caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres, caEindverantwoordelijkeOfferte
+caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres, caEindverantwoordelijkeOfferte,
+caOfferteSubstatus, caCalculator
                     — maatwerkvelden (custom attributes), plat met `ca`-prefix; vrije tekst (vaak leeg)
 ```
 > Werkadres = `streetName` + losse `houseNumber` (samenvoegen, net als bij contacten).
@@ -61,6 +62,15 @@ caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres, caEindverantw
 > **Maatwerkvelden:** komen plat mee op `/list/projects` (géén apart endpoint). `caEindverantwoordelijkeOfferte`
 > bevat de naam van de eindverantwoordelijke (alleen gevuld in de Offerte-fase) en wordt in `syncProjects()`
 > via naam-matching op `medewerkers` overgezet naar de dossier-rol **Controller** (`controller_id`).
+>
+> **Projectleider ≠ werkvoorbereider.** Bouw7 staat niet toe dat dezelfde medewerker `projectLeader`
+> én `workPlanner` is (geverifieerd: van de 539 projecten heeft er géén zo'n combinatie). EVA staat dat
+> wél toe. Daarom is het maatwerkveld **`caCalculator`** ("Calculator", id 21012, fieldType `employee`
+> = vrije-tekstnaam) de tweede drager van de calculator-rol:
+> - **Schrijven** (`lib/dossiers/bouw7-rollen.ts`): `caCalculator` krijgt altijd de naam van de
+>   EVA-calculator; `workPlanner` alleen als die ≠ projectleider — botst het, dan blijft `workPlanner` leeg.
+> - **Lezen** (`syncProjects()`): `calculator_id` = `workPlanner` → anders naam-match op `caCalculator`
+>   → anders de bestaande waarde.
 
 **Status-mapping Heimdall → EVA:**
 - `01.*` → aanvraag
@@ -317,9 +327,39 @@ totaal-velden). Live opgehaald, géén opslag — defensief met `.catch` per bro
 |---|---|---|---|
 | **Projectstatussen** | `GET /list/project-statuses` | `LIMIT 200` | `id`, `name` ("04. Onderhanden") — bron voor status-id bij terugschrijven |
 | **Uren per medewerker** | `GET /list/hour-logs/employee` | `project.id = {id}` | item: `employee{firstName,lastName}`, `type{name}` (uursoort), `projectSecurityLink{code,name}`, `hours`, `logDate`, `hourlyRate`, `invoicedAmount`, `isApproved`. Envelope: `totalHours`, `totalCost` |
-| **Verkooptermijnen** | `GET /list/project-invoice-terms` | `statement.project.id = {id}` | `description`, `percentage`, `subtotal`, `invoiceableAt`, `invoiceLine` (aanwezig = gefactureerd) |
+| **Termijnstaat** | `GET /list/project-invoice-term-statements` | `project.id = {id}` | `id` (= statement-id, nodig voor de termijnen hieronder), `project{id,number,name}`, `contact{name}`, `fixedPrice` (aanneemsom) |
+| **Verkooptermijnen** | `GET /list/project-invoice-terms` | **`statement.id = {statementId}`** | `id`, `description`, `percentage`, `subtotal`, `invoiceableAt`, `vatTariffPercentage`, `invoiceLine{invoiceId,invoiceStatusId}` |
 | **Verkoopfacturen** | `GET /list/invoices` | `project.id = {id}` | `invoiceNumber`, `status` (int), `isCredit`, `date`, `dueDate`, `datePaid` (gevuld = betaald), `total` |
 | **Onderaannemerscontracten** | `GET /list/subcontractor-contracts` | `project.id = {id}` | `subcontractor{name}`, `statusName`, `name`, `price` (contractbedrag), `outstandingCosts`, `projectSecurityLink{code}` |
+| **Inkoopfactuur-detail** | `GET /purchase-invoicing/purchase-invoice/{id}` | — (id in het pad) | **`lines[]`** (de échte factuurregels: `description`, `quantity`, `unitPrice`, `subTotal`, `vatTariffPercentage`, `deliveryTicket{ticketNumber, projectSecurityLink{code,name}}`) + **`file{uri, name, extension}`** (de factuur-PDF) |
+
+> **De factuurregels van een inkoopfactuur zitten ALLEEN hier** (geverifieerd jul 2026, gevonden door
+> het verzoek van Bouw7's eigen UI af te lezen). De `/purchase-invoicing/`-prefix is de sleutel:
+> `/purchase-invoice/{id}`, `/list/purchase-invoice-lines`, `/list/delivery-ticket-lines` en de
+> Apollo-varianten geven **allemaal 404** (~45 varianten over Heimdall/Athena/Apollo geprobeerd).
+>
+> **Gebruik de embedded `deliveryTicket` op `Bouw7PurchaseInvoiceListItem` NIET als regelbron** — die
+> geeft één leverbon met alleen een totaalbedrag, zónder aantal/stukprijs. Ook `/list/delivery-tickets`
+> is te grof: één leverbon kan meerdere artikelregels bundelen (bv. factuur 10028613 = 1 bon van
+> €20,78 die bestaat uit 2 regels van €7,36 + €13,42).
+>
+> **Document downloaden met `file.uri`, NIET met `file.secureHash`**: `/storage/{uri}/download` levert
+> de PDF; `/storage/{secureHash}/…` geeft 404. (Bij `Bouw7ProjectFile` werkt de secureHash juist wél —
+> de twee resources gedragen zich verschillend.)
+>
+> **Kosten: één call per factuur** → alleen on-demand ophalen (bij het uitklappen van een regel), niet
+> in bulk voor een heel dossier (>100 facturen komt voor). Zie `getInkoopFactuurDetail`.
+> De factuur is voor de gebruiker te openen in Bouw7: `https://start.bouw7.nl/purchase-invoice#/view/{id}`.
+
+> **Termijnen zijn een twee-traps-query** (geverifieerd jul 2026). `statement.project.id` is **niet**
+> HQL-mapped op `ProjectInvoiceTermListItem` → **HTTP 400**. Haal eerst de termijnstaat op met
+> `/list/project-invoice-term-statements` (`project.id = {id}`), en dan per statement de termijnen
+> met `/list/project-invoice-terms` (`statement.id = {statementId}`).
+>
+> **`invoiceLine.invoiceStatusId` zegt níets over verzonden/concept** — die is 0 voor zowel concept-
+> als reeds gemailde facturen. Of een termijn verzonden is, blijkt uit de gekoppelde verkoopfactuur:
+> `isMailed` (verzonden) en `datePaid` (betaald). Zo leidt `getDossierVerkoop` de termijnstatus af:
+> geen `invoiceLine` → *Nog te factureren*; wel een factuur maar `isMailed=false` → *Concept*.
 
 ### EVA-server actions
 

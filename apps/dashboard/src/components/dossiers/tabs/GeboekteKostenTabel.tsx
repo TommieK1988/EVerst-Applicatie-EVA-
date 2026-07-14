@@ -10,10 +10,20 @@ import { fmtDatum } from './tab-ui'
 import {
   verplaatsGeboekteKost, hercodeerGeboekteKost, wisInkoopCorrectie,
   hercodeerGeboekteKostenBulk, verplaatsGeboekteKostenBulk, wisInkoopCorrectiesBulk,
-  type GeboekteKostenRegel, type ProjectBewakingscode,
+  getInkoopFactuurDetail,
+  type GeboekteKostenRegel, type ProjectBewakingscode, type InkoopFactuurDetail,
 } from '@/lib/dossiers/actions'
-import { SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import {
+  SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight,
+  ExternalLink, FileText,
+} from 'lucide-react'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
+
+/** Bouw7 opent een inkoopfactuur op deze URL — hiermee kan de gebruiker de factuur zelf inzien. */
+const bouw7FactuurUrl = (invoiceId: number) => `https://start.bouw7.nl/purchase-invoice#/view/${invoiceId}`
+/** Factuurdocument via de EVA-proxy (Bouw7-download vereist een Bearer-token). */
+const documentUrl = (hash: string, naam: string | null) =>
+  `/api/bouw7/bestand/${encodeURIComponent(hash)}${naam ? `?naam=${encodeURIComponent(naam)}` : ''}`
 
 type OrderOptie = { orderId: number; nummer: string | null; leverancier: string | null; omschrijving: string | null }
 type ContractOptie = { contractId: number; onderaannemer: string | null; omschrijving: string | null }
@@ -43,6 +53,114 @@ type Kolom = {
   render: (r: GeboekteKostenRegel) => React.ReactNode
 }
 
+const aantalFmt = (n: number | null): string =>
+  n == null ? '—' : new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 2 }).format(n)
+
+/**
+ * Uitgeklapte inhoud van één inkoopfactuur: de échte factuurregels + het factuurdocument.
+ * Wordt lazy opgehaald (één Bouw7-call per factuur) zodat een dossier met >100 facturen niet
+ * evenveel calls doet bij het laden van de tab.
+ */
+function FactuurRegels({
+  dossierId, regel,
+}: { dossierId: string; regel: GeboekteKostenRegel }) {
+  const [detail, setDetail] = useState<InkoopFactuurDetail | null>(null)
+  const [fout, setFout] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    let afgebroken = false
+    getInkoopFactuurDetail(dossierId, regel.bronId).then((res) => {
+      if (afgebroken) return
+      if (res.ok) setDetail(res.detail)
+      else setFout(res.error)
+    })
+    return () => { afgebroken = true }
+  }, [dossierId, regel.bronId])
+
+  const linkStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5,
+    borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)',
+    textDecoration: 'none',
+  }
+  const th: React.CSSProperties = {
+    padding: '4px 8px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: 'var(--neutral-500)',
+    textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid var(--neutral-200, #e3e8ea)',
+  }
+  const td: React.CSSProperties = {
+    padding: '4px 8px', fontSize: 12, color: 'var(--neutral-700)',
+    borderBottom: '1px solid var(--neutral-100, #f4f7f8)',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--neutral-600)' }}>
+          Factuurregels{detail ? ` (${detail.regels.length})` : ''}
+        </span>
+        <span style={{ flex: 1 }} />
+        {detail?.documentHash && (
+          <a href={documentUrl(detail.documentHash, detail.documentNaam)} target="_blank" rel="noreferrer" style={linkStyle}>
+            <FileText size={12} /> Factuur (PDF)
+          </a>
+        )}
+        <a href={bouw7FactuurUrl(regel.bronId)} target="_blank" rel="noreferrer" style={linkStyle}>
+          <ExternalLink size={12} /> Open in Bouw7
+        </a>
+      </div>
+
+      {fout ? (
+        <div style={{ fontSize: 12, color: 'var(--danger-700, #b91c1c)' }}>Regels ophalen mislukt: {fout}</div>
+      ) : !detail ? (
+        <div style={{ fontSize: 12, color: 'var(--neutral-500)' }}>Regels laden…</div>
+      ) : detail.regels.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--neutral-500)' }}>Deze factuur heeft geen regels in Bouw7.</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 6 }}>
+          <thead>
+            <tr>
+              <th style={th}>Omschrijving</th>
+              <th style={th}>Leverbon</th>
+              <th style={th}>Bewakingscode</th>
+              <th style={{ ...th, textAlign: 'right' }}>Aantal</th>
+              <th style={{ ...th, textAlign: 'right' }}>Stukprijs</th>
+              <th style={{ ...th, textAlign: 'right' }}>Subtotaal</th>
+              <th style={{ ...th, textAlign: 'right' }}>BTW</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detail.regels.map((rg) => (
+              <tr key={rg.regelId}>
+                <td style={{ ...td, whiteSpace: 'normal' }}>{rg.omschrijving || '—'}</td>
+                <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--neutral-500)' }}>{rg.bonnummer ?? '—'}</td>
+                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                  {rg.code
+                    ? <span title={rg.codeNaam ?? undefined}>{rg.code}</span>
+                    : <span style={{ color: 'var(--neutral-400)' }}>—</span>}
+                </td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>{aantalFmt(rg.aantal)}</td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>{euro(rg.stukprijs)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{euro(rg.subtotaal)}</td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--neutral-500)' }}>
+                  {rg.btwPercentage != null ? `${rg.btwPercentage}%` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={5} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>Totaal excl. BTW</td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {euro(detail.regels.reduce((s, rg) => s + rg.subtotaal, 0))}
+              </td>
+              <td style={td} />
+            </tr>
+          </tfoot>
+        </table>
+      )}
+    </div>
+  )
+}
+
 type SubtotaalRij = { _sub: true; label: string; bedrag: number }
 type DisplayRij = GeboekteKostenRegel | SubtotaalRij
 const isSub = (r: DisplayRij): r is SubtotaalRij => '_sub' in r
@@ -55,6 +173,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const [pending, start] = useTransition()
   const [actief, setActief] = useState<GeboekteKostenRegel | null>(null)
   const [sel, setSel] = useState<Set<number>>(new Set())
+  const [open, setOpen] = useState<Set<number>>(new Set())
   const [zoek, setZoek] = useState('')
   const [sortKey, setSortKey] = useState<string>('datum')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -180,6 +299,9 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
 
   const toggleSel = (bronId: number) =>
     setSel((prev) => { const n = new Set(prev); n.has(bronId) ? n.delete(bronId) : n.add(bronId); return n })
+
+  const toggleOpen = (bronId: number) =>
+    setOpen((prev) => { const n = new Set(prev); n.has(bronId) ? n.delete(bronId) : n.add(bronId); return n })
 
   const totaal = useMemo(() => rijen.reduce((s, r) => s + r.bedrag, 0), [rijen])
   const totaalAlles = useMemo(() => data.reduce((s, r) => s + r.bedrag, 0), [data])
@@ -335,26 +457,47 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                 )
               }
               const r = item
+              const isOpen = open.has(r.bronId)
               return (
-                <tr key={r.bronId} style={{ background: sel.has(r.bronId) ? 'color-mix(in srgb, var(--brand-50, #eff6ff) 70%, transparent)' : r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
-                  <td style={{ ...tdStyle(), textAlign: 'center' }}>
-                    {!readOnly && (
-                      <input type="checkbox" aria-label="Selecteer regel" checked={sel.has(r.bronId)} onChange={() => toggleSel(r.bronId)} />
-                    )}
-                  </td>
-                  {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
-                  <td style={{ ...tdStyle(true) }}>
-                    {!readOnly && (
-                      <button
-                        onClick={() => setActief(r)}
-                        title="Toewijzen / hercoderen"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
-                      >
-                        <SlidersHorizontal size={12} /> Corrigeren
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <React.Fragment key={r.bronId}>
+                  <tr style={{ background: sel.has(r.bronId) ? 'color-mix(in srgb, var(--brand-50, #eff6ff) 70%, transparent)' : r.gecorrigeerd ? 'color-mix(in srgb, var(--warning-50, #fff7ed) 60%, transparent)' : undefined }}>
+                    <td style={{ ...tdStyle(), textAlign: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <button
+                          onClick={() => toggleOpen(r.bronId)}
+                          aria-expanded={isOpen}
+                          title={isOpen ? 'Inklappen' : 'Inkoopregels tonen'}
+                          style={{ display: 'inline-flex', padding: 1, border: 'none', background: 'none', color: 'var(--neutral-500)', cursor: 'pointer' }}
+                        >
+                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                        {!readOnly && (
+                          <input type="checkbox" aria-label="Selecteer regel" checked={sel.has(r.bronId)} onChange={() => toggleSel(r.bronId)} />
+                        )}
+                      </span>
+                    </td>
+                    {kolommen.map((k) => <td key={k.key} style={tdStyle(k.right)}>{k.render(r)}</td>)}
+                    <td style={{ ...tdStyle(true) }}>
+                      {!readOnly && (
+                        <button
+                          onClick={() => setActief(r)}
+                          title="Toewijzen / hercoderen"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
+                        >
+                          <SlidersHorizontal size={12} /> Corrigeren
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td style={{ ...tdStyle(), background: 'var(--neutral-50)' }} />
+                      <td colSpan={kolommen.length + 1} style={{ ...tdStyle(), background: 'var(--neutral-50)', whiteSpace: 'normal', padding: '8px 10px' }}>
+                        <FactuurRegels dossierId={dossierId} regel={r} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               )
             })}
             <tr style={{ background: 'var(--neutral-50)' }}>

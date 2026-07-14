@@ -6,6 +6,7 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
@@ -23,6 +24,8 @@ import {
   type Bouw7PurchaseOrderContract,
   type Bouw7EmployeeHourLogResponse,
   type Bouw7ProjectInvoiceTerm,
+  type Bouw7ProjectInvoiceTermStatement,
+  type Bouw7PurchaseInvoiceDetail,
   type Bouw7SalesInvoice,
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
@@ -889,10 +892,17 @@ export async function getDossierById(id: string): Promise<{ ok: true; data: Doss
 /**
  * Update de substatus van een dossier. De trigger in de DB handelt fase-promoties af.
  *
- * `opts.schrijfBouw7`: schrijf de nieuwe opdracht-substatus óók terug naar Bouw7
- * (alleen voor opdracht-dossiers met een `bouw7_id`). De EVA-update gaat altijd door;
- * een mislukte Bouw7-write wordt teruggegeven in `bouw7` zodat de UI een toast kan tonen
- * (geen rollback — de 2×/dag lees-sync corrigeert eventuele drift).
+ * `opts.schrijfBouw7`: schrijf de nieuwe substatus óók direct terug naar Bouw7 (write-through,
+ * alleen voor dossiers met een `bouw7_id`). Twee verschillende bestemmingen:
+ *  - opdracht  → de Bouw7-projectstatus (02.–07.), zie `bouw7-status.ts`;
+ *  - aanvraag/offerte → het maatwerkveld "Offerte Sub-status", zie `bouw7/substatus-attr.ts`.
+ *    Dat veld deelt EVA met een tweede app op Bouw7, die niet op de cron kan wachten — vandaar
+ *    dat we meteen schrijven in plaats van bij de volgende sync.
+ *
+ * Bij aanvraag/offerte gaat de Bouw7-write *vóór* de EVA-update, zodat een conflict (de andere app
+ * heeft de substatus intussen omgezet) de EVA-wijziging kan tegenhouden in plaats van de verse
+ * waarde van de ander te overschrijven. Andere Bouw7-fouten houden de EVA-update niet tegen; die
+ * komen terug in `bouw7` zodat de UI een toast kan tonen (de lees-sync corrigeert de drift).
  */
 export async function updateDossierSubstatus(
   id: string,
@@ -904,11 +914,32 @@ export async function updateDossierSubstatus(
 
   const { data: huidig, error: fetchError } = await supabase
     .from('dossiers')
-    .select('hoofdstatus, bouw7_id')
+    .select('hoofdstatus, bouw7_id, aanvraag_substatus, offerte_substatus, servicedesk_substatus')
     .eq('id', id)
     .single()
 
   if (fetchError) return { ok: false, error: fetchError.message }
+
+  // Write-through van de gedeelde aanvraag/offerte-substatus naar Bouw7 — vóór de EVA-update,
+  // zodat een conflict met de tweede app de wijziging afbreekt. Servicedesk-dossiers hebben
+  // hoofdstatus 'aanvraag' maar een eigen ladder: die horen hier niet.
+  let bouw7: Bouw7WriteResult | undefined
+  const isSubstatusFase = huidig.hoofdstatus === 'aanvraag' || huidig.hoofdstatus === 'offerte'
+  if (
+    opts?.schrijfBouw7 && isSubstatusFase
+    && huidig.servicedesk_substatus == null && huidig.bouw7_id != null
+  ) {
+    const sectie = huidig.hoofdstatus as 'aanvraag' | 'offerte'
+    // Aanvraag + 'verzonden' promoveert hieronder naar offerte/verzonden; in Bouw7 is dat
+    // hetzelfde label ("07. Verzonden"), dus schrijven we het als offerte-substatus weg.
+    const doelSectie = sectie === 'aanvraag' && nieuweSubstatus === 'verzonden' ? 'offerte' : sectie
+    const res = await schrijfBouw7Substatus(huidig.bouw7_id, doelSectie, nieuweSubstatus, {
+      sectie,
+      substatus: sectie === 'aanvraag' ? huidig.aanvraag_substatus : huidig.offerte_substatus,
+    })
+    if (!res.ok && res.conflict) return { ok: false, error: res.error }
+    bouw7 = res.ok ? { ok: true } : { ok: false, error: res.error }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let update: any
@@ -947,7 +978,7 @@ export async function updateDossierSubstatus(
   }
 
   // Two-way: opdracht-substatus terugschrijven naar Bouw7 (alleen opdracht-dossiers met koppeling).
-  let bouw7: Bouw7WriteResult | undefined
+  // De aanvraag/offerte-fase is hierboven al weggeschreven (maatwerkveld i.p.v. projectstatus).
   if (opts?.schrijfBouw7 && huidig.hoofdstatus === 'opdracht' && huidig.bouw7_id != null) {
     bouw7 = await schrijfBouw7Projectstatus(huidig.bouw7_id, nieuweSubstatus, 'opdracht')
   }
@@ -1081,9 +1112,14 @@ export async function updateDossierRollen(
 }
 
 /**
- * Resolveert de EVA-rol-uuids naar Bouw7-employee-id's (+ controller-naam voor het custom attribute)
- * en schrijft ze naar het gekoppelde Bouw7-project. Alleen rollen die in `payload` voorkomen worden
+ * Resolveert de EVA-rol-uuids naar Bouw7-employee-id's (+ de namen voor de maatwerkvelden) en
+ * schrijft ze naar het gekoppelde Bouw7-project. Alleen rollen die in `payload` voorkomen worden
  * meegenomen; een rol met waarde `null` maakt het Bouw7-veld leeg.
+ *
+ * Uitzondering: de calculator raakt twee Bouw7-velden (`workPlanner` + maatwerkveld "Calculator")
+ * en botst met de projectleider — zie `bouw7-rollen.ts`. Dat paar wordt daarom herberekend zodra
+ * één van beide rollen is aangeraakt, op basis van de **effectieve** stand van het dossier (de
+ * EVA-update is op dit punt al doorgevoerd, dus de dossierrij ís de nieuwe waarheid).
  */
 async function schrijfDossierRollenNaarBouw7(
   supabase: any,
@@ -1092,15 +1128,18 @@ async function schrijfDossierRollenNaarBouw7(
 ): Promise<Bouw7WriteResult> {
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('bouw7_id')
+    .select('bouw7_id, project_manager_id, calculator_id')
     .eq('id', dossierId)
     .maybeSingle()
   if (!dossier?.bouw7_id) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
 
-  // Verzamel de medewerker-uuids die we moeten opzoeken (projectleider / calculator / uitvoerder / controller).
-  const uuids = ['project_manager_id', 'calculator_id', 'uitvoerder_id', 'controller_id']
-    .map((k) => payload[k])
-    .filter((v): v is string => !!v)
+  // Verzamel de medewerker-uuids die we moeten opzoeken: de gewijzigde rollen, plus de effectieve
+  // projectleider en calculator (nodig voor de botsingscheck, ook als ze zelf niet wijzigden).
+  const uuids = [
+    ...['project_manager_id', 'calculator_id', 'uitvoerder_id', 'controller_id'].map((k) => payload[k]),
+    dossier.project_manager_id,
+    dossier.calculator_id,
+  ].filter((v): v is string => !!v)
 
   const medMap = new Map<string, { bouw7_id: string | null; naam: string }>()
   if (uuids.length) {
@@ -1131,13 +1170,27 @@ async function schrijfDossierRollenNaarBouw7(
 
   const rollen: Bouw7RollenInput = {
     projectLeaderId: naarEmployeeId('project_manager_id'),
-    workPlannerId:   naarEmployeeId('calculator_id'),
     executorId:      naarEmployeeId('uitvoerder_id'),
   }
   // Controller → custom attribute (vrije tekst = naam; lege waarde maakt het veld leeg).
   if ('controller_id' in payload) {
     const uuid = payload.controller_id
     rollen.controllerNaam = uuid ? (medMap.get(uuid)?.naam ?? '') : ''
+  }
+
+  // Calculator → `workPlanner` + maatwerkveld "Calculator". Ook een wijziging van de projectleider
+  // kan de botsing veroorzaken (Bouw7: projectleider ≠ werkvoorbereider) of juist opheffen, dus
+  // herbereken het paar zodra één van beide rollen is aangeraakt.
+  if ('calculator_id' in payload || 'project_manager_id' in payload) {
+    const calc  = dossier.calculator_id ? medMap.get(dossier.calculator_id) : null
+    const plB7  = dossier.project_manager_id ? (medMap.get(dossier.project_manager_id)?.bouw7_id ?? null) : null
+    const calcB7 = calc?.bouw7_id ?? null
+    const botst = !!calcB7 && !!plB7 && calcB7 === plB7
+
+    // Geen calculator, een calculator zonder Bouw7-koppeling, of een botsing met de projectleider
+    // → `workPlanner` leegmaken; het maatwerkveld draagt de rol dan alleen.
+    rollen.workPlannerId  = calcB7 && !botst ? Number(calcB7) : null
+    rollen.calculatorNaam = calc?.naam ?? ''
   }
 
   return schrijfBouw7Rollen(dossier.bouw7_id, rollen)
@@ -1676,6 +1729,24 @@ export type GeboekteKostenRegel = {
   toegewezenOrderId: number | null
   toegewezenContractId: number | null
 }
+/** Eén échte factuurregel van een inkoopfactuur (uit het Bouw7 factuur-detail). */
+export type InkoopFactuurRegel = {
+  regelId: number
+  omschrijving: string | null
+  aantal: number | null
+  stukprijs: number | null
+  subtotaal: number
+  btwPercentage: number | null
+  bonnummer: string | null
+  code: string | null
+  codeNaam: string | null
+}
+/** Lazy opgehaald detail van één inkoopfactuur: de regels + het factuurdocument. */
+export type InkoopFactuurDetail = {
+  regels: InkoopFactuurRegel[]
+  documentHash: string | null
+  documentNaam: string | null
+}
 export type ProjectBewakingscode = { code: string; naam: string | null }
 export type DossierInkoopData = {
   beschikbaar: boolean
@@ -1892,6 +1963,53 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     }
   } catch {
     return leeg
+  }
+}
+
+/**
+ * Regels + factuurdocument van één inkoopfactuur, on-demand opgehaald bij het uitklappen.
+ *
+ * Bron: **GET /purchase-invoicing/purchase-invoice/{id}** — de enige plek met de échte factuurregels
+ * (omschrijving, aantal, stukprijs, BTW) en de factuur-PDF. Eén call per factuur, dus bewust niet in
+ * `getDossierInkoop` meegenomen: een dossier kan >100 facturen hebben.
+ */
+export async function getInkoopFactuurDetail(
+  dossierId: string,
+  factuurId: number,
+): Promise<{ ok: true; detail: InkoopFactuurDetail } | { ok: false; error: string }> {
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier' }
+  try {
+    const d = await ctx.client.get<Bouw7PurchaseInvoiceDetail>(
+      `/purchase-invoicing/purchase-invoice/${factuurId}`,
+    )
+    const regels: InkoopFactuurRegel[] = (d.lines ?? []).map((l) => {
+      const link = l.deliveryTicket?.projectSecurityLink
+      return {
+        regelId: l.id,
+        omschrijving: stripHtml(l.description) ?? null,
+        aantal: l.quantity != null ? toGetal(l.quantity) : null,
+        stukprijs: l.unitPrice != null ? toGetal(l.unitPrice) : null,
+        subtotaal: toGetal(l.subTotal),
+        btwPercentage: l.vatTariffPercentage != null ? toGetal(l.vatTariffPercentage) : null,
+        bonnummer: l.deliveryTicket?.ticketNumber ?? null,
+        code: link?.code ?? null,
+        codeNaam: link?.name ?? null,
+      }
+    })
+    // Alleen een echt bestand tonen (Bouw7 levert `file: null` als er niets hangt).
+    // Downloaden gaat via `uri` — de secureHash geeft bij inkoopfacturen een 404.
+    const doc = d.file?.uri ? d.file : null
+    return {
+      ok: true,
+      detail: {
+        regels,
+        documentHash: doc?.uri ?? null,
+        documentNaam: doc ? `${doc.name ?? 'factuur'}.${doc.extension ?? 'pdf'}` : null,
+      },
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen mislukt' }
   }
 }
 
@@ -2156,15 +2274,26 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
 
 /* — Verkoop — */
 
+/**
+ * Status van een verkooptermijn, afgeleid uit de factuurregel + de bijbehorende verkoopfactuur:
+ * - `nog_te_factureren`: geen factuurregel (aangemaakt maar nog niet gefactureerd/verzonden)
+ * - `concept`: factuur aangemaakt maar nog niet verzonden (isMailed = false)
+ * - `verzonden`: factuur verzonden, nog niet betaald
+ * - `betaald`: factuur betaald (datePaid gevuld)
+ * - `gefactureerd`: factuurregel bestaat maar de factuur is niet terug te vinden (fallback)
+ */
+export type VerkoopTermijnStatus = 'nog_te_factureren' | 'concept' | 'verzonden' | 'betaald' | 'gefactureerd'
 export type VerkoopTermijn = {
   nummer: number
+  bouw7TermId: number      // stabiele Bouw7-sleutel (i.p.v. positioneel nummer)
   omschrijving: string | null
   percentage: number | null
   bedrag: number           // excl. BTW (subtotal)
   btwPercentage: number | null
   btwBedrag: number        // berekend: bedrag * btwPercentage / 100
   bedragIncl: number       // bedrag + btwBedrag
-  gefactureerd: boolean
+  gefactureerd: boolean    // er bestaat een factuurregel (invoiceLine != null)
+  status: VerkoopTermijnStatus
   invoiceableAt: string | null
 }
 export type VerkoopFactuur = {
@@ -2195,6 +2324,23 @@ export type DossierVerkoopData = {
 }
 
 /**
+ * Termijnstatus afleiden. Bewust NIET op `invoiceLine.invoiceStatusId` — die is 0 voor zowel
+ * concept- als reeds verzonden facturen (geverifieerd jul 2026). De betrouwbare bron is de
+ * gekoppelde verkoopfactuur: `isMailed` (verzonden) en `datePaid` (betaald).
+ */
+function termijnStatus(
+  t: Bouw7ProjectInvoiceTerm,
+  factuurPerId: Map<number, Bouw7SalesInvoice>,
+): VerkoopTermijnStatus {
+  if (t.invoiceLine == null) return 'nog_te_factureren'
+  const invoiceId = t.invoiceLine.invoiceId
+  const factuur = invoiceId != null ? factuurPerId.get(invoiceId) : undefined
+  if (!factuur) return 'gefactureerd' // factuurregel bestaat, factuur niet gevonden → neutraal
+  if (factuur.datePaid != null) return 'betaald'
+  return factuur.isMailed ? 'verzonden' : 'concept'
+}
+
+/**
  * Verkoop-overzicht van een dossier: termijnen (project-invoice-terms), verkoopfacturen (invoices)
  * en betaalgegevens van de klant (relatie_facturatie). Live uit Bouw7 + EVA. Defensief: ontbrekend
  * termijnen-endpoint → termijnenBeschikbaar=false zonder de tab te breken.
@@ -2215,36 +2361,15 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   let termijnenBeschikbaar = false
   let termijnen: VerkoopTermijn[] = []
   let facturen: VerkoopFactuur[] = []
+  // Verkoopfacturen per Bouw7-id, om per termijn te bepalen of de factuur al verzonden/betaald is.
+  const factuurPerId = new Map<number, Bouw7SalesInvoice>()
 
-  try {
-    const termResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTerm>>('/list/project-invoice-terms', {
-      q: `statement.project.id = ${bouw7Id} LIMIT 500`,
-    })
-    termijnenBeschikbaar = true
-    termijnen = (termResp.items ?? []).map((t, i) => {
-      const bedrag = toGetal(t.subtotal)
-      const btwPercentage = t.vatTariffPercentage != null ? toGetal(t.vatTariffPercentage) : null
-      const btwBedrag = btwPercentage != null ? Math.round(bedrag * btwPercentage) / 100 : 0
-      return {
-        nummer: i + 1,
-        omschrijving: t.description ?? null,
-        percentage: t.percentage != null ? toGetal(t.percentage) : null,
-        bedrag,
-        btwPercentage,
-        btwBedrag,
-        bedragIncl: bedrag + btwBedrag,
-        gefactureerd: t.invoiceLine != null,
-        invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
-      }
-    })
-  } catch {
-    termijnenBeschikbaar = false
-  }
-
+  // Facturen eerst: de termijnstatus leunt op isMailed/datePaid van de gekoppelde factuur.
   try {
     const invResp = await client.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
       q: `project.id = ${bouw7Id} SORT(date, DESC) LIMIT 500`,
     })
+    for (const inv of invResp.items ?? []) if (inv.id != null) factuurPerId.set(inv.id, inv)
     facturen = (invResp.items ?? []).map((inv) => ({
       factuurnummer: inv.invoiceNumber ?? null,
       datum: inv.date ? inv.date.slice(0, 10) : null,
@@ -2257,6 +2382,48 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     }))
   } catch {
     facturen = []
+  }
+
+  // Termijnen: eerst de termijnstaat (statement) van het project, dan de losse termijnen daaronder.
+  // `statement.project.id` is NIET HQL-mapped op ProjectInvoiceTermListItem → 400. Filteren moet
+  // op `statement.id` (geverifieerd jul 2026); zonder deze twee-traps-aanpak kwam de query altijd
+  // op een 400 uit en toonde de tab dus nooit termijnen.
+  try {
+    const stmtResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTermStatement>>(
+      '/list/project-invoice-term-statements',
+      { q: `project.id = ${bouw7Id} LIMIT 200` },
+    )
+    termijnenBeschikbaar = true
+    const statementIds = (stmtResp.items ?? []).map((s) => s.id).filter((id): id is number => id != null)
+
+    const ruweTermijnen: Bouw7ProjectInvoiceTerm[] = []
+    for (const sid of statementIds) {
+      const termResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTerm>>('/list/project-invoice-terms', {
+        q: `statement.id = ${sid} LIMIT 500`,
+      })
+      ruweTermijnen.push(...(termResp.items ?? []))
+    }
+
+    termijnen = ruweTermijnen.map((t, i) => {
+      const bedrag = toGetal(t.subtotal)
+      const btwPercentage = t.vatTariffPercentage != null ? toGetal(t.vatTariffPercentage) : null
+      const btwBedrag = btwPercentage != null ? Math.round(bedrag * btwPercentage) / 100 : 0
+      return {
+        nummer: i + 1,
+        bouw7TermId: t.id,
+        omschrijving: t.description ?? null,
+        percentage: t.percentage != null ? toGetal(t.percentage) : null,
+        bedrag,
+        btwPercentage,
+        btwBedrag,
+        bedragIncl: bedrag + btwBedrag,
+        gefactureerd: t.invoiceLine != null,
+        status: termijnStatus(t, factuurPerId),
+        invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
+      }
+    })
+  } catch {
+    termijnenBeschikbaar = false
   }
 
   const aanneemsom = toGetal(bouw7Financial?.fixedPrice) || toGetal(bouw7Financial?.revenue?.budgeted)

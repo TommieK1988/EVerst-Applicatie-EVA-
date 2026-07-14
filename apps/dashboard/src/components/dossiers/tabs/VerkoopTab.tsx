@@ -1,8 +1,17 @@
 import { Suspense } from 'react'
-import { getDossierVerkoop } from '@/lib/dossiers/actions'
+import { getDossierVerkoop, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtPct, fmtDatum, TH, TD, LegeStaat } from './tab-ui'
+
+/** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
+const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
+  nog_te_factureren: { label: 'Nog te factureren', kleur: 'var(--amber-700, #b45309)' },
+  concept: { label: 'Concept — niet verzonden', kleur: 'var(--orange-700, #c2410c)' },
+  verzonden: { label: 'Verzonden', kleur: 'var(--accent)' },
+  betaald: { label: 'Betaald', kleur: 'var(--green-700, #15803d)' },
+  gefactureerd: { label: 'Gefactureerd', kleur: 'var(--accent)' },
+}
 
 const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) => {
   if (!waarde) return null
@@ -161,7 +170,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
               </thead>
               <tbody>
                 {data.termijnen.map((tm) => (
-                  <tr key={tm.nummer}>
+                  <tr key={tm.bouw7TermId}>
                     <TD>{tm.nummer}</TD>
                     <TD>{tm.omschrijving ?? '—'}</TD>
                     <TD right>{fmtPct(tm.percentage)}</TD>
@@ -170,7 +179,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                     <TD right>{tm.btwBedrag > 0 ? fmt(tm.btwBedrag) : '—'}</TD>
                     <TD right vet>{fmt(tm.bedragIncl)}</TD>
                     <TD>{fmtDatum(tm.invoiceableAt)}</TD>
-                    <TD kleur={tm.gefactureerd ? 'var(--accent)' : undefined}>{tm.gefactureerd ? 'Gefactureerd' : 'Open'}</TD>
+                    <TD kleur={TERMIJN_STATUS[tm.status].kleur}>{TERMIJN_STATUS[tm.status].label}</TD>
                   </tr>
                 ))}
               </tbody>

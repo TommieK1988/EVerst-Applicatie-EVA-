@@ -414,6 +414,19 @@ export type Bouw7Project = {
    * sync gematcht op een medewerker → dossier-rol Controller. Alleen gevuld in de Offerte-fase.
    */
   caEindverantwoordelijkeOfferte?: string | null
+  /**
+   * Maatwerkveld "Offerte Sub-status" (dropdown, id 20987) — de gedeelde substatus-ladder voor de
+   * aanvraag- én offerte-fase, óók gelezen/geschreven door de tweede app op Bouw7. Waarde is de
+   * labelstring ("07. Verzonden"). Leidend zodra gevuld; zie `lib/bouw7/substatus-attr.ts`.
+   */
+  caOfferteSubstatus?: string | null
+  /**
+   * Maatwerkveld "Calculator" (fieldType `employee`, id 21012) — bevat de náám van de calculator.
+   * Bouw7 verbiedt dat de projectleider tevens werkvoorbereider (`workPlanner`) is; EVA staat dat
+   * wél toe. Dit veld is daarom de uitwijk: is `workPlanner` leeg, dan draagt het de calculator-rol.
+   * Zie `lib/dossiers/bouw7-rollen.ts`.
+   */
+  caCalculator?: string | null
 }
 
 /**
@@ -836,6 +849,68 @@ export type Bouw7PurchaseInvoiceListResponse = {
 }
 
 /**
+ * Eén factuurregel van een inkoopfactuur (`Bouw7PurchaseInvoiceDetail.lines`).
+ * `deliveryTicket.projectSecurityLink.code` = de bewakingscode van de regel.
+ *
+ * Let op: `unitName` bevat in de praktijk de string `"System.Xml.XmlElement"` (bug aan Bouw7-zijde) —
+ * niet tonen aan de gebruiker.
+ */
+export type Bouw7PurchaseInvoiceLine = {
+  id: number
+  description?: string | null
+  quantity?: string | number
+  unitName?: string | null
+  unitPrice?: string | number
+  grossPrice?: string | number | null
+  subTotal?: string | number
+  vatTariffPercentage?: string | number
+  vatTariffId?: number
+  ledger?: string | null
+  deliveryTicket?: {
+    id?: number
+    ticketNumber?: string | null
+    cost?: string | number
+    projectSecurityLink?: { id?: number; code?: string | null; name?: string | null } | null
+  } | null
+}
+
+/**
+ * Inkoopfactuur-detail uit **GET /purchase-invoicing/purchase-invoice/{id}** (Heimdall).
+ *
+ * Dít is de enige bron van de échte factuurregels (`lines`) én het factuurdocument (`file`).
+ * Geverifieerd jul 2026 door het verzoek van Bouw7's eigen UI af te lezen.
+ *
+ * **Download het document met `file.uri`, NIET met `file.secureHash`**: `/storage/{uri}/download`
+ * levert de PDF, `/storage/{secureHash}/...` geeft 404 (anders dan bij `Bouw7ProjectFile`, waar de
+ * secureHash juist wél werkt). De EVA-proxy `/api/bouw7/bestand/[hash]` slikt beide vormen.
+ *
+ * **Niet te vinden via de gebruikelijke paden:** er bestaat géén `/list/purchase-invoice-lines`,
+ * `/purchase-invoice/{id}` of Apollo-variant (allemaal 404) — de `/purchase-invoicing/`-prefix is
+ * de sleutel. De embedded `deliveryTicket` op `Bouw7PurchaseInvoiceListItem` is géén regelbron:
+ * die toont één bon met alleen een totaalbedrag, zonder aantal/stukprijs.
+ *
+ * **Kosten:** één call per factuur → alleen on-demand ophalen (bv. bij het uitklappen van een regel),
+ * niet in bulk voor een heel dossier.
+ */
+export type Bouw7PurchaseInvoiceDetail = {
+  id: number
+  invoiceNumber?: string | null
+  status?: number
+  lines?: Bouw7PurchaseInvoiceLine[]
+  file?: {
+    id?: number
+    name?: string | null
+    extension?: string | null
+    size?: number
+    /** Storage-sleutel voor de download (`/storage/{uri}/download`). */
+    uri?: string | null
+    /** Let op: werkt NIET als downloadsleutel voor inkoopfacturen — gebruik `uri`. */
+    secureHash?: string | null
+  } | null
+  fromBasecone?: boolean
+}
+
+/**
  * Bestelregel/contractregel uit GET /list/contract-order-lines (Heimdall), via `q`-DSL gefilterd
  * op `project.id`. `projectSecurityLink.code` = bewakingscode (kan ontbreken → kosten zonder code).
  * `contact.type`: 'subcontractor' = onderaanneming, anders inkoop (leverancier/handmatig).
@@ -904,12 +979,29 @@ export type Bouw7EmployeeHourLogResponse = {
 }
 
 /**
- * Verkooptermijn uit GET /list/project-invoice-terms (Heimdall, q-DSL `statement.project.id = {id}`).
- * `invoiceLine` aanwezig = termijn is daadwerkelijk gefactureerd. `subtotal` = termijnbedrag excl. BTW.
+ * Termijnstaat-kop uit GET /list/project-invoice-term-statements (Heimdall, q-DSL `project.id = {id}`).
+ * Eén statement per project bundelt de losse termijnen. `fixedPrice` = totale aanneemsom.
+ * De losse termijnen haal je op met `/list/project-invoice-terms` gefilterd op `statement.id`.
+ */
+export type Bouw7ProjectInvoiceTermStatement = {
+  id: number
+  project?: { id: number; number?: string; name?: string; status?: string } | null
+  contact?: { id: number; name?: string } | null
+  fixedPrice?: string | number
+}
+
+/**
+ * Verkooptermijn uit GET /list/project-invoice-terms (Heimdall).
+ * **Filter op `statement.id = {statementId}`** — `statement.project(.id)` is NIET HQL-mapped en
+ * geeft een 400 (geverifieerd jul 2026). Haal eerst de termijnstaat op via
+ * `/list/project-invoice-term-statements` (`project.id = {id}`), dan de termijnen per `statement.id`.
+ * `invoiceLine` aanwezig = er is een factuurregel aangemaakt; of die factuur al verzonden is,
+ * blijkt uit de bijbehorende `Bouw7SalesInvoice.isMailed` (invoiceLine.invoiceStatusId is
+ * onbetrouwbaar: 0 hoort ook bij reeds verzonden facturen). `subtotal` = termijnbedrag excl. BTW.
  */
 export type Bouw7ProjectInvoiceTerm = {
   id: number
-  statement?: { id: number; project?: { id: number }; contact?: { id: number; name?: string }; fixedPrice?: string | number } | null
+  statement?: { id: number; projectId?: number; project?: { id: number }; contactId?: number; contactName?: string; fixedPrice?: string | number } | null
   description?: string
   percentage?: string | number
   subtotal?: string | number
