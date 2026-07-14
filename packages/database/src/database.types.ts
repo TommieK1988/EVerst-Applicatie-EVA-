@@ -1712,6 +1712,8 @@ export type Database = {
       formulier_pdf_config: {
         Row: {
           bijgewerkt_op: string
+          briefpapier_marge_boven_mm: number
+          briefpapier_marge_onder_mm: number
           id: string
           koptekst: string | null
           toon_invuller: boolean
@@ -1721,6 +1723,8 @@ export type Database = {
         }
         Insert: {
           bijgewerkt_op?: string
+          briefpapier_marge_boven_mm?: number
+          briefpapier_marge_onder_mm?: number
           id?: string
           koptekst?: string | null
           toon_invuller?: boolean
@@ -1730,6 +1734,8 @@ export type Database = {
         }
         Update: {
           bijgewerkt_op?: string
+          briefpapier_marge_boven_mm?: number
+          briefpapier_marge_onder_mm?: number
           id?: string
           koptekst?: string | null
           toon_invuller?: boolean

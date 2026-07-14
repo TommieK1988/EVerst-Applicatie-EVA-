@@ -3,45 +3,10 @@ import { createAdminClient } from '@everts/database/server'
 import jsPDF from 'jspdf'
 import type { FormField, FormInstellingen } from '@/components/formulieren/types'
 import {
-  mergePdfConfig, hexNaarRgb, renderPdfItems, pasBriefpapierToe,
-  type PdfItem, type GlobalePdfConfig,
+  mergePdfConfig, hexNaarRgb, urlNaarBase64, dummyWaarde, buildBlokken,
+  tekenKop, renderReport, tekenPaginavoettekst, pasBriefpapierToe,
+  type GlobalePdfConfig, type Marge,
 } from '@/components/formulieren/pdf-schema'
-
-// Voorbeeld-waarde per veldtype
-function dummyWaarde(field: FormField): string {
-  switch (field.type) {
-    case 'text':      return 'Voorbeeld tekst'
-    case 'textarea':  return 'Langere voorbeeld tekst met meerdere woorden.'
-    case 'number':    return '42'
-    case 'rating':    return field.ratingStijl === 'sterren' ? `4 / ${field.validation?.max ?? 5} sterren` : `8 / ${field.validation?.max ?? 10}`
-    case 'date':      return new Date().toLocaleDateString('nl-NL')
-    case 'time':      return '09:30'
-    case 'dropdown':  return field.options?.[0]?.label ?? 'Optie 1'
-    case 'radio':     return field.options?.[0]?.label ?? 'Optie 1'
-    case 'checkbox':  return field.options?.slice(0, 2).map(o => o.label).join(', ') ?? 'Optie 1, Optie 2'
-    case 'boolean':   return 'Ja'
-    case 'photo':     return '[Foto — 1 afbeelding]'
-    case 'signature': return '[Handtekening aanwezig]'
-    case 'location':  return '52.3676, 4.9041 (Amsterdam)'
-    case 'barcode':   return '1234567890'
-    case 'file':      return 'document.pdf'
-    case 'repeatable': return '2 rijen'
-    default:          return '—'
-  }
-}
-
-async function urlNaarBase64(url: string): Promise<string | null> {
-  try {
-    const resp = await fetch(url)
-    if (!resp.ok) return null
-    const buf  = await resp.arrayBuffer()
-    const b64  = Buffer.from(buf).toString('base64')
-    const mime = resp.headers.get('content-type') ?? 'image/png'
-    return `data:${mime};base64,${b64}`
-  } catch {
-    return null
-  }
-}
 
 export async function GET(
   _req: Request,
@@ -71,81 +36,48 @@ export async function GET(
     naam: string | null; logo_primair_url: string | null; logo_url: string | null
   } | null
 
-  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageW  = doc.internal.pageSize.getWidth()
-  const pageH  = doc.internal.pageSize.getHeight()
-  const margin = 18
-  let y = margin
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
 
-  // Voorbeeld-watermark
-  doc.setFontSize(48)
-  doc.setTextColor(230, 230, 230)
-  doc.setFont('helvetica', 'bold')
-  doc.text('VOORBEELD', pageW / 2, pageH / 2, { align: 'center', angle: 45 })
+  const briefpapier = !!pdfConfig.briefpapierUrl
+  const marge: Marge = briefpapier
+    ? { boven: pdfConfig.briefpapierMargeBoven, onder: pdfConfig.briefpapierMargeOnder, links: 20, rechts: 20 }
+    : { boven: 18, onder: 16, links: 18, rechts: 18 }
 
-  doc.setTextColor(22, 27, 32)
-
-  // Logo
-  if (pdfConfig.toonLogo) {
-    const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
-    if (logoUrl) {
-      const logoB64 = await urlNaarBase64(logoUrl)
-      if (logoB64) {
-        try { doc.addImage(logoB64, 'PNG', margin, y, 36, 12); y += 14 } catch { /* skip */ }
-      }
-    }
+  // Diagonaal VOORBEELD-watermerk (op elke pagina).
+  const watermerk = (d: jsPDF) => {
+    d.setFont('helvetica', 'bold'); d.setFontSize(48); d.setTextColor(230, 230, 230)
+    d.text('VOORBEELD', pageW / 2, pageH / 2, { align: 'center', angle: 45 })
+    d.setTextColor(0, 0, 0)
   }
+  watermerk(doc)
 
-  doc.setFontSize(17)
-  doc.setFont('helvetica', 'bold')
-  doc.text(template.naam, margin, y)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100, 100, 100)
-  doc.text(`v${versie.versienummer} · VOORBEELDWEERGAVE`, margin, y + 5)
-  y += 14
-
-  if (pdfConfig.koptekst) {
-    doc.setFontSize(9); doc.setFont('helvetica', 'italic')
-    doc.text(pdfConfig.koptekst, margin, y); y += 7
-  }
+  const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
+  const logo = pdfConfig.toonLogo && !briefpapier && logoUrl ? await urlNaarBase64(logoUrl) : null
 
   const metaDelen: string[] = []
+  if (pdfConfig.koptekst) metaDelen.push(pdfConfig.koptekst)
   if (pdfConfig.toonInvuller) metaDelen.push(`Ingediend: ${new Date().toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}`)
   if (pdfConfig.toonProjectRef) metaDelen.push('Project: PRJ-2026-001')
   metaDelen.push('Status: Ingediend')
 
-  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100)
-  doc.text(metaDelen.join('  |  '), margin, y); y += 7
+  const startY = tekenKop(doc, {
+    titel: template.naam,
+    subtitel: `v${versie.versienummer} · VOORBEELDWEERGAVE`,
+    metaDelen,
+    logo,
+    briefpapier,
+    pageW, pageH, marge, accentRgb,
+  })
 
-  doc.setDrawColor(220, 220, 220)
-  doc.line(margin, y, pageW - margin, y); y += 6
+  const blokken = await buildBlokken(fields, f => dummyWaarde(f), { preview: true })
+  await renderReport(doc, blokken, { startY, pageW, pageH, marge, accentRgb, opNieuwePagina: watermerk })
 
-  const items: PdfItem[] = []
-  for (const f of fields) {
-    if (f.type === 'divider') continue
-    if (f.type === 'pagebreak') { items.push({ kind: 'pagebreak' }); continue }
-    if (f.type === 'image') {
-      if (f.afbeeldingUrl) items.push({ kind: 'image', url: f.afbeeldingUrl, breedte: f.afbeeldingBreedte ?? 200, uitlijning: f.opmaak?.uitlijning })
-      continue
-    }
-    if (f.type === 'callout') { items.push({ kind: 'row', cells: [f.label, ''], callout: f.opmaak?.variant ?? 'info' }); continue }
-    if (f.type === 'heading') { items.push({ kind: 'row', cells: [f.label, ''], stijl: 'heading' }); continue }
-    if (f.type === 'paragraph') { items.push({ kind: 'row', cells: [f.label, ''] }); continue }
-    items.push({ kind: 'row', cells: [f.label, dummyWaarde(f)] })
-  }
-
-  await renderPdfItems(doc, items, { startY: y, margin, pageW, pageH, accentRgb })
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalPages: number = (doc as any).internal.getNumberOfPages()
-  const voettekst = pdfConfig.voettekst ?? bedrijf?.naam ?? ''
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    doc.setFontSize(7.5); doc.setTextColor(160, 160, 160)
-    if (voettekst) doc.text(voettekst, margin, pageH - 8)
-    doc.text(`Pagina ${i} van ${totalPages}`, pageW - margin, pageH - 8, { align: 'right' })
-  }
+  tekenPaginavoettekst(doc, {
+    voettekst: pdfConfig.voettekst ?? bedrijf?.naam ?? '',
+    briefpapier, pageW, pageH, marge,
+  })
 
   const pdfBytes = await pasBriefpapierToe(doc.output('arraybuffer'), pdfConfig.briefpapierUrl)
 

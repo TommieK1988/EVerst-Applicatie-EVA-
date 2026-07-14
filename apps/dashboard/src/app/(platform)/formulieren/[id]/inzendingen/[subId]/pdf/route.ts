@@ -3,25 +3,11 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import jsPDF from 'jspdf'
 import type { FormField, FormInstellingen } from '@/components/formulieren/types'
-import { formatVeldwaardeTekst } from '@/components/formulieren/format'
 import {
-  mergePdfConfig, hexNaarRgb, renderPdfItems, pasBriefpapierToe,
-  type PdfItem, type GlobalePdfConfig,
+  mergePdfConfig, hexNaarRgb, urlNaarBase64, buildBlokken,
+  tekenKop, renderReport, tekenPaginavoettekst, pasBriefpapierToe,
+  type GlobalePdfConfig, type Marge,
 } from '@/components/formulieren/pdf-schema'
-
-// Hulpfunctie: URL → base64 data-URL
-async function urlNaarBase64(url: string): Promise<string | null> {
-  try {
-    const resp = await fetch(url)
-    if (!resp.ok) return null
-    const buf  = await resp.arrayBuffer()
-    const b64  = Buffer.from(buf).toString('base64')
-    const mime = resp.headers.get('content-type') ?? 'image/png'
-    return `data:${mime};base64,${b64}`
-  } catch {
-    return null
-  }
-}
 
 export async function GET(
   _req: Request,
@@ -72,131 +58,43 @@ export async function GET(
 
   // ── Genereer PDF ──────────────────────────────────────────────────
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageW  = doc.internal.pageSize.getWidth()
-  const pageH  = doc.internal.pageSize.getHeight()
-  const margin = 18
-  let y = margin
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
 
-  // Logo
-  const toonLogo = pdfConfig.toonLogo
-  if (toonLogo) {
-    const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
-    if (logoUrl) {
-      const logoB64 = await urlNaarBase64(logoUrl)
-      if (logoB64) {
-        try {
-          doc.addImage(logoB64, 'PNG', margin, y, 36, 12)
-          y += 14
-        } catch { /* logo niet beschikbaar */ }
-      }
-    }
-  }
+  const briefpapier = !!pdfConfig.briefpapierUrl
+  const marge: Marge = briefpapier
+    ? { boven: pdfConfig.briefpapierMargeBoven, onder: pdfConfig.briefpapierMargeOnder, links: 20, rechts: 20 }
+    : { boven: 18, onder: 16, links: 18, rechts: 18 }
 
-  // Formuliernaam + versie
-  doc.setFontSize(17)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(22, 27, 32)
-  doc.text(template?.naam ?? 'Formulier', margin, y + (toonLogo ? 0 : 6))
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100, 100, 100)
-  doc.text(`v${versie?.versienummer ?? 1}`, margin, y + (toonLogo ? 0 : 6) + 5)
-  y += toonLogo ? 14 : 20
-
-  // Koptekst
-  if (pdfConfig.koptekst) {
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'italic')
-    doc.setTextColor(120, 120, 120)
-    doc.text(pdfConfig.koptekst, margin, y)
-    y += 7
-  }
+  // Logo alleen zonder briefpapier (briefpapier heeft een eigen briefhoofd).
+  const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
+  const logo = pdfConfig.toonLogo && !briefpapier && logoUrl ? await urlNaarBase64(logoUrl) : null
 
   // Meta-regel
   const metaDelen: string[] = []
-
-  const toonInvuller = pdfConfig.toonInvuller
-  if (toonInvuller && inzending.ingediend_op) {
-    const datumStr = new Date(inzending.ingediend_op as string).toLocaleDateString('nl-NL', {
-      day: 'numeric', month: 'long', year: 'numeric',
-    })
-    metaDelen.push(`Ingediend: ${datumStr}`)
+  if (pdfConfig.koptekst) metaDelen.push(pdfConfig.koptekst)
+  if (pdfConfig.toonInvuller && inzending.ingediend_op) {
+    metaDelen.push(`Ingediend: ${new Date(inzending.ingediend_op as string).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}`)
   }
-
-  const toonProjectRef = pdfConfig.toonProjectRef
-  if (toonProjectRef && inzending.project_ref) {
-    metaDelen.push(`Project: ${inzending.project_ref}`)
-  }
-
+  if (pdfConfig.toonProjectRef && inzending.project_ref) metaDelen.push(`Project: ${inzending.project_ref}`)
   metaDelen.push(`Status: ${inzending.status}`)
 
-  if (metaDelen.length > 0) {
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(100, 100, 100)
-    doc.text(metaDelen.join('  |  '), margin, y)
-    y += 7
-  }
+  const startY = tekenKop(doc, {
+    titel: template?.naam ?? 'Formulier',
+    subtitel: `v${versie?.versienummer ?? 1}`,
+    metaDelen,
+    logo,
+    briefpapier,
+    pageW, pageH, marge, accentRgb,
+  })
 
-  // Scheidingslijn
-  doc.setDrawColor(220, 220, 220)
-  doc.line(margin, y, pageW - margin, y)
-  y += 6
+  const blokken = await buildBlokken(fields, f => waarden[f.id], {})
+  await renderReport(doc, blokken, { startY, pageW, pageH, marge, accentRgb })
 
-  // ── Veldwaarden → renderbare items (tabel + pagina-einden + afbeeldingen) ──
-  const items: PdfItem[] = []
-
-  for (const field of fields) {
-    if (field.type === 'divider') continue
-    if (field.type === 'pagebreak') { items.push({ kind: 'pagebreak' }); continue }
-    if (field.type === 'image') {
-      if (field.afbeeldingUrl) items.push({ kind: 'image', url: field.afbeeldingUrl, breedte: field.afbeeldingBreedte ?? 200, uitlijning: field.opmaak?.uitlijning })
-      continue
-    }
-    if (field.type === 'callout') { items.push({ kind: 'row', cells: [field.label, ''], callout: field.opmaak?.variant ?? 'info' }); continue }
-    if (field.type === 'heading') { items.push({ kind: 'row', cells: [field.label, ''], stijl: 'heading' }); continue }
-    if (field.type === 'paragraph') { items.push({ kind: 'row', cells: [field.label, ''] }); continue }
-    if (field.type === 'signature' || field.type === 'photo') {
-      items.push({ kind: 'row', cells: [field.label, '[Afbeelding — zie digitale inzending]'] })
-      continue
-    }
-
-    // Herhalende sectie: elke rij met zijn sub-velden uitschrijven.
-    if (field.type === 'repeatable') {
-      const rijen = Array.isArray(waarden[field.id]) ? (waarden[field.id] as Record<string, unknown>[]) : []
-      items.push({ kind: 'row', cells: [field.label, rijen.length === 0 ? '(geen rijen)' : ''], stijl: 'heading' })
-      rijen.forEach((row, i) => {
-        items.push({ kind: 'row', cells: [`#${i + 1}`, ''], stijl: 'rijkop' })
-        for (const child of field.children ?? []) {
-          if (child.type === 'divider' || child.type === 'heading' || child.type === 'paragraph' || child.type === 'callout' || child.type === 'image' || child.type === 'pagebreak') continue
-          const disp = (child.type === 'signature' || child.type === 'photo')
-            ? '[Afbeelding — zie digitale inzending]'
-            : formatVeldwaardeTekst(child, row[child.id])
-          items.push({ kind: 'row', cells: [`    ${child.label}`, disp] })
-        }
-      })
-      continue
-    }
-
-    items.push({ kind: 'row', cells: [field.label, formatVeldwaardeTekst(field, waarden[field.id])] })
-  }
-
-  await renderPdfItems(doc, items, { startY: y, margin, pageW, pageH, accentRgb })
-
-  // ── Footer per pagina ─────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalPages: number = (doc as any).internal.getNumberOfPages()
-  const voettekst = pdfConfig.voettekst ?? bedrijf?.naam ?? ''
-
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    doc.setFontSize(7.5)
-    doc.setTextColor(160, 160, 160)
-    if (voettekst) {
-      doc.text(voettekst, margin, pageH - 8)
-    }
-    doc.text(`Pagina ${i} van ${totalPages}`, pageW - margin, pageH - 8, { align: 'right' })
-  }
+  tekenPaginavoettekst(doc, {
+    voettekst: pdfConfig.voettekst ?? bedrijf?.naam ?? '',
+    briefpapier, pageW, pageH, marge,
+  })
 
   // Briefpapier als achtergrond onder elke pagina (best-effort).
   const pdfBytes = await pasBriefpapierToe(doc.output('arraybuffer'), pdfConfig.briefpapierUrl)
