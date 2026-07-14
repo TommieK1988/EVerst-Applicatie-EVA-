@@ -6,7 +6,6 @@ import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatu
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
-import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import { assertDossierBewerkbaar } from './guards'
 import { getVoortgang } from './voortgang'
@@ -24,8 +23,6 @@ import {
   type Bouw7PurchaseOrderContract,
   type Bouw7EmployeeHourLogResponse,
   type Bouw7ProjectInvoiceTerm,
-  type Bouw7ProjectInvoiceTermStatement,
-  type Bouw7PurchaseInvoiceDetail,
   type Bouw7SalesInvoice,
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
