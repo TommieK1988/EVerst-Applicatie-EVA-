@@ -19,6 +19,9 @@ import type {
 import { assertDossierBewerkbaar } from './guards'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { maakMeerwerkRegel } from './meerwerk'
+import { formatVeldwaardeTekst } from '@/components/formulieren/format'
+import { isInvoerVeld } from '@/components/formulieren/types'
+import type { FormField } from '@/components/formulieren/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -701,9 +704,15 @@ const TOKEN_PAD: Record<OpleverTokenScope, string> = {
   feedback: 'feedback',
 }
 
+/** Bouwt de publieke link voor een ruwe token. */
+function tokenUrl(scope: OpleverTokenScope, raw: string): string {
+  return `${appBaseUrl()}/p/${TOKEN_PAD[scope]}/${raw}`
+}
+
 /**
- * Maakt een publiek toegang-token aan (gehasht opgeslagen) en geeft de volledige tokenlink terug.
- * De ruwe token verlaat de server alleen via deze URL (mail).
+ * Maakt een publiek toegang-token aan en geeft de volledige tokenlink terug.
+ * `token_hash` blijft de lookup-sleutel; `token_raw` wordt bewaard zodat de link later
+ * opnieuw te tonen en te kopiëren is in de Oplevering-tab.
  */
 export async function maakToegangToken(
   scope: OpleverTokenScope,
@@ -723,6 +732,7 @@ export async function maakToegangToken(
     : null
   const { error } = await supabase.from('oplever_toegang_tokens').insert({
     token_hash: hashToken(raw),
+    token_raw: raw,
     dossier_id: opts.dossierId,
     scope,
     relatie_id: opts.relatieId ?? null,
@@ -733,8 +743,69 @@ export async function maakToegangToken(
     created_by: await huidigeMedewerkerId(),
   })
   if (error) return { ok: false, error: error.message }
-  const url = `${appBaseUrl()}/p/${TOKEN_PAD[scope]}/${raw}`
-  return { ok: true, url, token: raw }
+  return { ok: true, url: tokenUrl(scope, raw), token: raw }
+}
+
+export type OpleverTokenLink = {
+  id: string
+  url: string
+  scope: OpleverTokenScope
+  omschrijving: string | null
+  formTemplateId: string | null
+  templateNaam: string | null
+  verlooptOp: string | null
+  verlopen: boolean
+  createdAt: string
+}
+
+/**
+ * Eerder aangemaakte tokenlinks van een dossier, zodat ze in de Oplevering-tab getoond en
+ * opnieuw gekopieerd kunnen worden. Links van vóór de `token_raw`-migratie hebben geen ruwe
+ * token meer en worden overgeslagen — die zijn onherstelbaar.
+ */
+export async function getOpleverTokenLinks(
+  dossierId: string,
+  scope?: OpleverTokenScope,
+): Promise<OpleverTokenLink[]> {
+  const supabase = db()
+  let query = supabase
+    .from('oplever_toegang_tokens')
+    .select('id, token_raw, scope, omschrijving, form_template_id, verloopt_op, created_at')
+    .eq('dossier_id', dossierId)
+    .not('token_raw', 'is', null)
+    .order('created_at', { ascending: false })
+  if (scope) query = query.eq('scope', scope)
+  const { data } = await query
+  const rijen = (data ?? []) as any[]
+  if (rijen.length === 0) return []
+
+  const templateIds = [...new Set(rijen.map(r => r.form_template_id).filter(Boolean))]
+  const namen = new Map<string, string>()
+  if (templateIds.length > 0) {
+    const { data: templates } = await supabase.from('form_templates').select('id, naam').in('id', templateIds)
+    for (const t of (templates ?? []) as any[]) namen.set(t.id, t.naam)
+  }
+
+  const nu = Date.now()
+  return rijen.map(r => ({
+    id: r.id,
+    url: tokenUrl(r.scope as OpleverTokenScope, r.token_raw as string),
+    scope: r.scope as OpleverTokenScope,
+    omschrijving: r.omschrijving ?? null,
+    formTemplateId: r.form_template_id ?? null,
+    templateNaam: r.form_template_id ? namen.get(r.form_template_id) ?? null : null,
+    verlooptOp: r.verloopt_op ?? null,
+    verlopen: !!r.verloopt_op && new Date(r.verloopt_op).getTime() < nu,
+    createdAt: r.created_at,
+  }))
+}
+
+/** Trekt een tokenlink in: de link werkt daarna niet meer. */
+export async function verwijderToegangToken(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = db()
+  const { error } = await supabase.from('oplever_toegang_tokens').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
 /* ──────────────────────── Feedback-ronde (Formulieren) ────────────────────── */
@@ -802,6 +873,100 @@ export async function getOpleverFeedbackSamenvatting(dossierId: string): Promise
     label, gemiddelde: Math.round((a.total / a.n) * 10) / 10, aantal: a.n,
   }))
   return { aantal: rijen.length, cijfers }
+}
+
+/** Eén ingevuld veld van een feedbackinzending, klaar om te tonen. */
+export type FeedbackAntwoord = {
+  label: string
+  waarde: string
+  /** Afbeeldings-URL's bij photo-/signature-velden. */
+  fotos: string[]
+}
+export type FeedbackInzending = {
+  id: string
+  templateId: string
+  templateNaam: string
+  ingediendOp: string | null
+  aangemaaktOp: string
+  antwoorden: FeedbackAntwoord[]
+}
+
+function isLegeWaarde(v: unknown): boolean {
+  return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
+}
+
+/** Zet één veld + waarde om naar toonbare antwoorden (herhalende secties worden uitgevouwen). */
+function veldNaarAntwoorden(field: FormField, waarde: unknown, prefix = ''): FeedbackAntwoord[] {
+  // Koppen, tekstblokken, afbeeldingen e.d. zijn opmaak en hebben geen antwoord.
+  if (!isInvoerVeld(field)) return []
+  // Dossier-velden worden bij het invullen automatisch gevuld en niet opgeslagen; een leeg
+  // dossier-veld is dus geen onbeantwoorde vraag maar ruis.
+  if (field.type === 'dossier' && isLegeWaarde(waarde)) return []
+  const label = prefix ? `${prefix} · ${field.label}` : field.label
+
+  if (field.type === 'repeatable') {
+    const rijen = Array.isArray(waarde) ? (waarde as Record<string, unknown>[]) : []
+    return rijen.flatMap((rij, i) =>
+      (field.children ?? []).flatMap(child =>
+        veldNaarAntwoorden(child, rij?.[child.id], `${label} ${i + 1}`),
+      ),
+    )
+  }
+
+  const fotos =
+    field.type === 'photo' && Array.isArray(waarde)
+      ? (waarde as string[]).filter(u => typeof u === 'string')
+      : field.type === 'signature' && typeof waarde === 'string' && waarde !== ''
+        ? [waarde]
+        : []
+
+  return [{
+    label,
+    waarde: isLegeWaarde(waarde) ? 'Niet ingevuld' : formatVeldwaardeTekst(field, waarde),
+    fotos,
+  }]
+}
+
+/**
+ * Alle ingezonden bewonersfeedback van een dossier, mét álle ingevulde velden — niet alleen de
+ * cijfers uit `getOpleverFeedbackSamenvatting`. Leest het schema van de gebruikte versie zodat
+ * labels en opmaak overeenkomen met het formulier zoals het is ingevuld.
+ */
+export async function getOpleverFeedbackInzendingen(dossierId: string): Promise<FeedbackInzending[]> {
+  const supabase = db()
+  const { data: inzendingen } = await supabase
+    .from('form_inzendingen')
+    .select('id, template_id, versie_id, waarden, ingediend_op, aangemaakt_op')
+    .eq('dossier_id', dossierId)
+    .eq('project_ref', 'oplever-feedback')
+    .eq('status', 'ingediend')
+    .order('ingediend_op', { ascending: false, nullsFirst: false })
+  const rijen = (inzendingen ?? []) as any[]
+  if (rijen.length === 0) return []
+
+  const versieIds = [...new Set(rijen.map(r => r.versie_id).filter(Boolean))]
+  const templateIds = [...new Set(rijen.map(r => r.template_id).filter(Boolean))]
+  const [{ data: versies }, { data: templates }] = await Promise.all([
+    supabase.from('form_versies').select('id, schema').in('id', versieIds),
+    supabase.from('form_templates').select('id, naam').in('id', templateIds),
+  ])
+  const schemaVanVersie = new Map<string, FormField[]>()
+  for (const v of (versies ?? []) as any[]) schemaVanVersie.set(v.id, v.schema?.fields ?? [])
+  const naamVanTemplate = new Map<string, string>()
+  for (const t of (templates ?? []) as any[]) naamVanTemplate.set(t.id, t.naam)
+
+  return rijen.map(r => {
+    const fields = schemaVanVersie.get(r.versie_id) ?? []
+    const waarden = (r.waarden ?? {}) as Record<string, unknown>
+    return {
+      id: r.id,
+      templateId: r.template_id,
+      templateNaam: naamVanTemplate.get(r.template_id) ?? 'Formulier',
+      ingediendOp: r.ingediend_op ?? null,
+      aangemaaktOp: r.aangemaakt_op,
+      antwoorden: fields.flatMap(f => veldNaarAntwoorden(f, waarden[f.id])),
+    }
+  })
 }
 
 export type ToegangTokenContext = {
