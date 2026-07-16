@@ -307,14 +307,15 @@ export async function verifyBouw7WriteAccess(projectId?: number): Promise<WriteC
 }
 
 /**
- * Schrijft één of meer **bestelregels** (verwachte-kosten-regels) naar Bouw7 via
- * `POST /project/{project}/contract-order-line`. Dit is exact het regeltype dat de
+ * Schrijft één of meer **bestelregels** (verwachte-kosten-regels) naar Bouw7 via het
+ * ongedocumenteerde `POST /contract-order-line` (Heimdall). Dit is exact het regeltype dat de
  * EVA Financieel-tab al teruglez­t als "Verwachte kosten" (`GET /list/contract-order-lines`),
  * gesommeerd per `projectSecurityLink.code`. Door een PSL-id mee te geven landt de regel
  * op de juiste bewakingscode en telt 'ie mee in de verwachte kosten van die code.
  *
- * LET OP: voor dit endpoint bestaat **geen API-delete** — een testregel verwijder je
- * in de Bouw7-UI. Bouw7 berekent `totalPrice` zelf uit quantity × unitPrice.
+ * LET OP: gebruik NIET `POST /project/{project}/contract-order-line` (het gedocumenteerde,
+ * deprecated endpoint) — dat is material-only en weigert een arbeid-/OA-PSL. Zie
+ * WRITE-ENDPOINTS.md §2b. Bouw7 berekent `totalPrice` zelf uit quantity × unitPrice.
  */
 export type Bestelregel = {
   description: string
@@ -328,6 +329,12 @@ export type Bestelregel = {
   projectSecurityLinkId?: number
   /** Optioneel: leverancier (contact-id). */
   contactId?: number
+  /**
+   * Kostentype van de regel (eigen, nul-gebaseerde enum: 0 Materiaal · 1 Onderaanneming ·
+   * 2 Arbeid · 3 Materieel · 4 Overig). Moet passen bij de kostensoort van de PSL
+   * (0→ct5, 1→ct3, 2→ct1, 3→ct4). Weggelaten = 0 (Materiaal).
+   */
+  costType?: number
 }
 
 export type CreateBestelregelsResult =
@@ -361,15 +368,16 @@ export async function createBouw7Bestelregels(projectId: number, regels: Bestelr
         ...(r.articleNumber ? { articleNumber: r.articleNumber } : {}),
         ...(r.projectSecurityLinkId != null ? { projectSecurityLink: { id: r.projectSecurityLinkId } } : {}),
         ...(r.contactId != null ? { contact: { id: r.contactId } } : {}),
+        ...(r.costType != null ? { costType: r.costType } : {}),
       }
-      resultaten.push(await client.post<unknown>(`/project/${projectId}/contract-order-line`, body))
+      resultaten.push(await client.post<unknown>('/contract-order-line', body))
     }
 
     return {
       ok: true,
       aangemaakt: resultaten.length,
       resultaten,
-      message: `${resultaten.length} bestelregel(s) aangemaakt op project ${projectId}. Verschijnen als "Verwachte kosten" in Bouw7. (Geen API-delete — verwijder testregels in de Bouw7-UI.)`,
+      message: `${resultaten.length} bestelregel(s) aangemaakt op project ${projectId}. Verschijnen als "Verwachte kosten" in Bouw7. (Losse regel verwijderen kan alleen in de Bouw7-UI; DELETE /project/${projectId}/contract-order-lines wist ze állemaal.)`,
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Onbekende fout'

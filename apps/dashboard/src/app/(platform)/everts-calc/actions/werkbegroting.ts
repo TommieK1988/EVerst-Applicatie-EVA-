@@ -654,12 +654,29 @@ export async function verzendBestelling(
 /** Kostensoorten die vanuit de werkbegroting gevoed worden (= component-types). */
 const PROGNOSE_KOSTENSOORTEN = [1, 3, 5] as const
 
-/** Component-type → Bouw7-kostensoort. `materieel` → Materiaal (5) is de afgesproken mapping. */
-const TYPE_NAAR_BOUW7: Record<'arbeid' | 'materieel' | 'onderaanneming', { ct: number; label: string }> = {
-  arbeid:         { ct: 1, label: 'Arbeid' },
-  onderaanneming: { ct: 3, label: 'Onderaanneming' },
-  materieel:      { ct: 5, label: 'Materiaal' },
+/**
+ * Component-type → Bouw7-kostensoort. `materieel` → Materiaal (5) is de afgesproken mapping.
+ *
+ * LET OP — twee verschillende kostentype-enums:
+ *  - `ct`     = kostensoort van de **bewakingscode/PSL** (1 Arbeid · 3 Onderaanneming · 5 Materiaal).
+ *               Dit is de nummering van `/project-control/{id}/cost-type/{ct}/chapters`.
+ *  - `lineCt` = kostentype van de **bestelregel** zelf: een eigen, nul-gebaseerde enum die de
+ *               volgorde van de Bouw7-dropdown volgt (0 Materiaal · 1 Onderaanneming · 2 Arbeid ·
+ *               3 Materieel · 4 Overig).
+ * Bouw7 valideert bij `POST /contract-order-line` dat `costType` (lineCt) past bij de kostensoort
+ * van de meegegeven PSL. Sturen we `costType` niet mee, dan valt Bouw7 terug op 0 (Materiaal) en
+ * weigert het een arbeid- of OA-PSL met een 400 "does not have cost type material".
+ * De mapping is afgeleid uit 625 bestaande bestelregels (100% consistent), komt exact overeen met
+ * de kostentype-dropdown in de Bouw7-UI, en is met schrijftests bevestigd. Zie WRITE-ENDPOINTS.md §2b.
+ */
+const TYPE_NAAR_BOUW7: Record<'arbeid' | 'materieel' | 'onderaanneming', { ct: number; lineCt: number; label: string }> = {
+  arbeid:         { ct: 1, lineCt: 2, label: 'Arbeid' },
+  onderaanneming: { ct: 3, lineCt: 1, label: 'Onderaanneming' },
+  materieel:      { ct: 5, lineCt: 0, label: 'Materiaal' },
 }
+
+/** Bestelregel-kostentype (`ContractOrderLine.costType`) → kostensoort van de PSL. */
+const LINE_CT_NAAR_PSL_CT: Record<number, number> = { 0: 5, 1: 3, 2: 1, 3: 4, 4: 6 }
 
 /** Werkbegroting-totalen per bewakingscode (client berekent ze uit regels × componenten). */
 export type WerkbegrotingCodeTotaal = {
@@ -1348,7 +1365,10 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
       .then(r => r.items ?? [])
     bestelregels = lines
       .map((ol): BestelregelImport => {
-        const ct = ol.projectSecurityLink?.costType ?? ol.costType
+        // PSL-kostensoort is leidend; valt die weg, dan de regel-enum ernaartoe vertalen
+        // (die telt anders 1 = Onderaanneming als 1 = Arbeid).
+        const ct = ol.projectSecurityLink?.costType
+          ?? (ol.costType != null ? LINE_CT_NAAR_PSL_CT[ol.costType] : undefined)
         const type = ct === 1 ? 'arbeid' : ct === 3 ? 'onderaanneming' : 'materieel'
         const factor = getal(ol.quantityFactor)
         const aantal = getal(ol.quantity) * (factor || 1)
@@ -1376,7 +1396,11 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
 
 // ─── Werkbegroting-regels als bestelregels naar Bouw7 (upsert per regel) ──────
 //
-// Elke werkbegroting-COMPONENT → één contract-order-line ("verwachte kosten") in Bouw7.
+// Elke werkbegroting-COMPONENT → één contract-order-line ("verwachte kosten") in Bouw7,
+// via het ongedocumenteerde `POST /contract-order-line` (Heimdall, zónder /project/{id}-prefix).
+// Het wél gedocumenteerde `POST /project/{id}/contract-order-line` is NIET bruikbaar: dat is
+// material-only (het negeert `costType` en weigert een arbeid-/OA-PSL met een 400
+// "does not have cost type material"). Zie WRITE-ENDPOINTS.md §2b.
 // Identiteit via werkbegroting_componenten.bouw7_line_id:
 //   null  → aanmaken   (POST zonder id) → id opslaan
 //   gevuld→ bijwerken  (POST mét id)     → geen duplicaat
@@ -1384,10 +1408,8 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
 // Bestelde regels (code met inkooporder/OA/geboekte factuur) worden overgeslagen en
 // nooit aangeraakt (fiscale bescherming; zie getVergrendeldeBewakingscodes).
 //
-// LET OP: dat POST /project/{project}/contract-order-line een `id` als UPDATE honoreert
-// (i.p.v. een nieuwe regel maken) is niet gedocumenteerd — te verifiëren op een
-// testproject (zie WRITE-ENDPOINTS.md). De preview toont per regel de bedoelde actie
-// zodat een eventuele verdubbeling vroeg zichtbaar wordt.
+// De update-semantiek is geverifieerd op testproject 3869371 (juli 2026): een POST mét `id`
+// geeft 200 met hetzelfde id terug en werkt de bestaande regel bij — geen duplicaat.
 
 /**
  * Bewakingscodes waarop al inkoop "verbruikt" is: er staat een inkooporder, een
@@ -1427,7 +1449,10 @@ export type BestelregelPlanRegel = {
   codeNaam: string | null
   type: 'arbeid' | 'onderaanneming' | 'materieel'
   label: string
+  /** Kostensoort van de bewakingscode/PSL (1/3/5) — bepaalt welke PSL we aanschrijven. */
   ct: number
+  /** Kostentype van de bestelregel zelf (0-gebaseerde enum) — moet bij `ct` passen. */
+  lineCt: number
   omschrijving: string
   aantal: number
   prijs: number
@@ -1490,7 +1515,7 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
     else actie = 'bijwerken'
 
     regels.push({
-      componentId: comp.id, code, codeNaam: ref?.naam ?? naam, type: comp.type, label: map.label, ct: map.ct,
+      componentId: comp.id, code, codeNaam: ref?.naam ?? naam, type: comp.type, label: map.label, ct: map.ct, lineCt: map.lineCt,
       omschrijving: (comp.omschrijving?.trim() || regel.omschrijving || '').trim(),
       aantal, prijs, bedrag, eenheid: String(comp.eenheid || regel.eenheid || 'st'),
       bouw7LineId, pslId, actie, vergrendeld, reden,
@@ -1580,12 +1605,13 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
         description: r.omschrijving || r.label,
         quantity,
         unitPrice: String(r.prijs),
+        costType: r.lineCt,
         ...(r.eenheid ? { unit: r.eenheid } : {}),
         ...(r.pslId != null ? { projectSecurityLink: { id: r.pslId } } : {}),
         ...(contactId != null ? { contact: { id: contactId } } : {}),
         ...(r.bouw7LineId != null ? { id: r.bouw7LineId } : {}),
       }
-      const resp = await client.post<{ id?: number } | undefined>(`/project/${bouw7Id}/contract-order-line`, body)
+      const resp = await client.post<{ id?: number } | undefined>('/contract-order-line', body)
       const nieuwId = resp?.id ?? r.bouw7LineId ?? null
       if (nieuwId != null) lineIdPerComponent[r.componentId] = nieuwId
       if (r.actie === 'aanmaken') aangemaakt++

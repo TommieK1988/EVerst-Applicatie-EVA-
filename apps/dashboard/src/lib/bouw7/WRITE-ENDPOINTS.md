@@ -26,7 +26,8 @@ Bouw7. Kern: `apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegrotin
 | **Structuur schrijven** (PSL aanmaken) | `POST /project/{id}/project-security-links` (Heimdall) | Body `{ securityCodeChaptersPerObjects: [...zelfde array...] }` — **read-modify-write** (vervangt alles). Code+kostensoort toevoegen = kostensoort-veld op `"0"` zetten → PSL ontstaat (begroot 0). |
 | **Bewakingscode aanmaken** | `POST /security-code` (Heimdall) | `{ name, code, securityCodeChapter: { id } }` → response `{ id }`. Hoofdstuk-id moet **bestaan** (geen betrouwbaar create-hoofdstuk-endpoint gevonden). |
 | **Bewakingscodes/begroting lezen** | Athena `GET /project-control/{id}/cost-type/{1,3,5}/chapters` | `securityCodes[].pslIds[0]` = PSL-id per (code × kostensoort); `budgetAmount`, `hourInfo.budgetHours`. |
-| **Bestelregels** (import) | `GET /list/contract-order-lines` (Heimdall, `q`-DSL) | items: `quantity`, `quantityFactor`, `unitPrice`, `unit`, `totalPrice`, `projectSecurityLink{code,costType}`. Aantal = `quantity × quantityFactor`. |
+| **Bestelregels** (import) | `GET /list/contract-order-lines` (Heimdall, `q`-DSL) | items: `quantity`, `quantityFactor`, `unitPrice`, `unit`, `totalPrice`, `costType` (regel-enum!), `projectSecurityLink{code,costType}`. Aantal = `quantity × quantityFactor`. |
+| **Bestelregels** (schrijven) | `POST /contract-order-line` (Heimdall, **ongedocumenteerd**) | Zie §2b. **Niet** `/project/{id}/contract-order-line` — die is material-only. |
 
 ### Kostensoort ↔ structuur-veld
 ct1 Arbeid → `laborCosts` (+ `laborHours`/`laborHourlyRate`) · ct2 Inkoop → `purchaseOrderCosts` ·
@@ -179,30 +180,63 @@ Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `tick
 
 Afgestemd op wat EVA al **leest** (zie `ENDPOINTS.md` → "Projectbewaking per bewakingscode").
 
-### Bestelregels = "Verwachte kosten" → `POST /project/{project}/contract-order-line`
+### Bestelregels = "Verwachte kosten" → `POST /contract-order-line` (ongedocumenteerd)
 EVA's Financieel-tab toont **"Verwachte kosten"** uit `GET /list/contract-order-lines`, gesommeerd per
 `projectSecurityLink.code`. De **schrijf-tegenhanger** van precies dat regeltype is:
 
 ```
-POST /project/{project}/contract-order-line     body: ContractOrderLineOld
+POST /contract-order-line      (Heimdall — staat NIET in de Swagger-spec)
 ```
+
+> ### ⚠️ Gebruik NIET `POST /project/{project}/contract-order-line`
+> Dat is het enige contract-order-line-endpoint dát in de spec staat (als *deprecated*), en het is
+> **material-only**: het negeert een meegestuurd `costType` en weigert elke niet-materiaal-PSL met
+> ```
+> 400 {"type":"validation_error","message":"The project security link with ID #… does not have cost type \"material\"."}
+> ```
+> Geverifieerd jul 2026 op project 3869371: `costType` in álle schrijfwijzen (`costType` int/string,
+> `cost_type`, `costTypeId`, `type`, `costType:{id}`) gaf exact dezelfde fout → het veld wordt daar
+> genegeerd. Het variant **zónder** `/project/{id}`-prefix accepteert `costType` wél. Dat is ook de
+> route achter het "Bestelregel aanmaken"-dialoog in de Bouw7-UI (met kostentype-dropdown).
+
 | Veld | | Opmerking |
 |---|---|---|
-| `project` `{id}` | **REQ** | path + body |
+| `project` `{id}` | **REQ** | staat alleen in de body (geen path-param) |
+| `costType` | **REQ voor niet-materiaal** | kostentype van de **regel** — zie enum hieronder. Weggelaten = 0 (Materiaal) |
+| `projectSecurityLink` `{id}` | opt | **bewakingscode** — moet qua kostensoort bij `costType` passen |
 | `description` | opt | regelomschrijving |
 | `quantity`, `unitPrice` | opt | Bouw7 rekent `totalPrice` = quantity × unitPrice zelf |
+| `quantityFactor` | opt | default `1.00` |
 | `unit`, `articleNumber` | opt | |
-| `projectSecurityLink` `{id}` | opt | **bewakingscode** — zo landt de regel op de juiste code |
 | `contact` `{id}` | opt | leverancier |
+| `id` | opt | **upsert**: mét id → 200 + zelfde id, regel bijgewerkt (geen duplicaat). Geverifieerd jul 2026. |
 
-> **Let op:** dit endpoint staat in de spec als *deprecated*, maar is wél de bron die EVA leest.
-> **Geen API-delete** (`/list/contract-order-lines` is GET; er is geen DELETE) — testregels in de Bouw7-UI verwijderen.
+#### ⚠️ Twee verschillende kostentype-enums — niet verwisselen
+De `costType` van een **bestelregel** is een eigen, **nul-gebaseerde** enum (de volgorde van de
+UI-dropdown) en is *niet* de kostensoort-nummering van de bewakingscode/PSL:
+
+| `ContractOrderLine.costType` | betekenis | bijbehorende **PSL**-kostensoort |
+|---|---|---|
+| `0` | Materiaal | 5 |
+| `1` | Onderaanneming | 3 |
+| `2` | Arbeid | 1 |
+| `3` | Materieel | 4 |
+| `4` | Overig | 6 |
+
+Afgeleid uit 625 bestaande bestelregels (de koppeling is 100% consistent) en bevestigd met
+schrijftests op 3869371. Let hierop bij het **lezen**: `ol.costType` als PSL-kostensoort
+interpreteren maakt van elke OA-regel (`1`) een arbeid-regel.
+
+> **Delete:** er is geen delete per regel, wél **`DELETE /project/{project}/contract-order-lines`**
+> (ongedocumenteerd, geeft 204) — die wist *alle* bestelregels van het project. Eén testregel
+> verwijder je dus in de Bouw7-UI. Zie `resetBouw7Bestelregels`.
 > Niet te verwarren met `POST /contracts/purchase-order` (formele inkooporder met leverancier/status/termijnen →
 > voedt `contractCostAmount`, dat volgens EVA's eigen docs "klopt niet/0 in de praktijk"). Voor EVA-bestelregels
 > is `contract-order-line` de juiste route.
 
 EVA-implementatie: `createBouw7Bestelregels(projectId, regels)` + read-only `discoverBouw7Bestelregels(projectId?)`
-in `instellingen/integraties/actions.ts`.
+in `instellingen/integraties/actions.ts`; de werkbegroting-push in
+`everts-calc/actions/werkbegroting.ts` (`TYPE_NAAR_BOUW7` bevat zowel `ct` als `lineCt`).
 
 ### Prognose — wél schrijfbaar via "Niet/anders begroot" (ongedocumenteerd Heimdall-endpoint)
 In Bouw7 zet je de prognose niet direct, maar via het veld **"Niet/anders begroot"** (`prognosisOtherAmount`)
@@ -288,7 +322,7 @@ kostensoort-PSL van de code geschreven (één progress-log per PSL).
 
 > Patroon overal gelijk: `POST` = upsert · `DELETE` = `Condensed*{id}` · `PUT .../update-status/{status}`.
 
-**Projecten** `POST/DELETE /project` · `POST /project/set-internal-note` · `POST /restore-project/{id}` · `DELETE /hard-delete-project/{id}` · `POST/DELETE /project/delivery-ticket` · `POST /project/{project}/invoice-term-statement` · `POST /project/{statement}/invoice-term` · `DELETE /project/term-statement` · `POST /project/hour-log` · `POST /project/{project}/contract-order-line` *(deprecated)*
+**Projecten** `POST/DELETE /project` · `POST /project/set-internal-note` · `POST /restore-project/{id}` · `DELETE /hard-delete-project/{id}` · `POST/DELETE /project/delivery-ticket` · `POST /project/{project}/invoice-term-statement` · `POST /project/{statement}/invoice-term` · `DELETE /project/term-statement` · `POST /project/hour-log` · `POST /project/{project}/contract-order-line` *(deprecated — material-only, niet gebruiken; zie §2b)*
 
 **Relaties** `POST/DELETE /contact` · `POST/DELETE /contact/{contact}/contact-person`
 

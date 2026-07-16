@@ -924,6 +924,12 @@ export type Bouw7ContractOrderLine = {
   unit?: string
   unitPrice?: number | string
   totalPrice?: number | string
+  /**
+   * Kostentype van de REGEL — eigen, nul-gebaseerde enum (0 Materiaal · 1 Onderaanneming ·
+   * 2 Arbeid · 3 Materieel · 4 Overig). **Niet** dezelfde nummering als
+   * `projectSecurityLink.costType` (de kostensoort van de bewakingscode: 1 Arbeid · 3 OA ·
+   * 4 Materieel · 5 Materiaal). Zie WRITE-ENDPOINTS.md §2b.
+   */
   costType?: number
   contact?: { id?: number; name?: string; type?: string } | null
   projectSecurityLink?: {
