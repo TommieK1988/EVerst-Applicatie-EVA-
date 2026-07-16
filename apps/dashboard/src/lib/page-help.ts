@@ -82,6 +82,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Het volledige paspoort van dit stuk materieel: identificatie, aanschafwaarde, status, toewijzing en de QR-code. Vanaf hier beheer je alles rond dit object.',
     sections: [
       { title: 'Status', body: 'De statuspil toont in één oogopslag of iets in gebruik, beschikbaar, gereserveerd, in onderhoud, defect of vermist is.' },
+      { title: 'Foto\'s & documenten', body: 'Upload foto\'s, de handleiding, CE- en keuringsdocumenten of de factuur — slepen of klikken, meerdere tegelijk, max. 50 MB per bestand. Afbeeldingen komen in de fotogrid; de eerste wordt automatisch de hoofdfoto (klik een foto om een andere te kiezen). De bestanden staan in afgeschermde opslag en zijn alleen via de app in te zien.' },
       { title: 'Historie', body: 'De tijdlijn onderaan toont alles wat er met dit object gebeurd is: overdrachten (van wie naar wie, wanneer, door wie), keuringen met uitkomst en bijzonderheden, reparaties, controles, statuswijzigingen en scans. Filter bovenaan op soort.' },
       { title: 'Keuringen', body: 'Leg per keuring de uitkomst vast (goedgekeurd, onder voorwaarden of afgekeurd) plus de bijzonderheden van de keurmeester. Bij een afkeuring gaat de status automatisch naar Defect.' },
       { title: 'QR-sticker', body: 'Gebruik "Sticker printen" om alleen de QR-code met omschrijving en inventarisnummer af te drukken en op het materieel te plakken.' },

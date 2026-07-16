@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import type { MaterieelObject, MaterieelKeuring, MaterieelOnderhoud } from '@/lib/materieel/types'
 import { getMedewerkerOpties, getTeamOpties, getInstellingen, volledigeNaam } from '@/lib/materieel/data'
 import { getHistorie } from '@/lib/materieel/historie'
+import { getDocumenten, signPad } from '@/lib/materieel/bestanden'
 import Paspoort from '@/components/materieel/Paspoort'
 
 export const dynamic = 'force-dynamic'
@@ -19,15 +20,18 @@ export default async function MaterieelDetailPage(props: { params: Promise<{ id:
   if (!object) notFound()
   const obj = object as MaterieelObject
 
-  const [keuringenRes, onderhoudRes, scansRes, medewerkerOpties, teamOpties, instellingen, historie] = await Promise.all([
-    supabase.from('materieel_keuringen').select('*').eq('object_id', id).order('geldig_tot', { ascending: true, nullsFirst: false }),
-    supabase.from('materieel_onderhoud').select('*').eq('object_id', id).order('datum', { ascending: false }),
-    supabase.from('materieel_scans').select('id, gescand_at, locatie, gescand_door').eq('object_id', id).order('gescand_at', { ascending: false }).limit(8),
-    getMedewerkerOpties(),
-    getTeamOpties(),
-    getInstellingen(),
-    getHistorie(id),
-  ])
+  const [keuringenRes, onderhoudRes, scansRes, medewerkerOpties, teamOpties, instellingen, historie, documenten, hoofdfotoUrl] =
+    await Promise.all([
+      supabase.from('materieel_keuringen').select('*').eq('object_id', id).order('geldig_tot', { ascending: true, nullsFirst: false }),
+      supabase.from('materieel_onderhoud').select('*').eq('object_id', id).order('datum', { ascending: false }),
+      supabase.from('materieel_scans').select('id, gescand_at, locatie, gescand_door').eq('object_id', id).order('gescand_at', { ascending: false }).limit(8),
+      getMedewerkerOpties(),
+      getTeamOpties(),
+      getInstellingen(),
+      getHistorie(id),
+      getDocumenten(id, obj.hoofdfoto_path),
+      signPad(obj.hoofdfoto_path),
+    ])
 
   // Weergavenaam van de toewijzing. Zonder gekoppelde medewerker/team is het
   // algemeen gebruik — dat handelt het paspoort zelf af.
@@ -56,6 +60,8 @@ export default async function MaterieelDetailPage(props: { params: Promise<{ id:
       scans={scans.map((s) => ({ id: s.id, gescand_at: s.gescand_at, locatie: s.locatie, door_naam: s.gescand_door ? naamMap.get(s.gescand_door) ?? null : null }))}
       keuringSoorten={instellingen.keuring_soorten}
       historie={historie}
+      documenten={documenten}
+      hoofdfotoUrl={hoofdfotoUrl}
     />
   )
 }

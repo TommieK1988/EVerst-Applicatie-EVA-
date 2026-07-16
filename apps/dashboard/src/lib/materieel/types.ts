@@ -85,7 +85,8 @@ export type MaterieelObject = {
   toegewezen_team_id: string | null
   details: Record<string, unknown>
   hoort_bij_object_id: string | null
-  hoofdfoto_url: string | null
+  /** Storage-pad in de private bucket; omzetten naar signed URL om te tonen. */
+  hoofdfoto_path: string | null
   opmerkingen: string | null
   laatst_gescand_at: string | null
   laatst_gescand_door: string | null
@@ -98,6 +99,54 @@ export type MaterieelObject = {
 /** Object verrijkt met de weergavenaam van de toewijzing (medewerker/team). */
 export type MaterieelObjectRij = MaterieelObject & {
   toegewezen_naam: string | null
+  /** Kortstondige signed URL van de hoofdfoto (bucket is privé). */
+  hoofdfoto_url: string | null
+}
+
+/* ── Bestanden: foto's en documenten ── */
+
+export const MATERIEEL_DOCUMENT_TYPES = ['foto', 'handleiding', 'ce', 'keuring', 'factuur', 'overig'] as const
+export type MaterieelDocumentType = typeof MATERIEEL_DOCUMENT_TYPES[number]
+
+export const DOCUMENT_TYPE_LABELS: Record<MaterieelDocumentType, string> = {
+  foto:        'Foto',
+  handleiding: 'Handleiding',
+  ce:          'CE-document',
+  keuring:     'Keuringsdocument',
+  factuur:     'Factuur',
+  overig:      'Overig',
+}
+
+export type MaterieelDocument = {
+  id: string
+  object_id: string
+  type: MaterieelDocumentType
+  bestandsnaam: string | null
+  storage_path: string
+  grootte: number | null
+  mimetype: string | null
+  geupload_at: string
+  geupload_door: string | null
+}
+
+/** Document verrijkt voor weergave: signed URL + naam van de uploader. */
+export type MaterieelDocumentRij = MaterieelDocument & {
+  url: string | null
+  door_naam: string | null
+  is_hoofdfoto: boolean
+}
+
+/** Is dit bestand een afbeelding (→ tonen in de fotogrid)? */
+export function isAfbeelding(d: { mimetype: string | null; type: MaterieelDocumentType }): boolean {
+  return d.mimetype?.startsWith('image/') ?? d.type === 'foto'
+}
+
+/** Leesbare bestandsgrootte. */
+export function leesbareGrootte(bytes: number | null): string {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 export type MaterieelTeam = {

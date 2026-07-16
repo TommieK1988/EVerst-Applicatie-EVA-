@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { PageHeader, Button } from '@/components/ui'
 import StatusBadge from './StatusBadge'
 import HistorieTijdlijn from './HistorieTijdlijn'
+import BestandenBlok from './BestandenBlok'
 import Modal, { modalInput, modalLabel } from './Modal'
 import {
   archiveerMaterieelObject, wijsToe, neemTerug, registreerScan,
@@ -19,7 +20,7 @@ import {
   KEURING_UITKOMSTEN, UITKOMST_META,
   type MaterieelObject, type MaterieelKeuring, type MaterieelOnderhoud,
   type ToewijzingNiveau, type Optie, type KeuringSoort, type MaterieelStatus, type DetailVeld,
-  type HistorieItem, type KeuringUitkomst,
+  type HistorieItem, type KeuringUitkomst, type MaterieelDocumentRij,
 } from '@/lib/materieel/types'
 
 function euro(v: number | null): string {
@@ -58,10 +59,14 @@ type Props = {
   scans: ScanRij[]
   keuringSoorten: KeuringSoort[]
   historie: HistorieItem[]
+  documenten: MaterieelDocumentRij[]
+  /** Signed URL van de hoofdfoto (bucket is privé). */
+  hoofdfotoUrl: string | null
 }
 
 export default function Paspoort({
   object, toegewezenNaam, medewerkerOpties, teamOpties, keuringen, onderhoud, scans, keuringSoorten, historie,
+  documenten, hoofdfotoUrl,
 }: Props) {
   const router = useRouter()
   const [origin, setOrigin] = React.useState('')
@@ -113,9 +118,9 @@ export default function Paspoort({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <div style={{ width: 96, height: 96, borderRadius: 12, flexShrink: 0, overflow: 'hidden', background: 'var(--bg-subtle)', display: 'grid', placeItems: 'center', fontSize: 40 }}>
-              {object.hoofdfoto_url
+              {hoofdfotoUrl
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={object.hoofdfoto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={hoofdfotoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : '📦'}
             </div>
             <div>
@@ -229,6 +234,9 @@ export default function Paspoort({
               <p style={{ fontSize: 13, color: 'var(--fg-soft)', whiteSpace: 'pre-wrap' }}>{object.opmerkingen}</p>
             </section>
           )}
+
+          {/* Foto's, handleiding, CE- en keuringsdocumenten */}
+          <BestandenBlok objectId={object.id} documenten={documenten} />
 
           {/* Volledige historie: overdrachten, keuringen, onderhoud, controles, status, scans */}
           <section>

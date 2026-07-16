@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
+import { signPaden } from '@/lib/materieel/bestanden'
 import { ALGEMEEN_GEBRUIK, type MaterieelObject, type MaterieelObjectRij } from '@/lib/materieel/types'
 import MaterieelOverzicht from '@/components/materieel/MaterieelOverzicht'
 
@@ -45,13 +46,19 @@ export default async function MaterieelbeheerPage() {
     (teamsRes.data ?? []).map((t: { id: string; naam: string }) => [t.id, t.naam]),
   )
 
+  // Hoofdfoto's staan in een private bucket: paden in één batch ondertekenen,
+  // niet één call per rij.
+  const rijen = (objectenRes.data ?? []) as MaterieelObject[]
+  const fotoUrls = await signPaden(rijen.map((o) => o.hoofdfoto_path).filter(Boolean) as string[])
+
   // Geen medewerker en geen team gekoppeld → per definitie algemeen gebruik.
-  const objecten: MaterieelObjectRij[] = (objectenRes.data ?? []).map((o: MaterieelObject) => ({
+  const objecten: MaterieelObjectRij[] = rijen.map((o) => ({
     ...o,
     toegewezen_naam:
       o.toegewezen_medewerker_id ? medewerkerMap.get(o.toegewezen_medewerker_id) ?? ALGEMEEN_GEBRUIK
       : o.toegewezen_team_id ? teamMap.get(o.toegewezen_team_id) ?? ALGEMEEN_GEBRUIK
       : ALGEMEEN_GEBRUIK,
+    hoofdfoto_url: o.hoofdfoto_path ? fotoUrls.get(o.hoofdfoto_path) ?? null : null,
   }))
 
   return <MaterieelOverzicht objecten={objecten} layouts={layouts} user_id={user_id} />
