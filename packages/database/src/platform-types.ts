@@ -579,6 +579,7 @@ export const RECHTEN_MODULES = [
   { key: 'kam',            label: 'KAM/VGM' },
   { key: 'houtrotherstel', label: 'Houtrotherstel' },
   { key: 'everts_calc',    label: 'EvertsCalc' },
+  { key: 'materieelbeheer', label: 'Materieelbeheer' },
   { key: 'formulieren',    label: 'Formulieren' },
   { key: 'taken',          label: 'Actielijsten' },
   { key: 'mijn_taken',     label: 'Mijn taken' },
