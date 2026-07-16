@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
 import type { MaterieelObject, MaterieelKeuring, MaterieelOnderhoud } from '@/lib/materieel/types'
 import { getMedewerkerOpties, getTeamOpties, getInstellingen, volledigeNaam } from '@/lib/materieel/data'
+import { getHistorie } from '@/lib/materieel/historie'
 import Paspoort from '@/components/materieel/Paspoort'
 
 export const dynamic = 'force-dynamic'
@@ -18,13 +19,14 @@ export default async function MaterieelDetailPage(props: { params: Promise<{ id:
   if (!object) notFound()
   const obj = object as MaterieelObject
 
-  const [keuringenRes, onderhoudRes, scansRes, medewerkerOpties, teamOpties, instellingen] = await Promise.all([
+  const [keuringenRes, onderhoudRes, scansRes, medewerkerOpties, teamOpties, instellingen, historie] = await Promise.all([
     supabase.from('materieel_keuringen').select('*').eq('object_id', id).order('geldig_tot', { ascending: true, nullsFirst: false }),
     supabase.from('materieel_onderhoud').select('*').eq('object_id', id).order('datum', { ascending: false }),
     supabase.from('materieel_scans').select('id, gescand_at, locatie, gescand_door').eq('object_id', id).order('gescand_at', { ascending: false }).limit(8),
     getMedewerkerOpties(),
     getTeamOpties(),
     getInstellingen(),
+    getHistorie(id),
   ])
 
   // Weergavenaam van de toewijzing. Zonder gekoppelde medewerker/team is het
@@ -53,6 +55,7 @@ export default async function MaterieelDetailPage(props: { params: Promise<{ id:
       onderhoud={(onderhoudRes.data ?? []) as MaterieelOnderhoud[]}
       scans={scans.map((s) => ({ id: s.id, gescand_at: s.gescand_at, locatie: s.locatie, door_naam: s.gescand_door ? naamMap.get(s.gescand_door) ?? null : null }))}
       keuringSoorten={instellingen.keuring_soorten}
+      historie={historie}
     />
   )
 }

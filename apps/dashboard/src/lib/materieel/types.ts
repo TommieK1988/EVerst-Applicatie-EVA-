@@ -117,6 +117,15 @@ export const TEAM_TYPE_LABELS: Record<TeamType, string> = {
   bus: 'Servicebus', keet: 'Keet', ploeg: 'Ploeg', algemeen: 'Algemeen',
 }
 
+export const KEURING_UITKOMSTEN = ['goedgekeurd', 'voorwaardelijk', 'afgekeurd'] as const
+export type KeuringUitkomst = typeof KEURING_UITKOMSTEN[number]
+
+export const UITKOMST_META: Record<KeuringUitkomst, { label: string; kleur: string }> = {
+  goedgekeurd:   { label: 'Goedgekeurd',   kleur: '#16a34a' },
+  voorwaardelijk: { label: 'Goedgekeurd onder voorwaarden', kleur: '#f97316' },
+  afgekeurd:     { label: 'Afgekeurd',     kleur: '#dc2626' },
+}
+
 export type MaterieelKeuring = {
   id: string
   object_id: string
@@ -125,7 +134,34 @@ export type MaterieelKeuring = {
   geldig_tot: string | null
   document_url: string | null
   opmerking: string | null
+  /** goedgekeurd | voorwaardelijk | afgekeurd */
+  uitkomst: KeuringUitkomst | null
+  /** Bijzonderheden van de keurmeester. */
+  bevindingen: string | null
+  /** Keurende partij (vaak extern). */
+  uitgevoerd_door: string | null
   created_at: string
+}
+
+/** Eén regel op de historie-tijdlijn, samengesteld uit de bronbestanden. */
+export type HistorieItem = {
+  id: string
+  wanneer: string
+  soort: 'overdracht' | 'keuring' | 'onderhoud' | 'controle' | 'status' | 'scan'
+  titel: string
+  detail: string | null
+  door: string | null
+  /** Accentkleur van de tijdlijn-stip. */
+  kleur: string
+}
+
+export const HISTORIE_SOORT_LABELS: Record<HistorieItem['soort'], string> = {
+  overdracht: 'Overdracht',
+  keuring:    'Keuring',
+  onderhoud:  'Onderhoud',
+  controle:   'Controle',
+  status:     'Status',
+  scan:       'Scan',
 }
 
 export type MaterieelControle = {

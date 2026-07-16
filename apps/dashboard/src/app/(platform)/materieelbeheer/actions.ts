@@ -5,7 +5,7 @@ import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import { materieelObjectSchema, nieuwMaterieelSchema } from '@/lib/materieel/validations'
-import type { MaterieelStatus, ToewijzingNiveau } from '@/lib/materieel/types'
+import type { MaterieelStatus, ToewijzingNiveau, KeuringUitkomst } from '@/lib/materieel/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -99,8 +99,21 @@ export async function updateDetails(id: string, details: Record<string, unknown>
 
 export async function zetStatus(id: string, status: MaterieelStatus): Promise<ActieResultaat> {
   const g = await gate(); if (!g.ok) return g
-  const { error } = await db().from('materieel_objecten').update({ status }).eq('id', id)
+  const client = db()
+
+  // Oude status eerst lezen: zonder log wordt de kolom simpelweg overschreven
+  // en is de wijziging achteraf niet meer terug te zien in de historie.
+  const { data: huidig } = await client.from('materieel_objecten').select('status').eq('id', id).maybeSingle()
+  const oud = (huidig as { status: MaterieelStatus } | null)?.status ?? null
+  if (oud === status) return { ok: true, data: null }
+
+  const { error } = await client.from('materieel_objecten').update({ status }).eq('id', id)
   if (error) return { ok: false, error: error.message }
+
+  await client.from('materieel_gebeurtenissen').insert({
+    object_id: id, soort: 'status', van: oud, naar: status, door: g.medewerker.id,
+  })
+
   herlaad(id)
   return { ok: true, data: null }
 }
@@ -201,16 +214,31 @@ export async function slaControleOp(
 
 export async function voegKeuringToe(
   id: string,
-  input: { soort: string; geldig_van?: string | null; geldig_tot?: string | null; opmerking?: string | null },
+  input: {
+    soort: string; geldig_van?: string | null; geldig_tot?: string | null; opmerking?: string | null
+    uitkomst?: KeuringUitkomst | null; bevindingen?: string | null; uitgevoerd_door?: string | null
+  },
 ): Promise<ActieResultaat> {
   const g = await gate(); if (!g.ok) return g
   if (!input.soort) return { ok: false, error: 'Kies een keuringsoort' }
-  const { error } = await db().from('materieel_keuringen').insert({
+
+  const client = db()
+  const { error } = await client.from('materieel_keuringen').insert({
     object_id: id, soort: input.soort,
     geldig_van: input.geldig_van || null, geldig_tot: input.geldig_tot || null,
     opmerking: input.opmerking ?? null,
+    uitkomst: input.uitkomst ?? null,
+    bevindingen: input.bevindingen ?? null,
+    uitgevoerd_door: input.uitgevoerd_door ?? null,
   })
   if (error) return { ok: false, error: error.message }
+
+  // Een afkeuring is een veiligheidskwestie: het object hoort niet meer in
+  // gebruik te zijn. Status volgt de uitkomst, met een gelogde wijziging.
+  if (input.uitkomst === 'afgekeurd') {
+    await zetStatus(id, 'defect')
+  }
+
   herlaad(id)
   return { ok: true, data: null }
 }

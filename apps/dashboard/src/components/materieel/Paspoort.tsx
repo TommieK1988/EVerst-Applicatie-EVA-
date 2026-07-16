@@ -7,6 +7,7 @@ import QRCode from 'react-qr-code'
 import toast from 'react-hot-toast'
 import { PageHeader, Button } from '@/components/ui'
 import StatusBadge from './StatusBadge'
+import HistorieTijdlijn from './HistorieTijdlijn'
 import Modal, { modalInput, modalLabel } from './Modal'
 import {
   archiveerMaterieelObject, wijsToe, neemTerug, registreerScan,
@@ -15,8 +16,10 @@ import {
 import {
   CATEGORIE_LABELS, NIVEAU_LABELS, MATERIEEL_STATUSSEN, STATUS_META,
   CATEGORIE_DETAILS, ACCU_DETAILS, scanUrl, isAlgemeenGebruik,
+  KEURING_UITKOMSTEN, UITKOMST_META,
   type MaterieelObject, type MaterieelKeuring, type MaterieelOnderhoud,
   type ToewijzingNiveau, type Optie, type KeuringSoort, type MaterieelStatus, type DetailVeld,
+  type HistorieItem, type KeuringUitkomst,
 } from '@/lib/materieel/types'
 
 function euro(v: number | null): string {
@@ -54,10 +57,11 @@ type Props = {
   onderhoud: MaterieelOnderhoud[]
   scans: ScanRij[]
   keuringSoorten: KeuringSoort[]
+  historie: HistorieItem[]
 }
 
 export default function Paspoort({
-  object, toegewezenNaam, medewerkerOpties, teamOpties, keuringen, onderhoud, scans, keuringSoorten,
+  object, toegewezenNaam, medewerkerOpties, teamOpties, keuringen, onderhoud, scans, keuringSoorten, historie,
 }: Props) {
   const router = useRouter()
   const [origin, setOrigin] = React.useState('')
@@ -166,14 +170,31 @@ export default function Paspoort({
               : keuringen.map((k) => {
                   const dagen = dagenTot(k.geldig_tot)
                   const kleur = dagen === null ? 'var(--fg-muted)' : dagen < 0 ? '#dc2626' : dagen <= 30 ? '#f97316' : '#16a34a'
+                  const uit = k.uitkomst ? UITKOMST_META[k.uitkomst] : null
                   return (
-                    <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{k.soort}</div>
-                        <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>Geldig t/m {datum(k.geldig_tot)}{k.opmerking ? ` · ${k.opmerking}` : ''}</div>
+                    <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{k.soort}</span>
+                          {uit && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: uit.kleur,
+                              background: `color-mix(in srgb, ${uit.kleur} 12%, transparent)`,
+                              padding: '1px 7px', borderRadius: 999,
+                            }}>{uit.label}</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                          Geldig t/m {datum(k.geldig_tot)}{k.uitgevoerd_door ? ` · door ${k.uitgevoerd_door}` : ''}
+                        </div>
+                        {k.bevindingen && (
+                          <div style={{ fontSize: 12, color: 'var(--fg-soft)', marginTop: 3 }}>
+                            <strong style={{ color: 'var(--fg)' }}>Bijzonderheden:</strong> {k.bevindingen}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: kleur }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: kleur, whiteSpace: 'nowrap' }}>
                           {dagen === null ? '—' : dagen < 0 ? `${Math.abs(dagen)}d verlopen` : `nog ${dagen}d`}
                         </span>
                         <button onClick={() => run(() => verwijderKeuring(k.id, object.id), 'Keuring verwijderd')} style={{ ...linkKnop, color: 'var(--fg-muted)' }}>×</button>
@@ -209,14 +230,10 @@ export default function Paspoort({
             </section>
           )}
 
-          {/* Laatste scans (traceerbaarheid / vermissing) */}
+          {/* Volledige historie: overdrachten, keuringen, onderhoud, controles, status, scans */}
           <section>
-            <h3 style={kop}>Laatste scans</h3>
-            {scans.length === 0
-              ? <p style={leegTekst}>Nog niet gescand.</p>
-              : scans.map((s) => (
-                  <Rij key={s.id} label={`${new Date(s.gescand_at).toLocaleString('nl-NL')}`} waarde={`${s.door_naam ?? 'Onbekend'}${s.locatie ? ` · ${s.locatie}` : ''}`} />
-                ))}
+            <h3 style={kop}>Historie</h3>
+            <HistorieTijdlijn items={historie} />
           </section>
         </div>
 
@@ -368,14 +385,20 @@ function ToewijzenModal({ medewerkerOpties, teamOpties, bezig, onSluit, onOpslaa
 
 function KeuringModal({ soorten, bezig, onSluit, onOpslaan }: {
   soorten: KeuringSoort[]; bezig: boolean; onSluit: () => void
-  onOpslaan: (i: { soort: string; geldig_van?: string | null; geldig_tot?: string | null; opmerking?: string | null }) => void
+  onOpslaan: (i: {
+    soort: string; geldig_van?: string | null; geldig_tot?: string | null; opmerking?: string | null
+    uitkomst?: KeuringUitkomst | null; bevindingen?: string | null; uitgevoerd_door?: string | null
+  }) => void
 }) {
   const [soort, setSoort] = React.useState(soorten[0]?.label ?? '')
+  const [uitkomst, setUitkomst] = React.useState<KeuringUitkomst>('goedgekeurd')
   const [van, setVan] = React.useState('')
   const [tot, setTot] = React.useState('')
+  const [bevindingen, setBevindingen] = React.useState('')
+  const [keurder, setKeurder] = React.useState('')
   const [opmerking, setOpmerking] = React.useState('')
   return (
-    <Modal titel="Keuring toevoegen" onSluit={onSluit}>
+    <Modal titel="Keuring vastleggen" onSluit={onSluit} breedte={520}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
           <label style={modalLabel}>Soort</label>
@@ -383,13 +406,51 @@ function KeuringModal({ soorten, bezig, onSluit, onOpslaan }: {
             {soorten.map((s) => <option key={s.key} value={s.label}>{s.label}</option>)}
           </select>
         </div>
+
+        <div>
+          <label style={modalLabel}>Uitkomst</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {KEURING_UITKOMSTEN.map((u) => {
+              const meta = UITKOMST_META[u]
+              const actief = uitkomst === u
+              return (
+                <button key={u} type="button" onClick={() => setUitkomst(u)} style={{
+                  flex: '1 1 auto', padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${actief ? meta.kleur : 'var(--border)'}`,
+                  background: actief ? `color-mix(in srgb, ${meta.kleur} 12%, transparent)` : 'var(--bg)',
+                  color: actief ? meta.kleur : 'var(--fg-soft)',
+                }}>{meta.label}</button>
+              )
+            })}
+          </div>
+          {uitkomst === 'afgekeurd' && (
+            <p style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
+              Bij afkeuring zetten we de status automatisch op <strong>Defect</strong> — afgekeurd materieel hoort niet in gebruik te zijn.
+            </p>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div><label style={modalLabel}>Geldig van</label><input type="date" value={van} onChange={(e) => setVan(e.target.value)} style={modalInput} /></div>
+          <div><label style={modalLabel}>Gekeurd op</label><input type="date" value={van} onChange={(e) => setVan(e.target.value)} style={modalInput} /></div>
           <div><label style={modalLabel}>Geldig tot</label><input type="date" value={tot} onChange={(e) => setTot(e.target.value)} style={modalInput} /></div>
         </div>
+
+        <div>
+          <label style={modalLabel}>Bijzonderheden</label>
+          <textarea value={bevindingen} onChange={(e) => setBevindingen(e.target.value)}
+            style={{ ...modalInput, minHeight: 64, resize: 'vertical' }}
+            placeholder="Bijv. snoer beschadigd, aardlekschakelaar vervangen, scheur in behuizing…" />
+        </div>
+
+        <div><label style={modalLabel}>Gekeurd door (partij/persoon)</label><input value={keurder} onChange={(e) => setKeurder(e.target.value)} style={modalInput} placeholder="Bijv. Keuringsbedrijf X" /></div>
         <div><label style={modalLabel}>Opmerking</label><input value={opmerking} onChange={(e) => setOpmerking(e.target.value)} style={modalInput} /></div>
+
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <Button variant="primary" disabled={bezig} onClick={() => onOpslaan({ soort, geldig_van: van || null, geldig_tot: tot || null, opmerking: opmerking || null })}>Toevoegen</Button>
+          <Button variant="primary" disabled={bezig} onClick={() => onOpslaan({
+            soort, uitkomst, geldig_van: van || null, geldig_tot: tot || null,
+            bevindingen: bevindingen || null, uitgevoerd_door: keurder || null, opmerking: opmerking || null,
+          })}>Vastleggen</Button>
           <Button variant="secondary" onClick={onSluit}>Annuleren</Button>
         </div>
       </div>
