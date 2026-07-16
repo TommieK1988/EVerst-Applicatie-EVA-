@@ -40,6 +40,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [bestellingenOpen, setBestellingenOpen] = useState(false)
   /** Aantal actieve regels dat (nog) niet geaccordeerd is (server-side berekend). */
   const [nietGeaccordeerd, setNietGeaccordeerd] = useState<number>(0)
+  /** True als alle actieve regels onder de laatste accordering vallen (server-side berekend). Gate voor de prognose. */
+  const [volledigGoedgekeurd, setVolledigGoedgekeurd] = useState(false)
   /** True als er een open goedkeuringsaanvraag is die de ingelogde gebruiker mag accorderen (controller/Directie). */
   const [magGoedkeuren, setMagGoedkeuren] = useState(false)
   const [prognoseOpen, setPrognoseOpen] = useState(false)
@@ -154,6 +156,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     try {
       const status = await getWerkbegrotingGoedkeuringStatus(wb.id)
       setNietGeaccordeerd(status.regels.filter(r => !r.goedgekeurd).length)
+      setVolledigGoedgekeurd(status.volledigGoedgekeurd)
     } catch { /* stil */ }
     try {
       const overzicht = await getGoedkeuring('werkbegroting', wb.id)
@@ -456,8 +459,14 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         {magPrognose && (
           <button
             onClick={openPrognose}
-            disabled={!dossierId}
-            title={dossierId ? 'Stuur de werkbegroting-bedragen als prognose naar Bouw7' : 'Geen dossier gekoppeld'}
+            disabled={!dossierId || !volledigGoedgekeurd}
+            title={
+              !dossierId
+                ? 'Geen dossier gekoppeld'
+                : !volledigGoedgekeurd
+                ? 'Eerst de werkbegroting (opnieuw) laten goedkeuren'
+                : 'Stuur de werkbegroting-bedragen als prognose naar Bouw7'
+            }
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
               border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
               disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -503,6 +512,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                 totaalBedrag={totaalBedrag}
                 aanvragen={handleAanvragen}
                 accordeer={handleAccorderen}
+                wijzigingsInfo={{ ongewijzigdSindsGoedkeuring: volledigGoedgekeurd, aantalGewijzigd: nietGeaccordeerd }}
                 onVeranderd={verversStatus}
               />
             </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle, RotateCcw, Send, Loader2, MessageSquare, UserPlus, Share2, Clock, Lock } from 'lucide-react'
+import { CheckCircle, RotateCcw, Send, Loader2, MessageSquare, UserPlus, Share2, Clock, Lock, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getGoedkeuring, vraagGoedkeuringAan, keurGoed, keurAf, trekIn,
@@ -23,6 +23,17 @@ interface Props {
   accordeer?: (goedkeuringId: string, opmerking?: string) => Promise<{ ok: boolean; error?: string }>
   /** Werkbegroting geeft een eigen aanvraag-functie mee (sync payload eerst). */
   aanvragen?: (toelichting?: string) => Promise<{ ok: boolean; error?: string; goedkeuringId?: string }>
+  /**
+   * Inhouds-status t.o.v. de laatste goedkeuring. Voorkomt dat je opnieuw
+   * goedkeuring aanvraagt op iets dat al is goedgekeurd én niet is gewijzigd.
+   * Zonder deze prop blijft het oude gedrag gelden (altijd opnieuw aanvragen mogelijk).
+   */
+  wijzigingsInfo?: {
+    /** true = laatste ronde goedgekeurd én de inhoud is sindsdien niet gewijzigd. */
+    ongewijzigdSindsGoedkeuring: boolean
+    /** Optioneel (werkbegroting): aantal regels met niet-geaccordeerde wijzigingen. */
+    aantalGewijzigd?: number
+  }
   onVeranderd?: () => void
 }
 
@@ -36,7 +47,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   ingetrokken: { label: 'Ingetrokken', cls: 'bg-slate-100 text-slate-500' },
 }
 
-export default function GoedkeuringPaneel({ objectType, objectId, dossierId, totaalBedrag, accordeer, aanvragen, onVeranderd }: Props) {
+export default function GoedkeuringPaneel({ objectType, objectId, dossierId, totaalBedrag, accordeer, aanvragen, wijzigingsInfo, onVeranderd }: Props) {
   const [data, setData] = useState<GoedkeuringOverzicht | null>(null)
   const [laden, setLaden] = useState(true)
   const [bezig, setBezig] = useState(false)
@@ -69,6 +80,30 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
   const isOpen = actueel?.status === 'aangevraagd'
   const magBeoordelen = data?.magBeoordelen ?? false
   const rol = data?.rol ?? 'geen'
+
+  // ── Inhouds-status t.o.v. de laatste goedkeuring ──
+  const isGoedgekeurd = actueel?.status === 'goedgekeurd'
+  /** Al goedgekeurd én niets gewijzigd → er valt niets aan te vragen. */
+  const ongewijzigd = wijzigingsInfo?.ongewijzigdSindsGoedkeuring === true
+  /** Goedgekeurd, maar de inhoud is daarna gewijzigd → opnieuw indienen. */
+  const gewijzigdNaGoedkeuring = isGoedgekeurd && wijzigingsInfo != null && !ongewijzigd
+  /**
+   * Aanvragen kan alleen als er geen open aanvraag is én er iets te accorderen valt.
+   * Bewust gebonden aan de *actuele* ronde: is die teruggestuurd of ingetrokken, dan
+   * mag je altijd (opnieuw) indienen — ook als de inhoud toevallig gelijk is aan een
+   * eerder goedgekeurde ronde.
+   */
+  const magAanvragen = !isOpen && !(isGoedgekeurd && ongewijzigd)
+
+  const aantalGewijzigd = wijzigingsInfo?.aantalGewijzigd
+  const wijzigingSuffix = aantalGewijzigd
+    ? ` (${aantalGewijzigd} ${aantalGewijzigd === 1 ? 'wijziging' : 'wijzigingen'})`
+    : ''
+  const statusChip = gewijzigdNaGoedkeuring
+    ? { label: 'Gewijzigd na goedkeuring', cls: 'bg-amber-100 text-amber-700' }
+    : actueel
+    ? STATUS_LABEL[actueel.status] ?? { label: actueel.status, cls: '' }
+    : null
 
   // ── Acties ──
   async function doeAanvragen() {
@@ -151,9 +186,9 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
         </div>
         <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex flex-col justify-center">
           <p className="text-xs text-slate-500 font-medium mb-1">Status</p>
-          {actueel ? (
-            <span className={`inline-flex w-fit text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_LABEL[actueel.status]?.cls ?? ''}`}>
-              {STATUS_LABEL[actueel.status]?.label ?? actueel.status}
+          {actueel && statusChip ? (
+            <span className={`inline-flex w-fit text-xs px-2 py-0.5 rounded-full font-medium ${statusChip.cls}`}>
+              {statusChip.label}
               {actueel.ronde > 1 && <span className="ml-1 opacity-70">· ronde {actueel.ronde}</span>}
             </span>
           ) : (
@@ -194,7 +229,7 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
       )}
 
       {/* Notitie-veld (aanvragen / goedkeuren / terugsturen) */}
-      {(isOpen ? magBeoordelen : !actueel || actueel.status !== 'goedgekeurd') && (
+      {(isOpen ? magBeoordelen : magAanvragen) && (
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1">
             {isOpen && magBeoordelen ? 'Opmerking (verplicht bij terugsturen)' : 'Toelichting'} <span className="font-normal text-slate-400">(optioneel bij goedkeuren)</span>
@@ -211,12 +246,16 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
 
       {/* Actieknoppen */}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* Aanvragen (geen open aanvraag) */}
-        {!isOpen && (
+        {/* Aanvragen (geen open aanvraag én er valt iets te accorderen) */}
+        {magAanvragen && (
           <button onClick={doeAanvragen} disabled={bezig}
             className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors">
             {bezig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {actueel?.status === 'afgekeurd' ? 'Opnieuw ter goedkeuring indienen' : 'Ter goedkeuring indienen'}
+            {gewijzigdNaGoedkeuring
+              ? `Opnieuw ter goedkeuring indienen${wijzigingSuffix}`
+              : actueel?.status === 'afgekeurd'
+              ? 'Opnieuw ter goedkeuring indienen'
+              : 'Ter goedkeuring indienen'}
           </button>
         )}
 
@@ -307,10 +346,24 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
         </details>
       )}
 
-      {actueel?.status === 'goedgekeurd' && (
+      {isGoedgekeurd && !gewijzigdNaGoedkeuring && (
         <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
           <Lock className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
-          <span>Deze {objectLabel} is goedgekeurd{actueel.beoordeeld_door_naam ? ` door ${actueel.beoordeeld_door_naam}` : ''}.</span>
+          <span>
+            Deze {objectLabel} is goedgekeurd{actueel?.beoordeeld_door_naam ? ` door ${actueel.beoordeeld_door_naam}` : ''}.
+            {wijzigingsInfo && ' Er zijn geen wijzigingen sinds de goedkeuring.'}
+          </span>
+        </div>
+      )}
+
+      {gewijzigdNaGoedkeuring && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span>
+            Deze {objectLabel} is na de goedkeuring{actueel?.beoordeeld_door_naam ? ` door ${actueel.beoordeeld_door_naam}` : ''} gewijzigd
+            {wijzigingSuffix ? ` — ${aantalGewijzigd} ${aantalGewijzigd === 1 ? 'regel wijkt af' : 'regels wijken af'}` : ''}.
+            Dien hem opnieuw ter goedkeuring in.
+          </span>
         </div>
       )}
     </div>
