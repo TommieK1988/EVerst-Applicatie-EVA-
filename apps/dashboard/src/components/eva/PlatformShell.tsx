@@ -101,12 +101,11 @@ export default function PlatformShell({ children, userName, userInitials, userSu
           userSub={userSub}
           userFotoUrl={userFotoUrl}
           rechten={rechten}
-          aantalNieuweUpdates={aantalNieuweUpdates}
         />
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-        <TopBar dark={dark} setDark={setDark} aantalOngelezen={aantalOngelezen} />
+        <TopBar dark={dark} setDark={setDark} aantalOngelezen={aantalOngelezen} aantalNieuweUpdates={aantalNieuweUpdates} />
 
         <main style={{
           flex: 1,

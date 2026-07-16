@@ -10,7 +10,7 @@ import {
   IconFacturen, IconInkoop,
   IconKam,
   IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc,
-  IconFormulieren, IconSparkle,
+  IconFormulieren,
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -211,14 +211,12 @@ export type SidebarProps = {
   userFotoUrl?: string | null
   /** Effectieve rechten van de ingelogde gebruiker (sidebar-filtering). */
   rechten?: RechtenSet
-  /** Aantal ongelezen "Wat is nieuw"-updates (badge). */
-  aantalNieuweUpdates?: number
 }
 
 export default function Sidebar({
   density, collapsed, pinned, onToggle, onMouseEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
-  userFotoUrl, rechten, aantalNieuweUpdates = 0,
+  userFotoUrl, rechten,
 }: SidebarProps) {
   const pathname  = usePathname()
   const padY      = density === 'dense' ? 6 : 9
@@ -551,15 +549,6 @@ export default function Sidebar({
 
 
 </div>{/* end scrollable nav area */}
-
-      {/* ── Wat is nieuw ── altijd zichtbaar, met badge van ongelezen updates ── */}
-      <NavItem
-        href="/wat-is-nieuw"
-        icon={<IconSparkle size={17}/>}
-        label="Wat is nieuw"
-        active={isActive('/wat-is-nieuw')}
-        badge={aantalNieuweUpdates || undefined}
-      />
 
       {/* ── Bedrijfsinstellingen ── altijd zichtbaar, boven user card ── */}
       <NavItem
