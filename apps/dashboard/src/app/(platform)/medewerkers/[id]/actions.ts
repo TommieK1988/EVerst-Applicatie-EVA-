@@ -192,6 +192,7 @@ const gegevensSchema = z.object({
   achternaam:         z.string().min(1),
   email:              z.string().email().nullable().or(z.literal('')).transform(v => v || null),
   telefoon:           z.string().nullable(),
+  mobiel:             z.string().nullable(),
   functie:            z.string().nullable(),
   afdeling:           z.string().nullable(),
   in_dienst_vanaf:    z.string().nullable(),

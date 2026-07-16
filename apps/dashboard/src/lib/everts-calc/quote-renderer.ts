@@ -47,6 +47,7 @@ export interface DossierContext {
   titel: string
   referentie: string
   opdracht_referentie: string
+  vve_code: string
   werkadres: string          // samengesteld: straat, postcode plaats
   werkadres_naam: string
   werkadres_straat: string
@@ -111,7 +112,7 @@ export interface ContactpersoonContext {
 /** Lege dossier-context (offerte zonder gekoppeld dossier). */
 export const LEEG_DOSSIER: DossierContext = {
   heeft: false,
-  dossiernummer: '', titel: '', referentie: '', opdracht_referentie: '',
+  dossiernummer: '', titel: '', referentie: '', opdracht_referentie: '', vve_code: '',
   werkadres: '', werkadres_naam: '', werkadres_straat: '', werkadres_postcode: '',
   werkadres_plaats: '', werkadres_telefoon: '', werkadres_email: '',
   calculator: '', projectleider: '', teamleider: '', werkvoorbereider: '', uitvoerder: '',

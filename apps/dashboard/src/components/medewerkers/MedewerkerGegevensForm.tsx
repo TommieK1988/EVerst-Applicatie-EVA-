@@ -16,6 +16,7 @@ type FormState = {
   achternaam: string
   email: string
   telefoon: string
+  mobiel: string
   functie: string
   afdeling: string
   in_dienst_vanaf: string
@@ -46,6 +47,7 @@ function toForm(m: Medewerker): FormState {
     achternaam:          m.achternaam,
     email:               m.email ?? '',
     telefoon:            m.telefoon ?? '',
+    mobiel:              m.mobiel ?? '',
     functie:             m.functie ?? '',
     afdeling:            m.afdeling ?? '',
     in_dienst_vanaf:     m.in_dienst_vanaf ?? '',
@@ -317,6 +319,7 @@ export default function MedewerkerGegevensForm({
         tussenvoegsel:       state.tussenvoegsel  || null,
         email:               state.email          || null,
         telefoon:            state.telefoon        || null,
+        mobiel:              state.mobiel          || null,
         functie:             state.functie         || null,
         afdeling:            state.afdeling        || null,
         in_dienst_vanaf:     state.in_dienst_vanaf || null,
@@ -384,6 +387,9 @@ export default function MedewerkerGegevensForm({
             </Veld>
             <Veld label="Telefoon">
               {editing ? <Input type="tel" style={{ width: '100%' }} value={state.telefoon} onChange={e => set('telefoon', e.target.value)} /> : <Waarde value={m.telefoon} />}
+            </Veld>
+            <Veld label="Mobiel">
+              {editing ? <Input type="tel" style={{ width: '100%' }} value={state.mobiel} onChange={e => set('mobiel', e.target.value)} /> : <Waarde value={m.mobiel} />}
             </Veld>
             <Veld label="Adres" span>
               {editing ? <Input style={{ width: '100%' }} value={state.adres_straat} onChange={e => set('adres_straat', e.target.value)} placeholder="Straat en huisnummer" /> : <Waarde value={m.adres_straat} />}

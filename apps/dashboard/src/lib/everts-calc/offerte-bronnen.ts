@@ -26,16 +26,24 @@ import {
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import { leidWerkmaatschappijAf } from '@/lib/dossiers/werkmaatschappij'
 
+/**
+ * Velden per projectrol. De offerte gebruikt alleen de naam, maar documenten
+ * (bewonersbrief: "wie komt er langs") hebben de contactgegevens nodig. Eén
+ * gedeelde embed houdt de zes rollen identiek.
+ */
+const ROL_VELDEN = 'voornaam, tussenvoegsel, achternaam, functie, email, o365_email, telefoon, mobiel, foto_url'
+
 const DOSSIER_SELECT = `
-  dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id, klant_id,
+  id, dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id, klant_id,
+  vve_code, verwacht_startdatum, verwacht_einddatum,
   werkadres_naam, werkadres_straat, werkadres_postcode, werkadres_stad,
   werkadres_telefoon, werkadres_email,
-  calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam ),
-  projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam ),
-  teamleider:medewerkers!teamleider_id ( voornaam, tussenvoegsel, achternaam ),
-  werkvoorbereider:medewerkers!werkvoorbereider_id ( voornaam, tussenvoegsel, achternaam ),
-  uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
-  controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam ),
+  calculator:medewerkers!calculator_id ( ${ROL_VELDEN} ),
+  projectleider:medewerkers!project_manager_id ( ${ROL_VELDEN} ),
+  teamleider:medewerkers!teamleider_id ( ${ROL_VELDEN} ),
+  werkvoorbereider:medewerkers!werkvoorbereider_id ( ${ROL_VELDEN} ),
+  uitvoerder:medewerkers!uitvoerder_id ( ${ROL_VELDEN} ),
+  controller:medewerkers!controller_id ( ${ROL_VELDEN} ),
   contactpersoon:contactpersonen!contactpersoon_id (
     voornaam, tussenvoegsel, achternaam, email, telefoon,
     aanhef, voorletter, geslacht, mobiel, linkedin_url, opmerkingen
@@ -76,6 +84,7 @@ function bouwDossier(row: any): DossierContext {
     titel: row.titel ?? '',
     referentie: row.referentie ?? '',
     opdracht_referentie: row.opdracht_referentie ?? '',
+    vve_code: row.vve_code ?? '',
     werkadres,
     werkadres_naam: row.werkadres_naam ?? '',
     werkadres_straat: straat,
@@ -137,15 +146,25 @@ function aanspreekvorm(g: string | null | undefined): string {
 
 /**
  * Haalt bedrijf (werkmaatschappij of organisatie) + dossier-context op voor een offerte.
+ *
+ * Ook gebruikt door de documenten-module (`lib/documenten/document-context.ts`), die
+ * geen offerte heeft: die roept aan met `{ dossier_id }`. Dat werkt omdat er van
+ * `quote` alleen `dossier_id`/`project_id` wordt gelezen — bewust zo gelaten i.p.v.
+ * een tweede, bijna identieke loader.
+ *
  * @param supabase  een (server) Supabase-client
- * @param quote     de offerte-rij (gebruikt `project_id` voor de dossier-koppeling)
+ * @param quote     de offerte-rij (gebruikt `dossier_id`, anders `project_id`)
+ * @returns bedrijf + dossier-context, plus `dossierRow` = de ruwe rij (incl. de
+ *          volledige rol-embeds) voor consumenten die meer nodig hebben dan de
+ *          platte namen in DossierContext.
  */
 export async function laadBedrijfEnDossier(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   quote: any,
-): Promise<{ bedrijf: BedrijfContext; dossier: DossierContext }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<{ bedrijf: BedrijfContext; dossier: DossierContext; dossierRow: any; bedrijfRow: any }> {
   try {
     // 1. Dossier ophalen. Voorkeur: de directe koppeling `quotes.dossier_id`.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,8 +226,8 @@ export async function laadBedrijfEnDossier(
     // quotes.betalingsconditie_id. Zonder keuze blijft het betalingsblok leeg i.p.v.
     // een willekeurige standaard-staffel te tonen.
 
-    return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow) }
+    return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow), dossierRow, bedrijfRow }
   } catch {
-    return { bedrijf: { ...BEDRIJF_FALLBACK }, dossier: LEEG_DOSSIER }
+    return { bedrijf: { ...BEDRIJF_FALLBACK }, dossier: LEEG_DOSSIER, dossierRow: null, bedrijfRow: null }
   }
 }

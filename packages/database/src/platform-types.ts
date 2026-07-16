@@ -598,6 +598,7 @@ export type Medewerker = {
   achternaam: string
   email: string | null
   telefoon: string | null
+  mobiel: string | null
   foto_url: string | null
   functie: string | null
   afdeling: string | null

@@ -7,7 +7,8 @@
  *
  * Form fields:
  *   file      — het .docx bestand
- *   layoutId  — ID van de layout (gebruikt als mapnaam)
+ *   layoutId  — ID van de layout/het sjabloon (gebruikt als mapnaam)
+ *   prefix    — optioneel: 'layouts' (offertes, default) of 'documenten'
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,6 +17,12 @@ import { listDocxTags } from '@/lib/everts-calc/docx-utils'
 import { vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Toegestane hoofdmappen in de bucket. Allowlist, geen vrije string: deze route
+ * schrijft met de service-role, dus een ongecontroleerde prefix is path-traversal.
+ */
+const PREFIXEN = ['layouts', 'documenten'] as const
 
 export async function POST(request: NextRequest) {
   // M1: template-beheer schrijft met de service-role naar storage — alleen voor beheerders.
@@ -30,6 +37,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const layoutId = formData.get('layoutId') as string | null
+    const prefix = (formData.get('prefix') as string | null) ?? 'layouts'
 
     if (!file || !layoutId) {
       return NextResponse.json({ error: 'file en layoutId zijn verplicht' }, { status: 400 })
@@ -39,13 +47,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Alleen .docx bestanden zijn toegestaan' }, { status: 400 })
     }
 
+    if (!(PREFIXEN as readonly string[]).includes(prefix)) {
+      return NextResponse.json({ error: 'Ongeldige prefix' }, { status: 400 })
+    }
+
     // Service role client — bypasses RLS
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     )
 
-    const pad = `layouts/${layoutId}/${Date.now()}-${file.name}`
+    const pad = `${prefix}/${layoutId}/${Date.now()}-${file.name}`
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
