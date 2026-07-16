@@ -14,9 +14,10 @@ import {
   maakOpleverpunt, updateOpleverpunt, setPuntStatus, verwijderOpleverpunt,
   markeerAlsExtraWerk, ontkoppelExtraWerk,
   uploadOpleverFoto, verwijderOpleverFoto, voegPuntReactieToe, maakToegangToken, voegHandtekeningToe,
-  getOpleverFeedbackTemplates, getOpleverFeedbackSamenvatting,
+  getOpleverFeedbackTemplates, getOpleverFeedbackSamenvatting, getOpleverFeedbackInzendingen,
+  getOpleverTokenLinks, verwijderToegangToken,
   type DossierOpleveringData, type OpleverMomentView, type OpleverPuntView, type OpleverToewijsbaar,
-  type OpleverFeedbackSamenvatting,
+  type OpleverFeedbackSamenvatting, type FeedbackInzending, type OpleverTokenLink,
 } from '@/lib/dossiers/oplevering'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
@@ -153,15 +154,148 @@ function UitlegBlok() {
 
 /* ─────────────────────────── Feedback-ronde (bewoners) ────────────────────── */
 
+function datumTijd(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('nl-NL', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/** Toont een tokenlink als leesbare, selecteerbare tekst met kopieerknop. */
+function LinkRegel({ link, readOnly, onIngetrokken }: {
+  link: OpleverTokenLink
+  readOnly: boolean
+  onIngetrokken: () => void
+}) {
+  const [bezig, setBezig] = useState(false)
+
+  async function kopieer() {
+    try {
+      await navigator.clipboard.writeText(link.url)
+      toast.success('Link gekopieerd')
+    } catch {
+      // Clipboard kan geweigerd zijn (geen https / geen toestemming). De link staat in beeld,
+      // dus handmatig selecteren blijft mogelijk — geen valse succesmelding tonen.
+      toast.error('Kopiëren geweigerd door de browser — selecteer de link hieronder handmatig.')
+    }
+  }
+  async function trekIn() {
+    if (!window.confirm('Deze link intrekken? Wie hem al heeft, kan het formulier daarna niet meer invullen.')) return
+    setBezig(true)
+    const r = await verwijderToegangToken(link.id)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Link ingetrokken'); onIngetrokken()
+  }
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] text-neutral-500">
+          {link.templateNaam ?? 'Vragenlijst'} · aangemaakt {datumTijd(link.createdAt)}
+          {link.verlooptOp && (
+            <span className={link.verlopen ? 'ml-1 font-semibold text-red-600' : 'ml-1'}>
+              · {link.verlopen ? 'verlopen' : `geldig t/m ${datumTijd(link.verlooptOp)}`}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={kopieer}>Kopiëren</Button>
+          {!readOnly && (
+            <button type="button" onClick={trekIn} disabled={bezig}
+              className="text-[11px] font-medium text-neutral-400 underline hover:text-red-600">
+              Intrekken
+            </button>
+          )}
+        </div>
+      </div>
+      <input
+        readOnly
+        value={link.url}
+        onFocus={e => e.currentTarget.select()}
+        className="mt-2 w-full rounded-md border border-neutral-200 bg-white px-2 py-1 font-mono text-[11.5px] text-neutral-700 outline-none focus:border-brand-500"
+      />
+    </div>
+  )
+}
+
+/** Eén ingezonden formulier, uitklapbaar naar álle ingevulde velden. */
+function InzendingRij({ inzending }: { inzending: FeedbackInzending }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="rounded-lg border border-neutral-200">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-neutral-50">
+        <div>
+          <div className="text-[12.5px] font-semibold text-neutral-800">{inzending.templateNaam}</div>
+          <div className="text-[11px] text-neutral-500">
+            Ingediend {datumTijd(inzending.ingediendOp ?? inzending.aangemaaktOp)} · {inzending.antwoorden.length} veld(en)
+          </div>
+        </div>
+        <span className="text-[11px] font-medium text-neutral-400">{open ? 'Inklappen ▲' : 'Bekijken ▼'}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-neutral-200 px-3 py-2">
+          {inzending.antwoorden.length === 0 ? (
+            <p className="py-1 text-[12px] text-neutral-400">Dit formulier heeft geen invulbare velden.</p>
+          ) : (
+            <dl className="divide-y divide-neutral-100">
+              {inzending.antwoorden.map((a, i) => (
+                <div key={i} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[180px_1fr] sm:gap-3">
+                  <dt className="text-[12px] font-medium text-neutral-600">{a.label}</dt>
+                  <dd className="text-[12.5px] text-neutral-900">
+                    {a.fotos.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {a.fotos.map((url, j) => (
+                          <a key={j} href={url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt={`${a.label} ${j + 1}`}
+                              className="h-16 w-16 rounded-md border border-neutral-200 object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : a.waarde === 'Niet ingevuld' ? (
+                      <span className="italic text-neutral-400">Niet ingevuld</span>
+                    ) : (
+                      <span className="whitespace-pre-wrap">{a.waarde}</span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <div className="mt-2 flex justify-end">
+            <a href={`/formulieren/${inzending.templateId}/inzendingen/${inzending.id}`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-[11px] font-medium text-brand-600 underline">
+              Openen in Formulieren (incl. PDF)
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FeedbackBlok({ dossierId, readOnly }: { dossierId: string; readOnly: boolean }) {
   const [templates, setTemplates] = useState<{ id: string; naam: string }[] | null>(null)
   const [gekozen, setGekozen] = useState('')
   const [samenvatting, setSamenvatting] = useState<OpleverFeedbackSamenvatting | null>(null)
+  const [inzendingen, setInzendingen] = useState<FeedbackInzending[] | null>(null)
+  const [links, setLinks] = useState<OpleverTokenLink[] | null>(null)
   const [bezig, setBezig] = useState(false)
 
+  function herlaadFeedback() {
+    getOpleverFeedbackSamenvatting(dossierId).then(setSamenvatting).catch(() => setSamenvatting({ aantal: 0, cijfers: [] }))
+    getOpleverFeedbackInzendingen(dossierId).then(setInzendingen).catch(() => setInzendingen([]))
+    getOpleverTokenLinks(dossierId, 'feedback').then(setLinks).catch(() => setLinks([]))
+  }
   useEffect(() => {
     getOpleverFeedbackTemplates().then(t => { setTemplates(t); if (t[0]) setGekozen(t[0].id) }).catch(() => setTemplates([]))
-    getOpleverFeedbackSamenvatting(dossierId).then(setSamenvatting).catch(() => setSamenvatting({ aantal: 0, cijfers: [] }))
+    herlaadFeedback()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dossierId])
 
   async function feedbackLink() {
@@ -170,8 +304,13 @@ function FeedbackBlok({ dossierId, readOnly }: { dossierId: string; readOnly: bo
     const r = await maakToegangToken('feedback', { dossierId, formTemplateId: gekozen, geldigDagen: 60 })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    try { await navigator.clipboard.writeText(r.url) } catch { /* clipboard kan geweigerd zijn */ }
-    toast.success('Feedback-link gekopieerd — deel deze met bewoners/gebruikers')
+    try {
+      await navigator.clipboard.writeText(r.url)
+      toast.success('Feedback-link gekopieerd — deel deze met bewoners/gebruikers')
+    } catch {
+      toast.success('Feedback-link aangemaakt — kopieer hem hieronder')
+    }
+    herlaadFeedback()
   }
 
   return (
@@ -199,13 +338,37 @@ function FeedbackBlok({ dossierId, readOnly }: { dossierId: string; readOnly: bo
           <p className="mb-3 text-[13px] text-neutral-500">Nog geen feedback ontvangen.</p>
         )}
 
+        {/* Ingevulde formulieren — alle velden, niet alleen de cijfers. */}
+        {inzendingen && inzendingen.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 text-[12px] font-semibold text-neutral-700">Ingevulde formulieren</div>
+            <div className="space-y-2">
+              {inzendingen.map(i => <InzendingRij key={i.id} inzending={i} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Actieve links — blijven zichtbaar zodat je ze later opnieuw kunt kopiëren. */}
+        {links && links.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 text-[12px] font-semibold text-neutral-700">Actieve feedback-links</div>
+            <div className="space-y-2">
+              {links.map(l => (
+                <LinkRegel key={l.id} link={l} readOnly={readOnly} onIngetrokken={herlaadFeedback} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {!readOnly && (
           templates && templates.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               <select className={selectCls} value={gekozen} onChange={e => setGekozen(e.target.value)}>
                 {templates.map(t => <option key={t.id} value={t.id}>{t.naam}</option>)}
               </select>
-              <Button variant="secondary" onClick={feedbackLink} disabled={bezig}>Feedback-link maken &amp; kopiëren</Button>
+              <Button variant="secondary" onClick={feedbackLink} disabled={bezig}>
+                {links && links.length > 0 ? 'Extra feedback-link maken' : 'Feedback-link maken & kopiëren'}
+              </Button>
             </div>
           ) : templates ? (
             <p className="text-[12px] text-neutral-400">
