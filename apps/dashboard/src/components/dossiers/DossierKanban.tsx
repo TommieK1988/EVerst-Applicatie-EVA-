@@ -2,12 +2,16 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { IconPlus, IconSearch, IconDomeinOnderhoud } from '../eva/Icons'
-import { Button, Input, EmptyState } from '@/components/ui'
+import {
+  Button, Input, EmptyState,
+  AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
-import { getDossierSubstatus, isBouw7Substatus } from './types'
+import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -69,6 +73,9 @@ export function DossierKanban<K extends string>({
   const [dragOverCol, setDragOverCol] = React.useState<string | null>(null)
   const [modalOpen,   setModalOpen]   = React.useState(false)
   const [zoek,        setZoek]        = React.useState('')
+  /** Gezet zodra er naar een afsluitende kolom is gesleept; de dialoog bevestigt of annuleert. */
+  const [afsluitBevestiging, setAfsluitBevestiging] =
+    React.useState<{ dossierId: string; status: K } | null>(null)
 
   const gefilterd = zoek
     ? dossiers.filter(d =>
@@ -77,6 +84,38 @@ export function DossierKanban<K extends string>({
         d.dossiernummer?.toLowerCase().includes(zoek.toLowerCase())
       )
     : dossiers
+
+  /**
+   * Voert de statuswijziging uit: optimistisch de kaart verplaatsen, dan de server-action (die de
+   * status óók naar Bouw7 terugschrijft). Los van `handleDrop` omdat een afsluitende status eerst
+   * langs een bevestigingsdialoog gaat.
+   */
+  async function voerStatuswijzigingUit(dossierId: string, targetStatus: K) {
+    setDossiers(prev =>
+      prev.map(d => {
+        if (d.id !== dossierId) return d
+        return {
+          ...d,
+          aanvraag_substatus: d.hoofdstatus === 'aanvraag' ? targetStatus as any : d.aanvraag_substatus,
+          offerte_substatus:  d.hoofdstatus === 'offerte'  ? targetStatus as any : d.offerte_substatus,
+          opdracht_substatus: d.hoofdstatus === 'opdracht' ? targetStatus as any : d.opdracht_substatus,
+        }
+      })
+    )
+    // Two-way: schrijf de statuswijziging direct terug naar Bouw7 — opdracht naar de projectstatus,
+    // aanvraag/offerte naar het gedeelde maatwerkveld "Offerte Sub-status".
+    const res = await updateDossierSubstatus(dossierId, targetStatus as DossierSubstatus, { schrijfBouw7: true })
+    if (!res.ok) {
+      // O.a. een conflict: de andere Bouw7-app heeft deze substatus intussen omgezet. De
+      // EVA-wijziging is niet doorgevoerd — haal de echte stand terug op.
+      toast.error(res.error)
+      router.refresh()
+    } else if (res.bouw7 && !res.bouw7.ok) {
+      toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+    } else {
+      router.refresh()
+    }
+  }
 
   async function handleDrop(targetStatus: K) {
     if (!draggingId) return
@@ -104,32 +143,30 @@ export function DossierKanban<K extends string>({
       setDraggingId(null)
       setDragOverCol(null)
       await onStatusChange(draggingId, targetStatus)
-    } else {
-      // Standaard: update gebaseerd op hoofdstatus
-      setDossiers(prev =>
-        prev.map(d => {
-          if (d.id !== draggingId) return d
-          return {
-            ...d,
-            aanvraag_substatus: d.hoofdstatus === 'aanvraag' ? targetStatus as any : d.aanvraag_substatus,
-            offerte_substatus:  d.hoofdstatus === 'offerte'  ? targetStatus as any : d.offerte_substatus,
-            opdracht_substatus: d.hoofdstatus === 'opdracht' ? targetStatus as any : d.opdracht_substatus,
-          }
-        })
-      )
-      setDraggingId(null)
-      setDragOverCol(null)
-      // Opdracht-dossiers: schrijf de statuswijziging óók terug naar Bouw7.
-      const res = await updateDossierSubstatus(
-        draggingId,
-        targetStatus as DossierSubstatus,
-        { schrijfBouw7: sectie === 'opdracht' },
-      )
-      if (res.ok && res.bouw7 && !res.bouw7.ok) {
-        toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
-      }
+      return
     }
+
+    const id = draggingId
+    setDraggingId(null)
+    setDragOverCol(null)
+
+    // Afsluitende status (Afgewezen/Vervallen/Verloren): het dossier wordt daarna alleen-lezen en
+    // in Bouw7 kan het project op "08. Afgewezen" komen. Eerst bevestigen — een misslag met de muis
+    // is niet meer terug te draaien.
+    if (isAfsluitendeSubstatus(sectie, targetStatus)) {
+      setAfsluitBevestiging({ dossierId: id, status: targetStatus })
+      return
+    }
+
+    await voerStatuswijzigingUit(id, targetStatus)
   }
+
+  const afsluitDossier = afsluitBevestiging
+    ? dossiers.find(d => d.id === afsluitBevestiging.dossierId)
+    : null
+  const afsluitLabel = afsluitBevestiging
+    ? (statussen.find(s => s.key === afsluitBevestiging.status)?.label ?? afsluitBevestiging.status)
+    : ''
 
   return (
     <>
@@ -142,6 +179,34 @@ export function DossierKanban<K extends string>({
           werkmaatschappijen={werkmaatschappijen}
         />
       )}
+
+      {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. */}
+      <AlertDialog
+        open={afsluitBevestiging != null}
+        onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Dossier op &ldquo;{afsluitLabel}&rdquo; zetten?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {afsluitDossier?.dossiernummer ? `${afsluitDossier.dossiernummer} — ` : ''}
+            {afsluitDossier?.titel ?? 'Dit dossier'} wordt hiermee afgesloten en is daarna
+            <strong> overal alleen-lezen</strong>; je kunt dit niet meer ongedaan maken in EVA.
+            De status wordt ook naar Bouw7 teruggeschreven.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const b = afsluitBevestiging
+                setAfsluitBevestiging(null)
+                if (b) await voerStatuswijzigingUit(b.dossierId, b.status)
+              }}
+            >
+              Ja, afsluiten
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', background: 'var(--bg)' }}>
 

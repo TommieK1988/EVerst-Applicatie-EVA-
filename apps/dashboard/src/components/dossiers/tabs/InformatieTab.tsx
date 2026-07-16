@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
-  getDossierSubstatus, isBouw7Substatus,
+  getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
   type DossierSectie, type DossierRij,
 } from '../types'
 import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, koppelDossierAanProject } from '@/lib/dossiers/actions'
@@ -560,6 +560,8 @@ export function InformatieTab({
     sectie === 'servicedesk' ? ((dossier as any).servicedesk_substatus ?? 'nieuw') : getDossierSubstatus(dossier)
   )
   const [finDialoogOpen, setFinDialoogOpen] = React.useState(false)
+  /** Gezet zodra er een afsluitende status gekozen is; de dialoog bevestigt of annuleert. */
+  const [afsluitBevestiging, setAfsluitBevestiging] = React.useState<string | null>(null)
 
   const beschikbareStatussen =
     sectie === 'aanvraag'    ? AANVRAAG_STATUSSEN :
@@ -582,17 +584,40 @@ export function InformatieTab({
   })
 
   // Statuswijziging vanuit de detail-view: EVA bijwerken en — voor opdrachten — terugschrijven naar Bouw7.
-  async function zetSubstatus(next: string) {
+  async function voerSubstatusUit(next: string) {
+    const vorige = substatus
     setSubstatus(next)
     if (sectie === 'servicedesk') {
       const res = await updateServicedeskSubstatus(dossier.id, next)
       if (!res.ok) toast.error(res.error ?? 'Bijwerken mislukt')
       return
     }
-    const res = await updateDossierSubstatus(dossier.id, next as any, { schrijfBouw7: sectie === 'opdracht' })
-    if (res.ok && res.bouw7 && !res.bouw7.ok) {
+    // Two-way: opdracht naar de projectstatus, aanvraag/offerte naar het gedeelde maatwerkveld
+    // "Offerte Sub-status".
+    const res = await updateDossierSubstatus(dossier.id, next as any, { schrijfBouw7: true })
+    if (!res.ok) {
+      // O.a. een conflict: de andere Bouw7-app heeft deze substatus intussen omgezet.
+      setSubstatus(vorige)
+      toast.error(res.error)
+      router.refresh()
+    } else if (res.bouw7 && !res.bouw7.ok) {
       toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+    } else {
+      router.refresh()
     }
+  }
+
+  /**
+   * Afsluitende status (Afgewezen/Vervallen/Verloren) eerst laten bevestigen: het dossier wordt
+   * daarna overal alleen-lezen en in Bouw7 kan het project op "08. Afgewezen" komen — niet meer
+   * terug te draaien via de UI.
+   */
+  async function zetSubstatus(next: string) {
+    if (isAfsluitendeSubstatus(sectie, next)) {
+      setAfsluitBevestiging(next)
+      return
+    }
+    await voerSubstatusUit(next)
   }
 
   const [contactpersoonOpties, setContactpersoonOpties] = React.useState<{
@@ -855,6 +880,37 @@ export function InformatieTab({
             <span className="text-[12px] font-medium text-neutral-500">{dossier.klant_naam}</span>
           </div>
         </div>
+
+        {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. */}
+        <AlertDialog
+          open={afsluitBevestiging != null}
+          onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
+        >
+          <AlertDialogContent>
+            <AlertDialogTitle>
+              Dossier op &ldquo;
+              {beschikbareStatussen.find(s => s.key === afsluitBevestiging)?.label ?? afsluitBevestiging}
+              &rdquo; zetten?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Dit dossier wordt hiermee afgesloten en is daarna <strong>overal alleen-lezen</strong>;
+              je kunt dit niet meer ongedaan maken in EVA. De status wordt ook naar Bouw7
+              teruggeschreven.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Annuleren</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  const next = afsluitBevestiging
+                  setAfsluitBevestiging(null)
+                  if (next) await voerSubstatusUit(next)
+                }}
+              >
+                Ja, afsluiten
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Acties rechts */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">

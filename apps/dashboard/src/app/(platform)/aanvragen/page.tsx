@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
 import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
+import { SubstatusAutoVervers } from '@/components/dossiers/SubstatusAutoVervers'
 import { AANVRAAG_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersVoorAanvragen, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
@@ -41,16 +42,21 @@ export default async function AanvragenPage({
   const werkmaatschappijen = (werkmaatschappijenRes?.data ?? []) as { id: string; naam: string; code: string | null }[]
 
   return (
-    <DossierViewSwitcher
-      sectie="aanvraag"
-      statussen={AANVRAAG_STATUSSEN}
-      dossiers={dossiers}
-      layouts={layouts}
-      user_id={user_id}
-      mijnNaam={mijnNaam}
-      kanNieuwAanmaken
-      werkmaatschappijen={werkmaatschappijen}
-      extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
-    />
+    <>
+      {/* Verse stand van het gedeelde Bouw7-substatusveld ophalen bij openen (de tweede app schrijft
+          hetzelfde veld en kan niet op de cron wachten). */}
+      <SubstatusAutoVervers scope="aanvraag" />
+      <DossierViewSwitcher
+        sectie="aanvraag"
+        statussen={AANVRAAG_STATUSSEN}
+        dossiers={dossiers}
+        layouts={layouts}
+        user_id={user_id}
+        mijnNaam={mijnNaam}
+        kanNieuwAanmaken
+        werkmaatschappijen={werkmaatschappijen}
+        extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
+      />
+    </>
   )
 }

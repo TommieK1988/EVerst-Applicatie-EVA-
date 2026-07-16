@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
+import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 
 type Integratie = {
   id: string
@@ -167,6 +168,23 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Verversen mislukt' }
   }
+}
+
+/**
+ * Ververs alleen het gedeelde substatusveld ("Offerte Sub-status") van de aanvraag-/offerte-dossiers.
+ * Wordt afgevuurd bij het openen van de Aanvragen- en Offertes-pagina: de tweede Bouw7-app schrijft
+ * hetzelfde veld en kan niet op de cron wachten, dus moet de lijst bij openen de verse stand tonen.
+ * Eén Bouw7-call, geen detail-calls — zie `lib/bouw7/substatus-attr.ts`.
+ */
+export async function ververseSubstatussenActie(
+  scope: 'aanvraag' | 'offerte',
+): Promise<SubstatusVerversResult> {
+  const res = await ververseSubstatussen(scope)
+  if (res.ok && res.bijgewerkt > 0) {
+    revalidatePath('/aanvragen')
+    revalidatePath('/offertes')
+  }
+  return res
 }
 
 export type QuotationDebugResult =
