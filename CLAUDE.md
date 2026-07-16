@@ -83,6 +83,27 @@ De **code is altijd leidend** boven `domein-proces.md` voor exacte statuswaarden
 
 Het domeinproces-document gebruikt soms andere namen dan de code (bijv. `Geaccepteerd` in het document = `gewonnen` in de code). De code-waarden zijn de implementatiewaarheid.
 
+## Wat is nieuw — changelog bijwerken
+
+EVA heeft een changelog-pagina (`/wat-is-nieuw`) met een sterretje in de topbar en een popup bij inloggen. **Voeg zelf een item toe zodra je een gebruikersgerichte wijziging oplevert** — de gebruiker hoeft dit niet aan te melden.
+
+**Wel een item:** nieuwe functie, zichtbare verbetering, of een opgeloste fout die gebruikers merkten.
+**Geen item:** refactors, build-fixes, interne opschoning, en beveiligings-/RLS-werk zonder zichtbaar effect. Bundel meerdere commits van één feature tot één item.
+
+**Hoe:** voeg een `insert` toe via een nieuwe migratie in `supabase/migrations/` (patroon: `20260714b_changelog.sql`) en pas die toe met de Supabase MCP `apply_migration`. EVA draait op Vercel zonder git-toegang, dus de commit-historie wordt nooit live ingelezen — items zijn altijd data.
+
+```sql
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-16','nieuw','Offertes','Titel in gewone taal',
+   'Eén tot drie zinnen: wat kan de gebruiker nu, en waarom is dat handig.');
+```
+
+- `categorie` — `nieuw` (nieuwe functie) | `verbeterd` (uitbreiding van iets bestaands) | `opgelost` (bugfix)
+- `module` — tag, bijv. Offertes, Calculatie, Dossiers, Planning, Financieel, Wagenpark
+- `datum` — opleverdatum
+
+**Schrijfstijl:** begrijpelijk voor niet-technische collega's. Beschrijf de *functie*, niet de code: geen endpoints, tabelnamen, componentnamen, "RLS" of commit-jargon.
+
 ## Migration status (april 2026)
 
 De monorepo-migratie is functioneel maar niet volledig:
