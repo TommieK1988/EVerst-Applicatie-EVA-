@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { X, RefreshCw, FileText, Download, Mail } from 'lucide-react'
+import { X, RefreshCw, FileText, Download, Mail, Pencil } from 'lucide-react'
 import { mailDocument, getMailVoorstel } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 
@@ -66,14 +66,14 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
     setPreviewKey(k => k + 1)
   }
 
-  async function haalOp(soort: 'pdf' | 'docx') {
+  async function haalPdfOp() {
     if (ontbreekt.length) {
       toast.error(`Vul eerst in: ${ontbreekt.map(v => v.label).join(', ')}`)
       return
     }
-    setDownload(soort)
+    setDownload('pdf')
     try {
-      const res = await fetch(`/api/documenten/${soort}`, {
+      const res = await fetch('/api/documenten/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sjabloon_id: sjabloon.id, dossier_id: dossierId, invoer, archiveren }),
@@ -83,17 +83,48 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
         throw new Error(json.error ?? `HTTP ${res.status}`)
       }
       const blob = await res.blob()
-      const naam = bestandsnaamUitHeader(res.headers.get('Content-Disposition')) ?? `document.${soort}`
-      triggerDownload(blob, naam)
+      triggerDownload(blob, bestandsnaamUitHeader(res.headers.get('Content-Disposition')) ?? 'document.pdf')
 
-      if (soort === 'pdf') {
-        const gearchiveerd = res.headers.get('X-Archief-Status') === 'ok'
-        toast.success(archiveren && gearchiveerd
-          ? 'Document opgesteld en in SharePoint gezet'
-          : 'Document opgesteld')
-        onKlaar()
-      }
+      const gearchiveerd = res.headers.get('X-Archief-Status') === 'ok'
+      toast.success(archiveren && gearchiveerd
+        ? 'Document opgesteld en in SharePoint gezet'
+        : 'Document opgesteld')
+      onKlaar()
     } catch (err) {
+      toast.error(String(err instanceof Error ? err.message : err))
+    } finally {
+      setDownload(null)
+    }
+  }
+
+  /**
+   * Stelt het document op, zet het in de dossiermap en opent het in Word Online.
+   *
+   * Het tabblad wordt SYNCHROON bij de klik geopend en pas daarna gevuld: een
+   * window.open() ná een await wordt door popup-blockers geweigerd.
+   */
+  async function bewerkInWord() {
+    if (ontbreekt.length) {
+      toast.error(`Vul eerst in: ${ontbreekt.map(v => v.label).join(', ')}`)
+      return
+    }
+    const tab = window.open('', '_blank')
+    setDownload('docx')
+    try {
+      const res = await fetch('/api/documenten/word-online', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sjabloon_id: sjabloon.id, dossier_id: dossierId, invoer }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.webUrl) throw new Error(json.error ?? `HTTP ${res.status}`)
+
+      if (tab) tab.location.href = json.webUrl
+      else window.open(json.webUrl, '_blank')   // popup geblokkeerd → alsnog proberen
+      toast.success('Document staat in de dossiermap en opent in Word')
+      onKlaar()
+    } catch (err) {
+      tab?.close()
       toast.error(String(err instanceof Error ? err.message : err))
     } finally {
       setDownload(null)
@@ -201,11 +232,12 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
             <span className="text-[11.5px] text-amber-700">Nog invullen: {ontbreekt.map(v => v.label).join(', ')}</span>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => haalOp('docx')} disabled={download !== null}
+            <button onClick={bewerkInWord} disabled={download !== null}
+              title="Zet het document in de dossiermap en opent het in Word Online"
               className="flex items-center gap-1.5 rounded border border-neutral-300 px-3 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
-              <FileText className="h-3.5 w-3.5" /> {download === 'docx' ? 'Bezig…' : 'Word'}
+              <Pencil className="h-3.5 w-3.5" /> {download === 'docx' ? 'Bezig…' : 'Bewerken in Word'}
             </button>
-            <button onClick={() => haalOp('pdf')} disabled={download !== null}
+            <button onClick={haalPdfOp} disabled={download !== null}
               className="flex items-center gap-1.5 rounded border border-neutral-300 px-3 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
               <Download className="h-3.5 w-3.5" /> {download === 'pdf' ? 'Bezig…' : 'PDF'}
             </button>

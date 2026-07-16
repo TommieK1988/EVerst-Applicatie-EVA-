@@ -21,6 +21,8 @@ export interface ArchiveerArgs {
   invoer: Record<string, unknown>
   bestandsnaam: string
   bytes: Uint8Array
+  /** MIME-type van `bytes`. Default PDF; Word gebruikt het docx-type. */
+  contentType?: string
   medewerkerId: string | null
   /** False = alleen registreren, niet naar SharePoint. */
   archiveren: boolean
@@ -35,6 +37,7 @@ export interface ArchiveerResultaat {
 
 export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<ArchiveerResultaat> {
   const { supabase, dossierId, sjabloon, invoer, bestandsnaam, bytes, medewerkerId, archiveren } = args
+  const contentType = args.contentType ?? 'application/pdf'
 
   let webUrl: string | null = null
   let driveId: string | null = null
@@ -44,7 +47,7 @@ export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<Archiv
   if (archiveren) {
     try {
       const res = await uploadBuffersNaarDossierMap(dossierId, [
-        { naam: bestandsnaam, contentType: 'application/pdf', bytes },
+        { naam: bestandsnaam, contentType, bytes },
       ])
       if (!res.ok) fout = res.fout
       const geplaatst = res.bestanden?.[0]
