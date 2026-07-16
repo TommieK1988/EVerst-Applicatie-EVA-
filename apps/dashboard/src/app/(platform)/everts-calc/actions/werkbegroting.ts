@@ -1529,9 +1529,50 @@ export async function previewWerkbegrotingBestelregelsBouw7(dossierId: string, p
   return bouwBestelregelPlan(dossierId, payload)
 }
 
+/**
+ * Herkent de Bouw7-fout "het meegestuurde `id` bestaat niet (meer)" op `POST /contract-order-line`:
+ * `404 {"type":"entity_not_found","message":"Property with name \"id\", that contains a reference
+ * to an Object with ID #<id> of type \"ContractOrderLine\" does not exist."}`
+ *
+ * Dit gebeurt als een bestelregel in Bouw7 is verwijderd terwijl EVA het id nog bewaart (o.a. bij
+ * ids die uit de import komen). Bewust strak: het moet over ons eigen `id` gaan én over een
+ * ContractOrderLine — zo blijft een 404 over een onbekende PSL of contact gewoon een harde fout.
+ */
+function isOnbekendLineId(e: unknown, lineId: number | null): boolean {
+  if (lineId == null) return false
+  const msg = e instanceof Error ? e.message : ''
+  return /\b404\b/.test(msg)
+    && /entity_not_found/.test(msg)
+    && /ContractOrderLine/.test(msg)
+    && new RegExp(`#${lineId}\\b`).test(msg)
+}
+
 export type StuurBestelregelsResultaat =
-  | { ok: true; aangemaakt: number; bijgewerkt: number; geneutraliseerd: number; overgeslagen: number; fouten: string[]; lineIdPerComponent: Record<string, number> }
-  | { ok: false; error: string }
+  | {
+      ok: true
+      aangemaakt: number
+      bijgewerkt: number
+      geneutraliseerd: number
+      overgeslagen: number
+      fouten: string[]
+      lineIdPerComponent: Record<string, number>
+      /**
+       * Componenten waarvan het bouw7_line_id in Bouw7 niet meer bestond. Server-side al op null
+       * gezet; de client MOET ze ook lokaal wissen, anders schrijft de eerstvolgende
+       * `syncWerkbegrotingNaarSupabase` het verlopen id vanuit localStorage weer terug.
+       */
+      gewisteComponenten: string[]
+    }
+  | {
+      ok: false
+      error: string
+      /**
+       * Ook bij een afbreking halverwege: de regels die dáárvoor al in Bouw7 zijn aangemaakt.
+       * Zonder dit staan ze wél in Bouw7 maar kent EVA hun id niet → duplicaten bij de volgende push.
+       */
+      lineIdPerComponent: Record<string, number>
+      gewisteComponenten: string[]
+    }
 
 /**
  * Upsert de werkbegroting-componenten als bestelregels in Bouw7 (aanmaken/bijwerken/neutraliseren),
@@ -1544,15 +1585,16 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
   payload: WerkbegrotingPayload,
   doelHoofdstukId: number | null = null,
 ): Promise<StuurBestelregelsResultaat> {
+  const leeg = { lineIdPerComponent: {}, gewisteComponenten: [] }
   // Sync eerst zodat de bouw7_line_id-backfill straks op bestaande Supabase-rijen landt.
   const sync = await syncWerkbegrotingNaarSupabase(payload)
-  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
+  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}`, ...leeg }
 
   const plan = await bouwBestelregelPlan(dossierId, payload)
-  if (!plan.ok) return { ok: false, error: plan.error }
+  if (!plan.ok) return { ok: false, error: plan.error, ...leeg }
 
   const ctx = await bouw7Context(dossierId)
-  if (!ctx.ok) return { ok: false, error: ctx.error }
+  if (!ctx.ok) return { ok: false, error: ctx.error, ...leeg }
   const { client, bouw7Id } = ctx
   const fouten: string[] = []
 
@@ -1575,7 +1617,8 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
         }
       }
     } catch (e) {
-      return { ok: false, error: `Aanmaken bewakingscodes mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+      // Nog vóór de eerste bestelregel — er is nog niets uitgedeeld om te bewaren.
+      return { ok: false, error: `Aanmaken bewakingscodes mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}`, ...leeg }
     }
   }
 
@@ -1593,6 +1636,28 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
   // 3) Upsert per regel.
   let aangemaakt = 0, bijgewerkt = 0, geneutraliseerd = 0
   const lineIdPerComponent: Record<string, number> = {}
+  // Componenten waarvan het bouw7_line_id in Bouw7 niet meer bestaat → koppeling wissen.
+  const teWissen: string[] = []
+
+  /**
+   * Koppelingen naar Supabase wegschrijven. Wordt óók aangeroepen als de push halverwege
+   * afbreekt: de regels die dan al in Bouw7 staan moeten hun id houden, anders maakt de
+   * volgende push duplicaten aan.
+   */
+  const persisteerKoppelingen = async (): Promise<void> => {
+    if (Object.keys(lineIdPerComponent).length === 0 && teWissen.length === 0) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = createAdminClient() as any
+    const nu = new Date().toISOString()
+    for (const [componentId, lineId] of Object.entries(lineIdPerComponent)) {
+      await db.from('werkbegroting_componenten').update({ bouw7_line_id: lineId, bijgewerkt_op: nu }).eq('id', componentId).catch(() => {})
+    }
+    // Verlopen koppelingen opruimen, anders loopt élke volgende push weer op dezelfde 404.
+    if (teWissen.length > 0) {
+      await db.from('werkbegroting_componenten').update({ bouw7_line_id: null, bijgewerkt_op: nu }).in('id', teWissen).catch(() => {})
+    }
+  }
+
   try {
     for (const r of plan.regels) {
       if (r.actie === 'skip') continue
@@ -1611,16 +1676,35 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
         ...(contactId != null ? { contact: { id: contactId } } : {}),
         ...(r.bouw7LineId != null ? { id: r.bouw7LineId } : {}),
       }
-      const resp = await client.post<{ id?: number } | undefined>('/contract-order-line', body)
-      const nieuwId = resp?.id ?? r.bouw7LineId ?? null
+      let resp: { id?: number } | undefined
+      let actie = r.actie
+      try {
+        resp = await client.post<{ id?: number } | undefined>('/contract-order-line', body)
+      } catch (e) {
+        if (!isOnbekendLineId(e, r.bouw7LineId)) throw e
+        // Het opgeslagen bouw7_line_id bestaat niet meer in Bouw7 — de regel is daar verwijderd.
+        // Niet fataal: bij bijwerken maken we 'm opnieuw aan, bij neutraliseren is 'ie al weg.
+        if (r.actie === 'neutraliseren') { teWissen.push(r.componentId); geneutraliseerd++; continue }
+        delete body.id
+        resp = await client.post<{ id?: number } | undefined>('/contract-order-line', body)
+        actie = 'aanmaken'
+      }
+
+      // Bij (her)aanmaken nooit terugvallen op het oude id — dat bestaat juist niet meer.
+      const nieuwId = resp?.id ?? (actie === 'aanmaken' ? null : r.bouw7LineId) ?? null
       if (nieuwId != null) lineIdPerComponent[r.componentId] = nieuwId
-      if (r.actie === 'aanmaken') aangemaakt++
-      else if (r.actie === 'bijwerken') bijgewerkt++
+      else if (actie === 'aanmaken' && r.bouw7LineId != null) teWissen.push(r.componentId)
+      if (actie === 'aanmaken') aangemaakt++
+      else if (actie === 'bijwerken') bijgewerkt++
       else geneutraliseerd++
     }
   } catch (e) {
+    // Bewaar wat er vóór de fout al is aangemaakt — die regels staan in Bouw7 en zouden bij een
+    // volgende push anders nogmaals worden aangemaakt.
+    await persisteerKoppelingen()
     const msg = e instanceof Error ? e.message : 'Onbekende fout'
-    return { ok: false, error: /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — schrijfrechten of ids niet toegestaan.` : msg }
+    const error = /\b40[13]\b/.test(msg) ? `Geweigerd (${msg}) — schrijfrechten of ids niet toegestaan.` : msg
+    return { ok: false, error, lineIdPerComponent, gewisteComponenten: teWissen }
   }
 
   // 4) Backfill: gaf de POST geen id terug bij aanmaken, match de nieuwe regel op inhoud via /list.
@@ -1644,17 +1728,10 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
   }
 
   // 5) bouw7_line_id terugschrijven naar Supabase (client patcht ook zijn localStorage).
-  if (Object.keys(lineIdPerComponent).length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = createAdminClient() as any
-    const nu = new Date().toISOString()
-    for (const [componentId, lineId] of Object.entries(lineIdPerComponent)) {
-      await db.from('werkbegroting_componenten').update({ bouw7_line_id: lineId, bijgewerkt_op: nu }).eq('id', componentId).catch(() => {})
-    }
-  }
+  await persisteerKoppelingen()
 
   const overgeslagen = plan.regels.filter(r => r.actie === 'skip').length
-  return { ok: true, aangemaakt, bijgewerkt, geneutraliseerd, overgeslagen, fouten, lineIdPerComponent }
+  return { ok: true, aangemaakt, bijgewerkt, geneutraliseerd, overgeslagen, fouten, lineIdPerComponent, gewisteComponenten: teWissen }
 }
 
 /**

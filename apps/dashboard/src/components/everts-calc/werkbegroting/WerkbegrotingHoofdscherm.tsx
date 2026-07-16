@@ -285,15 +285,22 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     setBestelBezig(true)
     try {
       const res = await stuurWerkbegrotingBestelregelsBouw7(dossierId, payload)
+      // Koppelingen lokaal bijwerken — óók als de push halverwege faalde, want de regels die
+      // daarvóór zijn aangemaakt staan wél in Bouw7. Zonder dit schrijft de sync hierna het oude
+      // (lege of verlopen) id vanuit localStorage terug en ontstaan er duplicaten.
+      const comps = getWerkbegrotingComponenten()
+      let gewijzigd = false
+      for (const [compId, lineId] of Object.entries(res.lineIdPerComponent)) {
+        const c = comps.find(x => x.id === compId)
+        if (c && c.bouw7_line_id !== lineId) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: lineId }); gewijzigd = true }
+      }
+      for (const compId of res.gewisteComponenten) {
+        const c = comps.find(x => x.id === compId)
+        if (c && c.bouw7_line_id != null) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: undefined }); gewijzigd = true }
+      }
+      if (gewijzigd) { const p = bouwPayload(); if (p) await syncWerkbegrotingNaarSupabase(p) }
+
       if (res.ok) {
-        // Local bouw7_line_id bijwerken zodat een volgende sync de koppeling behoudt.
-        const comps = getWerkbegrotingComponenten()
-        let gewijzigd = false
-        for (const [compId, lineId] of Object.entries(res.lineIdPerComponent)) {
-          const c = comps.find(x => x.id === compId)
-          if (c && c.bouw7_line_id !== lineId) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: lineId }); gewijzigd = true }
-        }
-        if (gewijzigd) { const p = bouwPayload(); if (p) await syncWerkbegrotingNaarSupabase(p) }
         const delen: string[] = []
         if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
         if (res.bijgewerkt) delen.push(`${res.bijgewerkt} bijgewerkt`)

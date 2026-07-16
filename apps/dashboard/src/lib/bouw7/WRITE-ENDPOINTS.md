@@ -227,9 +227,32 @@ Afgeleid uit 625 bestaande bestelregels (de koppeling is 100% consistent) en bev
 schrijftests op 3869371. Let hierop bij het **lezen**: `ol.costType` als PSL-kostensoort
 interpreteren maakt van elke OA-regel (`1`) een arbeid-regel.
 
-> **Delete:** er is geen delete per regel, wél **`DELETE /project/{project}/contract-order-lines`**
-> (ongedocumenteerd, geeft 204) — die wist *alle* bestelregels van het project. Eén testregel
-> verwijder je dus in de Bouw7-UI. Zie `resetBouw7Bestelregels`.
+#### Verlopen `id` → 404, en waarom dat geen harde fout mag zijn
+Een in Bouw7 verwijderde regel waarvan EVA het id nog bewaart (o.a. ids die uit de import komen)
+geeft bij de upsert:
+```
+404 {"type":"entity_not_found","message":"Property with name \"id\", that contains a reference
+     to an Object with ID #<id> of type \"ContractOrderLine\" does not exist."}
+```
+`stuurWerkbegrotingBestelregelsBouw7` vangt dit af (`isOnbekendLineId`): bij *bijwerken* maakt het
+de regel opnieuw aan, bij *neutraliseren* is 'ie al weg. De koppeling wordt daarna zowel
+server-side als in localStorage gewist — beide zijn nodig, want `syncWerkbegrotingNaarSupabase`
+upsert `bouw7_line_id` vanuit de client-payload en zou het verlopen id anders terugschrijven.
+
+Let op de **discriminatie**: dezelfde 404 met `"Property with name \"id\""` verschijnt óók voor een
+onbekende PSL, maar dan met `of type "ProjectSecurityLink"`. Daarom checkt `isOnbekendLineId` op
+zowel het type `ContractOrderLine` als op ons eigen id-nummer — anders zou een verkeerde PSL
+stilletjes als "regel bestaat niet" worden weggeslikt.
+
+> **Partiële mislukking:** de push schrijft de al uitgedeelde `bouw7_line_id`'s ook weg als 'ie
+> halverwege afbreekt (`persisteerKoppelingen()` in de catch, plus `lineIdPerComponent` op het
+> `ok: false`-resultaat). Zonder dat staan die regels wél in Bouw7 maar kent EVA hun id niet, en
+> maakt de volgende push duplicaten.
+
+> **Delete** — twee routes, allebei ongedocumenteerd en allebei 204 (geverifieerd jul 2026):
+> - **`DELETE /contract-order-line`** met body `{ id }` → verwijdert **één** regel.
+> - **`DELETE /project/{project}/contract-order-lines`** → wist **álle** bestelregels van het
+>   project. Zie `resetBouw7Bestelregels`.
 > Niet te verwarren met `POST /contracts/purchase-order` (formele inkooporder met leverancier/status/termijnen →
 > voedt `contractCostAmount`, dat volgens EVA's eigen docs "klopt niet/0 in de praktijk"). Voor EVA-bestelregels
 > is `contract-order-line` de juiste route.
