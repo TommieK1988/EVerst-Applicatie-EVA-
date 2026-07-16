@@ -29,6 +29,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/$/, { title: 'Overzicht' }],
 
   // EVA
+  [/^\/wat-is-nieuw$/, { title: 'Wat is nieuw', breadcrumb: 'EVA' }],
   [/^\/vraag-eva$/, { title: 'Vraag EVA', breadcrumb: 'EVA' }],
   [/^\/bronnen$/, { title: 'Bronnen', breadcrumb: 'EVA' }],
   [/^\/bibliotheek$/, { title: 'Bibliotheek', breadcrumb: 'EVA' }],

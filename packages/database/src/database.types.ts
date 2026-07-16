@@ -631,6 +631,54 @@ export type Database = {
           },
         ]
       }
+      changelog: {
+        Row: {
+          aangemaakt_op: string
+          categorie: string
+          datum: string
+          gepubliceerd: boolean
+          id: string
+          module: string | null
+          omschrijving: string
+          titel: string
+        }
+        Insert: {
+          aangemaakt_op?: string
+          categorie?: string
+          datum: string
+          gepubliceerd?: boolean
+          id?: string
+          module?: string | null
+          omschrijving: string
+          titel: string
+        }
+        Update: {
+          aangemaakt_op?: string
+          categorie?: string
+          datum?: string
+          gepubliceerd?: boolean
+          id?: string
+          module?: string | null
+          omschrijving?: string
+          titel?: string
+        }
+        Relationships: []
+      }
+      changelog_gezien: {
+        Row: {
+          gezien_op: string
+          user_id: string
+        }
+        Insert: {
+          gezien_op?: string
+          user_id: string
+        }
+        Update: {
+          gezien_op?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           actief: boolean | null

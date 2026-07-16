@@ -34,6 +34,15 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/wat-is-nieuw$/, {
+    title: 'Wat is nieuw',
+    description: 'Een overzicht van alle nieuwe functies, verbeteringen en oplossingen die aan EVA zijn toegevoegd — een soort roadmap met afgeronde zaken. De nieuwste updates staan bovenaan.',
+    sections: [
+      { title: 'Melding van updates', body: 'Zodra er nieuwe updates zijn, verschijnt er een tellertje bij "Wat is nieuw" in het menu en een korte popup bij het inloggen. Beide verdwijnen zodra je deze pagina hebt bekeken.' },
+      { title: 'Categorieën', body: 'Elk item is gemarkeerd als Nieuw (nieuwe functie), Verbeterd (uitbreiding van iets bestaands) of Opgelost (opgeloste fout). Filter bovenaan op categorie om snel te vinden wat je zoekt.' },
+    ],
+  }],
+
   [/^\/bronnen$/, {
     title: 'Bronnen',
     description: 'Beheer de kennisbronnen die EVA gebruikt naast de database. Voeg interne documenten, handleidingen of productinformatie toe zodat EVA specifiekere en nauwkeurigere antwoorden geeft.',

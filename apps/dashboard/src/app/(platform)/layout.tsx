@@ -4,6 +4,7 @@ import ToastProvider from '@/components/taken/shared/ToastProvider'
 import MobileRedirect from '@/components/mobiel/MobileRedirect'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 import { getOngelezenNotificaties } from '@/app/(platform)/notificaties/actions'
+import { telOngelezenUpdates, getOngelezenUpdates } from '@/app/(platform)/wat-is-nieuw/actions'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -26,11 +27,13 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     }
   }
 
-  /* Medewerker-record + ongelezen-teller + ongelezen-lijst (voor auto-popup) parallel */
-  const [medewerker, aantalOngelezen, ongelezenNotificaties] = await Promise.all([
+  /* Medewerker-record + notificatie-teller/-lijst + changelog-teller/-lijst parallel */
+  const [medewerker, aantalOngelezen, ongelezenNotificaties, aantalNieuweUpdates, nieuweUpdates] = await Promise.all([
     getCurrentMedewerker(),
     telOngelezen(),
     getOngelezenNotificaties(8),
+    telOngelezenUpdates(),
+    getOngelezenUpdates(5),
   ])
   const rechten = await getEffectieveRechten(medewerker)
 
@@ -57,6 +60,8 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       userFotoUrl={medewerker?.foto_url}
       aantalOngelezen={aantalOngelezen}
       ongelezenNotificaties={ongelezenNotificaties}
+      aantalNieuweUpdates={aantalNieuweUpdates}
+      nieuweUpdates={nieuweUpdates}
       rechten={rechten}
     >
       <MobileRedirect />
