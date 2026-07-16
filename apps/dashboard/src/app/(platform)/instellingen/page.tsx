@@ -155,6 +155,14 @@ const calcOfferteItems: SettingsItem[] = [
     module: 'dossiers',
   },
   {
+    href: '/instellingen/document-sjablonen',
+    title: 'Documentsjablonen',
+    description: 'Word-sjablonen voor bewonersbrieven, garantiecertificaten en informatiebrieven.',
+    ready: true,
+    kicker: 'Documenten',
+    module: 'instellingen',
+  },
+  {
     href: '/instellingen/offerte-mail',
     title: 'Offerte-e-mail',
     description: 'Standaard onderwerp en tekst (met variabelen) voor het mailen van offertes.',

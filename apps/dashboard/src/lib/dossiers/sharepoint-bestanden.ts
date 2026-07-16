@@ -172,7 +172,18 @@ export async function koppelDossierMapViaLink(dossierId: string, shareLink: stri
 
 /* ─── Upload (bestanden meegestuurd bij een nieuwe aanvraag) ─────────────── */
 
-export type UploadResultaat = { ok: boolean; geuploaded: number; mapUrl?: string | null; fout?: string }
+/**
+ * `bestanden` bevat per geslaagd bestand de driveItem-gegevens, zodat een
+ * consument (documenten-module) het bestand kan terugvinden/linken. Consumenten
+ * die dat niet nodig hebben (offerte-archivering) negeren het veld.
+ */
+export type UploadResultaat = {
+  ok: boolean
+  geuploaded: number
+  mapUrl?: string | null
+  fout?: string
+  bestanden?: { naam: string; driveId: string | null; itemId: string | null; webUrl: string | null }[]
+}
 
 /** Container-pad ('root' of 'items/{id}') → Graph children-endpoint. */
 function childrenPad(ctx: DriveContext): string {
@@ -324,6 +335,7 @@ export async function uploadBuffersNaarDossierMap(
 
     let geuploaded = 0
     const fouten: string[] = []
+    const geplaatst: NonNullable<UploadResultaat['bestanden']> = []
     for (const b of bestanden) {
       try {
         const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}:/${encodeURIComponent(b.naam)}:/content`, {
@@ -331,7 +343,22 @@ export async function uploadBuffersNaarDossierMap(
           headers: { 'Content-Type': b.contentType || 'application/octet-stream' },
           body: b.bytes as unknown as BodyInit,
         })
-        if (res.ok) geuploaded++
+        if (res.ok) {
+          geuploaded++
+          // Graph geeft het aangemaakte driveItem terug; best-effort uitlezen zodat
+          // een onverwacht antwoord de upload niet alsnog laat "mislukken".
+          try {
+            const item = await res.json()
+            geplaatst.push({
+              naam: b.naam,
+              driveId: item?.parentReference?.driveId ?? driveId ?? null,
+              itemId: item?.id ?? null,
+              webUrl: item?.webUrl ?? null,
+            })
+          } catch {
+            geplaatst.push({ naam: b.naam, driveId: driveId ?? null, itemId: null, webUrl: null })
+          }
+        }
         else fouten.push(`${b.naam} (${res.status})`)
       } catch (e) {
         fouten.push(`${b.naam}: ${netteFout(e)}`)
@@ -342,6 +369,7 @@ export async function uploadBuffersNaarDossierMap(
       ok: fouten.length === 0,
       geuploaded,
       mapUrl,
+      bestanden: geplaatst,
       fout: fouten.length ? `Niet geüpload: ${fouten.join(', ')}` : undefined,
     }
   } catch (err) {

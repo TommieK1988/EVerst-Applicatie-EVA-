@@ -15,7 +15,7 @@ export default async function MedewerkersPage() {
   const { data } = await supabase
     .from('medewerkers')
     .select(
-      'id, voornaam, tussenvoegsel, achternaam, email, telefoon, foto_url, functie, afdeling, ' +
+      'id, voornaam, tussenvoegsel, achternaam, email, telefoon, mobiel, foto_url, functie, afdeling, ' +
       'extern, actief, uurtarief_verkoop, uurtarief_kostprijs, cao_schaal, cao_document_id, cao_trede, ' +
       'in_dienst_vanaf, uit_dienst_per, adres_straat, adres_postcode, adres_plaats, geboortedatum, ' +
       'werkmaatschappij_id, relatie_id, kleur, ploeg_id, standaard_uursoort_id, gebruiker_type, ' +

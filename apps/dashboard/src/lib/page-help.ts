@@ -1125,6 +1125,28 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Instellingen: Documentsjablonen ────────────────────────────────────
+  [/^\/instellingen\/document-sjablonen\/[^/]+$/, {
+    title: 'Instellingen — Documentsjabloon (editor)',
+    description: 'Bewerk één documentsjabloon: het Word-bestand, de invoervelden en de mailtekst. Rechts zie je een voorbeeld met testgegevens, zodat je het sjabloon kunt controleren zonder een echt dossier te kiezen.',
+    sections: [
+      { title: 'Word-bestand', body: 'De opmaak maak je in Word, niet in EVA. Upload een .docx of koppel er een uit SharePoint/OneDrive — die laatste kun je daarna rechtstreeks in Word Online bewerken. In het bestand zet je variabelen tussen accolades, bijvoorbeeld {geadresseerde.aanhef} of {uitvoerder.mobiel}; die worden bij het opstellen ingevuld.' },
+      { title: 'Variabelen', body: 'Klik in het variabelenpaneel op een variabele om hem te kopiëren en in Word te plakken. Alle zes de projectrollen zijn beschikbaar met naam, functie, telefoon, mobiel, e-mail en foto. Let op: een afbeeldings-tag ({%…}) moet alléén in zijn eigen alinea staan, anders mislukt het opstellen.' },
+      { title: 'Invoervelden', body: 'Sommige gegevens staan niet in het dossier — de omschrijving van de werkzaamheden, een garantietermijn. Maak daar een invoerveld voor; het wordt dan gevraagd bij het opstellen en is in Word beschikbaar als {invoer.sleutel}. Een garantietermijn is een besluit per document, geen dossiergegeven.' },
+      { title: 'Template controleren', body: 'Met "Template controleren" scan je het Word-bestand op fouten (niet-afgesloten tags, verkeerd geplaatste afbeeldingen) en op variabelen die EVA niet kent. Je krijgt de omringende tekst te zien, zodat je het in Word kunt terugzoeken.' },
+    ],
+  }],
+
+  [/^\/instellingen\/document-sjablonen$/, {
+    title: 'Instellingen — Documentsjablonen',
+    description: 'Beheer de Word-sjablonen voor bewonersbrieven, garantiecertificaten en tussentijdse informatiebrieven. Medewerkers gebruiken ze op het Bestanden-tab van een dossier via "Document opstellen".',
+    sections: [
+      { title: 'Sjablonen beheren', body: 'Klik op "+ Nieuw sjabloon", kies een documentsoort en koppel een Word-bestand. Met "Kopieer" dupliceer je een bestaand sjabloon — handig als je varianten per werkmaatschappij wilt.' },
+      { title: 'Zichtbaarheid', body: 'Een sjabloon zonder Word-template is niet bruikbaar en wordt in het dossier niet aangeboden; dat zie je hier aan een waarschuwing. Zet een sjabloon op inactief om het tijdelijk te verbergen zonder het te verwijderen.' },
+      { title: 'Alleen beheerders', body: 'Sjabloonbeheer is voorbehouden aan beheerders: een kapot template raakt iedereen die er een brief mee opstelt.' },
+    ],
+  }],
+
   // ── Management ─────────────────────────────────────────────────────────
   [/^\/management\/dashboard$/, {
     title: 'Management — Dashboard',
@@ -1328,8 +1350,10 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
 
     case 'bestanden':
       return T('Bestanden',
-        'Alle documenten bij dit dossier: foto\'s, tekeningen, opnamerapporten, offertes en correspondentie. De bestanden komen live uit Bouw7 en (indien gekoppeld) uit de SharePoint-dossiermap.',
+        'Alle documenten bij dit dossier: foto\'s, tekeningen, opnamerapporten, offertes en correspondentie. De bestanden komen live uit Bouw7 en (indien gekoppeld) uit de SharePoint-dossiermap. Bovenaan stel je zelf documenten op vanuit een sjabloon.',
         [
+          { title: 'Document opstellen', body: 'Met "Document opstellen" maak je een bewonersbrief, garantiecertificaat of informatiebrief op basis van een sjabloon. De gegevens van het dossier (opdrachtgever, werkadres, projectrollen met telefoonnummers, planning) worden automatisch ingevuld; alleen wat níet in het dossier staat — zoals de omschrijving van de werkzaamheden of een garantietermijn — vul je zelf in. Je krijgt eerst een voorbeeld te zien en kunt daarna downloaden als PDF of Word, of het direct mailen vanaf je eigen Outlook.' },
+          { title: 'Waar het document blijft', body: 'Een opgesteld document wordt bewaard in de SharePoint-dossiermap en verschijnt daardoor ook in de SharePoint-lijst hieronder. In de lijst "Documenten" zie je wie wat wanneer heeft opgesteld en of het gemaild is. Met "Opnieuw" maak je een nieuwe versie met dezelfde ingevulde gegevens.' },
           { title: 'Bronnen', body: 'De lijst toont de projectbestanden uit Bouw7 en, als de koppeling actief is, de bestanden uit de SharePoint-map van het dossier — samengevoegd in één overzicht.' },
           { title: 'Downloaden', body: 'Klik op een bestand om het te downloaden. Downloads lopen via een beveiligde EVA-proxy, dus je hebt geen aparte Bouw7- of SharePoint-login nodig.' },
         ])

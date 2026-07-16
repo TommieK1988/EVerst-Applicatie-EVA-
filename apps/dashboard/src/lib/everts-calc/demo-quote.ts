@@ -104,6 +104,7 @@ export function buildDemoDossierContext(): DossierContext {
     titel: 'Onderhoud- en schilderwerk Voorbeeldpand',
     referentie: 'Inkoopnr. 2026-0042',
     opdracht_referentie: 'OPO-2026-0042',
+    vve_code: 'VVE-0042',
     werkadres: 'Projectstraat 12, 3511 AB Utrecht',
     werkadres_naam: 'Voorbeeldpand VvE',
     werkadres_straat: 'Projectstraat 12',

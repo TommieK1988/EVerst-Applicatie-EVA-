@@ -11,6 +11,7 @@ import {
   type SharePointBestand,
 } from '@/lib/dossiers/sharepoint-bestanden'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
+import DocumentenKaart from '@/components/documenten/DocumentenKaart'
 
 const fmtGrootte = (bytes: number | null): string => {
   if (bytes == null) return '—'
@@ -38,6 +39,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
   return (
     <div className="px-8 py-7 space-y-5">
+      {/* Opstellen bovenaan; wat je hier maakt landt in SharePoint en verschijnt
+          daardoor vanzelf in de SharePoint-kaart hieronder. */}
+      <DocumentenKaart dossierId={dossierId} />
       <Bouw7Kaart data={bouw7} />
       <SharePointKaart dossierId={dossierId} />
     </div>

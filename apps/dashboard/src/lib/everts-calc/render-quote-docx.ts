@@ -1,8 +1,8 @@
 /**
  * render-quote-docx.ts
  *
- * Gedeelde Word-render-functie voor offertes. Vult een .docx-template via
- * docxtemplater met de offerte-context en geeft een ingevuld .docx terug.
+ * Offerte-specifieke Word-render: bouwt de offerte-context op en laat de generieke
+ * engine (`lib/documenten/render-docx.ts`) het template vullen.
  *
  * Wordt gebruikt door:
  *  - de /docx-endpoint (directe Word-download)
@@ -14,61 +14,22 @@
  */
 
 import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
-import { fixSplitDocxTags, stripHtml } from './docx-utils'
+import { stripHtml } from './docx-utils'
 import type { Quote } from './types-quotes'
-import { appGraphGetRaw } from '../o365/graph'
+import { renderDocx, loadTemplateBuffer, fetchImage } from '../documenten/render-docx'
 
-/** Gegooid wanneer een layout (nog) geen Word-template heeft gekoppeld. */
-export class GeenTemplateError extends Error {
-  constructor() {
-    super('Geen Word-template geconfigureerd voor deze layout.')
-    this.name = 'GeenTemplateError'
-  }
-}
+// De engine woont in lib/documenten/render-docx.ts. Deze re-exports houden alle
+// bestaande import-paden (pdf/docx/pdf-preview/docx-preview-routes) ongewijzigd werkend.
+export { formatDocxError, GeenTemplateError } from '../documenten/render-docx'
 
 /**
- * Haalt de .docx-template-buffer op voor een layout. SharePoint/OneDrive-templates
- * worden via Microsoft Graph (app-only) opgehaald; anders uit de Supabase-storage-URL.
+ * Haalt de .docx-template-buffer op voor een offerte-layout.
+ * Alias van de generieke `loadTemplateBuffer` — `quote_layouts` en `document_sjablonen`
+ * delen bewust dezelfde `docx_template_*`-kolomnamen.
  *
  * @throws GeenTemplateError als er geen template gekoppeld is.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function loadQuoteTemplateBuffer(rawLayout: any): Promise<Buffer> {
-  const bron: string | null = rawLayout?.docx_template_bron ?? null
-
-  if ((bron === 'sharepoint' || bron === 'onedrive') && rawLayout?.docx_template_drive_id && rawLayout?.docx_template_item_id) {
-    return appGraphGetRaw(
-      `/drives/${rawLayout.docx_template_drive_id}/items/${rawLayout.docx_template_item_id}/content`,
-    )
-  }
-
-  const url: string | null = rawLayout?.docx_template_url ?? null
-  if (url) {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`Template ophalen mislukt: HTTP ${res.status}`)
-    return Buffer.from(await res.arrayBuffer())
-  }
-
-  throw new GeenTemplateError()
-}
-
-// 1×1 transparante PNG — gebruikt als een image-tag in het template staat maar er
-// geen afbeelding beschikbaar is, zodat de image-module niet crasht.
-const LEGE_PIXEL = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-  'base64',
-)
-
-/** Max afmetingen (px @96dpi) waarbinnen een afbeelding wordt geschaald. */
-const LOGO_MAX = { w: 240, h: 120 }
-/** Max afmetingen voor werkomschrijving-foto's (groter dan een logo). */
-const PHOTO_MAX = { w: 480, h: 360 }
-/**
- * Kleiner max-kader voor foto's binnen een tabelcel (tag {%foto_klein}). 3,7 inch
- * breed @96dpi, zodat de foto in een tabelkolom past en niet wordt afgesneden.
- * Zelfde 4:3-verhouding als PHOTO_MAX.
- */
-const PHOTO_MAX_KLEIN = { w: 355, h: 266 }
+export const loadQuoteTemplateBuffer = loadTemplateBuffer
 
 interface ExtraImages {
   /** Handtekening-bytes (optioneel; tag {%handtekening}). */
@@ -115,192 +76,7 @@ export async function renderQuoteDocx(
     is_concept: extra.is_concept ?? false,
   }
 
-  const PizZip = (await import('pizzip')).default
-  const Docxtemplater = (await import('docxtemplater')).default
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ImageModule = (await import('docxtemplater-image-module-free' as any)).default
-  const { imageSize } = await import('image-size')
-
-  const zip = new PizZip(templateBuffer as ArrayBuffer)
-  fixSplitDocxTags(zip)
-
-  const imageModule = new ImageModule({
-    centered: false,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getImage(tagValue: any) {
-      if (!tagValue) return LEGE_PIXEL
-      if (Buffer.isBuffer(tagValue)) return tagValue
-      // Foto's komen binnen als base64 data-URL ("data:image/…;base64,XXXX") of als
-      // kale base64-string; beide moeten binair worden gedecodeerd (niet als utf8).
-      if (typeof tagValue === 'string') {
-        const komma = tagValue.indexOf(',')
-        const base64 = tagValue.startsWith('data:') && komma >= 0 ? tagValue.slice(komma + 1) : tagValue
-        try {
-          const buf = Buffer.from(base64, 'base64')
-          return buf.length > 0 ? buf : LEGE_PIXEL
-        } catch {
-          return LEGE_PIXEL
-        }
-      }
-      return Buffer.from(tagValue)
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getSize(img: Buffer, tagValue: any, tagName?: string) {
-      if (!tagValue) return [1, 1]
-      const max =
-        tagName === 'foto' ? PHOTO_MAX : tagName === 'foto_klein' ? PHOTO_MAX_KLEIN : LOGO_MAX
-      try {
-        const dim = imageSize(new Uint8Array(img))
-        // Alleen schalen als beide werkelijke afmetingen bekend zijn — dan blijft
-        // de verhouding gegarandeerd behouden. Bij onbekende afmeting NIET naar het
-        // max-kader forceren (dat zou de foto uitrekken/vervormen).
-        if (dim.width && dim.height) {
-          return fitSize(dim.width, dim.height, max)
-        }
-      } catch {
-        // valt door naar de veilige fallback hieronder
-      }
-      // Verhouding onbekend: kies een vierkant binnen de max zodat de foto niet
-      // actief naar een afwijkende verhouding wordt uitgerekt.
-      const veilig = Math.min(max.w, max.h)
-      return [veilig, veilig]
-    },
-  })
-
-  const doc = new Docxtemplater(zip, {
-    modules: [imageModule],
-    paragraphLoop: true,
-    linebreaks: true,
-    parser: dottedTagParser,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    nullGetter: (part: any) => (part.module ? '' : ''),
-  })
-
-  try {
-    doc.render(docxCtx)
-  } catch (renderErr: unknown) {
-    throw new Error(formatDocxError(renderErr))
-  }
-
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
-}
-
-/**
- * Dotted-path parser voor docxtemplater.
- *
- * docxtemplater lost standaard alleen platte tags (`{naam}`) en scope-tags op —
- * NIET de dotted notatie (`{offerte.nummer}`, `{klant.naam}`, `{totalen.totaal}`)
- * waar het hele variabelenpaneel op is gebaseerd. Zonder deze parser bleven al die
- * variabelen leeg. De parser splitst op `.` en zoekt de waarde in de huidige scope
- * en — voor gebruik binnen loops — in de omliggende scopes. `{.}` geeft de scope
- * zelf terug (voor string-array-loops zoals `behandelingen_overzicht`).
- */
-function dottedTagParser(tag: string): {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  get: (scope: any, context?: any) => any
-} {
-  const naam = tag.trim()
-  if (naam === '.') return { get: (scope) => scope }
-  const path = naam.split('.')
-  return {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    get(scope: any, context?: any) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const list: any[] = (context && context.scopeList) || [scope]
-      // Innermost scope eerst, dan naar buiten (voor tags binnen loops).
-      for (let i = list.length - 1; i >= 0; i--) {
-        let cur = list[i]
-        let ok = true
-        for (const key of path) {
-          if (cur != null && typeof cur === 'object' && cur[key] !== undefined) cur = cur[key]
-          else { ok = false; break }
-        }
-        if (ok) return cur
-      }
-      return undefined
-    },
-  }
-}
-
-/** Schaalt (w,h) zodat het binnen `max` past, met behoud van beeldverhouding. */
-/**
- * Schaalt (w×h) proportioneel zodat het binnen `max` past. Er wordt nooit
- * vergroot (ratio ≤ 1), nooit bijgesneden en de verhouding wordt nooit gewijzigd:
- * dezelfde schaalfactor gaat op breedte én hoogte. Bij ongeldige invoer een
- * vierkant binnen de max i.p.v. het volledige (mogelijk vervormende) kader.
- */
-function fitSize(w: number, h: number, max: { w: number; h: number }): [number, number] {
-  if (w <= 0 || h <= 0) {
-    const veilig = Math.min(max.w, max.h)
-    return [veilig, veilig]
-  }
-  const ratio = Math.min(max.w / w, max.h / h, 1)
-  return [Math.round(w * ratio), Math.round(h * ratio)]
-}
-
-async function fetchImage(url?: string | null): Promise<Buffer | null> {
-  if (!url) return null
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    return Buffer.from(await res.arrayBuffer())
-  } catch {
-    return null
-  }
-}
-
-/** Nederlandse labels per docxtemplater-fout-id. */
-const DOCX_FOUT_LABELS: Record<string, string> = {
-  unclosed_tag: 'Tag niet afgesloten (ontbrekende `}` of gesplitste tag)',
-  unopened_tag: 'Sluit-teken zonder open-tag (losse `}` of gesplitste tag)',
-  unclosed_loop: 'Loop niet afgesloten',
-  unopened_loop: 'Loop-sluit zonder loop-start',
-  closing_tag_does_not_match_opening_tag: 'Loop verkeerd genest / verkeerde sluit-tag',
-  duplicate_open_tag: 'Dubbele `{` — Word heeft de tag opgeknipt',
-  duplicate_close_tag: 'Dubbele `}` — Word heeft de tag opgeknipt',
-  raw_tag_outer_invalid: 'Afbeeldings-/raw-tag op een ongeldige plek',
-  raw_xml_tag_should_be_only_text_in_paragraph: 'Afbeeldings-tag ({%…}) moet alleen in een eigen alinea staan',
-  scopeparser_execution_failed: 'Fout bij het verwerken van de variabele',
-}
-
-/** Kort de omringende template-tekst in tot een leesbaar venster rond de fout-tag. */
-function docxContextSnippet(context: string, xtag: string): string {
-  if (!context) return ''
-  const clean = context.replace(/\s+/g, ' ').trim()
-  const W = 48
-  const zoek = xtag ? clean.indexOf(xtag) : -1
-  let start = 0
-  let end = Math.min(clean.length, 2 * W)
-  if (zoek >= 0) {
-    start = Math.max(0, zoek - W)
-    end = Math.min(clean.length, zoek + xtag.length + W)
-  }
-  return (start > 0 ? '…' : '') + clean.slice(start, end) + (end < clean.length ? '…' : '')
-}
-
-/**
- * Zet een docxtemplater-renderfout om in een leesbare, LOKALISEERBARE melding:
- * per fout het fouttype, de betreffende tag en een stukje omringende tekst
- * (uit `properties.context`) zodat de gebruiker het in Word kan terugzoeken.
- */
-export function formatDocxError(renderErr: unknown): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const e = renderErr as any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subs: any[] = e?.properties?.errors?.length
-    ? e.properties.errors
-    : (e?.properties ? [e] : [])
-
-  const blokken: string[] = []
-  for (const sub of subs) {
-    const p = sub?.properties ?? {}
-    const label = DOCX_FOUT_LABELS[p.id as string] ?? (p.explanation ?? sub?.message ?? 'Onbekende fout')
-    const xtag: string = p.xtag ?? ''
-    const snippet = docxContextSnippet(p.context ?? '', xtag)
-    let blok = `• ${label}`
-    if (xtag) blok += `  —  tag {${xtag}}`
-    if (snippet) blok += `\n   zoek in Word naar: "${snippet}"`
-    blokken.push(blok)
-  }
-  return blokken.length ? blokken.join('\n\n') : String(renderErr)
+  // Geen opties: de engine-defaults (LOGO_MAX, en PHOTO_MAX/PHOTO_MAX_KLEIN voor
+  // {%foto}/{%foto_klein}) zijn precies het bestaande offerte-gedrag.
+  return renderDocx(templateBuffer, docxCtx)
 }
