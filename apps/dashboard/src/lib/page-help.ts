@@ -34,6 +34,58 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Materieelbeheer (in ontwikkeling) ──────────────────────────────────
+  [/^\/materieelbeheer\/dashboard$/, {
+    title: 'Materieel-dashboard',
+    description: 'Managementoverzicht van je materieel: totale waarde, aantallen per status, verlopen keuringen, onderhoudskosten, de tien meest gerepareerde machines en de verdeling over medewerkers.',
+    sections: [
+      { title: 'Keuringen', body: 'Het blok "Keuringen — verlopen of bijna" gebruikt de waarschuwingstermijnen uit Instellingen. Klik een regel om direct naar het paspoort te gaan.' },
+      { title: 'Top 10 gerepareerd', body: 'Toont waar je onderhoudsbudget heen gaat — handig om te beslissen of vervangen goedkoper is dan blijven repareren.' },
+    ],
+  }],
+  [/^\/materieelbeheer\/controle$/, {
+    title: 'Periodieke controle',
+    description: 'Controleer in ± 2 minuten het materieel dat op jouw naam staat. Markeer per item of het aanwezig is en werkt, beschadigd is of vermist. Beschadigd zet de status op defect, vermist op vermist.',
+    sections: [
+      { title: 'Frequentie', body: 'Hoe vaak controle nodig is (bijv. eerste maandag van de maand) stel je in bij Instellingen › Controle & waarschuwingen.' },
+      { title: 'Gedeeltelijk', body: 'Je kunt een deel afronden en later verdergaan; alleen aangevinkte items worden vastgelegd.' },
+    ],
+  }],
+  [/^\/materieelbeheer\/instellingen$/, {
+    title: 'Materieel-instellingen',
+    description: 'Beheer de zaken die in de tijd wijzigen: teams/servicebussen, keuringsoorten en de controle- en waarschuwingstermijnen. Zo blijft het systeem flexibel zonder codewijziging.',
+    sections: [
+      { title: 'Teams & bussen', body: 'Maak servicebussen, keten en ploegen aan zodat je materieel op teamniveau kunt toewijzen (bijv. "Servicebus 6").' },
+      { title: 'Keuringsoorten', body: 'Bepaal welke keuringen je kunt vastleggen (APK, CE, elektra, …). Deze lijst verschijnt bij het toevoegen van een keuring aan materieel.' },
+      { title: 'Waarschuwingstermijnen', body: 'Stel in hoeveel dagen vóór verval je gewaarschuwd wilt worden voor keuringen, APK en garantie.' },
+    ],
+  }],
+  [/^\/materieelbeheer\/nieuw$/, {
+    title: 'Nieuw materieel',
+    description: 'Registreer een nieuw stuk materieel — gereedschap, machine, aanhanger, keet, steiger, meetapparatuur of PBM. Na opslaan krijgt het object automatisch een QR-code die je op een sticker kunt printen.',
+    sections: [
+      { title: 'Verplicht', body: 'Alleen een omschrijving en categorie zijn verplicht. Alle andere velden kun je later aanvullen vanaf het paspoort.' },
+      { title: 'QR-code', body: 'De QR-code wordt automatisch gegenereerd en verwijst naar het digitale paspoort. Scannen opent direct de gegevens, status en toewijzing.' },
+    ],
+  }],
+  [/^\/materieelbeheer\/[^/]+$/, {
+    title: 'Digitaal paspoort',
+    description: 'Het volledige paspoort van dit stuk materieel: identificatie, aanschafwaarde, status, toewijzing en de QR-code. Vanaf hier beheer je alles rond dit object.',
+    sections: [
+      { title: 'Status', body: 'De statuspil toont in één oogopslag of iets in gebruik, beschikbaar, gereserveerd, in onderhoud, defect of vermist is.' },
+      { title: 'QR-sticker', body: 'Gebruik "Sticker printen" om alleen de QR-code met omschrijving en inventarisnummer af te drukken en op het materieel te plakken.' },
+    ],
+  }],
+  [/^\/materieelbeheer$/, {
+    title: 'Materieelbeheer',
+    description: 'De centrale materieeldatabase. Elk stuk gereedschap, elke machine, aanhanger en keet heeft een eigen digitaal paspoort met QR-code, status en toewijzing. Doel: minder zoekgeraakt gereedschap, minder onnodige aankopen en aantoonbaar veilig materieel.',
+    sections: [
+      { title: 'Overzicht', body: 'De tabel toont al het actieve materieel. Klik op een rij om het paspoort te openen. Kolommen zijn aan/uit te zetten en te sorteren via het kolommenmenu.' },
+      { title: 'Nieuw toevoegen', body: 'Via "Nieuw materieel" registreer je een object in seconden. De QR-code wordt automatisch aangemaakt.' },
+      { title: 'In ontwikkeling', body: 'Deze module is nog in aanbouw. Toewijzing (persoonlijk/team/algemeen), periodieke controle, keuringsbewaking en rapportages volgen in latere fases.' },
+    ],
+  }],
+
   [/^\/bronnen$/, {
     title: 'Bronnen',
     description: 'Beheer de kennisbronnen die EVA gebruikt naast de database. Voeg interne documenten, handleidingen of productinformatie toe zodat EVA specifiekere en nauwkeurigere antwoorden geeft.',

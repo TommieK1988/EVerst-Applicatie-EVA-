@@ -67,6 +67,15 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/taken\/lijsten$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
   [/^\/taken$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
 
+  // Materieelbeheer (sub-app, in ontwikkeling)
+  [/^\/materieelbeheer\/dashboard$/, { title: 'Materieelbeheer › Dashboard', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer\/controle$/, { title: 'Materieelbeheer › Controle', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer\/instellingen$/, { title: 'Materieelbeheer › Instellingen', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer\/nieuw$/, { title: 'Materieelbeheer › Nieuw materieel', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer\/[^/]+\/bewerken$/, { title: 'Materieelbeheer › Bewerken', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer\/[^/]+$/, { title: 'Materieelbeheer › Paspoort', breadcrumb: 'Apps' }],
+  [/^\/materieelbeheer$/, { title: 'Materieelbeheer', breadcrumb: 'Apps' }],
+
   // Wagenpark (sub-app)
   [/^\/wagenpark\/voertuigen\/nieuw$/, { title: 'Wagenpark › Voertuigen › Nieuw', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/voertuigen\/[^/]+$/, { title: 'Wagenpark › Voertuigen › Detail', breadcrumb: 'Apps' }],
@@ -165,6 +174,7 @@ const SLUG_LABELS: Record<string, string> = {
   'mijn-taken': 'Mijn taken', 'account': 'Mijn account',
   // Apps
   'formulieren': 'Formulieren', 'taken': 'Actielijsten', 'houtrotherstel': 'Houtrotherstel',
+  'materieelbeheer': 'Materieelbeheer',
   'everts-calc': 'EvertsCalc', 'calculaties': 'Calculaties', 'quotes': 'Offertes',
   'sjablonen': 'Sjablonen', 'overzicht': 'Overzicht',
   // Instellingen
@@ -194,6 +204,7 @@ const BREADCRUMB_BY_ROOT: Record<string, string> = {
   'relaties': 'Beheer', 'medewerkers': 'Beheer', 'wagenpark': 'Beheer', 'kam': 'Beheer',
   'facturen': 'Financieel', 'management': 'Financieel',
   'formulieren': 'Apps', 'taken': 'Apps', 'houtrotherstel': 'Apps', 'everts-calc': 'Apps',
+  'materieelbeheer': 'Apps',
   'instellingen': 'Platform', 'account': 'Account', 'mijn-taken': 'Persoonlijk',
 }
 
