@@ -19,7 +19,9 @@ function euro(v: number): string {
 
 type ObjRow = {
   id: string; omschrijving: string; status: MaterieelStatus; categorie: MaterieelCategorie
-  aanschafwaarde: number | null; boekwaarde: number | null; toegewezen_medewerker_id: string | null; garantie_tot: string | null
+  aanschafwaarde: number | null; boekwaarde: number | null; garantie_tot: string | null
+  toegewezen_medewerker_id: string | null; toegewezen_team_id: string | null
+  laatst_gescand_door: string | null; laatst_gescand_at: string | null
 }
 type KeuringRow = { object_id: string; soort: string; geldig_tot: string | null }
 type OnderhoudRow = { object_id: string; kosten: number | null }
@@ -29,7 +31,7 @@ export default async function MaterieelDashboardPage() {
   const supabase = createAdminClient() as any
 
   const [objRes, keurRes, ondRes, medewerkerOpties, instellingen] = await Promise.all([
-    supabase.from('materieel_objecten').select('id, omschrijving, status, categorie, aanschafwaarde, boekwaarde, toegewezen_medewerker_id, garantie_tot').eq('actief', true),
+    supabase.from('materieel_objecten').select('id, omschrijving, status, categorie, aanschafwaarde, boekwaarde, garantie_tot, toegewezen_medewerker_id, toegewezen_team_id, laatst_gescand_door, laatst_gescand_at').eq('actief', true),
     supabase.from('materieel_keuringen').select('object_id, soort, geldig_tot'),
     supabase.from('materieel_onderhoud').select('object_id, kosten'),
     getMedewerkerOpties(),
@@ -63,6 +65,18 @@ export default async function MaterieelDashboardPage() {
   const top10 = [...reparatiesPer.entries()]
     .map(([id, aantal]) => ({ id, aantal, naam: objMap.get(id)?.omschrijving ?? 'Onbekend' }))
     .sort((a, b) => b.aantal - a.aantal).slice(0, 10)
+
+  // Algemeen gebruik: geen medewerker en geen team gekoppeld. Toon wie het als
+  // laatste in handen had (laatste scan), zodat het traceerbaar blijft.
+  const algemeenGebruik = objecten
+    .filter((o) => !o.toegewezen_medewerker_id && !o.toegewezen_team_id)
+    .map((o) => ({
+      id: o.id,
+      naam: o.omschrijving,
+      laatsteGebruiker: o.laatst_gescand_door ? medewerkerNaam.get(o.laatst_gescand_door) ?? 'Onbekend' : null,
+      wanneer: o.laatst_gescand_at,
+    }))
+    .sort((a, b) => (b.wanneer ?? '').localeCompare(a.wanneer ?? ''))
 
   // Gereedschap per medewerker
   const perMedewerker = new Map<string, number>()
@@ -114,6 +128,20 @@ export default async function MaterieelDashboardPage() {
             <Link key={t.id} href={`/materieelbeheer/${t.id}`} style={{ ...rijStyle, textDecoration: 'none' }}>
               <span style={{ fontSize: 13, color: 'var(--fg)' }}>{i + 1}. {t.naam}</span>
               <strong style={{ fontSize: 13 }}>{t.aantal}×</strong>
+            </Link>
+          ))}
+        </Blok>
+
+        {/* Algemeen gebruik — wie had het als laatste */}
+        <Blok titel="Algemeen gebruik — laatst in bezit">
+          {algemeenGebruik.length === 0 ? <Leeg tekst="Alles staat op naam of op een team" /> : algemeenGebruik.slice(0, 10).map((a) => (
+            <Link key={a.id} href={`/materieelbeheer/${a.id}`} style={{ ...rijStyle, textDecoration: 'none' }}>
+              <span style={{ fontSize: 13, color: 'var(--fg)' }}>{a.naam}</span>
+              <span style={{ fontSize: 12, color: a.laatsteGebruiker ? 'var(--fg-soft)' : 'var(--fg-muted)', textAlign: 'right' }}>
+                {a.laatsteGebruiker
+                  ? <>{a.laatsteGebruiker}{a.wanneer && <span style={{ color: 'var(--fg-muted)' }}> · {new Date(a.wanneer).toLocaleDateString('nl-NL')}</span>}</>
+                  : 'nog niet gescand'}
+              </span>
             </Link>
           ))}
         </Blok>

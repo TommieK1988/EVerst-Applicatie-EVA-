@@ -6,11 +6,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { PageHeader, Button } from '@/components/ui'
-import { materieelObjectSchema, type MaterieelObjectInput } from '@/lib/materieel/validations'
+import { nieuwMaterieelSchema, type NieuwMaterieelInput } from '@/lib/materieel/validations'
 import {
   MATERIEEL_CATEGORIEEN, CATEGORIE_LABELS,
   MATERIEEL_STATUSSEN, STATUS_META,
-  type MaterieelObject,
+  type MaterieelObject, type Optie,
 } from '@/lib/materieel/types'
 import { maakMaterieelObject, updateMaterieelObject } from '@/app/(platform)/materieelbeheer/actions'
 
@@ -38,17 +38,20 @@ function Veld({ label, children, fout }: { label: string; children: React.ReactN
 type Props = {
   /** Meegeven om te bewerken; weglaten = nieuw object. */
   bestaand?: MaterieelObject
+  /** Voor de medewerker-keuze bij aanmaken. */
+  medewerkerOpties?: Optie[]
 }
 
-export default function MaterieelForm({ bestaand }: Props) {
+export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props) {
   const router = useRouter()
   const bewerken = !!bestaand
 
   const {
     register, handleSubmit, formState: { errors, isSubmitting },
-  } = useForm<MaterieelObjectInput>({
-    resolver: zodResolver(materieelObjectSchema),
+  } = useForm<NieuwMaterieelInput>({
+    resolver: zodResolver(nieuwMaterieelSchema),
     defaultValues: {
+      toegewezen_medewerker_id: '',
       omschrijving: bestaand?.omschrijving ?? '',
       categorie: bestaand?.categorie ?? 'gereedschap',
       status: bestaand?.status ?? 'beschikbaar',
@@ -65,7 +68,7 @@ export default function MaterieelForm({ bestaand }: Props) {
     },
   })
 
-  async function onSubmit(waarden: MaterieelObjectInput) {
+  async function onSubmit(waarden: NieuwMaterieelInput) {
     const res = bewerken
       ? await updateMaterieelObject(bestaand!.id, waarden)
       : await maakMaterieelObject(waarden)
@@ -84,8 +87,8 @@ export default function MaterieelForm({ bestaand }: Props) {
       <PageHeader eyebrow="Materieelbeheer" title={bewerken ? 'Materieel bewerken' : 'Nieuw materieel'} />
 
       <form onSubmit={handleSubmit(onSubmit)} style={{ maxWidth: 720, marginTop: 16 }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16,
+        <div className="materieel-form-grid" style={{
+          display: 'grid', gap: 16,
           background: 'var(--bg-elev, var(--bg))', border: '1px solid var(--border)',
           borderRadius: 12, padding: 20,
         }}>
@@ -94,6 +97,22 @@ export default function MaterieelForm({ bestaand }: Props) {
               <input {...register('omschrijving')} style={inputStyle} placeholder="Bijv. Festool boormachine" />
             </Veld>
           </div>
+
+          {!bewerken && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Veld label="Toewijzen aan medewerker" fout={errors.toegewezen_medewerker_id?.message}>
+                <select {...register('toegewezen_medewerker_id')} style={inputStyle}>
+                  <option value="">— Algemeen gebruik (niemand persoonlijk) —</option>
+                  {medewerkerOpties.map((o) => (
+                    <option key={o.id} value={o.id}>{o.naam}</option>
+                  ))}
+                </select>
+              </Veld>
+              <p style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
+                Kies je niemand, dan staat het materieel voor algemeen gebruik. Later wijzigen kan via Toewijzen op het paspoort.
+              </p>
+            </div>
+          )}
 
           <Veld label="Categorie *" fout={errors.categorie?.message}>
             <select {...register('categorie')} style={inputStyle}>
@@ -139,11 +158,11 @@ export default function MaterieelForm({ bestaand }: Props) {
             <input type="date" {...register('garantie_tot')} style={inputStyle} />
           </Veld>
 
-          <Veld label="Aanschafwaarde (€)" fout={errors.aanschafwaarde?.message}>
+          <Veld label="Aanschafwaarde (€ excl. btw)" fout={errors.aanschafwaarde?.message}>
             <input type="number" step="0.01" min="0" {...register('aanschafwaarde')} style={inputStyle} />
           </Veld>
 
-          <Veld label="Boekwaarde (€)" fout={errors.boekwaarde?.message}>
+          <Veld label="Boekwaarde (€ excl. btw)" fout={errors.boekwaarde?.message}>
             <input type="number" step="0.01" min="0" {...register('boekwaarde')} style={inputStyle} />
           </Veld>
 
@@ -163,6 +182,14 @@ export default function MaterieelForm({ bestaand }: Props) {
           </Button>
         </div>
       </form>
+
+      {/* Twee kolommen op desktop, één op telefoon. */}
+      <style>{`
+        .materieel-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        @media (max-width: 640px) {
+          .materieel-form-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
     </div>
   )
 }

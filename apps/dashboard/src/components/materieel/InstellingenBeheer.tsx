@@ -8,12 +8,16 @@ import Modal, { modalInput, modalLabel } from './Modal'
 import { maakTeam, updateTeam, archiveerTeam, updateInstellingen } from '@/app/(platform)/materieelbeheer/beheer-actions'
 import {
   TEAM_TYPES, TEAM_TYPE_LABELS, CONTROLE_FREQUENTIES, FREQUENTIE_LABELS,
-  type MaterieelTeam, type MaterieelInstellingen, type TeamType, type KeuringSoort,
+  type MaterieelTeam, type MaterieelInstellingen, type TeamType, type KeuringSoort, type Optie,
 } from '@/lib/materieel/types'
 
 type Tab = 'teams' | 'controle' | 'keuringen'
 
-export default function InstellingenBeheer({ teams, instellingen }: { teams: MaterieelTeam[]; instellingen: MaterieelInstellingen }) {
+export default function InstellingenBeheer({ teams, instellingen, medewerkerOpties }: {
+  teams: MaterieelTeam[]
+  instellingen: MaterieelInstellingen
+  medewerkerOpties: Optie[]
+}) {
   const [tab, setTab] = React.useState<Tab>('teams')
 
   return (
@@ -32,7 +36,7 @@ export default function InstellingenBeheer({ teams, instellingen }: { teams: Mat
         ))}
       </div>
 
-      {tab === 'teams' && <TeamsTab teams={teams} />}
+      {tab === 'teams' && <TeamsTab teams={teams} medewerkerOpties={medewerkerOpties} />}
       {tab === 'controle' && <ControleTab instellingen={instellingen} />}
       {tab === 'keuringen' && <KeuringenTab instellingen={instellingen} />}
     </div>
@@ -41,10 +45,11 @@ export default function InstellingenBeheer({ teams, instellingen }: { teams: Mat
 
 /* ── Teams ── */
 
-function TeamsTab({ teams }: { teams: MaterieelTeam[] }) {
+function TeamsTab({ teams, medewerkerOpties }: { teams: MaterieelTeam[]; medewerkerOpties: Optie[] }) {
   const router = useRouter()
   const [modal, setModal] = React.useState<null | { team?: MaterieelTeam }>(null)
   const [bezig, setBezig] = React.useState(false)
+  const naamVan = (id: string | null) => (id ? medewerkerOpties.find((m) => m.id === id)?.naam ?? 'Onbekend' : null)
 
   async function verwijder(id: string) {
     if (!confirm('Dit team archiveren?')) return
@@ -59,14 +64,17 @@ function TeamsTab({ teams }: { teams: MaterieelTeam[] }) {
         <Button variant="primary" onClick={() => setModal({})}>+ Nieuw team / bus</Button>
       </div>
       {teams.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--fg-muted)' }}>Nog geen teams. Voeg servicebussen, keten of ploegen toe om materieel op teamniveau toe te wijzen.</p>
+        <p style={{ fontSize: 13, color: 'var(--fg-muted)' }}>Nog geen teams. Voeg servicebussen, keten of ploegen toe — elk met een teamleider die verantwoordelijk is voor het materieel.</p>
       ) : (
         <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {teams.map((t) => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div>
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{t.naam}</div>
                 <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{TEAM_TYPE_LABELS[t.type]}{t.kenteken ? ` · ${t.kenteken}` : ''}{t.omschrijving ? ` · ${t.omschrijving}` : ''}</div>
+                <div style={{ fontSize: 11, marginTop: 2, color: t.teamleider_id ? 'var(--fg-soft)' : '#dc2626' }}>
+                  {t.teamleider_id ? <>Teamleider: <strong style={{ color: 'var(--fg)' }}>{naamVan(t.teamleider_id)}</strong></> : 'Geen teamleider — wijs een verantwoordelijke aan'}
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <Button variant="secondary" onClick={() => setModal({ team: t })}>Bewerken</Button>
@@ -79,7 +87,7 @@ function TeamsTab({ teams }: { teams: MaterieelTeam[] }) {
 
       {modal && (
         <TeamModal
-          team={modal.team} bezig={bezig} onSluit={() => setModal(null)}
+          team={modal.team} medewerkerOpties={medewerkerOpties} bezig={bezig} onSluit={() => setModal(null)}
           onOpslaan={async (input) => {
             setBezig(true)
             const res = modal.team ? await updateTeam(modal.team.id, input) : await maakTeam(input)
@@ -93,14 +101,15 @@ function TeamsTab({ teams }: { teams: MaterieelTeam[] }) {
   )
 }
 
-function TeamModal({ team, bezig, onSluit, onOpslaan }: {
-  team?: MaterieelTeam; bezig: boolean; onSluit: () => void
-  onOpslaan: (i: { naam: string; type: TeamType; omschrijving?: string | null; kenteken?: string | null }) => void
+function TeamModal({ team, medewerkerOpties, bezig, onSluit, onOpslaan }: {
+  team?: MaterieelTeam; medewerkerOpties: Optie[]; bezig: boolean; onSluit: () => void
+  onOpslaan: (i: { naam: string; type: TeamType; omschrijving?: string | null; kenteken?: string | null; teamleider_id?: string | null }) => void
 }) {
   const [naam, setNaam] = React.useState(team?.naam ?? '')
   const [type, setType] = React.useState<TeamType>(team?.type ?? 'bus')
   const [kenteken, setKenteken] = React.useState(team?.kenteken ?? '')
   const [omschrijving, setOmschrijving] = React.useState(team?.omschrijving ?? '')
+  const [teamleiderId, setTeamleiderId] = React.useState(team?.teamleider_id ?? '')
   return (
     <Modal titel={team ? 'Team bewerken' : 'Nieuw team / bus'} onSluit={onSluit}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -111,10 +120,20 @@ function TeamModal({ team, bezig, onSluit, onOpslaan }: {
             {TEAM_TYPES.map((t) => <option key={t} value={t}>{TEAM_TYPE_LABELS[t]}</option>)}
           </select>
         </div>
+        <div>
+          <label style={modalLabel}>Teamleider *</label>
+          <select value={teamleiderId} onChange={(e) => setTeamleiderId(e.target.value)} style={modalInput}>
+            <option value="">— Kies de verantwoordelijke —</option>
+            {medewerkerOpties.map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
+            De teamleider is aanspreekbaar voor al het materieel dat aan dit team hangt.
+          </p>
+        </div>
         <div><label style={modalLabel}>Kenteken (bij bus)</label><input value={kenteken} onChange={(e) => setKenteken(e.target.value)} style={modalInput} /></div>
         <div><label style={modalLabel}>Omschrijving</label><input value={omschrijving} onChange={(e) => setOmschrijving(e.target.value)} style={modalInput} /></div>
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <Button variant="primary" disabled={bezig} onClick={() => onOpslaan({ naam, type, kenteken: kenteken || null, omschrijving: omschrijving || null })}>Opslaan</Button>
+          <Button variant="primary" disabled={bezig} onClick={() => onOpslaan({ naam, type, kenteken: kenteken || null, omschrijving: omschrijving || null, teamleider_id: teamleiderId || null })}>Opslaan</Button>
           <Button variant="secondary" onClick={onSluit}>Annuleren</Button>
         </div>
       </div>

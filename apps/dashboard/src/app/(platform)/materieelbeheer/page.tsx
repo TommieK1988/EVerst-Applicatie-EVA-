@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import type { MaterieelObject, MaterieelObjectRij } from '@/lib/materieel/types'
+import { ALGEMEEN_GEBRUIK, type MaterieelObject, type MaterieelObjectRij } from '@/lib/materieel/types'
 import MaterieelOverzicht from '@/components/materieel/MaterieelOverzicht'
 
 export const metadata: Metadata = { title: 'Materieelbeheer' }
@@ -45,16 +45,13 @@ export default async function MaterieelbeheerPage() {
     (teamsRes.data ?? []).map((t: { id: string; naam: string }) => [t.id, t.naam]),
   )
 
+  // Geen medewerker en geen team gekoppeld → per definitie algemeen gebruik.
   const objecten: MaterieelObjectRij[] = (objectenRes.data ?? []).map((o: MaterieelObject) => ({
     ...o,
     toegewezen_naam:
-      o.toewijzing_niveau === 'persoonlijk' && o.toegewezen_medewerker_id
-        ? medewerkerMap.get(o.toegewezen_medewerker_id) ?? null
-        : o.toewijzing_niveau === 'team' && o.toegewezen_team_id
-          ? teamMap.get(o.toegewezen_team_id) ?? null
-          : o.toewijzing_niveau === 'algemeen'
-            ? 'Algemeen'
-            : null,
+      o.toegewezen_medewerker_id ? medewerkerMap.get(o.toegewezen_medewerker_id) ?? ALGEMEEN_GEBRUIK
+      : o.toegewezen_team_id ? teamMap.get(o.toegewezen_team_id) ?? ALGEMEEN_GEBRUIK
+      : ALGEMEEN_GEBRUIK,
   }))
 
   return <MaterieelOverzicht objecten={objecten} layouts={layouts} user_id={user_id} />

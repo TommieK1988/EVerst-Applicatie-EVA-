@@ -45,7 +45,22 @@ export type ToewijzingNiveau = typeof TOEWIJZING_NIVEAUS[number]
 export const NIVEAU_LABELS: Record<ToewijzingNiveau, string> = {
   persoonlijk: 'Persoonlijk',
   team:        'Team',
-  algemeen:    'Algemeen',
+  algemeen:    'Algemeen gebruik',
+}
+
+/**
+ * Label voor materieel dat aan niemand persoonlijk en aan geen team hangt.
+ * Zonder gekoppelde medewerker/team is materieel per definitie voor algemeen
+ * gebruik — er bestaat dus geen "niet toegewezen"-toestand.
+ */
+export const ALGEMEEN_GEBRUIK = 'Algemeen gebruik'
+
+/** Hangt dit object aan een persoon of team? Zo nee → algemeen gebruik. */
+export function isAlgemeenGebruik(o: {
+  toegewezen_medewerker_id: string | null
+  toegewezen_team_id: string | null
+}): boolean {
+  return !o.toegewezen_medewerker_id && !o.toegewezen_team_id
 }
 
 /* ── Row-types ── */
@@ -91,6 +106,8 @@ export type MaterieelTeam = {
   type: 'bus' | 'keet' | 'ploeg' | 'algemeen'
   omschrijving: string | null
   kenteken: string | null
+  /** Verantwoordelijke voor het materieel van dit team. */
+  teamleider_id: string | null
   actief: boolean
 }
 
@@ -197,6 +214,7 @@ export const CATEGORIE_DETAILS: Partial<Record<MaterieelCategorie, DetailVeld[]>
     { key: 'verzekering', label: 'Verzekering', type: 'tekst' },
   ],
   keet: [
+    { key: 'kenteken', label: 'Kenteken', type: 'tekst' },
     { key: 'sleutels', label: 'Aantal sleutels', type: 'nummer' },
     { key: 'brandblusser', label: 'Brandblusser aanwezig', type: 'ja_nee' },
     { key: 'ehbo', label: 'EHBO-kit aanwezig', type: 'ja_nee' },

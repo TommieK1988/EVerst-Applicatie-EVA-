@@ -41,3 +41,14 @@ export const materieelObjectSchema = z.object({
 })
 
 export type MaterieelObjectInput = z.infer<typeof materieelObjectSchema>
+
+/**
+ * Aanmaak-schema: bij het registreren kun je het object meteen op naam van een
+ * medewerker zetten. Leeg laten = algemeen gebruik. Bewerken van de toewijzing
+ * loopt via de Toewijzen-actie op het paspoort (die houdt historie bij).
+ */
+export const nieuwMaterieelSchema = materieelObjectSchema.extend({
+  toegewezen_medewerker_id: optioneleTekst,
+})
+
+export type NieuwMaterieelInput = z.infer<typeof nieuwMaterieelSchema>

@@ -244,6 +244,9 @@ export default function Sidebar({
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' :
     href === '/taken' ? pathname === '/taken' :
+    // Module-root: exact matchen, anders licht "Overzicht" op zodra je ergens
+    // dieper in de module zit (elke subroute begint immers met deze href).
+    href === '/materieelbeheer' ? pathname === '/materieelbeheer' :
     pathname.startsWith(href)
 
   const activeAppKey = Object.keys(APP_SUBNAV).find(key => pathname.startsWith(key)) ?? null

@@ -25,7 +25,7 @@ export async function getMedewerkerOpties(): Promise<Optie[]> {
 export async function getTeams(): Promise<MaterieelTeam[]> {
   const { data } = await db()
     .from('materieel_teams')
-    .select('id, naam, type, omschrijving, kenteken, actief')
+    .select('id, naam, type, omschrijving, kenteken, teamleider_id, actief')
     .eq('actief', true)
     .order('naam', { ascending: true })
   return (data ?? []) as MaterieelTeam[]

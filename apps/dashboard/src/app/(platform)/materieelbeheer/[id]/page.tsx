@@ -27,15 +27,12 @@ export default async function MaterieelDetailPage(props: { params: Promise<{ id:
     getInstellingen(),
   ])
 
-  // Weergavenaam huidige toewijzing.
-  let toegewezenNaam: string | null = null
-  if (obj.toewijzing_niveau === 'persoonlijk' && obj.toegewezen_medewerker_id) {
-    toegewezenNaam = medewerkerOpties.find((m) => m.id === obj.toegewezen_medewerker_id)?.naam ?? null
-  } else if (obj.toewijzing_niveau === 'team' && obj.toegewezen_team_id) {
-    toegewezenNaam = teamOpties.find((t) => t.id === obj.toegewezen_team_id)?.naam ?? null
-  } else if (obj.toewijzing_niveau === 'algemeen') {
-    toegewezenNaam = 'Algemeen'
-  }
+  // Weergavenaam van de toewijzing. Zonder gekoppelde medewerker/team is het
+  // algemeen gebruik — dat handelt het paspoort zelf af.
+  const toegewezenNaam: string | null =
+    obj.toegewezen_medewerker_id ? medewerkerOpties.find((m) => m.id === obj.toegewezen_medewerker_id)?.naam ?? null
+    : obj.toegewezen_team_id ? teamOpties.find((t) => t.id === obj.toegewezen_team_id)?.naam ?? null
+    : null
 
   // Scan-namen ophalen.
   const scans = (scansRes.data ?? []) as ScanRow[]

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
-import { materieelObjectSchema } from '@/lib/materieel/validations'
+import { materieelObjectSchema, nieuwMaterieelSchema } from '@/lib/materieel/validations'
 import type { MaterieelStatus, ToewijzingNiveau } from '@/lib/materieel/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,17 +33,38 @@ function herlaad(id?: string) {
 
 export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<{ id: string }>> {
   const g = await gate(); if (!g.ok) return g
-  const parsed = materieelObjectSchema.safeParse(raw)
+  const parsed = nieuwMaterieelSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldige invoer' }
 
-  const { data, error } = await db()
+  // De medewerker-keuze is geen kolom-waarde maar een toewijzing: apart afhandelen.
+  const { toegewezen_medewerker_id: medewerkerId, ...velden } = parsed.data
+  const client = db()
+
+  const { data, error } = await client
     .from('materieel_objecten')
-    .insert({ ...parsed.data, created_by: g.medewerker.id })
+    .insert({
+      ...velden,
+      created_by: g.medewerker.id,
+      // Geen medewerker gekozen → algemeen gebruik.
+      toewijzing_niveau: medewerkerId ? 'persoonlijk' : 'algemeen',
+      toegewezen_medewerker_id: medewerkerId ?? null,
+      status: medewerkerId ? 'in_gebruik' : velden.status,
+    })
     .select('id').single()
 
   if (error) return { ok: false, error: error.message }
+  const id = data.id as string
+
+  // Historie vastleggen zodat de uitgifte later herleidbaar is.
+  if (medewerkerId) {
+    await client.from('materieel_toewijzingen').insert({
+      object_id: id, niveau: 'persoonlijk', medewerker_id: medewerkerId,
+      door: g.medewerker.id, opmerking: 'Toegewezen bij registratie',
+    })
+  }
+
   herlaad()
-  return { ok: true, data: { id: data.id as string } }
+  return { ok: true, data: { id } }
 }
 
 export async function updateMaterieelObject(id: string, raw: unknown): Promise<ActieResultaat<{ id: string }>> {
@@ -121,13 +142,14 @@ export async function wijsToe(
   return { ok: true, data: null }
 }
 
+/** Innemen: geen medewerker/team meer gekoppeld → automatisch algemeen gebruik. */
 export async function neemTerug(id: string): Promise<ActieResultaat> {
   const g = await gate(); if (!g.ok) return g
   const client = db()
   await client.from('materieel_toewijzingen').update({ tot: new Date().toISOString() })
     .eq('object_id', id).is('tot', null)
   const { error } = await client.from('materieel_objecten').update({
-    toewijzing_niveau: null, toegewezen_medewerker_id: null, toegewezen_team_id: null, status: 'beschikbaar',
+    toewijzing_niveau: 'algemeen', toegewezen_medewerker_id: null, toegewezen_team_id: null, status: 'beschikbaar',
   }).eq('id', id)
   if (error) return { ok: false, error: error.message }
   herlaad(id)

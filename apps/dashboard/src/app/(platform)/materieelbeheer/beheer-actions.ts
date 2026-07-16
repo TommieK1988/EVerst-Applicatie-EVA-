@@ -23,25 +23,45 @@ function herlaad() {
 
 /* ── Teams (servicebussen, keten, ploegen) ───────────────────────── */
 
-export async function maakTeam(input: { naam: string; type: TeamType; omschrijving?: string | null; kenteken?: string | null }): Promise<ActieResultaat<{ id: string }>> {
+type TeamInvoer = {
+  naam: string
+  type: TeamType
+  omschrijving?: string | null
+  kenteken?: string | null
+  /** Verantwoordelijke voor het materieel van dit team — verplicht. */
+  teamleider_id?: string | null
+}
+
+function valideerTeam(input: TeamInvoer): string | null {
+  if (!input.naam?.trim()) return 'Naam is verplicht'
+  if (!input.teamleider_id) return 'Kies een teamleider — een team zonder verantwoordelijke voegt niets toe'
+  return null
+}
+
+function teamVelden(input: TeamInvoer) {
+  return {
+    naam: input.naam.trim(),
+    type: input.type,
+    omschrijving: input.omschrijving?.trim() || null,
+    kenteken: input.kenteken?.trim() || null,
+    teamleider_id: input.teamleider_id ?? null,
+  }
+}
+
+export async function maakTeam(input: TeamInvoer): Promise<ActieResultaat<{ id: string }>> {
   const nope = await gate(); if (nope) return nope
-  if (!input.naam?.trim()) return { ok: false, error: 'Naam is verplicht' }
-  const { data, error } = await db().from('materieel_teams').insert({
-    naam: input.naam.trim(), type: input.type,
-    omschrijving: input.omschrijving?.trim() || null, kenteken: input.kenteken?.trim() || null,
-  }).select('id').single()
+  const fout = valideerTeam(input); if (fout) return { ok: false, error: fout }
+  const { data, error } = await db().from('materieel_teams')
+    .insert(teamVelden(input)).select('id').single()
   if (error) return { ok: false, error: error.message }
   herlaad()
   return { ok: true, data: { id: data.id as string } }
 }
 
-export async function updateTeam(id: string, input: { naam: string; type: TeamType; omschrijving?: string | null; kenteken?: string | null }): Promise<ActieResultaat> {
+export async function updateTeam(id: string, input: TeamInvoer): Promise<ActieResultaat> {
   const nope = await gate(); if (nope) return nope
-  if (!input.naam?.trim()) return { ok: false, error: 'Naam is verplicht' }
-  const { error } = await db().from('materieel_teams').update({
-    naam: input.naam.trim(), type: input.type,
-    omschrijving: input.omschrijving?.trim() || null, kenteken: input.kenteken?.trim() || null,
-  }).eq('id', id)
+  const fout = valideerTeam(input); if (fout) return { ok: false, error: fout }
+  const { error } = await db().from('materieel_teams').update(teamVelden(input)).eq('id', id)
   if (error) return { ok: false, error: error.message }
   herlaad()
   return { ok: true, data: null }

@@ -14,7 +14,7 @@ import {
 } from '@/app/(platform)/materieelbeheer/actions'
 import {
   CATEGORIE_LABELS, NIVEAU_LABELS, MATERIEEL_STATUSSEN, STATUS_META,
-  CATEGORIE_DETAILS, ACCU_DETAILS, scanUrl,
+  CATEGORIE_DETAILS, ACCU_DETAILS, scanUrl, isAlgemeenGebruik,
   type MaterieelObject, type MaterieelKeuring, type MaterieelOnderhoud,
   type ToewijzingNiveau, type Optie, type KeuringSoort, type MaterieelStatus, type DetailVeld,
 } from '@/lib/materieel/types'
@@ -68,6 +68,10 @@ export default function Paspoort({
 
   const qrValue = scanUrl(object.id, origin || undefined)
   const niveau = object.toewijzing_niveau as ToewijzingNiveau | null
+  // Geen medewerker én geen team gekoppeld = algemeen gebruik (geen aparte
+  // "niet toegewezen"-toestand).
+  const algemeen = isAlgemeenGebruik(object)
+  const laatsteGebruiker = scans[0]?.door_naam ?? null
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>, succes: string) {
     setBezig(true)
@@ -91,16 +95,16 @@ export default function Paspoort({
           <PageHeader eyebrow={CATEGORIE_LABELS[object.categorie]} title={object.omschrijving} />
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }} className="materieel-acties">
-          {niveau
-            ? <Button variant="secondary" disabled={bezig} onClick={() => run(() => neemTerug(object.id), 'Ingenomen')}>Innemen</Button>
-            : <Button variant="primary" onClick={() => setModal('toewijzen')}>Toewijzen</Button>}
+          {algemeen
+            ? <Button variant="primary" onClick={() => setModal('toewijzen')}>Toewijzen</Button>
+            : <Button variant="secondary" disabled={bezig} onClick={() => run(() => neemTerug(object.id), 'Ingenomen — staat nu op algemeen gebruik')}>Innemen</Button>}
           <Button variant="secondary" onClick={() => setModal('status')}>Status</Button>
           <Link href={`/materieelbeheer/${object.id}/bewerken`}><Button variant="secondary">Bewerken</Button></Link>
           <Button variant="secondary" disabled={bezig} onClick={() => { if (confirm('Dit materieel archiveren?')) run(() => archiveerMaterieelObject(object.id), 'Gearchiveerd').then((ok) => { if (ok) router.push('/materieelbeheer') }) }}>Archiveren</Button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 20, marginTop: 16, alignItems: 'start' }}>
+      <div className="materieel-paspoort-grid" style={{ display: 'grid', gap: 20, marginTop: 16, alignItems: 'start' }}>
         {/* ── Linkerkolom ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
@@ -113,9 +117,12 @@ export default function Paspoort({
             <div>
               <StatusBadge status={object.status} />
               <div style={{ marginTop: 8, fontSize: 13, color: 'var(--fg-soft)' }}>
-                {toegewezenNaam
-                  ? <>Toegewezen aan <strong style={{ color: 'var(--fg)' }}>{toegewezenNaam}</strong>{niveau && niveau !== 'algemeen' && ` · ${NIVEAU_LABELS[niveau]}`}</>
-                  : 'Niet toegewezen'}
+                {algemeen
+                  ? <>
+                      <strong style={{ color: 'var(--fg)' }}>Algemeen gebruik</strong>
+                      {laatsteGebruiker && <> · laatst gebruikt door <strong style={{ color: 'var(--fg)' }}>{laatsteGebruiker}</strong></>}
+                    </>
+                  : <>Toegewezen aan <strong style={{ color: 'var(--fg)' }}>{toegewezenNaam}</strong>{niveau && niveau !== 'algemeen' && ` · ${NIVEAU_LABELS[niveau]}`}</>}
               </div>
             </div>
           </div>
@@ -262,6 +269,18 @@ export default function Paspoort({
       )}
 
       <style>{`
+        /* Desktop: gegevens + QR naast elkaar. Tablet/telefoon: onder elkaar,
+           met de QR-kaart bovenaan (dat is waar je na een scan op landt). */
+        .materieel-paspoort-grid { grid-template-columns: minmax(0, 1fr) 280px; }
+        @media (max-width: 900px) {
+          .materieel-paspoort-grid { grid-template-columns: 1fr; }
+          .materieel-paspoort-grid > :last-child { order: -1; }
+        }
+        /* Ruimere raakvlakken op touch. */
+        @media (max-width: 640px) {
+          .materieel-acties { width: 100%; }
+          .materieel-acties > * { flex: 1 1 auto; }
+        }
         @media print {
           body * { visibility: hidden; }
           .materieel-qr-kaart, .materieel-qr-kaart * { visibility: visible; }
