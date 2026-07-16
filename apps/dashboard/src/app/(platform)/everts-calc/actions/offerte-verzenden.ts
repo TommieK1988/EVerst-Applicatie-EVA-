@@ -6,7 +6,7 @@ import { createAdminClient } from '@everts/database/server'
 import { laadOfferteContext, genereerOffertePdfMetBijlagen } from '@/lib/everts-calc/genereer-offerte-pdf'
 import { getOfferteMailSjabloon, buildMailVars, renderMailTekst } from '@/lib/everts-calc/offerte-mail'
 import { verstuurMailNamensMedewerker, haalVerzondenMailMime, type MailBijlage } from '@/lib/o365/mail'
-import { uploadBuffersNaarDossierMap } from '@/lib/dossiers/sharepoint-bestanden'
+import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 export interface MailConcept {
   to: string

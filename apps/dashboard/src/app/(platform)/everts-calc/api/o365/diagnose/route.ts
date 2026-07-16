@@ -90,8 +90,9 @@ export async function GET(request: NextRequest) {
         <ul>
           <li><code>O365_CLIENT_ID</code> / <code>O365_CLIENT_SECRET</code> ingesteld (en secret niet verlopen)</li>
           <li><code>O365_TENANT_ID</code> = de échte tenant-GUID (niet <code>common</code>)</li>
-          <li>In Azure: <strong>Application permission</strong> <code>Files.ReadWrite.All</code> toegevoegd
-              én <strong>admin consent</strong> verleend</li>
+          <li>In Azure: <strong>Application permission</strong> <code>Sites.Selected</code> toegevoegd
+              én <strong>admin consent</strong> verleend, plus per site een grant met
+              <code>roles:["write"]</code> (of het bredere <code>Files.ReadWrite.All</code>)</li>
         </ul>
       </div>`)
   }
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       return page(`<h1>O365 — diagnose</h1>
         <div class="kaart"><p class="fout">Resolven mislukt: ${String(err).replace(/</g, '&lt;')}</p>
-        <p>Heeft de app leesrecht op deze site? (<code>Files.ReadWrite.All</code> of <code>Sites.Read.All</code>, met admin consent.)</p></div>${FORM}`)
+        <p>Heeft de app recht op deze site? (<code>Sites.Selected</code> met een <code>write</code>-grant op déze site, of het bredere <code>Files.ReadWrite.All</code> — met admin consent.)</p></div>${FORM}`)
     }
   }
 

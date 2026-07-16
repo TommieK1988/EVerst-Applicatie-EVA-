@@ -2,17 +2,33 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { appGraphFetch } from '@/lib/o365/graph'
+import { vereisSessie } from '@/lib/auth/rechten'
+import { assertDossierBewerkbaar } from './guards'
 import {
   matchDossierFolder,
   listFolderChildren,
   resolveShareLink,
   resolveDriveContext,
-  type DriveContext,
+  zoekContainerMappen,
+  maakContainerMap,
+  haalMapItem,
+  dossierMapNaam,
+  saneerMapNaam,
   type SharePointBestand,
+  type SharePointMap,
   type MatchStatus,
 } from '@/lib/o365/sharepoint'
+import {
+  DOSSIER_SELECT,
+  netteFout,
+  matchInputVan,
+  zorgVoorMap,
+  type DossierRij,
+  type UploadResultaat,
+} from '@/lib/o365/dossier-map'
 
-export type { SharePointBestand } from '@/lib/o365/sharepoint'
+export type { SharePointBestand, SharePointMap } from '@/lib/o365/sharepoint'
+export type { UploadResultaat } from '@/lib/o365/dossier-map'
 
 export type DossierSharePointData = {
   /** O365_DOSSIER_DRIVE_ID is ingesteld. */
@@ -20,29 +36,116 @@ export type DossierSharePointData = {
   status: MatchStatus | null
   mapUrl: string | null
   bestanden: SharePointBestand[]
+  /** true = map handmatig gekozen; een automatische rematch laat hem met rust. */
+  handmatig: boolean
+  /** Voorstel voor een nieuwe map: `{dossiernummer} - {titel}`. */
+  voorstelNaam: string | null
+  /** Bij 'meerdere': de gevonden mappen, zodat de gebruiker direct kan kiezen. */
+  kandidaten?: SharePointMap[]
   /** Leesbare reden wanneer er iets misgaat (i.p.v. een crash). */
   fout?: string | null
+  /** Neutrale melding (bv. "map bestond al en is gekoppeld"). */
+  melding?: string | null
 }
 
-const LEEG: DossierSharePointData = { geconfigureerd: false, status: null, mapUrl: null, bestanden: [], fout: null }
-
-interface DossierRij {
-  dossiernummer: string | null
-  bouw7_id: string | number | null
-  titel: string | null
-  sharepoint_drive_id: string | null
-  sharepoint_item_id: string | null
-  sharepoint_web_url: string | null
-  sharepoint_match_status: MatchStatus | null
+const LEEG: DossierSharePointData = {
+  geconfigureerd: false,
+  status: null,
+  mapUrl: null,
+  bestanden: [],
+  handmatig: false,
+  voorstelNaam: null,
+  fout: null,
 }
 
-const SELECT =
-  'dossiernummer, bouw7_id, titel, sharepoint_drive_id, sharepoint_item_id, sharepoint_web_url, sharepoint_match_status'
+/**
+ * Negatieve resultaten ('niet_gevonden'/'meerdere') zijn een cache, geen eindoordeel:
+ * de container is een calculatie-archief, dus een map die er vandaag niet is kan er
+ * morgen wél staan. Na deze TTL probeert EVA het uit zichzelf opnieuw.
+ */
+const NEGATIEVE_CACHE_MS = 15 * 60 * 1000
 
-/** Maakt van een (Graph/token/DB) fout een korte, leesbare melding. */
-function netteFout(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err)
-  return msg.length > 300 ? msg.slice(0, 300) + '…' : msg
+function foutData(fout: string, status: MatchStatus | null = null): DossierSharePointData {
+  return { geconfigureerd: true, status, mapUrl: null, bestanden: [], handmatig: false, voorstelNaam: null, fout }
+}
+
+async function leesDossier(dossierId: string): Promise<DossierRij | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase.from('dossiers').select(DOSSIER_SELECT).eq('id', dossierId).maybeSingle()
+  return (data as DossierRij | null) ?? null
+}
+
+/** Schrijft de koppeling (of het negatieve resultaat) weg op het dossier. */
+async function schrijfKoppeling(
+  dossierId: string,
+  velden: {
+    driveId: string | null
+    itemId: string | null
+    webUrl: string | null
+    status: MatchStatus | null
+    handmatig?: boolean
+  },
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('dossiers')
+    .update({
+      sharepoint_drive_id: velden.driveId,
+      sharepoint_item_id: velden.itemId,
+      sharepoint_web_url: velden.webUrl,
+      sharepoint_match_status: velden.status,
+      ...(velden.handmatig === undefined ? {} : { sharepoint_handmatig: velden.handmatig }),
+      sharepoint_gematcht_op: new Date().toISOString(),
+    })
+    .eq('id', dossierId)
+}
+
+/**
+ * Wist de koppeling én het tijdstempel, zodat de eerstvolgende leesactie meteen
+ * opnieuw matcht in plaats van tegen de TTL aan te lopen.
+ */
+async function wisKoppeling(dossierId: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('dossiers')
+    .update({
+      sharepoint_drive_id: null,
+      sharepoint_item_id: null,
+      sharepoint_web_url: null,
+      sharepoint_match_status: null,
+      sharepoint_handmatig: false,
+      sharepoint_gematcht_op: null,
+    })
+    .eq('id', dossierId)
+}
+
+/** Bouwt het antwoord voor een gekoppelde map: bestanden ophalen, fouten opvangen. */
+async function metBestanden(
+  d: DossierRij,
+  driveId: string,
+  itemId: string,
+  mapUrl: string | null,
+  handmatig: boolean,
+  melding?: string,
+): Promise<DossierSharePointData> {
+  const basis: DossierSharePointData = {
+    geconfigureerd: true,
+    status: 'gematcht',
+    mapUrl,
+    bestanden: [],
+    handmatig,
+    voorstelNaam: dossierMapNaam(d) || null,
+    melding: melding ?? null,
+    fout: null,
+  }
+  try {
+    return { ...basis, bestanden: await listFolderChildren(driveId, itemId) }
+  } catch (err) {
+    return { ...basis, fout: netteFout(err) }
+  }
 }
 
 /**
@@ -55,187 +158,289 @@ export async function getDossierSharePointBestanden(dossierId: string): Promise<
   if (!envValue) return LEEG
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    const { data: dossier } = await supabase.from('dossiers').select(SELECT).eq('id', dossierId).single()
-    const d = dossier as DossierRij | null
+    await vereisSessie()
+
+    const d = await leesDossier(dossierId)
     if (!d) return { ...LEEG, geconfigureerd: true }
 
-    let spDriveId = d.sharepoint_drive_id
-    let spItemId = d.sharepoint_item_id
-    let mapUrl = d.sharepoint_web_url
-    let status: MatchStatus | null = d.sharepoint_match_status
+    const handmatig = !!d.sharepoint_handmatig
+    const gekoppeld = d.sharepoint_match_status === 'gematcht' && !!d.sharepoint_item_id && !!d.sharepoint_drive_id
 
-    // Nog niet (succesvol) gematcht → nu proberen en cachen
-    if (status !== 'gematcht' || !spItemId || !spDriveId) {
-      try {
-        const ctx = await resolveDriveContext(envValue)
-        if (!ctx) {
-          return {
-            geconfigureerd: true,
-            status: null,
-            mapUrl: null,
-            bestanden: [],
-            fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden — geef een geldige drive-id of een SharePoint-link naar de dossierbibliotheek/-map.',
-          }
-        }
-        const m = await matchDossierFolder(
-          { dossiernummer: d.dossiernummer, bouw7Id: d.bouw7_id != null ? String(d.bouw7_id) : null, titel: d.titel },
-          ctx,
-        )
-        status = m.status
-        spDriveId = m.driveId ?? null
-        spItemId = m.itemId ?? null
-        mapUrl = m.webUrl ?? null
-        await supabase
-          .from('dossiers')
-          .update({
-            sharepoint_drive_id: spDriveId,
-            sharepoint_item_id: spItemId,
-            sharepoint_web_url: mapUrl,
-            sharepoint_match_status: status,
-          })
-          .eq('id', dossierId)
-      } catch (err) {
-        return { geconfigureerd: true, status: null, mapUrl: null, bestanden: [], fout: netteFout(err) }
+    if (gekoppeld) {
+      return metBestanden(d, d.sharepoint_drive_id!, d.sharepoint_item_id!, d.sharepoint_web_url, handmatig)
+    }
+
+    // De TTL geldt alleen voor 'niet_gevonden' — dát is het geval dat Graph zou
+    // blijven bevragen voor dossiers die (nog) geen map hebben. Bij 'meerdere'
+    // matchen we altijd opnieuw: het antwoord zit dan toch in de listing-cache, en
+    // alleen zo krijgt de UI de kandidatenlijst mee om uit te kiezen.
+    const verlopen =
+      !d.sharepoint_gematcht_op || Date.now() - Date.parse(d.sharepoint_gematcht_op) > NEGATIEVE_CACHE_MS
+    const cacheGeldig = d.sharepoint_match_status === 'niet_gevonden' && !verlopen
+
+    // Een handmatige koppeling die stukging (map verwijderd) laten we staan i.p.v.
+    // hem stilletjes te overschrijven met een automatische match.
+    if (handmatig || cacheGeldig) {
+      return {
+        geconfigureerd: true,
+        status: d.sharepoint_match_status,
+        mapUrl: d.sharepoint_web_url,
+        bestanden: [],
+        handmatig,
+        voorstelNaam: dossierMapNaam(d) || null,
+        fout: null,
       }
     }
 
-    if (status !== 'gematcht' || !spItemId || !spDriveId) {
-      return { geconfigureerd: true, status, mapUrl, bestanden: [], fout: null }
+    // Nog niet gematcht of de negatieve cache is verlopen → opnieuw proberen en cachen.
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) {
+      return foutData(
+        'Kon O365_DOSSIER_DRIVE_ID niet herleiden — geef een geldige drive-id of een SharePoint-link naar de dossierbibliotheek/-map.',
+      )
     }
 
-    try {
-      const bestanden = await listFolderChildren(spDriveId, spItemId)
-      return { geconfigureerd: true, status: 'gematcht', mapUrl, bestanden, fout: null }
-    } catch (err) {
-      return { geconfigureerd: true, status: 'gematcht', mapUrl, bestanden: [], fout: netteFout(err) }
+    const m = await matchDossierFolder(matchInputVan(d), ctx)
+    await schrijfKoppeling(dossierId, {
+      driveId: m.driveId ?? null,
+      itemId: m.itemId ?? null,
+      webUrl: m.webUrl ?? null,
+      status: m.status,
+    })
+
+    if (m.status === 'gematcht' && m.driveId && m.itemId) {
+      return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, false)
+    }
+
+    return {
+      geconfigureerd: true,
+      status: m.status,
+      mapUrl: null,
+      bestanden: [],
+      handmatig: false,
+      voorstelNaam: dossierMapNaam(d) || null,
+      kandidaten: m.kandidaten,
+      fout: null,
     }
   } catch (err) {
-    return { geconfigureerd: true, status: null, mapUrl: null, bestanden: [], fout: netteFout(err) }
+    return foutData(netteFout(err))
   }
 }
 
-/** Reset de cache en zoekt de map opnieuw (knop bij niet-gevonden/meerdere). */
+/** Reset de koppeling en zoekt de map opnieuw (knop bij niet-gevonden/meerdere). */
 export async function hermatchDossierSharePoint(dossierId: string): Promise<DossierSharePointData> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    await supabase
-      .from('dossiers')
-      .update({ sharepoint_drive_id: null, sharepoint_item_id: null, sharepoint_web_url: null, sharepoint_match_status: null })
-      .eq('id', dossierId)
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
+    await wisKoppeling(dossierId)
   } catch (err) {
-    return { geconfigureerd: true, status: null, mapUrl: null, bestanden: [], fout: netteFout(err) }
+    return foutData(netteFout(err))
   }
   return getDossierSharePointBestanden(dossierId)
 }
 
-/** Koppelt handmatig een SharePoint-map via een deel-link (bij niet-gevonden/meerdere). */
-export async function koppelDossierMapViaLink(dossierId: string, shareLink: string): Promise<DossierSharePointData> {
-  let m
-  try {
-    m = await resolveShareLink(shareLink)
-  } catch (err) {
-    return { geconfigureerd: true, status: 'niet_gevonden', mapUrl: null, bestanden: [], fout: netteFout(err) }
-  }
+/* ─── Picker: zoeken, kiezen, aanmaken, ontkoppelen ───────────────────────── */
 
-  if (m.status !== 'gematcht' || !m.driveId || !m.itemId) {
+export type MappenLijst = { ok: boolean; mappen: SharePointMap[]; totaal: number; fout?: string }
+
+/** Zoekt mappen in de dossiercontainer, voor de picker. */
+export async function zoekSharePointMappen(
+  dossierId: string,
+  query: string,
+  offset = 0,
+  limit = 50,
+): Promise<MappenLijst> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return { ok: false, mappen: [], totaal: 0, fout: 'SharePoint niet geconfigureerd.' }
+
+  try {
+    await vereisSessie()
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return { ok: false, mappen: [], totaal: 0, fout: 'Kon de dossierbibliotheek niet bereiken.' }
+    const { mappen, totaal } = await zoekContainerMappen(ctx, query, offset, limit)
+    return { ok: true, mappen, totaal }
+  } catch (err) {
+    return { ok: false, mappen: [], totaal: 0, fout: netteFout(err) }
+  }
+}
+
+/**
+ * Koppelt een map die de gebruiker in de picker koos. De itemId komt van de client,
+ * dus we halen hem eerst op: bestaat hij, is het een map, en zit hij in de
+ * geconfigureerde drive? Zonder die check zou een kale RPC elk dossier naar een
+ * willekeurig driveItem kunnen laten wijzen.
+ */
+export async function koppelDossierMap(dossierId: string, itemId: string): Promise<DossierSharePointData> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return LEEG
+
+  try {
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
+
+    const d = await leesDossier(dossierId)
+    if (!d) return { ...LEEG, geconfigureerd: true }
+
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return foutData('Kon de dossierbibliotheek niet bereiken.')
+
+    const m = await haalMapItem(ctx.driveId, itemId)
+    if (m.status !== 'gematcht' || !m.driveId || !m.itemId || m.driveId !== ctx.driveId) {
+      return foutData('Deze map hoort niet bij de ingestelde dossierbibliotheek.', 'niet_gevonden')
+    }
+
+    await schrijfKoppeling(dossierId, {
+      driveId: m.driveId,
+      itemId: m.itemId,
+      webUrl: m.webUrl ?? null,
+      status: 'gematcht',
+      handmatig: true,
+    })
+    return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, true)
+  } catch (err) {
+    return foutData(netteFout(err))
+  }
+}
+
+/**
+ * Maakt een nieuwe dossiermap aan en koppelt hem. Zonder `naam` gebruiken we
+ * `{dossiernummer} - {titel}` — de conventie in de container, zodat de automatische
+ * match hem later ook zelfstandig terugvindt.
+ */
+export async function maakDossierMap(dossierId: string, naam?: string): Promise<DossierSharePointData> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return LEEG
+
+  try {
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
+
+    const d = await leesDossier(dossierId)
+    if (!d) return { ...LEEG, geconfigureerd: true }
+
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return foutData('Kon de dossierbibliotheek niet bereiken.')
+
+    const gewenst = saneerMapNaam(naam?.trim() || dossierMapNaam(d))
+    if (!gewenst) return foutData('Geef een mapnaam op.', d.sharepoint_match_status)
+
+    const map = await maakContainerMap(ctx, gewenst)
+    await schrijfKoppeling(dossierId, {
+      driveId: map.driveId,
+      itemId: map.itemId,
+      webUrl: map.webUrl,
+      status: 'gematcht',
+      handmatig: true,
+    })
+    return metBestanden(
+      d,
+      map.driveId,
+      map.itemId,
+      map.webUrl,
+      true,
+      map.status === 'bestaat_al' ? 'Deze map bestond al en is nu gekoppeld.' : undefined,
+    )
+  } catch (err) {
+    return foutData(netteFout(err), 'niet_gevonden')
+  }
+}
+
+/**
+ * Haalt de koppeling weg. Raakt **niets** in SharePoint aan — de map en de
+ * bestanden blijven onaangeroerd; alleen EVA vergeet welke map erbij hoort.
+ *
+ * Bewust géén rematch achteraf: die zou de zojuist losgekoppelde map er meteen weer
+ * aan hangen. De gebruiker houdt een lege kaart over en kiest zelf een map (of maakt
+ * er een). Bij een volgend bezoek probeert EVA het weer automatisch — daarvoor is
+ * "Opnieuw zoeken".
+ */
+export async function ontkoppelDossierMap(dossierId: string): Promise<DossierSharePointData> {
+  try {
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
+
+    const d = await leesDossier(dossierId)
+    if (!d) return { ...LEEG, geconfigureerd: true }
+
+    await wisKoppeling(dossierId)
     return {
       geconfigureerd: true,
       status: 'niet_gevonden',
       mapUrl: null,
       bestanden: [],
-      fout: 'De link kon niet naar een map worden herleid. Plak een link naar de map zelf (niet naar een bestand).',
+      handmatig: false,
+      voorstelNaam: dossierMapNaam(d) || null,
+      melding: 'Koppeling weggehaald. De map staat nog gewoon in SharePoint.',
+      fout: null,
     }
+  } catch (err) {
+    return foutData(netteFout(err))
   }
+}
+
+/** Koppelt handmatig een SharePoint-map via een deel-link (fallback naast de picker). */
+export async function koppelDossierMapViaLink(dossierId: string, shareLink: string): Promise<DossierSharePointData> {
+  const envValue = process.env.O365_DOSSIER_DRIVE_ID
+  if (!envValue) return LEEG
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    await supabase
-      .from('dossiers')
-      .update({
-        sharepoint_drive_id: m.driveId,
-        sharepoint_item_id: m.itemId,
-        sharepoint_web_url: m.webUrl ?? null,
-        sharepoint_match_status: 'gematcht',
-      })
-      .eq('id', dossierId)
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
 
-    const bestanden = await listFolderChildren(m.driveId, m.itemId)
-    return { geconfigureerd: true, status: 'gematcht', mapUrl: m.webUrl ?? null, bestanden, fout: null }
+    const d = await leesDossier(dossierId)
+    if (!d) return { ...LEEG, geconfigureerd: true }
+
+    const ctx = await resolveDriveContext(envValue)
+    if (!ctx) return foutData('Kon de dossierbibliotheek niet bereiken.')
+
+    let m
+    try {
+      m = await resolveShareLink(shareLink)
+    } catch (err) {
+      // Onder Sites.Selected geeft Graph 403 voor links buiten de toegestane sites.
+      const msg = netteFout(err)
+      return foutData(
+        /\b403\b|accessDenied/i.test(msg)
+          ? 'EVA heeft geen toegang tot deze locatie. Kies een map uit de dossierbibliotheek.'
+          : msg,
+        'niet_gevonden',
+      )
+    }
+
+    if (m.status !== 'gematcht' || !m.driveId || !m.itemId) {
+      return foutData(
+        'De link kon niet naar een map worden herleid. Plak een link naar de map zelf (niet naar een bestand).',
+        'niet_gevonden',
+      )
+    }
+    if (m.driveId !== ctx.driveId) {
+      return foutData('Deze map staat buiten de ingestelde dossierbibliotheek.', 'niet_gevonden')
+    }
+
+    await schrijfKoppeling(dossierId, {
+      driveId: m.driveId,
+      itemId: m.itemId,
+      webUrl: m.webUrl ?? null,
+      status: 'gematcht',
+      handmatig: true,
+    })
+    return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, true)
   } catch (err) {
-    return { geconfigureerd: true, status: 'gematcht', mapUrl: m.webUrl ?? null, bestanden: [], fout: netteFout(err) }
+    return foutData(netteFout(err))
   }
 }
 
 /* ─── Upload (bestanden meegestuurd bij een nieuwe aanvraag) ─────────────── */
 
 /**
- * `bestanden` bevat per geslaagd bestand de driveItem-gegevens, zodat een
- * consument (documenten-module) het bestand kan terugvinden/linken. Consumenten
- * die dat niet nodig hebben (offerte-archivering) negeren het veld.
- */
-export type UploadResultaat = {
-  ok: boolean
-  geuploaded: number
-  mapUrl?: string | null
-  fout?: string
-  bestanden?: { naam: string; driveId: string | null; itemId: string | null; webUrl: string | null }[]
-}
-
-/** Container-pad ('root' of 'items/{id}') → Graph children-endpoint. */
-function childrenPad(ctx: DriveContext): string {
-  return ctx.containerPath === 'root'
-    ? `/drives/${ctx.driveId}/root/children`
-    : `/drives/${ctx.driveId}/${ctx.containerPath}/children`
-}
-
-/**
- * Bepaalt de dossiermap: bestaande cache → autonome match → anders **aanmaken**.
- * Een gloednieuwe aanvraag heeft nog geen map; die maken we hier aan met een naam die
- * begint met het dossiernummer, zodat de autonome match hem later terugvindt.
- */
-async function bepaalOfMaakDossierMap(
-  ctx: DriveContext,
-  d: DossierRij,
-): Promise<{ driveId: string; itemId: string; webUrl: string | null }> {
-  const matchInput = {
-    dossiernummer: d.dossiernummer,
-    bouw7Id: d.bouw7_id != null ? String(d.bouw7_id) : null,
-    titel: d.titel,
-  }
-  const m = await matchDossierFolder(matchInput, ctx)
-  if (m.status === 'gematcht' && m.driveId && m.itemId) {
-    return { driveId: m.driveId, itemId: m.itemId, webUrl: m.webUrl ?? null }
-  }
-
-  // Niet gevonden → map aanmaken onder de container.
-  const naam = ([d.dossiernummer, d.titel].filter(Boolean).join(' ').trim()) || `Dossier ${d.dossiernummer ?? ''}`.trim()
-  const res = await appGraphFetch(childrenPad(ctx), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: naam, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
-  })
-  if (res.status === 409) {
-    // Bestaat toch al → opnieuw matchen.
-    const m2 = await matchDossierFolder(matchInput, ctx)
-    if (m2.status === 'gematcht' && m2.driveId && m2.itemId) {
-      return { driveId: m2.driveId, itemId: m2.itemId, webUrl: m2.webUrl ?? null }
-    }
-  }
-  if (!res.ok) throw new Error(`Kon SharePoint-map niet aanmaken (${res.status}): ${await res.text().catch(() => '')}`)
-  const item = (await res.json()) as { id: string; webUrl?: string }
-  return { driveId: ctx.driveId, itemId: item.id, webUrl: item.webUrl ?? null }
-}
-
-/**
  * Upload de meegestuurde bestanden van een (nieuwe) aanvraag naar de SharePoint-dossiermap.
  * Bestaat de map nog niet, dan wordt hij aangemaakt. Gooit nooit — geeft per saldo een
  * `fout`-melding terug zodat de UI het kan tonen zonder de aanvraag te blokkeren.
  */
-export async function uploadDossierBestandenNaarSharePoint(dossierId: string, formData: FormData): Promise<UploadResultaat> {
+export async function uploadDossierBestandenNaarSharePoint(
+  dossierId: string,
+  formData: FormData,
+): Promise<UploadResultaat> {
   const envValue = process.env.O365_DOSSIER_DRIVE_ID
   if (!envValue) return { ok: false, geuploaded: 0, fout: 'SharePoint niet geconfigureerd (O365_DOSSIER_DRIVE_ID).' }
 
@@ -243,29 +448,18 @@ export async function uploadDossierBestandenNaarSharePoint(dossierId: string, fo
   if (files.length === 0) return { ok: true, geuploaded: 0 }
 
   try {
+    await vereisSessie()
+    await assertDossierBewerkbaar(dossierId)
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
-    const { data: dossier } = await supabase.from('dossiers').select(SELECT).eq('id', dossierId).single()
-    const d = dossier as DossierRij | null
+    const d = await leesDossier(dossierId)
     if (!d) return { ok: false, geuploaded: 0, fout: 'Dossier niet gevonden.' }
 
     const ctx = await resolveDriveContext(envValue)
     if (!ctx) return { ok: false, geuploaded: 0, fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden naar een drive/map.' }
 
-    // Map bepalen (of aanmaken) en cachen op het dossier.
-    let driveId = d.sharepoint_drive_id
-    let itemId = d.sharepoint_item_id
-    let mapUrl = d.sharepoint_web_url
-    if (!(d.sharepoint_match_status === 'gematcht' && driveId && itemId)) {
-      const map = await bepaalOfMaakDossierMap(ctx, d)
-      driveId = map.driveId; itemId = map.itemId; mapUrl = map.webUrl
-      await supabase.from('dossiers').update({
-        sharepoint_drive_id: driveId,
-        sharepoint_item_id: itemId,
-        sharepoint_web_url: mapUrl,
-        sharepoint_match_status: 'gematcht',
-      }).eq('id', dossierId)
-    }
+    const { driveId, itemId, mapUrl } = await zorgVoorMap(supabase, dossierId, ctx, d)
 
     // Bestanden uploaden (simple upload; geschikt voor gangbare offerte-/foto-bestanden).
     let geuploaded = 0
@@ -289,87 +483,6 @@ export async function uploadDossierBestandenNaarSharePoint(dossierId: string, fo
       ok: fouten.length === 0,
       geuploaded,
       mapUrl,
-      fout: fouten.length ? `Niet geüpload: ${fouten.join(', ')}` : undefined,
-    }
-  } catch (err) {
-    return { ok: false, geuploaded: 0, fout: netteFout(err) }
-  }
-}
-
-/**
- * Upload één of meer in-memory buffers (bv. offerte-PDF, .eml) naar de SharePoint-
- * dossiermap. Server-to-server variant van uploadDossierBestandenNaarSharePoint;
- * maakt de map zo nodig aan en cachet hem op het dossier. Gooit nooit.
- */
-export async function uploadBuffersNaarDossierMap(
-  dossierId: string,
-  bestanden: { naam: string; contentType: string; bytes: Uint8Array }[],
-): Promise<UploadResultaat> {
-  const envValue = process.env.O365_DOSSIER_DRIVE_ID
-  if (!envValue) return { ok: false, geuploaded: 0, fout: 'SharePoint niet geconfigureerd (O365_DOSSIER_DRIVE_ID).' }
-  if (bestanden.length === 0) return { ok: true, geuploaded: 0 }
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    const { data: dossier } = await supabase.from('dossiers').select(SELECT).eq('id', dossierId).single()
-    const d = dossier as DossierRij | null
-    if (!d) return { ok: false, geuploaded: 0, fout: 'Dossier niet gevonden.' }
-
-    const ctx = await resolveDriveContext(envValue)
-    if (!ctx) return { ok: false, geuploaded: 0, fout: 'Kon O365_DOSSIER_DRIVE_ID niet herleiden naar een drive/map.' }
-
-    let driveId = d.sharepoint_drive_id
-    let itemId = d.sharepoint_item_id
-    let mapUrl = d.sharepoint_web_url
-    if (!(d.sharepoint_match_status === 'gematcht' && driveId && itemId)) {
-      const map = await bepaalOfMaakDossierMap(ctx, d)
-      driveId = map.driveId; itemId = map.itemId; mapUrl = map.webUrl
-      await supabase.from('dossiers').update({
-        sharepoint_drive_id: driveId,
-        sharepoint_item_id: itemId,
-        sharepoint_web_url: mapUrl,
-        sharepoint_match_status: 'gematcht',
-      }).eq('id', dossierId)
-    }
-
-    let geuploaded = 0
-    const fouten: string[] = []
-    const geplaatst: NonNullable<UploadResultaat['bestanden']> = []
-    for (const b of bestanden) {
-      try {
-        const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}:/${encodeURIComponent(b.naam)}:/content`, {
-          method: 'PUT',
-          headers: { 'Content-Type': b.contentType || 'application/octet-stream' },
-          body: b.bytes as unknown as BodyInit,
-        })
-        if (res.ok) {
-          geuploaded++
-          // Graph geeft het aangemaakte driveItem terug; best-effort uitlezen zodat
-          // een onverwacht antwoord de upload niet alsnog laat "mislukken".
-          try {
-            const item = await res.json()
-            geplaatst.push({
-              naam: b.naam,
-              driveId: item?.parentReference?.driveId ?? driveId ?? null,
-              itemId: item?.id ?? null,
-              webUrl: item?.webUrl ?? null,
-            })
-          } catch {
-            geplaatst.push({ naam: b.naam, driveId: driveId ?? null, itemId: null, webUrl: null })
-          }
-        }
-        else fouten.push(`${b.naam} (${res.status})`)
-      } catch (e) {
-        fouten.push(`${b.naam}: ${netteFout(e)}`)
-      }
-    }
-
-    return {
-      ok: fouten.length === 0,
-      geuploaded,
-      mapUrl,
-      bestanden: geplaatst,
       fout: fouten.length ? `Niet geüpload: ${fouten.join(', ')}` : undefined,
     }
   } catch (err) {

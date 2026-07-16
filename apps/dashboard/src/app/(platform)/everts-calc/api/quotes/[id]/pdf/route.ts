@@ -201,7 +201,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           dossierId = dRow?.id ?? null
         }
         if (dossierId) {
-          const { uploadBuffersNaarDossierMap } = await import('@/lib/dossiers/sharepoint-bestanden')
+          const { uploadBuffersNaarDossierMap } = await import('@/lib/o365/dossier-map')
           await uploadBuffersNaarDossierMap(dossierId, [{
             naam: `Concept ${quote.quote_nummer}.pdf`,
             contentType: 'application/pdf',

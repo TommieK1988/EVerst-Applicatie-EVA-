@@ -93,6 +93,21 @@ export class GeenToegangError extends Error {
 }
 
 /**
+ * Minimale gate: eist alleen een geldige sessie, geen specifiek modulerecht.
+ *
+ * Voor actions op modules die nog niet in `AFGEDWONGEN_MODULES` zitten: `vereisRecht`
+ * zou die module daar eenzijdig uitrollen en gebruikers buitensluiten die de functie
+ * vandaag gewoon gebruiken. Deze gate sluit wél het echte gat — een action met de
+ * admin-client (service-role, bypast RLS) mag nooit zonder sessie aanroepbaar zijn.
+ * Vervang door `vereisRecht` zodra de module wordt afgedwongen.
+ */
+export async function vereisSessie(): Promise<CurrentMedewerker> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) throw new GeenToegangError('Niet ingelogd')
+  return medewerker
+}
+
+/**
  * Autorisatie-gate voor server-actions en route-handlers. Gooit `GeenToegangError`
  * als er geen geldige sessie is óf de gebruiker het gevraagde niveau op `module`
  * mist. Retourneert de ingelogde medewerker + effectieve rechten voor hergebruik.
