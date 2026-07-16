@@ -4,11 +4,13 @@ import Sidebar from './Sidebar'
 import TopBar  from './TopBar'
 import IdleLogout from './IdleLogout'
 import NotificatieToasts from './NotificatieToasts'
+import UpdatesPopup from './UpdatesPopup'
 import { GlobalSearchProvider } from './GlobalSearch'
 import { BreadcrumbProvider } from '@/lib/breadcrumb-context'
 import type { Tweaks } from './types'
 import type { RechtenSet } from '@everts/database/platform-types'
 import type { Notificatie } from '@/app/(platform)/notificaties/actions'
+import type { ChangelogItem } from '@/app/(platform)/wat-is-nieuw/actions'
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme:               'light',
@@ -35,10 +37,12 @@ type Props = {
   userFotoUrl?:          string | null
   aantalOngelezen?:      number
   ongelezenNotificaties?: Notificatie[]
+  aantalNieuweUpdates?:  number
+  nieuweUpdates?:        ChangelogItem[]
   rechten?:              RechtenSet
 }
 
-export default function PlatformShell({ children, userName, userInitials, userSub, userFotoUrl, aantalOngelezen = 0, ongelezenNotificaties = [], rechten }: Props) {
+export default function PlatformShell({ children, userName, userInitials, userSub, userFotoUrl, aantalOngelezen = 0, ongelezenNotificaties = [], aantalNieuweUpdates = 0, nieuweUpdates = [], rechten }: Props) {
   const [tweaks,    setTweaks]    = React.useState<Tweaks>(TWEAK_DEFAULTS)
   const [collapsed, setCollapsed] = React.useState(true)
   const [hovering,  setHovering]  = React.useState(false)
@@ -101,7 +105,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-        <TopBar dark={dark} setDark={setDark} aantalOngelezen={aantalOngelezen} />
+        <TopBar dark={dark} setDark={setDark} aantalOngelezen={aantalOngelezen} aantalNieuweUpdates={aantalNieuweUpdates} />
 
         <main style={{
           flex: 1,
@@ -113,6 +117,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
       </div>
 
       <NotificatieToasts notificaties={ongelezenNotificaties} />
+      <UpdatesPopup updates={nieuweUpdates} totaal={aantalNieuweUpdates} />
     </div>
     </GlobalSearchProvider>
     </BreadcrumbProvider>

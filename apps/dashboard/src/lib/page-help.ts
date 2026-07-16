@@ -34,6 +34,15 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/wat-is-nieuw$/, {
+    title: 'Wat is nieuw',
+    description: 'Een overzicht van alle nieuwe functies, verbeteringen en oplossingen die aan EVA zijn toegevoegd — een soort roadmap met afgeronde zaken. De nieuwste updates staan bovenaan.',
+    sections: [
+      { title: 'Melding van updates', body: 'Zodra er nieuwe updates zijn, verschijnt er een tellertje bij "Wat is nieuw" in het menu en een korte popup bij het inloggen. Beide verdwijnen zodra je deze pagina hebt bekeken.' },
+      { title: 'Categorieën', body: 'Elk item is gemarkeerd als Nieuw (nieuwe functie), Verbeterd (uitbreiding van iets bestaands) of Opgelost (opgeloste fout). Filter bovenaan op categorie om snel te vinden wat je zoekt.' },
+    ],
+  }],
+
   // ── Materieelbeheer (in ontwikkeling) ──────────────────────────────────
   [/^\/materieelbeheer\/dashboard$/, {
     title: 'Materieel-dashboard',
@@ -82,7 +91,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     sections: [
       { title: 'Overzicht', body: 'De tabel toont al het actieve materieel. Klik op een rij om het paspoort te openen. Kolommen zijn aan/uit te zetten en te sorteren via het kolommenmenu.' },
       { title: 'Nieuw toevoegen', body: 'Via "Nieuw materieel" registreer je een object in seconden. De QR-code wordt automatisch aangemaakt.' },
-      { title: 'In ontwikkeling', body: 'Deze module is nog in aanbouw. Toewijzing (persoonlijk/team/algemeen), periodieke controle, keuringsbewaking en rapportages volgen in latere fases.' },
+      { title: 'In ontwikkeling', body: 'Deze module is nog in aanbouw en alleen zichtbaar waar de feature-flag aanstaat. Nog open: foto- en documentupload, automatische melding bij niet-controleren, en autogeneratie van inventarisnummers.' },
     ],
   }],
 

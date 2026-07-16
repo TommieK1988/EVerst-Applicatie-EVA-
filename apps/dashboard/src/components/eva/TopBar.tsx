@@ -1,7 +1,8 @@
 'use client';
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IconMoon, IconSun, IconQuestion } from './Icons';
+import { IconMoon, IconSun, IconQuestion, IconSparkle } from './Icons';
 import { TopbarZoek } from './GlobalSearch';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
 import HelpPanel from './HelpPanel';
@@ -29,6 +30,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/$/, { title: 'Overzicht' }],
 
   // EVA
+  [/^\/wat-is-nieuw$/, { title: 'Wat is nieuw', breadcrumb: 'EVA' }],
   [/^\/vraag-eva$/, { title: 'Vraag EVA', breadcrumb: 'EVA' }],
   [/^\/bronnen$/, { title: 'Bronnen', breadcrumb: 'EVA' }],
   [/^\/bibliotheek$/, { title: 'Bibliotheek', breadcrumb: 'EVA' }],
@@ -256,9 +258,11 @@ type TopBarProps = {
   dark: boolean;
   setDark: (v: boolean) => void;
   aantalOngelezen?: number;
+  /** Aantal ongelezen "Wat is nieuw"-updates (stip op het sterretje). */
+  aantalNieuweUpdates?: number;
 };
 
-export default function TopBar({ dark, setDark, aantalOngelezen = 0 }: TopBarProps) {
+export default function TopBar({ dark, setDark, aantalOngelezen = 0, aantalNieuweUpdates = 0 }: TopBarProps) {
   const pathname = usePathname()
   const { title, breadcrumb, withTabs } = resolveLabel(pathname)
   const breadcrumbCtx = useBreadcrumb()
@@ -297,6 +301,20 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0 }: TopBarPro
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <TopbarZoek />
+          <Link
+            href="/wat-is-nieuw"
+            style={iconBtn()}
+            title="Wat is nieuw"
+          >
+            <IconSparkle size={20}/>
+            {aantalNieuweUpdates > 0 && (
+              <span style={{
+                position: 'absolute', top: 6, right: 7,
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#ef4444',
+              }}/>
+            )}
+          </Link>
           <button
             onClick={() => setHelpOpen(true)}
             style={iconBtn()}

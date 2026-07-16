@@ -7,6 +7,7 @@ import { laadOfferteContext, genereerOffertePdfMetBijlagen } from '@/lib/everts-
 import { getOfferteMailSjabloon, buildMailVars, renderMailTekst } from '@/lib/everts-calc/offerte-mail'
 import { verstuurMailNamensMedewerker, haalVerzondenMailMime, type MailBijlage } from '@/lib/o365/mail'
 import { uploadBuffersNaarDossierMap } from '@/lib/dossiers/sharepoint-bestanden'
+import type { GoedkeuringStatus } from '@/lib/goedkeuring/types'
 
 export interface MailConcept {
   to: string
@@ -51,6 +52,56 @@ export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteD
     verzendbaar,
     totaalBedrag: q.subtotaal_ex_btw ?? 0,
     dossierId,
+  }
+}
+
+export interface OfferteGoedkeuringKnopStatus {
+  /** Status van de actuele (laatste) ronde; null = nog nooit goedkeuring aangevraagd. */
+  status: GoedkeuringStatus | null
+  /** Mag de ingelogde gebruiker de openstaande aanvraag beoordelen (controller/Directie/gedelegeerde)? */
+  magBeoordelen: boolean
+  /** Is goedkeuring voor deze offerte überhaupt vereist (categorie/drempel)? */
+  vereist: boolean
+  /** Laatste goedgekeurde ronde én de inhoud is sindsdien niet gewijzigd (object_hash matcht). */
+  ongewijzigd: boolean
+}
+
+/**
+ * Alles wat de offerte-goedkeuringsknop nodig heeft om zijn status te tonen, in één call.
+ * Spiegelt de werkbegroting-header: groen "Offerte goedkeuren" als je mag accorderen,
+ * anders een statusgekleurde knop.
+ */
+export async function getOfferteGoedkeuringKnopStatus(quoteId: string): Promise<OfferteGoedkeuringKnopStatus> {
+  const { getGoedkeuring } = await import('@/lib/goedkeuring/actions')
+  const { offerteGoedkeuringVereist, berekenOfferteHash } = await import('@/lib/goedkeuring/offerte')
+
+  const [overzicht, vereistInfo] = await Promise.all([
+    getGoedkeuring('offerte', quoteId),
+    offerteGoedkeuringVereist(quoteId),
+  ])
+
+  // Ongewijzigd = laatste goedgekeurde ronde met een object_hash die nog matcht.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data: laatsteGoedgekeurd } = await admin
+    .from('goedkeuringen')
+    .select('object_hash')
+    .eq('object_type', 'offerte')
+    .eq('object_id', quoteId)
+    .eq('status', 'goedgekeurd')
+    .order('ronde', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const ongewijzigd = laatsteGoedgekeurd
+    ? laatsteGoedgekeurd.object_hash === (await berekenOfferteHash(quoteId))
+    : false
+
+  return {
+    status: overzicht.actueel?.status ?? null,
+    magBeoordelen: overzicht.magBeoordelen,
+    vereist: vereistInfo.vereist,
+    ongewijzigd,
   }
 }
 
