@@ -10,7 +10,7 @@ const NIVEAU_RANG: Record<ModuleRechten, number> = { lezen: 1, schrijven: 2, beh
  * Onderdelen waarvoor de toegang nu daadwerkelijk wordt afgedwongen
  * (sidebar verbergen + route-guard). Uitrollen = key toevoegen.
  */
-export const AFGEDWONGEN_MODULES: RechtenModule[] = ['management', 'mijn_taken', 'wagenpark']
+export const AFGEDWONGEN_MODULES: RechtenModule[] = ['management', 'mijn_taken', 'wagenpark', 'materieelbeheer']
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */
 export function isBeheerder(rechten: RechtenSet): boolean {
