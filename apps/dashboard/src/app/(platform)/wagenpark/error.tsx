@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
 
 /**
  * Error-boundary voor de hele Wagenpark-sectie.
@@ -19,6 +20,7 @@ export default function WagenparkError({
 }) {
   useEffect(() => {
     console.error('[wagenpark] render-fout:', error)
+    meldFoutVanuitBrowser(error, '/wagenpark')
   }, [error])
 
   const lijktDbFout =

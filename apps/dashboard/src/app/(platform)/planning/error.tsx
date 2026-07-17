@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
 
 export default function PlanningError({
   error,
@@ -9,6 +10,10 @@ export default function PlanningError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  React.useEffect(() => {
+    meldFoutVanuitBrowser(error, '/planning')
+  }, [error])
+
   return (
     <div className="eva-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
       <div className="eva-card-warn" style={{ padding: '28px 32px', maxWidth: 420, textAlign: 'center' }}>

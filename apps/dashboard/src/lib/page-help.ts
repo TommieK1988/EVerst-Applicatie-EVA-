@@ -275,6 +275,18 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/foutenlog$/, {
+    title: 'Instellingen — Foutenlog',
+    description: 'Overzicht van wat er in EVA misging: de foutmelding, wanneer hij ontstond, hoe vaak hij voorkwam en waar in de applicatie. Bedoeld om te monitoren wat er nog stukgaat naarmate meer collega\'s met EVA werken. Alleen zichtbaar voor beheerders, omdat een technisch foutspoor klantgegevens kan bevatten.',
+    sections: [
+      { title: 'Eén regel per fout, niet per keer', body: 'Dezelfde fout die honderd keer optreedt blijft één regel; de kolom Aantal loopt op. Een hoog aantal betekent dat veel collega\'s erover struikelen — sorteer daarop om te zien wat het meeste pijn doet.' },
+      { title: 'Waar de fout vandaan komt', body: 'Server = het ging mis op de achtergrond bij het klaarzetten van een pagina of het opslaan van gegevens. Browser = het ging mis op het scherm van de collega zelf. Cron = het ging mis in een taak die automatisch \'s nachts draait, zoals de Bouw7-synchronisatie.' },
+      { title: 'Afvinken als opgelost', body: 'Klik een regel aan voor het volledige foutspoor en vink hem af zodra hij verholpen is, eventueel met een notitie. Gebeurt dezelfde fout daarna tóch weer, dan springt hij automatisch terug op open — hij was dan immers niet opgelost.' },
+      { title: 'Foutcode', body: 'Meldt een collega een foutcode van zijn scherm, zoek die dan hier op: de regel met dezelfde code bevat de echte melding en het foutspoor.' },
+      { title: 'Wat er niet in staat', body: 'Fouten die EVA zelf netjes opvangt en als melding aan de gebruiker toont, komen hier niet terecht — dit zijn alleen de onverwachte. Regels worden automatisch opgeruimd: opgelost na 30 dagen, de rest na 90 dagen.' },
+    ],
+  }],
+
   [/^\/instellingen\/bedrijfsgegevens\/huisstijl$/, {
     title: 'Instellingen — Huisstijl',
     description: 'Stel de visuele identiteit van je werkmaatschappij in: logo\'s in verschillende formaten, kleurenpalet, typografie en huisstijlregels. Deze instellingen worden toegepast op alle gegenereerde PDF\'s en e-mails.',

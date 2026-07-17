@@ -66,6 +66,14 @@ const platformItems: SettingsItem[] = [
     module: 'instellingen',
   },
   {
+    href: '/instellingen/foutenlog',
+    title: 'Foutenlog',
+    description: 'Wat er misging in EVA — wat de melding was, wanneer, hoe vaak en wie het raakte.',
+    ready: true,
+    kicker: 'Systeem',
+    module: 'instellingen',
+  },
+  {
     href: '/instellingen',
     title: 'Systeem',
     description: 'Feature flags, cache, logs en backups.',

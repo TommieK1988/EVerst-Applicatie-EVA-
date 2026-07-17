@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo structure
 
-npm workspaces + Turborepo. Twee actieve Next.js 14 apps onder `apps/`, vijf interne packages onder `packages/`.
+npm workspaces + Turborepo. Twee actieve Next.js 15 apps onder `apps/`, vijf interne packages onder `packages/`.
 
 **De centrale app is EVA** (`apps/dashboard`, package-naam `eva`). Alle modules (wagenpark, houtrotherstel, taken, everts-calc) zijn geïntegreerd in EVA — ze draaien **niet** meer als losse apps.
 
@@ -61,7 +61,7 @@ Gebruik altijd de `@everts/database` package voor Supabase-clients — nooit rec
 
 ## Architecture patterns
 
-### Data flow (Next.js 14 App Router)
+### Data flow (Next.js 15 App Router)
 Alle apps gebruiken de Next.js App Router. Server Components halen data direct via de Supabase server client (`@everts/database/server`). Client Components gebruiken de browser client (`@everts/database/client`).
 
 ### Styling
