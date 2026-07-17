@@ -1,4 +1,4 @@
-import type { FormField } from './types'
+import type { AandachtspuntWaarde, FormField } from './types'
 
 /** Eén geselecteerde medewerker in een `medewerker`-veld. */
 export type MedewerkerWaarde = { id: string; naam: string }
@@ -80,6 +80,20 @@ export function formatVeldwaardeTekst(field: FormField, value: unknown): string 
     case 'photo':
     case 'signature':
       return '[Afbeelding]'
+
+    case 'aandachtspunt': {
+      const punten = Array.isArray(value) ? (value as AandachtspuntWaarde[]) : []
+      const regels = punten
+        .filter(p => typeof p?.omschrijving === 'string' && p.omschrijving.trim() !== '')
+        .map((p, i) => {
+          const staart = [
+            p.ruimte ? `(${p.ruimte})` : null,
+            p.fotos?.length ? `— ${p.fotos.length} foto${p.fotos.length === 1 ? '' : "'s"}` : null,
+          ].filter(Boolean).join(' ')
+          return `${i + 1}. ${p.omschrijving.trim()}${staart ? ` ${staart}` : ''}`
+        })
+      return regels.length ? regels.join('\n') : '—'
+    }
 
     default:
       return String(value)

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
-import { evaluateConditions, isInvoerVeld, resolveAccent } from '../types'
+import { evaluateConditions, isInvoerVeld, isVeldLeeg, resolveAccent } from '../types'
 import FieldRenderer from './FieldRenderer'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import {
@@ -13,6 +13,7 @@ import {
   laadFormulierConcept,
   bewaarFormulierConcept,
   verwijderFormulierConcept,
+  uploadAandachtspuntFoto,
 } from '@/app/(platform)/formulieren/actions'
 
 type Props = {
@@ -130,6 +131,15 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     }
   }
 
+  /** Foto's bij een aandachtspunt gaan meteen naar de opslag; alleen de URL komt in de waarden. */
+  async function fotoUpload(file: File): Promise<string | null> {
+    const fd = new FormData()
+    fd.append('foto', file)
+    const res = await uploadAandachtspuntFoto(dossierId ?? null, fd)
+    if (!res.ok) { toast.error(res.error); return null }
+    return res.data
+  }
+
   /** Verplichte invoervelden binnen een set die nog leeg zijn. */
   function missendeInVelden(velden: FormField[]): FormField[] {
     return velden.filter(field => {
@@ -137,9 +147,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       // en mogen het indienen nooit blokkeren.
       if (!isInvoerVeld(field)) return false
       if (!field.required) return false
-      const val = values[field.id]
-      return val === undefined || val === null || val === '' ||
-        (Array.isArray(val) && val.length === 0)
+      return isVeldLeeg(field, values[field.id])
     })
   }
 
@@ -344,6 +352,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
               mobiel={mobiel}
               medewerkers={medewerkers}
               accent={accent}
+              onFotoUpload={fotoUpload}
             />
           </div>
         ))}

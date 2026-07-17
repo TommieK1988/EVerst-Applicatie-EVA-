@@ -26,8 +26,14 @@ const selectCls =
   'h-8 rounded-md border border-neutral-300 bg-white px-2 text-[12px] text-neutral-800 outline-none focus:border-brand-500'
 
 const PUNT_TONE: Record<OpleverPuntStatus, 'neutral' | 'info' | 'warning' | 'success' | 'error'> = {
-  open: 'neutral', in_behandeling: 'info', opgelost: 'warning', geaccepteerd: 'success', geweigerd: 'error',
+  nieuw: 'warning', open: 'neutral', in_behandeling: 'info', opgelost: 'warning',
+  geaccepteerd: 'success', geweigerd: 'error', afgewezen: 'neutral',
 }
+
+/** Statussen die alleen via triage worden gezet en dus niet in de handmatige status-select horen. */
+const TRIAGE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
+
+const LEGE_OPLEVERING: DossierOpleveringData = { momenten: [], triage: [], lossePunten: [], afgewezen: [] }
 const MOMENT_TONE: Record<OpleverMomentStatus, 'neutral' | 'info' | 'warning' | 'success' | 'brand'> = {
   concept: 'neutral', in_uitvoering: 'info', gereed_voor_ondertekening: 'warning', ondertekend: 'brand', afgerond: 'success',
 }
@@ -43,7 +49,7 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
   const [nieuwType, setNieuwType] = useState<OpleverMomentType>('eindoplevering')
 
   function herlaad() {
-    getDossierOplevering(dossierId).then(setData).catch(() => setData({ momenten: [] }))
+    getDossierOplevering(dossierId).then(setData).catch(() => setData(LEGE_OPLEVERING))
   }
   useEffect(() => {
     herlaad()
@@ -104,7 +110,11 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
         </Card>
       )}
 
-      {data.momenten.length === 0 ? (
+      {data.triage.length > 0 && (
+        <TriageBlok punten={data.triage} readOnly={readOnly} onChange={() => { herlaad(); router.refresh() }} />
+      )}
+
+      {data.momenten.length === 0 && data.lossePunten.length === 0 ? (
         <Card><CardBody>
           <p className="text-[13px] text-neutral-500">Nog geen oplevermoment op dit dossier. Maak er een aan om opleverpunten vast te leggen.</p>
         </CardBody></Card>
@@ -113,6 +123,15 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
           <MomentCard key={m.id} moment={m} dossierId={dossierId} toewijsbaar={toewijsbaar}
             readOnly={readOnly} onChange={() => { herlaad(); router.refresh() }} />
         ))
+      )}
+
+      {data.lossePunten.length > 0 && (
+        <LossePuntenCard punten={data.lossePunten} dossierId={dossierId} toewijsbaar={toewijsbaar}
+          readOnly={readOnly} onChange={() => { herlaad(); router.refresh() }} />
+      )}
+
+      {data.afgewezen.length > 0 && (
+        <AfgewezenBlok punten={data.afgewezen} readOnly={readOnly} onChange={() => { herlaad(); router.refresh() }} />
       )}
 
       <FeedbackBlok dossierId={dossierId} readOnly={readOnly} />
@@ -145,6 +164,7 @@ function UitlegBlok() {
             <li><strong>Onderaannemers:</strong> wijs een punt aan een onderaannemer toe → er verschijnt een <em>afmeldlink</em> bij Deel-links. Stuur die link; hij ziet alleen zijn eigen punten en meldt ze af met foto — zonder EVA-account.</li>
             <li><strong>Opdrachtgever:</strong> laat ter plekke tekenen, of deel de <em>akkoordlink</em> voor akkoord op afstand.</li>
             <li><strong>Bewonersfeedback (optioneel):</strong> maak in de Formulieren-module één feedbackformulier (categorie &ldquo;Oplevering&rdquo;), en deel hieronder de feedback-link. Reacties worden bewaard en samengevat (gemiddelde per cijfer).</li>
+            <li><strong>Aandachtspunten:</strong> zet in zo&rsquo;n formulier de vraag &ldquo;Aandachtspunt(en)&rdquo; en de invuller — bewoner of collega — kan melden wat er nog niet in orde is, met foto. Die meldingen komen bovenaan onder <em>Nieuwe meldingen</em>. Je zet ze met één klik op de opleverlijst of wijst ze af; pas dán zijn het echte opleverpunten.</li>
           </ul>
         </div>
       )}
@@ -380,6 +400,176 @@ function FeedbackBlok({ dossierId, readOnly }: { dossierId: string; readOnly: bo
         )}
       </CardBody>
     </Card>
+  )
+}
+
+/* ──────────────────── Triage: gemelde aandachtspunten ─────────────────────── */
+
+/**
+ * Meldingen uit een formulier komen niet meteen op de opleverlijst: een bewoner meldt via een
+ * openbare link, en niet elke melding is werk. De projectleider zet ze hier op de lijst of wijst ze
+ * af met een reden.
+ *
+ * Bewust geen `PuntRow`: die heeft een status-select, toewijzing en extra-werk-schakelaar die pas
+ * betekenis krijgen zódra een melding een opleverpunt is.
+ */
+function TriageBlok({ punten, readOnly, onChange }: {
+  punten: OpleverPuntView[]
+  readOnly: boolean
+  onChange: () => void
+}) {
+  const [bezig, setBezig] = useState<string | null>(null)
+
+  async function beoordeel(punt: OpleverPuntView, status: 'open' | 'afgewezen') {
+    let reden: string | null = null
+    if (status === 'afgewezen') {
+      reden = window.prompt('Waarom is dit geen opleverpunt? (optioneel)') ?? null
+    }
+    setBezig(punt.id)
+    const r = await setPuntStatus(punt.id, status, { reden })
+    setBezig(null)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success(status === 'open' ? 'Op de opleverlijst gezet' : 'Melding afgewezen')
+    onChange()
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <span>Nieuwe meldingen</span>
+        <Badge tone="warning" size="sm">{punten.length}</Badge>
+      </CardHeader>
+      <CardBody>
+        <p className="mb-3 text-[12.5px] text-neutral-500">
+          Gemeld via een formulier. Zet ze op de opleverlijst, of wijs ze af met een reden.
+        </p>
+        <div className="space-y-2">
+          {punten.map(punt => (
+            <div key={punt.id} className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] text-neutral-800">{punt.omschrijving}</div>
+                  <div className="mt-0.5 text-[11px] text-neutral-500">
+                    {punt.ruimte && <span>{punt.ruimte} · </span>}
+                    <span>{punt.bronTemplateNaam ?? 'Formulier'}</span>
+                    <span> · {punt.melder_naam ?? 'Anoniem'}</span>
+                    <span> · {datumTijd(punt.created_at)}</span>
+                  </div>
+                </div>
+                {!readOnly && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="primary" onClick={() => beoordeel(punt, 'open')} disabled={bezig === punt.id}>
+                      Op de lijst
+                    </Button>
+                    <button
+                      className="text-[11px] font-medium text-error-600 hover:underline disabled:opacity-50"
+                      disabled={bezig === punt.id}
+                      onClick={() => beoordeel(punt, 'afgewezen')}
+                    >
+                      Afwijzen
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {punt.fotos.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {punt.fotos.map(f => (
+                    <div key={f.id} className="h-16 w-16 overflow-hidden rounded-md border border-neutral-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <a href={f.url} target="_blank" rel="noreferrer">
+                        <img src={f.url} alt="foto bij melding" className="h-full w-full object-cover" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+/* ──────────────── Punten zonder oplevermoment (aandachtspunten) ───────────── */
+
+/** Punten die op de lijst staan maar niet aan een inspectie hangen — typisch gemelde meldingen. */
+function LossePuntenCard({ punten, dossierId, toewijsbaar, readOnly, onChange }: {
+  punten: OpleverPuntView[]
+  dossierId: string
+  toewijsbaar: OpleverToewijsbaar | null
+  readOnly: boolean
+  onChange: () => void
+}) {
+  const open = punten.filter(p => p.status !== 'geaccepteerd').length
+  return (
+    <Card>
+      <CardHeader>
+        <span>Aandachtspunten</span>
+        <Badge tone={open > 0 ? 'warning' : 'success'} size="sm">{open} open</Badge>
+      </CardHeader>
+      <CardBody>
+        <p className="mb-3 text-[12.5px] text-neutral-500">
+          Punten op de opleverlijst die niet aan een oplevermoment hangen.
+        </p>
+        <div className="space-y-2">
+          {punten.map(p => (
+            <PuntRow key={p.id} punt={p} dossierId={dossierId} toewijsbaar={toewijsbaar}
+              readOnly={readOnly} onChange={onChange} />
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+/** Afgewezen meldingen — ingeklapt, puur ter verantwoording. */
+function AfgewezenBlok({ punten, readOnly, onChange }: {
+  punten: OpleverPuntView[]
+  readOnly: boolean
+  onChange: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [bezig, setBezig] = useState<string | null>(null)
+
+  async function terug(punt: OpleverPuntView) {
+    setBezig(punt.id)
+    const r = await setPuntStatus(punt.id, 'nieuw')
+    setBezig(null)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Terug bij de nieuwe meldingen'); onChange()
+  }
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50/60">
+      <button onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left">
+        <span className="text-[12.5px] font-medium text-neutral-600">
+          {punten.length} afgewezen melding{punten.length === 1 ? '' : 'en'}
+        </span>
+        <span className="text-[11px] font-medium text-neutral-500">{open ? 'Verbergen' : 'Tonen'}</span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-neutral-200 px-4 py-3">
+          {punten.map(p => (
+            <div key={p.id} className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] text-neutral-600 line-through">{p.omschrijving}</div>
+                {p.geweigerd_reden && (
+                  <div className="text-[11px] text-neutral-500">Reden: {p.geweigerd_reden}</div>
+                )}
+              </div>
+              {!readOnly && (
+                <button className="text-[11px] text-neutral-500 hover:underline disabled:opacity-50"
+                  disabled={bezig === p.id} onClick={() => terug(p)}>
+                  Ongedaan maken
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -784,7 +974,10 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold tabular-nums text-neutral-400">OP{String(punt.volgnummer).padStart(2, '0')}</span>
+            {/* Losse punten (AP) hebben een eigen nummerreeks per dossier, naast die per moment (OP). */}
+            <span className="text-[11px] font-semibold tabular-nums text-neutral-400">
+              {punt.moment_id ? 'OP' : 'AP'}{String(punt.volgnummer).padStart(2, '0')}
+            </span>
             <Badge tone={PUNT_TONE[punt.status]} size="sm">{opleverPuntStatusLabels[punt.status]}</Badge>
             {punt.is_extra_werk && (
               <Badge tone="brand" size="sm">Extra werk{punt.meerwerkVolgnummer ? ` · MW${String(punt.meerwerkVolgnummer).padStart(2, '0')}` : ''}</Badge>
@@ -810,9 +1003,12 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
           {!readOnly && (
             <select className={selectCls} value={punt.status} disabled={bezig}
               onChange={e => { if (e.target.value !== punt.status) wijzigStatus(e.target.value as OpleverPuntStatus) }}>
-              {(Object.keys(opleverPuntStatusLabels) as OpleverPuntStatus[]).map(s => (
-                <option key={s} value={s}>{opleverPuntStatusLabels[s]}</option>
-              ))}
+              {/* Triage-statussen horen hier niet: die zet je bij "Nieuwe meldingen", niet halverwege het werk. */}
+              {(Object.keys(opleverPuntStatusLabels) as OpleverPuntStatus[])
+                .filter(s => !TRIAGE_STATUSSEN.includes(s))
+                .map(s => (
+                  <option key={s} value={s}>{opleverPuntStatusLabels[s]}</option>
+                ))}
             </select>
           )}
           <button className="text-[11px] text-neutral-500 hover:underline" onClick={() => setOpen(o => !o)}>

@@ -1,5 +1,5 @@
 import type jsPDF from 'jspdf'
-import type { CalloutVariant, FormPdfConfig, VeldOpmaak, FormField } from './types'
+import type { AandachtspuntWaarde, CalloutVariant, FormPdfConfig, VeldOpmaak, FormField } from './types'
 import { CALLOUT_VARIANTEN } from './types'
 import { formatVeldwaardeTekst } from './format'
 import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
@@ -129,6 +129,7 @@ export function dummyWaarde(field: FormField): unknown {
     case 'photo':      return []   // placeholder-blok via preview-vlag
     case 'signature':  return ''   // placeholder-blok via preview-vlag
     case 'repeatable': return [Object.fromEntries((field.children ?? []).map(c => [c.id, dummyWaarde(c)]))]
+    case 'aandachtspunt': return [{ omschrijving: 'Kras in het kozijn', ruimte: 'Woonkamer', fotos: [] }]
     default:           return ''
   }
 }
@@ -200,6 +201,26 @@ export async function buildBlokken(
             : formatVeldwaardeTekst(c, row[c.id])
           return { label: structureel ? '' : c.label, waarde }
         }))
+        blokken.push({ kind: 'herhaling', label: field.label, rijen })
+        continue
+      }
+      case 'aandachtspunt': {
+        const raw = waardeVoor(field)
+        const punten = Array.isArray(raw) ? (raw as AandachtspuntWaarde[]) : []
+        const rijen = punten
+          .filter(p => typeof p?.omschrijving === 'string' && p.omschrijving.trim() !== '')
+          .map(p => {
+            const rij = [{ label: 'Omschrijving', waarde: p.omschrijving.trim() }]
+            if (field.aandachtspunt?.toonRuimte !== false) {
+              rij.push({ label: 'Ruimte', waarde: p.ruimte?.trim() || '—' })
+            }
+            // Alleen het aantal: de foto's staan als https-URL in de opslag en het afbeeldingsblok
+            // verwerkt uitsluitend data-URL's. Ze ophalen zou elke export N netwerkrondjes kosten.
+            if (p.fotos?.length) {
+              rij.push({ label: "Foto's", waarde: `${p.fotos.length} foto${p.fotos.length === 1 ? '' : "'s"}` })
+            }
+            return rij
+          })
         blokken.push({ kind: 'herhaling', label: field.label, rijen })
         continue
       }

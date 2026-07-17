@@ -19,6 +19,7 @@ export type FormFieldType =
   | 'medewerker'
   | 'dossier'
   | 'repeatable'
+  | 'aandachtspunt'
   | 'heading'
   | 'paragraph'
   | 'callout'
@@ -42,6 +43,31 @@ export interface VeldOpmaak {
   vet?: boolean
   cursief?: boolean
   variant?: CalloutVariant                    // callout
+}
+
+// ── Aandachtspunten ──────────────────────────────────────────────────────────
+
+/**
+ * Eén door de invuller gemeld aandachtspunt. Wordt na indienen gematerialiseerd als opleverpunt
+ * (status "nieuw") op het dossier, waar de projectleider het beoordeelt.
+ *
+ * `fotos` bevat publieke storage-URL's — **nooit** data-URL's: foto's gaan bij het kiezen al naar
+ * de opslag, zodat ze niet als base64 in de inzending belanden.
+ */
+export type AandachtspuntWaarde = {
+  omschrijving: string
+  ruimte?: string | null
+  fotos?: string[]
+}
+
+/** Instellingen van een aandachtspunt-veld; de invuller ziet hiervan alleen het effect. */
+export interface AandachtspuntConfig {
+  /** `oplever` komt op de opleverlijst; `veiligheid` is voorbereid voor VCA maar nog niet in gebruik. */
+  soort?: 'oplever' | 'veiligheid'
+  toonRuimte?: boolean
+  toonFotos?: boolean
+  maxFotosPerPunt?: number
+  toevoegLabel?: string
 }
 
 export type ConditionOperator =
@@ -87,6 +113,7 @@ export interface FormField {
   opmaak?: VeldOpmaak                   // heading | paragraph | callout | image
   afbeeldingUrl?: string                // image: geüploade afbeelding (public URL)
   afbeeldingBreedte?: number            // image: weergavebreedte in px
+  aandachtspunt?: AandachtspuntConfig   // aandachtspunt: soort + welke subvelden zichtbaar zijn
 }
 
 // ── Weergave-only veldtypen ──────────────────────────────────────────
@@ -228,6 +255,7 @@ export const FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   medewerker:  'Medewerker(s)',
   dossier:     'Dossier-gegeven',
   repeatable:  'Herhalende sectie',
+  aandachtspunt: 'Aandachtspunt(en)',
   heading:     'Kop (vaste titel)',
   paragraph:   'Tekst­blok',
   callout:     'Aandacht-blok',
@@ -256,6 +284,10 @@ export const FIELD_TYPE_GROUPS: { label: string; types: FormFieldType[] }[] = [
   {
     label: 'Opmaak & Structuur',
     types: ['heading', 'paragraph', 'callout', 'divider', 'image', 'pagebreak'],
+  },
+  {
+    label: 'Aandachtspunten',
+    types: ['aandachtspunt'],
   },
   {
     label: 'Sectie',
@@ -377,6 +409,13 @@ export function defaultField(type: FormFieldType, existingNames: string[]): Form
     base.children = []
   }
 
+  if (type === 'aandachtspunt') {
+    base.label = 'Aandachtspunten'
+    base.helpText = 'Meld hier wat er nog niet in orde is. Elk punt komt bij de projectleider terecht.'
+    base.defaultValue = []
+    base.aandachtspunt = { soort: 'oplever', toonRuimte: true, toonFotos: true, maxFotosPerPunt: 3 }
+  }
+
   if (type === 'dossier') {
     // Dossier-gegevens worden automatisch uit het gekoppelde dossier gevuld en
     // zijn altijd alleen-lezen. De concrete variabele kiest de bouwer in de instellingen.
@@ -403,6 +442,22 @@ function isLeeg(v: unknown): boolean {
   if (v === undefined || v === null || v === '') return true
   if (Array.isArray(v) && v.length === 0) return true
   return false
+}
+
+/**
+ * Telt dit veld als onbeantwoord? Gedeeld door elke plek die `required` afdwingt, zodat de
+ * invulweergave en het bewonersportaal het niet elk anders doen.
+ *
+ * Voor de meeste typen is dat "geen waarde", maar een aandachtspunt-veld met alleen lege rijen is
+ * óók leeg — anders voldoet een invuller aan een verplichte vraag door op "toevoegen" te klikken.
+ */
+export function isVeldLeeg(field: { type: FormFieldType }, value: unknown): boolean {
+  if (field.type === 'aandachtspunt') {
+    if (!Array.isArray(value)) return true
+    return (value as AandachtspuntWaarde[])
+      .filter(p => typeof p?.omschrijving === 'string' && p.omschrijving.trim() !== '').length === 0
+  }
+  return isLeeg(value)
 }
 
 /** Bepaal of één conditie matcht. */

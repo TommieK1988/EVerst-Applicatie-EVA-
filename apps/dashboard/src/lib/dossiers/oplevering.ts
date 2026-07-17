@@ -16,12 +16,12 @@ import type {
   OpleverToewijzingType,
   OpleverTokenScope,
 } from '@everts/database'
-import { assertDossierBewerkbaar } from './guards'
+import { assertDossierBewerkbaar, isDossierBewerkbaar } from './guards'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { maakMeerwerkRegel } from './meerwerk'
 import { formatVeldwaardeTekst } from '@/components/formulieren/format'
 import { isInvoerVeld } from '@/components/formulieren/types'
-import type { FormField } from '@/components/formulieren/types'
+import type { AandachtspuntWaarde, FormField, FormSchema } from '@/components/formulieren/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -37,14 +37,24 @@ function revalidate(dossierId: string) {
 
 /* ─────────────────────────── Statusmachines ──────────────────────────────── */
 
-/** Toegestane opleverpunt-transities (domein: Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd). */
+/**
+ * Toegestane opleverpunt-transities (domein: Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd).
+ *
+ * `nieuw` is de triage-ingang voor punten uit een formulier: de projectleider zet ze op de lijst
+ * (`open`) of wijst ze af. `afgewezen` is terminaal, op ongedaan maken na.
+ */
 const PUNT_TRANSITIES: Record<OpleverPuntStatus, OpleverPuntStatus[]> = {
+  nieuw:          ['open', 'afgewezen'],
   open:           ['in_behandeling', 'opgelost', 'geaccepteerd'],
   in_behandeling: ['open', 'opgelost', 'geaccepteerd'],
   opgelost:       ['geaccepteerd', 'geweigerd', 'in_behandeling'],
   geaccepteerd:   ['in_behandeling'],
   geweigerd:      ['open', 'in_behandeling', 'opgelost'],
+  afgewezen:      ['nieuw', 'open'],
 }
+
+/** Statussen die niet meetellen als werk: nog te beoordelen, of beoordeeld en afgevallen. */
+const NIET_ACTIEVE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
 
 /* ─────────────────────────────── Views ───────────────────────────────────── */
 
@@ -53,6 +63,8 @@ export type OpleverPuntView = OpleverPunt & {
   reacties: OpleverPuntReactie[]
   toegewezenNaam: string | null
   meerwerkVolgnummer: number | null
+  /** Naam van het formulier waaruit dit punt is gemeld; null bij handmatig aangemaakte punten. */
+  bronTemplateNaam: string | null
 }
 
 export type OpleverMomentView = OpleverMoment & {
@@ -65,31 +77,38 @@ export type OpleverMomentView = OpleverMoment & {
 
 export type DossierOpleveringData = {
   momenten: OpleverMomentView[]
+  /** Meldingen uit een formulier die nog beoordeeld moeten worden (status 'nieuw'). */
+  triage: OpleverPuntView[]
+  /** Punten die op de lijst staan maar niet aan een oplevermoment hangen. */
+  lossePunten: OpleverPuntView[]
+  /** Beoordeeld en afgevallen; alleen ter verantwoording, ingeklapt in beeld. */
+  afgewezen: OpleverPuntView[]
 }
 
 /**
  * Volledige opleverstructuur van een dossier: momenten → punten (met foto's, reacties, toegewezen-naam
- * en meerwerkkoppeling) → handtekeningen. Namen van toegewezen medewerkers/relaties worden in één
- * batch opgelost.
+ * en meerwerkkoppeling) → handtekeningen, plus de punten die níét aan een moment hangen. Namen van
+ * toegewezen medewerkers/relaties worden in één batch opgelost.
+ *
+ * Punten worden op `dossier_id` opgehaald, niet via de momenten: een aandachtspunt uit een formulier
+ * heeft geen moment, en een dossier kan meldingen hebben zonder dat er ooit een oplevermoment is
+ * aangemaakt. Alleen `soort = 'oplever'` — veiligheidspunten (VCA) horen niet op de opleverlijst.
  */
 export async function getDossierOplevering(dossierId: string): Promise<DossierOpleveringData> {
   const supabase = db()
 
-  const { data: momentenRaw } = await supabase
-    .from('oplever_momenten')
-    .select('*')
-    .eq('dossier_id', dossierId)
-    .order('created_at', { ascending: true })
+  const [{ data: momentenRaw }, { data: puntenRaw }] = await Promise.all([
+    supabase.from('oplever_momenten').select('*').eq('dossier_id', dossierId).order('created_at', { ascending: true }),
+    supabase.from('oplever_punten').select('*').eq('dossier_id', dossierId).eq('soort', 'oplever')
+      .order('volgnummer', { ascending: true }),
+  ])
   const momenten = (momentenRaw ?? []) as OpleverMoment[]
-  if (momenten.length === 0) return { momenten: [] }
+  const punten = (puntenRaw ?? []) as OpleverPunt[]
 
   const momentIds = momenten.map(m => m.id)
-
-  const [{ data: puntenRaw }, { data: handtekeningenRaw }] = await Promise.all([
-    supabase.from('oplever_punten').select('*').in('moment_id', momentIds).order('volgnummer', { ascending: true }),
-    supabase.from('oplever_handtekeningen').select('*').in('moment_id', momentIds).order('created_at', { ascending: true }),
-  ])
-  const punten = (puntenRaw ?? []) as OpleverPunt[]
+  const { data: handtekeningenRaw } = momentIds.length
+    ? await supabase.from('oplever_handtekeningen').select('*').in('moment_id', momentIds).order('created_at', { ascending: true })
+    : { data: [] }
   const handtekeningen = (handtekeningenRaw ?? []) as OpleverHandtekening[]
   const puntIds = punten.map(p => p.id)
 
@@ -105,12 +124,13 @@ export async function getDossierOplevering(dossierId: string): Promise<DossierOp
   const fotos = (fotosRaw ?? []) as OpleverFoto[]
   const reacties = (reactiesRaw ?? []) as OpleverPuntReactie[]
 
-  // Namen van toegewezenen + meerwerk-volgnummers oplossen.
+  // Namen van toegewezenen + meerwerk-volgnummers + herkomst-formulier oplossen.
   const medewerkerIds = [...new Set(punten.map(p => p.toegewezen_medewerker_id).filter(Boolean))] as string[]
   const relatieIds = [...new Set(punten.map(p => p.toegewezen_relatie_id).filter(Boolean))] as string[]
   const meerwerkIds = [...new Set(punten.map(p => p.meerwerk_regel_id).filter(Boolean))] as string[]
+  const inzendingIds = [...new Set(punten.map(p => p.form_inzending_id).filter(Boolean))] as string[]
 
-  const [medewerkers, relaties, meerwerk] = await Promise.all([
+  const [medewerkers, relaties, meerwerk, inzendingen] = await Promise.all([
     medewerkerIds.length
       ? supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', medewerkerIds)
       : Promise.resolve({ data: [] }),
@@ -120,6 +140,9 @@ export async function getDossierOplevering(dossierId: string): Promise<DossierOp
     meerwerkIds.length
       ? supabase.from('meerwerk_regels').select('id, volgnummer').in('id', meerwerkIds)
       : Promise.resolve({ data: [] }),
+    inzendingIds.length
+      ? supabase.from('form_inzendingen').select('id, template_id').in('id', inzendingIds)
+      : Promise.resolve({ data: [] }),
   ])
   const medewerkerNaam = new Map<string, string>()
   for (const m of (medewerkers.data ?? [])) {
@@ -128,39 +151,61 @@ export async function getDossierOplevering(dossierId: string): Promise<DossierOp
   const relatieNaam = new Map<string, string>((relaties.data ?? []).map((r: any) => [r.id, r.naam]))
   const meerwerkVolg = new Map<string, number>((meerwerk.data ?? []).map((r: any) => [r.id, r.volgnummer]))
 
-  const puntenPerMoment = new Map<string, OpleverPuntView[]>()
-  for (const p of punten) {
-    const toegewezenNaam =
+  // Inzending → template → naam, in twee batches.
+  const inzendingTemplate = new Map<string, string>((inzendingen.data ?? []).map((r: any) => [r.id, r.template_id]))
+  const templateIds = [...new Set([...inzendingTemplate.values()].filter(Boolean))]
+  const { data: templatesRaw } = templateIds.length
+    ? await supabase.from('form_templates').select('id, naam').in('id', templateIds)
+    : { data: [] }
+  const templateNaam = new Map<string, string>((templatesRaw ?? []).map((r: any) => [r.id, r.naam]))
+
+  const view = (p: OpleverPunt): OpleverPuntView => ({
+    ...p,
+    fotos: fotos.filter(f => f.punt_id === p.id),
+    reacties: reacties.filter(r => r.punt_id === p.id),
+    toegewezenNaam:
       p.toegewezen_type === 'medewerker'
         ? medewerkerNaam.get(p.toegewezen_medewerker_id ?? '') ?? null
         : p.toegewezen_type === 'relatie'
           ? relatieNaam.get(p.toegewezen_relatie_id ?? '') ?? null
-          : null
-    const view: OpleverPuntView = {
-      ...p,
-      fotos: fotos.filter(f => f.punt_id === p.id),
-      reacties: reacties.filter(r => r.punt_id === p.id),
-      toegewezenNaam,
-      meerwerkVolgnummer: p.meerwerk_regel_id ? meerwerkVolg.get(p.meerwerk_regel_id) ?? null : null,
-    }
-    const list = puntenPerMoment.get(p.moment_id) ?? []
-    list.push(view)
-    puntenPerMoment.set(p.moment_id, list)
+          : null,
+    meerwerkVolgnummer: p.meerwerk_regel_id ? meerwerkVolg.get(p.meerwerk_regel_id) ?? null : null,
+    bronTemplateNaam: p.form_inzending_id
+      ? templateNaam.get(inzendingTemplate.get(p.form_inzending_id) ?? '') ?? null
+      : null,
+  })
+
+  const views = punten.map(view)
+
+  const puntenPerMoment = new Map<string, OpleverPuntView[]>()
+  for (const v of views) {
+    if (!v.moment_id) continue
+    const list = puntenPerMoment.get(v.moment_id) ?? []
+    list.push(v)
+    puntenPerMoment.set(v.moment_id, list)
   }
 
   const momentViews: OpleverMomentView[] = momenten.map(m => {
     const mp = puntenPerMoment.get(m.id) ?? []
+    // Afgewezen en nog te beoordelen punten tellen niet mee als werk: anders blijft een moment
+    // eeuwig "open" en komt het nooit op 'gereed_voor_ondertekening'.
+    const meetellend = mp.filter(p => !NIET_ACTIEVE_STATUSSEN.includes(p.status))
     return {
       ...m,
       punten: mp,
       handtekeningen: handtekeningen.filter(h => h.moment_id === m.id),
-      aantalTotaal: mp.length,
-      aantalOpen: mp.filter(p => p.status !== 'geaccepteerd').length,
-      aantalGeaccepteerd: mp.filter(p => p.status === 'geaccepteerd').length,
+      aantalTotaal: meetellend.length,
+      aantalOpen: meetellend.filter(p => p.status !== 'geaccepteerd').length,
+      aantalGeaccepteerd: meetellend.filter(p => p.status === 'geaccepteerd').length,
     }
   })
 
-  return { momenten: momentViews }
+  return {
+    momenten: momentViews,
+    triage:      views.filter(p => p.status === 'nieuw'),
+    lossePunten: views.filter(p => !p.moment_id && p.status !== 'nieuw' && p.status !== 'afgewezen'),
+    afgewezen:   views.filter(p => p.status === 'afgewezen'),
+  }
 }
 
 /* ────────────────────────────── Rapportage ───────────────────────────────── */
@@ -202,13 +247,17 @@ export async function getOplevermomentRapport(momentId: string): Promise<Oplever
     supabase.from('oplever_handtekeningen').select('*').eq('moment_id', momentId).order('created_at'),
   ])
 
-  const puntViews: OpleverPuntView[] = (punten ?? []).map((p: any) => ({
-    ...p,
-    fotos: (fotos ?? []).filter((f: any) => f.punt_id === p.id),
-    reacties: (reacties ?? []).filter((r: any) => r.punt_id === p.id),
-    toegewezenNaam: null,
-    meerwerkVolgnummer: null,
-  }))
+  const puntViews: OpleverPuntView[] = (punten ?? [])
+    // Afgewezen meldingen horen niet in een rapport naar de klant.
+    .filter((p: any) => !NIET_ACTIEVE_STATUSSEN.includes(p.status))
+    .map((p: any) => ({
+      ...p,
+      fotos: (fotos ?? []).filter((f: any) => f.punt_id === p.id),
+      reacties: (reacties ?? []).filter((r: any) => r.punt_id === p.id),
+      toegewezenNaam: null,
+      meerwerkVolgnummer: null,
+      bronTemplateNaam: null,
+    }))
 
   return {
     dossier: { titel: dossier?.titel ?? null, nummer: dossier?.dossiernummer ?? null, werkadres, klant },
@@ -362,7 +411,7 @@ export async function updateOpleverpunt(
 
 /**
  * Statusovergang met transitie-guard. Zet automatisch afgemeld_op (bij 'opgelost'),
- * geaccepteerd_op (bij 'geaccepteerd') en de weigerreden (bij 'geweigerd').
+ * geaccepteerd_op (bij 'geaccepteerd') en de reden (bij 'geweigerd' en 'afgewezen').
  */
 export async function setPuntStatus(
   id: string,
@@ -375,7 +424,10 @@ export async function setPuntStatus(
   await assertDossierBewerkbaar(row.dossier_id)
 
   const huidige = row.status as OpleverPuntStatus
-  if (huidige !== status && !PUNT_TRANSITIES[huidige].includes(status)) {
+  // Defensief: een status die de machine niet kent levert `undefined` op en zou hier throwen —
+  // deze module geeft altijd een resultaatobject terug, nooit een exceptie.
+  const toegestaan = PUNT_TRANSITIES[huidige] ?? []
+  if (huidige !== status && !toegestaan.includes(status)) {
     return { ok: false, error: `Ongeldige statusovergang: ${huidige} → ${status}` }
   }
 
@@ -383,7 +435,7 @@ export async function setPuntStatus(
   const velden: Record<string, unknown> = { status, updated_at: now }
   if (status === 'opgelost') velden.afgemeld_op = now
   if (status === 'geaccepteerd') velden.geaccepteerd_op = now
-  if (status === 'geweigerd') velden.geweigerd_reden = opts?.reden ?? null
+  if (status === 'geweigerd' || status === 'afgewezen') velden.geweigerd_reden = opts?.reden ?? null
 
   const { data: bijgewerkt, error } = await supabase
     .from('oplever_punten').update(velden).eq('id', id).select('moment_id').single()
@@ -399,10 +451,15 @@ export async function setPuntStatus(
   return { ok: true }
 }
 
-/** Zet een moment op 'gereed_voor_ondertekening' zodra er punten zijn en geen enkel punt meer open is. */
+/**
+ * Zet een moment op 'gereed_voor_ondertekening' zodra er punten zijn en geen enkel punt meer open is.
+ * Nog te beoordelen en afgewezen punten tellen niet mee — die zouden het moment anders permanent
+ * blokkeren.
+ */
 async function bumpMomentBijVolledigGeaccepteerd(supabase: any, momentId: string): Promise<void> {
   const { data: punten } = await supabase.from('oplever_punten').select('status').eq('moment_id', momentId)
-  const rows = (punten ?? []) as { status: OpleverPuntStatus }[]
+  const rows = ((punten ?? []) as { status: OpleverPuntStatus }[])
+    .filter(p => !NIET_ACTIEVE_STATUSSEN.includes(p.status))
   if (rows.length === 0 || rows.some(p => p.status !== 'geaccepteerd')) return
   const { data: moment } = await supabase.from('oplever_momenten').select('status').eq('id', momentId).single()
   if (moment && (moment.status === 'concept' || moment.status === 'in_uitvoering')) {
@@ -561,6 +618,133 @@ export async function verwijderOpleverFoto(id: string): Promise<{ ok: true } | {
   return { ok: true }
 }
 
+/* ─────────────────────── Aandachtspunten uit formulieren ─────────────────── */
+
+/** Publieke basis-URL van de oplever-fotos-bucket, bijv. https://<ref>.supabase.co/storage/v1/object/public/oplever-fotos/ */
+function opleverFotoBasisUrl(supabase: any): string {
+  return supabase.storage.from('oplever-fotos').getPublicUrl('').data.publicUrl
+}
+
+/**
+ * Materialiseert de aandachtspunten uit een ingediende formulier-inzending als opleverpunten
+ * (status `nieuw`, dus wachtend op triage door de projectleider).
+ *
+ * Niet-blokkerend van opzet: elk randgeval levert `{ok:true, aangemaakt:0}` op in plaats van een
+ * fout. Deze functie draait namelijk óók achter de publieke bewonerslink, en een bewoner die zijn
+ * feedback al heeft ingestuurd mag daar geen foutscherm voor terugkrijgen.
+ *
+ * **Eenmalig, niet synchroniserend.** Is er voor deze inzending al gematerialiseerd, dan gebeurt er
+ * niets meer — ook niet als de antwoorden intussen zijn gewijzigd. Anders zou een her-indiening de
+ * triage-beslissingen van de projectleider overschrijven.
+ */
+export async function materialiseerAandachtspunten(
+  inzendingId: string,
+): Promise<{ ok: true; aangemaakt: number } | { ok: false; error: string }> {
+  try {
+    const supabase = db()
+    const { data: inzending } = await supabase
+      .from('form_inzendingen')
+      .select('id, dossier_id, versie_id, waarden, ingediend_door')
+      .eq('id', inzendingId)
+      .maybeSingle()
+    if (!inzending) return { ok: false, error: 'Inzending niet gevonden' }
+
+    // Zonder dossier is er geen opleverlijst om het punt op te zetten. De antwoorden blijven gewoon
+    // in de inzending staan, dus er gaat niets verloren.
+    if (!inzending.dossier_id) return { ok: true, aangemaakt: 0 }
+
+    // Al gematerialiseerd? Dan klaar. De unique index uq_oplever_punten_bron vangt de race waarin
+    // twee submits elkaar kruisen.
+    const { data: bestaand } = await supabase
+      .from('oplever_punten').select('id').eq('form_inzending_id', inzendingId).limit(1).maybeSingle()
+    if (bestaand) return { ok: true, aangemaakt: 0 }
+
+    // Afgesloten dossier: bewust geen fout — de feedback blijft bewaard, er komt alleen geen punt bij.
+    if (!(await isDossierBewerkbaar(inzending.dossier_id))) return { ok: true, aangemaakt: 0 }
+
+    const { data: versie } = await supabase
+      .from('form_versies').select('schema').eq('id', inzending.versie_id).maybeSingle()
+    const schema = versie?.schema as FormSchema | undefined
+    // Alleen top-level velden: een aandachtspunt in een herhalende sectie wordt niet gelezen (en is
+    // in de bouwer ook niet te plaatsen).
+    const velden = (schema?.fields ?? []).filter(f => f.type === 'aandachtspunt')
+    if (velden.length === 0) return { ok: true, aangemaakt: 0 }
+
+    const waarden = (inzending.waarden ?? {}) as Record<string, unknown>
+    const basisUrl = opleverFotoBasisUrl(supabase)
+
+    type NieuwePunt = { veld: FormField; index: number; punt: AandachtspuntWaarde }
+    const teMaken: NieuwePunt[] = []
+    for (const veld of velden) {
+      const rijen = Array.isArray(waarden[veld.id]) ? (waarden[veld.id] as AandachtspuntWaarde[]) : []
+      rijen
+        .map((punt, index) => ({ veld, index, punt }))
+        .filter(r => typeof r.punt?.omschrijving === 'string' && r.punt.omschrijving.trim() !== '')
+        // Harde bovengrens tegen misbruik van de publieke route.
+        .slice(0, 20)
+        .forEach(r => teMaken.push(r))
+    }
+    if (teMaken.length === 0) return { ok: true, aangemaakt: 0 }
+
+    // Melder: een collega kennen we bij naam, een bewoner via de publieke link niet.
+    let melderNaam: string | null = null
+    if (inzending.ingediend_door) {
+      const { data: mw } = await supabase
+        .from('medewerkers').select('voornaam, tussenvoegsel, achternaam')
+        .eq('id', inzending.ingediend_door).maybeSingle()
+      if (mw) melderNaam = [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ') || null
+    }
+
+    // Losse punten hebben een eigen nummerreeks per dossier (weergave "AP-xx").
+    const { data: maxRow } = await supabase
+      .from('oplever_punten')
+      .select('volgnummer')
+      .eq('dossier_id', inzending.dossier_id)
+      .is('moment_id', null)
+      .order('volgnummer', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    let volgnummer = (maxRow?.volgnummer ?? 0) + 1
+
+    const rijen = teMaken.map(r => ({
+      moment_id: null,
+      dossier_id: inzending.dossier_id,
+      volgnummer: volgnummer++,
+      omschrijving: r.punt.omschrijving.trim(),
+      ruimte: typeof r.punt.ruimte === 'string' && r.punt.ruimte.trim() !== '' ? r.punt.ruimte.trim() : null,
+      status: 'nieuw',
+      soort: r.veld.aandachtspunt?.soort ?? 'oplever',
+      bron: 'formulier',
+      form_inzending_id: inzendingId,
+      bron_veld_id: r.veld.id,
+      bron_index: r.index,
+      melder_naam: melderNaam,
+    }))
+
+    const { data: ins, error } = await supabase.from('oplever_punten').insert(rijen).select('id')
+    if (error) {
+      // 23505 = de unique index sloeg toe: een gelijktijdige submit was ons voor. Geen fout.
+      if (error.code === '23505') return { ok: true, aangemaakt: 0 }
+      return { ok: false, error: error.message }
+    }
+
+    // Foto's registreren. Alleen URL's uit onze eigen bucket: `oplever_fotos.url` wordt elders als
+    // <img src> gerenderd en in het opleverrapport ingebed, en `waarden` komt van een publieke,
+    // niet-geauthenticeerde route.
+    const fotoRijen = (ins ?? []).flatMap((row: any, i: number) =>
+      (teMaken[i].punt.fotos ?? [])
+        .filter(u => typeof u === 'string' && u.startsWith(basisUrl))
+        .map(url => ({ punt_id: row.id, url, soort: 'algemeen' })),
+    )
+    if (fotoRijen.length > 0) await supabase.from('oplever_fotos').insert(fotoRijen)
+
+    revalidate(inzending.dossier_id)
+    return { ok: true, aangemaakt: rijen.length }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
+}
+
 /* ─────────────────────────── Handtekening / akkoord ──────────────────────── */
 
 /** Legt een handtekening (ter plekke, PNG-dataURL) of akkoord vast bij een oplevermoment. */
@@ -652,6 +836,9 @@ export type OpleverBetaalsignaal = {
 /**
  * Per betrokken relatie het aantal nog niet-geaccepteerde opleverpunten. Puur informatief: de
  * Inkoop-tab toont hiermee "betaling nog niet vrijgeven" zolang `open > 0`. Blokkeert niets.
+ *
+ * Nog te beoordelen en afgewezen punten tellen niet mee — die zouden een betaling eeuwig laten
+ * "openstaan" zonder dat er werk tegenover staat.
  */
 export async function getOpleverBetaalsignaal(dossierId: string): Promise<OpleverBetaalsignaal[]> {
   const supabase = db()
@@ -659,7 +846,9 @@ export async function getOpleverBetaalsignaal(dossierId: string): Promise<Opleve
     .from('oplever_punten')
     .select('toegewezen_relatie_id, status')
     .eq('dossier_id', dossierId)
+    .eq('soort', 'oplever')
     .eq('toegewezen_type', 'relatie')
+    .not('status', 'in', `(${NIET_ACTIEVE_STATUSSEN.join(',')})`)
     .not('toegewezen_relatie_id', 'is', null)
   const rows = (punten ?? []) as { toegewezen_relatie_id: string; status: OpleverPuntStatus }[]
   if (rows.length === 0) return []
@@ -911,6 +1100,17 @@ function veldNaarAntwoorden(field: FormField, waarde: unknown, prefix = ''): Fee
         veldNaarAntwoorden(child, rij?.[child.id], `${label} ${i + 1}`),
       ),
     )
+  }
+
+  // Elk gemeld aandachtspunt als eigen regel, zodat de foto's als thumbnails meekomen.
+  if (field.type === 'aandachtspunt') {
+    const punten = Array.isArray(waarde) ? (waarde as AandachtspuntWaarde[]) : []
+    if (punten.length === 0) return []
+    return punten.map((p, i) => ({
+      label: `${label} ${i + 1}`,
+      waarde: [p?.omschrijving, p?.ruimte ? `(${p.ruimte})` : null].filter(Boolean).join(' ') || 'Niet ingevuld',
+      fotos: Array.isArray(p?.fotos) ? p.fotos.filter(u => typeof u === 'string') : [],
+    }))
   }
 
   const fotos =

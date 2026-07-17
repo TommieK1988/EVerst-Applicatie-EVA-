@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react'
 import FieldRenderer from '@/components/formulieren/filler/FieldRenderer'
-import { evaluateConditions, isInvoerVeld, type FormField } from '@/components/formulieren/types'
-import { portaalFeedbackSubmit, type FeedbackPortaalData } from '../../actions'
+import { evaluateConditions, isInvoerVeld, isVeldLeeg, type FormField } from '@/components/formulieren/types'
+import { portaalFeedbackSubmit, portaalUploadAandachtspuntFoto, type FeedbackPortaalData } from '../../actions'
 
 // FieldRenderer werkt op DS-tokens (--text, --bg, --border, hsl(var(--primary)) …). De publieke
 // layout zit buiten de EVA-shell, dus we zetten de benodigde tokens hier expliciet.
@@ -31,11 +31,19 @@ export function FeedbackPortaal({ token, data }: { token: string; data: Feedback
     if (errors[id]) setErrors(prev => { const n = { ...prev }; delete n[id]; return n })
   }
 
+  /** Foto's bij een aandachtspunt gaan meteen naar de opslag; alleen de URL komt in de waarden. */
+  async function fotoUpload(file: File): Promise<string | null> {
+    const fd = new FormData()
+    fd.append('foto', file)
+    const r = await portaalUploadAandachtspuntFoto(token, fd)
+    if (!r.ok) { setFout(r.error); return null }
+    return r.url
+  }
+
   async function verstuur() {
-    const missend = fields.filter(f => zichtbaar(f) && isInvoerVeld(f) && f.required).filter(f => {
-      const v = values[f.id]
-      return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
-    })
+    const missend = fields
+      .filter(f => zichtbaar(f) && isInvoerVeld(f) && f.required)
+      .filter(f => isVeldLeeg(f, values[f.id]))
     if (missend.length > 0) {
       setErrors(Object.fromEntries(missend.map(f => [f.id, `${f.label} is verplicht.`])))
       return
@@ -69,7 +77,7 @@ export function FeedbackPortaal({ token, data }: { token: string; data: Feedback
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {fields.filter(zichtbaar).map(f => (
             <div key={f.id}>
-              <FieldRenderer field={f} value={values[f.id]} error={errors[f.id]} onChange={v => update(f.id, v)} mobiel />
+              <FieldRenderer field={f} value={values[f.id]} error={errors[f.id]} onChange={v => update(f.id, v)} mobiel onFotoUpload={fotoUpload} />
             </div>
           ))}
           {fields.length === 0 && <p style={{ fontSize: 13.5, color: '#6b757c' }}>Deze vragenlijst bevat nog geen vragen.</p>}

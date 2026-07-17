@@ -22,6 +22,7 @@ const FIELD_ICONS: Record<FormFieldType, string> = {
   medewerker: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2-5.24',
   dossier:    'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
   repeatable: 'M4 6h16M4 10h16M4 14h16M4 18h16',
+  aandachtspunt: 'M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z',
   heading:    'M4 6h16M4 12h16',
   paragraph:  'M4 6h16M4 10h16M4 14h12',
   callout:    'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',

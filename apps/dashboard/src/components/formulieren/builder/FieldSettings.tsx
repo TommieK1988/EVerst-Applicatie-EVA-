@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import type { FormField, FormFieldType, FieldCondition, FieldOption, VeldOpmaak, CalloutVariant } from '../types'
+import type { AandachtspuntConfig, FormField, FormFieldType, FieldCondition, FieldOption, VeldOpmaak, CalloutVariant } from '../types'
 import {
   FIELD_TYPE_LABELS,
   FIELD_TYPE_GROUPS,
@@ -559,6 +559,7 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
   const isStructural = !isInvoerVeld(field)
   const hasOptions   = field.type === 'dropdown' || field.type === 'radio' || field.type === 'checkbox'
   const isRepeatable = field.type === 'repeatable'
+  const isAandachtspunt = field.type === 'aandachtspunt'
   const isDossier    = field.type === 'dossier'
   const isRating     = field.type === 'rating'
   const isCallout    = field.type === 'callout'
@@ -576,6 +577,10 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
 
   function updateOpmaak(patch: Partial<VeldOpmaak>) {
     update({ opmaak: { ...field.opmaak, ...patch } })
+  }
+
+  function updateAandachtspunt(patch: Partial<AandachtspuntConfig>) {
+    update({ aandachtspunt: { ...field.aandachtspunt, ...patch } })
   }
 
   function updateOption(idx: number, patch: Partial<FieldOption>) {
@@ -903,14 +908,90 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
         </div>
       )}
 
+      {/* Aandachtspunt-instellingen */}
+      {isAandachtspunt && (
+        <div style={{ marginBottom: 16 }}>
+          <InputRow label="Soort">
+            <SegmentedControl
+              options={[
+                { value: 'oplever', label: 'Opleverpunt' },
+                { value: 'veiligheid', label: 'Veiligheid' },
+              ]}
+              value={field.aandachtspunt?.soort ?? 'oplever'}
+              onChange={v => updateAandachtspunt({ soort: v as 'oplever' | 'veiligheid' })}
+            />
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+              Opleverpunten komen op de opleverlijst van het dossier. Veiligheid is bedoeld voor
+              VCA-formulieren en heeft nog geen eigen overzicht.
+            </p>
+          </InputRow>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            <Toggle
+              checked={field.aandachtspunt?.toonRuimte !== false}
+              onChange={v => updateAandachtspunt({ toonRuimte: v })}
+              label="Vraag naar de ruimte"
+            />
+            <Toggle
+              checked={field.aandachtspunt?.toonFotos !== false}
+              onChange={v => updateAandachtspunt({ toonFotos: v })}
+              label="Foto's toestaan"
+            />
+          </div>
+
+          <InputRow label="Max. aantal punten">
+            <TextInput
+              type="number"
+              min={1}
+              value={field.validation?.max ?? ''}
+              onChange={e => update({
+                validation: { ...field.validation, max: e.target.value === '' ? undefined : Number(e.target.value) },
+              })}
+              placeholder="Onbeperkt"
+            />
+          </InputRow>
+
+          {field.aandachtspunt?.toonFotos !== false && (
+            <InputRow label="Max. foto's per punt">
+              <TextInput
+                type="number"
+                min={1}
+                value={field.aandachtspunt?.maxFotosPerPunt ?? 3}
+                onChange={e => updateAandachtspunt({ maxFotosPerPunt: Math.max(1, Number(e.target.value) || 1) })}
+              />
+            </InputRow>
+          )}
+
+          <InputRow label="Tekst op de knop">
+            <TextInput
+              value={field.aandachtspunt?.toevoegLabel ?? ''}
+              onChange={e => updateAandachtspunt({ toevoegLabel: e.target.value })}
+              placeholder="Punt toevoegen"
+            />
+          </InputRow>
+
+          <p style={{
+            fontSize: 11, lineHeight: 1.5, margin: 0, padding: '8px 10px', borderRadius: 6,
+            color: CALLOUT_VARIANTEN.let_op.tekst,
+            background: CALLOUT_VARIANTEN.let_op.achtergrond,
+            border: `1px solid ${CALLOUT_VARIANTEN.let_op.rand}`,
+          }}>
+            Gemelde punten belanden alleen op een opleverlijst als het formulier aan een dossier hangt.
+            Wordt dit sjabloon los ingevuld, dan blijven de antwoorden staan maar ontstaat er geen punt.
+          </p>
+        </div>
+      )}
+
       {/* Toggles */}
       {!isStructural && !isDossier && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
           {!isRepeatable && (
             <Toggle checked={field.required} onChange={v => update({ required: v })} label="Verplicht veld" />
           )}
-          <Toggle checked={field.readOnly} onChange={v => update({ readOnly: v })} label="Alleen lezen" />
-          {!isRepeatable && (
+          {!isAandachtspunt && (
+            <Toggle checked={field.readOnly} onChange={v => update({ readOnly: v })} label="Alleen lezen" />
+          )}
+          {!isRepeatable && !isAandachtspunt && (
             <Toggle checked={field.rememberLastValue} onChange={v => update({ rememberLastValue: v })} label="Onthoud laatste invoer" />
           )}
         </div>

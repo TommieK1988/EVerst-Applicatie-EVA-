@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useEffect, useState } from 'react'
-import type { FormField, VeldOpmaak } from '../types'
+import type { AandachtspuntWaarde, FormField, VeldOpmaak } from '../types'
 import { CALLOUT_VARIANTEN, STANDAARD_ACCENT } from '../types'
 import type { MedewerkerWaarde } from '../format'
 import { Combobox } from '@/components/ui/combobox'
@@ -17,6 +17,13 @@ type Props = {
   medewerkers?: { id: string; naam: string }[]
   /** Accentkleur van het sjabloon (knoppen, rating, selectie). */
   accent?: string
+  /**
+   * Uploadt een foto bij een aandachtspunt en geeft de opgeslagen URL terug (of null bij een fout).
+   * Wordt door de host meegegeven omdat elke omgeving zijn eigen endpoint heeft: ingelogd invullen,
+   * het publieke bewonersportaal, of de sjabloon-preview (die geen upload heeft — dan is de
+   * fotoknop uitgeschakeld).
+   */
+  onFotoUpload?: (file: File) => Promise<string | null>
 }
 
 /** CSS-uitlijning uit een opmaak-object. */
@@ -58,7 +65,7 @@ function Label({ field }: { field: FormField }) {
   )
 }
 
-export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers, accent = STANDAARD_ACCENT }: Props) {
+export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers, accent = STANDAARD_ACCENT, onFotoUpload }: Props) {
 
   const inputStyle: React.CSSProperties = mobiel ? { ...inputBase, ...inputMobiel } : inputBase
   const optieFont = mobiel ? 15 : 14
@@ -600,6 +607,102 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
     )
   }
 
+  if (field.type === 'aandachtspunt') {
+    const cfg = field.aandachtspunt ?? {}
+    const punten = Array.isArray(value) ? (value as AandachtspuntWaarde[]) : []
+    const maxPunten = field.validation?.max
+    const magToevoegen = maxPunten === undefined || punten.length < maxPunten
+
+    const wijzig = (i: number, patch: Partial<AandachtspuntWaarde>) => {
+      const next = [...punten]
+      next[i] = { ...next[i], ...patch }
+      onChange(next)
+    }
+
+    return (
+      <div>
+        <Label field={field} />
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', ...errorStyle }}>
+          <div style={{
+            padding: '10px 14px',
+            background: 'var(--surface)',
+            borderBottom: punten.length > 0 ? '1px solid var(--border)' : 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {punten.length === 0
+                ? 'Nog geen punten gemeld'
+                : `${punten.length} punt${punten.length === 1 ? '' : 'en'}`}
+            </span>
+            {magToevoegen && (
+              <button
+                type="button"
+                onClick={() => onChange([...punten, { omschrijving: '', ruimte: null, fotos: [] }])}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  background: accent, color: 'white',
+                  border: 'none', borderRadius: 5, padding: mobiel ? '8px 14px' : '4px 10px',
+                  fontSize: mobiel ? 14 : 12, cursor: 'pointer',
+                }}
+              >
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                {cfg.toevoegLabel || 'Punt toevoegen'}
+              </button>
+            )}
+          </div>
+
+          {punten.map((punt, i) => (
+            <div key={i} style={{
+              padding: '12px 14px',
+              borderBottom: i < punten.length - 1 ? '1px solid var(--border)' : 'none',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Punt {i + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => onChange(punten.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
+                >
+                  Verwijderen
+                </button>
+              </div>
+
+              <textarea
+                value={punt?.omschrijving ?? ''}
+                onChange={e => wijzig(i, { omschrijving: e.target.value })}
+                placeholder={field.placeholder || 'Wat is er niet in orde?'}
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+
+              {cfg.toonRuimte !== false && (
+                <input
+                  type="text"
+                  value={punt?.ruimte ?? ''}
+                  onChange={e => wijzig(i, { ruimte: e.target.value })}
+                  placeholder="Ruimte of plek (bijv. woonkamer)"
+                  style={{ ...inputStyle, marginTop: 8 }}
+                />
+              )}
+
+              {cfg.toonFotos !== false && (
+                <AandachtspuntFotos
+                  fotos={punt?.fotos ?? []}
+                  max={cfg.maxFotosPerPunt ?? 3}
+                  onFotoUpload={onFotoUpload}
+                  onChange={fotos => wijzig(i, { fotos })}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        {error && <p style={{ fontSize: 12, color: '#e53e3e', margin: '4px 0 0' }}>{error}</p>}
+      </div>
+    )
+  }
+
   if (field.type === 'repeatable') {
     const rows = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
     return (
@@ -651,6 +754,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                   mobiel={mobiel}
                   medewerkers={medewerkers}
                   accent={accent}
+                  onFotoUpload={onFotoUpload}
                   onChange={val => {
                     const next = [...rows]
                     next[i] = { ...next[i], [child.id]: val }
@@ -668,6 +772,117 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
   return (
     <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
       [Veldtype '{field.type}' niet ondersteund in invulweergave]
+    </div>
+  )
+}
+
+// ── Foto's bij een aandachtspunt ──────────────────────────────────────
+//
+// Anders dan het `photo`-veld slaan we hier géén data-URL op: de foto gaat meteen naar de opslag en
+// alleen de URL komt in de inzending. Dat houdt de payload klein genoeg om te kunnen versturen.
+
+function AandachtspuntFotos({
+  fotos, max, onFotoUpload, onChange,
+}: {
+  fotos: string[]
+  max: number
+  onFotoUpload?: (file: File) => Promise<string | null>
+  onChange: (fotos: string[]) => void
+}) {
+  const [bezig, setBezig] = useState(0)
+  const [fout, setFout] = useState<string | null>(null)
+
+  async function kies(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!onFotoUpload) return
+    const files = Array.from(e.target.files ?? []).slice(0, Math.max(0, max - fotos.length))
+    e.target.value = ''
+    if (files.length === 0) return
+
+    setFout(null)
+    setBezig(n => n + files.length)
+    const urls: string[] = []
+    for (const file of files) {
+      try {
+        const url = await onFotoUpload(file)
+        if (url) urls.push(url)
+        else setFout('Een foto kon niet worden geüpload.')
+      } catch {
+        setFout('Een foto kon niet worden geüpload.')
+      } finally {
+        setBezig(n => n - 1)
+      }
+    }
+    if (urls.length) onChange([...fotos, ...urls])
+  }
+
+  const vol = fotos.length + bezig >= max
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {(fotos.length > 0 || bezig > 0) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {fotos.map((url, i) => (
+            <div key={url} style={{ position: 'relative' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt=""
+                style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }}
+              />
+              <button
+                type="button"
+                onClick={() => onChange(fotos.filter((_, j) => j !== i))}
+                style={{
+                  position: 'absolute', top: 2, right: 2,
+                  background: 'rgba(0,0,0,0.5)', border: 'none',
+                  borderRadius: '50%', width: 18, height: 18,
+                  color: 'white', cursor: 'pointer', fontSize: 10,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >✕</button>
+            </div>
+          ))}
+          {Array.from({ length: bezig }).map((_, i) => (
+            <div
+              key={`bezig-${i}`}
+              style={{
+                width: 64, height: 64, borderRadius: 6,
+                border: '1px dashed var(--border)', background: 'var(--surface)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: 'var(--text-muted)',
+              }}
+            >…</div>
+          ))}
+        </div>
+      )}
+
+      {!onFotoUpload ? (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          Foto&apos;s toevoegen kan in het echte formulier.
+        </p>
+      ) : !vol && (
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', borderRadius: 7,
+          border: '1px dashed var(--border)',
+          cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)',
+        }}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          Foto toevoegen
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            style={{ display: 'none' }}
+            onChange={kies}
+          />
+        </label>
+      )}
+
+      {fout && <p style={{ fontSize: 12, color: '#e53e3e', margin: '4px 0 0' }}>{fout}</p>}
     </div>
   )
 }

@@ -4,16 +4,16 @@ import { GeenToegangError } from '@/lib/auth/rechten'
 import { isDossierAfgesloten } from '@/components/dossiers/types'
 
 /**
- * Server-side vangnet: gooit `GeenToegangError` als het dossier definitief is afgesloten
- * (Financieel afgesloten / Verloren / Vervallen, of Bouw7-projectstatus '07.'). Zulke dossiers
- * zijn overal **alleen-lezen** — roep dit aan bovenin elke muterende server-action die op een
- * dossier werkt, zodat een afgesloten dossier ook via een kale RPC-aanroep onwijzigbaar blijft.
+ * Is het dossier nog bewerkbaar? Niet-gooiende variant van `assertDossierBewerkbaar`, voor paden
+ * waar een afgesloten dossier geen fout is maar simpelweg betekent dat we niets doen — zoals het
+ * materialiseren van aandachtspunten uit een formulier dat een bewoner via een publieke link
+ * indient. Die bewoner mag geen 500 krijgen omdat het dossier intussen is afgesloten.
  *
- * Bewust tolerant: als het dossier niet gevonden wordt (bijv. losse calc zonder dossier) laten we
- * de mutatie door — de guard blokkeert alleen wanneer het dossier aantoonbaar afgesloten is.
+ * Bewust tolerant: een onbekend dossier (bijv. losse calc zonder dossier) geldt als bewerkbaar —
+ * we blokkeren alleen wanneer het dossier aantoonbaar afgesloten is.
  */
-export async function assertDossierBewerkbaar(dossierId: string | null | undefined): Promise<void> {
-  if (!dossierId) return
+export async function isDossierBewerkbaar(dossierId: string | null | undefined): Promise<boolean> {
+  if (!dossierId) return true
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const { data } = await supabase
@@ -22,7 +22,17 @@ export async function assertDossierBewerkbaar(dossierId: string | null | undefin
     .eq('id', dossierId)
     .maybeSingle()
 
-  if (data && isDossierAfgesloten(data)) {
+  return !(data && isDossierAfgesloten(data))
+}
+
+/**
+ * Server-side vangnet: gooit `GeenToegangError` als het dossier definitief is afgesloten
+ * (Financieel afgesloten / Verloren / Vervallen, of Bouw7-projectstatus '07.'). Zulke dossiers
+ * zijn overal **alleen-lezen** — roep dit aan bovenin elke muterende server-action die op een
+ * dossier werkt, zodat een afgesloten dossier ook via een kale RPC-aanroep onwijzigbaar blijft.
+ */
+export async function assertDossierBewerkbaar(dossierId: string | null | undefined): Promise<void> {
+  if (!(await isDossierBewerkbaar(dossierId))) {
     throw new GeenToegangError('Dit dossier is afgesloten en alleen-lezen')
   }
 }

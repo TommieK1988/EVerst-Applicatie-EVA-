@@ -1,5 +1,6 @@
 'use server'
 
+import { randomUUID } from 'crypto'
 import { createAdminClient, createClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type {
@@ -14,6 +15,7 @@ import type {
 import { defaultSchema, normalizeSchemaRequired } from '@/components/formulieren/types'
 import type { Json } from '@everts/database/types'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
+import { materialiseerAandachtspunten } from '@/lib/dossiers/oplevering'
 
 // ── Resultaat-types ──────────────────────────────────────────────────
 
@@ -374,8 +376,42 @@ export async function submitFormInzending(
     try { await updateTaakStatus(taskId, 'gereed') } catch { /* niet-blokkerend */ }
   }
 
+  // Gemelde aandachtspunten als opleverpunten op het dossier zetten (status "nieuw", wacht op triage).
+  try { await materialiseerAandachtspunten(id) } catch { /* niet-blokkerend */ }
+
   revalidatePath(`/formulieren/${templateId}/inzendingen`)
   return { ok: true, data: undefined }
+}
+
+/* ── Aandachtspunt-foto's ─────────────────────────────────────────────
+ * Foto's bij een aandachtspunt gaan bij het kiezen al naar de opslag, niet als base64 mee in de
+ * inzending: dat laatste knalt door de body-limiet van server-actions zodra iemand een paar
+ * telefoonfoto's meestuurt. Het punt zelf bestaat pas na indienen, dus de foto krijgt een pad op
+ * dossierniveau; bij materialisatie wordt de URL aan het nieuwe punt gehangen.
+ */
+
+const MAX_FOTO_BYTES = 8 * 1024 * 1024
+const TOEGESTANE_FOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+
+export async function uploadAandachtspuntFoto(
+  dossierId: string | null,
+  formData: FormData,
+): Promise<ActionResult<string>> {
+  const file = formData.get('foto')
+  if (!(file instanceof File)) return { ok: false, error: 'Geen bestand.' }
+  if (file.size > MAX_FOTO_BYTES) return { ok: false, error: 'Deze foto is te groot (max. 8 MB).' }
+  if (!TOEGESTANE_FOTO_TYPES.includes(file.type)) return { ok: false, error: 'Alleen foto\'s zijn toegestaan.' }
+
+  const supabase = createAdminClient()
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+  const path = `aandachtspunten/${dossierId ?? 'los'}/intern/${randomUUID()}.${ext}`
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const { error } = await supabase.storage
+    .from('oplever-fotos')
+    .upload(path, buffer, { contentType: file.type || 'image/jpeg', upsert: false })
+  if (error) return { ok: false, error: error.message }
+  const { data } = supabase.storage.from('oplever-fotos').getPublicUrl(path)
+  return { ok: true, data: data.publicUrl }
 }
 
 export async function updateInzendingStatus(

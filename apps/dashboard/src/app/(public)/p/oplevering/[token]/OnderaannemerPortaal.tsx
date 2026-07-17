@@ -5,12 +5,17 @@ import { useRouter } from 'next/navigation'
 import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/database'
 import { portaalUploadFoto, portaalAfmeldenPunt, type OnderaannemerPortaalData, type PortaalPunt } from '../../actions'
 
+// 'nieuw' en 'afgewezen' horen bij de interne triage van gemelde aandachtspunten en komen hier niet
+// voor — een onderaannemer ziet alleen punten die aan hem zijn toegewezen. Wel volledig invullen,
+// zodat de opzoeking nooit `undefined` oplevert.
 const STATUS_KLEUR: Record<OpleverPuntStatus, { bg: string; fg: string }> = {
+  nieuw:          { bg: '#fdf6e9', fg: '#7a5a17' },
   open:           { bg: '#eef1f2', fg: '#3a444c' },
   in_behandeling: { bg: '#e6f0fb', fg: '#1d4e89' },
   opgelost:       { bg: '#fdf6e9', fg: '#7a5a17' },
   geaccepteerd:   { bg: '#e7f6ec', fg: '#1c7a3f' },
   geweigerd:      { bg: '#fdecec', fg: '#a12020' },
+  afgewezen:      { bg: '#eef1f2', fg: '#6b757c' },
 }
 
 const card: React.CSSProperties = { background: '#fff', border: '1px solid #e4e8e7', borderRadius: 12, padding: 16, marginBottom: 12 }

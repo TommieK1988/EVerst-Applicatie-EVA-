@@ -1206,16 +1206,43 @@ export const opleverMomentStatusLabels: Record<OpleverMomentStatus, string> = {
   afgerond:                  'Afgerond',
 }
 
-/** Opleverpunt-statusmachine (domein): Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd. */
-export type OpleverPuntStatus = 'open' | 'in_behandeling' | 'opgelost' | 'geaccepteerd' | 'geweigerd'
+/**
+ * Opleverpunt-statusmachine (domein): Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd.
+ *
+ * Twee statussen staan buiten die keten:
+ * - `nieuw`     — gemeld via een formulier, wacht op triage door de projectleider.
+ * - `afgewezen` — terminaal: dit is geen opleverpunt. Niet te verwarren met `geweigerd`, dat juist
+ *                 actief is (de afmelding deugt niet, het werk moet opnieuw).
+ */
+export type OpleverPuntStatus =
+  | 'nieuw'
+  | 'open'
+  | 'in_behandeling'
+  | 'opgelost'
+  | 'geaccepteerd'
+  | 'geweigerd'
+  | 'afgewezen'
 
+/** Volgorde is functioneel: Object.keys() hiervan voedt de status-select in de Oplevering-tab. */
 export const opleverPuntStatusLabels: Record<OpleverPuntStatus, string> = {
+  nieuw:         'Nieuwe melding',
   open:          'Open',
   in_behandeling:'In behandeling',
   opgelost:      'Opgelost',
   geaccepteerd:  'Geaccepteerd',
   geweigerd:     'Geweigerd',
+  afgewezen:     'Afgewezen',
 }
+
+/** `veiligheid` is voorbereid voor VCA/KAM-formulieren maar nog nergens in gebruik. */
+export type OpleverPuntSoort = 'oplever' | 'veiligheid'
+
+export const opleverPuntSoortLabels: Record<OpleverPuntSoort, string> = {
+  oplever:    'Opleverpunt',
+  veiligheid: 'Veiligheid / VCA',
+}
+
+export type OpleverPuntBron = 'handmatig' | 'formulier'
 
 export type OpleverToewijzingType = 'medewerker' | 'relatie'
 export type OpleverReactieAuteurType = 'intern' | 'onderaannemer'
@@ -1240,12 +1267,15 @@ export type OpleverMoment = {
 
 export type OpleverPunt = {
   id: string
-  moment_id: string
+  /** Null voor punten die uit een formulier komen: die horen bij het dossier, niet bij een moment. */
+  moment_id: string | null
   dossier_id: string
+  /** Loopt per moment; voor losse punten (moment_id null) per dossier. Weergave: OP-xx resp. AP-xx. */
   volgnummer: number
   omschrijving: string
   ruimte: string | null
   status: OpleverPuntStatus
+  soort: OpleverPuntSoort
   toegewezen_type: OpleverToewijzingType | null
   toegewezen_medewerker_id: string | null
   toegewezen_relatie_id: string | null
@@ -1255,6 +1285,12 @@ export type OpleverPunt = {
   geweigerd_reden: string | null
   afgemeld_op: string | null
   geaccepteerd_op: string | null
+  // Herkomst — gevuld bij bron 'formulier'.
+  bron: OpleverPuntBron
+  form_inzending_id: string | null
+  bron_veld_id: string | null
+  bron_index: number | null
+  melder_naam: string | null
   created_at: string
   updated_at: string
   created_by: string | null

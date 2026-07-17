@@ -8,8 +8,11 @@ import { getOplevermomentRapport } from '@/lib/dossiers/oplevering'
 const esc = (s: unknown): string =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 
+// 'nieuw' en 'afgewezen' filtert het rapport zelf al weg (nog niet beoordeeld resp. afgevallen);
+// ze staan hier alleen zodat de opzoeking nooit `undefined` in de CSS-kleur oplevert.
 const STATUS_KLEUR: Record<OpleverPuntStatus, string> = {
-  open: '#6b757c', in_behandeling: '#1d4e89', opgelost: '#7a5a17', geaccepteerd: '#1c7a3f', geweigerd: '#a12020',
+  nieuw: '#7a5a17', open: '#6b757c', in_behandeling: '#1d4e89', opgelost: '#7a5a17',
+  geaccepteerd: '#1c7a3f', geweigerd: '#a12020', afgewezen: '#6b757c',
 }
 
 /**

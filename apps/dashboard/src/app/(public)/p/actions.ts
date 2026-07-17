@@ -1,10 +1,11 @@
 'use server'
 
+import { randomUUID } from 'crypto'
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { OpleverPuntStatus } from '@everts/database'
 import type { FormField } from '@/components/formulieren/types'
-import { valideerToken } from '@/lib/dossiers/oplevering'
+import { materialiseerAandachtspunten, valideerToken } from '@/lib/dossiers/oplevering'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -253,6 +254,44 @@ export async function getFeedbackPortaal(rawToken: string): Promise<FeedbackPort
 }
 
 /**
+ * Publieke foto-upload voor een aandachtspunt via een feedbacklink. Foto's gaan bij het kiezen al
+ * naar de opslag in plaats van als base64 in de inzending: die zou anders door de body-limiet van
+ * server-actions heen knallen zodra een bewoner twee telefoonfoto's meestuurt.
+ *
+ * `portaalUploadFoto` is hier niet bruikbaar — die hoort bij de onderaannemer-scope en eist een
+ * bestaand opleverpunt, terwijl een aandachtspunt pas na het indienen ontstaat.
+ */
+const MAX_FOTO_BYTES = 8 * 1024 * 1024
+const TOEGESTANE_FOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+
+export async function portaalUploadAandachtspuntFoto(
+  rawToken: string,
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const token = await valideerToken(rawToken, 'feedback')
+  if (!token) return { ok: false, error: 'Ongeldige link.' }
+
+  const file = formData.get('foto')
+  if (!(file instanceof File)) return { ok: false, error: 'Geen bestand.' }
+  if (file.size > MAX_FOTO_BYTES) return { ok: false, error: 'Deze foto is te groot (max. 8 MB).' }
+  if (!TOEGESTANE_FOTO_TYPES.includes(file.type)) return { ok: false, error: 'Alleen foto\'s zijn toegestaan.' }
+
+  const supabase = db()
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+  const path = `aandachtspunten/${token.dossier_id}/feedback/${randomUUID()}.${ext}`
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const { error: upErr } = await supabase.storage
+    .from('oplever-fotos')
+    .upload(path, buffer, { contentType: file.type || 'image/jpeg', upsert: false })
+  if (upErr) return { ok: false, error: upErr.message }
+  const { data: urlData } = supabase.storage.from('oplever-fotos').getPublicUrl(path)
+  return { ok: true, url: urlData.publicUrl }
+}
+
+/** Bovengrens op de antwoorden van een publieke, niet-geauthenticeerde inzending. */
+const MAX_WAARDEN_BYTES = 256_000
+
+/**
  * Publieke inzending van een feedbackformulier. Meerdere bewoners kunnen dezelfde link gebruiken
  * (token blijft geldig), dus elke inzending is een nieuwe rij. `aangemaakt_door` blijft leeg (extern).
  */
@@ -262,6 +301,11 @@ export async function portaalFeedbackSubmit(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const token = await valideerToken(rawToken, 'feedback')
   if (!token || !token.form_template_id) return { ok: false, error: 'Ongeldige link.' }
+
+  if (JSON.stringify(waarden ?? {}).length > MAX_WAARDEN_BYTES) {
+    return { ok: false, error: 'De antwoorden zijn te groot om te versturen. Verwijder een paar foto\'s en probeer het opnieuw.' }
+  }
+
   const supabase = db()
 
   const { data: template } = await supabase
@@ -280,7 +324,7 @@ export async function portaalFeedbackSubmit(
   if (!versie) return { ok: false, error: 'Vragenlijst niet beschikbaar.' }
 
   const now = new Date().toISOString()
-  const { error } = await supabase.from('form_inzendingen').insert({
+  const { data: ins, error } = await supabase.from('form_inzendingen').insert({
     template_id: token.form_template_id,
     versie_id: versie.id,
     status: 'ingediend',
@@ -288,8 +332,12 @@ export async function portaalFeedbackSubmit(
     dossier_id: token.dossier_id,
     project_ref: 'oplever-feedback',
     ingediend_op: now,
-  })
+  }).select('id').single()
   if (error) return { ok: false, error: error.message }
+
+  // Gemelde aandachtspunten als opleverpunten op het dossier zetten. Niet-blokkerend: de feedback
+  // van de bewoner is binnen, ook als dit misgaat.
+  try { await materialiseerAandachtspunten(ins.id) } catch { /* niet-blokkerend */ }
 
   revalidatePath(`/opdrachten/${token.dossier_id}/oplevering`)
   return { ok: true }
