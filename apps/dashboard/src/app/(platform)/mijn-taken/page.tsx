@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisModuleToegang } from '@/lib/auth/rechten'
-import { getMijnTakenRijen } from '@/lib/taken/services/taken'
+import { vereisModuleToegang, getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
+import { getMijnTakenRijen, getAlleTakenRijen } from '@/lib/taken/services/taken'
 import TakenActieveDossiers from '@/components/taken/TakenActieveDossiers'
 
 export const metadata: Metadata = { title: 'Mijn taken' }
@@ -19,8 +20,14 @@ export default async function MijnTakenPage() {
     // niet ingelogd of session unavailable
   }
 
+  const medewerker = await getCurrentMedewerker()
+  const rechten = await getEffectieveRechten(medewerker)
+  const magAlleTaken = heeftModuleToegang(rechten, 'alle_taken')
+
   const [data, layouts] = await Promise.all([
-    user_id ? getMijnTakenRijen(user_id) : Promise.resolve([]),
+    magAlleTaken
+      ? getAlleTakenRijen()
+      : (user_id ? getMijnTakenRijen(user_id) : Promise.resolve([])),
     user_id ? laadLayouts(user_id, 'mijn-taken') : [],
   ])
 
@@ -30,9 +37,10 @@ export default async function MijnTakenPage() {
       layouts={layouts}
       user_id={user_id}
       titel="Mijn taken"
-      subtitel="Al jouw toegewezen open taken."
+      subtitel={magAlleTaken ? 'Open taken, per dossier gebundeld.' : 'Al jouw toegewezen open taken, per dossier gebundeld.'}
       scherm="mijn-taken"
-      verbergToegewezenSlicer
+      variant="mijn-taken"
+      magAlleTaken={magAlleTaken}
       beginSortering={[{ id: 'deadline', desc: false }]}
     />
   )

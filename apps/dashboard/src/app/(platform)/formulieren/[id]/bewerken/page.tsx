@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getFormTemplate, getLatestFormVersie } from '../../actions'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 import FormBuilder from '@/components/formulieren/builder/FormBuilder'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -10,6 +11,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function FormulierBewerkPage({ params }: { params: Promise<{ id: string }> }) {
+  await vereisModuleToegang('formulieren')
+
   const { id } = await params
   const [templateResult, versieResult] = await Promise.all([
     getFormTemplate(id),

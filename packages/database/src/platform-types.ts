@@ -597,6 +597,9 @@ export const RECHTEN_MODULES = [
   { key: 'formulieren',    label: 'Formulieren' },
   { key: 'taken',          label: 'Actielijsten' },
   { key: 'mijn_taken',     label: 'Mijn taken' },
+  // Geen menu-item maar een schakelaar: vanaf 'lezen' toont "Mijn taken" ook de
+  // taken van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
+  { key: 'alle_taken',     label: 'Alle taken' },
   { key: 'financieel',     label: 'Financieel' },
   { key: 'instellingen',   label: 'Instellingen' },
 ] as const

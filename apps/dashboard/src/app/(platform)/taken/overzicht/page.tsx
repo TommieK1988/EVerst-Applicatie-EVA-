@@ -21,5 +21,5 @@ export default async function TakenOverzichtPage() {
     user_id ? laadLayouts(user_id, 'taken-overzicht') : [],
   ])
 
-  return <TakenActieveDossiers data={data} layouts={layouts} user_id={user_id} />
+  return <TakenActieveDossiers data={data} layouts={layouts} user_id={user_id} variant="overzicht" />
 }

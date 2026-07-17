@@ -438,7 +438,8 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
       deadline: (t.deadline as string | null) ?? null,
       lijst_naam: lijst?.naam ?? null,
       toegewezen_ids,
-      toegewezen_namen: toegewezen_ids.map(id => namenMap[id]).filter(Boolean),
+      // Geen filter(Boolean): index-voor-index uitgelijnd met toegewezen_ids.
+      toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
       dossier_id: dossierId,
       dossiernummer: ctx.dossiernummer,
       dossier_titel: ctx.titel,
@@ -460,36 +461,14 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
 }
 
 /**
- * Mijn toegewezen taken als platte rijen mét dossier-context, voor de "Mijn taken"-pagina.
- * Vertrekt — net als de home-widget (`getMijnTaken`) — vanuit `task_assignees`, zodat het
- * overzicht exact dezelfde taken toont als de widget: alle open taken die aan `userId` zijn
- * toegewezen, ongeacht of het dossier nog actief is.
- * Alleen vanuit Server Components aanroepen (admin client, geen RLS).
+ * Vlakt opgehaalde taken af tot `TaakRij[]`: zoekt het effectieve dossier op, haalt de
+ * dossier-context en de namen van de toegewezen medewerkers erbij.
+ * Gedeeld door `getMijnTakenRijen` en `getAlleTakenRijen`.
  */
-export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
+async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[]> {
+  if (taken.length === 0) return []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-
-  const { data: toewijzingen } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-  const taskIds = [...new Set(((toewijzingen ?? []) as { task_id: string }[]).map(t => t.task_id))]
-  if (taskIds.length === 0) return []
-
-  // Zelfde status-filter als de werkende home-widget (getMijnTaken): twee neq's
-  // i.p.v. een not-in, dat in PostgREST stil kon mislukken (lege lijst tot gevolg).
-  const { data: takenData, error: takenError } = await supabase
-    .from('tasks')
-    .select('*, task_assignees ( user_id )')
-    .in('id', taskIds)
-    .is('parent_task_id', null)
-    .neq('status', 'gereed')
-    .neq('status', 'vervallen')
-    .order('deadline', { ascending: false, nullsFirst: false })
-  if (takenError) throw new Error(`Fout bij ophalen mijn taken: ${takenError.message}`)
-  const taken = (takenData ?? []) as Record<string, unknown>[]
-  if (taken.length === 0) return []
 
   // Effectief dossier: directe koppeling vóór de koppeling via de actielijst.
   const lijstIds = [...new Set(taken.map(t => t.lijst_id as string | null).filter(Boolean) as string[])]
@@ -544,7 +523,9 @@ export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
       deadline: (t.deadline as string | null) ?? null,
       lijst_naam: lijst?.naam ?? null,
       toegewezen_ids,
-      toegewezen_namen: toegewezen_ids.map(id => namenMap[id]).filter(Boolean),
+      // Geen filter(Boolean): de arrays moeten index-voor-index uitlijnen met
+      // toegewezen_ids, zodat de client zichzelf eruit kan filteren.
+      toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
       dossier_id: dossierId ?? '',
       dossiernummer: ctx?.dossiernummer ?? null,
       dossier_titel: ctx?.titel ?? '—',
@@ -563,6 +544,61 @@ export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
   }
 
   return rijen
+}
+
+/**
+ * Mijn toegewezen taken als platte rijen mét dossier-context, voor de "Mijn taken"-pagina.
+ * Vertrekt — net als de home-widget (`getMijnTaken`) — vanuit `task_assignees`, zodat het
+ * overzicht exact dezelfde taken toont als de widget: alle open taken die aan `userId` zijn
+ * toegewezen, ongeacht of het dossier nog actief is.
+ * Alleen vanuit Server Components aanroepen (admin client, geen RLS).
+ */
+export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: toewijzingen } = await supabase
+    .from('task_assignees')
+    .select('task_id')
+    .eq('user_id', userId)
+  const taskIds = [...new Set(((toewijzingen ?? []) as { task_id: string }[]).map(t => t.task_id))]
+  if (taskIds.length === 0) return []
+
+  // Zelfde status-filter als de werkende home-widget (getMijnTaken): twee neq's
+  // i.p.v. een not-in, dat in PostgREST stil kon mislukken (lege lijst tot gevolg).
+  const { data: takenData, error: takenError } = await supabase
+    .from('tasks')
+    .select('*, task_assignees ( user_id )')
+    .in('id', taskIds)
+    .is('parent_task_id', null)
+    .neq('status', 'gereed')
+    .neq('status', 'vervallen')
+    .order('deadline', { ascending: false, nullsFirst: false })
+  if (takenError) throw new Error(`Fout bij ophalen mijn taken: ${takenError.message}`)
+
+  return bouwTaakRijen((takenData ?? []) as Record<string, unknown>[])
+}
+
+/**
+ * Alle open taken van alle medewerkers, zelfde vorm en dossier-scope als
+ * `getMijnTakenRijen` — de superset daarvan. Voor gebruikers met het `alle_taken`-recht;
+ * de scope-slicer op "Mijn taken" filtert er client-side de eigen taken uit.
+ * Alleen vanuit Server Components aanroepen (admin client, geen RLS).
+ */
+export async function getAlleTakenRijen(): Promise<TaakRij[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: takenData, error: takenError } = await supabase
+    .from('tasks')
+    .select('*, task_assignees ( user_id )')
+    .is('parent_task_id', null)
+    .neq('status', 'gereed')
+    .neq('status', 'vervallen')
+    .order('deadline', { ascending: false, nullsFirst: false })
+  if (takenError) throw new Error(`Fout bij ophalen alle taken: ${takenError.message}`)
+
+  return bouwTaakRijen((takenData ?? []) as Record<string, unknown>[])
 }
 
 export async function getSjablonen(): Promise<DbTaskList[]> {

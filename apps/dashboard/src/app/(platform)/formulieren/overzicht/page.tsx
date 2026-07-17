@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { createClient as createServerClient } from '@everts/database/server'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 import { laadLayouts } from '@/app/actions/layouts'
 import { getFormTakenVoorActieveDossiers } from '../actions'
 import FormulierenActieveDossiers from '@/components/formulieren/FormulierenActieveDossiers'
@@ -7,6 +8,8 @@ import FormulierenActieveDossiers from '@/components/formulieren/FormulierenActi
 export const metadata: Metadata = { title: 'Formulieren — Overzicht' }
 
 export default async function FormulierenOverzichtPage() {
+  await vereisModuleToegang('formulieren')
+
   let user_id: string | null = null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

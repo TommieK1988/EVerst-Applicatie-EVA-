@@ -5,7 +5,8 @@ import { createClient } from '@/lib/taken/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { activeerSjabloon } from './sjablonen'
-import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie } from '@/lib/taken/supabase/database.types'
+import { getTaak } from '@/lib/taken/services/taken'
+import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
 
@@ -38,6 +39,11 @@ export async function maakActielijst(formData: FormData): Promise<{ id: string }
   revalidatePath('/taken')
   revalidatePath('/taken/lijsten')
   return { id: data.id }
+}
+
+/** Eén taak met details ophalen — client-aanroepbaar, voor het detailpaneel op de takenoverzichten. */
+export async function haalTaakVoorPaneel(id: string): Promise<TaakMetDetails | null> {
+  return getTaak(id)
 }
 
 export async function updateActielijst(id: string, formData: FormData): Promise<void> {

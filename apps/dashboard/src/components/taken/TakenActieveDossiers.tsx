@@ -4,11 +4,15 @@ import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
+import { AlertTriangle } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import type { TaakRij } from '@/lib/taken/services/taken'
+import type { TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
+import { haalTaakVoorPaneel } from '@/app/(platform)/taken/actions/taken'
+import TaakDetailPanel from './TaakDetailPanel'
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   open:            { label: 'Open',           bg: '#eff6ff', color: '#1d4ed8' },
@@ -30,6 +34,16 @@ const DEADLINE_OPTIES = [
   { value: 'later',        label: 'Later' },
   { value: 'geen',         label: 'Geen deadline' },
 ]
+
+/** Scope-slicer waarden op "Mijn taken" (alleen relevant met alle_taken-recht). */
+const SCOPE_MIJN = 'mijn'
+const SCOPE_ALLE = 'alle'
+
+function isVerlopen(deadline: string | null, status: string): boolean {
+  if (!deadline) return false
+  if (status === 'gereed' || status === 'vervallen') return false
+  return new Date(deadline) < new Date()
+}
 
 function deadlineBucket(deadline: string | null, status: string): string {
   if (!deadline) return 'geen'
@@ -63,7 +77,8 @@ export default function TakenActieveDossiers({
   titel = 'Taken — actieve dossiers',
   subtitel = 'Alle taken (los én uit actielijsten) van dossiers die nog niet zijn afgerond.',
   scherm = 'taken-overzicht',
-  verbergToegewezenSlicer = false,
+  variant = 'overzicht',
+  magAlleTaken = false,
   beginSortering,
 }: {
   data: TaakRij[]
@@ -72,50 +87,77 @@ export default function TakenActieveDossiers({
   titel?: string
   subtitel?: string
   scherm?: string
-  verbergToegewezenSlicer?: boolean
+  /** 'mijn-taken' toont de eigen-taken-scope; 'overzicht' toont het brede overzicht. */
+  variant?: 'overzicht' | 'mijn-taken'
+  /** Alleen zinvol bij variant 'mijn-taken': schakelt de scope-slicer (mijn/alle) vrij. */
+  magAlleTaken?: boolean
   beginSortering?: { id: string; desc: boolean }[]
 }) {
   const router = useRouter()
+  const isMijnTaken = variant === 'mijn-taken'
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
+
+  // Detailpaneel (klik op een taaknaam) — lazy geladen volledige taak.
+  const [paneelTaak, setPaneelTaak] = useState<TaakMetDetails | null>(null)
+  const [paneelBezig, setPaneelBezig] = useState<string | null>(null)
+
+  async function openTaak(id: string) {
+    setPaneelBezig(id)
+    try {
+      const taak = await haalTaakVoorPaneel(id)
+      if (taak) setPaneelTaak(taak)
+    } finally {
+      setPaneelBezig(null)
+    }
+  }
 
   // ── Slicer-definities (opties afgeleid uit de data) ──────────────
   const slicers = useMemo<SlicerDef[]>(() => {
-    const fases = [...new Set(data.map(d => d.dossier_fase))].sort()
     const statussen = [...new Set(data.map(d => d.status))]
-    const prios = [...new Set(data.map(d => d.prioriteit))]
     const personen = [...new Set(data.flatMap(d => d.toegewezen_namen))].sort()
 
     const ord = (arr: string[], volgorde: string[]) =>
       [...arr].sort((a, b) => volgorde.indexOf(a) - volgorde.indexOf(b))
 
+    const deadline: SlicerDef = { key: 'deadline', label: 'Deadline', opties: DEADLINE_OPTIES }
+
+    if (isMijnTaken) {
+      return [
+        ...(magAlleTaken ? [{
+          key: 'scope', label: 'Taken van',
+          opties: [
+            { value: SCOPE_MIJN, label: 'Mijn taken' },
+            { value: SCOPE_ALLE, label: 'Alle taken' },
+          ],
+        }] : []),
+        deadline,
+      ]
+    }
+
+    // Breed overzicht: Status + Toegewezen + Deadline (dataset bevat óók gereed/vervallen).
     return [
-      { key: 'fase', label: 'Fase', opties: fases.map(f => ({ value: f, label: f })) },
       { key: 'status', label: 'Status',
         opties: ord(statussen, ['open', 'in_behandeling', 'wacht_op', 'gereed', 'vervallen'])
           .map(s => ({ value: s, label: STATUS_META[s]?.label ?? s })) },
-      { key: 'prioriteit', label: 'Prioriteit',
-        opties: ord(prios, ['urgent', 'hoog', 'normaal', 'laag'])
-          .map(p => ({ value: p, label: PRIO_META[p]?.label ?? p })) },
-      ...(verbergToegewezenSlicer ? [] : [{
-        key: 'toegewezen', label: 'Toegewezen aan',
+      { key: 'toegewezen', label: 'Toegewezen aan',
         opties: [
           ...personen.map(p => ({ value: p, label: p })),
           { value: NIET_TOEGEWEZEN, label: 'Niet toegewezen' },
-        ],
-      }]),
-      { key: 'deadline', label: 'Deadline', opties: DEADLINE_OPTIES },
+        ] },
+      deadline,
     ]
-  }, [data, verbergToegewezenSlicer])
+  }, [data, isMijnTaken, magAlleTaken])
 
   // ── Filtering op slicer-waarden ──────────────────────────────────
   const gefilterd = useMemo(() => {
     return data.filter(rij => {
-      const f = slicer.fase
-      if (f?.length && !f.includes(rij.dossier_fase)) return false
+      // Scope (alleen mijn-taken met alle_taken-recht): 'mijn' = eigen taken.
+      const sc = slicer.scope
+      if (sc?.length && sc.includes(SCOPE_MIJN) && !sc.includes(SCOPE_ALLE)) {
+        if (!user_id || !rij.toegewezen_ids.includes(user_id)) return false
+      }
       const s = slicer.status
       if (s?.length && !s.includes(rij.status)) return false
-      const p = slicer.prioriteit
-      if (p?.length && !p.includes(rij.prioriteit)) return false
       const t = slicer.toegewezen
       if (t?.length) {
         const matchPersoon = rij.toegewezen_namen.some(n => t.includes(n))
@@ -126,22 +168,47 @@ export default function TakenActieveDossiers({
       if (dl?.length && !dl.includes(deadlineBucket(rij.deadline, rij.status))) return false
       return true
     })
-  }, [data, slicer])
+  }, [data, slicer, user_id])
+
+  // ── "Ook toegewezen aan": namen behalve de ingelogde gebruiker ──
+  const medeToegewezen = (r: TaakRij): string[] => {
+    if (!isMijnTaken || !user_id) return r.toegewezen_namen
+    return r.toegewezen_namen.filter((_, i) => r.toegewezen_ids[i] !== user_id)
+  }
 
   // ── Kolommen ─────────────────────────────────────────────────────
   const kolommen = useMemo<KolomDefinitie<TaakRij>[]>(() => [
-    { key: 'titel', label: 'Taak', vast: true, breedte: 260,
-      sorteerWaarde: r => r.titel.toLowerCase(),
-      render: r => <span style={{ fontWeight: 500 }}>{r.titel}</span> },
-    { key: 'dossiernummer', label: 'Dossier', breedte: 100,
+    { key: 'dossiernummer', label: 'Dossier', vast: true, breedte: 110,
       sorteerWaarde: r => r.dossiernummer ?? '',
-      render: r => r.dossiernummer ?? '—' },
-    { key: 'dossier_titel', label: 'Dossiertitel', breedte: 200,
+      render: r => (
+        <button
+          onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
+          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, fontFamily: 'inherit', fontSize: 'inherit' }}
+        >
+          {r.dossiernummer ?? '—'}
+        </button>
+      ) },
+    { key: 'dossier_titel', label: 'Omschrijving', breedte: 220,
       sorteerWaarde: r => r.dossier_titel.toLowerCase(),
-      render: r => r.dossier_titel },
-    { key: 'klant_naam', label: 'Klant', breedte: 180, standaard_zichtbaar: false,
-      sorteerWaarde: r => r.klant_naam ?? '',
-      render: r => r.klant_naam ?? '—' },
+      render: r => (
+        <button
+          onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
+          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg)', textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit' }}
+        >
+          {r.dossier_titel}
+        </button>
+      ) },
+    { key: 'titel', label: 'Taak', breedte: 260,
+      sorteerWaarde: r => r.titel.toLowerCase(),
+      render: r => (
+        <button
+          onClick={e => { e.stopPropagation(); onTaakKlik(r) }}
+          disabled={paneelBezig === r.id}
+          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg)', fontWeight: 500, textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', opacity: paneelBezig === r.id ? 0.5 : 1 }}
+        >
+          {r.titel}
+        </button>
+      ) },
     { key: 'fase', label: 'Fase', breedte: 160,
       sorteerWaarde: r => r.dossier_fase,
       render: r => (
@@ -160,10 +227,17 @@ export default function TakenActieveDossiers({
       render: r => <Badge meta={PRIO_META[r.prioriteit]} /> },
     { key: 'deadline', label: 'Deadline', breedte: 120,
       sorteerWaarde: r => r.deadline ?? '9999',
-      render: r => fmtDatum(r.deadline) },
-    { key: 'toegewezen', label: 'Toegewezen aan', breedte: 170,
-      sorteerWaarde: r => r.toegewezen_namen.join(', '),
-      render: r => r.toegewezen_namen.length ? r.toegewezen_namen.join(', ') : '—' },
+      render: r => (
+        <span style={{ color: isVerlopen(r.deadline, r.status) ? '#dc2626' : undefined, fontWeight: isVerlopen(r.deadline, r.status) ? 600 : undefined }}>
+          {fmtDatum(r.deadline)}
+        </span>
+      ) },
+    { key: 'toegewezen', label: isMijnTaken ? 'Ook toegewezen aan' : 'Toegewezen aan', breedte: 180,
+      sorteerWaarde: r => medeToegewezen(r).join(', '),
+      render: r => { const namen = medeToegewezen(r); return namen.length ? namen.join(', ') : '—' } },
+    { key: 'klant_naam', label: 'Klant', breedte: 180, standaard_zichtbaar: false,
+      sorteerWaarde: r => r.klant_naam ?? '',
+      render: r => r.klant_naam ?? '—' },
     { key: 'lijst_naam', label: 'Actielijst', breedte: 170, standaard_zichtbaar: false,
       sorteerWaarde: r => r.lijst_naam ?? '',
       render: r => r.lijst_naam ?? <span style={{ color: 'var(--text-muted)' }}>Losse taak</span> },
@@ -188,7 +262,45 @@ export default function TakenActieveDossiers({
     { key: 'verwacht_einddatum', label: 'Verwacht eind', breedte: 130, standaard_zichtbaar: false,
       sorteerWaarde: r => r.verwacht_einddatum ?? '9999',
       render: r => fmtDatum(r.verwacht_einddatum) },
-  ], [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [isMijnTaken, user_id, paneelBezig])
+
+  // Taaknaam-klik: WB-controletaak → werkbegroting-tab, rest → detailpaneel.
+  function onTaakKlik(r: TaakRij) {
+    if (r.titel === BEOORDEEL_TAAK_TITEL.werkbegroting) {
+      router.push(`/${r.dossier_sectie}/${r.dossier_id}/werkbegroting`)
+      return
+    }
+    void openTaak(r.id)
+  }
+
+  // ── Groepsregel per dossier ──────────────────────────────────────
+  const groepKop = (rijen: TaakRij[]) => {
+    const eerste = rijen[0]
+    const totaal = rijen.length
+    const open = rijen.filter(r => r.status === 'open').length
+    const heeftVerlopen = rijen.some(r => isVerlopen(r.deadline, r.status))
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: 'var(--fg)', fontSize: 13 }}>
+          {eerste?.dossiernummer ?? '—'}
+        </span>
+        <span style={{ color: 'var(--fg-muted)', fontSize: 13 }}>{eerste?.dossier_titel ?? ''}</span>
+        {heeftVerlopen && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+            background: '#fef2f2', color: '#dc2626', whiteSpace: 'nowrap',
+          }}>
+            <AlertTriangle size={11} /> Verlopen
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
+          {totaal} {totaal === 1 ? 'taak' : 'taken'} · {open} open
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -215,12 +327,30 @@ export default function TakenActieveDossiers({
         layouts={layouts}
         user_id={user_id}
         beginSortering={beginSortering}
-        onRijKlik={r => {
-          // WB-controletaak opent direct de werkbegroting-tab i.p.v. de takenlijst.
-          const tab = r.titel === BEOORDEEL_TAAK_TITEL.werkbegroting ? 'werkbegroting' : 'taken'
-          router.push(`/${r.dossier_sectie}/${r.dossier_id}/${tab}`)
+        selecteerbaar={false}
+        toonRijActie={false}
+        groepering={{
+          sleutel: r => r.dossier_id,
+          kop: groepKop,
         }}
       />
+
+      {paneelTaak && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+            padding: '64px 24px 24px',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setPaneelTaak(null) }}
+        >
+          <TaakDetailPanel
+            taak={paneelTaak}
+            onSluit={() => { setPaneelTaak(null); router.refresh() }}
+          />
+        </div>
+      )}
     </div>
   )
 }

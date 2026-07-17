@@ -9,6 +9,8 @@ import {
   getSortedRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
+  getGroupedRowModel,
+  getExpandedRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
@@ -18,6 +20,7 @@ import {
   type RowSelectionState,
   type PaginationState,
   type ColumnSizingState,
+  type ExpandedState,
   type FilterFn,
 } from '@tanstack/react-table'
 import {
@@ -41,6 +44,7 @@ import {
   GripVertical,
   Eye, EyeOff, X, Check, Layers, SlidersHorizontal, ChevronDown as ChevronDownSm,
   Search, ChevronLeft, ChevronRight, MoreHorizontal, Download,
+  ChevronsUpDown, ChevronsDownUp,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -74,7 +78,22 @@ type Props<T extends { id: string }> = {
   dicht?: boolean
   /** Toon de per-rij actieknop (⋯) rechts (default true). Rijen blijven klikbaar zonder de knop. */
   toonRijActie?: boolean
+  /**
+   * Optioneel: rijen bundelen onder in-/uitklapbare groepsregels. Weglaten = platte tabel.
+   * De groepeerkolom is intern en verschijnt niet in het kolombeheer of de export.
+   */
+  groepering?: {
+    /** Waarde waarop gebundeld wordt, bv. `r => r.dossier_id`. */
+    sleutel: (item: T) => string
+    /** Inhoud van de groepsregel; krijgt alle rijen van de groep (na filteren). */
+    kop: (rijen: T[], sleutel: string) => React.ReactNode
+    /** Begin uitgeklapt (default false = ingeklapt). */
+    standaardOpen?: boolean
+  }
 }
+
+/** Interne kolom-id waarop gegroepeerd wordt; altijd verborgen. */
+const GROEP_KOLOM = '__groep'
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
 
@@ -277,7 +296,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -295,6 +314,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   const [globalFilter, setGlobalFilter]         = useState('')
   const [rowSelection, setRowSelection]         = useState<RowSelectionState>({})
   const [pagination, setPagination]             = useState<PaginationState>({ pageIndex: 0, pageSize: 25 })
+  const [expanded, setExpanded]                 = useState<ExpandedState>(groepering?.standaardOpen ? true : {})
 
   const [layouts, setLayouts]             = useState<GebruikerLayout[]>(initialLayouts)
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(
@@ -377,8 +397,18 @@ export default function OverzichtTabel<T extends { id: string }>({
     ),
   }
 
+  // ── Groepeerkolom (intern, altijd verborgen) ──────────────────────────────
+  const groepColumn: ColumnDef<T> = {
+    id: GROEP_KOLOM,
+    accessorFn: (row: T) => (groepering ? groepering.sleutel(row) : ''),
+    enableGrouping: true,
+    enableSorting: false,
+    enableColumnFilter: false,
+  }
+
   const tableColumns: ColumnDef<T>[] = [
     selectColumn,
+    ...(groepering ? [groepColumn] : []),
     ...kolommen.map(k => ({
       id: k.key,
       accessorFn: k.sorteerWaarde ?? ((row: T) => {
@@ -387,6 +417,9 @@ export default function OverzichtTabel<T extends { id: string }>({
       }),
       header: k.label,
       cell: ({ row }: { row: { original: T } }) => k.render(row.original),
+      // Groepsregels renderen we zelf; een aggregatiecel zou k.render(undefined) aanroepen.
+      aggregatedCell: () => null,
+      enableGrouping: false,
       enableSorting: !!k.sorteerWaarde,
       enableColumnFilter: !!k.filterType,
       enableResizing: true,
@@ -396,10 +429,21 @@ export default function OverzichtTabel<T extends { id: string }>({
     })),
   ]
 
+  // De groepeerkolom mag nooit als cel of in het kolombeheer opduiken.
+  const effectieveVisibility: VisibilityState = groepering
+    ? { ...columnVisibility, [GROEP_KOLOM]: false }
+    : columnVisibility
+
   const table = useReactTable({
     data,
     columns: tableColumns,
-    state: { sorting, columnFilters, columnVisibility, columnOrder, columnSizing, globalFilter, rowSelection, pagination },
+    state: {
+      sorting, columnFilters, columnVisibility: effectieveVisibility, columnOrder, columnSizing,
+      globalFilter, rowSelection, pagination,
+      ...(groepering ? { grouping: [GROEP_KOLOM], expanded } : {}),
+    },
+    onExpandedChange: setExpanded,
+    groupedColumnMode: false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
@@ -412,6 +456,7 @@ export default function OverzichtTabel<T extends { id: string }>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    ...(groepering ? { getGroupedRowModel: getGroupedRowModel(), getExpandedRowModel: getExpandedRowModel() } : {}),
     columnResizeMode: 'onChange',
     enableColumnResizing: true,
     enableRowSelection: true,
@@ -481,6 +526,12 @@ export default function OverzichtTabel<T extends { id: string }>({
   const orderedKolommen = columnOrder
     .map(key => kolommen.find(k => k.key === key))
     .filter(Boolean) as KolomDefinitie<T>[]
+
+  /** Aantal kolommen dat een groeps- of lege-staat-regel moet overspannen. */
+  const kolomAantal =
+    columnOrder.filter(k => columnVisibility[k] !== false).length
+    + (selecteerbaar ? 1 : 0)
+    + (toonRijActie ? 1 : 0)
 
   const hasFilters = kolommen.some(k => k.filterType)
   const activeFilters = columnFilters.filter(f =>
@@ -640,6 +691,28 @@ export default function OverzichtTabel<T extends { id: string }>({
             Export
           </button>
 
+          {/* Alles uit-/inklappen (alleen bij groepering) */}
+          {groepering && (
+            <button
+              onClick={() => table.toggleAllRowsExpanded(!table.getIsAllRowsExpanded())}
+              title={table.getIsAllRowsExpanded() ? 'Alles inklappen' : 'Alles uitklappen'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                height: 32, padding: '0 10px',
+                border: '1px solid var(--border)', borderRadius: 6,
+                background: 'var(--bg)', cursor: 'pointer',
+                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--neutral-100, #f1f4f5)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg)')}
+            >
+              {table.getIsAllRowsExpanded()
+                ? <><ChevronsDownUp size={13} strokeWidth={2} />Alles inklappen</>
+                : <><ChevronsUpDown size={13} strokeWidth={2} />Alles uitklappen</>}
+            </button>
+          )}
+
           {/* Extern meegegeven acties (Nieuw…) */}
           {acties && <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{acties}</div>}
 
@@ -795,7 +868,7 @@ export default function OverzichtTabel<T extends { id: string }>({
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>
                   {selecteerbaar && <col style={{ width: 44 }} />}
-                  {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
+                  {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select' && h.id !== GROEP_KOLOM).map(header => {
                     if (columnVisibility[header.id] === false) return null
                     return <col key={header.id} style={{ width: header.getSize() }} />
                   })}
@@ -879,6 +952,42 @@ export default function OverzichtTabel<T extends { id: string }>({
 
                 <tbody>
                   {table.getRowModel().rows.map(row => {
+                    // ── Groepsregel: één cel over de hele breedte, klikken klapt open/dicht ──
+                    if (groepering && row.getIsGrouped()) {
+                      const isOpen = row.getIsExpanded()
+                      return (
+                        <tr
+                          key={row.id}
+                          className="overzicht-groep"
+                          onClick={row.getToggleExpandedHandler()}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td
+                            colSpan={kolomAantal}
+                            style={{
+                              ...tdStyle,
+                              background: 'var(--bg)',
+                              borderBottom: '1px solid var(--border)',
+                              padding: dicht ? '7px 12px' : '9px 14px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span
+                                aria-hidden
+                                style={{ display: 'inline-flex', color: 'var(--fg-muted)', flexShrink: 0 }}
+                              >
+                                {isOpen ? <ChevronDownSm size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+                              </span>
+                              {groepering.kop(
+                                row.subRows.map(r => r.original),
+                                String(row.getGroupingValue(GROEP_KOLOM) ?? ''),
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    }
+
                     const isSelected = row.getIsSelected()
                     return (
                       <tr
@@ -923,7 +1032,7 @@ export default function OverzichtTabel<T extends { id: string }>({
 
                   {table.getRowModel().rows.length === 0 && (
                     <tr>
-                      <td colSpan={columnOrder.filter(k => columnVisibility[k] !== false).length + (selecteerbaar ? 1 : 0) + (toonRijActie ? 1 : 0)}
+                      <td colSpan={kolomAantal}
                         style={{ ...tdStyle, textAlign: 'center', color: 'var(--fg-muted)', padding: '40px 0', borderBottom: 'none' }}
                       >Geen resultaten</td>
                     </tr>
@@ -981,6 +1090,8 @@ export default function OverzichtTabel<T extends { id: string }>({
       </div>
 
       <style>{`
+        tr.overzicht-groep { transition: background 80ms ease; }
+        tr.overzicht-groep:hover td { background: var(--bg-active, #eef2f5) !important; }
         tr.overzicht-rij { transition: background 80ms ease; }
         tr.overzicht-rij:hover td { background: var(--bg); }
         tr.overzicht-rij:has(td [aria-checked="true"]) td,
