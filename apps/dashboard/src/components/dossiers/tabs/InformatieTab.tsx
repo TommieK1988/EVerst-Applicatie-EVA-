@@ -21,6 +21,7 @@ import { DossierVerversKnop } from '../DossierVerversKnop'
 import { DossierAutoVervers } from '../DossierAutoVervers'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
+import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
@@ -33,7 +34,6 @@ import TaakDetailPanel from '@/components/taken/TaakDetailPanel'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
-import { STANDAARD_BTW_HOOG_PCT as STANDAARD_BTW_PCT } from '@/lib/stamdata/constants'
 import {
   Button, Card, CardHeader, CardBody,
   Input, Textarea,
@@ -424,162 +424,6 @@ function TakenBlok({
         </div>
       )}
     </>
-  )
-}
-
-/* ─── offerte preview ─────────────────────────────────────────────── */
-const A4_W = 794
-const A4_H = 1123
-
-type Versie = { nr: number; datum: string; status: 'verzonden' | 'concept' }
-
-function OffertePreview({ dossier }: { dossier: DossierRij }) {
-  const containerRef              = React.useRef<HTMLDivElement>(null)
-  const [scale, setScale]         = React.useState(1)
-  const [versies, setVersies]     = React.useState<Versie[]>([{ nr: 1, datum: dossier.created_at, status: 'verzonden' }])
-  const [actief, setActief]       = React.useState(0)
-  const huidig = versies[actief]
-
-  React.useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const bereken = () => {
-      const { width, height } = el.getBoundingClientRect()
-      const pad = 24
-      setScale(Math.min((width - pad * 2) / A4_W, (height - pad * 2) / A4_H))
-    }
-    bereken()
-    const ro = new ResizeObserver(bereken)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const scaledW = Math.round(A4_W * scale)
-  const scaledH = Math.round(A4_H * scale)
-
-  // LET OP: deze kostenverdeling (arbeid/materiaal/onderaanneming) is nog placeholder/mock —
-  // het zijn vaste verhoudingen, geen echte calculatie. De BTW gebruikt wél het bedrijfs-default
-  // hoge tarief (centrale BTW-bron) i.p.v. een hardcoded percentage.
-  const bedrag      = dossier.bedrag_excl_btw ?? 0
-  const arbeid      = Math.round(bedrag * 0.58)
-  const materiaal   = Math.round(bedrag * 0.28)
-  const onderaannem = Math.round(bedrag * 0.10)
-  const overig      = bedrag - arbeid - materiaal - onderaannem
-  const btw         = Math.round(bedrag * (STANDAARD_BTW_PCT / 100))
-  const inclBtw     = bedrag + btw
-
-  function kopieer() {
-    const nieuw: Versie = { nr: versies.length + 1, datum: new Date().toISOString().slice(0, 10), status: 'concept' }
-    setVersies(p => [...p, nieuw])
-    setActief(versies.length)
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border)' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg)' }}>Verstuurde offerte</span>
-          {versies.length > 1 && (
-            <div style={{ display: 'flex', gap: 4 }}>
-              {versies.map((v, i) => (
-                <button key={i} onClick={() => setActief(i)} style={{
-                  padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                  border: i === actief ? 'none' : '1px solid var(--border)',
-                  background: i === actief ? 'var(--accent)' : 'transparent',
-                  color: i === actief ? 'white' : 'var(--fg-muted)',
-                }}>v{v.nr}{v.status === 'concept' ? ' ✎' : ''}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button onClick={kopieer} style={{
-          display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-          padding: '5px 10px', borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          background: 'var(--bg-active)', border: '1px solid var(--border)', color: 'var(--fg)', whiteSpace: 'nowrap',
-        }}>
-          <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="6" y="6" width="10" height="12" rx="1.5" /><path d="M4 14V4h10" />
-          </svg>
-          Kopiëren naar nieuwe versie
-        </button>
-      </div>
-
-      {huidig.status === 'concept' && (
-        <div style={{ padding: '7px 16px', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--accent)', flexShrink: 0 }}>
-          ✎ Concept — nog niet verzonden
-        </div>
-      )}
-
-      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', background: '#ddd8cc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
-          <div style={{
-            position: 'absolute', top: 0, left: 0,
-            width: A4_W, height: A4_H,
-            transform: `scale(${scale})`, transformOrigin: 'top left',
-            background: 'white', boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
-            padding: '56px 60px', fontFamily: 'var(--font-ui)', fontSize: 12,
-            color: '#1a1a1a', lineHeight: 1.5, boxSizing: 'border-box',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 36 }}>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '0.06em', color: '#009439' }}>EVERTS.</div>
-                <div style={{ fontSize: 10, color: '#777', marginTop: 4, lineHeight: 1.7 }}>
-                  Everts Groep BV<br />Enschede · info@everts.nl<br />KVK 12345678 · BTW NL000000000B01
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '0.04em', color: '#333' }}>OFFERTE</div>
-                <div style={{ fontSize: 10, color: '#777', marginTop: 6, lineHeight: 1.8 }}>
-                  Referentie: {dossier.dossiernummer}<br />Versie: {huidig.nr}<br />Datum: {fmtDatum(huidig.datum)}
-                  {huidig.status === 'concept' && <><br /><span style={{ color: '#e67e22', fontWeight: 700 }}>CONCEPT</span></>}
-                </div>
-              </div>
-            </div>
-            <div style={{ height: 1, background: '#009439', marginBottom: 28 }} />
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{dossier.klant_naam}</div>
-              <div style={{ color: '#555', lineHeight: 1.7, marginTop: 2 }}>t.a.v. contactpersoon<br />Straat 1<br />1234 AB Stad</div>
-            </div>
-            <div style={{ marginBottom: 8, fontWeight: 700 }}>Betreft: <span style={{ fontWeight: 400 }}>{dossier.titel}</span></div>
-            <div style={{ marginBottom: 28, color: '#444', fontSize: 11 }}>Naar aanleiding van uw aanvraag brengen wij u hierbij vrijblijvend offerte uit voor de hierna omschreven werkzaamheden.</div>
-            {dossier.bedrag_excl_btw != null && (
-              <>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 20 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #009439' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 4px', fontWeight: 700, color: '#009439' }}>Omschrijving</th>
-                      <th style={{ textAlign: 'right', padding: '6px 4px', fontWeight: 700, color: '#009439', whiteSpace: 'nowrap' }}>Bedrag (excl. BTW)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[['Arbeid (loon incl. sociale lasten)', arbeid], ['Materiaal', materiaal], ['Onderaanneming', onderaannem], ['Overig / stelposten', overig]].map(([lbl, val]) => (
-                      <tr key={lbl as string} style={{ borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: '7px 4px' }}>{lbl}</td>
-                        <td style={{ padding: '7px 4px', textAlign: 'right', fontFamily: 'monospace' }}>{fmtBedrag(val as number)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ marginLeft: 'auto', width: 280, borderTop: '2px solid #009439', paddingTop: 10 }}>
-                  {[['Totaal excl. BTW', bedrag], ['BTW 21%', btw]].map(([lbl, val]) => (
-                    <div key={lbl as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 11 }}>
-                      <span>{lbl}</span><span style={{ fontFamily: 'monospace' }}>{fmtBedrag(val as number)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', marginTop: 6, borderTop: '1px solid #ddd', fontWeight: 700, fontSize: 13 }}>
-                    <span>Totaal incl. BTW</span><span style={{ fontFamily: 'monospace' }}>{fmtBedrag(inclBtw)}</span>
-                  </div>
-                </div>
-              </>
-            )}
-            <div style={{ position: 'absolute', bottom: 56, left: 60, right: 60, fontSize: 9, color: '#888', borderTop: '1px solid #eee', paddingTop: 12, lineHeight: 1.7 }}>
-              <strong style={{ color: '#555' }}>Voorwaarden: </strong>
-              Op al onze aanbiedingen, opdrachten en overeenkomsten zijn de algemene leveringsvoorwaarden van Everts Groep BV van toepassing. Geldigheidsduur offerte: 30 dagen na offertedatum.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -1488,7 +1332,7 @@ export function InformatieTab({
       <div style={{ display: 'flex', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
         <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>{inhoud}</div>
         <div style={{ width: 460, flexShrink: 0 }}>
-          <OffertePreview dossier={dossier} />
+          <OffertePaneel dossierId={dossier.id} />
         </div>
       </div>
     )
