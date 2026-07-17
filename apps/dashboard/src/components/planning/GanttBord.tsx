@@ -3,6 +3,7 @@
 import { addDays, parseISO, startOfDay } from 'date-fns'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { OPDRACHT_STATUSSEN } from '@/components/dossiers/types'
 import { crewKleur } from '@/lib/utils/crew'
 import {
   KLEUR, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
@@ -16,6 +17,12 @@ const SUBSTATUS_KLEUR: Record<string, string> = {
   onderhanden:       '#009439',
   uitvoering_gereed: '#8650c4',
 }
+
+/** De pagina laadt alleen opdrachten vóór de financiële afronding — die statussen kunnen hier dus niet voorkomen. */
+const STATUS_OPTIES = OPDRACHT_STATUSSEN.filter(
+  s => s.key !== 'financieel_gereed' && s.key !== 'financieel_afgesloten',
+)
+const STANDAARD_STATUSSEN = ['onderhanden', 'werkvoorbereiding']
 
 type SortKey = 'start' | 'eind' | 'naam'
 const SORT_OPTIES: { key: SortKey; label: string }[] = [
@@ -31,8 +38,9 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
   } = usePlanningController({ defaultView: 'maand' })
 
   const [kleurModus, setKleurModus] = useState<'status' | 'projectleider'>('projectleider')
-  const [sortBy, setSortBy] = useState<SortKey>('start')
+  const [sortBy, setSortBy] = useState<SortKey>('eind')
   const [geselecteerdeCategorieen, setGeselecteerdeCategorieen] = useState<string[]>([])
+  const [geselecteerdeStatussen, setGeselecteerdeStatussen] = useState<string[]>(STANDAARD_STATUSSEN)
 
   const { vs, ve } = layout
 
@@ -44,8 +52,9 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
   const gefilterd = useMemo(
     () => opdrachten
       .filter(d => d.planning_start || d.planning_eind || d.verwacht_startdatum || d.verwacht_einddatum)
-      .filter(d => geselecteerdeCategorieen.length === 0 || geselecteerdeCategorieen.includes(d.categorie ?? '')),
-    [opdrachten, geselecteerdeCategorieen],
+      .filter(d => geselecteerdeCategorieen.length === 0 || geselecteerdeCategorieen.includes(d.categorie ?? ''))
+      .filter(d => geselecteerdeStatussen.includes(d.opdracht_substatus ?? '')),
+    [opdrachten, geselecteerdeCategorieen, geselecteerdeStatussen],
   )
 
   const gesorteerd = useMemo(() => {
@@ -230,38 +239,71 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     </div>
   )
 
-  const categorieSlicer = uniekeCat.length >= 2 ? (
+  const pil = (key: string, label: string, actief: boolean, onClick: () => void) => (
+    <button key={key} onClick={onClick} style={{
+      padding: '3px 10px', borderRadius: 20, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
+      background: actief ? 'var(--accent)' : 'transparent',
+      color: actief ? 'white' : 'var(--fg-muted)',
+      fontSize: 10, fontWeight: 600, cursor: 'pointer',
+    }}>
+      {label}
+    </button>
+  )
+
+  const slicerRij = (titel: string, children: React.ReactNode) => (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-      {uniekeCat.map(cat => {
-        const actief = geselecteerdeCategorieen.includes(cat)
-        return (
-          <button key={cat} onClick={() => setGeselecteerdeCategorieen(prev =>
-            actief ? prev.filter(c => c !== cat) : [...prev, cat]
-          )} style={{
-            padding: '3px 10px', borderRadius: 20, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
-            background: actief ? 'var(--accent)' : 'transparent',
-            color: actief ? 'white' : 'var(--fg-muted)',
-            fontSize: 10, fontWeight: 600, cursor: 'pointer',
-          }}>
-            {cat}
-          </button>
-        )
-      })}
-      {geselecteerdeCategorieen.length > 0 && (
-        <button onClick={() => setGeselecteerdeCategorieen([])} style={{
-          padding: '3px 8px', borderRadius: 20, border: '1px solid var(--border)',
-          background: 'transparent', color: 'var(--fg-muted)',
-          fontSize: 10, cursor: 'pointer',
-        }}>
-          × wis
-        </button>
-      )}
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2,
+      }}>
+        {titel}
+      </span>
+      {children}
     </div>
-  ) : null
+  )
+
+  const statusSlicer = slicerRij('Status', (
+    <>
+      {STATUS_OPTIES.map(s => pil(
+        s.key,
+        s.label,
+        geselecteerdeStatussen.includes(s.key),
+        () => setGeselecteerdeStatussen(prev =>
+          prev.includes(s.key) ? prev.filter(k => k !== s.key) : [...prev, s.key]
+        ),
+      ))}
+      {pil('__alles', 'Alles', false, () => setGeselecteerdeStatussen(STATUS_OPTIES.map(s => s.key)))}
+    </>
+  ))
+
+  const categorieSlicer = uniekeCat.length >= 2
+    ? slicerRij('Categorie', (
+        <>
+          {uniekeCat.map(cat => pil(
+            cat,
+            cat,
+            geselecteerdeCategorieen.includes(cat),
+            () => setGeselecteerdeCategorieen(prev =>
+              prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+            ),
+          ))}
+          {geselecteerdeCategorieen.length > 0 && (
+            <button onClick={() => setGeselecteerdeCategorieen([])} style={{
+              padding: '3px 8px', borderRadius: 20, border: '1px solid var(--border)',
+              background: 'transparent', color: 'var(--fg-muted)',
+              fontSize: 10, cursor: 'pointer',
+            }}>
+              × wis
+            </button>
+          )}
+        </>
+      ))
+    : null
 
   return (
     <div ref={wrapRef}>
       {balkStijl}
+      {statusSlicer}
       {categorieSlicer}
       {gesorteerd.length === 0 ? (
         <>
@@ -277,8 +319,8 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
             border: `2px dashed ${KLEUR.border}`, borderRadius: 10,
             color: KLEUR.fgMuted, fontFamily: 'var(--font-ui)', fontSize: 13,
           }}>
-            Geen opdrachten met geplande start- of einddatum gevonden.
-            Stel start- en einddatum in op de opdracht om ze hier te tonen.
+            Geen opdrachten gevonden binnen de gekozen status en categorie.
+            Pas de filters aan, of stel start- en einddatum in op de opdracht om ze hier te tonen.
           </div>
         </>
       ) : (
