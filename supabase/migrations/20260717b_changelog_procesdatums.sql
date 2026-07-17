@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-17','verbeterd','Dossiers','Alle datums van een dossier op een rij',
+   'In het blok Projectinformatie staan de datums nu onder elkaar in de volgorde van het proces: van aanvraag en deadline tot oplevering en financieel gereed. Achter elke datum zie je hoeveel dagen erover zijn gegaan sinds de vorige, zodat je in één oogopslag ziet waar de tijd zit. De opdrachtdatum en de datum financieel gereed worden voortaan automatisch bijgehouden, en de start- en einddatum volgen nu de planning. Je vult zelf alleen nog de aanvraagdatum en de deadline in.');

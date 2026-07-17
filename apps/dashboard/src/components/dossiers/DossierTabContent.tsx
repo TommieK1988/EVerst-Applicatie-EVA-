@@ -1,6 +1,8 @@
 import { Suspense } from 'react'
 import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
+import { getDossierDatums } from '@/lib/dossiers/datums'
+import { LEGE_DOSSIER_DATUMS } from '@/lib/dossiers/datum-regels'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getGoedgekeurdMeerwerkExcl } from '@/lib/dossiers/meerwerk'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
@@ -80,7 +82,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen] = await Promise.all([
+    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums] = await Promise.all([
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
@@ -94,6 +96,8 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       getDossierNotities(id).catch(() => []),
       getCurrentMedewerker().catch(() => null),
       getWerkmaatschappijen().catch(() => []),
+      // Procesdatums (aanvraag → financieel gereed) voor het Projectinformatie-blok.
+      getDossierDatums(id).catch(() => LEGE_DOSSIER_DATUMS),
     ])
 
     // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
@@ -118,6 +122,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           notities={notities}
           currentMedewerkerId={currentMedewerker?.id ?? null}
           werkmaatschappijen={werkmaatschappijen}
+          datums={datums}
         />
       </>
     )

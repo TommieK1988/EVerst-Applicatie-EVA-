@@ -11,6 +11,10 @@ import {
 } from '../types'
 import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, koppelDossierAanProject } from '@/lib/dossiers/actions'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
+import {
+  bouwDatumRegels, formatDelta, LEGE_DOSSIER_DATUMS,
+  type DossierDatumRegel, type DossierDatums,
+} from '@/lib/dossiers/datum-regels'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
@@ -55,19 +59,32 @@ const statusKleur = (s: string) =>
 
 const fmtBedrag = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
+// timeZone expliciet: de procesdatums zijn deels timestamptz (opdrachtdatum,
+// verzonden_op, planning-blokken). Zonder dit valt een mutatie van 23:00 NL op de vorige dag.
 const fmtDatum = (iso: string) =>
-  new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
+  new Date(iso).toLocaleDateString('nl-NL', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Amsterdam',
+  })
+
+/**
+ * DatePicker-waarde → 'YYYY-MM-DD' voor een date-kolom, in lokale tijd.
+ * Bewust niet `toISOString().slice(0,10)`: die rekent naar UTC, waardoor een in
+ * de zomertijd gekozen 1 juli (00:00 CEST = 30 juni 22:00 UTC) als 30 juni opslaat.
+ */
+const datumNaarISO = (d: Date | undefined | null): string => {
+  if (!d) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
 
 /* ─── form state ──────────────────────────────────────────────────── */
 type FormValues = {
   calculator_id: string
-  uiterlijkeIndiendatum: string
   categorie: string
   referentie: string
   opmerkingen: string
   contactpersoon_id: string
-  verwacht_startdatum: string
-  verwacht_einddatum: string
   werkadres_naam: string
   werkadres_telefoon: string
   werkadres_email: string
@@ -76,8 +93,6 @@ type FormValues = {
   werkadres_stad: string
   betalingstermijn: string
   factuurreferentie: string
-  datum_offerte_verzonden: string
-  opdrachtdatum: string
   aanneemsom: string
   projectleider_id: string
   teamleider_id: string
@@ -120,6 +135,46 @@ function InfoVeld({
           : 'text-neutral-400',
       )}>
         {heeftWaarde ? waarde : '—'}
+      </div>
+    </div>
+  )
+}
+
+/* ─── datumlijst ──────────────────────────────────────────────────────
+   De acht procesdatums onder elkaar in vaste procesvolgorde, met per regel
+   het aantal dagen sinds de vorige gevulde datum. Lege datums blijven als
+   streepje staan: dat een opdrachtdatum ontbreekt is zelf ook informatie. */
+function DatumLijst({ regels, deadlineUrgent }: {
+  regels: DossierDatumRegel[]
+  deadlineUrgent: boolean
+}) {
+  return (
+    <div className="mt-4 border-t border-neutral-100 pt-3">
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+        Datums
+      </div>
+      <div className="divide-y divide-neutral-100">
+        {regels.map(regel => {
+          const heeftWaarde = regel.waarde != null
+          const delta       = formatDelta(regel.delta)
+          const urgent      = regel.sleutel === 'deadline' && deadlineUrgent && heeftWaarde
+          return (
+            <div key={regel.sleutel} className="flex items-baseline justify-between gap-3 py-[5px]">
+              <span className="text-[11px] text-neutral-500">{regel.label}</span>
+              <span className="flex items-baseline gap-2 text-right">
+                {delta && (
+                  <span className="text-[10px] tabular-nums text-neutral-400">{delta}</span>
+                )}
+                <span className={cn(
+                  'text-[13px] font-medium tabular-nums',
+                  !heeftWaarde ? 'text-neutral-400' : urgent ? 'text-warning-700' : 'text-neutral-800',
+                )}>
+                  {heeftWaarde ? fmtDatum(regel.waarde!) : '—'}
+                </span>
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -542,12 +597,15 @@ type Props = {
   currentMedewerkerId?: string | null
   /** Werkmaatschappijen (bedrijfsgegevens) voor de werkmaatschappij-dropdown. */
   werkmaatschappijen?: WerkmaatschappijOptie[]
+  /** Procesdatums (aanvraag → financieel gereed); server-side samengesteld. */
+  datums?: DossierDatums
 }
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
   relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
   notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
+  datums = LEGE_DOSSIER_DATUMS,
 }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
@@ -606,13 +664,10 @@ export function InformatieTab({
 
   const [form, setForm] = React.useState<FormValues>({
     calculator_id:           (dossier as any).calculator_id      ?? '',
-    uiterlijkeIndiendatum:   '',
     categorie:               (dossier as any).categorie           ?? '',
     referentie:              dossier.referentie           ?? '',
     opmerkingen:             (dossier as any).opmerkingen          ?? '',
     contactpersoon_id:       (dossier as any).contactpersoon_id  ?? '',
-    verwacht_startdatum:     dossier.verwacht_startdatum         ?? '',
-    verwacht_einddatum:      dossier.verwacht_einddatum          ?? '',
     werkadres_naam:          (dossier as any).werkadres_naam      ?? '',
     werkadres_telefoon:      (dossier as any).werkadres_telefoon  ?? '',
     werkadres_email:         (dossier as any).werkadres_email     ?? '',
@@ -621,8 +676,6 @@ export function InformatieTab({
     werkadres_stad:          (dossier as any).werkadres_stad      ?? '',
     betalingstermijn:        '',
     factuurreferentie:       '',
-    datum_offerte_verzonden: '',
-    opdrachtdatum:           '',
     aanneemsom:              dossier.bedrag_excl_btw != null ? String(dossier.bedrag_excl_btw) : '',
     projectleider_id:        dossier.project_manager_id  ?? '',
     teamleider_id:           dossier.teamleider_id        ?? '',
@@ -728,8 +781,6 @@ export function InformatieTab({
       ...(bouw7Vergrendeld ? {} : {
         categorie:            form.categorie            || null,
         contactpersoon_id:    form.contactpersoon_id    || null,
-        verwacht_startdatum:  form.verwacht_startdatum  || null,
-        verwacht_einddatum:   form.verwacht_einddatum   || null,
         werkadres_straat:     form.werkadres_straat     || null,
         werkadres_postcode:   form.werkadres_postcode   || null,
         werkadres_stad:       form.werkadres_stad       || null,
@@ -737,6 +788,22 @@ export function InformatieTab({
     }).catch(() => {})
   }
   function annuleer() { setForm(opgeslagen); setEditMode(false) }
+
+  /* ─── procesdatums ───────────────────────────────────────────────────
+     De server levert de acht datums; aanvraagdatum en deadline komen uit het
+     formulier zodat de lijst in de bewerkmodus meteen meebeweegt. Een lege
+     aanvraagdatum valt terug op de serverwaarde (= created_at). */
+  const datumRegels = React.useMemo(() => bouwDatumRegels({
+    ...datums,
+    aanvraagdatum: form.aanvraagdatum || datums.aanvraagdatum,
+    deadline:      form.deadline      || null,
+  }), [datums, form.aanvraagdatum, form.deadline])
+
+  // De deadline is het moment waarop de offerte verzonden had moeten zijn; zodra
+  // die eruit is, valt er niets meer te halen en kleurt hij dus niet meer.
+  const deadlineUrgent = !!form.deadline
+    && datums.offertedatum == null
+    && (new Date(form.deadline).getTime() - Date.now()) < 86_400_000 * 7
 
   const geselecteerdFa        = factuuradressen.find(fa => fa.id === form.factuuradres_id) ?? null
   // Voorkeur: gegenereerde offerte (Supabase) → anders live calculatietotalen → anders Bouw7.
@@ -969,14 +1036,6 @@ export function InformatieTab({
               <InfoVeld label="Opdrachtgever"  waarde={dossier.klant_naam} />
               <InfoVeld label="Projectnaam"    waarde={dossier.titel} />
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
-              <InfoVeld label="Aanvraagdatum" waarde={form.aanvraagdatum ? fmtDatum(form.aanvraagdatum) : null} />
-              <InfoVeld
-                label="Deadline"
-                waarde={form.deadline ? fmtDatum(form.deadline) : null}
-                urgentie={!!form.deadline && (new Date(form.deadline).getTime() - Date.now()) < 86_400_000 * 7}
-              />
-              <InfoVeld label="Begindatum" waarde={form.verwacht_startdatum ? fmtDatum(form.verwacht_startdatum) : null} />
-              <InfoVeld label="Einddatum"  waarde={form.verwacht_einddatum  ? fmtDatum(form.verwacht_einddatum)  : null} />
               <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
               <InfoVeld label="Categorie" waarde={form.categorie || null} />
               <InfoVeld label="Referentie" waarde={form.referentie || null} />
@@ -986,6 +1045,8 @@ export function InformatieTab({
                 <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
               )}
             </div>
+
+            <DatumLijst regels={datumRegels} deadlineUrgent={deadlineUrgent} />
 
             {editMode && (
               <div className="mt-4">
@@ -1040,64 +1101,24 @@ export function InformatieTab({
                 </FormSection>
 
                 <FormSection title="Datums">
+                  <p className="mb-3 text-[11px] leading-snug text-neutral-500">
+                    De overige datums houdt EVA zelf bij: de offertedatum volgt uit het verzenden
+                    van de offerte, start- en einddatum uit de planning, de opleverdatum uit de
+                    oplevering, en opdracht- en financieel-gereed-datum uit de fasewissel.
+                  </p>
                   <FormRow cols="2">
                     <FormField upper label="Aanvraagdatum">
                       <DatePicker
                         value={form.aanvraagdatum ? new Date(form.aanvraagdatum) : undefined}
-                        onChange={d => set('aanvraagdatum')(d ? d.toISOString().slice(0, 10) : '')}
+                        onChange={d => set('aanvraagdatum')(datumNaarISO(d))}
                       />
                     </FormField>
                     <FormField upper label="Deadline">
                       <DatePicker
                         value={form.deadline ? new Date(form.deadline) : undefined}
-                        onChange={d => set('deadline')(d ? d.toISOString().slice(0, 10) : '')}
+                        onChange={d => set('deadline')(datumNaarISO(d))}
                       />
                     </FormField>
-                    {(sectie === 'offerte' || sectie === 'opdracht') && (
-                      <FormField upper label="Datum offerte verzonden">
-                        <DatePicker
-                          value={form.datum_offerte_verzonden ? new Date(form.datum_offerte_verzonden) : undefined}
-                          onChange={d => set('datum_offerte_verzonden')(d ? d.toISOString().slice(0, 10) : '')}
-                        />
-                      </FormField>
-                    )}
-                    {sectie === 'opdracht' && (
-                      <FormField upper label="Opdrachtdatum">
-                        <DatePicker
-                          value={form.opdrachtdatum ? new Date(form.opdrachtdatum) : undefined}
-                          onChange={d => set('opdrachtdatum')(d ? d.toISOString().slice(0, 10) : '')}
-                        />
-                      </FormField>
-                    )}
-                    {sectie === 'aanvraag' && (
-                      <FormField upper label="Uiterlijke indiendatum">
-                        <DatePicker
-                          value={form.uiterlijkeIndiendatum ? new Date(form.uiterlijkeIndiendatum) : undefined}
-                          onChange={d => set('uiterlijkeIndiendatum')(d ? d.toISOString().slice(0, 10) : '')}
-                        />
-                      </FormField>
-                    )}
-                    {bouw7Vergrendeld ? (
-                      <>
-                        <InfoVeld label="Begindatum" waarde={form.verwacht_startdatum ? fmtDatum(form.verwacht_startdatum) : null} />
-                        <InfoVeld label="Einddatum"  waarde={form.verwacht_einddatum  ? fmtDatum(form.verwacht_einddatum)  : null} />
-                      </>
-                    ) : (
-                      <>
-                        <FormField upper label="Begindatum">
-                          <DatePicker
-                            value={form.verwacht_startdatum ? new Date(form.verwacht_startdatum) : undefined}
-                            onChange={d => set('verwacht_startdatum')(d ? d.toISOString().slice(0, 10) : '')}
-                          />
-                        </FormField>
-                        <FormField upper label="Einddatum">
-                          <DatePicker
-                            value={form.verwacht_einddatum ? new Date(form.verwacht_einddatum) : undefined}
-                            onChange={d => set('verwacht_einddatum')(d ? d.toISOString().slice(0, 10) : '')}
-                          />
-                        </FormField>
-                      </>
-                    )}
                   </FormRow>
                 </FormSection>
               </div>

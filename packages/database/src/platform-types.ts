@@ -493,10 +493,14 @@ export type Dossier = {
   werkadres_stad: string | null
   /** VvE-code van het object; gesynct naar Bouw7 als custom attribute caVveCode. */
   vve_code: string | null
-  /** Datum van de aanvraag (default vandaag, bewerkbaar). */
+  /** Datum van de aanvraag. Leeg = het dossier is aangemaakt op `created_at`. */
   aanvraagdatum: string | null
-  /** Gewenste deadline/opleverdatum (optioneel). */
+  /** Deadline: de datum waarop de offerte verzonden had moeten zijn (optioneel). */
   deadline: string | null
+  /** Moment van de overgang naar hoofdstatus opdracht. Gezet door de DB-trigger zz_dossier_procesdatums. */
+  opdrachtdatum: string | null
+  /** Moment dat de opdracht-substatus financieel_gereed werd. Gezet door dezelfde DB-trigger. */
+  financieel_gereed_op: string | null
   /** Werkmaatschappij (bedrijfsgegevens.type=werkmaatschappij); zie migratie 20260706_dossier_werkmaatschappij. */
   werkmaatschappij_id: string | null
   created_at: string
