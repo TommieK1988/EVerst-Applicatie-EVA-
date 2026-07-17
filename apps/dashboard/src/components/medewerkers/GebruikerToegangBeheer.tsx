@@ -57,6 +57,7 @@ export default function GebruikerToegangBeheer({
   const [type, setType] = useState<GebruikerType>(initial_type)
   const [rechten, setRechten] = useState<RechtenSet>(initial_rechten)
   const [editingRechten, setEditingRechten] = useState(false)
+  const [editRechten, setEditRechten] = useState<Record<string, 'lezen' | 'schrijven' | 'beheren' | null>>({})
   const [isPending, startTransition] = useTransition()
   const [authUserId, setAuthUserId] = useState<string | null>(auth_user_id)
 
@@ -96,10 +97,29 @@ export default function GebruikerToegangBeheer({
     })
   }
 
+  function startEditRechten() {
+    // Formulier starten vanaf de effectieve rechten, niet alleen de override
+    const seed: Record<string, 'lezen' | 'schrijven' | 'beheren' | null> = {}
+    for (const m of MODULES) {
+      seed[m.key] = (effectiefRechten as Record<string, 'lezen' | 'schrijven' | 'beheren' | null>)[m.key] ?? null
+    }
+    setEditRechten(seed)
+    setEditingRechten(true)
+  }
+
   function saveRechten() {
+    // Alleen afwijkingen t.o.v. de afdeling-standaard als override bewaren,
+    // zodat ongewijzigde modules de afdeling-standaard blijven volgen.
+    const override: RechtenSet = {}
+    for (const m of MODULES) {
+      const val = editRechten[m.key] ?? null
+      const std = (afdeling_standaard_rechten as Record<string, string | null>)[m.key] ?? null
+      if (val !== std) (override as Record<string, unknown>)[m.key] = val
+    }
     startTransition(async () => {
-      const res = await updateRechtenOverride(medewerker_id, rechten)
+      const res = await updateRechtenOverride(medewerker_id, override)
       if (!res.ok) { toast.error(res.error); return }
+      setRechten(override)
       setEditingRechten(false)
       toast.success('Rechten opgeslagen')
     })
@@ -188,7 +208,7 @@ export default function GebruikerToegangBeheer({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Rechten (override op afdeling-standaard)</label>
             {!editingRechten && (
-              <Button variant="ghost" size="sm" onClick={() => setEditingRechten(true)}>
+              <Button variant="ghost" size="sm" onClick={startEditRechten}>
                 Aanpassen
               </Button>
             )}
@@ -202,7 +222,7 @@ export default function GebruikerToegangBeheer({
                   <div key={n.label} style={{ ...labelStyle, marginBottom: 0, textAlign: 'center' }}>{n.label}</div>
                 ))}
                 {MODULES.map(m => {
-                  const huidig = rechten[m.key] ?? null
+                  const huidig = editRechten[m.key] ?? null
                   return (
                     <React.Fragment key={m.key}>
                       <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13 }}>{m.label}</span>
@@ -212,7 +232,7 @@ export default function GebruikerToegangBeheer({
                             type="radio"
                             name={`rechten_${m.key}`}
                             checked={huidig === n.value}
-                            onChange={() => setRechten(prev => ({ ...prev, [m.key]: n.value }))}
+                            onChange={() => setEditRechten(prev => ({ ...prev, [m.key]: n.value }))}
                           />
                         </div>
                       ))}
@@ -221,7 +241,7 @@ export default function GebruikerToegangBeheer({
                 })}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="ghost" size="sm" onClick={() => { setRechten(initial_rechten); setEditingRechten(false) }}>
+                <Button variant="ghost" size="sm" onClick={() => setEditingRechten(false)}>
                   Annuleren
                 </Button>
                 <Button variant="primary" size="sm" onClick={saveRechten} loading={isPending} disabled={isPending}>
