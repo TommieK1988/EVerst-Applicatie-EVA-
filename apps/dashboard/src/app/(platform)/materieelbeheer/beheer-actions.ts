@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
-import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
+import { vereisMaterieelBeheer } from '@/lib/materieel/auth'
 import type { KeuringSoort, TeamType } from '@/lib/materieel/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,8 +11,10 @@ const db = () => createAdminClient() as any
 
 type ActieResultaat<T = unknown> = { ok: true; data: T } | { ok: false; error: string }
 
+/** Alles in dit bestand is stamgegevens-beheer (teams, keuringsoorten,
+ *  termijnen) en vereist daarom 'beheren' — geen dagelijks gebruik. */
 async function gate(): Promise<{ ok: false; error: string } | null> {
-  try { await vereisMaterieelMutatie(); return null }
+  try { await vereisMaterieelBeheer(); return null }
   catch (e) { if (e instanceof GeenToegangError) return { ok: false, error: e.message }; throw e }
 }
 

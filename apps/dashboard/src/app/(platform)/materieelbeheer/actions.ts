@@ -6,16 +6,23 @@ import { GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import { materieelObjectSchema, nieuwMaterieelSchema } from '@/lib/materieel/validations'
 import type { MaterieelStatus, ToewijzingNiveau, KeuringUitkomst } from '@/lib/materieel/types'
+import type { ModuleRechten } from '@everts/database/platform-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
 type ActieResultaat<T = unknown> = { ok: true; data: T } | { ok: false; error: string }
 
-/** Gate → geeft de ingelogde medewerker terug, of een { ok:false }-resultaat. */
-async function gate(): Promise<{ ok: true; medewerker: CurrentMedewerker } | { ok: false; error: string }> {
+/**
+ * Gate → geeft de ingelogde medewerker terug, of een { ok:false }-resultaat.
+ * Standaard 'schrijven' (dagelijks gebruik: scannen, controleren, toewijzen).
+ * Geef 'beheren' mee voor onomkeerbare acties — archiveren en verwijderen.
+ */
+async function gate(
+  min: ModuleRechten = 'schrijven',
+): Promise<{ ok: true; medewerker: CurrentMedewerker } | { ok: false; error: string }> {
   try {
-    const medewerker = await vereisMaterieelMutatie()
+    const medewerker = await vereisMaterieelMutatie(min)
     return { ok: true, medewerker }
   } catch (e) {
     if (e instanceof GeenToegangError) return { ok: false, error: e.message }
@@ -78,8 +85,9 @@ export async function updateMaterieelObject(id: string, raw: unknown): Promise<A
   return { ok: true, data: { id } }
 }
 
+/** Onomkeerbaar voor de gebruiker → alleen beheerders. */
 export async function archiveerMaterieelObject(id: string): Promise<ActieResultaat> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   const { error } = await db().from('materieel_objecten').update({ actief: false }).eq('id', id)
   if (error) return { ok: false, error: error.message }
   herlaad(id)
@@ -243,8 +251,9 @@ export async function voegKeuringToe(
   return { ok: true, data: null }
 }
 
+/** Een keuring is bewijsmateriaal (o.a. bij afkeuring) → alleen beheerders. */
 export async function verwijderKeuring(keuringId: string, objectId: string): Promise<ActieResultaat> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   const { error } = await db().from('materieel_keuringen').delete().eq('id', keuringId)
   if (error) return { ok: false, error: error.message }
   herlaad(objectId)

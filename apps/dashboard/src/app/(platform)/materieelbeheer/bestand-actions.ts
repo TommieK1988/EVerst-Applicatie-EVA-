@@ -6,6 +6,7 @@ import { GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import { MATERIEEL_BUCKET } from '@/lib/materieel/bestanden'
 import { MATERIEEL_DOCUMENT_TYPES, type MaterieelDocumentType } from '@/lib/materieel/types'
+import type { ModuleRechten } from '@everts/database/platform-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -14,9 +15,12 @@ type ActieResultaat<T = unknown> = { ok: true; data: T } | { ok: false; error: s
 
 const MAX_BYTES = 50 * 1024 * 1024
 
-async function gate(): Promise<{ ok: true; medewerker: CurrentMedewerker } | { ok: false; error: string }> {
+/** Standaard 'schrijven'; verwijderen vereist 'beheren' (er zitten facturen bij). */
+async function gate(
+  min: ModuleRechten = 'schrijven',
+): Promise<{ ok: true; medewerker: CurrentMedewerker } | { ok: false; error: string }> {
   try {
-    return { ok: true, medewerker: await vereisMaterieelMutatie() }
+    return { ok: true, medewerker: await vereisMaterieelMutatie(min) }
   } catch (e) {
     if (e instanceof GeenToegangError) return { ok: false, error: e.message }
     throw e
@@ -91,9 +95,10 @@ export async function uploadDocument(objectId: string, formData: FormData): Prom
   return { ok: true, data: { id: data.id as string } }
 }
 
-/** Document verwijderen — uit storage én uit de tabel. */
+/** Document verwijderen — uit storage én uit de tabel. Alleen beheerders:
+ *  hier zitten facturen, CE- en keuringsdocumenten tussen. */
 export async function verwijderDocument(documentId: string, objectId: string): Promise<ActieResultaat> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   const client = db()
 
   const { data: doc } = await client
