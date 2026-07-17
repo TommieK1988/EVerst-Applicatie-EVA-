@@ -85,12 +85,14 @@ Het domeinproces-document gebruikt soms andere namen dan de code (bijv. `Geaccep
 
 ## Wat is nieuw — changelog bijwerken
 
-EVA heeft een changelog-pagina (`/wat-is-nieuw`) met een sterretje in de topbar en een popup bij inloggen. **Voeg zelf een item toe zodra je een gebruikersgerichte wijziging oplevert** — de gebruiker hoeft dit niet aan te melden.
+EVA heeft een changelog-pagina (`/wat-is-nieuw`) met een sterretje in de topbar en een popup bij inloggen. **Voeg zelf een item toe zodra een gebruikersgerichte wijziging op `main` staat** — de gebruiker hoeft dit niet aan te melden.
+
+**Timing is kritiek: pas ná `main`, nooit eerder.** De `changelog`-tabel staat in het gedeelde productie-Supabase en de RLS toont elk `gepubliceerd`-item aan iedereen. Een insert is dus meteen voor álle gebruikers zichtbaar, ongeacht op welke branch de code staat. Een item toevoegen vanaf een feature-branch kondigt een functie aan die nog niet bestaat. Wacht daarom met `apply_migration` tot de wijziging naar `main` is gemerged/gepusht (= Vercel-productie). Staat het werk nog op een branch: het item nog niet toevoegen.
 
 **Wel een item:** nieuwe functie, zichtbare verbetering, of een opgeloste fout die gebruikers merkten.
 **Geen item:** refactors, build-fixes, interne opschoning, en beveiligings-/RLS-werk zonder zichtbaar effect. Bundel meerdere commits van één feature tot één item.
 
-**Hoe:** voeg een `insert` toe via een nieuwe migratie in `supabase/migrations/` (patroon: `20260714b_changelog.sql`) en pas die toe met de Supabase MCP `apply_migration`. EVA draait op Vercel zonder git-toegang, dus de commit-historie wordt nooit live ingelezen — items zijn altijd data.
+**Hoe:** voeg een `insert` toe via een nieuwe migratie in `supabase/migrations/` (patroon: `20260714b_changelog.sql`) en pas die toe met de Supabase MCP `apply_migration`. EVA draait op Vercel zonder git-toegang, dus de commit-historie wordt nooit live ingelezen — items zijn altijd data. `aangemaakt_op` bepaalt de ongelezen-teller, dus dat moment moet samenvallen met livegang.
 
 ```sql
 insert into public.changelog (datum, categorie, module, titel, omschrijving) values
