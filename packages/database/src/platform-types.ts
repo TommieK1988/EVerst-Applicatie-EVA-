@@ -474,6 +474,16 @@ export type Dossier = {
   bouw7_aanmaakdatum: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null
+  /** Cache van de gekoppelde SharePoint-dossiermap (driveItem binnen O365_DOSSIER_DRIVE_ID). */
+  sharepoint_drive_id: string | null
+  sharepoint_item_id: string | null
+  sharepoint_web_url: string | null
+  /** 'gematcht' | 'niet_gevonden' | 'meerdere'. Negatieve waarden verlopen via sharepoint_gematcht_op. */
+  sharepoint_match_status: 'gematcht' | 'niet_gevonden' | 'meerdere' | null
+  /** true = map handmatig gekozen/aangemaakt; een automatische rematch laat hem met rust. */
+  sharepoint_handmatig: boolean
+  /** Moment van de laatste match-poging; basis voor de TTL op negatieve resultaten. */
+  sharepoint_gematcht_op: string | null
   kostprijs_excl_btw: number | null
   contactpersoon_id: string | null
   servicedesk_substatus: ServicedeskSubstatus | null

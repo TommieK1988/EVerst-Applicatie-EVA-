@@ -6,6 +6,7 @@ import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
+import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
 
 export type SyncResult = {
@@ -820,12 +821,25 @@ const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
   'LB. Lopende bonnen':    'loopt',
 }
 
+/** Hoort deze Bouw7-projectstatus bij de opdracht-fase (02.–07.)? */
+function isOpdrachtStatus(naam: string): boolean {
+  return Object.keys(OPDRACHT_PREFIX_NAAR_SUBSTATUS).some((prefix) => naam.startsWith(prefix))
+}
+
 /**
- * Leidt de EVA-statusvelden af uit de Bouw7 projectstatus, categorie en offertestatus.
- * Categorie DO/MU wint altijd — die projecten gaan naar Servicedesk.
- * Opdracht-substatussen worden altijd overschreven vanuit Bouw7.
- * Offerte-substatussen: de vier eindstatussen uit de Bouw7-offertestatus (gewonnen, verloren,
- * vervallen, mondelinge toezegging) overschrijven altijd; anders blijft de bestaande staan.
+ * Leidt de EVA-statusvelden af uit de Bouw7 projectstatus, categorie, offertestatus en het
+ * maatwerkveld "Offerte Sub-status".
+ *
+ * Volgorde van bronnen:
+ *  1. Categorie DO/MU of LB.-status → Servicedesk (wint altijd).
+ *  2. Projectstatus 02.–07. → opdracht-substatus (altijd overschreven vanuit Bouw7).
+ *  3. Maatwerkveld `caOfferteSubstatus` → aanvraag/offerte-substatus, zodra het gevuld is. Dit is
+ *     het veld dat EVA deelt met de tweede Bouw7-app; het is dus leidend boven de afleiding uit
+ *     project-/offertestatus hieronder.
+ *  4. Leeg maatwerkveld (nog verreweg de meeste projecten) → de oude afleiding: de vier
+ *     eindstatussen uit de Bouw7-offertestatus (gewonnen, verloren, vervallen, mondelinge
+ *     toezegging) overschrijven altijd; anders blijft de bestaande EVA-substatus staan.
+ *
  * Servicedesk-substatussen worden altijd overschreven vanuit BOUW7_NAAR_SERVICEDESK_SUBSTATUS.
  */
 function mapBouw7NaarEvaStatus(
@@ -835,6 +849,7 @@ function mapBouw7NaarEvaStatus(
   bestaandeOfferteSub: string | null,
   bestaandeVerzondenOp: string | null,
   offertestatusNaam: string | null = null,
+  caSubstatus: string | null = null,
 ): EvaStatusVelden {
   const naam = bouw7StatusNaam ?? ''
   const cat  = bouw7CategorieNaam ?? ''
@@ -850,6 +865,29 @@ function mapBouw7NaarEvaStatus(
       offerte_substatus:     null,
       opdracht_substatus:    null,
       servicedesk_substatus: BOUW7_NAAR_SERVICEDESK_SUBSTATUS[naam] ?? 'nieuw',
+    }
+  }
+
+  // Maatwerkveld "Offerte Sub-status" — gedeeld met de tweede app, leidend zodra gevuld.
+  // Buiten de opdracht-fase: staat het project in Bouw7 op 02.–07., dan is het een opdracht en is
+  // de waarde uit de offertefase een restant.
+  // De huidige EVA-fase gaat mee, zodat "12. Verloren"/"13. Vervallen" een afgewezen/vervallen
+  // *aanvraag* niet naar de Offertes-tab verplaatst.
+  const huidigeFase = bestaandeAanvraagSub != null ? 'aanvraag'
+                    : bestaandeOfferteSub  != null ? 'offerte'
+                    : null
+  const caStatus = isOpdrachtStatus(naam) ? null : bouw7SubstatusNaarEva(caSubstatus, huidigeFase)
+  if (caStatus) {
+    return {
+      hoofdstatus:           caStatus.hoofdstatus,
+      aanvraag_substatus:    caStatus.aanvraag_substatus,
+      offerte_substatus:     caStatus.offerte_substatus,
+      opdracht_substatus:    null,
+      servicedesk_substatus: null,
+      // Offertefase: `verzonden_op` stuurt de 7-daagse nazichtbaarheid op de Aanvragen-tab.
+      ...(caStatus.hoofdstatus === 'offerte'
+        ? { verzonden_op: bestaandeVerzondenOp ?? new Date().toISOString() }
+        : {}),
     }
   }
 
@@ -1143,6 +1181,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         // in de fingerprint, anders slaat de incrementele sync een dossier over waarvan alléén
         // dit veld is gewijzigd.
         cacalc:    p.caCalculator ?? null,
+        // Gedeelde substatus met de tweede Bouw7-app: moet in de fingerprint, anders slaat de
+        // incrementele sync een dossier over waarvan alléén dit veld is gewijzigd.
+        casub:     p.caOfferteSubstatus ?? null,
         q:       q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
         vst:       verstuurdAggMap.get(key) ? { n: verstuurdAggMap.get(key)!.aantal, s: Math.round(verstuurdAggMap.get(key)!.somExcl * 100) } : null,
       })
@@ -1170,6 +1211,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
           existing?.offerte_substatus ?? null,
           existing?.verzonden_op ?? null,
           quotationMap.get(key)?.quotationStatus?.name ?? null,
+          p.caOfferteSubstatus ?? null,
         )
         const nieuweSectie = sectieVan(nieuweStatus)
         const huidigeSectie = existing ? sectieVan(existing) : null
@@ -1383,6 +1425,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         existing?.offerte_substatus ?? null,
         existing?.verzonden_op ?? null,
         quote?.quotationStatus?.name ?? null,
+        p.caOfferteSubstatus ?? null,
       )
 
       // Servicedesk: log een substatuswijziging (basis voor doorlooptijd-per-fase).

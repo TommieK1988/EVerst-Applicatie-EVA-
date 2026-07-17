@@ -10,7 +10,7 @@
  */
 
 import 'server-only'
-import { uploadBuffersNaarDossierMap } from '../dossiers/sharepoint-bestanden'
+import { uploadBuffersNaarDossierMap } from '../o365/dossier-map'
 import type { DocumentSjabloon } from './types'
 
 export interface ArchiveerArgs {

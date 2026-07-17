@@ -135,15 +135,31 @@ export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
  * `BOUW7_NAAR_SERVICEDESK_SUBSTATUS` in `lib/bouw7/sync.ts`). Voor dossiers die uit Bouw7
  * komen (`bouw7_id != null`) zijn deze in EVA **alleen-lezen** — je kunt een dossier wél naar
  * EVA-eigen substatussen verplaatsen, maar niet naar een Bouw7-eigen substatus (die wijzig je
- * in Bouw7). `aanvraag` blijft volledig EVA-stuurbaar: veel aanvraag-dossiers hebben (nog) geen
- * Bouw7-offerte, dus handmatig naar Vervallen/Afgewezen slepen moet mogelijk blijven — de sync
- * overschrijft alleen wanneer er wél een gemapte Bouw7-offertestatus is.
+ * in Bouw7).
+ *
+ * De aanvraag- én offerte-ladder zijn volledig EVA-stuurbaar: elke substatus wordt naar het
+ * Bouw7-maatwerkveld "Offerte Sub-status" teruggeschreven (`lib/bouw7/substatus-attr.ts`). De drie
+ * eindstatussen trekken daar ook de projectstatus mee — Gewonnen → `02. Nieuwe opdracht`,
+ * Verloren/Vervallen → `08. Afgewezen` zodra álle offertes van het project afgeketst zijn.
+ * Alleen opdracht en servicedesk houden nog Bouw7-eigen substatussen.
  */
 export const BOUW7_EIGEN_SUBSTATUSSEN: Record<DossierSectie, string[]> = {
   aanvraag:    [],
-  offerte:     ['verzonden', 'mondelinge_toezegging', 'gewonnen', 'verloren', 'vervallen'],
+  offerte:     [],
   opdracht:    ['nieuwe_opdracht', 'werkvoorbereiding', 'onderhanden', 'uitvoering_gereed', 'financieel_gereed', 'financieel_afgesloten'],
   servicedesk: ['nieuw', 'offerte_uitgebracht', 'loopt', 'uitgevoerd', 'financieel_gereed'],
+}
+
+/**
+ * True als het zetten van deze substatus het dossier **definitief afsluit** — daarna is het overal
+ * alleen-lezen (zie `isDossierAfgesloten` + `lib/dossiers/guards.ts`) en is het niet meer via de UI
+ * terug te draaien. Deze substatussen worden bovendien naar Bouw7 teruggeschreven en kunnen daar de
+ * projectstatus op `08. Afgewezen` zetten. Vandaar een bevestiging vóór de wijziging.
+ */
+export function isAfsluitendeSubstatus(sectie: DossierSectie, key: string): boolean {
+  if (sectie === 'aanvraag') return key === 'afgewezen' || key === 'vervallen'
+  if (sectie === 'offerte')  return key === 'verloren'  || key === 'vervallen'
+  return false
 }
 
 /** True als `key` een door Bouw7 beheerde substatus is binnen de gegeven sectie. */

@@ -6,12 +6,14 @@ import { getDossierBestanden, type DossierBestandenData, type DossierBestand } f
 import {
   getDossierSharePointBestanden,
   hermatchDossierSharePoint,
-  koppelDossierMapViaLink,
+  koppelDossierMap,
+  ontkoppelDossierMap,
   type DossierSharePointData,
   type SharePointBestand,
 } from '@/lib/dossiers/sharepoint-bestanden'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import DocumentenKaart from '@/components/documenten/DocumentenKaart'
+import SharePointMapPicker from './SharePointMapPicker'
 
 const fmtGrootte = (bytes: number | null): string => {
   if (bytes == null) return '—'
@@ -127,43 +129,98 @@ function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
 
 // ─── SharePoint ─────────────────────────────────────────────────────────────────
 
+const fallbackFout = (e: unknown): DossierSharePointData => ({
+  geconfigureerd: true,
+  status: null,
+  mapUrl: null,
+  bestanden: [],
+  handmatig: false,
+  voorstelNaam: null,
+  fout: String(e),
+})
+
+/** Acties bij een gekoppelde map. Ontkoppelen raakt SharePoint niet aan — alleen de koppeling in EVA. */
+function MapActies({ onKies, onOntkoppel, bezig }: { onKies: () => void; onOntkoppel: () => void; bezig: boolean }) {
+  const [bevestig, setBevestig] = useState(false)
+
+  if (bevestig) {
+    return (
+      <span className="flex items-center gap-2 text-[11px]">
+        <span className="text-neutral-600">Koppeling weghalen? De map blijft in SharePoint staan.</span>
+        <button onClick={() => { setBevestig(false); onOntkoppel() }} disabled={bezig}
+          className="font-medium text-red-600 hover:underline disabled:opacity-60">
+          Ontkoppelen
+        </button>
+        <button onClick={() => setBevestig(false)} className="text-neutral-500 hover:underline">Annuleren</button>
+      </span>
+    )
+  }
+
+  return (
+    <span className="flex items-center gap-3 text-[11px]">
+      <button onClick={onKies} disabled={bezig} className="font-medium text-brand-600 hover:underline disabled:opacity-60">
+        Andere map kiezen
+      </button>
+      <button onClick={() => setBevestig(true)} disabled={bezig} className="text-neutral-500 hover:underline disabled:opacity-60">
+        Ontkoppelen
+      </button>
+    </span>
+  )
+}
+
 function SharePointKaart({ dossierId }: { dossierId: string }) {
   const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierSharePointData | null>(null)
-  const [link, setLink] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [bezig, start] = useTransition()
 
   useEffect(() => {
     getDossierSharePointBestanden(dossierId)
       .then(setData)
-      .catch(e => setData({ geconfigureerd: true, status: null, mapUrl: null, bestanden: [], fout: String(e) }))
+      .catch(e => setData(fallbackFout(e)))
   }, [dossierId])
 
   // Niet geconfigureerd → kaart helemaal verbergen
   if (data && !data.geconfigureerd) return null
 
-  const fallbackFout = (e: unknown): DossierSharePointData =>
-    ({ geconfigureerd: true, status: 'niet_gevonden', mapUrl: null, bestanden: [], fout: String(e) })
-
   const opnieuw = () => start(async () => {
     try { setData(await hermatchDossierSharePoint(dossierId)) } catch (e) { setData(fallbackFout(e)) }
   })
-  const koppel = () => {
-    if (!link.trim()) return
-    start(async () => {
-      try { const r = await koppelDossierMapViaLink(dossierId, link.trim()); setData(r); setLink('') }
-      catch (e) { setData(fallbackFout(e)) }
-    })
-  }
+  const ontkoppel = () => start(async () => {
+    try { setData(await ontkoppelDossierMap(dossierId)) } catch (e) { setData(fallbackFout(e)) }
+  })
+  // Kandidaat uit de 'meerdere'-lijst: één klik, zonder de picker te openen.
+  const kiesKandidaat = (itemId: string) => start(async () => {
+    try { setData(await koppelDossierMap(dossierId, itemId)) } catch (e) { setData(fallbackFout(e)) }
+  })
+
+  const picker = (
+    <SharePointMapPicker
+      dossierId={dossierId}
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      onGekoppeld={setData}
+      voorstelNaam={data?.voorstelNaam ?? null}
+      zoekterm={data?.voorstelNaam?.split(' - ')[0] ?? null}
+    />
+  )
 
   return (
     <Card>
+      {picker}
       <CardHeader>
         <div className="flex items-center justify-between">
           <span>SharePoint-bestanden</span>
-          {data?.status === 'gematcht' && (
-            <span className="text-[11px] font-normal text-neutral-400">{data.bestanden.length} in map</span>
-          )}
+          <span className="flex items-center gap-2">
+            {data?.handmatig && (
+              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
+                Handmatig gekoppeld
+              </span>
+            )}
+            {data?.status === 'gematcht' && (
+              <span className="text-[11px] font-normal text-neutral-400">{data.bestanden.length} in map</span>
+            )}
+          </span>
         </div>
       </CardHeader>
       <CardBody style={{ padding: data?.status === 'gematcht' && data.bestanden.length ? 0 : undefined }}>
@@ -171,9 +228,13 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
           <p className="text-[13px] text-neutral-500">SharePoint laden…</p>
         ) : data.status === 'gematcht' ? (
           data.bestanden.length === 0 ? (
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] text-neutral-500">Map gekoppeld, maar leeg.</p>
-              {data.mapUrl && <a href={data.mapUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-600 hover:underline">Open map in SharePoint</a>}
+            <div className="space-y-3">
+              {data.melding && <p className="text-[12px] text-neutral-600">{data.melding}</p>}
+              <div className="flex items-center justify-between">
+                <p className="text-[13px] text-neutral-500">Map gekoppeld, maar leeg.</p>
+                {data.mapUrl && <a href={data.mapUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-600 hover:underline">Open map in SharePoint</a>}
+              </div>
+              {!readOnly && <MapActies onKies={() => setPickerOpen(true)} onOntkoppel={ontkoppel} bezig={bezig} />}
             </div>
           ) : (
             <>
@@ -203,19 +264,25 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
                 </tbody>
               </table>
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-[11px] text-neutral-500">Live uit SharePoint (automatisch gekoppelde dossiermap).</span>
-                {data.mapUrl && <a href={data.mapUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-600 hover:underline">Open map in SharePoint</a>}
+                <span className="text-[11px] text-neutral-500">
+                  Live uit SharePoint ({data.handmatig ? 'handmatig gekoppelde' : 'automatisch gekoppelde'} dossiermap).
+                </span>
+                <span className="flex items-center gap-3">
+                  {!readOnly && <MapActies onKies={() => setPickerOpen(true)} onOntkoppel={ontkoppel} bezig={bezig} />}
+                  {data.mapUrl && <a href={data.mapUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-600 hover:underline">Open map in SharePoint</a>}
+                </span>
               </div>
             </>
           )
         ) : (
-          // niet_gevonden / meerdere / fout → handmatig koppelen
+          // niet_gevonden / meerdere / fout → zelf een map kiezen of aanmaken
           <div className="space-y-3">
+            {data.melding && <p className="text-[12px] text-neutral-600">{data.melding}</p>}
             <p className="text-[13px] text-neutral-500">
               {data.status === 'meerdere'
-                ? 'Meerdere mogelijke mappen gevonden — koppel de juiste handmatig.'
+                ? 'Meerdere mappen komen in aanmerking — kies de juiste.'
                 : data.status === 'niet_gevonden'
-                  ? 'Geen SharePoint-map automatisch gevonden voor dit dossier.'
+                  ? 'Geen SharePoint-map gevonden voor dit dossier. Kies de juiste map, of maak hem aan.'
                   : 'SharePoint is nu niet bereikbaar.'}
             </p>
             {data.fout && (
@@ -223,17 +290,33 @@ function SharePointKaart({ dossierId }: { dossierId: string }) {
                 {data.fout}
               </p>
             )}
+
+            {/* Bij 'meerdere' de kandidaten direct tonen: één klik i.p.v. de picker openen. */}
+            {!readOnly && !!data.kandidaten?.length && (
+              <ul className="divide-y divide-neutral-100 rounded border border-neutral-200">
+                {data.kandidaten.map(m => (
+                  <li key={m.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] text-neutral-800">{m.naam}</span>
+                      <span className="block text-[11px] text-neutral-500">
+                        {m.aantalItems ?? 0} item{m.aantalItems === 1 ? '' : 's'}
+                        {m.gewijzigd ? ` · gewijzigd ${m.gewijzigd}` : ''}
+                      </span>
+                    </span>
+                    <button onClick={() => kiesKandidaat(m.id)} disabled={bezig}
+                      className="shrink-0 rounded border border-neutral-300 px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60">
+                      Koppelen
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {!readOnly && (
               <div className="flex items-center gap-2">
-                <input
-                  value={link}
-                  onChange={e => setLink(e.target.value)}
-                  placeholder="Plak SharePoint-link naar de dossiermap"
-                  className="flex-1 rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                />
-                <button onClick={koppel} disabled={bezig}
+                <button onClick={() => setPickerOpen(true)} disabled={bezig}
                   className="rounded bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-700 disabled:opacity-60">
-                  Koppelen
+                  Map kiezen of aanmaken
                 </button>
                 <button onClick={opnieuw} disabled={bezig}
                   className="rounded border border-neutral-300 px-3 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
