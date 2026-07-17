@@ -95,6 +95,13 @@ type Props<T extends { id: string }> = {
 /** Interne kolom-id waarop gegroepeerd wordt; altijd verborgen. */
 const GROEP_KOLOM = '__groep'
 
+/**
+ * Stabiele referentie voor de grouping-state. Een array-literal in `state` geeft
+ * TanStack elke render een nieuwe referentie → grouped row model herbouwt →
+ * async resetExpanded in de wachtrij → oneindige update-lus (bevroren tab).
+ */
+const GROEP_GROUPING = [GROEP_KOLOM]
+
 // ─── Checkbox ────────────────────────────────────────────────────────────────
 
 function Checkbox({ checked, indeterminate, onChange, disabled }: {
@@ -430,9 +437,13 @@ export default function OverzichtTabel<T extends { id: string }>({
   ]
 
   // De groepeerkolom mag nooit als cel of in het kolombeheer opduiken.
-  const effectieveVisibility: VisibilityState = groepering
-    ? { ...columnVisibility, [GROEP_KOLOM]: false }
-    : columnVisibility
+  // Gememoized: een verse object-identiteit per render laat TanStack's interne
+  // memo's elke render opnieuw rekenen.
+  const heeftGroepering = !!groepering
+  const effectieveVisibility = React.useMemo<VisibilityState>(
+    () => (heeftGroepering ? { ...columnVisibility, [GROEP_KOLOM]: false } : columnVisibility),
+    [columnVisibility, heeftGroepering],
+  )
 
   const table = useReactTable({
     data,
@@ -440,10 +451,13 @@ export default function OverzichtTabel<T extends { id: string }>({
     state: {
       sorting, columnFilters, columnVisibility: effectieveVisibility, columnOrder, columnSizing,
       globalFilter, rowSelection, pagination,
-      ...(groepering ? { grouping: [GROEP_KOLOM], expanded } : {}),
+      ...(groepering ? { grouping: GROEP_GROUPING, expanded } : {}),
     },
     onExpandedChange: setExpanded,
     groupedColumnMode: false,
+    // Uitklap-status is user-state: niet automatisch resetten bij data-/state-
+    // wijzigingen (de async reset veroorzaakte bovendien de update-lus hierboven).
+    autoResetExpanded: false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
