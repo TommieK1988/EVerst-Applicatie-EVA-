@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/fouten-opruimen",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/oplevering",
+      "schedule": "0 6 * * 1-5"
     }
   ]
 }

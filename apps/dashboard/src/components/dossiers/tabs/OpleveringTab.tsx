@@ -21,6 +21,7 @@ import {
 } from '@/lib/dossiers/oplevering'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
+import OpleveringMailBlok from './OpleveringMailBlok'
 
 const selectCls =
   'h-8 rounded-md border border-neutral-300 bg-white px-2 text-[12px] text-neutral-800 outline-none focus:border-brand-500'
@@ -133,6 +134,12 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
       {data.afgewezen.length > 0 && (
         <AfgewezenBlok punten={data.afgewezen} readOnly={readOnly} onChange={() => { herlaad(); router.refresh() }} />
       )}
+
+      <OpleveringMailBlok
+        dossierId={dossierId}
+        momenten={data.momenten.map(m => ({ id: m.id, titel: m.titel }))}
+        readOnly={readOnly}
+      />
 
       <FeedbackBlok dossierId={dossierId} readOnly={readOnly} />
     </div>
