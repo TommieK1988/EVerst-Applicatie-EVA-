@@ -1,18 +1,21 @@
 /**
- * POST /api/documenten/docx
+ * POST /api/documenten/word-online
  *
- * Geeft het ingevulde Word-document terug, zodat de gebruiker er handmatig nog
- * iets aan kan veranderen vóór verzending.
+ * Stelt het document op, zet het in de SharePoint-dossiermap en geeft de webUrl
+ * terug zodat de browser het in Word Online kan openen.
  *
- * Bewust GEEN archivering/registratie: dit is een werkbestand, geen eindproduct.
- * De PDF-route is het pad dat wél in het dossier landt.
+ * Waarom uploaden en niet downloaden: Word Online kan alleen een bestand openen
+ * dat in SharePoint/OneDrive staat. "Bewerken in Word Online" impliceert dus
+ * archiveren — er is geen variant die alleen in de browser bewerkt.
  *
  * Body: { sjabloon_id, dossier_id, invoer }
+ * Antwoord: { webUrl, documentId, bestandsnaam }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import {
   genereerDocumentDocx,
   laadSjabloon,
@@ -20,8 +23,8 @@ import {
   assertInvoerCompleet,
   GeenTemplateError,
   DocumentInvoerError,
-  DEMO_DOSSIER,
 } from '@/lib/documenten/genereer-document'
+import { archiveerEnRegistreer } from '@/lib/documenten/archiveer'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +51,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await assertDossierBewerkbaar(dossierId)
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
     const sjabloon = await laadSjabloon(supabase, sjabloonId)
@@ -58,26 +63,41 @@ export async function POST(request: NextRequest) {
     const medewerker = await getCurrentMedewerker()
     const docx = await genereerDocumentDocx(supabase, sjabloon, dossierId, invoer, medewerker?.id)
 
-    let dossiernummer: string | null = null
-    if (dossierId !== DEMO_DOSSIER) {
-      const { data } = await supabase.from('dossiers').select('dossiernummer').eq('id', dossierId).maybeSingle()
-      dossiernummer = data?.dossiernummer ?? null
-    }
-    const naam = bestandsnaamVoor(sjabloon, dossiernummer)
+    const { data: dossier } = await supabase
+      .from('dossiers').select('dossiernummer').eq('id', dossierId).maybeSingle()
+    const bestandsnaam = `${bestandsnaamVoor(sjabloon, dossier?.dossiernummer)}.docx`
 
-    return new NextResponse(docx.buffer as ArrayBuffer, {
-      headers: {
-        'Content-Type': DOCX_MIME,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(naam)}.docx"`,
-        'Cache-Control': 'no-store',
-      },
+    const archief = await archiveerEnRegistreer({
+      supabase, dossierId, sjabloon, invoer,
+      bestandsnaam, bytes: docx, contentType: DOCX_MIME,
+      medewerkerId: medewerker?.id ?? null,
+      // Archiveren is hier geen keuze maar de voorwaarde: zonder bestand in
+      // SharePoint valt er niets in Word Online te openen.
+      archiveren: true,
+    })
+
+    if (!archief.webUrl) {
+      // Meest voorkomende oorzaak: O365_DOSSIER_DRIVE_ID ontbreekt of de
+      // dossiermap kon niet worden gemaakt. Geef de reden door — de gebruiker
+      // kan dan de PDF-knop gebruiken of de map koppelen.
+      return NextResponse.json(
+        { error: archief.fout ?? 'Kon het document niet in SharePoint plaatsen; bewerken in Word Online kan daardoor niet.' },
+        { status: 502 },
+      )
+    }
+
+    return NextResponse.json({
+      webUrl: archief.webUrl,
+      documentId: archief.documentId,
+      bestandsnaam,
     })
   } catch (err) {
+    if (err instanceof GeenToegangError) return NextResponse.json({ error: 'Dossier is afgesloten' }, { status: 403 })
     if (err instanceof DocumentInvoerError) return NextResponse.json({ error: err.message }, { status: 400 })
     if (err instanceof GeenTemplateError) {
       return NextResponse.json({ error: 'Koppel eerst een Word-template aan dit sjabloon.' }, { status: 422 })
     }
-    console.error('Document docx fout:', err)
+    console.error('Word Online fout:', err)
     return NextResponse.json({ error: 'Er ging iets mis bij het opstellen van het document' }, { status: 500 })
   }
 }

@@ -1,34 +1,52 @@
 import 'server-only'
-import { notFound } from 'next/navigation'
-import { getCurrentMedewerker, GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
+import { notFound, redirect } from 'next/navigation'
+import { vereisRecht, GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { FEATURES } from '@/lib/features'
+import type { ModuleRechten } from '@everts/database/platform-types'
 
 /**
- * Autorisatie-gate voor materieelbeheer.
+ * Autorisatie voor materieelbeheer — twee lagen:
  *
- * FLAG-FASE (nu): de module is verborgen achter NEXT_PUBLIC_FEATURE_MATERIEEL.
- * Waar de flag uit staat (productie) bestaat de module niet → notFound(). Waar de
- * flag aan staat (preview/lokaal) mag elke ingelogde medewerker de module testen.
+ *  1. De env-flag bepaalt of de module in deze omgeving überhaupt bestaat.
+ *  2. Het recht `materieelbeheer` bepaalt wie er wat mag.
  *
- * BIJ GO-LIVE (TODO): vervang de body door de strikte rechten-gate, seed het recht
- * en voeg 'materieelbeheer' toe aan AFGEDWONGEN_MODULES:
- *   const { medewerker } = await vereisRecht('materieelbeheer', min)
- *   return medewerker
+ * Niveaus (zie de seed-migratie 20260716d):
+ *  - lezen     → paspoorten en overzichten bekijken
+ *  - schrijven → dagelijks gebruik: scannen, controle invullen, toewijzen,
+ *                storing melden, materieel toevoegen, bestanden uploaden
+ *  - beheren   → onomkeerbaar/administratief: archiveren, documenten en
+ *                keuringen verwijderen, teams en instellingen beheren
+ *
+ * De splitsing schrijven/beheren is bewust: monteurs moeten kunnen scannen en
+ * controleren, maar horen geen facturen of keuringsdocumenten te kunnen wissen.
  */
-export async function vereisMaterieelToegang(): Promise<CurrentMedewerker> {
+
+/** Route-guard voor pagina's. Onvoldoende recht → terug naar de startpagina. */
+export async function vereisMaterieelToegang(min: ModuleRechten = 'lezen'): Promise<CurrentMedewerker> {
+  // Flag uit (productie vóór go-live) → de module bestaat hier simpelweg niet.
   if (!FEATURES.materieelbeheer) notFound()
-  const medewerker = await getCurrentMedewerker()
-  if (!medewerker) notFound()
-  return medewerker
+  try {
+    const { medewerker } = await vereisRecht('materieelbeheer', min)
+    return medewerker
+  } catch (e) {
+    // redirect() gooit zelf een Next-signaal; dat mag hier gewoon doorlopen.
+    if (e instanceof GeenToegangError) redirect('/')
+    throw e
+  }
 }
 
 /**
- * Zelfde gate voor muterende server-actions, maar gooit i.p.v. redirect/notFound —
- * server-actions worden ook als kale RPC aangeroepen en moeten hard falen.
+ * Gate voor muterende server-actions. Gooit i.p.v. te redirecten: actions worden
+ * ook als kale RPC aangeroepen en moeten dan hard falen — zonder deze check kan
+ * elke ingelogde gebruiker ze rechtstreeks aanroepen (de admin-client bypast RLS).
  */
-export async function vereisMaterieelMutatie(): Promise<CurrentMedewerker> {
+export async function vereisMaterieelMutatie(min: ModuleRechten = 'schrijven'): Promise<CurrentMedewerker> {
   if (!FEATURES.materieelbeheer) throw new GeenToegangError('Materieelbeheer is niet actief')
-  const medewerker = await getCurrentMedewerker()
-  if (!medewerker) throw new GeenToegangError('Niet ingelogd')
+  const { medewerker } = await vereisRecht('materieelbeheer', min)
   return medewerker
+}
+
+/** Kortere schrijfwijze voor onomkeerbare of administratieve acties. */
+export async function vereisMaterieelBeheer(): Promise<CurrentMedewerker> {
+  return vereisMaterieelMutatie('beheren')
 }
