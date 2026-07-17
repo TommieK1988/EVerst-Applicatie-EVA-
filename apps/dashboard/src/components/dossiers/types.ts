@@ -31,6 +31,10 @@ export type DossierRij = Dossier & {
   contactpersoon_naam:     string | null
   contactpersoon_email:    string | null
   contactpersoon_telefoon: string | null
+  /** Naam bij het werkadres (DB-kolom bestaat wel, ontbreekt nog in de gegenereerde Dossier-types). */
+  werkadres_naam?: string | null
+  /** Samengesteld afwijkend factuuradres (label + adres), voor zoeken en de lijstkolom. */
+  factuuradres_tekst?: string | null
   /** Bewaking-vlaggen (tijdens Bouw7-sync berekend; nog niet in de gegenereerde Dossier-types). */
   bouw7_bestelregels_afwijking?: boolean | null
   bouw7_uren_overschrijding?:    boolean | null

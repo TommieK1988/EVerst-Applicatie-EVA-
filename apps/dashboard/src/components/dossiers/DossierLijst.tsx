@@ -440,6 +440,15 @@ export function DossierLijst({
 
     // ── Werkadres (standaard verborgen) ─────────────────────────────────────
     {
+      key: 'werkadres_naam',
+      label: 'Naam werkadres',
+      breedte: 170,
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: d => d.werkadres_naam ?? '',
+      render: d => <Tekst waarde={d.werkadres_naam ?? null} />,
+    },
+    {
       key: 'werkadres',
       label: 'Werkadres',
       breedte: 240,
@@ -447,6 +456,15 @@ export function DossierLijst({
       filterType: 'tekst',
       sorteerWaarde: d => werkadresTekst(d),
       render: d => <Tekst waarde={werkadresTekst(d)} />,
+    },
+    {
+      key: 'factuuradres',
+      label: 'Factuuradres',
+      breedte: 240,
+      standaard_zichtbaar: false,
+      filterType: 'tekst',
+      sorteerWaarde: d => d.factuuradres_tekst ?? '',
+      render: d => <Tekst waarde={d.factuuradres_tekst ?? null} />,
     },
     {
       key: 'stad',

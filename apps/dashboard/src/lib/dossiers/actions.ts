@@ -47,7 +47,8 @@ const ROL_SELECT = `
   calculator:medewerkers!calculator_id ( voornaam, tussenvoegsel, achternaam, kleur ),
   uitvoerder:medewerkers!uitvoerder_id ( voornaam, tussenvoegsel, achternaam ),
   controller:medewerkers!controller_id ( voornaam, tussenvoegsel, achternaam, kleur ),
-  contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon )
+  contactpersoon:contactpersonen!contactpersoon_id ( voornaam, tussenvoegsel, achternaam, email, telefoon ),
+  factuuradres:relatie_factuuradressen!factuuradres_id ( label, straat, postcode, plaats )
 `.trim()
 
 /**
@@ -70,6 +71,14 @@ function medNaam(med: { voornaam?: string; tussenvoegsel?: string; achternaam?: 
   return [med.voornaam, med.tussenvoegsel, med.achternaam].filter(Boolean).join(' ') || null
 }
 
+function factuuradresTekst(
+  fa: { label?: string | null; straat?: string | null; postcode?: string | null; plaats?: string | null } | null
+): string | null {
+  if (!fa) return null
+  const adres = [fa.straat, [fa.postcode, fa.plaats].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+  return [fa.label, adres].filter(Boolean).join(' — ') || null
+}
+
 function mapRij(row: any): DossierRij {
   return {
     ...row,
@@ -81,6 +90,7 @@ function mapRij(row: any): DossierRij {
     uitvoerder:       undefined,
     controller:       undefined,
     contactpersoon:   undefined,
+    factuuradres:     undefined,
     klant_naam:            row.relaties?.naam ?? null,
     projectleider_naam:    medNaam(row.projectleider),
     projectleider_kleur:   row.projectleider?.kleur    ?? null,
@@ -95,6 +105,7 @@ function mapRij(row: any): DossierRij {
     contactpersoon_naam:     medNaam(row.contactpersoon),
     contactpersoon_email:    row.contactpersoon?.email    ?? null,
     contactpersoon_telefoon: row.contactpersoon?.telefoon ?? null,
+    factuuradres_tekst:      factuuradresTekst(row.factuuradres),
     intern: false,
   }
 }

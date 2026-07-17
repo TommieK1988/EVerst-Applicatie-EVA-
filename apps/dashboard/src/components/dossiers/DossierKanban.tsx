@@ -77,11 +77,16 @@ export function DossierKanban<K extends string>({
   const [afsluitBevestiging, setAfsluitBevestiging] =
     React.useState<{ dossierId: string; status: K } | null>(null)
 
-  const gefilterd = zoek
+  const zoekQ = zoek.trim().toLowerCase()
+  const gefilterd = zoekQ
     ? dossiers.filter(d =>
-        d.titel?.toLowerCase().includes(zoek.toLowerCase()) ||
-        d.klant_naam?.toLowerCase().includes(zoek.toLowerCase()) ||
-        d.dossiernummer?.toLowerCase().includes(zoek.toLowerCase())
+        [
+          d.titel, d.klant_naam, d.dossiernummer,
+          d.contactpersoon_naam,
+          d.werkadres_naam,
+          [d.werkadres_straat, d.werkadres_huisnummer, d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
+          d.factuuradres_tekst,
+        ].some(v => v?.toLowerCase().includes(zoekQ))
       )
     : dossiers
 
@@ -219,7 +224,7 @@ export function DossierKanban<K extends string>({
         }}>
           <Input
             prefix={<IconSearch size={14} />}
-            placeholder="Zoek dossier, klant of nummer…"
+            placeholder="Zoek dossier, klant, contactpersoon of adres…"
             value={zoek}
             onChange={e => setZoek(e.target.value)}
             className="w-64"
