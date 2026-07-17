@@ -8,7 +8,7 @@ import type {
   DbTaskCompletionActie,
   DbTaskList,
 } from '@/lib/taken/supabase/database.types'
-import { berekenDeadline, resolveerStreefdatum } from '@/lib/taken/deadlines'
+import { berekenDeadline } from '@/lib/taken/deadlines'
 import {
   DOSSIER_ROL_SELECT,
   kopieerCompletionActies,
@@ -54,11 +54,10 @@ export async function activeerSjabloon(input: {
 
   if (dossierError || !dossier) throw new Error('Dossier niet gevonden')
 
-  // Een ingetypte streefdatum wint; anders bepaalt het sjabloon waar hij vandaan komt.
-  // Zonder dit kregen streefdatum-taken op de trigger-route stil geen deadline: daar is
-  // niemand die de dialoog invult.
-  const streefdatum =
-    input.streefdatum ?? resolveerStreefdatum((sjabloon as any).streefdatum_bron, dossier)
+  // Alleen gevuld bij handmatig activeren; op de trigger-route is er niemand die de
+  // dialoog invult. Taken die dan tóch een deadline moeten krijgen hangen aan een
+  // dossier-datum (verwacht_startdatum/verwacht_einddatum) in plaats van hieraan.
+  const streefdatum = input.streefdatum ?? null
 
   // Haal alle taken op uit het sjabloon (incl. toewijzingen)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +100,8 @@ export async function activeerSjabloon(input: {
     const deadline = berekenDeadline(taak.deadline_basis, taak.deadline_dagen, {
       activatiedatum: vandaag,
       streefdatum,
+      verwacht_startdatum: dossier.verwacht_startdatum,
+      verwacht_einddatum:  dossier.verwacht_einddatum,
     })
 
     // Voeg taak in
@@ -189,11 +190,10 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
     .insert({
       naam:             `${bron.naam} (kopie)`,
       beschrijving:     bron.beschrijving,
-      is_template:      true,
-      template_naam:    bron.template_naam ? `${bron.template_naam} (kopie)` : null,
-      owner_id:         user.id,
-      volgorde:         0,
-      streefdatum_bron: bron.streefdatum_bron ?? 'handmatig',
+      is_template:   true,
+      template_naam: bron.template_naam ? `${bron.template_naam} (kopie)` : null,
+      owner_id:      user.id,
+      volgorde:      0,
     })
     .select('id')
     .single()

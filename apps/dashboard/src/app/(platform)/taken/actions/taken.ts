@@ -59,9 +59,6 @@ export async function updateActielijst(id: string, formData: FormData): Promise<
     updateData.trigger_hoofdstatus = (formData.get('trigger_hoofdstatus') as string) || null
     updateData.trigger_substatus   = (formData.get('trigger_substatus')   as string) || null
   }
-  if (formData.has('streefdatum_bron')) {
-    updateData.streefdatum_bron = (formData.get('streefdatum_bron') as string) || 'handmatig'
-  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)

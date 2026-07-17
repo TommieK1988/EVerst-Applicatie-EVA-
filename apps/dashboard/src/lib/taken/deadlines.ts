@@ -1,11 +1,13 @@
 import { addDays, addMonths, format, isWeekend, parseISO } from 'date-fns'
 
 /**
- * Waar de deadline van een sjabloontaak aan hangt.
- * - activatie      → moment waarop het sjabloon op het dossier werd gezet
- * - streefdatum    → handmatig ingevulde streefdatum bij het activeren
- * - planning_start → vroegste start van de detailplanning van het dossier
- * - planning_eind  → laatste eind van de detailplanning van het dossier
+ * Waar de deadline van een sjabloontaak aan hangt. Elke taak kiest zijn eigen anker.
+ * - activatie           → moment waarop het sjabloon op het dossier werd gezet
+ * - streefdatum         → datum die bij het handmatig activeren is ingetypt
+ * - planning_start      → vroegste start van de detailplanning van het dossier
+ * - planning_eind       → laatste eind van de detailplanning van het dossier
+ * - verwacht_startdatum → verwachte startdatum van het dossier
+ * - verwacht_einddatum  → verwachte einddatum van het dossier
  */
 export type DeadlineBasis =
   | 'geen'
@@ -13,6 +15,8 @@ export type DeadlineBasis =
   | 'streefdatum'
   | 'planning_start'
   | 'planning_eind'
+  | 'verwacht_startdatum'
+  | 'verwacht_einddatum'
 
 export type HerhalingInterval =
   | 'geen'
@@ -28,46 +32,32 @@ export function isPlanningBasis(basis: string | null | undefined): boolean {
   return PLANNING_BASISSEN.includes(basis as DeadlineBasis)
 }
 
-export const DEADLINE_BASIS_LABELS: Record<DeadlineBasis, string> = {
-  geen:           'Geen automatische deadline',
-  activatie:      'Datum van activeren',
-  streefdatum:    'Streefdatum van de lijst',
-  planning_start: 'Start detailplanning',
-  planning_eind:  'Einde detailplanning',
-}
-
 /**
- * Waar de streefdatum van een geactiveerde actielijst vandaan komt.
- * 'handmatig' werkt alleen als een mens de lijst activeert en een datum intypt; op de
- * trigger-route is er niemand die dat doet, vandaar de dossier-gebonden varianten.
+ * Ankers die na het activeren nog kunnen verschuiven en dus herberekend moeten worden.
+ * 'activatie' hoort hier bewust niet bij: dat moment ligt voorgoed vast.
  */
-export type StreefdatumBron = 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'
+export const HERBEREKENBARE_BASISSEN: DeadlineBasis[] = [
+  'planning_start',
+  'planning_eind',
+  'streefdatum',
+  'verwacht_startdatum',
+  'verwacht_einddatum',
+]
 
-export const STREEFDATUM_BRON_LABELS: Record<StreefdatumBron, string> = {
-  handmatig:           'Invullen bij het activeren',
-  verwacht_startdatum: 'Verwachte startdatum van het dossier',
-  verwacht_einddatum:  'Verwachte einddatum van het dossier',
+export const DEADLINE_BASIS_LABELS: Record<DeadlineBasis, string> = {
+  geen:                'Geen automatische deadline',
+  activatie:           'Datum van activeren',
+  streefdatum:         'Streefdatum (ingevuld bij activeren)',
+  planning_start:      'Start detailplanning',
+  planning_eind:       'Einde detailplanning',
+  verwacht_startdatum: 'Verwachte startdatum dossier',
+  verwacht_einddatum:  'Verwachte einddatum dossier',
 }
 
-/** Velden op het dossier die als streefdatum kunnen dienen. */
-export interface DossierStreefdatumVelden {
+/** Velden op het dossier die als anker kunnen dienen. */
+export interface DossierDatumVelden {
   verwacht_startdatum?: string | null
   verwacht_einddatum?: string | null
-}
-
-/**
- * De streefdatum volgens de bron van het sjabloon. Null bij 'handmatig' (die komt uit de
- * activeer-dialoog) of wanneer het dossier de datum niet heeft.
- */
-export function resolveerStreefdatum(
-  bron: StreefdatumBron | string | null | undefined,
-  dossier: DossierStreefdatumVelden,
-): string | null {
-  switch (bron) {
-    case 'verwacht_startdatum': return dossier.verwacht_startdatum ?? null
-    case 'verwacht_einddatum':  return dossier.verwacht_einddatum  ?? null
-    default:                    return null
-  }
 }
 
 export const HERHALING_LABELS: Record<HerhalingInterval, string> = {
@@ -90,15 +80,19 @@ export interface DeadlineContext {
   streefdatum?: string | null
   planning_start?: string | null
   planning_eind?: string | null
+  verwacht_startdatum?: string | null
+  verwacht_einddatum?: string | null
 }
 
 function ankerDatum(basis: DeadlineBasis, ctx: DeadlineContext): string | null {
   switch (basis) {
-    case 'activatie':      return ctx.activatiedatum
-    case 'streefdatum':    return ctx.streefdatum    ?? null
-    case 'planning_start': return ctx.planning_start ?? null
-    case 'planning_eind':  return ctx.planning_eind  ?? null
-    default:               return null
+    case 'activatie':           return ctx.activatiedatum
+    case 'streefdatum':         return ctx.streefdatum         ?? null
+    case 'planning_start':      return ctx.planning_start      ?? null
+    case 'planning_eind':       return ctx.planning_eind       ?? null
+    case 'verwacht_startdatum': return ctx.verwacht_startdatum ?? null
+    case 'verwacht_einddatum':  return ctx.verwacht_einddatum  ?? null
+    default:                    return null
   }
 }
 

@@ -382,6 +382,13 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                               <option key={k} value={k}>{DEADLINE_BASIS_LABELS[k]}</option>
                             ))}
                           </select>
+                          {deadlineBasis === 'streefdatum' && (
+                            <p className="mt-1.5 text-xs text-slate-500 leading-snug">
+                              Alleen gevuld als iemand de lijst zelf activeert en een
+                              streefdatum invult. Wordt de lijst automatisch geactiveerd,
+                              kies dan een datum van het dossier.
+                            </p>
+                          )}
                         </div>
 
                         {deadlineBasis !== 'geen' && (

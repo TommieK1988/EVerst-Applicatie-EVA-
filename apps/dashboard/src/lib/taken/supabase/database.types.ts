@@ -565,9 +565,9 @@ export type Database = {
         Relationships: []
       }
       task_lists: {
-        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; streefdatum_bron: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum_bron?: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum_bron?: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; streefdatum: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       task_completion_acties: {
@@ -676,9 +676,7 @@ export interface DbTaskList {
   trigger_hoofdstatus: string | null
   trigger_substatus: string | null
   template_id: string | null
-  /** Sjabloon: waar de streefdatum vandaan komt. Zie lib/taken/deadlines.ts. */
-  streefdatum_bron: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'
-  /** Geactiveerde lijst: de streefdatum die gold bij het activeren. */
+  /** Geactiveerde lijst: de streefdatum die bij het activeren is ingetypt. */
   streefdatum: string | null
   created_at: string
   updated_at: string
@@ -703,7 +701,9 @@ export interface DbTask {
   dossier_rollen: string[]   // bv. ['project_manager_id', 'calculator_id']
   // Deadline-anker voor sjabloon-taken: waar de deadline aan hangt en hoeveel dagen
   // ervóór (negatief) of erná (positief). Zie lib/taken/deadlines.ts.
-  deadline_basis: 'geen' | 'activatie' | 'streefdatum' | 'planning_start' | 'planning_eind'
+  deadline_basis:
+    | 'geen' | 'activatie' | 'streefdatum' | 'planning_start' | 'planning_eind'
+    | 'verwacht_startdatum' | 'verwacht_einddatum'
   deadline_dagen: number | null
   /** Deadline handmatig gezet → de automatische herberekening slaat deze taak over. */
   deadline_handmatig: boolean

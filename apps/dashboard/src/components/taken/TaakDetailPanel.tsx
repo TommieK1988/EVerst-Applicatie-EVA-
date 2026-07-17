@@ -542,6 +542,13 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
                     </select>
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                   </div>
+                  {deadlineBasis === 'streefdatum' && (
+                    <p className="mt-1 text-xs text-slate-500 leading-snug">
+                      Alleen gevuld als iemand de lijst zelf activeert en een streefdatum
+                      invult. Wordt de lijst automatisch geactiveerd, kies dan een datum
+                      van het dossier — anders blijft deze taak zonder deadline.
+                    </p>
+                  )}
                 </div>
 
                 {deadlineBasis !== 'geen' && (

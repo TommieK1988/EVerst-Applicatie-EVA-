@@ -7,7 +7,7 @@ import { createAdminClient } from '@everts/database/server'
 import {
   berekenDeadline,
   herhalingsDatums,
-  resolveerStreefdatum,
+  HERBEREKENBARE_BASISSEN,
   MAX_HERHALINGEN,
   type PlanningVenster,
 } from '@/lib/taken/deadlines'
@@ -142,41 +142,26 @@ async function verwerkDossier(sb: any, dossier_id: string, venster: PlanningVens
   const vandaag = new Date().toISOString().split('T')[0]
 
   for (const lijst of (lijsten ?? []) as any[]) {
-    // De streefdatum-bron staat op het sjabloon. Bij 'handmatig' blijft de datum staan die
-    // bij het activeren is ingevuld; anders volgt hij het dossier en kan hij dus verschoven zijn.
-    let bron = 'handmatig'
-    if (lijst.template_id) {
-      const { data: sjabloon } = await sb
-        .from('task_lists')
-        .select('streefdatum_bron')
-        .eq('id', lijst.template_id)
-        .maybeSingle()
-      bron = sjabloon?.streefdatum_bron ?? 'handmatig'
-    }
-    const streefdatum =
-      bron === 'handmatig' ? (lijst.streefdatum ?? null) : resolveerStreefdatum(bron, dossier)
-
-    if (streefdatum !== (lijst.streefdatum ?? null)) {
-      await sb.from('task_lists').update({ streefdatum }).eq('id', lijst.id)
-    }
-
     const ctx = {
       activatiedatum: vandaag,
-      streefdatum,
-      planning_start: venster.start,
-      planning_eind:  venster.eind,
+      // Staat alleen op de lijst als iemand hem bij het activeren intypte; die datum
+      // volgt het dossier niet en blijft dus staan zoals hij is.
+      streefdatum:         lijst.streefdatum ?? null,
+      planning_start:      venster.start,
+      planning_eind:       venster.eind,
+      verwacht_startdatum: dossier.verwacht_startdatum,
+      verwacht_einddatum:  dossier.verwacht_einddatum,
     }
 
     // 1. Losse taken met een anker dat kan verschuiven: deadline opnieuw uitrekenen.
-    //    Handmatig gezette deadlines blijven met rust. 'activatie' zit hier bewust niet bij:
-    //    dat anker is het moment van activeren en ligt dus voorgoed vast.
+    //    Handmatig gezette deadlines blijven met rust.
     const { data: gebonden } = await sb
       .from('tasks')
       .select('id, deadline, deadline_basis, deadline_dagen')
       .eq('lijst_id', lijst.id)
       .eq('deadline_handmatig', false)
       .is('herhaling_bron_taak_id', null)
-      .in('deadline_basis', ['planning_start', 'planning_eind', 'streefdatum'])
+      .in('deadline_basis', HERBEREKENBARE_BASISSEN)
 
     for (const taak of (gebonden ?? []) as any[]) {
       const nieuw = berekenDeadline(taak.deadline_basis, taak.deadline_dagen, ctx)
