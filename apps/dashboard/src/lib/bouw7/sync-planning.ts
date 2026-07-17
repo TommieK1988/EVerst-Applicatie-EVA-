@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client, logSync, type SyncResult, type SyncMode } from './sync'
 import { fingerprint } from './fingerprint'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
+import { herberekenDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -461,7 +462,25 @@ export async function syncDossierPlanning(
   } finally {
     // Bij bulk-sync (syncAllPlanning) logt de aanroeper een samenvatting; per-dossier loggen zou de
     // sync_log overspoelen. Een losse aanroep (ververs-knop) logt wél.
-    if (!opts?.silent) await logSync('planning', 'in', result, Date.now() - start)
+    if (!opts?.silent) {
+      await logSync('planning', 'in', result, Date.now() - start)
+      // Losse aanroep: meteen de taak-deadlines bijtrekken die aan deze planning hangen.
+      // Bij bulk doet syncAllPlanning dat één keer na afloop, niet per dossier.
+      await flushDeadlines()
+    }
+  }
+}
+
+/**
+ * Trek de herberekenings-wachtrij leeg die de DB-trigger vulde toen deze sync in
+ * planning_items schreef. Faalt dit, dan blijven de rijen 'pending' en pakt een
+ * volgende planningswijziging of sync ze alsnog op — de sync zelf mag er niet op stuklopen.
+ */
+async function flushDeadlines(): Promise<void> {
+  try {
+    await herberekenDeadlines()
+  } catch (e) {
+    console.error('[sync-planning] herberekenen taak-deadlines mislukt:', e)
   }
 }
 
@@ -576,6 +595,8 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
       }
     }
     if (meldingen.length > 0) totaal.foutMelding = meldingen.join(' | ')
+    // Eén keer voor de hele batch: de wachtrij bevat elk dossier waarvan de planning wijzigde.
+    await flushDeadlines()
     return totaal
   } catch (e: unknown) {
     totaal.fouten++

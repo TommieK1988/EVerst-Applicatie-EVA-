@@ -565,9 +565,9 @@ export type Database = {
         Relationships: []
       }
       task_lists: {
-        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; streefdatum_bron: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum_bron?: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum_bron?: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'; streefdatum?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       task_completion_acties: {
@@ -577,9 +577,9 @@ export type Database = {
         Relationships: []
       }
       tasks: {
-        Row: { id: string; lijst_id: string | null; dossier_id: string | null; parent_task_id: string | null; titel: string; omschrijving: Json | null; status: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline: string | null; geschatte_uren: number | null; volgorde: number; aangemaakt_door: string | null; assignee_type: 'direct' | 'dossier_rol'; dossier_rol: string | null; max_doorlooptijd_dagen: number | null; deadline_offset_dagen: number | null; blocked_by_task_id: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel?: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; lijst_id: string | null; dossier_id: string | null; parent_task_id: string | null; titel: string; omschrijving: Json | null; status: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline: string | null; geschatte_uren: number | null; volgorde: number; aangemaakt_door: string | null; assignee_type: 'direct' | 'dossier_rol'; dossier_rol: string | null; max_doorlooptijd_dagen: number | null; deadline_offset_dagen: number | null; deadline_basis: string; deadline_dagen: number | null; deadline_handmatig: boolean; herhaling_interval: string; herhaling_bron_taak_id: string | null; herhaling_index: number | null; blocked_by_task_id: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; deadline_basis?: string; deadline_dagen?: number | null; deadline_handmatig?: boolean; herhaling_interval?: string; herhaling_bron_taak_id?: string | null; herhaling_index?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; lijst_id?: string | null; dossier_id?: string | null; parent_task_id?: string | null; titel?: string; omschrijving?: Json | null; status?: 'open' | 'in_behandeling' | 'wacht_op' | 'gereed' | 'vervallen'; prioriteit?: 'laag' | 'normaal' | 'hoog' | 'urgent'; deadline?: string | null; geschatte_uren?: number | null; volgorde?: number; aangemaakt_door?: string | null; assignee_type?: 'direct' | 'dossier_rol'; dossier_rol?: string | null; max_doorlooptijd_dagen?: number | null; deadline_offset_dagen?: number | null; deadline_basis?: string; deadline_dagen?: number | null; deadline_handmatig?: boolean; herhaling_interval?: string; herhaling_bron_taak_id?: string | null; herhaling_index?: number | null; blocked_by_task_id?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       task_assignees: {
@@ -676,6 +676,10 @@ export interface DbTaskList {
   trigger_hoofdstatus: string | null
   trigger_substatus: string | null
   template_id: string | null
+  /** Sjabloon: waar de streefdatum vandaan komt. Zie lib/taken/deadlines.ts. */
+  streefdatum_bron: 'handmatig' | 'verwacht_startdatum' | 'verwacht_einddatum'
+  /** Geactiveerde lijst: de streefdatum die gold bij het activeren. */
+  streefdatum: string | null
   created_at: string
   updated_at: string
 }
@@ -697,9 +701,18 @@ export interface DbTask {
   // Toewijzing-extensies
   assignee_type: AssigneeType
   dossier_rollen: string[]   // bv. ['project_manager_id', 'calculator_id']
-  // Deadline-extensies voor sjabloon-taken
-  max_doorlooptijd_dagen: number | null
-  deadline_offset_dagen: number | null
+  // Deadline-anker voor sjabloon-taken: waar de deadline aan hangt en hoeveel dagen
+  // ervóór (negatief) of erná (positief). Zie lib/taken/deadlines.ts.
+  deadline_basis: 'geen' | 'activatie' | 'streefdatum' | 'planning_start' | 'planning_eind'
+  deadline_dagen: number | null
+  /** Deadline handmatig gezet → de automatische herberekening slaat deze taak over. */
+  deadline_handmatig: boolean
+  // Herhaling gedurende de uitvoering (het venster van de detailplanning)
+  herhaling_interval: 'geen' | 'werkdagen' | 'wekelijks' | 'tweewekelijks' | 'maandelijks'
+  /** Op een gegenereerde herhaal-taak: de sjabloontaak waaruit hij ontstond. */
+  herhaling_bron_taak_id: string | null
+  /** De hoeveelste keer (0-based) binnen de reeks. */
+  herhaling_index: number | null
   // Afhankelijkheid
   blocked_by_task_id: string | null
   // Formulier-koppeling

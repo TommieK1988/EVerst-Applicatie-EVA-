@@ -11,6 +11,12 @@ import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platf
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import TaakCompletionActies from './TaakCompletionActies'
 import type { TaakMetDetails, TaskStatus, TaskPrioriteit, TaskAssigneeRol } from '@/lib/taken/supabase/database.types'
+import {
+  DEADLINE_BASIS_LABELS,
+  HERHALING_LABELS,
+  type DeadlineBasis,
+  type HerhalingInterval,
+} from '@/lib/taken/deadlines'
 
 interface Props {
   taak: TaakMetDetails
@@ -65,8 +71,18 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
   // Template-velden
   const [assigneeType, setAssigneeType] = useState<'direct' | 'dossier_rol'>(taak.assignee_type ?? 'direct')
   const [dossierRollen, setDossierRollen] = useState<string[]>(taak.dossier_rollen ?? [])
-  const [maxDoorlooptijd, setMaxDoorlooptijd] = useState(taak.max_doorlooptijd_dagen?.toString() ?? '')
-  const [deadlineOffset, setDeadlineOffset]   = useState(taak.deadline_offset_dagen?.toString() ?? '')
+  const [deadlineBasis, setDeadlineBasis] = useState<DeadlineBasis>(taak.deadline_basis ?? 'geen')
+  // In de DB is de offset ondertekend (negatief = ervóór); in het formulier splitsen we
+  // dat in een positief aantal dagen plus een richting, want zo lees je het ook voor.
+  const [deadlineDagen, setDeadlineDagen] = useState(
+    taak.deadline_dagen != null ? Math.abs(taak.deadline_dagen).toString() : '',
+  )
+  const [deadlineRichting, setDeadlineRichting] = useState<'voor' | 'na'>(
+    (taak.deadline_dagen ?? 0) < 0 ? 'voor' : 'na',
+  )
+  const [herhalingInterval, setHerhalingInterval] = useState<HerhalingInterval>(
+    taak.herhaling_interval ?? 'geen',
+  )
 
   // Blokkering
   const [blockedBy, setBlockedBy] = useState(taak.blocked_by_task_id ?? '')
@@ -168,12 +184,25 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
     )
   }
 
+  // Een herhalende taak krijgt per keer zijn eigen datum uit de detailplanning;
+  // een los anker zou daar niets aan toe te voegen hebben.
+  const herhaalt = herhalingInterval !== 'geen'
+  const effectieveBasis: DeadlineBasis = herhaalt ? 'geen' : deadlineBasis
+  const dagenGetal = deadlineDagen ? parseInt(deadlineDagen) : null
+  const effectieveDagen =
+    effectieveBasis === 'geen' || dagenGetal == null
+      ? null
+      : effectieveBasis !== 'activatie' && deadlineRichting === 'voor'
+        ? -dagenGetal
+        : dagenGetal
+
   const handleTemplateVeldenOpslaan = () => {
     startTransition(() => updateTaak(taak.id, {
       assignee_type:  assigneeType,
       dossier_rollen: assigneeType === 'dossier_rol' ? dossierRollen : [],
-      max_doorlooptijd_dagen: maxDoorlooptijd ? parseInt(maxDoorlooptijd) : null,
-      deadline_offset_dagen:  deadlineOffset  ? parseInt(deadlineOffset)  : null,
+      deadline_basis:     effectieveBasis,
+      deadline_dagen:     effectieveDagen,
+      herhaling_interval: herhalingInterval,
     }))
   }
 
@@ -475,30 +504,76 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Max. doorlooptijd (dagen)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={maxDoorlooptijd}
-                  onChange={e => setMaxDoorlooptijd(e.target.value)}
-                  placeholder="—"
-                  className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-everts/30"
-                />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Herhalen</label>
+              <div className="relative">
+                <select
+                  value={herhalingInterval}
+                  onChange={e => setHerhalingInterval(e.target.value as HerhalingInterval)}
+                  className="w-full appearance-none text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white pr-7 focus:outline-none focus:ring-2 focus:ring-everts/30"
+                >
+                  {(Object.keys(HERHALING_LABELS) as HerhalingInterval[]).map(k => (
+                    <option key={k} value={k}>{HERHALING_LABELS[k]}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Offset vóór streefdatum</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={deadlineOffset}
-                  onChange={e => setDeadlineOffset(e.target.value)}
-                  placeholder="—"
-                  className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-everts/30"
-                />
-              </div>
+              {herhaalt && (
+                <p className="mt-1 text-xs text-slate-500 leading-snug">
+                  Bij activeren ontstaat één taak per keer, verdeeld over de uitvoering volgens
+                  de detailplanning van het dossier. Elke taak krijgt zijn eigen deadline.
+                </p>
+              )}
             </div>
+
+            {!herhaalt && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Deadline bepalen op</label>
+                  <div className="relative">
+                    <select
+                      value={deadlineBasis}
+                      onChange={e => setDeadlineBasis(e.target.value as DeadlineBasis)}
+                      className="w-full appearance-none text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white pr-7 focus:outline-none focus:ring-2 focus:ring-everts/30"
+                    >
+                      {(Object.keys(DEADLINE_BASIS_LABELS) as DeadlineBasis[]).map(k => (
+                        <option key={k} value={k}>{DEADLINE_BASIS_LABELS[k]}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {deadlineBasis !== 'geen' && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <input
+                      type="number"
+                      min={0}
+                      value={deadlineDagen}
+                      onChange={e => setDeadlineDagen(e.target.value)}
+                      placeholder="0"
+                      className="w-14 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-everts/30"
+                    />
+                    <span className="text-xs text-slate-600">dagen</span>
+                    {deadlineBasis === 'activatie' ? (
+                      <span className="text-xs text-slate-600">na</span>
+                    ) : (
+                      <select
+                        value={deadlineRichting}
+                        onChange={e => setDeadlineRichting(e.target.value as 'voor' | 'na')}
+                        className="text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-everts/30"
+                      >
+                        <option value="voor">vóór</option>
+                        <option value="na">na</option>
+                      </select>
+                    )}
+                    <span className="text-xs text-slate-600">
+                      {DEADLINE_BASIS_LABELS[deadlineBasis].toLowerCase()}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
 
             <button
               onClick={handleTemplateVeldenOpslaan}

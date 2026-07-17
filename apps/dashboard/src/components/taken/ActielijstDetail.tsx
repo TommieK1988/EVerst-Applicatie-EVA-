@@ -11,6 +11,7 @@ import NieuweTaakDialog from './NieuweTaakDialog'
 import SjabloonTriggers from './SjabloonTriggers'
 import { updateActielijst } from '@/app/(platform)/taken/actions/taken'
 import type { ActielijstMetTaken } from '@/lib/taken/supabase/database.types'
+import { STREEFDATUM_BRON_LABELS, type StreefdatumBron } from '@/lib/taken/deadlines'
 import {
   Button,
   Dialog,
@@ -22,6 +23,11 @@ import {
   FormField,
   Input,
   Textarea,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
 } from '@/components/ui'
 
 interface Props {
@@ -33,11 +39,15 @@ function BewerkLijstDialog({ lijst }: { lijst: ActielijstMetTaken }) {
   const [open, setOpen] = useState(false)
   const [naam, setNaam] = useState(lijst.naam)
   const [beschrijving, setBeschrijving] = useState(lijst.beschrijving ?? '')
+  const [streefdatumBron, setStreefdatumBron] = useState<StreefdatumBron>(
+    lijst.streefdatum_bron ?? 'handmatig',
+  )
   const [pending, startTransition] = useTransition()
 
   function openDialog() {
     setNaam(lijst.naam)
     setBeschrijving(lijst.beschrijving ?? '')
+    setStreefdatumBron(lijst.streefdatum_bron ?? 'handmatig')
     setOpen(true)
   }
 
@@ -47,6 +57,7 @@ function BewerkLijstDialog({ lijst }: { lijst: ActielijstMetTaken }) {
       const fd = new FormData()
       fd.set('naam', naam.trim())
       fd.set('beschrijving', beschrijving)
+      if (lijst.is_template) fd.set('streefdatum_bron', streefdatumBron)
       await updateActielijst(lijst.id, fd)
       setOpen(false)
     })
@@ -81,6 +92,26 @@ function BewerkLijstDialog({ lijst }: { lijst: ActielijstMetTaken }) {
                   rows={3}
                 />
               </FormField>
+              {lijst.is_template && (
+                <FormField label="Streefdatum van deze checklist">
+                  <Select
+                    value={streefdatumBron}
+                    onValueChange={v => setStreefdatumBron(v as StreefdatumBron)}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(STREEFDATUM_BRON_LABELS) as StreefdatumBron[]).map(k => (
+                        <SelectItem key={k} value={k}>{STREEFDATUM_BRON_LABELS[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--fg-muted)', lineHeight: 1.4 }}>
+                    Bepaalt de deadline van taken die op &quot;streefdatum&quot; staan. Kies een datum van
+                    het dossier als de checklist ook automatisch geactiveerd wordt — bij
+                    &quot;invullen bij het activeren&quot; blijven die taken dan zonder deadline.
+                  </p>
+                </FormField>
+              )}
             </div>
           </DialogBody>
           <DialogFooter>

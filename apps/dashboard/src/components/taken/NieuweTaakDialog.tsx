@@ -8,6 +8,12 @@ import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/action
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import type { TaskPrioriteit, DbTaskList } from '@/lib/taken/supabase/database.types'
+import {
+  DEADLINE_BASIS_LABELS,
+  HERHALING_LABELS,
+  type DeadlineBasis,
+  type HerhalingInterval,
+} from '@/lib/taken/deadlines'
 
 interface Props {
   lijsten?: DbTaskList[]
@@ -67,9 +73,10 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
   const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol'>('direct')
   const [geselecteerdeAssignees, setGeselecteerdeAssignees] = useState<AssigneeKeuze[]>([])
   const [dossierRollen, setDossierRollen]   = useState<string[]>(['project_manager_id'])
-  const [deadlineType, setDeadlineType]     = useState<'deadline' | 'max_doorlooptijd' | 'deadline_offset'>('deadline')
-  const [maxDoorlooptijd, setMaxDoorlooptijd] = useState('')
-  const [deadlineOffset, setDeadlineOffset] = useState('')
+  const [deadlineBasis, setDeadlineBasis]       = useState<DeadlineBasis>('geen')
+  const [deadlineDagen, setDeadlineDagen]       = useState('')
+  const [deadlineRichting, setDeadlineRichting] = useState<'voor' | 'na'>('voor')
+  const [herhalingInterval, setHerhalingInterval] = useState<HerhalingInterval>('geen')
   const [medewerkers, setMedewerkers]       = useState<MedewerkerKeuze[]>([])
   const [formulierTemplateId, setFormulierTemplateId] = useState('')
   const [formulieren, setFormulieren]       = useState<{ id: string; naam: string; categorie: string | null }[]>([])
@@ -118,11 +125,24 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
     setAssigneeType('direct')
     setGeselecteerdeAssignees([])
     setDossierRollen(['project_manager_id'])
-    setDeadlineType('deadline')
-    setMaxDoorlooptijd('')
-    setDeadlineOffset('')
+    setDeadlineBasis('geen')
+    setDeadlineDagen('')
+    setDeadlineRichting('voor')
+    setHerhalingInterval('geen')
     setFormulierTemplateId('')
   }
+
+  // Een herhalende taak krijgt per keer zijn eigen datum uit de detailplanning;
+  // een los anker zou daar niets aan toe te voegen hebben.
+  const herhaalt = isTemplate && herhalingInterval !== 'geen'
+  const effectieveBasis: DeadlineBasis = herhaalt ? 'geen' : deadlineBasis
+  const dagenGetal = deadlineDagen ? parseInt(deadlineDagen) : null
+  const effectieveDagen =
+    effectieveBasis === 'geen' || dagenGetal == null
+      ? null
+      : effectieveBasis !== 'activatie' && deadlineRichting === 'voor'
+        ? -dagenGetal
+        : dagenGetal
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -135,16 +155,12 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
         lijst_id:   lijstId || undefined,
         // Bij een gekozen actielijst is de lijst leidend voor de dossier-koppeling
         dossier_id: !isTemplate && !lijstId && dossierId ? dossierId : undefined,
-        // Deadline afhankelijk van mode
-        deadline: (!isTemplate && deadlineType === 'deadline' && deadline) ? deadline : undefined,
-        max_doorlooptijd_dagen:
-          isTemplate && deadlineType === 'max_doorlooptijd' && maxDoorlooptijd
-            ? parseInt(maxDoorlooptijd)
-            : undefined,
-        deadline_offset_dagen:
-          isTemplate && deadlineType === 'deadline_offset' && deadlineOffset
-            ? parseInt(deadlineOffset)
-            : undefined,
+        // Deadline afhankelijk van mode: een echte taak krijgt een datum,
+        // een sjabloontaak een anker waaruit de datum later volgt.
+        deadline: (!isTemplate && deadline) ? deadline : undefined,
+        deadline_basis: isTemplate ? effectieveBasis : undefined,
+        deadline_dagen: isTemplate ? effectieveDagen : undefined,
+        herhaling_interval: isTemplate ? herhalingInterval : undefined,
         // Toewijzing
         assignee_type: isTemplate ? assigneeType : 'direct',
         dossier_rollen: isTemplate && assigneeType === 'dossier_rol' ? dossierRollen : undefined,
@@ -334,47 +350,69 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
 
                 {isTemplate ? (
                   <>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="deadline_type" checked={deadlineType === 'deadline'} onChange={() => setDeadlineType('deadline')} className="accent-everts" />
-                        <span className="text-sm text-slate-700">Geen automatische deadline</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="deadline_type" checked={deadlineType === 'max_doorlooptijd'} onChange={() => setDeadlineType('max_doorlooptijd')} className="accent-everts" />
-                        <span className="text-sm text-slate-700">Max. doorlooptijd na activatie</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="deadline_type" checked={deadlineType === 'deadline_offset'} onChange={() => setDeadlineType('deadline_offset')} className="accent-everts" />
-                        <span className="text-sm text-slate-700">Vóór streefdatum checklist</span>
-                      </label>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">Herhalen</label>
+                      <select
+                        value={herhalingInterval}
+                        onChange={e => setHerhalingInterval(e.target.value as HerhalingInterval)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
+                      >
+                        {(Object.keys(HERHALING_LABELS) as HerhalingInterval[]).map(k => (
+                          <option key={k} value={k}>{HERHALING_LABELS[k]}</option>
+                        ))}
+                      </select>
+                      {herhaalt && (
+                        <p className="mt-1.5 text-xs text-slate-500 leading-snug">
+                          Er ontstaat één taak per keer, verdeeld over de uitvoering volgens de
+                          detailplanning van het dossier. Elke taak krijgt zijn eigen deadline.
+                        </p>
+                      )}
                     </div>
 
-                    {deadlineType === 'max_doorlooptijd' && (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={maxDoorlooptijd}
-                          onChange={e => setMaxDoorlooptijd(e.target.value)}
-                          placeholder="Bijv. 5"
-                          className="w-24 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
-                        />
-                        <span className="text-sm text-slate-600">dagen na activatiedatum</span>
-                      </div>
-                    )}
+                    {!herhaalt && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1.5">Deadline bepalen op</label>
+                          <select
+                            value={deadlineBasis}
+                            onChange={e => setDeadlineBasis(e.target.value as DeadlineBasis)}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
+                          >
+                            {(Object.keys(DEADLINE_BASIS_LABELS) as DeadlineBasis[]).map(k => (
+                              <option key={k} value={k}>{DEADLINE_BASIS_LABELS[k]}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                    {deadlineType === 'deadline_offset' && (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={deadlineOffset}
-                          onChange={e => setDeadlineOffset(e.target.value)}
-                          placeholder="Bijv. 3"
-                          className="w-24 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
-                        />
-                        <span className="text-sm text-slate-600">dagen vóór de streefdatum</span>
-                      </div>
+                        {deadlineBasis !== 'geen' && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="number"
+                              min={0}
+                              value={deadlineDagen}
+                              onChange={e => setDeadlineDagen(e.target.value)}
+                              placeholder="Bijv. 3"
+                              className="w-20 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
+                            />
+                            <span className="text-sm text-slate-600">dagen</span>
+                            {deadlineBasis === 'activatie' ? (
+                              <span className="text-sm text-slate-600">na</span>
+                            ) : (
+                              <select
+                                value={deadlineRichting}
+                                onChange={e => setDeadlineRichting(e.target.value as 'voor' | 'na')}
+                                className="border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-everts/30"
+                              >
+                                <option value="voor">vóór</option>
+                                <option value="na">na</option>
+                              </select>
+                            )}
+                            <span className="text-sm text-slate-600">
+                              {DEADLINE_BASIS_LABELS[deadlineBasis].toLowerCase()}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 ) : (

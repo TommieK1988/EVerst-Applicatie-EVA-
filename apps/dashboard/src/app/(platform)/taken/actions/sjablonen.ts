@@ -8,25 +8,24 @@ import type {
   DbTaskCompletionActie,
   DbTaskList,
 } from '@/lib/taken/supabase/database.types'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function addDagen(isoDate: string, dagen: number): string {
-  const d = new Date(isoDate)
-  d.setDate(d.getDate() + dagen)
-  return d.toISOString().split('T')[0]
-}
-
-function subDagen(isoDate: string, dagen: number): string {
-  return addDagen(isoDate, -dagen)
-}
+import { berekenDeadline, resolveerStreefdatum } from '@/lib/taken/deadlines'
+import {
+  DOSSIER_ROL_SELECT,
+  kopieerCompletionActies,
+  resolveerToewijzingen,
+} from '@/lib/taken/kloon'
+import { herberekenDossierNu } from './deadlines'
 
 // ─── Sjabloon activeren ───────────────────────────────────────────────────────
 
 /**
  * Kloon een sjabloon-actielijst naar een concrete instantie gekoppeld aan een dossier.
  * Resolveer dossier-rol toewijzingen naar echte medewerkers.
- * Als streefdatum is opgegeven, worden deadline_offset_dagen omgezet naar concrete deadlines.
+ *
+ * Deadlines volgen het anker van de sjabloontaak (deadline_basis + deadline_dagen).
+ * Ankers op de detailplanning worden hier nog niet vastgeklikt: die kan bij activatie
+ * nog leeg zijn en later schuiven, dus die rekent herberekenDossierNu uit — net als de
+ * herhalende taken, die hier bewust worden overgeslagen.
  */
 export async function activeerSjabloon(input: {
   template_id: string
@@ -49,11 +48,17 @@ export async function activeerSjabloon(input: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dossier, error: dossierError } = await (supabase as any)
     .from('dossiers')
-    .select('id, project_manager_id, teamleider_id, werkvoorbereider_id, calculator_id, uitvoerder_id, controller_id')
+    .select(`${DOSSIER_ROL_SELECT}, verwacht_startdatum, verwacht_einddatum`)
     .eq('id', input.dossier_id)
     .single()
 
   if (dossierError || !dossier) throw new Error('Dossier niet gevonden')
+
+  // Een ingetypte streefdatum wint; anders bepaalt het sjabloon waar hij vandaan komt.
+  // Zonder dit kregen streefdatum-taken op de trigger-route stil geen deadline: daar is
+  // niemand die de dialoog invult.
+  const streefdatum =
+    input.streefdatum ?? resolveerStreefdatum((sjabloon as any).streefdatum_bron, dossier)
 
   // Haal alle taken op uit het sjabloon (incl. toewijzingen)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,6 +81,9 @@ export async function activeerSjabloon(input: {
       template_id:  input.template_id,
       owner_id:     (sjabloon as any).owner_id,
       volgorde:     0,
+      // Vastleggen op de lijst: anders is een ingetypte streefdatum na dit request weg
+      // en valt er later niets meer te herberekenen.
+      streefdatum,
     })
     .select('id')
     .single()
@@ -86,13 +94,14 @@ export async function activeerSjabloon(input: {
   // geremapt kan worden naar de nieuwe taken — anders verliezen subtaken hun hiërarchie).
   const idMap = new Map<string, string>()
   for (const taak of sjabloonTaken ?? []) {
-    // Bereken deadline
-    let deadline: string | null = null
-    if (taak.max_doorlooptijd_dagen != null) {
-      deadline = addDagen(vandaag, taak.max_doorlooptijd_dagen)
-    } else if (taak.deadline_offset_dagen != null && input.streefdatum) {
-      deadline = subDagen(input.streefdatum, taak.deadline_offset_dagen)
-    }
+    // Herhalende taken worden niet één keer gekloond maar als reeks opgebouwd zodra
+    // het uitvoeringsvenster bekend is; dat doet herberekenDossierNu hieronder.
+    if ((taak.herhaling_interval ?? 'geen') !== 'geen') continue
+
+    const deadline = berekenDeadline(taak.deadline_basis, taak.deadline_dagen, {
+      activatiedatum: vandaag,
+      streefdatum,
+    })
 
     // Voeg taak in
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,6 +114,9 @@ export async function activeerSjabloon(input: {
         status:                'open',
         prioriteit:            taak.prioriteit,
         deadline,
+        // Anker meenemen zodat een planning-gebonden deadline later kan meebewegen.
+        deadline_basis:        taak.deadline_basis ?? 'geen',
+        deadline_dagen:        taak.deadline_dagen ?? null,
         geschatte_uren:        taak.geschatte_uren,
         volgorde:              taak.volgorde,
         assignee_type:         taak.assignee_type ?? 'direct',
@@ -118,51 +130,8 @@ export async function activeerSjabloon(input: {
     if (taakError || !nieuweTaak) continue
     idMap.set(taak.id, nieuweTaak.id)
 
-    // Toewijzingen resolven
-    const assignees = taak.task_assignees ?? []
-
-    if (taak.assignee_type === 'dossier_rol' && (taak.dossier_rollen ?? []).length > 0) {
-      // Resolveer elke rol naar een medewerker-id op het dossier
-      for (const rol of taak.dossier_rollen as string[]) {
-        const medewerkerIdOpDossier = (dossier as Record<string, unknown>)[rol] as string | null
-        if (!medewerkerIdOpDossier) continue
-        const { data: med } = await supabase
-          .from('medewerkers')
-          .select('auth_user_id')
-          .eq('id', medewerkerIdOpDossier)
-          .single()
-        if (med?.auth_user_id) {
-          await supabase.from('task_assignees').insert({
-            task_id: nieuweTaak.id,
-            user_id: med.auth_user_id,
-            rol:     'verantwoordelijke',
-          })
-        }
-      }
-    } else if (assignees.length > 0) {
-      // Kopieer directe toewijzingen
-      await supabase.from('task_assignees').insert(
-        assignees.map((a: { user_id: string; rol: string }) => ({
-          task_id: nieuweTaak.id,
-          user_id: a.user_id,
-          rol:     a.rol,
-        }))
-      )
-    }
-
-    // Kopieer completion-acties
-    const acties = taak.task_completion_acties ?? []
-    if (acties.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('task_completion_acties').insert(
-        acties.map((a: { actie_type: string; config: unknown; volgorde: number }) => ({
-          task_id:     nieuweTaak.id,
-          actie_type:  a.actie_type,
-          config:      a.config,
-          volgorde:    a.volgorde,
-        }))
-      )
-    }
+    await resolveerToewijzingen(supabase, dossier as Record<string, unknown>, taak, nieuweTaak.id)
+    await kopieerCompletionActies(supabase, taak, nieuweTaak.id)
   }
 
   // Pass 2: hiërarchie (parent_task_id) remappen naar de gekopieerde taken.
@@ -174,6 +143,10 @@ export async function activeerSjabloon(input: {
       await (supabase as any).from('tasks').update({ parent_task_id: nieuwParentId }).eq('id', nieuwId)
     }
   }
+
+  // Planning-gebonden deadlines uitrekenen en de herhalende taken opbouwen.
+  // Staat er nog geen detailplanning, dan gebeurt dat later alsnog via de wachtrij.
+  await herberekenDossierNu(input.dossier_id)
 
   revalidatePath('/taken/lijsten')
   revalidatePath(`/taken/lijsten/${nieuweLijst.id}`)
@@ -214,12 +187,13 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
   const { data: nieuweLijst, error: lijstError } = await sb
     .from('task_lists')
     .insert({
-      naam:          `${bron.naam} (kopie)`,
-      beschrijving:  bron.beschrijving,
-      is_template:   true,
-      template_naam: bron.template_naam ? `${bron.template_naam} (kopie)` : null,
-      owner_id:      user.id,
-      volgorde:      0,
+      naam:             `${bron.naam} (kopie)`,
+      beschrijving:     bron.beschrijving,
+      is_template:      true,
+      template_naam:    bron.template_naam ? `${bron.template_naam} (kopie)` : null,
+      owner_id:         user.id,
+      volgorde:         0,
+      streefdatum_bron: bron.streefdatum_bron ?? 'handmatig',
     })
     .select('id')
     .single()
@@ -241,8 +215,9 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
         volgorde:               taak.volgorde,
         assignee_type:          taak.assignee_type ?? 'direct',
         dossier_rollen:         taak.dossier_rollen ?? [],
-        max_doorlooptijd_dagen: taak.max_doorlooptijd_dagen,
-        deadline_offset_dagen:  taak.deadline_offset_dagen,
+        deadline_basis:         taak.deadline_basis ?? 'geen',
+        deadline_dagen:         taak.deadline_dagen ?? null,
+        herhaling_interval:     taak.herhaling_interval ?? 'geen',
         formulier_template_id:  taak.formulier_template_id ?? null,
         aangemaakt_door:        user.id,
       })

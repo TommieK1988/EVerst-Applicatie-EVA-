@@ -10,8 +10,25 @@ import type {
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType,
 } from '@everts/database/platform-types'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
+import { herberekenDeadlines } from '../taken/actions/deadlines'
 
 const db = () => createAdminClient() as any
+
+/**
+ * Rond een planningswijziging af. De DB-trigger tg_planning_items_deadline_queue heeft het
+ * dossier al op de wachtrij gezet; die trekken we hier meteen leeg, zodat taken waarvan de
+ * deadline aan de detailplanning hangt direct kloppen in plaats van pas na de nachtsync.
+ * Mislukt dat, dan blijft de planningswijziging staan: de rij blijft 'pending' en een
+ * volgende wijziging of de sync pakt hem alsnog op.
+ */
+async function naPlanningWijziging(): Promise<void> {
+  try {
+    await herberekenDeadlines()
+  } catch (e) {
+    console.error('[planning] herberekenen taak-deadlines mislukt:', e)
+  }
+  revalidatePath('/planning')
+}
 
 // ─── Budget helpers ───────────────────────────────────────────────────────────
 
@@ -182,7 +199,7 @@ export async function updatePlanningActiviteit(
     }
   }
 
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, cascade: itemsVerschoven > 0 ? { items_verschoven: itemsVerschoven } : undefined }
 }
 
@@ -195,7 +212,7 @@ export async function verwijderPlanningActiviteit(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -242,7 +259,7 @@ export async function maakPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
 
@@ -330,7 +347,7 @@ export async function maakSnelPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
 
@@ -377,7 +394,7 @@ export async function kopieerPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
 
@@ -419,7 +436,7 @@ export async function verplaatsPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -439,7 +456,7 @@ export async function verwijderPlanningItem(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -459,7 +476,7 @@ export async function upsertWerkbegrotingRegel(
     )
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -511,7 +528,7 @@ export async function maakPlanningFase(
     .single()
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, data: data as PlanningFase }
 }
 
@@ -521,7 +538,7 @@ export async function updatePlanningFase(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { error } = await db().from('planning_fasen').update(input).eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -568,7 +585,7 @@ export async function verschuifPlanningFase(
     }
   }
 
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, activiteiten_verschoven: aShift, items_verschoven: iShift }
 }
 
@@ -577,7 +594,7 @@ export async function verwijderPlanningFase(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { error } = await db().from('planning_fasen').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -599,7 +616,7 @@ export async function maakAfhankelijkheid(
     .single()
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, data: data as PlanningAfhankelijkheid }
 }
 
@@ -608,7 +625,7 @@ export async function verwijderAfhankelijkheid(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { error } = await db().from('planning_activiteit_afhankelijkheden').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true }
 }
 
@@ -625,6 +642,6 @@ export async function syncPlanningVoorDossier(
   // zie je bijv. de activiteit-samenvoeging niet. De cron/bulk blijft incrementeel.
   const result = await syncDossierPlanning(dossier_id, { mode: 'full' })
   if (result.foutMelding) return { ok: false, error: result.foutMelding }
-  revalidatePath('/planning')
+  await naPlanningWijziging()
   return { ok: true, nieuw: result.nieuw, fouten: result.fouten }
 }

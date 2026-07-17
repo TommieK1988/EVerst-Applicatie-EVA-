@@ -38,11 +38,9 @@ export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact 
   const [streefdatum, setStreefdatum] = useState('')
 
   const geselecteerd = sjablonen.find(s => s.id === templateId)
-  const heeftOffsets = geselecteerd
-    // We can't easily check this client-side without loading tasks,
-    // so just show the streefdatum field when any sjabloon is selected
-    ? true
-    : false
+  // Alleen vragen wat het sjabloon niet zelf weet: bij een dossier-gebonden bron haalt
+  // activeerSjabloon de streefdatum op uit het dossier.
+  const vraagStreefdatum = (geselecteerd?.streefdatum_bron ?? 'handmatig') === 'handmatig'
 
   function handleActiveer() {
     if (!templateId) return
@@ -98,7 +96,7 @@ export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact 
               </FormField>
 
               {/* Streefdatum */}
-              {heeftOffsets && templateId && (
+              {vraagStreefdatum && templateId && (
                 <FormField
                   label={
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

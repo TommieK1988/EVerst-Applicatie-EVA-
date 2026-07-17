@@ -6,6 +6,7 @@ import { createAdminClient } from '@everts/database/server'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { activeerSjabloon } from './sjablonen'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie } from '@/lib/taken/supabase/database.types'
+import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
@@ -58,6 +59,9 @@ export async function updateActielijst(id: string, formData: FormData): Promise<
     updateData.trigger_hoofdstatus = (formData.get('trigger_hoofdstatus') as string) || null
     updateData.trigger_substatus   = (formData.get('trigger_substatus')   as string) || null
   }
+  if (formData.has('streefdatum_bron')) {
+    updateData.streefdatum_bron = (formData.get('streefdatum_bron') as string) || 'handmatig'
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
@@ -101,8 +105,9 @@ export async function maakTaak(data: {
   // Template-specifieke velden
   assignee_type?: 'direct' | 'dossier_rol'
   dossier_rollen?: string[]
-  max_doorlooptijd_dagen?: number
-  deadline_offset_dagen?: number
+  deadline_basis?: DeadlineBasis
+  deadline_dagen?: number | null
+  herhaling_interval?: HerhalingInterval
   // Formulier-koppeling
   formulier_template_id?: string
 }): Promise<{ id: string }> {
@@ -124,8 +129,10 @@ export async function maakTaak(data: {
       aangemaakt_door:        user.id,
       assignee_type:          data.assignee_type          ?? 'direct',
       dossier_rollen:         data.dossier_rollen         ?? [],
-      max_doorlooptijd_dagen: data.max_doorlooptijd_dagen ?? null,
-      deadline_offset_dagen:  data.deadline_offset_dagen  ?? null,
+      deadline_basis:         data.deadline_basis         ?? 'geen',
+      deadline_dagen:         data.deadline_dagen         ?? null,
+      deadline_handmatig:     data.deadline               != null,
+      herhaling_interval:     data.herhaling_interval     ?? 'geen',
       formulier_template_id:  data.formulier_template_id  ?? null,
     })
     .select('id')
@@ -274,8 +281,9 @@ export async function updateTaak(id: string, data: {
   geschatte_uren?: number | null
   assignee_type?: 'direct' | 'dossier_rol'
   dossier_rollen?: string[]
-  max_doorlooptijd_dagen?: number | null
-  deadline_offset_dagen?: number | null
+  deadline_basis?: DeadlineBasis
+  deadline_dagen?: number | null
+  herhaling_interval?: HerhalingInterval
   blocked_by_task_id?: string | null
   formulier_template_id?: string | null
 }): Promise<void> {
@@ -291,12 +299,18 @@ export async function updateTaak(id: string, data: {
   if (data.beschrijving        !== undefined) updatePayload.omschrijving         = data.beschrijving as Json
   if (data.status              !== undefined) updatePayload.status               = data.status
   if (data.prioriteit          !== undefined) updatePayload.prioriteit           = data.prioriteit
-  if (data.deadline            !== undefined) updatePayload.deadline             = data.deadline
+  if (data.deadline            !== undefined) {
+    updatePayload.deadline = data.deadline
+    // Zelf een datum kiezen zet de automatische berekening voor deze taak uit;
+    // het veld leegmaken geeft de regie terug aan het anker.
+    updatePayload.deadline_handmatig = data.deadline != null
+  }
   if (data.geschatte_uren      !== undefined) updatePayload.geschatte_uren       = data.geschatte_uren
   if (data.assignee_type       !== undefined) updatePayload.assignee_type        = data.assignee_type
   if (data.dossier_rollen      !== undefined) updatePayload.dossier_rollen       = data.dossier_rollen ?? []
-  if (data.max_doorlooptijd_dagen !== undefined) updatePayload.max_doorlooptijd_dagen = data.max_doorlooptijd_dagen
-  if (data.deadline_offset_dagen  !== undefined) updatePayload.deadline_offset_dagen  = data.deadline_offset_dagen
+  if (data.deadline_basis      !== undefined) updatePayload.deadline_basis       = data.deadline_basis
+  if (data.deadline_dagen      !== undefined) updatePayload.deadline_dagen       = data.deadline_dagen
+  if (data.herhaling_interval  !== undefined) updatePayload.herhaling_interval   = data.herhaling_interval
   if (data.blocked_by_task_id      !== undefined) updatePayload.blocked_by_task_id      = data.blocked_by_task_id
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
 
