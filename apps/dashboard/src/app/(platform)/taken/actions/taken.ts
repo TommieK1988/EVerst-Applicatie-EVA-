@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/taken/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
+import { spiegelTaakstatusNaarBouw7 } from '@/lib/bouw7/todo-write'
 import { activeerSjabloon } from './sjablonen'
 import { getTaak } from '@/lib/taken/services/taken'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
@@ -239,6 +240,10 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     await verwerkVoltooiingsActies(id, dossierId).catch(() => {})
   }
 
+  // Uit Bouw7 geïmporteerde taak → het vinkje ook daar zetten. Fail-soft: lukt de write niet,
+  // dan blijft de EVA-status staan (de sync draait hem niet meer terug, zie tasks.bouw7_todo_done).
+  await spiegelTaakstatusNaarBouw7(id, status).catch(() => {})
+
   revalidatePath('/taken')
   if (oud?.lijst_id) revalidatePath(`/taken/lijsten/${oud.lijst_id}`)
 }
@@ -332,6 +337,11 @@ export async function updateTaak(id: string, data: {
     oud_waarde:    oud as Json | null,
     nieuwe_waarde: data as unknown as Json,
   })
+
+  // Ook langs deze weg kan de status wijzigen → Bouw7 meenemen (fail-soft, zie updateTaakStatus).
+  if (data.status !== undefined && data.status !== oud?.status) {
+    await spiegelTaakstatusNaarBouw7(id, data.status).catch(() => {})
+  }
 
   revalidatePath('/taken')
   if (oud?.lijst_id) revalidatePath(`/taken/lijsten/${oud.lijst_id}`)

@@ -263,6 +263,32 @@ export type Bouw7Todo = {
   associatedEmployeeNames: string | null
 }
 
+/**
+ * To-do-detail: `GET /project/timeline/todo/{id}` (let op de prefix — `/todo/{id}` bestaat níét).
+ * Rijker dan de lijstvorm: `employees` met échte id's i.p.v. de naam-string, plus `visibility`
+ * en `sendNotifications`. Precies deze vorm gaat ook weer terug via `POST /project/timeline/todo`,
+ * dus dit type dient als heen- én terugweg (read-modify-write).
+ */
+export type Bouw7TodoDetail = {
+  id: number
+  name: string
+  description: string | null
+  priority: number | null
+  executeBefore: string | null
+  /** 0 = zichtbaar voor iedereen (enige waarde die we in het veld zagen). */
+  visibility: number | null
+  isDone: boolean
+  /** Bouw7 mailt de toegewezen medewerkers bij een wijziging. Sync-writes laten dit op `false`. */
+  sendNotifications: boolean | null
+  project: { id: number; name?: string | null } & Record<string, unknown> | null
+  employees: { id: number; firstName?: string | null; lastName?: string | null }[] | null
+  /** Server-side gezet; niet meesturen bij een write. */
+  createdAt?: string
+  createdBy?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+
 /* ── Response types (gebaseerd op Bouw7 API spec) ─────────────────── */
 
 export type Bouw7Contact = {

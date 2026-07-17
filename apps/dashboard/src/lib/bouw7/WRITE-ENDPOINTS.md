@@ -400,7 +400,63 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 
 - **Schrijf-scope van de app-key onbekend.** Eerst fase 0 draaien; bij 403 → in Bouw7 (`start.bouw7.nl/my-account/api-access`) een key met schrijfrechten regelen.
 - **Plan-items schrijven lijkt niet te bestaan.** We lezen planning via Apollo (read-only); er is geen `plan-item`-write-endpoint. Uren schrijf je via `/project/hour-log` (≠ plan-items). Verifiëren of planning terugschrijven überhaupt kan.
+- **Gegokte URL's bewijzen niets.** Een 404 op `/todo/{id}` betekende níét dat to-do-detail/-write niet bestaan: ze zitten onder `/project/timeline/…` (zie §5a). Ook de Swagger-spec is incompleet (`/list/todos` ontbreekt erin). Bij "bestaat niet"-conclusies: eerst de UI-call capturen.
 - **Loop-preventie.** Lees-sync en schrijf-sync mogen elkaar niet triggeren. Hergebruik `bron` + `sync_vergrendeld` (al aanwezig in het datamodel) zodat door EVA gewijzigde velden niet door de lees-sync overschreven worden en vice versa.
 - **Idempotentie.** Upsert op `id` is veilig; create zonder `id` twee keer = dubbele records. Altijd eerst `bouw7_id` checken.
 - ~~Achterhaalde "write-API nog niet bekend"-notitie~~ — gecorrigeerd in [`ENDPOINTS.md`](./ENDPOINTS.md) (Apollo-sectie). `client.ts` heeft nu `post()/put()/del()`.
 - **Audit/fiscaal.** Verzonden facturen zijn onveranderbaar (creditnota i.p.v. wijzigen) — relevant vanaf fase 7.
+
+---
+
+## 5a. To-do's terugschrijven (`isDone`) — LIVE (gecaptured jul 2026)
+
+Een in EVA afgevinkte taak wordt ook in Bouw7 afgevinkt. De endpoints staan **niet** in de Swagger-spec
+en zitten onder een onvoorspelbare prefix — `/project/timeline/…`, niet `/todo`:
+
+| Doel | Endpoint | Body |
+|---|---|---|
+| **To-do lezen (detail)** | **Heimdall** `GET /project/timeline/todo/{id}` | — |
+| **To-do schrijven** | **Heimdall** `POST /project/timeline/todo` | volledig to-do-object met `id` (upsert) |
+
+**Let op — dit corrigeert een oudere aanname:** [`ENDPOINTS.md`](./ENDPOINTS.md) stelde dat er "geen
+detail-endpoint per item" is omdat `GET /todo/{id}` een 404 geeft. Dat klopt voor díé prefix, maar
+`GET /project/timeline/todo/{id}` geeft gewoon **200**. De 404 bewees alleen dat de gegokte URL fout was,
+niet dat de functie ontbrak.
+
+**Detail-respons = write-body.** `GET /project/timeline/todo/{id}` geeft exact de vorm die de UI ook
+terugPOST: `id, name, project{…}, description, priority, executeBefore, visibility, isDone,
+sendNotifications, employees[{id,firstName,lastName}], createdAt/By, updatedAt/By`. Rijker dan
+`/list/todos`, dat alleen `associatedEmployeeNames` (namen, géén id's) heeft — met alléén de lijstdata
+kun je dus geen veilige write doen zonder de toewijzing te verliezen.
+
+**Werkwijze in EVA** (`lib/bouw7/todo-write.ts`, `schrijfBouw7TodoIsDone`):
+1. `GET /project/timeline/todo/{id}` → huidig object;
+2. `createdAt/By` + `updatedAt/By` eruit (server-side), **alleen `isDone` vervangen**, `sendNotifications:
+   false` (anders mailt Bouw7 de toegewezen medewerkers om een vinkje uit EVA);
+3. `POST /project/timeline/todo` met het volledige object.
+
+Read-modify-write met het hele object, net als de UI. Of een minimale body (`{ id, isDone }`) de rest
+laat staan dan wel leegmaakt is **niet uitgezocht** — een verkeerde gok wist stilletjes omschrijving en
+toewijzing van élke afgevinkte to-do, en de winst (één GET minder) weegt daar niet tegenop.
+
+**Loop-preventie:** na een geslaagde write zet EVA `tasks.bouw7_todo_done = isDone`. Dat is geen
+administratie maar functioneel — die vlag is de laatst bekende Bouw7-stand waarmee `syncBouw7Todos` een
+échte heropening in Bouw7 (true→false) onderscheidt van een EVA-afvinking. Blijft de vlag achter, dan
+mist de sync een latere heropening in Bouw7.
+
+**Fail-soft:** mislukt de write, dan blijft de EVA-status gewoon staan en blijft `bouw7_todo_done` op de
+oude waarde — waardoor de lees-sync de nog-open Bouw7-to-do **niet** als heropening ziet en het vinkje
+met rust laat (migratie `20260717_tasks_bouw7_todo_done.sql`). Kosten van een mislukte write zijn dus
+alleen dat Bouw7 de spiegeling mist.
+
+**Niet gespiegeld:** EVA-status `vervallen`. Bouw7 kent alleen open/afgevinkt; een geannuleerde taak als
+"afgevinkt" doorgeven zou liegen tegen wie in Bouw7 kijkt. Zo'n taak blijft daar open.
+
+**Vindmethode (herbruikbaar) — het Allow-orakel:** Heimdall antwoordt op een bestáánde route met een
+verkeerde methode `403 … Method Not Allowed (Allow: POST, DELETE)`, en op een onbestaande route
+`404 entity_not_found … No route found`. Eén GET onthult dus welke schrijfmethodes een route heeft,
+zónder iets te muteren (`GET /project/timeline/todo` → `Allow: POST, DELETE`). Nuttig om een uit de UI
+gecapturede call te bevestigen — maar het orakel kan een endpoint niet *vinden*: raden werkt niet
+(`/todo`, `/todos`, `/todo/{id}`, `/list/todos/{id}`, `/project/{id}/todo`, `/task(s)`, `/action(s)`
+geven allemaal 404, op Heimdall én Athena én Apollo). Alleen de UI-capture wees de echte prefix aan.
+Afwezigheid in de Swagger-spec bewijst niets: ook het werkende `/list/todos` staat er niet in.

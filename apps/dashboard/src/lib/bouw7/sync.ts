@@ -1972,6 +1972,11 @@ export async function syncOfferteHerinneringen(opts?: { mode?: SyncMode; onlyBou
  * in Bouw7 verdwenen → `vervallen`. Titel/omschrijving/toewijzing van bestaande taken worden
  * niet overschreven (EVA-edits blijven behouden); alleen deadline + status reconcilieren.
  * Toewijzing via `associatedEmployeeNames` (naam-match → medewerkers.auth_user_id).
+ *
+ * Een in EVA afgevinkte of vervallen taak blijft dicht, ook als de Bouw7 to-do nog open staat:
+ * heropenen gebeurt alleen bij een echte overgang afgevinkt → open in Bouw7, afgelezen aan
+ * `bouw7_todo_done` (de laatst geziene Bouw7-stand). Afvinken in EVA gaat via
+ * `lib/bouw7/todo-write.ts` meteen terug naar Bouw7; die vlag is het vangnet als dat mislukt.
  */
 export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
   const start = Date.now()
@@ -2012,14 +2017,14 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
     })
 
     let tq = supabase.from('tasks')
-      .select('id, dossier_id, bouw7_todo_id, status, deadline').not('bouw7_todo_id', 'is', null)
+      .select('id, dossier_id, bouw7_todo_id, status, deadline, bouw7_todo_done').not('bouw7_todo_id', 'is', null)
     const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
     if (scopeDossierIds) {
       tq = scopeDossierIds.length ? tq.in('dossier_id', scopeDossierIds) : tq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
     }
     const { data: bestaandeTaken } = await tq
-    const taakByTodoId = new Map<string, { id: string; status: string; deadline: string | null }>(
-      (bestaandeTaken ?? []).map((t: { id: string; bouw7_todo_id: number; status: string; deadline: string | null }) => [String(t.bouw7_todo_id), t])
+    const taakByTodoId = new Map<string, { id: string; status: string; deadline: string | null; bouw7_todo_done: boolean }>(
+      (bestaandeTaken ?? []).map((t: { id: string; bouw7_todo_id: number; status: string; deadline: string | null; bouw7_todo_done: boolean }) => [String(t.bouw7_todo_id), t])
     )
 
     for (const t of relevant) {
@@ -2028,11 +2033,16 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
       const deadline = t.executeBefore ?? null
 
       if (t.isDone) {
-        if (cur && cur.status !== 'gereed') {
-          const { error } = await supabase.from('tasks').update({ status: 'gereed' }).eq('id', cur.id)
-          if (error) { result.fouten++ } else { result.bijgewerkt++ }
+        if (cur) {
+          taakByTodoId.delete(String(t.id))
+          const patch: Record<string, unknown> = {}
+          if (cur.status !== 'gereed' && cur.status !== 'vervallen') patch.status = 'gereed'
+          if (!cur.bouw7_todo_done) patch.bouw7_todo_done = true
+          if (Object.keys(patch).length) {
+            const { error } = await supabase.from('tasks').update(patch).eq('id', cur.id)
+            if (error) { result.fouten++ } else { result.bijgewerkt++ }
+          }
         }
-        taakByTodoId.delete(String(t.id))
         continue
       }
 
@@ -2040,8 +2050,13 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
         taakByTodoId.delete(String(t.id))
         const patch: Record<string, unknown> = {}
         if ((cur.deadline ?? null) !== deadline) patch.deadline = deadline
-        // Weer open in Bouw7 → heropen een eerder afgesloten taak.
-        if (cur.status === 'gereed' || cur.status === 'vervallen') patch.status = 'open'
+        // Alleen een échte heropening in Bouw7 (afgevinkt → open) zet de taak terug op open.
+        // Stond de to-do al open, dan is een dichte EVA-status een bewuste keuze van de
+        // gebruiker en blijft die staan.
+        if (cur.bouw7_todo_done) {
+          patch.bouw7_todo_done = false
+          if (cur.status === 'gereed' || cur.status === 'vervallen') patch.status = 'open'
+        }
         if (Object.keys(patch).length) {
           const { error } = await supabase.from('tasks').update(patch).eq('id', cur.id)
           if (error) { result.fouten++ } else { result.bijgewerkt++ }

@@ -391,8 +391,13 @@ dus de sync haalt ze **volledig** op en groepeert per `bouw7_id`; per-dossier sc
 het enkele veld **`note`** op `GET /project/{id}` (detail-call; **niet** aanwezig op `/list/projects`).
 `information` op de projectlijst is de offerte-/projectomschrijving, geen notitie.
 
-> **Geen detail-endpoint per item:** `GET /todo/{id}` en `/list/todos/{id}` geven 404 — alleen de
-> lijstvorm bestaat. Toewijzing van een to-do is dus alleen op **naam** te matchen (`associatedEmployeeNames`).
+> **Wél een detail-endpoint, onder een andere prefix (gecorrigeerd jul 2026):** `GET /todo/{id}` en
+> `/list/todos/{id}` geven 404, maar **`GET /project/timeline/todo/{id}` geeft 200** — met `employees[]`
+> inclusief échte id's, plus `visibility`/`sendNotifications`. De sync leest de lijstvorm (één call voor
+> alles) en matcht toewijzing daarom nog steeds op **naam** (`associatedEmployeeNames`); het detail-endpoint
+> gebruiken we alleen bij het terugschrijven van `isDone` (`POST /project/timeline/todo`, zie
+> [`WRITE-ENDPOINTS.md` §5a](./WRITE-ENDPOINTS.md)). Wie hier per to-do een id-vaste toewijzing wil, kan
+> dat endpoint gebruiken — kost dan wel een call per to-do.
 
 ### EVA-mapping (zie `sync.ts`)
 
