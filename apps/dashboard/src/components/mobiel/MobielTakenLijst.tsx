@@ -13,6 +13,8 @@ export type MobielTaak = {
   dossier_naam: string | null
   dossier_id: string | null
   formulier_template_id: string | null
+  /** Gezet als de taak een openstaande toolbox is; link naar de doorloop. */
+  toolbox_toewijzing_id?: string | null
   /** Platte omschrijving-tekst; null als er geen omschrijving is. */
   omschrijving: string | null
 }
@@ -65,6 +67,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
       {zichtbaar.map(taak => {
         const prio = PRIO[taak.prioriteit] ?? PRIO.normaal
         const dl = deadlineLabel(taak.deadline)
+        const isToolbox = !!taak.toolbox_toewijzing_id
         return (
           <div
             key={taak.id}
@@ -74,15 +77,29 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
               border: '1px solid #e3e8ea', borderRadius: 12,
             }}
           >
-            <button
-              onClick={() => vinkAf(taak.id)}
-              aria-label="Taak afvinken"
-              style={{
-                width: 22, height: 22, flexShrink: 0, marginTop: 1,
-                borderRadius: 6, border: '2px solid #e3e8ea', background: 'transparent',
-                cursor: 'pointer', display: 'grid', placeItems: 'center',
-              }}
-            />
+            {isToolbox ? (
+              <div
+                aria-label="Toolbox — rond af via de doorloop"
+                title="Deze taak sluit automatisch zodra je de toolbox hebt doorlopen"
+                style={{
+                  width: 22, height: 22, flexShrink: 0, marginTop: 1,
+                  borderRadius: 6, border: '2px solid #e3e8ea', background: '#f7f9fa',
+                  display: 'grid', placeItems: 'center', fontSize: 12,
+                }}
+              >
+                🦺
+              </div>
+            ) : (
+              <button
+                onClick={() => vinkAf(taak.id)}
+                aria-label="Taak afvinken"
+                style={{
+                  width: 22, height: 22, flexShrink: 0, marginTop: 1,
+                  borderRadius: 6, border: '2px solid #e3e8ea', background: 'transparent',
+                  cursor: 'pointer', display: 'grid', placeItems: 'center',
+                }}
+              />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               {taak.omschrijving ? (
                 <button
@@ -142,6 +159,22 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                     <path d="M9 13h6m-6 4h6M9 9h1M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
                   </svg>
                   Formulier invullen
+                </Link>
+              )}
+              {taak.toolbox_toewijzing_id && (
+                <Link
+                  href={`/m/toolbox/${taak.toolbox_toewijzing_id}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+                    padding: '8px 12px', borderRadius: 8,
+                    background: '#ecfdf3', color: '#067647',
+                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                  }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M12 2L3 7v6c0 5 3.5 8 9 9 5.5-1 9-4 9-9V7l-9-5z"/>
+                  </svg>
+                  Toolbox openen
                 </Link>
               )}
             </div>

@@ -43,6 +43,41 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Toolbox ────────────────────────────────────────────────────────────
+  [/^\/toolbox\/nieuw$/, {
+    title: 'Toolbox opstellen',
+    description: 'Bouw een toolbox op uit slides met tekst, koppen, afbeeldingen en video-links, gevolgd door meerkeuzevragen. Publiceer pas als alles klopt — daarna kun je hem toewijzen of aan een toolbox-moment in de agenda hangen.',
+    sections: [
+      { title: 'Slides', body: 'Voeg content-slides toe met blokken (kop, tekst, afbeelding, YouTube/Vimeo-video). Sleep slides om de volgorde te wijzigen.' },
+      { title: 'Vragen', body: 'Elke vraag heeft 2 tot 6 antwoorden waarvan er precies één juist is, plus een verplichte uitleg die verschijnt bij een fout antwoord. Bij het doorlopen worden vragen én antwoorden per medewerker geschud, zodat collega\'s niet kunnen afkijken.' },
+      { title: 'Publiceren', body: 'Publiceren bevriest de inhoud als versie. Wie hem daarna doorloopt en aftekent, tekent exact deze versie. Wil je iets wijzigen? Pas het concept aan en publiceer opnieuw — lopende toewijzingen houden hun oude versie.' },
+    ],
+  }],
+  [/^\/toolbox\/[^/]+\/bewerken$/, {
+    title: 'Toolbox bewerken',
+    description: 'Werk de inhoud van deze toolbox bij. Wijzigingen komen pas bij medewerkers terecht nadat je opnieuw publiceert.',
+  }],
+  [/^\/toolbox\/[^/]+\/presenteren$/, {
+    title: 'Toolbox presenteren',
+    description: 'De slide-weergave voor een klassikale bespreking op een groot scherm. Blader door de slides; de kennischeck en het aftekenen doen medewerkers zelf op hun telefoon.',
+  }],
+  [/^\/toolbox\/[^/]+$/, {
+    title: 'Toolbox — rapportage',
+    description: 'Zie wie deze toolbox heeft afgerond, met datum, aantal pogingen en handtekening. Wijs de toolbox toe aan medewerkers of exporteer de presentielijst als PDF voor je VCA-dossier.',
+    sections: [
+      { title: 'Toewijzen', body: 'Wijs de toolbox los toe aan een selectie medewerkers of aan alle actieve app-gebruikers. Elke medewerker krijgt de toolbox als openstaande taak in "Mijn taken" op zijn telefoon; die blijft staan tot de toolbox goed is afgerond.' },
+      { title: 'Presentielijst', body: 'De PDF-presentielijst toont per deelnemer de handtekening, datum en het aantal pogingen — audit-proof voor VCA/ISO.' },
+    ],
+  }],
+  [/^\/toolbox$/, {
+    title: 'Toolbox',
+    description: 'Digitale veiligheids-toolboxen: bouw instructies met een kennischeck, wijs ze toe of koppel ze aan een toolbox-moment in de bedrijfsagenda. Medewerkers doorlopen ze op hun telefoon en tekenen digitaal af.',
+    sections: [
+      { title: 'Overzicht', body: 'De tabel toont al je toolbox-onderwerpen met status en het aantal afgeronde deelnemers. Klik een rij voor de rapportage.' },
+      { title: 'Agenda-koppeling', body: 'Hang een toolbox aan een "VCA Toolbox"-moment in de bedrijfsagenda. Op de dag van het moment krijgt iedereen uit de doelgroep de toolbox automatisch klaargezet.' },
+    ],
+  }],
+
   // ── Materieelbeheer (in ontwikkeling) ──────────────────────────────────
   [/^\/materieelbeheer\/dashboard$/, {
     title: 'Materieel-dashboard',

@@ -69,6 +69,13 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/taken\/lijsten$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
   [/^\/taken$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
 
+  // Toolbox (sub-app)
+  [/^\/toolbox\/nieuw$/, { title: 'Toolbox › Nieuw', breadcrumb: 'Apps' }],
+  [/^\/toolbox\/[^/]+\/bewerken$/, { title: 'Toolbox › Bewerken', breadcrumb: 'Apps' }],
+  [/^\/toolbox\/[^/]+\/presenteren$/, { title: 'Toolbox › Presenteren', breadcrumb: 'Apps' }],
+  [/^\/toolbox\/[^/]+$/, { title: 'Toolbox › Rapportage', breadcrumb: 'Apps' }],
+  [/^\/toolbox$/, { title: 'Toolbox', breadcrumb: 'Apps' }],
+
   // Materieelbeheer (sub-app, in ontwikkeling)
   [/^\/materieelbeheer\/dashboard$/, { title: 'Materieelbeheer › Dashboard', breadcrumb: 'Apps' }],
   [/^\/materieelbeheer\/controle$/, { title: 'Materieelbeheer › Controle', breadcrumb: 'Apps' }],

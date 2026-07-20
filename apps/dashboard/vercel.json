@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/oplevering",
       "schedule": "0 6 * * 1-5"
+    },
+    {
+      "path": "/api/cron/toolbox-momenten",
+      "schedule": "0 5 * * *"
     }
   ]
 }

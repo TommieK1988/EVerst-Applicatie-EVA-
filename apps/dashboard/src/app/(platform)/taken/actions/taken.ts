@@ -217,6 +217,22 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     }
   }
 
+  // Toolbox-afdwingen: een taak die aan een toolbox-toewijzing hangt mag niet
+  // handmatig op 'gereed'. Hij sluit automatisch zodra de medewerker de toolbox
+  // (slides + kennischeck + handtekening) op zijn telefoon heeft doorlopen.
+  if (status === 'gereed') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = createAdminClient() as any
+    const { data: tb } = await admin
+      .from('toolbox_toewijzingen')
+      .select('status')
+      .eq('task_id', id)
+      .maybeSingle()
+    if (tb && tb.status !== 'afgerond') {
+      throw new Error('Deze taak wordt automatisch afgerond zodra je de toolbox op je telefoon hebt doorlopen.')
+    }
+  }
+
   const { error } = await supabase
     .from('tasks')
     .update({ status, updated_at: new Date().toISOString() })

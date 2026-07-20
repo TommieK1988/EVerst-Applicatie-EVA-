@@ -10,7 +10,7 @@ import {
   IconFacturen, IconInkoop,
   IconKam,
   IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc,
-  IconFormulieren, IconMaterieel,
+  IconFormulieren, IconMaterieel, IconToolbox,
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -78,6 +78,7 @@ const FINANCIEEL: NavEntry[] = [
 const APPS: NavEntry[] = [
   { href: '/formulieren',    label: 'Formulieren',     Icon: IconFormulieren,    module: 'formulieren'   },
   { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen,      module: 'taken'         },
+  { href: '/toolbox',        label: 'Toolbox',         Icon: IconToolbox,        module: 'toolbox'       },
   { href: '/houtrotherstel', label: 'Houtrotherstel',  Icon: IconHoutrotherstel, module: 'houtrotherstel' },
   { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc,     module: 'everts_calc'   },
   // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).

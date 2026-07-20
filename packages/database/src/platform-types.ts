@@ -594,6 +594,7 @@ export const RECHTEN_MODULES = [
   { key: 'houtrotherstel', label: 'Houtrotherstel' },
   { key: 'everts_calc',    label: 'EvertsCalc' },
   { key: 'materieelbeheer', label: 'Materieelbeheer' },
+  { key: 'toolbox',        label: 'Toolbox' },
   { key: 'formulieren',    label: 'Formulieren' },
   { key: 'taken',          label: 'Actielijsten' },
   { key: 'mijn_taken',     label: 'Mijn taken' },
