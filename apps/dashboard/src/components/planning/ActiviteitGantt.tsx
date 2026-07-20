@@ -2,9 +2,9 @@
 
 import React, { useState, useTransition, useMemo, useRef, useEffect } from 'react'
 import {
-  format, eachDayOfInterval,
+  format,
   addMonths, addDays, isToday, isWeekend, parseISO,
-  differenceInDays, startOfDay, getISODay, getISOWeek,
+  differenceInDays, startOfDay, getISOWeek,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -26,6 +26,7 @@ import {
   type View, type GridUnit,
 } from './layout/index'
 import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
+import { berekenWerkuren } from '@/lib/planning/werkuren'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -64,38 +65,6 @@ function medKleur(id: string) {
 
 function medNaam(e: PlanningItemVerrijkt) {
   return [e.medewerkers?.voornaam, e.medewerkers?.achternaam].filter(Boolean).join(' ')
-}
-
-function berekenWerkuren(
-  medewerker_id: string,
-  startDt: string,
-  eindDt: string,
-  roosters: MedewerkerRooster[],
-  afwezigheid: MedewerkerAfwezigheid[],
-): number {
-  const medRoosters = roosters
-    .filter(r => r.medewerker_id === medewerker_id)
-    .sort((a, b) => b.geldig_vanaf.localeCompare(a.geldig_vanaf))
-  const medAfwezig = afwezigheid.filter(a => a.medewerker_id === medewerker_id)
-  const start = startOfDay(parseISO(startDt))
-  const eind  = startOfDay(parseISO(eindDt))
-  if (eind < start) return 0
-  const days = eachDayOfInterval({ start, end: eind })
-  let total = 0
-  for (const dag of days) {
-    const dagStr = format(dag, 'yyyy-MM-dd')
-    if (medAfwezig.some(a => a.start_datum <= dagStr && a.eind_datum >= dagStr)) continue
-    const rooster = medRoosters.find(r =>
-      r.geldig_vanaf <= dagStr && (r.geldig_tot === null || r.geldig_tot >= dagStr),
-    )
-    if (!rooster) continue
-    const isoDay = getISODay(dag)
-    if (!(rooster.werkdagen as number[]).includes(isoDay)) continue
-    const [sh, sm] = (rooster.dagstart as string).split(':').map(Number)
-    const [eh, em] = (rooster.dageind as string).split(':').map(Number)
-    total += (eh * 60 + em - sh * 60 - sm) / 60
-  }
-  return Math.round(total * 2) / 2 // afgerond op 0.5u
 }
 
 // ─── ItemEditDialog ───────────────────────────────────────────────────────────
