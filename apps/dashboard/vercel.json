@@ -14,6 +14,14 @@
       "schedule": "0 7 * * 1"
     },
     {
+      "path": "/api/cron/wagenpark-dagoverzicht",
+      "schedule": "0 7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/wagenpark-maandrapport",
+      "schedule": "0 7 1 * *"
+    },
+    {
       "path": "/api/cron/fouten-opruimen",
       "schedule": "0 3 * * *"
     },
