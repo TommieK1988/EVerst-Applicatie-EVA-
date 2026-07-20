@@ -25,6 +25,16 @@ const LABEL_W = 96   // breedte van de naamkolom links van de tijdlijn
 const LANE_H  = 40   // hoogte van één sleepbare baan
 const SNAP_MS = 60 * 60 * 1000 // sleep-raster: 1 uur
 
+// Zoomniveaus (zichtbare dagen). Krap inzoomen = meer pixels per uur, zodat je
+// op het uur kunt slepen; uitzoomen om over meer dagen te verplaatsen.
+const ZOOM_PRESETS = [
+  { dagen: 1,  label: '1 dag' },
+  { dagen: 2,  label: '2 dagen' },
+  { dagen: 4,  label: '4 dagen' },
+  { dagen: 7,  label: 'week' },
+  { dagen: 14, label: '2 weken' },
+] as const
+
 type Wijziging = { id: string; start_dt: string; eind_dt: string }
 
 type Venster = { vanMs: number; totMs: number; van: Date; tot: Date }
@@ -111,19 +121,49 @@ export default function ConflictOplosDialog({
   // (dat zou de balk onder de cursor laten wegdrijven).
   const [vastVenster, setVastVenster] = useState<Venster | null>(null)
 
-  const venster = useMemo<Venster>(() => {
-    if (vastVenster) return vastVenster
-    let min = Infinity, max = -Infinity
+  // Bereik dat de cluster-items (origineel + draft) samen beslaan.
+  const clusterRange = useMemo(() => {
+    let lo = Infinity, hi = -Infinity
     for (const e of cluster) {
       const d = draftVan(e.id)
-      min = Math.min(min, parseISO(e.start_dt).getTime(), parseISO(d.start_dt).getTime())
-      max = Math.max(max, parseISO(e.eind_dt).getTime(), parseISO(d.eind_dt).getTime())
+      lo = Math.min(lo, parseISO(e.start_dt).getTime(), parseISO(d.start_dt).getTime())
+      hi = Math.max(hi, parseISO(e.eind_dt).getTime(), parseISO(d.eind_dt).getTime())
     }
-    const van = addDays(startOfDay(new Date(min)), -1)
-    const tot = addDays(startOfDay(new Date(max - 1)), 2)
-    return { vanMs: van.getTime(), totMs: tot.getTime(), van, tot }
+    return { lo, hi }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cluster, draftEntries, vastVenster])
+  }, [cluster, draftEntries])
+
+  // Aantal hele dagen dat de cluster minimaal beslaat — ondergrens voor inzoomen
+  // (je kunt niet krapper dan de betrokken planningen zelf).
+  const fitDagen = Math.max(
+    1,
+    Math.round(
+      (addDays(startOfDay(new Date(clusterRange.hi - 1)), 1).getTime()
+        - startOfDay(new Date(clusterRange.lo)).getTime()) / DAG_MS,
+    ),
+  )
+
+  // Zoomniveau: standaard krap (op-het-uur slepen), uit te zoomen via de knoppen.
+  const [zoomDagen, setZoomDagen] = useState<number>(() => {
+    let lo = Infinity, hi = -Infinity
+    for (const e of cluster) {
+      lo = Math.min(lo, parseISO(e.start_dt).getTime())
+      hi = Math.max(hi, parseISO(e.eind_dt).getTime())
+    }
+    const dagen = Math.max(1, Math.ceil((hi - lo) / DAG_MS))
+    return Math.min(14, Math.max(2, dagen + 1))
+  })
+
+  const venster = useMemo<Venster>(() => {
+    if (vastVenster) return vastVenster
+    const vanFit = startOfDay(new Date(clusterRange.lo))
+    const totFit = addDays(startOfDay(new Date(clusterRange.hi - 1)), 1)
+    const totaal = Math.max(fitDagen, zoomDagen)
+    const extra  = totaal - fitDagen
+    const van = addDays(vanFit, -Math.floor(extra / 2))
+    const tot = addDays(totFit, Math.ceil(extra / 2))
+    return { vanMs: van.getTime(), totMs: tot.getTime(), van, tot }
+  }, [clusterRange, fitDagen, zoomDagen, vastVenster])
 
   const dagenVenster = useMemo(
     () => eachDayOfInterval({ start: venster.van, end: addDays(venster.tot, -1) }),
@@ -132,6 +172,18 @@ export default function ConflictOplosDialog({
   const spanMs = venster.totMs - venster.vanMs
   const pct    = (ms: number) => ((ms - venster.vanMs) / spanMs) * 100
   const labelElke = Math.max(1, Math.ceil(dagenVenster.length / 10))
+  const zichtbareDagen = Math.round(spanMs / DAG_MS)
+
+  // Uurlijnen als hulp bij op-het-uur slepen — alleen als er genoeg ruimte per uur is.
+  const uurLijnen = useMemo(() => {
+    if (zichtbareDagen > 3) return [] as number[]
+    const stapUur = zichtbareDagen <= 1 ? 2 : 3
+    const lijnen: number[] = []
+    for (let t = venster.vanMs; t < venster.totMs; t += stapUur * 60 * 60 * 1000) {
+      if (new Date(t).getHours() !== 0) lijnen.push(t) // middernacht = daglijn
+    }
+    return lijnen
+  }, [venster, zichtbareDagen])
 
   function barPointerDown(e: React.PointerEvent, entry: EntryMetDossier) {
     if (!stripRef.current) return
@@ -273,7 +325,34 @@ export default function ConflictOplosDialog({
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Sleepbare tijdlijn */}
           <div>
-            <label style={labelStyle}>Sleep een balk om de overlap op te heffen</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Sleep een balk om de overlap op te heffen</label>
+              <div style={{ display: 'flex', gap: 2, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 2, flexShrink: 0 }}>
+                {ZOOM_PRESETS.map(z => {
+                  const disabled = z.dagen < fitDagen
+                  const actief   = !disabled && Math.max(fitDagen, zoomDagen) === z.dagen
+                  return (
+                    <button
+                      key={z.dagen}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setZoomDagen(z.dagen)}
+                      title={disabled ? 'De betrokken planning past niet in deze weergave' : `Toon ${z.label}`}
+                      style={{
+                        padding: '2px 8px', borderRadius: 4, border: 'none',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        background: actief ? 'var(--accent)' : 'transparent',
+                        color: actief ? 'white' : 'var(--fg-muted)',
+                        fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+                        opacity: disabled ? 0.4 : 1,
+                      }}
+                    >
+                      {z.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             {/* Dag-as */}
             <div style={{ display: 'flex', marginBottom: 2 }}>
@@ -329,6 +408,14 @@ export default function ConflictOplosDialog({
                     background: buitenRooster(d, roosters) ? 'rgba(0,0,0,0.06)' : 'transparent',
                     borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
                     zIndex: 0,
+                  }} />
+                ))}
+
+                {/* Uurlijnen (bij inzoomen) */}
+                {uurLijnen.map((t, i) => (
+                  <div key={`uur-${i}`} style={{
+                    position: 'absolute', top: 0, bottom: 0, left: `${pct(t)}%`, width: 0,
+                    borderLeft: '1px dashed var(--border)', opacity: 0.5, zIndex: 0,
                   }} />
                 ))}
 
