@@ -2,15 +2,15 @@
 
 import { addDays, eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { AlertTriangle, ArrowRight, Check, RotateCcw, X } from 'lucide-react'
-import { useMemo, useState, useTransition } from 'react'
+import { AlertTriangle, Check, GripVertical, RotateCcw, X } from 'lucide-react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 
 import type { Medewerker, MedewerkerRooster } from '@everts/database/platform-types'
 import { verplaatsPlanningItem } from '@/app/(platform)/planning/actions'
 import { crewKleur } from '@/lib/utils/crew'
 import {
-  DAG_MS, berekenConflicten, buitenRooster, clusterVoorConflict, vindVrijMoment,
+  DAG_MS, berekenConflicten, buitenRooster, clusterVoorConflict,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
 } from './conflict'
 import { verschuifTs } from './layout/index'
@@ -21,9 +21,13 @@ const labelStyle: React.CSSProperties = {
   display: 'block', marginBottom: 4,
 }
 
-const STRIP_H = 30
+const LABEL_W = 96   // breedte van de naamkolom links van de tijdlijn
+const LANE_H  = 40   // hoogte van één sleepbare baan
+const SNAP_MS = 60 * 60 * 1000 // sleep-raster: 1 uur
 
 type Wijziging = { id: string; start_dt: string; eind_dt: string }
+
+type Venster = { vanMs: number; totMs: number; van: Date; tot: Date }
 
 type Props = {
   medewerker:     Medewerker
@@ -96,63 +100,19 @@ export default function ConflictOplosDialog({
     setDraft(prev => ({ ...prev, [id]: { start_dt: start.toISOString(), eind_dt: eind.toISOString() } }))
   }
 
-  // ─── Snelle oplossingen ─────────────────────────────────────────────────────
+  // ─── Sleepbare tijdlijn ─────────────────────────────────────────────────────
 
-  type Voorstel = {
-    key:     string
-    label:   string
-    doel:    { start: Date; eind: Date } | null
-    moverId: string
-  }
+  const stripRef = useRef<HTMLDivElement>(null)
+  const dragRef  = useRef<
+    { id: string; startX: number; origStartMs: number; durMs: number; venster: Venster } | null
+  >(null)
+  const [sleeptId, setSleeptId] = useState<string | null>(null)
+  // Tijdens het slepen bevriezen we het venster zodat de balken niet mee-herschalen
+  // (dat zou de balk onder de cursor laten wegdrijven).
+  const [vastVenster, setVastVenster] = useState<Venster | null>(null)
 
-  const voorstellen = useMemo<Voorstel[]>(() => {
-    const maakVoorstel = (key: string, label: string, mover: EntryMetDossier, vanafMs: number): Voorstel => {
-      const d      = draftVan(mover.id)
-      const duurMs = parseISO(d.eind_dt).getTime() - parseISO(d.start_dt).getTime()
-      const doel = vindVrijMoment({
-        duurMs,
-        vanafMs,
-        tijdVanDagVan: parseISO(d.start_dt),
-        andereWerk: naarWork(draftEntries.filter(e => e.id !== mover.id)),
-        blokken,
-        roosters,
-      })
-      return { key, label, doel, moverId: mover.id }
-    }
-    // Vanaf de dag ná `ms`, op het tijdstip-van-de-dag van het te verschuiven item.
-    const dagNa = (ms: number, mover: EntryMetDossier): number => {
-      const t = parseISO(draftVan(mover.id).start_dt)
-      const d = addDays(startOfDay(new Date(ms - 1)), 1)
-      d.setHours(t.getHours(), t.getMinutes(), 0, 0)
-      return d.getTime()
-    }
-
-    const lijst: Voorstel[] = []
-    if (conflict.soort === 'overlap') {
-      const a = draftVan(conflict.a.id)
-      const b = draftVan(conflict.b.id)
-      lijst.push(
-        maakVoorstel('b-na-a', `Plan “${korteNaam(b)}” ná “${korteNaam(a)}”`, b, parseISO(a.eind_dt).getTime()),
-        maakVoorstel('a-na-b', `Plan “${korteNaam(a)}” ná “${korteNaam(b)}”`, a, parseISO(b.eind_dt).getTime()),
-        maakVoorstel('b-vrij', `“${korteNaam(b)}” naar eerstvolgend vrij moment`, b, dagNa(conflict.e, b)),
-      )
-      // Bouw7-items liever laten staan: opties die een EVA-item verschuiven bovenaan.
-      lijst.sort((x, y) => {
-        const bron = (id: string) => (entriesRij.find(e => e.id === id)?.bron === 'bouw7' ? 1 : 0)
-        return bron(x.moverId) - bron(y.moverId)
-      })
-    } else {
-      lijst.push(
-        maakVoorstel('na-blok', 'Verplaats naar eerstvolgende werkbare dag', draftVan(conflict.a.id), dagNa(conflict.e, conflict.a)),
-      )
-    }
-    return lijst
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conflict, draftEntries, blokken, roosters, entriesRij])
-
-  // ─── Mini-tijdlijn (Nu / Na wijziging) ──────────────────────────────────────
-
-  const venster = useMemo(() => {
+  const venster = useMemo<Venster>(() => {
+    if (vastVenster) return vastVenster
     let min = Infinity, max = -Infinity
     for (const e of cluster) {
       const d = draftVan(e.id)
@@ -163,7 +123,7 @@ export default function ConflictOplosDialog({
     const tot = addDays(startOfDay(new Date(max - 1)), 2)
     return { vanMs: van.getTime(), totMs: tot.getTime(), van, tot }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cluster, draftEntries])
+  }, [cluster, draftEntries, vastVenster])
 
   const dagenVenster = useMemo(
     () => eachDayOfInterval({ start: venster.van, end: addDays(venster.tot, -1) }),
@@ -173,69 +133,46 @@ export default function ConflictOplosDialog({
   const pct    = (ms: number) => ((ms - venster.vanMs) / spanMs) * 100
   const labelElke = Math.max(1, Math.ceil(dagenVenster.length / 10))
 
-  function Strip({ label, lijst, segs }: { label: string; lijst: EntryMetDossier[]; segs: ConflictDetail[] }) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 78, flexShrink: 0, fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textAlign: 'right' }}>
-          {label}
-        </span>
-        <div style={{
-          position: 'relative', flex: 1, height: STRIP_H,
-          background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-          overflow: 'hidden',
-        }}>
-          {/* Dag-achtergrond: buiten rooster grijs, dag-scheidingslijnen */}
-          {dagenVenster.map((d, i) => (
-            <div key={i} style={{
-              position: 'absolute', top: 0, bottom: 0,
-              left: `${pct(d.getTime())}%`, width: `${(DAG_MS / spanMs) * 100}%`,
-              background: buitenRooster(d, roosters) ? 'rgba(0,0,0,0.06)' : 'transparent',
-              borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
-            }} />
-          ))}
-          {/* Blok-periodes (verlof/feestdag/ATV) */}
-          {blokken.filter(b => b.s < venster.totMs && b.e > venster.vanMs).map((b, i) => (
-            <div key={`blok-${i}`} title={b.label} style={{
-              position: 'absolute', top: 0, bottom: 0,
-              left: `${pct(Math.max(b.s, venster.vanMs))}%`,
-              width: `${pct(Math.min(b.e, venster.totMs)) - pct(Math.max(b.s, venster.vanMs))}%`,
-              background: 'rgba(248,113,113,0.20)',
-            }} />
-          ))}
-          {/* Planitems: cluster gekleurd, overige grijs */}
-          {lijst.map(e => {
-            const s = parseISO(e.start_dt).getTime()
-            const en = parseISO(e.eind_dt).getTime()
-            if (en <= venster.vanMs || s >= venster.totMs) return null
-            const l = pct(Math.max(s, venster.vanMs))
-            const w = Math.max(0.6, pct(Math.min(en, venster.totMs)) - l)
-            const inCluster = clusterIds.has(e.id)
-            return (
-              <div key={e.id} title={`${titelVan(e)} · ${fmt(s)} – ${fmt(en)}`} style={{
-                position: 'absolute', top: 5, height: STRIP_H - 10,
-                left: `${l}%`, width: `${w}%`,
-                borderRadius: 3,
-                background: inCluster ? kleurVan(e) : 'var(--fg-muted)',
-                opacity: inCluster ? 1 : 0.35,
-              }} />
-            )
-          })}
-          {/* Resterende conflictsegmenten — zelfde rode gloed als in de timeline */}
-          {segs.filter(c => c.s < venster.totMs && c.e > venster.vanMs).map((c, i) => (
-            <div key={`seg-${i}`} style={{
-              position: 'absolute', top: 3, height: STRIP_H - 6,
-              left: `${pct(Math.max(c.s, venster.vanMs))}%`,
-              width: `${Math.max(0.6, pct(Math.min(c.e, venster.totMs)) - pct(Math.max(c.s, venster.vanMs)))}%`,
-              borderRadius: 4,
-              background: 'rgba(239,68,68,0.22)',
-              border: '1px solid rgba(239,68,68,0.75)',
-              boxShadow: '0 0 7px 1px rgba(239,68,68,0.55)',
-            }} />
-          ))}
-        </div>
-      </div>
-    )
+  function barPointerDown(e: React.PointerEvent, entry: EntryMetDossier) {
+    if (!stripRef.current) return
+    const d = draftVan(entry.id)
+    const origStartMs = parseISO(d.start_dt).getTime()
+    const durMs       = parseISO(d.eind_dt).getTime() - origStartMs
+    setVastVenster(venster)
+    dragRef.current = { id: entry.id, startX: e.clientX, origStartMs, durMs, venster }
+    setSleeptId(entry.id)
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.preventDefault()
+    e.stopPropagation()
   }
+
+  function barPointerMove(e: React.PointerEvent) {
+    const drag = dragRef.current
+    const rect = stripRef.current?.getBoundingClientRect()
+    if (!drag || !rect) return
+    const vspan   = drag.venster.totMs - drag.venster.vanMs
+    const deltaMs = ((e.clientX - drag.startX) / rect.width) * vspan
+    const snapped = Math.round(deltaMs / SNAP_MS) * SNAP_MS
+    // Binnen het (bevroren) venster houden zodat de balk zichtbaar blijft.
+    const maxStart = Math.max(drag.venster.vanMs, drag.venster.totMs - drag.durMs)
+    const newStart = Math.max(drag.venster.vanMs, Math.min(drag.origStartMs + snapped, maxStart))
+    zetDraft(drag.id, new Date(newStart), new Date(newStart + drag.durMs))
+  }
+
+  function barPointerUp() {
+    if (!dragRef.current) return
+    dragRef.current = null
+    setSleeptId(null)
+    setVastVenster(null)
+  }
+
+  // Context: niet-cluster werk-taken die in het venster vallen (om per ongeluk
+  // erbovenop slepen zichtbaar te maken).
+  const contextWerk = draftEntries.filter(
+    e => !clusterIds.has(e.id)
+      && parseISO(e.eind_dt).getTime() > venster.vanMs
+      && parseISO(e.start_dt).getTime() < venster.totMs,
+  )
 
   // ─── Opslaan ────────────────────────────────────────────────────────────────
 
@@ -301,7 +238,7 @@ export default function ConflictOplosDialog({
         background: 'var(--bg-elev)',
         border: '1px solid var(--border)',
         borderRadius: 12,
-        width: 'min(620px, calc(100vw - 32px))',
+        width: 'min(640px, calc(100vw - 32px))',
         maxHeight: '90vh',
         overflowY: 'auto',
         boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
@@ -334,12 +271,13 @@ export default function ConflictOplosDialog({
         </div>
 
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Mini-tijdlijn: Nu vs. Na wijziging */}
+          {/* Sleepbare tijdlijn */}
           <div>
-            <label style={labelStyle}>Voorbeeld</label>
+            <label style={labelStyle}>Sleep een balk om de overlap op te heffen</label>
+
             {/* Dag-as */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              <span style={{ width: 78, flexShrink: 0 }} />
+            <div style={{ display: 'flex', marginBottom: 2 }}>
+              <span style={{ width: LABEL_W, flexShrink: 0 }} />
               <div style={{ position: 'relative', flex: 1, height: 14 }}>
                 {dagenVenster.map((d, i) => (
                   i % labelElke === 0 ? (
@@ -353,10 +291,138 @@ export default function ConflictOplosDialog({
                 ))}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Strip label="Nu"            lijst={entriesRij}   segs={conflicten.filter(raaktCluster)} />
-              <Strip label="Na wijziging"  lijst={draftEntries} segs={resterend} />
+
+            <div style={{ display: 'flex' }}>
+              {/* Naamkolom */}
+              <div style={{ width: LABEL_W, flexShrink: 0 }}>
+                {cluster.map((e, i) => (
+                  <div key={e.id} title={titelVan(e)} style={{
+                    height: LANE_H, display: 'flex', alignItems: 'center', gap: 6,
+                    borderBottom: i < cluster.length - 1 ? '1px solid var(--border)' : 'none',
+                    paddingRight: 6,
+                  }}>
+                    <div style={{ width: 9, height: 9, borderRadius: 2, background: kleurVan(e), flexShrink: 0 }} />
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, color: 'var(--fg)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {korteNaam(e)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tijdlijn met sleepbare balken */}
+              <div
+                ref={stripRef}
+                style={{
+                  position: 'relative', flex: 1, height: cluster.length * LANE_H,
+                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
+                  overflow: 'hidden', touchAction: 'none',
+                }}
+              >
+                {/* Dag-achtergrond: buiten rooster grijs, dag-scheidingslijnen */}
+                {dagenVenster.map((d, i) => (
+                  <div key={`dag-${i}`} style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: `${pct(d.getTime())}%`, width: `${(DAG_MS / spanMs) * 100}%`,
+                    background: buitenRooster(d, roosters) ? 'rgba(0,0,0,0.06)' : 'transparent',
+                    borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                    zIndex: 0,
+                  }} />
+                ))}
+
+                {/* Blok-periodes (verlof/feestdag/ATV) */}
+                {blokken.filter(b => b.s < venster.totMs && b.e > venster.vanMs).map((b, i) => (
+                  <div key={`blok-${i}`} title={b.label} style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: `${pct(Math.max(b.s, venster.vanMs))}%`,
+                    width: `${pct(Math.min(b.e, venster.totMs)) - pct(Math.max(b.s, venster.vanMs))}%`,
+                    background: 'rgba(248,113,113,0.18)', zIndex: 1,
+                  }} />
+                ))}
+
+                {/* Context: niet-cluster werk als lichte band, over de volle hoogte */}
+                {contextWerk.map(e => {
+                  const s = parseISO(e.start_dt).getTime()
+                  const en = parseISO(e.eind_dt).getTime()
+                  const l = pct(Math.max(s, venster.vanMs))
+                  const w = Math.max(0.5, pct(Math.min(en, venster.totMs)) - l)
+                  return (
+                    <div key={`ctx-${e.id}`} title={`${titelVan(e)} (andere planning)`} style={{
+                      position: 'absolute', top: 0, bottom: 0, left: `${l}%`, width: `${w}%`,
+                      background: 'rgba(100,116,139,0.16)',
+                      borderLeft: '1px dashed rgba(100,116,139,0.5)',
+                      borderRight: '1px dashed rgba(100,116,139,0.5)',
+                      zIndex: 1,
+                    }} />
+                  )
+                })}
+
+                {/* Baan-scheidingslijnen */}
+                {cluster.slice(1).map((_, i) => (
+                  <div key={`lane-${i}`} style={{
+                    position: 'absolute', left: 0, right: 0, top: (i + 1) * LANE_H,
+                    height: 1, background: 'var(--border)', zIndex: 2,
+                  }} />
+                ))}
+
+                {/* Resterende conflicten — rode band over de volle hoogte */}
+                {resterend.filter(c => c.s < venster.totMs && c.e > venster.vanMs).map((c, i) => (
+                  <div key={`seg-${i}`} title="Overlap" style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: `${pct(Math.max(c.s, venster.vanMs))}%`,
+                    width: `${Math.max(0.6, pct(Math.min(c.e, venster.totMs)) - pct(Math.max(c.s, venster.vanMs)))}%`,
+                    background: 'rgba(239,68,68,0.20)',
+                    borderLeft: '1px solid rgba(239,68,68,0.75)',
+                    borderRight: '1px solid rgba(239,68,68,0.75)',
+                    boxShadow: '0 0 7px 1px rgba(239,68,68,0.45)',
+                    pointerEvents: 'none', zIndex: 3,
+                  }} />
+                ))}
+
+                {/* Sleepbare cluster-balken, elk in eigen baan */}
+                {cluster.map((e, i) => {
+                  const d  = draftVan(e.id)
+                  const s  = parseISO(d.start_dt).getTime()
+                  const en = parseISO(d.eind_dt).getTime()
+                  const l  = pct(Math.max(s, venster.vanMs))
+                  const w  = Math.max(1.2, pct(Math.min(en, venster.totMs)) - l)
+                  const actief = sleeptId === e.id
+                  return (
+                    <div
+                      key={`bar-${e.id}`}
+                      onPointerDown={ev => barPointerDown(ev, e)}
+                      onPointerMove={barPointerMove}
+                      onPointerUp={barPointerUp}
+                      title={`${titelVan(e)} · ${fmt(s)} – ${fmt(en)}\nSleep om te verschuiven`}
+                      style={{
+                        position: 'absolute',
+                        top: i * LANE_H + 6, height: LANE_H - 12,
+                        left: `${l}%`, width: `${w}%`,
+                        borderRadius: 5, background: kleurVan(e),
+                        boxShadow: actief ? '0 4px 14px rgba(0,0,0,0.35)' : '0 1px 2px rgba(0,0,0,0.15)',
+                        cursor: actief ? 'grabbing' : 'grab',
+                        display: 'flex', alignItems: 'center', gap: 2,
+                        paddingLeft: 4, paddingRight: 4, overflow: 'hidden',
+                        userSelect: 'none', touchAction: 'none',
+                        zIndex: actief ? 6 : 5,
+                        outline: actief ? '2px solid rgba(255,255,255,0.8)' : 'none',
+                      }}
+                    >
+                      <GripVertical size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />
+                      <span style={{
+                        fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'white',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {format(s, 'HH:mm', { locale: nl })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
+
             {/* Statusregel */}
             <div style={{
               marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
@@ -369,45 +435,7 @@ export default function ConflictOplosDialog({
             </div>
           </div>
 
-          {/* Snelle oplossingen */}
-          {!opgelost && (
-            <div>
-              <label style={labelStyle}>Snelle oplossingen</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {voorstellen.map(v => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    disabled={!v.doel}
-                    onClick={() => v.doel && zetDraft(v.moverId, v.doel.start, v.doel.eind)}
-                    className="eva-btn-ghost"
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                      border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px',
-                      textAlign: 'left', cursor: v.doel ? 'pointer' : 'not-allowed',
-                      opacity: v.doel ? 1 : 0.55,
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 12, fontWeight: 600, color: 'var(--fg)', minWidth: 0,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {v.label}
-                    </span>
-                    <span style={{
-                      fontSize: 10, color: 'var(--fg-muted)', flexShrink: 0,
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                    }}>
-                      <ArrowRight size={11} />
-                      {v.doel ? fmtKort(v.doel.start) : 'geen vrij moment gevonden'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Handmatig verschuiven per planitem */}
+          {/* Handmatig verschuiven per planitem — precieze tijden en grote sprongen */}
           <div>
             <label style={labelStyle}>Handmatig verschuiven</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
