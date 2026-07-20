@@ -90,6 +90,18 @@ type Props<T extends { id: string }> = {
     /** Begin uitgeklapt (default false = ingeklapt). */
     standaardOpen?: boolean
   }
+  /** Tekst op één regel houden: te lange celinhoud wordt afgekapt met een ellipsis. */
+  eenregelig?: boolean
+  /**
+   * Optioneel: vaste afvink-kolom links (buiten het kolombeheer en de layouts om).
+   * 'open' = leeg rondje (klikbaar), 'af' = groen vinkje (klikbaar), 'verborgen' = lege cel.
+   */
+  afvinkKolom?: {
+    status: (item: T) => 'open' | 'af' | 'verborgen'
+    onKlik: (item: T) => void
+    /** Bezig-indicator: rij-id waarvoor een wijziging loopt (knop tijdelijk uit). */
+    bezigId?: string | null
+  }
 }
 
 /** Interne kolom-id waarop gegroepeerd wordt; altijd verborgen. */
@@ -303,7 +315,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -545,6 +557,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   const kolomAantal =
     columnOrder.filter(k => columnVisibility[k] !== false).length
     + (selecteerbaar ? 1 : 0)
+    + (afvinkKolom ? 1 : 0)
     + (toonRijActie ? 1 : 0)
 
   const hasFilters = kolommen.some(k => k.filterType)
@@ -605,6 +618,7 @@ export default function OverzichtTabel<T extends { id: string }>({
     fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)',
     padding: dicht ? '7px 12px' : '12px 14px', borderBottom: '1px solid var(--border-soft)',
     verticalAlign: 'middle',
+    ...(eenregelig ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : {}),
   }
 
   // ── Pagination helpers ─────────────────────────────────────────────────────
@@ -882,6 +896,7 @@ export default function OverzichtTabel<T extends { id: string }>({
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>
                   {selecteerbaar && <col style={{ width: 44 }} />}
+                  {afvinkKolom && <col style={{ width: 40 }} />}
                   {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select' && h.id !== GROEP_KOLOM).map(header => {
                     if (columnVisibility[header.id] === false) return null
                     return <col key={header.id} style={{ width: header.getSize() }} />
@@ -900,6 +915,9 @@ export default function OverzichtTabel<T extends { id: string }>({
                         />
                       </th>
                     )}
+
+                    {/* Afvink-kolom header */}
+                    {afvinkKolom && <th style={{ ...thStyle, width: 40 }} />}
 
                     {/* Data column headers */}
                     {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
@@ -936,6 +954,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                   {hasFilters && (
                     <tr>
                       {selecteerbaar && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
+                      {afvinkKolom && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
                       {table.getHeaderGroups()[0]?.headers.filter(h => h.id !== '__select').map(header => {
                         if (columnVisibility[header.id] === false) return null
                         const kol = kolommen.find(k => k.key === header.id)
@@ -1015,6 +1034,38 @@ export default function OverzichtTabel<T extends { id: string }>({
                             <Checkbox checked={isSelected} onChange={() => row.toggleSelected()} />
                           </td>
                         )}
+
+                        {/* Afvink-cel */}
+                        {afvinkKolom && (() => {
+                          const st = afvinkKolom.status(row.original)
+                          const bezig = afvinkKolom.bezigId != null && afvinkKolom.bezigId === row.original.id
+                          return (
+                            <td style={{ ...tdStyle, width: 40, padding: dicht ? '5px 10px' : '10px 12px' }}>
+                              {st !== 'verborgen' && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); if (!bezig) afvinkKolom.onKlik(row.original) }}
+                                  title={st === 'af' ? 'Heropenen' : 'Afvinken'}
+                                  aria-label={st === 'af' ? 'Taak heropenen' : 'Taak afvinken'}
+                                  disabled={bezig}
+                                  style={{
+                                    width: 18, height: 18, borderRadius: '50%', padding: 0,
+                                    border: `1.5px solid ${st === 'af' ? '#16a34a' : 'var(--border)'}`,
+                                    background: st === 'af' ? '#16a34a' : 'white',
+                                    display: 'grid', placeItems: 'center',
+                                    cursor: bezig ? 'wait' : 'pointer',
+                                    opacity: bezig ? 0.5 : 1,
+                                    transition: 'background 100ms, border-color 100ms',
+                                  }}
+                                  className="tbl-afvink"
+                                >
+                                  {st === 'af' && (
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                  )}
+                                </button>
+                              )}
+                            </td>
+                          )
+                        })()}
 
                         {/* Data cells */}
                         {row.getVisibleCells().filter(c => c.column.id !== '__select').map(cell => {
@@ -1104,6 +1155,7 @@ export default function OverzichtTabel<T extends { id: string }>({
       </div>
 
       <style>{`
+        .tbl-afvink:hover:not(:disabled) { border-color: #16a34a !important; }
         tr.overzicht-groep { transition: background 80ms ease; }
         tr.overzicht-groep:hover td { background: var(--bg-active, #eef2f5) !important; }
         tr.overzicht-rij { transition: background 80ms ease; }

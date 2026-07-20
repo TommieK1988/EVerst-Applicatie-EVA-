@@ -1,18 +1,22 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
+import toast from 'react-hot-toast'
 import { AlertTriangle } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import type { TaakRij } from '@/lib/taken/services/taken'
-import type { TaakMetDetails } from '@/lib/taken/supabase/database.types'
+import type { TaakMetDetails, TaskStatus } from '@/lib/taken/supabase/database.types'
 import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
-import { haalTaakVoorPaneel } from '@/app/(platform)/taken/actions/taken'
+import { haalTaakVoorPaneel, updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import TaakDetailPanel from './TaakDetailPanel'
+
+/** Beoordeel-taken lopen via de goedkeuringsflow en zijn niet handmatig af te vinken. */
+const BEOORDEEL_TITELS = new Set<string>(Object.values(BEOORDEEL_TAAK_TITEL))
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   open:            { label: 'Open',           bg: '#eff6ff', color: '#1d4ed8' },
@@ -111,6 +115,26 @@ export default function TakenActieveDossiers({
     }
   }
 
+  // Afvinken direct in de tabel (gereed ↔ open).
+  const [, startAfvink] = useTransition()
+  const [afvinkBezigId, setAfvinkBezigId] = useState<string | null>(null)
+
+  function toggleAfvink(r: TaakRij) {
+    const nieuw: TaskStatus = r.status === 'gereed' ? 'open' : 'gereed'
+    setAfvinkBezigId(r.id)
+    startAfvink(async () => {
+      try {
+        await updateTaakStatus(r.id, nieuw)
+        toast.success(nieuw === 'gereed' ? 'Taak afgerond' : 'Taak heropend')
+        router.refresh()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Afvinken mislukt')
+      } finally {
+        setAfvinkBezigId(null)
+      }
+    })
+  }
+
   // ── Slicer-definities (opties afgeleid uit de data) ──────────────
   const slicers = useMemo<SlicerDef[]>(() => {
     const statussen = [...new Set(data.map(d => d.status))]
@@ -177,13 +201,22 @@ export default function TakenActieveDossiers({
   }
 
   // ── Kolommen ─────────────────────────────────────────────────────
+  // Celknoppen breken lange tekst af met een ellipsis zodat de rij één regel blijft.
+  const celKnop: React.CSSProperties = {
+    background: 'none', border: 0, padding: 0, cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 'inherit', textAlign: 'left',
+    display: 'block', maxWidth: '100%',
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  }
+
   const kolommen = useMemo<KolomDefinitie<TaakRij>[]>(() => [
     { key: 'dossiernummer', label: 'Dossier', vast: true, breedte: 110,
       sorteerWaarde: r => r.dossiernummer ?? '',
       render: r => (
         <button
           onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
-          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, fontFamily: 'inherit', fontSize: 'inherit' }}
+          title={r.dossiernummer ?? undefined}
+          style={{ ...celKnop, color: 'var(--accent)', fontWeight: 600 }}
         >
           {r.dossiernummer ?? '—'}
         </button>
@@ -193,7 +226,8 @@ export default function TakenActieveDossiers({
       render: r => (
         <button
           onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
-          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg)', textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit' }}
+          title={r.dossier_titel}
+          style={{ ...celKnop, color: 'var(--fg)' }}
         >
           {r.dossier_titel}
         </button>
@@ -204,7 +238,8 @@ export default function TakenActieveDossiers({
         <button
           onClick={e => { e.stopPropagation(); onTaakKlik(r) }}
           disabled={paneelBezig === r.id}
-          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: 'var(--fg)', fontWeight: 500, textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', opacity: paneelBezig === r.id ? 0.5 : 1 }}
+          title={r.titel}
+          style={{ ...celKnop, color: 'var(--fg)', fontWeight: 500, opacity: paneelBezig === r.id ? 0.5 : 1 }}
         >
           {r.titel}
         </button>
@@ -329,6 +364,17 @@ export default function TakenActieveDossiers({
         beginSortering={beginSortering}
         selecteerbaar={false}
         toonRijActie={false}
+        dicht
+        eenregelig
+        afvinkKolom={{
+          status: r =>
+            BEOORDEEL_TITELS.has(r.titel) ? 'verborgen'
+            : r.status === 'gereed' ? 'af'
+            : r.status === 'vervallen' ? 'verborgen'
+            : 'open',
+          onKlik: toggleAfvink,
+          bezigId: afvinkBezigId,
+        }}
         groepering={{
           sleutel: r => r.dossier_id,
           kop: groepKop,
