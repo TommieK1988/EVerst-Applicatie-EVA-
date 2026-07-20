@@ -975,14 +975,6 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
             </div>
             <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 1 }}>
               {isOA && onderaannemer ? onderaannemer.naam : uursoort?.naam ?? ''}
-              {activiteit.geschatte_uren != null ? ` · ${activiteit.geschatte_uren}u geschat` : ''}
-              {(() => {
-                const geplUren = items.reduce((s, i) => s + (i.uren ?? 0), 0)
-                if (geplUren === 0) return null
-                return <span style={{ color: geplUren > (activiteit.geschatte_uren ?? Infinity) ? '#e67e22' : 'var(--accent)' }}>
-                  {` · ${Math.round(geplUren * 10) / 10}u gepland`}
-                </span>
-              })()}
             </div>
           </div>
           <div style={{ width: 36, flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--fg-muted)', marginRight: 8 }}>{duurDagen != null ? `${duurDagen}d` : ''}</div>
