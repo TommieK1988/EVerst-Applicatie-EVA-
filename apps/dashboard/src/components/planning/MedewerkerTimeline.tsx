@@ -31,6 +31,11 @@ import {
 } from './layout/index'
 import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
+import ConflictOplosDialog from './ConflictOplosDialog'
+import {
+  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster,
+  type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
+} from './conflict'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,8 +43,6 @@ const ITEM_H  = 28
 const ROW_PAD = 6
 /** Vaste rijhoogte — taken worden niet meer gestapeld in lanes (één strook). */
 const RIJ_VAST = ROW_PAD * 2 + ITEM_H
-
-const DAG_MS = 86_400_000
 
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
 
@@ -72,60 +75,6 @@ const SORT_OPTIES: { key: SortKey; label: string }[] = [
   { key: 'functie',  label: 'Functie' },
   { key: 'ploeg',    label: 'Ploeg' },
 ]
-
-// ─── Conflict-detectie (op echte tijdstippen) ───────────────────────────────────
-
-type Interval = { s: number; e: number } // ms-bereik [start, eind)
-
-type EntryMetDossier = PlanningItemVerrijkt & { dossier_id?: string }
-
-type WerkInterval = Interval & { entry: EntryMetDossier }
-type BlokInterval = Interval & { label: string }
-
-/** Conflictsegment inclusief de bron: welke planitems overlappen, of welk blok geraakt wordt. */
-export type ConflictDetail = Interval & (
-  | { soort: 'overlap'; a: EntryMetDossier; b: EntryMetDossier }
-  | { soort: 'blok';    a: EntryMetDossier; blokLabel: string }
-)
-
-/**
- * Conflictsegmenten op basis van werkelijke tijdstippen, los van de gerenderde
- * balkbreedte: (a) waar twee werk-taken in tijd overlappen, en (b) waar werk binnen
- * een blok-periode valt (verlof/afwezigheid/feestdag/ATV). Elk segment houdt bij
- * wát er conflicteert, zodat de conflict-popup dat kan tonen.
- */
-function berekenConflicten(work: WerkInterval[], blokken: BlokInterval[]): ConflictDetail[] {
-  const segs: ConflictDetail[] = []
-  const sorted = [...work].sort((a, b) => a.s - b.s)
-  for (let i = 0; i < sorted.length; i++) {
-    for (let j = i + 1; j < sorted.length; j++) {
-      if (sorted[j].s >= sorted[i].e) break
-      segs.push({
-        s: Math.max(sorted[i].s, sorted[j].s),
-        e: Math.min(sorted[i].e, sorted[j].e),
-        soort: 'overlap', a: sorted[i].entry, b: sorted[j].entry,
-      })
-    }
-  }
-  for (const w of work) {
-    for (const b of blokken) {
-      const s = Math.max(w.s, b.s)
-      const e = Math.min(w.e, b.e)
-      if (s < e) segs.push({ s, e, soort: 'blok', a: w.entry, blokLabel: b.label })
-    }
-  }
-  return segs
-}
-
-function afwezigheidInterval(a: MedewerkerAfwezigheid): Interval {
-  if (a.start_tijd && a.eind_tijd) {
-    return {
-      s: new Date(`${a.start_datum}T${a.start_tijd}`).getTime(),
-      e: new Date(`${a.eind_datum}T${a.eind_tijd}`).getTime(),
-    }
-  }
-  return { s: parseISO(a.start_datum).getTime(), e: parseISO(a.eind_datum).getTime() + DAG_MS }
-}
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -338,12 +287,13 @@ function PlanningItemEditDialog({
 // ─── ConflictDialog ───────────────────────────────────────────────────────────
 
 function ConflictDialog({
-  medewerker, conflicten, dossierMap, onClose,
+  medewerker, conflicten, dossierMap, onClose, onOplossen,
 }: {
   medewerker: Medewerker
   conflicten: ConflictDetail[]
   dossierMap: Record<string, string>
   onClose:    () => void
+  onOplossen: (conflict: ConflictDetail) => void
 }) {
   const titelVan = (e: EntryMetDossier) => {
     const dossier = dossierMap[e.dossier_id ?? ''] ?? 'Onbekend dossier'
@@ -393,8 +343,18 @@ function ConflictDialog({
               background: 'rgba(239,68,68,0.06)',
               borderRadius: 8, padding: '10px 12px',
             }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 4 }}>
-                {fmt(c.s)} – {fmt(c.e)}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c' }}>
+                  {fmt(c.s)} – {fmt(c.e)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOplossen(c)}
+                  className="eva-btn-ghost"
+                  style={{ padding: '2px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}
+                >
+                  Oplossen →
+                </button>
               </div>
               <div style={{ fontSize: 12, color: 'var(--fg)', lineHeight: 1.5 }}>
                 {c.soort === 'overlap' ? (
@@ -945,7 +905,7 @@ function TimelineRij({
   medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
   overCellId, dossierMap, projectleiders,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
-  onOpenDossier, onStartKopie, onCelKlik, kopieerModus,
+  onOpenDossier, onStartKopie, onCelKlik, onConflictKlik, kopieerModus,
 }: {
   medewerker:        Medewerker
   top:               number
@@ -966,22 +926,11 @@ function TimelineRij({
   onOpenDossier:     (entry: EntryMetDossier) => void
   onStartKopie:      (entry: EntryMetDossier) => void
   onCelKlik:         (medewerker_id: string, datum: string) => void
+  onConflictKlik:    (conflict: ConflictDetail) => void
   kopieerModus:      boolean
 }) {
   const { ppd, totalW, xVoor, breedteVoor } = layout
   const dagLenW = totalW
-
-  function buitenRooster(dag: Date): boolean {
-    // Lokale datum — dag.toISOString() zou vóór 01:00/02:00 NL de vórige dag geven (UTC).
-    const iso    = format(dag, 'yyyy-MM-dd')
-    const dagNum = dag.getDay() === 0 ? 7 : dag.getDay()
-    const actief = roosters.find(r => {
-      const tot = r.geldig_tot ?? '9999-12-31'
-      return iso >= r.geldig_vanaf && iso <= tot
-    })
-    if (!actief) return isWeekend(dag)
-    return !(actief.werkdagen ?? []).includes(dagNum)
-  }
 
   function afwezigheidOpDag(dag: Date): MedewerkerAfwezigheid | undefined {
     const iso = format(dag, 'yyyy-MM-dd')
@@ -995,7 +944,7 @@ function TimelineRij({
         // Lokale datum: de cel die visueel op dag X ligt moet ook datum X dragen
         // (toISOString() is UTC en gaf de vorige dag → verlof-shading 1 dag verschoven).
         const iso    = format(dag, 'yyyy-MM-dd')
-        const buiten = buitenRooster(dag)
+        const buiten = buitenRooster(dag, roosters)
         const afwez  = afwezigheidOpDag(dag)
         const feest  = feestdagenDagen.has(iso)
         const atv    = atvDagen.has(iso)
@@ -1083,7 +1032,8 @@ function TimelineRij({
         return (
           <div
             key={`conflict-${i}`}
-            title="Dubbel ingepland / conflict"
+            title="Dubbel ingepland — klik om op te lossen"
+            onClick={e => { e.stopPropagation(); onConflictKlik(seg) }}
             style={{
               position: 'absolute',
               top: top + 2, height: RIJ_VAST - 4,
@@ -1092,7 +1042,7 @@ function TimelineRij({
               background: 'rgba(239,68,68,0.22)',
               border: '1px solid rgba(239,68,68,0.75)',
               boxShadow: '0 0 7px 1px rgba(239,68,68,0.55)',
-              pointerEvents: 'none', zIndex: 7,
+              cursor: 'pointer', zIndex: 7,
             }}
           />
         )
@@ -1139,6 +1089,7 @@ export default function MedewerkerTimeline({
   const [nieuwItem,     setNieuwItem]     = useState<{ medewerker_id: string; datum: string } | null>(null)
   const [kopieerBron,   setKopieerBron]   = useState<EntryMetDossier | null>(null)
   const [conflictInfo,  setConflictInfo]  = useState<{ medewerker: Medewerker; conflicten: ConflictDetail[] } | null>(null)
+  const [oplosConflict, setOplosConflict] = useState<{ medewerkerId: string; conflict: ConflictDetail } | null>(null)
 
   const [selAfdelingen, setSelAfdelingen] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortKey>('voornaam')
@@ -1278,7 +1229,7 @@ export default function MedewerkerTimeline({
         ...myAfw.map(a => ({ ...afwezigheidInterval(a), label: medewerkerAfwezigheidLabels[a.type].toLowerCase() })),
       ]
       const conflicten = berekenConflicten(work, blokken)
-      const row = { medewerker: m, top: accTop, entries: myEntries, conflicten, heeftConflict: conflicten.length > 0 }
+      const row = { medewerker: m, top: accTop, entries: myEntries, conflicten, blokken, heeftConflict: conflicten.length > 0 }
       accTop += RIJ_VAST
       return row
     })
@@ -1483,6 +1434,7 @@ export default function MedewerkerTimeline({
           onOpenDossier={openDossier}
           onStartKopie={entry => setKopieerBron(entry)}
           onCelKlik={handleCelKlik}
+          onConflictKlik={conflict => setOplosConflict({ medewerkerId: m.id, conflict })}
           kopieerModus={!!kopieerBron}
         />
       ))}
@@ -1507,7 +1459,7 @@ export default function MedewerkerTimeline({
       ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <AlertTriangle size={12} color="#ef4444" />
-        <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>Conflict — klik op het icoon voor details</span>
+        <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>Conflict — klik op de rode gloed om op te lossen</span>
       </div>
     </div>
   )
@@ -1704,8 +1656,38 @@ export default function MedewerkerTimeline({
           conflicten={conflictInfo.conflicten}
           dossierMap={dossierMap}
           onClose={() => setConflictInfo(null)}
+          onOplossen={conflict => {
+            setOplosConflict({ medewerkerId: conflictInfo.medewerker.id, conflict })
+            setConflictInfo(null)
+          }}
         />
       )}
+
+      {oplosConflict && (() => {
+        const row = medewerkerLayout.find(r => r.medewerker.id === oplosConflict.medewerkerId)
+        if (!row) return null
+        return (
+          <ConflictOplosDialog
+            medewerker={row.medewerker}
+            conflict={oplosConflict.conflict}
+            conflicten={row.conflicten}
+            entriesRij={row.entries}
+            blokken={row.blokken}
+            roosters={roosters.filter(r => r.medewerker_id === row.medewerker.id)}
+            dossierMap={dossierMap}
+            projectleiders={projectleiders}
+            zichtbaar={{ van: vs.getTime(), tot: ve.getTime() + DAG_MS }}
+            onApplied={wijzigingen => {
+              setEntries(prev => prev.map(e => {
+                const w = wijzigingen.find(x => x.id === e.id)
+                return w ? { ...e, start_dt: w.start_dt, eind_dt: w.eind_dt } : e
+              }))
+              startTransition(() => router.refresh())
+            }}
+            onClose={() => setOplosConflict(null)}
+          />
+        )
+      })()}
     </DndContext>
   )
 }
