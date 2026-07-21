@@ -151,6 +151,10 @@ export default function OfferteAanmakenModal({
             calculatieregel_id: regel.id,
             opmerking: regel.werkomschrijving ?? null,
             is_stelpost: regel.is_stelpost ?? false,
+            // Zonder eigen keuze het standaardtarief van de calculatie (leeg → server pakt 21%).
+            btw_pct: regel.btw_pct ?? actiefScenario?.btw_pct_default ?? null,
+            // Alleen de koppeling; de tekst bevriest de server op dít moment.
+            schilderbehandeling_id: regel.schilderbehandeling_id ?? null,
             schilderbehandeling: regel.schilderbehandeling ?? null,
             werkomschrijving_afbeeldingen: regel.werkomschrijving_afbeeldingen ?? null,
           })

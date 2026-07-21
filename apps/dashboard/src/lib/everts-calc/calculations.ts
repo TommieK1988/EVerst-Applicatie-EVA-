@@ -104,6 +104,24 @@ export function formatGetal(getal: number, decimalen = 2): string {
   }).format(getal)
 }
 
+/**
+ * Leest een met de hand getypt getal, in Nederlandse én Engelse notatie.
+ *
+ * Staan er punt én komma in ("1.234,56"), dan is de punt het duizendteken en de
+ * komma het decimaalteken. Staat er maar één van beide ("1234,5" of "1234.5"),
+ * dan is dat het decimaalteken — anders zou iemand die gewoon "12.5" typt ineens
+ * 125 krijgen. Onleesbare invoer levert 0 op.
+ */
+export function parseGetal(tekst: string): number {
+  const schoon = tekst.replace(/[\s €]/g, '')
+  if (!schoon) return 0
+  const genormaliseerd = schoon.includes(',') && schoon.includes('.')
+    ? schoon.replace(/\./g, '').replace(',', '.')
+    : schoon.replace(',', '.')
+  const n = parseFloat(genormaliseerd)
+  return Number.isFinite(n) ? n : 0
+}
+
 // ─── Nieuwe calculatiestructuur: berekenlogica ────────────────────────────────
 
 export interface RegelBedragen {

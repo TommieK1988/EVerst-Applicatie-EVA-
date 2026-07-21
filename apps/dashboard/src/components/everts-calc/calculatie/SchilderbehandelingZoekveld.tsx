@@ -7,18 +7,25 @@ import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwer
 
 interface Props {
   behandelingId?: string
+  /** Alleen fallback voor oude regels zonder `behandelingId`: normaal komt de tekst
+   *  live uit de bibliotheek, zodat een wijziging daar direct doorwerkt. */
   behandelingTekst?: string
+  /** Al geladen bibliotheek (het grid haalt hem één keer op); leeg → zelf laden. */
+  bibliotheek?: SchilderBehandeling[]
   onSelecteer: (b: SchilderBehandeling) => void
   onWis: () => void
 }
 
-export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, onSelecteer, onWis }: Props) {
+export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, bibliotheek, onSelecteer, onWis }: Props) {
   const [zoekterm, setZoekterm]     = useState('')
   const [resultaten, setResultaten] = useState<SchilderBehandeling[]>([])
   const [open, setOpen]             = useState(false)
-  const [alle, setAlle]             = useState<SchilderBehandeling[] | null>(null)
+  const [eigenLijst, setEigenLijst] = useState<SchilderBehandeling[] | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const ladenRef = useRef(false)
+
+  // Meegegeven bibliotheek wint; anders zelf (lazy) laden.
+  const alle = (bibliotheek && bibliotheek.length > 0) ? bibliotheek : eigenLijst
 
   // Behandelingen-bibliotheek één keer (lazy) laden, daarna client-side filteren.
   const zorgGeladen = useCallback(async (): Promise<SchilderBehandeling[]> => {
@@ -27,10 +34,10 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
     ladenRef.current = true
     try {
       const lijst = await laadBehandelingen()
-      setAlle(lijst)
+      setEigenLijst(lijst)
       return lijst
     } catch {
-      setAlle([])
+      setEigenLijst([])
       return []
     }
   }, [alle])
@@ -63,6 +70,10 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
   if (behandelingId || behandelingTekst) {
     const gekozen = alle?.find(b => b.id === behandelingId)
     const label = gekozen ? gekozen.naam : 'Behandeling gekozen'
+    // Live uit de bibliotheek; de opgeslagen tekst is enkel fallback voor oude regels.
+    const tekst = gekozen
+      ? (gekozen.uitgebreide_werkomschrijving?.trim() || gekozen.korte_omschrijving?.trim() || gekozen.naam)
+      : behandelingTekst
     return (
       <div className="flex items-start gap-2">
         <PaintBucket className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -80,9 +91,9 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
               <X className="w-3 h-3" />
             </button>
           </div>
-          {behandelingTekst && (
-            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3 whitespace-pre-wrap" title={behandelingTekst}>
-              {behandelingTekst}
+          {tekst && (
+            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3 whitespace-pre-wrap" title={tekst}>
+              {tekst}
             </p>
           )}
         </div>

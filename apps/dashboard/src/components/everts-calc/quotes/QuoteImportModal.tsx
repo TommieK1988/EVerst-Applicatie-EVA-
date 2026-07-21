@@ -28,6 +28,10 @@ interface ImportRegel {
   kostprijs_pe: number
   uren_pe: number
   calculatieregel_id: string
+  is_stelpost?: boolean
+  btw_pct?: number | null
+  schilderbehandeling_id?: string | null
+  schilderbehandeling?: string | null
 }
 
 interface Groep {
@@ -102,6 +106,12 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
             calculatieregel_id: r.id,
             werkomschrijving: r.werkomschrijving ?? '',
             werkomschrijving_afbeeldingen: r.werkomschrijving_afbeeldingen,
+            is_stelpost: r.is_stelpost ?? false,
+            // Zonder eigen keuze het standaardtarief van de calculatie (leeg → server pakt 21%).
+            btw_pct: r.btw_pct ?? scenario?.btw_pct_default ?? null,
+            // Alleen de koppeling; de tekst bevriest de server op dít moment.
+            schilderbehandeling_id: r.schilderbehandeling_id ?? null,
+            schilderbehandeling: r.schilderbehandeling ?? null,
           }
         })
 
@@ -178,6 +188,10 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
             const combined = tekst + (imgs ? (tekst ? '\n' : '') + imgs : '')
             return combined || null
           })(),
+          is_stelpost: r.is_stelpost ?? false,
+          btw_pct: r.btw_pct ?? null,
+          schilderbehandeling_id: r.schilderbehandeling_id ?? null,
+          schilderbehandeling: r.schilderbehandeling ?? null,
         }))
       )
       onClose()

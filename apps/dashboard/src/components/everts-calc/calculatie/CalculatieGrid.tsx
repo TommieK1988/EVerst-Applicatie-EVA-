@@ -15,14 +15,21 @@ import {
 import {
   berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP,
   berekenGroepUren, berekenGroepMaterieel, berekenGroepOA,
-  berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal,
+  berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal, parseGetal,
 } from '@/lib/everts-calc/calculations'
+import {
+  platteGroepen, subtreeIds, subtreeHoogte, projecteer, verplaatsGroep, MAX_NIVEAU,
+  type Projectie,
+} from '@/lib/everts-calc/groep-boom'
 import { nieuweId, cn } from '@/lib/everts-calc/utils'
 import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
 import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
+import { laadBehandelingen } from '@/app/(platform)/everts-calc/actions/schilderwerk'
+import { behandelingSuffix as maakBehandelingSuffix } from '@/lib/everts-calc/behandeling-label'
+import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import { slaRegelOpAlsRecept } from '@/app/(platform)/everts-calc/actions/bibliotheek'
 import { haalHuidigeGebruikerId } from '@/app/(platform)/everts-calc/actions/layouts-calc'
 import { laadLayouts, slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
@@ -93,6 +100,9 @@ const COL_DEFS: ColDef[] = [
   { id: 'acties',    label: '',         dw: 28,  minW: 28, align: 'center' },
 ]
 
+/** Inspringing per groepsniveau (px). Ook de sleepstap: 16 px naar links/rechts = één niveau. */
+const NIVEAU_INSPRING = 16
+
 const COL_MAP     = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Record<ColId, ColDef>
 const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
 const DEFAULT_WIDTHS = Object.fromEntries(COL_DEFS.map(c => [c.id, c.dw])) as Record<ColId, number>
@@ -123,6 +133,45 @@ function layoutNaarState(cfg: KolomConfig[]): { colOrder: ColId[]; hiddenCols: S
     }
   }
   return { colOrder, hiddenCols, colWidths }
+}
+
+// ─── GetalInput ───────────────────────────────────────────────────────────────
+
+/**
+ * Numeriek invoerveld met Nederlandse opmaak: buiten focus zie je `12.345,67`,
+ * bij het bewerken het kale getal zodat typen niet vecht met de scheidingstekens.
+ *
+ * Bewust `type="text"` — een `<input type="number">` kan geen duizendteken tonen.
+ * De parser accepteert zowel komma als punt als decimaalteken (zie `parseGetal`).
+ */
+function GetalInput({
+  waarde, onChange, decimalen = 2, className, title, onDoubleClick,
+}: {
+  waarde: number
+  onChange: (v: number) => void
+  decimalen?: number
+  className?: string
+  title?: string
+  onDoubleClick?: (e: React.MouseEvent) => void
+}) {
+  const [edit, setEdit] = useState<string | null>(null)
+  const toon = edit !== null
+    ? edit
+    : waarde === 0 ? '' : formatGetal(waarde, decimalen)
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={toon}
+      className={className}
+      title={title}
+      onDoubleClick={onDoubleClick}
+      onFocus={() => setEdit(waarde === 0 ? '' : String(+waarde.toFixed(decimalen)))}
+      onChange={e => { setEdit(e.target.value); onChange(parseGetal(e.target.value)) }}
+      onBlur={() => setEdit(null)}
+    />
+  )
 }
 
 // ─── TabelHeader ──────────────────────────────────────────────────────────────
@@ -229,14 +278,14 @@ function ComponentRegelRij({
   const compVpTotaal    = compBedrag * (1 + effectiefOpslag / 100)
   const compVpPe        = regelHoeveelheid > 0 ? compVpTotaal / regelHoeveelheid : 0
 
-  const niComp = (val: number, onChange: (v: number) => void, step = '0.01', cls = '') => (
-    <input
-      type="number" step={step} min="0"
-      value={val === 0 ? '' : +val.toFixed(2)}
+  const niComp = (val: number, onChange: (v: number) => void, decimalen = 2, cls = '') => (
+    <GetalInput
+      waarde={val}
+      decimalen={decimalen}
+      onChange={onChange}
       className={`w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
         hover:bg-white hover:border hover:border-slate-200
         focus:bg-white focus:border focus:border-everts/40 focus:outline-none ${cls}`}
-      onChange={e => onChange(parseFloat(e.target.value) || 0)}
     />
   )
 
@@ -307,7 +356,7 @@ function ComponentRegelRij({
       )
       case 'aant': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {niComp(normEdit, v => { setNormEdit(v); deb('norm', () => onWijzig({ norm_hoeveelheid: v })) }, '0.001')}
+          {niComp(normEdit, v => { setNormEdit(v); deb('norm', () => onWijzig({ norm_hoeveelheid: v })) }, 3)}
         </td>
       )
       case 'eenh': return (
@@ -330,7 +379,7 @@ function ComponentRegelRij({
           {comp.type === 'arbeid' && niComp(
             normEdit,
             v => { setNormEdit(v); deb('norm', () => onWijzig({ norm_hoeveelheid: v })) },
-            '0.01', 'text-blue-700'
+            2, 'text-blue-700'
           )}
         </td>
       )
@@ -339,7 +388,7 @@ function ComponentRegelRij({
           {comp.type === 'arbeid' && niComp(
             +(normEdit * 60).toFixed(2),
             v => { const u = +(v / 60).toFixed(4); setNormEdit(u); deb('norm', () => onWijzig({ norm_hoeveelheid: u })) },
-            '0.01', 'text-blue-600'
+            2, 'text-blue-600'
           )}
         </td>
       )
@@ -348,7 +397,7 @@ function ComponentRegelRij({
           {comp.type === 'arbeid' && niComp(
             tariefEdit,
             v => { setTariefEdit(v); deb('tarief', () => onWijzig({ tarief: v })) },
-            '0.01', 'text-blue-700'
+            2, 'text-blue-700'
           )}
         </td>
       )
@@ -364,7 +413,7 @@ function ComponentRegelRij({
           {comp.type === 'materieel' && niComp(
             tariefEdit,
             v => { setTariefEdit(v); deb('tarief', () => onWijzig({ tarief: v })) },
-            '0.01', 'text-red-700'
+            2, 'text-red-700'
           )}
         </td>
       )
@@ -380,7 +429,7 @@ function ComponentRegelRij({
           {comp.type === 'onderaanneming' && niComp(
             tariefEdit,
             v => { setTariefEdit(v); deb('tarief', () => onWijzig({ tarief: v })) },
-            '0.01', 'text-purple-700'
+            2, 'text-purple-700'
           )}
         </td>
       )
@@ -412,13 +461,10 @@ function ComponentRegelRij({
         <td key={id} className={tdBase} style={tdSt}>
           <div className="flex items-center justify-start gap-0.5">
             <input
-              type="number" min="0" max="100" step="0.01"
+              type="text" inputMode="decimal"
               value={comp.opslag_pct !== undefined ? +comp.opslag_pct.toFixed(2) : ''}
               placeholder={regelOpslag.toFixed(2)}
-              onChange={e => {
-                const v = e.target.value === '' ? undefined : parseFloat(e.target.value)
-                onWijzig({ opslag_pct: v !== undefined && isNaN(v) ? undefined : v })
-              }}
+              onChange={e => onWijzig({ opslag_pct: e.target.value === '' ? undefined : parseGetal(e.target.value) })}
               className="w-full text-xs text-right  px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-everts/40 focus:bg-white focus:outline-none text-slate-600 placeholder-slate-300"
             />
             <span className="text-[10px] text-slate-300 flex-shrink-0">%</span>
@@ -430,12 +476,12 @@ function ComponentRegelRij({
           {vpEenhEdit !== null ? (
             <input
               autoFocus
-              type="number" step="0.01" min="0"
+              type="text" inputMode="decimal"
               value={vpEenhEdit}
               onChange={e => {
                 setVpEenhEdit(e.target.value)
-                const v = parseFloat(e.target.value)
-                if (!isNaN(v) && compKpPe > 0) {
+                const v = parseGetal(e.target.value)
+                if (v > 0 && compKpPe > 0) {
                   const pct = +((v / compKpPe - 1) * 100).toFixed(2)
                   onWijzig({ opslag_pct: pct })
                 }
@@ -459,12 +505,12 @@ function ComponentRegelRij({
           {totVpEdit !== null ? (
             <input
               autoFocus
-              type="number" step="0.01" min="0"
+              type="text" inputMode="decimal"
               value={totVpEdit}
               onChange={e => {
                 setTotVpEdit(e.target.value)
-                const v = parseFloat(e.target.value)
-                if (!isNaN(v) && compBedrag > 0) {
+                const v = parseGetal(e.target.value)
+                if (v > 0 && compBedrag > 0) {
                   const pct = +((v / compBedrag - 1) * 100).toFixed(2)
                   onWijzig({ opslag_pct: pct })
                 }
@@ -625,6 +671,8 @@ interface RegelRijProps {
   onVerwijder: () => void
   onHerlaad: () => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
+  /** Bibliotheek van schilderbehandelingen; één keer geladen door het grid. */
+  behandelingen?: SchilderBehandeling[]
   isGeselecteerd?: boolean
   onSelecteer?: (ctrlKey: boolean, shiftKey: boolean) => void
   isDragging?: boolean
@@ -640,7 +688,7 @@ interface RegelRijProps {
 function CalculatieregelRij({
   regel, componenten, diepte, defaultOpslag, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
   onWijzig, onWijzigComponent, onWijzigComponentExtra, onVoegComponentToe, onVerwijderComponent, onVerwijder, onHerlaad,
-  bibliotheekItems,
+  bibliotheekItems, behandelingen = [],
   isGeselecteerd, onSelecteer,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
   collapseSignal, readOnly = false,
@@ -735,7 +783,12 @@ function CalculatieregelRij({
   const [compsUitgeklapt,        setCompsUitgeklapt]        = useState(false)
   useEffect(() => { if (collapseSignal) setCompsUitgeklapt(false) }, [collapseSignal])
   const [opmerkingOpen,          setOpmerkingOpen]          = useState(!!(regel.opmerking))
-  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(!!(regel.schilderbehandeling))
+  const heeftBehandeling = !!(regel.schilderbehandeling_id || regel.schilderbehandeling)
+  const behandelingNaam = regel.schilderbehandeling_id
+    ? behandelingen.find(b => b.id === regel.schilderbehandeling_id)?.naam ?? ''
+    : ''
+  const behandelingSuffix = maakBehandelingSuffix(regel.omschrijving, behandelingNaam)
+  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(heeftBehandeling)
   const [biblOpen,        setBiblOpen]        = useState(false)
   // Lokale edit-state voor totaalbedragen en verkoopprijzen
   const [mtBedragEdit, setMtBedragEdit] = useState<string | null>(null)
@@ -750,15 +803,15 @@ function CalculatieregelRij({
   const isVRR  = regel.is_verrekenbaar ?? false
   const rowCls = regel.gemarkeerd ? 'bg-orange-50 italic' : isVRR ? 'bg-teal-50/40' : ''
 
-  const ni = (val: number, onChange: (v: number) => void, step = '0.01', decimals?: number) => (
-    <input
-      type="number" step={step} min="0"
-      value={val === 0 ? '' : (decimals !== undefined ? +val.toFixed(decimals) : val)}
+  const ni = (val: number, onChange: (v: number) => void, decimalen = 2) => (
+    <GetalInput
+      waarde={val}
+      decimalen={decimalen}
+      onChange={onChange}
       className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
         hover:bg-slate-50 hover:border hover:border-slate-200
         focus:bg-white focus:border focus:border-everts/40 focus:outline-none
         text-slate-700 placeholder-slate-200"
-      onChange={e => onChange(parseFloat(e.target.value) || 0)}
     />
   )
 
@@ -828,6 +881,17 @@ function CalculatieregelRij({
               maxLength={150}
               onChange={e => onWijzig(regel.id, { omschrijving: e.target.value })}
             />
+            {/* Naam van de gekoppelde behandeling, afgeleid uit de bibliotheek — hij
+                staat bewust náást het invoerveld, niet erin, zodat `omschrijving` de
+                eigen tekst blijft. Belandt zo ook in de offerteregel. */}
+            {behandelingSuffix && (
+              <span
+                className="flex-shrink min-w-0 truncate text-xs text-slate-500"
+                title={`Schilderbehandeling: ${behandelingNaam}`}
+              >
+                {behandelingSuffix}
+              </span>
+            )}
             <span
               role="button"
               tabIndex={0}
@@ -863,7 +927,7 @@ function CalculatieregelRij({
             {regel.opmerking && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Heeft interne opmerking" />
             )}
-            {regel.schilderbehandeling && !compsUitgeklapt && (
+            {heeftBehandeling && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Heeft schilderbehandeling" />
             )}
           </div>
@@ -876,17 +940,16 @@ function CalculatieregelRij({
               className="w-full text-xs text-right  font-semibold px-1 py-0.5 block text-teal-600"
               title="Hoeveelheid vastgesteld door meetstaat — pas aan in de meetstaat"
             >
-              {regel.hoeveelheid === 0 ? '—' : regel.hoeveelheid.toFixed(2)}
+              {regel.hoeveelheid === 0 ? '—' : formatGetal(regel.hoeveelheid, 2)}
             </span>
           ) : (
             <>
-              <input
-                type="number" step="0.01" min="0"
-                value={regel.hoeveelheid === 0 ? '' : +regel.hoeveelheid.toFixed(2)}
+              <GetalInput
+                waarde={regel.hoeveelheid}
+                onChange={v => onWijzig(regel.id, { hoeveelheid: v })}
                 className="w-full text-xs text-right  font-semibold px-1 py-0.5 rounded border-0 bg-transparent
                   hover:bg-slate-50 hover:border hover:border-slate-200
                   focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-800"
-                onChange={e => onWijzig(regel.id, { hoeveelheid: parseFloat(e.target.value) || 0 })}
                 onDoubleClick={e => { e.stopPropagation(); setMiniMeetstaat(true) }}
                 title="Dubbelklik om te meten"
               />
@@ -962,7 +1025,7 @@ function CalculatieregelRij({
       case 'tot_uren': return (
         <td key={id} className={`px-2 py-1 text-right ${base}`} style={tdSt}>
           {uren_totaal > 0
-            ? <span className=" text-xs text-blue-700 font-semibold">{formatGetal(uren_totaal, 2)}</span>
+            ? <span className=" text-xs text-blue-700">{formatGetal(uren_totaal, 2)}</span>
             : <span className="text-slate-200">—</span>
           }
         </td>
@@ -984,41 +1047,41 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
             ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe, 2) : ''}</span>
-            : ni(abUren, onUrenChange, '0.01', 2)}
+            : ni(abUren, onUrenChange, 2)}
         </td>
       )
       case 'min_eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
             ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe * 60, 2) : ''}</span>
-            : ni(abMin, onMinChange, '0.01', 2)}
+            : ni(abMin, onMinChange, 2)}
         </td>
       )
       case 'tarief_ab': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
-            : ni(abTarief, onTariefAb, '0.01', 2)}
+            : ni(abTarief, onTariefAb, 2)}
         </td>
       )
-      case 'bedrag_ab': return <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>{ni(arbeid_totaal, onBedragAb, '0.01', 2)}</td>
+      case 'bedrag_ab': return <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>{ni(arbeid_totaal, onBedragAb, 2)}</td>
       case 'prijs_mt':  return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiMt
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
-            : ni(mtPrijs, v => { setMtPrijs(v); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, v)) }, '0.01', 2)}
+            : ni(mtPrijs, v => { setMtPrijs(v); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, v)) }, 2)}
         </td>
       )
       case 'bedrag_mt': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           <input
-            type="number" step="0.01" min="0"
-            value={mtBedragEdit !== null ? mtBedragEdit : (materieel_totaal === 0 ? '' : +materieel_totaal.toFixed(2))}
+            type="text" inputMode="decimal"
+            value={mtBedragEdit !== null ? mtBedragEdit : (materieel_totaal === 0 ? '' : formatGetal(materieel_totaal, 2))}
             onFocus={() => setMtBedragEdit(materieel_totaal === 0 ? '' : String(+materieel_totaal.toFixed(2)))}
             onChange={e => {
               setMtBedragEdit(e.target.value)
-              const v = parseFloat(e.target.value)
-              if (!isNaN(v) && regel.hoeveelheid > 0) {
+              const v = parseGetal(e.target.value)
+              if (v > 0 && regel.hoeveelheid > 0) {
                 const t = +(v / regel.hoeveelheid).toFixed(4)
                 setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, t))
               }
@@ -1032,19 +1095,19 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiOa
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
-            : ni(oaPrijs, v => { setOaPrijs(v); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, v)) }, '0.01', 2)}
+            : ni(oaPrijs, v => { setOaPrijs(v); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, v)) }, 2)}
         </td>
       )
       case 'bedrag_oa': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           <input
-            type="number" step="0.01" min="0"
-            value={oaBedragEdit !== null ? oaBedragEdit : (oa_totaal === 0 ? '' : +oa_totaal.toFixed(2))}
+            type="text" inputMode="decimal"
+            value={oaBedragEdit !== null ? oaBedragEdit : (oa_totaal === 0 ? '' : formatGetal(oa_totaal, 2))}
             onFocus={() => setOaBedragEdit(oa_totaal === 0 ? '' : String(+oa_totaal.toFixed(2)))}
             onChange={e => {
               setOaBedragEdit(e.target.value)
-              const v = parseFloat(e.target.value)
-              if (!isNaN(v) && regel.hoeveelheid > 0) {
+              const v = parseGetal(e.target.value)
+              if (v > 0 && regel.hoeveelheid > 0) {
                 const t = +(v / regel.hoeveelheid).toFixed(4)
                 setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, t))
               }
@@ -1064,14 +1127,14 @@ function CalculatieregelRij({
         <td key={id} className={`px-2 py-1 ${base}`} style={tdSt}>
           <div className="flex items-center justify-start gap-0.5">
             <input
-              type="number" step="0.01" min="0"
+              type="text" inputMode="decimal"
               value={displayOpslag === 0 ? '' : +displayOpslag.toFixed(2)}
               placeholder={defaultOpslag.toFixed(2)}
               className="w-12 text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
                 hover:bg-white hover:border hover:border-slate-200
                 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
               onChange={e => {
-                const v = parseFloat(e.target.value) || 0
+                const v = parseGetal(e.target.value)
                 onWijzig(regel.id, { opslag_pct: v })
                 if (ab) onWijzigComponentExtra(ab.id, { opslag_pct: undefined })
                 if (mt) onWijzigComponentExtra(mt.id, { opslag_pct: undefined })
@@ -1087,12 +1150,12 @@ function CalculatieregelRij({
           {vpEenhEdit !== null ? (
             <input
               autoFocus
-              type="number" step="0.01" min="0"
+              type="text" inputMode="decimal"
               value={vpEenhEdit}
               onChange={e => {
                 setVpEenhEdit(e.target.value)
-                const v = parseFloat(e.target.value)
-                if (!isNaN(v) && kp_pe > 0) {
+                const v = parseGetal(e.target.value)
+                if (v > 0 && kp_pe > 0) {
                   const pct = +((v / kp_pe - 1) * 100).toFixed(2)
                   onWijzig(regel.id, { opslag_pct: pct })
                 }
@@ -1116,12 +1179,12 @@ function CalculatieregelRij({
           {totVpEdit !== null ? (
             <input
               autoFocus
-              type="number" step="0.01" min="0"
+              type="text" inputMode="decimal"
               value={totVpEdit}
               onChange={e => {
                 setTotVpEdit(e.target.value)
-                const v = parseFloat(e.target.value)
-                if (!isNaN(v) && kp_pe > 0 && regel.hoeveelheid > 0) {
+                const v = parseGetal(e.target.value)
+                if (v > 0 && kp_pe > 0 && regel.hoeveelheid > 0) {
                   const vpPe = v / regel.hoeveelheid
                   const pct = +((vpPe / kp_pe - 1) * 100).toFixed(2)
                   onWijzig(regel.id, { opslag_pct: pct })
@@ -1331,7 +1394,7 @@ function CalculatieregelRij({
                 <button
                   onClick={() => setSchilderbehandelingOpen(v => !v)}
                   className={`text-[11px] px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors ${
-                    schilderbehandelingOpen || regel.schilderbehandeling
+                    schilderbehandelingOpen || heeftBehandeling
                       ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
                       : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
                   }`}
@@ -1375,9 +1438,12 @@ function CalculatieregelRij({
                 <SchilderbehandelingZoekveld
                   behandelingId={regel.schilderbehandeling_id}
                   behandelingTekst={regel.schilderbehandeling}
+                  bibliotheek={behandelingen}
+                  // Alleen de koppeling vastleggen — de tekst wordt pas bevroren bij het
+                  // opstellen van de offerte, zodat de calculatie de bibliotheek volgt.
                   onSelecteer={b => onWijzig(regel.id, {
                     schilderbehandeling_id: b.id,
-                    schilderbehandeling: (b.uitgebreide_werkomschrijving?.trim() || b.korte_omschrijving?.trim() || b.naam),
+                    schilderbehandeling: undefined,
                   })}
                   onWis={() => {
                     onWijzig(regel.id, { schilderbehandeling: undefined, schilderbehandeling_id: undefined })
@@ -1429,8 +1495,10 @@ interface GroepSectieProps {
   onVoegRegelToe: (groepId: string) => void
   onVoegSubgroepToe: (groep: Groep) => void
   dragOverGroepId: string | null
+  /** Diepte waarop de gesleepte groep landt — bepaalt de inspringing van de indicatorlijn. */
+  dragIndicatorDiepte: number | null
   sleepRegelId: string | null
-  onDragStart: (groep: Groep) => void
+  onDragStart: (groep: Groep, e: React.DragEvent) => void
   onDragOver: (e: React.DragEvent, groep: Groep) => void
   onDrop: (e: React.DragEvent, doelGroep: Groep) => void
   onDragEnd: () => void
@@ -1438,6 +1506,8 @@ interface GroepSectieProps {
   onRegelDragEnd: () => void
   onRegelVerplaatsNaarPositie: (regelId: string, doelGroepId: string, voorRegelId: string | null) => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
+  /** Bibliotheek van schilderbehandelingen; één keer geladen door het grid. */
+  behandelingen?: SchilderBehandeling[]
   geselecteerdeRegels?: Set<string>
   onSelecteerRegel?: (regelId: string, ctrlKey: boolean, shiftKey: boolean) => void
   collapseSignal?: number
@@ -1450,9 +1520,9 @@ function GroepSectie({
   onKlik, onRegelWijzig, onRegelComponentWijzig, onWijzigComponentExtra,
   onVoegComponentToe, onVerwijderComponent,
   onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onVoegRegelToe, onVoegSubgroepToe,
-  dragOverGroepId, sleepRegelId, onDragStart, onDragOver, onDrop, onDragEnd,
+  dragOverGroepId, dragIndicatorDiepte, sleepRegelId, onDragStart, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
-  bibliotheekItems,
+  bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel,
   collapseSignal, readOnly = false,
 }: GroepSectieProps) {
@@ -1518,12 +1588,22 @@ function GroepSectie({
   const kopBgStijl = kopBgStijlen[diepte] ?? kopBgStijlen[2]
   const kopPadding = diepte === 0 ? 'py-2.5' : 'py-1.5'
   const kopTekst   = diepte === 0 ? 'text-sm font-bold' : diepte === 1 ? 'text-xs font-semibold' : 'text-xs font-medium'
-  const indent     = 4
+  // Zichtbare inspringing per niveau: zonder dat verschil is horizontaal slepen
+  // (een groep een niveau in/uit) niet te richten.
+  const indent     = 4 + diepte * NIVEAU_INSPRING
 
   return (
     <>
       {isDragOver && !sleepRegelId && (
-        <tr><td colSpan={colCount}><div className="h-0.5 bg-everts mx-2 rounded" /></td></tr>
+        <tr>
+          <td colSpan={colCount}>
+            {/* Inspringing van de lijn = het niveau waarop de groep landt. */}
+            <div
+              className="h-0.5 bg-everts mr-2 rounded"
+              style={{ marginLeft: 8 + (dragIndicatorDiepte ?? diepte) * NIVEAU_INSPRING }}
+            />
+          </td>
+        </tr>
       )}
 
       <tr
@@ -1532,7 +1612,7 @@ function GroepSectie({
         className={`border-b cursor-pointer group/kop select-none ${kopStijl} ${isActief ? 'ring-1 ring-inset ring-everts/50' : ''} ${isRegelDropTarget ? 'ring-2 ring-inset ring-blue-400' : ''}`}
         style={kopBgStijl}
         onClick={() => onKlik(groep.id)}
-        onDragStart={() => onDragStart(groep)}
+        onDragStart={e => onDragStart(groep, e)}
         onDragOver={e => onDragOver(e, groep)}
         onDrop={e => onDrop(e, groep)}
         onDragEnd={onDragEnd}
@@ -1666,6 +1746,7 @@ function GroepSectie({
               onVerwijderComponent={onVerwijderComponent}
               onVerwijder={() => onVerwijderRegel(r.id)}
               bibliotheekItems={bibliotheekItems}
+              behandelingen={behandelingen}
               isGeselecteerd={geselecteerdeRegels?.has(r.id)}
               onSelecteer={(ctrl, shift) => onSelecteerRegel?.(r.id, ctrl, shift)}
               isDragging={dragRegelId === r.id}
@@ -1690,13 +1771,14 @@ function GroepSectie({
               onVerwijderRegel={onVerwijderRegel} onVerwijderGroep={onVerwijderGroep}
               onWijzigGroep={onWijzigGroep}
               onVoegRegelToe={onVoegRegelToe} onVoegSubgroepToe={onVoegSubgroepToe}
-              dragOverGroepId={dragOverGroepId} sleepRegelId={sleepRegelId}
+              dragOverGroepId={dragOverGroepId} dragIndicatorDiepte={dragIndicatorDiepte} sleepRegelId={sleepRegelId}
               onDragStart={onDragStart}
               onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
               onRegelDragStartNaarGroep={onRegelDragStartNaarGroep}
               onRegelDragEnd={onRegelDragEnd}
               onRegelVerplaatsNaarPositie={onRegelVerplaatsNaarPositie}
               bibliotheekItems={bibliotheekItems}
+              behandelingen={behandelingen}
               geselecteerdeRegels={geselecteerdeRegels}
               onSelecteerRegel={onSelecteerRegel}
               collapseSignal={collapseSignal}
@@ -1750,10 +1832,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const klembordRegels     = useRef<Calculatieregel[]>([])
   const klembordComponenten = useRef<Componentregel[]>([])
 
-  // Groep drag & drop
+  // Groep drag & drop. Verticaal bepaalt de positie, horizontaal het niveau: de
+  // muisverplaatsing t.o.v. het startpunt (`sleepStartX`) wordt via `projecteer`
+  // vertaald naar een nieuwe ouder + diepte (`projectie`).
   const [sleepGroep,   setSleepGroep]   = useState<Groep | null>(null)
   const [sleepRegelId, setSleepRegelId] = useState<string | null>(null)
   const [dragOverId,   setDragOverId]   = useState<string | null>(null)
+  const [projectie,    setProjectie]    = useState<Projectie | null>(null)
+  const sleepStartX = useRef(0)
 
   // Instellingen — altijd vers uitlezen zodat wijzigingen in de instellingenpagina direct zichtbaar zijn
   const _inst        = getInstellingen()
@@ -1761,6 +1847,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const kolomNamen   = (_inst.kolom_namen ?? {}) as Record<string, string>
   const uurtarieven  = _inst.uurtarieven ?? []
   const eenheden     = _inst.eenheden ?? []
+
+  // Schilderbehandelingen: één keer voor het hele grid, zodat elke regel de naam
+  // van zijn gekoppelde behandeling live kan tonen zonder eigen fetch per rij.
+  const [behandelingen, setBehandelingen] = useState<SchilderBehandeling[]>([])
+  useEffect(() => {
+    laadBehandelingen().then(setBehandelingen).catch(() => setBehandelingen([]))
+  }, [])
 
   // Kolom breedte + volgorde
   const [colWidths, setColWidths] = useState<Record<ColId, number>>(DEFAULT_WIDTHS)
@@ -2189,9 +2282,12 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const onColDragEnd = () => { setDragCol(null); setDragOverCol(null) }
 
   // ─── Rij drag & drop ───────────────────────────────────────────────────────
-  const handleDragStart          = useCallback((g: Groep) => { setSleepGroep(g); setSleepRegelId(null) }, [])
-  const handleRegelDragStartGrid = useCallback((id: string) => { setSleepRegelId(id); setSleepGroep(null) }, [])
-  const handleDragEnd            = useCallback(() => { setSleepGroep(null); setSleepRegelId(null); setDragOverId(null) }, [])
+  const handleDragStart = useCallback((g: Groep, e: React.DragEvent) => {
+    setSleepGroep(g); setSleepRegelId(null); setProjectie(null)
+    sleepStartX.current = e.clientX
+  }, [])
+  const handleRegelDragStartGrid = useCallback((id: string) => { setSleepRegelId(id); setSleepGroep(null); setProjectie(null) }, [])
+  const handleDragEnd            = useCallback(() => { setSleepGroep(null); setSleepRegelId(null); setDragOverId(null); setProjectie(null) }, [])
 
   const handleVerplaatsRegelNaarPositie = useCallback((regelId: string, doelGroepId: string, voorRegelId: string | null) => {
     const regel = regels.find(r => r.id === regelId)
@@ -2220,12 +2316,38 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     toast.success('Regel verplaatst')
   }, [regels, duwSnapshot, laadAlles, onWijziging, syncAggregaatGroep])
 
+  /**
+   * Waar landt de gesleepte groep als je nú loslaat? De doelrij bepaalt de positie
+   * (ervóór), de horizontale muisverplaatsing het niveau. Levert `null` als de drop
+   * niet mag — bijv. op de eigen tak, of een verplaatsing voorbij niveau 3.
+   */
+  const berekenProjectie = useCallback((e: React.DragEvent, doel: Groep) => {
+    if (!sleepGroep) return null
+    const eigenTak = subtreeIds(groepen, sleepGroep.id)
+    if (eigenTak.has(doel.id)) return null
+
+    // Outline-lijst zónder de gesleepte tak: die verhuist immers mee.
+    const lijst = platteGroepen(groepen).filter(p => !eigenTak.has(p.groep.id))
+    const doelIndex = lijst.findIndex(p => p.groep.id === doel.id)
+    if (doelIndex === -1) return null
+
+    // Diepte t.o.v. de doelrij: zonder horizontale beweging neem je zijn niveau over
+    // (puur herordenen), één stap naar rechts legt hem eríń, naar links erboven.
+    const stappen = Math.round((e.clientX - sleepStartX.current) / NIVEAU_INSPRING)
+    const maxEigenDiepte = MAX_NIVEAU - 1 - subtreeHoogte(groepen, sleepGroep.id)
+    return projecteer(lijst, doelIndex, lijst[doelIndex].diepte + stappen, maxEigenDiepte)
+  }, [sleepGroep, groepen])
+
   const handleDragOver  = useCallback((e: React.DragEvent, doel: Groep) => {
     e.preventDefault()
     if (sleepRegelId) { setDragOverId(doel.id); return }
-    if (!sleepGroep || sleepGroep.id === doel.id || sleepGroep.parent_id !== doel.parent_id) return
+    if (!sleepGroep || sleepGroep.id === doel.id) return
+    const proj = berekenProjectie(e, doel)
+    if (!proj) return
+    setProjectie(proj)
     setDragOverId(doel.id)
-  }, [sleepGroep, sleepRegelId])
+  }, [sleepGroep, sleepRegelId, berekenProjectie])
+
   const handleDrop = useCallback((e: React.DragEvent, doel: Groep) => {
     e.preventDefault()
     if (sleepRegelId) {
@@ -2233,19 +2355,23 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
       return
     }
-    // Groep herordenen
-    if (!sleepGroep || sleepGroep.id === doel.id || sleepGroep.parent_id !== doel.parent_id) {
-      setSleepGroep(null); setDragOverId(null); return
-    }
-    const siblings = groepen.filter(g => g.parent_id === sleepGroep.parent_id).sort((a, b) => a.volgorde - b.volgorde)
-    const fi = siblings.findIndex(g => g.id === sleepGroep.id)
-    const ti = siblings.findIndex(g => g.id === doel.id)
-    const nieuw = [...siblings]; nieuw.splice(fi, 1); nieuw.splice(ti, 0, sleepGroep)
-    nieuw.forEach((g, i) => slaGroepOp({ ...g, volgorde: i + 1 }))
+    const opruimen = () => { setSleepGroep(null); setDragOverId(null); setProjectie(null) }
+    if (!sleepGroep || sleepGroep.id === doel.id) { opruimen(); return }
+
+    const proj = berekenProjectie(e, doel)
+    if (!proj) { opruimen(); return }
+
+    const gewijzigd = verplaatsGroep(groepen, sleepGroep.id, proj.parentId, proj.voorGroepId)
+    if (gewijzigd.length === 0) { opruimen(); return }
+
+    duwSnapshot()
+    gewijzigd.forEach(g => slaGroepOp(g))
     laadAlles(); onWijziging()
-    setSleepGroep(null); setDragOverId(null)
-    toast.success('Volgorde bijgewerkt')
-  }, [sleepGroep, sleepRegelId, groepen, handleVerplaatsRegelNaarPositie, laadAlles, onWijziging])
+    opruimen()
+    toast.success(
+      proj.diepte === sleepGroep.niveau - 1 ? 'Volgorde bijgewerkt' : `Groep naar niveau ${proj.diepte + 1} verplaatst`,
+    )
+  }, [sleepGroep, sleepRegelId, groepen, berekenProjectie, duwSnapshot, handleVerplaatsRegelNaarPositie, laadAlles, onWijziging])
 
   // ─── Mutaties ──────────────────────────────────────────────────────────────
   const handleRegelWijzig = useCallback((id: string, veld: Partial<Calculatieregel>) => {
@@ -2657,13 +2783,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   onWijzigGroep={handleWijzigGroep}
                   onVoegRegelToe={handleVoegRegelToe}
                   onVoegSubgroepToe={handleVoegSubgroepToe}
-                  dragOverGroepId={dragOverId} sleepRegelId={sleepRegelId}
+                  dragOverGroepId={dragOverId} dragIndicatorDiepte={projectie?.diepte ?? null} sleepRegelId={sleepRegelId}
                   onDragStart={handleDragStart} onDragOver={handleDragOver}
                   onDrop={handleDrop} onDragEnd={handleDragEnd}
                   onRegelDragStartNaarGroep={handleRegelDragStartGrid}
                   onRegelDragEnd={handleDragEnd}
                   onRegelVerplaatsNaarPositie={handleVerplaatsRegelNaarPositie}
                   bibliotheekItems={bibliotheekItems}
+                  behandelingen={behandelingen}
                   geselecteerdeRegels={geselecteerdeRegels}
                   onSelecteerRegel={handleSelecteerRegel}
                   collapseSignal={collapseSignal}

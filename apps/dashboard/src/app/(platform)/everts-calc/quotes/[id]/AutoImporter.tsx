@@ -67,6 +67,8 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
               opmerking: regel.werkomschrijving ?? null,
               is_stelpost: regel.is_stelpost ?? false,
               btw_pct: regel.btw_pct ?? null,
+              // Alleen de koppeling; de tekst bevriest de server op dít moment.
+              schilderbehandeling_id: regel.schilderbehandeling_id ?? null,
               schilderbehandeling: regel.schilderbehandeling ?? null,
               werkomschrijving_afbeeldingen: regel.werkomschrijving_afbeeldingen ?? null,
             })

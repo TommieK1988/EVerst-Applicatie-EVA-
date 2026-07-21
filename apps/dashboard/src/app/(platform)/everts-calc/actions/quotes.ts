@@ -6,6 +6,7 @@ import { createClient } from '@/lib/everts-calc/supabase/server'
 import type { NieuweQuoteData, QuoteType, QuoteStatus, Discipline, TermType } from '@/lib/everts-calc/types-quotes'
 import type { StructuurGroep } from '@/lib/everts-calc/import-structuur'
 import { assertQuoteBewerkbaar } from '@/lib/everts-calc/quote-guards'
+import { omschrijvingMetBehandeling } from '@/lib/everts-calc/behandeling-label'
 
 const PAD = '/quotes'
 
@@ -181,6 +182,9 @@ export type ImportRegel = {
   calculatieregel_id?: string | null
   opmerking?: string | null
   is_stelpost?: boolean
+  btw_pct?: number | null
+  /** Koppeling naar de bibliotheek; de tekst wordt hier pas bevroren (zie importeerRegels). */
+  schilderbehandeling_id?: string | null
   schilderbehandeling?: string | null
   werkomschrijving_afbeeldingen?: string[] | null
 }
@@ -946,6 +950,7 @@ export async function importeerRegels(
     opmerking?: string | null
     is_stelpost?: boolean
     btw_pct?: number | null
+    schilderbehandeling_id?: string | null
     schilderbehandeling?: string | null
     werkomschrijving_afbeeldingen?: string[] | null
   }[],
@@ -956,6 +961,27 @@ export async function importeerRegels(
 ): Promise<void> {
   await assertQuoteBewerkbaar(quoteId)
   const supabase = await getDb()
+
+  // Schilderbehandelingen: de calculatie bewaart alleen de koppeling (id), de tekst
+  // wordt hier — op het moment dat de offerte ontstaat — bevroren. Zo volgt de
+  // calculatie wijzigingen in de bibliotheek, terwijl de offerte vastligt. Zonder id
+  // (oudere calculaties) valt hij terug op de meegestuurde tekst.
+  const behandelingIds = Array.from(
+    new Set(regels.map(r => r.schilderbehandeling_id).filter((id): id is string => !!id)),
+  )
+  const behandelingTeksten = new Map<string, string>()
+  const behandelingNamen = new Map<string, string>()
+  if (behandelingIds.length > 0) {
+    const { data: behandelingen } = await supabase
+      .from('schilder_behandelingen')
+      .select('id, naam, korte_omschrijving, uitgebreide_werkomschrijving')
+      .in('id', behandelingIds)
+    for (const b of behandelingen ?? []) {
+      const tekst = b.uitgebreide_werkomschrijving?.trim() || b.korte_omschrijving?.trim() || b.naam
+      if (tekst) behandelingTeksten.set(b.id, tekst)
+      if (b.naam?.trim()) behandelingNamen.set(b.id, b.naam.trim())
+    }
+  }
 
   // Groepeer regels per groep (altijd sectie per groep)
   const groepenMap = new Map<string, typeof regels>()
@@ -1022,7 +1048,11 @@ export async function importeerRegels(
       section_id: section.id,
       groep_id: def.groep_id,
       calculatieregel_id: r.calculatieregel_id ?? null,
-      omschrijving: r.omschrijving,
+      // Gekoppelde behandeling erachter: "Kozijnen voorgevel – 2-laags dekkend".
+      omschrijving: omschrijvingMetBehandeling(
+        r.omschrijving,
+        r.schilderbehandeling_id ? behandelingNamen.get(r.schilderbehandeling_id) : null,
+      ),
       hoeveelheid: r.hoeveelheid,
       eenheid: r.eenheid,
       eenheidsprijs: r.eenheidsprijs,
@@ -1038,10 +1068,13 @@ export async function importeerRegels(
     // Optioneel: is_stelpost + schilderbehandeling per regel bijwerken (v3)
     if (insertedLines) {
       for (let i = 0; i < groepRegels.length; i++) {
-        const r = groepRegels[i] as typeof groepRegels[0] & { is_stelpost?: boolean; schilderbehandeling?: string | null; werkomschrijving_afbeeldingen?: string[] | null }
+        const r = groepRegels[i] as typeof groepRegels[0] & { is_stelpost?: boolean; schilderbehandeling_id?: string | null; schilderbehandeling?: string | null; werkomschrijving_afbeeldingen?: string[] | null }
         const updates: Record<string, unknown> = {}
         if (r.is_stelpost) updates.is_stelpost = true
-        if (r.schilderbehandeling) updates.schilderbehandeling = r.schilderbehandeling
+        const behandeling =
+          (r.schilderbehandeling_id ? behandelingTeksten.get(r.schilderbehandeling_id) : null) ??
+          r.schilderbehandeling
+        if (behandeling) updates.schilderbehandeling = behandeling
         if (r.werkomschrijving_afbeeldingen && r.werkomschrijving_afbeeldingen.length > 0) {
           updates.werkomschrijving_afbeeldingen = r.werkomschrijving_afbeeldingen
         }

@@ -229,14 +229,9 @@ const DAG_H    = 16   // headerrij met dagnummers (alleen in weekweergave)
 const LIJN_DAG  = '#e8edee'
 const LIJN_WEEK = '#c6d0d3'
 
-/** Vaste dagbreedte per zoomniveau — de tijdlijn is een doorlopende, horizontaal
+/** Vaste dagbreedte: weekweergave. De tijdlijn is een doorlopende, horizontaal
  *  scrollbare strook (net als de desktop-Gantt), géén fit-to-screen. */
-const ZOOM = [
-  { key: 'week',     label: 'Week',     ppd: 30 },
-  { key: 'maand',    label: 'Maand',    ppd: 11 },
-  { key: 'kwartaal', label: 'Kwartaal', ppd: 4.5 },
-] as const
-type ZoomKey = typeof ZOOM[number]['key']
+const PPD = 30
 
 type GanttRij =
   | { kind: 'fase'; key: string; naam: string }
@@ -245,12 +240,10 @@ type GanttRij =
 
 function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [zoom, setZoom] = useState<ZoomKey>('week')
   const [open, setOpen] = useState<string | null>(null)
 
-  const ppd = ZOOM.find(z => z.key === zoom)!.ppd
-  const toonDagnummers = zoom === 'week'
-  const headerH = WEEK_H + (toonDagnummers ? DAG_H : 0)
+  const ppd = PPD
+  const headerH = WEEK_H + DAG_H
 
   const vandaag = startOfDay(new Date())
 
@@ -340,25 +333,6 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-
-      {/* Zoombalk — blijft staan, scrollt niet mee */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4,
-        padding: '5px 10px', borderBottom: `1px solid ${RAND}`, background: '#f8fafa', flexShrink: 0,
-      }}>
-        {ZOOM.map(z => (
-          <button key={z.key} onClick={() => setZoom(z.key)} style={{
-            padding: '3px 10px', borderRadius: 999, fontFamily: 'inherit', fontSize: 11,
-            fontWeight: 600, cursor: 'pointer',
-            border: `1px solid ${zoom === z.key ? GROEN : RAND}`,
-            background: zoom === z.key ? GROEN : '#fff',
-            color: zoom === z.key ? '#fff' : GRIJS,
-          }}>
-            {z.label}
-          </button>
-        ))}
-      </div>
-
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <div style={{ width: LABEL_W + tijdlijnW, minWidth: '100%', position: 'relative' }}>
 
@@ -396,15 +370,13 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 <span style={{ fontSize: 9.5, fontWeight: 700, color: GRIJS, whiteSpace: 'nowrap' }}>
                   wk {getISOWeek(w.datum)}
                 </span>
-                {7 * ppd >= 90 && (
-                  <span style={{ fontSize: 9.5, color: '#9aa4ab', whiteSpace: 'nowrap' }}>
-                    {format(w.datum, 'd MMM', { locale: nl })}
-                  </span>
-                )}
+                <span style={{ fontSize: 9.5, color: '#9aa4ab', whiteSpace: 'nowrap' }}>
+                  {format(w.datum, 'd MMM', { locale: nl })}
+                </span>
               </div>
             ))}
-            {/* Dagnummers (alleen bij weekweergave — daaronder wordt het onleesbaar) */}
-            {toonDagnummers && Array.from({ length: dagen }, (_, i) => {
+            {/* Dagnummers */}
+            {Array.from({ length: dagen }, (_, i) => {
               const d = addDays(start, i)
               return (
                 <div key={i} style={{
