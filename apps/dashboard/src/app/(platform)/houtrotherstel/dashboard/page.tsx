@@ -1,16 +1,24 @@
-import { Metadata } from 'next'
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ClipboardList, CheckCircle, AlertTriangle, FolderOpen, TrendingUp, Plus } from 'lucide-react'
 import StatCard from '@/components/houtrotherstel/shared/StatCard'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
 import { formatCurrency, formatDateShort } from '@/lib/houtrotherstel/utils'
-import { getAllRegistraties, getAllProjecten } from '@/lib/houtrotherstel/local-store'
-
-export const metadata: Metadata = { title: 'Dashboard' }
+import { getRegistraties } from '@/services/houtrotherstel/registraties'
+import { getProjects } from '@/services/houtrotherstel/projects'
 
 export default function DashboardPage() {
-  const registraties = getAllRegistraties()
-  const projecten = getAllProjecten().filter(p => p.status === 'onderhanden')
+  const [registraties, setRegistraties] = useState<any[]>([])
+  const [projecten, setProjecten] = useState<any[]>([])
+
+  useEffect(() => {
+    getRegistraties().then(setRegistraties).catch(() => setRegistraties([]))
+    getProjects()
+      .then(rows => setProjecten(rows.filter(p => p.status === 'actief')))
+      .catch(() => setProjecten([]))
+  }, [])
 
   const openCount = registraties.filter(r => r.status === 'open').length
   const inUitvoeringCount = registraties.filter(r => ['in_uitvoering', 'ingepland'].includes(r.status)).length
@@ -86,16 +94,16 @@ export default function DashboardPage() {
             ) : registraties.map((r) => (
               <Link
                 key={r.id}
-                href={`/registraties/${r.id}`}
+                href={`/houtrotherstel/registraties/${r.id}`}
                 className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-sm font-medium text-slate-800 truncate">
-                      {r.project?.name}
+                      {r.projects?.name}
                     </span>
                     <span className="text-slate-400 text-xs hidden sm:inline">
-                      #{r.project?.project_number}
+                      #{r.projects?.project_number}
                     </span>
                   </div>
                   <span className="text-xs text-slate-500">
@@ -124,7 +132,7 @@ export default function DashboardPage() {
             ) : projecten.map((p) => (
               <Link
                 key={p.id}
-                href={`/projecten/${p.id}`}
+                href={`/houtrotherstel/projecten/${p.id}`}
                 className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors"
               >
                 <div className="w-8 h-8 bg-everts-100 rounded-lg flex items-center justify-center flex-shrink-0">

@@ -4,91 +4,41 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Plus, MapPin, Calendar, Phone, Mail, User,
-  ChevronRight, Layers, CheckCircle, Circle, Edit, Trash2, FileText, X
+  ArrowLeft, MapPin, Calendar, Phone, Mail, User,
+  ChevronRight, ClipboardList, Edit, FileText,
 } from 'lucide-react'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
-import { formatDate, formatCurrency } from '@/lib/houtrotherstel/utils'
-import {
-  getAllProjecten, getProjectdelenVoorProject, saveProjectdeel,
-  deleteProjectdeel, getReparatiesVoorProject, getAllLocaties,
-  getAllRegistraties,
-} from '@/lib/houtrotherstel/local-store'
-import type { Project, Projectdeel, Reparatie } from '@/lib/houtrotherstel/types'
+import { formatDate, formatCurrency, formatDateShort } from '@/lib/houtrotherstel/utils'
+import { getProjectWithDetails } from '@/services/houtrotherstel/projects'
+import type { Project } from '@/lib/houtrotherstel/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-  DialogBody, DialogFooter,
+  DialogFooter,
 } from '@/components/ui/dialog'
-import { EmptyState } from '@/components/ui/empty-state'
 
 interface Props {
   projectId: string
 }
 
+const AFGEROND_STATUSSEN = ['gereed', 'gecontroleerd']
+
 export default function ProjectDetail({ projectId }: Props) {
   const router = useRouter()
   const [project, setProject] = useState<Project | null>(null)
-  const [projectdelen, setProjectdelen] = useState<Projectdeel[]>([])
-  const [reparaties, setReparaties] = useState<Reparatie[]>([])
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [nieuwNaam, setNieuwNaam] = useState('')
-  const [nieuwOmschrijving, setNieuwOmschrijving] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [registraties, setRegistraties] = useState<any[]>([])
   const [showRapportageModal, setShowRapportageModal] = useState(false)
 
-  function laden() {
-    const p = getAllProjecten().find(x => x.id === projectId)
-    if (!p) return
-    setProject(p)
-    setProjectdelen(getProjectdelenVoorProject(projectId))
-    setReparaties(getReparatiesVoorProject(projectId))
-  }
-
-  useEffect(() => { laden() }, [projectId])
-
-  function getAantalLocaties(projectdeelId: string) {
-    return getAllLocaties().filter(l => l.projectdeel_id === projectdeelId).length
-  }
-
-  function getAantalReparaties(projectdeelId: string) {
-    return reparaties.filter(r => r.projectdeel_id === projectdeelId).length
-  }
-
-  function getGereedCount(projectdeelId: string) {
-    const repIds = reparaties.filter(r => r.projectdeel_id === projectdeelId).map(r => r.registratie_id)
-    const repIdSet = new Set(repIds)
-    return getAllRegistraties().filter(r => repIdSet.has(r.id) && r.status === 'afgerond').length
-  }
-
-  async function voegProjectdeelToe() {
-    if (!nieuwNaam.trim()) return
-    setSaving(true)
-    const nieuw: Projectdeel = {
-      id: `pd-${Date.now()}`,
-      project_id: projectId,
-      naam: nieuwNaam.trim(),
-      omschrijving: nieuwOmschrijving.trim() || null,
-      volgorde: projectdelen.length + 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-    saveProjectdeel(nieuw)
-    setNieuwNaam('')
-    setNieuwOmschrijving('')
-    setShowAddForm(false)
-    setSaving(false)
-    laden()
-  }
-
-  function verwijderProjectdeel(id: string, e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!confirm('Projectdeel verwijderen? Dit verwijdert ook alle locaties en reparaties.')) return
-    deleteProjectdeel(id)
-    laden()
-  }
+  useEffect(() => {
+    getProjectWithDetails(projectId)
+      .then(data => {
+        if (!data) return
+        setProject(data as Project)
+        setRegistraties((data as any).repair_registrations || [])
+      })
+      .catch(() => setProject(null))
+  }, [projectId])
 
   if (!project) return (
     <div className="flex items-center justify-center h-40 text-slate-400">
@@ -96,11 +46,11 @@ export default function ProjectDetail({ projectId }: Props) {
     </div>
   )
 
-  const totalVerkoopprijs = reparaties.reduce((s, r) => s + (r.sale_price_snapshot || 0), 0)
-  const alleRegIds = new Set(reparaties.map(r => r.registratie_id))
-  const alleRegsHier = getAllRegistraties().filter(r => alleRegIds.has(r.id))
-  const openCount = alleRegsHier.filter(r => r.status !== 'afgerond').length
-  const gereedCount = alleRegsHier.filter(r => r.status === 'afgerond').length
+  const openCount = registraties.filter(r => !AFGEROND_STATUSSEN.includes(r.status)).length
+  const gereedCount = registraties.filter(r => AFGEROND_STATUSSEN.includes(r.status)).length
+  const totalVerkoopprijs = registraties.reduce(
+    (s, r) => s + (Number(r.actual_sale_price ?? r.sale_price_snapshot) || 0), 0
+  )
 
   return (
     <div className="space-y-6 pb-20 lg:pb-0">
@@ -132,7 +82,7 @@ export default function ProjectDetail({ projectId }: Props) {
               <span className="hidden sm:inline">Rapportage</span>
             </Button>
             <Button variant="outline" size="lg" asChild>
-              <Link href={`/projecten/${project.id}/bewerken`}>
+              <Link href={`/houtrotherstel/projecten/${project.id}/bewerken`}>
                 <Edit className="w-4 h-4" />
                 <span className="hidden sm:inline">Bewerken</span>
               </Link>
@@ -173,20 +123,20 @@ export default function ProjectDetail({ projectId }: Props) {
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardBody className="text-center py-4">
-            <div className="text-2xl font-bold text-neutral-700">{projectdelen.length}</div>
-            <div className="text-xs text-neutral-500 mt-0.5">Projectdelen</div>
+            <div className="text-2xl font-bold text-neutral-700">{registraties.length}</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Registraties</div>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="text-center py-4">
             <div className="text-2xl font-bold text-brand-600">{openCount}</div>
-            <div className="text-xs text-neutral-500 mt-0.5">Onderhanden</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Open</div>
           </CardBody>
         </Card>
         <Card>
           <CardBody className="text-center py-4">
             <div className="text-2xl font-bold text-success-700">{gereedCount}</div>
-            <div className="text-xs text-neutral-500 mt-0.5">Afgerond</div>
+            <div className="text-xs text-neutral-500 mt-0.5">Gereed</div>
           </CardBody>
         </Card>
       </div>
@@ -243,101 +193,52 @@ export default function ProjectDetail({ projectId }: Props) {
               <h2 className="font-semibold text-slate-800 mb-3">Financieel overzicht</h2>
               <div className="text-sm text-slate-500">Verkoopwaarde</div>
               <div className="text-2xl font-bold text-slate-800">{formatCurrency(totalVerkoopprijs)}</div>
-              <div className="mt-2 text-xs text-slate-400">{reparaties.length} reparaties</div>
+              <div className="mt-2 text-xs text-slate-400">{registraties.length} registraties</div>
             </div>
           )}
         </div>
 
-        {/* Projectdelen */}
+        {/* Registraties */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-everts" />
-              Projectdelen
+              <ClipboardList className="w-4 h-4 text-everts" />
+              Registraties
             </h2>
-            <button
-              onClick={() => setShowAddForm(v => !v)}
-              className="inline-flex items-center gap-1.5 bg-everts hover:bg-everts-dark text-white
-                font-medium px-3 py-2 rounded-lg text-sm transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Projectdeel
-            </button>
+            <Button variant="primary" size="md" asChild>
+              <Link href={`/houtrotherstel/registraties/nieuw?project=${project.id}`}>
+                Nieuwe registratie
+              </Link>
+            </Button>
           </div>
 
-          {/* Add form */}
-          {showAddForm && (
-            <div className="bg-everts-50 border border-everts/20 rounded-xl p-4 space-y-3">
-              <h3 className="font-medium text-slate-700 text-sm">Nieuw projectdeel</h3>
-              <input
-                type="text"
-                value={nieuwNaam}
-                onChange={e => setNieuwNaam(e.target.value)}
-                placeholder="Naam, bijv. Voorgevel, Achtergevel, Blok A..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && voegProjectdeelToe()}
-              />
-              <input
-                type="text"
-                value={nieuwOmschrijving}
-                onChange={e => setNieuwOmschrijving(e.target.value)}
-                placeholder="Omschrijving (optioneel)"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={voegProjectdeelToe}
-                  disabled={!nieuwNaam.trim() || saving}
-                  className="bg-everts hover:bg-everts-dark disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
-                >
-                  Toevoegen
-                </button>
-                <button
-                  onClick={() => { setShowAddForm(false); setNieuwNaam(''); setNieuwOmschrijving('') }}
-                  className="bg-white border border-slate-300 text-slate-600 font-medium px-4 py-2 rounded-lg text-sm hover:border-slate-400 transition-colors"
-                >
-                  Annuleren
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Projectdelen list */}
           <div className="space-y-3">
-            {projectdelen.map(gd => {
-              const aantalLoc = getAantalLocaties(gd.id)
-              const aantalRep = getAantalReparaties(gd.id)
-              const gereed = getGereedCount(gd.id)
+            {registraties.map(reg => {
+              const locatie = [reg.location_block, reg.room_or_unit, reg.element_number]
+                .filter(Boolean).join(' · ')
+              const bedrag = Number(reg.actual_sale_price ?? reg.sale_price_snapshot) || 0
               return (
                 <Link
-                  key={gd.id}
-                  href={`/projecten/${projectId}/projectdelen/${gd.id}`}
+                  key={reg.id}
+                  href={`/houtrotherstel/registraties/${reg.id}`}
                   className="bg-white rounded-xl border border-slate-200 p-4 hover:border-everts/40 hover:shadow-sm transition-all flex items-center gap-4 group"
                 >
-                  <div className="w-10 h-10 bg-everts-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Layers className="w-5 h-5 text-everts" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-800 group-hover:text-everts transition-colors">{gd.naam}</div>
-                    {gd.omschrijving && <div className="text-xs text-slate-500 truncate">{gd.omschrijving}</div>}
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800 group-hover:text-everts transition-colors truncate">
+                        {reg.component_type || 'Registratie'}
+                      </span>
+                      <StatusBadge status={reg.status} size="sm" />
+                    </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                      <span>{aantalLoc} locatie{aantalLoc !== 1 ? 's' : ''}</span>
-                      <span>{aantalRep} reparatie{aantalRep !== 1 ? 's' : ''}</span>
-                      {aantalRep > 0 && (
-                        <span className="flex items-center gap-1 text-green-600">
-                          <CheckCircle className="w-3 h-3" />{gereed}/{aantalRep} afgerond
-                        </span>
-                      )}
+                      {reg.registration_date && <span>{formatDateShort(reg.registration_date)}</span>}
+                      {locatie && <span className="truncate">{locatie}</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={e => verwijderProjectdeel(gd.id, e)}
-                      className="p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {bedrag > 0 && (
+                      <span className="text-sm font-medium text-slate-600">{formatCurrency(bedrag)}</span>
+                    )}
                     <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-everts transition-colors" />
                   </div>
                 </Link>
@@ -345,11 +246,11 @@ export default function ProjectDetail({ projectId }: Props) {
             })}
           </div>
 
-          {projectdelen.length === 0 && !showAddForm && (
+          {registraties.length === 0 && (
             <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">
-              <Layers className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="font-medium">Nog geen projectdelen</p>
-              <p className="text-sm mt-1">Voeg een projectdeel toe om te beginnen</p>
+              <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="font-medium">Nog geen registraties</p>
+              <p className="text-sm mt-1">Voeg een registratie toe om te beginnen</p>
             </div>
           )}
         </div>

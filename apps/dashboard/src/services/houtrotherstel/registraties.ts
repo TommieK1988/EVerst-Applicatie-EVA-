@@ -3,7 +3,6 @@ import type {
   RepairRegistration,
   RegistratieForm,
   RegistratieFilters,
-  Registratie,
 } from '@/lib/houtrotherstel/types'
 
 export async function getRegistraties(
@@ -80,53 +79,52 @@ export async function createRegistratie(
   form: RegistratieForm,
   userId: string
 ): Promise<RepairRegistration> {
-  const { saveRegistratie, getAllProjecten } = await import('@/lib/houtrotherstel/local-store')
+  const supabase = createClient()
 
-  const allProjecten = getAllProjecten()
-  const project = allProjecten.find(p => p.id === form.project_id)
+  const { data, error } = await supabase
+    .from('repair_registrations')
+    .insert({
+      project_id: form.project_id,
+      user_id: userId,
+      registration_date: form.registration_date,
+      location_block: form.location_block || null,
+      floor: form.floor || null,
+      room_or_unit: form.room_or_unit || null,
+      facade_side: form.facade_side || null,
+      component_type: form.component_type || null,
+      element_number: form.element_number || null,
+      damage_description: form.damage_description || null,
+      damage_severity: form.damage_severity || null,
+      damage_cause: form.damage_cause || null,
+      standard_repair_id: form.standard_repair_id || null,
+      custom_work_description: form.custom_work_description || null,
+      notes: form.notes || null,
+      status: form.status,
+      control_status: form.control_status,
+      completed_at: form.completed_at || null,
+      checked_at: form.checked_at || null,
+      labor_hours_snapshot: form.labor_hours_snapshot ?? null,
+      labor_rate_snapshot: form.labor_rate_snapshot ?? null,
+      labor_cost_snapshot: form.labor_cost_snapshot ?? null,
+      material_cost_snapshot: form.material_cost_snapshot ?? null,
+      cost_price_snapshot: form.cost_price_snapshot ?? null,
+      sale_price_snapshot: form.sale_price_snapshot ?? null,
+      repair_code_snapshot: form.repair_code_snapshot || null,
+      repair_name_snapshot: form.repair_name_snapshot || null,
+      repair_description_snapshot: form.repair_description_snapshot || null,
+      actual_labor_hours: form.actual_labor_hours ?? null,
+      actual_material_cost: form.actual_material_cost ?? null,
+      actual_cost_price: form.actual_cost_price ?? null,
+      actual_sale_price: form.actual_sale_price ?? null,
+    })
+    .select()
+    .single()
 
-  const reg: RepairRegistration = {
-    id: `r-${Date.now()}`,
-    project_id: form.project_id,
-    user_id: userId,
-    registration_date: form.registration_date,
-    location_block: form.location_block || null,
-    floor: form.floor || null,
-    room_or_unit: form.room_or_unit || null,
-    facade_side: form.facade_side || null,
-    component_type: form.component_type || null,
-    element_number: form.element_number || null,
-    damage_description: form.damage_description || null,
-    damage_severity: form.damage_severity || null,
-    damage_cause: form.damage_cause || null,
-    standard_repair_id: form.standard_repair_id || null,
-    custom_work_description: form.custom_work_description || null,
-    notes: form.notes || null,
-    status: form.status,
-    control_status: form.control_status,
-    completed_at: form.completed_at || null,
-    checked_at: form.checked_at || null,
-    labor_hours_snapshot: form.labor_hours_snapshot ?? null,
-    labor_rate_snapshot: form.labor_rate_snapshot ?? null,
-    labor_cost_snapshot: form.labor_cost_snapshot ?? null,
-    material_cost_snapshot: form.material_cost_snapshot ?? null,
-    cost_price_snapshot: form.cost_price_snapshot ?? null,
-    sale_price_snapshot: form.sale_price_snapshot ?? null,
-    repair_code_snapshot: form.repair_code_snapshot || null,
-    repair_name_snapshot: form.repair_name_snapshot || null,
-    repair_description_snapshot: form.repair_description_snapshot || null,
-    actual_labor_hours: form.actual_labor_hours ?? null,
-    actual_material_cost: form.actual_material_cost ?? null,
-    actual_cost_price: form.actual_cost_price ?? null,
-    actual_sale_price: form.actual_sale_price ?? null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    project: project ? { name: project.name, project_number: project.project_number } : undefined,
-    profile: { full_name: 'Admin Gebruiker' } as any,
-  } as RepairRegistration
+  if (error) throw new Error(error.message)
 
-  saveRegistratie(reg as unknown as Registratie)
-  return reg
+  await logActivity(supabase, userId, 'registratie', data.id, 'create', null, form)
+
+  return data as RepairRegistration
 }
 
 export async function updateRegistratie(

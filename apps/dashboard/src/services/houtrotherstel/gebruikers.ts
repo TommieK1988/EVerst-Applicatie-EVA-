@@ -71,25 +71,11 @@ export async function updateGebruikerRol(
   if (error) throw new Error(error.message)
 }
 
-// Gebruiker aanmaken via Supabase Auth (alleen admin via server action)
-export async function createGebruikerViaServiceRole(
-  email: string,
-  password: string,
-  fullName: string,
-  role: UserRole
-): Promise<void> {
-  // Dit moet via een server action / API route met service role key
-  const response = await fetch('/api/admin/create-user', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, full_name: fullName, role }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.message || 'Aanmaken gebruiker mislukt')
-  }
-}
+// Let op: houtrot kent géén eigen gebruikersbeheer meer. Accounts en rollen lopen
+// via het EVA-gebruikersbeheer (medewerkers + gebruiker_type/rechten). De oude
+// `createGebruikerViaServiceRole` + /api/admin/create-user-route zijn verwijderd.
+// `getCurrentProfile` blijft tot de cutover de identiteit voor houtrot-writes
+// (profiles.id == auth user id); daarna vervangen door getCurrentMedewerker.
 
 export async function getCurrentProfile(): Promise<Profile | null> {
   const supabase = createClient()

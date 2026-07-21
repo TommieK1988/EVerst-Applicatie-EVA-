@@ -30,7 +30,7 @@ export const updatePasswordSchema = z
 export const profileSchema = z.object({
   full_name: z.string().min(2, 'Naam moet minimaal 2 tekens bevatten'),
   email: z.string().email('Voer een geldig e-mailadres in'),
-  role: z.enum(['admin', 'platform_gebruiker', 'app_gebruiker']),
+  role: z.enum(['admin', 'projectleider', 'medewerker']),
   active: z.boolean(),
   phone: z.string().optional(),
 })
@@ -56,7 +56,7 @@ export const projectSchema = z.object({
   city: z.string().min(2, 'Plaats is verplicht'),
   start_date: z.string().optional(),
   end_date: z.string().optional(),
-  status: z.enum(['onderhanden', 'afgerond']),
+  status: z.enum(['concept', 'actief', 'afgerond', 'gepauzeerd', 'geannuleerd']),
   description: z.string().optional(),
   contact_name: z.string().optional(),
   contact_phone: z.string().optional(),
@@ -125,7 +125,7 @@ export const registratieSchema = z.object({
   notes: z.string().optional(),
 
   // Status
-  status: z.enum(['geregistreerd', 'open', 'in_uitvoering', 'ingepland', 'onderhanden', 'gereed', 'gecontroleerd', 'afgekeurd', 'afgerond']),
+  status: z.enum(['open', 'ingepland', 'in_uitvoering', 'gereed', 'gecontroleerd', 'afgekeurd', 'hersteld_na_afkeur']),
   control_status: z.enum(['niet_gecontroleerd', 'goedgekeurd', 'afgekeurd']),
   completed_at: z.string().optional(),
   checked_at: z.string().optional(),

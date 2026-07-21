@@ -2,13 +2,13 @@
 // ENUMS & CONSTANTEN
 // ============================================================
 
-export type UserRole = 'admin' | 'platform_gebruiker' | 'app_gebruiker'
+export type UserRole = 'admin' | 'projectleider' | 'medewerker'
 
-export type ProjectStatus = 'onderhanden' | 'afgerond'
+export type ProjectStatus = 'concept' | 'actief' | 'afgerond' | 'gepauzeerd' | 'geannuleerd'
 
 export type RegistratieStatus =
-  | 'geregistreerd' | 'open' | 'in_uitvoering' | 'ingepland'
-  | 'onderhanden' | 'gereed' | 'gecontroleerd' | 'afgekeurd' | 'afgerond'
+  | 'open' | 'ingepland' | 'in_uitvoering' | 'gereed'
+  | 'gecontroleerd' | 'afgekeurd' | 'hersteld_na_afkeur'
 
 export type ControlStatus = 'niet_gecontroleerd' | 'goedgekeurd' | 'afgekeurd'
 
@@ -17,20 +17,27 @@ export type FotoType = 'voor' | 'tijdens' | 'na'
 export type SchadeSeverity = 'licht' | 'matig' | 'ernstig' | 'kritiek'
 
 export const PROJECT_STATUSSEN: Record<ProjectStatus, string> = {
-  onderhanden: 'Onderhanden',
+  concept: 'Concept',
+  actief: 'Actief',
   afgerond: 'Afgerond',
+  gepauzeerd: 'Gepauzeerd',
+  geannuleerd: 'Geannuleerd',
 }
 
 export const REGISTRATIE_STATUSSEN: Record<RegistratieStatus, string> = {
-  geregistreerd: 'Geregistreerd',
   open: 'Open',
-  in_uitvoering: 'In uitvoering',
   ingepland: 'Ingepland',
-  onderhanden: 'Onderhanden',
+  in_uitvoering: 'In uitvoering',
   gereed: 'Gereed',
   gecontroleerd: 'Gecontroleerd',
   afgekeurd: 'Afgekeurd',
-  afgerond: 'Afgerond',
+  hersteld_na_afkeur: 'Hersteld na afkeur',
+}
+
+export const USER_ROLES: Record<UserRole, string> = {
+  admin: 'Beheerder',
+  projectleider: 'Projectleider',
+  medewerker: 'Medewerker',
 }
 
 export const CONTROL_STATUSSEN: Record<ControlStatus, string> = {
@@ -407,71 +414,6 @@ export interface MedewerkerSamenvatting {
   count: number
   total_sale_price: number
   total_labor_hours: number
-}
-
-// ============================================================
-// PROJECTDEEL / LOCATIE / REGISTRATIE / REPARATIE
-// ============================================================
-
-export interface Projectdeel {
-  id: string
-  project_id: string
-  naam: string
-  omschrijving: string | null
-  volgorde: number
-  created_at: string
-  updated_at: string
-}
-
-export interface Locatie {
-  id: string
-  projectdeel_id: string
-  project_id: string
-  naam: string
-  omschrijving: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface Registratie {
-  id: string
-  locatie_id: string
-  projectdeel_id: string
-  project_id: string
-  datum: string
-  medewerker: string | null
-  omschrijving: string | null
-  voor_foto: string | null
-  na_foto: string | null
-  status: RegistratieStatus
-  created_at: string
-  updated_at: string
-  // Extended fields (RepairRegistration schema)
-  registration_date?: string
-  actual_sale_price?: number | null
-  sale_price_snapshot?: number | null
-  repair_name_snapshot?: string | null
-  project?: { name?: string; project_number?: string | null }
-}
-
-export interface Reparatie {
-  id: string
-  registratie_id: string
-  locatie_id: string
-  projectdeel_id: string
-  project_id: string
-  omschrijving: string
-  standaard_reparatie_id: string | null
-  reparatie_naam: string | null
-  reparatie_code: string | null
-  sale_price_snapshot: number | null
-  created_at: string
-  updated_at: string
-  // Relations (in-memory)
-  locatie?: Locatie
-  registratie?: Registratie
-  projectdeel?: Projectdeel
-  standaard_reparatie?: StandardRepair
 }
 
 // ============================================================

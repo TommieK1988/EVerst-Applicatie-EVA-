@@ -77,7 +77,7 @@ export default async function RegistratieDetailPage({
           <div className="flex gap-2">
             {canEdit && (
               <Link
-                href={`/registraties/${id}/bewerken`}
+                href={`/houtrotherstel/registraties/${id}/bewerken`}
                 className="inline-flex items-center gap-2 bg-white border border-slate-300
                   hover:border-slate-400 text-slate-700 font-medium px-4 py-2.5 rounded-lg text-sm transition-colors"
               >

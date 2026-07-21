@@ -4,28 +4,36 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Download, Loader2 } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/houtrotherstel/utils'
-import {
-  getAllProjecten,
-  getProjectdelenVoorProject,
-  getLocatiesVoorProjectdeel,
-  getRegistratiesVoorLocatie,
-  getReparatiesVoorRegistratie,
-} from '@/lib/houtrotherstel/local-store'
-import type { Project, Projectdeel, Locatie, Registratie, Reparatie } from '@/lib/houtrotherstel/types'
+import { getProject } from '@/services/houtrotherstel/projects'
+import { getRegistraties, getPhotoUrl } from '@/services/houtrotherstel/registraties'
+import { createClient } from '@/lib/houtrotherstel/supabase/client'
+import { REGISTRATIE_STATUSSEN } from '@/lib/houtrotherstel/types'
+import type { Project } from '@/lib/houtrotherstel/types'
 
-interface RegistratieRapport {
-  registratie: Registratie
-  reparaties: Reparatie[]
+const AFGEROND_STATUSSEN = ['gereed', 'gecontroleerd']
+
+interface RepRegel {
+  id: string
+  naam: string | null
+  omschrijving: string | null
+  prijs: number
 }
 
-interface LocatieRapport {
-  locatie: Locatie
-  registraties: RegistratieRapport[]
+interface RegRapport {
+  id: string
+  datum: string | null
+  medewerker: string | null
+  status: string
+  voorFoto: string | null
+  naFoto: string | null
+  locatieLabel: string
+  reparaties: RepRegel[]
 }
 
-interface ProjectdeelRapport {
-  projectdeel: Projectdeel
-  locaties: LocatieRapport[]
+interface Sectie {
+  naam: string
+  omschrijving: string | null
+  registraties: RegRapport[]
 }
 
 // Compact fotovak: echte foto = aspect-ratio, geen foto = kleine strook
@@ -57,39 +65,78 @@ export default function RapportagePage() {
   const metPrijzen = searchParams.get('prijzen') === '1'
 
   const [project, setProject] = useState<Project | null>(null)
-  const [secties, setSecties] = useState<ProjectdeelRapport[]>([])
+  const [secties, setSecties] = useState<Sectie[]>([])
   const [generating, setGenerating] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const p = getAllProjecten().find(x => x.id === projectId)
-    if (!p) return
-    setProject(p)
-    const projectdelen = getProjectdelenVoorProject(projectId)
-    setSecties(projectdelen.map(gd => ({
-      projectdeel: gd,
-      locaties: getLocatiesVoorProjectdeel(gd.id).map(loc => ({
-        locatie: loc,
-        registraties: getRegistratiesVoorLocatie(loc.id).map(reg => ({
-          registratie: reg,
-          reparaties: getReparatiesVoorRegistratie(reg.id),
-        })),
-      })),
-    })))
+    let afgebroken = false
+
+    async function laad() {
+      const [p, registraties] = await Promise.all([
+        getProject(projectId),
+        getRegistraties({ project_id: projectId }),
+      ])
+      if (afgebroken || !p) return
+      setProject(p)
+
+      const supabase = createClient()
+      const fotoUrl = (pad: string | null | undefined) =>
+        pad ? getPhotoUrl(supabase, pad) : null
+
+      // Het echte datamodel kent géén projectdeel/locatie-hiërarchie; registraties
+      // dragen hun plaats als losse velden. Groepeer daarom op `location_block`.
+      const groepen = new Map<string, RegRapport[]>()
+
+      for (const reg of registraties) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const r = reg as any
+        const fotos = (r.repair_photos ?? []) as { photo_type: string; storage_path: string }[]
+        const locatieLabel = [r.floor, r.room_or_unit, r.facade_side, r.component_type, r.element_number]
+          .filter(Boolean).join(' · ') || 'Onbekende locatie'
+
+        const prijs = Number(r.actual_sale_price ?? r.sale_price_snapshot ?? 0)
+        const reparaties: RepRegel[] = [{
+          id: r.id,
+          naam: r.repair_name_snapshot ?? r.standard_repairs?.name ?? null,
+          omschrijving: r.custom_work_description ?? r.damage_description ?? null,
+          prijs,
+        }]
+
+        const rapport: RegRapport = {
+          id: r.id,
+          datum: r.registration_date ?? null,
+          medewerker: r.profiles?.full_name ?? null,
+          status: r.status,
+          voorFoto: fotoUrl(fotos.find(f => f.photo_type === 'voor')?.storage_path),
+          naFoto: fotoUrl(fotos.find(f => f.photo_type === 'na')?.storage_path),
+          locatieLabel,
+          reparaties,
+        }
+
+        const sleutel = (r.location_block as string | null) || 'Overig'
+        const lijst = groepen.get(sleutel) ?? []
+        lijst.push(rapport)
+        groepen.set(sleutel, lijst)
+      }
+
+      setSecties([...groepen.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], 'nl'))
+        .map(([naam, registraties]) => ({ naam, omschrijving: null, registraties })))
+    }
+
+    laad().catch(() => { /* rapportage blijft leeg bij laadfout */ })
+    return () => { afgebroken = true }
   }, [projectId])
 
   if (!project) return null
 
-  const alleReparaties = secties.flatMap(s =>
-    s.locaties.flatMap(l => l.registraties.flatMap(r => r.reparaties))
-  )
-  const alleRegistraties = secties.flatMap(s =>
-    s.locaties.flatMap(l => l.registraties.map(r => r.registratie))
-  )
-  const afgerond = alleRegistraties.filter(r => r.status === 'afgerond').length
+  const alleRegistraties = secties.flatMap(s => s.registraties)
+  const alleReparaties = alleRegistraties.flatMap(r => r.reparaties)
+  const afgerond = alleRegistraties.filter(r => AFGEROND_STATUSSEN.includes(r.status)).length
 
   const aantalPerType = alleReparaties.reduce<Record<string, number>>((acc, r) => {
-    const key = r.reparatie_naam || r.omschrijving || 'Overig'
+    const key = r.naam || r.omschrijving || 'Overig'
     acc[key] = (acc[key] || 0) + 1
     return acc
   }, {})
@@ -97,15 +144,15 @@ export default function RapportagePage() {
 
   const totaalPerType = alleReparaties.reduce<Record<string, { naam: string; aantal: number; prijs: number }>>(
     (acc, r) => {
-      const key = r.reparatie_naam || r.omschrijving || 'Overig'
+      const key = r.naam || r.omschrijving || 'Overig'
       if (!acc[key]) acc[key] = { naam: key, aantal: 0, prijs: 0 }
       acc[key].aantal++
-      acc[key].prijs += r.sale_price_snapshot || 0
+      acc[key].prijs += r.prijs || 0
       return acc
     }, {}
   )
   const totaalRegels = Object.values(totaalPerType).sort((a, b) => b.prijs - a.prijs)
-  const totaalPrijs = alleReparaties.reduce((s, r) => s + (r.sale_price_snapshot || 0), 0)
+  const totaalPrijs = alleReparaties.reduce((s, r) => s + (r.prijs || 0), 0)
 
   const datum = new Date().toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -317,7 +364,7 @@ export default function RapportagePage() {
               </p>
               <div className="space-y-2 mb-6">
                 <div className="bg-slate-50 rounded-lg px-4 py-3.5 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">Projectdelen</span>
+                  <span className="text-sm text-slate-500">Blokken</span>
                   <span className="text-xl font-bold text-slate-800">{secties.length}</span>
                 </div>
                 <div className="bg-slate-50 rounded-lg px-4 py-3.5 flex items-center justify-between">
@@ -363,11 +410,10 @@ export default function RapportagePage() {
 
         {/* ══ DEEL 2: REPARATIEKAARTEN ═════════════════════════════════════════ */}
         {secties.map((sectie, si) => {
-          const alleRegInSectie = sectie.locaties.flatMap(l => l.registraties)
-          if (alleRegInSectie.length === 0) return null
+          if (sectie.registraties.length === 0) return null
 
           return (
-            <div key={sectie.projectdeel.id}>
+            <div key={sectie.naam}>
 
               {/* Sectie-header: donkere balk — eigen PDF-element */}
               <div
@@ -380,10 +426,10 @@ export default function RapportagePage() {
                   </div>
                   <div>
                     <h2 className="font-bold text-white text-base leading-tight">
-                      {sectie.projectdeel.naam}
+                      {sectie.naam}
                     </h2>
-                    {sectie.projectdeel.omschrijving && (
-                      <p className="text-xs text-white/60 mt-0.5">{sectie.projectdeel.omschrijving}</p>
+                    {sectie.omschrijving && (
+                      <p className="text-xs text-white/60 mt-0.5">{sectie.omschrijving}</p>
                     )}
                   </div>
                 </div>
@@ -391,84 +437,82 @@ export default function RapportagePage() {
               </div>
 
               {/* Registratiekaarten: één kaart per registratie */}
-              {sectie.locaties.flatMap(({ locatie, registraties }) =>
-                registraties.map(({ registratie, reparaties }) => {
-                  const regDatum = new Date(registratie.datum).toLocaleDateString('nl-NL', {
-                    day: 'numeric', month: 'long', year: 'numeric',
-                  })
+              {sectie.registraties.map(reg => {
+                const regDatum = reg.datum
+                  ? new Date(reg.datum).toLocaleDateString('nl-NL', {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                    })
+                  : '—'
+                const isAf = AFGEROND_STATUSSEN.includes(reg.status)
+                const isBezig = reg.status === 'in_uitvoering' || reg.status === 'ingepland'
 
-                  return (
-                    <div
-                      key={registratie.id}
-                      data-pdf-card
-                      className="px-6 pt-5 bg-white"
-                    >
-                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                return (
+                  <div
+                    key={reg.id}
+                    data-pdf-card
+                    className="px-6 pt-5 bg-white"
+                  >
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
 
-                        {/* Kaart kop */}
-                        <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-slate-800 text-sm leading-snug">
-                              {locatie.naam}
-                            </p>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                              <span>{regDatum}</span>
-                              {registratie.medewerker && <span>· {registratie.medewerker}</span>}
-                              <span>· {reparaties.length} reparatie{reparaties.length !== 1 ? 's' : ''}</span>
-                            </div>
+                      {/* Kaart kop */}
+                      <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 text-sm leading-snug">
+                            {reg.locatieLabel}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                            <span>{regDatum}</span>
+                            {reg.medewerker && <span>· {reg.medewerker}</span>}
+                            <span>· {reg.reparaties.length} reparatie{reg.reparaties.length !== 1 ? 's' : ''}</span>
                           </div>
-                          <span className={`flex-shrink-0 text-xs px-3 py-1 rounded-full font-semibold mt-0.5 ${
-                            registratie.status === 'afgerond'
-                              ? 'bg-green-100 text-green-700'
-                              : registratie.status === 'onderhanden'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {registratie.status === 'afgerond'
-                              ? 'Afgerond'
-                              : registratie.status === 'onderhanden'
-                              ? 'Onderhanden'
-                              : 'Geregistreerd'}
-                          </span>
                         </div>
-
-                        {/* Foto's van de registratie */}
-                        <div className="p-5 flex gap-5 bg-white">
-                          <FotoVak src={registratie.voor_foto} label="Voor" />
-                          <FotoVak src={registratie.na_foto} label="Na" />
-                        </div>
-
-                        {/* Reparaties lijst */}
-                        {reparaties.length > 0 && (
-                          <div className="px-5 pb-5 border-t border-slate-100">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2">
-                              Uitgevoerde reparaties
-                            </p>
-                            <div className="space-y-1.5">
-                              {reparaties.map(rep => (
-                                <div key={rep.id} className="flex items-center justify-between text-xs gap-3">
-                                  <span className="text-slate-600 truncate">
-                                    {rep.reparatie_naam || rep.omschrijving}
-                                    {rep.reparatie_naam && rep.omschrijving && (
-                                      <span className="text-slate-400"> — {rep.omschrijving}</span>
-                                    )}
-                                  </span>
-                                  {rep.sale_price_snapshot && (
-                                    <span className="flex-shrink-0 font-medium text-slate-500">
-                                      {formatCurrency(rep.sale_price_snapshot)}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
+                        <span className={`flex-shrink-0 text-xs px-3 py-1 rounded-full font-semibold mt-0.5 ${
+                          isAf
+                            ? 'bg-green-100 text-green-700'
+                            : isBezig
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {REGISTRATIE_STATUSSEN[reg.status as keyof typeof REGISTRATIE_STATUSSEN] ?? reg.status}
+                        </span>
                       </div>
+
+                      {/* Foto's van de registratie */}
+                      <div className="p-5 flex gap-5 bg-white">
+                        <FotoVak src={reg.voorFoto} label="Voor" />
+                        <FotoVak src={reg.naFoto} label="Na" />
+                      </div>
+
+                      {/* Reparaties lijst */}
+                      {reg.reparaties.length > 0 && (
+                        <div className="px-5 pb-5 border-t border-slate-100">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2">
+                            Uitgevoerde reparaties
+                          </p>
+                          <div className="space-y-1.5">
+                            {reg.reparaties.map(rep => (
+                              <div key={rep.id} className="flex items-center justify-between text-xs gap-3">
+                                <span className="text-slate-600 truncate">
+                                  {rep.naam || rep.omschrijving}
+                                  {rep.naam && rep.omschrijving && (
+                                    <span className="text-slate-400"> — {rep.omschrijving}</span>
+                                  )}
+                                </span>
+                                {rep.prijs > 0 && (
+                                  <span className="flex-shrink-0 font-medium text-slate-500">
+                                    {formatCurrency(rep.prijs)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                     </div>
-                  )
-                })
-              )}
+                  </div>
+                )
+              })}
             </div>
           )
         })}

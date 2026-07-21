@@ -6,15 +6,19 @@ import { Plus, MapPin, Calendar } from 'lucide-react'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
 import PageHeader from '@/components/houtrotherstel/shared/PageHeader'
 import { formatDateShort } from '@/lib/houtrotherstel/utils'
-import { getAllProjecten, getAllRegistraties } from '@/lib/houtrotherstel/local-store'
+import { getProjects } from '@/services/houtrotherstel/projects'
+import { getRegistraties } from '@/services/houtrotherstel/registraties'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 
 const STATUSSEN = [
   { value: '', label: 'Alle' },
-  { value: 'onderhanden', label: 'Onderhanden' },
+  { value: 'concept', label: 'Concept' },
+  { value: 'actief', label: 'Actief' },
   { value: 'afgerond', label: 'Afgerond' },
+  { value: 'gepauzeerd', label: 'Gepauzeerd' },
+  { value: 'geannuleerd', label: 'Geannuleerd' },
 ]
 
 export default function ProjectenLijst() {
@@ -24,8 +28,8 @@ export default function ProjectenLijst() {
   const [status, setStatus] = useState('')
 
   useEffect(() => {
-    setProjecten(getAllProjecten())
-    setRegistraties(getAllRegistraties())
+    getProjects().then(setProjecten).catch(() => setProjecten([]))
+    getRegistraties().then(setRegistraties).catch(() => setRegistraties([]))
   }, [])
 
   const gefilterd = projecten.filter(p => {
@@ -87,7 +91,7 @@ export default function ProjectenLijst() {
           return (
             <Card key={project.id} interactive>
               <Link
-                href={`/projecten/${project.id}`}
+                href={`/houtrotherstel/projecten/${project.id}`}
                 className="block p-5 group"
               >
                 <div className="flex items-start justify-between gap-2 mb-3">

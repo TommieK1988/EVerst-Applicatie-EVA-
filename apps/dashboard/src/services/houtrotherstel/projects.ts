@@ -67,53 +67,53 @@ export async function getProjectWithDetails(id: string) {
 }
 
 export async function createProject(form: ProjectForm, userId: string): Promise<Project> {
-  const { saveProject } = await import('@/lib/houtrotherstel/local-store')
-  const project: Project = {
-    id: `p-${Date.now()}`,
-    project_number: form.project_number,
-    name: form.name,
-    client_name: form.client_name,
-    address: form.address,
-    postal_code: form.postal_code,
-    city: form.city,
-    start_date: form.start_date || null,
-    end_date: form.end_date || null,
-    status: form.status,
-    description: form.description || null,
-    contact_name: form.contact_name || null,
-    contact_phone: form.contact_phone || null,
-    contact_email: form.contact_email || null,
-    notes: form.notes || null,
-    photo_url: null,
-    created_by: userId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
-  saveProject(project)
-  return project
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({
+      project_number: form.project_number,
+      name: form.name,
+      client_name: form.client_name,
+      address: form.address,
+      postal_code: form.postal_code,
+      city: form.city,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
+      status: form.status,
+      description: form.description || null,
+      contact_name: form.contact_name || null,
+      contact_phone: form.contact_phone || null,
+      contact_email: form.contact_email || null,
+      notes: form.notes || null,
+      created_by: userId,
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(error.message)
+  return data as Project
 }
 
 export async function updateProject(id: string, form: Partial<ProjectForm>): Promise<Project> {
-  const { getAllProjecten, saveProject } = await import('@/lib/houtrotherstel/local-store')
-  const all = getAllProjecten()
-  const existing = all.find(p => p.id === id)
-  if (!existing) throw new Error('Project niet gevonden')
-  const updated: Project = {
-    ...existing,
-    ...form,
-    start_date: form.start_date ?? existing.start_date,
-    end_date: form.end_date ?? existing.end_date,
-    updated_at: new Date().toISOString(),
-  }
-  saveProject(updated)
-  return updated
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update(form)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw new Error(error.message)
+  return data as Project
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  // Alleen localStorage projecten kunnen worden verwijderd
-  const { getLocalProjecten } = await import('@/lib/houtrotherstel/local-store')
-  const items = getLocalProjecten().filter(p => p.id !== id)
-  localStorage.setItem('eve_projecten', JSON.stringify(items))
+  const supabase = createClient()
+
+  const { error } = await supabase.from('projects').delete().eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
 export async function assignUserToProject(

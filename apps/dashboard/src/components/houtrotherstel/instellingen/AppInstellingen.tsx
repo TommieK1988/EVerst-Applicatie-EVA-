@@ -7,8 +7,8 @@ import {
   getUurtarief, saveUurtarief,
   getEenheden, saveEenheden,
   getReparatieTypes, saveReparatieTypes,
-} from '@/lib/houtrotherstel/local-store'
-import type { ReparatieType } from '@/lib/houtrotherstel/local-store'
+} from '@/lib/houtrotherstel/app-settings'
+import type { ReparatieType } from '@/lib/houtrotherstel/app-settings'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'

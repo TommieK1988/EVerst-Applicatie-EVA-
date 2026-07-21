@@ -534,8 +534,13 @@ export default function RegistratieFormulier({
           <div>
             <label className={labelClass}>Status *</label>
             <select {...register('status')} className={inputClass(!!errors.status)}>
-              <option value="onderhanden">Onderhanden</option>
-              <option value="afgerond">Afgerond</option>
+              <option value="open">Open</option>
+              <option value="ingepland">Ingepland</option>
+              <option value="in_uitvoering">In uitvoering</option>
+              <option value="gereed">Gereed</option>
+              <option value="gecontroleerd">Gecontroleerd</option>
+              <option value="afgekeurd">Afgekeurd</option>
+              <option value="hersteld_na_afkeur">Hersteld na afkeur</option>
             </select>
           </div>
           <div>

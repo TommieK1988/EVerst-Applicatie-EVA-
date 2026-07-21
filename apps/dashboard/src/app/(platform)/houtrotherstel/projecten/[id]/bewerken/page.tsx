@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import ProjectForm from '@/components/houtrotherstel/projecten/ProjectForm'
-import { getAllProjecten } from '@/lib/houtrotherstel/local-store'
+import { getProject } from '@/services/houtrotherstel/projects'
 import type { Project } from '@/lib/houtrotherstel/types'
 
 export default function ProjectBewerkenPage() {
@@ -14,8 +14,7 @@ export default function ProjectBewerkenPage() {
   const [project, setProject] = useState<Project | null | undefined>(undefined)
 
   useEffect(() => {
-    const p = getAllProjecten().find(x => x.id === id)
-    setProject(p ?? null)
+    getProject(id).then(p => setProject(p ?? null)).catch(() => setProject(null))
   }, [id])
 
   if (project === undefined) return (
@@ -30,7 +29,7 @@ export default function ProjectBewerkenPage() {
     <div className="max-w-3xl space-y-6 pb-20 lg:pb-0">
       <div>
         <Link
-          href={`/projecten/${id}`}
+          href={`/houtrotherstel/projecten/${id}`}
           className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

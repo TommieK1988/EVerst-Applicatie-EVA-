@@ -163,7 +163,7 @@ export default function RegistratiesTable({
           title="Geen registraties gevonden"
           description="Er zijn geen registraties die voldoen aan de huidige filters."
           actionLabel="Nieuwe registratie"
-          actionHref="/registraties/nieuw"
+          actionHref="/houtrotherstel/registraties/nieuw"
         />
       ) : (
         <>
@@ -237,7 +237,7 @@ export default function RegistratiesTable({
             {registraties.map((r: any) => (
               <Link
                 key={r.id}
-                href={`/registraties/${r.id}`}
+                href={`/houtrotherstel/registraties/${r.id}`}
                 className="block bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
