@@ -1,0 +1,9 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-22','opgelost','Calculatie','Het BTW-tarief van een calculatieregel komt weer in de offerte',
+   'Koos je op een regel 9% of 0% BTW, dan stond er in de offerte toch 21%. Dat is verholpen: elk tarief dat je in de calculatie kiest komt nu mee, en de BTW-specificatie onder de offerte splitst netjes per tarief. Regels waar je zelf niets kiest volgen het standaardtarief van de calculatie.'),
+  ('2026-07-22','opgelost','Calculatie','De behandelingstekst in de offerte is altijd de actuele',
+   'De tekst van een schilderbehandeling werd vastgelegd op het moment dat je hem aan een regel koppelde. Paste je hem daarna aan in de bibliotheek, dan stonden er twee bijna gelijke behandelingen in de offerte. Voortaan bewaart de calculatie alleen de koppeling en wordt de tekst pas vastgelegd als je de offerte opstelt. In de calculatie zie je dus altijd de actuele tekst, en in een verzonden offerte blijft staan wat er stond.'),
+  ('2026-07-22','nieuw','Calculatie','Groepen naar een ander niveau slepen',
+   'Sleep een groep omhoog of omlaag om hem te verplaatsen, en naar links of rechts om hem een niveau hoger of lager te zetten. Een lijntje laat vooraf zien waar hij landt. Onderliggende subgroepen schuiven mee en de nummering loopt vanzelf weer goed. Groepen springen nu ook zichtbaar in per niveau.'),
+  ('2026-07-22','verbeterd','Calculatie','De calculatie leest prettiger',
+   'Alle bedragen en aantallen in het calculatiescherm hebben een duizendpunt gekregen, ook terwijl je ze invult — een komma of een punt als decimaalteken werkt allebei. De letters zijn iets groter, de kolom Tot. Uren staat niet langer vet, en hangt er een schilderbehandeling aan een regel, dan zie je de naam ervan achter de omschrijving staan.');
