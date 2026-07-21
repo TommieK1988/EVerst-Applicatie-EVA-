@@ -12,7 +12,11 @@ import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { pgQuery, getPgPool } from '@/lib/wagenpark/db'
 import { vereisRecht } from '@/lib/auth/rechten'
 
-export async function runComplianceAction(): Promise<{ totaal: number; perRegel: Record<string, number> }> {
+export async function runComplianceAction(): Promise<{
+  totaal: number
+  perRegel: Record<string, number>
+  ritten: number
+}> {
   await vereisRecht('wagenpark', 'schrijven')
   const supabase = createServiceRoleClient()
 
@@ -22,12 +26,29 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
   const periodeEind = new Date().toISOString().slice(0, 10)
 
   // Laad trips, voertuigen, regels, ulu_users
-  const [tripsRes, voertuigenRes, regelsRes, uluUsersRaw] = await Promise.all([
-    supabase
-      .from('ulu_trips')
-      .select('*')
-      .gte('start_datum', periodeStart)
-      .lte('start_datum', periodeEind),
+  //
+  // Trips gaan bewust via de directe Postgres-pool en NIET via PostgREST:
+  // PostgREST kapt een `select *` af op zijn max-rows-instelling en de
+  // authenticator-rol heeft statement_timeout=8s. Bij zo'n afkapping of time-out
+  // kwam er stilletjes een lege lijst terug (de vorige code las alleen
+  // `tripsRes.data ?? []` en negeerde `tripsRes.error`), waarna de hele run
+  // "geslaagd" meldde met nul bevindingen. Numerieke kolommen worden expliciet
+  // naar float gecast, want node-postgres levert `numeric` als string.
+  const [trips, voertuigenRes, regelsRes, uluUsersRaw] = await Promise.all([
+    pgQuery<UluTrip & { rit_type_override?: 'zakelijk' | 'prive' | null }>(
+      `select id::text, voertuig_id::text, medewerker_id::text, bestuurder_naam_raw,
+              user_id_ulu, kenteken, start_datum::text, start_tijd::text, stop_tijd::text,
+              adres_start, adres_stop,
+              afstand_km::float     as afstand_km,
+              duur_seconden,
+              km_stand_start::float as km_stand_start,
+              km_stand_stop::float  as km_stand_stop,
+              rit_type_ulu, rit_type_berekend::text, rit_type_override::text,
+              score, import_batch_id::text, created_at::text
+         from public.ulu_trips
+        where start_datum between $1::date and $2::date`,
+      [periodeStart, periodeEind],
+    ),
     supabase.from('voertuigen').select('*'),
     supabase.from('handboek_regels').select('*'),
     pgQuery<UluUserInfo>(
@@ -38,10 +59,13 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
     ),
   ])
 
+  // Fouten hier niet inslikken: een mislukte laadstap zou anders een lege lijst
+  // opleveren en de run ten onrechte als "geen bevindingen" laten eindigen.
+  if (voertuigenRes.error) throw new Error(`Voertuigen laden mislukt: ${voertuigenRes.error.message}`)
+  if (regelsRes.error) throw new Error(`Handboek-regels laden mislukt: ${regelsRes.error.message}`)
+
   // Substitueer effectief rit_type: handmatige override wint boven berekend
-  const trips = ((tripsRes.data ?? []) as (UluTrip & {
-    rit_type_override?: 'zakelijk' | 'prive' | null
-  })[]).map((t) => ({
+  const tripsEffectief = trips.map((t) => ({
     ...t,
     rit_type_berekend: t.rit_type_override ?? t.rit_type_berekend,
   })) as UluTrip[]
@@ -53,7 +77,7 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
   )
   const uluUsers = new Map(uluUsersRaw.map((u) => [u.id, u]))
 
-  const ctx = { trips, voertuigen, regels, periodeStart, periodeEind, uluUsers }
+  const ctx = { trips: tripsEffectief, voertuigen, regels, periodeStart, periodeEind, uluUsers }
   const result = Compliance.runComplianceEngine(ctx)
 
   // R8 — parkeer-analyses (apart, want werkt op ulu_parking i.p.v. ulu_trips)
@@ -116,7 +140,7 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
 
   // Map trip_id → user_id_ulu als fallback (R3/R6 hebben geen data.user_id_ulu)
   const tripToUser = new Map<string, number | null>(
-    trips.map((t) => [t.id, t.user_id_ulu ?? null]),
+    tripsEffectief.map((t) => [t.id, t.user_id_ulu ?? null]),
   )
 
   function isAutoToegestaan(b: typeof result.bevindingen[number]): boolean {
@@ -265,7 +289,11 @@ export async function runComplianceAction(): Promise<{ totaal: number; perRegel:
 
   revalidatePath('/wagenpark/bevindingen')
   revalidatePath('/wagenpark/dashboard')
-  return { totaal: result.samenvatting.totaal, perRegel: result.perRegel }
+  return {
+    totaal: result.samenvatting.totaal,
+    perRegel: result.perRegel,
+    ritten: tripsEffectief.length,
+  }
 }
 
 /**

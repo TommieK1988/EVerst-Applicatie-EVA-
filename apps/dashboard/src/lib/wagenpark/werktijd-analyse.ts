@@ -175,12 +175,37 @@ function straatPlaatsSleutel(
  * ook op straat+plaats te matchen tellen die ritten alsnog als "op locatie".
  */
 function tripSleutel(adres: string | null | undefined): string | null {
+  const dl = tripAdresDelen(adres)
+  return dl ? straatPlaatsSleutel(dl.straat, dl.plaats) : null
+}
+
+/**
+ * Splits een ULU-rit-adres in straat + plaats. Het formaat verschilt per bron:
+ *   API-sync (vanaf 17-apr): "Poolsterstraat , Den Haag"                → 2 delen
+ *   xlsx-import (t/m 16-apr): "Europalaan , Kaatsheuvel 5171, N-Brabant" → 3 delen
+ *   soms alleen een straatnaam zonder plaats                            → 1 deel
+ * De straat is altijd het eerste deel en de plaats het tweede; een postcode
+ * achter de plaats en een eventuele provincie als derde deel vallen weg. Bij één
+ * deel is de plaats onbekend en geven we null terug.
+ */
+function tripAdresDelen(
+  adres: string | null | undefined,
+): { straat: string; plaats: string } | null {
   if (!adres) return null
   const delen = adres.split(',').map((s) => s.trim()).filter(Boolean)
   if (delen.length < 2) return null
-  const plaats = delen[delen.length - 1]
-  const straat = delen.slice(0, delen.length - 1).join(' ')
-  return straatPlaatsSleutel(straat, plaats)
+  const straat = delen[0]
+  const plaats = delen[1]
+    .replace(/\s*\d{4}\s*[a-z]{0,2}\s*$/i, '') // "Kaatsheuvel 5171 RC" → "Kaatsheuvel"
+    .replace(/\s*\d+\s*$/, '')
+    .trim()
+  return straat && plaats ? { straat, plaats } : null
+}
+
+/** Plaats van een rit-eindpunt (voor het plaats-voorfilter). */
+function tripPlaats(adres: string | null | undefined): string | null {
+  const dl = tripAdresDelen(adres)
+  return dl ? dl.plaats.toLowerCase() : null
 }
 
 function datesInRange(van: string, tot: string): string[] {
@@ -763,7 +788,7 @@ async function verrijkTripCoordinaten(
     const refSleutels = sleutelsPerDriver.get(t.user_id_ulu) ?? new Set<string>()
 
     if (t.start_lat == null && t.adres_start && !refSleutels.has(tripSleutel(t.adres_start) ?? '')) {
-      const plaats = plaatsUitAdres(t.adres_start)
+      const plaats = tripPlaats(t.adres_start)
       if (plaats && plaatsen.has(plaats)) {
         const punt = await geocodeQuery(geocodeQueryVoorRit(t.adres_start))
         if (punt) {
@@ -778,7 +803,7 @@ async function verrijkTripCoordinaten(
     }
     if (Date.now() > deadline) break
     if (t.stop_lat == null && t.adres_stop && !refSleutels.has(tripSleutel(t.adres_stop) ?? '')) {
-      const plaats = plaatsUitAdres(t.adres_stop)
+      const plaats = tripPlaats(t.adres_stop)
       if (plaats && plaatsen.has(plaats)) {
         const punt = await geocodeQuery(geocodeQueryVoorRit(t.adres_stop))
         if (punt) {
