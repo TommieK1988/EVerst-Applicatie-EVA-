@@ -15,9 +15,7 @@ import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
 const fmtDatum = (iso: string) =>
-  new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
-const fmtBedrag = (v: number) =>
-  new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
+  new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
 
 const TabLaden = () => (
   <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>Laden…</div>
@@ -72,31 +70,20 @@ function InformatieTab({ d, statusLabel }: { d: Record<string, any>; statusLabel
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
 
+  // Bewust kaal voor de buitendienst: geen bedragen, geen volledige rollenlijst.
   const info: DossierInfo = {
     titel: d.titel,
     dossiernummer: d.dossiernummer ?? null,
     statusLabel,
     statusColor: dossierStatusBadge(d as never).color,
     klant_naam: d.klant_naam ?? null,
-    categorie: d.categorie ?? d.bouw7_categorie_naam ?? null,
-    fase: statusLabel,
     begindatum: d.verwacht_startdatum ? fmtDatum(d.verwacht_startdatum) : null,
     einddatum: d.verwacht_einddatum ? fmtDatum(d.verwacht_einddatum) : null,
-    referentie: d.referentie ?? null,
     contact_naam: d.contactpersoon_naam ?? null,
     contact_telefoon: d.contactpersoon_telefoon ?? null,
-    contact_email: d.contactpersoon_email ?? null,
     werkadres,
-    rollen: [
-      { label: 'Projectleider', naam: d.projectleider_naam ?? null },
-      { label: 'Uitvoerder', naam: d.uitvoerder_naam ?? null },
-      { label: 'Werkvoorbereider', naam: d.werkvoorbereider_naam ?? null },
-      { label: 'Calculator', naam: d.calculator_naam ?? null },
-      { label: 'Teamleider', naam: d.teamleider_naam ?? null },
-      { label: 'Controller', naam: d.controller_naam ?? null },
-    ],
-    aanneemsom: d.bedrag_excl_btw != null ? fmtBedrag(d.bedrag_excl_btw) : null,
-    totaalIncl: d.bedrag_incl_btw != null ? fmtBedrag(d.bedrag_incl_btw) : null,
+    uitvoerder: d.uitvoerder_naam ?? null,
+    projectleider: d.projectleider_naam ?? null,
   }
 
   return <DossierInfoView info={info} />

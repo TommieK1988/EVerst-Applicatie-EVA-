@@ -3,8 +3,12 @@ import Link from 'next/link'
 
 /**
  * Mobiele scherm-header (DS "AppHeader"): polygon-achtergrond + donkere scrim,
- * 62px top-padding voor de iOS-statusbar, witte titel (800/-0.02em) + optionele
- * subtitel en terug-link. Per scherm gerenderd; de bottom-nav zit in de layout.
+ * witte titel (800/-0.02em) + optionele subtitel en terug-link.
+ *
+ * Bewust compact gehouden: op een telefoon is verticale ruimte schaars en de
+ * header mag niet meer wegnemen dan nodig. De top-padding houdt rekening met de
+ * statusbalk (`env(safe-area-inset-top)`), met een ondergrens voor toestellen
+ * die die waarde niet leveren.
  */
 export default function AppHeader({
   title, sub, backHref,
@@ -19,10 +23,10 @@ export default function AppHeader({
         backgroundImage: 'url("/polygon-bg.png")',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        paddingTop: 'max(62px, env(safe-area-inset-top))',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)',
         paddingLeft: 16,
         paddingRight: 16,
-        paddingBottom: backHref ? 16 : 20,
+        paddingBottom: backHref ? 12 : 14,
         color: '#fff',
         flexShrink: 0,
         position: 'relative',
@@ -43,7 +47,7 @@ export default function AppHeader({
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               color: 'rgba(255,255,255,.9)', fontSize: 14, fontWeight: 600,
-              textDecoration: 'none', marginBottom: 10, lineHeight: 1,
+              textDecoration: 'none', marginBottom: 8, lineHeight: 1,
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -60,9 +64,9 @@ export default function AppHeader({
             src="/logo-beeldmerk.svg"
             alt=""
             aria-hidden
-            style={{ height: backHref ? 22 : 26, width: 'auto', flexShrink: 0, filter: 'brightness(0) invert(1)' }}
+            style={{ height: backHref ? 19 : 22, width: 'auto', flexShrink: 0, filter: 'brightness(0) invert(1)' }}
           />
-          <div style={{ fontSize: backHref ? 18 : 21, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: backHref ? 17 : 19, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {title}
           </div>
         </div>

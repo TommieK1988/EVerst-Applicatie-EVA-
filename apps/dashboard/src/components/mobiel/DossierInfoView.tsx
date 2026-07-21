@@ -1,118 +1,123 @@
 import React from 'react'
-import AppHeader from './AppHeader'
 import StatusBadge from './StatusBadge'
 
+/**
+ * Dossier-informatie voor de buitendienst (mobiel).
+ *
+ * Bewust kaal: uitvoerend personeel heeft op een telefoon maar een paar dingen
+ * nodig — waar moet ik zijn, wie bel ik, en wanneer. Grote tekst, grote
+ * knoppen. Financiële cijfers en de volledige rollenlijst horen hier niet;
+ * die staan op de desktop. Een tabletweergave met meer detail kan later.
+ *
+ * LET OP: dit scherm rendert géén eigen `AppHeader` — de dossierpagina doet dat
+ * al. Twee headers stapelen gaf een dubbele bovenbalk waar de tabstrip tussen
+ * wegviel.
+ */
 export type DossierInfo = {
   titel: string
   dossiernummer: string | null
   statusLabel: string
   statusColor: string
   klant_naam: string | null
-  categorie: string | null
-  fase: string
   begindatum: string | null
   einddatum: string | null
-  referentie: string | null
   contact_naam: string | null
   contact_telefoon: string | null
-  contact_email: string | null
   werkadres: string | null
-  rollen: { label: string; naam: string | null }[]
-  aanneemsom: string | null
-  totaalIncl: string | null
+  uitvoerder: string | null
+  projectleider: string | null
 }
 
-function Sectie({ titel, children }: { titel: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e3e8ea', borderRadius: 12, padding: 14, marginBottom: 10 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#6b757c', marginBottom: 10 }}>
-        {titel}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Veld({ label, waarde }: { label: string; waarde?: React.ReactNode }) {
+/** Groot, goed leesbaar feit. */
+function Feit({ label, waarde }: { label: string; waarde: React.ReactNode }) {
   const leeg = waarde == null || waarde === ''
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#9aa4ab', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500, color: leeg ? '#9aa4ab' : '#232a30', wordBreak: 'break-word' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#6b757c', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 600, color: leeg ? '#9aa4ab' : '#161b20', wordBreak: 'break-word', lineHeight: 1.35 }}>
         {leeg ? '—' : waarde}
       </div>
     </div>
   )
 }
 
-const grid2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }
+const kaart: React.CSSProperties = {
+  background: '#fff', border: '1px solid #e3e8ea', borderRadius: 14,
+  padding: 16, display: 'flex', flexDirection: 'column', gap: 14,
+}
+
+const knop: React.CSSProperties = {
+  flex: 1, minHeight: 56, borderRadius: 14,
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  fontSize: 16, fontWeight: 700, textDecoration: 'none',
+  WebkitTapHighlightColor: 'transparent',
+}
 
 export default function DossierInfoView({ info }: { info: DossierInfo }) {
+  const telefoon = info.contact_telefoon?.replace(/\s/g, '') || null
+  const periode = [info.begindatum, info.einddatum].filter(Boolean).join(' – ') || null
+
   return (
-    <>
-      <AppHeader title={info.titel} sub={info.dossiernummer ?? undefined} backHref="/m/dossiers" />
-      <div style={{ padding: 12 }}>
-        {/* Status */}
-        <div style={{ background: '#fff', border: '1px solid #e3e8ea', borderRadius: 12, padding: 14, marginBottom: 10 }}>
-          <StatusBadge label={info.statusLabel} color={info.statusColor} lg />
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Wat is dit voor werk, en hoe staat het ervoor */}
+      <div style={{ ...kaart, gap: 12 }}>
+        <div style={{ fontSize: 19, fontWeight: 800, color: '#161b20', lineHeight: 1.25 }}>
+          {info.titel}
         </div>
-
-        <Sectie titel="Project">
-          <div style={grid2}>
-            <Veld label="Dossiernummer" waarde={info.dossiernummer} />
-            <Veld label="Fase" waarde={info.fase} />
-            <Veld label="Categorie" waarde={info.categorie} />
-            <Veld label="Referentie" waarde={info.referentie} />
-            <Veld label="Begindatum" waarde={info.begindatum} />
-            <Veld label="Einddatum" waarde={info.einddatum} />
-          </div>
-        </Sectie>
-
-        <Sectie titel="Opdrachtgever & contact">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Veld label="Opdrachtgever" waarde={info.klant_naam} />
-            <div style={grid2}>
-              <Veld label="Contactpersoon" waarde={info.contact_naam} />
-              <Veld
-                label="Telefoon"
-                waarde={info.contact_telefoon
-                  ? <a href={`tel:${info.contact_telefoon.replace(/\s/g, '')}`} style={{ color: '#009439', textDecoration: 'none', fontWeight: 600 }}>{info.contact_telefoon}</a>
-                  : null}
-              />
-            </div>
-            <Veld
-              label="E-mail"
-              waarde={info.contact_email
-                ? <a href={`mailto:${info.contact_email}`} style={{ color: '#009439', textDecoration: 'none', fontWeight: 600 }}>{info.contact_email}</a>
-                : null}
-            />
-          </div>
-        </Sectie>
-
-        <Sectie titel="Werkadres">
-          <Veld
-            label="Adres"
-            waarde={info.werkadres
-              ? <a href={`https://maps.google.com/?q=${encodeURIComponent(info.werkadres)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#009439', textDecoration: 'none', fontWeight: 600 }}>{info.werkadres}</a>
-              : null}
-          />
-        </Sectie>
-
-        <Sectie titel="Rollen">
-          <div style={grid2}>
-            {info.rollen.map(r => <Veld key={r.label} label={r.label} waarde={r.naam} />)}
-          </div>
-        </Sectie>
-
-        <Sectie titel="Financieel">
-          <div style={grid2}>
-            <Veld label="Aanneemsom excl. BTW" waarde={info.aanneemsom} />
-            <Veld label="Totaal incl. BTW" waarde={info.totaalIncl} />
-          </div>
-        </Sectie>
+        <StatusBadge label={info.statusLabel} color={info.statusColor} lg />
       </div>
-    </>
+
+      {/* De twee dingen die je in het veld daadwerkelijk doet */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <a
+          href={telefoon ? `tel:${telefoon}` : undefined}
+          aria-disabled={!telefoon}
+          style={{
+            ...knop,
+            background: telefoon ? '#009439' : '#e3e8ea',
+            color: telefoon ? '#fff' : '#9aa4ab',
+            pointerEvents: telefoon ? 'auto' : 'none',
+          }}
+        >
+          Bellen
+        </a>
+        <a
+          href={info.werkadres ? `https://maps.google.com/?q=${encodeURIComponent(info.werkadres)}` : undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-disabled={!info.werkadres}
+          style={{
+            ...knop,
+            background: info.werkadres ? '#fff' : '#f4f6f7',
+            color: info.werkadres ? '#009439' : '#9aa4ab',
+            border: `1px solid ${info.werkadres ? '#009439' : '#e3e8ea'}`,
+            pointerEvents: info.werkadres ? 'auto' : 'none',
+          }}
+        >
+          Navigeren
+        </a>
+      </div>
+
+      <div style={kaart}>
+        <Feit label="Werkadres" waarde={info.werkadres} />
+        <Feit label="Opdrachtgever" waarde={info.klant_naam} />
+        {periode && <Feit label="Periode" waarde={periode} />}
+      </div>
+
+      <div style={kaart}>
+        <Feit
+          label="Contactpersoon"
+          waarde={info.contact_naam
+            ? (telefoon
+                ? <a href={`tel:${telefoon}`} style={{ color: '#009439', textDecoration: 'none' }}>
+                    {info.contact_naam} · {info.contact_telefoon}
+                  </a>
+                : info.contact_naam)
+            : null}
+        />
+        <Feit label="Uitvoerder" waarde={info.uitvoerder} />
+        <Feit label="Projectleider" waarde={info.projectleider} />
+      </div>
+    </div>
   )
 }
