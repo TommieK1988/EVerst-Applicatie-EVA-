@@ -65,8 +65,8 @@ export default function RapportagesDashboard({
   const perMedewerker = useMemo(() => {
     const map: Record<string, { naam: string; count: number; verkoopprijs: number; uren: number }> = {}
     registraties.forEach(r => {
-      const uid = r.profiles?.id || 'unknown'
-      if (!map[uid]) map[uid] = { naam: r.profiles?.full_name || 'Onbekend', count: 0, verkoopprijs: 0, uren: 0 }
+      const uid = r.user_id || 'unknown'
+      if (!map[uid]) map[uid] = { naam: r.medewerker_naam || 'Onbekend', count: 0, verkoopprijs: 0, uren: 0 }
       map[uid].count++
       map[uid].verkoopprijs += Number(r.actual_sale_price || r.sale_price_snapshot) || 0
       map[uid].uren += Number(r.actual_labor_hours || r.labor_hours_snapshot) || 0
@@ -89,7 +89,7 @@ export default function RapportagesDashboard({
         'Datum': formatDateShort(r.registration_date),
         'Project': r.projects?.name,
         'Projectnummer': r.projects?.project_number,
-        'Medewerker': r.profiles?.full_name,
+        'Medewerker': r.medewerker_naam,
         'Component': r.component_type,
         'Reparatie': r.repair_name_snapshot,
         'Status': r.status,

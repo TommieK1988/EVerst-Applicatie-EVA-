@@ -1,6 +1,7 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/houtrotherstel/supabase/server'
+import { getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 import Link from 'next/link'
 import { ArrowLeft, Edit, MapPin, Calendar, User, Wrench, Euro } from 'lucide-react'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
@@ -17,20 +18,16 @@ export default async function RegistratieDetailPage({
 }) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user!.id)
-    .single()
+  // Rechten lopen sinds de cutover via EVA (medewerkers + rechten), niet meer
+  // via het oude houtrot-eigen profiles.role.
+  const rechten = await getEffectieveRechten()
 
   const { data: registratie } = await supabase
     .from('repair_registrations')
     .select(`
       *,
       projects(id, name, project_number, client_name, city),
-      profiles(id, full_name, email),
       standard_repairs(id, code, name, category),
       repair_photos(id, photo_type, storage_path, file_name, created_at)
     `)
@@ -39,8 +36,17 @@ export default async function RegistratieDetailPage({
 
   if (!registratie) notFound()
 
-  const isAdmin = profile?.role === 'admin'
-  const isProjectleider = profile?.role === 'projectleider'
+  // De registrant staat in public.medewerkers; dat schema is niet embedbaar vanuit
+  // de houtrot-client, dus halen we de naam uit de view die er wél overheen joint.
+  const { data: detail } = await supabase
+    .from('registraties_met_details')
+    .select('medewerker_naam')
+    .eq('id', id)
+    .maybeSingle()
+  const medewerkerNaam = (detail as { medewerker_naam?: string | null } | null)?.medewerker_naam ?? '—'
+
+  const isAdmin = heeftModuleToegang(rechten, 'houtrotherstel', 'beheren')
+  const isProjectleider = heeftModuleToegang(rechten, 'houtrotherstel', 'schrijven')
   const isOwner = registratie.user_id === user!.id
   const canEdit = isAdmin || isProjectleider || isOwner
 
@@ -208,7 +214,7 @@ export default async function RegistratieDetailPage({
                 <User className="w-4 h-4 text-slate-400" />
                 <div>
                   <div className="text-xs text-slate-400">Medewerker</div>
-                  <div className="text-slate-700">{(registratie.profiles as any)?.full_name}</div>
+                  <div className="text-slate-700">{medewerkerNaam}</div>
                 </div>
               </div>
               {registratie.completed_at && (

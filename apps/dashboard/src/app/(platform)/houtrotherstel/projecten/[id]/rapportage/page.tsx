@@ -106,7 +106,7 @@ export default function RapportagePage() {
         const rapport: RegRapport = {
           id: r.id,
           datum: r.registration_date ?? null,
-          medewerker: r.profiles?.full_name ?? null,
+          medewerker: r.medewerker_naam ?? null,
           status: r.status,
           voorFoto: fotoUrl(fotos.find(f => f.photo_type === 'voor')?.storage_path),
           naFoto: fotoUrl(fotos.find(f => f.photo_type === 'na')?.storage_path),

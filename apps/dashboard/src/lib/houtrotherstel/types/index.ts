@@ -233,9 +233,14 @@ export interface RepairRegistration {
   updated_at: string
   // Relaties
   project?: Project
-  profile?: Profile
   standard_repair?: StandardRepair
   photos?: RepairPhoto[]
+  /**
+   * Naam van de registrerende medewerker. Wordt aangevuld vanuit de view
+   * `registraties_met_details`: de eigenaar staat in `public.medewerkers` en dat
+   * schema is niet embedbaar vanuit de houtrot-client.
+   */
+  medewerker_naam?: string | null
 }
 
 export interface RepairPhoto {

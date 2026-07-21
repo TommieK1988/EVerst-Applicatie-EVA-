@@ -15,7 +15,6 @@ export async function getRegistraties(
     .select(`
       *,
       projects(id, name, project_number),
-      profiles(id, full_name, email),
       standard_repairs(id, name, code, category),
       repair_photos(id, photo_type, storage_path, file_name)
     `)
@@ -53,7 +52,30 @@ export async function getRegistraties(
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  return (data || []) as RepairRegistration[]
+  return metMedewerkerNaam(supabase, (data || []) as RepairRegistration[])
+}
+
+/**
+ * Vult `medewerker_naam` aan. De registrant staat sinds de cutover in
+ * `public.medewerkers`, maar deze client is op het `houtrotherstel`-schema gescoped
+ * en kan daar niet naartoe embedden. De view `registraties_met_details` joint wél
+ * over de schema's heen, dus halen we de naam daar op. Faalt stil (naam blijft null).
+ */
+async function metMedewerkerNaam(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  rijen: RepairRegistration[]
+): Promise<RepairRegistration[]> {
+  if (rijen.length === 0) return rijen
+
+  const { data } = await supabase
+    .from('registraties_met_details')
+    .select('id, medewerker_naam')
+    .in('id', rijen.map(r => r.id))
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const namen = new Map<string, string | null>((data ?? []).map((d: any) => [d.id, d.medewerker_naam]))
+  return rijen.map(r => ({ ...r, medewerker_naam: namen.get(r.id) ?? null }))
 }
 
 export async function getRegistratie(id: string): Promise<RepairRegistration | null> {
@@ -64,7 +86,6 @@ export async function getRegistratie(id: string): Promise<RepairRegistration | n
     .select(`
       *,
       projects(id, name, project_number, client_name),
-      profiles(id, full_name, email),
       standard_repairs(id, name, code, category, description),
       repair_photos(id, photo_type, storage_path, file_name, created_at)
     `)
@@ -72,7 +93,8 @@ export async function getRegistratie(id: string): Promise<RepairRegistration | n
     .single()
 
   if (error) return null
-  return data as RepairRegistration
+  const [rij] = await metMedewerkerNaam(supabase, [data as RepairRegistration])
+  return rij ?? (data as RepairRegistration)
 }
 
 export async function createRegistratie(

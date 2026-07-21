@@ -1,6 +1,5 @@
 import { Metadata } from 'next'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/houtrotherstel/supabase/server'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import StandaardReparatieForm from '@/components/houtrotherstel/reparaties/StandaardReparatieForm'
@@ -8,18 +7,9 @@ import StandaardReparatieForm from '@/components/houtrotherstel/reparaties/Stand
 export const metadata: Metadata = { title: 'Nieuwe standaard reparatie' }
 
 export default async function NieuweStandaardReparatiePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user!.id)
-    .single()
-
-  if (profile?.role !== 'admin') {
-    redirect('/houtrotherstel/standaard-reparaties')
-  }
+  // De prijzenbibliotheek is beheer-werk: gate op EVA-rechten i.p.v. het oude
+  // houtrot-eigen profiles.role.
+  await vereisModuleToegang('houtrotherstel', 'beheren')
 
   return (
     <div className="max-w-3xl space-y-6 pb-20 lg:pb-0">

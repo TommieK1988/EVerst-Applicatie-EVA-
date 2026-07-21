@@ -267,7 +267,7 @@ export default function RegistratiesTable({
                         {r.repair_photos.length}
                       </span>
                     )}
-                    <span>{r.profiles?.full_name}</span>
+                    <span>{r.medewerker_naam}</span>
                   </div>
                   {(r.actual_sale_price || r.sale_price_snapshot) && userRole !== 'medewerker' && (
                     <span className="text-sm font-medium text-slate-700">

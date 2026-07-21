@@ -51,7 +51,7 @@ export async function getProjectWithDetails(id: string) {
       project_user_assignments(
         id,
         role_in_project,
-        profiles(id, full_name, email, role)
+        user_id
       ),
       repair_registrations(
         id, status, control_status, sale_price_snapshot, actual_sale_price,

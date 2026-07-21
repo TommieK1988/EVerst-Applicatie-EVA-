@@ -99,8 +99,8 @@ export default function ProjectRegistratiesTab({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span>{formatDateShort(r.registration_date)}</span>
-                  {r.profiles?.full_name && (
-                    <span>· {r.profiles.full_name}</span>
+                  {r.medewerker_naam && (
+                    <span>· {r.medewerker_naam}</span>
                   )}
                   {r.repair_name_snapshot && (
                     <span className="hidden sm:inline">· {r.repair_name_snapshot}</span>

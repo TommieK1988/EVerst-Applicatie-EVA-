@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import RegistratieFormulier from '@/components/houtrotherstel/registraties/RegistratieFormulier'
 import { getProjects } from '@/services/houtrotherstel/projects'
 import { getStandaardReparaties } from '@/services/houtrotherstel/standaard-reparaties'
-import { getCurrentProfile } from '@/services/houtrotherstel/gebruikers'
+import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 
 interface Props {
   defaultProjectId?: string
@@ -29,7 +29,8 @@ export default function NieuweRegistratieClient({ defaultProjectId }: Props) {
       description: r.description,
     })))).catch(() => setStandaardReparaties([]))
 
-    getCurrentProfile().then(p => { if (p) setUserId(p.id) }).catch(() => {})
+    // user_id op een registratie is sinds de cutover een medewerker-id.
+    getHuidigeMedewerker().then(m => { if (m) setUserId(m.id) }).catch(() => {})
   }, [])
 
   return (

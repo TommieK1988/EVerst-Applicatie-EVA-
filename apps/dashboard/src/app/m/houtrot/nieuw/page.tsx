@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getProjects } from '@/services/houtrotherstel/projects'
 import { getStandaardReparaties } from '@/services/houtrotherstel/standaard-reparaties'
 import { createRegistratie, uploadPhoto } from '@/services/houtrotherstel/registraties'
-import { getCurrentProfile } from '@/services/houtrotherstel/gebruikers'
+import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import {
   GEVEL_ZIJDEN, ONDERDEEL_TYPEN, SCHADE_SEVERITY,
   type ProjectWithStats, type StandardRepair, type RegistratieForm, type SchadeSeverity,
@@ -82,8 +82,8 @@ export default function MobielHoutrotNieuwPage() {
     setFout(null)
 
     try {
-      const profiel = await getCurrentProfile()
-      if (!profiel) throw new Error('Geen gebruikersprofiel gevonden.')
+      const medewerker = await getHuidigeMedewerker()
+      if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
 
       const sr = reparaties.find(r => r.id === reparatieId)
 
@@ -115,7 +115,7 @@ export default function MobielHoutrotNieuwPage() {
         }),
       }
 
-      const registratie = await createRegistratie(form, profiel.id)
+      const registratie = await createRegistratie(form, medewerker.id)
 
       // Foto's pas na het aanmaken — ze hangen aan het registratie-id.
       if (voorFoto) await uploadPhoto(registratie.id, voorFoto, 'voor').catch(() => null)
