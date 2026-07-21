@@ -207,9 +207,13 @@ export async function runComplianceAction(): Promise<{
     // verouderde open bevindingen kwijt (trip is bv. verwijderd), maar behouden
     // we behandelde status.
     const nieuweFingerprints = uniek.map((u) => u.fingerprint)
+    // R11 uitzonderen: die bevindingen komen uit de werktijd-analyse (eigen job,
+    // async data) en zitten dus niet in het resultaat van deze run. Zonder deze
+    // uitzondering zou elke compliance-check ze weggooien.
     await client.query(
       `delete from public.compliance_bevindingen
         where status = 'open'
+          and regel_code <> 'R11'
           and periode_start >= $1::date
           and (fingerprint is null or not (fingerprint = any($2::text[])))`,
       [periodeStart, nieuweFingerprints],

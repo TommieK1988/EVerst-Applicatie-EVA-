@@ -92,6 +92,9 @@ export type DagResultaat = {
   vertrek_werk: string | null
   vertrek_thuis: string | null
   aankomst_thuis: string | null
+  /** Rit die de aankomst op / het vertrek van de werkplek bepaalde. */
+  aankomst_trip_id: string | null
+  vertrek_trip_id: string | null
   netto_minuten: number | null
   te_laat_minuten: number | null
   te_vroeg_minuten: number | null
@@ -630,6 +633,8 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
     vertrek_werk: null,
     vertrek_thuis: null,
     aankomst_thuis: null,
+    aankomst_trip_id: null,
+    vertrek_trip_id: null,
     netto_minuten: null,
     te_laat_minuten: null,
     te_vroeg_minuten: null,
@@ -674,13 +679,17 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
   let vertrekWerk: string | null = null
   let vertrekThuis: string | null = null
   let aankomstThuis: string | null = null
+  let aankomstTripId: string | null = null
+  let vertrekTripId: string | null = null
 
   for (const t of gesorteerd) {
     if (aankomstWerk == null && bijWerk(t.adres_stop, stopPunt(t))) {
       aankomstWerk = (t.stop_tijd ?? t.start_tijd).slice(0, 5)
+      aankomstTripId = t.id
     }
     if (bijWerk(t.adres_start, startPunt(t))) {
       vertrekWerk = t.start_tijd.slice(0, 5)
+      vertrekTripId = t.id
     }
     if (vertrekThuis == null && bijThuis(t.adres_start, startPunt(t))) {
       vertrekThuis = t.start_tijd.slice(0, 5)
@@ -729,6 +738,8 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
     vertrek_werk: vertrekWerk,
     vertrek_thuis: vertrekThuis,
     aankomst_thuis: aankomstThuis,
+    aankomst_trip_id: aankomstTripId,
+    vertrek_trip_id: vertrekTripId,
     netto_minuten: nettoMin,
     te_laat_minuten: teLaat,
     te_vroeg_minuten: teVroeg,

@@ -1,5 +1,6 @@
 import 'server-only'
 import { analyseerWerktijden } from './werktijd-analyse'
+import { schrijfWerktijdBevindingen } from './werktijd-bevindingen'
 import { beheerOntvangers, maakWagenparkMelding } from './notificaties'
 
 /**
@@ -32,6 +33,9 @@ export async function stuurWagenparkDagoverzicht(
 ): Promise<DagoverzichtResultaat> {
   const datum = datumOverride ?? gisteren(nu)
   const resultaten = await analyseerWerktijden(datum, datum)
+
+  // Persisteer als R11-bevindingen zodat ze bij Bevindingen verschijnen.
+  await schrijfWerktijdBevindingen(resultaten, datum, datum)
 
   const teLaat: string[] = []
   const teVroeg: string[] = []
