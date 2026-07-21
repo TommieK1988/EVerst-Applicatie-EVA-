@@ -338,15 +338,25 @@ export async function runComplianceAction(): Promise<{
     // ritten verdeeld zijn (tankstop, opgesplitste registratie) en die krijgen
     // elk een bevinding. Zonder deze filter zou beheer twee of drie meldingen
     // krijgen over hetzelfde moment.
+    //
+    // En alleen als de regel zélf op melden staat (`meld_in_app` in zijn
+    // drempel_config). Standaard uit: R9/R10 leveren zoveel signalen dat een
+    // belmelding per bevinding het belletje onbruikbaar maakt. De bevindingen
+    // staan gewoon op /wagenpark/bevindingen; aanzetten kan per regel via
+    // Wagenpark → Instellingen.
     const nieuwGeinsert = new Set(
       ins.rows.filter((r) => r.was_insert).map((r) => r.fingerprint),
     )
+    const meldtInApp = (code: string): boolean =>
+      ((regels.get(code)?.drempel_config ?? {}) as Record<string, unknown>).meld_in_app === true
+
     for (const [i, b] of uniek.entries()) {
       const bevData = (b.data ?? {}) as Record<string, unknown>
       if (
         nieuwGeinsert.has(b.fingerprint) &&
         statussen[i] === 'open' &&
         (b.regel_code === 'R9' || b.regel_code === 'R10') &&
+        meldtInApp(b.regel_code) &&
         bevData.keten_rol !== 'deel'
       ) {
         const uid = bevData.user_id_ulu
@@ -395,11 +405,12 @@ const MELD_VENSTER_DAGEN = 14
  * Directie (afdeling), beheerders (instellingen=beheren) of wagenpark=beheren.
  * Insert via de directe pooler, consistent met de rest van de wagenpark-module.
  *
- * Alleen RECENTE signalen worden gemeld. De compliance-run kijkt naar het hele
- * lopende jaar, dus de eerste run na het aanzetten van een regel levert honderden
- * nieuwe bevindingen op over dagen van maanden terug. Die als belmelding
- * uitsturen maakt het belletje onbruikbaar en zegt niets: het gaat om wat er
- * sinds de vorige check is bijgekomen, niet om de inhaalslag.
+ * Wordt alleen aangeroepen voor regels die op melden staan (`meld_in_app`, zie
+ * de aanroeper) en dan nog uitsluitend voor RECENTE signalen. De compliance-run
+ * kijkt naar het hele lopende jaar, dus de eerste run na het aanzetten van een
+ * regel levert honderden nieuwe bevindingen op over dagen van maanden terug. Die
+ * als belmelding uitsturen maakt het belletje onbruikbaar en zegt niets: het
+ * gaat om wat er sinds de vorige check is bijgekomen, niet om de inhaalslag.
  */
 async function notificeerWerktijdSignalen(
   alleSignalen: {
