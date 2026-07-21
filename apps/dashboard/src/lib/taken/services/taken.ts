@@ -178,6 +178,37 @@ function hoofdstatusToSectie(h?: string): string | null {
   return null
 }
 
+/**
+ * Telt alleen de open taken van een gebruiker — voor het badge-getal op het mobiele
+ * grid-startscherm. Haalt bewust géén taakrijen of joins op (`head: true`), want dat
+ * scheelt fors aan payload en querytijd op een mobiele verbinding; het startscherm
+ * heeft alleen het getal nodig. Faalt stil (0) zodat de tegel altijd rendert.
+ */
+export async function telMijnOpenTaken(userId: string): Promise<number> {
+  const supabase = await createClient()
+
+  const { data: toewijzingen, error: tError } = await supabase
+    .from('task_assignees')
+    .select('task_id')
+    .eq('user_id', userId)
+
+  if (tError || !toewijzingen) return 0
+
+  const taskIds = toewijzingen.map(t => t.task_id)
+  if (taskIds.length === 0) return 0
+
+  const { count, error } = await supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .in('id', taskIds)
+    .is('parent_task_id', null)
+    .neq('status', 'gereed')
+    .neq('status', 'vervallen')
+
+  if (error) return 0
+  return count ?? 0
+}
+
 export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
   const supabase = await createClient()
 

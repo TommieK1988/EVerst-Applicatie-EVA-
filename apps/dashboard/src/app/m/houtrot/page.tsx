@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { getProjects } from '@/services/houtrotherstel/projects'
 import type { ProjectWithStats } from '@/lib/houtrotherstel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
+import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 
 /**
  * Mobiel Houtrot-scherm (buitendienst): lijst van houtrot-projecten uit de echte
@@ -31,9 +33,9 @@ export default function MobielHoutrotPage() {
   }, [])
 
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <AppHeader title="Houtrot" sub="Projecten" backHref="/m" />
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
         {fout && (
           <div style={{ color: '#b42318', fontSize: 14, textAlign: 'center', padding: 24 }}>{fout}</div>
         )}
@@ -46,12 +48,15 @@ export default function MobielHoutrotPage() {
         {projecten?.map((p) => {
           const st = STATUS_LABEL[p.status] ?? { label: p.status, kleur: '#9aa4ab' }
           return (
-            <div
+            <Link
               key={p.id}
+              href={`/m/houtrot/nieuw?project=${p.id}`}
               style={{
+                display: 'block', textDecoration: 'none',
                 padding: '14px 16px', background: '#fff',
                 border: '1px solid #e3e8ea', borderRadius: 12,
                 borderLeft: `4px solid ${st.kleur}`,
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
@@ -64,10 +69,25 @@ export default function MobielHoutrotPage() {
                 {[p.client_name, p.city].filter(Boolean).join(' · ')}
                 {p.project_number ? ` · #${p.project_number}` : ''}
               </div>
-            </div>
+            </Link>
           )
         })}
       </div>
-    </>
+
+      <MobielStickyFooter>
+        <Link
+          href="/m/houtrot/nieuw"
+          style={{
+            display: 'block', width: '100%', textAlign: 'center',
+            padding: '14px 16px', borderRadius: 12,
+            background: '#009439', color: '#fff',
+            fontSize: 16, fontWeight: 700, textDecoration: 'none',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          Nieuwe registratie
+        </Link>
+      </MobielStickyFooter>
+    </div>
   )
 }
