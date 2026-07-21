@@ -26,7 +26,7 @@ import {
   type View, type GridUnit,
 } from './layout/index'
 import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
-import { berekenWerkuren } from '@/lib/planning/werkuren'
+import { berekenPlanUren } from '@/lib/planning/werkuren'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
 
   useEffect(() => {
     if (!medId || !start || !eind) return
-    const berekend = berekenWerkuren(medId, `${start}T08:00:00`, `${eind}T17:00:00`, roosters, afwezigheid)
+    const berekend = berekenPlanUren(medId, `${start}T08:00:00`, `${eind}T17:00:00`, roosters, afwezigheid)
     if (berekend > 0) setUren(berekend)
   }, [medId, start, eind])
 
@@ -111,7 +111,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
           <div>
             <label style={S.lbl}>Geplande uren</label>
             <div className="eva-input" style={{ background: 'var(--surface-muted,#f5f5f5)', color: 'var(--text-secondary,#666)', cursor: 'default' }}>{uren} uur</div>
-            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Berekend op basis van werkrooster</p>
+            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Werkdagen in de periode × contracturen per dag</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 16, flexWrap: 'wrap' }}>
@@ -153,7 +153,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
     const initStart = defaultStart ?? activiteit.gewenste_start ?? today
     const initEind  = defaultStart ?? activiteit.deadline ?? activiteit.gewenste_start ?? today
     if (initMed && roosters.length > 0) {
-      const berekend = berekenWerkuren(initMed, `${initStart}T08:00:00`, `${initEind}T17:00:00`, roosters, afwezigheid)
+      const berekend = berekenPlanUren(initMed, `${initStart}T08:00:00`, `${initEind}T17:00:00`, roosters, afwezigheid)
       if (berekend > 0) return String(berekend)
     }
     return String(activiteit.geschatte_uren ?? 8)
@@ -162,7 +162,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 
   function herbereken(newMedId: string, newStart: string, newEind: string) {
     if (!newMedId || roosters.length === 0) return
-    const berekend = berekenWerkuren(newMedId, `${newStart}T08:00:00`, `${newEind}T17:00:00`, roosters, afwezigheid)
+    const berekend = berekenPlanUren(newMedId, `${newStart}T08:00:00`, `${newEind}T17:00:00`, roosters, afwezigheid)
     if (berekend > 0) setUren(String(berekend))
   }
 
@@ -195,7 +195,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
           <div>
             <label style={S.lbl}>Geplande uren</label>
             <div className="eva-input" style={{ background: 'var(--surface-muted,#f5f5f5)', color: 'var(--text-secondary,#666)', cursor: 'default' }}>{uren} uur</div>
-            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Berekend op basis van werkrooster</p>
+            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Werkdagen in de periode × contracturen per dag</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
@@ -567,7 +567,7 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
     if (aMin != null && new Date(ns).getTime() < aMin) { toast.error('Planitem valt buiten activiteit-startdatum'); return }
     if (aMax != null && new Date(ne).getTime() > aMax) { toast.error('Planitem valt buiten activiteit-deadline'); return }
     const nieuweUren = roosters.length > 0
-      ? berekenWerkuren(drag.medewerker_id, ns, ne, roosters, afwezigheid) || drag.origUren
+      ? berekenPlanUren(drag.medewerker_id, ns, ne, roosters, afwezigheid) || drag.origUren
       : drag.origUren
     onUpdated(item.id, { start_dt: ns, eind_dt: ne, uren: nieuweUren })
     const result = await verplaatsPlanningItem(item.id, { start_dt: ns, eind_dt: ne, medewerker_id: drag.medewerker_id, dossier_id, uursoort_id: drag.uursoort_id, uren: nieuweUren })
