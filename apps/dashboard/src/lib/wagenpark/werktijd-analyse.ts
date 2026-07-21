@@ -88,6 +88,8 @@ export type DagResultaat = {
   werk_bron: WerkBron
   verwacht_start: string | null
   verwacht_eind: string | null
+  /** Roostertijd komt uit een rooster dat op deze datum formeel nog niet gold. */
+  rooster_benadering: boolean
   aankomst_werk: string | null
   vertrek_werk: string | null
   vertrek_thuis: string | null
@@ -574,17 +576,32 @@ type DagContext = {
 function verwachteTijden(
   datum: string,
   ctx: DagContext,
-): { isWerkdag: boolean; start: string | null; eind: string | null } {
+): { isWerkdag: boolean; start: string | null; eind: string | null; benadering: boolean } {
   const iso = isoWeekdag(datum)
-  const rooster = ctx.roosters.find(
+  let rooster = ctx.roosters.find(
     (r) => r.geldig_vanaf <= datum && (r.geldig_tot == null || r.geldig_tot >= datum),
   )
+  let benadering = false
+
+  // Geen rooster dat deze datum dekt? Dat komt voor als het rooster later is
+  // ingevoerd dan de periode die we analyseren (bv. rooster geldig vanaf 1 juli
+  // terwijl we juni bekijken). Zonder terugval zou de bestuurder helemaal geen
+  // verwachte tijden krijgen en dus nooit een signaal. Neem dan het
+  // dichtstbijzijnde rooster als benadering — en markeer dat als zodanig, zodat
+  // een bevinding herleidbaar is naar een rooster dat formeel nog niet gold.
+  if (!rooster && ctx.roosters.length > 0) {
+    const oudste = ctx.roosters[ctx.roosters.length - 1] // lijst is desc op geldig_vanaf
+    rooster = datum < oudste.geldig_vanaf ? oudste : ctx.roosters[0]
+    benadering = true
+  }
+
   if (rooster) {
     const werkdag = Array.isArray(rooster.werkdagen) && rooster.werkdagen.includes(iso)
     return {
       isWerkdag: werkdag,
       start: werkdag ? rooster.dagstart.slice(0, 5) : null,
       eind: werkdag ? rooster.dageind.slice(0, 5) : null,
+      benadering,
     }
   }
   const werkdag = iso >= 1 && iso <= 5
@@ -592,6 +609,7 @@ function verwachteTijden(
     isWerkdag: werkdag,
     start: werkdag ? ctx.driver.werktijd_start?.slice(0, 5) ?? null : null,
     eind: werkdag ? ctx.driver.werktijd_eind?.slice(0, 5) ?? null : null,
+    benadering: false,
   }
 }
 
@@ -600,7 +618,7 @@ function afwezigheidOpDag(datum: string, ctx: DagContext): AfwezigRij | null {
 }
 
 function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResultaat {
-  const { isWerkdag, start, eind } = verwachteTijden(datum, ctx)
+  const { isWerkdag, start, eind, benadering } = verwachteTijden(datum, ctx)
 
   // Werkplek van de dag: ingeplande projectlocatie(s), anders het bedrijfsadres.
   // Zowel coördinaten (straal) als straat|plaats-sleutels tellen als referentie.
@@ -629,6 +647,7 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
     werk_bron: werkBron,
     verwacht_start: start,
     verwacht_eind: eind,
+    rooster_benadering: benadering,
     aankomst_werk: null,
     vertrek_werk: null,
     vertrek_thuis: null,
@@ -734,6 +753,7 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
     werk_bron: werkBron,
     verwacht_start: start,
     verwacht_eind: eind,
+    rooster_benadering: benadering,
     aankomst_werk: aankomstWerk,
     vertrek_werk: vertrekWerk,
     vertrek_thuis: vertrekThuis,

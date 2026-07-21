@@ -10,6 +10,7 @@ import {
 import type { UluUserInfo } from '@everts/wagenpark-core/compliance'
 import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { pgQuery, getPgPool } from '@/lib/wagenpark/db'
+import { ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { vereisRecht } from '@/lib/auth/rechten'
 
 export async function runComplianceAction(): Promise<{
@@ -35,7 +36,10 @@ export async function runComplianceAction(): Promise<{
   // "geslaagd" meldde met nul bevindingen. Numerieke kolommen worden expliciet
   // naar float gecast, want node-postgres levert `numeric` als string.
   const [trips, voertuigenRes, regelsRes, uluUsersRaw] = await Promise.all([
-    pgQuery<UluTrip & { rit_type_override?: 'zakelijk' | 'prive' | null }>(
+    pgQuery<UluTrip & {
+      rit_type_override?: 'zakelijk' | 'prive' | null
+      rit_type_effectief?: 'zakelijk' | 'prive' | null
+    }>(
       `select id::text, voertuig_id::text, medewerker_id::text, bestuurder_naam_raw,
               user_id_ulu, kenteken, start_datum::text, start_tijd::text, stop_tijd::text,
               adres_start, adres_stop,
@@ -44,8 +48,9 @@ export async function runComplianceAction(): Promise<{
               km_stand_start::float as km_stand_start,
               km_stand_stop::float  as km_stand_stop,
               rit_type_ulu, rit_type_berekend::text, rit_type_override::text,
+              ${ritTypeEffectiefSql('t')} as rit_type_effectief,
               score, import_batch_id::text, created_at::text
-         from public.ulu_trips
+         from public.ulu_trips t
         where start_datum between $1::date and $2::date`,
       [periodeStart, periodeEind],
     ),
@@ -64,10 +69,14 @@ export async function runComplianceAction(): Promise<{
   if (voertuigenRes.error) throw new Error(`Voertuigen laden mislukt: ${voertuigenRes.error.message}`)
   if (regelsRes.error) throw new Error(`Handboek-regels laden mislukt: ${regelsRes.error.message}`)
 
-  // Substitueer effectief rit_type: handmatige override wint boven berekend
+  // Substitueer het EFFECTIEVE rit_type (zie ritTypeEffectiefSql): verlof wint,
+  // daarna een handmatige override, daarna de rooster-regel (rijden op een dag
+  // die volgens het rooster geen werkdag is telt als privé), anders de
+  // trigger-berekening. Voorheen werd hier alleen de override toegepast,
+  // waardoor R1/R2 verlof- en vrije-dag-ritten als zakelijk bleven zien.
   const tripsEffectief = trips.map((t) => ({
     ...t,
-    rit_type_berekend: t.rit_type_override ?? t.rit_type_berekend,
+    rit_type_berekend: t.rit_type_effectief ?? t.rit_type_override ?? t.rit_type_berekend,
   })) as UluTrip[]
   const voertuigen = new Map(
     ((voertuigenRes.data ?? []) as Voertuig[]).map((v) => [v.id, v]),

@@ -25,7 +25,22 @@ export function ritTypeEffectiefSql(alias = 't'): string {
          and (ma.start_tijd is null or ${alias}.start_tijd >= ma.start_tijd)
          and (ma.eind_tijd  is null or ${alias}.start_tijd <= ma.eind_tijd)
     ) then 'prive'
-    else coalesce(${alias}.rit_type_override, ${alias}.rit_type_berekend)
+    -- Handmatige correctie gaat vóór de rooster-regel: incidenteel werken op een
+    -- vrije dag moet als zakelijk gemarkeerd kunnen blijven.
+    when ${alias}.rit_type_override is not null then ${alias}.rit_type_override
+    -- Rijdt de bestuurder op een dag die volgens zijn rooster geen werkdag is
+    -- (bv. standaard vrij op vrijdag), dan is de rit privé. Het weekend wordt al
+    -- door de DB-trigger afgevangen; dit vangt de individuele vrije dagen.
+    when exists (
+      select 1
+        from public.ulu_users uu
+        join public.medewerker_roosters mr on mr.medewerker_id = uu.medewerker_id
+       where uu.id = ${alias}.user_id_ulu
+         and ${alias}.start_datum >= mr.geldig_vanaf
+         and (mr.geldig_tot is null or ${alias}.start_datum <= mr.geldig_tot)
+         and not (extract(isodow from ${alias}.start_datum)::smallint = any(mr.werkdagen))
+    ) then 'prive'
+    else ${alias}.rit_type_berekend
   end`
 }
 
