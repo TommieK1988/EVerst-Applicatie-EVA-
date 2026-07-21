@@ -480,6 +480,17 @@ export function InformatieTab({
   const bouw7Url = bouw7Vergrendeld
     ? `https://start.bouw7.nl/project/view?id=${(dossier as any).bouw7_id}#/`
     : null
+
+  // Werkadres-kwaliteit: Opdracht- en Servicedesk-dossiers hebben een CONCREET
+  // werkadres nodig (straat + plaats). Dit adres bepaalt o.a. de aanwezigheid op
+  // locatie in de wagenpark-werktijd-analyse. Een leeg adres of een aanduiding als
+  // "Diverse adressen" / "nader te bepalen" telt niet als concreet.
+  const werkStraat = String((dossier as any).werkadres_straat ?? '').trim()
+  const werkStad = String((dossier as any).werkadres_stad ?? '').trim()
+  const werkadresNietConcreet =
+    !werkStraat ||
+    !werkStad ||
+    /divers|nader te bepalen|n\.?t\.?b\.?|onbekend|n\.?v\.?t\.?/i.test(`${werkStraat} ${werkStad}`)
   // Fase-gating. Opdracht-dossiers zijn two-way: hun Bouw7-eigen opdracht-statussen zijn selecteerbaar
   // (worden teruggeschreven naar Bouw7), behalve financieel_afgesloten (definitieve afsluiting). Voor
   // aanvraag/offerte blijven Bouw7-eigen substatussen alleen-lezen (zichtbaar als huidige waarde).
@@ -913,6 +924,28 @@ export function InformatieTab({
               <li>Een arbeid-bewakingscode overschrijdt op 100% de prognose-uren — controleer de urenraming.</li>
             )}
           </ul>
+        </div>
+      )}
+
+      {/* ── Werkadres verplicht bij Opdracht/Servicedesk ── */}
+      {(sectie === 'opdracht' || sectie === 'servicedesk') && werkadresNietConcreet && (
+        <div style={{
+          marginBottom: 14, padding: '12px 16px', borderRadius: 8,
+          background: 'var(--warning-50, #fff7ed)', border: '1px solid var(--warning-200, #fed7aa)',
+          color: 'var(--warning-800, #9a3412)', fontSize: 13,
+        }}>
+          <strong>⚠ Concreet werkadres vereist</strong>
+          <div style={{ margin: '6px 0 0', lineHeight: 1.5 }}>
+            Vul voor dit {sectie === 'servicedesk' ? 'servicedesk-' : 'opdracht'}dossier een concreet
+            werkadres in (straat + huisnummer, postcode en plaats). Dit adres bepaalt onder andere de
+            aanwezigheid op locatie in de wagenpark-werktijd-analyse; een leeg adres of een aanduiding
+            als “Diverse adressen” kan daarvoor niet worden gebruikt.
+            {bouw7Vergrendeld && bouw7Url && (
+              <> Dit dossier komt uit Bouw7 — pas het werkadres aan in{' '}
+                <a href={bouw7Url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>Bouw7</a>.
+              </>
+            )}
+          </div>
         </div>
       )}
 

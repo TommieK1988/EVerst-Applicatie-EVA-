@@ -5,7 +5,7 @@ type Rij = {
   naam: string | null
   prognose_uren: number
   geplande_uren: number
-  restant: number
+  geboekte_uren: number
 }
 
 const th: React.CSSProperties = {
@@ -29,9 +29,12 @@ const td: React.CSSProperties = {
 }
 
 /**
- * Kleine samenvattingstabel bovenin de detailplanning: per Bouw7-bewakingscode
- * de geprognotiseerde arbeid-uren (live uit Bouw7) naast de in EVA geplande uren.
- * Rendert niets als er geen relevante codes zijn (bijv. geen Bouw7-koppeling).
+ * Kleine samenvattingstabel bovenin de detailplanning: per bewakingscode de
+ * geprognotiseerde arbeid-uren (uit EVA) naast de in EVA geplande uren en de
+ * werkelijk geboekte uren. Rendert niets als er geen relevante codes zijn.
+ *
+ * De geplande uren komen via de prop binnen — die zijn in `DossierPlanningTab`
+ * per planitem herberekend uit het werkrooster (niet uit het Bouw7-uren-veld).
  */
 export default async function KostengroepUrenBewaking({
   dossier_id,
@@ -42,26 +45,22 @@ export default async function KostengroepUrenBewaking({
 }) {
   const bewaking = await getDossierUrenBewaking(dossier_id)
 
-  // Unie van codes met prognose-arbeid én codes waarop geplande uren staan,
-  // zodat op een verkeerde code geboekte planning niet stilletjes verdwijnt.
-  const prognosePerCode = new Map<string, { naam: string | null; uren: number }>()
+  const refPerCode = new Map<string, { naam: string | null; prognose_uren: number; geboekte_uren: number }>()
   for (const r of bewaking.regels) {
-    if (r.prognose_uren > 0) prognosePerCode.set(r.code, { naam: r.naam, uren: r.prognose_uren })
+    refPerCode.set(r.code, { naam: r.naam, prognose_uren: r.prognose_uren, geboekte_uren: r.geboekte_uren })
   }
 
-  const codes = new Set<string>([...prognosePerCode.keys(), ...Object.keys(geplandePerBewakingscode)])
+  const codes = new Set<string>([...refPerCode.keys(), ...Object.keys(geplandePerBewakingscode)])
   if (codes.size === 0) return null
 
   const rijen: Rij[] = [...codes].map((code) => {
-    const prog = prognosePerCode.get(code)
-    const prognose_uren = prog?.uren ?? 0
-    const geplande_uren = geplandePerBewakingscode[code] ?? 0
+    const ref = refPerCode.get(code)
     return {
       code,
-      naam: prog?.naam ?? null,
-      prognose_uren,
-      geplande_uren,
-      restant: prognose_uren - geplande_uren,
+      naam: ref?.naam ?? null,
+      prognose_uren: ref?.prognose_uren ?? 0,
+      geplande_uren: geplandePerBewakingscode[code] ?? 0,
+      geboekte_uren: ref?.geboekte_uren ?? 0,
     }
   }).sort((a, b) => a.code.localeCompare(b.code, 'nl', { numeric: true }))
 
@@ -69,9 +68,9 @@ export default async function KostengroepUrenBewaking({
     (t, r) => ({
       prognose_uren: t.prognose_uren + r.prognose_uren,
       geplande_uren: t.geplande_uren + r.geplande_uren,
-      restant: t.restant + r.restant,
+      geboekte_uren: t.geboekte_uren + r.geboekte_uren,
     }),
-    { prognose_uren: 0, geplande_uren: 0, restant: 0 },
+    { prognose_uren: 0, geplande_uren: 0, geboekte_uren: 0 },
   )
 
   return (
@@ -85,14 +84,15 @@ export default async function KostengroepUrenBewaking({
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
             <th style={{ ...th, textAlign: 'left' }}>Bewakingscode</th>
-            <th style={th}>Prognose arbeid</th>
+            <th style={th}>Prognose</th>
             <th style={th}>Gepland</th>
-            <th style={th}>Restant</th>
+            <th style={th}>Geboekt</th>
           </tr>
         </thead>
         <tbody>
           {rijen.map((r) => {
-            const over = r.geplande_uren > r.prognose_uren
+            // Gepland boven de prognose = oranje signaal (alleen als er een prognose is).
+            const overPrognose = r.prognose_uren > 0 && r.geplande_uren > r.prognose_uren
             return (
               <tr key={r.code} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ ...td, textAlign: 'left', color: 'var(--fg)' }}>
@@ -100,8 +100,8 @@ export default async function KostengroepUrenBewaking({
                   {r.naam ? <span style={{ color: 'var(--fg-muted)', marginLeft: 6 }}>{r.naam}</span> : null}
                 </td>
                 <td style={{ ...td, color: 'var(--fg-muted)' }}>{fmt(r.prognose_uren)}u</td>
-                <td style={{ ...td, color: over ? '#e67e22' : 'var(--accent)', fontWeight: 600 }}>{fmt(r.geplande_uren)}u</td>
-                <td style={{ ...td, color: r.restant < 0 ? '#e67e22' : 'var(--fg-muted)' }}>{fmt(r.restant)}u</td>
+                <td style={{ ...td, color: overPrognose ? '#e67e22' : 'var(--accent)', fontWeight: 600 }}>{fmt(r.geplande_uren)}u</td>
+                <td style={{ ...td, color: 'var(--fg-muted)' }}>{fmt(r.geboekte_uren)}u</td>
               </tr>
             )
           })}
@@ -112,7 +112,7 @@ export default async function KostengroepUrenBewaking({
               <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: 'var(--fg-muted)' }}>Totaal</td>
               <td style={{ ...td, fontWeight: 600, color: 'var(--fg-muted)' }}>{fmt(totaal.prognose_uren)}u</td>
               <td style={{ ...td, fontWeight: 600 }}>{fmt(totaal.geplande_uren)}u</td>
-              <td style={{ ...td, fontWeight: 600, color: totaal.restant < 0 ? '#e67e22' : 'var(--fg-muted)' }}>{fmt(totaal.restant)}u</td>
+              <td style={{ ...td, fontWeight: 600, color: 'var(--fg-muted)' }}>{fmt(totaal.geboekte_uren)}u</td>
             </tr>
           </tfoot>
         )}

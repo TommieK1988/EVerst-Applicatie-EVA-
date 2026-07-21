@@ -307,10 +307,14 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
   const result: ActielijstMetTaken[] = []
   for (const lijst of lijsten) {
     const activering = activeringPerLijst.get(lijst.id)
+    // Subtaken horen genest onder hun hoofdtaak, net als op de sjabloonpagina
+    // (getTaken filtert daar op parent_task_id is null). Zonder dat filter telde
+    // een subtaak hier als losse taak mee en toonde het dossier er méér dan het sjabloon.
     const { data: taken } = await supabase
       .from('tasks')
-      .select('*, task_assignees(*)')
+      .select('*, task_assignees(*), subtaken:tasks!parent_task_id ( id, titel, status )')
       .eq('lijst_id', lijst.id)
+      .is('parent_task_id', null)
       .order('volgorde')
 
     const takenArr = taken ?? []
@@ -319,7 +323,7 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
       taken: takenArr.map((t: Record<string, unknown>) => ({
         ...t,
         assignees:         t.task_assignees ?? [],
-        subtaken:          [],
+        subtaken:          t.subtaken ?? [],
         comments_count:    0,
         attachments_count: 0,
       })) as unknown as ActielijstMetTaken['taken'],
