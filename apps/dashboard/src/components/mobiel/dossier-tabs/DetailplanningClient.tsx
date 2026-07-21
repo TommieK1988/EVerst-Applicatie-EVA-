@@ -263,7 +263,8 @@ const PPD = 30
 type GanttRij =
   | { kind: 'fase'; key: string; naam: string }
   | { kind: 'activiteit'; key: string; a: MobielActiviteit }
-  | { kind: 'planitem'; key: string; a: MobielActiviteit; item: MobielPlanitem }
+  /** Eén rij per medewerker binnen een activiteit; `items` zijn al zijn blokken. */
+  | { kind: 'planitem'; key: string; a: MobielActiviteit; naam: string; items: MobielPlanitem[] }
 
 function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -330,9 +331,21 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
       if (groep.naam) out.push({ kind: 'fase', key: `fase-${groep.id}`, naam: groep.naam })
       for (const a of groep.activiteiten) {
         out.push({ kind: 'activiteit', key: `act-${a.id}`, a })
+
+        // Alle blokken van dezelfde medewerker binnen deze activiteit op ÉÉN rij,
+        // anders krijg je dezelfde naam vijf keer onder elkaar. Sleutel op
+        // medewerker_id; valt terug op de naam voor rijen zonder koppeling.
+        const perMedewerker = new Map<string, { naam: string; items: MobielPlanitem[] }>()
         for (const item of a.items) {
           if (!item.start_dt && !item.eind_dt) continue
-          out.push({ kind: 'planitem', key: `item-${item.id}`, a, item })
+          const sleutel = item.medewerker_id ?? item.naam ?? item.id
+          const naam = item.voornaam ?? item.naam ?? '—'
+          const rij = perMedewerker.get(sleutel)
+          if (rij) rij.items.push(item)
+          else perMedewerker.set(sleutel, { naam, items: [item] })
+        }
+        for (const [sleutel, rij] of perMedewerker) {
+          out.push({ kind: 'planitem', key: `item-${a.id}-${sleutel}`, a, naam: rij.naam, items: rij.items })
         }
       }
     }
@@ -444,15 +457,27 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           const hoogte = isAct ? RIJ_H : SUBRIJ_H
           const kleur = kleurVan(rij.a.status)
 
-          const b = isAct
-            ? { s: dagVan(rij.a.gewenste_start) ?? dagVan(rij.a.deadline), e: dagVan(rij.a.deadline) ?? dagVan(rij.a.gewenste_start) }
-            : {
-                s: dagVanTijdstip(rij.item.start_dt) ?? dagVanTijdstip(rij.item.eind_dt, true),
-                e: dagVanTijdstip(rij.item.eind_dt, true) ?? dagVanTijdstip(rij.item.start_dt),
-              }
+          // Een activiteitrij heeft één balk; een medewerkerrij er zoveel als die
+          // persoon blokken heeft binnen deze activiteit.
+          const perioden = isAct
+            ? [{
+                sleutel: rij.a.id,
+                s: dagVan(rij.a.gewenste_start) ?? dagVan(rij.a.deadline),
+                e: dagVan(rij.a.deadline) ?? dagVan(rij.a.gewenste_start),
+              }]
+            : rij.items.map(item => ({
+                sleutel: item.id,
+                s: dagVanTijdstip(item.start_dt) ?? dagVanTijdstip(item.eind_dt, true),
+                e: dagVanTijdstip(item.eind_dt, true) ?? dagVanTijdstip(item.start_dt),
+              }))
 
-          const left = b.s ? Math.max(0, offset(b.s)) : null
-          const width = b.s && b.e ? Math.max(ppd, offset(b.e) + ppd - offset(b.s)) : null
+          const balken = perioden
+            .filter(p => p.s && p.e)
+            .map(p => ({
+              sleutel: p.sleutel,
+              left: Math.max(0, offset(p.s!)),
+              width: Math.max(ppd, offset(p.e!) + ppd - offset(p.s!)),
+            }))
 
           return (
             <div key={rij.key}>
@@ -477,21 +502,20 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                     color: isAct ? '#161b20' : GRIJS,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
-                    {isAct ? rij.a.titel : (rij.item.voornaam ?? rij.item.naam ?? '—')}
+                    {isAct ? rij.a.titel : rij.naam}
                   </span>
                 </div>
 
                 <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0, ...raster }}>
-                  {left != null && width != null && (
-                    <div style={{
-                      position: 'absolute', left, width,
+                  {balken.map(balk => (
+                    <div key={balk.sleutel} style={{
+                      position: 'absolute', left: balk.left, width: balk.width,
                       top: isAct ? 7 : 5, bottom: isAct ? 7 : 5,
                       borderRadius: 4,
                       background: isAct ? `${kleur}26` : kleur,
                       border: isAct ? `1.5px solid ${kleur}` : 'none',
-                      display: 'flex', alignItems: 'center', paddingLeft: 5, overflow: 'hidden',
                     }}/>
-                  )}
+                  ))}
                 </div>
               </div>
 
