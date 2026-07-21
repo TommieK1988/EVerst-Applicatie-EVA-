@@ -141,21 +141,23 @@ export class UluClient {
   /**
    * Alle trips van een voertuig binnen een datumbereik. Paginering automatisch.
    *
-   * **Historie van een bug (21-jul-2026):** hier stond eerder
-   * `if (chunk.length < pageSize) break` met een gevraagde `pageSize` van 100,
-   * terwijl ULU `limit` afkapt op 75. Die vergelijking was dus altijd waar en de
-   * lus stopte na pagina 1 — er kwamen structureel maximaal ~75 trips per
-   * voertuig binnen (bij ~14 voertuigen zo'n 1.000 per sync). Daardoor leek het
-   * alsof de API "alleen de laatste ~75 trips" gaf; in werkelijkheid is 75 de
-   * PAGINA-grootte en werd pagina 2 nooit opgevraagd. Gevolg: hele maanden
-   * ontbraken in ulu_trips.
+   * **HARDE RECENCY-CAP — bevestigd 17-apr én opnieuw gemeten 21-jul-2026.**
+   * De ULU API negeert date-range parameters én geeft alleen de laatst gereden
+   * **~75 trips per voertuig** terug. Doorpagineren levert niets extra's op.
+   * Meting: een sync over 1 jan – 21 jul haalde 1.297 rijen op vóór en 1.320 ná
+   * het herstellen van de paginering (zie hieronder) — nagenoeg gelijk, en de
+   * oudste opgehaalde rit was 6 juli. Oudere periodes zijn dus NIET via de API
+   * te halen; daarvoor is de xlsx-import (Wagenpark → Ritten → Importeren) de
+   * enige route.
    *
-   * Nu wordt de paginering gestuurd door de envelope (`has_more` / `total_pages`)
-   * met een veilige terugval, en nooit meer door de gevraagde pageSize.
+   * De paginering zélf was wel kapot: `if (chunk.length < pageSize) break`
+   * vergeleek de ontvangen paginagrootte (~75) met de gevraagde (100) en stopte
+   * daardoor altijd na pagina 1. Dat is hersteld — de envelope (`has_more` /
+   * `total_pages`) stuurt nu, met terugval op de vorige paginagrootte. Het lost
+   * de recency-cap hierboven niet op; verwacht daar dus geen extra historie van.
    *
-   * De API negeert date-range parameters, dus filteren blijft client-side. Om
-   * niet elke sync de volledige historie op te halen stoppen we zodra een pagina
-   * volledig vóór `minStartDatum` ligt (trips komen nieuwste-eerst).
+   * Date-filtering blijft client-side. We stoppen zodra een pagina volledig vóór
+   * `minStartDatum` ligt (trips komen nieuwste-eerst).
    *
    * @param vehicleId           ULU vehicle.id
    * @param opts.pageSize       gevraagde paginagrootte (ULU clamt naar ~75)
