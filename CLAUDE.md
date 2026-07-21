@@ -14,9 +14,17 @@ npm workspaces + Turborepo. Twee actieve Next.js 15 apps onder `apps/`, vijf int
 | `apps/everts-calc` | 3001 | Legacy standalone (wordt samengevoegd met EVA, tijdelijk actief) |
 
 Gearchiveerde standalone apps (niet meer starten):
-- `apps/houtrotherstel-app` — geïntegreerd in EVA onder `/houtrotherstel`
 - `apps/taken` — geïntegreerd in EVA onder `/taken`
 - `apps/wagenpark` — geïntegreerd in EVA onder `/wagenpark`
+
+**Houtrot** is geen aparte app of module meer. `apps/houtrotherstel-app` is verwijderd
+(juli 2026) en de losse schermen onder `/houtrotherstel` (dashboard, projecten,
+registraties, rapportages) ook. Houtrotherstel zit nu **in het dossier**: zet de
+dossier-toggle `houtrot_registreren` aan en er verschijnt een tab Houtrot
+(`TAB_TOGGLE_GATES`, zelfde mechaniek als VCA). Registraties hangen aan een
+dossier (`houtrotherstel.repair_registrations.dossier_id`), niet aan een
+houtrot-project. Onder `/houtrotherstel` blijft alleen de **reparatiebibliotheek**
+(`standaard-reparaties`) over: de prijzen/codes die je bij een registratie kiest.
 
 Internal packages:
 - `@everts/database` — Supabase client + gegenereerde TypeScript types

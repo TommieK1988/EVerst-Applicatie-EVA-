@@ -650,90 +650,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
 
   // ── Houtrotherstel ─────────────────────────────────────────────────────
-  [/^\/houtrotherstel\/dashboard$/, {
-    title: 'Houtrotherstel — Dashboard',
-    description: 'Persoonlijk dashboard voor de houtrotherstel­module. Toont openstaande, afgeronde en afgekeurde registraties, totale omzetwaarde, recente registraties en actieve projecten.',
-    sections: [
-      { title: 'Statistieken', body: 'Vier tegels: openstaande registraties, afgeronde registraties, afgekeurde registraties en totale verkoopwaarde. De teller "open" is jouw directe actiepunt.' },
-      { title: 'Recente registraties', body: 'De tabel toont de meest recente registraties met projectnaam, datum, reparatietype, verkoopprijs en status. Klik op een rij om direct naar de registratie te navigeren.' },
-      { title: 'Afgekeurde registraties', body: 'Als er afgekeurde registraties zijn verschijnt een rode melding bovenaan. Klik erop om direct naar de afgekeurde registraties te gaan en ze te herzien of te herstellen.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/projecten\/nieuw$/, {
-    title: 'Houtrotherstel — Nieuw project',
-    description: 'Maak een nieuw houtrotherstel­project aan. Vul de projectnaam, klant, locatie, startdatum en projectleider in.',
-    sections: [
-      { title: 'Verplichte velden', body: 'Projectnaam, klant en adres zijn verplicht. Het projectnummer wordt automatisch gegenereerd. Je kunt een projectdatum instellen of dit later aanpassen.' },
-      { title: 'Koppeling met opdracht', body: 'Koppel het project optioneel aan een bestaande opdracht (uit het hoofdproces) voor volledige traceerbaarheid van kosten en registraties.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/bewerken$/, {
-    title: 'Houtrotherstel — Project bewerken',
-    description: 'Bewerk de basisgegevens van het houtrotherstel­project: naam, klant, adres, start- en einddatum, status en projectleider.',
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/rapportage$/, {
-    title: 'Houtrotherstel — Project­rapportage',
-    description: 'Genereer een volledige PDF-rapportage van het project met foto\'s voor/na, registraties per geveldeel, totale herstel­oppervlakten en productgebruik.',
-    sections: [
-      { title: 'Rapportage genereren', body: 'Klik op "Rapportage genereren" om de PDF op te bouwen. Alle geregistreerde foto\'s, locaties en reparatie­types worden automatisch opgenomen in een opgemaakte lay-out.' },
-      { title: 'Gebruik', body: 'Stuur de rapportage naar de klant of corporatie als verantwoording voor de uitgevoerde werkzaamheden. De rapportage voldoet aan de documentatie-eisen van de meeste opdrachtgevers.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+$/, {
-    title: 'Houtrotherstel — Project detail',
-    description: 'Projectoverzicht met alle registraties, voortgang, totale registratie­statistieken en knoppen voor rapportage en bewerking.',
-    sections: [
-      { title: 'Registraties', body: 'Elke aangetroffen houtrotschade wordt als registratie vastgelegd, met plaatsaanduiding (blok, verdieping, ruimte, gevelzijde, onderdeel), de gekozen standaard­reparatie en foto\'s voor/na.' },
-      { title: 'Rapportage', body: 'Klik op "Rapportage" om een volledige PDF te genereren met alle registraties, foto\'s en productgebruik voor dit project.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/projecten$/, {
-    title: 'Houtrotherstel — Projecten',
-    description: 'Rasteroverzicht van alle houtrotherstel­projecten met status, klant, adres en registratieprogress. Filter op status of zoek op naam, nummer of klant.',
-    sections: [
-      { title: 'Statusfilter', body: 'Gebruik de statusfilter om te wisselen tussen "Alle", "Onderhanden" (in uitvoering) en "Afgerond". Zo houd je focus op actieve projecten.' },
-      { title: 'Project­kaarten', body: 'Elke kaart toont het projectnummer, status­badge, naam, klant, adres en het aantal open en afgeronde registraties. Klik op een kaart voor het volledige project.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/rapportages$/, {
-    title: 'Houtrotherstel — Rapportages',
-    description: 'Overzicht van de laatste 25 projecten gesorteerd op recente activiteit. Download of bekijk de rapportage per project.',
-    sections: [
-      { title: 'Rapportage downloaden', body: 'Klik op het rapport­icoontje in de rij van een project om de PDF-rapportage te openen of te downloaden. De rapportage bevat alle registraties en foto\'s.' },
-      { title: 'Status', body: '"Onderhanden" = project is actief, "Afgerond" = alle registraties zijn voltooid en het project is gesloten.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/registraties\/nieuw$/, {
-    title: 'Houtrotherstel — Nieuwe registratie',
-    description: 'Registreer een nieuwe houtrotherstel­behandeling. Selecteer het project en de locatie, voeg foto\'s toe en beschrijf de reparatie­methode en gebruikte producten.',
-    sections: [
-      { title: 'Project en locatie', body: 'Selecteer eerst het project uit de dropdown. Kies daarna het projectdeel en de locatie. Als de locatie nog niet bestaat kun je hem direct aanmaken.' },
-      { title: 'Foto\'s', body: 'Upload minimaal één foto voor en één foto na de behandeling. Foto\'s zijn verplicht voor een complete registratie en worden opgenomen in de klant­rapportage.' },
-      { title: 'Reparatiemethode', body: 'Selecteer een standaard­reparatie uit de bibliotheek of voer een vrije omschrijving in. Standaard­reparaties bevatten gestandaardiseerde beschrijvingen en zijn aanbevolen voor consistente rapportage.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/registraties\/[^/]+$/, {
-    title: 'Houtrotherstel — Registratie detail',
-    description: 'Bekijk of bewerk een bestaande houtrotherstel­registratie. Voeg aanvullende foto\'s of opmerkingen toe, pas de reparatie­methode aan of wijzig de status.',
-  }],
-
-  [/^\/houtrotherstel\/registraties$/, {
-    title: 'Houtrotherstel — Registraties',
-    description: 'Volledig overzicht van alle houtrotherstel­registraties. Filter op project, status en zoekterm (element­nummer, ruimte, schade­omschrijving, reparatienaam).',
-    sections: [
-      { title: 'Filteren', body: 'Gebruik de project­filter en statusfilter in combinatie met de zoekbalk voor een gerichte selectie. Zoeken werkt op element­nummer, ruimte, schade­omschrijving en de naam van de standaard­reparatie.' },
-      { title: 'Nieuwe registratie', body: 'Klik op "Nieuwe registratie" om direct een registratie aan te maken zonder eerst naar een project te navigeren. Handig voor buitendienst­medewerkers die snel willen registreren.' },
-    ],
-  }],
-
   [/^\/houtrotherstel\/standaard-reparaties\/nieuw$/, {
     title: 'Houtrotherstel — Nieuwe standaard reparatie',
     description: 'Voeg een nieuwe standaard­reparatie toe aan de bibliotheek. Standaard­reparaties zijn beschrijvings­sjablonen voor veelvoorkomende houtrotherstel­methoden met vaste producten en prijzen.',
@@ -748,29 +664,13 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/houtrotherstel\/gebruikers$/, {
-    title: 'Houtrotherstel — Gebruikers',
-    description: 'Beheer de medewerkers die toegang hebben tot de houtrotherstel­module. Stel rollen in: admin, platform­gebruiker of app­gebruiker.',
-    sections: [
-      { title: 'Rollen', body: 'Admin = volledige beheer­toegang (projecten, bibliotheek, gebruikers). Platform­gebruiker = toegang tot alle projecten en registraties. App­gebruiker = alleen eigen registraties aanmaken en inzien.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel\/instellingen$/, {
-    title: 'Houtrotherstel — Instellingen',
-    description: 'Instellingen voor de houtrotherstel­module: profielgegevens en app­configuratie.',
-    sections: [
-      { title: 'Profiel', body: 'Bewerk je persoonlijke profiel­gegevens zoals naam, e-mail en weergave­naam in de module.' },
-      { title: 'App­instellingen', body: 'Configureer module­brede instellingen zoals standaard­producten, verplichte foto\'s bij registraties en rapportage­sjabloon.' },
-    ],
-  }],
-
   [/^\/houtrotherstel$/, {
-    title: 'Houtrotherstel',
-    description: 'De houtrotherstel­module van EVA. Registreer, documenteer en rapporteer houtrotherstel­werkzaamheden per project.',
+    title: 'Houtrot',
+    description: 'Houtrotherstel zit in het dossier zelf, niet meer in een losse app. Hier beheer je alleen de reparatiebibliotheek met de prijzen.',
     sections: [
-      { title: 'Werkwijze', body: '1. Maak een project aan en koppel het aan een klant en adres. 2. Registreer per aangetroffen schade een registratie met plaatsaanduiding (blok, verdieping, ruimte, gevelzijde, onderdeel). 3. Kies de standaard­reparatie en leg foto\'s voor/na vast. 4. Genereer de rapportage voor de klant.' },
-      { title: 'Mobiel gebruik', body: 'De registratie­pagina is geoptimaliseerd voor gebruik op een smartphone. Foto\'s kunnen direct vanuit de camera worden geüpload zonder tussenopslag.' },
+      { title: 'Werkwijze', body: '1. Zet bij het dossier de toggle "Houtrot registreren" aan. 2. Er verschijnt dan een tab Houtrot bij dat dossier. 3. De monteur legt daar op locatie per aangetroffen schade een registratie vast: plaats (blok, verdieping, ruimte, gevelzijde, onderdeel), de standaard­reparatie en foto\'s voor/na.' },
+      { title: 'Reparatiebibliotheek', body: 'De standaard­reparaties op deze pagina zijn de keuzelijst bij een registratie: code, omschrijving, uren en prijs. Wat je hier vastlegt wordt als momentopname bij de registratie bewaard, zodat latere prijswijzigingen oude registraties niet veranderen.' },
+      { title: 'Mobiel gebruik', body: 'Registreren doe je op de telefoon: open het dossier in de mobiele app en kies de tab Houtrot. Foto\'s gaan rechtstreeks vanuit de camera mee.' },
     ],
   }],
 

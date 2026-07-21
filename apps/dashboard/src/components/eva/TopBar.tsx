@@ -108,21 +108,9 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/wagenpark$/, { title: 'Wagenpark', breadcrumb: 'Apps' }],
 
   // Houtrotherstel (sub-app)
-  [/^\/houtrotherstel\/projecten\/nieuw$/, { title: 'Houtrotherstel › Projecten › Nieuw', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/projecten\/[^/]+\/bewerken$/, { title: 'Houtrotherstel › Projecten › Bewerken', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/projecten\/[^/]+\/rapportage$/, { title: 'Houtrotherstel › Projecten › Rapportage', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/projecten\/[^/]+$/, { title: 'Houtrotherstel › Projecten › Detail', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/projecten$/, { title: 'Houtrotherstel › Projecten', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/rapportages$/, { title: 'Houtrotherstel › Rapportages', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/registraties\/nieuw$/, { title: 'Houtrotherstel › Registraties › Nieuw', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/registraties\/[^/]+$/, { title: 'Houtrotherstel › Registraties › Detail', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/registraties$/, { title: 'Houtrotherstel › Registraties', breadcrumb: 'Apps' }],
   [/^\/houtrotherstel\/standaard-reparaties\/nieuw$/, { title: 'Houtrotherstel › Standaard reparaties › Nieuw', breadcrumb: 'Apps' }],
   [/^\/houtrotherstel\/standaard-reparaties$/, { title: 'Houtrotherstel › Standaard reparaties', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/gebruikers$/, { title: 'Houtrotherstel › Gebruikers', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/instellingen$/, { title: 'Houtrotherstel › Instellingen', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/dashboard$/, { title: 'Houtrotherstel › Dashboard', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel$/, { title: 'Houtrotherstel', breadcrumb: 'Apps' }],
+  [/^\/houtrotherstel$/, { title: 'Houtrot', breadcrumb: 'Apps' }],
 
   // EvertsCalc (sub-app)
   [/^\/everts-calc\/meetstaat\/[^/]+$/, { title: 'EvertsCalc › Meetstaat', breadcrumb: 'Apps' }],

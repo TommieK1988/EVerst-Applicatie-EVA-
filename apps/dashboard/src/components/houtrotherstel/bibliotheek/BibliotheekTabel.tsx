@@ -10,7 +10,6 @@ import {
   getStandaardReparaties, createStandaardReparatie,
   updateStandaardReparatie, deleteStandaardReparatie,
 } from '@/services/houtrotherstel/standaard-reparaties'
-import { getUurtarief, getEenheden, getReparatieTypes } from '@/lib/houtrotherstel/app-settings'
 import type { StandardRepair, StandardRepairForm } from '@/lib/houtrotherstel/types'
 import * as XLSX from 'xlsx'
 
@@ -492,14 +491,13 @@ export default function BibliotheekTabel() {
   const [modal, setModal] = useState<{ open: boolean; item: StandardRepair | null }>({ open: false, item: null })
   const [importOpen, setImportOpen] = useState(false)
   const [importResultaat, setImportResultaat] = useState<string | null>(null)
-  const [uurtarief, setUurtarief] = useState(65)
-  const [eenheden, setEenheden] = useState<string[]>(['st', 'm1', 'm2', 'm3', 'uur', 'dag'])
-  const [reparatieTypes, setReparatieTypes] = useState<string[]>([])
+  // Vaste standaarden. Deze kwamen uit de losse houtrot-app-instellingen
+  // (localStorage); die app is vervallen nu houtrot in het dossier zit.
+  const [uurtarief] = useState(65)
+  const [eenheden] = useState<string[]>(['st', 'm1', 'm2', 'm3', 'uur', 'dag'])
+  const [reparatieTypes] = useState<string[]>([])
 
   async function laden() {
-    setUurtarief(getUurtarief())
-    setEenheden(getEenheden())
-    setReparatieTypes(getReparatieTypes().map(t => t.naam))
     try {
       setItems(await getStandaardReparaties())
     } catch {

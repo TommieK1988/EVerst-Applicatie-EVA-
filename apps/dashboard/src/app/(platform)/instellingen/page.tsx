@@ -190,11 +190,11 @@ const appItems: SettingsItem[] = [
     module: 'everts_calc',
   },
   {
-    href: '/houtrotherstel/instellingen',
-    title: 'Houtrotherstel',
-    description: 'Producten, behandelingen, rapportage-sjablonen en tarieven.',
+    href: '/houtrotherstel/standaard-reparaties',
+    title: 'Houtrot-reparaties',
+    description: 'De reparatiebibliotheek met codes, uren en prijzen die je bij een registratie kiest.',
     ready: true,
-    kicker: 'Houtrotherstel',
+    kicker: 'Houtrot',
     module: 'houtrotherstel',
   },
   {
