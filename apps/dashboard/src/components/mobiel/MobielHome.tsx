@@ -1,5 +1,5 @@
 import React from 'react'
-import { ListChecks, FolderOpen, Clock, CalendarDays, Hammer, User } from 'lucide-react'
+import { ListChecks, FolderOpen, Clock, CalendarDays, User } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 
@@ -29,7 +29,8 @@ export default function MobielHome({
         <MobielTegel href="/m/dossiers" label="Dossiers" Icon={FolderOpen} />
         <MobielTegel href="/m/uren" label="Uren" Icon={Clock} />
         <MobielTegel href="/m/planning" label="Planning" Icon={CalendarDays} />
-        <MobielTegel href="/m/houtrot" label="Houtrot" Icon={Hammer} />
+        {/* Houtrot heeft bewust géén eigen tegel: registraties horen bij een dossier
+            en verschijnen als tab zodra de toggle `houtrot_registreren` aanstaat. */}
         <MobielTegel href="/m/profiel" label="Mijn gegevens" Icon={User} />
       </div>
     </>

@@ -27,9 +27,12 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'EVA',
   },
+  // Let op: het beeldmerk zelf is WIT (bedoeld voor een donkere ondergrond) en
+  // valt daardoor weg als favicon/app-icoon op een licht startscherm. Gebruik
+  // daarom de iconen mét groene achtergrond.
   icons: {
-    icon: '/logo-beeldmerk.svg',
-    apple: '/logo-beeldmerk.svg',
+    icon: '/favicon-32.png',
+    apple: '/apple-icon.png',
   },
 }
 

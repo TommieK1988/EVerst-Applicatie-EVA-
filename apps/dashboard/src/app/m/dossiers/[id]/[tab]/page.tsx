@@ -1,6 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { Suspense } from 'react'
-import { getDossierById } from '@/lib/dossiers/actions'
+import { getDossierById, getDossierToggles } from '@/lib/dossiers/actions'
+import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
+import HoutrotView from '@/components/mobiel/dossier-tabs/HoutrotView'
 import AppHeader from '@/components/mobiel/AppHeader'
 import DossierInfoView, { type DossierInfo } from '@/components/mobiel/DossierInfoView'
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
@@ -33,6 +35,11 @@ export default async function MobielDossierTabPage(
   const res = await getDossierById(id)
   if (!res.ok) notFound()
 
+  // Houtrot verschijnt alleen bij dossiers waar de toggle aanstaat.
+  const toggles = await getDossierToggles(id).catch(() => [])
+  const houtrotAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
+  if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
+
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = res.data as Record<string, any>
@@ -42,9 +49,10 @@ export default async function MobielDossierTabPage(
   return (
     <>
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref="/m/dossiers" />
-      <DossierTabStrip id={id} active={actief} />
+      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} />
 
       {actief === 'informatie' && <InformatieTab d={d} statusLabel={label} />}
+      {actief === 'houtrot' && <HoutrotView dossierId={id} />}
       {actief === 'planning' && <DetailplanningView dossierId={id} />}
       {actief === 'kostengroepen' && (
         <Suspense fallback={<TabLaden />}><KostengroepenView dossierId={id} /></Suspense>

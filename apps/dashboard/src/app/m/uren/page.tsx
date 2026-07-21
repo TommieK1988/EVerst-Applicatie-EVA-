@@ -67,7 +67,7 @@ export default async function MobielUrenPage() {
       <MobielPullToRefresh />
       {dagen.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen werkbonnen in deze periode.
+          Er staan geen werkbonnen voor jou in deze periode.
         </div>
       ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>

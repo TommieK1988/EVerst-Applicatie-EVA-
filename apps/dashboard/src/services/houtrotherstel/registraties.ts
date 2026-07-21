@@ -20,6 +20,9 @@ export async function getRegistraties(
     `)
     .order('registration_date', { ascending: false })
 
+  if (filters?.dossier_id) {
+    query = query.eq('dossier_id', filters.dossier_id)
+  }
   if (filters?.project_id) {
     query = query.eq('project_id', filters.project_id)
   }
@@ -106,7 +109,8 @@ export async function createRegistratie(
   const { data, error } = await supabase
     .from('repair_registrations')
     .insert({
-      project_id: form.project_id,
+      project_id: form.project_id ?? null,
+      dossier_id: form.dossier_id ?? null,
       user_id: userId,
       registration_date: form.registration_date,
       location_block: form.location_block || null,

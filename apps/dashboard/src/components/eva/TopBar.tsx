@@ -17,6 +17,7 @@ const TAB_LABELS: Record<string, string> = {
   werkbegroting: 'Werkbegroting',
   planning:      'Planning',
   vca:           'VCA',
+  houtrot:       'Houtrot',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
   meerwerk:      'Meerwerk',

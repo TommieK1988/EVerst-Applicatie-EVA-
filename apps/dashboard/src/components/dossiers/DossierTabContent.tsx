@@ -17,6 +17,7 @@ import { getQuotesVoorDossier } from '@/lib/everts-calc/services/quotes'
 import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting/OpdrachtWerkbegrotingTab'
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import VcaTab from './tabs/VcaTab'
+import HoutrotTab from './tabs/HoutrotTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
 import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
@@ -36,6 +37,7 @@ const TAB_LABELS: Record<string, string> = {
   werkbegroting: 'Werkbegroting',
   planning:      'Planning',
   vca:           'VCA',
+  houtrot:       'Houtrot',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
   uren:          'Uren',
@@ -195,6 +197,21 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
         <ActielijstenTab dossier_id={id} dossier_titel={dossier?.titel} />
       </>
     )
+  }
+
+  if (tab === 'houtrot') {
+    // Alleen wanneer de houtrot-toggle voor dit dossier aanstaat; anders valt de
+    // render door naar de generieke "niet beschikbaar"-weergave hieronder.
+    const toggles = await getDossierToggles(id)
+    const houtrotAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
+    if (houtrotAan) {
+      return (
+        <>
+          {titleInjector}
+          <HoutrotTab dossierId={id} />
+        </>
+      )
+    }
   }
 
   if (tab === 'vca') {

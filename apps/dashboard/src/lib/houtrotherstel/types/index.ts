@@ -336,7 +336,13 @@ export interface StandardRepairMaterialForm {
 }
 
 export interface RegistratieForm {
-  project_id: string
+  /**
+   * Een registratie hangt aan precies één anker: een EVA-dossier (nieuw, via de
+   * dossier-toggle `houtrot_registreren`) óf een legacy houtrot-project. De
+   * database dwingt dat af met een check-constraint.
+   */
+  dossier_id?: string
+  project_id?: string
   registration_date: string
   location_block?: string
   floor?: string
@@ -375,6 +381,7 @@ export interface RegistratieForm {
 // ============================================================
 
 export interface RegistratieFilters {
+  dossier_id?: string
   project_id?: string
   user_id?: string
   status?: RegistratieStatus

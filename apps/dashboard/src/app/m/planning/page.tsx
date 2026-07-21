@@ -64,7 +64,7 @@ export default async function MobielPlanningPage() {
       <MobielPullToRefresh />
       {dagen.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen planning in de komende weken.
+          Er staat de komende weken niets voor jou ingepland.
         </div>
       ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>

@@ -10,13 +10,24 @@ export const DOSSIER_TABS = [
   { key: 'informatie', label: 'Info' },
   { key: 'planning', label: 'Planning' },
   { key: 'kostengroepen', label: 'Kosten' },
+  // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
+  // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
+  { key: 'houtrot', label: 'Houtrot' },
   { key: 'formulieren', label: 'Formulieren' },
   { key: 'bestanden', label: 'Bestanden' },
 ] as const
 
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
-export default function DossierTabStrip({ id, active }: { id: string; active: DossierTabKey }) {
+export default function DossierTabStrip({
+  id, active, houtrotAan = false,
+}: {
+  id: string
+  active: DossierTabKey
+  houtrotAan?: boolean
+}) {
+  const tabs = DOSSIER_TABS.filter(t => t.key !== 'houtrot' || houtrotAan)
+
   return (
     <div
       style={{
@@ -26,7 +37,7 @@ export default function DossierTabStrip({ id, active }: { id: string; active: Do
         scrollbarWidth: 'none',
       }}
     >
-      {DOSSIER_TABS.map(({ key, label }) => {
+      {tabs.map(({ key, label }) => {
         const isActief = key === active
         return (
           <Link

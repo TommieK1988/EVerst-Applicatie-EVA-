@@ -37,7 +37,7 @@ export default async function MobielProfielPage() {
 
   return (
     <>
-      <AppHeader title="Profiel" />
+      <AppHeader title="Mijn gegevens" backHref="/m" />
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Identiteit */}
         <div style={{
