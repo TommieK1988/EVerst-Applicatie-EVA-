@@ -8,9 +8,9 @@ import React from 'react'
  * NOOIT `position: fixed`.
  *
  * Waarom: de `/m`-shell (`app/m/layout.tsx`) is een flex-kolom met een
- * scrollend content-gebied bóven de vaste `MobielBottomNav`. Een
- * `position: fixed`-element ontsnapt aan die kolom en plakt tegen de
- * onderrand van het viewport — dus ACHTER de bottom-nav, waar het wegvalt.
+ * scrollend content-gebied. Een `position: fixed`-element ontsnapt aan die
+ * kolom en plakt tegen de onderrand van het viewport i.p.v. onderaan de
+ * scroll-content — met `sticky; bottom:0` blijft het netjes binnen de kolom.
  * Een `sticky`-element leeft binnen de scroll-container en stopt daardoor
  * automatisch nét boven de nav. Vandaar deze gedeelde, correcte primitive.
  *

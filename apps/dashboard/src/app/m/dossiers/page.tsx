@@ -17,7 +17,7 @@ export default async function MobielDossiersPage() {
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Dossiers" />
+        <AppHeader title="Dossiers" backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
           Geen medewerker-koppeling gevonden voor dit account.
         </div>
@@ -62,7 +62,7 @@ export default async function MobielDossiersPage() {
 
   return (
     <>
-      <AppHeader title="Dossiers" sub={`${rows.length} dossiers`} />
+      <AppHeader title="Dossiers" sub={`${rows.length} dossiers`} backHref="/m" />
       <MobielPullToRefresh />
       <MobielDossierLijst dossiers={rows} />
     </>
