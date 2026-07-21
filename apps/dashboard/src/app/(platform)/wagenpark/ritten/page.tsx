@@ -13,9 +13,12 @@ import { laadLayouts } from '@/app/actions/layouts'
 
 export const dynamic = 'force-dynamic'
 
-// Max aantal ritten dat we in één keer in de tabel laden. Filteren/sorteren/
-// pagineren gebeurt client-side in OverzichtTabel.
-const RITTEN_LIMIT = 1000
+// Veiligheidsplafond voor het aantal ritten dat we in één keer in de tabel
+// laden. Filteren/sorteren/pagineren gebeurt client-side in OverzichtTabel;
+// die toont maar 25 rijen tegelijk, dus de rem zit in de queryduur en de
+// omvang van de pagina die naar de browser gaat — niet in het tekenen.
+// Bij ~1.500 nieuwe ritten per maand is dit ruim een jaar of tien vooruit.
+const RITTEN_LIMIT = 25000
 
 export default async function RittenPage() {
   const magPrive = await magPriveRittenZien()
