@@ -102,7 +102,7 @@ export async function maakToolbox(input: {
     .single()
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/toolbox')
+  revalidatePath('/kam/toolbox')
   return { ok: true, data: { id: data.id } }
 }
 
@@ -120,8 +120,8 @@ export async function updateConceptSchema(
   const { error } = await db().from('toolboxen').update(patch).eq('id', id)
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/toolbox')
-  revalidatePath(`/toolbox/${id}`)
+  revalidatePath('/kam/toolbox')
+  revalidatePath(`/kam/toolbox/${id}`)
   return { ok: true, data: undefined }
 }
 
@@ -155,8 +155,8 @@ export async function publiceerToolbox(id: string): Promise<ActionResult<{ versi
     .eq('id', id)
   if (uErr) return { ok: false, error: uErr.message }
 
-  revalidatePath('/toolbox')
-  revalidatePath(`/toolbox/${id}`)
+  revalidatePath('/kam/toolbox')
+  revalidatePath(`/kam/toolbox/${id}`)
   return { ok: true, data: { versienummer: nieuwVersienummer } }
 }
 
@@ -164,7 +164,7 @@ export async function archiveerToolbox(id: string): Promise<ActionResult> {
   await vereisRecht('toolbox', 'beheren')
   const { error } = await db().from('toolboxen').update({ status: 'gearchiveerd' }).eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/toolbox')
+  revalidatePath('/kam/toolbox')
   return { ok: true, data: undefined }
 }
 
@@ -231,7 +231,7 @@ export async function wijsToe(input: {
     toegewezenDoor: null,
   })
 
-  revalidatePath(`/toolbox/${input.toolboxId}`)
+  revalidatePath(`/kam/toolbox/${input.toolboxId}`)
   return { ok: true, data: res }
 }
 
@@ -252,7 +252,7 @@ export async function verwijderToewijzing(id: string): Promise<ActionResult> {
   await supabase.from('toolbox_toewijzingen').delete().eq('id', id)
   if (toew.task_id) await supabase.from('tasks').delete().eq('id', toew.task_id)
 
-  revalidatePath(`/toolbox/${toew.toolbox_id}`)
+  revalidatePath(`/kam/toolbox/${toew.toolbox_id}`)
   return { ok: true, data: undefined }
 }
 

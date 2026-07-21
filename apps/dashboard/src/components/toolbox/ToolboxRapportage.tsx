@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { PageHeader, Button } from '@/components/ui'
-import { wijsToe, verwijderToewijzing, type DeelnemerRij, type MedewerkerKeuze } from '@/app/(platform)/toolbox/actions'
+import { wijsToe, verwijderToewijzing, type DeelnemerRij, type MedewerkerKeuze } from '@/app/(platform)/kam/toolbox/actions'
 import type { ToolboxStatus } from '@/components/toolbox/types'
 
 type Props = {
@@ -72,11 +72,11 @@ export default function ToolboxRapportage({ toolbox, deelnemers, medewerkers }: 
         }}
         actions={
           <>
-            <Link href={`/toolbox/${toolbox.id}/bewerken`}><Button variant="ghost">Bewerken</Button></Link>
+            <Link href={`/kam/toolbox/${toolbox.id}/bewerken`}><Button variant="ghost">Bewerken</Button></Link>
             {gepubliceerd && (
-              <Link href={`/toolbox/${toolbox.id}/presenteren`} target="_blank"><Button variant="ghost">Presenteren</Button></Link>
+              <Link href={`/kam/toolbox/${toolbox.id}/presenteren`} target="_blank"><Button variant="ghost">Presenteren</Button></Link>
             )}
-            <a href={`/toolbox/${toolbox.id}/presentielijst`} target="_blank" rel="noreferrer">
+            <a href={`/kam/toolbox/${toolbox.id}/presentielijst`} target="_blank" rel="noreferrer">
               <Button variant="ghost">Presentielijst (PDF)</Button>
             </a>
             <Button variant="primary" disabled={!gepubliceerd} onClick={() => setToewijsOpen(true)}>Toewijzen</Button>

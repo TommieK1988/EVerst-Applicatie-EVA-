@@ -69,12 +69,14 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/taken\/lijsten$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
   [/^\/taken$/, { title: 'Actielijsten', breadcrumb: 'Apps' }],
 
-  // Toolbox (sub-app)
-  [/^\/toolbox\/nieuw$/, { title: 'Toolbox › Nieuw', breadcrumb: 'Apps' }],
-  [/^\/toolbox\/[^/]+\/bewerken$/, { title: 'Toolbox › Bewerken', breadcrumb: 'Apps' }],
-  [/^\/toolbox\/[^/]+\/presenteren$/, { title: 'Toolbox › Presenteren', breadcrumb: 'Apps' }],
-  [/^\/toolbox\/[^/]+$/, { title: 'Toolbox › Rapportage', breadcrumb: 'Apps' }],
-  [/^\/toolbox$/, { title: 'Toolbox', breadcrumb: 'Apps' }],
+  // KAM/VGM (sub-app)
+  [/^\/kam\/toolbox\/[^/]+\/bewerken$/, { title: 'KAM/VGM › Toolbox › Bewerken', breadcrumb: 'Beheer' }],
+  [/^\/kam\/toolbox\/[^/]+\/presenteren$/, { title: 'KAM/VGM › Toolbox › Presenteren', breadcrumb: 'Beheer' }],
+  [/^\/kam\/toolbox\/[^/]+$/, { title: 'KAM/VGM › Toolbox › Rapportage', breadcrumb: 'Beheer' }],
+  [/^\/kam\/toolbox$/, { title: 'KAM/VGM › Toolbox', breadcrumb: 'Beheer' }],
+  [/^\/kam\/vca-diplomas$/, { title: 'KAM/VGM › VCA-diploma’s', breadcrumb: 'Beheer' }],
+  [/^\/kam\/formulieren$/, { title: 'KAM/VGM › Formulieren', breadcrumb: 'Beheer' }],
+  [/^\/kam$/, { title: 'KAM/VGM › Dashboard', breadcrumb: 'Beheer' }],
 
   // Materieelbeheer (sub-app, in ontwikkeling)
   [/^\/materieelbeheer\/dashboard$/, { title: 'Materieelbeheer › Dashboard', breadcrumb: 'Apps' }],

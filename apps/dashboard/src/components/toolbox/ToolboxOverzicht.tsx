@@ -7,7 +7,7 @@ import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { PageHeader, Button } from '@/components/ui'
 import { IconPlus } from '@/components/eva/Icons'
-import { maakToolbox, type ToolboxOverzichtRij } from '@/app/(platform)/toolbox/actions'
+import { maakToolbox, type ToolboxOverzichtRij } from '@/app/(platform)/kam/toolbox/actions'
 import type { ToolboxStatus } from '@/components/toolbox/types'
 
 const STATUS_META: Record<ToolboxStatus, { label: string; c: string; bg: string }> = {
@@ -102,7 +102,7 @@ export default function ToolboxOverzicht({ data, layouts, user_id }: Props) {
     startTransition(async () => {
       const res = await maakToolbox({ titel: t, omschrijving: omschrijving.trim() || undefined })
       if (!res.ok) { toast.error(res.error); return }
-      router.push(`/toolbox/${res.data.id}/bewerken`)
+      router.push(`/kam/toolbox/${res.data.id}/bewerken`)
     })
   }
 
@@ -141,7 +141,7 @@ export default function ToolboxOverzicht({ data, layouts, user_id }: Props) {
           kolommen={KOLOMMEN}
           layouts={layouts}
           user_id={user_id}
-          onRijKlik={(r) => router.push(`/toolbox/${r.id}`)}
+          onRijKlik={(r) => router.push(`/kam/toolbox/${r.id}`)}
           beginSortering={[{ id: 'bijgewerkt_op', desc: true }]}
         />
       )}

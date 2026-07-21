@@ -11,7 +11,7 @@ import { parseVideoUrl } from '@/lib/toolbox/schema'
 import {
   updateConceptSchema,
   publiceerToolbox,
-} from '@/app/(platform)/toolbox/actions'
+} from '@/app/(platform)/kam/toolbox/actions'
 import type {
   ToolboxSchema,
   ToolboxSlide,
@@ -114,7 +114,7 @@ export default function ToolboxBuilder({ toolbox }: { toolbox: ToolboxData }) {
       const res = await publiceerToolbox(toolbox.id)
       if (!res.ok) { toast.error(res.error); return }
       toast.success(`Gepubliceerd als versie ${res.data.versienummer}`)
-      router.push(`/toolbox/${toolbox.id}`)
+      router.push(`/kam/toolbox/${toolbox.id}`)
     })
   }
 
@@ -125,7 +125,7 @@ export default function ToolboxBuilder({ toolbox }: { toolbox: ToolboxData }) {
     <div className="eva-page-full" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 120px)' }}>
       {/* Kop */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <Link href="/toolbox" style={{ fontSize: 13, color: 'var(--fg-muted)', textDecoration: 'none' }}>← Toolbox</Link>
+        <Link href="/kam/toolbox" style={{ fontSize: 13, color: 'var(--fg-muted)', textDecoration: 'none' }}>← Toolbox</Link>
         <input
           value={titel}
           onChange={(e) => { setTitel(e.target.value); setVuil(true) }}

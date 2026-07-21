@@ -10,7 +10,7 @@ import {
   ontkoppelMoment,
   type ToolboxKeuze,
   type MomentKoppeling,
-} from '@/app/(platform)/toolbox/actions'
+} from '@/app/(platform)/kam/toolbox/actions'
 
 /**
  * Sectie in de AgendaItemModal (alleen bij type `vca_toolbox`): koppel een
@@ -77,7 +77,7 @@ export default function ToolboxMomentSectie({
           <div style={{ fontSize: 12, color: 'var(--fg-soft)', marginTop: 2 }}>
             Klaargezet · {koppeling.aantal_afgerond} van {koppeling.aantal_toegewezen} afgerond
           </div>
-          <Link href={`/toolbox/${koppeling.toolbox_id}`} style={{ fontSize: 12, color: '#1f6feb', textDecoration: 'none' }}>
+          <Link href={`/kam/toolbox/${koppeling.toolbox_id}`} style={{ fontSize: 12, color: '#1f6feb', textDecoration: 'none' }}>
             Rapportage bekijken →
           </Link>
         </div>
