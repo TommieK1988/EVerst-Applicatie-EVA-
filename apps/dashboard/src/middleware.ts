@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { alsSessieCookie } from '@everts/database/cookies'
 import { isMobileUA } from '@/lib/isMobileUA'
-import { IDLE_MS, COOKIE_LAATSTE_ACTIVITEIT } from '@/lib/idle'
+import { COOKIE_SESSIE_VERLOOPT, volgendeUitlogTijd } from '@/lib/sessie'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -57,30 +57,29 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user) {
-    // Automatisch uitloggen bij inactiviteit (server-side handhaving).
-    // De activiteitscookie wordt door de client geschreven bij échte input; hier
-    // wordt hij alléén gelézen — niet ververst — zodat achtergrond-requests
-    // (polling e.d.) de sessie niet ongemerkt verlengen.
-    const laatste = request.cookies.get(COOKIE_LAATSTE_ACTIVITEIT)?.value
+    // Eén keer per dag uitloggen (server-side handhaving). De vervalcookie wordt
+    // bij de eerste request van een sessie gezet en daarna alléén gelézen — verder
+    // gebruik schuift het moment dus niet op.
+    const verval = request.cookies.get(COOKIE_SESSIE_VERLOOPT)?.value
     const nu = Date.now()
-    if (laatste) {
-      const ts = Number(laatste)
-      if (Number.isFinite(ts) && nu - ts > IDLE_MS) {
-        // Te lang inactief → sessie beëindigen en naar login. Dit dekt ook het
-        // geval "URL heropenen": een verlopen tijdstempel logt alsnog uit.
+    if (verval) {
+      const ts = Number(verval)
+      if (Number.isFinite(ts) && nu >= ts) {
+        // Werkdag voorbij → sessie beëindigen en naar login. Dit dekt ook het
+        // geval "app heropenen": een verlopen moment logt alsnog uit.
         await supabase.auth.signOut()
         const uit = NextResponse.redirect(new URL('/login', request.url))
         // Door signOut gewiste Supabase-cookies meenemen op de redirect …
         response.cookies.getAll().forEach((c) => uit.cookies.set(c))
-        // … en de activiteitscookie opruimen, anders logt de volgende login direct weer uit.
-        uit.cookies.set(COOKIE_LAATSTE_ACTIVITEIT, '', { maxAge: 0, path: '/' })
+        // … en de vervalcookie opruimen, anders logt de volgende login direct weer uit.
+        uit.cookies.set(COOKIE_SESSIE_VERLOOPT, '', { maxAge: 0, path: '/' })
         return uit
       }
     } else if (!isApiRoute) {
-      // Nog geen activiteitscookie (verse login): seed op 'nu' zodat een net
-      // ingelogde gebruiker niet meteen wordt uitgelogd. Gebeurt eenmalig bij
-      // afwezigheid — dus geen sessieverlenging door achtergrond-requests.
-      response.cookies.set(COOKIE_LAATSTE_ACTIVITEIT, String(nu), {
+      // Verse login: leg het vervalmoment eenmalig vast op het eerstvolgende
+      // uitlogtijdstip. Alleen op paginarequests, zodat een achtergrond-fetch
+      // vlak na middernacht niet stiekem een nieuw dagvenster opent.
+      response.cookies.set(COOKIE_SESSIE_VERLOOPT, String(volgendeUitlogTijd()), {
         path: '/',
         sameSite: 'lax',
       })

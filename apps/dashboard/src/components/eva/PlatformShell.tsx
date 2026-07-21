@@ -2,7 +2,7 @@
 import React from 'react'
 import Sidebar from './Sidebar'
 import TopBar  from './TopBar'
-import IdleLogout from './IdleLogout'
+import SessieVerloop from './SessieVerloop'
 import NotificatieToasts from './NotificatieToasts'
 import UpdatesPopup from './UpdatesPopup'
 import { GlobalSearchProvider } from './GlobalSearch'
@@ -71,7 +71,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
   return (
     <BreadcrumbProvider>
     <GlobalSearchProvider>
-    <IdleLogout />
+    <SessieVerloop />
     <div
       className="eva"
       data-theme={dataTheme}

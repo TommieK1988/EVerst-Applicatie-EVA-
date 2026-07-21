@@ -1,4 +1,5 @@
 import React from 'react'
+import SessieVerloop from '@/components/eva/SessieVerloop'
 
 /**
  * MobielShell — eigen mobiele omgeving (`/m`), los van de desktop-PlatformShell.
@@ -29,6 +30,9 @@ export default function MobielLayout({ children }: { children: React.ReactNode }
         WebkitFontSmoothing: 'antialiased',
       }}
     >
+      {/* Uitloggen aan het eind van de werkdag; op mobiel ontbrak deze timer,
+          waardoor alleen de middleware-backstop de sessie beëindigde. */}
+      <SessieVerloop />
       <div data-m-scroll style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
