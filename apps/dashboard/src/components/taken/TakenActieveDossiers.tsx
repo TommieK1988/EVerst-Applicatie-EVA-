@@ -209,12 +209,18 @@ export default function TakenActieveDossiers({
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   }
 
+  // Medewerker-taken hangen niet aan een dossier: die linken naar de medewerkerpagina.
+  const openContext = (r: TaakRij) =>
+    r.medewerker_id
+      ? router.push(`/medewerkers/${r.medewerker_id}`)
+      : router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`)
+
   const kolommen = useMemo<KolomDefinitie<TaakRij>[]>(() => [
     { key: 'dossiernummer', label: 'Dossier', vast: true, breedte: 110,
       sorteerWaarde: r => r.dossiernummer ?? '',
       render: r => (
         <button
-          onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
+          onClick={e => { e.stopPropagation(); openContext(r) }}
           title={r.dossiernummer ?? undefined}
           style={{ ...celKnop, color: 'var(--accent)', fontWeight: 600 }}
         >
@@ -225,7 +231,7 @@ export default function TakenActieveDossiers({
       sorteerWaarde: r => r.dossier_titel.toLowerCase(),
       render: r => (
         <button
-          onClick={e => { e.stopPropagation(); router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`) }}
+          onClick={e => { e.stopPropagation(); openContext(r) }}
           title={r.dossier_titel}
           style={{ ...celKnop, color: 'var(--fg)' }}
         >
@@ -376,7 +382,9 @@ export default function TakenActieveDossiers({
           bezigId: afvinkBezigId,
         }}
         groepering={{
-          sleutel: r => r.dossier_id,
+          // Medewerker-taken hebben geen dossier_id; zonder eigen sleutel zouden ze
+          // allemaal in één naamloze groep vallen.
+          sleutel: r => r.medewerker_id ? `medewerker:${r.medewerker_id}` : r.dossier_id,
           kop: groepKop,
         }}
       />

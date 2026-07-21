@@ -127,10 +127,12 @@ interface Props {
   taken: TaakMetDetails[]
   lijsten?: DbTaskList[]
   isTemplate?: boolean
+  /** Sjabloon-context: bepaalt de toewijzings- en deadline-opties in het detailpaneel. */
+  context?: 'dossier' | 'medewerker'
   takenInLijst?: { id: string; titel: string }[]
 }
 
-export default function KanbanBord({ taken, lijsten, isTemplate, takenInLijst = [] }: Props) {
+export default function KanbanBord({ taken, lijsten, isTemplate, context = 'dossier', takenInLijst = [] }: Props) {
   const [lokaalTaken, setLokaalTaken]             = useState<TaakMetDetails[]>(taken)
   const [actieveTaak, setActieveTaak]             = useState<TaakMetDetails | null>(null)
   const [geselecteerdeTaak, setGeselecteerdeTaak] = useState<TaakMetDetails | null>(null)
@@ -205,6 +207,7 @@ export default function KanbanBord({ taken, lijsten, isTemplate, takenInLijst = 
           taak={geselecteerdeTaak}
           onSluit={() => setGeselecteerdeTaak(null)}
           isTemplate={isTemplate}
+          context={context}
           takenInLijst={takenInLijst}
         />
       )}

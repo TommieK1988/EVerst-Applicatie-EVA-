@@ -43,6 +43,59 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── KAM/VGM ────────────────────────────────────────────────────────────
+  [/^\/kam\/toolbox\/[^/]+\/bewerken$/, {
+    title: 'Toolbox bewerken',
+    description: 'Bouw de toolbox op uit slides met tekst, koppen, afbeeldingen en video-links, gevolgd door meerkeuzevragen. Wijzigingen komen pas bij medewerkers terecht nadat je opnieuw publiceert.',
+    sections: [
+      { title: 'Slides', body: 'Voeg content-slides toe met blokken (kop, tekst, afbeelding, YouTube/Vimeo-video). Met de pijltjes wijzig je de volgorde.' },
+      { title: 'Vragen', body: 'Elke vraag heeft 2 tot 6 antwoorden waarvan er precies één juist is, plus een verplichte uitleg die verschijnt bij een fout antwoord. Bij het doorlopen worden vragen én antwoorden per medewerker geschud, zodat collega\'s niet kunnen afkijken.' },
+      { title: 'Publiceren', body: 'Publiceren bevriest de inhoud als versie. Wie hem daarna doorloopt en aftekent, tekent exact deze versie. Lopende toewijzingen houden hun oude versie.' },
+    ],
+  }],
+  [/^\/kam\/toolbox\/[^/]+\/presenteren$/, {
+    title: 'Toolbox presenteren',
+    description: 'De slide-weergave voor een klassikale bespreking op een groot scherm. Blader door de slides; de kennischeck en het aftekenen doen medewerkers zelf op hun telefoon.',
+  }],
+  [/^\/kam\/toolbox\/[^/]+$/, {
+    title: 'Toolbox — rapportage',
+    description: 'Zie wie deze toolbox heeft afgerond, met datum, aantal pogingen en handtekening. Wijs de toolbox toe aan medewerkers of exporteer de presentielijst als PDF voor je VCA-dossier.',
+    sections: [
+      { title: 'Toewijzen', body: 'Wijs de toolbox los toe aan een selectie medewerkers of aan alle actieve app-gebruikers. Elke medewerker krijgt de toolbox als openstaande taak in "Mijn taken" op zijn telefoon; die blijft staan tot de toolbox goed is afgerond.' },
+      { title: 'Presentielijst', body: 'De PDF-presentielijst toont per deelnemer de handtekening, datum en het aantal pogingen — audit-proof voor VCA/ISO.' },
+    ],
+  }],
+  [/^\/kam\/toolbox$/, {
+    title: 'Toolbox',
+    description: 'Digitale veiligheids-toolboxen: bouw instructies met een kennischeck, wijs ze toe of koppel ze aan een toolbox-moment in de bedrijfsagenda. Medewerkers doorlopen ze op hun telefoon en tekenen digitaal af.',
+    sections: [
+      { title: 'Overzicht', body: 'De tabel toont al je toolbox-onderwerpen met status en het aantal afgeronde deelnemers. Klik een rij voor de rapportage.' },
+      { title: 'Agenda-koppeling', body: 'Hang een toolbox aan een "VCA Toolbox"-moment in de bedrijfsagenda. Op de dag van het moment krijgt iedereen uit de doelgroep de toolbox automatisch klaargezet.' },
+    ],
+  }],
+  [/^\/kam\/vca-diplomas$/, {
+    title: 'VCA-diploma’s',
+    description: 'Het register van VCA-diploma’s per medewerker, met soort, diplomanummer en geldigheidsdatum. Het verkeerslicht laat zien wat verlopen is of binnenkort verloopt.',
+    sections: [
+      { title: 'Geldigheid', body: 'Een VCA-diploma is doorgaans 10 jaar geldig. Rood = verlopen, oranje = verloopt binnen 3 maanden, groen = in orde. Zonder einddatum blijft de status onbekend.' },
+      { title: 'Scan bewaren', body: 'De diplomascan zelf upload je bij de medewerker onder Bestanden (categorie VCA-diploma). Dit register legt de gegevens vast zodat je kunt sturen op verlengingen.' },
+    ],
+  }],
+  [/^\/kam\/formulieren$/, {
+    title: 'KAM-formulieren',
+    description: 'Alle formulieren die als KAM/VGM-formulier zijn gemarkeerd, met hun inzendingen. Denk aan werkplekinspecties, VCA-registraties en incidentmeldingen.',
+    sections: [
+      { title: 'Formulier toevoegen', body: 'Zet bij een formulier het vinkje "KAM/VGM-formulier" aan in de formulierenbouwer; daarna verschijnt hij hier automatisch.' },
+    ],
+  }],
+  [/^\/kam$/, {
+    title: 'KAM/VGM — Dashboard',
+    description: 'Kwaliteit, Arbo en Milieu in één overzicht: de lopende opdrachten waarop de VCA-toggle aanstaat, met de voortgang van hun KAM-formulieren en follow-up taken.',
+    sections: [
+      { title: 'Opdrachten met VCA', body: 'Elke opdracht met de VCA-toggle verschijnt hier, inclusief projectleider en de status van de bijbehorende formulieren. Klik een rij om naar het dossier te gaan.' },
+    ],
+  }],
+
   // ── Materieelbeheer (in ontwikkeling) ──────────────────────────────────
   [/^\/materieelbeheer\/dashboard$/, {
     title: 'Materieel-dashboard',
@@ -462,6 +515,18 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Voertuig­koppeling', body: 'Wijs een voertuig toe via de koppeling­sectie. Meerdere koppelingen zijn mogelijk (bijv. bij voertuig­wissel). Einddatum wordt automatisch gevuld bij het koppelen van een nieuw voertuig.' },
       { title: 'Uitzonderingen (Allowances)', body: 'Maak persistente uitzonderingen aan voor compliance­regels die bewust worden genegeerd. Bijvoorbeeld: een bestuurder mag regelmatig parkeren op een locatie die normaal als "lang parkeren" wordt geflagd.' },
       { title: 'Ritten corrigeren', body: 'Klik op het type­badge van een rit (zakelijk/privé) om het type handmatig te overschrijven. Een ● geeft aan dat de rit handmatig is gecorrigeerd.' },
+    ],
+  }],
+
+  [/^\/wagenpark\/werktijden$/, {
+    title: 'Wagenpark — Werktijden',
+    description: 'Aanwezigheid op de werkplek afgeleid uit de rittenregistratie. Bepaalt per bestuurder wanneer hij op de werkplek aankwam en weer vertrok, door te kijken welke ritten binnen een straal (standaard 500 m) rond de ingeplande projectlocatie van die dag beginnen of eindigen. De grens voor "te laat" en "te vroeg" komt uit het rooster. Vertrouwelijk: alleen zichtbaar voor Directie/beheer.',
+    sections: [
+      { title: 'Wat is "de werkplek"?', body: 'De projectlocatie waar de medewerker die dag is ingepland (dossier-werkadres uit de planning). Meerdere locaties op één dag kan: aankomst telt bij de eerste, vertrek bij de laatste. Is er die dag geen planning, dan valt de werkplek terug op het bedrijfsadres.' },
+      { title: 'Aankomst en vertrek', body: 'Aankomst = de eerste rit die binnen de straal van een ingeplande locatie eindigt. Vertrek = de laatste rit die binnen de straal ervan start. Zo tel je echt "op de werkplek", niet het moment van vertrek thuis.' },
+      { title: 'Te laat / te vroeg', body: 'De uiterste aankomst en het vroegste vertrek komen uit het rooster (dagstart/dageind) van de medewerker — dus 07:30 of 08:00 per persoon. Verlof of afwezigheid op een dag onderdrukt het signaal voor die dag.' },
+      { title: 'Dagelijks en maandelijks', body: 'Elke werkdag krijgt Directie/beheer een in-app samenvatting van wie te laat was of te vroeg vertrok. Op de 1e van de maand wordt per bestuurder een volledige analyse van de vorige maand klaargezet, met een PDF om te downloaden.' },
+      { title: 'Adressen geocoderen', body: 'De analyse heeft coördinaten nodig van de woonadressen en het bedrijfsadres; ingeplande projectlocaties worden automatisch omgezet. Ontbreekt er iets, draai dan "Adressen geocoderen". Pas de straal en marges aan via Instellingen (regel R11).' },
     ],
   }],
 

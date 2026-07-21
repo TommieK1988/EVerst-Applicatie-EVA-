@@ -565,9 +565,9 @@ export type Database = {
         Relationships: []
       }
       task_lists: {
-        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; streefdatum: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; naam: string; beschrijving: string | null; entity_type: 'project' | 'offerte' | 'calculatie' | null; entity_id: string | null; is_template: boolean; template_naam: string | null; owner_id: string | null; volgorde: number; dossier_id: string | null; medewerker_id: string | null; context: 'dossier' | 'medewerker'; trigger_hoofdstatus: string | null; trigger_substatus: string | null; template_id: string | null; streefdatum: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; naam: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; medewerker_id?: string | null; context?: 'dossier' | 'medewerker'; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; naam?: string; beschrijving?: string | null; entity_type?: 'project' | 'offerte' | 'calculatie' | null; entity_id?: string | null; is_template?: boolean; template_naam?: string | null; owner_id?: string | null; volgorde?: number; dossier_id?: string | null; medewerker_id?: string | null; context?: 'dossier' | 'medewerker'; trigger_hoofdstatus?: string | null; trigger_substatus?: string | null; template_id?: string | null; streefdatum?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       task_completion_acties: {
@@ -654,7 +654,8 @@ export type TaskPrioriteit = 'laag' | 'normaal' | 'hoog' | 'urgent'
 export type TaskAssigneeRol = 'verantwoordelijke' | 'mede-uitvoerder' | 'reviewer'
 export type EntityType    = 'project' | 'offerte' | 'calculatie'
 
-export type AssigneeType = 'direct' | 'dossier_rol'
+/** 'medewerker_zelf' = de medewerker om wie de actielijst draait (medewerker-context). */
+export type AssigneeType = 'direct' | 'dossier_rol' | 'medewerker_zelf'
 export type CompletionActieType =
   | 'dossier_substatus_wijzigen'
   | 'dossier_rol_toewijzen'
@@ -673,6 +674,10 @@ export interface DbTaskList {
   volgorde: number
   // Sjabloon-extensies
   dossier_id: string | null
+  /** Geactiveerde lijst op een medewerker (medewerker-context). */
+  medewerker_id: string | null
+  /** Sjabloon: waar het sjabloon voor bedoeld is. Bepaalt triggers, toewijzing en ankers. */
+  context: 'dossier' | 'medewerker'
   trigger_hoofdstatus: string | null
   trigger_substatus: string | null
   template_id: string | null
@@ -687,6 +692,8 @@ export interface DbTask {
   lijst_id: string | null
   /** Directe dossier-koppeling voor losse taken zonder actielijst. */
   dossier_id: string | null
+  /** Directe medewerker-koppeling voor losse taken zonder actielijst. */
+  medewerker_id: string | null
   parent_task_id: string | null
   titel: string
   omschrijving: Record<string, unknown> | null  // Tiptap JSON
@@ -704,6 +711,7 @@ export interface DbTask {
   deadline_basis:
     | 'geen' | 'activatie' | 'streefdatum' | 'planning_start' | 'planning_eind'
     | 'verwacht_startdatum' | 'verwacht_einddatum'
+    | 'in_dienst_vanaf' | 'uit_dienst_per'
   deadline_dagen: number | null
   /** Deadline handmatig gezet → de automatische herberekening slaat deze taak over. */
   deadline_handmatig: boolean

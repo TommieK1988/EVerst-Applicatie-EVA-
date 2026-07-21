@@ -11,7 +11,7 @@ const NIVEAU_RANG: Record<ModuleRechten, number> = { lezen: 1, schrijven: 2, beh
  * (sidebar verbergen + route-guard). Uitrollen = key toevoegen.
  */
 export const AFGEDWONGEN_MODULES: RechtenModule[] = [
-  'management', 'mijn_taken', 'wagenpark', 'materieelbeheer', 'taken', 'formulieren',
+  'management', 'mijn_taken', 'wagenpark', 'materieelbeheer', 'taken', 'formulieren', 'toolbox',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */

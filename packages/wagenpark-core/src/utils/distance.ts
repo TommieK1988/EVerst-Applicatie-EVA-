@@ -1,5 +1,37 @@
 /** Afstand-helpers: zoeken en parsen van kenteken-strings en coördinaten. */
 
+/** Een geografisch punt (WGS84). */
+export type GeoPunt = { lat: number; lng: number }
+
+/**
+ * Hemelsbrede afstand tussen twee coördinaten in METERS (haversine).
+ * Nauwkeurig genoeg voor "binnen X meter van een adres"-checks.
+ */
+export function afstandMeter(a: GeoPunt, b: GeoPunt): number {
+  const R = 6_371_000 // straal aarde in meter
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat)
+  const lat2 = toRad(b.lat)
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** Ligt `punt` binnen `straalMeter` van `referentie`? Null-coördinaten → false. */
+export function isBinnenStraal(
+  punt: GeoPunt | null | undefined,
+  referentie: GeoPunt | null | undefined,
+  straalMeter: number,
+): boolean {
+  if (!punt || !referentie) return false
+  if (!Number.isFinite(punt.lat) || !Number.isFinite(punt.lng)) return false
+  if (!Number.isFinite(referentie.lat) || !Number.isFinite(referentie.lng)) return false
+  return afstandMeter(punt, referentie) <= straalMeter
+}
+
 /** Normaliseer een kenteken: hoofdletters, geen spaties, streepjes behouden. */
 export function normalizeKenteken(k: string | null | undefined): string {
   if (!k) return ''

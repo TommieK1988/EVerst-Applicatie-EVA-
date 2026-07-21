@@ -10,7 +10,7 @@ import {
   IconFacturen, IconInkoop,
   IconKam,
   IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc,
-  IconFormulieren, IconMaterieel,
+  IconFormulieren, IconMaterieel, IconToolbox,
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -141,6 +141,7 @@ const APP_SUBNAV: Record<string, {
       { href: '/wagenpark/bestuurders', label: 'Bestuurders', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
       { href: '/wagenpark/parkeren',    label: 'Parkeren',    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z' },
       { href: '/wagenpark/bevindingen', label: 'Bevindingen', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+      { href: '/wagenpark/werktijden',  label: 'Werktijden',  icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
       { href: '/wagenpark/diagnose',    label: 'Diagnose',    icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18' },
     ],
   },
@@ -153,6 +154,16 @@ const APP_SUBNAV: Record<string, {
       { href: '/materieelbeheer/controle',     label: 'Controle',        icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
       { href: '/materieelbeheer/nieuw',        label: 'Nieuw materieel', icon: 'M12 4.8v14.4M4.8 12h14.4' },
       { href: '/materieelbeheer/instellingen', label: 'Instellingen',    icon: 'M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-2.82 1.17V21a2 2 0 01-4 0v-.09A1.65 1.65 0 007 19.4' },
+    ],
+  },
+  '/kam': {
+    label: 'KAM/VGM',
+    Icon: IconKam,
+    items: [
+      { href: '/kam',               label: 'Dashboard',     icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+      { href: '/kam/formulieren',   label: 'Formulieren',   icon: ICON_OVERZICHT },
+      { href: '/kam/toolbox',       label: 'Toolbox',       icon: 'M2.4 16.8h19.2v1.8H2.4z M4.8 16.8v-1.2a7.2 7.2 0 0 1 4.8-6.8V6a1.2 1.2 0 0 1 1.2-1.2h2.4A1.2 1.2 0 0 1 14.4 6v2.8a7.2 7.2 0 0 1 4.8 6.8v1.2' },
+      { href: '/kam/vca-diplomas',  label: "VCA-diploma's", icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
     ],
   },
   '/management': {
@@ -247,6 +258,7 @@ export default function Sidebar({
     // Module-root: exact matchen, anders licht "Overzicht" op zodra je ergens
     // dieper in de module zit (elke subroute begint immers met deze href).
     href === '/materieelbeheer' ? pathname === '/materieelbeheer' :
+    href === '/kam' ? pathname === '/kam' :
     pathname.startsWith(href)
 
   const activeAppKey = Object.keys(APP_SUBNAV).find(key => pathname.startsWith(key)) ?? null

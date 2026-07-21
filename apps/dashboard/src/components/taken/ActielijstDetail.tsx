@@ -97,6 +97,8 @@ function BewerkLijstDialog({ lijst }: { lijst: ActielijstMetTaken }) {
 
 export default function ActielijstDetail({ lijst }: Props) {
   const [view, setView] = useState<'lijst' | 'kanban'>('lijst')
+  // Bepaalt welke triggers, toewijzingen en deadline-ankers zinvol zijn in deze lijst.
+  const context = lijst.context ?? 'dossier'
 
   const voortgang = lijst.taken_count > 0
     ? Math.round((lijst.gereed_count / lijst.taken_count) * 100)
@@ -116,7 +118,7 @@ export default function ActielijstDetail({ lijst }: Props) {
         actions={
           <div className="flex items-center gap-2">
             <BewerkLijstDialog lijst={lijst} />
-            {lijst.is_template && <SjabloonTriggers templateId={lijst.id} />}
+            {lijst.is_template && <SjabloonTriggers templateId={lijst.id} context={context} />}
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
               <button
                 onClick={() => setView('lijst')}
@@ -133,7 +135,7 @@ export default function ActielijstDetail({ lijst }: Props) {
                 <LayoutGrid className="w-4 h-4" />
               </button>
             </div>
-            <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={lijst.is_template} />
+            <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={lijst.is_template} context={context} />
           </div>
         }
       />
@@ -168,12 +170,14 @@ export default function ActielijstDetail({ lijst }: Props) {
         <TaakLijstWeergave
           taken={lijst.taken}
           isTemplate={lijst.is_template}
+          context={context}
           takenInLijst={lijst.taken.map(t => ({ id: t.id, titel: t.titel }))}
         />
       ) : (
         <KanbanBord
           taken={lijst.taken}
           isTemplate={lijst.is_template}
+          context={context}
           takenInLijst={lijst.taken.map(t => ({ id: t.id, titel: t.titel }))}
         />
       )}

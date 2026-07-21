@@ -3,7 +3,7 @@
  *
  * Logica:
  *  - Rit is door het systeem als privé geclassificeerd (rit_type_berekend = 'prive')
- *    → dus weekend of weekdag buiten 07:00-17:00
+ *    → dus weekend of weekdag buiten 06:30-17:00
  *  - Bestuurder betaalt GEEN bijtelling (mag niet privé rijden)
  *  → Individuele info-bevinding per rit
  *
@@ -37,7 +37,7 @@ function categoriseerPriveTijd(startDatum: string, startTijd: string): {
     return { reden: 'avond', detail: `${dag} ${uur}:${min} (na 17:00)` }
   }
   if (uur < 7 && uur >= 5) {
-    return { reden: 'vroeg', detail: `${dag} ${uur}:${min} (voor 07:00)` }
+    return { reden: 'vroeg', detail: `${dag} ${uur}:${min} (voor 06:30)` }
   }
   return { reden: 'nacht', detail: `${dag} ${uur}:${min} (nacht)` }
 }
@@ -79,7 +79,7 @@ export const R1: RuleModule = {
           adres_start: t.adres_start,
           adres_stop: t.adres_stop,
           uitleg_regel:
-            'Werktijd volgens systeem: weekdagen 07:00-17:00. Alles daarbuiten of in ' +
+            'Werktijd volgens systeem: weekdagen 06:30-17:00. Alles daarbuiten of in ' +
             'het weekend is privé. Voor bestuurders zonder bijtelling is dit een info-' +
             'signaal per rit — elke rit telt mee voor R2b (max 500 km/jaar). ' +
             'Bestuurders met bijtelling mogen privé rijden en krijgen dit signaal niet. ' +

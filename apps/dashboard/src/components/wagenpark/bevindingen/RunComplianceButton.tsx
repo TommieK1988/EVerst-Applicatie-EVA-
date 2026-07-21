@@ -12,7 +12,11 @@ export default function RunComplianceButton() {
     startTransition(async () => {
       try {
         const res = await runComplianceAction()
-        toast.success(`Compliance-check klaar — ${res.totaal} bevindingen`)
+        // Het aantal beoordeelde ritten meetonen: zonder dat lijkt een run die
+        // geen data zag identiek aan een run die niets te melden had.
+        toast.success(
+          `Compliance-check klaar — ${res.totaal} bevindingen over ${res.ritten} ritten`,
+        )
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Check mislukt')
       }

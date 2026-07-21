@@ -2,7 +2,8 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo } from './client'
-import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
@@ -533,6 +534,11 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
         .upsert(rows.slice(i, i + 500), { onConflict: 'bouw7_id' })
       if (error) { result.fouten++; result.foutMelding = error.message }
     }
+
+    // Vangnet zoals bij dossiers: de DB-trigger enqueuet alleen bij echt gewijzigde
+    // velden, dus een sync zonder mutaties levert hier geen werk op.
+    await verwerkMedewerkerTriggers().catch(() => {})
+    await herberekenMedewerkerDeadlines().catch(() => {})
   } catch (e: unknown) {
     result.foutMelding = e instanceof Error ? e.message : 'Onbekende fout'
     result.fouten++

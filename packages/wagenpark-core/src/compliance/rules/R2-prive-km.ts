@@ -152,7 +152,7 @@ function formatBreakdown(b: KmBreakdown): string {
   if (b.nacht_km > 0)
     onderdelen.push(`${b.nacht_km.toFixed(0)} km in ${b.nacht_ritten} nachtritten (22-05u)`)
   if (b.vroeg_km > 0)
-    onderdelen.push(`${b.vroeg_km.toFixed(0)} km in ${b.vroeg_ritten} vroege ritten (voor 07:00)`)
+    onderdelen.push(`${b.vroeg_km.toFixed(0)} km in ${b.vroeg_ritten} vroege ritten (voor 06:30)`)
   return onderdelen.join(' + ')
 }
 

@@ -28,6 +28,8 @@ export function IconBase({ size = 20, children, style }: IconProps) {
 
 export function IconFormulieren(p: IconProps) { return <IconBase {...p}><path d="M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3l5 5h-5z" fill="currentColor" stroke="none"/><path d="M8 13h8M8 16.5h5"/></IconBase> }
 
+export function IconToolbox(p: IconProps) { return <IconBase {...p}><path d="M2.4 16.8h19.2v1.8H2.4z"/><path d="M4.8 16.8v-1.2a7.2 7.2 0 0 1 4.8-6.8V6a1.2 1.2 0 0 1 1.2-1.2h2.4A1.2 1.2 0 0 1 14.4 6v2.8a7.2 7.2 0 0 1 4.8 6.8v1.2"/></IconBase> }
+
 export function IconMaterieel(p: IconProps) { return <IconBase {...p}><path d="M3 8.4h18v10.2a1.2 1.2 0 0 1-1.2 1.2H4.2A1.2 1.2 0 0 1 3 18.6V8.4Z"/><path d="M8.4 8.4V6a1.8 1.8 0 0 1 1.8-1.8h3.6A1.8 1.8 0 0 1 15.6 6v2.4"/><path d="M3 12.6h18"/></IconBase> }
 
 export const IconHome     = (p: IconProps) => <IconBase {...p}><path d="M3.6 10.2L12 3.6l8.4 6.6V19.2a1.2 1.2 0 0 1-1.2 1.2H15V14.4H9V20.4H4.8a1.2 1.2 0 0 1-1.2-1.2V10.2Z"/></IconBase>;

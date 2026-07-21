@@ -19,6 +19,8 @@ import type {
 import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { vereisRecht, vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
+import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -277,6 +279,12 @@ export async function updateMedewerkerGegevens(
     }
   }
 
+  // De DB-triggers hebben de wijziging al geregistreerd; hier draaien we de
+  // evaluator meteen zodat een actielijst direct zichtbaar is na het opslaan.
+  // Fail-soft: een mislukte drain mag het opslaan van de medewerker niet blokkeren.
+  await verwerkMedewerkerTriggers(id).catch(() => {})
+  await herberekenMedewerkerDeadlines(id).catch(() => {})
+
   revalidatePath(`/medewerkers/${id}`)
   return { ok: true }
 }
@@ -368,6 +376,7 @@ export async function upsertAttribuutWaarden(
       .upsert({ medewerker_id, definitie_id: w.definitie_id, waarde: w.waarde }, { onConflict: 'medewerker_id,definitie_id' })
     if (error) return { ok: false, error: error.message }
   }
+  await verwerkMedewerkerTriggers(medewerker_id).catch(() => {})
   revalidatePath(`/medewerkers/${medewerker_id}`)
   return { ok: true }
 }

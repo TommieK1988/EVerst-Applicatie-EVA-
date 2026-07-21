@@ -20,6 +20,7 @@ import {
   Input,
   Textarea,
 } from '@/components/ui'
+import ToolboxMomentSectie from './ToolboxMomentSectie'
 
 type Props = {
   item?: BedrijfsagendaItemMetDoelgroep
@@ -611,6 +612,14 @@ export default function AgendaItemModal({
             )}
             </CardBody>
           </Card>
+
+          {/* Toolbox-onderwerp — alleen bij een opgeslagen VCA-toolbox-moment */}
+          {item?.id && form.type === 'vca_toolbox' && (
+            <ToolboxMomentSectie
+              agendaItemId={item.id}
+              datum={isOccurrence && occurrenceDatum ? occurrenceDatum : form.start_datum}
+            />
+          )}
         </div>
         </DialogBody>
 

@@ -10,6 +10,8 @@ import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import type { TaskPrioriteit, DbTaskList } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
+  DOSSIER_DEADLINE_BASISSEN,
+  MEDEWERKER_DEADLINE_BASISSEN,
   HERHALING_LABELS,
   type DeadlineBasis,
   type HerhalingInterval,
@@ -22,7 +24,11 @@ interface Props {
   toonDossierPicker?: boolean
   /** Vooraf gekoppeld dossier (bijv. vanaf de Taken-tab van een dossier). */
   defaultDossier?: { id: string; titel: string }
+  /** Vooraf gekoppelde medewerker (vanaf de medewerkerpagina). */
+  defaultMedewerker?: { id: string; naam: string }
   isTemplate?: boolean
+  /** Sjabloon-context: bepaalt de toewijzings- en deadline-opties. */
+  context?: 'dossier' | 'medewerker'
   onSuccess?: (id: string) => void
   trigger?: React.ReactNode
 }
@@ -57,7 +63,8 @@ const ASSIGNEE_ROLLEN = [
 
 type AssigneeKeuze = { user_id: string; rol: 'verantwoordelijke' | 'mede-uitvoerder' | 'reviewer' }
 
-export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierPicker, defaultDossier, isTemplate, onSuccess, trigger }: Props) {
+export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierPicker, defaultDossier, defaultMedewerker, isTemplate, context = 'dossier', onSuccess, trigger }: Props) {
+  const isMedewerkerContext = context === 'medewerker'
   const [open, setOpen]                     = useState(false)
   const [pending, startTransition]          = useTransition()
   const [titel, setTitel]                   = useState('')
@@ -70,7 +77,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
   )
 
   // Template-specifieke velden
-  const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol'>('direct')
+  const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol' | 'medewerker_zelf'>('direct')
   const [geselecteerdeAssignees, setGeselecteerdeAssignees] = useState<AssigneeKeuze[]>([])
   const [dossierRollen, setDossierRollen]   = useState<string[]>(['project_manager_id'])
   const [deadlineBasis, setDeadlineBasis]       = useState<DeadlineBasis>('geen')
@@ -155,12 +162,14 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
         lijst_id:   lijstId || undefined,
         // Bij een gekozen actielijst is de lijst leidend voor de dossier-koppeling
         dossier_id: !isTemplate && !lijstId && dossierId ? dossierId : undefined,
+        medewerker_id: !isTemplate && !lijstId && defaultMedewerker ? defaultMedewerker.id : undefined,
         // Deadline afhankelijk van mode: een echte taak krijgt een datum,
         // een sjabloontaak een anker waaruit de datum later volgt.
         deadline: (!isTemplate && deadline) ? deadline : undefined,
         deadline_basis: isTemplate ? effectieveBasis : undefined,
         deadline_dagen: isTemplate ? effectieveDagen : undefined,
-        herhaling_interval: isTemplate ? herhalingInterval : undefined,
+        // Herhaling hangt aan de detailplanning van een dossier; niet in medewerker-context.
+        herhaling_interval: isTemplate && !isMedewerkerContext ? herhalingInterval : undefined,
         // Toewijzing
         assignee_type: isTemplate ? assigneeType : 'direct',
         dossier_rollen: isTemplate && assigneeType === 'dossier_rol' ? dossierRollen : undefined,
@@ -231,6 +240,16 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                 </div>
               </div>
 
+              {/* Medewerker-koppeling (losse taak vanaf de medewerkerpagina) */}
+              {!isTemplate && defaultMedewerker && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Medewerker</label>
+                  <div className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 bg-slate-50">
+                    {defaultMedewerker.naam}
+                  </div>
+                </div>
+              )}
+
               {/* Dossier-koppeling (losse taak) */}
               {!isTemplate && (toonDossierPicker || defaultDossier) && (
                 <div>
@@ -278,16 +297,29 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                       />
                       <span className="text-sm text-slate-700">Vaste medewerker</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="assignee_type"
-                        checked={assigneeType === 'dossier_rol'}
-                        onChange={() => setAssigneeType('dossier_rol')}
-                        className="accent-everts"
-                      />
-                      <span className="text-sm text-slate-700">Rol in dossier</span>
-                    </label>
+                    {isMedewerkerContext ? (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="assignee_type"
+                          checked={assigneeType === 'medewerker_zelf'}
+                          onChange={() => setAssigneeType('medewerker_zelf')}
+                          className="accent-everts"
+                        />
+                        <span className="text-sm text-slate-700">De medewerker zelf</span>
+                      </label>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="assignee_type"
+                          checked={assigneeType === 'dossier_rol'}
+                          onChange={() => setAssigneeType('dossier_rol')}
+                          className="accent-everts"
+                        />
+                        <span className="text-sm text-slate-700">Rol in dossier</span>
+                      </label>
+                    )}
                   </div>
                 )}
 
@@ -327,7 +359,14 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                   </div>
                 )}
 
-                {isTemplate && assigneeType === 'dossier_rol' && (
+                {isTemplate && assigneeType === 'medewerker_zelf' && (
+                  <p className="text-xs text-slate-500 leading-snug">
+                    De taak komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
+                    EVA-account, dan blijft de taak open staan tot het account gekoppeld is.
+                  </p>
+                )}
+
+                {isTemplate && assigneeType === 'dossier_rol' && !isMedewerkerContext && (
                   <div className="space-y-1.5">
                     {DOSSIER_ROLLEN.map(r => (
                       <label key={r.value} className="flex items-center gap-2 cursor-pointer">
@@ -350,7 +389,9 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
 
                 {isTemplate ? (
                   <>
-                    <div>
+                    {/* Herhaling hangt aan de detailplanning van een dossier; bestaat niet
+                        in de medewerker-context. */}
+                    <div className={isMedewerkerContext ? 'hidden' : undefined}>
                       <label className="block text-xs font-medium text-slate-600 mb-1.5">Herhalen</label>
                       <select
                         value={herhalingInterval}
@@ -378,7 +419,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                             onChange={e => setDeadlineBasis(e.target.value as DeadlineBasis)}
                             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-everts/30 focus:border-everts"
                           >
-                            {(Object.keys(DEADLINE_BASIS_LABELS) as DeadlineBasis[]).map(k => (
+                            {(isMedewerkerContext ? MEDEWERKER_DEADLINE_BASISSEN : DOSSIER_DEADLINE_BASISSEN).map(k => (
                               <option key={k} value={k}>{DEADLINE_BASIS_LABELS[k]}</option>
                             ))}
                           </select>
