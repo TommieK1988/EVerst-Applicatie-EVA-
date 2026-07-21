@@ -410,18 +410,27 @@ export async function analyseerWerktijden(
   // 5. Verzamel per bestuurder de relevante plaatsen (woon + bedrijf + ingeplande steden)
   //    voor het plaats-voorfilter, en zorg dat rit-eindpunten daar coördinaten krijgen.
   const plaatsenPerDriver = new Map<number, Set<string>>()
+  const sleutelsPerDriver = new Map<number, Set<string>>()
   for (const d of drivers) {
-    const set = new Set<string>()
-    if (d.werk_plaats) set.add(d.werk_plaats)
-    if (d.woon_plaats) set.add(d.woon_plaats)
+    const plaatsen = new Set<string>()
+    const sleutels = new Set<string>()
+    if (d.werk_plaats) plaatsen.add(d.werk_plaats)
+    if (d.woon_plaats) plaatsen.add(d.woon_plaats)
+    const cs = straatPlaatsSleutel(d.werk_straat, d.werk_plaats)
+    if (cs) sleutels.add(cs)
+    const ws = straatPlaatsSleutel(d.woon_straat, d.woon_plaats)
+    if (ws) sleutels.add(ws)
     const planRows = d.medewerker_id ? planningPerMw.get(d.medewerker_id) ?? [] : []
     for (const p of planRows) {
       const stad = (p.werkadres_stad ?? plaatsUitAdres(p.locatie_adres) ?? '').trim().toLowerCase()
-      if (stad) set.add(stad)
+      if (stad) plaatsen.add(stad)
+      const ps = straatPlaatsSleutel(p.werkadres_straat, p.werkadres_stad)
+      if (ps) sleutels.add(ps)
     }
-    plaatsenPerDriver.set(d.user_id_ulu, set)
+    plaatsenPerDriver.set(d.user_id_ulu, plaatsen)
+    sleutelsPerDriver.set(d.user_id_ulu, sleutels)
   }
-  await verrijkTripCoordinaten(trips, plaatsenPerDriver)
+  await verrijkTripCoordinaten(trips, plaatsenPerDriver, sleutelsPerDriver)
 
   const alleDatums = datesInRange(van, tot)
   const resultaten: BestuurderResultaat[] = []
@@ -735,12 +744,25 @@ function planAdresQuery(p: PlanningRij): string | null {
 async function verrijkTripCoordinaten(
   trips: TripRij[],
   plaatsenPerDriver: Map<number, Set<string>>,
+  sleutelsPerDriver: Map<number, Set<string>>,
+  tijdsbudgetMs = 90_000,
 ): Promise<void> {
+  // Een verse geocode kost ~1,1 s (Nominatim-limiet), dus een ongelimiteerde
+  // run loopt in een timeout. Twee remmen: (1) eindpunten waarvan straat+plaats
+  // al met een referentie-adres matcht hoeven niet gegeocodeerd te worden — de
+  // uitkomst staat dan al vast; (2) een tijdsbudget. Bewust op TIJD en niet op
+  // aantal: cache-hits kosten vrijwel niets, dus een warme run verwerkt alles,
+  // terwijl een koude run netjes afkapt. De cache blijft staan, dus een
+  // volgende run gaat verder waar deze stopte.
+  const deadline = Date.now() + tijdsbudgetMs
+
   for (const t of trips) {
+    if (Date.now() > deadline) break
     const plaatsen = plaatsenPerDriver.get(t.user_id_ulu)
     if (!plaatsen || plaatsen.size === 0) continue
+    const refSleutels = sleutelsPerDriver.get(t.user_id_ulu) ?? new Set<string>()
 
-    if (t.start_lat == null && t.adres_start) {
+    if (t.start_lat == null && t.adres_start && !refSleutels.has(tripSleutel(t.adres_start) ?? '')) {
       const plaats = plaatsUitAdres(t.adres_start)
       if (plaats && plaatsen.has(plaats)) {
         const punt = await geocodeQuery(geocodeQueryVoorRit(t.adres_start))
@@ -754,7 +776,8 @@ async function verrijkTripCoordinaten(
         }
       }
     }
-    if (t.stop_lat == null && t.adres_stop) {
+    if (Date.now() > deadline) break
+    if (t.stop_lat == null && t.adres_stop && !refSleutels.has(tripSleutel(t.adres_stop) ?? '')) {
       const plaats = plaatsUitAdres(t.adres_stop)
       if (plaats && plaatsen.has(plaats)) {
         const punt = await geocodeQuery(geocodeQueryVoorRit(t.adres_stop))

@@ -12,6 +12,9 @@ import {
 } from '@/lib/wagenpark/maandrapport'
 
 export const dynamic = 'force-dynamic'
+// De handmatige acties (geocoderen, maand-/dagrun) doen externe geocode-calls
+// met een verplichte pauze van ~1,1 s; die hebben meer dan de standaardtijd nodig.
+export const maxDuration = 300
 
 function urenLabel(min: number | null): string {
   if (min == null) return '—'

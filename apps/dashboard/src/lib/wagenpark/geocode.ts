@@ -120,6 +120,8 @@ export type GeocodeReferentieResultaat = {
   medewerkers_geen_match: number
   bedrijven_ok: number
   bedrijven_geen_match: number
+  /** Adressen die na deze ronde nog zonder coördinaat staan. */
+  resterend: number
 }
 
 /**
@@ -128,12 +130,22 @@ export type GeocodeReferentieResultaat = {
  * draaien goedkoop; alleen gewijzigde adressen leiden tot een nieuwe call.
  * Bedoeld voor de handmatige "(her)geocodeer"-knop in de instellingen.
  */
-export async function geocodeReferentieadressen(): Promise<GeocodeReferentieResultaat> {
+export async function geocodeReferentieadressen(
+  opties: { max?: number; opnieuw?: boolean } = {},
+): Promise<GeocodeReferentieResultaat> {
+  // Nominatim staat ~1 request/seconde toe, dus 48 adressen kosten al ~55 s.
+  // Dat past niet in de tijd die een server-action krijgt. Daarom per aanroep
+  // een beperkt aantal adressen, en standaard alleen wat nog ontbreekt — de
+  // knop is herhaalbaar tot `resterend` op 0 staat.
+  const max = opties.max ?? 40
+  const alleenOntbrekend = !opties.opnieuw
+
   const res: GeocodeReferentieResultaat = {
     medewerkers_ok: 0,
     medewerkers_geen_match: 0,
     bedrijven_ok: 0,
     bedrijven_geen_match: 0,
+    resterend: 0,
   }
 
   const medewerkers = await pgQuery<{
@@ -145,7 +157,10 @@ export async function geocodeReferentieadressen(): Promise<GeocodeReferentieResu
     `select id, adres_straat, adres_postcode, adres_plaats
        from public.medewerkers
       where actief = true
-        and (adres_straat is not null or adres_plaats is not null)`,
+        and (adres_straat is not null or adres_plaats is not null)
+        ${alleenOntbrekend ? 'and adres_lat is null' : ''}
+      limit $1`,
+    [max],
   )
   for (const m of medewerkers) {
     const punt = await geocodeAdres(m.adres_straat, m.adres_postcode, m.adres_plaats)
@@ -167,7 +182,8 @@ export async function geocodeReferentieadressen(): Promise<GeocodeReferentieResu
   }>(
     `select id, adres_straat, adres_postcode, adres_plaats
        from public.bedrijfsgegevens
-      where adres_straat is not null or adres_plaats is not null`,
+      where (adres_straat is not null or adres_plaats is not null)
+        ${alleenOntbrekend ? 'and adres_lat is null' : ''}`,
   )
   for (const b of bedrijven) {
     const punt = await geocodeAdres(b.adres_straat, b.adres_postcode, b.adres_plaats)
@@ -180,6 +196,19 @@ export async function geocodeReferentieadressen(): Promise<GeocodeReferentieResu
     if (punt) res.bedrijven_ok++
     else res.bedrijven_geen_match++
   }
+
+  // Hoeveel adressen wachten er nog? (alleen zinvol in incrementele modus)
+  const rest = await pgQuery<{ n: number }>(
+    `select (
+       (select count(*) from public.medewerkers
+         where actief = true and (adres_straat is not null or adres_plaats is not null)
+           and adres_lat is null)
+     + (select count(*) from public.bedrijfsgegevens
+         where (adres_straat is not null or adres_plaats is not null)
+           and adres_lat is null)
+     )::int as n`,
+  )
+  res.resterend = rest[0]?.n ?? 0
 
   return res
 }
