@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog'
 import { Alert } from '@/components/ui/alert'
 import {
-  getAllBibliotheekActief, saveBibliotheekItem, deleteBibliotheekItem,
-  getUurtarief, getEenheden, getReparatieTypes,
-} from '@/lib/houtrotherstel/local-store'
-import type { StandardRepair } from '@/lib/houtrotherstel/types'
+  getStandaardReparaties, createStandaardReparatie,
+  updateStandaardReparatie, deleteStandaardReparatie,
+} from '@/services/houtrotherstel/standaard-reparaties'
+import { getUurtarief, getEenheden, getReparatieTypes } from '@/lib/houtrotherstel/app-settings'
+import type { StandardRepair, StandardRepairForm } from '@/lib/houtrotherstel/types'
 import * as XLSX from 'xlsx'
 
 // ─── Berekeningen ──────────────────────────────────────────────────────────────
@@ -495,11 +496,15 @@ export default function BibliotheekTabel() {
   const [eenheden, setEenheden] = useState<string[]>(['st', 'm1', 'm2', 'm3', 'uur', 'dag'])
   const [reparatieTypes, setReparatieTypes] = useState<string[]>([])
 
-  function laden() {
-    setItems(getAllBibliotheekActief())
+  async function laden() {
     setUurtarief(getUurtarief())
     setEenheden(getEenheden())
     setReparatieTypes(getReparatieTypes().map(t => t.naam))
+    try {
+      setItems(await getStandaardReparaties())
+    } catch {
+      setItems([])
+    }
   }
 
   useEffect(() => { laden() }, [])
@@ -515,20 +520,50 @@ export default function BibliotheekTabel() {
     )
   })
 
-  function opslaan(item: StandardRepair) {
-    saveBibliotheekItem(item)
+  function toPayload(item: StandardRepair): StandardRepairForm {
+    return {
+      code: item.code,
+      name: item.name,
+      extended_description: item.extended_description ?? null,
+      category: item.category,
+      description: item.description ?? null,
+      unit: item.unit,
+      labor_hours: item.labor_hours,
+      labor_rate: item.labor_rate,
+      material_cost: item.material_cost,
+      sale_price: item.sale_price,
+      vat_percentage: item.vat_percentage,
+      active: item.active,
+      price_date: item.price_date ?? undefined,
+      version: item.version ?? undefined,
+      notes: item.notes ?? undefined,
+    } as unknown as StandardRepairForm
+  }
+
+  async function opslaan(item: StandardRepair) {
+    try {
+      if (modal.item) {
+        await updateStandaardReparatie(modal.item.id, toPayload(item))
+      } else {
+        await createStandaardReparatie(toPayload(item))
+      }
+    } catch {
+      // fouten stil negeren; herladen toont de actuele stand
+    }
     setModal({ open: false, item: null })
     laden()
   }
 
-  function verwijder(id: string) {
+  async function verwijder(id: string) {
     if (!confirm('Reparatie verwijderen uit de bibliotheek?')) return
-    deleteBibliotheekItem(id)
+    try { await deleteStandaardReparatie(id) } catch { /* negeren */ }
     laden()
   }
 
-  function handleImport(nieuweItems: StandardRepair[]) {
-    nieuweItems.forEach(i => saveBibliotheekItem(i))
+  async function handleImport(nieuweItems: StandardRepair[]) {
+    for (const i of nieuweItems) {
+      try { await createStandaardReparatie(toPayload(i)) } catch { /* negeren */ }
+    }
     setImportOpen(false)
     setImportResultaat(`${nieuweItems.length} reparaties succesvol geïmporteerd.`)
     laden()

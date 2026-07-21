@@ -8,6 +8,8 @@ import { addDays, addMonths, format, isWeekend, parseISO } from 'date-fns'
  * - planning_eind       → laatste eind van de detailplanning van het dossier
  * - verwacht_startdatum → verwachte startdatum van het dossier
  * - verwacht_einddatum  → verwachte einddatum van het dossier
+ * - in_dienst_vanaf     → in-dienstdatum van de medewerker (medewerker-context)
+ * - uit_dienst_per      → uit-dienstdatum van de medewerker (medewerker-context)
  */
 export type DeadlineBasis =
   | 'geen'
@@ -17,6 +19,8 @@ export type DeadlineBasis =
   | 'planning_eind'
   | 'verwacht_startdatum'
   | 'verwacht_einddatum'
+  | 'in_dienst_vanaf'
+  | 'uit_dienst_per'
 
 export type HerhalingInterval =
   | 'geen'
@@ -42,6 +46,8 @@ export const HERBEREKENBARE_BASISSEN: DeadlineBasis[] = [
   'streefdatum',
   'verwacht_startdatum',
   'verwacht_einddatum',
+  'in_dienst_vanaf',
+  'uit_dienst_per',
 ]
 
 export const DEADLINE_BASIS_LABELS: Record<DeadlineBasis, string> = {
@@ -52,7 +58,18 @@ export const DEADLINE_BASIS_LABELS: Record<DeadlineBasis, string> = {
   planning_eind:       'Einde detailplanning',
   verwacht_startdatum: 'Verwachte startdatum dossier',
   verwacht_einddatum:  'Verwachte einddatum dossier',
+  in_dienst_vanaf:     'In dienst vanaf (medewerker)',
+  uit_dienst_per:      'Uit dienst per (medewerker)',
 }
+
+/** Ankers die per sjabloon-context beschikbaar zijn (voor de deadline-dropdowns). */
+export const DOSSIER_DEADLINE_BASISSEN: DeadlineBasis[] = [
+  'geen', 'activatie', 'streefdatum', 'planning_start', 'planning_eind',
+  'verwacht_startdatum', 'verwacht_einddatum',
+]
+export const MEDEWERKER_DEADLINE_BASISSEN: DeadlineBasis[] = [
+  'geen', 'activatie', 'streefdatum', 'in_dienst_vanaf', 'uit_dienst_per',
+]
 
 /** Velden op het dossier die als anker kunnen dienen. */
 export interface DossierDatumVelden {
@@ -82,6 +99,8 @@ export interface DeadlineContext {
   planning_eind?: string | null
   verwacht_startdatum?: string | null
   verwacht_einddatum?: string | null
+  in_dienst_vanaf?: string | null
+  uit_dienst_per?: string | null
 }
 
 function ankerDatum(basis: DeadlineBasis, ctx: DeadlineContext): string | null {
@@ -92,6 +111,8 @@ function ankerDatum(basis: DeadlineBasis, ctx: DeadlineContext): string | null {
     case 'planning_eind':       return ctx.planning_eind       ?? null
     case 'verwacht_startdatum': return ctx.verwacht_startdatum ?? null
     case 'verwacht_einddatum':  return ctx.verwacht_einddatum  ?? null
+    case 'in_dienst_vanaf':     return ctx.in_dienst_vanaf     ?? null
+    case 'uit_dienst_per':      return ctx.uit_dienst_per      ?? null
     default:                    return null
   }
 }

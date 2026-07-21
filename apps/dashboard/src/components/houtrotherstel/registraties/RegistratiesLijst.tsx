@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import PageHeader from '@/components/houtrotherstel/shared/PageHeader'
 import RegistratiesTable from '@/components/houtrotherstel/registraties/RegistratiesTable'
-import { getAllRegistraties, getAllProjecten } from '@/lib/houtrotherstel/local-store'
+import { getRegistraties } from '@/services/houtrotherstel/registraties'
+import { getProjects } from '@/services/houtrotherstel/projects'
 
 export default function RegistratiesLijst() {
   const searchParams = useSearchParams()
@@ -14,8 +15,8 @@ export default function RegistratiesLijst() {
   const [projecten, setProjecten] = useState<any[]>([])
 
   useEffect(() => {
-    setRegistraties(getAllRegistraties())
-    setProjecten(getAllProjecten())
+    getRegistraties().then(setRegistraties).catch(() => setRegistraties([]))
+    getProjects().then(setProjecten).catch(() => setProjecten([]))
   }, [])
 
   const filters = {

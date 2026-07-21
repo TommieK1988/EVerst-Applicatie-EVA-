@@ -110,7 +110,7 @@ async function stemHerhalingAf(
       .single()
 
     if (!nieuweTaak) continue
-    await resolveerToewijzingen(sb, dossier, sjabloonTaak, nieuweTaak.id)
+    await resolveerToewijzingen(sb, { dossier }, sjabloonTaak, nieuweTaak.id)
     await kopieerCompletionActies(sb, sjabloonTaak, nieuweTaak.id)
   }
 
@@ -248,5 +248,117 @@ export async function herberekenDeadlines(dossier_id?: string): Promise<number> 
   }
 
   if (verwerkt > 0) revalidatePath('/taken')
+  return verwerkt
+}
+
+// ─── Medewerker-ankers ────────────────────────────────────────────────────────
+
+/**
+ * Herbereken de medewerker-gebonden deadlines (in_dienst_vanaf / uit_dienst_per) van
+ * één medewerker: zowel de taken op geactiveerde actielijsten als de losse taken.
+ *
+ * Geen herhalende taken hier: die hangen aan het uitvoeringsvenster van een dossier,
+ * een concept dat in de medewerker-context niet bestaat.
+ */
+async function verwerkMedewerker(sb: any, medewerker_id: string): Promise<void> {
+  const { data: medewerker } = await sb
+    .from('medewerkers')
+    .select('id, in_dienst_vanaf, uit_dienst_per')
+    .eq('id', medewerker_id)
+    .maybeSingle()
+  if (!medewerker) return
+
+  const vandaag = new Date().toISOString().split('T')[0]
+
+  const herbereken = async (taken: any[], streefdatum: string | null) => {
+    for (const taak of taken) {
+      const nieuw = berekenDeadline(taak.deadline_basis, taak.deadline_dagen, {
+        activatiedatum:  vandaag,
+        streefdatum,
+        in_dienst_vanaf: medewerker.in_dienst_vanaf,
+        uit_dienst_per:  medewerker.uit_dienst_per,
+      })
+      if (nieuw !== taak.deadline) {
+        await sb.from('tasks').update({ deadline: nieuw }).eq('id', taak.id)
+      }
+    }
+  }
+
+  const { data: lijsten } = await sb
+    .from('task_lists')
+    .select('id, streefdatum')
+    .eq('medewerker_id', medewerker_id)
+    .eq('is_template', false)
+
+  for (const lijst of (lijsten ?? []) as any[]) {
+    const { data: gebonden } = await sb
+      .from('tasks')
+      .select('id, deadline, deadline_basis, deadline_dagen')
+      .eq('lijst_id', lijst.id)
+      .eq('deadline_handmatig', false)
+      .in('deadline_basis', HERBEREKENBARE_BASISSEN)
+    await herbereken((gebonden ?? []) as any[], lijst.streefdatum ?? null)
+  }
+
+  // Losse taken hangen rechtstreeks aan de medewerker en kennen geen streefdatum.
+  const { data: los } = await sb
+    .from('tasks')
+    .select('id, deadline, deadline_basis, deadline_dagen')
+    .eq('medewerker_id', medewerker_id)
+    .eq('deadline_handmatig', false)
+    .in('deadline_basis', HERBEREKENBARE_BASISSEN)
+  await herbereken((los ?? []) as any[], null)
+}
+
+/**
+ * Verwerk de 'pending' rijen in medewerker_deadline_herberekeningen die de DB-trigger
+ * (tg_medewerker_datums_deadline_queue) aanmaakte toen in_dienst_vanaf of uit_dienst_per
+ * wijzigde. Claim-first, net als de dossier-variant hierboven.
+ */
+export async function herberekenMedewerkerDeadlines(medewerker_id?: string): Promise<number> {
+  const sb = createAdminClient() as any
+
+  let query = sb
+    .from('medewerker_deadline_herberekeningen')
+    .select('medewerker_id')
+    .eq('status', 'pending')
+  if (medewerker_id) query = query.eq('medewerker_id', medewerker_id)
+
+  const { data: rijen } = await query
+  if (!rijen?.length) return 0
+
+  let verwerkt = 0
+  for (const rij of rijen as { medewerker_id: string }[]) {
+    const { data: geclaimd } = await sb
+      .from('medewerker_deadline_herberekeningen')
+      .update({ status: 'processing' })
+      .eq('medewerker_id', rij.medewerker_id)
+      .eq('status', 'pending')
+      .select('medewerker_id')
+    if (!geclaimd?.length) continue
+
+    try {
+      await verwerkMedewerker(sb, rij.medewerker_id)
+      await sb
+        .from('medewerker_deadline_herberekeningen')
+        .update({ status: 'done', verwerkt_op: new Date().toISOString(), foutmelding: null })
+        .eq('medewerker_id', rij.medewerker_id)
+      verwerkt++
+    } catch (e) {
+      await sb
+        .from('medewerker_deadline_herberekeningen')
+        .update({
+          status:      'error',
+          foutmelding: e instanceof Error ? e.message : String(e),
+          verwerkt_op: new Date().toISOString(),
+        })
+        .eq('medewerker_id', rij.medewerker_id)
+    }
+  }
+
+  if (verwerkt > 0) {
+    revalidatePath('/taken')
+    revalidatePath('/mijn-taken')
+  }
   return verwerkt
 }

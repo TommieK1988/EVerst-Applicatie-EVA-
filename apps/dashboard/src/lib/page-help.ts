@@ -683,40 +683,11 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/houtrotherstel\/projecten\/[^/]+\/geveldelen\/[^/]+\/locaties\/[^/]+$/, {
-    title: 'Houtrotherstel — Geveldeel locatie',
-    description: 'Registratiepagina voor een specifieke locatie binnen een geveldeel. Leg hier de aangetroffen schade, de uitgevoerde reparatie, gebruikte producten en foto\'s voor/na vast.',
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/geveldelen\/[^/]+$/, {
-    title: 'Houtrotherstel — Geveldeel',
-    description: 'Overzicht van alle locaties binnen dit geveldeel. Voeg locaties toe per kozijn, dorpel, borstwering of ander bouwelement en registreer per locatie de conditie en werkzaamheden.',
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/projectdelen\/[^/]+\/locaties\/[^/]+\/registraties\/[^/]+$/, {
-    title: 'Houtrotherstel — Registratie detail',
-    description: 'Volledige registratie van een houtrotherstel­behandeling op één locatie: foto\'s voor/na, gebruikte producten, hoeveelheden, reparatie­methode, tijdstip en uitvoerder.',
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/projectdelen\/[^/]+\/locaties\/[^/]+$/, {
-    title: 'Houtrotherstel — Projectdeel locatie',
-    description: 'Alle registraties voor deze locatie binnen het projectdeel. Voeg registraties toe voor elke behandelde plek op deze locatie.',
-  }],
-
-  [/^\/houtrotherstel\/projecten\/[^/]+\/projectdelen\/[^/]+$/, {
-    title: 'Houtrotherstel — Projectdeel',
-    description: 'Overzicht van alle locaties binnen dit projectdeel (bijv. voorgevel, achtergevel, kozijnen). Voeg locaties toe en registreer per locatie de schade en uitgevoerde herstel­werkzaamheden.',
-    sections: [
-      { title: 'Locaties toevoegen', body: 'Klik op "Locatie toevoegen" en beschrijf het element: type (kozijn, dorpel, gevelplaat), positie, verdieping en oppervlak. Voeg direct een eerste registratie toe als de schade al bekend is.' },
-      { title: 'Voortgang', body: 'De voortgangs­balk toont het percentage locaties met een afgeronde registratie. Groen = alles geregistreerd, oranje = in behandeling, grijs = nog niet gestart.' },
-    ],
-  }],
-
   [/^\/houtrotherstel\/projecten\/[^/]+$/, {
     title: 'Houtrotherstel — Project detail',
-    description: 'Projectoverzicht met alle projectdelen, voortgang per deel, totale registratie­statistieken en knoppen voor rapportage en bewerking.',
+    description: 'Projectoverzicht met alle registraties, voortgang, totale registratie­statistieken en knoppen voor rapportage en bewerking.',
     sections: [
-      { title: 'Projectdelen', body: 'Een project is opgedeeld in projectdelen (bijv. Gevel Noord, Kozijnen BG, Balkonhekken). Klik op een projectdeel om de locaties en registraties te beheren.' },
+      { title: 'Registraties', body: 'Elke aangetroffen houtrotschade wordt als registratie vastgelegd, met plaatsaanduiding (blok, verdieping, ruimte, gevelzijde, onderdeel), de gekozen standaard­reparatie en foto\'s voor/na.' },
       { title: 'Rapportage', body: 'Klik op "Rapportage" om een volledige PDF te genereren met alle registraties, foto\'s en productgebruik voor dit project.' },
     ],
   }],
@@ -796,9 +767,9 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   [/^\/houtrotherstel$/, {
     title: 'Houtrotherstel',
-    description: 'De houtrotherstel­module van EVA. Registreer, documenteer en rapporteer houtrotherstel­werkzaamheden per project, geveldeel en locatie.',
+    description: 'De houtrotherstel­module van EVA. Registreer, documenteer en rapporteer houtrotherstel­werkzaamheden per project.',
     sections: [
-      { title: 'Werkwijze', body: '1. Maak een project aan en koppel het aan een klant en locatie. 2. Voeg projectdelen toe (gevels, kozijnen). 3. Voeg per projectdeel locaties toe. 4. Registreer per locatie de schade, reparatie en foto\'s. 5. Genereer de rapportage voor de klant.' },
+      { title: 'Werkwijze', body: '1. Maak een project aan en koppel het aan een klant en adres. 2. Registreer per aangetroffen schade een registratie met plaatsaanduiding (blok, verdieping, ruimte, gevelzijde, onderdeel). 3. Kies de standaard­reparatie en leg foto\'s voor/na vast. 4. Genereer de rapportage voor de klant.' },
       { title: 'Mobiel gebruik', body: 'De registratie­pagina is geoptimaliseerd voor gebruik op een smartphone. Foto\'s kunnen direct vanuit de camera worden geüpload zonder tussenopslag.' },
     ],
   }],

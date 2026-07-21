@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-21','nieuw','Taken','Actielijsten en taken voor een medewerker',
+   'Een actielijst kan nu ook bij een medewerker horen in plaats van bij een dossier — handig voor vaste stappen rond in- en uitdiensttreding. Bij het aanmaken van een lijst kies je waar hij voor bedoeld is. Zulke lijsten kunnen zichzelf klaarzetten zodra er iets in het medewerkerdossier verandert, bijvoorbeeld wanneer een uit-dienstdatum wordt ingevuld of iemand een andere functie krijgt. Taken kun je toewijzen aan een vaste collega of aan de medewerker zelf, en een deadline laten meelopen met de in- of uitdienstdatum: verschuift die datum, dan schuift de deadline mee.');

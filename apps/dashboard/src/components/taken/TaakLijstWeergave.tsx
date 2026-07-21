@@ -15,6 +15,8 @@ interface Props {
   taken: TaakMetDetails[]
   toonFilters?: boolean
   isTemplate?: boolean
+  /** Sjabloon-context: bepaalt de toewijzings- en deadline-opties in het detailpaneel. */
+  context?: 'dossier' | 'medewerker'
   takenInLijst?: { id: string; titel: string }[]
   detailAlsDialog?: boolean
 }
@@ -63,7 +65,7 @@ function SorteerbareTaakRij({
   )
 }
 
-export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplate, takenInLijst = [], detailAlsDialog = false }: Props) {
+export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplate, context = 'dossier', takenInLijst = [], detailAlsDialog = false }: Props) {
   const [geselecteerdeTaak, setGeselecteerdeTaak] = useState<TaakMetDetails | null>(null)
   const [filterStatus, setFilterStatus]       = useState<TaskStatus | 'alle'>('alle')
   const [filterPrioriteit, setFilterPrioriteit] = useState<TaskPrioriteit | 'alle'>('alle')
@@ -285,6 +287,7 @@ export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplat
           taak={geselecteerdeTaak}
           onSluit={() => setGeselecteerdeTaak(null)}
           isTemplate={isTemplate}
+          context={context}
           takenInLijst={takenInLijst}
         />
       )}

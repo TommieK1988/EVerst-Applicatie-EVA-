@@ -24,12 +24,14 @@ import {
 import { useDossierReadOnly } from './DossierReadOnlyContext'
 
 interface Props {
-  dossier_id: string
+  /** Precies één van beide: het sjabloon wordt op een dossier óf op een medewerker geactiveerd. */
+  dossier_id?: string
+  medewerker_id?: string
   sjablonen: DbTaskList[]
   compact?: boolean
 }
 
-export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact = false }: Props) {
+export default function ActiveerSjabloonDialog({ dossier_id, medewerker_id, sjablonen, compact = false }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [open, setOpen]           = useState(false)
@@ -43,12 +45,15 @@ export default function ActiveerSjabloonDialog({ dossier_id, sjablonen, compact 
       const result = await activeerSjabloon({
         template_id: templateId,
         dossier_id,
+        medewerker_id,
         streefdatum: streefdatum || undefined,
       })
       setOpen(false)
       setTemplateId('')
       setStreefdatum('')
-      router.push(`/taken/lijsten/${result.lijst_id}`)
+      // Medewerker-lijsten worden op de medewerkerpagina zelf getoond; die is al open.
+      if (medewerker_id) router.refresh()
+      else router.push(`/taken/lijsten/${result.lijst_id}`)
     })
   }
 

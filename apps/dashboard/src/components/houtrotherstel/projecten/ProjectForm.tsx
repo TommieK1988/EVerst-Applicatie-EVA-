@@ -38,7 +38,7 @@ export default function ProjectForm({ project, userId, onSuccess }: ProjectFormP
       city: project?.city || '',
       start_date: project?.start_date || '',
       end_date: project?.end_date || '',
-      status: project?.status || 'onderhanden',
+      status: project?.status || 'actief',
       description: project?.description || '',
       contact_name: project?.contact_name || '',
       contact_phone: project?.contact_phone || '',
@@ -94,8 +94,11 @@ export default function ProjectForm({ project, userId, onSuccess }: ProjectFormP
             <div>
               <label className={labelClass}>Status *</label>
               <select {...register('status')} className={inputClass(!!errors.status)}>
-                <option value="onderhanden">Onderhanden</option>
+                <option value="concept">Concept</option>
+                <option value="actief">Actief</option>
                 <option value="afgerond">Afgerond</option>
+                <option value="gepauzeerd">Gepauzeerd</option>
+                <option value="geannuleerd">Geannuleerd</option>
               </select>
             </div>
           </div>

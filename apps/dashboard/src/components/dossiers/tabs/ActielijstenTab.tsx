@@ -13,7 +13,8 @@ export default async function ActielijstenTab({ dossier_id, dossier_titel }: Pro
   const [lijsten, losseTaken, sjablonen] = await Promise.all([
     getActielijstenVoorDossier(dossier_id),
     getLosseTakenVoorDossier(dossier_id),
-    getSjablonen(),
+    // Alleen dossier-sjablonen: medewerker-sjablonen horen op de medewerkerpagina.
+    getSjablonen('dossier'),
   ])
 
   const dossier = { id: dossier_id, titel: dossier_titel ?? 'Dit dossier' }

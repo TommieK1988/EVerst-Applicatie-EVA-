@@ -37,7 +37,7 @@ export default function ProjectRegistratiesTab({
       <CardHeader>
         <h2 className="font-semibold text-slate-800">Registraties</h2>
         <Button asChild variant="primary" size="sm">
-          <Link href={`/registraties/nieuw?project=${projectId}`}>
+          <Link href={`/houtrotherstel/registraties/nieuw?project=${projectId}`}>
             <Plus className="w-3.5 h-3.5" />
             Toevoegen
           </Link>
@@ -72,7 +72,7 @@ export default function ProjectRegistratiesTab({
           gefilterd.map((r: any) => (
             <Link
               key={r.id}
-              href={`/registraties/${r.id}`}
+              href={`/houtrotherstel/registraties/${r.id}`}
               className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors group"
             >
               <div className="flex-1 min-w-0">
@@ -99,8 +99,8 @@ export default function ProjectRegistratiesTab({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span>{formatDateShort(r.registration_date)}</span>
-                  {r.profiles?.full_name && (
-                    <span>· {r.profiles.full_name}</span>
+                  {r.medewerker_naam && (
+                    <span>· {r.medewerker_naam}</span>
                   )}
                   {r.repair_name_snapshot && (
                     <span className="hidden sm:inline">· {r.repair_name_snapshot}</span>

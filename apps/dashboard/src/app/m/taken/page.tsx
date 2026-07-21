@@ -47,7 +47,7 @@ export default async function MobielTakenPage() {
 
   return (
     <>
-      <AppHeader title="Taken" sub={`${items.length} open`} />
+      <AppHeader title="Taken" sub={`${items.length} open`} backHref="/m" />
       <MobielPullToRefresh />
       <MobielTakenLijst taken={items} />
     </>

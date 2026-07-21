@@ -246,7 +246,10 @@ export async function syncUluAction(
     const alleRows: (UluTripInput & { voertuig_id: string | null })[] = []
 
     for (const v of vehicles) {
-      // ULU API-cap: max ~75 trips per voertuig. Filter client-side op periode.
+      // ULU pagineert met ~75 trips per pagina en negeert date-parameters; de
+      // client pagineert door tot de periode gedekt is en filtert client-side.
+      // (Eerder stopte die paginering na pagina 1, waardoor er structureel maar
+      // ~75 trips per voertuig binnenkwamen en hele maanden ontbraken.)
       const trips = await ulu.listTripsForVehicle(v.id, {
         minStartDatum: from,
         maxStartDatum: to,

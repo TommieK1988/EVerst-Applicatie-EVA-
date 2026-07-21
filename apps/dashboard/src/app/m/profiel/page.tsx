@@ -24,7 +24,7 @@ export default async function MobielProfielPage() {
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Profiel" />
+        <AppHeader title="Mijn gegevens" backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
           Geen medewerker-koppeling gevonden voor dit account.
         </div>

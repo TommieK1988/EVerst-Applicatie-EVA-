@@ -1,5 +1,6 @@
 import 'server-only'
 import { analyseerWerktijden, type BestuurderResultaat } from './werktijd-analyse'
+import { schrijfWerktijdBevindingen } from './werktijd-bevindingen'
 import { beheerOntvangers, maakWagenparkMelding } from './notificaties'
 import { pgQuery } from './db'
 
@@ -59,6 +60,9 @@ export async function genereerWagenparkMaandrapporten(
 ): Promise<MaandrapportResultaat> {
   const periode = maandPeriode(nu, override)
   const resultaten = await analyseerWerktijden(periode.van, periode.tot)
+
+  // Persisteer als R11-bevindingen zodat ze bij Bevindingen verschijnen.
+  await schrijfWerktijdBevindingen(resultaten, periode.van, periode.tot)
 
   let opgeslagen = 0
   for (const r of resultaten) {

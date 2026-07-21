@@ -13,6 +13,8 @@ import TaakCompletionActies from './TaakCompletionActies'
 import type { TaakMetDetails, TaskStatus, TaskPrioriteit, TaskAssigneeRol } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
+  DOSSIER_DEADLINE_BASISSEN,
+  MEDEWERKER_DEADLINE_BASISSEN,
   HERHALING_LABELS,
   type DeadlineBasis,
   type HerhalingInterval,
@@ -22,6 +24,8 @@ interface Props {
   taak: TaakMetDetails
   onSluit: () => void
   isTemplate?: boolean
+  /** Sjabloon-context: bepaalt de toewijzings- en deadline-opties. */
+  context?: 'dossier' | 'medewerker'
   takenInLijst?: { id: string; titel: string }[]
 }
 
@@ -48,7 +52,8 @@ const ASSIGNEE_ROLLEN: { value: TaskAssigneeRol; label: string }[] = [
   { value: 'reviewer',          label: 'Reviewer' },
 ]
 
-export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijst = [] }: Props) {
+export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = 'dossier', takenInLijst = [] }: Props) {
+  const isMedewerkerContext = context === 'medewerker'
   const [pending, startTransition] = useTransition()
   const [editTitel, setEditTitel]   = useState(false)
   const [titel, setTitel]           = useState(taak.titel)
@@ -69,7 +74,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
   const [nieuweAssigneeRol, setNieuweAssigneeRol] = useState<TaskAssigneeRol>('verantwoordelijke')
 
   // Template-velden
-  const [assigneeType, setAssigneeType] = useState<'direct' | 'dossier_rol'>(taak.assignee_type ?? 'direct')
+  const [assigneeType, setAssigneeType] = useState<'direct' | 'dossier_rol' | 'medewerker_zelf'>(taak.assignee_type ?? 'direct')
   const [dossierRollen, setDossierRollen] = useState<string[]>(taak.dossier_rollen ?? [])
   const [deadlineBasis, setDeadlineBasis] = useState<DeadlineBasis>(taak.deadline_basis ?? 'geen')
   // In de DB is de offset ondertekend (negatief = ervóór); in het formulier splitsen we
@@ -481,14 +486,27 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
                   <input type="radio" name={`at-${taak.id}`} checked={assigneeType === 'direct'} onChange={() => setAssigneeType('direct')} className="accent-everts" />
                   <span className="text-xs text-slate-700">Vaste medewerker</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" name={`at-${taak.id}`} checked={assigneeType === 'dossier_rol'} onChange={() => setAssigneeType('dossier_rol')} className="accent-everts" />
-                  <span className="text-xs text-slate-700">Rol in dossier</span>
-                </label>
+                {isMedewerkerContext ? (
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name={`at-${taak.id}`} checked={assigneeType === 'medewerker_zelf'} onChange={() => setAssigneeType('medewerker_zelf')} className="accent-everts" />
+                    <span className="text-xs text-slate-700">De medewerker zelf</span>
+                  </label>
+                ) : (
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name={`at-${taak.id}`} checked={assigneeType === 'dossier_rol'} onChange={() => setAssigneeType('dossier_rol')} className="accent-everts" />
+                    <span className="text-xs text-slate-700">Rol in dossier</span>
+                  </label>
+                )}
               </div>
+              {isMedewerkerContext && assigneeType === 'medewerker_zelf' && (
+                <p className="mt-1 text-xs text-slate-500 leading-snug">
+                  De taak komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
+                  EVA-account, dan blijft de taak open staan tot het account gekoppeld is.
+                </p>
+              )}
             </div>
 
-            {assigneeType === 'dossier_rol' && (
+            {assigneeType === 'dossier_rol' && !isMedewerkerContext && (
               <div className="space-y-1.5">
                 {DOSSIER_ROLLEN.map(r => (
                   <label key={r.value} className="flex items-center gap-2 cursor-pointer">
@@ -504,7 +522,9 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
               </div>
             )}
 
-            <div>
+            {/* Herhaling hangt aan het uitvoeringsvenster van de detailplanning —
+                een concept dat in de medewerker-context niet bestaat. */}
+            <div className={isMedewerkerContext ? 'hidden' : undefined}>
               <label className="block text-xs font-medium text-slate-600 mb-1">Herhalen</label>
               <div className="relative">
                 <select
@@ -536,7 +556,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, takenInLijs
                       onChange={e => setDeadlineBasis(e.target.value as DeadlineBasis)}
                       className="w-full appearance-none text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white pr-7 focus:outline-none focus:ring-2 focus:ring-everts/30"
                     >
-                      {(Object.keys(DEADLINE_BASIS_LABELS) as DeadlineBasis[]).map(k => (
+                      {(isMedewerkerContext ? MEDEWERKER_DEADLINE_BASISSEN : DOSSIER_DEADLINE_BASISSEN).map(k => (
                         <option key={k} value={k}>{DEADLINE_BASIS_LABELS[k]}</option>
                       ))}
                     </select>

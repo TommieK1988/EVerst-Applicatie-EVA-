@@ -3,11 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { FileText, CheckCircle, Clock, Wrench, ExternalLink } from 'lucide-react'
-import {
-  getAllProjecten,
-  getAllRegistraties,
-  getReparatiesVoorProject,
-} from '@/lib/houtrotherstel/local-store'
+import { getProjects } from '@/services/houtrotherstel/projects'
+import { getRegistraties } from '@/services/houtrotherstel/registraties'
+import { PROJECT_STATUSSEN } from '@/lib/houtrotherstel/types'
 import type { Project, ProjectStatus } from '@/lib/houtrotherstel/types'
 
 interface Rij {
@@ -17,14 +15,15 @@ interface Rij {
 }
 
 function StatusBadge({ status }: { status: ProjectStatus }) {
+  const label = PROJECT_STATUSSEN[status] ?? status
   if (status === 'afgerond') return (
     <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-green-100 text-green-700">
-      <CheckCircle className="w-3 h-3" /> Afgerond
+      <CheckCircle className="w-3 h-3" /> {label}
     </span>
   )
   return (
     <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-      <Clock className="w-3 h-3" /> Onderhanden
+      <Clock className="w-3 h-3" /> {label}
     </span>
   )
 }
@@ -33,31 +32,34 @@ export default function RapportagesPage() {
   const [rijen, setRijen] = useState<Rij[]>([])
 
   useEffect(() => {
-    const projecten = getAllProjecten()
-    const registraties = getAllRegistraties()
+    Promise.all([getProjects(), getRegistraties()])
+      .then(([projecten, registraties]) => {
+        const rijden: Rij[] = projecten.map(project => {
+          const projectRegs = registraties.filter(r => r.project_id === project.id)
+          const recentste = projectRegs.length > 0
+            ? [...projectRegs].sort((a, b) =>
+                (b.registration_date || '').localeCompare(a.registration_date || '')
+              )[0].registration_date
+            : null
 
-    const rijden: Rij[] = projecten.map(project => {
-      const projectRegs = registraties.filter(r => r.project_id === project.id)
-      const recentste = projectRegs.length > 0
-        ? projectRegs.sort((a, b) => b.datum.localeCompare(a.datum))[0].datum
-        : null
+          return {
+            project,
+            datumRapportage: recentste,
+            aantalReparaties: projectRegs.length,
+          }
+        })
 
-      return {
-        project,
-        datumRapportage: recentste,
-        aantalReparaties: getReparatiesVoorProject(project.id).length,
-      }
-    })
+        const gesorteerd = rijden
+          .sort((a, b) => {
+            const da = a.datumRapportage ?? a.project.updated_at
+            const db = b.datumRapportage ?? b.project.updated_at
+            return (db || '').localeCompare(da || '')
+          })
+          .slice(0, 25)
 
-    const gesorteerd = rijden
-      .sort((a, b) => {
-        const da = a.datumRapportage ?? a.project.updated_at
-        const db = b.datumRapportage ?? b.project.updated_at
-        return db.localeCompare(da)
+        setRijen(gesorteerd)
       })
-      .slice(0, 25)
-
-    setRijen(gesorteerd)
+      .catch(() => setRijen([]))
   }, [])
 
   return (
@@ -131,7 +133,7 @@ export default function RapportagesPage() {
 
                       <td className="px-5 py-3.5 text-right">
                         <Link
-                          href={`/projecten/${project.id}/rapportage`}
+                          href={`/houtrotherstel/projecten/${project.id}/rapportage`}
                           className="inline-flex items-center gap-1.5 text-xs font-medium text-everts hover:text-everts-dark transition-colors"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />

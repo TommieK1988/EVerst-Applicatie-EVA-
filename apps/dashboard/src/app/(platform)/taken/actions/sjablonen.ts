@@ -19,20 +19,24 @@ import { herberekenDossierNu } from './deadlines'
 // ─── Sjabloon activeren ───────────────────────────────────────────────────────
 
 /**
- * Kloon een sjabloon-actielijst naar een concrete instantie gekoppeld aan een dossier.
- * Resolveer dossier-rol toewijzingen naar echte medewerkers.
+ * Kloon een sjabloon-actielijst naar een concrete instantie gekoppeld aan een dossier
+ * óf een medewerker. Resolveer rol-/medewerker-zelf-toewijzingen naar echte gebruikers.
  *
  * Deadlines volgen het anker van de sjabloontaak (deadline_basis + deadline_dagen).
  * Ankers op de detailplanning worden hier nog niet vastgeklikt: die kan bij activatie
  * nog leeg zijn en later schuiven, dus die rekent herberekenDossierNu uit — net als de
- * herhalende taken, die hier bewust worden overgeslagen.
+ * herhalende taken, die hier bewust worden overgeslagen. Medewerker-ankers
+ * (in_dienst_vanaf/uit_dienst_per) zijn wél meteen bekend en rekenen hier direct mee.
  */
 export async function activeerSjabloon(input: {
   template_id: string
-  dossier_id: string
+  dossier_id?: string
+  medewerker_id?: string
   streefdatum?: string
 }): Promise<{ lijst_id: string }> {
   const supabase = createAdminClient()
+
+  if (!input.dossier_id && !input.medewerker_id) throw new Error('Geen dossier of medewerker opgegeven')
 
   // Haal sjabloon op
   const { data: sjabloon, error: sjabloonError } = await supabase
@@ -44,15 +48,45 @@ export async function activeerSjabloon(input: {
 
   if (sjabloonError || !sjabloon) throw new Error('Sjabloon niet gevonden')
 
-  // Haal dossier op voor rol-resolutie (as any: extra rol-kolommen niet in gegenereerde types)
+  // Context-bewaking: een medewerker-sjabloon hoort niet op een dossier te belanden (en andersom).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: dossier, error: dossierError } = await (supabase as any)
-    .from('dossiers')
-    .select(`${DOSSIER_ROL_SELECT}, verwacht_startdatum, verwacht_einddatum`)
-    .eq('id', input.dossier_id)
-    .single()
+  const sjabloonContext = ((sjabloon as any).context ?? 'dossier') as 'dossier' | 'medewerker'
+  if (input.dossier_id && sjabloonContext !== 'dossier') {
+    throw new Error('Dit sjabloon is voor medewerkers en kan niet op een dossier geactiveerd worden')
+  }
+  if (input.medewerker_id && sjabloonContext !== 'medewerker') {
+    throw new Error('Dit sjabloon is voor dossiers en kan niet op een medewerker geactiveerd worden')
+  }
 
-  if (dossierError || !dossier) throw new Error('Dossier niet gevonden')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let dossier: Record<string, any> | null = null
+  let medewerker: {
+    id: string
+    auth_user_id: string | null
+    in_dienst_vanaf: string | null
+    uit_dienst_per: string | null
+  } | null = null
+
+  if (input.dossier_id) {
+    // Haal dossier op voor rol-resolutie (as any: extra rol-kolommen niet in gegenereerde types)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('dossiers')
+      .select(`${DOSSIER_ROL_SELECT}, verwacht_startdatum, verwacht_einddatum`)
+      .eq('id', input.dossier_id)
+      .single()
+    if (error || !data) throw new Error('Dossier niet gevonden')
+    dossier = data
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('medewerkers')
+      .select('id, auth_user_id, in_dienst_vanaf, uit_dienst_per')
+      .eq('id', input.medewerker_id)
+      .single()
+    if (error || !data) throw new Error('Medewerker niet gevonden')
+    medewerker = data
+  }
 
   // Alleen gevuld bij handmatig activeren; op de trigger-route is er niemand die de
   // dialoog invult. Taken die dan tóch een deadline moeten krijgen hangen aan een
@@ -73,13 +107,15 @@ export async function activeerSjabloon(input: {
   const { data: nieuweLijst, error: lijstError } = await (supabase as any)
     .from('task_lists')
     .insert({
-      naam:         sjabloon.naam,
-      beschrijving: sjabloon.beschrijving,
-      is_template:  false,
-      dossier_id:   input.dossier_id,
-      template_id:  input.template_id,
-      owner_id:     (sjabloon as any).owner_id,
-      volgorde:     0,
+      naam:          sjabloon.naam,
+      beschrijving:  sjabloon.beschrijving,
+      is_template:   false,
+      dossier_id:    input.dossier_id ?? null,
+      medewerker_id: input.medewerker_id ?? null,
+      context:       sjabloonContext,
+      template_id:   input.template_id,
+      owner_id:      (sjabloon as any).owner_id,
+      volgorde:      0,
       // Vastleggen op de lijst: anders is een ingetypte streefdatum na dit request weg
       // en valt er later niets meer te herberekenen.
       streefdatum,
@@ -100,8 +136,10 @@ export async function activeerSjabloon(input: {
     const deadline = berekenDeadline(taak.deadline_basis, taak.deadline_dagen, {
       activatiedatum: vandaag,
       streefdatum,
-      verwacht_startdatum: dossier.verwacht_startdatum,
-      verwacht_einddatum:  dossier.verwacht_einddatum,
+      verwacht_startdatum: dossier?.verwacht_startdatum ?? null,
+      verwacht_einddatum:  dossier?.verwacht_einddatum ?? null,
+      in_dienst_vanaf:     medewerker?.in_dienst_vanaf ?? null,
+      uit_dienst_per:      medewerker?.uit_dienst_per ?? null,
     })
 
     // Voeg taak in
@@ -131,7 +169,12 @@ export async function activeerSjabloon(input: {
     if (taakError || !nieuweTaak) continue
     idMap.set(taak.id, nieuweTaak.id)
 
-    await resolveerToewijzingen(supabase, dossier as Record<string, unknown>, taak, nieuweTaak.id)
+    await resolveerToewijzingen(
+      supabase,
+      { dossier: dossier ?? undefined, medewerker: medewerker ?? undefined },
+      taak,
+      nieuweTaak.id,
+    )
     await kopieerCompletionActies(supabase, taak, nieuweTaak.id)
   }
 
@@ -156,10 +199,14 @@ export async function activeerSjabloon(input: {
 
   // Planning-gebonden deadlines uitrekenen en de herhalende taken opbouwen.
   // Staat er nog geen detailplanning, dan gebeurt dat later alsnog via de wachtrij.
-  await herberekenDossierNu(input.dossier_id)
+  // Medewerker-context kent geen planningvenster of herhaling; daar is niets na te rekenen.
+  if (input.dossier_id) {
+    await herberekenDossierNu(input.dossier_id)
+  }
 
   revalidatePath('/taken/lijsten')
   revalidatePath(`/taken/lijsten/${nieuweLijst.id}`)
+  if (input.medewerker_id) revalidatePath(`/medewerkers/${input.medewerker_id}`)
 
   return { lijst_id: nieuweLijst.id }
 }
@@ -201,6 +248,7 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
       beschrijving:     bron.beschrijving,
       is_template:   true,
       template_naam: bron.template_naam ? `${bron.template_naam} (kopie)` : null,
+      context:       bron.context ?? 'dossier',
       owner_id:      user.id,
       volgorde:      0,
     })
@@ -298,22 +346,23 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
  * Claim-first (status 'processing') voorkomt dat twee gelijktijdige drains dezelfde rij
  * verwerken; de UNIQUE(template_id, dossier_id)-constraint is het uiteindelijke vangnet.
  */
-export async function verwerkActiveringen(dossier_id?: string): Promise<number> {
+export async function verwerkActiveringen(dossier_id?: string, medewerker_id?: string): Promise<number> {
   const supabase = createAdminClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any
 
   let query = sb
     .from('actielijst_activeringen')
-    .select('id, template_id, dossier_id')
+    .select('id, template_id, dossier_id, medewerker_id')
     .eq('status', 'pending')
   if (dossier_id) query = query.eq('dossier_id', dossier_id)
+  if (medewerker_id) query = query.eq('medewerker_id', medewerker_id)
 
   const { data: rijen } = await query
   if (!rijen?.length) return 0
 
   let verwerkt = 0
-  for (const rij of rijen as { id: string; template_id: string; dossier_id: string }[]) {
+  for (const rij of rijen as { id: string; template_id: string; dossier_id: string | null; medewerker_id: string | null }[]) {
     // Claim de rij; als een andere drain hem al claimde, krijgen we 0 rijen terug.
     const { data: geclaimd } = await sb
       .from('actielijst_activeringen')
@@ -325,8 +374,9 @@ export async function verwerkActiveringen(dossier_id?: string): Promise<number> 
 
     try {
       const { lijst_id } = await activeerSjabloon({
-        template_id: rij.template_id,
-        dossier_id:  rij.dossier_id,
+        template_id:   rij.template_id,
+        dossier_id:    rij.dossier_id ?? undefined,
+        medewerker_id: rij.medewerker_id ?? undefined,
       })
       await sb
         .from('actielijst_activeringen')
@@ -491,13 +541,11 @@ function evalConditie(c: TriggerConditie, ctx: DossierContext): boolean {
  */
 function evalCondities(
   condities: TriggerConditie[],
-  ctx: DossierContext,
   logica: 'en' | 'of' = 'en',
+  test: (c: TriggerConditie) => boolean,
 ): boolean {
   if (!Array.isArray(condities) || condities.length === 0) return true
-  return logica === 'of'
-    ? condities.some(c => evalConditie(c, ctx))
-    : condities.every(c => evalConditie(c, ctx))
+  return logica === 'of' ? condities.some(test) : condities.every(test)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -579,11 +627,11 @@ export async function verwerkDossierTriggers(dossier_id?: string): Promise<numbe
         if (ctx) {
           const { data: triggers } = await sb
             .from('actielijst_triggers')
-            .select('id, template_id, event_type, event_config, condities, actief')
+            .select('id, template_id, event_type, event_config, condities, conditie_logica, actief')
             .eq('actief', true)
 
           for (const t of (triggers ?? []) as ActielijstTrigger[]) {
-            if (matchEvent(t, ev, toggleSleutelById) && evalCondities(t.condities ?? [], ctx, t.conditie_logica ?? 'en')) {
+            if (matchEvent(t, ev, toggleSleutelById) && evalCondities(t.condities ?? [], t.conditie_logica ?? 'en', c => evalConditie(c, ctx))) {
               // ON CONFLICT DO NOTHING via upsert ignoreDuplicates → idempotent.
               await sb
                 .from('actielijst_activeringen')
@@ -607,6 +655,176 @@ export async function verwerkDossierTriggers(dossier_id?: string): Promise<numbe
 
   // Kloon de zojuist (of eerder) ge-enqueuede activeringen.
   return verwerkActiveringen(dossier_id)
+}
+
+// ─── IFTTT: medewerker-triggers ───────────────────────────────────────────────
+// Spiegel van de dossier-evaluator hierboven, maar dan voor sjablonen met
+// context='medewerker'. Events komen uit medewerker_trigger_events (DB-triggers
+// op medewerkers en medewerker_attribuut_waarden, zie migratie 20260720b).
+
+// Niet exporteren: een 'use server'-bestand mag alleen async functies exporteren.
+// De trigger-editor heeft zijn eigen (gelabelde) lijst — houd beide in sync.
+const MEDEWERKER_EVENT_TYPES = [
+  'medewerker_aangemaakt', 'medewerker_veld_waarde', 'medewerker_datum_gezet', 'medewerker_attribuut',
+] as const
+
+const MEDEWERKER_CONDITIE_VELDEN = ['functie', 'afdeling', 'actief', 'extern'] as const
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface MedewerkerTriggerEvent { id: string; medewerker_id: string; soort: string; payload: Record<string, any> }
+
+/** Bepaalt of een medewerker-trigger-regel matcht met het gebeurde event (delta-detectie). */
+function matchMedewerkerEvent(trigger: ActielijstTrigger, event: MedewerkerTriggerEvent): boolean {
+  const cfg = trigger.event_config ?? {}
+  const { soort, payload } = event
+  const oud: Snapshot = payload?.oud ?? null
+  const nieuw: Snapshot = payload?.nieuw ?? null
+  const isMedewerker = soort === 'medewerker_insert' || soort === 'medewerker_update'
+
+  switch (trigger.event_type) {
+    case 'medewerker_aangemaakt':
+      return soort === 'medewerker_insert'
+    case 'medewerker_veld_waarde': {
+      if (!isMedewerker || !nieuw) return false
+      const veld = cfg.veld as string
+      if (!MEDEWERKER_CONDITIE_VELDEN.includes(veld as typeof MEDEWERKER_CONDITIE_VELDEN[number])) return false
+      // String-vergelijk zodat booleans ('true'/'false' uit de UI) ook matchen.
+      if (String(nieuw[veld]) !== String(cfg.waarde)) return false
+      if (soort === 'medewerker_update' && oud && String(oud[veld]) === String(nieuw[veld])) return false
+      return true
+    }
+    case 'medewerker_datum_gezet': {
+      // "Gezet of gewijzigd": ook bij aanmaken mét datum (bv. in_dienst_vanaf bij een
+      // nieuwe medewerker) — anders zou een onboarding-checklist die insert missen.
+      if (!isMedewerker || !nieuw) return false
+      const veld = cfg.veld as string
+      if (veld !== 'in_dienst_vanaf' && veld !== 'uit_dienst_per') return false
+      return nieuw[veld] != null && (oud?.[veld] ?? null) !== nieuw[veld]
+    }
+    case 'medewerker_attribuut': {
+      if (soort !== 'attribuut') return false
+      if (payload?.definitie_id !== cfg.definitie_id) return false
+      const nieuwW = payload?.nieuw_waarde ?? null
+      const oudW = payload?.oud_waarde ?? null
+      if (nieuwW == null || nieuwW === '' || nieuwW === oudW) return false
+      // Zonder opgegeven waarde: "krijgt een (andere) waarde"; met waarde: exacte match.
+      if (cfg.waarde != null && cfg.waarde !== '' && String(nieuwW) !== String(cfg.waarde)) return false
+      return true
+    }
+    default: return false
+  }
+}
+
+interface MedewerkerContext {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  medewerker: Record<string, any>
+}
+
+/** Test één conditie tegen de medewerker. Alleen 'veld'-condities zijn zinvol in deze context. */
+function evalMedewerkerConditie(c: TriggerConditie, ctx: MedewerkerContext): boolean {
+  if (c.soort !== 'veld') return false
+  if (!MEDEWERKER_CONDITIE_VELDEN.includes(c.veld as typeof MEDEWERKER_CONDITIE_VELDEN[number])) return false
+  const op = c.op ?? 'eq'
+  // String-normalisatie voor eq/neq (booleans); gt/lt e.d. rekenen numeriek in vergelijk().
+  if (op === 'eq' || op === 'neq') return vergelijk(String(ctx.medewerker[c.veld!]), String(c.waarde), op)
+  return vergelijk(ctx.medewerker[c.veld!], c.waarde, op)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function laadMedewerkerContext(sb: any, medewerker_id: string): Promise<MedewerkerContext | null> {
+  const { data: m } = await sb
+    .from('medewerkers')
+    .select('id, actief, extern, functie, afdeling, in_dienst_vanaf, uit_dienst_per')
+    .eq('id', medewerker_id)
+    .maybeSingle()
+  if (!m) return null
+  return { medewerker: m }
+}
+
+/**
+ * Verwerk openstaande medewerker-trigger-events: evalueer de actieve medewerker-
+ * trigger-regels en enqueue matchende activeringen, daarna klonen. Idempotentie
+ * via UNIQUE(template_id, medewerker_id) op actielijst_activeringen.
+ */
+export async function verwerkMedewerkerTriggers(medewerker_id?: string): Promise<number> {
+  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  let q = sb
+    .from('medewerker_trigger_events')
+    .select('id, medewerker_id, soort, payload')
+    .eq('status', 'pending')
+    .order('created_at')
+  if (medewerker_id) q = q.eq('medewerker_id', medewerker_id)
+  const { data: events } = await q
+
+  if (events?.length) {
+    for (const ev of events as MedewerkerTriggerEvent[]) {
+      // Claim het event (voorkomt dubbele verwerking door gelijktijdige drains).
+      const { data: claimed } = await sb
+        .from('medewerker_trigger_events')
+        .update({ status: 'processing' })
+        .eq('id', ev.id)
+        .eq('status', 'pending')
+        .select('id')
+      if (!claimed?.length) continue
+
+      try {
+        const ctx = await laadMedewerkerContext(sb, ev.medewerker_id)
+        if (ctx) {
+          const { data: triggers } = await sb
+            .from('actielijst_triggers')
+            .select('id, template_id, event_type, event_config, condities, conditie_logica, actief')
+            .eq('actief', true)
+            .in('event_type', [...MEDEWERKER_EVENT_TYPES])
+
+          for (const t of (triggers ?? []) as ActielijstTrigger[]) {
+            if (matchMedewerkerEvent(t, ev) && evalCondities(t.condities ?? [], t.conditie_logica ?? 'en', c => evalMedewerkerConditie(c, ctx))) {
+              await sb
+                .from('actielijst_activeringen')
+                .upsert(
+                  { medewerker_id: ev.medewerker_id, template_id: t.template_id, status: 'pending', bron: 'trigger' },
+                  { onConflict: 'template_id,medewerker_id', ignoreDuplicates: true },
+                )
+            }
+          }
+        }
+        await sb.from('medewerker_trigger_events')
+          .update({ status: 'done', verwerkt_op: new Date().toISOString() })
+          .eq('id', ev.id)
+      } catch (e) {
+        await sb.from('medewerker_trigger_events')
+          .update({ status: 'error', foutmelding: e instanceof Error ? e.message : String(e), verwerkt_op: new Date().toISOString() })
+          .eq('id', ev.id)
+      }
+    }
+  }
+
+  return verwerkActiveringen(undefined, medewerker_id)
+}
+
+/** Keuzelijsten voor de medewerker-trigger-editor (functies, afdelingen, custom velden). */
+export async function getMedewerkerTriggerRefData(): Promise<{
+  functies: string[]
+  afdelingen: string[]
+  attributen: { id: string; naam: string }[]
+}> {
+  const supabase = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = supabase as any
+
+  const [f, a, d] = await Promise.all([
+    sb.from('medewerker_functies').select('naam').eq('actief', true).order('volgorde').order('naam'),
+    sb.from('medewerker_afdelingen').select('naam').eq('actief', true).order('volgorde').order('naam'),
+    sb.from('medewerker_attribuut_definities').select('id, naam').eq('actief', true).order('volgorde'),
+  ])
+
+  return {
+    functies:   ((f.data ?? []) as { naam: string }[]).map(r => r.naam),
+    afdelingen: ((a.data ?? []) as { naam: string }[]).map(r => r.naam),
+    attributen: (d.data ?? []) as { id: string; naam: string }[],
+  }
 }
 
 // ─── CRUD: trigger-regels per sjabloon ────────────────────────────────────────
@@ -698,13 +916,16 @@ export async function getMedewerkersVoorToewijzing(): Promise<MedewerkerKeuze[]>
 
 // ─── Sjablonen ophalen (voor client-components zoals TaakCompletionActies) ───
 
-export async function getSjablonen(): Promise<DbTaskList[]> {
+export async function getSjablonen(context?: 'dossier' | 'medewerker'): Promise<DbTaskList[]> {
   const supabase = createAdminClient()
-  const { data } = await supabase
+  let query = supabase
     .from('task_lists')
     .select('*')
     .eq('is_template', true)
     .order('template_naam', { ascending: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (context) query = (query as any).eq('context', context)
+  const { data } = await query
   return (data ?? []) as DbTaskList[]
 }
 
