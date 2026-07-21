@@ -140,6 +140,49 @@ function plaatsUitAdres(adres: string | null | undefined): string | null {
   return (laatste || delen[delen.length - 1]).toLowerCase()
 }
 
+/**
+ * Straatnaam normaliseren: huisnummer(reeks) en toevoegingen eraf, lowercase.
+ * "De Star 3" → "de star" · "Assendelftstraat  53-89" → "assendelftstraat"
+ */
+function normStraatnaam(v: string | null | undefined): string {
+  return String(v ?? '')
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/\s+\d+\s*[a-z]?(\s*[-–/]\s*\d+\s*[a-z]?)*\s*$/i, '') // huisnummer(reeks) achteraan
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * Sleutel "straat|plaats" voor een referentie-adres (bedrijf, woonadres, dossier).
+ * Null als straat of plaats ontbreekt.
+ */
+function straatPlaatsSleutel(
+  straat: string | null | undefined,
+  plaats: string | null | undefined,
+): string | null {
+  const s = normStraatnaam(straat)
+  const p = String(plaats ?? '').replace(/\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+  return s && p ? `${s}|${p}` : null
+}
+
+/**
+ * Sleutel "straat|plaats" voor een ULU-rit-adres ("Road, Plaats" of "Road, Plaats (DE)").
+ *
+ * ULU levert alleen een straatnaam, geen huisnummer. Geocoding van zo'n adres
+ * geeft daarom het MIDDEN van de straat — bij een lange straat kan dat honderden
+ * meters van het echte pand liggen (bv. "De Star" is 554 m van De Star 3). Door
+ * ook op straat+plaats te matchen tellen die ritten alsnog als "op locatie".
+ */
+function tripSleutel(adres: string | null | undefined): string | null {
+  if (!adres) return null
+  const delen = adres.split(',').map((s) => s.trim()).filter(Boolean)
+  if (delen.length < 2) return null
+  const plaats = delen[delen.length - 1]
+  const straat = delen.slice(0, delen.length - 1).join(' ')
+  return straatPlaatsSleutel(straat, plaats)
+}
+
 function datesInRange(van: string, tot: string): string[] {
   const out: string[] = []
   const d = new Date(van + 'T12:00:00Z')
@@ -170,9 +213,11 @@ type DriverRij = {
   woon_lat: number | null
   woon_lng: number | null
   woon_plaats: string | null
+  woon_straat: string | null
   werk_lat: number | null
   werk_lng: number | null
   werk_plaats: string | null
+  werk_straat: string | null
 }
 
 type TripRij = {
@@ -241,7 +286,7 @@ export async function analyseerWerktijden(
   const drivers = await pgQuery<DriverRij>(
     `
     with hoofd as (
-      select adres_lat, adres_lng, adres_plaats
+      select adres_lat, adres_lng, adres_plaats, adres_straat
         from public.bedrijfsgegevens
        where adres_lat is not null
        order by created_at nulls last, id
@@ -256,9 +301,11 @@ export async function analyseerWerktijden(
            m.adres_lat as woon_lat,
            m.adres_lng as woon_lng,
            lower(coalesce(m.adres_plaats, '')) as woon_plaats,
+           m.adres_straat as woon_straat,
            coalesce(bg.adres_lat, (select adres_lat from hoofd)) as werk_lat,
            coalesce(bg.adres_lng, (select adres_lng from hoofd)) as werk_lng,
-           lower(coalesce(bg.adres_plaats, (select adres_plaats from hoofd), '')) as werk_plaats
+           lower(coalesce(bg.adres_plaats, (select adres_plaats from hoofd), '')) as werk_plaats,
+           coalesce(bg.adres_straat, (select adres_straat from hoofd)) as werk_straat
       from public.ulu_users uu
       left join public.medewerkers m on m.id = uu.medewerker_id
       left join public.bedrijfsgegevens bg on bg.id = m.werkmaatschappij_id
@@ -385,21 +432,34 @@ export async function analyseerWerktijden(
     const woonPunt: GeoPunt | null =
       d.woon_lat != null && d.woon_lng != null ? { lat: d.woon_lat, lng: d.woon_lng } : null
 
-    // Werkpunten per dag uit de planning.
+    // Werkpunten én straat|plaats-sleutels per dag uit de planning.
     const planRows = d.medewerker_id ? planningPerMw.get(d.medewerker_id) ?? [] : []
     const werkPuntenPerDatum = new Map<string, GeoPunt[]>()
+    const werkSleutelsPerDatum = new Map<string, Set<string>>()
     for (const p of planRows) {
       const q = planAdresQuery(p)
       const punt = q ? planAdresPunt.get(q) ?? null : null
-      if (!punt) continue
+      const sleutel = straatPlaatsSleutel(p.werkadres_straat, p.werkadres_stad)
+      if (!punt && !sleutel) continue
       const vanaf = maxDatum(p.start_dag, van)
       const totm = minDatum(p.eind_dag, tot)
       for (const datum of datesInRange(vanaf, totm)) {
-        const lijst = werkPuntenPerDatum.get(datum) ?? []
-        lijst.push(punt)
-        werkPuntenPerDatum.set(datum, lijst)
+        if (punt) {
+          const lijst = werkPuntenPerDatum.get(datum) ?? []
+          lijst.push(punt)
+          werkPuntenPerDatum.set(datum, lijst)
+        }
+        if (sleutel) {
+          const set = werkSleutelsPerDatum.get(datum) ?? new Set<string>()
+          set.add(sleutel)
+          werkSleutelsPerDatum.set(datum, set)
+        }
       }
     }
+
+    // Terugval-sleutels: bedrijfsadres en woonadres.
+    const companySleutel = straatPlaatsSleutel(d.werk_straat, d.werk_plaats)
+    const woonSleutel = straatPlaatsSleutel(d.woon_straat, d.woon_plaats)
 
     const driverTrips = tripsPerDriver.get(d.user_id_ulu) ?? []
     const tripsPerDag = new Map<string, TripRij[]>()
@@ -419,6 +479,9 @@ export async function analyseerWerktijden(
           companyPunt,
           woonPunt,
           werkPuntenPerDatum,
+          werkSleutelsPerDatum,
+          companySleutel,
+          woonSleutel,
           roosters: mwRoosters,
           afwezig: mwAfwezig,
           driver: d,
@@ -437,8 +500,12 @@ export async function analyseerWerktijden(
       volledige_naam: d.volledige_naam,
       medewerker_id: d.medewerker_id,
       auth_user_id: d.auth_user_id,
-      heeft_werk_coord: companyPunt != null || werkPuntenPerDatum.size > 0,
-      heeft_woon_coord: !!woonPunt,
+      heeft_werk_coord:
+        companyPunt != null ||
+        werkPuntenPerDatum.size > 0 ||
+        werkSleutelsPerDatum.size > 0 ||
+        companySleutel != null,
+      heeft_woon_coord: woonPunt != null || woonSleutel != null,
       dagen,
       dagen_te_laat: teLaatDagen.length,
       dagen_te_vroeg: teVroegDagen.length,
@@ -458,6 +525,9 @@ type DagContext = {
   companyPunt: GeoPunt | null
   woonPunt: GeoPunt | null
   werkPuntenPerDatum: Map<string, GeoPunt[]>
+  werkSleutelsPerDatum: Map<string, Set<string>>
+  companySleutel: string | null
+  woonSleutel: string | null
   roosters: RoosterRij[]
   afwezig: AfwezigRij[]
   driver: DriverRij
@@ -496,15 +566,25 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
   const { isWerkdag, start, eind } = verwachteTijden(datum, ctx)
 
   // Werkplek van de dag: ingeplande projectlocatie(s), anders het bedrijfsadres.
+  // Zowel coördinaten (straal) als straat|plaats-sleutels tellen als referentie.
   const geplandeWerkPunten = ctx.werkPuntenPerDatum.get(datum) ?? []
-  const werkPunten =
-    geplandeWerkPunten.length > 0
-      ? geplandeWerkPunten
-      : ctx.companyPunt
-        ? [ctx.companyPunt]
-        : []
-  const werkBron: WerkBron =
-    geplandeWerkPunten.length > 0 ? 'planning' : ctx.companyPunt ? 'bedrijf' : null
+  const geplandeWerkSleutels = ctx.werkSleutelsPerDatum.get(datum) ?? new Set<string>()
+  const heeftPlanning = geplandeWerkPunten.length > 0 || geplandeWerkSleutels.size > 0
+
+  const werkPunten = heeftPlanning
+    ? geplandeWerkPunten
+    : ctx.companyPunt
+      ? [ctx.companyPunt]
+      : []
+  const werkSleutels = heeftPlanning
+    ? geplandeWerkSleutels
+    : new Set<string>(ctx.companySleutel ? [ctx.companySleutel] : [])
+
+  const werkBron: WerkBron = heeftPlanning
+    ? 'planning'
+    : ctx.companyPunt || ctx.companySleutel
+      ? 'bedrijf'
+      : null
 
   const leeg = (status: DagStatus, afwezigheid: string | null = null): DagResultaat => ({
     datum,
@@ -535,10 +615,19 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
   const werkStraal = ctx.config.straal_meter
   const thuisStraal = ctx.config.thuis_straal_meter
 
-  const bijWerk = (punt: GeoPunt | null) =>
-    !!punt && werkPunten.some((w) => afstandMeter(punt, w) <= werkStraal)
-  const bijThuis = (punt: GeoPunt | null) =>
-    !!punt && !!ctx.woonPunt && afstandMeter(punt, ctx.woonPunt) <= thuisStraal
+  // Match = binnen de straal ÓF zelfde straat+plaats. Dat tweede vangt de
+  // straat-geocoding op: ULU geeft geen huisnummer, dus een lang straatmidden
+  // kan buiten de straal vallen terwijl de rit wel degelijk op locatie was.
+  const bijWerk = (adres: string | null, punt: GeoPunt | null): boolean => {
+    if (punt && werkPunten.some((w) => afstandMeter(punt, w) <= werkStraal)) return true
+    if (werkSleutels.size === 0) return false
+    const k = tripSleutel(adres)
+    return !!k && werkSleutels.has(k)
+  }
+  const bijThuis = (adres: string | null, punt: GeoPunt | null): boolean => {
+    if (punt && ctx.woonPunt && afstandMeter(punt, ctx.woonPunt) <= thuisStraal) return true
+    return !!ctx.woonSleutel && tripSleutel(adres) === ctx.woonSleutel
+  }
 
   const startPunt = (t: TripRij): GeoPunt | null =>
     t.start_lat != null && t.start_lng != null ? { lat: t.start_lat, lng: t.start_lng } : null
@@ -553,16 +642,16 @@ function analyseerDag(datum: string, trips: TripRij[], ctx: DagContext): DagResu
   let aankomstThuis: string | null = null
 
   for (const t of gesorteerd) {
-    if (aankomstWerk == null && bijWerk(stopPunt(t))) {
+    if (aankomstWerk == null && bijWerk(t.adres_stop, stopPunt(t))) {
       aankomstWerk = (t.stop_tijd ?? t.start_tijd).slice(0, 5)
     }
-    if (bijWerk(startPunt(t))) {
+    if (bijWerk(t.adres_start, startPunt(t))) {
       vertrekWerk = t.start_tijd.slice(0, 5)
     }
-    if (vertrekThuis == null && bijThuis(startPunt(t))) {
+    if (vertrekThuis == null && bijThuis(t.adres_start, startPunt(t))) {
       vertrekThuis = t.start_tijd.slice(0, 5)
     }
-    if (bijThuis(stopPunt(t))) {
+    if (bijThuis(t.adres_stop, stopPunt(t))) {
       aankomstThuis = (t.stop_tijd ?? t.start_tijd).slice(0, 5)
     }
   }
