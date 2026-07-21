@@ -219,9 +219,14 @@ export async function runComplianceAction(): Promise<{
     // R11 uitzonderen: die bevindingen komen uit de werktijd-analyse (eigen job,
     // async data) en zitten dus niet in het resultaat van deze run. Zonder deze
     // uitzondering zou elke compliance-check ze weggooien.
+    //
+    // Handmatig toegekende bevindingen om dezelfde reden: die produceert deze
+    // run per definitie niet opnieuw, dus zonder de bron-filter zou een planner
+    // zijn eigen signaal bij de eerstvolgende check kwijtraken.
     await client.query(
       `delete from public.compliance_bevindingen
         where status = 'open'
+          and bron = 'automatisch'
           and regel_code <> 'R11'
           and periode_start >= $1::date
           and (fingerprint is null or not (fingerprint = any($2::text[])))`,

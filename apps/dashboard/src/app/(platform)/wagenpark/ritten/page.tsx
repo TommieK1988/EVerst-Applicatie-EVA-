@@ -4,6 +4,7 @@ import { createClient as createServerClient } from '@everts/database/server'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import RittenTabel, { type RitRij } from '@/components/wagenpark/ritten/RittenTabel'
+import type { RegelOptie } from '@/components/wagenpark/ritten/RitPaneel'
 import RunComplianceButton from '@/components/wagenpark/bevindingen/RunComplianceButton'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
@@ -30,7 +31,7 @@ export default async function RittenPage() {
   }
 
   // Ritten (privacy-gescoped) + het totaal (voor de header) parallel.
-  const [ritten, totaal, layouts] = await Promise.all([
+  const [ritten, totaal, layouts, regels] = await Promise.all([
     pgQuery<RitRij>(
       `
       select t.id,
@@ -64,6 +65,7 @@ export default async function RittenPage() {
                        'gegenereerd_op', b.gegenereerd_op::text,
                        'periode_start',  b.periode_start::text,
                        'periode_eind',   b.periode_eind::text,
+                       'bron',           b.bron,
                        'data',           b.data
                      )
                      order by case b.ernst::text
@@ -94,6 +96,11 @@ export default async function RittenPage() {
       [magPrive],
     ),
     user_id ? laadLayouts(user_id, 'wagenpark-ritten') : Promise.resolve([]),
+    // Regels voor de handmatige toekenning. Ook de uitgeschakelde regels: dat de
+    // engine ze niet draait is juist een reden om ze met de hand te melden.
+    pgQuery<RegelOptie>(
+      `select code, titel, actief from public.handboek_regels order by code`,
+    ),
   ])
 
   const totaalAantal = totaal[0]?.aantal ?? 0
@@ -146,7 +153,7 @@ export default async function RittenPage() {
           }
         />
       ) : (
-        <RittenTabel data={ritten} layouts={layouts} user_id={user_id} />
+        <RittenTabel data={ritten} layouts={layouts} user_id={user_id} regels={regels} />
       )}
     </>
   )

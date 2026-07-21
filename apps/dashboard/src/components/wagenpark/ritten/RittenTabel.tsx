@@ -6,7 +6,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 import RitPaneel from '@/components/wagenpark/ritten/RitPaneel'
-import type { RitBevinding } from '@/components/wagenpark/ritten/RitPaneel'
+import type { RitBevinding, RegelOptie } from '@/components/wagenpark/ritten/RitPaneel'
 
 export type RitRij = {
   id: string
@@ -64,14 +64,23 @@ export default function RittenTabel({
   data,
   layouts,
   user_id,
+  regels,
 }: {
   data: RitRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
+  regels: RegelOptie[]
 }) {
   // Snelfilter via de tel-kaarten boven de tabel. null = alles tonen.
   const [ernstFilter, setErnstFilter] = useState<Ernst | 'gevlagd' | null>(null)
-  const [geopend, setGeopend] = useState<RitRij | null>(null)
+  // Bewust het id bewaren en niet de rij zelf: na het toekennen of intrekken van
+  // een handmatige afwijking komt er via revalidatePath verse data binnen. Een
+  // vastgehouden rij-object zou dan de oude signalen blijven tonen.
+  const [geopendId, setGeopendId] = useState<string | null>(null)
+  const geopend = useMemo(
+    () => (geopendId ? data.find((r) => r.id === geopendId) ?? null : null),
+    [data, geopendId],
+  )
 
   const tellingen = useMemo(() => {
     const t = { overtreding: 0, waarschuwing: 0, info: 0, gevlagd: 0 }
@@ -235,8 +244,15 @@ export default function RittenTabel({
                   <span
                     key={b.id}
                     className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${ERNST_STIJL[b.ernst].badge}`}
+                    title={
+                      b.bron === 'handmatig'
+                        ? `${b.regel_code} — handmatig toegekend`
+                        : b.regel_code
+                    }
                   >
                     {b.regel_code}
+                    {/* Punt = handmatig toegekend, zelfde taal als de type-badge */}
+                    {b.bron === 'handmatig' && <span className="ml-0.5 opacity-70">●</span>}
                   </span>
                 ))}
                 {bevs.length > 3 && (
@@ -300,10 +316,10 @@ export default function RittenTabel({
         beginSortering={[{ id: 'datum', desc: true }]}
         selecteerbaar={false}
         toonRijActie={false}
-        onRijKlik={(r) => setGeopend(r)}
+        onRijKlik={(r) => setGeopendId(r.id)}
       />
 
-      <RitPaneel rit={geopend} onClose={() => setGeopend(null)} />
+      <RitPaneel rit={geopend} regels={regels} onClose={() => setGeopendId(null)} />
     </>
   )
 }

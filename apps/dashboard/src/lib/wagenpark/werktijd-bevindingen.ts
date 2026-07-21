@@ -135,6 +135,7 @@ export async function schrijfWerktijdBevindingen(
       `delete from public.compliance_bevindingen
         where regel_code = 'R11'
           and status = 'open'
+          and bron = 'automatisch'
           and periode_start between $1::date and $2::date
           and (fingerprint is null or not (fingerprint = any($3::text[])))`,
       [van, tot, rijen.map((r) => r.fingerprint)],
