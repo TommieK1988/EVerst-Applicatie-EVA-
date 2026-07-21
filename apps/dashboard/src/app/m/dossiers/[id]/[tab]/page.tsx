@@ -5,6 +5,8 @@ import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import HoutrotView from '@/components/mobiel/dossier-tabs/HoutrotView'
 import AppHeader from '@/components/mobiel/AppHeader'
 import DossierInfoView, { type DossierInfo } from '@/components/mobiel/DossierInfoView'
+import DossierActiesBlok from '@/components/mobiel/DossierActiesBlok'
+import { getTakenVoorDossier } from '@/lib/taken/services/taken'
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
 import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
 import DetailplanningView from '@/components/mobiel/dossier-tabs/DetailplanningView'
@@ -49,7 +51,13 @@ export default async function MobielDossierTabPage(
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref="/m/dossiers" />
       <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} />
 
-      {actief === 'informatie' && <InformatieTab d={d} statusLabel={label} />}
+      {actief === 'informatie' && (
+        <>
+          <InformatieTab d={d} statusLabel={label} />
+          {/* Acties apart in Suspense: de takenquery mag de infokaarten niet ophouden. */}
+          <Suspense fallback={null}><ActiesBlok dossierId={id} /></Suspense>
+        </>
+      )}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
       {/* Ook planning in Suspense: zonder dat blokkeert de query de hele render,
           waardoor kopbalk én tabstrip pas verschijnen als de data binnen is. */}
@@ -64,6 +72,15 @@ export default async function MobielDossierTabPage(
         <Suspense fallback={<TabLaden />}><BestandenView dossierId={id} /></Suspense>
       )}
     </>
+  )
+}
+
+async function ActiesBlok({ dossierId }: { dossierId: string }) {
+  const taken = await getTakenVoorDossier(dossierId).catch(() => [])
+  return (
+    <div style={{ padding: '0 16px 16px' }}>
+      <DossierActiesBlok taken={taken} />
+    </div>
   )
 }
 

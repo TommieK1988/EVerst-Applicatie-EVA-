@@ -778,6 +778,85 @@ export async function getUrgenteTakenVoorDossier(dossier_id: string): Promise<Ur
   }))
 }
 
+/** Eén taakregel van een dossier, plat genoeg voor het mobiele acties-blok. */
+export type DossierTaakRegel = {
+  id: string
+  titel: string
+  status: string
+  prioriteit: string
+  deadline: string | null
+  lijst_naam: string | null
+  assignee_naam: string | null
+  /** Gereed of vervallen — die horen onder de uitklap, niet in de top vijf. */
+  afgerond: boolean
+}
+
+/**
+ * Alle acties van één dossier, oplopend op deadline (zonder deadline achteraan).
+ * Pakt zowel taken uit de actielijsten van het dossier als losse taken die
+ * rechtstreeks aan het dossier hangen — dezelfde twee bronnen als
+ * {@link getUrgenteTakenVoorDossier}, maar zonder limiet en mét afgeronde taken.
+ */
+export async function getTakenVoorDossier(dossier_id: string): Promise<DossierTaakRegel[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: lijsten } = await supabase
+    .from('task_lists')
+    .select('id, naam')
+    .eq('dossier_id', dossier_id)
+    .eq('is_template', false)
+
+  const lijstNamen = new Map<string, string>(
+    ((lijsten ?? []) as { id: string; naam: string }[]).map(l => [l.id, l.naam])
+  )
+
+  const orFilters = [`dossier_id.eq.${dossier_id}`]
+  if (lijstNamen.size > 0) orFilters.push(`lijst_id.in.(${[...lijstNamen.keys()].join(',')})`)
+
+  const { data: taken } = await supabase
+    .from('tasks')
+    .select('id, titel, status, prioriteit, deadline, lijst_id, volgorde, task_assignees(user_id)')
+    .or(orFilters.join(','))
+    .order('deadline', { ascending: true, nullsFirst: false })
+    .order('volgorde', { ascending: true })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rijen = (taken ?? []) as any[]
+  if (rijen.length === 0) return []
+
+  const userIds = [...new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rijen.flatMap(t => (t.task_assignees ?? []).map((a: any) => a.user_id))
+  )].filter(Boolean)
+
+  let namen: Record<string, string> = {}
+  if (userIds.length > 0) {
+    const { data: meds } = await supabase
+      .from('medewerkers')
+      .select('auth_user_id, voornaam, tussenvoegsel, achternaam')
+      .in('auth_user_id', userIds)
+    namen = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (meds ?? []).map((m: any) => [
+        m.auth_user_id,
+        [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      ])
+    )
+  }
+
+  return rijen.map(t => ({
+    id:            t.id,
+    titel:         t.titel,
+    status:        t.status,
+    prioriteit:    t.prioriteit,
+    deadline:      t.deadline ?? null,
+    lijst_naam:    t.lijst_id ? lijstNamen.get(t.lijst_id) ?? null : null,
+    assignee_naam: namen[t.task_assignees?.[0]?.user_id] ?? null,
+    afgerond:      t.status === 'gereed' || t.status === 'vervallen',
+  }))
+}
+
 export async function getDossierRedirectUrlVoorLijst(lijstId: string): Promise<string | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
