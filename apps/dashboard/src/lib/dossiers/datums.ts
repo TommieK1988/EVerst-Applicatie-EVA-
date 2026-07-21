@@ -12,7 +12,7 @@ import { LEGE_DOSSIER_DATUMS, type DossierDatums } from './datum-regels'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-type DossierDatumVelden = {
+type DossierDatumVelden = Partial<{
   aanvraagdatum: string | null
   deadline: string | null
   verzonden_op: string | null
@@ -20,7 +20,7 @@ type DossierDatumVelden = {
   financieel_gereed_op: string | null
   bouw7_aanmaakdatum: string | null
   created_at: string | null
-}
+}>
 
 /**
  * Start/eind van de uitvoering = de buitenste grenzen van de detailplanning.
@@ -93,7 +93,10 @@ export async function getDossierDatums(dossierId: string): Promise<DossierDatums
   const [dossierRes, planning, opleverdatum] = await Promise.all([
     supabase
       .from('dossiers')
-      .select('aanvraagdatum, deadline, verzonden_op, opdrachtdatum, financieel_gereed_op, bouw7_aanmaakdatum, created_at')
+      // Bewust `*`: bij een expliciete kolomlijst laat PostgREST de héle query
+      // falen zodra één kolom ontbreekt, waardoor álle procesdatums leeg bleven.
+      // Nu vullen we elke datum die wél bekend is; een ontbrekend veld blijft leeg.
+      .select('*')
       .eq('id', dossierId)
       .maybeSingle(),
     laadPlanningDatums(supabase, dossierId),
