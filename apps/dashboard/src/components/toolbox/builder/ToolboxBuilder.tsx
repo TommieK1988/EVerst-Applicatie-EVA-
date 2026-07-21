@@ -85,10 +85,14 @@ export default function ToolboxBuilder({ toolbox }: { toolbox: ToolboxData }) {
     muteer([...slides, s]); setActiefIdx(slides.length)
   }
   function voegVraagToe() {
+    // Bewust géén antwoord voorgeselecteerd: stond het eerste antwoord standaard
+    // op 'juist', dan publiceerde je bij vergeten stilzwijgend A als goede
+    // antwoord — de validatie ('precies één juist') werd immers gehaald.
+    // Zonder selectie blokkeert publiceren en moet de auteur bewust kiezen.
     const s: VraagSlide = {
       id: nieuwId('v'), type: 'vraag', vraag: '',
       opties: [
-        { id: nieuwId('o'), tekst: '', correct: true },
+        { id: nieuwId('o'), tekst: '' },
         { id: nieuwId('o'), tekst: '' },
       ],
       uitleg: '',
