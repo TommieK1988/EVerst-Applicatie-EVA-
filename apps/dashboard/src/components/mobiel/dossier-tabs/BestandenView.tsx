@@ -1,5 +1,5 @@
 import React from 'react'
-import { getDossierBestanden } from '@/lib/dossiers/bestanden'
+import { getDossierBestanden, getAppZichtbareBestandIds } from '@/lib/dossiers/bestanden'
 
 /**
  * Mobiele Bestanden-tab: projectbestanden live uit Bouw7 (read-only). Download
@@ -14,19 +14,26 @@ function formatGrootte(bytes: number | null): string {
 }
 
 export default async function BestandenView({ dossierId }: { dossierId: string }) {
-  const data = await getDossierBestanden(dossierId).catch(() => null)
+  const [data, zichtbaarIds] = await Promise.all([
+    getDossierBestanden(dossierId).catch(() => null),
+    getAppZichtbareBestandIds(dossierId).catch(() => [] as number[]),
+  ])
 
-  if (!data || !data.beschikbaar || data.bestanden.length === 0) {
+  // Opt-in: alleen wat in EVA is aangevinkt komt op de telefoon.
+  const zichtbaar = new Set(zichtbaarIds)
+  const bestanden = (data?.bestanden ?? []).filter(b => zichtbaar.has(b.id))
+
+  if (!data || !data.beschikbaar || bestanden.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>
-        Geen bestanden beschikbaar voor dit dossier.
+        Er zijn voor dit dossier geen bestanden vrijgegeven voor de app.
       </div>
     )
   }
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {data.bestanden.map((b) => {
+      {bestanden.map((b) => {
         const meta = [b.categorie, formatGrootte(b.grootte), b.datum].filter(Boolean).join(' · ')
         const inner = (
           <>

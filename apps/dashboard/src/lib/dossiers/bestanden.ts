@@ -1,6 +1,9 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@everts/database/server'
 import { bouw7VoorDossier } from './actions'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import type { Bouw7ProjectFile } from '@/lib/bouw7/client'
 
 export type DossierBestand = {
@@ -52,4 +55,50 @@ export async function getDossierBestanden(dossierId: string): Promise<DossierBes
   } catch {
     return { beschikbaar: false, bestanden: [] }
   }
+}
+
+/**
+ * Zichtbaarheid van dossierbestanden in de mobiele app.
+ *
+ * Bewust opt-in: alleen bestanden die hier als zichtbaar staan verschijnen op de
+ * telefoon. Zonder rij is een bestand dus NIET zichtbaar — de buitendienst krijgt
+ * niet de hele projectmap mee. Bestanden zelf blijven read-only uit Bouw7; alleen
+ * deze keuze leggen we in EVA vast.
+ */
+/** Array (geen Set): dit is een server action, en die moet serialiseerbaar teruggeven. */
+export async function getAppZichtbareBestandIds(dossierId: string): Promise<number[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossier_bestand_app_zichtbaar')
+    .select('bouw7_bestand_id')
+    .eq('dossier_id', dossierId)
+    .eq('zichtbaar', true)
+
+  return ((data ?? []) as { bouw7_bestand_id: number }[]).map(r => Number(r.bouw7_bestand_id))
+}
+
+export async function setBestandAppZichtbaar(
+  dossierId: string,
+  bestandId: number,
+  zichtbaar: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const medewerker = await getCurrentMedewerker()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { error } = await supabase
+    .from('dossier_bestand_app_zichtbaar')
+    .upsert({
+      dossier_id: dossierId,
+      bouw7_bestand_id: bestandId,
+      zichtbaar,
+      gewijzigd_op: new Date().toISOString(),
+      gewijzigd_door: medewerker?.id ?? null,
+    }, { onConflict: 'dossier_id,bouw7_bestand_id' })
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/opdrachten/${dossierId}/bestanden`)
+  return { ok: true }
 }

@@ -2,7 +2,10 @@
 
 import React, { useEffect, useState, useTransition } from 'react'
 import { Card, CardHeader, CardBody } from '@/components/ui'
-import { getDossierBestanden, type DossierBestandenData, type DossierBestand } from '@/lib/dossiers/bestanden'
+import {
+  getDossierBestanden, getAppZichtbareBestandIds, setBestandAppZichtbaar,
+  type DossierBestandenData, type DossierBestand,
+} from '@/lib/dossiers/bestanden'
 import {
   getDossierSharePointBestanden,
   hermatchDossierSharePoint,
@@ -34,17 +37,38 @@ const TH = 'py-1.5 px-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text
 
 export default function BestandenTab({ dossierId }: { dossierId: string }) {
   const [bouw7, setBouw7] = useState<DossierBestandenData | null>(null)
+  const [inApp, setInApp] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     getDossierBestanden(dossierId).then(setBouw7).catch(() => setBouw7({ beschikbaar: false, bestanden: [] }))
+    getAppZichtbareBestandIds(dossierId).then(ids => setInApp(new Set(ids))).catch(() => setInApp(new Set()))
   }, [dossierId])
+
+  // Optimistisch omzetten: de lijst hoeft niet opnieuw geladen te worden voor
+  // een vinkje. Faalt de opslag, dan zetten we het vinkje terug.
+  function toggleApp(bestandId: number, zichtbaar: boolean) {
+    setInApp(vorig => {
+      const nieuw = new Set(vorig)
+      if (zichtbaar) nieuw.add(bestandId); else nieuw.delete(bestandId)
+      return nieuw
+    })
+    setBestandAppZichtbaar(dossierId, bestandId, zichtbaar).then(res => {
+      if (!res.ok) {
+        setInApp(vorig => {
+          const terug = new Set(vorig)
+          if (zichtbaar) terug.delete(bestandId); else terug.add(bestandId)
+          return terug
+        })
+      }
+    })
+  }
 
   return (
     <div className="px-8 py-7 space-y-5">
       {/* Opstellen bovenaan; wat je hier maakt landt in SharePoint en verschijnt
           daardoor vanzelf in de SharePoint-kaart hieronder. */}
       <DocumentenKaart dossierId={dossierId} />
-      <Bouw7Kaart data={bouw7} />
+      <Bouw7Kaart data={bouw7} inApp={inApp} onToggleApp={toggleApp} />
       <SharePointKaart dossierId={dossierId} />
     </div>
   )
@@ -52,7 +76,12 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
 // ─── Bouw7 ──────────────────────────────────────────────────────────────────────
 
-function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
+function Bouw7Kaart({ data, inApp, onToggleApp }: {
+  data: DossierBestandenData | null
+  /** Bestanden die de buitendienst in de mobiele app te zien krijgt (opt-in). */
+  inApp: Set<number>
+  onToggleApp: (bestandId: number, zichtbaar: boolean) => void
+}) {
   if (data == null) return <Card><CardHeader>Bouw7-bestanden</CardHeader><CardBody><p className="text-[13px] text-neutral-500">Laden…</p></CardBody></Card>
 
   if (!data.beschikbaar || data.bestanden.length === 0) {
@@ -81,7 +110,9 @@ function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <span>Bouw7-bestanden</span>
-          <span className="text-[11px] font-normal text-neutral-400">{data.bestanden.length} uit Bouw7</span>
+          <span className="text-[11px] font-normal text-neutral-400">
+            {data.bestanden.length} uit Bouw7 · {inApp.size} in de app
+          </span>
         </div>
       </CardHeader>
       <CardBody style={{ padding: 0 }}>
@@ -90,13 +121,15 @@ function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
             <tr className="border-b border-neutral-200 text-left">
               <th className={`${TH} pl-4`}>Naam</th><th className={TH}>Type</th>
               <th className={`${TH} text-right`}>Grootte</th><th className={TH}>Datum</th>
-              <th className={TH}>Door</th><th className={`${TH} pr-4 text-right`}>Actie</th>
+              <th className={TH}>Door</th>
+              <th className={`${TH} text-center`} title="Zichtbaar in de mobiele app voor de buitendienst">In app</th>
+              <th className={`${TH} pr-4 text-right`}>Actie</th>
             </tr>
           </thead>
           {groepen.map(g => (
             <tbody key={g.categorie}>
               <tr className="bg-neutral-50">
-                <td colSpan={6} className="py-1.5 pl-4 pr-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">{g.categorie}</td>
+                <td colSpan={7} className="py-1.5 pl-4 pr-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">{g.categorie}</td>
               </tr>
               {g.items.map(b => {
                 const href = downloadHref(b)
@@ -110,6 +143,15 @@ function Bouw7Kaart({ data }: { data: DossierBestandenData | null }) {
                     <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmtGrootte(b.grootte)}</td>
                     <td className="py-1.5 px-2 text-neutral-500">{b.datum ?? '—'}</td>
                     <td className="py-1.5 px-2 text-neutral-500">{b.aangemaaktDoor ?? '—'}</td>
+                    <td className="py-1.5 px-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={inApp.has(b.id)}
+                        onChange={e => onToggleApp(b.id, e.target.checked)}
+                        aria-label={`${b.naam} zichtbaar in de app`}
+                        className="h-4 w-4 cursor-pointer accent-brand-600"
+                      />
+                    </td>
                     <td className="py-1.5 pl-2 pr-4 text-right">
                       {href
                         ? <a href={href} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-brand-600 hover:underline">Openen</a>
