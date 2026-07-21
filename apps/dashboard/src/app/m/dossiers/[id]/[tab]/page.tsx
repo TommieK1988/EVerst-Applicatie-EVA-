@@ -8,7 +8,7 @@ import DossierInfoView, { type DossierInfo } from '@/components/mobiel/DossierIn
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
 import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
 import DetailplanningView from '@/components/mobiel/dossier-tabs/DetailplanningView'
-import KostengroepenView from '@/components/mobiel/dossier-tabs/KostengroepenView'
+import VoortgangView from '@/components/mobiel/dossier-tabs/VoortgangView'
 import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 
@@ -51,9 +51,13 @@ export default async function MobielDossierTabPage(
 
       {actief === 'informatie' && <InformatieTab d={d} statusLabel={label} />}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
-      {actief === 'planning' && <DetailplanningView dossierId={id} />}
-      {actief === 'kostengroepen' && (
-        <Suspense fallback={<TabLaden />}><KostengroepenView dossierId={id} /></Suspense>
+      {/* Ook planning in Suspense: zonder dat blokkeert de query de hele render,
+          waardoor kopbalk én tabstrip pas verschijnen als de data binnen is. */}
+      {actief === 'planning' && (
+        <Suspense fallback={<TabLaden />}><DetailplanningView dossierId={id} /></Suspense>
+      )}
+      {actief === 'voortgang' && (
+        <Suspense fallback={<TabLaden />}><VoortgangView dossierId={id} /></Suspense>
       )}
       {actief === 'formulieren' && <FormulierenView dossierId={id} />}
       {actief === 'bestanden' && (

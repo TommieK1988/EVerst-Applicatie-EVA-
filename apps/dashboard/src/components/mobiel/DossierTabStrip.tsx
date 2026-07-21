@@ -9,7 +9,7 @@ import Link from 'next/link'
 export const DOSSIER_TABS = [
   { key: 'informatie', label: 'Info' },
   { key: 'planning', label: 'Planning' },
-  { key: 'kostengroepen', label: 'Kosten' },
+  { key: 'voortgang', label: 'Voortgang' },
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
   // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
   { key: 'houtrot', label: 'Houtrot' },
