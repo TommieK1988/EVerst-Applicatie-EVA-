@@ -1,7 +1,10 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { addDays, differenceInDays, format, isWeekend, parseISO, startOfDay } from 'date-fns'
+import {
+  addDays, differenceInDays, endOfWeek, format, getISOWeek,
+  isWeekend, parseISO, startOfDay, startOfWeek,
+} from 'date-fns'
 import { nl } from 'date-fns/locale'
 
 /**
@@ -220,9 +223,20 @@ const LABEL_W  = 120
 const RIJ_H    = 34
 const SUBRIJ_H = 22
 const FASE_H   = 22
-const HEADER_H = 34
-const PPD_MIN  = 6
-const PPD_MAX  = 28
+const WEEK_H   = 18   // headerrij met weeknummers
+const DAG_H    = 16   // headerrij met dagnummers (alleen in weekweergave)
+
+const LIJN_DAG  = '#e8edee'
+const LIJN_WEEK = '#c6d0d3'
+
+/** Vaste dagbreedte per zoomniveau — de tijdlijn is een doorlopende, horizontaal
+ *  scrollbare strook (net als de desktop-Gantt), géén fit-to-screen. */
+const ZOOM = [
+  { key: 'week',     label: 'Week',     ppd: 30 },
+  { key: 'maand',    label: 'Maand',    ppd: 11 },
+  { key: 'kwartaal', label: 'Kwartaal', ppd: 4.5 },
+] as const
+type ZoomKey = typeof ZOOM[number]['key']
 
 type GanttRij =
   | { kind: 'fase'; key: string; naam: string }
@@ -231,19 +245,17 @@ type GanttRij =
 
 function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [breedte, setBreedte] = useState(0)
+  const [zoom, setZoom] = useState<ZoomKey>('week')
   const [open, setOpen] = useState<string | null>(null)
 
-  useEffect(() => {
-    const meet = () => setBreedte(scrollRef.current?.clientWidth ?? 0)
-    meet()
-    window.addEventListener('resize', meet)
-    return () => window.removeEventListener('resize', meet)
-  }, [])
+  const ppd = ZOOM.find(z => z.key === zoom)!.ppd
+  const toonDagnummers = zoom === 'week'
+  const headerH = WEEK_H + (toonDagnummers ? DAG_H : 0)
 
   const vandaag = startOfDay(new Date())
 
-  // Bereik: alle datums + vandaag, met een paar dagen marge.
+  // Bereik: alle datums + vandaag, afgerond op hele weken (maandag t/m zondag).
+  // Op een maandag beginnen houdt de weekstrepen en de weekendtint in de pas.
   const { start, dagen } = useMemo(() => {
     const alle: string[] = []
     for (const a of activiteiten) {
@@ -253,24 +265,22 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
     }
     alle.push(format(vandaag, 'yyyy-MM-dd'))
     alle.sort()
-    const s = addDays(parseISO(alle[0]), -2)
-    const e = addDays(parseISO(alle[alle.length - 1]), 2)
-    return { start: s, dagen: Math.max(1, differenceInDays(e, s) + 1) }
+    const s = startOfWeek(parseISO(alle[0]), { weekStartsOn: 1 })
+    const e = endOfWeek(parseISO(alle[alle.length - 1]), { weekStartsOn: 1 })
+    return { start: s, dagen: Math.max(7, differenceInDays(e, s) + 1) }
   }, [activiteiten])
 
-  const beschikbaar = Math.max(0, breedte - LABEL_W)
-  const ppd = beschikbaar > 0
-    ? Math.min(PPD_MAX, Math.max(PPD_MIN, beschikbaar / dagen))
-    : PPD_MIN
   const tijdlijnW = dagen * ppd
 
-  // Bij openen naar vandaag scrollen (vandaag op ~1/6 van de zichtbare breedte).
+  // Bij openen (en bij het wisselen van zoomniveau) naar vandaag scrollen —
+  // vandaag landt op ~1/6 van de zichtbare breedte, zoals de desktop-planning.
   useEffect(() => {
     const el = scrollRef.current
-    if (!el || beschikbaar <= 0) return
+    if (!el) return
+    const zichtbaar = Math.max(0, el.clientWidth - LABEL_W)
     const x = differenceInDays(vandaag, start) * ppd
-    el.scrollLeft = Math.max(0, x - beschikbaar / 6)
-  }, [ppd, beschikbaar, dagen])
+    el.scrollLeft = Math.max(0, x - zichtbaar / 6)
+  }, [ppd, dagen, start])
 
   const offset = (iso: string) => differenceInDays(parseISO(iso), start) * ppd
 
@@ -309,20 +319,61 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
     return out
   }, [activiteiten])
 
-  const dagKolommen = useMemo(
-    () => Array.from({ length: dagen }, (_, i) => addDays(start, i)),
-    [start, dagen]
-  )
+  const weken = useMemo(() => {
+    const uit: { i: number; datum: Date }[] = []
+    for (let i = 0; i < dagen; i += 7) uit.push({ i, datum: addDays(start, i) })
+    return uit
+  }, [start, dagen])
+
   const vandaagX = differenceInDays(vandaag, start) * ppd
 
-  return (
-    <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff' }}>
-      <div style={{ width: LABEL_W + tijdlijnW, minWidth: '100%' }}>
+  /** Verticale rasterlijnen: dagstreep per dag, zwaardere streep per week,
+   *  weekendkolommen getint. Als CSS-gradients i.p.v. duizenden losse divs —
+   *  scheelt bij een lange planning enorm veel DOM-knopen. */
+  const raster: React.CSSProperties = {
+    backgroundImage: [
+      `repeating-linear-gradient(90deg, transparent 0 ${5 * ppd}px, rgba(0,0,0,0.045) ${5 * ppd}px ${7 * ppd}px)`,
+      `repeating-linear-gradient(90deg, ${LIJN_DAG} 0 1px, transparent 1px ${ppd}px)`,
+      `repeating-linear-gradient(90deg, ${LIJN_WEEK} 0 1px, transparent 1px ${7 * ppd}px)`,
+    ].join(','),
+  }
 
-        {/* Header: maandlabels + dagnummers */}
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+
+      {/* Zoombalk — blijft staan, scrollt niet mee */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4,
+        padding: '5px 10px', borderBottom: `1px solid ${RAND}`, background: '#f8fafa', flexShrink: 0,
+      }}>
+        {ZOOM.map(z => (
+          <button key={z.key} onClick={() => setZoom(z.key)} style={{
+            padding: '3px 10px', borderRadius: 999, fontFamily: 'inherit', fontSize: 11,
+            fontWeight: 600, cursor: 'pointer',
+            border: `1px solid ${zoom === z.key ? GROEN : RAND}`,
+            background: zoom === z.key ? GROEN : '#fff',
+            color: zoom === z.key ? '#fff' : GRIJS,
+          }}>
+            {z.label}
+          </button>
+        ))}
+      </div>
+
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div style={{ width: LABEL_W + tijdlijnW, minWidth: '100%', position: 'relative' }}>
+
+        {/* Vandaag-lijn over de volle hoogte; onder de labelkolom (z-index 3) door. */}
+        {vandaagX >= 0 && vandaagX <= tijdlijnW && (
+          <div style={{
+            position: 'absolute', left: LABEL_W + vandaagX, top: 0, bottom: 0,
+            width: 2, background: GROEN, opacity: 0.5, zIndex: 2, pointerEvents: 'none',
+          }} />
+        )}
+
+        {/* Header: weeknummers, en in de weekweergave ook de dagnummers */}
         <div style={{
           display: 'flex', position: 'sticky', top: 0, zIndex: 5,
-          background: '#fff', borderBottom: `1px solid ${RAND}`, height: HEADER_H,
+          background: '#fff', borderBottom: `1px solid ${LIJN_WEEK}`, height: headerH,
         }}>
           <div style={{
             width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
@@ -334,23 +385,36 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
             Planning
           </div>
           <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0 }}>
-            {dagKolommen.map((d, i) => {
-              const eersteVanMaand = d.getDate() === 1 || i === 0
+            {/* Weekbalk */}
+            {weken.map(w => (
+              <div key={w.i} style={{
+                position: 'absolute', left: w.i * ppd, top: 0, width: 7 * ppd, height: WEEK_H,
+                borderLeft: `1px solid ${LIJN_WEEK}`,
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '0 4px', overflow: 'hidden',
+              }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: GRIJS, whiteSpace: 'nowrap' }}>
+                  wk {getISOWeek(w.datum)}
+                </span>
+                {7 * ppd >= 90 && (
+                  <span style={{ fontSize: 9.5, color: '#9aa4ab', whiteSpace: 'nowrap' }}>
+                    {format(w.datum, 'd MMM', { locale: nl })}
+                  </span>
+                )}
+              </div>
+            ))}
+            {/* Dagnummers (alleen bij weekweergave — daaronder wordt het onleesbaar) */}
+            {toonDagnummers && Array.from({ length: dagen }, (_, i) => {
+              const d = addDays(start, i)
               return (
                 <div key={i} style={{
-                  position: 'absolute', left: i * ppd, top: 0, bottom: 0, width: ppd,
-                  borderLeft: eersteVanMaand ? `1px solid ${RAND}` : 'none',
-                  display: 'flex', flexDirection: 'column', justifyContent: 'center',
-                  paddingLeft: 2, overflow: 'hidden',
+                  position: 'absolute', left: i * ppd, top: WEEK_H, width: ppd, height: DAG_H,
+                  borderLeft: `1px solid ${i % 7 === 0 ? LIJN_WEEK : LIJN_DAG}`,
+                  display: 'grid', placeItems: 'center',
+                  background: isWeekend(d) ? 'rgba(0,0,0,0.045)' : undefined,
+                  fontSize: 9, color: isWeekend(d) ? '#9aa4ab' : GRIJS,
                 }}>
-                  {eersteVanMaand && (
-                    <span style={{ fontSize: 9, fontWeight: 700, color: GRIJS, whiteSpace: 'nowrap' }}>
-                      {format(d, 'MMM', { locale: nl })}
-                    </span>
-                  )}
-                  {ppd >= 16 && (
-                    <span style={{ fontSize: 9, color: '#9aa4ab' }}>{d.getDate()}</span>
-                  )}
+                  {d.getDate()}
                 </div>
               )
             })}
@@ -372,7 +436,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 }}>
                   {rij.naam}
                 </div>
-                <div style={{ width: tijdlijnW, flexShrink: 0 }} />
+                <div style={{ width: tijdlijnW, flexShrink: 0, ...raster, opacity: 0.6 }} />
               </div>
             )
           }
@@ -415,17 +479,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                   </span>
                 </div>
 
-                <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0 }}>
-                  {/* Weekendtint */}
-                  {dagKolommen.map((d, i) => isWeekend(d) ? (
-                    <div key={i} style={{ position: 'absolute', left: i * ppd, top: 0, bottom: 0, width: ppd, background: 'rgba(0,0,0,0.035)' }} />
-                  ) : null)}
-
-                  {/* Vandaag-lijn */}
-                  {vandaagX >= 0 && vandaagX <= tijdlijnW && (
-                    <div style={{ position: 'absolute', left: vandaagX, top: 0, bottom: 0, width: 2, background: GROEN, opacity: 0.55 }} />
-                  )}
-
+                <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0, ...raster }}>
                   {left != null && width != null && (
                     <div style={{
                       position: 'absolute', left, width,
@@ -473,6 +527,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
