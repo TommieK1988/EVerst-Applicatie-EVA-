@@ -187,7 +187,7 @@ const SLUG_LABELS: Record<string, string> = {
   'zones': 'Zones', 'rapportage': 'Rapportage', 'rapportages': 'Rapportages',
   'registraties': 'Registraties', 'voertuigen': 'Voertuigen', 'bestuurders': 'Bestuurders',
   'ritten': 'Ritten', 'parkeren': 'Parkeren', 'leasecontracten': 'Leasecontracten',
-  'bevindingen': 'Bevindingen', 'diagnose': 'Diagnose', 'dashboard': 'Dashboard',
+  'diagnose': 'Diagnose', 'dashboard': 'Dashboard',
   'projecten': 'Projecten', 'standaard-reparaties': 'Standaard reparaties',
   'meetstaat': 'Meetstaat', 'inzendingen': 'Inzendingen', 'invullen': 'Invullen',
 }

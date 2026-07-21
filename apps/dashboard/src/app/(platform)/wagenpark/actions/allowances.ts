@@ -66,7 +66,7 @@ export async function addAllowanceAction(opts: {
     }
 
     await client.query('commit')
-    revalidatePath('/wagenpark/bevindingen')
+    revalidatePath('/wagenpark/ritten')
     revalidatePath(`/wagenpark/bestuurders/${opts.ulu_user_id}`)
     revalidatePath('/wagenpark/bestuurders')
     revalidatePath('/wagenpark/instellingen')
@@ -89,7 +89,7 @@ export async function removeAllowanceAction(id: string): Promise<void> {
       where id = $1`,
     [id],
   )
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
   revalidatePath('/wagenpark/bestuurders')
   revalidatePath('/wagenpark/instellingen')
 }

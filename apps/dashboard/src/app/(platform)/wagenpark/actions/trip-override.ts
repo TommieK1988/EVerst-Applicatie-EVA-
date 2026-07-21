@@ -35,10 +35,9 @@ export async function updateRitTypeAction(
       )
     }
     // Revalidate alles wat trip-data toont
-    revalidatePath('/wagenpark/bevindingen')
+    revalidatePath('/wagenpark/ritten')
     revalidatePath('/wagenpark/bestuurders')
     revalidatePath('/wagenpark/voertuigen')
-    revalidatePath('/wagenpark/ritten')
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

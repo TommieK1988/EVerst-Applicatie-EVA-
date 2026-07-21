@@ -6,6 +6,7 @@ import BestuurderBijtellingToggle from '@/components/wagenpark/bestuurders/Bestu
 import BestuurderActiefToggle from '@/components/wagenpark/bestuurders/BestuurderActiefToggle'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { formatKm } from '@/lib/wagenpark/utils'
+import { RIT_REGELS_SQL, NIET_RIT_REGELS_SQL } from '@/lib/wagenpark/signalen'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +22,10 @@ type BestuurderRij = {
   ritten_ytd: number
   km_zakelijk_ytd: number
   km_prive_ytd: number
-  bevindingen_open: number
+  /** Open signalen die aan een losse rit hangen (R1/R3/R7/R9/R10). */
+  bevindingen_ritten: number
+  /** Open signalen over de bestuurder zelf: privé-km (R2) en rijgedrag (R6). */
+  bevindingen_persoonlijk: number
   laatste_kenteken: string | null
   /** Dagen sinds oudste rit in DB voor deze bestuurder (prognose-basis). */
   dagen_met_data: number | null
@@ -55,14 +59,31 @@ export default async function BestuurdersPage(
         and t.start_datum >= $1
       group by t.user_id_ulu
     ),
+    -- Bevindingen per bestuurder. Een bevinding wijst óf via trip_id naar een rit
+    -- (R1/R3/R7/R9/R10), óf draagt de bestuurder in data.user_id_ulu (R2/R6).
+    -- De oude versie joinde alleen op trip_id, waardoor juist de persoonlijke
+    -- signalen — privé-km en rijgedrag — nooit in deze teller opdoken.
+    bev_user as (
+      select
+        b.status,
+        b.regel_code,
+        coalesce(
+          (select t.user_id_ulu from public.ulu_trips t where t.id = b.trip_id limit 1),
+          (b.data->>'user_id_ulu')::bigint,
+          -- R8 (parkeren) kent geen user_id_ulu, alleen een bestuurdersnaam.
+          -- Zonder deze tak vallen álle parkeersignalen uit de teller.
+          (select u2.id from public.ulu_users u2 where u2.volledige_naam = b.data->>'bestuurder' limit 1)
+        ) as user_id
+      from public.compliance_bevindingen b
+    ),
     bev as (
       select
-        t.user_id_ulu                              as user_id,
-        count(*) filter (where b.status = 'open')  as open_count
-      from public.compliance_bevindingen b
-      join public.ulu_trips t on t.id = b.trip_id
-      where t.user_id_ulu is not null
-      group by t.user_id_ulu
+        user_id,
+        count(*) filter (where status = 'open' and regel_code ${RIT_REGELS_SQL})::int as open_ritten,
+        count(*) filter (where status = 'open' and regel_code ${NIET_RIT_REGELS_SQL})::int as open_persoonlijk
+      from bev_user
+      where user_id is not null
+      group by user_id
     )
     select
       u.id                        as user_id,
@@ -76,7 +97,8 @@ export default async function BestuurdersPage(
       coalesce(r.ritten_ytd, 0)::int        as ritten_ytd,
       coalesce(r.km_zakelijk_ytd, 0)::float as km_zakelijk_ytd,
       coalesce(r.km_prive_ytd, 0)::float    as km_prive_ytd,
-      coalesce(bev.open_count, 0)::int      as bevindingen_open,
+      coalesce(bev.open_ritten, 0)::int     as bevindingen_ritten,
+      coalesce(bev.open_persoonlijk, 0)::int as bevindingen_persoonlijk,
       r.laatste_kenteken,
       case when r.oudste_rit is not null
            then greatest(1, (current_date - r.oudste_rit + 1))::int
@@ -139,7 +161,8 @@ export default async function BestuurdersPage(
                 <th className="text-right">Prognose zak.</th>
                 <th className="text-right">Privé YTD</th>
                 <th className="text-right">Prognose privé</th>
-                <th className="text-right">Bevind.</th>
+                <th className="text-right" title="Privé-km en rijgedrag — horen bij de bestuurder">Persoonlijk</th>
+                <th className="text-right" title="Signalen op losse ritten — staan in de signaal-kolom bij Ritten">Rit-signalen</th>
                 <th></th>
               </tr>
             </thead>
@@ -202,10 +225,26 @@ export default async function BestuurdersPage(
                       {formatKm(prognosePrive, 0)}
                     </td>
                     <td className="text-right">
-                      {b.bevindingen_open > 0 ? (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                          {b.bevindingen_open}
+                      {b.bevindingen_persoonlijk > 0 ? (
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                          title="Privé-kilometers en rijgedrag — af te handelen op de bestuurderspagina"
+                        >
+                          {b.bevindingen_persoonlijk}
                         </span>
+                      ) : (
+                        <span className="text-slate-400">0</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {b.bevindingen_ritten > 0 ? (
+                        <Link
+                          href="/wagenpark/ritten"
+                          className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          title="Signalen op losse ritten — af te handelen in de signaal-kolom op de ritten-pagina"
+                        >
+                          {b.bevindingen_ritten}
+                        </Link>
                       ) : (
                         <span className="text-slate-400">0</span>
                       )}

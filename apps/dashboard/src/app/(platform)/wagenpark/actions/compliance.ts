@@ -300,7 +300,7 @@ export async function runComplianceAction(): Promise<{
     }
   }
 
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
   revalidatePath('/wagenpark/dashboard')
   return {
     totaal: result.samenvatting.totaal,
@@ -366,7 +366,7 @@ async function notificeerWerktijdSignalen(
     })
   }
   for (const omschrijving of zonderBestuurder) {
-    meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/bevindingen' })
+    meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/ritten' })
   }
 
   for (const o of ontvangers) {
@@ -392,7 +392,8 @@ export async function markeerUitzonderingAction(bevinding_id: string, toelichtin
     actie: 'markeer_uitzondering',
     toelichting,
   })
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
+  revalidatePath('/wagenpark/bestuurders')
 }
 
 export async function bevestigOvertredingAction(bevinding_id: string, toelichting: string) {
@@ -407,5 +408,6 @@ export async function bevestigOvertredingAction(bevinding_id: string, toelichtin
     actie: 'bevestig_overtreding',
     toelichting,
   })
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
+  revalidatePath('/wagenpark/bestuurders')
 }
