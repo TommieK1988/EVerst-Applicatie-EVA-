@@ -359,7 +359,7 @@ function HandmatigBlok({
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
-              Wat klopt hier niet?
+              Toelichting <span className="font-normal text-slate-400">(optioneel)</span>
             </label>
             <textarea
               value={toelichting}
@@ -369,7 +369,8 @@ function HandmatigBlok({
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Deze toelichting wordt als leermoment bewaard naast het signaal.
+              Laat je dit leeg, dan staat alleen de regel erbij. Vul je het in, dan wordt het als
+              leermoment bewaard naast het signaal.
             </p>
           </div>
 
