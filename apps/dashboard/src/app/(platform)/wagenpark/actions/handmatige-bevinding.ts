@@ -27,9 +27,9 @@ async function huidigeAuthUserId(): Promise<string | null> {
  * Ken handmatig een afwijking toe aan een rit.
  *
  * De bevinding krijgt `bron = 'handmatig'` en wordt daarmee niet opgeruimd door
- * een volgende compliance-run (zie de delete in runComplianceAction). De
- * toelichting wordt óók als `compliance_feedback`-regel vastgelegd, zodat de
- * terugkoppeling bewaard blijft naast het signaal zelf.
+ * een volgende compliance-run (zie de delete in runComplianceAction). Er komt
+ * altijd een `compliance_feedback`-regel bij, zodat ook zichtbaar blijft wie
+ * het signaal toekende; de toelichting daarin is optioneel.
  *
  * De fingerprint krijgt een eigen `handmatig|`-namespace: zo botst een
  * handmatige toekenning nooit met de automatische fingerprint voor dezelfde
@@ -44,10 +44,8 @@ export async function voegHandmatigeBevindingToe(
     return { ok: false, error: 'Onvoldoende rechten voor wagenpark.' }
   }
 
+  // Toelichting is optioneel: de regelcode zelf zegt vaak al genoeg.
   const toelichting = input.toelichting.trim()
-  if (!toelichting) {
-    return { ok: false, error: 'Geef een korte toelichting — die is het leermoment.' }
-  }
 
   const pool = getPgPool()
   const client = await pool.connect()
@@ -88,8 +86,16 @@ export async function voegHandmatigeBevindingToe(
       }
     }
 
+    // Zonder toelichting valt de omschrijving terug op de titel van de regel —
+    // een bevinding met een lege omschrijving zegt in de lijst niets.
+    const regel = await client.query<{ titel: string }>(
+      `select titel from public.handboek_regels where code = $1 limit 1`,
+      [input.regel_code],
+    )
     const fingerprint = `handmatig|${input.regel_code}|trip|${input.trip_id}`
-    const omschrijving = `Handmatig toegekend: ${toelichting}`
+    const omschrijving =
+      `Handmatig toegekend: ` +
+      (toelichting || regel.rows[0]?.titel || input.regel_code)
 
     const ins = await client.query<{ id: string }>(
       `insert into public.compliance_bevindingen
@@ -108,7 +114,7 @@ export async function voegHandmatigeBevindingToe(
         omschrijving,
         JSON.stringify({
           handmatig: true,
-          toelichting,
+          ...(toelichting ? { toelichting } : {}),
           kenteken: t.kenteken,
           bestuurder: t.bestuurder_naam_raw,
           user_id_ulu: t.user_id_ulu,
@@ -130,7 +136,7 @@ export async function voegHandmatigeBevindingToe(
     await client.query(
       `insert into public.compliance_feedback (bevinding_id, gebruiker_id, actie, toelichting)
        values ($1, $2, 'handmatig_toegekend', $3)`,
-      [ins.rows[0].id, await huidigeAuthUserId(), toelichting],
+      [ins.rows[0].id, await huidigeAuthUserId(), toelichting || null],
     )
 
     await client.query('commit')
