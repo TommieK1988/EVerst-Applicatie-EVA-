@@ -18,12 +18,21 @@ import { nl } from 'date-fns/locale'
  * terwijl de `/m`-schermen met vaste hex-kleuren werken en alleen-lezen zijn.
  */
 
+/**
+ * LET OP — bewust géén uren hier.
+ *
+ * `planning_items.uren` is bij Bouw7-planning het `hours`-veld van het plan-item,
+ * dat ongewijzigd op de regel van iedere toegewezen medewerker wordt gezet
+ * (zie `lib/bouw7/sync-planning.ts`). Staan er vier mensen op één blok, dan
+ * toont iedereen hetzelfde bloktotaal — en dat totaal is niet consequent
+ * gevuld: soms is het per persoon, soms voor het hele blok. Daarom laat dit
+ * scherm nergens uren zien; namen wel.
+ */
 export type MobielPlanitem = {
   id: string
   medewerker_id: string | null
   start_dt: string | null
   eind_dt: string | null
-  uren: number | null
   naam: string | null
   voornaam: string | null
 }
@@ -36,7 +45,6 @@ export type MobielActiviteit = {
   deadline: string | null
   locatie_adres: string | null
   volgorde: number
-  geschatte_uren: number | null
   fase_id: string | null
   fase_naam: string | null
   fase_volgorde: number | null
@@ -55,8 +63,27 @@ const GRIJS = '#6b757c'
 
 const kleurVan = (status: string | null) => STATUS_KLEUR[status ?? ''] ?? '#9aa4ab'
 
-/** Datum-only ISO (yyyy-MM-dd) uit een date- of timestamp-kolom. */
+/** Datum-only ISO (yyyy-MM-dd) uit een `date`-kolom (gewenste_start, deadline). */
 const dagVan = (iso: string | null): string | null => (iso ? iso.slice(0, 10) : null)
+
+/**
+ * Lokale kalenderdag van een timestamptz (`planning_items.start_dt`/`eind_dt`).
+ *
+ * NIET `slice(0,10)` gebruiken: PostgREST levert UTC, dus 1 juni 00:00 in
+ * Nederland komt binnen als `2026-05-31T22:00:00+00:00` en zou dan als 31 mei
+ * op de tijdlijn belanden. `parseISO` rekent wél naar lokale tijd.
+ *
+ * `eindExclusief`: een planitem eindigt op middernacht ván de volgende dag, dus
+ * de laatste gewerkte dag is die van (eind − 1 ms). Bij een eindtijd midden op
+ * de dag (bv. 15:00) verandert dat niets.
+ */
+function dagVanTijdstip(iso: string | null, eindExclusief = false): string | null {
+  if (!iso) return null
+  try {
+    const d = parseISO(iso)
+    return format(new Date(eindExclusief ? d.getTime() - 1 : d.getTime()), 'yyyy-MM-dd')
+  } catch { return null }
+}
 
 function datumLabel(iso: string | null): string | null {
   const d = dagVan(iso)
@@ -76,7 +103,7 @@ function mensenVan(a: MobielActiviteit): string {
 function bereikVan(a: MobielActiviteit): { start: string | null; eind: string | null } {
   const dagen = [
     dagVan(a.gewenste_start), dagVan(a.deadline),
-    ...a.items.flatMap(i => [dagVan(i.start_dt), dagVan(i.eind_dt)]),
+    ...a.items.flatMap(i => [dagVanTijdstip(i.start_dt), dagVanTijdstip(i.eind_dt, true)]),
   ].filter(Boolean) as string[]
   if (dagen.length === 0) return { start: null, eind: null }
   dagen.sort()
@@ -419,7 +446,10 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
 
           const b = isAct
             ? { s: dagVan(rij.a.gewenste_start) ?? dagVan(rij.a.deadline), e: dagVan(rij.a.deadline) ?? dagVan(rij.a.gewenste_start) }
-            : { s: dagVan(rij.item.start_dt) ?? dagVan(rij.item.eind_dt), e: dagVan(rij.item.eind_dt) ?? dagVan(rij.item.start_dt) }
+            : {
+                s: dagVanTijdstip(rij.item.start_dt) ?? dagVanTijdstip(rij.item.eind_dt, true),
+                e: dagVanTijdstip(rij.item.eind_dt, true) ?? dagVanTijdstip(rij.item.start_dt),
+              }
 
           const left = b.s ? Math.max(0, offset(b.s)) : null
           const width = b.s && b.e ? Math.max(ppd, offset(b.e) + ppd - offset(b.s)) : null
@@ -460,13 +490,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                       background: isAct ? `${kleur}26` : kleur,
                       border: isAct ? `1.5px solid ${kleur}` : 'none',
                       display: 'flex', alignItems: 'center', paddingLeft: 5, overflow: 'hidden',
-                    }}>
-                      {!isAct && rij.item.uren != null && width > 34 && (
-                        <span style={{ fontSize: 9, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap' }}>
-                          {rij.item.uren}u
-                        </span>
-                      )}
-                    </div>
+                    }}/>
                   )}
                 </div>
               </div>
@@ -482,7 +506,6 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                   }} />
                   <div style={{ padding: '8px 10px', fontSize: 11, color: GRIJS, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {periodeLabel(rij.a) && <span>📅 {periodeLabel(rij.a)}</span>}
-                    {rij.a.geschatte_uren != null && <span>⏱ {rij.a.geschatte_uren}u</span>}
                     {mensenVan(rij.a) && <span>👤 {mensenVan(rij.a)}</span>}
                     {rij.a.locatie_adres && (
                       <a

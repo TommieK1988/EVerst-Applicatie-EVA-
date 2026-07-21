@@ -16,11 +16,11 @@ export default async function DetailplanningView({ dossierId }: { dossierId: str
   const { data } = await supabase
     .from('planning_activiteiten')
     .select(`
-      id, titel, status, gewenste_start, deadline, locatie_adres, volgorde, geschatte_uren,
+      id, titel, status, gewenste_start, deadline, locatie_adres, volgorde,
       fase_id,
       planning_fasen ( naam, volgorde ),
       planning_items (
-        id, medewerker_id, start_dt, eind_dt, uren,
+        id, medewerker_id, start_dt, eind_dt,
         medewerkers ( voornaam, tussenvoegsel, achternaam )
       )
     `)
@@ -40,7 +40,6 @@ export default async function DetailplanningView({ dossierId }: { dossierId: str
     deadline: a.deadline ?? null,
     locatie_adres: a.locatie_adres ?? null,
     volgorde: typeof a.volgorde === 'number' ? a.volgorde : 0,
-    geschatte_uren: a.geschatte_uren ?? null,
     fase_id: a.fase_id ? String(a.fase_id) : null,
     fase_naam: a.planning_fasen?.naam ?? null,
     fase_volgorde: a.planning_fasen?.volgorde ?? null,
@@ -50,7 +49,6 @@ export default async function DetailplanningView({ dossierId }: { dossierId: str
       medewerker_id: pi.medewerker_id ? String(pi.medewerker_id) : null,
       start_dt: pi.start_dt ?? null,
       eind_dt: pi.eind_dt ?? null,
-      uren: typeof pi.uren === 'number' ? pi.uren : null,
       naam: [pi.medewerkers?.voornaam, pi.medewerkers?.tussenvoegsel, pi.medewerkers?.achternaam]
         .filter(Boolean).join(' ') || null,
       voornaam: pi.medewerkers?.voornaam ?? null,
