@@ -35,6 +35,12 @@ export default function DossierTabStrip({
         borderBottom: '1px solid #e3e8ea', background: '#fff',
         position: 'sticky', top: 0, zIndex: 5,
         scrollbarWidth: 'none',
+        // LET OP — niet weghalen. Deze strook is een flex-item in de verticale
+        // kolom van MobielLayout. Door `overflow-x: auto` valt zijn `min-height:
+        // auto` terug op 0, dus zonder deze regel drukt de browser hem plat tot
+        // 1px (alleen de rand) zodra de tab-inhoud hoger is dan het scherm — de
+        // sub-tabs zijn dan onvindbaar, terwijl de kopbalk blijft staan.
+        flexShrink: 0,
       }}
     >
       {tabs.map(({ key, label }) => {
