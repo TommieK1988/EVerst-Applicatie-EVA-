@@ -7,7 +7,11 @@ import {
   type Voertuig,
   type HandboekRegel,
 } from '@everts/wagenpark-core'
-import type { UluUserInfo } from '@everts/wagenpark-core/compliance'
+import type {
+  AfwezigInfo,
+  RoosterInfo,
+  UluUserInfo,
+} from '@everts/wagenpark-core/compliance'
 import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { pgQuery, getPgPool } from '@/lib/wagenpark/db'
 import { ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
@@ -35,34 +39,53 @@ export async function runComplianceAction(): Promise<{
   // `tripsRes.data ?? []` en negeerde `tripsRes.error`), waarna de hele run
   // "geslaagd" meldde met nul bevindingen. Numerieke kolommen worden expliciet
   // naar float gecast, want node-postgres levert `numeric` als string.
-  const [trips, voertuigenRes, regelsRes, uluUsersRaw] = await Promise.all([
-    pgQuery<UluTrip & {
-      rit_type_override?: 'zakelijk' | 'prive' | null
-      rit_type_effectief?: 'zakelijk' | 'prive' | null
-    }>(
-      `select id::text, voertuig_id::text, medewerker_id::text, bestuurder_naam_raw,
-              user_id_ulu, kenteken, start_datum::text, start_tijd::text, stop_tijd::text,
-              adres_start, adres_stop,
-              afstand_km::float     as afstand_km,
-              duur_seconden,
-              km_stand_start::float as km_stand_start,
-              km_stand_stop::float  as km_stand_stop,
-              rit_type_ulu, rit_type_berekend::text, rit_type_override::text,
-              ${ritTypeEffectiefSql('t')} as rit_type_effectief,
-              score, import_batch_id::text, created_at::text
-         from public.ulu_trips t
-        where start_datum between $1::date and $2::date`,
-      [periodeStart, periodeEind],
-    ),
-    supabase.from('voertuigen').select('*'),
-    supabase.from('handboek_regels').select('*'),
-    pgQuery<UluUserInfo>(
-      `select id, volledige_naam, bijtelling_betaald,
-              prive_limiet_km_jaar, zakelijk_verwacht_km_jaar,
-              werktijd_start::text, werktijd_eind::text
-         from public.ulu_users`,
-    ),
-  ])
+  const [trips, voertuigenRes, regelsRes, uluUsersRaw, roostersRaw, afwezigheidRaw] =
+    await Promise.all([
+      pgQuery<UluTrip & {
+        rit_type_override?: 'zakelijk' | 'prive' | null
+        rit_type_effectief?: 'zakelijk' | 'prive' | null
+      }>(
+        `select id::text, voertuig_id::text, medewerker_id::text, bestuurder_naam_raw,
+                user_id_ulu, kenteken, start_datum::text, start_tijd::text, stop_tijd::text,
+                adres_start, adres_stop,
+                afstand_km::float     as afstand_km,
+                duur_seconden,
+                km_stand_start::float as km_stand_start,
+                km_stand_stop::float  as km_stand_stop,
+                rit_type_ulu, rit_type_berekend::text, rit_type_override::text,
+                ${ritTypeEffectiefSql('t')} as rit_type_effectief,
+                score, import_batch_id::text, created_at::text
+           from public.ulu_trips t
+          where start_datum between $1::date and $2::date`,
+        [periodeStart, periodeEind],
+      ),
+      supabase.from('voertuigen').select('*'),
+      supabase.from('handboek_regels').select('*'),
+      pgQuery<UluUserInfo>(
+        `select id, volledige_naam, bijtelling_betaald,
+                prive_limiet_km_jaar, zakelijk_verwacht_km_jaar,
+                medewerker_id::text as medewerker_id,
+                werktijd_start::text, werktijd_eind::text
+           from public.ulu_users`,
+      ),
+      // Roosters en afwezigheid voeden R9/R10: het rooster levert de werkdagen
+      // en de verwachte dagstart/dageind, verlof onderdrukt het signaal. Beide
+      // zijn kleine tabellen, dus we laden ze in hun geheel — de regels draaien
+      // synchroon en kunnen zelf niets opvragen.
+      pgQuery<RoosterInfo>(
+        `select medewerker_id::text as medewerker_id, geldig_vanaf::text, geldig_tot::text,
+                werkdagen, dagstart::text, dageind::text
+           from public.medewerker_roosters
+          order by medewerker_id, geldig_vanaf desc`,
+      ),
+      pgQuery<AfwezigInfo>(
+        `select medewerker_id::text as medewerker_id, type::text, start_datum::text,
+                eind_datum::text, start_tijd::text, eind_tijd::text
+           from public.medewerker_afwezigheid
+          where eind_datum >= $1::date and start_datum <= $2::date`,
+        [periodeStart, periodeEind],
+      ),
+    ])
 
   // Fouten hier niet inslikken: een mislukte laadstap zou anders een lege lijst
   // opleveren en de run ten onrechte als "geen bevindingen" laten eindigen.
@@ -86,7 +109,29 @@ export async function runComplianceAction(): Promise<{
   )
   const uluUsers = new Map(uluUsersRaw.map((u) => [u.id, u]))
 
-  const ctx = { trips: tripsEffectief, voertuigen, regels, periodeStart, periodeEind, uluUsers }
+  const roosters = new Map<string, RoosterInfo[]>()
+  for (const r of roostersRaw) {
+    const lijst = roosters.get(r.medewerker_id) ?? []
+    lijst.push(r)
+    roosters.set(r.medewerker_id, lijst)
+  }
+  const afwezigheid = new Map<string, AfwezigInfo[]>()
+  for (const a of afwezigheidRaw) {
+    const lijst = afwezigheid.get(a.medewerker_id) ?? []
+    lijst.push(a)
+    afwezigheid.set(a.medewerker_id, lijst)
+  }
+
+  const ctx = {
+    trips: tripsEffectief,
+    voertuigen,
+    regels,
+    periodeStart,
+    periodeEind,
+    uluUsers,
+    roosters,
+    afwezigheid,
+  }
   const result = Compliance.runComplianceEngine(ctx)
 
   // R8 — parkeer-analyses (apart, want werkt op ulu_parking i.p.v. ulu_trips)
@@ -216,18 +261,13 @@ export async function runComplianceAction(): Promise<{
     // verouderde open bevindingen kwijt (trip is bv. verwijderd), maar behouden
     // we behandelde status.
     const nieuweFingerprints = uniek.map((u) => u.fingerprint)
-    // R11 uitzonderen: die bevindingen komen uit de werktijd-analyse (eigen job,
-    // async data) en zitten dus niet in het resultaat van deze run. Zonder deze
-    // uitzondering zou elke compliance-check ze weggooien.
-    //
-    // Handmatig toegekende bevindingen om dezelfde reden: die produceert deze
+    // Handmatig toegekende bevindingen blijven buiten schot: die produceert deze
     // run per definitie niet opnieuw, dus zonder de bron-filter zou een planner
     // zijn eigen signaal bij de eerstvolgende check kwijtraken.
     await client.query(
       `delete from public.compliance_bevindingen
         where status = 'open'
           and bron = 'automatisch'
-          and regel_code <> 'R11'
           and periode_start >= $1::date
           and (fingerprint is null or not (fingerprint = any($2::text[])))`,
       [periodeStart, nieuweFingerprints],
@@ -273,12 +313,19 @@ export async function runComplianceAction(): Promise<{
       // Nieuw ingevoegde (xmax = 0), nog openstaande werktijd-signalen verzamelen
       // voor een actieve melding naar beheer. Update-conflicts (bestaande
       // bevindingen) worden niet opnieuw gemeld.
+      //
+      // Alleen het anker van een ritketen: één te late aankomst kan over
+      // meerdere ritten verdeeld zijn (tankstop, opgesplitste registratie) en
+      // die krijgen elk een bevinding. Zonder deze filter zou beheer twee of
+      // drie meldingen krijgen over hetzelfde moment.
+      const bevData = (b.data ?? {}) as Record<string, unknown>
       if (
         ins.rows[0]?.was_insert &&
         nieuweStatus === 'open' &&
-        (b.regel_code === 'R9' || b.regel_code === 'R10')
+        (b.regel_code === 'R9' || b.regel_code === 'R10') &&
+        bevData.keten_rol !== 'deel'
       ) {
-        const uid = (b.data as Record<string, unknown> | undefined)?.user_id_ulu
+        const uid = bevData.user_id_ulu
         nieuweWerktijdSignalen.push({
           regel_code: b.regel_code,
           omschrijving: b.omschrijving,

@@ -518,18 +518,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/wagenpark\/werktijden$/, {
-    title: 'Wagenpark — Werktijden',
-    description: 'Aanwezigheid op de werkplek afgeleid uit de rittenregistratie. Bepaalt per bestuurder wanneer hij op de werkplek aankwam en weer vertrok, door te kijken welke ritten binnen een straal (standaard 500 m) rond de ingeplande projectlocatie van die dag beginnen of eindigen. De grens voor "te laat" en "te vroeg" komt uit het rooster. Vertrouwelijk: alleen zichtbaar voor Directie/beheer.',
-    sections: [
-      { title: 'Wat is "de werkplek"?', body: 'De projectlocatie waar de medewerker die dag is ingepland (dossier-werkadres uit de planning). Meerdere locaties op één dag kan: aankomst telt bij de eerste, vertrek bij de laatste. Is er die dag geen planning, dan valt de werkplek terug op het bedrijfsadres.' },
-      { title: 'Aankomst en vertrek', body: 'Aankomst = de eerste rit die binnen de straal van een ingeplande locatie eindigt. Vertrek = de laatste rit die binnen de straal ervan start. Zo tel je echt "op de werkplek", niet het moment van vertrek thuis.' },
-      { title: 'Te laat / te vroeg', body: 'De uiterste aankomst en het vroegste vertrek komen uit het rooster (dagstart/dageind) van de medewerker — dus 07:30 of 08:00 per persoon. Verlof of afwezigheid op een dag onderdrukt het signaal voor die dag.' },
-      { title: 'Dagelijks en maandelijks', body: 'Elke werkdag krijgt Directie/beheer een in-app samenvatting van wie te laat was of te vroeg vertrok. Op de 1e van de maand wordt per bestuurder een volledige analyse van de vorige maand klaargezet, met een PDF om te downloaden.' },
-      { title: 'Adressen geocoderen', body: 'De analyse heeft coördinaten nodig van de woonadressen en het bedrijfsadres; ingeplande projectlocaties worden automatisch omgezet. Ontbreekt er iets, draai dan "Adressen geocoderen". Pas de straal en marges aan via Instellingen (regel R11).' },
-    ],
-  }],
-
   [/^\/wagenpark\/bestuurders$/, {
     title: 'Wagenpark — Bestuurders',
     description: 'Overzicht van alle geregistreerde bestuurders met bijtelling­status, gekoppeld voertuig, kilometers (YTD zakelijk/privé), prognose en openstaande bevindingen.',

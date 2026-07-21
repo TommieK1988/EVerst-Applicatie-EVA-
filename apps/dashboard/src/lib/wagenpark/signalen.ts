@@ -5,8 +5,8 @@
  * afhandelt:
  *
  *  - **Rit-gebonden** (R1 werktijden, R3 buitenland, R7 weekend-markering,
- *    R9 te laat, R10 te vroeg, R11 werktijd-analyse) — gaan over één rit en
- *    staan in de signaal-kolom op /wagenpark/ritten.
+ *    R9 te laat, R10 te vroeg) — gaan over één rit en staan in de
+ *    signaal-kolom op /wagenpark/ritten.
  *  - **Persoonlijk** (R2a/R2b privé-km, R6 rijgedrag) — gaan over een bestuurder
  *    over een periode en staan op de bestuurderspagina.
  *  - **Parkeren** (R8) — hangen aan een parkeer-record of aan een maandtotaal

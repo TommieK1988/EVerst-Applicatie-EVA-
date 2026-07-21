@@ -2,7 +2,9 @@ import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import { Settings } from 'lucide-react'
 import RegelEditor from '@/components/wagenpark/instellingen/RegelEditor'
+import GeocodeKnop from '@/components/wagenpark/instellingen/GeocodeKnop'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +18,7 @@ type RegelRij = {
 }
 
 export default async function InstellingenPage() {
+  const magAdressen = await magPriveRittenZien()
   let regels: RegelRij[] = []
   let verbindingsfout: string | null = null
   try {
@@ -68,6 +71,22 @@ export default async function InstellingenPage() {
           </div>
         )}
       </section>
+
+      {magAdressen && (
+        <section className="mt-6 bg-white rounded-lg border">
+          <div className="px-5 py-3 border-b">
+            <h2 className="text-sm font-semibold text-slate-700">Adresgegevens</h2>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-slate-600 mb-3">
+              Zet de woonadressen van medewerkers en de adressen van de vestigingen om naar
+              coördinaten. Nodig voor alles wat afstanden tot een adres berekent. Een koude
+              ronde kapt af na een minuut of twee — de melding vertelt of er nog adressen wachten.
+            </p>
+            <GeocodeKnop />
+          </div>
+        </section>
+      )}
 
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-900">
         <strong>Let op:</strong> alleen drempelwaardes binnen bestaande regels zijn via deze UI aan te

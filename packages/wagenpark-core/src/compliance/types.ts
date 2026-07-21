@@ -4,6 +4,7 @@ import type {
   UluTrip,
   Voertuig,
 } from '../types'
+import type { AfwezigInfo, RoosterInfo } from './rules/werkdag'
 
 /** Beperkte shape van ulu_users — alleen wat regels nodig hebben. */
 export type UluUserInfo = {
@@ -12,9 +13,14 @@ export type UluUserInfo = {
   bijtelling_betaald: boolean
   prive_limiet_km_jaar: number | null
   zakelijk_verwacht_km_jaar: number | null
-  /** Verwachte start-tijd werkdag, "HH:MM". Null = regel niet van toepassing. */
+  /** Koppeling naar public.medewerkers — nodig voor rooster en afwezigheid. */
+  medewerker_id: string | null
+  /**
+   * Verwachte werktijden uit het bestuurderprofiel. Alleen terugval: het
+   * rooster (medewerker_roosters) is leidend en veel bestuurders hebben deze
+   * velden leeg staan.
+   */
   werktijd_start: string | null
-  /** Verwachte eind-tijd werkdag, "HH:MM". */
   werktijd_eind: string | null
 }
 
@@ -32,6 +38,14 @@ export type ComplianceContext = {
   voertuigen: Map<string, Voertuig>
   /** ULU-bestuurders, geïndexeerd op ulu user_id. Optioneel (oude sync-data). */
   uluUsers?: Map<number, UluUserInfo>
+  /**
+   * Werkroosters per medewerker_id, aflopend gesorteerd op geldig_vanaf.
+   * Bepaalt welke dagen werkdagen zijn en wat de verwachte dagstart/dageind is
+   * (R9/R10). Ontbreekt de map, dan vallen die regels terug op ulu_users.
+   */
+  roosters?: Map<string, RoosterInfo[]>
+  /** Verlof en ander verzuim per medewerker_id — onderdrukt R9/R10 die dag. */
+  afwezigheid?: Map<string, AfwezigInfo[]>
   /** Actieve regels uit de DB. */
   regels: Map<string, HandboekRegel>
 }

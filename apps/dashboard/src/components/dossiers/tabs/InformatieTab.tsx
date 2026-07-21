@@ -483,9 +483,9 @@ export function InformatieTab({
     : null
 
   // Werkadres-kwaliteit: Opdracht- en Servicedesk-dossiers hebben een CONCREET
-  // werkadres nodig (straat + plaats). Dit adres bepaalt o.a. de aanwezigheid op
-  // locatie in de wagenpark-werktijd-analyse. Een leeg adres of een aanduiding als
-  // "Diverse adressen" / "nader te bepalen" telt niet als concreet.
+  // werkadres nodig (straat + plaats). Daarop varen de planning, de werkbon en de
+  // monteur die er naartoe moet. Een leeg adres of een aanduiding als "Diverse
+  // adressen" / "nader te bepalen" telt niet als concreet.
   const werkStraat = String((dossier as any).werkadres_straat ?? '').trim()
   const werkStad = String((dossier as any).werkadres_stad ?? '').trim()
   const werkadresNietConcreet =
@@ -938,9 +938,9 @@ export function InformatieTab({
           <strong>⚠ Concreet werkadres vereist</strong>
           <div style={{ margin: '6px 0 0', lineHeight: 1.5 }}>
             Vul voor dit {sectie === 'servicedesk' ? 'servicedesk-' : 'opdracht'}dossier een concreet
-            werkadres in (straat + huisnummer, postcode en plaats). Dit adres bepaalt onder andere de
-            aanwezigheid op locatie in de wagenpark-werktijd-analyse; een leeg adres of een aanduiding
-            als “Diverse adressen” kan daarvoor niet worden gebruikt.
+            werkadres in (straat + huisnummer, postcode en plaats). Dit adres komt terug op de
+            planning en de werkbon, en is waar de monteur naartoe rijdt; met een leeg adres of een
+            aanduiding als “Diverse adressen” kan hij niets.
             {bouw7Vergrendeld && bouw7Url && (
               <> Dit dossier komt uit Bouw7 — pas het werkadres aan in{' '}
                 <a href={bouw7Url} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>Bouw7</a>.

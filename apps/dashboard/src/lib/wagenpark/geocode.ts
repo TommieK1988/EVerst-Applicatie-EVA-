@@ -2,11 +2,11 @@ import 'server-only'
 import { pgQuery } from './db'
 
 /**
- * Geocoding voor de wagenpark-werktijd-analyse.
+ * Geocoding voor de wagenpark-module.
  *
  * Adressen staan overal als vrije tekst (medewerker-woonadres, bedrijfsadres,
- * rit-start/-stop). Om "binnen X meter van werk/huis" te kunnen bepalen zetten
- * we die tekst om naar coördinaten via Nominatim (OpenStreetMap, gratis).
+ * rit-start/-stop). Om afstanden tussen die punten te kunnen berekenen zetten we
+ * die tekst om naar coördinaten via Nominatim (OpenStreetMap, gratis).
  *
  * Nominatim-gebruiksvoorwaarden: max ~1 request/seconde en een geldige
  * User-Agent met contact. Daarom throttelen we live-calls en cachen we élk

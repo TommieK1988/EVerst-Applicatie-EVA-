@@ -1,102 +1,163 @@
 /**
- * R10 — Te vroeg weg van werk.
+ * R10 — Te vroeg vertrokken van het werk.
  *
- * Laatste rit van de werkdag eindigt ruim voor verwachte werktijd_eind − marge.
- * Alleen actief voor bestuurders waar werktijd_eind is ingesteld (ulu_users).
+ * Het spiegelbeeld van R9: het vertrek van het werk is het BEGIN van de laatste
+ * zakelijke ritketen van de dag (zie `werkdag.ts`). Ligt dat vóór het dageind
+ * uit het rooster, dan is de bestuurder te vroeg weg.
  *
- * Logica per (bestuurder × werkdag):
- *  - Laatste rit op die dag (hoogste start_tijd)
- *  - Bepaal effectieve eind-tijd: stop_tijd, anders start_tijd van laatste rit
- *  - Als feitelijke eind < werktijd_eind − marge → bevinding
- *  - Alleen weekdagen (ma-vr)
+ * "Laatste keten" en niet "eerste rit richting huis": wie om 14:49 van de bouw
+ * naar het eigen depot rijdt en daar nog een half uur bezig is, vertrok pas om
+ * 15:41 van het werk. Andersom telt een tankstop van vier minuten onderweg naar
+ * huis niet als werkplek — die rit hoort bij dezelfde keten.
+ *
+ * De regel slaat de dag over als de laatste keten ook de eerste is. Dan is er
+ * maar één verplaatsing bekend (auto blijft staan, of de rittensync is
+ * onvolledig) en zou de heenreis van 's ochtends als vertrektijd gelden — goed
+ * voor een signaal van vele uren te vroeg.
  */
 
 import type { ComplianceBevindingInput, UluTrip } from '../../types'
 import type { RuleModule, UluUserInfo } from '../types'
-
-function parseHM(t: string): number {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
-function isoWeekdag(dateStr: string): number {
-  return new Date(dateStr + 'T12:00:00Z').getUTCDay()
-}
-
-const dagNamen = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag']
+import {
+  DAG_NAMEN,
+  bouwKetens,
+  duurLabel,
+  afwezigheidOpDag,
+  isoWeekdag,
+  ketenVertrek,
+  vandaagNL,
+  verwachteTijden,
+  zakelijkeRittenPerDag,
+} from './werkdag'
 
 export const R10: RuleModule = {
   code: 'R10',
-  runner: ({ trips, uluUsers, regels }) => {
-    const regel = regels.get('R10')
-    const cfg = (regel?.drempel_config ?? {}) as Record<string, number>
-    const margeMin = cfg.marge_minuten ?? 30
+  runner: ({ trips, uluUsers, regels, roosters, afwezigheid }) => {
+    const cfg = (regels.get('R10')?.drempel_config ?? {}) as Record<string, number>
+    const margeMin = cfg.marge_minuten ?? 0
+    const pauzeMin = cfg.keten_pauze_min ?? 5
+    const overtredingVanaf = cfg.overtreding_vanaf_min ?? 5
 
     if (!uluUsers) return []
 
-    type DayKey = string
-    const laatste = new Map<
-      DayKey,
-      { user: UluUserInfo; datum: string; laatsteTrip: UluTrip }
-    >()
-
-    for (const t of trips) {
-      if (t.user_id_ulu == null) continue
-      const user = uluUsers.get(t.user_id_ulu)
-      if (!user?.werktijd_eind) continue
-      const dow = isoWeekdag(t.start_datum)
-      if (dow === 0 || dow === 6) continue
-
-      const key = `${t.user_id_ulu}|${t.start_datum}`
-      const huidige = laatste.get(key)
-      if (!huidige || t.start_tijd > huidige.laatsteTrip.start_tijd) {
-        laatste.set(key, { user, datum: t.start_datum, laatsteTrip: t })
-      }
-    }
-
+    const vandaag = vandaagNL()
     const out: ComplianceBevindingInput[] = []
-    for (const { user, datum, laatsteTrip } of Array.from(laatste.values())) {
-      if (!user.werktijd_eind) continue
-      const verwacht = parseHM(user.werktijd_eind)
-      // Effectieve eindtijd: stop_tijd indien bekend, anders start_tijd
-      const eindTijd = laatsteTrip.stop_tijd ?? laatsteTrip.start_tijd
-      const feitelijk = parseHM(eindTijd.slice(0, 5))
-      const verschil = verwacht - feitelijk
 
-      if (verschil <= margeMin) continue
+    for (const { userId, datum, ritten: dagRitten } of zakelijkeRittenPerDag(trips)) {
+      if (datum >= vandaag) continue
 
-      const ernst: 'info' | 'waarschuwing' | 'overtreding' =
-        verschil > 90 ? 'waarschuwing' : 'info'
-      const dag = dagNamen[isoWeekdag(datum)]
-      const label = user.volledige_naam ?? `Bestuurder #${user.id}`
+      const user = uluUsers.get(userId!)
+      if (!user) continue
 
-      out.push({
-        regel_code: 'R10',
-        voertuig_id: laatsteTrip.voertuig_id ?? null,
-        medewerker_id: null,
-        trip_id: laatsteTrip.id,
-        periode_start: datum,
-        periode_eind: datum,
-        ernst,
-        omschrijving:
-          `${label}: op ${dag} ${datum} laatste rit eindigde om ${eindTijd.slice(0, 5)} — ` +
-          `${verschil} min voor verwacht werktijd-eind (${user.werktijd_eind.slice(0, 5)}).`,
-        data: {
-          user_id_ulu: user.id,
-          werktijd_eind: user.werktijd_eind.slice(0, 5),
-          feitelijk_eind: eindTijd.slice(0, 5),
-          verschil_minuten: verschil,
-          marge_minuten: margeMin,
-          dag,
-          adres_start: laatsteTrip.adres_start,
-          adres_stop: laatsteTrip.adres_stop,
-          uitleg_regel:
-            `Vergelijkt de laatste rit van de dag met de verwachte eind-werktijd ` +
-            `van de bestuurder. Marge: ${margeMin} min. Verschil >90 min wordt waarschuwing. ` +
-            `Regel vuurt alleen als werktijd_eind is ingesteld in het bestuurder-profiel.`,
-        },
-      })
+      const mwRoosters = user.medewerker_id ? roosters?.get(user.medewerker_id) ?? [] : []
+      const { isWerkdag, eind, eindLabel, benadering } = verwachteTijden(datum, mwRoosters, user)
+      if (!isWerkdag || eind == null) continue
+
+      if (
+        user.medewerker_id &&
+        afwezigheidOpDag(datum, afwezigheid?.get(user.medewerker_id) ?? [])
+      ) {
+        continue
+      }
+
+      const ketens = bouwKetens(dagRitten, pauzeMin)
+      // Eén keten = alleen de heenreis bekend; daar is geen vertrek uit af te leiden.
+      if (ketens.length < 2) continue
+
+      const laatste = ketens[ketens.length - 1]
+      const { trip: ankerTrip, minuten: vertrek } = ketenVertrek(laatste)
+      if (vertrek == null) continue
+
+      const verschil = eind - margeMin - vertrek
+      if (verschil <= 0) continue
+
+      out.push(...bouwBevindingen(laatste, ankerTrip, {
+        user,
+        datum,
+        verschil,
+        vertrek,
+        eindLabel,
+        benadering,
+        margeMin,
+        pauzeMin,
+        overtredingVanaf,
+      }))
     }
+
     return out
   },
+}
+
+type Context = {
+  user: UluUserInfo
+  datum: string
+  verschil: number
+  vertrek: number
+  eindLabel: string | null
+  benadering: boolean
+  margeMin: number
+  pauzeMin: number
+  overtredingVanaf: number
+}
+
+function hm(minuten: number): string {
+  const u = Math.floor(minuten / 60)
+  const m = minuten % 60
+  return `${String(u).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function bouwBevindingen(
+  keten: UluTrip[],
+  anker: UluTrip,
+  ctx: Context,
+): ComplianceBevindingInput[] {
+  const { user, datum, verschil } = ctx
+  const naam = user.volledige_naam ?? `Bestuurder #${user.id}`
+  const dag = DAG_NAMEN[isoWeekdag(datum)]
+
+  const gedeeldeData = {
+    user_id_ulu: user.id,
+    soort: 'te_vroeg',
+    datum,
+    dag,
+    verwacht_eind: ctx.eindLabel,
+    vertrek_werk: hm(ctx.vertrek),
+    verschil_minuten: verschil,
+    marge_minuten: ctx.margeMin,
+    keten_pauze_min: ctx.pauzeMin,
+    overtreding_vanaf_min: ctx.overtredingVanaf,
+    keten_trip_ids: keten.map((t) => t.id),
+    rooster_benadering: ctx.benadering,
+    uitleg_regel:
+      'Vertrek van het werk = het begin van de laatste zakelijke ritketen van de dag. ' +
+      `Ritten met minder dan ${ctx.pauzeMin} minuten ertussen tellen als één rit, zodat een ` +
+      'tankstop onderweg naar huis het vertrekmoment niet verschuift. De grens is het dageind ' +
+      'uit het werkrooster. Verlof onderdrukt het signaal, en een dag met maar één ritketen ' +
+      `wordt overgeslagen. Tot en met ${ctx.overtredingVanaf} minuten te vroeg is een ` +
+      'waarschuwing, daarboven een overtreding.',
+  }
+
+  // Alle ritten van de keten krijgen dezelfde ernst: het gaat om één te vroeg
+  // vertrek, alleen verdeeld over meerdere geregistreerde ritten.
+  const ernst = verschil > ctx.overtredingVanaf ? 'overtreding' : 'waarschuwing'
+
+  return keten.map((trip) => {
+    const isAnker = trip.id === anker.id
+    return {
+      regel_code: 'R10',
+      voertuig_id: trip.voertuig_id ?? null,
+      medewerker_id: null,
+      trip_id: trip.id,
+      periode_start: datum,
+      periode_eind: datum,
+      ernst,
+      omschrijving: isAnker
+        ? `${naam}: op ${dag} ${datum} om ${hm(ctx.vertrek)} van het werk vertrokken — ` +
+          `${duurLabel(verschil)} voor de roostertijd (${ctx.eindLabel}).` +
+          (keten.length > 1 ? ` De thuisreis bestaat uit ${keten.length} ritten.` : '')
+        : `${naam}: deel van de thuisreis op ${dag} ${datum}, die om ${hm(ctx.vertrek)} begon — ` +
+          `${duurLabel(verschil)} voor de roostertijd (${ctx.eindLabel}).`,
+      data: { ...gedeeldeData, keten_rol: isAnker ? 'anker' : 'deel' },
+    }
+  })
 }

@@ -51,7 +51,7 @@ export default async function RittenPage() {
              bev.bevindingen
         from public.ulu_trips t
         -- Open compliance-bevindingen die aan déze rit hangen (R1, R3, R7, R9,
-        -- R10, R11). Persoonlijke signalen (privé-km, rijgedrag) en parkeren
+        -- R10). Persoonlijke signalen (privé-km, rijgedrag) en parkeren
         -- horen op de bestuurderspagina — zie lib/wagenpark/signalen.ts.
         left join lateral (
           select coalesce(
