@@ -14,7 +14,7 @@ import {
   type ComboboxOption,
 } from '@/components/ui'
 import {
-  getTriggersVoorSjabloon, upsertTrigger, verwijderTrigger,
+  getTriggersVoorSjabloon, upsertTrigger, verwijderTrigger, getMedewerkerTriggerRefData,
   type ActielijstTrigger, type TriggerConditie,
 } from '@/app/(platform)/taken/actions/sjablonen'
 import { getToggleDefinities, type ToggleDefinitie } from '@/app/(platform)/instellingen/dossier-toggles/actions'
@@ -23,7 +23,7 @@ import { zoekRelaties, getUniekeBouw7Categorieen } from '@/lib/dossiers/actions'
 
 // ─── Statische keuzelijsten ───────────────────────────────────────────────────
 
-const EVENT_TYPES = [
+const EVENT_TYPES_DOSSIER = [
   { value: 'dossier_status',     label: 'Dossier bereikt status' },
   { value: 'dossier_aangemaakt', label: 'Dossier aangemaakt' },
   { value: 'rol_toegewezen',     label: 'Rol toegewezen' },
@@ -31,6 +31,35 @@ const EVENT_TYPES = [
   { value: 'bedrag_drempel',     label: 'Bedrag boven drempel' },
   { value: 'toggle_aan',         label: 'Toggle aangezet' },
 ]
+
+const EVENT_TYPES_MEDEWERKER = [
+  { value: 'medewerker_aangemaakt',  label: 'Medewerker aangemaakt' },
+  { value: 'medewerker_veld_waarde', label: 'Veld krijgt waarde' },
+  { value: 'medewerker_datum_gezet', label: 'Datum ingevuld of gewijzigd' },
+  { value: 'medewerker_attribuut',   label: 'Eigen veld krijgt waarde' },
+]
+
+/** Velden op de medewerker die als event/conditie kunnen dienen (spiegel van de whitelist). */
+const MEDEWERKER_VELD_OPTIES = [
+  { value: 'functie',  label: 'Functie' },
+  { value: 'afdeling', label: 'Afdeling' },
+  { value: 'actief',   label: 'Actief' },
+]
+const MEDEWERKER_CONDITIE_VELDEN = [
+  ...MEDEWERKER_VELD_OPTIES,
+  { value: 'extern', label: 'Extern (ZZP/uitzend)' },
+]
+const MEDEWERKER_DATUM_OPTIES = [
+  { value: 'in_dienst_vanaf', label: 'In dienst vanaf' },
+  { value: 'uit_dienst_per',  label: 'Uit dienst per' },
+]
+const JA_NEE = [{ value: 'true', label: 'Ja' }, { value: 'false', label: 'Nee' }]
+
+interface MedewerkerRefData {
+  functies: string[]
+  afdelingen: string[]
+  attributen: { id: string; naam: string }[]
+}
 
 const SUBSTATUSSEN_PER_FASE: Record<string, { value: string; label: string }[]> = {
   aanvraag: [
@@ -115,13 +144,24 @@ const nieuweKey = () => `t${keyCounter++}`
 const sel = 'w-full appearance-none border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400'
 const inp = 'w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400'
 
-export default function SjabloonTriggers({ templateId }: { templateId: string }) {
+export default function SjabloonTriggers({
+  templateId,
+  context = 'dossier',
+}: {
+  templateId: string
+  /** Sjabloon-context: bepaalt welke events en condities beschikbaar zijn. */
+  context?: 'dossier' | 'medewerker'
+}) {
+  const isMedewerker = context === 'medewerker'
+  const eventTypes = isMedewerker ? EVENT_TYPES_MEDEWERKER : EVENT_TYPES_DOSSIER
+
   const [open, setOpen] = useState(false)
   const [refDataGeladen, setRefDataGeladen] = useState(false)
   const [triggers, setTriggers] = useState<DraftTrigger[]>([])
   const [categorieen, setCategorieen] = useState<string[]>([])
   const [bouw7Categorieen, setBouw7Categorieen] = useState<string[]>([])
   const [toggles, setToggles] = useState<ToggleDefinitie[]>([])
+  const [medewerkerRef, setMedewerkerRef] = useState<MedewerkerRefData>({ functies: [], afdelingen: [], attributen: [] })
   const [, startT] = useTransition()
 
   // Triggers direct op mount laden zodat de knop het aantal kan tonen.
@@ -139,10 +179,14 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
   useEffect(() => {
     if (!open || refDataGeladen) return
     setRefDataGeladen(true)
+    if (isMedewerker) {
+      getMedewerkerTriggerRefData().then(setMedewerkerRef).catch(() => {})
+      return
+    }
     getDossierCategorieen().then(setCategorieen).catch(() => {})
     getUniekeBouw7Categorieen().then(setBouw7Categorieen).catch(() => {})
     getToggleDefinities().then(d => setToggles(d.filter(t => t.actief))).catch(() => {})
-  }, [open, refDataGeladen])
+  }, [open, refDataGeladen, isMedewerker])
 
   function patch(key: string, change: Partial<DraftTrigger>) {
     setTriggers(prev => prev.map(t => t.localKey === key ? { ...t, ...change } : t))
@@ -150,7 +194,7 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
 
   function voegToe() {
     setTriggers(prev => [...prev, {
-      localKey: nieuweKey(), event_type: 'dossier_status', event_config: {}, condities: [],
+      localKey: nieuweKey(), event_type: eventTypes[0].value, event_config: {}, condities: [],
       conditie_logica: 'en', actief: true,
     }])
   }
@@ -202,9 +246,19 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
           <DrawerHeader>
             <DrawerTitle>Triggers</DrawerTitle>
             <DrawerDescription>
-              Elke trigger activeert dit sjabloon zodra de gebeurtenis plaatsvindt en alle condities kloppen —
-              één keer per dossier. Een status-trigger vuurt op de status <em>nadat</em> het dossier die fase
-              bereikt; condities worden op dat moment gecheckt.
+              {isMedewerker ? (
+                <>
+                  Elke trigger activeert dit sjabloon zodra de gebeurtenis in het medewerkerdossier plaatsvindt
+                  en alle condities kloppen — één keer per medewerker. Let op: ook de Bouw7-sync kan medewerkers
+                  aanmaken of wijzigen; gebruik condities (bijv. Extern = Nee) om die buiten te sluiten.
+                </>
+              ) : (
+                <>
+                  Elke trigger activeert dit sjabloon zodra de gebeurtenis plaatsvindt en alle condities kloppen —
+                  één keer per dossier. Een status-trigger vuurt op de status <em>nadat</em> het dossier die fase
+                  bereikt; condities worden op dat moment gecheckt.
+                </>
+              )}
             </DrawerDescription>
           </DrawerHeader>
           <DrawerBody>
@@ -219,6 +273,9 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
                 <TriggerKaart
                   key={t.localKey}
                   trigger={t}
+                  eventTypes={eventTypes}
+                  isMedewerker={isMedewerker}
+                  medewerkerRef={medewerkerRef}
                   categorieen={categorieen}
                   bouw7Categorieen={bouw7Categorieen}
                   toggles={toggles}
@@ -242,9 +299,13 @@ export default function SjabloonTriggers({ templateId }: { templateId: string })
 // ─── Eén trigger-kaart ────────────────────────────────────────────────────────
 
 function TriggerKaart({
-  trigger, categorieen, bouw7Categorieen, toggles, onPatch, onBewaar, onVerwijder,
+  trigger, eventTypes, isMedewerker, medewerkerRef,
+  categorieen, bouw7Categorieen, toggles, onPatch, onBewaar, onVerwijder,
 }: {
   trigger: DraftTrigger
+  eventTypes: { value: string; label: string }[]
+  isMedewerker: boolean
+  medewerkerRef: MedewerkerRefData
   categorieen: string[]
   bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
@@ -255,11 +316,18 @@ function TriggerKaart({
   const cfg = trigger.event_config
   const setCfg = (c: Record<string, unknown>) => onPatch({ event_config: c })
 
+  // Waardelijst bij het gekozen medewerker-veld; 'actief' is een ja/nee-vlag.
+  const medewerkerWaarden =
+    cfg.veld === 'functie'  ? medewerkerRef.functies.map(v => ({ value: v, label: v }))
+    : cfg.veld === 'afdeling' ? medewerkerRef.afdelingen.map(v => ({ value: v, label: v }))
+    : cfg.veld === 'actief'   ? JA_NEE
+    : []
+
   return (
     <div className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50/50">
       <div className="flex items-center gap-2">
         <select value={trigger.event_type} onChange={e => onPatch({ event_type: e.target.value, event_config: {} })} className={sel}>
-          {EVENT_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {eventTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <button onClick={onVerwijder} className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0" title="Verwijderen">
           <Trash2 className="w-3.5 h-3.5" />
@@ -329,10 +397,49 @@ function TriggerKaart({
         </select>
       )}
 
+      {/* Event-config: medewerker-context */}
+      {trigger.event_type === 'medewerker_veld_waarde' && (
+        <div className="grid grid-cols-2 gap-2">
+          <select value={(cfg.veld as string) ?? ''} onChange={e => setCfg({ veld: e.target.value, waarde: '' })} className={sel}>
+            <option value="">— Veld —</option>
+            {MEDEWERKER_VELD_OPTIES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+          </select>
+          <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} disabled={!cfg.veld} className={sel}>
+            <option value="">— Waarde —</option>
+            {medewerkerWaarden.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+          </select>
+        </div>
+      )}
+
+      {trigger.event_type === 'medewerker_datum_gezet' && (
+        <select value={(cfg.veld as string) ?? ''} onChange={e => setCfg({ veld: e.target.value })} className={sel}>
+          <option value="">— Kies datum —</option>
+          {MEDEWERKER_DATUM_OPTIES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+      )}
+
+      {trigger.event_type === 'medewerker_attribuut' && (
+        <div className="grid grid-cols-2 gap-2">
+          <select value={(cfg.definitie_id as string) ?? ''} onChange={e => setCfg({ definitie_id: e.target.value, waarde: '' })} className={sel}>
+            <option value="">— Eigen veld —</option>
+            {medewerkerRef.attributen.map(a => <option key={a.id} value={a.id}>{a.naam}</option>)}
+          </select>
+          <input
+            type="text"
+            value={(cfg.waarde as string) ?? ''}
+            onChange={e => setCfg({ ...cfg, waarde: e.target.value })}
+            placeholder="Elke waarde"
+            className={inp}
+          />
+        </div>
+      )}
+
       {/* Condities */}
       <CondititesEditor
         condities={trigger.condities}
         logica={trigger.conditie_logica}
+        isMedewerker={isMedewerker}
+        medewerkerRef={medewerkerRef}
         categorieen={categorieen}
         bouw7Categorieen={bouw7Categorieen}
         toggles={toggles}
@@ -356,10 +463,13 @@ function TriggerKaart({
 // ─── Condities-editor ─────────────────────────────────────────────────────────
 
 function CondititesEditor({
-  condities, logica, categorieen, bouw7Categorieen, toggles, onChange, onLogicaChange,
+  condities, logica, isMedewerker, medewerkerRef,
+  categorieen, bouw7Categorieen, toggles, onChange, onLogicaChange,
 }: {
   condities: TriggerConditie[]
   logica: 'en' | 'of'
+  isMedewerker: boolean
+  medewerkerRef: MedewerkerRefData
   categorieen: string[]
   bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
@@ -369,8 +479,67 @@ function CondititesEditor({
   function set(i: number, c: TriggerConditie) {
     onChange(condities.map((x, idx) => idx === i ? c : x))
   }
-  function voegToe() { onChange([...condities, { soort: 'veld', veld: 'categorie', op: 'eq', waarde: '' }]) }
+  function voegToe() {
+    onChange([...condities, isMedewerker
+      ? { soort: 'veld', veld: 'functie', op: 'eq', waarde: '' }
+      : { soort: 'veld', veld: 'categorie', op: 'eq', waarde: '' }])
+  }
   function verwijder(i: number) { onChange(condities.filter((_, idx) => idx !== i)) }
+
+  // Medewerker-condities kennen alleen veld-condities; de waardelijst hangt aan het veld.
+  const waardenVoorVeld = (veld?: string) =>
+    veld === 'functie'  ? medewerkerRef.functies.map(v => ({ value: v, label: v }))
+    : veld === 'afdeling' ? medewerkerRef.afdelingen.map(v => ({ value: v, label: v }))
+    : JA_NEE   // actief / extern
+
+  if (isMedewerker) {
+    return (
+      <div className="border-t border-slate-200 pt-2 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
+            Condities
+            {condities.length < 2 && <span className="normal-case tracking-normal"> (alle moeten kloppen)</span>}
+          </p>
+          {condities.length >= 2 && (
+            <select
+              value={logica}
+              onChange={e => onLogicaChange(e.target.value as 'en' | 'of')}
+              className="appearance-none border border-slate-200 rounded-lg px-2 py-1 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="en">alle condities (EN)</option>
+              <option value="of">één van de condities (OF)</option>
+            </select>
+          )}
+        </div>
+        {condities.map((c, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <div className="flex-1 grid grid-cols-3 gap-1.5">
+              <select
+                value={c.veld ?? ''}
+                onChange={e => set(i, { soort: 'veld', veld: e.target.value, op: 'eq', waarde: '' })}
+                className={sel}
+              >
+                {MEDEWERKER_CONDITIE_VELDEN.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
+              <select value={c.op ?? 'eq'} onChange={e => set(i, { ...c, op: e.target.value as TriggerConditie['op'] })} className={sel}>
+                {OP_OPTIES_TEKST.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
+                <option value="">— Waarde —</option>
+                {waardenVoorVeld(c.veld).map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+              </select>
+            </div>
+            <button onClick={() => verwijder(i)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0">
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+        <button onClick={voegToe} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700">
+          <Plus className="w-3 h-3" /> Conditie toevoegen
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="border-t border-slate-200 pt-2 space-y-2">

@@ -30,6 +30,7 @@ import BestandenBeheer from '@/components/medewerkers/BestandenBeheer'
 import HandtekeningBeheer from '@/components/medewerkers/HandtekeningBeheer'
 import GebruikerToegangBeheer from '@/components/medewerkers/GebruikerToegangBeheer'
 import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
+import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
@@ -271,6 +272,9 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
               />
             </CardBody>
           </Card>
+
+          {/* Taken & actielijsten (handmatig of via triggers op dit dossier) */}
+          <MedewerkerTakenKaart medewerker_id={params.id} medewerker_naam={naam} />
         </div>
 
         {/* Rechterkolom */}

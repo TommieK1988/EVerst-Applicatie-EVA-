@@ -179,7 +179,9 @@ export default function TaakCompletionActies({ taakId }: Props) {
   useEffect(() => {
     if (!open) return
     getCompletionActies(taakId).then(setActies)
-    getSjablonen().then(setSjablonen as (v: unknown[]) => void)
+    // Alleen dossier-sjablonen: de vervolgacties (substatus, dossier-rol, sjabloon
+    // activeren) draaien allemaal op een dossier.
+    getSjablonen('dossier').then(setSjablonen as (v: unknown[]) => void)
     getMedewerkersVoorToewijzing().then(setMedewerkers)
   }, [open, taakId])
 

@@ -86,7 +86,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
-      getSjablonen(),
+      getSjablonen('dossier'),
       getUrgenteTakenVoorDossier(id),
       getUniekeBouw7Categorieen(),
       // Goedgekeurd meerwerk komt live uit Bouw7; alleen ophalen bij gekoppeld dossier.

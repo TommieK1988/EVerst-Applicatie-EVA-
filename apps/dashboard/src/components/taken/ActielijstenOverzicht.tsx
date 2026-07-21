@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, List, Folder, Trash2, Copy, ChevronRight, Zap } from 'lucide-react'
+import { Plus, List, Folder, Trash2, Copy, ChevronRight, Zap, User } from 'lucide-react'
 import PageHeader from '@/components/taken/shared/PageHeader'
 import { maakActielijst, verwijderActielijst } from '@/app/(platform)/taken/actions/taken'
 import { kopieerActielijst } from '@/app/(platform)/taken/actions/sjablonen'
@@ -28,6 +28,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
   const [toonNieuw, setToonNieuw]  = useState(false)
   const [naam, setNaam]            = useState('')
   const [beschrijving, setBeschrijving] = useState('')
+  const [context, setContext] = useState<'dossier' | 'medewerker'>('dossier')
   const [verwijderLijst, setVerwijderLijst] = useState<{ id: string; naam: string } | null>(null)
 
   const handleAanmaken = (e: React.FormEvent) => {
@@ -36,10 +37,12 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
     const fd = new FormData()
     fd.set('naam', naam.trim())
     fd.set('beschrijving', beschrijving)
+    fd.set('context', context)
     startTransition(async () => {
       await maakActielijst(fd)
       setNaam('')
       setBeschrijving('')
+      setContext('dossier')
       setToonNieuw(false)
     })
   }
@@ -77,6 +80,12 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
                 ? `${lijst.triggers_count} trigger${lijst.triggers_count !== 1 ? 's' : ''}`
                 : 'Handmatig'}
             </span>
+            {lijst.context === 'medewerker' && (
+              <span className="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 flex-shrink-0 bg-violet-50 text-violet-700 border border-violet-200">
+                <User className="w-3 h-3" />
+                Medewerker
+              </span>
+            )}
           </div>
           {lijst.beschrijving && (
             <p className="text-xs text-slate-500 truncate pl-6">{lijst.beschrijving}</p>
@@ -145,6 +154,15 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
               placeholder="Beschrijving (optioneel)"
               className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30"
             />
+            <select
+              value={context}
+              onChange={e => setContext(e.target.value as 'dossier' | 'medewerker')}
+              title="Waar hoort deze lijst bij?"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-everts/30"
+            >
+              <option value="dossier">Voor een dossier</option>
+              <option value="medewerker">Voor een medewerker</option>
+            </select>
             <div className="flex items-center gap-2">
               <button
                 type="submit"

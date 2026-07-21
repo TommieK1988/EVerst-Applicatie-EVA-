@@ -38,6 +38,9 @@ export type TaakRij = {
   werkadres_stad: string | null
   verwacht_startdatum: string | null
   verwacht_einddatum: string | null
+  /** Gevuld bij taken die aan een medewerker hangen i.p.v. aan een dossier. */
+  medewerker_id: string | null
+  medewerker_naam: string | null
 }
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
@@ -46,12 +49,14 @@ export type ActielijstMetTriggerCount = DbTaskList & { triggers_count: number }
 
 export async function getActielijsten(): Promise<ActielijstMetTriggerCount[]> {
   const supabase = await createClient()
-  // Alles behalve dossier-instanties (gekloonde sjablonen); die staan op de
-  // Actielijsten-tab van het dossier zelf. Toont dus sjablonen én losse lijsten.
+  // Alles behalve geactiveerde instanties (gekloonde sjablonen); die staan op de
+  // Taken-tab van het dossier of op de medewerkerpagina zelf. Toont dus sjablonen
+  // én losse lijsten.
   const { data, error } = await supabase
     .from('task_lists')
     .select('*')
     .is('dossier_id', null)
+    .is('medewerker_id', null)
     .order('template_naam', { ascending: true })
     .order('created_at', { ascending: false })
 
@@ -279,13 +284,30 @@ export async function getComments(taskId: string): Promise<DbTaskComment[]> {
 // Alleen aanroepen vanuit Server Components, nooit vanuit client code.
 
 export async function getActielijstenVoorDossier(dossier_id: string): Promise<ActielijstMetTaken[]> {
+  return actielijstenVoorContext('dossier_id', dossier_id)
+}
+
+/** Geactiveerde actielijsten van één medewerker. */
+export async function getActielijstenVoorMedewerker(medewerker_id: string): Promise<ActielijstMetTaken[]> {
+  return actielijstenVoorContext('medewerker_id', medewerker_id)
+}
+
+/**
+ * Geactiveerde actielijsten binnen één context (dossier of medewerker). De twee
+ * contexten hangen aan hun eigen kolom op task_lists / actielijst_activeringen;
+ * de rest van de opbouw (taken, gereed-teller, auto-geactiveerd-badge) is identiek.
+ */
+async function actielijstenVoorContext(
+  kolom: 'dossier_id' | 'medewerker_id',
+  id: string,
+): Promise<ActielijstMetTaken[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
   const { data: lijsten } = await supabase
     .from('task_lists')
     .select('*')
-    .eq('dossier_id', dossier_id)
+    .eq(kolom, id)
     .eq('is_template', false)
     .order('created_at', { ascending: false })
 
@@ -295,7 +317,7 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
   const { data: activeringen } = await supabase
     .from('actielijst_activeringen')
     .select('lijst_id, bron, verwerkt_op')
-    .eq('dossier_id', dossier_id)
+    .eq(kolom, id)
     .eq('status', 'done')
   const activeringPerLijst = new Map<string, { bron: string; verwerkt_op: string | null }>(
     (activeringen ?? [])
@@ -337,13 +359,25 @@ export async function getActielijstenVoorDossier(dossier_id: string): Promise<Ac
 
 /** Losse taken die direct (zonder actielijst) aan een dossier hangen. */
 export async function getLosseTakenVoorDossier(dossier_id: string): Promise<TaakMetDetails[]> {
+  return losseTakenVoorContext('dossier_id', dossier_id)
+}
+
+/** Losse taken die direct (zonder actielijst) aan een medewerker hangen. */
+export async function getLosseTakenVoorMedewerker(medewerker_id: string): Promise<TaakMetDetails[]> {
+  return losseTakenVoorContext('medewerker_id', medewerker_id)
+}
+
+async function losseTakenVoorContext(
+  kolom: 'dossier_id' | 'medewerker_id',
+  id: string,
+): Promise<TaakMetDetails[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
   const { data: taken } = await supabase
     .from('tasks')
     .select('*, task_assignees(*)')
-    .eq('dossier_id', dossier_id)
+    .eq(kolom, id)
     .is('lijst_id', null)
     .is('parent_task_id', null)
     .order('volgorde')
@@ -458,6 +492,10 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
       werkadres_stad: ctx.werkadres_stad,
       verwacht_startdatum: ctx.verwacht_startdatum,
       verwacht_einddatum: ctx.verwacht_einddatum,
+      // Dit overzicht is dossier-gescoped (taken zonder dossier zijn hierboven al
+      // overgeslagen); medewerker-taken komen hier per definitie niet in voor.
+      medewerker_id: null,
+      medewerker_naam: null,
     })
   }
 
@@ -476,22 +514,39 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
 
   // Effectief dossier: directe koppeling vóór de koppeling via de actielijst.
   const lijstIds = [...new Set(taken.map(t => t.lijst_id as string | null).filter(Boolean) as string[])]
-  const lijstMap = new Map<string, { dossier_id: string | null; naam: string }>()
+  const lijstMap = new Map<string, { dossier_id: string | null; medewerker_id: string | null; naam: string }>()
   if (lijstIds.length > 0) {
     const { data: lijsten } = await supabase
       .from('task_lists')
-      .select('id, naam, dossier_id')
+      .select('id, naam, dossier_id, medewerker_id')
       .in('id', lijstIds)
-    for (const l of (lijsten ?? []) as { id: string; naam: string; dossier_id: string | null }[]) {
-      lijstMap.set(l.id, { dossier_id: l.dossier_id, naam: l.naam })
+    for (const l of (lijsten ?? []) as { id: string; naam: string; dossier_id: string | null; medewerker_id: string | null }[]) {
+      lijstMap.set(l.id, { dossier_id: l.dossier_id, medewerker_id: l.medewerker_id, naam: l.naam })
     }
   }
 
   const effDossier = (t: Record<string, unknown>): string | null =>
     (t.dossier_id as string | null) ?? (t.lijst_id ? lijstMap.get(t.lijst_id as string)?.dossier_id ?? null : null)
 
+  // Medewerker-taken hebben geen dossier; hun groepskop toont de medewerker.
+  const effMedewerker = (t: Record<string, unknown>): string | null =>
+    (t.medewerker_id as string | null) ?? (t.lijst_id ? lijstMap.get(t.lijst_id as string)?.medewerker_id ?? null : null)
+
   const dossierIds = [...new Set(taken.map(effDossier).filter(Boolean) as string[])]
   const context = await getDossierContextVoorIds(dossierIds)
+
+  const medewerkerIds = [...new Set(taken.map(effMedewerker).filter(Boolean) as string[])]
+  const medewerkerNamen = new Map<string, string>()
+  if (medewerkerIds.length > 0) {
+    const { data: meds } = await supabase
+      .from('medewerkers')
+      .select('id, voornaam, tussenvoegsel, achternaam')
+      .in('id', medewerkerIds)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const m of (meds ?? []) as any[]) {
+      medewerkerNamen.set(m.id, [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '))
+    }
+  }
 
   // Namen van toegewezen medewerkers.
   const userIds = [...new Set(
@@ -517,6 +572,8 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
     const lijst = t.lijst_id ? lijstMap.get(t.lijst_id as string) : undefined
     const dossierId = effDossier(t)
     const ctx = dossierId ? context.get(dossierId) : undefined
+    const medewerkerId = effMedewerker(t)
+    const medewerkerNaam = medewerkerId ? medewerkerNamen.get(medewerkerId) ?? 'Onbekend' : null
     const toegewezen_ids = ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)
 
     rijen.push({
@@ -531,8 +588,10 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
       // toegewezen_ids, zodat de client zichzelf eruit kan filteren.
       toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
       dossier_id: dossierId ?? '',
-      dossiernummer: ctx?.dossiernummer ?? null,
-      dossier_titel: ctx?.titel ?? '—',
+      // Medewerker-taken vullen de dossierkolommen met hun eigen context, zodat ze
+      // niet als naamloze groep in "Mijn taken" belanden.
+      dossiernummer: ctx?.dossiernummer ?? (medewerkerId ? 'Medewerker' : null),
+      dossier_titel: ctx?.titel ?? medewerkerNaam ?? '—',
       dossier_sectie: ctx?.sectie ?? 'opdrachten',
       dossier_fase: ctx?.fase_label ?? '—',
       dossier_substatus: ctx?.substatus_label ?? null,
@@ -544,6 +603,8 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
       werkadres_stad: ctx?.werkadres_stad ?? null,
       verwacht_startdatum: ctx?.verwacht_startdatum ?? null,
       verwacht_einddatum: ctx?.verwacht_einddatum ?? null,
+      medewerker_id: medewerkerId,
+      medewerker_naam: medewerkerNaam,
     })
   }
 
@@ -605,14 +666,17 @@ export async function getAlleTakenRijen(): Promise<TaakRij[]> {
   return bouwTaakRijen((takenData ?? []) as Record<string, unknown>[])
 }
 
-export async function getSjablonen(): Promise<DbTaskList[]> {
+/** Sjablonen, optioneel beperkt tot één context ('dossier' of 'medewerker'). */
+export async function getSjablonen(context?: 'dossier' | 'medewerker'): Promise<DbTaskList[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-  const { data } = await supabase
+  let query = supabase
     .from('task_lists')
     .select('*')
     .eq('is_template', true)
     .order('template_naam', { ascending: true })
+  if (context) query = query.eq('context', context)
+  const { data } = await query
   return (data ?? []) as DbTaskList[]
 }
 
@@ -689,11 +753,14 @@ export async function getDossierRedirectUrlVoorLijst(lijstId: string): Promise<s
 
   const { data: lijst } = await supabase
     .from('task_lists')
-    .select('is_template, dossier_id')
+    .select('is_template, dossier_id, medewerker_id')
     .eq('id', lijstId)
     .single()
 
-  if (!lijst || lijst.is_template || !lijst.dossier_id) return null
+  if (!lijst || lijst.is_template) return null
+  // Medewerker-actielijst: de lijst leeft op de medewerkerpagina.
+  if (lijst.medewerker_id) return `/medewerkers/${lijst.medewerker_id}`
+  if (!lijst.dossier_id) return null
 
   const { data: dossier } = await supabase
     .from('dossiers')

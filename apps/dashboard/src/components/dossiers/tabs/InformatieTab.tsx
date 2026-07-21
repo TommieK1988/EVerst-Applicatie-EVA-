@@ -232,6 +232,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     deadline:                t.deadline,
     lijst_id:                null,
     dossier_id:              null,
+    medewerker_id:           null,
     parent_task_id:          null,
     geschatte_uren:          null,
     volgorde:                0,

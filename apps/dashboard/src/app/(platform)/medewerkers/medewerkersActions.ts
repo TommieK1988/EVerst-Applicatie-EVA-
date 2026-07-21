@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { z } from 'zod'
+import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 
 const nieuweMedewerkerSchema = z.object({
   voornaam:      z.string().min(1),
@@ -76,6 +77,9 @@ export async function maakMedewerker(raw: unknown): Promise<MaakMedewerkerResult
       }
     }
   }
+
+  // Onboarding-sjablonen die op "medewerker aangemaakt" triggeren meteen activeren.
+  await verwerkMedewerkerTriggers(data.id).catch(() => {})
 
   return { ok: true, id: data.id }
 }

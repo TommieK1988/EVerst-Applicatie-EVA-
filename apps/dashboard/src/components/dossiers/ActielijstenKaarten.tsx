@@ -10,12 +10,14 @@ import { useDossierReadOnly } from './DossierReadOnlyContext'
 
 interface Props {
   lijsten: ActielijstMetTaken[]
-  /** Losse taken die direct (zonder actielijst) aan het dossier hangen. */
+  /** Losse taken die direct (zonder actielijst) aan het dossier/de medewerker hangen. */
   losseTaken?: TaakMetDetails[]
   dossier?: { id: string; titel: string }
+  /** Alternatieve context: dezelfde kaarten op een medewerkerpagina. */
+  medewerker?: { id: string; naam: string }
 }
 
-export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props) {
+export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewerker }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   // Standaard alle lijsten open
@@ -26,7 +28,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props
       <EmptyState
         icon={<span style={{ fontSize: 24 }}>☑</span>}
         title="Geen taken"
-        description="Maak een losse taak aan met 'Nieuwe taak', of activeer een sjabloon om een actielijst aan dit dossier te koppelen."
+        description={`Maak een losse taak aan met 'Nieuwe taak', of activeer een sjabloon om een actielijst aan ${medewerker ? 'deze medewerker' : 'dit dossier'} te koppelen.`}
       />
     )
   }
@@ -226,10 +228,11 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier }: Props
                   takenInLijst={losseTaken.map(t => ({ id: t.id, titel: t.titel }))}
                   detailAlsDialog
                 />
-                {dossier && !readOnly && (
+                {(dossier || medewerker) && !readOnly && (
                   <div style={{ marginTop: 12 }}>
                     <NieuweTaakDialog
                       defaultDossier={dossier}
+                      defaultMedewerker={medewerker}
                       onSuccess={() => router.refresh()}
                       trigger={
                         <button style={{

@@ -30,6 +30,8 @@ export async function maakActielijst(formData: FormData): Promise<{ id: string }
       entity_id:     entityId   || null,
       is_template:   true, // actielijsten zijn altijd sjablonen (instanties ontstaan via activeerSjabloon)
       template_naam: (formData.get('template_naam') as string) || null,
+      // Waar het sjabloon voor bedoeld is: een dossier of een medewerker.
+      context:       formData.get('context') === 'medewerker' ? 'medewerker' : 'dossier',
       owner_id:      user.id,
     })
     .select('id')
@@ -99,6 +101,8 @@ export async function maakTaak(data: {
   lijst_id?: string
   /** Directe dossier-koppeling voor losse taken zonder actielijst. */
   dossier_id?: string
+  /** Directe medewerker-koppeling voor losse taken zonder actielijst. */
+  medewerker_id?: string
   beschrijving?: Record<string, unknown>
   status?: TaskStatus
   prioriteit?: TaskPrioriteit
@@ -107,7 +111,7 @@ export async function maakTaak(data: {
   parent_task_id?: string
   assignees?: { user_id: string; rol?: TaskAssigneeRol }[]
   // Template-specifieke velden
-  assignee_type?: 'direct' | 'dossier_rol'
+  assignee_type?: 'direct' | 'dossier_rol' | 'medewerker_zelf'
   dossier_rollen?: string[]
   deadline_basis?: DeadlineBasis
   deadline_dagen?: number | null
@@ -124,6 +128,7 @@ export async function maakTaak(data: {
       titel:                  data.titel,
       lijst_id:               data.lijst_id               ?? null,
       dossier_id:             data.dossier_id             ?? null,
+      medewerker_id:          data.medewerker_id          ?? null,
       omschrijving:           (data.beschrijving ?? null) as Json | null,
       status:                 data.status                 ?? 'open',
       prioriteit:             data.prioriteit             ?? 'normaal',
@@ -303,7 +308,7 @@ export async function updateTaak(id: string, data: {
   prioriteit?: TaskPrioriteit
   deadline?: string | null
   geschatte_uren?: number | null
-  assignee_type?: 'direct' | 'dossier_rol'
+  assignee_type?: 'direct' | 'dossier_rol' | 'medewerker_zelf'
   dossier_rollen?: string[]
   deadline_basis?: DeadlineBasis
   deadline_dagen?: number | null
