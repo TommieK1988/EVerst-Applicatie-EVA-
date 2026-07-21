@@ -16,7 +16,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/m',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
+    // 'any' (niet 'portrait'): de dossierplanning toont in liggende stand een
+    // Gantt-weergave — met een portrait-lock draait de geïnstalleerde PWA niet mee.
+    orientation: 'any',
     background_color: '#ffffff',
     theme_color: '#009439',
     lang: 'nl',
