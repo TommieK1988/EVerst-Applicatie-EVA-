@@ -253,7 +253,12 @@ export async function runComplianceAction(): Promise<{
   // allowance matcht, anders 'open'.
   const pool = getPgPool()
   const client = await pool.connect()
-  const nieuweWerktijdSignalen: { regel_code: string; omschrijving: string; user_id_ulu: number | null }[] = []
+  const nieuweWerktijdSignalen: {
+    regel_code: string
+    omschrijving: string
+    user_id_ulu: number | null
+    periode_start: string | null
+  }[] = []
   try {
     await client.query('begin')
 
@@ -273,55 +278,74 @@ export async function runComplianceAction(): Promise<{
       [periodeStart, nieuweFingerprints],
     )
 
-    for (const b of uniek) {
-      const autoAllowed = isAutoToegestaan(b)
-      const nieuweStatus = autoAllowed ? 'geaccepteerd_uitzondering' : 'open'
-      const ins = await client.query<{ was_insert: boolean }>(
-        `insert into public.compliance_bevindingen
-           (fingerprint, regel_code, voertuig_id, medewerker_id, trip_id,
-            periode_start, periode_eind, ernst, omschrijving, data, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
-         on conflict (fingerprint) do update set
-           -- Behoud behandelde status (uitzondering / afgewezen); refresh rest
-           status = case
-                     when public.compliance_bevindingen.status <> 'open'
-                       then public.compliance_bevindingen.status
-                     else excluded.status
-                    end,
-           omschrijving  = excluded.omschrijving,
-           data          = excluded.data,
-           ernst         = excluded.ernst,
-           voertuig_id   = excluded.voertuig_id,
-           periode_start = excluded.periode_start,
-           periode_eind  = excluded.periode_eind,
-           updated_at    = now()
-         returning (xmax = 0) as was_insert`,
-        [
-          b.fingerprint,
-          b.regel_code,
-          b.voertuig_id,
-          b.medewerker_id,
-          b.trip_id,
-          b.periode_start,
-          b.periode_eind,
-          b.ernst,
-          b.omschrijving,
-          JSON.stringify(b.data ?? {}),
-          nieuweStatus,
-        ],
-      )
-      // Nieuw ingevoegde (xmax = 0), nog openstaande werktijd-signalen verzamelen
-      // voor een actieve melding naar beheer. Update-conflicts (bestaande
-      // bevindingen) worden niet opnieuw gemeld.
-      //
-      // Alleen het anker van een ritketen: één te late aankomst kan over
-      // meerdere ritten verdeeld zijn (tankstop, opgesplitste registratie) en
-      // die krijgen elk een bevinding. Zonder deze filter zou beheer twee of
-      // drie meldingen krijgen over hetzelfde moment.
+    // In ÉÉN statement upserten in plaats van een insert per bevinding. Een
+    // volle run levert enkele duizenden bevindingen op; als losse round-trips
+    // naar de pooler liep dat tegen de tijdslimiet van de serverfunctie aan en
+    // rolde de hele transactie terug — de knop gaf dan "An unexpected response
+    // was received from the server" zonder spoor in het foutenlogboek.
+    const statussen = uniek.map((b) =>
+      isAutoToegestaan(b) ? 'geaccepteerd_uitzondering' : 'open',
+    )
+    const ins = await client.query<{ fingerprint: string; was_insert: boolean }>(
+      `insert into public.compliance_bevindingen
+         (fingerprint, regel_code, voertuig_id, medewerker_id, trip_id,
+          periode_start, periode_eind, ernst, omschrijving, data, status)
+       -- ernst en status zijn enums (bevinding_ernst / bevinding_status). Bij een
+       -- losse VALUES-rij cast Postgres een tekstparameter daar nog naar toe, maar
+       -- unnest levert een echte text-kolom en die coercet niet impliciet — vandaar
+       -- de expliciete array-casts.
+       select * from unnest(
+         $1::text[], $2::text[], $3::uuid[], $4::uuid[], $5::uuid[],
+         $6::date[], $7::date[], $8::bevinding_ernst[], $9::text[], $10::jsonb[],
+         $11::bevinding_status[]
+       )
+       on conflict (fingerprint) do update set
+         -- Behoud behandelde status (uitzondering / afgewezen); refresh rest
+         status = case
+                   when public.compliance_bevindingen.status <> 'open'
+                     then public.compliance_bevindingen.status
+                   else excluded.status
+                  end,
+         omschrijving  = excluded.omschrijving,
+         data          = excluded.data,
+         ernst         = excluded.ernst,
+         voertuig_id   = excluded.voertuig_id,
+         trip_id       = excluded.trip_id,
+         periode_start = excluded.periode_start,
+         periode_eind  = excluded.periode_eind,
+         updated_at    = now()
+       returning fingerprint, (xmax = 0) as was_insert`,
+      [
+        uniek.map((b) => b.fingerprint),
+        uniek.map((b) => b.regel_code),
+        uniek.map((b) => b.voertuig_id),
+        uniek.map((b) => b.medewerker_id),
+        uniek.map((b) => b.trip_id),
+        uniek.map((b) => b.periode_start),
+        uniek.map((b) => b.periode_eind),
+        uniek.map((b) => b.ernst),
+        uniek.map((b) => b.omschrijving),
+        uniek.map((b) => JSON.stringify(b.data ?? {})),
+        statussen,
+      ],
+    )
+
+    // Nieuw ingevoegde (xmax = 0), nog openstaande werktijd-signalen verzamelen
+    // voor een actieve melding naar beheer. Update-conflicts (bestaande
+    // bevindingen) worden niet opnieuw gemeld.
+    //
+    // Alleen het anker van een ritketen: één te late aankomst kan over meerdere
+    // ritten verdeeld zijn (tankstop, opgesplitste registratie) en die krijgen
+    // elk een bevinding. Zonder deze filter zou beheer twee of drie meldingen
+    // krijgen over hetzelfde moment.
+    const nieuwGeinsert = new Set(
+      ins.rows.filter((r) => r.was_insert).map((r) => r.fingerprint),
+    )
+    for (const [i, b] of uniek.entries()) {
       const bevData = (b.data ?? {}) as Record<string, unknown>
       if (
-        ins.rows[0]?.was_insert &&
-        nieuweStatus === 'open' &&
+        nieuwGeinsert.has(b.fingerprint) &&
+        statussen[i] === 'open' &&
         (b.regel_code === 'R9' || b.regel_code === 'R10') &&
         bevData.keten_rol !== 'deel'
       ) {
@@ -330,6 +354,7 @@ export async function runComplianceAction(): Promise<{
           regel_code: b.regel_code,
           omschrijving: b.omschrijving,
           user_id_ulu: typeof uid === 'number' ? uid : null,
+          periode_start: b.periode_start ?? null,
         })
       }
     }
@@ -361,15 +386,35 @@ export async function runComplianceAction(): Promise<{
   }
 }
 
+/** Alleen signalen over de afgelopen twee weken zijn nog het melden waard. */
+const MELD_VENSTER_DAGEN = 14
+
 /**
  * Stuur één in-app melding PER BESTUURDER naar elke beheer-ontvanger, met de
  * nieuwe werktijd-signalen (te laat / te vroeg) van die bestuurder. Ontvangers =
  * Directie (afdeling), beheerders (instellingen=beheren) of wagenpark=beheren.
  * Insert via de directe pooler, consistent met de rest van de wagenpark-module.
+ *
+ * Alleen RECENTE signalen worden gemeld. De compliance-run kijkt naar het hele
+ * lopende jaar, dus de eerste run na het aanzetten van een regel levert honderden
+ * nieuwe bevindingen op over dagen van maanden terug. Die als belmelding
+ * uitsturen maakt het belletje onbruikbaar en zegt niets: het gaat om wat er
+ * sinds de vorige check is bijgekomen, niet om de inhaalslag.
  */
 async function notificeerWerktijdSignalen(
-  signalen: { regel_code: string; omschrijving: string; user_id_ulu: number | null }[],
+  alleSignalen: {
+    regel_code: string
+    omschrijving: string
+    user_id_ulu: number | null
+    periode_start: string | null
+  }[],
 ): Promise<void> {
+  const grens = new Date(Date.now() - MELD_VENSTER_DAGEN * 86_400_000)
+    .toISOString()
+    .slice(0, 10)
+  const signalen = alleSignalen.filter((s) => (s.periode_start ?? '') >= grens)
+  if (signalen.length === 0) return
+
   const ontvangers = await pgQuery<{ auth_user_id: string }>(
     `
     select distinct m.auth_user_id::text as auth_user_id
@@ -421,15 +466,21 @@ async function notificeerWerktijdSignalen(
     meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/ritten' })
   }
 
-  for (const o of ontvangers) {
-    for (const m of meldingen) {
-      await pgQuery(
-        `insert into public.notificaties (user_id, type, titel, body, url, gelezen)
-         values ($1, 'algemeen', $2, $3, $4, false)`,
-        [o.auth_user_id, m.titel, m.body, m.url],
-      )
-    }
-  }
+  // Alle meldingen in één statement: ontvangers × bestuurders liep anders op
+  // tot honderden losse inserts.
+  const rijen = ontvangers.flatMap((o) => meldingen.map((m) => ({ ...m, user: o.auth_user_id })))
+  await pgQuery(
+    `insert into public.notificaties (user_id, type, titel, body, url, gelezen)
+     select * from unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], $6::boolean[])`,
+    [
+      rijen.map((r) => r.user),
+      rijen.map(() => 'algemeen'),
+      rijen.map((r) => r.titel),
+      rijen.map((r) => r.body),
+      rijen.map((r) => r.url),
+      rijen.map(() => false),
+    ],
+  )
 }
 
 export async function markeerUitzonderingAction(bevinding_id: string, toelichting: string) {
