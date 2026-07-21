@@ -152,12 +152,16 @@ information, isActive
 **Velden op `Bouw7Employee`:**
 ```
 id, firstName, prefix, lastName
-email, phone, function
+emailAddress, phoneNumber, functionTitle
+address, zipCode, city        — woonadres (zipCode zonder spatie, bv. "2265DE")
 department { id, name }, branch { id, name }
-isActive
-hourlyRate   — verkooptarief per uur
-costRate     — kostprijstarief per uur
+birthDate, dateOfEmployment, dateOfResignation (gevuld = uit dienst), external
+hourlyRate         — kostprijs-uurtarief (string)
+sellingHourlyRate  — verkoop-uurtarief (string)
 ```
+
+> **Let op:** er is géén detail-endpoint — `/employee/{id}` en `/employees/{id}` geven 404.
+> `/list/employees` bevat alle velden (inclusief woonadres en `ca*`-maatwerkvelden).
 
 ### Organisatie (verbindingstest)
 
@@ -389,7 +393,8 @@ dus de sync haalt ze **volledig** op en groepeert per `bouw7_id`; per-dossier sc
 
 **Notities:** géén lijst-endpoint (`/list/notes`, `/list/project-notes` → 404). De interne projectnotitie is
 het enkele veld **`note`** op `GET /project/{id}` (detail-call; **niet** aanwezig op `/list/projects`).
-`information` op de projectlijst is de offerte-/projectomschrijving, geen notitie.
+`information` is de offerte-/projectomschrijving (staat óók op `/list/projects`) — géén notitie, maar wordt
+wel als aparte dossier-notitie meegenomen zodat de tekst in EVA leesbaar is.
 
 > **Wél een detail-endpoint, onder een andere prefix (gecorrigeerd jul 2026):** `GET /todo/{id}` en
 > `/list/todos/{id}` geven 404, maar **`GET /project/timeline/todo/{id}` geeft 200** — met `employees[]`
@@ -405,6 +410,7 @@ het enkele veld **`note`** op `GET /project/{id}` (detail-call; **niet** aanwezi
 |---|---|---|
 | Offerte-herinnering (open) | `dossier_notities` (`bouw7_bron='reminder'`, `bouw7_ref='reminder:{id}'`) | unieke `(dossier_id, bouw7_ref)` |
 | Interne projectnotitie (`note`) | `dossier_notities` (`bouw7_bron='note'`, `bouw7_ref='note:project'`) | 1 per dossier; leeg → verwijderd |
+| Projectomschrijving (`information`) | `dossier_notities` (`bouw7_bron='note'`, `bouw7_ref='note:information'`) | 1 per dossier; leeg → verwijderd |
 | To-do (open) | `tasks` (`bouw7_todo_id`, `dossier_id`) + `task_assignees` | unieke `(dossier_id, bouw7_todo_id)` |
 
 > **Auteur/toewijzing:** herinnering-auteur via `createdBy.username` → `medewerkers.email`. To-do-toewijzing via

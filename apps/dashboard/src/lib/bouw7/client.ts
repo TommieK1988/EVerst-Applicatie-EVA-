@@ -345,6 +345,12 @@ export type Bouw7Employee = {
   lastName?: string
   emailAddress?: string
   phoneNumber?: string
+  /** Woonadres: straat + huisnummer, bv. "De Wickelaan 36". */
+  address?: string | null
+  /** Postcode, zonder spatie, bv. "2265DE". */
+  zipCode?: string | null
+  /** Woonplaats. */
+  city?: string | null
   functionTitle?: string
   department?: { id: number; name: string }
   branch?: { id: number; name: string }
