@@ -9,7 +9,7 @@ import {
   IconProjectplanning, IconCrewplanning, IconAgenda,
   IconFacturen, IconInkoop,
   IconKam,
-  IconSjablonen, IconWagenpark, IconHoutrotherstel, IconEvertsCalc,
+  IconSjablonen, IconWagenpark, IconEvertsCalc,
   IconFormulieren, IconMaterieel, IconToolbox,
 } from './Icons'
 import type { Tweaks } from './types'
@@ -78,7 +78,6 @@ const FINANCIEEL: NavEntry[] = [
 const APPS: NavEntry[] = [
   { href: '/formulieren',    label: 'Formulieren',     Icon: IconFormulieren,    module: 'formulieren'   },
   { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen,      module: 'taken'         },
-  { href: '/houtrotherstel', label: 'Houtrotherstel',  Icon: IconHoutrotherstel, module: 'houtrotherstel' },
   { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc,     module: 'everts_calc'   },
   // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).
   ...(FEATURES.materieelbeheer
@@ -108,16 +107,6 @@ const APP_SUBNAV: Record<string, {
     items: [
       { href: '/taken/overzicht', label: 'Overzicht',  icon: ICON_OVERZICHT },
       { href: '/taken/lijsten',   label: 'Sjablonen',  icon: ICON_SJABLONEN },
-    ],
-  },
-  // De losse houtrot-app is vervallen: registreren gebeurt in het dossier (tab
-  // Houtrot, met de toggle `houtrot_registreren`). Hier blijft alleen het beheer
-  // van de reparatiebibliotheek met de prijzen over.
-  '/houtrotherstel': {
-    label: 'Houtrot',
-    Icon: IconHoutrotherstel,
-    items: [
-      { href: '/houtrotherstel/standaard-reparaties', label: 'Reparatiebibliotheek', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
     ],
   },
   '/everts-calc': {

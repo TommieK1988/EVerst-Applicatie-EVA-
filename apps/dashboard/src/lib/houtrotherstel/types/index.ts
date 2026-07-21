@@ -353,6 +353,9 @@ export interface RegistratieForm {
   damage_description?: string
   damage_severity?: SchadeSeverity
   damage_cause?: string
+  /** Recept uit de calculatiebibliotheek (public.paint_items). */
+  recept_id?: string
+  /** Vervallen: verwees naar de oude houtrot-reparatiebibliotheek. */
   standard_repair_id?: string
   custom_work_description?: string
   notes?: string

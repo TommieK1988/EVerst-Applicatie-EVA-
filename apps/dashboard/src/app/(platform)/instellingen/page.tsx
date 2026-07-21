@@ -190,12 +190,12 @@ const appItems: SettingsItem[] = [
     module: 'everts_calc',
   },
   {
-    href: '/houtrotherstel/standaard-reparaties',
-    title: 'Houtrot-reparaties',
-    description: 'De reparatiebibliotheek met codes, uren en prijzen die je bij een registratie kiest.',
+    href: '/everts-calc/bibliotheek/recepten',
+    title: 'Recepten',
+    description: 'Codes, uren, materialen en marge per recept. Ook de houtrotreparaties die je bij een registratie kiest.',
     ready: true,
-    kicker: 'Houtrot',
-    module: 'houtrotherstel',
+    kicker: 'Calculatie',
+    module: 'everts_calc',
   },
   {
     href: '/wagenpark/instellingen',

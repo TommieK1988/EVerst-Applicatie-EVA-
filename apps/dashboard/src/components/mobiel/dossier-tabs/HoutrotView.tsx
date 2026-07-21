@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistraties, createRegistratie, uploadPhoto } from '@/services/houtrotherstel/registraties'
-import { getStandaardReparaties } from '@/services/houtrotherstel/standaard-reparaties'
+import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import {
   GEVEL_ZIJDEN, ONDERDEEL_TYPEN, SCHADE_SEVERITY, REGISTRATIE_STATUSSEN,
-  type RepairRegistration, type StandardRepair, type RegistratieForm, type SchadeSeverity,
+  type RepairRegistration, type RegistratieForm, type SchadeSeverity,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 
@@ -41,7 +41,7 @@ function Blok({ titel, children }: { titel: string; children: React.ReactNode })
 
 export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
-  const [reparaties, setReparaties] = useState<StandardRepair[]>([])
+  const [recepten, setRecepten] = useState<Recept[]>([])
   const [invoeren, setInvoeren] = useState(false)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
@@ -67,7 +67,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   useEffect(() => { laad() }, [laad])
   useEffect(() => {
-    getStandaardReparaties().then(setReparaties).catch(() => setReparaties([]))
+    getRecepten().then(setRecepten).catch(() => setRecepten([]))
   }, [])
 
   function leegmaken() {
@@ -83,9 +83,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       const medewerker = await getHuidigeMedewerker()
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
 
-      const sr = reparaties.find(r => r.id === reparatieId)
+      const recept = recepten.find(r => r.id === reparatieId)
       const form: RegistratieForm = {
         dossier_id: dossierId,
+        recept_id: reparatieId || undefined,
         registration_date: new Date().toISOString().slice(0, 10),
         location_block: blok || undefined,
         floor: verdieping || undefined,
@@ -95,20 +96,21 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         element_number: elementnr || undefined,
         damage_description: schade || undefined,
         damage_severity: ernst || undefined,
-        standard_repair_id: reparatieId || undefined,
         notes: notitie || undefined,
         status: 'open',
         control_status: 'niet_gecontroleerd',
-        ...(sr && {
-          repair_code_snapshot: sr.code,
-          repair_name_snapshot: sr.name,
-          repair_description_snapshot: sr.description ?? undefined,
-          labor_hours_snapshot: sr.labor_hours,
-          labor_rate_snapshot: sr.labor_rate,
-          labor_cost_snapshot: sr.labor_cost,
-          material_cost_snapshot: sr.material_cost,
-          cost_price_snapshot: sr.cost_price,
-          sale_price_snapshot: sr.sale_price,
+        // Prijs wordt als momentopname vastgelegd: latere wijzigingen aan het
+        // recept of aan het uurtarief veranderen bestaande registraties niet.
+        ...(recept && {
+          repair_code_snapshot: recept.code,
+          repair_name_snapshot: recept.naam,
+          repair_description_snapshot: recept.omschrijving ?? undefined,
+          labor_hours_snapshot: recept.uren,
+          labor_rate_snapshot: recept.uurtarief,
+          labor_cost_snapshot: recept.arbeidskosten,
+          material_cost_snapshot: recept.materiaalkosten,
+          cost_price_snapshot: recept.kostprijs,
+          sale_price_snapshot: recept.verkoopprijs,
         }),
       }
 
@@ -191,10 +193,14 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
           <Blok titel="Reparatie">
             <div>
-              <label style={label} htmlFor="hr-reparatie">Standaard-reparatie</label>
+              <label style={label} htmlFor="hr-reparatie">Recept</label>
               <select id="hr-reparatie" style={veld} value={reparatieId} onChange={e => setReparatieId(e.target.value)}>
                 <option value="">— geen —</option>
-                {reparaties.map(r => <option key={r.id} value={r.id}>{r.code} · {r.name}</option>)}
+                {recepten.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.code} · {r.naam}{r.verkoopprijs ? ` — € ${r.verkoopprijs.toFixed(2)}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
             <div>

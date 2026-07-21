@@ -122,6 +122,7 @@ export async function createRegistratie(
       damage_description: form.damage_description || null,
       damage_severity: form.damage_severity || null,
       damage_cause: form.damage_cause || null,
+      recept_id: form.recept_id || null,
       standard_repair_id: form.standard_repair_id || null,
       custom_work_description: form.custom_work_description || null,
       notes: form.notes || null,

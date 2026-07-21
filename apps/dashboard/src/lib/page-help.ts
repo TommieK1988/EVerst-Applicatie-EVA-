@@ -650,30 +650,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
 
   // ── Houtrotherstel ─────────────────────────────────────────────────────
-  [/^\/houtrotherstel\/standaard-reparaties\/nieuw$/, {
-    title: 'Houtrotherstel — Nieuwe standaard reparatie',
-    description: 'Voeg een nieuwe standaard­reparatie toe aan de bibliotheek. Standaard­reparaties zijn beschrijvings­sjablonen voor veelvoorkomende houtrotherstel­methoden met vaste producten en prijzen.',
-  }],
-
-  [/^\/houtrotherstel\/standaard-reparaties$/, {
-    title: 'Houtrotherstel — Standaard reparaties',
-    description: 'Bibliotheek met standaard­reparaties voor veelvoorkomende houtrotherstel­situaties. Elke reparatie bevat een naam, omschrijving, gebruikte producten en de verkoopprijs. Gebruik als sjabloon bij nieuwe registraties.',
-    sections: [
-      { title: 'Reparatie aanmaken', body: 'Klik op "Nieuwe standaard reparatie" en vul de naam, reparatie­methode, producten (merk, type, hoeveelheid) en de standaard verkoopprijs in. De reparatie is daarna beschikbaar als selectie bij registraties.' },
-      { title: 'Prijsstructuur', body: 'De bibliotheek­tabel toont de volledige prijsopbouw per reparatie. Actualiseer de prijzen na een leveranciers­prijswijziging om correcte calculaties te garanderen.' },
-    ],
-  }],
-
-  [/^\/houtrotherstel$/, {
-    title: 'Houtrot',
-    description: 'Houtrotherstel zit in het dossier zelf, niet meer in een losse app. Hier beheer je alleen de reparatiebibliotheek met de prijzen.',
-    sections: [
-      { title: 'Werkwijze', body: '1. Zet bij het dossier de toggle "Houtrot registreren" aan. 2. Er verschijnt dan een tab Houtrot bij dat dossier. 3. De monteur legt daar op locatie per aangetroffen schade een registratie vast: plaats (blok, verdieping, ruimte, gevelzijde, onderdeel), de standaard­reparatie en foto\'s voor/na.' },
-      { title: 'Reparatiebibliotheek', body: 'De standaard­reparaties op deze pagina zijn de keuzelijst bij een registratie: code, omschrijving, uren en prijs. Wat je hier vastlegt wordt als momentopname bij de registratie bewaard, zodat latere prijswijzigingen oude registraties niet veranderen.' },
-      { title: 'Mobiel gebruik', body: 'Registreren doe je op de telefoon: open het dossier in de mobiele app en kies de tab Houtrot. Foto\'s gaan rechtstreeks vanuit de camera mee.' },
-    ],
-  }],
-
   // ── EvertsCalc ─────────────────────────────────────────────────────────
   [/^\/everts-calc\/meetstaat\/[^/]+$/, {
     title: 'EvertsCalc — Meetstaat',

@@ -108,9 +108,6 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/wagenpark$/, { title: 'Wagenpark', breadcrumb: 'Apps' }],
 
   // Houtrotherstel (sub-app)
-  [/^\/houtrotherstel\/standaard-reparaties\/nieuw$/, { title: 'Houtrotherstel › Standaard reparaties › Nieuw', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel\/standaard-reparaties$/, { title: 'Houtrotherstel › Standaard reparaties', breadcrumb: 'Apps' }],
-  [/^\/houtrotherstel$/, { title: 'Houtrot', breadcrumb: 'Apps' }],
 
   // EvertsCalc (sub-app)
   [/^\/everts-calc\/meetstaat\/[^/]+$/, { title: 'EvertsCalc › Meetstaat', breadcrumb: 'Apps' }],
@@ -168,7 +165,6 @@ const SLUG_LABELS: Record<string, string> = {
   'vraag-eva': 'Vraag EVA', 'bronnen': 'Bronnen', 'bibliotheek': 'Bibliotheek',
   'mijn-taken': 'Mijn taken', 'account': 'Mijn account',
   // Apps
-  'formulieren': 'Formulieren', 'taken': 'Actielijsten', 'houtrotherstel': 'Houtrotherstel',
   'materieelbeheer': 'Materieelbeheer',
   'everts-calc': 'EvertsCalc', 'calculaties': 'Calculaties', 'quotes': 'Offertes',
   'sjablonen': 'Sjablonen', 'overzicht': 'Overzicht',
@@ -199,7 +195,6 @@ const BREADCRUMB_BY_ROOT: Record<string, string> = {
   'planning': 'Planning',
   'relaties': 'Beheer', 'medewerkers': 'Beheer', 'wagenpark': 'Beheer', 'kam': 'Beheer',
   'facturen': 'Financieel', 'management': 'Financieel',
-  'formulieren': 'Apps', 'taken': 'Apps', 'houtrotherstel': 'Apps', 'everts-calc': 'Apps',
   'materieelbeheer': 'Apps',
   'instellingen': 'Platform', 'account': 'Account', 'mijn-taken': 'Persoonlijk',
 }

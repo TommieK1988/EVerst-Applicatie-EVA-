@@ -65,6 +65,45 @@ export async function setGoedkeuringDrempelOfferte(
   })
 }
 
+/**
+ * Eenheden (st, m¹, m², uur, …) horen bij de bedrijfsinstellingen, zodat de
+ * calculatie, de recepten en de houtrotregistratie dezelfde lijst gebruiken.
+ * Stonden eerder los in de calculatie-instellingen (`everts_calc_instellingen`).
+ */
+export type Eenheid = { afkorting: string; omschrijving?: string }
+
+const STANDAARD_EENHEDEN: Eenheid[] = [
+  { afkorting: 'st' }, { afkorting: 'm¹' }, { afkorting: 'm²' }, { afkorting: 'm³' },
+  { afkorting: 'uur' }, { afkorting: 'dag' }, { afkorting: 'ltr' }, { afkorting: 'kg' },
+  { afkorting: 'set' },
+]
+
+export async function getEenheden(): Promise<Eenheid[]> {
+  const { data } = await db()
+    .from('bedrijfsinstellingen')
+    .select('eenheden')
+    .eq('id', 1)
+    .maybeSingle()
+
+  const lijst = data?.eenheden
+  return Array.isArray(lijst) && lijst.length > 0 ? (lijst as Eenheid[]) : STANDAARD_EENHEDEN
+}
+
+export async function setEenheden(
+  eenheden: Eenheid[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await db()
+    .from('bedrijfsinstellingen')
+    .update({ eenheden })
+    .eq('id', 1)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/bedrijfsinstellingen')
+  revalidatePath('/everts-calc/instellingen')
+  revalidatePath('/everts-calc/bibliotheek/recepten')
+  return { ok: true }
+}
+
 export async function getDossierCategorieen(): Promise<string[]> {
   const inst = await getBedrijfsinstellingen()
   const cats = (inst.overige as any)?.dossier_categorieen
