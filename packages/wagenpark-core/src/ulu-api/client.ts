@@ -10,7 +10,14 @@
  * Officiële docs: https://driveulu.github.io/api/
  */
 
-import type { UluCompanyUser, UluSession, UluTrip, UluUser, UluVehicle } from './types'
+import type {
+  UluCompanyUser,
+  UluSession,
+  UluTrip,
+  UluTripsResponse,
+  UluUser,
+  UluVehicle,
+} from './types'
 
 const DEFAULT_BASE_URL = 'https://live.cartracker.nl/api/v1'
 
@@ -132,35 +139,85 @@ export class UluClient {
   }
 
   /**
-   * Alle (recente) trips van een voertuig. Paginering automatisch.
+   * Alle trips van een voertuig binnen een datumbereik. Paginering automatisch.
    *
-   * **Let op**: de ULU API negeert date-range parameters en retourneert alleen
-   * de **laatste ~75 trips** per voertuig (serverside cap, getest 17-apr-2026).
-   * Date-filtering doen we client-side: zie `opts.minStartDatum`.
+   * **Historie van een bug (21-jul-2026):** hier stond eerder
+   * `if (chunk.length < pageSize) break` met een gevraagde `pageSize` van 100,
+   * terwijl ULU `limit` afkapt op 75. Die vergelijking was dus altijd waar en de
+   * lus stopte na pagina 1 — er kwamen structureel maximaal ~75 trips per
+   * voertuig binnen (bij ~14 voertuigen zo'n 1.000 per sync). Daardoor leek het
+   * alsof de API "alleen de laatste ~75 trips" gaf; in werkelijkheid is 75 de
+   * PAGINA-grootte en werd pagina 2 nooit opgevraagd. Gevolg: hele maanden
+   * ontbraken in ulu_trips.
    *
-   * @param vehicleId       ULU vehicle.id
-   * @param opts.pageSize   default 100 — ULU clamt dit effectief tot 75
+   * Nu wordt de paginering gestuurd door de envelope (`has_more` / `total_pages`)
+   * met een veilige terugval, en nooit meer door de gevraagde pageSize.
+   *
+   * De API negeert date-range parameters, dus filteren blijft client-side. Om
+   * niet elke sync de volledige historie op te halen stoppen we zodra een pagina
+   * volledig vóór `minStartDatum` ligt (trips komen nieuwste-eerst).
+   *
+   * @param vehicleId           ULU vehicle.id
+   * @param opts.pageSize       gevraagde paginagrootte (ULU clamt naar ~75)
    * @param opts.minStartDatum  optioneel ISO (YYYY-MM-DD); drop trips vóór deze datum
    * @param opts.maxStartDatum  optioneel ISO (YYYY-MM-DD); drop trips ná deze datum
+   * @param opts.maxPages       veiligheidsgrens op het aantal pagina's
    */
   async listTripsForVehicle(
     vehicleId: number,
-    opts: { pageSize?: number; minStartDatum?: string; maxStartDatum?: string } = {},
+    opts: {
+      pageSize?: number
+      minStartDatum?: string
+      maxStartDatum?: string
+      maxPages?: number
+    } = {},
   ): Promise<UluTrip[]> {
     const pageSize = opts.pageSize ?? 100
+    const maxPages = opts.maxPages ?? 200
     const trips: UluTrip[] = []
+    const gezienIds = new Set<number>()
+    let vorigeChunkGrootte: number | null = null
     let page = 1
-    while (page <= 200) {
-      const res = await this.get<UluTrip[] | { trips: UluTrip[] }>(
+
+    while (page <= maxPages) {
+      const res = await this.get<UluTrip[] | UluTripsResponse>(
         `/vehicles/${vehicleId}/trips`,
         { page, limit: pageSize },
       )
-      const chunk: UluTrip[] = Array.isArray(res) ? res : ((res as { trips?: UluTrip[] }).trips ?? [])
+      const envelope = Array.isArray(res) ? null : (res as UluTripsResponse)
+      const chunk: UluTrip[] = Array.isArray(res) ? res : (envelope?.trips ?? [])
       if (chunk.length === 0) break
-      trips.push(...chunk)
-      if (chunk.length < pageSize) break
+
+      // Negeert de server de `page`-parameter, dan krijgen we telkens dezelfde
+      // rijen terug. Zonder deze check zouden we tot maxPages door blijven halen
+      // en duplicaten stapelen.
+      const nieuwe = chunk.filter((t) => t.id != null && !gezienIds.has(t.id))
+      if (nieuwe.length === 0) break
+      for (const t of nieuwe) gezienIds.add(t.id)
+      trips.push(...nieuwe)
+
+      // Voorbij het gevraagde begin? Dan is verder pagineren zinloos.
+      const min = opts.minStartDatum
+      if (min) {
+        const alleOuder = chunk.every((t) => {
+          const d = (t.start_at ?? '').slice(0, 10)
+          return d !== '' && d < min
+        })
+        if (alleOuder) break
+      }
+
+      // Paginering: envelope is leidend; anders doorgaan zolang de pagina's
+      // even groot blijven (gemeten aan wat de server teruggaf, niet aan wat wij
+      // vroegen — dat was juist de oude fout).
+      if (envelope?.has_more === false) break
+      if (envelope?.total_pages != null && page >= envelope.total_pages) break
+      if (envelope?.has_more == null && envelope?.total_pages == null) {
+        if (vorigeChunkGrootte != null && chunk.length < vorigeChunkGrootte) break
+        vorigeChunkGrootte = chunk.length
+      }
       page += 1
     }
+
     // Client-side date filter
     const min = opts.minStartDatum
     const max = opts.maxStartDatum
