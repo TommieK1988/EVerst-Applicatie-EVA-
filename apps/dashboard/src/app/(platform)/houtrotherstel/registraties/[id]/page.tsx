@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/houtrotherstel/supabase/server'
-import { getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
+import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 import Link from 'next/link'
 import { ArrowLeft, Edit, MapPin, Calendar, User, Wrench, Euro } from 'lucide-react'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
@@ -21,7 +21,8 @@ export default async function RegistratieDetailPage({
 
   // Rechten lopen sinds de cutover via EVA (medewerkers + rechten), niet meer
   // via het oude houtrot-eigen profiles.role.
-  const rechten = await getEffectieveRechten()
+  const medewerker = await getCurrentMedewerker()
+  const rechten = await getEffectieveRechten(medewerker)
 
   const { data: registratie } = await supabase
     .from('repair_registrations')
@@ -47,7 +48,8 @@ export default async function RegistratieDetailPage({
 
   const isAdmin = heeftModuleToegang(rechten, 'houtrotherstel', 'beheren')
   const isProjectleider = heeftModuleToegang(rechten, 'houtrotherstel', 'schrijven')
-  const isOwner = registratie.user_id === user!.id
+  // user_id op een registratie is sinds de cutover een medewerker-id.
+  const isOwner = !!medewerker && registratie.user_id === medewerker.id
   const canEdit = isAdmin || isProjectleider || isOwner
 
   const effectieveVerkoopprijs = registratie.actual_sale_price ?? registratie.sale_price_snapshot
