@@ -135,13 +135,22 @@ export async function activeerSjabloon(input: {
     await kopieerCompletionActies(supabase, taak, nieuweTaak.id)
   }
 
-  // Pass 2: hiërarchie (parent_task_id) remappen naar de gekopieerde taken.
+  // Pass 2: taak-relaties (parent_task_id + blocked_by_task_id) remappen naar de gekopieerde taken.
   for (const taak of sjabloonTaken ?? []) {
-    if (!taak.parent_task_id) continue
-    const nieuwId       = idMap.get(taak.id)
-    const nieuwParentId = idMap.get(taak.parent_task_id)
-    if (nieuwId && nieuwParentId) {
-      await (supabase as any).from('tasks').update({ parent_task_id: nieuwParentId }).eq('id', nieuwId)
+    if (!taak.parent_task_id && !taak.blocked_by_task_id) continue
+    const nieuwId = idMap.get(taak.id)
+    if (!nieuwId) continue
+    const patch: Record<string, string> = {}
+    if (taak.parent_task_id) {
+      const nieuwParentId = idMap.get(taak.parent_task_id)
+      if (nieuwParentId) patch.parent_task_id = nieuwParentId
+    }
+    if (taak.blocked_by_task_id) {
+      const nieuwBlockerId = idMap.get(taak.blocked_by_task_id)
+      if (nieuwBlockerId) patch.blocked_by_task_id = nieuwBlockerId
+    }
+    if (Object.keys(patch).length > 0) {
+      await (supabase as any).from('tasks').update(patch).eq('id', nieuwId)
     }
   }
 
