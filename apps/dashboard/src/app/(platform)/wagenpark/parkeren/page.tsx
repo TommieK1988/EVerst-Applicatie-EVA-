@@ -16,6 +16,8 @@ type ParkingRij = {
   parkeerkosten: number | null
   duur_seconden: number | null
   bestuurder_naam_raw: string | null
+  /** Regelcodes + ernst van de open R8-signalen op dit parkeer-record. */
+  signalen: { ernst: 'info' | 'waarschuwing' | 'overtreding'; omschrijving: string }[]
 }
 
 export default async function ParkerenPage(
@@ -45,7 +47,17 @@ export default async function ParkerenPage(
           and t.start_datum = (p.parkeer_starttijd::date)
           and ($2::boolean or (${eff}) = 'zakelijk')
         order by abs(extract(epoch from (t.start_datum::timestamp + t.start_tijd) - p.parkeer_starttijd))
-        limit 1)                                             as bestuurder_naam_raw
+        limit 1)                                             as bestuurder_naam_raw,
+      -- Open R8-signalen op dít parkeer-record (hoge kosten, extreem lang parkeren).
+      -- Het maandtotaal per bestuurder heeft geen parking_id en staat op de
+      -- bestuurderspagina onder Parkeren.
+      (select coalesce(
+                json_agg(json_build_object('ernst', b.ernst::text, 'omschrijving', b.omschrijving)),
+                '[]'::json)
+         from public.compliance_bevindingen b
+        where b.regel_code = 'R8'
+          and b.status = 'open'
+          and b.data->>'parking_id' = p.id::text)            as signalen
     from public.ulu_parking p
     where ($1 = '' or p.kenteken ilike '%' || $1 || '%')
     order by p.parkeer_starttijd desc
@@ -136,6 +148,7 @@ export default async function ParkerenPage(
                 <th>Locatie</th>
                 <th className="text-right">Duur</th>
                 <th className="text-right">Kosten</th>
+                <th>Signaal</th>
               </tr>
             </thead>
             <tbody>
@@ -170,6 +183,23 @@ export default async function ParkerenPage(
                       {r.parkeerkosten != null && r.parkeerkosten > 0
                         ? `€${r.parkeerkosten.toFixed(2)}`
                         : '—'}
+                    </td>
+                    <td className="max-w-[280px]">
+                      {(r.signalen ?? []).length === 0 ? (
+                        <span className="text-slate-300">—</span>
+                      ) : (
+                        <span
+                          className={
+                            'text-xs px-2 py-0.5 rounded-full ' +
+                            (r.signalen.some((s) => s.ernst === 'waarschuwing')
+                              ? 'bg-orange-100 text-orange-700'
+                              : 'bg-blue-100 text-blue-700')
+                          }
+                          title={r.signalen.map((s) => s.omschrijving).join('\n')}
+                        >
+                          {r.signalen.length === 1 ? 'R8' : `R8 ×${r.signalen.length}`}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 )

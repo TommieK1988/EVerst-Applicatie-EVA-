@@ -184,7 +184,6 @@ export async function importTripsAction(formData: FormData): Promise<TripsImport
       revalidatePath('/wagenpark/ritten')
       revalidatePath('/wagenpark/bestuurders')
       revalidatePath('/wagenpark/dashboard')
-      revalidatePath('/wagenpark/bevindingen')
 
       return {
         ok: true,

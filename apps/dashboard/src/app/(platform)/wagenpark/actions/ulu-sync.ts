@@ -382,7 +382,6 @@ export async function syncUluAction(
     revalidatePath('/wagenpark/dashboard')
     revalidatePath('/wagenpark/ritten')
     revalidatePath('/wagenpark/voertuigen')
-    revalidatePath('/wagenpark/bevindingen')
 
     return {
       ok: true,

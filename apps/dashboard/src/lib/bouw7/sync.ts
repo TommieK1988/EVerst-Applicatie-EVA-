@@ -457,6 +457,15 @@ function mapContactType(typeName?: string): OrganisatieType {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * SYNC: Employees → Medewerkers
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/** "2265de" / "2265 DE" → "2265 DE". Onherkenbare invoer blijft ongewijzigd (getrimd). */
+function normaliseerPostcode(pc?: string | null): string | null {
+  const schoon = pc?.replace(/\s+/g, '').toUpperCase() ?? ''
+  if (!schoon) return null
+  const m = schoon.match(/^(\d{4})([A-Z]{2})$/)
+  return m ? `${m[1]} ${m[2]}` : (pc?.trim() || null)
+}
+
 export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
@@ -490,9 +499,15 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
       // `functie` én `afdeling` zijn EVA-beheerd (de indeling wijkt af van Bouw7) en
       // worden bewust NIET meer vanuit de sync geschreven — zo overschrijft Bouw7 de
       // EVA-indeling nooit. Ze staan daarom ook niet in de fingerprint.
+      // Woonadres uit Bouw7. Postcode komt zonder spatie binnen ("2265DE"); genormaliseerd
+      // naar "2265 DE" — leesbaarder én betrouwbaarder voor geocoding (wagenpark-analyse).
+      const straat   = e.address?.trim() || null
+      const postcode = normaliseerPostcode(e.zipCode)
+      const plaats   = e.city?.trim() || null
       const hash = fingerprint({
         v: e.firstName ?? '', tv: e.prefix ?? null, a: e.lastName ?? '',
         em: e.emailAddress ?? null, tel: e.phoneNumber ?? null,
+        str: straat, pc: postcode, pl: plaats,
         act: actief, ext: e.external ?? false,
         gb: e.birthDate ?? null, dvd: e.dateOfEmployment ?? null, udp: e.dateOfResignation ?? null,
         hr: uurtariefVerkoop, cr: uurtariefKostprijs,
@@ -503,6 +518,9 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
         achternaam:          e.lastName ?? '',
         email:               e.emailAddress ?? null,
         telefoon:            e.phoneNumber ?? null,
+        adres_straat:        straat,
+        adres_postcode:      postcode,
+        adres_plaats:        plaats,
         actief,
         extern:              e.external ?? false,
         geboortedatum:       toDate(e.birthDate),
@@ -2113,9 +2131,10 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
 }
 
 /**
- * Interne projectnotitie (GET /project/{id}.note) → dossier-notitie (1 per dossier, ref 'note:project').
- * Kost een detail-call per dossier: draait alléén bij `full`-sync of per-dossier verversknop (scoped),
- * niet in de incrementele cron. Leeg geworden notitie → verwijderd.
+ * Interne projectnotitie (GET /project/{id}.note) → dossier-notitie (ref 'note:project') en de
+ * projectomschrijving (`information`) → dossier-notitie (ref 'note:information'). Beide maximaal
+ * één per dossier. Kost een detail-call per dossier: draait alléén bij `full`-sync of per-dossier
+ * verversknop (scoped), niet in de incrementele cron. Leeg geworden notitie → verwijderd.
  */
 export async function syncDossierNotities(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
@@ -2138,37 +2157,47 @@ export async function syncDossierNotities(opts?: { mode?: SyncMode; onlyBouw7Ids
     const dossiers = (dossierData ?? []) as { id: string; bouw7_id: string }[]
 
     const dossierIds = dossiers.map(d => d.id)
+    // Sleutel: `${dossier_id}|${bouw7_ref}` — per dossier hoogstens één notitie én één omschrijving.
     const bestaandByDossier = new Map<string, { id: string; inhoud: string }>()
     if (dossierIds.length) {
       const { data: bestaand } = await supabase.from('dossier_notities')
-        .select('id, dossier_id, inhoud').eq('bouw7_bron', 'note').in('dossier_id', dossierIds)
-      for (const n of (bestaand ?? []) as { id: string; dossier_id: string; inhoud: string }[]) bestaandByDossier.set(n.dossier_id, n)
+        .select('id, dossier_id, bouw7_ref, inhoud').eq('bouw7_bron', 'note').in('dossier_id', dossierIds)
+      for (const n of (bestaand ?? []) as { id: string; dossier_id: string; bouw7_ref: string; inhoud: string }[]) {
+        bestaandByDossier.set(`${n.dossier_id}|${n.bouw7_ref}`, n)
+      }
+    }
+
+    /** Schrijft één Bouw7-tekstveld weg als dossier-notitie; lege tekst → bestaande notitie verwijderen. */
+    const bewaar = async (dossierId: string, ref: string, tekst: string, prefix: string) => {
+      const cur = bestaandByDossier.get(`${dossierId}|${ref}`)
+      if (!tekst) {
+        if (cur) { await supabase.from('dossier_notities').delete().eq('id', cur.id); result.bijgewerkt++ }
+        return
+      }
+      const inhoud = `${prefix}${tekst}`
+      if (!cur) {
+        const { error } = await supabase.from('dossier_notities').insert({
+          dossier_id: dossierId, bouw7_bron: 'note', bouw7_ref: ref, inhoud, medewerker_id: null,
+        })
+        if (error) { result.fouten++ } else { result.nieuw++ }
+      } else if (cur.inhoud !== inhoud) {
+        const { error } = await supabase.from('dossier_notities').update({ inhoud }).eq('id', cur.id)
+        if (error) { result.fouten++ } else { result.bijgewerkt++ }
+      }
     }
 
     const BATCH = 10
     for (let i = 0; i < dossiers.length; i += BATCH) {
       const batch = dossiers.slice(i, i + BATCH)
-      const details = await Promise.allSettled(batch.map(d => bouw7.get<{ note?: string | null }>(`/project/${d.bouw7_id}`)))
+      const details = await Promise.allSettled(
+        batch.map(d => bouw7.get<{ note?: string | null; information?: string | null }>(`/project/${d.bouw7_id}`)),
+      )
       for (let j = 0; j < batch.length; j++) {
         const d = batch[j]
         const r = details[j]
         if (r.status !== 'fulfilled') { result.overgeslagen = (result.overgeslagen ?? 0) + 1; continue } // bv. gearchiveerd project (404)
-        const note = (r.value?.note ?? '').trim()
-        const cur = bestaandByDossier.get(d.id)
-        if (!note) {
-          if (cur) { await supabase.from('dossier_notities').delete().eq('id', cur.id); result.bijgewerkt++ }
-          continue
-        }
-        const inhoud = `📝 Interne notitie (Bouw7): ${note}`
-        if (!cur) {
-          const { error } = await supabase.from('dossier_notities').insert({
-            dossier_id: d.id, bouw7_bron: 'note', bouw7_ref: 'note:project', inhoud, medewerker_id: null,
-          })
-          if (error) { result.fouten++ } else { result.nieuw++ }
-        } else if (cur.inhoud !== inhoud) {
-          const { error } = await supabase.from('dossier_notities').update({ inhoud }).eq('id', cur.id)
-          if (error) { result.fouten++ } else { result.bijgewerkt++ }
-        }
+        await bewaar(d.id, 'note:project', (r.value?.note ?? '').trim(), '📝 Interne notitie (Bouw7): ')
+        await bewaar(d.id, 'note:information', (r.value?.information ?? '').trim(), '📄 Omschrijving (Bouw7): ')
       }
     }
   } catch (e: unknown) {

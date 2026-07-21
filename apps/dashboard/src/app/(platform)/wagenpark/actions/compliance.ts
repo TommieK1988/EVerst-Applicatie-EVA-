@@ -219,9 +219,14 @@ export async function runComplianceAction(): Promise<{
     // R11 uitzonderen: die bevindingen komen uit de werktijd-analyse (eigen job,
     // async data) en zitten dus niet in het resultaat van deze run. Zonder deze
     // uitzondering zou elke compliance-check ze weggooien.
+    //
+    // Handmatig toegekende bevindingen om dezelfde reden: die produceert deze
+    // run per definitie niet opnieuw, dus zonder de bron-filter zou een planner
+    // zijn eigen signaal bij de eerstvolgende check kwijtraken.
     await client.query(
       `delete from public.compliance_bevindingen
         where status = 'open'
+          and bron = 'automatisch'
           and regel_code <> 'R11'
           and periode_start >= $1::date
           and (fingerprint is null or not (fingerprint = any($2::text[])))`,
@@ -300,7 +305,7 @@ export async function runComplianceAction(): Promise<{
     }
   }
 
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
   revalidatePath('/wagenpark/dashboard')
   return {
     totaal: result.samenvatting.totaal,
@@ -366,7 +371,7 @@ async function notificeerWerktijdSignalen(
     })
   }
   for (const omschrijving of zonderBestuurder) {
-    meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/bevindingen' })
+    meldingen.push({ titel: 'Werktijd-signaal wagenpark', body: omschrijving, url: '/wagenpark/ritten' })
   }
 
   for (const o of ontvangers) {
@@ -392,7 +397,8 @@ export async function markeerUitzonderingAction(bevinding_id: string, toelichtin
     actie: 'markeer_uitzondering',
     toelichting,
   })
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
+  revalidatePath('/wagenpark/bestuurders')
 }
 
 export async function bevestigOvertredingAction(bevinding_id: string, toelichting: string) {
@@ -407,5 +413,6 @@ export async function bevestigOvertredingAction(bevinding_id: string, toelichtin
     actie: 'bevestig_overtreding',
     toelichting,
   })
-  revalidatePath('/wagenpark/bevindingen')
+  revalidatePath('/wagenpark/ritten')
+  revalidatePath('/wagenpark/bestuurders')
 }

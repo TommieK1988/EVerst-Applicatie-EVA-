@@ -469,7 +469,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Statistieken', body: 'Vier tegels geven direct inzicht: actieve voertuigen, openstaande bevindingen, zakelijke kilometers deze maand en privé­kilometers deze maand. Kleuren geven aan of waarden binnen de norm vallen.' },
       { title: 'ULU-tracker', body: 'De ingebedde ULU­tracker toont real-time voertuig­posities en -statussen. Vereist een actieve ULU-koppeling. Klik op een voertuig voor details.' },
       { title: 'Rijscore­ranking', body: 'Rangschikking van bestuurders op rijscore. Een lage score (rood) duidt op scherp remmen, hoog rijden of andere rijstijlissues. Gebruik dit voor coaching­gesprekken.' },
-      { title: 'Open bevindingen', body: 'De vijf meest urgente compliance­bevindingen worden direct getoond. Klik op "Alle bevindingen" voor het volledige overzicht met filteropties.' },
+      { title: 'Open bevindingen', body: 'De vijf meest urgente compliance­bevindingen worden direct getoond. Het volledige beeld staat bij de gegevens zelf: rit-signalen in de signaal-kolom op de Ritten-pagina, privé-kilometers, rijgedrag en parkeerkosten op de bestuurderspagina.' },
       { title: 'ULU sync', body: 'Klik op "ULU sync" om handmatig ritten- en compliance­data te vernieuwen vanuit de ULU-koppeling. De sync loopt normaal automatisch dagelijks.' },
     ],
   }],
@@ -562,10 +562,12 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   [/^\/wagenpark\/ritten$/, {
     title: 'Wagenpark — Ritten',
-    description: 'Volledig rittenlogboek van het wagenpark. Filter op datumbereik, bestuurder, type (zakelijk/privé) of rijscore. Exporteer gegevens voor de salarisadministratie of de Belastingdienst.',
+    description: 'Volledig rittenlogboek van het wagenpark, mét de compliance­signalen erbij. Rechts in de tabel zie je per rit of er iets opvalt en waarom. Filter op bestuurder, kenteken, type (zakelijk/privé) of rijscore.',
     sections: [
-      { title: 'Filters gebruiken', body: 'Combineer filters: selecteer een bestuurder, kies periode en filter op score­bucket (<50 = rood, 50–69 = oranje, 70+ = normaal). De tabel toont maximaal 200 ritten per pagina.' },
-      { title: 'Ritten kleuring', body: 'Groene rijen = zakelijk, grijze rijen = privé. Rood of oranje score­badges duiden op rijstijlissues. Een ● achter het type geeft aan dat de classificatie handmatig is gecorrigeerd.' },
+      { title: 'Signaal-kolom', body: 'De laatste kolom toont de regelcodes van openstaande signalen op die rit (bijvoorbeeld R1 werktijden of R9 te laat), gekleurd naar ernst: rood = overtreding, oranje = waarschuwing, blauw = informatief. Een streepje betekent: niets aan de hand.' },
+      { title: 'Snel filteren', body: 'De vier kaarten bovenaan filteren de tabel meteen op ernst. Klik nogmaals op dezelfde kaart om het filter los te laten. Sorteren op de signaal-kolom zet de zwaarste gevallen bovenaan.' },
+      { title: 'Signaal afhandelen', body: 'Klik op een rit om het zijpaneel te openen. Daar staat de uitleg bij de regel en handel je af: eenmalige uitzondering, altijd toestaan voor deze bestuurder, of overtreding bevestigen. In hetzelfde paneel wissel je een rit van zakelijk naar privé.' },
+      { title: 'Signalen die niet over één rit gaan', body: 'Privé-kilometers, rijgedrag over een week en parkeerkosten horen bij een bestuurder, niet bij één rit. Die vind je op de bestuurderspagina onder Signalen.' },
       { title: 'Kilometeradministratie', body: 'Een volledige kilometeradministratie is fiscaal verplicht voor leaserijders met bijtelling. Zorg dat alle ritten zijn geclassificeerd (zakelijk/privé) vóór de maandafsluiting. Exporteer via de "Exporteer"-knop als CSV voor de salarisadministratie.' },
     ],
   }],
@@ -618,17 +620,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/wagenpark\/bevindingen$/, {
-    title: 'Wagenpark — Bevindingen',
-    description: 'Compliance­bevindingen voor het volledige wagenpark. Filter op ernst (overtreding/waarschuwing/info), status (open/uitzondering/afgewezen) en specifieke regels of bestuurders.',
-    sections: [
-      { title: 'Ernst­niveaus', body: 'Overtreding (rood) = actie vereist. Waarschuwing (oranje) = let op. Info (blauw) = informatief. De ernstkaarten bovenaan geven direct het totaalbeeld.' },
-      { title: 'Filters', body: 'Filter op status (Open / Uitzonderingen / Afgewezen / Alle), op regelcode (welke complianceregel is overtreden) of op bestuurder. Combineer filters voor een gerichte analyse.' },
-      { title: 'Bevinding beheren', body: 'Klik op een bevinding om actie te ondernemen: markeer als uitzondering (met reden), wijs af of los op. Opgeloste bevindingen verdwijnen uit het "Open"-overzicht.' },
-      { title: 'Compliance check uitvoeren', body: 'Klik op "Compliance check uitvoeren" om handmatig alle regels opnieuw te beoordelen op actuele data. Normaal loopt dit automatisch na elke rit­synchronisatie.' },
-    ],
-  }],
-
   [/^\/wagenpark\/instellingen$/, {
     title: 'Wagenpark — Instellingen',
     description: 'Configureer de compliance­regels voor het wagenpark. Per regel kun je de actieve status wijzigen en drempelwaarden aanpassen. Zware logica­wijzigingen vereisen aanpassing in de compliance­engine (backend).',
@@ -643,7 +634,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Wagenpark',
     description: 'De wagenpark­module van EVA. Beheer voertuigen, bestuurders, kilometer­administratie, lease­contracten en compliance op één plek. Geïntegreerd met de ULU-rittenregistratie.',
     sections: [
-      { title: 'Modules', body: 'Dashboard · Voertuigen · Bestuurders · Ritten · Parkeren · Leasecontracten · Diagnose · Bevindingen · Instellingen.' },
+      { title: 'Modules', body: 'Dashboard · Voertuigen · Bestuurders · Ritten · Parkeren · Leasecontracten · Diagnose · Instellingen.' },
       { title: 'ULU-integratie', body: 'Ritten en parkeertransacties komen via de ULU-koppeling (automatisch of via Excel-import). Stel de ULU-inloggegevens in via .env.local voor automatische synchronisatie.' },
       { title: 'Compliance', body: 'EVA bewaakt automatisch APK-vervaldatums, rijbewijs­geldigheid, privé­kilometerlimieten en rijstijl­scores op basis van instelbare regels.' },
     ],

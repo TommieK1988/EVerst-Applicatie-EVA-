@@ -35,7 +35,7 @@ export async function updateRegelConfigAction(
       [JSON.stringify(parsed), code],
     )
     revalidatePath('/wagenpark/instellingen')
-    revalidatePath('/wagenpark/bevindingen')
+    revalidatePath('/wagenpark/ritten')
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

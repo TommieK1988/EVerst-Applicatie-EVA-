@@ -12,6 +12,7 @@ import RitTypeToggle from '@/components/wagenpark/ritten/RitTypeToggle'
 import MedewerkerKoppeling, { type MedewerkerOptie } from '@/components/wagenpark/bestuurders/MedewerkerKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import { signaalSoort } from '@/lib/wagenpark/signalen'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +55,45 @@ type Rit = {
   rit_type_handmatig: boolean
   score: number | null
   adres_stop: string | null
+}
+
+/** Eén blok met bevindingen van dezelfde soort. Leeg blok blijft staan als "alles in orde". */
+function BevindingenBlok({
+  titel,
+  toelichting,
+  bevindingen,
+  leegTekst,
+}: {
+  titel: string
+  toelichting: React.ReactNode
+  bevindingen: BevindingRow[]
+  leegTekst: string
+}) {
+  const open = bevindingen.filter((b) => b.status === 'open').length
+  return (
+    <section className="bg-white rounded-lg border lg:col-span-2">
+      <div className="px-5 py-3 border-b">
+        <h2 className="text-sm font-semibold text-slate-700">
+          {titel}
+          {open > 0 && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+              {open} open
+            </span>
+          )}
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">{toelichting}</p>
+      </div>
+      {bevindingen.length === 0 ? (
+        <p className="text-sm text-slate-500 p-5">{leegTekst}</p>
+      ) : (
+        <div className="divide-y">
+          {bevindingen.map((b) => (
+            <BevindingRij key={b.id} bevinding={b} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
 }
 
 type BevindingRow = {
@@ -130,7 +170,9 @@ export default async function BestuurderDetailPage(
     [userId, typeFilter, magPrive],
   )
 
-  // Bevindingen voor deze bestuurder (via trip OF via data->>user_id_ulu)
+  // Bevindingen voor deze bestuurder (via trip OF via data->>user_id_ulu).
+  // Ook de R8-parkeersignalen: die hangen aan een parkeer-record en kennen alleen
+  // een bestuurdersnaam, dus die matchen we op naam.
   const bevindingen = await pgQuery<BevindingRow>(
     `
     select b.id, b.regel_code, b.voertuig_id, b.medewerker_id, b.trip_id,
@@ -148,6 +190,18 @@ export default async function BestuurderDetailPage(
      where (
        (select t.user_id_ulu from public.ulu_trips t where t.id = b.trip_id limit 1) = $1
        or (b.data->>'user_id_ulu')::bigint = $1
+       or (
+         b.regel_code = 'R8'
+         and b.data->>'bestuurder' is not null
+         and (
+           b.data->>'bestuurder' = (select uu.volledige_naam from public.ulu_users uu where uu.id = $1)
+           -- ULU levert bij parkeren de ruwe naam uit de rit; die wijkt soms af van volledige_naam.
+           or b.data->>'bestuurder' in (
+             select distinct t5.bestuurder_naam_raw from public.ulu_trips t5
+              where t5.user_id_ulu = $1 and t5.bestuurder_naam_raw is not null
+           )
+         )
+       )
      )
      order by b.status = 'open' desc,
               coalesce(b.periode_eind, b.periode_start, b.gegenereerd_op::date) desc,
@@ -225,6 +279,13 @@ export default async function BestuurderDetailPage(
   } catch (e: unknown) {
     koppelingFout = e instanceof Error ? e.message : 'Onbekende fout'
   }
+
+  // Drie soorten signalen, drie blokken — zie lib/wagenpark/signalen.ts.
+  // Rit-gebonden bevindingen staan primair in de signaal-kolom op de
+  // ritten-pagina; hier alleen als naslag.
+  const bevParkeren = bevindingen.filter((b) => signaalSoort(b.regel_code) === 'parkeren')
+  const bevPersoonlijk = bevindingen.filter((b) => signaalSoort(b.regel_code) === 'persoonlijk')
+  const bevRitten = bevindingen.filter((b) => signaalSoort(b.regel_code) === 'rit')
 
   const factor = 365 / tot.dagen_in_periode
   const prognoseZakelijk = Math.round(tot.km_zakelijk * factor)
@@ -348,23 +409,35 @@ export default async function BestuurderDetailPage(
           <AllowancesPaneel allowances={allowances} />
         </section>
 
-        {/* Bevindingen */}
-        <section className="bg-white rounded-lg border lg:col-span-2">
-          <div className="px-5 py-3 border-b">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Compliance-bevindingen ({bevindingen.length})
-            </h2>
-          </div>
-          {bevindingen.length === 0 ? (
-            <p className="text-sm text-slate-500 p-5">Geen bevindingen voor deze bestuurder.</p>
-          ) : (
-            <div className="divide-y">
-              {bevindingen.map((b) => (
-                <BevindingRij key={b.id} bevinding={b} />
-              ))}
-            </div>
-          )}
-        </section>
+        {/* Signalen — per soort, want ze vragen om verschillende actie */}
+        <BevindingenBlok
+          titel="Privé-kilometers & rijgedrag"
+          toelichting="Signalen over een hele periode: privé-km ten opzichte van de limiet en het rijgedrag per week. Ze horen bij deze bestuurder, niet bij één rit."
+          bevindingen={bevPersoonlijk}
+          leegTekst="Geen signalen over privé-kilometers of rijgedrag."
+        />
+
+        <BevindingenBlok
+          titel="Parkeren"
+          toelichting="Hoge parkeerkosten per transactie, extreem lang parkeren en het maandtotaal aan parkeerkosten. De onderliggende records staan op de parkeren-pagina."
+          bevindingen={bevParkeren}
+          leegTekst="Geen parkeersignalen voor deze bestuurder."
+        />
+
+        <BevindingenBlok
+          titel="Signalen op losse ritten"
+          toelichting={
+            <>
+              Deze signalen hangen aan één rit en handel je normaal af vanuit de{' '}
+              <Link href="/wagenpark/ritten" className="text-green-700 hover:underline">
+                signaal-kolom op de ritten-pagina
+              </Link>
+              . Hier staan ze als naslag bij elkaar.
+            </>
+          }
+          bevindingen={bevRitten}
+          leegTekst="Geen openstaande signalen op losse ritten."
+        />
 
         <section className="bg-white rounded-lg border lg:col-span-2">
           <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2">
