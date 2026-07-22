@@ -2,29 +2,21 @@ import { Clock, Lock } from 'lucide-react'
 import { createClient as createServerClient } from '@everts/database/server'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
-import WerktijdenTabel, {
-  type WerktijdRij,
-} from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import WerktijdenWeergave, {
+  type Weergave,
+} from '@/components/wagenpark/werktijden/WerktijdenWeergave'
+import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
+import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
 import { laadLayouts } from '@/app/actions/layouts'
 
 export const dynamic = 'force-dynamic'
 
-/** Standaard-terugblik in weken; te overschrijven met ?weken=. */
-const STANDAARD_WEKEN = 13
-const MAX_WEKEN = 104
-
-function vanafDatum(weken: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - weken * 7)
-  return d.toISOString().slice(0, 10)
-}
-
 export default async function WerktijdenPage({
   searchParams,
 }: {
-  searchParams: Promise<{ weken?: string }>
+  searchParams: Promise<{ periode?: string; van?: string; tot?: string; weergave?: string }>
 }) {
   // Aankomst- en vertrektijden van een met naam genoemde medewerker zijn
   // privacygevoelig — zelfde poort als de privé-ritten. De wagenpark-layout
@@ -44,11 +36,8 @@ export default async function WerktijdenPage({
   }
 
   const params = await searchParams
-  const weken = Math.min(
-    Math.max(Number.parseInt(params.weken ?? '', 10) || STANDAARD_WEKEN, 1),
-    MAX_WEKEN,
-  )
-  const vanaf = vanafDatum(weken)
+  const periode = bepaalPeriode(params)
+  const weergave: Weergave = params.weergave === 'medewerker' ? 'medewerker' : 'dag'
 
   let user_id: string | null = null
   try {
@@ -61,7 +50,7 @@ export default async function WerktijdenPage({
     // niet ingelogd of sessie niet beschikbaar
   }
 
-  const [rijen, handmatig, layouts] = await Promise.all([
+  const [rijen, handmatig, layoutsDag, layoutsSamenvatting] = await Promise.all([
     // Alleen de ANKER-bevindingen. De andere ritten van dezelfde ritketen dragen
     // hetzelfde aantal minuten mee als verwijzing; die meetellen zou een
     // opgesplitste heenreis dubbel laten tellen. Zie lib/wagenpark/werktijd.ts.
@@ -91,10 +80,10 @@ export default async function WerktijdenPage({
          -- met de medewerker. Geaccepteerde uitzonderingen blijven wél staan —
          -- die wil je juist kunnen benoemen, met hun status erbij.
          and b.status <> 'afgewezen'
-         and b.periode_start >= $1::date
+         and b.periode_start between $1::date and $2::date
        order by b.periode_start desc
       `,
-      [vanaf],
+      [periode.van, periode.tot],
     ),
     // Handmatig toegekende R9/R10-signalen hebben geen ritketen en dus geen
     // minuten. Ze stilzwijgend weglaten zou het beeld vertekenen, dus we tellen
@@ -106,11 +95,12 @@ export default async function WerktijdenPage({
        where b.regel_code in ('R9', 'R10')
          and b.data->>'keten_rol' is null
          and b.status <> 'afgewezen'
-         and b.periode_start >= $1::date
+         and b.periode_start between $1::date and $2::date
       `,
-      [vanaf],
+      [periode.van, periode.tot],
     ),
     user_id ? laadLayouts(user_id, 'wagenpark-werktijden') : Promise.resolve([]),
+    user_id ? laadLayouts(user_id, 'wagenpark-werktijden-samenvatting') : Promise.resolve([]),
   ])
 
   const handmatigAantal = handmatig[0]?.aantal ?? 0
@@ -120,22 +110,33 @@ export default async function WerktijdenPage({
       <PageHeader
         titel="Werktijden"
         omschrijving={
-          `Te laat aangekomen en te vroeg vertrokken, per medewerker per week — laatste ${weken} weken ` +
-          `(vanaf ${new Date(vanaf).toLocaleDateString('nl-NL')}). ` +
+          `Te laat aangekomen en te vroeg vertrokken. ` +
+          `${periode.label} — ${datumKort(periode.van)} t/m ${datumKort(periode.tot)}. ` +
           (handmatigAantal > 0
             ? `${handmatigAantal} handmatig toegekende signalen tellen niet mee: daar is geen tijd van bekend.`
             : '')
         }
       />
 
-      {rijen.length === 0 ? (
-        <EmptyState
-          titel="Geen afwijkingen in deze periode"
-          omschrijving="Er zijn geen R9/R10-bevindingen gevonden. Draai eventueel eerst een compliance-check op de ritten."
-          icon={Clock}
-        />
-      ) : (
-        <WerktijdenTabel data={rijen} layouts={layouts} user_id={user_id} />
+      {/* De weergave wordt altijd getoond, ook zonder rijen: anders verdwijnt de
+          periodekiezer juist op het moment dat je een andere periode wilt kiezen. */}
+      <WerktijdenWeergave
+        data={rijen}
+        periode={periode}
+        weergave={weergave}
+        layoutsDag={layoutsDag}
+        layoutsSamenvatting={layoutsSamenvatting}
+        user_id={user_id}
+      />
+
+      {rijen.length === 0 && (
+        <div className="mt-4">
+          <EmptyState
+            titel="Geen afwijkingen in deze periode"
+            omschrijving="Kies hierboven een andere periode, of draai eerst een compliance-check op de ritten."
+            icon={Clock}
+          />
+        </div>
       )}
     </>
   )

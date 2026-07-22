@@ -93,6 +93,15 @@ type Props<T extends { id: string }> = {
   /** Tekst op één regel houden: te lange celinhoud wordt afgekapt met een ellipsis. */
   eenregelig?: boolean
   /**
+   * Optioneel: krijg de rijen terug die door de zoekbalk en de kolomfilters heen
+   * komen, zodat totalen buiten de tabel (tel-kaarten, subtotaalbalken) met die
+   * filters meebewegen in plaats van over de hele dataset te rekenen.
+   *
+   * De rijen zijn ongegroepeerd en ongepagineerd — je krijgt dus álles wat het
+   * filter overleeft, niet alleen de zichtbare pagina.
+   */
+  onGefilterd?: (rijen: T[]) => void
+  /**
    * Optioneel: vaste afvink-kolom links (buiten het kolombeheer en de layouts om).
    * 'open' = leeg rondje (klikbaar), 'af' = groen vinkje (klikbaar), 'verborgen' = lege cel.
    */
@@ -315,7 +324,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -559,6 +568,17 @@ export default function OverzichtTabel<T extends { id: string }>({
     + (selecteerbaar ? 1 : 0)
     + (afvinkKolom ? 1 : 0)
     + (toonRijActie ? 1 : 0)
+
+  // ── Gefilterde rijen terugmelden ──────────────────────────────────────────
+  // De callback in een ref, zodat een aanroeper die hem niet memoïseert geen
+  // effect-lus veroorzaakt: het effect hangt alleen aan het rijmodel, en dat
+  // herberekent TanStack pas als data of filters echt wijzigen.
+  const onGefilterdRef = useRef(onGefilterd)
+  onGefilterdRef.current = onGefilterd
+  const gefilterdeRijen = table.getFilteredRowModel().rows
+  useEffect(() => {
+    onGefilterdRef.current?.(gefilterdeRijen.map(r => r.original))
+  }, [gefilterdeRijen])
 
   const hasFilters = kolommen.some(k => k.filterType)
   const activeFilters = columnFilters.filter(f =>

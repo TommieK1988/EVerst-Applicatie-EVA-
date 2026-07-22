@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
-import { Clock, LogOut, Sigma } from 'lucide-react'
+import React, { useCallback, useMemo } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import { minutenLabel, SOORT_LABEL, type WerktijdSoort } from '@/lib/wagenpark/werktijd'
+import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 
 /**
  * Eén regel = één medewerker, één dag, één soort afwijking. Een dag kan dus twee
@@ -59,31 +59,31 @@ export default function WerktijdenTabel({
   data,
   layouts,
   user_id,
+  onTotalen,
 }: {
   data: WerktijdRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
+  /** Totalen over de rijen die de kolomfilters overleven; voedt de tel-kaarten. */
+  onTotalen?: (t: Totalen) => void
 }) {
-  // Snelfilter via de tel-kaarten boven de tabel. null = alles tonen.
-  const [soortFilter, setSoortFilter] = useState<WerktijdSoort | null>(null)
-
-  const tellingen = useMemo(() => {
-    const t = { te_laat: 0, te_vroeg: 0, min_laat: 0, min_vroeg: 0 }
-    for (const r of data) {
-      if (r.soort === 'te_laat') {
-        t.te_laat += 1
-        t.min_laat += r.minuten
-      } else {
-        t.te_vroeg += 1
-        t.min_vroeg += r.minuten
+  // De tabel meldt terug welke rijen door zoekbalk en kolomfilters komen, zodat
+  // de kaarten boven de pagina hetzelfde tellen als wat je op je scherm ziet.
+  const meldTotalen = useCallback(
+    (rijen: WerktijdRij[]) => {
+      const t = { dagenLaat: 0, minutenLaat: 0, dagenVroeg: 0, minutenVroeg: 0 }
+      for (const r of rijen) {
+        if (r.soort === 'te_laat') {
+          t.dagenLaat += 1
+          t.minutenLaat += r.minuten
+        } else {
+          t.dagenVroeg += 1
+          t.minutenVroeg += r.minuten
+        }
       }
-    }
-    return t
-  }, [data])
-
-  const zichtbaar = useMemo(
-    () => (soortFilter ? data.filter((r) => r.soort === soortFilter) : data),
-    [data, soortFilter],
+      onTotalen?.(t)
+    },
+    [onTotalen],
   )
 
   const bestuurderOpties = useMemo(
@@ -206,50 +206,19 @@ export default function WerktijdenTabel({
   )
 
   return (
-    <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        <TelKaart
-          label="Te laat"
-          hoofd={minutenLabel(tellingen.min_laat)}
-          sub={`${tellingen.te_laat} dagen`}
-          icon={Clock}
-          kleurBadge="bg-amber-100 text-amber-700"
-          actief={soortFilter === 'te_laat'}
-          onKlik={() => setSoortFilter(soortFilter === 'te_laat' ? null : 'te_laat')}
-        />
-        <TelKaart
-          label="Te vroeg weg"
-          hoofd={minutenLabel(tellingen.min_vroeg)}
-          sub={`${tellingen.te_vroeg} dagen`}
-          icon={LogOut}
-          kleurBadge="bg-violet-100 text-violet-700"
-          actief={soortFilter === 'te_vroeg'}
-          onKlik={() => setSoortFilter(soortFilter === 'te_vroeg' ? null : 'te_vroeg')}
-        />
-        <TelKaart
-          label="Totaal"
-          hoofd={minutenLabel(tellingen.min_laat + tellingen.min_vroeg)}
-          sub={`${data.length} regels`}
-          icon={Sigma}
-          kleurBadge="bg-slate-100 text-slate-600"
-          actief={soortFilter === null}
-          onKlik={() => setSoortFilter(null)}
-        />
-      </div>
-
-      <OverzichtTabel
-        scherm="wagenpark-werktijden"
-        data={zichtbaar}
-        kolommen={kolommen}
-        layouts={layouts}
-        user_id={user_id}
-        beginSortering={[{ id: 'datum', desc: true }]}
-        selecteerbaar={false}
-        toonRijActie={false}
-        dicht
-        groepering={groepering}
-      />
-    </>
+    <OverzichtTabel
+      scherm="wagenpark-werktijden"
+      data={data}
+      kolommen={kolommen}
+      layouts={layouts}
+      user_id={user_id}
+      beginSortering={[{ id: 'datum', desc: true }]}
+      selecteerbaar={false}
+      toonRijActie={false}
+      dicht
+      groepering={groepering}
+      onGefilterd={meldTotalen}
+    />
   )
 }
 
@@ -294,42 +263,5 @@ function WeekKop({ rijen }: { rijen: WerktijdRij[] }) {
         </span>
       </span>
     </span>
-  )
-}
-
-function TelKaart({
-  label,
-  hoofd,
-  sub,
-  icon: Icon,
-  kleurBadge,
-  actief,
-  onKlik,
-}: {
-  label: string
-  hoofd: string
-  sub: string
-  icon: React.ElementType
-  kleurBadge: string
-  actief: boolean
-  onKlik: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onKlik}
-      className={`rounded-lg p-4 text-left transition-all flex items-start gap-3 border ${
-        actief ? 'border-slate-900 shadow-sm bg-white' : 'border-slate-200 bg-white hover:shadow-sm'
-      }`}
-    >
-      <span className={`p-1.5 rounded-md ${kleurBadge}`}>
-        <Icon className="w-4 h-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs uppercase tracking-wide text-slate-500">{label}</span>
-        <span className="block text-2xl font-semibold text-slate-900">{hoofd}</span>
-        <span className="block text-xs text-slate-400">{sub}</span>
-      </span>
-    </button>
   )
 }
