@@ -456,6 +456,80 @@ export async function discoverBouw7Bestelregels(projectId?: number): Promise<Bes
   }
 }
 
+/**
+ * Read-only verkenning voor **inkooporders en OA-contracten** (`POST /contracts/purchase-order`
+ * en `POST /contracts/subcontractor`). Schrijft niets.
+ *
+ * Haalt op wat je nodig hebt vóór de eerste schrijfactie:
+ *  - de **statuslijsten** (`/contracts/{soort}/statuses`) — de concept-status-id mag je niet raden;
+ *  - de **kostentypes** van een inkooporder (`/contracts/purchase-order/cost-types`);
+ *  - van het nieuwste bestaande contract per soort het **detail** (`/contracts/{soort}/{id}`) plus
+ *    zijn **termijnen** (`/list/{soort}-contract-terms`). Daarin zie je de echte veldvulling én —
+ *    de kernvraag — of een termijn via `contractOrderLines` naar bestaande bestelregels verwijst.
+ */
+export type ContractRefsResult =
+  | {
+      ok: true
+      inkooporderStatussen: unknown
+      oaStatussen: unknown
+      inkooporderKostentypes: unknown
+      voorbeeldInkooporder: unknown
+      voorbeeldInkooporderTermijnen: unknown
+      voorbeeldOaContract: unknown
+      voorbeeldOaTermijnen: unknown
+    }
+  | { ok: false; error: string }
+
+export async function discoverBouw7Contracten(projectId?: number): Promise<ContractRefsResult> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('integraties')
+      .select('config')
+      .eq('naam', 'bouw7')
+      .maybeSingle()
+    if (!data) return { ok: false, error: 'Bouw7 is nog niet geconfigureerd.' }
+
+    const { Bouw7Client } = await import('@/lib/bouw7/client')
+    const config = data.config as Record<string, string>
+    const client = new Bouw7Client(config.api_key, config.app_name)
+
+    const tryGet = async <T>(fn: () => Promise<T>) => {
+      try { return await fn() } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
+    }
+
+    const filter = projectId != null ? `project.id = ${projectId} ` : ''
+    const nieuwste = async (pad: string) => {
+      const res = await tryGet(() => client.get<{ items?: { id: number }[] }>(pad, { q: `${filter}SORT(id, DESC) LIMIT 1` }))
+      return (res as { items?: { id: number }[] })?.items?.[0]?.id ?? null
+    }
+
+    const [inkooporderStatussen, oaStatussen, inkooporderKostentypes, poId, subId] = await Promise.all([
+      tryGet(() => client.get<unknown>('/contracts/purchase-order/statuses')),
+      tryGet(() => client.get<unknown>('/contracts/subcontractor/statuses')),
+      tryGet(() => client.get<unknown>('/contracts/purchase-order/cost-types')),
+      nieuwste('/list/purchase-order-contracts'),
+      nieuwste('/list/subcontractor-contracts'),
+    ])
+
+    const [voorbeeldInkooporder, voorbeeldInkooporderTermijnen, voorbeeldOaContract, voorbeeldOaTermijnen] = await Promise.all([
+      poId != null ? tryGet(() => client.get<unknown>(`/contracts/purchase-order/${poId}`)) : null,
+      poId != null ? tryGet(() => client.get<unknown>('/list/purchase-order-contract-terms', { q: `contractId = ${poId} LIMIT 25` })) : null,
+      subId != null ? tryGet(() => client.get<unknown>(`/contracts/subcontractor/${subId}`)) : null,
+      subId != null ? tryGet(() => client.get<unknown>('/list/subcontractor-contract-terms', { q: `contractId = ${subId} LIMIT 25` })) : null,
+    ])
+
+    return {
+      ok: true,
+      inkooporderStatussen, oaStatussen, inkooporderKostentypes,
+      voorbeeldInkooporder, voorbeeldInkooporderTermijnen,
+      voorbeeldOaContract, voorbeeldOaTermijnen,
+    }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
+}
+
 export type SyncRelatiesResult =
   | { ok: true; organisaties: SyncResult; contactpersonen: SyncResult }
   | { ok: false; error: string }

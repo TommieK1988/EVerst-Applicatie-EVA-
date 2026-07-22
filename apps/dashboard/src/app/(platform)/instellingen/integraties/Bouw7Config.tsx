@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Button, Card, CardBody, Input } from '@/components/ui'
-import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, verifyBouw7WriteAccess, discoverBouw7Bestelregels, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult, type WriteCheckResult, type BestelregelRefsResult } from './actions'
+import { saveBouw7Config, testBouw7Connection, runFullSync, debugBouw7Quotations, debugBouw7Projects, verifyBouw7WriteAccess, discoverBouw7Bestelregels, discoverBouw7Contracten, type RunSyncResult, type QuotationDebugResult, type ProjectDebugResult, type WriteCheckResult, type BestelregelRefsResult, type ContractRefsResult } from './actions'
 
 type Status = { kind: 'idle' } | { kind: 'saving' } | { kind: 'success'; msg?: string } | { kind: 'error'; message: string }
 
@@ -24,6 +24,8 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
   const [writeChecking, setWriteChecking] = useState(false)
   const [poRefs, setPoRefs] = useState<BestelregelRefsResult | null>(null)
   const [poRefsLoading, setPoRefsLoading] = useState(false)
+  const [contractRefs, setContractRefs] = useState<ContractRefsResult | null>(null)
+  const [contractRefsLoading, setContractRefsLoading] = useState(false)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -300,6 +302,42 @@ export function Bouw7Config({ existingId, existingKey, existingAppName, laatstSy
                   </pre>
                 ) : (
                   <span style={{ color: '#dc2626' }}>{poRefs.error}</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg-muted)', marginBottom: 4 }}>
+              Inkooporders &amp; OA-contracten — statussen en voorbeeldcontract ontdekken
+            </p>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Read-only. Haalt de statuslijsten en kostentypes op (die id&apos;s mag je niet raden) en van het
+              nieuwste bestaande contract per soort het detail plus zijn termijnen — daarin zie je of een termijn
+              via <code>contractOrderLines</code> naar bestaande bestelregels verwijst.
+            </p>
+            <Button type="button" variant="ghost" size="sm" loading={contractRefsLoading}
+              onClick={async () => {
+                setContractRefsLoading(true)
+                setContractRefs(null)
+                try { setContractRefs(await discoverBouw7Contracten()) }
+                finally { setContractRefsLoading(false) }
+              }}>
+              Contracten inspecteren
+            </Button>
+            {contractRefs && (
+              <div style={{
+                marginTop: 10, padding: '12px 14px',
+                background: contractRefs.ok ? 'var(--bg)' : 'color-mix(in srgb, #dc2626 8%, var(--bg-elev))',
+                border: `1px solid ${contractRefs.ok ? 'var(--border)' : 'color-mix(in srgb, #dc2626 20%, transparent)'}`,
+                borderRadius: 8, fontSize: 11,
+              }}>
+                {contractRefs.ok ? (
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 320, overflow: 'auto', color: 'var(--fg-muted)' }}>
+                    {JSON.stringify(contractRefs, null, 2)}
+                  </pre>
+                ) : (
+                  <span style={{ color: '#dc2626' }}>{contractRefs.error}</span>
                 )}
               </div>
             )}
