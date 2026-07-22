@@ -58,6 +58,46 @@ export function urenLabel(uren: number): string {
   return uren.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
+/**
+ * Status van een bevinding die als "verklaard" is afgevinkt.
+ *
+ * De enum-waarde is misleidend: `afgewezen` betekent NIET ingetrokken maar
+ * "verklaring afgewezen, overtreding bevestigd". Alleen deze waarde betekent
+ * "gecontroleerd, er was niets aan de hand".
+ */
+export const VERKLAARD = 'geaccepteerd_uitzondering'
+
+/**
+ * Telt deze regel mee in een totaal?
+ *
+ * Een verklaarde afwijking blijft zichtbaar in de lijst — je wilt kunnen zien
+ * wat er is weggestreept en waarom — maar telt nergens in een som mee. Elke
+ * plek die "totaal" toont gebruikt deze functie, zodat de kaarten, de
+ * weeksubtotalen en de samenvatting per medewerker niet uiteen kunnen lopen.
+ */
+export function teltMee(status: string): boolean {
+  return status !== VERKLAARD
+}
+
+/**
+ * Netto werkdag in uren, voor het omrekenen van minuten naar dagen.
+ *
+ * De roosters lopen van 08:00–16:15 of 07:30–16:15, dus 8,25 tot 8,75 uur
+ * BRUTO — inclusief pauze. Netto komt dat op ongeveer acht uur uit. Die acht is
+ * dus een norm en geen berekening; daarom staat hij in de export altijd met
+ * "bij 8 uur per dag" erbij, zodat niemand het voor een exacte uitkomst aanziet.
+ */
+export const UREN_PER_WERKDAG = 8
+
+/** Minuten omgerekend naar uren en werkdagen, voor onder aan een export. */
+export function omrekening(minuten: number): { uren: number; dagen: number } {
+  const uren = minuten / 60
+  return {
+    uren: Math.round(uren * 100) / 100,
+    dagen: Math.round((uren / UREN_PER_WERKDAG) * 100) / 100,
+  }
+}
+
 export function minutenLabel(minuten: number): string {
   const u = Math.floor(minuten / 60)
   const m = Math.round(minuten % 60)

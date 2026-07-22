@@ -102,6 +102,15 @@ type Props<T extends { id: string }> = {
    */
   onGefilterd?: (rijen: T[]) => void
   /**
+   * Optioneel: regels die ná de gegevens onder aan het Excel-bestand komen,
+   * gescheiden door een lege regel. Bedoeld voor totalen en omrekeningen die je
+   * niet per rij kunt uitdrukken.
+   *
+   * Krijgt dezelfde rijen als `onGefilterd`, dus het totaal in het bestand hoort
+   * bij de filters die op dat moment aan staan.
+   */
+  exportExtraRijen?: (rijen: T[]) => (string | number)[][]
+  /**
    * Optioneel: vaste afvink-kolom links (buiten het kolombeheer en de layouts om).
    * 'open' = leeg rondje (klikbaar), 'af' = groen vinkje (klikbaar), 'verborgen' = lege cel.
    */
@@ -324,7 +333,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, exportExtraRijen,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -610,12 +619,19 @@ export default function OverzichtTabel<T extends { id: string }>({
       })
     )
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rijen])
+    // Totalen en omrekeningen onderaan, gescheiden door een lege regel zodat een
+    // draaitabel of filter in Excel er niet overheen struikelt.
+    const extra = exportExtraRijen
+      ? exportExtraRijen(table.getFilteredRowModel().rows.map(r => r.original))
+      : []
+    const alleRijen = extra.length > 0 ? [...rijen, [], ...extra] : rijen
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...alleRijen])
     // Kolombreedte op basis van langste waarde per kolom
     ws['!cols'] = headers.map((h, i) => {
       const maxLen = Math.max(
         String(h).length,
-        ...rijen.map(r => String(r[i] ?? '').length),
+        ...alleRijen.map(r => String(r[i] ?? '').length),
       )
       return { wch: Math.min(Math.max(maxLen + 2, 10), 50) }
     })

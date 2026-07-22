@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
-import { minutenLabel } from '@/lib/wagenpark/werktijd'
+import { minutenLabel, teltMee, omrekening, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
 import { MAAND_LABEL, type Periode, maandenInPeriode } from '@/lib/wagenpark/periode'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
@@ -20,6 +20,9 @@ export type SamenvattingRij = {
   totaalMinuten: number
   /** Minuten per kalendermaand, sleutel 1..12. Alleen gevulde maanden staan erin. */
   perMaand: Record<number, number>
+  /** Weggestreepte minuten; blijven zichtbaar maar tellen nergens in mee. */
+  verklaardMinuten: number
+  verklaardDagen: number
 }
 
 /**
@@ -43,8 +46,18 @@ export function bouwSamenvatting(rijen: WerktijdRij[]): SamenvattingRij[] {
         minutenVroeg: 0,
         totaalMinuten: 0,
         perMaand: {},
+        verklaardMinuten: 0,
+        verklaardDagen: 0,
       }
       perMedewerker.set(r.user_id_ulu, s)
+    }
+    // Verklaarde dagen krijgen een eigen kolom en blijven daarmee zichtbaar,
+    // maar ze tellen niet mee in het totaal of in de maandkolommen. Zo blijft
+    // een medewerker die alles netjes verklaard heeft wél in de lijst staan.
+    if (!teltMee(r.status)) {
+      s.verklaardMinuten += r.minuten
+      s.verklaardDagen += 1
+      continue
     }
     if (r.soort === 'te_laat') {
       s.dagenLaat += 1
@@ -176,6 +189,21 @@ export default function SamenvattingTabel({
           ),
       },
       {
+        key: 'verklaard',
+        label: 'Verklaard',
+        breedte: 110,
+        sorteerWaarde: (r) => r.verklaardMinuten,
+        render: (r) =>
+          r.verklaardDagen > 0 ? (
+            <span className="text-slate-400 tabular-nums" title="Weggestreept; telt niet mee">
+              {minutenLabel(r.verklaardMinuten)}
+              <span className="ml-1 text-xs">({r.verklaardDagen})</span>
+            </span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         key: 'totaal',
         label: 'Totaal',
         vast: true,
@@ -187,6 +215,32 @@ export default function SamenvattingTabel({
       },
     ]
   }, [bestuurderOpties, zichtbareMaanden])
+
+  // Zelfde totalen onderaan de export als in de dagweergave, zodat de twee
+  // bestanden niet verschillende uitkomsten geven voor dezelfde periode.
+  const exportTotalen = useCallback((gefilterd: SamenvattingRij[]) => {
+    let laat = 0
+    let vroeg = 0
+    let verklaard = 0
+    let verklaardDagen = 0
+    for (const r of gefilterd) {
+      laat += r.minutenLaat
+      vroeg += r.minutenVroeg
+      verklaard += r.verklaardMinuten
+      verklaardDagen += r.verklaardDagen
+    }
+    const totaal = laat + vroeg
+    const om = omrekening(totaal)
+    return [
+      ['Totaal te laat (minuten)', laat],
+      ['Totaal te vroeg (minuten)', vroeg],
+      ['Totaal (minuten)', totaal],
+      ['Totaal (uren)', om.uren],
+      [`Totaal (werkdagen bij ${UREN_PER_WERKDAG} uur per dag)`, om.dagen],
+      ['', ''],
+      [`Verklaard, telt niet mee (minuten) — ${verklaardDagen} dagen`, verklaard],
+    ]
+  }, [])
 
   return (
     <OverzichtTabel
@@ -200,6 +254,7 @@ export default function SamenvattingTabel({
       toonRijActie={false}
       dicht
       onGefilterd={meldTotalen}
+      exportExtraRijen={exportTotalen}
       onRijKlik={onMedewerkerKlik}
     />
   )

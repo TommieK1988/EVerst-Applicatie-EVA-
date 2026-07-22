@@ -42,10 +42,11 @@ export default function WerktijdenWeergave({
   const router = useRouter()
   const params = useSearchParams()
   const [totalen, setTotalen] = useState<Totalen>(LEGE_TOTALEN)
-  // Standaard alleen de dagen die nog nagekeken moeten worden: zo krimpt de
-  // werklijst terwijl je hem afwerkt, in plaats van dat je elke keer dezelfde
-  // al beoordeelde dagen weer langsloopt.
-  const [alleenOpen, setAlleenOpen] = useState(true)
+  // Standaard staat álles in beeld, ook de afgehandelde dagen. Een verklaarde
+  // dag telt nergens in mee (zie teltMee in lib/wagenpark/werktijd.ts) maar
+  // blijft doorgestreept zichtbaar, zodat je kunt zien wat er is weggestreept en
+  // waarom. Wil je puur je werklijst, dan zet je dit vinkje aan.
+  const [alleenOpen, setAlleenOpen] = useState(false)
 
   const zichtbaar = useMemo(
     () => (alleenOpen ? data.filter((r) => r.status === 'open') : data),
@@ -91,11 +92,9 @@ export default function WerktijdenWeergave({
             onChange={(e) => setAlleenOpen(e.target.checked)}
             className="rounded border-slate-300 text-green-600 focus:ring-green-600"
           />
-          Alleen nog te controleren
+          Verberg afgehandelde dagen
           {afgehandeld > 0 && (
-            <span className="text-slate-400">
-              ({afgehandeld} afgehandeld {alleenOpen ? 'verborgen' : 'zichtbaar'})
-            </span>
+            <span className="text-slate-400">({afgehandeld} afgehandeld)</span>
           )}
         </label>
       </div>

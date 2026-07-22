@@ -4,7 +4,10 @@ import React, { useCallback, useMemo, useState } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
-import { minutenLabel, urenLabel, SOORT_LABEL, type WerktijdSoort } from '@/lib/wagenpark/werktijd'
+import {
+  minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
+  SOORT_LABEL, type WerktijdSoort,
+} from '@/lib/wagenpark/werktijd'
 import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 import DagPaneel from '@/components/wagenpark/werktijden/DagPaneel'
 
@@ -111,6 +114,8 @@ export default function WerktijdenTabel({
     (rijen: WerktijdRij[]) => {
       const t = { dagenLaat: 0, minutenLaat: 0, dagenVroeg: 0, minutenVroeg: 0 }
       for (const r of rijen) {
+        // Verklaarde dagen blijven in de lijst staan maar tellen niet mee.
+        if (!teltMee(r.status)) continue
         if (r.soort === 'te_laat') {
           t.dagenLaat += 1
           t.minutenLaat += r.minuten
@@ -205,15 +210,22 @@ export default function WerktijdenTabel({
         // Getal, geen tekst: sorteert op omvang én komt als rekenbare cel in de
         // Excel-export terecht, zodat je er in Excel een SOM overheen kunt zetten.
         sorteerWaarde: (r) => r.minuten,
-        render: (r) => (
-          <span
-            className={`font-medium ${
-              r.ernst === 'overtreding' ? 'text-red-700' : 'text-orange-700'
-            }`}
-          >
-            {minutenLabel(r.minuten)}
-          </span>
-        ),
+        // Een verklaarde afwijking wordt doorgestreept getoond: hij blijft
+        // zichtbaar, maar je ziet meteen dat hij nergens in meetelt.
+        render: (r) =>
+          teltMee(r.status) ? (
+            <span
+              className={`font-medium ${
+                r.ernst === 'overtreding' ? 'text-red-700' : 'text-orange-700'
+              }`}
+            >
+              {minutenLabel(r.minuten)}
+            </span>
+          ) : (
+            <span className="text-slate-400 line-through" title="Verklaard — telt niet mee">
+              {minutenLabel(r.minuten)}
+            </span>
+          ),
       },
       {
         // Controlekolom: schreef deze medewerker die dag genoeg uren? Getal, dus
@@ -280,6 +292,35 @@ export default function WerktijdenTabel({
     [],
   )
 
+  // Totalen onder aan het Excel-bestand. Verklaarde dagen staan er apart onder,
+  // zodat de medewerker ziet wat er is weggestreept en het totaal toch klopt.
+  const exportTotalen = useCallback((gefilterd: WerktijdRij[]) => {
+    let laat = 0
+    let vroeg = 0
+    let verklaard = 0
+    let verklaardDagen = 0
+    for (const r of gefilterd) {
+      if (!teltMee(r.status)) {
+        verklaard += r.minuten
+        verklaardDagen += 1
+        continue
+      }
+      if (r.soort === 'te_laat') laat += r.minuten
+      else vroeg += r.minuten
+    }
+    const totaal = laat + vroeg
+    const om = omrekening(totaal)
+    return [
+      ['Totaal te laat (minuten)', laat],
+      ['Totaal te vroeg (minuten)', vroeg],
+      ['Totaal (minuten)', totaal],
+      ['Totaal (uren)', om.uren],
+      [`Totaal (werkdagen bij ${UREN_PER_WERKDAG} uur per dag)`, om.dagen],
+      ['', ''],
+      [`Verklaard, telt niet mee (minuten) — ${verklaardDagen} dagen`, verklaard],
+    ]
+  }, [])
+
   return (
     <>
       <OverzichtTabel
@@ -294,6 +335,7 @@ export default function WerktijdenTabel({
         dicht
         groepering={groepering}
         onGefilterd={meldTotalen}
+        exportExtraRijen={exportTotalen}
         onRijKlik={(r) => setGeopendId(r.id)}
       />
 
@@ -311,7 +353,15 @@ function WeekKop({ rijen }: { rijen: WerktijdRij[] }) {
   let laatMin = 0
   let vroegDagen = 0
   let vroegMin = 0
+  let verklaard = 0
   for (const r of rijen) {
+    // Verklaarde dagen tellen niet mee in het weeksubtotaal, maar worden er wel
+    // apart bij vermeld — anders lijkt een week met veel weggestreepte dagen
+    // gelijk aan een week waarin niets gebeurde.
+    if (!teltMee(r.status)) {
+      verklaard += 1
+      continue
+    }
     if (r.soort === 'te_laat') {
       laatDagen += 1
       laatMin += r.minuten
