@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-22','nieuw','Financieel','Alle geboekte uren in één overzicht',
+   'Onder Financieel staat een nieuw scherm Uren met alle geboekte uren van eigen medewerkers én ingehuurde krachten, over alle dossiers heen. Per boeking zie je bij welk dossier hij hoort en of hij al is geaccordeerd, en bovenin staat direct hoeveel regels nog op accordering wachten. Kies een periode — deze maand, vorige maand, dit kwartaal of dit jaar — en klik op een kolomkop om te sorteren: op medewerker, dossier, uursoort of intern/extern krijg je meteen subtotalen per groep.');
