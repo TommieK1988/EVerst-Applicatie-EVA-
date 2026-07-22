@@ -1045,7 +1045,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                                 <button
                                   onClick={e => { e.stopPropagation(); if (!bezig) afvinkKolom.onKlik(row.original) }}
                                   title={st === 'af' ? 'Heropenen' : 'Afvinken'}
-                                  aria-label={st === 'af' ? 'Taak heropenen' : 'Taak afvinken'}
+                                  aria-label={st === 'af' ? 'Actie heropenen' : 'Actie afvinken'}
                                   disabled={bezig}
                                   style={{
                                     width: 18, height: 18, borderRadius: '50%', padding: 0,

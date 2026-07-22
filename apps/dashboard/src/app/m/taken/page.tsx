@@ -5,7 +5,7 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 
-export const metadata = { title: 'Taken · EVA Mobiel' }
+export const metadata = { title: 'Acties · EVA Mobiel' }
 
 export default async function MobielTakenPage() {
   const supabase = await createClient()
@@ -47,7 +47,7 @@ export default async function MobielTakenPage() {
 
   return (
     <>
-      <AppHeader title="Taken" sub={`${items.length} open`} backHref="/m" />
+      <AppHeader title="Acties" sub={`${items.length} open`} backHref="/m" />
       <MobielPullToRefresh />
       <MobielTakenLijst taken={items} />
     </>

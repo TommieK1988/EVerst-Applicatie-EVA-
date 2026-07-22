@@ -210,7 +210,7 @@ const appItems: SettingsItem[] = [
     title: 'Actielijsten',
     description: 'Standaard rollen en doorlooptijden voor actielijsten.',
     ready: false,
-    kicker: 'Taken',
+    kicker: 'Acties',
     module: 'taken',
   },
 ]

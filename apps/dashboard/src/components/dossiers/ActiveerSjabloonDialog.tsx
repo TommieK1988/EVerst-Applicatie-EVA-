@@ -113,7 +113,7 @@ export default function ActiveerSjabloonDialog({ dossier_id, medewerker_id, sjab
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 6 }}>
                     <Info style={{ width: 13, height: 13, color: 'var(--fg-muted)', flexShrink: 0, marginTop: 1 }} />
                     <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-muted)' }}>
-                      Taken met een &quot;offset van streefdatum&quot; krijgen automatisch een deadline berekend. Optioneel.
+                      Acties met een &quot;offset van streefdatum&quot; krijgen automatisch een deadline berekend. Optioneel.
                     </p>
                   </div>
                 </FormField>

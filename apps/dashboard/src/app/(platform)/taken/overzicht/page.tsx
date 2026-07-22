@@ -4,7 +4,7 @@ import { laadLayouts } from '@/app/actions/layouts'
 import { getTakenVoorActieveDossiers } from '@/lib/taken/services/taken'
 import TakenActieveDossiers from '@/components/taken/TakenActieveDossiers'
 
-export const metadata: Metadata = { title: 'Taken — Overzicht' }
+export const metadata: Metadata = { title: 'Acties — Overzicht' }
 
 export default async function TakenOverzichtPage() {
   let user_id: string | null = null

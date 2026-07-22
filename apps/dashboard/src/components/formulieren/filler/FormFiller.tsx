@@ -246,7 +246,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       verwijderFormulierConcept(scope).catch(() => { /* stil */ })
 
-      toast.success(taskId ? 'Formulier ingediend — taak voltooid!' : 'Formulier ingediend!')
+      toast.success(taskId ? 'Formulier ingediend — actie voltooid!' : 'Formulier ingediend!')
       router.push(terugHref ?? (mobiel ? '/m/taken' : `/formulieren/${template.id}/inzendingen`))
     } finally {
       setIsSubmitting(false)

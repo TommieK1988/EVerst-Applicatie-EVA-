@@ -113,7 +113,7 @@ function KanbanKolom({
 
         {taken.length === 0 && (
           <p className="text-center py-6 text-xs text-slate-400 select-none">
-            Sleep taken hierheen
+            Sleep acties hierheen
           </p>
         )}
       </div>

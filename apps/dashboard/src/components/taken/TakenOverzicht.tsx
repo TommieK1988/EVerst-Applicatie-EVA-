@@ -26,7 +26,7 @@ export default function TakenOverzicht({ alleTaken, mijnTaken }: Props) {
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Taken"
+        title="Acties"
         description="Beheer actiepunten en checklists"
         actions={<NieuweTaakDialog />}
       />
@@ -44,7 +44,7 @@ export default function TakenOverzicht({ alleTaken, mijnTaken }: Props) {
             )}
           >
             <User className="w-3.5 h-3.5" />
-            Mijn taken
+            Mijn acties
             {mijnTaken.length > 0 && (
               <span className={cn(
                 'text-xs rounded-full px-1.5 py-0.5 font-semibold',
@@ -64,7 +64,7 @@ export default function TakenOverzicht({ alleTaken, mijnTaken }: Props) {
             )}
           >
             <List className="w-3.5 h-3.5" />
-            Alle taken
+            Alle acties
             {alleTaken.length > 0 && (
               <span className={cn(
                 'text-xs rounded-full px-1.5 py-0.5 font-semibold',
@@ -107,10 +107,10 @@ export default function TakenOverzicht({ alleTaken, mijnTaken }: Props) {
             <List className="w-6 h-6 text-slate-400" />
           </div>
           <p className="text-slate-700 font-medium mb-1">
-            {tab === 'mijn' ? 'Geen taken aan jou toegewezen' : 'Nog geen taken'}
+            {tab === 'mijn' ? 'Geen acties aan jou toegewezen' : 'Nog geen acties'}
           </p>
           <p className="text-slate-400 text-sm mb-4">
-            {tab === 'mijn' ? 'Taken die aan jou worden toegewezen verschijnen hier.' : 'Maak een eerste taak aan om te beginnen.'}
+            {tab === 'mijn' ? 'Acties die aan jou worden toegewezen verschijnen hier.' : 'Maak een eerste actie aan om te beginnen.'}
           </p>
           <NieuweTaakDialog />
         </div>

@@ -274,7 +274,7 @@ export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplat
 
         {(sorteerModus ? gesorteerd : gefilterd).length === 0 ? (
           <div className="text-center py-12 text-slate-400">
-            <p className="text-sm">Geen taken gevonden</p>
+            <p className="text-sm">Geen acties gevonden</p>
           </div>
         ) : (
           renderInhoud()

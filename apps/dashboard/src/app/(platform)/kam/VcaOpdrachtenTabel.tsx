@@ -52,7 +52,7 @@ export function VcaOpdrachtenTabel({ rijen }: Props) {
             <th style={TH}>Projectleider</th>
             <th style={TH}>Teamleider</th>
             <th style={TH}>VCA-formulieren (ingevuld / totaal)</th>
-            <th style={TH}>Follow-up taken (voltooid / totaal)</th>
+            <th style={TH}>Follow-up acties (voltooid / totaal)</th>
           </tr>
         </thead>
         <tbody>

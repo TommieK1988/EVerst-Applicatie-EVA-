@@ -78,8 +78,8 @@ const NIET_TOEGEWEZEN = '__none__'
 
 export default function TakenActieveDossiers({
   data, layouts, user_id,
-  titel = 'Taken — actieve dossiers',
-  subtitel = 'Alle taken (los én uit actielijsten) van dossiers die nog niet zijn afgerond.',
+  titel = 'Acties — actieve dossiers',
+  subtitel = 'Alle acties (los én uit actielijsten) van dossiers die nog niet zijn afgerond.',
   scherm = 'taken-overzicht',
   variant = 'overzicht',
   magAlleTaken = false,
@@ -125,7 +125,7 @@ export default function TakenActieveDossiers({
     startAfvink(async () => {
       try {
         await updateTaakStatus(r.id, nieuw)
-        toast.success(nieuw === 'gereed' ? 'Taak afgerond' : 'Taak heropend')
+        toast.success(nieuw === 'gereed' ? 'Actie afgerond' : 'Actie heropend')
         router.refresh()
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Afvinken mislukt')
@@ -148,10 +148,10 @@ export default function TakenActieveDossiers({
     if (isMijnTaken) {
       return [
         ...(magAlleTaken ? [{
-          key: 'scope', label: 'Taken van',
+          key: 'scope', label: 'Acties van',
           opties: [
-            { value: SCOPE_MIJN, label: 'Mijn taken' },
-            { value: SCOPE_ALLE, label: 'Alle taken' },
+            { value: SCOPE_MIJN, label: 'Mijn acties' },
+            { value: SCOPE_ALLE, label: 'Alle acties' },
           ],
         }] : []),
         deadline,
@@ -238,7 +238,7 @@ export default function TakenActieveDossiers({
           {r.dossier_titel}
         </button>
       ) },
-    { key: 'titel', label: 'Taak', breedte: 260,
+    { key: 'titel', label: 'Actie', breedte: 260,
       sorteerWaarde: r => r.titel.toLowerCase(),
       render: r => (
         <button
@@ -281,7 +281,7 @@ export default function TakenActieveDossiers({
       render: r => r.klant_naam ?? '—' },
     { key: 'lijst_naam', label: 'Actielijst', breedte: 170, standaard_zichtbaar: false,
       sorteerWaarde: r => r.lijst_naam ?? '',
-      render: r => r.lijst_naam ?? <span style={{ color: 'var(--text-muted)' }}>Losse taak</span> },
+      render: r => r.lijst_naam ?? <span style={{ color: 'var(--text-muted)' }}>Losse actie</span> },
     { key: 'projectleider_naam', label: 'Projectleider', breedte: 160, standaard_zichtbaar: false,
       sorteerWaarde: r => r.projectleider_naam ?? '',
       render: r => r.projectleider_naam ?? '—' },
@@ -337,7 +337,7 @@ export default function TakenActieveDossiers({
           </span>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
-          {totaal} {totaal === 1 ? 'taak' : 'taken'} · {open} open
+          {totaal} {totaal === 1 ? 'actie' : 'acties'} · {open} open
         </span>
       </div>
     )

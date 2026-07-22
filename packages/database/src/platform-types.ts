@@ -539,7 +539,7 @@ export type NotificatieVoorkeuren = {
 }
 
 export const notificatieCategorieLabels: Record<keyof NotificatieVoorkeuren, string> = {
-  taken:             'Taken',
+  taken:             'Acties',
   opdrachten:        'Opdrachten & dossiers',
   offertes:          'Offertes',
   storingsmeldingen: 'Storingsmeldingen',
@@ -597,10 +597,10 @@ export const RECHTEN_MODULES = [
   { key: 'toolbox',        label: 'Toolbox' },
   { key: 'formulieren',    label: 'Formulieren' },
   { key: 'taken',          label: 'Actielijsten' },
-  { key: 'mijn_taken',     label: 'Mijn taken' },
-  // Geen menu-item maar een schakelaar: vanaf 'lezen' toont "Mijn taken" ook de
-  // taken van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
-  { key: 'alle_taken',     label: 'Alle taken' },
+  { key: 'mijn_taken',     label: 'Mijn acties' },
+  // Geen menu-item maar een schakelaar: vanaf 'lezen' toont "Mijn acties" ook de
+  // acties van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
+  { key: 'alle_taken',     label: 'Alle acties' },
   { key: 'financieel',     label: 'Financieel' },
   { key: 'instellingen',   label: 'Instellingen' },
 ] as const

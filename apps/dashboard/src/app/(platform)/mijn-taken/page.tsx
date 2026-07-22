@@ -6,7 +6,7 @@ import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { getMijnTakenRijen, getAlleTakenRijen } from '@/lib/taken/services/taken'
 import TakenActieveDossiers from '@/components/taken/TakenActieveDossiers'
 
-export const metadata: Metadata = { title: 'Mijn taken' }
+export const metadata: Metadata = { title: 'Mijn acties' }
 
 export default async function MijnTakenPage() {
   await vereisModuleToegang('mijn_taken')
@@ -36,8 +36,8 @@ export default async function MijnTakenPage() {
       data={data}
       layouts={layouts}
       user_id={user_id}
-      titel="Mijn taken"
-      subtitel={magAlleTaken ? 'Open taken, per dossier gebundeld.' : 'Al jouw toegewezen open taken, per dossier gebundeld.'}
+      titel="Mijn acties"
+      subtitel={magAlleTaken ? 'Open acties, per dossier gebundeld.' : 'Al jouw toegewezen open acties, per dossier gebundeld.'}
       scherm="mijn-taken"
       variant="mijn-taken"
       magAlleTaken={magAlleTaken}

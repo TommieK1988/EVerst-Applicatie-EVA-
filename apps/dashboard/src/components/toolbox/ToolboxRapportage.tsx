@@ -146,7 +146,7 @@ export default function ToolboxRapportage({ toolbox, deelnemers, medewerkers }: 
         <div onClick={() => !pending && setToewijsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '80dvh', background: '#fff', borderRadius: 16, padding: 22, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Toolbox toewijzen</div>
-            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 14 }}>Elke medewerker krijgt de toolbox als openstaande taak op zijn telefoon.</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 14 }}>Elke medewerker krijgt de toolbox als openstaande actie op zijn telefoon.</div>
             <input value={zoek} onChange={(e) => setZoek(e.target.value)} placeholder="Zoek medewerker…" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, marginBottom: 10 }} />
             <div style={{ overflowY: 'auto', flex: 1, border: '1px solid var(--border)', borderRadius: 8, marginBottom: 14 }}>
               {gefilterd.map((m) => (

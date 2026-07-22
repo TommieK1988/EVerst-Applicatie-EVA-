@@ -320,7 +320,7 @@ function TakenBlok({
     <>
       <Card>
         <CardHeader>
-          <span>Taken · {openTaken.length} open</span>
+          <span>Acties · {openTaken.length} open</span>
           {!readOnly && (
             <div className="flex items-center gap-1.5">
               {sjablonen.length > 0 && (
@@ -337,7 +337,7 @@ function TakenBlok({
                     <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                       <path d="M10 4v12M4 10h12" />
                     </svg>
-                    Nieuwe taak
+                    Nieuwe actie
                   </button>
                 }
               />
@@ -348,9 +348,9 @@ function TakenBlok({
           {openTaken.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-4 text-center">
               <span className="text-[22px] opacity-35">☑</span>
-              <span className="text-xs font-medium text-neutral-500">Geen openstaande taken</span>
+              <span className="text-xs font-medium text-neutral-500">Geen openstaande acties</span>
               {sjablonen.length > 0 && (
-                <span className="text-[11px] text-neutral-400">Activeer een sjabloon om taken aan te maken</span>
+                <span className="text-[11px] text-neutral-400">Activeer een sjabloon om acties aan te maken</span>
               )}
             </div>
           ) : (
@@ -367,7 +367,7 @@ function TakenBlok({
                     type="button"
                     onClick={() => { if (!readOnly) vinkAf(t.id) }}
                     disabled={readOnly}
-                    title={readOnly ? 'Alleen-lezen' : 'Taak afvinken'}
+                    title={readOnly ? 'Alleen-lezen' : 'Actie afvinken'}
                     className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-neutral-300 bg-transparent text-white outline-none transition-colors enabled:hover:border-brand-500 enabled:hover:bg-brand-50 disabled:cursor-default"
                   />
                   <button
@@ -404,7 +404,7 @@ function TakenBlok({
                 href={takenTabHref}
                 className="mt-2.5 block text-xs font-semibold text-brand-600 no-underline"
               >
-                Alle taken →
+                Alle acties →
               </Link>
             </div>
           )}

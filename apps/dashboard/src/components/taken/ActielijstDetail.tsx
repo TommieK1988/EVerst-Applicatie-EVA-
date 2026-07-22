@@ -144,7 +144,7 @@ export default function ActielijstDetail({ lijst }: Props) {
       {lijst.taken_count > 0 && (
         <div className="mb-5">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-            <span>{lijst.gereed_count} van {lijst.taken_count} taken gereed</span>
+            <span>{lijst.gereed_count} van {lijst.taken_count} acties gereed</span>
             <span className="font-semibold text-slate-700">{voortgang}%</span>
           </div>
           <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -162,8 +162,8 @@ export default function ActielijstDetail({ lijst }: Props) {
           <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-4">
             <List className="w-6 h-6 text-slate-400" />
           </div>
-          <p className="text-slate-700 font-medium mb-1">Nog geen taken in deze lijst</p>
-          <p className="text-slate-400 text-sm mb-4">Voeg de eerste taak toe om te beginnen.</p>
+          <p className="text-slate-700 font-medium mb-1">Nog geen acties in deze lijst</p>
+          <p className="text-slate-400 text-sm mb-4">Voeg de eerste actie toe om te beginnen.</p>
           <NieuweTaakDialog defaultLijstId={lijst.id} isTemplate={lijst.is_template} />
         </div>
       ) : view === 'lijst' ? (

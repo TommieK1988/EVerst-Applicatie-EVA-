@@ -14,9 +14,9 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Overzicht ──────────────────────────────────────────────────────────
   [/^\/$/, {
     title: 'Overzicht',
-    description: 'Je persoonlijke startpagina in EVA. Hier zie je jouw openstaande taken, de dossiers waar jij op staat, en de komende zeven agendapunten — alles gefilterd op jouw medewerkerscode.',
+    description: 'Je persoonlijke startpagina in EVA. Hier zie je jouw openstaande acties, de dossiers waar jij op staat, en de komende zeven agendapunten — alles gefilterd op jouw medewerkerscode.',
     sections: [
-      { title: 'Mijn taken', body: 'De takenwidget toont openstaande acties die direct aan jou zijn toegewezen. Klik op een taak om naar de bijbehorende lijst of het dossier te gaan.' },
+      { title: 'Mijn acties', body: 'De actiewidget toont openstaande acties die direct aan jou zijn toegewezen. Klik op een actie om naar de bijbehorende lijst of het dossier te gaan.' },
       { title: 'Mijn dossiers', body: 'Aanvragen, offertes en opdrachten waar jij als verantwoordelijke op staat verschijnen hier automatisch. Zo zie je in één oogopslag wat er van jou verwacht wordt.' },
       { title: 'Agenda', body: 'De zeven eerstvolgende plannings­items (±30 dagen) worden getoond op basis van jouw afdeling en medewerkerscode. Klik op een item voor meer details in de planningsmodule.' },
     ],
@@ -61,7 +61,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Toolbox — rapportage',
     description: 'Zie wie deze toolbox heeft afgerond, met datum, aantal pogingen en handtekening. Wijs de toolbox toe aan medewerkers of exporteer de presentielijst als PDF voor je VCA-dossier.',
     sections: [
-      { title: 'Toewijzen', body: 'Wijs de toolbox los toe aan een selectie medewerkers of aan alle actieve app-gebruikers. Elke medewerker krijgt de toolbox als openstaande taak in "Mijn taken" op zijn telefoon; die blijft staan tot de toolbox goed is afgerond.' },
+      { title: 'Toewijzen', body: 'Wijs de toolbox los toe aan een selectie medewerkers of aan alle actieve app-gebruikers. Elke medewerker krijgt de toolbox als openstaande actie in "Mijn acties" op zijn telefoon; die blijft staan tot de toolbox goed is afgerond.' },
       { title: 'Presentielijst', body: 'De PDF-presentielijst toont per deelnemer de handtekening, datum en het aantal pogingen — audit-proof voor VCA/ISO.' },
     ],
   }],
@@ -90,7 +90,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
   [/^\/kam$/, {
     title: 'KAM/VGM — Dashboard',
-    description: 'Kwaliteit, Arbo en Milieu in één overzicht: de lopende opdrachten waarop de VCA-toggle aanstaat, met de voortgang van hun KAM-formulieren en follow-up taken.',
+    description: 'Kwaliteit, Arbo en Milieu in één overzicht: de lopende opdrachten waarop de VCA-toggle aanstaat, met de voortgang van hun KAM-formulieren en follow-up acties.',
     sections: [
       { title: 'Opdrachten met VCA', body: 'Elke opdracht met de VCA-toggle verschijnt hier, inclusief projectleider en de status van de bijbehorende formulieren. Klik een rij om naar het dossier te gaan.' },
     ],
@@ -324,7 +324,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Platform­instellingen', body: 'Functies & Afdelingen, CAO-beheer, Organisatie­gegevens en Huisstijl raken de hele organisatie. Wijzigingen hier zijn direct zichtbaar voor alle gebruikers.' },
       { title: 'Gebruikers & Rechten', body: 'Beheer wie toegang heeft tot welke modules. Stel rechten in per afdeling als standaard en overschrijf ze per medewerker indien nodig.' },
       { title: 'Integraties', body: 'Koppel externe systemen zoals Bouw7. Toekomstige integraties (Exact Online, iDEAL) worden hier ook geconfigureerd zodra ze beschikbaar zijn.' },
-      { title: 'App-instellingen', body: 'Elke sub-app (EvertsCalc, Houtrotherstel, Wagenpark, Taken) heeft eigen instellingen die via de kaarten op deze pagina bereikbaar zijn.' },
+      { title: 'App-instellingen', body: 'Elke sub-app (EvertsCalc, Houtrotherstel, Wagenpark, Actielijsten) heeft eigen instellingen die via de kaarten op deze pagina bereikbaar zijn.' },
     ],
   }],
 
@@ -435,17 +435,17 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Actielijsten ──────────────────────────────────────────────────────────
   [/^\/taken\/lijsten\/[^/]+$/, {
     title: 'Actielijsten › Detail',
-    description: 'Detailpagina van een actielijst. Sjabloon­lijsten tonen alle taken direct. Niet-sjabloon­lijsten horen bij een specifiek dossier en worden geopend vanuit het tabblad Taken van dat dossier.',
+    description: 'Detailpagina van een actielijst. Sjabloon­lijsten tonen alle acties direct. Niet-sjabloon­lijsten horen bij een specifiek dossier en worden geopend vanuit het tabblad Acties van dat dossier.',
     sections: [
-      { title: 'Taken beheren', body: 'Voeg taken toe met de "+"-knop. Stel per taak een omschrijving, verantwoordelijke medewerker en deadline in. Sleep taken om de volgorde te bepalen.' },
-      { title: 'Status bijwerken', body: 'Klik op het vinkje van een taak om hem te voltooien. Gebruik het statusfilter om alleen openstaande of afgeronde taken te tonen.' },
-      { title: 'Sjabloon­lijsten', body: 'Sjabloon­lijsten zijn herbruikbare takensets. Ze worden automatisch gekopieerd en aan een dossier gekoppeld op basis van de ingestelde triggers.' },
+      { title: 'Acties beheren', body: 'Voeg acties toe met de "+"-knop. Stel per actie een omschrijving, verantwoordelijke medewerker en deadline in. Sleep acties om de volgorde te bepalen.' },
+      { title: 'Status bijwerken', body: 'Klik op het vinkje van een actie om hem te voltooien. Gebruik het statusfilter om alleen openstaande of afgeronde acties te tonen.' },
+      { title: 'Sjabloon­lijsten', body: 'Sjabloon­lijsten zijn herbruikbare sets acties. Ze worden automatisch gekopieerd en aan een dossier gekoppeld op basis van de ingestelde triggers.' },
     ],
   }],
 
   [/^\/taken\/lijsten$/, {
     title: 'Actielijsten',
-    description: 'Overzicht van alle actielijsten in het systeem. Actielijsten zijn takensets die je handmatig aanmaakt of automatisch koppelt aan dossiers via triggers.',
+    description: 'Overzicht van alle actielijsten in het systeem. Actielijsten zijn sets acties die je handmatig aanmaakt of automatisch koppelt aan dossiers via triggers.',
     sections: [
       { title: 'Nieuwe lijst', body: 'Klik op "Nieuwe lijst" en geef hem een naam. Je kunt de lijst direct koppelen aan een bestaand dossier (aanvraag/offerte/opdracht) of hem als sjabloon bewaren voor hergebruik.' },
       { title: 'Lijsttypen', body: 'Sjabloon­lijsten zijn herbruikbaar en staan los van dossiers. Dossier­lijsten zijn gekoppeld aan een specifiek dossier en worden geopend vanuit dat dossier.' },
@@ -454,9 +454,9 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   [/^\/taken$/, {
     title: 'Actielijsten',
-    description: 'De actielijsten-module van EVA. Organiseer werk in actielijsten en wijs taken toe aan medewerkers.',
+    description: 'De actielijsten-module van EVA. Organiseer werk in actielijsten en wijs acties toe aan medewerkers.',
     sections: [
-      { title: 'Actielijsten', body: 'Groepeer taken in overzichtelijke lijsten per project, klant of afdeling. Koppel lijsten aan dossiers (aanvraag, offerte, opdracht) voor directe traceerbaarheid.' },
+      { title: 'Actielijsten', body: 'Groepeer acties in overzichtelijke lijsten per project, klant of afdeling. Koppel lijsten aan dossiers (aanvraag, offerte, opdracht) voor directe traceerbaarheid.' },
       { title: 'Triggers', body: 'Stel in dat een actielijst automatisch wordt geactiveerd wanneer een dossier een bepaalde status bereikt.' },
     ],
   }],
@@ -876,8 +876,8 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Mijn facturen / Alle facturen', body: 'Met de schakelaar bovenin kies je tussen alleen jouw eigen projecten ("Mijn facturen") of het volledige overzicht ("Alle facturen"). Een projectleider opent standaard op de eigen facturen, maar kan altijd naar Alle schakelen. Administratie en directie zien standaard alles. De totalen rechts (openstaand bedrag, aantal, aantal 30+ dagen te laat) lopen mee met de gekozen weergave.' },
       { title: 'Kolommen, sorteren en filteren', body: 'Klik op een kolomkop om te sorteren — bijvoorbeeld op hoogste bedrag of op oudste/meest-te-laat factuur. Onder elke kop kun je filteren (tekstveld of keuzelijst). Via "Kolommen beheren" zet je extra kolommen aan of uit (zoals "Dagen (factuur)" of "Verwacht betaald", die standaard verborgen zijn) en versleep je de volgorde. Met "Layout opslaan" bewaar je je eigen kolomindeling als standaard, zodat het scherm voortaan zo opent. Met "Export" download je de zichtbare kolommen naar Excel.' },
       { title: 'Opvolging vastleggen', body: 'Klik op een factuurregel om het zijpaneel te openen. Daar leg je vast: de reden dat er nog niet betaald is (keuzelijst), de concrete actie, de actiehouder (binnendienst-medewerker die het oppakt), de verwachte betaaldatum (optioneel), de opvolgdatum (wanneer je het opnieuw oppakt) en de opvolgstatus (nieuw, in behandeling, wacht op klant, opgelost of geëscaleerd). Onderaan houd je in het logboek een chronologische historie bij van wat er is gebeurd. Klik op Opslaan om je wijzigingen te bewaren.' },
-      { title: 'Facturen ouder dan 60 dagen', body: 'Zodra een factuur meer dan 60 dagen te laat is, wordt opvolging verplicht: reden, actie, actiehouder, opvolgdatum én minstens één logboekregel moeten ingevuld zijn (verwachte betaaldatum is optioneel). Het systeem maakt dan automatisch een opvolgtaak aan voor de projectleider met een deadline van zeven dagen. Die taak kan pas op "gereed" worden gezet als alle verplichte velden compleet zijn — zo wordt afgedwongen dat oude facturen echt worden opgepakt.' },
-      { title: 'Taken en herinneringen', body: 'De automatische opvolgtaken verschijnen bij de toegewezen projectleider onder "Mijn taken" en als melding in het belletje rechtsboven. Heeft een factuur geen gekoppelde projectleider, dan gaat er een signaal naar de administratie. Wanneer een opvolgdatum verstrijkt, krijg je automatisch een herinnering in het meldingenoverzicht.' },
+      { title: 'Facturen ouder dan 60 dagen', body: 'Zodra een factuur meer dan 60 dagen te laat is, wordt opvolging verplicht: reden, actie, actiehouder, opvolgdatum én minstens één logboekregel moeten ingevuld zijn (verwachte betaaldatum is optioneel). Het systeem maakt dan automatisch een opvolgactie aan voor de projectleider met een deadline van zeven dagen. Die actie kan pas op "gereed" worden gezet als alle verplichte velden compleet zijn — zo wordt afgedwongen dat oude facturen echt worden opgepakt.' },
+      { title: 'Acties en herinneringen', body: 'De automatische opvolgacties verschijnen bij de toegewezen projectleider onder "Mijn acties" en als melding in het belletje rechtsboven. Heeft een factuur geen gekoppelde projectleider, dan gaat er een signaal naar de administratie. Wanneer een opvolgdatum verstrijkt, krijg je automatisch een herinnering in het meldingenoverzicht.' },
       { title: 'Verversen en rechten', body: 'Met de knop "↻ Ververs uit Bouw7" haal je direct de meest actuele facturen op zonder op de dagelijkse synchronisatie te wachten. Bewerken van de opvolging (en verversen) is voorbehouden aan administratie en directie; andere gebruikers zien het overzicht alleen-lezen. De keuzelijst met redenen beheer je onder Instellingen → "Debiteuren — redencodes".' },
     ],
   }],
@@ -905,25 +905,25 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  // ── Persoonlijk: Mijn taken ────────────────────────────────────────────
+  // ── Persoonlijk: Mijn acties ────────────────────────────────────────────
   [/^\/mijn-taken$/, {
-    title: 'Mijn taken',
-    description: 'Alle openstaande taken die aan jou zijn toegewezen, verzameld uit alle lopende dossiers. Dé werklijst om je eigen dag te plannen — gesorteerd op deadline zodat het meest urgente bovenaan staat.',
+    title: 'Mijn acties',
+    description: 'Alle openstaande acties die aan jou zijn toegewezen, verzameld uit alle lopende dossiers. Dé werklijst om je eigen dag te plannen — gesorteerd op deadline zodat het meest urgente bovenaan staat.',
     sections: [
-      { title: 'Werken met de lijst', body: 'Klik op een taak om direct naar het tabblad Taken van het bijbehorende dossier te springen. De lijst toont alleen jouw taken; de kolom "Toegewezen aan" is daarom verborgen.' },
+      { title: 'Werken met de lijst', body: 'Klik op een actie om direct naar het tabblad Acties van het bijbehorende dossier te springen. De lijst toont alleen jouw acties; de kolom "Toegewezen aan" is daarom verborgen.' },
       { title: 'Filteren en sorteren', body: 'Filter op fase, status (Open, In behandeling, Wacht op, Gereed, Vervallen), prioriteit en deadline (Overschreden, Deze week, Later, Geen). Standaard staat de lijst op deadline oplopend.' },
-      { title: 'Kolommen', body: 'Naast de taak zie je het dossiernummer, de dossiertitel, fase, prioriteit, actielijst en de betrokken rollen (projectleider, uitvoerder, calculator, werkvoorbereider). Via "Kolommen beheren" kies je wat zichtbaar is.' },
+      { title: 'Kolommen', body: 'Naast de actie zie je het dossiernummer, de dossiertitel, fase, prioriteit, actielijst en de betrokken rollen (projectleider, uitvoerder, calculator, werkvoorbereider). Via "Kolommen beheren" kies je wat zichtbaar is.' },
     ],
   }],
 
-  // ── Actielijsten: Taken-overzicht (team) ───────────────────────────────
+  // ── Actielijsten: Acties-overzicht (team) ───────────────────────────────
   [/^\/taken\/overzicht$/, {
-    title: 'Actielijsten — Openstaande taken',
-    description: 'Team-breed overzicht van alle openstaande taken uit actieve dossiers — niet alleen die van jou. Handig voor binnendienst en projectleiders om te bewaken dat er niets blijft liggen.',
+    title: 'Actielijsten — Openstaande acties',
+    description: 'Team-breed overzicht van alle openstaande acties uit actieve dossiers — niet alleen die van jou. Handig voor binnendienst en projectleiders om te bewaken dat er niets blijft liggen.',
     sections: [
-      { title: 'Verschil met "Mijn taken"', body: 'Deze lijst toont taken van het hele team; "Mijn taken" toont alleen die aan jou zijn toegewezen. Gebruik de filter "Toegewezen aan" om per medewerker (of "Niet toegewezen") in te zoomen.' },
-      { title: 'Filteren', body: 'Combineer filters op fase, status, prioriteit, deadline en toegewezen medewerker. De deadline-filter markeert ook overschreden taken van nog niet afgeronde acties.' },
-      { title: 'Openen', body: 'Klik op een taak om naar het tabblad Taken van het dossier te gaan en de taak daar af te handelen.' },
+      { title: 'Verschil met "Mijn acties"', body: 'Deze lijst toont acties van het hele team; "Mijn acties" toont alleen die aan jou zijn toegewezen. Gebruik de filter "Toegewezen aan" om per medewerker (of "Niet toegewezen") in te zoomen.' },
+      { title: 'Filteren', body: 'Combineer filters op fase, status, prioriteit, deadline en toegewezen medewerker. De deadline-filter markeert ook overschreden acties van nog niet afgeronde acties.' },
+      { title: 'Openen', body: 'Klik op een actie om naar het tabblad Acties van het dossier te gaan en de actie daar af te handelen.' },
     ],
   }],
 
@@ -1286,7 +1286,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // inhoud. De tab zit als laatste segment in de URL, dus resolven we de hulp op
 // (sectie, tab) i.p.v. één generieke tekst voor de hele detailpagina. Welke tabs
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
-//   aanvragen & offertes → informatie · bestanden · calculatie · taken
+//   aanvragen & offertes → informatie · bestanden · calculatie · acties
 //   opdrachten           → + werkbegroting · planning · vca · uren · inkoop · verkoop · meerwerk · oplevering · financieel · formulieren
 //   servicedesk          → informatie · bestanden · calculatie · planning · vca · financieel
 const DOSSIER_ROOT_LABELS: Record<string, string> = {
@@ -1360,19 +1360,19 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
         ])
 
     case 'taken':
-      return T('Taken',
-        'De actielijsten en losse taken bij dit dossier. Houd hier bij welke acties nog open staan, wie ze oppakt en wanneer ze af moeten.',
+      return T('Acties',
+        'De actielijsten en losse acties bij dit dossier. Houd hier bij welke acties nog open staan, wie ze oppakt en wanneer ze af moeten.',
         [
           { title: 'Actielijsten', body: 'Een dossier kan één of meer actielijsten hebben. Sjabloon-lijsten worden automatisch gekoppeld zodra het dossier aan de trigger-voorwaarden voldoet (bijv. een bepaalde status of toggle).' },
-          { title: 'Taken afwerken', body: 'Vink taken af als ze klaar zijn en wijs een verantwoordelijke en deadline toe. Openstaande taken verschijnen ook bij de betrokkene onder "Mijn taken".' },
+          { title: 'Acties afwerken', body: 'Vink acties af als ze klaar zijn en wijs een verantwoordelijke en deadline toe. Openstaande acties verschijnen ook bij de betrokkene onder "Mijn acties".' },
         ])
 
     case 'vca':
       return T('VCA',
-        'Kwaliteit, Arbo en Milieu voor dit dossier: de ingediende VCA-/KAM-formulieren en de openstaande VCA-taken. Dit tabblad verschijnt alleen als de VCA-toggle voor het dossier aanstaat.',
+        'Kwaliteit, Arbo en Milieu voor dit dossier: de ingediende VCA-/KAM-formulieren en de openstaande VCA-acties. Dit tabblad verschijnt alleen als de VCA-toggle voor het dossier aanstaat.',
         [
           { title: 'Ingediende formulieren', body: 'De VCA-/KAM-formulieren (toolbox, inspectie, LMRA) die voor dit dossier zijn ingediend staan hier bij elkaar. Klik door naar de inzending voor de volledige inhoud en de PDF.' },
-          { title: 'Openstaande taken', body: 'Nog uit te voeren VCA-taken worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat.' },
+          { title: 'Openstaande acties', body: 'Nog uit te voeren VCA-acties worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat.' },
         ])
 
     case 'uren':

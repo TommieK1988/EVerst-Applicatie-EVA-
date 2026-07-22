@@ -56,7 +56,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
   if (zichtbaar.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-        Geen openstaande taken
+        Geen openstaande acties
       </div>
     )
   }
@@ -80,7 +80,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
             {isToolbox ? (
               <div
                 aria-label="Toolbox — rond af via de doorloop"
-                title="Deze taak sluit automatisch zodra je de toolbox hebt doorlopen"
+                title="Deze actie sluit automatisch zodra je de toolbox hebt doorlopen"
                 style={{
                   width: 22, height: 22, flexShrink: 0, marginTop: 1,
                   borderRadius: 6, border: '2px solid #e3e8ea', background: '#f7f9fa',
@@ -92,7 +92,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
             ) : (
               <button
                 onClick={() => vinkAf(taak.id)}
-                aria-label="Taak afvinken"
+                aria-label="Actie afvinken"
                 style={{
                   width: 22, height: 22, flexShrink: 0, marginTop: 1,
                   borderRadius: 6, border: '2px solid #e3e8ea', background: 'transparent',

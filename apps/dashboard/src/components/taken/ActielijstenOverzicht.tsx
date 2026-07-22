@@ -122,7 +122,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
     <div>
       <PageHeader
         title="Actielijsten"
-        description="Sjablonen met taken die handmatig of via triggers aan dossiers gekoppeld worden"
+        description="Sjablonen met acties die handmatig of via triggers aan dossiers gekoppeld worden"
         actions={
           <button
             onClick={() => setToonNieuw(true)}
@@ -189,7 +189,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
             <Folder className="w-6 h-6 text-slate-400" />
           </div>
           <p className="text-slate-700 font-medium mb-1">Nog geen actielijsten</p>
-          <p className="text-slate-400 text-sm mb-4">Maak een actielijst aan om taken te groeperen.</p>
+          <p className="text-slate-400 text-sm mb-4">Maak een actielijst aan om acties te groeperen.</p>
           <button
             onClick={() => setToonNieuw(true)}
             className="inline-flex items-center gap-2 bg-everts text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-everts/90"
@@ -210,7 +210,7 @@ export default function ActielijstenOverzicht({ lijsten }: Props) {
           <AlertDialogTitle>Actielijst verwijderen?</AlertDialogTitle>
           <AlertDialogDescription>
             Weet je zeker dat je <strong>{verwijderLijst?.naam}</strong> wilt verwijderen?
-            Alle taken in deze lijst worden ook verwijderd. Dit kan niet ongedaan worden gemaakt.
+            Alle acties in deze lijst worden ook verwijderd. Dit kan niet ongedaan worden gemaakt.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuleren</AlertDialogCancel>

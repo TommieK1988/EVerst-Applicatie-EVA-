@@ -193,7 +193,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
         {trigger ?? (
           <button className="inline-flex items-center gap-2 bg-everts text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-everts/90 transition-colors">
             <Plus className="w-4 h-4" />
-            Nieuwe taak
+            Nieuwe actie
           </button>
         )}
       </div>
@@ -203,7 +203,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
-              <h2 className="text-base font-semibold text-slate-900">Nieuwe taak</h2>
+              <h2 className="text-base font-semibold text-slate-900">Nieuwe actie</h2>
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -212,7 +212,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               {/* Titel */}
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">Taak *</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1.5">Actie *</label>
                 <input
                   autoFocus
                   type="text"
@@ -274,7 +274,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                   )}
                   {lijstId && dossierId && (
                     <p className="text-xs text-slate-500 mt-1">
-                      Er is ook een actielijst gekozen — de taak wordt aan die lijst (en het bijbehorende dossier) gekoppeld.
+                      Er is ook een actielijst gekozen — de actie wordt aan die lijst (en het bijbehorende dossier) gekoppeld.
                     </p>
                   )}
                 </div>
@@ -361,8 +361,8 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
 
                 {isTemplate && assigneeType === 'medewerker_zelf' && (
                   <p className="text-xs text-slate-500 leading-snug">
-                    De taak komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
-                    EVA-account, dan blijft de taak open staan tot het account gekoppeld is.
+                    De actie komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
+                    EVA-account, dan blijft de actie open staan tot het account gekoppeld is.
                   </p>
                 )}
 
@@ -404,8 +404,8 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                       </select>
                       {herhaalt && (
                         <p className="mt-1.5 text-xs text-slate-500 leading-snug">
-                          Er ontstaat één taak per keer, verdeeld over de uitvoering volgens de
-                          detailplanning van het dossier. Elke taak krijgt zijn eigen deadline.
+                          Er ontstaat één actie per keer, verdeeld over de uitvoering volgens de
+                          detailplanning van het dossier. Elke actie krijgt zijn eigen deadline.
                         </p>
                       )}
                     </div>
@@ -536,7 +536,7 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                   disabled={!titel.trim() || pending}
                   className="inline-flex items-center gap-2 bg-everts text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-everts/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {pending ? 'Opslaan...' : 'Taak aanmaken'}
+                  {pending ? 'Opslaan...' : 'Actie aanmaken'}
                 </button>
               </div>
             </form>

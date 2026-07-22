@@ -14,7 +14,8 @@ npm workspaces + Turborepo. Twee actieve Next.js 15 apps onder `apps/`, vijf int
 | `apps/everts-calc` | 3001 | Legacy standalone (wordt samengevoegd met EVA, tijdelijk actief) |
 
 Gearchiveerde standalone apps (niet meer starten):
-- `apps/taken` — geïntegreerd in EVA onder `/taken`
+- `apps/taken` — geïntegreerd in EVA onder `/taken` (heet in de interface **Acties**/Actielijsten;
+  routes, mappen en DB-namen blijven bewust `taken`/`tasks`)
 - `apps/wagenpark` — geïntegreerd in EVA onder `/wagenpark`
 
 **Houtrot** is geen aparte app of module meer. `apps/houtrotherstel-app` is verwijderd

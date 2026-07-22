@@ -199,10 +199,10 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
 
   return (
     <WidgetShell
-      title="Mijn taken"
+      title="Mijn acties"
       subtitle={`${open} open · ${doneIds.size} afgerond`}
       onTitleClick={() => router.push('/mijn-taken')}
-      titleHint="Bekijk al mijn taken"
+      titleHint="Bekijk al mijn acties"
       actionNode={
         <NieuweTaakDialog
           toonDossierPicker
@@ -224,7 +224,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {displayed.length === 0 && (
           <div style={{ padding: '16px 2px', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
-            Geen taken toegewezen.
+            Geen acties toegewezen.
           </div>
         )}
         {displayed.map((t, i) => {

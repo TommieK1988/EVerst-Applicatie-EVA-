@@ -27,8 +27,8 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewer
     return (
       <EmptyState
         icon={<span style={{ fontSize: 24 }}>☑</span>}
-        title="Geen taken"
-        description={`Maak een losse taak aan met 'Nieuwe taak', of activeer een sjabloon om een actielijst aan ${medewerker ? 'deze medewerker' : 'dit dossier'} te koppelen.`}
+        title="Geen acties"
+        description={`Maak een losse actie aan met 'Nieuwe actie', of activeer een sjabloon om een actielijst aan ${medewerker ? 'deze medewerker' : 'dit dossier'} te koppelen.`}
       />
     )
   }
@@ -116,7 +116,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewer
               <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px' }}>
                 {lijst.taken.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--fg-muted)', padding: '8px 0', textAlign: 'center' }}>
-                    Geen taken in deze actielijst
+                    Geen acties in deze actielijst
                   </div>
                 ) : (
                   <TaakLijstWeergave
@@ -147,7 +147,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewer
                         width: '100%',
                         justifyContent: 'center',
                       }}>
-                        + Taak toevoegen
+                        + Actie toevoegen
                       </button>
                     }
                   />
@@ -185,13 +185,13 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewer
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>Overige taken</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>Overige acties</div>
                   {voortgang === 100 && (
                     <Badge tone="success" size="sm">Afgerond</Badge>
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
-                  Losse taken zonder actielijst
+                  Losse acties zonder actielijst
                 </div>
                 <Progress
                   value={voortgang}
@@ -249,7 +249,7 @@ export function ActielijstenKaarten({ lijsten, losseTaken = [], dossier, medewer
                           width: '100%',
                           justifyContent: 'center',
                         }}>
-                          + Taak toevoegen
+                          + Actie toevoegen
                         </button>
                       }
                     />

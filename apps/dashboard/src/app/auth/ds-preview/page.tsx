@@ -135,7 +135,7 @@ export default function DsPreview() {
             <StatCard tone="brand" icon={<FileText className="h-5 w-5" />} label="Open aanvragen" value="12" trend={{ direction: 'up', value: '+3', compare: 'vs vorige week' }} />
             <StatCard tone="success" icon={<CheckCircle2 className="h-5 w-5" />} label="Gewonnen offertes" value="8" trend={{ direction: 'up', value: '+2', compare: 'deze maand' }} />
             <StatCard tone="info" icon={<Building2 className="h-5 w-5" />} label="Actieve opdrachten" value="23" trend={{ direction: 'flat', value: 'stabiel' }} />
-            <StatCard tone="warning" icon={<Clock className="h-5 w-5" />} label="Taken vandaag" value="3" trend={{ direction: 'down', value: '-1', compare: 'vs gisteren' }} />
+            <StatCard tone="warning" icon={<Clock className="h-5 w-5" />} label="Acties vandaag" value="3" trend={{ direction: 'down', value: '-1', compare: 'vs gisteren' }} />
           </div>
         </Section>
 
@@ -198,9 +198,9 @@ export default function DsPreview() {
         </Section>
 
         {/* ═══════════════ 3 · DOSSIER DETAIL ═══════════════ */}
-        <Section title="Dossier detail — Aanvraag" sub="Detailpagina met tabbladen: Informatie, Bestanden, Calculatie, Taken">
+        <Section title="Dossier detail — Aanvraag" sub="Detailpagina met tabbladen: Informatie, Bestanden, Calculatie, Acties">
           <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
-            {['Informatie', 'Bestanden', 'Calculatie', 'Taken', 'VCA'].map((t, i) => (
+            {['Informatie', 'Bestanden', 'Calculatie', 'Acties', 'VCA'].map((t, i) => (
               <button key={t} style={{
                 padding: '8px 14px', background: 'none', border: 'none',
                 borderBottom: i === 0 ? '2px solid var(--brand-500)' : '2px solid transparent',

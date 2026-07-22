@@ -2090,7 +2090,7 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
 
       const omschrijving = t.description && t.description.trim() ? { text: t.description.trim() } : null
       const { data: nieuweTaak, error } = await supabase.from('tasks').insert({
-        titel: t.name || '(naamloze taak)',
+        titel: t.name || '(naamloze actie)',
         omschrijving,
         dossier_id: dossierId,
         bouw7_todo_id: t.id,

@@ -127,8 +127,8 @@ export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): Kaar
     indicatoren.push({
       soort: 'taken', tone: 'neutral', chip: `${takenOpen}/${takenTotaal}`,
       uitleg: takenOpen === 0
-        ? `Alle ${takenTotaal} taken zijn afgerond.`
-        : `${takenOpen} van de ${takenTotaal} taken staan nog open.`,
+        ? `Alle ${takenTotaal} acties zijn afgerond.`
+        : `${takenOpen} van de ${takenTotaal} acties staan nog open.`,
     })
   }
 

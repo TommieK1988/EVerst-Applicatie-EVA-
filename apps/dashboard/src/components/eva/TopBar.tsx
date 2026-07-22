@@ -163,7 +163,7 @@ const SLUG_LABELS: Record<string, string> = {
   'kam': 'KAM / VGM', 'contactpersonen': 'Contactpersoon', 'particulieren': 'Particulier',
   // EVA / persoonlijk
   'vraag-eva': 'Vraag EVA', 'bronnen': 'Bronnen', 'bibliotheek': 'Bibliotheek',
-  'mijn-taken': 'Mijn taken', 'account': 'Mijn account',
+  'mijn-taken': 'Mijn acties', 'account': 'Mijn account',
   // Apps
   'materieelbeheer': 'Materieelbeheer',
   'everts-calc': 'EvertsCalc', 'calculaties': 'Calculaties', 'quotes': 'Offertes',

@@ -25,10 +25,10 @@ export default async function ActielijstenTab({ dossier_id, dossier_titel }: Pro
       <DrainActiveringen dossier_id={dossier_id} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Taken</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Acties</h2>
           <p style={{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 4 }}>
             {lijsten.length === 0 && losseTaken.length === 0
-              ? 'Nog geen taken aan dit dossier gekoppeld.'
+              ? 'Nog geen acties aan dit dossier gekoppeld.'
               : [
                   lijsten.length > 0 ? `${lijsten.length} actielijst${lijsten.length !== 1 ? 'en' : ''}` : null,
                   losseTaken.length > 0 ? `${losseTaken.length} losse ta${losseTaken.length !== 1 ? 'ken' : 'ak'}` : null,

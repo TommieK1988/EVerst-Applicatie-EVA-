@@ -267,9 +267,9 @@ function KlaarScherm({ titel, onTerug, alAfgerond }: { titel: string; onTerug: (
       <div style={{ fontSize: 14, color: '#6b757c', marginBottom: 28, maxWidth: 280 }}>
         {alAfgerond
           ? `Je hebt "${titel}" eerder al afgetekend.`
-          : `Je hebt "${titel}" doorlopen en afgetekend. De taak is automatisch afgerond.`}
+          : `Je hebt "${titel}" doorlopen en afgetekend. De actie is automatisch afgerond.`}
       </div>
-      <button onClick={onTerug} style={{ ...knopPrimair, maxWidth: 240 }}>Terug naar taken</button>
+      <button onClick={onTerug} style={{ ...knopPrimair, maxWidth: 240 }}>Terug naar acties</button>
     </div>
   )
 }

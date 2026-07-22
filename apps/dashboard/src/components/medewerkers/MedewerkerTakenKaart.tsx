@@ -32,10 +32,10 @@ export default async function MedewerkerTakenKaart({ medewerker_id, medewerker_n
 
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-base font-semibold" style={{ color: 'var(--fg)' }}>Taken &amp; actielijsten</h2>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--fg)' }}>Acties &amp; actielijsten</h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--fg-muted)' }}>
               {lijsten.length === 0 && losseTaken.length === 0
-                ? 'Nog geen taken aan deze medewerker gekoppeld.'
+                ? 'Nog geen acties aan deze medewerker gekoppeld.'
                 : [
                     lijsten.length > 0 ? `${lijsten.length} actielijst${lijsten.length !== 1 ? 'en' : ''}` : null,
                     losseTaken.length > 0 ? `${losseTaken.length} losse ta${losseTaken.length !== 1 ? 'ken' : 'ak'}` : null,

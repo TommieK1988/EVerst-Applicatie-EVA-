@@ -1031,7 +1031,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
     return (
       <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
         <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', opacity: 0.5 }}>Taken</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', opacity: 0.5 }}>Acties</span>
         </div>
         <div style={{ flex: 1, minWidth: totalW, height: 24 }} />
       </div>
@@ -1042,7 +1042,7 @@ function TakenStrip({ taken, vs, ppd, totalDays, totalW }: {
     <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
       <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: 'var(--bg)', borderRight: '2px solid var(--border)', height: 24, display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-          Taken ({zichtbaar.length})
+          Acties ({zichtbaar.length})
         </span>
       </div>
       <div style={{ flex: 1, minWidth: totalW, height: 24, position: 'relative' }}>

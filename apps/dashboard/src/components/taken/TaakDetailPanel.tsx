@@ -134,7 +134,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   }
 
   const handleVerwijderen = () => {
-    if (!confirm(`Taak "${taak.titel}" verwijderen?`)) return
+    if (!confirm(`Actie "${taak.titel}" verwijderen?`)) return
     startTransition(async () => {
       await verwijderTaak(taak.id)
       onSluit()
@@ -165,7 +165,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   }
 
   const handleSubtaakVerwijderen = (subId: string, subTitel: string) => {
-    if (!confirm(`Subtaak "${subTitel}" verwijderen?`)) return
+    if (!confirm(`Subactie "${subTitel}" verwijderen?`)) return
     startTransition(() => verwijderTaak(subId))
   }
 
@@ -500,8 +500,8 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </div>
               {isMedewerkerContext && assigneeType === 'medewerker_zelf' && (
                 <p className="mt-1 text-xs text-slate-500 leading-snug">
-                  De taak komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
-                  EVA-account, dan blijft de taak open staan tot het account gekoppeld is.
+                  De actie komt bij de medewerker om wie deze lijst draait. Heeft die nog geen
+                  EVA-account, dan blijft de actie open staan tot het account gekoppeld is.
                 </p>
               )}
             </div>
@@ -540,8 +540,8 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </div>
               {herhaalt && (
                 <p className="mt-1 text-xs text-slate-500 leading-snug">
-                  Bij activeren ontstaat één taak per keer, verdeeld over de uitvoering volgens
-                  de detailplanning van het dossier. Elke taak krijgt zijn eigen deadline.
+                  Bij activeren ontstaat één actie per keer, verdeeld over de uitvoering volgens
+                  de detailplanning van het dossier. Elke actie krijgt zijn eigen deadline.
                 </p>
               )}
             </div>
@@ -566,7 +566,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
                     <p className="mt-1 text-xs text-slate-500 leading-snug">
                       Alleen gevuld als iemand de lijst zelf activeert en een streefdatum
                       invult. Wordt de lijst automatisch geactiveerd, kies dan een datum
-                      van het dossier — anders blijft deze taak zonder deadline.
+                      van het dossier — anders blijft deze actie zonder deadline.
                     </p>
                   )}
                 </div>
@@ -619,7 +619,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-slate-500">
-              Subtaken {taak.subtaken.length > 0 && `(${taak.subtaken.length})`}
+              Subacties {taak.subtaken.length > 0 && `(${taak.subtaken.length})`}
             </label>
             <button
               onClick={() => setToonSubtaak(t => !t)}
@@ -650,7 +650,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
                     type="button"
                     onClick={() => handleSubtaakVerwijderen(sub.id, sub.titel)}
                     disabled={pending}
-                    title="Subtaak verwijderen"
+                    title="Subactie verwijderen"
                     className="flex-shrink-0 text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                   >
                     <X className="w-3 h-3" />
@@ -666,7 +666,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
                 autoFocus
                 value={nieuweSubtaak}
                 onChange={e => setNieuweSubtaak(e.target.value)}
-                placeholder="Subtaak omschrijving..."
+                placeholder="Subactie omschrijving..."
                 className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-everts/30"
               />
               <button type="submit" disabled={!nieuweSubtaak.trim()} className="text-xs bg-everts text-white px-2.5 py-1.5 rounded-lg hover:bg-everts/90 disabled:opacity-50">
