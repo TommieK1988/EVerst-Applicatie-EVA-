@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { CalendarDays, Users } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -42,6 +42,16 @@ export default function WerktijdenWeergave({
   const router = useRouter()
   const params = useSearchParams()
   const [totalen, setTotalen] = useState<Totalen>(LEGE_TOTALEN)
+  // Standaard alleen de dagen die nog nagekeken moeten worden: zo krimpt de
+  // werklijst terwijl je hem afwerkt, in plaats van dat je elke keer dezelfde
+  // al beoordeelde dagen weer langsloopt.
+  const [alleenOpen, setAlleenOpen] = useState(true)
+
+  const zichtbaar = useMemo(
+    () => (alleenOpen ? data.filter((r) => r.status === 'open') : data),
+    [data, alleenOpen],
+  )
+  const afgehandeld = data.length - zichtbaar.length
 
   // Stabiele referentie: OverzichtTabel roept dit vanuit een effect aan, dus een
   // nieuwe functie per render zou een extra renderronde per tabelupdate geven.
@@ -58,26 +68,43 @@ export default function WerktijdenWeergave({
     <>
       <PeriodeKiezer periode={periode} />
 
-      <div className="flex items-center gap-1 mb-4 p-1 rounded-lg bg-slate-100 w-fit">
-        <WeergaveKnop
-          actief={weergave === 'dag'}
-          icon={CalendarDays}
-          label="Per dag"
-          onKlik={() => kiesWeergave('dag')}
-        />
-        <WeergaveKnop
-          actief={weergave === 'medewerker'}
-          icon={Users}
-          label="Per medewerker"
-          onKlik={() => kiesWeergave('medewerker')}
-        />
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100 w-fit">
+          <WeergaveKnop
+            actief={weergave === 'dag'}
+            icon={CalendarDays}
+            label="Per dag"
+            onKlik={() => kiesWeergave('dag')}
+          />
+          <WeergaveKnop
+            actief={weergave === 'medewerker'}
+            icon={Users}
+            label="Per medewerker"
+            onKlik={() => kiesWeergave('medewerker')}
+          />
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={alleenOpen}
+            onChange={(e) => setAlleenOpen(e.target.checked)}
+            className="rounded border-slate-300 text-green-600 focus:ring-green-600"
+          />
+          Alleen nog te controleren
+          {afgehandeld > 0 && (
+            <span className="text-slate-400">
+              ({afgehandeld} afgehandeld {alleenOpen ? 'verborgen' : 'zichtbaar'})
+            </span>
+          )}
+        </label>
       </div>
 
       <TelKaarten totalen={totalen} />
 
       {weergave === 'medewerker' ? (
         <SamenvattingTabel
-          data={data}
+          data={zichtbaar}
           layouts={layoutsSamenvatting}
           user_id={user_id}
           periode={periode}
@@ -86,7 +113,7 @@ export default function WerktijdenWeergave({
         />
       ) : (
         <WerktijdenTabel
-          data={data}
+          data={zichtbaar}
           layouts={layoutsDag}
           user_id={user_id}
           onTotalen={onTotalen}

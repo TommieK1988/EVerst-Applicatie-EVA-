@@ -84,10 +84,10 @@ export default async function WerktijdenPage({
         left join public.medewerkers m on m.id = uu.medewerker_id
        where b.regel_code in ('R9', 'R10')
          and b.data->>'keten_rol' = 'anker'
-         -- Een afgewezen bevinding is ingetrokken; die hoort niet in een gesprek
-         -- met de medewerker. Geaccepteerde uitzonderingen blijven wél staan —
-         -- die wil je juist kunnen benoemen, met hun status erbij.
-         and b.status <> 'afgewezen'
+         -- Alle statussen. NIET op status filteren: de waarde 'afgewezen'
+         -- betekent hier "verklaring afgewezen, overtreding bevestigd" en niet
+         -- "ingetrokken", dus wegfilteren zou juist de bevestigde gevallen
+         -- verbergen. De werklijst wordt in de UI teruggebracht tot 'open'.
          and b.periode_start between $1::date and $2::date
        order by b.periode_start desc
       `,
@@ -102,7 +102,6 @@ export default async function WerktijdenPage({
         from public.compliance_bevindingen b
        where b.regel_code in ('R9', 'R10')
          and b.data->>'keten_rol' is null
-         and b.status <> 'afgewezen'
          and b.periode_start between $1::date and $2::date
       `,
       [periode.van, periode.tot],

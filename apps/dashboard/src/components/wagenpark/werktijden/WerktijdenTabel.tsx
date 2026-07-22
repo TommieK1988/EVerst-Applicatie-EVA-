@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import { minutenLabel, urenLabel, SOORT_LABEL, type WerktijdSoort } from '@/lib/wagenpark/werktijd'
 import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
+import DagPaneel from '@/components/wagenpark/werktijden/DagPaneel'
 
 /**
  * Eén regel = één medewerker, één dag, één soort afwijking. Een dag kan dus twee
@@ -49,10 +50,25 @@ export type WerktijdRij = {
 /** De rij zoals hij uit de database komt, nog zonder de uren uit Bouw7. */
 export type WerktijdBevindingRij = Omit<WerktijdRij, 'geboekt' | 'uursoorten'>
 
+/**
+ * Statuslabels in de taal van dit scherm.
+ *
+ * LET OP: `afgewezen` betekent hier NIET "signaal ingetrokken" maar
+ * "verklaring afgewezen, overtreding bevestigd" — zie
+ * app/(platform)/wagenpark/actions/werktijd-afhandeling.ts.
+ */
 const STATUS_LABEL: Record<string, string> = {
-  open: 'Open',
-  geaccepteerd_uitzondering: 'Uitzondering',
+  open: 'Te controleren',
+  geaccepteerd_uitzondering: 'Verklaard',
+  afgewezen: 'Bespreken',
   opgelost: 'Opgelost',
+}
+
+const STATUS_STIJL: Record<string, string> = {
+  open: 'bg-slate-100 text-slate-600',
+  geaccepteerd_uitzondering: 'bg-green-100 text-green-700',
+  afgewezen: 'bg-red-100 text-red-700',
+  opgelost: 'bg-green-100 text-green-700',
 }
 
 function tijd(t: string | null): string {
@@ -81,6 +97,14 @@ export default function WerktijdenTabel({
   /** Totalen over de rijen die de kolomfilters overleven; voedt de tel-kaarten. */
   onTotalen?: (t: Totalen) => void
 }) {
+  // Het zijpaneel houdt het id vast, niet de rij zelf: na het afvinken komt er
+  // via revalidatePath verse data binnen, en een vastgehouden object zou dan de
+  // oude status blijven tonen.
+  const [geopendId, setGeopendId] = useState<string | null>(null)
+  const geopend = useMemo(
+    () => (geopendId ? data.find((r) => r.id === geopendId) ?? null : null),
+    [data, geopendId],
+  )
   // De tabel meldt terug welke rijen door zoekbalk en kolomfilters komen, zodat
   // de kaarten boven de pagina hetzelfde tellen als wat je op je scherm ziet.
   const meldTotalen = useCallback(
@@ -226,13 +250,18 @@ export default function WerktijdenTabel({
       {
         key: 'status',
         label: 'Status',
-        breedte: 120,
-        standaard_zichtbaar: false,
+        breedte: 130,
         filterType: 'select',
         filterOpties: [...new Set(data.map((r) => STATUS_LABEL[r.status] ?? r.status))],
         sorteerWaarde: (r) => STATUS_LABEL[r.status] ?? r.status,
         render: (r) => (
-          <span className="text-xs text-slate-500">{STATUS_LABEL[r.status] ?? r.status}</span>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full ${
+              STATUS_STIJL[r.status] ?? 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {STATUS_LABEL[r.status] ?? r.status}
+          </span>
         ),
       },
     ],
@@ -252,19 +281,24 @@ export default function WerktijdenTabel({
   )
 
   return (
-    <OverzichtTabel
-      scherm="wagenpark-werktijden"
-      data={data}
-      kolommen={kolommen}
-      layouts={layouts}
-      user_id={user_id}
-      beginSortering={[{ id: 'datum', desc: true }]}
-      selecteerbaar={false}
-      toonRijActie={false}
-      dicht
-      groepering={groepering}
-      onGefilterd={meldTotalen}
-    />
+    <>
+      <OverzichtTabel
+        scherm="wagenpark-werktijden"
+        data={data}
+        kolommen={kolommen}
+        layouts={layouts}
+        user_id={user_id}
+        beginSortering={[{ id: 'datum', desc: true }]}
+        selecteerbaar={false}
+        toonRijActie={false}
+        dicht
+        groepering={groepering}
+        onGefilterd={meldTotalen}
+        onRijKlik={(r) => setGeopendId(r.id)}
+      />
+
+      <DagPaneel rij={geopend} onClose={() => setGeopendId(null)} />
+    </>
   )
 }
 
