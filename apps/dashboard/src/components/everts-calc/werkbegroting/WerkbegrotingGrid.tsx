@@ -254,7 +254,7 @@ function VerschilBadge({ verschil, pct }: { verschil: number; pct: number | null
   if (verschil === 0) return null
   const isWinst = verschil < 0
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded ${
+    <span className={`inline-flex items-center gap-0.5 whitespace-nowrap text-[10px] font-bold px-1.5 py-0.5 rounded ${
       isWinst ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
     }`}>
       {isWinst ? '▼' : '▲'}
@@ -310,11 +310,11 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
       calcArbeid,   calcMateriaal,   calcOA,   calcTotaal }
   }, [componenten, regels, calcCompMap])
 
-  const thCls = 'text-left text-[9px] font-bold uppercase tracking-wide text-slate-400 pb-1 border-b border-slate-100'
-  const tdCls = 'py-1 text-[11px]'
+  const thCls = 'text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 pb-1 border-b border-slate-100 whitespace-nowrap'
+  const tdCls = 'py-1 text-[11px] whitespace-nowrap'
 
   return (
-    <aside className="w-64 flex-shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto flex flex-col">
+    <aside className="w-80 2xl:w-96 flex-shrink-0 border-l border-slate-200 bg-slate-50 overflow-y-auto flex flex-col">
       <div className="px-4 py-2.5 border-b border-slate-200 bg-white sticky top-0 z-10">
         <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Totalen</h3>
       </div>
@@ -335,7 +335,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
             <tbody>
               {[...totalen.perUurtype.entries()].map(([uurtype, d]) => (
                 <tr key={uurtype} className="border-b border-slate-100/60">
-                  <td className={`${tdCls} text-slate-700 font-medium truncate max-w-[60px]`} title={uurtype}>{uurtype}</td>
+                  <td className={`${tdCls} text-slate-700 font-medium truncate max-w-[120px]`} title={uurtype}>{uurtype}</td>
                   <td className={`${tdCls} text-right  text-slate-600`}>{d.aantal % 1 === 0 ? d.aantal.toFixed(0) : d.aantal.toFixed(1)}</td>
                   <td className={`${tdCls} text-right  text-slate-500`}>{formatEuro(d.tarief)}</td>
                   <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{formatEuro(d.totaal)}</td>
@@ -417,7 +417,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
                 .sort((a, b) => b[1].totaal - a[1].totaal)
                 .map(([key, d]) => (
                 <tr key={key} className="border-b border-slate-100/60">
-                  <td className={`${tdCls} text-slate-700 font-medium truncate max-w-[80px]`} title={d.naam}>{d.naam}</td>
+                  <td className={`${tdCls} text-slate-700 font-medium truncate max-w-[150px]`} title={d.naam}>{d.naam}</td>
                   <td className={`${tdCls} text-center`}>
                     <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${
                       d.type === 'Onderaannemer' ? 'bg-purple-50 text-purple-600' : 'bg-red-50 text-red-600'

@@ -44,6 +44,12 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [volledigGoedgekeurd, setVolledigGoedgekeurd] = useState(false)
   /** True als er een open goedkeuringsaanvraag is die de ingelogde gebruiker mag accorderen (controller/Directie). */
   const [magGoedkeuren, setMagGoedkeuren] = useState(false)
+  /**
+   * Status van de actuele goedkeuringsronde uit Supabase (null = nog nooit aangevraagd).
+   * Dit is de waarheid voor de header — `wb.status` is client-lokaal en blijft op andere
+   * apparaten op 'definitief' staan omdat de accordering die kolom niet terugschrijft.
+   */
+  const [goedkeuringStatus, setGoedkeuringStatus] = useState<string | null>(null)
   const [prognoseOpen, setPrognoseOpen] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
   const [prognoseBezig, setPrognoseBezig] = useState(false)
@@ -160,6 +166,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     } catch { /* stil */ }
     try {
       const overzicht = await getGoedkeuring('werkbegroting', wb.id)
+      setGoedkeuringStatus(overzicht.actueel?.status ?? null)
       setMagGoedkeuren(overzicht.actueel?.status === 'aangevraagd' && overzicht.magBeoordelen)
     } catch { /* stil */ }
   }, [wb])
@@ -188,6 +195,30 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       return sum + regel.hoeveelheid * comp.norm_hoeveelheid * comp.tarief
     }, 0)
   }, [wb, refreshTeller])
+
+  /**
+   * Wat de goedkeuringsknop en de statuschip tonen. Afgeleid van de goedkeuringsronde in
+   * Supabase (plus de regel-hashes), niet van de lokale `wb.status` — die loopt achter.
+   */
+  const goedkeuringWeergave = useMemo(() => {
+    if (goedkeuringStatus === 'aangevraagd') {
+      return { label: 'Ter beoordeling', chip: 'Ter beoordeling', chipCls: 'bg-blue-100 text-blue-700',
+        knopCls: 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' }
+    }
+    if (goedkeuringStatus === 'goedgekeurd') {
+      return volledigGoedgekeurd
+        ? { label: 'Goedgekeurd', chip: 'Goedgekeurd', chipCls: 'bg-green-100 text-green-700',
+            knopCls: 'border border-green-200 bg-green-50 text-green-700 hover:bg-green-100' }
+        : { label: 'Gewijzigd na goedkeuring', chip: 'Gewijzigd na goedkeuring', chipCls: 'bg-amber-100 text-amber-700',
+            knopCls: 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' }
+    }
+    if (goedkeuringStatus === 'afgekeurd') {
+      return { label: 'Teruggestuurd', chip: 'Teruggestuurd', chipCls: 'bg-red-100 text-red-700',
+        knopCls: 'border border-red-200 bg-red-50 text-red-700 hover:bg-red-100' }
+    }
+    return { label: 'Goedkeuring aanvragen', chip: 'Nog niet aangevraagd', chipCls: 'bg-slate-100 text-slate-600',
+      knopCls: 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50' }
+  }, [goedkeuringStatus, volledigGoedgekeurd])
 
   /** Werkbegroting-totalen per bewakingscode (= regel.kostengroep), gesplitst per component-type. */
   const berekenPrognoseTotalen = useCallback((): WerkbegrotingPrognoseTotalen => {
@@ -412,12 +443,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
             {nietGeaccordeerd} niet geaccordeerd
           </span>
         )}
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-          wb.status === 'geaccordeerd' ? 'bg-green-100 text-green-700' :
-          wb.status === 'definitief'   ? 'bg-blue-100 text-blue-700' :
-                                         'bg-amber-100 text-amber-700'
-        }`}>
-          {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Definitief' : 'Concept'}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${goedkeuringWeergave.chipCls}`}>
+          {goedkeuringWeergave.chip}
         </span>
         {magGoedkeuren ? (
           <button
@@ -431,17 +458,11 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         ) : (
           <button
             onClick={() => setGoedkeuringOpen(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-              wb.status === 'geaccordeerd'
-                ? 'border border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                : wb.status === 'definitief'
-                ? 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${goedkeuringWeergave.knopCls}`}
             title="Goedkeuringsproces beheren"
           >
             <ClipboardCheck className="w-3.5 h-3.5" />
-            {wb.status === 'geaccordeerd' ? 'Geaccordeerd' : wb.status === 'definitief' ? 'Ter beoordeling' : 'Goedkeuring'}
+            {goedkeuringWeergave.label}
           </button>
         )}
         <button
