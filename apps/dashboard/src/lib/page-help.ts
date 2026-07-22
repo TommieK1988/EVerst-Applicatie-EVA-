@@ -557,6 +557,19 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Signaal afhandelen', body: 'Klik op een rit om het zijpaneel te openen. Daar staat de uitleg bij de regel en handel je af: eenmalige uitzondering, altijd toestaan voor deze bestuurder, of overtreding bevestigen. In hetzelfde paneel wissel je een rit van zakelijk naar privé.' },
       { title: 'Signalen die niet over één rit gaan', body: 'Privé-kilometers, rijgedrag over een week en parkeerkosten horen bij een bestuurder, niet bij één rit. Die vind je op de bestuurderspagina onder Signalen.' },
       { title: 'Kilometeradministratie', body: 'Een volledige kilometeradministratie is fiscaal verplicht voor leaserijders met bijtelling. Zorg dat alle ritten zijn geclassificeerd (zakelijk/privé) vóór de maandafsluiting. Exporteer via de "Exporteer"-knop als CSV voor de salarisadministratie.' },
+      { title: 'Afwijking werktijd', body: 'Directie en beheer kunnen via het kolombeheer de kolom "Afwijking werktijd" aanzetten: hoeveel minuten er die dag te laat is begonnen of te vroeg is gestopt. Bestaat de heenreis uit meerdere ritten, dan staat het getal alleen op de rit die de tijd bepaalt — de andere delen tonen een streepje, zodat optellen geen dubbeltelling geeft. Voor weektotalen per medewerker: zie de pagina Werktijden.' },
+    ],
+  }],
+
+  [/^\/wagenpark\/werktijden$/, {
+    title: 'Wagenpark — Werktijden',
+    description: 'Per medewerker per week: hoeveel minuten er te laat is begonnen en te vroeg is gestopt. Bedoeld om cijfers klaar te zetten voor een gesprek met de medewerker. Alleen zichtbaar voor directie en beheer.',
+    sections: [
+      { title: 'Hoe de tijden worden bepaald', body: 'Aankomst op het werk is het einde van de eerste zakelijke ritketen van de dag; vertrek is het begin van de laatste. Ritten met minder dan vijf minuten ertussen tellen als één rit, zodat een tankstop of een opgeknipte registratie niet voor aankomst wordt aangezien. Elke stop telt als werkplek — ook de groothandel of het depot. De grens is de dagstart en het dageind uit het werkrooster.' },
+      { title: 'Wat er niet meetelt', body: 'Dagen met verlof of afwezigheid worden overgeslagen, net als de lopende dag. Handmatig toegekende signalen tellen niet mee: daar is geen tijd van bekend. Een ≈ achter de roostertijd betekent dat er op die datum nog geen rooster gold en de dichtstbijzijnde is gebruikt.' },
+      { title: 'Weektotalen', body: 'De regels zijn gebundeld per medewerker per week. Klik op een balk om de losse dagen te zien; rechts in de balk staat het weektotaal. De kaarten bovenaan filteren op te laat of te vroeg.' },
+      { title: 'Delen met de medewerker', body: 'Filter op één medewerker (kolomfilter Medewerker) en stel eventueel de periode in via ?weken=… in de adresbalk. Klik dan op Exporteer: je krijgt een Excel-bestand met één regel per dag, waarin de afwijking als getal staat. Daarmee kan de medewerker de optelling zelf narekenen.' },
+      { title: 'Privacy', body: 'Deze cijfers gaan over het doen en laten van een met naam genoemde medewerker. Deel het overzicht alleen met de betrokkene zelf en met wie het functioneel nodig heeft.' },
     ],
   }],
 

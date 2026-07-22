@@ -5,6 +5,7 @@ import { AlertCircle, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
+import { afwijkingenVanRit, afwijkingLabel, totaalMinuten } from '@/lib/wagenpark/werktijd'
 import RitPaneel from '@/components/wagenpark/ritten/RitPaneel'
 import type { RitBevinding, RegelOptie } from '@/components/wagenpark/ritten/RitPaneel'
 
@@ -65,11 +66,14 @@ export default function RittenTabel({
   layouts,
   user_id,
   regels,
+  magPrive = false,
 }: {
   data: RitRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
   regels: RegelOptie[]
+  /** Directie/beheer: alleen zij zien de werktijd-afwijking per rit. */
+  magPrive?: boolean
 }) {
   // Snelfilter via de tel-kaarten boven de tabel. null = alles tonen.
   const [ernstFilter, setErnstFilter] = useState<Ernst | 'gevlagd' | null>(null)
@@ -219,6 +223,43 @@ export default function RittenTabel({
           </span>
         ),
       },
+      // Werktijd-afwijking in minuten. Alleen voor Directie/beheer: het gaat om
+      // aankomst- en vertrektijden van een met naam genoemde medewerker.
+      ...(magPrive
+        ? [
+            {
+              key: 'afwijking',
+              label: 'Afwijking werktijd',
+              breedte: 170,
+              standaard_zichtbaar: false,
+              // Getal, geen tekst: zo sorteert de kolom op omvang én komt er in de
+              // Excel-export een cel waarmee je kunt rekenen. Ritten die alleen een
+              // ander deel van de ritketen zijn leveren 0 — hun minuten staan op het
+              // anker, meetellen zou dubbeltellen. Zie lib/wagenpark/werktijd.ts.
+              sorteerWaarde: (r: RitRij) => totaalMinuten(afwijkingenVanRit(r.bevindingen)),
+              render: (r: RitRij) => {
+                const afw = afwijkingenVanRit(r.bevindingen)
+                if (afw.length === 0) return <span className="text-slate-300">—</span>
+                const zwaar = afw.some((a) => a.ernst === 'overtreding')
+                return (
+                  <span
+                    className={`text-xs font-medium ${zwaar ? 'text-red-700' : 'text-orange-700'}`}
+                    title={afw
+                      .map((a) =>
+                        a.verwacht && a.werkelijk
+                          ? `Rooster ${a.verwacht}, werkelijk ${a.werkelijk}`
+                          : '',
+                      )
+                      .filter(Boolean)
+                      .join(' · ')}
+                  >
+                    {afwijkingLabel(afw)}
+                  </span>
+                )
+              },
+            } as KolomDefinitie<RitRij>,
+          ]
+        : []),
       {
         // Rechts in de tabel: is deze rit gevlagd, en waarom. Niet uit te zetten —
         // zonder deze kolom is de tabel weer het oude, signaalloze ritten-overzicht.
@@ -267,7 +308,7 @@ export default function RittenTabel({
         },
       },
     ],
-    [bestuurderOpties, uluOpties],
+    [bestuurderOpties, uluOpties, magPrive],
   )
 
   return (

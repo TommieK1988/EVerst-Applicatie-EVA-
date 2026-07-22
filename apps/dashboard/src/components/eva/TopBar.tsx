@@ -97,6 +97,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/wagenpark\/ritten\/import$/, { title: 'Wagenpark › Ritten › Importeren', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/ritten\/sync$/, { title: 'Wagenpark › Ritten › Synchroniseren', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/ritten$/, { title: 'Wagenpark › Ritten', breadcrumb: 'Apps' }],
+  [/^\/wagenpark\/werktijden$/, { title: 'Wagenpark › Werktijden', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/parkeren\/import$/, { title: 'Wagenpark › Parkeren › Importeren', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/parkeren\/zones$/, { title: 'Wagenpark › Parkeren › Zones', breadcrumb: 'Apps' }],
   [/^\/wagenpark\/parkeren$/, { title: 'Wagenpark › Parkeren', breadcrumb: 'Apps' }],

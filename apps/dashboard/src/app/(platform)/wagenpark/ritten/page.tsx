@@ -156,7 +156,13 @@ export default async function RittenPage() {
           }
         />
       ) : (
-        <RittenTabel data={ritten} layouts={layouts} user_id={user_id} regels={regels} />
+        <RittenTabel
+          data={ritten}
+          layouts={layouts}
+          user_id={user_id}
+          regels={regels}
+          magPrive={magPrive}
+        />
       )}
     </>
   )
