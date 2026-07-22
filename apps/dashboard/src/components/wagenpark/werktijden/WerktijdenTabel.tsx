@@ -4,7 +4,7 @@ import React, { useCallback, useMemo } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
-import { minutenLabel, SOORT_LABEL, type WerktijdSoort } from '@/lib/wagenpark/werktijd'
+import { minutenLabel, urenLabel, SOORT_LABEL, type WerktijdSoort } from '@/lib/wagenpark/werktijd'
 import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 
 /**
@@ -33,7 +33,21 @@ export type WerktijdRij = {
   week: string
   /** Maandag van die week (YYYY-MM-DD). */
   week_start: string
+  /**
+   * Uren die deze medewerker die dag in Bouw7 schreef, om het signaal mee te
+   * controleren. `null` = niet op te halen (Bouw7 onbereikbaar of medewerker
+   * zonder Bouw7-koppeling); `0` = wél gekeken, niets geboekt. Dat onderscheid
+   * moet zichtbaar blijven: een storing mag er niet uitzien als een lege dag.
+   */
+  geboekt: number | null
+  /** "6,0 normaal · 2,0 verlof", of null als er niets geboekt is. */
+  uursoorten: string | null
+  /** Bouw7-medewerkersnummer; de server koppelt hiermee de urenboekingen. */
+  bouw7_id: string | null
 }
+
+/** De rij zoals hij uit de database komt, nog zonder de uren uit Bouw7. */
+export type WerktijdBevindingRij = Omit<WerktijdRij, 'geboekt' | 'uursoorten'>
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
@@ -174,6 +188,38 @@ export default function WerktijdenTabel({
             }`}
           >
             {minutenLabel(r.minuten)}
+          </span>
+        ),
+      },
+      {
+        // Controlekolom: schreef deze medewerker die dag genoeg uren? Getal, dus
+        // sorteerbaar op "veel afwijking maar toch volle dag geboekt" — precies
+        // de regels die je wilt bekijken.
+        key: 'geboekt',
+        label: 'Geboekt',
+        breedte: 100,
+        sorteerWaarde: (r) => r.geboekt ?? -1,
+        render: (r) =>
+          r.geboekt == null ? (
+            <span className="text-slate-300" title="Uren niet opgehaald uit Bouw7">
+              —
+            </span>
+          ) : (
+            <span
+              className={`tabular-nums ${r.geboekt === 0 ? 'text-slate-400' : 'text-slate-700'}`}
+            >
+              {urenLabel(r.geboekt)} u
+            </span>
+          ),
+      },
+      {
+        key: 'uursoorten',
+        label: 'Uursoorten',
+        breedte: 240,
+        sorteerWaarde: (r) => r.uursoorten ?? '',
+        render: (r) => (
+          <span className="block max-w-[240px] truncate text-xs text-slate-600" title={r.uursoorten ?? ''}>
+            {r.uursoorten ?? '—'}
           </span>
         ),
       },

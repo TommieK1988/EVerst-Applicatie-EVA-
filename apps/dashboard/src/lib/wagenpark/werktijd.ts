@@ -48,6 +48,16 @@ export const SOORT_LABEL: Record<WerktijdSoort, string> = {
  * Zelfde vorm als `duurLabel` in wagenpark-core, bewust gedupliceerd: die zit in
  * de compliance-engine en die wil je niet in een client component importeren.
  */
+/**
+ * Uren met één decimaal en een komma, zoals de rest van EVA getallen toont.
+ *
+ * Staat hier en niet in `werktijd-uren.ts`: die module is `server-only` (hij
+ * praat met Bouw7), en de tabelkolom die dit label toont draait in de browser.
+ */
+export function urenLabel(uren: number): string {
+  return uren.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
 export function minutenLabel(minuten: number): string {
   const u = Math.floor(minuten / 60)
   const m = Math.round(minuten % 60)
