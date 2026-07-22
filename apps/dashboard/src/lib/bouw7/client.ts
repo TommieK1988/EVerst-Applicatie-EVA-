@@ -993,12 +993,19 @@ export type Bouw7ProjectStatus = {
  * Urenregel uit GET /list/hour-logs/employee (Heimdall, q-DSL `project.id = {id}`).
  * `type` = uursoort (hourType), `hours`/`hourlyRate`/`invoicedAmount` zijn strings.
  * Response-envelope: `Bouw7EmployeeHourLogResponse` ({ items, totalHours, totalCost, count }).
+ *
+ * Het endpoint werkt ook **zonder** projectfilter (bedrijfsbreed, bv. `logDate >= "…"`) — dat is de
+ * bron van het Uren-overzicht onder Financieel. Twee valkuilen daarbij (geverifieerd jul 2026):
+ * de query-params `?limit`/`?offset` worden genegeerd (beide pagina's geven de volledige set en
+ * `limit`/`offset` komen als null terug) — begrenzen kan alleen via `LIMIT` in de q-DSL of een
+ * `logDate`-filter. En `employee.isExternal` is niet HQL-mapped (→ 400); filter op het top-level
+ * `isExternal`.
  */
 export type Bouw7EmployeeHourLog = {
   id: number
   employee?: { id: number; firstName?: string; lastName?: string } | null
   type?: { id: number; name?: string } | null
-  project?: { id: number; name?: string } | null
+  project?: { id: number; name?: string; number?: string; projectLeaderName?: string | null } | null
   projectSecurityLink?: { id?: number; code?: string | null; name?: string | null; parentName?: string | null; costType?: number } | null
   hours?: string | number
   logDate?: string
@@ -1006,6 +1013,11 @@ export type Bouw7EmployeeHourLog = {
   hourlyRate?: string | number
   invoicedAmount?: string | number
   isApproved?: boolean
+  /** Geaccordeerd door — alleen gevuld als `isApproved` true is. */
+  approvedBy?: { id?: number; username?: string } | null
+  approvedAt?: string | null
+  /** Ingehuurde kracht (ZZP/uitzend) i.p.v. eigen dienst. */
+  isExternal?: boolean
   bookingStatus?: number
 }
 

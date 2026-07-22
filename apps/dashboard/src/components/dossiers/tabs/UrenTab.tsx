@@ -6,7 +6,7 @@ import {
 } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtUren, fmtTarief, fmtPct, TH, TD, LegeStaat, ROOD, GROEN } from './tab-ui'
-import UrenDetailTable from './UrenDetailTable'
+import UrenDetailTable from '@/components/uren/UrenDetailTable'
 
 const KLEUR_SALDO = (v: number) => (v >= 0 ? GROEN : ROOD)
 

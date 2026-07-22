@@ -10,6 +10,7 @@
  */
 import { createAdminClient } from '@everts/database/server'
 import { getOmzetVoorRelatie } from '@/lib/relaties/actions'
+import { dossierHref } from '@/lib/dossiers/href'
 
 export type EntityType =
   | 'dossier'
@@ -56,18 +57,6 @@ const GROEP_VOLGORDE: EntityType[] = [
   'contactpersoon',
   'particulier',
 ]
-
-/** Dossier-detailroutes lopen per hoofdstatus (er is geen losse /dossiers/[id]). */
-const HOOFDSTATUS_SEGMENT: Record<string, string> = {
-  aanvraag: 'aanvragen',
-  offerte: 'offertes',
-  opdracht: 'opdrachten',
-}
-
-function dossierHref(id: string, hoofdstatus: string | null): string {
-  const seg = HOOFDSTATUS_SEGMENT[hoofdstatus ?? ''] ?? 'opdrachten'
-  return `/${seg}/${id}`
-}
 
 function volledigeNaam(
   voornaam?: string | null,

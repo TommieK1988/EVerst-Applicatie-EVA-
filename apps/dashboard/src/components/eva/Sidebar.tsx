@@ -7,7 +7,7 @@ import {
   IconRelaties, IconMedewerkers, IconInstellingen,
   IconAanvragen, IconOffertes, IconOpdrachten, IconManagement, IconServicedesk, IconAfgesloten,
   IconProjectplanning, IconCrewplanning, IconAgenda,
-  IconFacturen, IconInkoop,
+  IconFacturen, IconInkoop, IconUren,
   IconKam,
   IconSjablonen, IconWagenpark, IconEvertsCalc,
   IconFormulieren, IconMaterieel, IconToolbox,
@@ -71,6 +71,7 @@ const PLANNING_INKOOP: NavEntry[] = [
 
 const FINANCIEEL: NavEntry[] = [
   { href: '/facturen', label: 'Facturen', Icon: IconFacturen, module: 'financieel' },
+  { href: '/uren',     label: 'Uren',     Icon: IconUren,     module: 'financieel' },
   { label: 'Inkoop',   Icon: IconInkoop,   comingSoon: true, module: 'financieel' },
   { href: '/management/dashboard', label: 'Management', Icon: IconManagement, module: 'management' },
 ]

@@ -299,6 +299,19 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Financieel: Uren ───────────────────────────────────────────────────
+  [/^\/uren$/, {
+    title: 'Uren',
+    description: 'Alle geboekte uren van interne én externe medewerkers over alle dossiers heen, live uit Bouw7. Dezelfde detailtabel als op het tabblad Uren in een dossier, met een kolom Dossier en de accorderingsstatus erbij.',
+    sections: [
+      { title: 'Periode kiezen', body: 'Bovenaan kies je deze maand, vorige maand, dit kwartaal of dit jaar. De lijst haalt alleen die periode op, dus hoe korter de periode hoe sneller het scherm laadt.' },
+      { title: 'Subtotalen', body: 'Klik op een kolomkop om te sorteren. Sorteer je op Medewerker, Dossier, Week, Uursoort, Bewakingscode, Dienstverband, Projectleider of Geaccordeerd, dan verschijnt onder elke groep automatisch een subtotaal met uren en bedrag.' },
+      { title: 'Geaccordeerd', body: 'Toont of de urenboeking in Bouw7 is geaccordeerd, door wie en wanneer. Accorderen zelf doe je in Bouw7 — EVA laat de status alleen zien. Bovenin zie je in één oogopslag hoeveel regels nog niet geaccordeerd zijn.' },
+      { title: 'Intern en extern', body: 'De kolom Dienstverband onderscheidt eigen medewerkers van ingehuurde krachten (ZZP en uitzend). Sorteer erop voor een subtotaal per soort.' },
+      { title: 'Uurtarief', body: 'Het getoonde uurtarief is de kostprijs per uur, niet het verkooptarief. Daarom staat dit scherm onder Financieel en is er het recht Financieel voor nodig.' },
+    ],
+  }],
+
   // ── Beheer: Management ─────────────────────────────────────────────────
   [/^\/management$/, {
     title: 'Management',

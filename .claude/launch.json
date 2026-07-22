@@ -16,6 +16,13 @@
       "autoPort": false
     },
     {
+      "name": "dashboard-uren",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set NEXT_DIST_DIR=.next-uren&& npm run dev -w eva -- -p 3006"],
+      "port": 3006,
+      "autoPort": false
+    },
+    {
       "name": "docs",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "docs", "-l", "4000", "--no-clipboard"],

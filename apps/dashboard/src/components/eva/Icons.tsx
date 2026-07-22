@@ -134,6 +134,7 @@ export const IconAgenda            = (p: IconProps) => <IconBase {...p}><rect x=
 // Financieel
 export const IconFacturen = (p: IconProps) => <IconBase {...p}><path d="M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3l5 5h-5z"/><path d="M14 13h-3.5a1.8 1.8 0 0 0 0 3.6H12M8 13h3.5"/></IconBase>;
 export const IconInkoop   = (p: IconProps) => <IconBase {...p}><path d="M12 2.5l9 5-9 5-9-5z"/><path d="M3 7.5v9l9 5 9-5v-9"/><path d="M12 12.5v9"/></IconBase>;
+export const IconUren     = (p: IconProps) => <IconBase {...p}><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l4 2.4"/></IconBase>;
 
 // Organisatie & Apps
 export const IconKam           = (p: IconProps) => <IconBase {...p}><path d="M12 3l8 3v6c0 5-3.5 8-8 9.5C7.5 20 4 17 4 12V6z"/><path d="M9 12l2 2 4-4"/></IconBase>;
