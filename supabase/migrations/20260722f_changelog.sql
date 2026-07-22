@@ -1,0 +1,6 @@
+-- Wat is nieuw: oplevering op mobiel + voor/na-bewijs in het opleverrapport.
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-22','nieuw','Oplevering','Een oplevering lopen op je telefoon',
+   'Bij een opdracht staat op je telefoon nu een tabblad Oplevering. Daar maak je een oplevering aan en loop je de punten af: foto maken, status bijwerken, de opdrachtgever ter plekke laten tekenen en een afmeldlink naar een onderaannemer sturen. Je ziet er ook de aandachtspunten die bewoners hebben gemeld en het gemiddelde rapportcijfer uit hun feedback. De omschrijving van een punt kun je inspreken in plaats van typen.'),
+  ('2026-07-22','verbeterd','Oplevering','Met foto''s aantonen dat een punt verholpen is',
+   'Bij een opleverpunt leg je nu apart een foto vooraf en een foto na herstel vast. In het opleverrapport staan die naast elkaar, zodat de klant ziet dat het werk echt gedaan is. Meldt een onderaannemer een punt af met een foto, dan telt die automatisch mee als bewijs. Ontbreekt de foto na herstel, dan valt dat op in plaats van weg. Ook nieuw: aandachtspunten die los van een oplevermoment zijn gemeld, staan nu in een eigen hoofdstuk in het rapport.');
