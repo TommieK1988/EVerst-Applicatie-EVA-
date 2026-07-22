@@ -427,6 +427,8 @@ export interface WerkbegrotingComponent {
   artikelnummer?: string     // specificatie bij materieel
   uurtype?: string           // specificatie bij arbeid (bijv. 'Gezel', 'Leerling')
   bouw7_line_id?: number     // Bouw7 contract-order-line id (dedup bij re-import uit Bouw7)
+  /** Winkelbudget: budgetreservering bij een leverancier i.p.v. losse artikelen (alleen materiaal). */
+  is_winkel?: boolean
   is_verwijderd?: boolean
 }
 
@@ -449,6 +451,22 @@ export interface WerkbegrotingBestelling {
   relatie_id?: string
   status: 'concept' | 'verzonden' | 'bevestigd'
   component_ids: string[]  // opgelost uit junction bij laden
+  /** Welk Bouw7-document dit wordt. Volgt uit het componenttype (onderaanneming → oa_contract). */
+  soort?: 'inkooporder' | 'oa_contract'
+  /** Gevuld zodra de bestelling in Bouw7 staat; anker voor bijwerken i.p.v. dupliceren. */
+  bouw7_contract_id?: number | null
+  /** Contractnummer uit Bouw7, bv. "20261.00357OA002". */
+  bouw7_nummer?: string | null
+  /** Leverbon die Bouw7 bij het afroepen maakte, bv. "20261.00357OA002B001". */
+  bouw7_leverbon_id?: number | null
+  bouw7_bonnummer?: string | null
+  bouw7_sync_status?: string | null
+  bouw7_sync_fout?: string | null
+  /** Lever-/startdatum (ISO-datum) of vrije tekst ("week 34") — Bouw7 accepteert beide. */
+  levering_datum?: string | null
+  levering_tekst?: string | null
+  betaalafspraak?: string | null
+  interne_notitie?: string | null
 }
 
 export interface RelatieRef {

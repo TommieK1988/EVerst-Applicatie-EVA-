@@ -1312,14 +1312,23 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                     onWis={() => onComponentWijzig(comp.id, { relatie_id: undefined, leverancier_naam: undefined, aannemersnaam: undefined })}
                   />
                 </div>
-                {/* Snelkoppeling: Afhalen in winkel (alleen bij materiaal, alleen als nog geen leverancier) */}
-                {comp.type === 'materieel' && !comp.leverancier_naam && !comp.relatie_id && (
+                {/* Winkelbudget: budgetreservering bij deze leverancier i.p.v. losse artikelen.
+                    Alleen bij materiaal, en alleen zinvol mét gekoppelde leverancier — zonder
+                    relatie kan er in Bouw7 geen order/leverbon op naam gemaakt worden. */}
+                {comp.type === 'materieel' && (
                   <button
-                    onClick={() => onComponentWijzig(comp.id, { leverancier_naam: 'Afhalen in winkel', relatie_id: undefined })}
-                    title="Budget reserveren — afhalen in winkel"
-                    className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50 transition-colors whitespace-nowrap"
+                    onClick={() => onComponentWijzig(comp.id, { is_winkel: !comp.is_winkel })}
+                    disabled={!comp.relatie_id}
+                    title={comp.relatie_id
+                      ? (comp.is_winkel ? 'Winkelbudget uitzetten' : 'Als winkelbudget bestellen — één bedrag i.p.v. losse artikelen')
+                      : 'Kies eerst een leverancier'}
+                    className={`flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
+                      comp.is_winkel
+                        ? 'border-amber-300 bg-amber-50 text-amber-700 font-semibold'
+                        : 'border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
+                    }`}
                   >
-                    Winkel
+                    {comp.is_winkel ? '✓ Winkel' : 'Winkel'}
                   </button>
                 )}
               </div>

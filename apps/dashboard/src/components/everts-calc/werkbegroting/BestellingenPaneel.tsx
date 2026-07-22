@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Package, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus } from 'lucide-react'
+import { X, Package, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus, Undo2, ChevronDown, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
@@ -13,6 +13,10 @@ import {
   zetBestellingKlaar, verzendBestelling, getWerkbegrotingGoedkeuringStatus,
   type WerkbegrotingPayload,
 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import {
+  stelBestellingenVoor, maakBestellingInBouw7, trekBestellingIn,
+  type BestellingVoorstel,
+} from '@/app/(platform)/everts-calc/actions/bestellingen'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 
 interface Props {
@@ -31,6 +35,17 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
   const [omschrijving, setOmschrijving] = useState('')
   const [goedgekeurdRegels, setGoedgekeurdRegels] = useState<Set<string>>(new Set())
+
+  /** Automatische voorstellen per leverancier (server-side berekend uit de werkbegroting). */
+  const [voorstellen, setVoorstellen] = useState<BestellingVoorstel[] | null>(null)
+  const [voorstellenFout, setVoorstellenFout] = useState<string | null>(null)
+  const [voorstellenLaden, setVoorstellenLaden] = useState(false)
+  /** Per voorstel: uitgevinkte componenten, open/dicht, en de invulvelden. */
+  const [uit, setUit] = useState<Record<string, Set<string>>>({})
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [naam, setNaam] = useState<Record<string, string>>({})
+  const [levering, setLevering] = useState<Record<string, string>>({})
+  const [betaling, setBetaling] = useState<Record<string, string>>({})
 
   const regels = useMemo(() => getWerkbegrotingRegels(wb.id).filter(r => !r.is_verwijderd), [wb.id, tick])
   const componenten = useMemo(() => {
@@ -55,6 +70,33 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   }, [wb.id])
 
   useEffect(() => { verversStatus() }, [verversStatus, tick])
+
+  const verversVoorstellen = useCallback(async () => {
+    if (!dossierId) { setVoorstellen([]); return }
+    setVoorstellenLaden(true)
+    setVoorstellenFout(null)
+    try {
+      const res = await stelBestellingenVoor(dossierId, bouwPayload())
+      if (res.ok) {
+        setVoorstellen(res.voorstellen)
+        setNaam(prev => {
+          const next = { ...prev }
+          for (const v of res.voorstellen) if (next[v.sleutel] == null) next[v.sleutel] = v.relatieNaam
+          return next
+        })
+      } else {
+        setVoorstellen([])
+        setVoorstellenFout(res.error)
+      }
+    } catch (e) {
+      setVoorstellen([])
+      setVoorstellenFout(e instanceof Error ? e.message : 'Voorstellen ophalen mislukt')
+    } finally {
+      setVoorstellenLaden(false)
+    }
+  }, [dossierId, bouwPayload])
+
+  useEffect(() => { verversVoorstellen() }, [verversVoorstellen, tick])
 
   const compById = useMemo(() => new Map(componenten.map(c => [c.id, c])), [componenten])
   const regelVanComp = useCallback((compId: string) => compById.get(compId)?.werkbegroting_regel_id ?? null, [compById])
@@ -113,9 +155,69 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     } finally { setBezigId(null) }
   }
 
+  /** Voorstel accepteren: bestelling vastleggen én het Bouw7-document (concept) aanmaken. */
+  async function maakInBouw7(v: BestellingVoorstel) {
+    if (!dossierId) return
+    const uitgevinkt = uit[v.sleutel] ?? new Set<string>()
+    const gekozen = v.regels.filter(r => !uitgevinkt.has(r.componentId))
+    if (gekozen.length === 0) { toast.error('Selecteer minstens één regel.'); return }
+
+    const bestelling: WerkbegrotingBestelling = {
+      id: nieuweId(),
+      werkbegroting_id: wb.id,
+      omschrijving: (naam[v.sleutel] ?? v.relatieNaam).trim() || v.relatieNaam,
+      status: 'concept',
+      relatie_id: v.relatieId ?? undefined,
+      component_ids: gekozen.map(r => r.componentId),
+      soort: v.soort,
+      levering_tekst: levering[v.sleutel]?.trim() || null,
+      betaalafspraak: betaling[v.sleutel]?.trim() || null,
+    }
+    slaBestellingOp(bestelling)
+    setBezigId(v.sleutel)
+    try {
+      const res = await maakBestellingInBouw7(dossierId, bestelling, bouwPayload())
+      if (res.ok) {
+        // Lokale cache bijwerken zodat het nummer meteen zichtbaar is zonder herladen.
+        slaBestellingOp({
+          ...bestelling, status: 'verzonden',
+          bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer, bouw7_bonnummer: res.bonnummer,
+        })
+        if (res.bonWaarschuwing) {
+          // Het contract staat er, maar zonder leverbon kan Bouw7 de factuur er niet aan koppelen.
+          toast.error(`${v.soortLabel} ${res.nummer ?? ''} aangemaakt, maar de leverbon niet: ${res.bonWaarschuwing}`, { duration: 8000 })
+        } else {
+          toast.success(`${v.soortLabel} ${res.nummer ?? ''} + leverbon ${res.bonnummer ?? ''} aangemaakt`)
+        }
+      } else if (res.reden === 'niet_goedgekeurd') {
+        toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`)
+      } else {
+        toast.error(res.error)
+      }
+    } finally {
+      setBezigId(null)
+      setTick(t => t + 1)
+    }
+  }
+
+  async function trekIn(b: WerkbegrotingBestelling) {
+    if (!dossierId) return
+    setBezigId(b.id)
+    try {
+      const res = await trekBestellingIn(dossierId, b.id)
+      if (res.ok) {
+        slaBestellingOp({ ...b, status: 'concept', bouw7_contract_id: null, bouw7_nummer: null })
+        toast.success('Concept ingetrokken in Bouw7')
+      } else toast.error(res.error)
+    } finally {
+      setBezigId(null)
+      setTick(t => t + 1)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onSluit() }}>
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col max-h-[85vh]">
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
           <div className="flex items-center gap-2">
             <Package className="h-5 w-5 text-everts" />
@@ -125,31 +227,161 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
         </div>
 
         <div className="px-6 py-4 overflow-y-auto flex-1">
-          <p className="text-xs text-slate-500 mb-3">
-            Bestellingen kunnen altijd worden <strong>klaargezet</strong>. Verzenden kan pas als de bijbehorende
-            werkbegroting-regels zijn <strong>geaccordeerd</strong>. Wijzigt de werkbegroting daarna, dan moet de
-            bestelling eerst worden bijgewerkt.
+          <p className="text-xs text-slate-500 mb-4">
+            EVA stelt per leverancier én bewakingscode een bestelling voor. Aanmaken maakt in Bouw7 een
+            inkooporder of onderaannemerscontract <strong>met leverbon</strong>, zodat een inkoopfactuur er
+            straks automatisch op afboekt. Er wordt niets gemaild — versturen naar de leverancier doe je in Bouw7.
+            Voorwaarde: de regels zijn <strong>geaccordeerd</strong> en staan al als bestelregel in Bouw7.
+            Eenmaal aangemaakt is een bestelling <strong>niet meer te wijzigen</strong>.
           </p>
 
-          {/* Bestaande bestellingen */}
+          {/* ── Voorstellen per leverancier ────────────────────────────────── */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Voorgesteld</p>
+              <button onClick={() => setTick(t => t + 1)} disabled={voorstellenLaden}
+                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-40">
+                {voorstellenLaden ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Vernieuwen
+              </button>
+            </div>
+
+            {voorstellenFout && (
+              <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1.5">{voorstellenFout}</p>
+            )}
+            {!voorstellenFout && voorstellen?.length === 0 && !voorstellenLaden && (
+              <p className="text-sm text-slate-400 italic py-3 text-center">
+                Niets te bestellen — alle inkoopregels staan al in een bestelling.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {(voorstellen ?? []).map(v => {
+                const uitgevinkt = uit[v.sleutel] ?? new Set<string>()
+                const gekozen = v.regels.filter(r => !uitgevinkt.has(r.componentId))
+                const totaal = gekozen.reduce((s, r) => s + r.bedrag, 0)
+                const bezig = bezigId === v.sleutel
+                const geblokkeerd = v.blokkades.length > 0
+                const isOpen = open[v.sleutel] ?? false
+                return (
+                  <div key={v.sleutel} className="rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between gap-3 px-4 py-3">
+                      <button onClick={() => setOpen(p => ({ ...p, [v.sleutel]: !isOpen }))} className="flex items-center gap-2 min-w-0 text-left">
+                        {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">
+                            {v.relatieNaam}
+                            {v.code && <span className="ml-1.5 text-xs font-normal text-slate-400">{v.code}</span>}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 mr-1.5 text-[10px] font-medium text-slate-600">{v.soortLabel}</span>
+                            {v.isWinkel && <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 mr-1.5 text-[10px] font-medium text-amber-700">Winkelbudget</span>}
+                            {v.isWinkel
+                              ? `${gekozen.length} regel(s) → één budgetbedrag · ${formatEuro(totaal)}`
+                              : `${gekozen.length} van ${v.regels.length} regel(s) · ${formatEuro(totaal)}`}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => maakInBouw7(v)}
+                        disabled={bezig || geblokkeerd || gekozen.length === 0}
+                        title={geblokkeerd ? v.blokkades.join(' ') : 'Als concept aanmaken in Bouw7'}
+                        className="inline-flex items-center gap-1.5 shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-everts text-white hover:bg-everts/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Aanmaken in Bouw7
+                      </button>
+                    </div>
+
+                    {geblokkeerd && (
+                      <div className="px-4 pb-3">
+                        <p className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                          <span>{v.blokkades.join(' ')}</span>
+                        </p>
+                      </div>
+                    )}
+
+                    {isOpen && (
+                      <div className="border-t border-slate-100 px-4 py-3 space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          <label className="text-xs text-slate-500">
+                            Omschrijving
+                            <input value={naam[v.sleutel] ?? v.relatieNaam} onChange={e => setNaam(p => ({ ...p, [v.sleutel]: e.target.value }))}
+                              className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                          </label>
+                          <label className="text-xs text-slate-500">
+                            {v.soort === 'oa_contract' ? 'Start' : 'Levering'}
+                            <input value={levering[v.sleutel] ?? ''} onChange={e => setLevering(p => ({ ...p, [v.sleutel]: e.target.value }))}
+                              placeholder="bijv. week 34"
+                              className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                          </label>
+                          <label className="text-xs text-slate-500">
+                            Betaalafspraak
+                            <input value={betaling[v.sleutel] ?? ''} onChange={e => setBetaling(p => ({ ...p, [v.sleutel]: e.target.value }))}
+                              placeholder="bijv. 30 dagen netto"
+                              className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                          </label>
+                        </div>
+
+                        <div className="space-y-1">
+                          {v.regels.map(r => (
+                            <label key={r.componentId} className="flex items-center gap-2 text-xs py-1 cursor-pointer">
+                              <input type="checkbox" className="accent-everts" checked={!uitgevinkt.has(r.componentId)}
+                                onChange={() => setUit(p => {
+                                  const set = new Set(p[v.sleutel] ?? [])
+                                  if (set.has(r.componentId)) set.delete(r.componentId); else set.add(r.componentId)
+                                  return { ...p, [v.sleutel]: set }
+                                })} />
+                              <span className="flex-1 truncate text-slate-700">{r.omschrijving || 'Regel zonder omschrijving'}</span>
+                              {r.code && <span className="text-[10px] text-slate-400 shrink-0">{r.code}</span>}
+                              <span className="text-slate-500 shrink-0 tabular-nums">{formatEuro(r.bedrag)}</span>
+                              {!r.geaccordeerd && <span className="text-[10px] text-amber-600 shrink-0">niet geaccordeerd</span>}
+                              {r.bouw7LineId == null && <span className="text-[10px] text-amber-600 shrink-0">niet in Bouw7</span>}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── Bestaande bestellingen ─────────────────────────────────────── */}
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Bestellingen</p>
           {bestellingen.length === 0 && !nieuw && (
-            <p className="text-sm text-slate-400 italic py-4 text-center">Nog geen bestellingen klaargezet.</p>
+            <p className="text-sm text-slate-400 italic py-3 text-center">Nog geen bestellingen klaargezet.</p>
           )}
 
           <div className="space-y-2">
             {bestellingen.map(b => {
               const blokkerend = bestellingGeblokkeerd(b)
               const isVerzonden = b.status !== 'concept'
+              const inBouw7 = b.bouw7_contract_id != null
               const bezig = bezigId === b.id
               return (
                 <div key={b.id} className="rounded-lg border border-slate-200 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-800 truncate">{b.omschrijving}</p>
-                      <p className="text-xs text-slate-400">{b.component_ids.length} regel(s)</p>
+                      <p className="text-xs text-slate-400">
+                        {b.component_ids.length} regel(s)
+                        {b.bouw7_nummer && <> · <span className="font-medium text-slate-500">{b.bouw7_nummer}</span></>}
+                        {b.bouw7_bonnummer && <> · bon <span className="font-medium text-slate-500">{b.bouw7_bonnummer}</span></>}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {isVerzonden ? (
+                      {inBouw7 ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> In Bouw7
+                          </span>
+                          <button onClick={() => trekIn(b)} disabled={bezig} title="Concept in Bouw7 verwijderen"
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                            {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} Intrekken
+                          </button>
+                        </>
+                      ) : isVerzonden ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Verzonden
                         </span>
@@ -171,6 +403,11 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       )}
                     </div>
                   </div>
+                  {b.bouw7_sync_fout && (
+                    <p className="mt-2 flex items-start gap-1.5 text-xs text-red-700 bg-red-50 rounded px-2 py-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {b.bouw7_sync_fout}
+                    </p>
+                  )}
                   {!isVerzonden && blokkerend.length > 0 && (
                     <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -182,7 +419,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             })}
           </div>
 
-          {/* Nieuwe bestelling */}
+          {/* ── Zelf samenstellen ──────────────────────────────────────────── */}
           {nieuw ? (
             <div className="mt-4 rounded-lg border border-everts/30 bg-everts-50/40 p-4">
               <input
@@ -219,7 +456,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
           ) : (
             <button onClick={() => setNieuw(true)}
               className="mt-4 flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
-              <Plus className="w-4 h-4" /> Nieuwe bestelling klaarzetten
+              <Plus className="w-4 h-4" /> Zelf samenstellen
             </button>
           )}
         </div>

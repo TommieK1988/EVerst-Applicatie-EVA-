@@ -296,6 +296,231 @@ inbouwen zonder uitdrukkelijk akkoord. Geboekte kosten leest EVA via Heimdall `G
 
 ---
 
+## 2d. Inkooporders & OA-contracten — LIVE (geverifieerd jul 2026)
+
+EVA maakt vanuit de **werkbegroting-bestellingen** het formele inkoopdocument in Bouw7, altijd in
+**concept**. Versturen naar de leverancier gebeurt in Bouw7 — EVA mailt nooit zelf.
+
+| Doel | Endpoint | Body |
+|---|---|---|
+| **Inkooporder** aanmaken/bijwerken | `POST /contracts/purchase-order` | `PurchaseOrderContract` (upsert op `id`) |
+| **OA-contract** aanmaken/bijwerken | `POST /contracts/subcontractor` | `SubcontractorContract` (upsert op `id`) |
+| Verwijderen | `DELETE /contracts/{purchase-order,subcontractor}` | **niet** alleen `{id}` — zie hieronder |
+| Statuslijst | `GET /contracts/{soort}/statuses` | — |
+| Kostentypes inkooporder | `GET /contracts/purchase-order/cost-types` | — |
+| Detail (incl. termijnen) | `GET /contracts/{soort}/{id}` | — |
+| Losse termijn muteren | `POST /contracts/purchase-order/contract-term` · `POST /contracts/subcontract/contract-term` | let op: bij OA heet de POST-route `subcontract`, de DELETE `subcontractor` |
+
+### Vier bevindingen uit de schrijftest (project 3869371, testcontract weer verwijderd)
+
+1. **Termijnen mogen inline mee.** `contractTerms[]` in dezelfde POST als het contract werkt; er is
+   geen losse call per regel nodig. Eén contract met N regels = één request.
+2. **`contractOrderLines: [{ id }]` koppelt een BESTAANDE bestelregel** — het maakt er geen nieuwe.
+   Dit is de spil van het ontwerp: `stuurWerkbegrotingBestelregelsBouw7` blijft de enige bron van
+   contract-order-lines, het contract hangt ze alleen onder zich. Zou het contract eigen regels
+   aanmaken, dan stonden dezelfde kosten **twee keer** in de verwachte kosten per bewakingscode.
+   Na koppeling: de regel krijgt `status: 1` en `subcontractorContract`/`purchaseOrderContract`, en
+   Bouw7 zet zelf de leverancier van het contract op de regel.
+3. **DELETE wil een condensed contract, geen `{id}`.** Alleen id geeft
+   `400 … CondensedSubcontractorContract::$project … should not be null` (idem `$cost`). Stuur
+   `{ id, project:{id}, supplier|subcontractor:{id}, cost, status, type }`.
+4. **Opruimvolgorde:** een bestelregel die aan een termijn hangt is niet los te verwijderen
+   (`cannot be deleted because it is linked to contract term`). Eerst het contract weg, dan de regel.
+
+### Status- en type-enums (live opgehaald, **niet** hardcoden)
+- Inkooporder-status: `0 to_order` (= concept, wat EVA schrijft) · 1 ordered · 2 confirmed ·
+  3 delivered · 4 waiting_for_response · 5 denied · 6 canceled
+- OA-status: `0 to_send` (= concept) · 1 waiting_for_approval · 2 accepted · 3 denied · 4 planned ·
+  5 in_progress · 6 completed · 7 canceled
+- `purchaseType` (inkooporder): 2 purchase_order · 4 equipment · 5 material · 6 remaining
+- `type`: 0 = vaste prijs · 1 = regie · (OA ook 2 = uitbesteed)
+
+EVA leest de statuslijst alsnog live op (`getConceptStatusId`) en faalt met een duidelijke melding
+als de concept-status ontbreekt — een gegokte id zet een contract stilzwijgend op "geleverd".
+
+### Hoe een inkoopfactuur op het contract landt (uitgezocht jul 2026)
+
+De keten is **contract → leverbon → inkoopfactuur**; er is geen directe factuur→contract-verwijzing.
+
+```
+contract 20267.00605IO001  (price 250)
+  └─ leverbon 20267.00605IO001B001   cost 175   ← DeliveryTicket.contract = {id, contractNumber}
+       └─ inkoopfactuur 102436       orderNumber = "20267.00605IO001B001"
+                                     deliveryTicket = { id, number, … }
+  └─ leverbon 20267.00605IO001B001-1 cost 75    ← deelbon, nog geen factuur
+```
+
+- **Bonnummer = contractnummer + `B<nr>`** (deelbonnen krijgen `-1`, `-2`, …). Dat is een
+  Bouw7-nummerconventie, geen toeval — daarop draait de bestaande matching in `getDossierInkoop`
+  (`bon === nummer || bon.startsWith(nummer + 'B')`). Doordat EVA-contracten een echt Bouw7-
+  contractnummer krijgen, landen hun facturen daar **automatisch** onder; er is geen extra
+  koppelstap in EVA nodig.
+- **Exacte koppeling bestaat ook**, als de nummer-heuristiek ooit tekortschiet:
+  `GET /project/delivery-ticket/{id}` geeft `contract: { id, type, contractNumber }` én
+  `purchaseInvoice`. Kost wel één call per bon — `/list/delivery-tickets` bevat de contract-
+  referentie **niet** (wel `purchaseInvoiceId` + `bookingStatus`).
+- ⚠️ **`outstandingCosts` is NIET "nog te factureren"** maar *nog af te roepen*. Contract 1129226
+  staat op `outstandingCosts: 0.00` terwijl er van de 250 pas 175 daadwerkelijk gefactureerd is
+  (de resterende 75 staat op een open bon). Gebruik het dus nooit als "geboekt"-bron; EVA rekent
+  bewust met de échte inkoopfacturen en toont `openstaand` als aparte kolom.
+- **Afroepen (`called-receipts`) wordt bij Everts niet gebruikt** — `calledReceiptCount` was 0 op
+  alle onderzochte contracten en beide `…/called-receipts/{id}`-endpoints gaven `[]`. De bonnen
+  ontstaan bij het inboeken van de factuur. Daarom schrijft EVA `createDeliveryTicket: false`,
+  net als de bestaande handmatig gemaakte contracten die correct doorlopen.
+
+### ✅ Leverbon mét contractkoppeling: `approve-contract-terms` (UI-capture jul 2026, WERKT)
+
+**Dit is de oplossing** voor het probleem in de volgende paragraaf. De bon wordt niet los aangemaakt,
+maar ontstaat als **bijproduct van het afroepen** van contracttermijnen — en dan legt Bouw7 zelf de
+contractkoppeling, het bonnummer, de bewakingscode én het `purchaseType`.
+
+```
+POST /contracts/subcontractor/approve-contract-terms      (OA)
+POST /contracts/purchase-order/approve-contract-terms     (inkooporder)
+→ 204 No Content
+```
+
+```jsonc
+{
+  "items": [ /* volledige ContractTerm-objecten zoals GET /contracts/{soort}/{id} ze teruggeeft,
+                aangevuld met: */
+    { "...": "...",
+      "partiallyAmountReceived": "10",     // hoeveel er wordt afgeroepen (= amount voor 100%)
+      "partiallyCostReceived":  "1000.00"  // bijbehorend bedrag (= subTotal voor 100%)
+    }
+  ],
+  "createDeliveryTickets": true,   // ← maakt de leverbon(nen)
+  "createPdf": false,              // true genereert een afroepbon-PDF
+  "signee": "EVA",                 // vrije naam; ondertekenaar
+  "signatureImage": null,          // OPTIONEEL — weglaten werkt gewoon
+  "recipient": null,               // ← null houden: gevuld mailt Bouw7 de leverancier
+  "ccRecipients": null, "bccRecipients": null,
+  "comments": ""
+}
+```
+
+**Voorwaarde: het contract mag niet in concept staan.** De validatiefout noemt de toegestane statussen:
+
+| Soort | Toegestaan om af te roepen | Laagste bruikbare |
+|---|---|---|
+| OA-contract | `waiting_for_approval, accepted, planned, in_progress, completed` | **1** `waiting_for_approval` |
+| Inkooporder | `ordered, waiting_for_response, confirmed, delivered` | **1** `ordered` |
+
+Dus: aanmaken in concept (0) → `PUT /contracts/{soort}/{id}/update-status/1` → afroepen.
+
+**Bewezen resultaat** (project 3869371, beide soorten, testobjecten weer verwijderd):
+- termijn krijgt `approved: true`, `amountReceived`/`costReceived` gevuld, `costToReceive: 0`;
+- er ontstaat bon `<contractnummer>B001` met **`contract: { id, type, contractNumber }`** — de
+  koppeling die via `POST /project/delivery-ticket` onbereikbaar is;
+- bon krijgt automatisch de juiste `projectSecurityLink` en `purchaseType` (3 bij OA, 5 bij materiaal);
+- `outstandingCosts` van het contract gaat naar 0 (= volledig afgeroepen).
+
+**Volgorde in EVA:** bestelregels → contract (concept, termijnen verwijzen naar de bestelregels) →
+status 1 → `approve-contract-terms`. Opruimen in omgekeerde volgorde: bon, contract, bestelregel.
+
+**Implementatie:** `lib/bouw7/contracten.ts` (`getAfroepStatusId`, `zetBouw7ContractStatus`,
+`roepBouw7ContractAf`, `verwijderBouw7Leverbon`) · `everts-calc/actions/bestellingen.ts`
+(`voerAfroepUit`, aangeroepen na `schrijfBouw7Contract`) · migratie `20260722a_leverbon_winkel.sql`
+(`bouw7_leverbon_id`, `bouw7_bonnummer`, `bouw7_afroep_op`, plus `is_winkel` op de componenten).
+
+> **Twee dingen die je niet mag omdraaien.**
+> 1. Bij een mislukte afroep blijft `bouw7_contract_id` staan en wordt alleen de bon als fout
+>    gemeld. Zou je de contract-koppeling wissen, dan maakt de volgende poging een tweede contract
+>    en verdubbelen de kosten. Er is daarvoor een expliciet herstelpad: staat het contract er wél
+>    maar de bon niet, dan doet `maakBestellingInBouw7` alléén de afroep opnieuw.
+> 2. Bij intrekken gaat de **bon eerst**, dan het contract. Een bestelregel die aan een
+>    contracttermijn hangt is niet verwijderbaar, en een achtergebleven bon telt door als kosten.
+
+**Gevolg voor de cijfers:** een afgeroepen bon telt in Bouw7 direct volledig mee in `costAmount`
+van de bewakingscode (zie de meting verderop). In EVA komt dat terug in de kolommen Onderaanneming
+/ Materiaal / Inkoop-Mat.-Afval, terwijl *Geboekte kosten* alleen facturen telt. Dat verschil staat
+nu als toelichting onder de Financieel-tab.
+
+---
+
+### ⛔ Een leverbon los aanmaken en koppelen kán niet (4 routes uitgeput, jul 2026)
+
+*Historisch — opgelost door `approve-contract-terms` hierboven. Bewaard zodat niemand deze vier
+routes opnieuw probeert.*
+
+Dit is de blokkade voor "bon en contract gelijktijdig laten ontstaan". Bouw7 heeft de leverbon nodig
+om een inkoopfactuur aan een order/contract te matchen — maar een via de API aangemaakte bon blijft
+los hangen. Vier routes geprobeerd, alle vier zonder resultaat:
+
+| Poging | Uitkomst |
+|---|---|
+| `createDeliveryTicket: true` op contract **én** termijn | Genegeerd — komt terug als `false`, geen bon |
+| Statuswissel `PUT …/update-status/{2,5,6}` (accepted → in_progress → completed) | Status wijzigt, maar geen bon en `calledReceipts` blijft 0 |
+| `POST /project/delivery-ticket` mét `contract: { id }` in de body | Bon ontstaat, maar **`contract` = `null`**; termijn ziet hem niet, `outstandingCosts` ongewijzigd |
+| **`linkedDeliveryTicket: { id }` op het contract** — béide volgordes: (a) bon → contract, (b) contract → bon → contract-update | **Genegeerd, komt terug als `null`.** Ook `outstandingCosts` blijft staan |
+
+Die laatste was de meest kansrijke: `PurchaseOrderContract.linkedDeliveryTicket` en
+`SubcontractorContract.linkedDeliveryTicket` staan in de Swagger-spec **niet** als `readOnly`
+gemarkeerd — anders dan `DeliveryTicket.contract` en `ContractTerm.deliveryTickets`, die dat wél zijn.
+Toch wordt het veld bij het schrijven genegeerd. **Les: het ontbreken van `readOnly` in deze spec
+bewijst niets over schrijfbaarheid.**
+
+> ⚠️ Het **Allow-orakel is hier onbruikbaar** om routes te zoeken: `GET /project/delivery-ticket`
+> geeft `404 No route found` terwijl `POST` op datzelfde pad aantoonbaar werkt. Een 404 bewijst in
+> deze route-tak dus niet dat een endpoint ontbreekt. (Controlegeval `GET /contracts/purchase-order`
+> geeft wél netjes `403 Method Not Allowed`.)
+
+**Wat rest: een UI-capture.** Iemand opent in Bouw7 een contract, maakt daar een leverbon/afroep, en
+legt de netwerkcall vast met DevTools. Dat is dezelfde methode waarmee de prognose (§2b), de
+voortgang (§2c) en het to-do-terugschrijven (§5a) zijn gevonden — alle drie stonden ook niet in de
+spec. Zolang die call onbekend is, heeft het geen zin bonnen vanuit EVA aan te maken: ze doen in
+Bouw7 niet wat ze moeten doen.
+
+Voor de volledigheid: de bestaande contract-bonnen zijn **handmatig door medewerkers in de UI**
+gemaakt (marga 69×, chris 32×, marco 20×, …) en hebben stuk voor stuk wél een `contract`-referentie
+— 14 van 14 in een steekproef. De UI kan het dus; de API niet.
+
+> **Bouw hier geen omweg omheen.** Een bon die EVA los aanmaakt met het juiste nummer
+> (`<contractnummer>B001`) zou door EVA's eigen bonnummer-matching wél worden meegeteld, maar door
+> Bouw7 niet — het contract blijft volledig openstaan. Dat is een *schijnkoppeling* en daarmee
+> erger dan niets doen. Wat EVA wél oplevert: het contract staat mét de juiste regels en bedragen
+> klaar, zodat afroepen in Bouw7 een paar klikken is in plaats van overtypen.
+
+### Bon-bedrag ≠ factuurbedrag — wat Bouw7 dan doet (148 bonnen geanalyseerd)
+
+Van 148 contract-bonnen: 104 gelijk · 36 factuur **lager** dan afgeroepen · 8 factuur **hoger** ·
+21 deel-/restbonnen · 137 van 148 met contract-koppeling.
+
+1. **De bon wordt altijd gelijkgetrokken met het factuurbedrag.** `cost` = wat er gefactureerd is;
+   `initialCost` (read-only) bewaart de oorspronkelijke afroepwaarde. Er is géén blokkade of
+   waarschuwing bij afwijking — ook niet bij fors hoger (750 afgeroepen → 1.750 gefactureerd).
+2. **Het verschil komt op een deelbon `B00x-1`** — en dat werkt beide kanten op:
+   - factuur lager → **positieve** restbon met het restant, die open blijft staan
+     (`20267.00605IO001B001`: 250 → 175, restbon `-1` van 75);
+   - factuur hoger → **negatieve** restbon met de overschrijding
+     (`20267.00402IO001B001`: 500 → 534,55, restbon `-1` van **−34,55**).
+3. **Een restbon is een keuze bij het inboeken, geen automatisme.** `20267.00542OA001B001` ging van
+   250 naar 193,67 *zonder* restbon: de termijn werd afgesloten, `outstandingCosts` naar 0, en het
+   verschil van 56,33 verviel gewoon.
+4. ⚠️ **`costReceived` op de termijn is het AFGEROEPEN bedrag, niet het gefactureerde.** Bij dat
+   laatste contract staat `costReceived: "250"` terwijl er 193,67 is gefactureerd.
+
+**Consequentie voor EVA:** noch `outstandingCosts`, noch `costReceived`, noch de bon-`cost` is een
+betrouwbare "werkelijke kosten"-bron. Alleen de échte inkoopfacturen zijn dat — precies wat
+`getDossierInkoop` al doet. Dit is nu met 44 afwijkende gevallen hard onderbouwd; ga dat niet
+"vereenvoudigen" naar `price − outstandingCosts`.
+
+Terzijde: 11 van de 148 bonnen misten de contract-referentie terwijl het bonnummer wél klopte.
+EVA's nummer-matching is daar dus zelfs robuuster dan `deliveryTicket.contract`.
+
+**EVA-implementatie:** `lib/bouw7/contracten.ts` (schrijflaag) ·
+`everts-calc/actions/bestellingen.ts` (`stelBestellingenVoor`, `maakBestellingInBouw7`,
+`trekBestellingIn`) · gedeelde poortwachter `lib/everts-calc/bestelling-gates.ts` ·
+UI in `components/everts-calc/werkbegroting/BestellingenPaneel.tsx` ·
+opslag: nieuwe kolommen op `werkbegroting_bestellingen` (migratie `20260721a_bestellingen_bouw7.sql`).
+
+> **Idempotentie:** `bouw7_contract_id` op de bestelling is het anker — aanwezig = update, leeg =
+> create. `syncBestellingenNaarSupabase` schrijft die kolom bewust **niet** mee vanuit de client:
+> een lege waarde uit een oude localStorage-cache zou de koppeling wissen en de volgende push een
+> duplicaat-contract laten maken (zelfde les als bij `bouw7_line_id`).
+
+---
+
 ## 2c. Voortgang / "% gereed" — schrijven (gecaptured jun 2026, LIVE)
 
 EVA **leest** % gereed al op twee niveaus: project-breed via Athena `GET /wip/report` (`progress`,

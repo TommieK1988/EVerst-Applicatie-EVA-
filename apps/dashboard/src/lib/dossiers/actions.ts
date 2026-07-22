@@ -1698,6 +1698,8 @@ export type InkoopOrderRegel = {
   /** contractbedrag − geboekt (mag negatief zijn bij overschrijding). */
   nogVerwacht: number
   status: string | null
+  /** Vanuit een EVA-bestelling aangemaakt (i.p.v. handmatig in Bouw7). */
+  uitEva: boolean
 }
 export type OnderaannemerContract = {
   contractId: number | null
@@ -1712,6 +1714,8 @@ export type OnderaannemerContract = {
   /** contractbedrag − geboekt (mag negatief zijn bij overschrijding). */
   nogVerwacht: number
   status: string | null
+  /** Vanuit een EVA-bestelling aangemaakt (i.p.v. handmatig in Bouw7). */
+  uitEva: boolean
 }
 /** Eén geboekte kostenregel = één Bouw7-inkoopfactuur, verrijkt met bewakingscode + EVA-correctie. */
 export type GeboekteKostenRegel = {
@@ -1739,7 +1743,25 @@ export type GeboekteKostenRegel = {
   linkBron: 'bouw7' | 'eva' | null
   toegewezenOrderId: number | null
   toegewezenContractId: number | null
+  /**
+   * Hangt deze factuur aan een leverbon? Zo niet, dan kon Bouw7 hem niet aan een bestelling
+   * koppelen — bijvoorbeeld omdat de bon al volledig was ingeboekt.
+   */
+  heeftLeverbon: boolean
 }
+
+/** Eén afwijking op de inkoop van dit dossier, bedoeld om op te volgen. */
+export type InkoopSignaal = {
+  soort: 'overfacturatie' | 'factuur_zonder_bon'
+  /** Leverancier of onderaannemer. */
+  partij: string | null
+  /** Order-/contractnummer, of het factuurnummer bij een losse factuur. */
+  referentie: string | null
+  /** Bij overfacturatie: het bedrag te véél. Bij een losse factuur: het factuurbedrag. */
+  bedrag: number
+  toelichting: string
+}
+
 /** Eén échte factuurregel van een inkoopfactuur (uit het Bouw7 factuur-detail). */
 export type InkoopFactuurRegel = {
   regelId: number
@@ -1766,6 +1788,8 @@ export type DossierInkoopData = {
   geboekteKosten: GeboekteKostenRegel[]
   /** Bewakingscodes die al op dit project voorkomen (voor de hercodeer-dropdown). */
   projectcodes: ProjectBewakingscode[]
+  /** Afwijkingen die opvolging vragen — bovenaan de tab getoond. */
+  signalen: InkoopSignaal[]
   totalen: { besteld: number; onderaanneming: number; geboekt: number; toegewezen: number; nietToegewezen: number }
 }
 
@@ -1816,9 +1840,31 @@ export async function getInkoopCorrecties(dossierId: string): Promise<InkoopCorr
  * EVA-correcties (hercoderen / toewijzen aan order/contract) worden toegepast maar NIET naar Bouw7
  * teruggeschreven — ze beïnvloeden alleen EVA's saldo per order/contract en de code-toewijzing.
  */
+/** Bedrag in de toelichting van een signaal, bv. "€ 10.212,50". */
+const fmtBedrag = (n: number): string =>
+  `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * Bouw7-contract-ids die vanuit een EVA-bestelling zijn aangemaakt (werkbegroting →
+ * inkooporder/OA-contract). Alleen voor het "EVA"-merkje in de tabel.
+ */
+async function getEvaContractIds(dossierId: string): Promise<Set<number>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data: wbs } = await db.from('werkbegrotingen').select('id').eq('dossier_id', dossierId)
+  const ids = ((wbs ?? []) as { id: string }[]).map(w => w.id)
+  if (ids.length === 0) return new Set()
+  const { data } = await db
+    .from('werkbegroting_bestellingen')
+    .select('bouw7_contract_id')
+    .in('werkbegroting_id', ids)
+    .not('bouw7_contract_id', 'is', null)
+  return new Set(((data ?? []) as { bouw7_contract_id: number }[]).map(r => Number(r.bouw7_contract_id)))
+}
+
 export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
   const leeg: DossierInkoopData = {
-    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [],
+    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [], signalen: [],
     totalen: { besteld: 0, onderaanneming: 0, geboekt: 0, toegewezen: 0, nietToegewezen: 0 },
   }
   const ctx = await bouw7VoorDossier(dossierId)
@@ -1839,6 +1885,10 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       }).catch(() => ({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
       getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
     ])
+
+    // Welke contracten zijn vanuit een EVA-bestelling aangemaakt? Puur ter herkenning in de
+    // tabel — de bedragen komen onverkort uit Bouw7.
+    const evaContractIds = await getEvaContractIds(dossierId).catch(() => new Set<number>())
 
     // Apollo levert de bewakingscode: indexeer per deliveryTicket.id én per invoice.id (fallback).
     const codePerBon = new Map<number, { code: string | null; naam: string | null }>()
@@ -1907,6 +1957,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         linkBron,
         toegewezenOrderId: effOrderId,
         toegewezenContractId: effContractId,
+        heeftLeverbon: inv.deliveryTicket?.id != null,
       }
     })
 
@@ -1932,6 +1983,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         openstaand,
         nogVerwacht: contractbedrag - geboekt,
         status: o.statusName ?? null,
+        uitEva: o.id != null && evaContractIds.has(o.id),
       }
     })
 
@@ -1949,6 +2001,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         openstaand,
         nogVerwacht: contractbedrag - geboekt,
         status: c.statusName ?? null,
+        uitEva: c.id != null && evaContractIds.has(c.id),
       }
     })
 
@@ -1967,9 +2020,56 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     const toegewezen = geboekteKosten.filter(r => r.toegewezenOrderId != null || r.toegewezenContractId != null).reduce((s, r) => s + r.bedrag, 0)
     const nietToegewezen = geboekt - toegewezen
 
+    // ── Signalen: afwijkingen die opvolging vragen ────────────────────────────
+    //
+    // 1. Meer gefactureerd dan besteld. Dit is het creditnota-geval: een leverancier of
+    //    onderaannemer heeft meer in rekening gebracht dan er aan opdracht ligt.
+    // 2. Een factuur die aan het project hangt maar aan géén enkele leverbon. Bouw7 kan hem dan
+    //    niet aan een bestelling koppelen — bijvoorbeeld omdat de bon al volledig was ingeboekt.
+    //
+    // Bewust géén signaal voor openstaande bonnen: dat staat al als "Nog verwacht" per order in
+    // de tabel eronder.
+    const signalen: InkoopSignaal[] = []
+
+    for (const o of inkooporders) {
+      const teveel = o.geboekt - o.contractbedrag
+      if (teveel > 0.005) {
+        signalen.push({
+          soort: 'overfacturatie',
+          partij: o.leverancier,
+          referentie: o.nummer,
+          bedrag: teveel,
+          toelichting: `Gefactureerd ${fmtBedrag(o.geboekt)} tegenover een orderbedrag van ${fmtBedrag(o.contractbedrag)}.`,
+        })
+      }
+    }
+    for (const c of onderaannemers) {
+      const teveel = c.geboekt - c.contractbedrag
+      if (teveel > 0.005) {
+        signalen.push({
+          soort: 'overfacturatie',
+          partij: c.onderaannemer,
+          referentie: c.nummer,
+          bedrag: teveel,
+          toelichting: `Gefactureerd ${fmtBedrag(c.geboekt)} tegenover een contractbedrag van ${fmtBedrag(c.contractbedrag)}.`,
+        })
+      }
+    }
+    for (const r of geboekteKosten) {
+      if (r.heeftLeverbon) continue
+      signalen.push({
+        soort: 'factuur_zonder_bon',
+        partij: r.leverancier,
+        referentie: r.factuurnummer,
+        bedrag: r.bedrag,
+        toelichting: 'Deze factuur hangt niet aan een leverbon en is dus aan geen enkele bestelling gekoppeld.',
+      })
+    }
+    signalen.sort((a, b) => b.bedrag - a.bedrag)
+
     return {
       beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
-      inkooporders, onderaannemers, geboekteKosten, projectcodes,
+      inkooporders, onderaannemers, geboekteKosten, projectcodes, signalen,
       totalen: { besteld, onderaanneming, geboekt, toegewezen, nietToegewezen },
     }
   } catch {

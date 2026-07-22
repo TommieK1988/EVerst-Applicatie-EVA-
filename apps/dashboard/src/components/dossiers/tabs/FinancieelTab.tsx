@@ -261,6 +261,10 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
           Live uit Bouw7-projectbewaking. Arbeidskosten = kostensoort Arbeid; geboekte kosten = arbeid +
           ingekochte kosten mét inkoopfactuur; nog te verwachten = Tot. prognose − geboekte kosten (rood = overschreden).
           % gereed = waarde-gewogen gemiddelde over de kostensoorten. Uren staan op het Uren-tab.
+          <br />
+          <strong>Let op het verschil:</strong> Onderaanneming, Materiaal en Inkoop/Mat./Afval komen uit
+          Bouw7 en tellen ook <em>afgeroepen maar nog niet gefactureerde</em> leverbonnen mee — dus wat er
+          vastligt bij leveranciers. <strong>Geboekte kosten</strong> telt alleen wat écht gefactureerd is.
         </div>
       </CardBody>
     </Card>

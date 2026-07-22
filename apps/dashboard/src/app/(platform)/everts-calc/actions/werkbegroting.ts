@@ -98,6 +98,7 @@ export async function syncWerkbegrotingNaarSupabase(
             aannemersnaam: c.aannemersnaam ?? null, offertenummer: c.offertenummer ?? null,
             artikelnummer: c.artikelnummer ?? null, uurtype: c.uurtype ?? null,
             bouw7_line_id: c.bouw7_line_id ?? null,
+            is_winkel: c.is_winkel ?? false,
             is_verwijderd: c.is_verwijderd ?? false,
             bijgewerkt_op: nu,
           })),
@@ -175,7 +176,19 @@ export async function syncBestellingenNaarSupabase(
     for (const b of bestellingen) {
       const { error: bErr } = await db
         .from('werkbegroting_bestellingen')
-        .upsert({ id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving, relatie_id: uuidOfNull(b.relatie_id), status: b.status, bijgewerkt_op: nu }, { onConflict: 'id' })
+        // LET OP: bouw7_contract_id / bouw7_nummer / bouw7_sync_* worden hier bewust NIET
+        // meegeschreven. Die zijn server-side eigendom van de contract-push; zou de client ze
+        // vanuit een oude localStorage-cache terugsturen, dan wist een lege waarde de koppeling
+        // en maakt de volgende push een duplicaat-contract in Bouw7 (zelfde les als bouw7_line_id).
+        .upsert({
+          id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving,
+          relatie_id: uuidOfNull(b.relatie_id), status: b.status, bijgewerkt_op: nu,
+          soort: b.soort ?? null,
+          levering_datum: b.levering_datum ?? null,
+          levering_tekst: b.levering_tekst ?? null,
+          betaalafspraak: b.betaalafspraak ?? null,
+          interne_notitie: b.interne_notitie ?? null,
+        }, { onConflict: 'id' })
       if (bErr) throw new Error(`Bestelling sync: ${bErr.message}`)
 
       await db.from('werkbegroting_bestelling_regels').delete().eq('bestelling_id', b.id)
@@ -286,6 +299,7 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       offertenummer: c.offertenummer ?? undefined, artikelnummer: c.artikelnummer ?? undefined,
       uurtype: c.uurtype ?? undefined,
       bouw7_line_id: c.bouw7_line_id ?? undefined,
+      is_winkel: c.is_winkel ?? false,
       is_verwijderd: c.is_verwijderd ?? false,
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -300,6 +314,17 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving ?? '',
       relatie_id: b.relatie_id ?? undefined, status: (b.status ?? 'concept') as WerkbegrotingBestelling['status'],
       component_ids: compIdsPerBestelling.get(b.id) ?? [],
+      soort: b.soort ?? undefined,
+      bouw7_contract_id: b.bouw7_contract_id ?? null,
+      bouw7_nummer: b.bouw7_nummer ?? null,
+      bouw7_leverbon_id: b.bouw7_leverbon_id ?? null,
+      bouw7_bonnummer: b.bouw7_bonnummer ?? null,
+      bouw7_sync_status: b.bouw7_sync_status ?? null,
+      bouw7_sync_fout: b.bouw7_sync_fout ?? null,
+      levering_datum: b.levering_datum ?? null,
+      levering_tekst: b.levering_tekst ?? null,
+      betaalafspraak: b.betaalafspraak ?? null,
+      interne_notitie: b.interne_notitie ?? null,
     })),
   }
 }
@@ -582,8 +607,7 @@ export async function verzendBestelling(
   bestellingId: string,
   payload: WerkbegrotingPayload,
 ): Promise<VerzendBestellingResultaat> {
-  const { hashComponentenSet } = await import('@/lib/everts-calc/goedkeuring-hash')
-  const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
+  const { controleerBestellingGates } = await import('@/lib/everts-calc/bestelling-gates')
 
   const sync = await syncWerkbegrotingNaarSupabase(payload)
   if (!sync.gelukt) return { ok: false, reden: 'fout', error: `Synchroniseren mislukt: ${sync.fout}` }
@@ -601,34 +625,16 @@ export async function verzendBestelling(
     .from('werkbegroting_bestelling_regels')
     .select('component_id')
     .eq('bestelling_id', bestellingId)
-  const componentIds = new Set<string>(((junction ?? []) as { component_id: string }[]).map(j => j.component_id))
-  if (componentIds.size === 0) return { ok: false, reden: 'fout', error: 'Bestelling heeft geen componenten.' }
 
-  const componenten = payload.componenten.filter(c => componentIds.has(c.id) && !c.is_verwijderd)
-  if (componenten.length !== componentIds.size) {
-    return { ok: false, reden: 'verouderd', error: 'Eén of meer bestelde componenten bestaan niet meer — werk de bestelling bij.' }
-  }
-
-  // (b) Verouderd-check: componenten gewijzigd sinds klaarzetten?
-  const actueleHash = await hashComponentenSet(componenten)
-  if (!bestelling.componenten_hash || actueleHash !== bestelling.componenten_hash) {
-    return { ok: false, reden: 'verouderd', error: 'De werkbegroting is gewijzigd sinds deze bestelling is klaargezet — werk de bestelling bij.' }
-  }
-
-  // (a) Regel-goedkeuring: elke regel achter de bestelde componenten moet geaccordeerd zijn.
-  const status = await berekenWerkbegrotingStatus(bestelling.werkbegroting_id)
-  const goedgekeurdPerRegel = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
-  const regelIds = [...new Set(componenten.map(c => c.werkbegroting_regel_id))]
-  const geblokkeerd = regelIds.filter(id => goedgekeurdPerRegel.get(id) !== true)
-  if (geblokkeerd.length > 0) {
-    const regelById = new Map(payload.regels.map(r => [r.id, r]))
-    const namen = geblokkeerd.map(id => regelById.get(id)?.omschrijving || 'Onbekende regel')
-    return {
-      ok: false, reden: 'niet_goedgekeurd',
-      error: 'Deze bestelling bevat regels die (nog) niet zijn geaccordeerd.',
-      regels: namen,
-    }
-  }
+  const gate = await controleerBestellingGates({
+    bestellingId,
+    werkbegrotingId: bestelling.werkbegroting_id,
+    componentenHash: bestelling.componenten_hash ?? null,
+    componentIds: new Set<string>(((junction ?? []) as { component_id: string }[]).map(j => j.component_id)),
+    componenten: payload.componenten,
+    regels: payload.regels,
+  })
+  if (!gate.ok) return gate
 
   const { error } = await db
     .from('werkbegroting_bestellingen')
