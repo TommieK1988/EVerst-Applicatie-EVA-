@@ -19,7 +19,8 @@ import type { UrenRegel } from '@/lib/dossiers/actions'
 import { dossierHref } from '@/lib/dossiers/href'
 import { periodeBereik, type UrenPeriode, type UrenExtraVelden } from './types'
 
-export type UrenOverzichtRegel = UrenRegel & UrenExtraVelden
+/** `id` is de Bouw7 hour-log-id als string — OverzichtTabel eist een stabiele stringsleutel. */
+export type UrenOverzichtRegel = UrenRegel & UrenExtraVelden & { id: string }
 
 export type UrenOverzichtData = {
   beschikbaar: boolean
@@ -88,6 +89,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     const dossier = h.project?.id != null ? dossierPerProject.get(h.project.id) : undefined
 
     return {
+      id: String(h.id),
       medewerker,
       datum: h.logDate ? h.logDate.slice(0, 10) : null,
       uren,
