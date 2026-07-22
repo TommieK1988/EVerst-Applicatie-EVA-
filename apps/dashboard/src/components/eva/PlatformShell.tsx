@@ -60,6 +60,16 @@ export default function PlatformShell({ children, userName, userInitials, userSu
     localStorage.setItem('eva-tweaks', JSON.stringify({ ...tweaks, sidebarCollapsed: collapsed }))
   }, [tweaks, collapsed, hydrated])
 
+  // Het thema hoort óók op <html>: de <body>, de scrollbars en alles wat via
+  // een portal buiten deze div rendert (Radix-dialogs, popovers, toasts) zitten
+  // niet in deze boom en bleven anders licht.
+  React.useEffect(() => {
+    if (!hydrated) return
+    const root = document.documentElement
+    if (tweaks.theme === 'light') root.removeAttribute('data-theme')
+    else root.setAttribute('data-theme', tweaks.theme)
+  }, [tweaks.theme, hydrated])
+
   const dark = tweaks.theme === 'dark'
 
   function setDark(v: boolean) {

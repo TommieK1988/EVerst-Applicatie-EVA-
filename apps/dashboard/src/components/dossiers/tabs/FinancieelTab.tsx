@@ -49,7 +49,7 @@ const TH = ({ children, right, compact }: { children?: React.ReactNode; right?: 
     color: 'var(--neutral-500)',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
-    borderBottom: '2px solid var(--neutral-200, #e3e8ea)',
+    borderBottom: '2px solid var(--border)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',

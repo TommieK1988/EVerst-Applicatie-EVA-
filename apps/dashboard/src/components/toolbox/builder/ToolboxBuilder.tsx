@@ -443,7 +443,7 @@ function PreviewPaneel({ slides }: { slides: ToolboxSlide[] }) {
   const vragen = slides.filter((s): s is VraagSlide => s.type === 'vraag')
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'grid', placeItems: 'start center', padding: 20 }}>
-      <div style={{ width: 380, maxWidth: '100%', border: '10px solid #161b20', borderRadius: 32, padding: 20, background: '#fff', display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <div style={{ width: 380, maxWidth: '100%', border: '10px solid #161b20', borderRadius: 32, padding: 20, background: 'var(--bg-elev)', display: 'flex', flexDirection: 'column', gap: 28 }}>
         {content.map((s) => (
           <div key={s.id} style={{ borderBottom: '1px dashed var(--border)', paddingBottom: 20 }}>
             <SlideRenderer slide={s} compact />
@@ -454,7 +454,7 @@ function PreviewPaneel({ slides }: { slides: ToolboxSlide[] }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: '#b85a00', marginBottom: 10 }}>Kennischeck ({vragen.length} vragen)</div>
             {vragen.map((v) => (
               <div key={v.id} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20', marginBottom: 6 }}>{v.vraag || '—'}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', marginBottom: 6 }}>{v.vraag || '—'}</div>
                 {v.opties.map((o, i) => (
                   <div key={o.id} style={{ fontSize: 13, color: o.correct ? '#067647' : '#3a444b', padding: '2px 0' }}>
                     {String.fromCharCode(65 + i)}. {o.tekst || '—'} {o.correct && '✓'}
@@ -481,9 +481,9 @@ const labelStijl: React.CSSProperties = {
 }
 const miniBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8,
-  border: '1px solid var(--border)', background: '#fff', fontSize: 12, fontWeight: 600, color: 'var(--fg)', cursor: 'pointer',
+  border: '1px solid var(--border)', background: 'var(--bg-elev)', fontSize: 12, fontWeight: 600, color: 'var(--fg)', cursor: 'pointer',
 }
 const pijlBtn: React.CSSProperties = {
   width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: 6,
-  border: '1px solid var(--border)', background: '#fff', fontSize: 13, cursor: 'pointer', color: 'var(--fg-soft)',
+  border: '1px solid var(--border)', background: 'var(--bg-elev)', fontSize: 13, cursor: 'pointer', color: 'var(--fg-soft)',
 }

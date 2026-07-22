@@ -191,7 +191,7 @@ function PlanningLijst({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
           <button
             onClick={() => setToonVerlopen(v => !v)}
             style={{
-              marginTop: 4, padding: '10px 14px', background: '#fff',
+              marginTop: 4, padding: '10px 14px', background: 'var(--bg-elev)',
               border: `1px solid ${RAND}`, borderRadius: 12, color: GRIJS,
               fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
               width: '100%', textAlign: 'center',
@@ -221,12 +221,12 @@ function ActiviteitKaart({ a, gedimd }: { a: MobielActiviteit; gedimd?: boolean 
 
   return (
     <div style={{
-      padding: '12px 14px', background: '#fff',
+      padding: '12px 14px', background: 'var(--bg-elev)',
       border: `1px solid ${RAND}`, borderRadius: 12,
       borderLeft: `4px solid ${kleur}`,
       opacity: gedimd ? 0.6 : 1,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20' }}>{a.titel}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{a.titel}</div>
       <div style={{ fontSize: 12, color: GRIJS, marginTop: 3, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {periode && <span>📅 {periode}</span>}
         {mensen && <span>👤 {mensen}</span>}
@@ -372,7 +372,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-elev)' }}>
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <div style={{ width: LABEL_W + tijdlijnW, minWidth: '100%', position: 'relative' }}>
 
@@ -387,11 +387,11 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
         {/* Header: weeknummers, en in de weekweergave ook de dagnummers */}
         <div style={{
           display: 'flex', position: 'sticky', top: 0, zIndex: 5,
-          background: '#fff', borderBottom: `1px solid ${LIJN_WEEK}`, height: headerH,
+          background: 'var(--bg-elev)', borderBottom: `1px solid ${LIJN_WEEK}`, height: headerH,
         }}>
           <div style={{
             width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
-            background: '#fff', borderRight: `1px solid ${RAND}`,
+            background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
             display: 'flex', alignItems: 'center', padding: '0 8px',
             fontSize: 10, fontWeight: 700, color: GRIJS,
             textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -491,7 +491,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
               >
                 <div style={{
                   width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                  background: '#fff', borderRight: `1px solid ${RAND}`,
+                  background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: isAct ? '0 8px' : '0 8px 0 18px',
                 }}>
@@ -522,11 +522,11 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
               {/* Detailregel bij tik op een activiteitbalk */}
               {isAct && open === rij.a.id && (
                 <div style={{
-                  display: 'flex', borderBottom: `1px solid ${RAND}`, background: '#f8fafa',
+                  display: 'flex', borderBottom: `1px solid ${RAND}`, background: 'var(--bg)',
                 }}>
                   <div style={{
                     width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                    background: '#f8fafa', borderRight: `1px solid ${RAND}`,
+                    background: 'var(--bg)', borderRight: `1px solid ${RAND}`,
                   }} />
                   <div style={{ padding: '8px 10px', fontSize: 11, color: GRIJS, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {periodeLabel(rij.a) && <span>📅 {periodeLabel(rij.a)}</span>}

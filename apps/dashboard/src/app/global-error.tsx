@@ -26,7 +26,7 @@ export default function GlobalError({
     <html lang="nl">
       <body style={{ margin: 0, fontFamily: 'system-ui, -apple-system, sans-serif', background: '#f8fafc' }}>
         <div style={{ maxWidth: 480, margin: '15vh auto', padding: '0 24px' }}>
-          <div style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 12, padding: 28 }}>
+          <div style={{ background: 'var(--bg-elev)', border: '1px solid #fecaca', borderRadius: 12, padding: 28 }}>
             <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#991b1b' }}>
               EVA kon deze pagina niet laden
             </h1>

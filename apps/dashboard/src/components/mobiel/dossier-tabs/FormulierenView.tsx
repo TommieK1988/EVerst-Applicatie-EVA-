@@ -47,12 +47,12 @@ export default async function FormulierenView({ dossierId }: { dossierId: string
 
         return (
           <div key={i.id} style={{
-            padding: '12px 14px', background: '#fff',
-            border: '1px solid #e3e8ea', borderRadius: 12,
+            padding: '12px 14px', background: 'var(--bg-elev)',
+            border: '1px solid var(--border)', borderRadius: 12,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
           }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
                 {i.template?.naam ?? 'Formulier'}
               </div>
               {datumLabel && <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>{datumLabel}</div>}

@@ -125,7 +125,7 @@ export default function ToolboxRapportage({ toolbox, deelnemers, medewerkers }: 
                     <td style={tdStijl}>
                       {d.handtekening_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={d.handtekening_url} alt="handtekening" onClick={() => setLightbox(d.handtekening_url)} style={{ height: 28, cursor: 'zoom-in', background: '#fff', border: '1px solid var(--border)', borderRadius: 4 }} />
+                        <img src={d.handtekening_url} alt="handtekening" onClick={() => setLightbox(d.handtekening_url)} style={{ height: 28, cursor: 'zoom-in', background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 4 }} />
                       ) : '—'}
                     </td>
                     <td style={tdStijl}>
@@ -144,7 +144,7 @@ export default function ToolboxRapportage({ toolbox, deelnemers, medewerkers }: 
       {/* Toewijs-paneel */}
       {toewijsOpen && (
         <div onClick={() => !pending && setToewijsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '80dvh', background: '#fff', borderRadius: 16, padding: 22, display: 'flex', flexDirection: 'column' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, maxHeight: '80dvh', background: 'var(--bg-elev)', borderRadius: 16, padding: 22, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Toolbox toewijzen</div>
             <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 14 }}>Elke medewerker krijgt de toolbox als openstaande actie op zijn telefoon.</div>
             <input value={zoek} onChange={(e) => setZoek(e.target.value)} placeholder="Zoek medewerker…" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, marginBottom: 10 }} />
@@ -174,7 +174,7 @@ export default function ToolboxRapportage({ toolbox, deelnemers, medewerkers }: 
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', padding: 24 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox} alt="handtekening" style={{ maxWidth: '90vw', maxHeight: '80vh', background: '#fff', borderRadius: 8, padding: 16 }} />
+          <img src={lightbox} alt="handtekening" style={{ maxWidth: '90vw', maxHeight: '80vh', background: 'var(--bg-elev)', borderRadius: 8, padding: 16 }} />
         </div>
       )}
     </div>

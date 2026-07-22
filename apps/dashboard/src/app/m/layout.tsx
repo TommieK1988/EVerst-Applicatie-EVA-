@@ -20,12 +20,16 @@ export default function MobielLayout({ children }: { children: React.ReactNode }
   return (
     <div
       className="eva"
+      // Mobiel doet bewust NIET mee met donkere modus. Zonder deze vergrendeling
+      // zou /m meekleuren zodra op hetzelfde apparaat donkere modus aanstaat,
+      // terwijl er op mobiel geen schakelaar is om terug te zetten.
+      data-theme="light"
       style={{
         display: 'flex',
         flexDirection: 'column',
         height: '100dvh',
         overflow: 'hidden',
-        background: 'var(--neutral-50, #f8fafa)',
+        background: 'var(--bg)',
         fontFamily: "'Montserrat', ui-sans-serif, system-ui, sans-serif",
         WebkitFontSmoothing: 'antialiased',
       }}

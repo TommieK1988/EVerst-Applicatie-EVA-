@@ -31,7 +31,7 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
       <div
         style={{
           display: 'flex', gap: 5, padding: '10px 14px 8px',
-          background: '#fff', borderBottom: '1px solid #e3e8ea',
+          background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
           overflowX: 'auto', flexShrink: 0,
         }}
       >
@@ -68,8 +68,8 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
             href={`/m/dossiers/${d.id}`}
             style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
-              padding: 14, background: '#fff',
-              border: '1px solid #e3e8ea', borderRadius: 12,
+              padding: 14, background: 'var(--bg-elev)',
+              border: '1px solid var(--border)', borderRadius: 12,
               textDecoration: 'none',
             }}
           >
@@ -77,7 +77,7 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
               <div style={{ marginBottom: 7 }}>
                 <StatusBadge label={d.statusLabel} color={d.statusColor} />
               </div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#161b20', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--fg)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {d.titel}
               </div>
               {d.klant_naam && (

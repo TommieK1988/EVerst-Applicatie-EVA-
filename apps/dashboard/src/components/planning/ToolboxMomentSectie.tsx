@@ -122,6 +122,6 @@ const koppelBtn: React.CSSProperties = {
   color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 }
 const ontkoppelBtn: React.CSSProperties = {
-  padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff',
+  padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-elev)',
   color: '#b42318', fontSize: 12, fontWeight: 600, cursor: 'pointer',
 }

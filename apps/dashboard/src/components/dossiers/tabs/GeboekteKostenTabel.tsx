@@ -84,7 +84,7 @@ function FactuurRegels({
   }
   const th: React.CSSProperties = {
     padding: '4px 8px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: 'var(--neutral-500)',
-    textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid var(--neutral-200, #e3e8ea)',
+    textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid var(--border)',
   }
   const td: React.CSSProperties = {
     padding: '4px 8px', fontSize: 12, color: 'var(--neutral-700)',
@@ -318,7 +318,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const thStyle = (right?: boolean): React.CSSProperties => ({
     padding: '6px 10px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
     color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.04em',
-    borderBottom: '2px solid var(--neutral-200, #e3e8ea)', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
+    borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
   })
   const tdStyle = (right?: boolean): React.CSSProperties => ({
     padding: '3px 10px', fontSize: 12.5, textAlign: right ? 'right' : 'left', color: 'var(--neutral-700)',
@@ -327,8 +327,8 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const subStyle = (right?: boolean): React.CSSProperties => ({
     padding: '2px 10px', fontSize: 11.5, textAlign: right ? 'right' : 'left',
     background: 'var(--neutral-100, #f0f4f5)',
-    borderTop: '1px solid var(--neutral-200, #e3e8ea)',
-    borderBottom: '2px solid var(--neutral-200, #e3e8ea)',
+    borderTop: '1px solid var(--border)',
+    borderBottom: '2px solid var(--border)',
     color: 'var(--neutral-600)',
     whiteSpace: 'nowrap',
   })

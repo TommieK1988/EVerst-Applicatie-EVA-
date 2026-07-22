@@ -27,6 +27,8 @@ export default function MobielLogin({ fout }: { fout?: string }) {
   return (
     <div
       className="eva"
+      // Zelfde keuze als de mobiele shell (/m): mobiel blijft licht.
+      data-theme="light"
       style={{
         display: 'flex', flexDirection: 'column',
         minHeight: '100dvh',

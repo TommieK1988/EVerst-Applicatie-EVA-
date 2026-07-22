@@ -42,7 +42,7 @@ function Feit({ label, waarde }: { label: string; waarde: React.ReactNode }) {
 }
 
 const kaart: React.CSSProperties = {
-  background: '#fff', border: '1px solid #e3e8ea', borderRadius: 14,
+  background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 14,
   padding: 16, display: 'flex', flexDirection: 'column', gap: 14,
 }
 
@@ -61,7 +61,7 @@ export default function DossierInfoView({ info }: { info: DossierInfo }) {
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Wat is dit voor werk, en hoe staat het ervoor */}
       <div style={{ ...kaart, gap: 12 }}>
-        <div style={{ fontSize: 19, fontWeight: 800, color: '#161b20', lineHeight: 1.25 }}>
+        <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--fg)', lineHeight: 1.25 }}>
           {info.titel}
         </div>
         <StatusBadge label={info.statusLabel} color={info.statusColor} lg />

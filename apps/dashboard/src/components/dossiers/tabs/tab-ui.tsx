@@ -48,7 +48,7 @@ export const TH = ({ children, right }: { children?: React.ReactNode; right?: bo
   <th style={{
     padding: '7px 12px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
     color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.04em',
-    borderBottom: '2px solid var(--neutral-200, #e3e8ea)', whiteSpace: 'nowrap',
+    borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap',
   }}>
     {children}
   </th>

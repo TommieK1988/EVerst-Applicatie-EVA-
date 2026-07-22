@@ -96,13 +96,13 @@ export default async function MobielUrenPage() {
                       <Link key={entry.id} href={`/m/uren/${entry.id}`} style={{ textDecoration: 'none' }}>
                         <div style={{
                           padding: '14px 16px',
-                          background: '#fff',
-                          border: '1px solid #e3e8ea',
+                          background: 'var(--bg-elev)',
+                          border: '1px solid var(--border)',
                           borderRadius: 12,
                           borderLeft: `4px solid ${afgerond ? '#8a8c86' : actief ? '#009439' : '#e3e8ea'}`,
                           opacity: afgerond ? 0.65 : 1,
                         }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20' }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
                             {activiteit?.titel ?? '—'}
                           </div>
                           <div style={{ fontSize: 12, color: '#6b757c', marginTop: 3 }}>

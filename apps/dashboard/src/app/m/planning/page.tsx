@@ -88,8 +88,8 @@ export default async function MobielPlanningPage() {
 
                     return (
                       <div key={entry.id} style={{
-                        padding: '14px 16px', background: '#fff',
-                        border: '1px solid #e3e8ea', borderRadius: 12,
+                        padding: '14px 16px', background: 'var(--bg-elev)',
+                        border: '1px solid var(--border)', borderRadius: 12,
                         borderLeft: '4px solid #009439',
                       }}>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
@@ -97,7 +97,7 @@ export default async function MobielPlanningPage() {
                             {format(parseISO(entry.start_dt), 'HH:mm')}
                           </span>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20' }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
                               {activiteit?.titel ?? '—'}
                             </div>
                             <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>

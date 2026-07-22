@@ -185,7 +185,7 @@ function DiplomaModal({ rij, onSluit, onKlaar }: { rij: VcaRij; onSluit: () => v
 
   return (
     <div onClick={() => !pending && onSluit()} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: '#fff', borderRadius: 16, padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: 'var(--bg-elev)', borderRadius: 16, padding: 24 }}>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>VCA-diploma</div>
         <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 18 }}>{rij.naam}</div>
 

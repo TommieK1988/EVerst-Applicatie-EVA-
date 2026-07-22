@@ -26,7 +26,7 @@ export default function MobielTegel({
     gap: 12,
     aspectRatio: '1 / 1',
     background: 'var(--neutral-0, #fff)',
-    border: '1px solid var(--neutral-200, #e3e8ea)',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     textDecoration: 'none',
     color: 'var(--neutral-900, #161b20)',

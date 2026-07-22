@@ -64,11 +64,11 @@ export default function ToolboxDoorloop({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: 'var(--bg-elev)' }}>
       {/* Voortgangsbalk */}
       <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #eef1f2' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#161b20' }}>{deelname.titel}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg)' }}>{deelname.titel}</span>
           <span style={{ fontSize: 11, color: '#6b757c' }}>
             {fase === 'vragen' ? `Vraag ${vraagIdx + 1}/${vraagSlides.length}` : `Slide ${slideIdx + 1}/${contentSlides.length}`}
           </span>
@@ -147,7 +147,7 @@ function VraagScherm({
   return (
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#161b20', marginBottom: 18, lineHeight: 1.3 }}>{vraag.vraag}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', marginBottom: 18, lineHeight: 1.3 }}>{vraag.vraag}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {vraag.opties.map((o, i) => {
             const isGekozen = gekozen === o.id
@@ -223,7 +223,7 @@ function AftekenScherm({
   return (
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: '#161b20', marginBottom: 6 }}>Aftekenen</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--fg)', marginBottom: 6 }}>Aftekenen</div>
         <div style={{ fontSize: 14, color: '#6b757c', marginBottom: 18, lineHeight: 1.5 }}>
           Je hebt de toolbox doorlopen en alle vragen goed beantwoord. Onderteken hieronder om te bevestigen dat je de instructie hebt begrepen.
         </div>
@@ -232,7 +232,7 @@ function AftekenScherm({
         <input
           value={naam}
           onChange={(e) => setNaam(e.target.value)}
-          style={{ width: '100%', padding: '12px 14px', border: '1px solid #e3e8ea', borderRadius: 10, fontSize: 16, marginBottom: 18 }}
+          style={{ width: '100%', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 16, marginBottom: 18 }}
         />
 
         <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#3a444b', marginBottom: 6 }}>Handtekening</label>
@@ -257,11 +257,11 @@ function AftekenScherm({
 // ── Klaar ────────────────────────────────────────────────────────────────
 function KlaarScherm({ titel, onTerug, alAfgerond }: { titel: string; onTerug: () => void; alAfgerond: boolean }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', background: 'var(--bg-elev)' }}>
       <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#ecfdf3', display: 'grid', placeItems: 'center', marginBottom: 20 }}>
         <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#12b76a" strokeWidth={2.5}><path d="M20 6L9 17l-5-5" /></svg>
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#161b20', marginBottom: 8 }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--fg)', marginBottom: 8 }}>
         {alAfgerond ? 'Al afgerond' : 'Toolbox afgerond'}
       </div>
       <div style={{ fontSize: 14, color: '#6b757c', marginBottom: 28, maxWidth: 280 }}>
@@ -280,8 +280,8 @@ const knopPrimair: React.CSSProperties = {
   background: '#009439', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
 }
 const knopSecundair: React.CSSProperties = {
-  padding: '14px 18px', borderRadius: 12, border: '1px solid #e3e8ea',
-  background: '#fff', color: '#161b20', fontSize: 16, fontWeight: 600, cursor: 'pointer',
+  padding: '14px 18px', borderRadius: 12, border: '1px solid var(--border)',
+  background: 'var(--bg-elev)', color: 'var(--fg)', fontSize: 16, fontWeight: 600, cursor: 'pointer',
 }
 const knopUit: React.CSSProperties = {
   flex: 1, padding: '14px 18px', borderRadius: 12, border: 'none',

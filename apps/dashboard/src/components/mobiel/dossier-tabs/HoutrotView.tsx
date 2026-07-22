@@ -20,9 +20,9 @@ import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
  */
 const veld: React.CSSProperties = {
   width: '100%', padding: '11px 12px', borderRadius: 10,
-  border: '1px solid #e3e8ea', background: '#fff',
+  border: '1px solid var(--border)', background: 'var(--bg-elev)',
   fontSize: 16, // voorkomt inzoomen op iOS
-  color: '#161b20', fontFamily: 'inherit',
+  color: 'var(--fg)', fontFamily: 'inherit',
 }
 const label: React.CSSProperties = {
   fontSize: 12, fontWeight: 600, color: '#6b757c', marginBottom: 5, display: 'block',
@@ -30,7 +30,7 @@ const label: React.CSSProperties = {
 
 function Blok({ titel, children }: { titel: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid #e3e8ea', borderRadius: 14, padding: 14 }}>
+    <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#6b757c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
         {titel}
       </div>
@@ -229,8 +229,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             onClick={() => { setInvoeren(false); setFout(null) }}
             disabled={bezig}
             style={{
-              padding: '14px 16px', borderRadius: 12, background: '#fff', color: '#6b757c',
-              border: '1px solid #e3e8ea', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+              padding: '14px 16px', borderRadius: 12, background: 'var(--bg-elev)', color: '#6b757c',
+              border: '1px solid var(--border)', fontSize: 15, fontWeight: 600, cursor: 'pointer',
             }}
           >
             Annuleren
@@ -272,11 +272,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             .filter(Boolean).join(' · ') || 'Plaats niet opgegeven'
           return (
             <div key={r.id} style={{
-              padding: '12px 14px', background: '#fff',
-              border: '1px solid #e3e8ea', borderRadius: 12,
+              padding: '12px 14px', background: 'var(--bg-elev)',
+              border: '1px solid var(--border)', borderRadius: 12,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20', minWidth: 0 }}>{plaats}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>{plaats}</div>
                 <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b757c', flexShrink: 0 }}>
                   {REGISTRATIE_STATUSSEN[r.status] ?? r.status}
                 </span>

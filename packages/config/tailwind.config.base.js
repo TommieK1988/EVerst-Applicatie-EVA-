@@ -3,6 +3,44 @@
  * Apps extenden via `presets: [require('@everts/config/tailwind.config.base.js')]`.
  * Apps definiëren zelf hun `content` paths (die verschillen per app).
  */
+const GREY_STEPS = [0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+
+/**
+ * Grijsschaal als CSS-variabelen i.p.v. vaste hex-waarden.
+ * `prefix` is n (neutral), s (slate) of g (gray); de variabelen zelf staan in
+ * globals.css. De `<alpha-value>`-vorm houdt Tailwind-opacity (`bg-neutral-100/50`)
+ * werkend — met een kale `var()` zou dat stilzwijgend breken.
+ */
+function greyScale(prefix, role = '') {
+  const out = {}
+  for (const step of GREY_STEPS) {
+    out[step] = `rgb(var(--${prefix}${role}-${step}) / <alpha-value>)`
+  }
+  return out
+}
+
+/**
+ * Tekstschaal: identiek aan de oppervlakschaal t/m 600, maar 700–950 wijzen naar
+ * de omgekeerde `--*t-*`-variabelen. Zo wordt `text-neutral-900` in donkere modus
+ * bijna-wit terwijl `bg-neutral-900` donker blijft.
+ */
+function greyTextScale(prefix) {
+  const out = greyScale(prefix)
+  for (const step of [700, 800, 900, 950]) {
+    out[step] = `rgb(var(--${prefix}t-${step}) / <alpha-value>)`
+  }
+  return out
+}
+
+/** Statusschaal (success/warning/error/info) — zelfde principe als greyScale. */
+function statusScale(prefix) {
+  const out = {}
+  for (const step of [50, 100, 300, 500, 700, 900]) {
+    out[step] = `rgb(var(--${prefix}-${step}) / <alpha-value>)`
+  }
+  return out
+}
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -82,54 +120,27 @@ module.exports = {
         },
 
         // ── EVA Design System · Neutrals (koel slate) ───────────────────
-        neutral: {
-          0:   '#ffffff',
-          50:  '#f8fafa',
-          100: '#f1f4f5',
-          200: '#e3e8ea',
-          300: '#cbd2d6',
-          400: '#9aa4ab',
-          500: '#6b757c',
-          600: '#4d575e',
-          700: '#364048',
-          800: '#232a30',
-          900: '#161b20',
-          950: '#1f2933',
-        },
+        // De grijsschalen lopen via CSS-variabelen zodat ze in donkere modus
+        // kantelen. Zie globals.css (§ Grijsschalen). In lichte modus zijn de
+        // waarden exact gelijk aan de oude hardcoded hex-waarden.
+        //
+        // `colors` is de OPPERVLAK-schaal: hij voedt bg-, border-, ring- en
+        // divide-utilities. In donkere modus draaien 0–600 om (licht vlak →
+        // donker vlak) maar blijven 700–950 donker, want `bg-slate-900
+        // text-white` is een bewust donkere chip die donker moet blijven.
+        // De TEKST-schaal staat los in `textColor` hieronder.
+        neutral: greyScale('n'),
+        slate:   greyScale('s'),
+        gray:    greyScale('g'),
 
         // ── EVA Design System · Status colors ───────────────────────────
-        success: {
-          50:  '#ecfdf3',
-          100: '#d1fadf',
-          300: '#6ce9a6',
-          500: '#12b76a',
-          700: '#027a48',
-          900: '#054f31',
-        },
-        warning: {
-          50:  '#fff6ec',
-          100: '#ffe6cc',
-          300: '#ffb866',
-          500: '#f08000',
-          700: '#b85a00',
-          900: '#6b3400',
-        },
-        error: {
-          50:  '#fef3f2',
-          100: '#fee4e2',
-          300: '#fda29b',
-          500: '#e8453b',
-          700: '#b42318',
-          900: '#7a271a',
-        },
-        info: {
-          50:  '#eff8ff',
-          100: '#d1e9ff',
-          300: '#84caff',
-          500: '#2e90fa',
-          700: '#175cd3',
-          900: '#194185',
-        },
+        // Ook via CSS-variabelen: een `bg-warning-50 text-warning-700`-badge
+        // moet in donkere modus een gedempt vlak met lichte tekst worden,
+        // niet het room-op-oranje van de lichte modus.
+        success: statusScale('su'),
+        warning: statusScale('wa'),
+        error:   statusScale('er'),
+        info:    statusScale('in'),
 
         // ── EVA Design System · Domein · Calculatie kolomgroepen ─────────
         calc: {
@@ -171,6 +182,21 @@ module.exports = {
           DEFAULT: '#009439',   // brand-500
           light:   '#28a44a',   // brand-400
         },
+      },
+      // Tekstkleuren wijken af van de oppervlakschaal in het 700–950-bereik
+      // (zie greyTextScale). `text-white` blijft bewust echt wit: dat is het
+      // label op groene/gekleurde knoppen, geen thema-afhankelijk vlak.
+      textColor: {
+        neutral: greyTextScale('n'),
+        slate:   greyTextScale('s'),
+        gray:    greyTextScale('g'),
+      },
+      // `bg-white` is in de praktijk "kaartvlak", niet "de kleur wit". In
+      // donkere modus wordt dat het verhoogde oppervlak. Wie écht papierwit
+      // nodig heeft (PDF-/offertepreview) gebruikt `bg-paper`.
+      backgroundColor: {
+        white: 'rgb(var(--surface-white) / <alpha-value>)',
+        paper: '#ffffff',
       },
       borderRadius: {
         lg: 'var(--radius)',

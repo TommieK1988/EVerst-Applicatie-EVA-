@@ -44,9 +44,23 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
+/**
+ * Zet het thema op <html> vóór de eerste paint. Zonder dit rendert de pagina
+ * eerst licht en klapt hij pas donker zodra React gehydrateerd is — een witte
+ * flits bij elke navigatie. Leest dezelfde localStorage-sleutel als
+ * PlatformShell; blijft bewust klein en zonder dependencies.
+ */
+const THEME_BOOTSTRAP = `(function(){try{
+  var t=JSON.parse(localStorage.getItem('eva-tweaks')||'{}').theme;
+  if(t&&t!=='light')document.documentElement.setAttribute('data-theme',t);
+}catch(e){}})()`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="nl">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
       <body className={`${montserrat.variable} ${jetbrainsMono.variable} font-sans`}>
         {children}
         <ServiceWorkerRegister />

@@ -37,15 +37,15 @@ export default async function BestandenView({ dossierId }: { dossierId: string }
         const meta = [b.categorie, formatGrootte(b.grootte), b.datum].filter(Boolean).join(' · ')
         const inner = (
           <>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#161b20', wordBreak: 'break-word' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', wordBreak: 'break-word' }}>
               {b.naam}{b.extensie ? `.${b.extensie}` : ''}
             </div>
             {meta && <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>{meta}</div>}
           </>
         )
         const style: React.CSSProperties = {
-          display: 'block', padding: '12px 14px', background: '#fff',
-          border: '1px solid #e3e8ea', borderRadius: 12, textDecoration: 'none',
+          display: 'block', padding: '12px 14px', background: 'var(--bg-elev)',
+          border: '1px solid var(--border)', borderRadius: 12, textDecoration: 'none',
         }
         return b.fileHash ? (
           <a key={b.id} href={`/api/bouw7/bestand/${b.fileHash}`} target="_blank" rel="noopener noreferrer" style={style}>

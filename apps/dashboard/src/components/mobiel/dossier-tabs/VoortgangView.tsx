@@ -84,7 +84,7 @@ function Uren({ geboekt, prognose }: { geboekt: number; prognose: number }) {
       </div>
       <div style={{ fontSize: 20, fontWeight: 600, color: '#c3cbd0', paddingBottom: 4 }}>van</div>
       <div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: '#161b20', lineHeight: 1.1 }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--fg)', lineHeight: 1.1 }}>
           {getal(prognose)}
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: '#6b757c' }}>uur prognose</div>
@@ -125,7 +125,7 @@ export default async function VoortgangView({ dossierId }: { dossierId: string }
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Stand van het hele project */}
       <div style={{
-        background: '#fff', border: '1px solid #e3e8ea', borderRadius: 16, padding: 18,
+        background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 16, padding: 18,
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
       }}>
         <Ring pct={data.projectProgress} />
@@ -148,11 +148,11 @@ export default async function VoortgangView({ dossierId }: { dossierId: string }
 
         return (
           <div key={r.code ?? i} style={{
-            background: '#fff', border: '1px solid #e3e8ea', borderRadius: 16,
+            background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 16,
             padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
           }}>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#161b20', lineHeight: 1.3 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', lineHeight: 1.3 }}>
                 {r.naam ?? r.code ?? 'Zonder code'}
               </div>
               {r.code && r.naam && (
@@ -164,7 +164,7 @@ export default async function VoortgangView({ dossierId }: { dossierId: string }
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
                 <span style={{ fontSize: 15, fontWeight: 600, color: '#6b757c' }}>Werk gereed</span>
-                <span style={{ fontSize: 24, fontWeight: 800, color: '#161b20' }}>{pctTekst(gereed)}</span>
+                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--fg)' }}>{pctTekst(gereed)}</span>
               </div>
               <Balk pct={gereed} kleur={GROEN} />
             </div>

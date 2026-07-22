@@ -56,7 +56,7 @@ function TaakRegel({ taak }: { taak: DossierTaakRegel }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 14, fontWeight: 600, color: '#161b20', lineHeight: 1.4,
+          fontSize: 14, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.4,
           textDecoration: taak.afgerond ? 'line-through' : 'none',
         }}>
           {taak.titel}
@@ -85,7 +85,7 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
 
   return (
     <div style={{
-      background: '#fff', border: '1px solid #e3e8ea', borderRadius: 14,
+      background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 14,
       padding: '14px 16px 4px',
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 8 }}>

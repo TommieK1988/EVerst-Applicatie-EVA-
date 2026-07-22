@@ -42,8 +42,8 @@ export default async function MobielProfielPage() {
         {/* Identiteit */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14,
-          padding: 16, background: '#fff',
-          border: '1px solid #e3e8ea', borderRadius: 14,
+          padding: 16, background: 'var(--bg-elev)',
+          border: '1px solid var(--border)', borderRadius: 14,
         }}>
           {medewerker.foto_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -63,7 +63,7 @@ export default async function MobielProfielPage() {
             </div>
           )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#161b20', lineHeight: 1.3 }}>{naam}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', lineHeight: 1.3 }}>{naam}</div>
             {functieAfdeling && (
               <div style={{ fontSize: 13, color: '#6b757c', marginTop: 2 }}>{functieAfdeling}</div>
             )}
@@ -79,7 +79,7 @@ export default async function MobielProfielPage() {
             type="submit"
             style={{
               width: '100%', padding: '14px 16px', borderRadius: 12,
-              background: '#fff', color: '#b42318',
+              background: 'var(--bg-elev)', color: '#b42318',
               border: '1px solid #f0c8c2', fontSize: 15, fontWeight: 600,
               cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
             }}

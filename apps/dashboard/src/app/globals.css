@@ -24,48 +24,65 @@
   --brand-lime: #61ac2b;
   --brand-dark: #1f2933;
 
-  /* ── Neutrals · Koel slate ─────────────────────────────────────────── */
-  --neutral-0:    #ffffff;
-  --neutral-50:   #f8fafa;
-  --neutral-100:  #f1f4f5;
-  --neutral-200:  #e3e8ea;
-  --neutral-300:  #cbd2d6;
-  --neutral-400:  #9aa4ab;
-  --neutral-500:  #6b757c;
-  --neutral-600:  #4d575e;
-  --neutral-700:  #364048;
-  --neutral-800:  #232a30;
-  --neutral-900:  #161b20;
-  --neutral-950:  #1f2933;   /* = brand-dark */
+  /* ── Neutrals · Koel slate ───────────────────────────────────────────
+     Afgeleid van de kanaal-variabelen verderop, zodat de ~310 inline
+     `var(--neutral-*)`-verwijzingen in componenten vanzelf meekantelen met
+     het thema. Lichte modus levert exact dezelfde hex-waarden als voorheen.
+     700–950 volgt de TEKST-schaal: in inline styles is `var(--neutral-900)`
+     altijd tekstkleur, nooit een bewust donker vlak. */
+  --neutral-0:    rgb(var(--n-0));
+  --neutral-50:   rgb(var(--n-50));
+  --neutral-100:  rgb(var(--n-100));
+  --neutral-200:  rgb(var(--n-200));
+  --neutral-300:  rgb(var(--n-300));
+  --neutral-400:  rgb(var(--n-400));
+  --neutral-500:  rgb(var(--n-500));
+  --neutral-600:  rgb(var(--n-600));
+  --neutral-700:  rgb(var(--nt-700));
+  --neutral-800:  rgb(var(--nt-800));
+  --neutral-900:  rgb(var(--nt-900));
+  --neutral-950:  rgb(var(--nt-950));
 
-  /* ── Status ────────────────────────────────────────────────────────── */
-  --success-50:   #ecfdf3;
-  --success-100:  #d1fadf;
-  --success-300:  #6ce9a6;
-  --success-500:  #12b76a;
-  --success-700:  #027a48;
-  --success-900:  #054f31;
+  /* ── Status ──────────────────────────────────────────────────────────
+     Zelfde kanaal-opzet als de grijsschalen, zodat zowel de Tailwind-
+     utilities (bg-warning-50, text-error-700, …) als de inline
+     `var(--warning-50)`-verwijzingen met het thema meekantelen. */
+  --su-50: 236 253 243; --su-100: 209 250 223; --su-300: 108 233 166;
+  --su-500: 18 183 106; --su-700:   2 122  72; --su-900:   5  79  49;
+  --wa-50: 255 246 236; --wa-100: 255 230 204; --wa-300: 255 184 102;
+  --wa-500: 240 128   0; --wa-700: 184  90   0; --wa-900: 107  52   0;
+  --er-50: 254 243 242; --er-100: 254 228 226; --er-300: 253 162 155;
+  --er-500: 232  69  59; --er-700: 180  35  24; --er-900: 122  39  26;
+  --in-50: 239 248 255; --in-100: 209 233 255; --in-300: 132 202 255;
+  --in-500:  46 144 250; --in-700:  23  92 211; --in-900:  25  65 133;
 
-  --warning-50:   #fff6ec;
-  --warning-100:  #ffe6cc;
-  --warning-300:  #ffb866;
-  --warning-500:  #f08000;
-  --warning-700:  #b85a00;
-  --warning-900:  #6b3400;
+  --success-50:   rgb(var(--su-50));
+  --success-100:  rgb(var(--su-100));
+  --success-300:  rgb(var(--su-300));
+  --success-500:  rgb(var(--su-500));
+  --success-700:  rgb(var(--su-700));
+  --success-900:  rgb(var(--su-900));
 
-  --error-50:     #fef3f2;
-  --error-100:    #fee4e2;
-  --error-300:    #fda29b;
-  --error-500:    #e8453b;
-  --error-700:    #b42318;
-  --error-900:    #7a271a;
+  --warning-50:   rgb(var(--wa-50));
+  --warning-100:  rgb(var(--wa-100));
+  --warning-300:  rgb(var(--wa-300));
+  --warning-500:  rgb(var(--wa-500));
+  --warning-700:  rgb(var(--wa-700));
+  --warning-900:  rgb(var(--wa-900));
 
-  --info-50:      #eff8ff;
-  --info-100:     #d1e9ff;
-  --info-300:     #84caff;
-  --info-500:     #2e90fa;
-  --info-700:     #175cd3;
-  --info-900:     #194185;
+  --error-50:     rgb(var(--er-50));
+  --error-100:    rgb(var(--er-100));
+  --error-300:    rgb(var(--er-300));
+  --error-500:    rgb(var(--er-500));
+  --error-700:    rgb(var(--er-700));
+  --error-900:    rgb(var(--er-900));
+
+  --info-50:      rgb(var(--in-50));
+  --info-100:     rgb(var(--in-100));
+  --info-300:     rgb(var(--in-300));
+  --info-500:     rgb(var(--in-500));
+  --info-700:     rgb(var(--in-700));
+  --info-900:     rgb(var(--in-900));
 
   /* ── Semantic surface tokens (light theme) ─────────────────────────── */
   --color-bg:          var(--neutral-50);
@@ -156,6 +173,38 @@
   --duration-base:  120ms;
   --duration-slow:  240ms;
   --ease-default:   ease;
+
+  /* ── Grijsschalen · RGB-kanalen ──────────────────────────────────────
+     Voeden de Tailwind-utilities neutral-/slate-/gray-* (zie de preset in
+     packages/config). Losse kanalen i.p.v. hex, zodat Tailwind-opacity
+     (`bg-neutral-100/50`) blijft werken.
+
+     --{p}-*   oppervlakschaal → bg, border, ring, divide
+     --{p}t-*  tekstschaal     → alleen 700–950, want daar lopen de rollen
+                                 uiteen (donkere chip vs. donkere tekst).
+     De waarden hieronder zijn exact de oude hardcoded hex-waarden; lichte
+     modus verandert dus niet. De donkere kant staat verderop.
+     ─────────────────────────────────────────────────────────────────── */
+  --n-0:   255 255 255;  --n-50:  248 250 250;  --n-100: 241 244 245;
+  --n-200: 227 232 234;  --n-300: 203 210 214;  --n-400: 154 164 171;
+  --n-500: 107 117 124;  --n-600:  77  87  94;  --n-700:  54  64  72;
+  --n-800:  35  42  48;  --n-900:  22  27  32;  --n-950:  31  41  51;
+  --nt-700: 54 64 72;  --nt-800: 35 42 48;  --nt-900: 22 27 32;  --nt-950: 31 41 51;
+
+  --s-0:   255 255 255;  --s-50:  248 250 252;  --s-100: 241 245 249;
+  --s-200: 226 232 240;  --s-300: 203 213 225;  --s-400: 148 163 184;
+  --s-500: 100 116 139;  --s-600:  71  85 105;  --s-700:  51  65  85;
+  --s-800:  30  41  59;  --s-900:  15  23  42;  --s-950:   2   6  23;
+  --st-700: 51 65 85;  --st-800: 30 41 59;  --st-900: 15 23 42;  --st-950: 2 6 23;
+
+  --g-0:   255 255 255;  --g-50:  249 250 251;  --g-100: 243 244 246;
+  --g-200: 229 231 235;  --g-300: 209 213 219;  --g-400: 156 163 175;
+  --g-500: 107 114 128;  --g-600:  75  85  99;  --g-700:  55  65  81;
+  --g-800:  31  41  55;  --g-900:  17  24  39;  --g-950:   3   7  18;
+  --gt-700: 55 65 81;  --gt-800: 31 41 55;  --gt-900: 17 24 39;  --gt-950: 3 7 18;
+
+  /* `bg-white` = "kaartvlak", niet letterlijk wit. Zie de preset. */
+  --surface-white: 255 255 255;
 }
 
 /* ── Dark theme · semantic + elevation overrides ─────────────────────────
@@ -163,17 +212,20 @@
    Gebruik naast .eva[data-theme="dark"] voor componenten buiten .eva scope.
    ──────────────────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --color-bg:          var(--neutral-950);
-  --color-surface:     var(--neutral-900);
-  --color-surface-2:   var(--neutral-800);
-  --color-border:      var(--neutral-800);
-  --color-border-soft: var(--neutral-700);
-  --color-fg:          var(--neutral-50);
-  --color-fg-2:        var(--neutral-300);
-  --color-fg-muted:    var(--neutral-400);
-  --color-fg-subtle:   var(--neutral-500);
+  /* LET OP — bewust letterlijke hex, geen var(--neutral-*).
+     De neutrals kantelen hieronder mee met het thema; zou dit blok ernaar
+     verwijzen, dan werd --color-bg juist bijna-wit. */
+  --color-bg:          #1f2933;
+  --color-surface:     #161b20;
+  --color-surface-2:   #232a30;
+  --color-border:      #232a30;
+  --color-border-soft: #364048;
+  --color-fg:          #f8fafa;
+  --color-fg-2:        #cbd2d6;
+  --color-fg-muted:    #9aa4ab;
+  --color-fg-subtle:   #6b757c;
   --color-primary:     var(--brand-400);
-  --color-primary-fg:  var(--neutral-950);
+  --color-primary-fg:  #1f2933;
   --color-focus-ring:  rgba(40,164,74,0.25);
 
   /* dark elevation — inset border trick */
@@ -182,6 +234,51 @@
   --shadow-md: 0 6px 14px -4px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06);
   --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
   --shadow-xl: 0 22px 34px -8px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.07);
+
+  /* ── Grijsschalen · donker ──────────────────────────────────────────
+     De drie schalen (neutral/slate/gray) vallen in donkere modus samen op
+     één koele slate-set; dat haalt de kleurzweem eruit die je krijgt als
+     Tailwind-slate en EVA-neutral naast elkaar staan.
+
+     Gekanteld op ROL, niet op helderheid: stap 300 is in lichte modus een
+     subtiel randje op wit en wordt hier een subtiel randje op donker. Stap
+     400–600 (hulptekst) wordt licht en haalt ≥4,5:1 op zowel --bg als
+     --bg-elev. Stap 700–950 blijft in de oppervlakschaal donker — daar zit
+     `bg-slate-900 text-white`, een chip die donker hoort te blijven — maar
+     kantelt in de tekstschaal (--*t-*) wél naar bijna-wit.
+     ───────────────────────────────────────────────────────────────────── */
+  --n-0:   35  42  48;  --n-50:  31  41  51;  --n-100:  42  50  58;
+  --n-200: 54  64  72;  --n-300: 77  87  94;  --n-400: 163 173 180;
+  --n-500: 185 194 200; --n-600: 205 212 216; --n-700:  77  87  94;
+  --n-800: 62  72  79;  --n-900: 54  64  72;  --n-950:  45  54  61;
+  --nt-700: 214 221 225; --nt-800: 232 237 240; --nt-900: 248 250 250; --nt-950: 255 255 255;
+
+  --s-0:   35  42  48;  --s-50:  31  41  51;  --s-100:  42  50  58;
+  --s-200: 54  64  72;  --s-300: 77  87  94;  --s-400: 163 173 180;
+  --s-500: 185 194 200; --s-600: 205 212 216; --s-700:  77  87  94;
+  --s-800: 62  72  79;  --s-900: 54  64  72;  --s-950:  45  54  61;
+  --st-700: 214 221 225; --st-800: 232 237 240; --st-900: 248 250 250; --st-950: 255 255 255;
+
+  --g-0:   35  42  48;  --g-50:  31  41  51;  --g-100:  42  50  58;
+  --g-200: 54  64  72;  --g-300: 77  87  94;  --g-400: 163 173 180;
+  --g-500: 185 194 200; --g-600: 205 212 216; --g-700:  77  87  94;
+  --g-800: 62  72  79;  --g-900: 54  64  72;  --g-950:  45  54  61;
+  --gt-700: 214 221 225; --gt-800: 232 237 240; --gt-900: 248 250 250; --gt-950: 255 255 255;
+
+  --surface-white: 35 42 48;
+
+  /* Statuskleuren. De -50/-100-tinten zijn in lichte modus bijna-wit; op een
+     donkere achtergrond worden dat gedempte vlakken, en de -700-tekstkleuren
+     moeten juist oplichten — anders is het donkergroen/donkerrood dat op wit
+     als tekstkleur diende niet meer te lezen op het gedempte vlak. */
+  --su-50:  16  41  29; --su-100:  20  55  42; --su-300:  47 143  95;
+  --su-500: 53 208 138; --su-700: 126 231 176; --su-900: 199 245 221;
+  --wa-50:  48  33  19; --wa-100:  63  44  23; --wa-300: 156 106  30;
+  --wa-500: 245 159  44; --wa-700: 255 200 128; --wa-900: 255 227 189;
+  --er-50:  51  27  26; --er-100:  70  33  31; --er-300: 163  69  61;
+  --er-500: 242 104  95; --er-700: 255 157 149; --er-900: 255 208 203;
+  --in-50:  20  39  58; --in-100:  26  52  80; --in-300:  46 107 163;
+  --in-500:  90 171 255; --in-700: 156 203 255; --in-900: 211 231 255;
 }
 
 /* ─── EVA Design System · CSS variabelen ──────────────────────────────
@@ -198,19 +295,25 @@
   --brand-lime:   #61ac2b;   /* lime-accent */
   --brand-dark:   #1f2933;   /* donker / TotalsBar */
 
-  /* Neutrals — koel slate */
-  --neutral-0:    #ffffff;
-  --neutral-50:   #f8fafa;
-  --neutral-100:  #f1f4f5;
-  --neutral-200:  #e3e8ea;
-  --neutral-300:  #cbd2d6;
-  --neutral-400:  #9aa4ab;
-  --neutral-500:  #6b757c;
-  --neutral-600:  #4d575e;
-  --neutral-700:  #364048;
-  --neutral-800:  #232a30;
-  --neutral-900:  #161b20;
-  --neutral-950:  #1f2933;   /* = brand-dark */
+  /* Neutrals — koel slate.
+     Bewust hier HERHAALD en niet alleen in :root. Een custom property met een
+     var()-verwijzing wordt vastgeklikt op het element waar hij gedeclareerd
+     staat; stond dit alleen in :root, dan bleef --neutral-500 de lichte waarde
+     ook nadat [data-theme="dark"] op deze .eva de kanalen omzette. Door de
+     afleiding hier te herhalen valt hij op hetzelfde element als de
+     thema-override en rekent hij dus opnieuw. */
+  --neutral-0:    rgb(var(--n-0));
+  --neutral-50:   rgb(var(--n-50));
+  --neutral-100:  rgb(var(--n-100));
+  --neutral-200:  rgb(var(--n-200));
+  --neutral-300:  rgb(var(--n-300));
+  --neutral-400:  rgb(var(--n-400));
+  --neutral-500:  rgb(var(--n-500));
+  --neutral-600:  rgb(var(--n-600));
+  --neutral-700:  rgb(var(--nt-700));
+  --neutral-800:  rgb(var(--nt-800));
+  --neutral-900:  rgb(var(--nt-900));
+  --neutral-950:  rgb(var(--nt-950));
 
   /* Pagina-chrome (aliases op neutrals) */
   --bg:           var(--neutral-50);    /* paginaachtergrond */
@@ -226,6 +329,14 @@
   /* Accent (altijd brand-groen, geen meerdere varianten) */
   --accent:       var(--brand);
   --accent-2:     var(--brand-deep);
+
+  /* Aliassen die in componenten al gebruikt werden maar nergens gedefinieerd
+     stonden: `var(--surface, #fff)` viel dus altijd terug op de hardcoded
+     lichte fallback, ook in donkere modus. Nu zijn het echte tokens. */
+  --surface:        var(--bg-elev);
+  --surface-2:      var(--bg);
+  --surface-muted:  var(--bg);
+  --bg-elevated:    var(--bg-elev);   /* typefout-variant, komt in de code voor */
 
   /* Typografie */
   --font-sans:    'Montserrat', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -250,11 +361,22 @@
   --shadow-lg:   0 12px 16px -4px rgba(16,24,40,0.10), 0 4px 6px -2px rgba(16,24,40,0.04);
   --shadow-xl:   0 20px 24px -4px rgba(16,24,40,0.10);
 
-  /* Status */
-  --success-50:   #ecfdf3; --success-500: #12b76a; --success-700: #027a48;
-  --warning-50:   #fff6ec; --warning-300: #ffb866; --warning-500: #f08000; --warning-700: #b85a00;
-  --error-50:     #fef3f2; --error-300:   #fda29b; --error-500:   #e8453b; --error-700:   #b42318;
-  --info-50:      #eff8ff; --info-300:    #84caff; --info-500:    #2e90fa; --info-700:    #175cd3;
+  /* Status — afgeleid van de kanalen, om dezelfde reden als de neutrals
+     hierboven: de afleiding moet op hetzelfde element staan als de
+     thema-override, anders blijft de lichte waarde vastgeklikt. Stonden hier
+     eerder als losse hex-waarden, wat de donkere set altijd overschreef. */
+  --success-50:  rgb(var(--su-50));  --success-100: rgb(var(--su-100));
+  --success-300: rgb(var(--su-300)); --success-500: rgb(var(--su-500));
+  --success-700: rgb(var(--su-700)); --success-900: rgb(var(--su-900));
+  --warning-50:  rgb(var(--wa-50));  --warning-100: rgb(var(--wa-100));
+  --warning-300: rgb(var(--wa-300)); --warning-500: rgb(var(--wa-500));
+  --warning-700: rgb(var(--wa-700)); --warning-900: rgb(var(--wa-900));
+  --error-50:    rgb(var(--er-50));  --error-100:   rgb(var(--er-100));
+  --error-300:   rgb(var(--er-300)); --error-500:   rgb(var(--er-500));
+  --error-700:   rgb(var(--er-700)); --error-900:   rgb(var(--er-900));
+  --info-50:     rgb(var(--in-50));  --info-100:    rgb(var(--in-100));
+  --info-300:    rgb(var(--in-300)); --info-500:    rgb(var(--in-500));
+  --info-700:    rgb(var(--in-700)); --info-900:    rgb(var(--in-900));
 
   /* Domein · CalculatieGrid kolomgroepen */
   --calc-ab:  #1f6feb;   /* AB · aanneemsom */
@@ -302,19 +424,37 @@
   --border-soft:  #f0e9d9;
 }
 
-/* ── Donker thema ────────────────────────────────────────────────────── */
-.eva[data-theme="dark"] {
+/* ── Donker thema ──────────────────────────────────────────────────────
+   Twee selectors: het attribuut kan op de .eva zelf staan (PlatformShell)
+   óf op <html> (thema-bootstrap). Die tweede vorm is wat de mobiele shell
+   (/m) donker maakt — die zette zelf nooit een data-theme. */
+.eva[data-theme="dark"],
+[data-theme="dark"] .eva {
   --bg:           #1f2933;   /* brand-dark */
   --bg-elev:      #232a30;   /* neutral-800 */
   --bg-sidebar:   #161b20;   /* neutral-900 */
   --bg-active:    #232a30;
-  --fg:           #f8fafa;   /* neutral-50 */
-  --fg-soft:      #cbd2d6;   /* neutral-300 */
-  --fg-muted:     #9aa4ab;   /* neutral-400 */
+  --fg:           #f8fafa;
+  --fg-soft:      #cbd2d6;
+  /* Iets lichter dan de neutral-400 uit lichte modus: hulptekst staat vaak op
+     een chip of tabelkop (--border, #364048) en haalde daar 4,2:1. */
+  --fg-muted:     #a3adb4;
   --border:       #364048;   /* neutral-700 */
   --border-soft:  #232a30;   /* neutral-800 */
-  --accent:       var(--brand-light);
-  --accent-2:     var(--brand);
+  /* Bewust brand-500 en niet brand-400. Op het lichtere groen zakt wit label-
+     tekst naar 3,2:1; op brand-500 blijft het 4,0:1 — gelijk aan lichte modus.
+     De ~150 knoppen met een hardcoded `text-white` worden daar allemaal beter
+     van. brand-400 blijft beschikbaar als hover/secundair accent. */
+  --accent:       var(--brand);
+  --accent-2:     var(--brand-light);
+
+  /* De actief-staat in navigatie en projectboom is een paar: --brand-50 als
+     vlak, --brand-700 als tekst. Onveranderd gaf dat donkergroen op donker
+     (1,9:1). Het paar kantelt hier samen, dus overal waar het gebruikt wordt
+     klopt het contrast weer. */
+  --brand-50:     #14301f;
+  --brand-100:    #1a3f28;
+  --brand-700:    #6dd190;
 
   /* dark elevation — inset border trick */
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.4),  inset 0 0 0 1px rgba(255,255,255,0.04);
@@ -322,6 +462,58 @@
   --shadow-md: 0 6px 14px -4px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06);
   --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
   --shadow-xl: 0 22px 34px -8px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.07);
+}
+
+/* ── Vast licht thema ────────────────────────────────────────────────────
+   Voor shells die bewust NIET meedoen met donkere modus. Wint van
+   `[data-theme="dark"] .eva` doordat het even specifiek is maar later staat,
+   én doordat de kanalen hier op het element zelf opnieuw gezet worden — die
+   staan in donkere modus alleen op <html> en worden hier dus overschreven.
+
+   Gebruikt door de mobiele shell (/m): buitendienst werkt op locatie en bij
+   fel daglicht, donkere modus is daar bewust niet uitgerold. */
+.eva[data-theme="light"] {
+  --n-0:   255 255 255;  --n-50:  248 250 250;  --n-100: 241 244 245;
+  --n-200: 227 232 234;  --n-300: 203 210 214;  --n-400: 154 164 171;
+  --n-500: 107 117 124;  --n-600:  77  87  94;  --n-700:  54  64  72;
+  --n-800:  35  42  48;  --n-900:  22  27  32;  --n-950:  31  41  51;
+  --nt-700: 54 64 72; --nt-800: 35 42 48; --nt-900: 22 27 32; --nt-950: 31 41 51;
+  --s-0:   255 255 255;  --s-50:  248 250 252;  --s-100: 241 245 249;
+  --s-200: 226 232 240;  --s-300: 203 213 225;  --s-400: 148 163 184;
+  --s-500: 100 116 139;  --s-600:  71  85 105;  --s-700:  51  65  85;
+  --s-800:  30  41  59;  --s-900:  15  23  42;  --s-950:   2   6  23;
+  --st-700: 51 65 85; --st-800: 30 41 59; --st-900: 15 23 42; --st-950: 2 6 23;
+  --g-0:   255 255 255;  --g-50:  249 250 251;  --g-100: 243 244 246;
+  --g-200: 229 231 235;  --g-300: 209 213 219;  --g-400: 156 163 175;
+  --g-500: 107 114 128;  --g-600:  75  85  99;  --g-700:  55  65  81;
+  --g-800:  31  41  55;  --g-900:  17  24  39;  --g-950:   3   7  18;
+  --gt-700: 55 65 81; --gt-800: 31 41 55; --gt-900: 17 24 39; --gt-950: 3 7 18;
+  --surface-white: 255 255 255;
+  --su-50: 236 253 243; --su-100: 209 250 223; --su-300: 108 233 166;
+  --su-500: 18 183 106; --su-700: 2 122 72;    --su-900: 5 79 49;
+  --wa-50: 255 246 236; --wa-100: 255 230 204; --wa-300: 255 184 102;
+  --wa-500: 240 128 0;  --wa-700: 184 90 0;    --wa-900: 107 52 0;
+  --er-50: 254 243 242; --er-100: 254 228 226; --er-300: 253 162 155;
+  --er-500: 232 69 59;  --er-700: 180 35 24;   --er-900: 122 39 26;
+  --in-50: 239 248 255; --in-100: 209 233 255; --in-300: 132 202 255;
+  --in-500: 46 144 250; --in-700: 23 92 211;   --in-900: 25 65 133;
+  --brand-50: #ecfaf0; --brand-100: #d2f2dd; --brand-700: #0a5e28;
+  --bg:          var(--neutral-50);
+  --bg-elev:     var(--neutral-0);
+  --bg-sidebar:  var(--neutral-0);
+  --bg-active:   var(--brand-50);
+  --fg:          var(--neutral-900);
+  --fg-soft:     var(--neutral-700);
+  --fg-muted:    var(--neutral-500);
+  --border:      var(--neutral-200);
+  --border-soft: var(--neutral-100);
+  --accent:      var(--brand);
+  --accent-2:    var(--brand-deep);
+  --shadow-xs:   0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm:   0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04);
+  --shadow-md:   0 4px 8px -2px rgba(16,24,40,0.08), 0 2px 4px -2px rgba(16,24,40,0.04);
+  --shadow-lg:   0 12px 16px -4px rgba(16,24,40,0.10), 0 4px 6px -2px rgba(16,24,40,0.04);
+  --shadow-xl:   0 20px 24px -4px rgba(16,24,40,0.10);
 }
 
 /* ── Animaties ───────────────────────────────────────────────────────── */
@@ -458,6 +650,31 @@ a.eva-card:hover { background: var(--bg-active); }
     --radius: 0.5rem;
   }
 
+  /* Donkere tegenhanger. Deze set ontbrak volledig, waardoor elke
+     shadcn/Radix-component (dialog, popover, select, tooltip) in donkere modus
+     wit bleef — inclusief alles wat via een portal buiten .eva rendert. */
+  [data-theme="dark"] {
+    --background: 210 24% 16%;          /* #1f2933 */
+    --foreground: 180 20% 98%;          /* #f8fafa */
+    --card: 210 16% 16%;                /* #232a30 */
+    --card-foreground: 180 20% 98%;
+    --popover: 210 16% 16%;
+    --popover-foreground: 180 20% 98%;
+    --primary: 137 61% 40%;             /* brand-400 #28a44a */
+    --primary-foreground: 210 24% 16%;
+    --secondary: 210 14% 24%;           /* #364048 */
+    --secondary-foreground: 180 20% 98%;
+    --muted: 210 16% 20%;               /* #2a323a */
+    --muted-foreground: 202 10% 64%;    /* #9aa4ab */
+    --accent: 210 16% 20%;
+    --accent-foreground: 180 20% 98%;
+    --destructive: 4 84% 66%;           /* #f2685f */
+    --destructive-foreground: 210 24% 16%;
+    --border: 210 14% 24%;
+    --input: 210 14% 24%;
+    --ring: 137 61% 40%;
+  }
+
   * { border-color: hsl(var(--border)); }
 }
 
@@ -465,8 +682,8 @@ html, body { height: 100%; }
 
 body {
   @apply antialiased;
-  background-color: #f8fafa;
-  color: #161b20;
+  background-color: var(--color-bg);
+  color: var(--color-fg);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -480,6 +697,39 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
 /* ── Print styles ─────────────────────────────────────────────────────── */
 @media print {
+  /* Papier is altijd wit. Zonder deze reset zou iemand die in donkere modus
+     werkt een pagina met donkere vlakken en lichte tekst afdrukken. */
+  [data-theme="dark"], [data-theme="dark"] .eva {
+    --n-0: 255 255 255;  --n-50: 248 250 250;  --n-100: 241 244 245;
+    --n-200: 227 232 234; --n-300: 203 210 214; --n-400: 154 164 171;
+    --n-500: 107 117 124; --n-600: 77 87 94;    --n-700: 54 64 72;
+    --n-800: 35 42 48;    --n-900: 22 27 32;    --n-950: 31 41 51;
+    --nt-700: 54 64 72; --nt-800: 35 42 48; --nt-900: 22 27 32; --nt-950: 31 41 51;
+    --s-0: 255 255 255;  --s-50: 248 250 252;  --s-100: 241 245 249;
+    --s-200: 226 232 240; --s-300: 203 213 225; --s-400: 148 163 184;
+    --s-500: 100 116 139; --s-600: 71 85 105;   --s-700: 51 65 85;
+    --s-800: 30 41 59;    --s-900: 15 23 42;    --s-950: 2 6 23;
+    --st-700: 51 65 85; --st-800: 30 41 59; --st-900: 15 23 42; --st-950: 2 6 23;
+    --g-0: 255 255 255;  --g-50: 249 250 251;  --g-100: 243 244 246;
+    --g-200: 229 231 235; --g-300: 209 213 219; --g-400: 156 163 175;
+    --g-500: 107 114 128; --g-600: 75 85 99;    --g-700: 55 65 81;
+    --g-800: 31 41 55;    --g-900: 17 24 39;    --g-950: 3 7 18;
+    --gt-700: 55 65 81; --gt-800: 31 41 55; --gt-900: 17 24 39; --gt-950: 3 7 18;
+    --surface-white: 255 255 255;
+    --su-50: 236 253 243; --su-100: 209 250 223; --su-300: 108 233 166;
+    --su-500: 18 183 106; --su-700: 2 122 72;    --su-900: 5 79 49;
+    --wa-50: 255 246 236; --wa-100: 255 230 204; --wa-300: 255 184 102;
+    --wa-500: 240 128 0;  --wa-700: 184 90 0;    --wa-900: 107 52 0;
+    --er-50: 254 243 242; --er-100: 254 228 226; --er-300: 253 162 155;
+    --er-500: 232 69 59;  --er-700: 180 35 24;   --er-900: 122 39 26;
+    --in-50: 239 248 255; --in-100: 209 233 255; --in-300: 132 202 255;
+    --in-500: 46 144 250; --in-700: 23 92 211;   --in-900: 25 65 133;
+    --brand-50: #ecfaf0; --brand-100: #d2f2dd; --brand-700: #0a5e28;
+    --bg: #ffffff; --bg-elev: #ffffff; --bg-active: #f1f4f5;
+    --fg: #161b20; --fg-soft: #364048; --fg-muted: #6b757c;
+    --border: #e3e8ea; --border-soft: #f1f4f5;
+  }
+
   .no-print { display: none !important; }
   .print-break { page-break-before: always; }
   aside, nav, header { display: none !important; }
@@ -605,6 +855,25 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .wysiwyg-editor-wrap .ProseMirror code { background: #f1f5f9; border-radius: 3px; padding: 1px 4px; font-family: 'Courier New', monospace; font-size: 0.9em; }
 .wysiwyg-editor-wrap .ProseMirror pre { background: #1e293b; color: #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 0.5em 0; overflow-x: auto; }
 .wysiwyg-editor-wrap .ProseMirror pre code { background: none; padding: 0; font-size: 0.85em; }
+
+/* ── TipTap · donkere modus ───────────────────────────────────────────────
+   Alleen de INLINE editor (.wysiwyg-editor-wrap) kantelt mee; dat is gewone
+   app-chrome. De paginasimulatie (.wysiwyg-doc-page) blijft wit — dat is een
+   vel papier, dat hoort niet donker te worden. Wel de grijze "bureaublad"
+   eromheen, anders staat er een fel lichtgrijs vlak in een donker scherm. */
+[data-theme="dark"] .wysiwyg-doc-scroll { background: #11161a; }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror { color: var(--fg); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror blockquote { border-left-color: var(--border); color: var(--fg-muted); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror hr { border-top-color: var(--border); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror td,
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror th { border-color: var(--border); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror th { background: var(--bg); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror code { background: var(--bg); color: var(--fg); }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror a,
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror .wysiwyg-link { color: #84caff; }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror a:hover { color: #b0dcff; }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror .hb-var { background: #1a3450; color: #9ccbff; border-color: #2e6ba3; }
+[data-theme="dark"] .wysiwyg-editor-wrap .ProseMirror p.is-editor-empty:first-child::before { color: var(--fg-muted); }
 
 /* ── Calculatie tabel (everts-calc) ───────────────────────────────────── */
 .calc-table { @apply w-full text-sm border-collapse; }

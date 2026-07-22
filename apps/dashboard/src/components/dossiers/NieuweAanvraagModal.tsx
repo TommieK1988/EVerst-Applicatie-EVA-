@@ -324,7 +324,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                 {zoekOpen && zoekResultaten.length > 0 && (
                   <div style={{
                     position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                    background: '#ffffff', border: '1px solid var(--border)',
+                    background: 'var(--bg-elev)', border: '1px solid var(--border)',
                     borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
                     overflow: 'hidden', marginTop: 2,
                   }}>
@@ -335,7 +335,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           width: '100%', padding: '9px 12px', border: 'none',
-                          background: '#ffffff', cursor: 'pointer', textAlign: 'left',
+                          background: 'var(--bg-elev)', cursor: 'pointer', textAlign: 'left',
                           color: 'var(--fg)', fontSize: 13,
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-active)')}

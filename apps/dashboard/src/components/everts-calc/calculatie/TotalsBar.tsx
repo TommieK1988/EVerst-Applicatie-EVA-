@@ -65,7 +65,7 @@ export default function TotalsBar({
                 const v = parseFloat(e.target.value)
                 onScenarioWijzig({ standaard_uurtarief: isNaN(v) ? undefined : v })
               }}
-              className="w-14 bg-white/10 hover:bg-white/20 focus:bg-white/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30"
+              className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30"
             />
             <span className="text-white/50 text-xs">/u</span>
           </div>
@@ -115,7 +115,7 @@ export default function TotalsBar({
           >
             {formatPct(marge_pct)}
           </div>
-          <div className="mt-1 h-1 bg-white/20 rounded-full overflow-hidden">
+          <div className="mt-1 h-1 bg-paper/20 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-300"
               style={{

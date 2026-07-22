@@ -1710,14 +1710,14 @@ function GroepSectie({
               </button>
               <button
                 onClick={() => onVoegRegelToe(groep.id)}
-                className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
+                className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-paper/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
               >
                 <Plus className="w-3 h-3" /> Regel
               </button>
               {groep.niveau < 3 && (
                 <button
                   onClick={() => onVoegSubgroepToe(groep)}
-                  className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
+                  className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-paper/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
                 >
                   <Plus className="w-3 h-3" /> Groep
                 </button>
@@ -2557,7 +2557,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             onChange={e => setNieuwRootGroepNaam(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') bevestigRootGroep(); if (e.key === 'Escape') { setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('') } }}
             placeholder="Naam van de groep..."
-            className="flex-1 text-xs px-3 py-1.5 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/40 bg-white/10 text-white placeholder-white/40"
+            className="flex-1 text-xs px-3 py-1.5 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/40 bg-paper/10 text-white placeholder-white/40"
           />
           <button
             onClick={bevestigRootGroep}

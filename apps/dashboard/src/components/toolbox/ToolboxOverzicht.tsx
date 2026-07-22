@@ -153,7 +153,7 @@ export default function ToolboxOverzicht({ data, layouts, user_id }: Props) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.2)' }}
+            style={{ width: '100%', maxWidth: 440, background: 'var(--bg-elev)', borderRadius: 16, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.2)' }}
           >
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', marginBottom: 16 }}>Nieuwe toolbox</div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--fg-soft)', marginBottom: 6 }}>Titel</label>

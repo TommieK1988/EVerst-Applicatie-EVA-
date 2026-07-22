@@ -35,7 +35,7 @@ export default function MobielStickyFooter({
         gap: 10,
         padding: '12px 14px calc(12px + env(safe-area-inset-bottom, 0px))',
         background: 'var(--neutral-0, #fff)',
-        borderTop: '1px solid var(--neutral-200, #e3e8ea)',
+        borderTop: '1px solid var(--border)',
         ...style,
       }}
     >

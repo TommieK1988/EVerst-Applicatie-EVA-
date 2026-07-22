@@ -45,7 +45,7 @@ export default function UiPreview() {
   const [sw, setSw] = React.useState(true)
   return (
     <TooltipProvider>
-    <div className="eva" style={{ background: '#f8fafa', minHeight: '100dvh', padding: '48px 56px', fontFamily: 'var(--font-ui)' }}>
+    <div className="eva" style={{ background: 'var(--bg)', minHeight: '100dvh', padding: '48px 56px', fontFamily: 'var(--font-ui)' }}>
       <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.022em', marginBottom: 8 }}>EVA UI · Componenten</h1>
       <p style={{ color: '#4d575e', marginBottom: 40 }}>Visuele verificatie van de nieuwe Radix + Tailwind componenten.</p>
 
@@ -144,7 +144,7 @@ export default function UiPreview() {
       <div style={{ height: 1, background: '#e3e8ea', margin: '8px 0 32px' }} />
 
       <Row title="PageHeader">
-        <div style={{ width: '100%', background: 'white', border: '1px solid #e3e8ea', borderRadius: 10, padding: 24 }}>
+        <div style={{ width: '100%', background: 'white', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
           <PageHeader
             eyebrow="Hoofdproces"
             title={['Opdrachten', 'Renovatie Kerkstraat 12', 'Werkbegroting']}
@@ -186,7 +186,7 @@ export default function UiPreview() {
       </Row>
 
       <Row title="EmptyState">
-        <div style={{ width: 420, background: 'white', border: '1px solid #e3e8ea', borderRadius: 10 }}>
+        <div style={{ width: 420, background: 'white', border: '1px solid var(--border)', borderRadius: 10 }}>
           <EmptyState
             icon={<Inbox className="h-6 w-6" />}
             title="Nog geen aanvragen"
@@ -254,7 +254,7 @@ export default function UiPreview() {
       <div style={{ height: 1, background: '#e3e8ea', margin: '8px 0 32px' }} />
 
       <Row title="Formulierpatronen">
-        <div style={{ width: 520, background: 'white', border: '1px solid #e3e8ea', borderRadius: 10, padding: 24 }}>
+        <div style={{ width: 520, background: 'white', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
           <FormSection title="Klantgegevens" description="Verplichte velden zijn gemarkeerd">
             <FormRow cols="2">
               <FormField label="Bedrijfsnaam" required><Input placeholder="Acme B.V." /></FormField>

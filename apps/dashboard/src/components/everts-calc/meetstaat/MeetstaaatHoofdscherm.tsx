@@ -329,7 +329,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
               }
               <span className="hidden sm:inline">Sync naar calculatie</span>
               {ongesyncCount > 0 && (
-                <span className="bg-white/20 text-white text-xs px-1.5 rounded-full">
+                <span className="bg-paper/20 text-white text-xs px-1.5 rounded-full">
                   {ongesyncCount}
                 </span>
               )}

@@ -218,7 +218,7 @@ export default function MeetregelRij({
   )
 
   const rijCls = `border-b border-slate-100 transition-colors ${
-    isActief ? 'bg-everts/5' : actief ? 'bg-white hover:bg-slate-50' : 'bg-white/60 hover:bg-white'
+    isActief ? 'bg-everts/5' : actief ? 'bg-white hover:bg-slate-50' : 'bg-paper/60 hover:bg-white'
   }`
 
   return (

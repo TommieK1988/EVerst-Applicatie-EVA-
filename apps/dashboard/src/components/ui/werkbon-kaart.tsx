@@ -189,7 +189,7 @@ const PlanningEntry = React.forwardRef<HTMLDivElement, PlanningEntryProps>(
       style={{ background: color, ...style }}
       className={cn(
         'relative cursor-grab overflow-hidden rounded-[7px] py-[7px] pl-[11px] pr-[9px] text-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]',
-        'before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-white/45 before:content-[""]',
+        'before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-paper/45 before:content-[""]',
         className,
       )}
       {...props}

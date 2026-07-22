@@ -52,7 +52,7 @@ function GroepRij({
         <span className="flex-1 truncate">{groep.naam}</span>
         {aantalRegels > 0 && (
           <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-            isActief ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
+            isActief ? 'bg-paper/20 text-white' : 'bg-slate-200 text-slate-500'
           }`}>
             {aantalRegels}
           </span>

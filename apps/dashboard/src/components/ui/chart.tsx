@@ -59,7 +59,7 @@ function ChartCard({ className, title, subtitle, watermark, children, ...props }
 /** Tooltip-styling voor Recharts (geef door aan <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />). */
 export const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   borderRadius: 8,
-  border: '1px solid #e3e8ea',
+  border: '1px solid var(--border)',
   boxShadow: '0 4px 8px -2px rgba(16,24,40,0.08)',
   fontSize: 12,
   padding: '8px 10px',

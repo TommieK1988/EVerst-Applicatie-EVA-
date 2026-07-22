@@ -57,7 +57,7 @@ function AfgeslotenBanner() {
       padding: '9px 32px', fontSize: 12.5, fontWeight: 600,
       color: 'var(--neutral-700, #3a444c)',
       background: 'var(--neutral-100, #eef1f2)',
-      borderBottom: '1px solid var(--neutral-200, #e3e8ea)',
+      borderBottom: '1px solid var(--border)',
     }}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -333,7 +333,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
 
       <div style={{
         padding: '32px 28px',
-        border: '1px dashed var(--neutral-200, #e3e8ea)',
+        border: '1px dashed var(--border)',
         borderRadius: 10,
         background: 'var(--neutral-50, #f8fafa)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,

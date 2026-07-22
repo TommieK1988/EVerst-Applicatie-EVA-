@@ -30,9 +30,12 @@ const TooltipContent = React.forwardRef<
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
+// Vaste wit-tinten, geen neutral-schaal: de tooltip is in beide thema's donker,
+// dus grijstinten die met het thema meekantelen zouden hier in donkere modus
+// donker-op-donker opleveren.
 function TooltipKbd({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-[3px] bg-neutral-700 px-[5px] py-px  text-[10px] text-neutral-200">
+    <span className="rounded-[3px] bg-paper/15 px-[5px] py-px  text-[10px] text-white/85">
       {children}
     </span>
   )

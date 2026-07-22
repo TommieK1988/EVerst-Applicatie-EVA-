@@ -142,7 +142,7 @@ export function ProjectVoortgangEditor({
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         padding: '12px 16px', marginBottom: 16,
-        border: '1px solid var(--neutral-200, #e3e8ea)', borderRadius: 10, background: 'var(--neutral-50, #f8fafa)',
+        border: '1px solid var(--border)', borderRadius: 10, background: 'var(--neutral-50, #f8fafa)',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -161,7 +161,7 @@ export function ProjectVoortgangEditor({
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       padding: '12px 16px', marginBottom: 16,
-      border: '1px solid var(--neutral-200, #e3e8ea)', borderRadius: 10, background: 'var(--neutral-50, #f8fafa)',
+      border: '1px solid var(--border)', borderRadius: 10, background: 'var(--neutral-50, #f8fafa)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
