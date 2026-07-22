@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-07-22','verbeterd','Platform','Donkere modus is nu overal goed leesbaar',
+   'Wie EVA op donker zet, kreeg op veel schermen nog witte vlakken met lichte tekst erop, of juist donkergrijze tekst op een donkere achtergrond. Dat is opgelost: kaarten, tabellen, formulieren, menu''s, meldingen en statuslabels kleuren nu allemaal netjes mee. Ook vensters die over de pagina heen komen — zoals dialoogschermen en keuzelijsten — blijven niet langer wit. Print je een pagina terwijl donkere modus aanstaat, dan komt hij gewoon op wit papier. Op de telefoon blijft EVA bewust licht, omdat je daar buiten en bij fel daglicht werkt.');
