@@ -13,6 +13,9 @@ export const DOSSIER_TABS = [
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
   // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
   { key: 'houtrot', label: 'Houtrot' },
+  // Oplevering is Fase 9 en hoort dus bij een opdracht; op de desktop staat hij daarom in
+  // OPDRACHT_TABS en niet bij aanvragen of servicedesk. Zelfde regel hier.
+  { key: 'oplevering', label: 'Oplevering' },
   { key: 'formulieren', label: 'Formulieren' },
   { key: 'bestanden', label: 'Bestanden' },
 ] as const
@@ -20,19 +23,22 @@ export const DOSSIER_TABS = [
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
 export default function DossierTabStrip({
-  id, active, houtrotAan = false,
+  id, active, houtrotAan = false, isOpdracht = false,
 }: {
   id: string
   active: DossierTabKey
   houtrotAan?: boolean
+  isOpdracht?: boolean
 }) {
-  const tabs = DOSSIER_TABS.filter(t => t.key !== 'houtrot' || houtrotAan)
+  const tabs = DOSSIER_TABS
+    .filter(t => t.key !== 'houtrot' || houtrotAan)
+    .filter(t => t.key !== 'oplevering' || isOpdracht)
 
   return (
     <div
       style={{
         display: 'flex', gap: 4, overflowX: 'auto', padding: '0 12px',
-        borderBottom: '1px solid #e3e8ea', background: '#fff',
+        borderBottom: '1px solid var(--border)', background: 'var(--bg-elev)',
         position: 'sticky', top: 0, zIndex: 5,
         scrollbarWidth: 'none',
         // LET OP — niet weghalen. Deze strook is een flex-item in de verticale

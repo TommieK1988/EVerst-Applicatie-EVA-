@@ -1,6 +1,7 @@
 import 'server-only'
 import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/database'
-import { getOplevermomentRapport } from './oplevering'
+import { getOplevermomentRapport, type OpleverPuntView } from './oplevering'
+import { splitsFotos, bewijsOntbreekt } from './oplever-fotos'
 
 /**
  * Opleverrapportage als PDF, opgebouwd met pdf-lib (zelfde aanpak als de briefpapier-merge).
@@ -13,8 +14,11 @@ const A4 = { breedte: 595.28, hoogte: 841.89 }
 const MARGE = 48
 const KOLOM = A4.breedte - MARGE * 2
 
-/** Max. aantal foto's per punt in de bijlage — houdt het rapport en de mail hanteerbaar. */
-const MAX_FOTOS_PER_PUNT = 4
+/**
+ * Max. aantal foto's per kolom (voor/na) in de bijlage — houdt het rapport en de mail hanteerbaar.
+ * Drie thumbnails van 68pt passen naast elkaar in een halve tekstkolom.
+ */
+const MAX_FOTOS_PER_KOLOM = 3
 /** Ruimhartig: de bron mag groot zijn, we verkleinen hem hierna zelf. */
 const MAX_FOTO_BYTES = 25 * 1024 * 1024
 /**
@@ -117,7 +121,7 @@ const STATUS_RGB: Record<OpleverPuntStatus, [number, number, number]> = {
 export async function genereerOpleverRapportPdf(momentId: string): Promise<Uint8Array | null> {
   const rapport = await getOplevermomentRapport(momentId)
   if (!rapport) return null
-  const { dossier, moment, punten, handtekeningen } = rapport
+  const { dossier, moment, punten, aandachtspunten, handtekeningen } = rapport
 
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
   const doc = await PDFDocument.create()
@@ -194,9 +198,55 @@ export async function genereerOpleverRapportPdf(momentId: string): Promise<Uint8
     y -= 14
   }
 
-  for (const p of punten) {
+  /**
+   * Eén kolom voor/na-bewijs. Tekent vanaf `topY` naar beneden en laat `y` ongemoeid — de aanroeper
+   * verschuift `y` één keer voor beide kolommen, anders zakt de tweede kolom onder de eerste.
+   */
+  const FOTO_MAAT = 68
+  const KOL_BREEDTE = (KOLOM - 16) / 2
+  async function tekenFotoKolom(kop: string, urls: string[], x0: number, topY: number) {
+    pagina.drawText(veilig(kop), { x: x0, y: topY - 8, size: 7.5, font: vet, color: GRIJS })
+    const rijY = topY - 14
+    if (urls.length === 0) {
+      // Gestippeld leeg vak: ontbrekend bewijs moet opvallen, niet stilletjes wegvallen.
+      pagina.drawRectangle({
+        x: x0, y: rijY - FOTO_MAAT, width: KOL_BREEDTE, height: FOTO_MAAT,
+        borderColor: LICHTGRIJS, borderWidth: 0.8, borderDashArray: [3, 3],
+      })
+      const t = 'geen foto'
+      pagina.drawText(t, {
+        x: x0 + (KOL_BREEDTE - normaal.widthOfTextAtSize(t, 8)) / 2,
+        y: rijY - FOTO_MAAT / 2 - 3, size: 8, font: normaal, color: GRIJS,
+      })
+      return
+    }
+    let x = x0
+    for (const url of urls.slice(0, MAX_FOTOS_PER_KOLOM)) {
+      const img = await haalAfbeelding(url, FOTO_MAX_PX)
+      if (!img) continue
+      try {
+        const embedded = await doc.embedJpg(img.bytes)
+        // Vierkant uitsnijden zou vervormen; schaal binnen het vierkant.
+        const schaal = Math.min(FOTO_MAAT / embedded.width, FOTO_MAAT / embedded.height)
+        const w = embedded.width * schaal
+        const h = embedded.height * schaal
+        pagina.drawImage(embedded, {
+          x: x + (FOTO_MAAT - w) / 2, y: rijY - FOTO_MAAT + (FOTO_MAAT - h) / 2, width: w, height: h,
+        })
+        pagina.drawRectangle({
+          x, y: rijY - FOTO_MAAT, width: FOTO_MAAT, height: FOTO_MAAT,
+          borderColor: LICHTGRIJS, borderWidth: 0.6,
+        })
+        x += FOTO_MAAT + 6
+      } catch {
+        // Onbruikbare afbeelding overslaan; het rapport moet altijd opleveren.
+      }
+    }
+  }
+
+  async function tekenPunt(p: OpleverPuntView, prefix: 'OP' | 'AP') {
     ruimte(60)
-    const nr = `OP${String(p.volgnummer).padStart(2, '0')}`
+    const nr = `${prefix}${String(p.volgnummer).padStart(2, '0')}`
     const statusLabel = opleverPuntStatusLabels[p.status] ?? p.status
     const statusKleur = STATUS_RGB[p.status] ?? [0.42, 0.46, 0.49]
 
@@ -212,8 +262,12 @@ export async function genereerOpleverRapportPdf(momentId: string): Promise<Uint8
     for (const regel of wikkel(p.omschrijving, vet, 10.5, KOLOM - 70)) {
       ruimte(14); tekst(regel, { grootte: 10.5, font: vet }); y -= 13
     }
-    const sub = [p.ruimte, p.deadline ? `deadline ${p.deadline}` : null, p.is_extra_werk ? 'Extra werk' : null]
-      .filter(Boolean).join('  -  ')
+    const sub = [
+      p.ruimte,
+      p.deadline ? `deadline ${p.deadline}` : null,
+      p.is_extra_werk ? 'Extra werk' : null,
+      bewijsOntbreekt(p.status, p.fotos) ? 'Geen foto na herstel' : null,
+    ].filter(Boolean).join('  -  ')
     if (sub) { ruimte(12); tekst(sub, { grootte: 8.5, kleur: GRIJS }); y -= 12 }
     if (p.status === 'geweigerd' && p.geweigerd_reden) {
       for (const regel of wikkel(`Afgewezen: ${p.geweigerd_reden}`, normaal, 8.5, KOLOM)) {
@@ -230,35 +284,39 @@ export async function genereerOpleverRapportPdf(momentId: string): Promise<Uint8
       }
     }
 
-    // Foto's als thumbnailrij
-    const urls = p.fotos.slice(0, MAX_FOTOS_PER_PUNT).map(f => f.url)
-    if (urls.length > 0) {
-      const maat = 68
-      ruimte(maat + 8)
-      let x = MARGE
-      for (const url of urls) {
-        const img = await haalAfbeelding(url, FOTO_MAX_PX)
-        if (!img) continue
-        try {
-          const embedded = await doc.embedJpg(img.bytes)
-          // Vierkant uitsnijden op de korte zijde zou vervormen; schaal binnen het vierkant.
-          const schaal = Math.min(maat / embedded.width, maat / embedded.height)
-          const w = embedded.width * schaal
-          const h = embedded.height * schaal
-          pagina.drawImage(embedded, { x, y: y - maat + (maat - h) / 2, width: w, height: h })
-          pagina.drawRectangle({ x, y: y - maat, width: maat, height: maat, borderColor: LICHTGRIJS, borderWidth: 0.6 })
-          x += maat + 6
-        } catch {
-          // Onbruikbare afbeelding overslaan; het rapport moet altijd opleveren.
-        }
-      }
-      y -= maat + 8
+    // Voor/na naast elkaar. Punten die nooit een foto kregen en nog niet zijn afgemeld slaan we
+    // over — anders staat het halve rapport vol lege vakken.
+    const { voor, na } = splitsFotos(p.fotos)
+    if (p.fotos.length > 0 || bewijsOntbreekt(p.status, p.fotos)) {
+      // Label + thumbnail + witruimte in één keer reserveren: `ruimte()` mag niet tússen de twee
+      // kolommen een pagina omslaan, dan komt de Na-kolom op de volgende bladzijde terecht.
+      ruimte(FOTO_MAAT + 24)
+      const topY = y
+      await tekenFotoKolom('VOOR', voor.map(f => f.url), MARGE, topY)
+      await tekenFotoKolom('NA', na.map(f => f.url), MARGE + KOL_BREEDTE + 16, topY)
+      y = topY - 14 - FOTO_MAAT - 8
     }
 
     y -= 4
     ruimte(8)
     pagina.drawRectangle({ x: MARGE, y, width: KOLOM, height: 0.5, color: LICHTGRIJS })
     y -= 12
+  }
+
+  for (const p of punten) await tekenPunt(p, 'OP')
+
+  /* ── Aandachtspunten (losse punten van het dossier, eigen nummerreeks) ── */
+  if (aandachtspunten.length > 0) {
+    y -= 12
+    ruimte(44)
+    tekst(`Aandachtspunten (${aandachtspunten.length})`, { grootte: 11, font: vet })
+    y -= 6
+    pagina.drawRectangle({ x: MARGE, y, width: KOLOM, height: 0.8, color: LICHTGRIJS })
+    y -= 14
+    tekst('Gemelde punten bij dit project die niet aan dit oplevermoment gekoppeld zijn.', { grootte: 8.5, kleur: GRIJS })
+    y -= 16
+
+    for (const p of aandachtspunten) await tekenPunt(p, 'AP')
   }
 
   /* ── Ondertekening ── */

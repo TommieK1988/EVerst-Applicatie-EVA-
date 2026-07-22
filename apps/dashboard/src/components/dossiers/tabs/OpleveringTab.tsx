@@ -22,6 +22,9 @@ import {
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
 import OpleveringMailBlok from './OpleveringMailBlok'
+import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
+import { verkleinFoto } from '@/lib/foto/verkleinFoto'
+import type { OpleverFotoSoort } from '@everts/database'
 
 const selectCls =
   'h-8 rounded-md border border-neutral-300 bg-white px-2 text-[12px] text-neutral-800 outline-none focus:border-brand-500'
@@ -315,7 +318,7 @@ function FeedbackBlok({ dossierId, readOnly }: { dossierId: string; readOnly: bo
   const [bezig, setBezig] = useState(false)
 
   function herlaadFeedback() {
-    getOpleverFeedbackSamenvatting(dossierId).then(setSamenvatting).catch(() => setSamenvatting({ aantal: 0, cijfers: [] }))
+    getOpleverFeedbackSamenvatting(dossierId).then(setSamenvatting).catch(() => setSamenvatting({ aantal: 0, cijfers: [], hoofdscore: null }))
     getOpleverFeedbackInzendingen(dossierId).then(setInzendingen).catch(() => setInzendingen([]))
     getOpleverTokenLinks(dossierId, 'feedback').then(setLinks).catch(() => setLinks([]))
   }
@@ -903,6 +906,45 @@ function NieuwPuntForm({ momentId, toewijsbaar, onDone, onCancel }: {
   )
 }
 
+/* ─────────────────────────── Voor/na-fotokolom ───────────────────────────── */
+
+/**
+ * Eén kolom van het voor/na-bewijs. Een lege kant blijft in beeld als gestippeld vlak: een
+ * ontbrekende na-foto moet opvallen, niet stilletjes wegvallen. Zelfde opbouw als in het rapport.
+ */
+function FotoKolom({ kop, fotos, readOnly, onVerwijder }: {
+  kop: string
+  fotos: { id: string; url: string }[]
+  readOnly: boolean
+  onVerwijder: (id: string) => void
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-neutral-400">{kop}</div>
+      {fotos.length === 0 ? (
+        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-neutral-300 text-[11px] text-neutral-400">
+          geen foto
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {fotos.map(f => (
+            <div key={f.id} className="relative h-16 w-16 overflow-hidden rounded-md border border-neutral-200">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href={f.url} target="_blank" rel="noreferrer">
+                <img src={f.url} alt={`opleverfoto ${kop.toLowerCase()}`} className="h-full w-full object-cover" />
+              </a>
+              {!readOnly && (
+                <button onClick={() => onVerwijder(f.id)}
+                  className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/50 text-[10px] text-white">×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ──────────────────────────────── Punt-rij ───────────────────────────────── */
 
 function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
@@ -915,7 +957,10 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
   const router = useRouter()
   const [bezig, setBezig] = useState(false)
   const [open, setOpen] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const voorRef = useRef<HTMLInputElement>(null)
+  const naRef = useRef<HTMLInputElement>(null)
+  const { voor, na } = splitsFotos(punt.fotos)
+  const mistBewijs = bewijsOntbreekt(punt.status, punt.fotos)
 
   async function wijzigStatus(status: OpleverPuntStatus) {
     let reden: string | null = null
@@ -946,12 +991,15 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
     onChange(); router.refresh()
   }
 
-  async function uploadFotos(files: FileList | null) {
+  async function uploadFotos(files: FileList | null, soort: OpleverFotoSoort) {
     if (!files || files.length === 0) return
     setBezig(true)
     for (const file of Array.from(files)) {
       const fd = new FormData()
-      fd.append('foto', file)
+      // Verkleinen vóór verzenden: een camerafoto van 4 MB komt anders niet door de
+      // body-limiet van server-actions heen.
+      fd.append('foto', await verkleinFoto(file))
+      fd.append('soort', soort)
       const r = await uploadOpleverFoto(punt.id, fd)
       if (!r.ok) { toast.error(r.error); break }
     }
@@ -989,6 +1037,8 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
             {punt.is_extra_werk && (
               <Badge tone="brand" size="sm">Extra werk{punt.meerwerkVolgnummer ? ` · MW${String(punt.meerwerkVolgnummer).padStart(2, '0')}` : ''}</Badge>
             )}
+            {/* Afgemeld zonder foto van het herstel — alleen signaleren, nergens blokkeren. */}
+            {mistBewijs && <Badge tone="warning" size="sm">Geen foto na herstel</Badge>}
           </div>
           <div className="mt-1 text-[13px] text-neutral-800">{punt.omschrijving}</div>
           <div className="mt-0.5 text-[11px] text-neutral-500">
@@ -1024,21 +1074,11 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
         </div>
       </div>
 
-      {/* Foto-thumbnails */}
-      {punt.fotos.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {punt.fotos.map(f => (
-            <div key={f.id} className="relative h-16 w-16 overflow-hidden rounded-md border border-neutral-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href={f.url} target="_blank" rel="noreferrer">
-                <img src={f.url} alt="opleverfoto" className="h-full w-full object-cover" />
-              </a>
-              {!readOnly && (
-                <button onClick={() => verwijderFoto(f.id)}
-                  className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/50 text-[10px] text-white">×</button>
-              )}
-            </div>
-          ))}
+      {/* Voor/na naast elkaar — hetzelfde beeld als in het opleverrapport. */}
+      {(punt.fotos.length > 0 || mistBewijs) && (
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <FotoKolom kop="Voor" fotos={voor} readOnly={readOnly} onVerwijder={verwijderFoto} />
+          <FotoKolom kop="Na" fotos={na} readOnly={readOnly} onVerwijder={verwijderFoto} />
         </div>
       )}
 
@@ -1056,9 +1096,12 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
                 <input type="checkbox" checked={punt.is_extra_werk} disabled={bezig} onChange={toggleExtraWerk} />
                 Extra werk
               </label>
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-                onChange={e => uploadFotos(e.target.files)} />
-              <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={bezig}>Foto toevoegen</Button>
+              <input ref={voorRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+                onChange={e => { uploadFotos(e.target.files, 'voor'); e.target.value = '' }} />
+              <input ref={naRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+                onChange={e => { uploadFotos(e.target.files, 'na'); e.target.value = '' }} />
+              <Button variant="secondary" onClick={() => voorRef.current?.click()} disabled={bezig}>Foto vooraf</Button>
+              <Button variant="secondary" onClick={() => naRef.current?.click()} disabled={bezig}>Foto na herstel</Button>
               <button className="text-[11px] font-medium text-error-600 hover:underline" disabled={bezig} onClick={verwijder}>
                 Verwijder punt
               </button>

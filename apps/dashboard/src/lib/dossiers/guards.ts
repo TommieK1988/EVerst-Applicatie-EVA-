@@ -36,3 +36,41 @@ export async function assertDossierBewerkbaar(dossierId: string | null | undefin
     throw new GeenToegangError('Dit dossier is afgesloten en alleen-lezen')
   }
 }
+
+/**
+ * Rolkolommen op `dossiers` die iemand tot betrokkene bij het project maken. Gelijk aan
+ * `DOSSIER_ROL_KOLOMMEN` in `actions.ts`, die bepaalt welke dossiers je in "mijn dossiers" ziet.
+ * Blijven die twee lijsten uit elkaar lopen, dan zie je op mobiel een dossier dat je vervolgens
+ * niet mag openen (of andersom).
+ */
+const PROJECTROL_KOLOMMEN = [
+  'project_manager_id',
+  'teamleider_id',
+  'werkvoorbereider_id',
+  'calculator_id',
+  'uitvoerder_id',
+  'controller_id',
+] as const
+
+/**
+ * Heeft deze medewerker een projectrol op dit dossier?
+ *
+ * De mobiele dossierlijst toont alleen je eigen dossiers, maar de detailroutes draaien op de
+ * admin-client en checkten dat niet: met een geraden id opende een deeplink elk dossier. Gebruik
+ * dit op de mobiele oplever-schermen, waar je punten kunt wijzigen en laat ondertekenen.
+ */
+export async function heeftProjectrol(
+  dossierId: string | null | undefined,
+  medewerkerId: string | null | undefined,
+): Promise<boolean> {
+  if (!dossierId || !medewerkerId) return false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossiers')
+    .select(PROJECTROL_KOLOMMEN.join(', '))
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!data) return false
+  return PROJECTROL_KOLOMMEN.some(kolom => data[kolom] === medewerkerId)
+}

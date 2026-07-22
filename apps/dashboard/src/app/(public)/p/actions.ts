@@ -134,14 +134,30 @@ export async function portaalAfmeldenPunt(
 
   const { data: relatie } = await supabase.from('relaties').select('naam').eq('id', token.relatie_id).maybeSingle()
 
+  // `fotoUrls` komt van een publieke, ongeauthenticeerde route en wordt straks als <img src>
+  // gerenderd én in het opleverrapport ingebed. Alleen URL's uit onze eigen bucket toelaten —
+  // zonder deze filter kan een geprepareerde payload een willekeurig domein in het rapport zetten.
+  // Zelfde controle als in `materialiseerAandachtspunten`.
+  const basisUrl = supabase.storage.from('oplever-fotos').getPublicUrl('').data.publicUrl
+  const veiligeUrls = (fotoUrls ?? []).filter(u => typeof u === 'string' && u.startsWith(basisUrl))
+
   await supabase.from('oplever_punt_reacties').insert({
     punt_id: puntId,
     auteur_type: 'onderaannemer',
     auteur_naam: relatie?.naam ?? 'Onderaannemer',
     soort: 'afmelding',
     opmerking: opmerking || null,
-    foto_urls: fotoUrls ?? [],
+    foto_urls: veiligeUrls,
   })
+
+  // De afmeldfoto is precies het bewijs dat het punt verholpen is, dus hij hoort óók in
+  // `oplever_fotos` als 'na' — daar leest het rapport de voor/na-kolommen uit. Hij blijft
+  // daarnaast bij de reactie staan, zodat de context van de afmelding zichtbaar blijft.
+  if (veiligeUrls.length > 0) {
+    await supabase.from('oplever_fotos').insert(
+      veiligeUrls.map(url => ({ punt_id: puntId, url, soort: 'na' })),
+    )
+  }
 
   const now = new Date().toISOString()
   const { error } = await supabase

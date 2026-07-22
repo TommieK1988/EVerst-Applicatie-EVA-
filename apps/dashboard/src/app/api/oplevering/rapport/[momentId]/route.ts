@@ -3,7 +3,8 @@ import {
   opleverMomentTypeLabels, opleverMomentStatusLabels, opleverPuntStatusLabels,
   type OpleverPuntStatus,
 } from '@everts/database'
-import { getOplevermomentRapport } from '@/lib/dossiers/oplevering'
+import { getOplevermomentRapport, type OpleverPuntView } from '@/lib/dossiers/oplevering'
+import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 
 const esc = (s: unknown): string =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
@@ -24,15 +25,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
   const rapport = await getOplevermomentRapport(momentId)
   if (!rapport) return new NextResponse('Oplevermoment niet gevonden', { status: 404 })
 
-  const { dossier, moment, punten, handtekeningen } = rapport
+  const { dossier, moment, punten, aandachtspunten, handtekeningen } = rapport
   const datum = moment.opgeleverd_op
     ? new Date(moment.opgeleverd_op).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
     : new Date(moment.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  const puntenHtml = punten.map(p => `
+  /** Voor/na naast elkaar. Een lege kant blijft zichtbaar als gestippeld vlak: ontbrekend bewijs
+   *  moet opvallen, niet stilletjes wegvallen. */
+  const bewijsHtml = (p: OpleverPuntView) => {
+    const { voor, na } = splitsFotos(p.fotos)
+    const mist = bewijsOntbreekt(p.status, p.fotos)
+    // Punten die nooit een foto kregen en nog niet zijn afgemeld: niets tonen, scheelt ruis.
+    if (p.fotos.length === 0 && !mist) return ''
+    const kolom = (kop: string, urls: string[]) => `
+      <div class="kol">
+        <div class="kol-kop">${kop}</div>
+        ${urls.length
+          ? `<div class="fotos">${urls.map(u => `<img src="${esc(u)}" alt="${esc(kop)}" />`).join('')}</div>`
+          : '<div class="leeg">geen foto</div>'}
+      </div>`
+    return `<div class="bewijs">
+      ${kolom('Voor', voor.map(f => f.url))}
+      ${kolom('Na', na.map(f => f.url))}
+    </div>`
+  }
+
+  const puntHtml = (p: OpleverPuntView, prefix: 'OP' | 'AP') => `
     <div class="punt">
       <div class="punt-kop">
-        <span class="op">OP${String(p.volgnummer).padStart(2, '0')}</span>
+        <span class="op">${prefix}${String(p.volgnummer).padStart(2, '0')}</span>
         <span class="omschr">${esc(p.omschrijving)}</span>
         <span class="status" style="color:${STATUS_KLEUR[p.status]}">${esc(opleverPuntStatusLabels[p.status])}</span>
       </div>
@@ -40,16 +61,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
         ${p.ruimte ? `<span>${esc(p.ruimte)}</span>` : ''}
         ${p.deadline ? `<span>deadline ${esc(p.deadline)}</span>` : ''}
         ${p.is_extra_werk ? `<span class="ew">Extra werk</span>` : ''}
+        ${bewijsOntbreekt(p.status, p.fotos) ? `<span class="ew">Geen foto na herstel</span>` : ''}
       </div>
       ${p.geweigerd_reden ? `<div class="afw">Afgewezen: ${esc(p.geweigerd_reden)}</div>` : ''}
-      ${p.fotos.length ? `<div class="fotos">${p.fotos.map(f => `<img src="${esc(f.url)}" alt="foto" />`).join('')}</div>` : ''}
+      ${bewijsHtml(p)}
       ${p.reacties.length ? `<div class="reacties">${p.reacties.map(r => `
         <div class="reactie">
           <strong>${esc(r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Everts'))}</strong>
           ${r.opmerking ? `<span>${esc(r.opmerking)}</span>` : ''}
           ${r.foto_urls.length ? `<div class="fotos">${r.foto_urls.map(u => `<img src="${esc(u)}" alt="foto" />`).join('')}</div>` : ''}
         </div>`).join('')}</div>` : ''}
-    </div>`).join('')
+    </div>`
+
+  const puntenHtml = punten.map(p => puntHtml(p, 'OP')).join('')
+
+  // Aandachtspunten horen bij het dossier, niet bij dit ene moment — vandaar een eigen hoofdstuk
+  // met eigen nummerreeks (AP). Geen aandachtspunten = geen kopje.
+  const aandachtspuntenHtml = aandachtspunten.length ? `
+    <h2>Aandachtspunten (${aandachtspunten.length})</h2>
+    <p class="uitleg">Gemelde punten bij dit project die niet aan dit oplevermoment gekoppeld zijn.</p>
+    ${aandachtspunten.map(p => puntHtml(p, 'AP')).join('')}` : ''
 
   const handtekeningenHtml = handtekeningen.length ? `
     <div class="section">
@@ -96,11 +127,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
   .meta { font-size: 11.5px; color: #6b757c; margin-top: 3px; display: flex; gap: 10px; }
   .meta .ew { color: #7a5a17; font-weight: 600; }
   .afw { font-size: 12px; color: #a12020; margin-top: 4px; }
-  .fotos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .fotos { display: flex; flex-wrap: wrap; gap: 6px; }
   .fotos img { width: 92px; height: 92px; object-fit: cover; border-radius: 6px; border: 1px solid #e4e8e7; }
+  .bewijs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; page-break-inside: avoid; }
+  .kol-kop { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #8a938f; margin-bottom: 4px; }
+  .leeg { border: 1px dashed #d5dbd9; border-radius: 6px; height: 92px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; color: #a4adb2; }
+  .uitleg { font-size: 12px; color: #6b757c; margin: -4px 0 10px; }
   .reacties { margin-top: 8px; border-top: 1px dashed #e4e8e7; padding-top: 8px; }
   .reactie { font-size: 12.5px; margin-bottom: 6px; }
   .reactie strong { margin-right: 6px; }
+  .reactie .fotos { margin-top: 4px; }
   .handtekeningen { display: flex; flex-wrap: wrap; gap: 24px; }
   .ht { border: 1px solid #e4e8e7; border-radius: 8px; padding: 10px 14px; min-width: 200px; }
   .ht img { height: 54px; max-width: 180px; object-fit: contain; }
@@ -137,6 +173,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
 
     <h2>Opleverpunten (${punten.length}) · ${aantalGeaccepteerd} geaccepteerd</h2>
     ${punten.length ? puntenHtml : '<p style="font-size:13px;color:#6b757c">Geen opleverpunten geregistreerd.</p>'}
+
+    ${aandachtspuntenHtml}
 
     ${handtekeningenHtml}
 

@@ -13,6 +13,7 @@ import DetailplanningView from '@/components/mobiel/dossier-tabs/DetailplanningV
 import VoortgangView from '@/components/mobiel/dossier-tabs/VoortgangView'
 import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
+import OpleveringView from '@/components/mobiel/dossier-tabs/OpleveringView'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
@@ -40,6 +41,10 @@ export default async function MobielDossierTabPage(
   const houtrotAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
   if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
 
+  // Oplevering (Fase 9) hoort bij een opdracht, niet bij een aanvraag.
+  const isOpdracht = (res.data as { hoofdstatus?: string }).hoofdstatus === 'opdracht'
+  if (actief === 'oplevering' && !isOpdracht) redirect(`/m/dossiers/${id}/informatie`)
+
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = res.data as Record<string, any>
@@ -49,7 +54,7 @@ export default async function MobielDossierTabPage(
   return (
     <>
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref="/m/dossiers" />
-      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} />
+      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} isOpdracht={isOpdracht} />
 
       {actief === 'informatie' && (
         <>
@@ -66,6 +71,9 @@ export default async function MobielDossierTabPage(
       )}
       {actief === 'voortgang' && (
         <Suspense fallback={<TabLaden />}><VoortgangView dossierId={id} /></Suspense>
+      )}
+      {actief === 'oplevering' && (
+        <Suspense fallback={<TabLaden />}><OpleveringView dossierId={id} /></Suspense>
       )}
       {actief === 'formulieren' && <FormulierenView dossierId={id} />}
       {actief === 'bestanden' && (

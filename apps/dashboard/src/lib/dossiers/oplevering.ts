@@ -17,6 +17,7 @@ import type {
   OpleverTokenScope,
 } from '@everts/database'
 import { assertDossierBewerkbaar, isDossierBewerkbaar } from './guards'
+import { PUNT_TRANSITIES, NIET_ACTIEVE_STATUSSEN } from './oplever-status'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { maakMeerwerkRegel } from './meerwerk'
 import { formatVeldwaardeTekst } from '@/components/formulieren/format'
@@ -34,27 +35,6 @@ async function huidigeMedewerkerId(): Promise<string | null> {
 function revalidate(dossierId: string) {
   revalidatePath(`/opdrachten/${dossierId}/oplevering`)
 }
-
-/* ─────────────────────────── Statusmachines ──────────────────────────────── */
-
-/**
- * Toegestane opleverpunt-transities (domein: Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd).
- *
- * `nieuw` is de triage-ingang voor punten uit een formulier: de projectleider zet ze op de lijst
- * (`open`) of wijst ze af. `afgewezen` is terminaal, op ongedaan maken na.
- */
-const PUNT_TRANSITIES: Record<OpleverPuntStatus, OpleverPuntStatus[]> = {
-  nieuw:          ['open', 'afgewezen'],
-  open:           ['in_behandeling', 'opgelost', 'geaccepteerd'],
-  in_behandeling: ['open', 'opgelost', 'geaccepteerd'],
-  opgelost:       ['geaccepteerd', 'geweigerd', 'in_behandeling'],
-  geaccepteerd:   ['in_behandeling'],
-  geweigerd:      ['open', 'in_behandeling', 'opgelost'],
-  afgewezen:      ['nieuw', 'open'],
-}
-
-/** Statussen die niet meetellen als werk: nog te beoordelen, of beoordeeld en afgevallen. */
-const NIET_ACTIEVE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
 
 /* ─────────────────────────────── Views ───────────────────────────────────── */
 
@@ -214,6 +194,12 @@ export type OpleverRapport = {
   dossier: { titel: string | null; nummer: string | null; werkadres: string | null; klant: string | null }
   moment: OpleverMoment
   punten: OpleverPuntView[]
+  /**
+   * Losse aandachtspunten van het dossier (zonder oplevermoment). Bewust een apart veld en niet
+   * samengevoegd met `punten`: ze hebben een eigen nummerreeks — AP-xx tegenover OP-xx — en horen
+   * bij het dossier, niet bij dit ene moment. Het rapport zet ze in een eigen hoofdstuk.
+   */
+  aandachtspunten: OpleverPuntView[]
   handtekeningen: OpleverHandtekening[]
 }
 
@@ -239,16 +225,25 @@ export async function getOplevermomentRapport(momentId: string): Promise<Oplever
         .filter(Boolean).join(', ') || null
     : null
 
-  const { data: punten } = await supabase.from('oplever_punten').select('*').eq('moment_id', momentId).order('volgnummer')
-  const puntIds = (punten ?? []).map((p: any) => p.id)
+  const [{ data: punten }, { data: losse }] = await Promise.all([
+    supabase.from('oplever_punten').select('*').eq('moment_id', momentId).order('volgnummer'),
+    // De aandachtspunten van hetzelfde dossier. Alleen 'oplever' — veiligheidspunten (VCA) horen
+    // niet in een opleverrapport naar de klant.
+    supabase.from('oplever_punten').select('*')
+      .eq('dossier_id', moment.dossier_id).is('moment_id', null).eq('soort', 'oplever')
+      .order('volgnummer'),
+  ])
+
+  const alle = [...(punten ?? []), ...(losse ?? [])]
+  const puntIds = alle.map((p: any) => p.id)
   const [{ data: fotos }, { data: reacties }, { data: handtekeningen }] = await Promise.all([
     puntIds.length ? supabase.from('oplever_fotos').select('*').in('punt_id', puntIds) : Promise.resolve({ data: [] }),
     puntIds.length ? supabase.from('oplever_punt_reacties').select('*').in('punt_id', puntIds).order('created_at') : Promise.resolve({ data: [] }),
     supabase.from('oplever_handtekeningen').select('*').eq('moment_id', momentId).order('created_at'),
   ])
 
-  const puntViews: OpleverPuntView[] = (punten ?? [])
-    // Afgewezen meldingen horen niet in een rapport naar de klant.
+  const naarView = (rows: any[]): OpleverPuntView[] => rows
+    // Afgewezen meldingen en nog niet beoordeelde meldingen horen niet in een rapport naar de klant.
     .filter((p: any) => !NIET_ACTIEVE_STATUSSEN.includes(p.status))
     .map((p: any) => ({
       ...p,
@@ -262,7 +257,8 @@ export async function getOplevermomentRapport(momentId: string): Promise<Oplever
   return {
     dossier: { titel: dossier?.titel ?? null, nummer: dossier?.dossiernummer ?? null, werkadres, klant },
     moment: moment as OpleverMoment,
-    punten: puntViews,
+    punten: naarView(punten ?? []),
+    aandachtspunten: naarView(losse ?? []),
     handtekeningen: (handtekeningen ?? []) as OpleverHandtekening[],
   }
 }
@@ -384,6 +380,57 @@ export async function maakOpleverpunt(
     .single()
   if (error) return { ok: false, error: error.message }
   revalidate(moment.dossier_id)
+  return { ok: true, id: ins.id }
+}
+
+/**
+ * Maakt een opleverpunt dat níét aan een oplevermoment hangt — een aandachtspunt dat een collega
+ * ter plekke zelf meldt.
+ *
+ * Twee verschillen met `maakOpleverpunt`:
+ *  - eigen nummerreeks per dossier over `moment_id is null` (weergave "AP-xx"), gelijk aan wat
+ *    `materialiseerAandachtspunten` doet voor meldingen uit een formulier;
+ *  - status `open` in plaats van `nieuw`. Triage bestaat om meldingen van buiten te beoordelen;
+ *    een medewerker die zelf iets constateert hoeft zichzelf niet goed te keuren.
+ */
+export async function maakLosOpleverpunt(
+  dossierId: string,
+  data: NieuwOpleverpunt,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(dossierId)
+  const supabase = db()
+
+  const { data: maxRow } = await supabase
+    .from('oplever_punten')
+    .select('volgnummer')
+    .eq('dossier_id', dossierId)
+    .is('moment_id', null)
+    .order('volgnummer', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const volgnummer = (maxRow?.volgnummer ?? 0) + 1
+
+  const { data: ins, error } = await supabase
+    .from('oplever_punten')
+    .insert({
+      moment_id: null,
+      dossier_id: dossierId,
+      volgnummer,
+      omschrijving: data.omschrijving,
+      ruimte: data.ruimte ?? null,
+      status: 'open',
+      soort: 'oplever',
+      bron: 'handmatig',
+      toegewezen_type: data.toegewezen_type ?? null,
+      toegewezen_medewerker_id: data.toegewezen_type === 'medewerker' ? data.toegewezen_medewerker_id ?? null : null,
+      toegewezen_relatie_id: data.toegewezen_type === 'relatie' ? data.toegewezen_relatie_id ?? null : null,
+      deadline: data.deadline ?? null,
+      created_by: await huidigeMedewerkerId(),
+    })
+    .select('id')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  revalidate(dossierId)
   return { ok: true, id: ins.id }
 }
 
@@ -731,10 +778,12 @@ export async function materialiseerAandachtspunten(
     // Foto's registreren. Alleen URL's uit onze eigen bucket: `oplever_fotos.url` wordt elders als
     // <img src> gerenderd en in het opleverrapport ingebed, en `waarden` komt van een publieke,
     // niet-geauthenticeerde route.
+    // soort 'voor': wie een aandachtspunt meldt fotografeert het probleem, niet het herstel.
+    // Het bewijs dat het verholpen is komt later als 'na'-foto binnen.
     const fotoRijen = (ins ?? []).flatMap((row: any, i: number) =>
       (teMaken[i].punt.fotos ?? [])
         .filter(u => typeof u === 'string' && u.startsWith(basisUrl))
-        .map(url => ({ punt_id: row.id, url, soort: 'algemeen' })),
+        .map(url => ({ punt_id: row.id, url, soort: 'voor' })),
     )
     if (fotoRijen.length > 0) await supabase.from('oplever_fotos').insert(fotoRijen)
 
@@ -1011,10 +1060,23 @@ export async function getOpleverFeedbackTemplates(): Promise<{ id: string; naam:
   return (data ?? []).map((t: any) => ({ id: t.id, naam: t.naam }))
 }
 
-export type FeedbackCijfer = { label: string; gemiddelde: number; aantal: number }
+export type FeedbackCijfer = {
+  label: string
+  gemiddelde: number
+  aantal: number
+  /** Bovenkant van de schaal, zodat "4,2" te lezen is als "4,2 van de 5". */
+  max: number
+  stijl: 'cijfers' | 'sterren'
+}
 export type OpleverFeedbackSamenvatting = {
   aantal: number
   cijfers: FeedbackCijfer[]
+  /**
+   * Het cijfer dat als hoofdscore getoond mag worden: bij voorkeur een sterrenveld, anders het
+   * eerste rating-veld. Null als er alleen losse getalvelden zijn — een willekeurig aantal
+   * kozijnen als "score" tonen zou onzin zijn.
+   */
+  hoofdscore: FeedbackCijfer | null
 }
 
 /**
@@ -1031,37 +1093,60 @@ export async function getOpleverFeedbackSamenvatting(dossierId: string): Promise
     .eq('project_ref', 'oplever-feedback')
     .eq('status', 'ingediend')
   const rijen = (inzendingen ?? []) as { waarden: Record<string, unknown>; versie_id: string }[]
-  if (rijen.length === 0) return { aantal: 0, cijfers: [] }
+  if (rijen.length === 0) return { aantal: 0, cijfers: [], hoofdscore: null }
 
   const versieIds = [...new Set(rijen.map(r => r.versie_id).filter(Boolean))]
   const { data: versies } = await supabase.from('form_versies').select('id, schema').in('id', versieIds)
 
-  // fieldId → label voor cijfer-achtige velden (rating/number), incl. velden in herhalende secties.
-  const cijferVeld = new Map<string, string>()
+  // fieldId → label + schaal voor cijfer-achtige velden (rating/number), incl. herhalende secties.
+  // LET OP: de bovengrens staat in `validation.max`, niet op het veld zelf (zie defaultField in
+  // formulieren/types.ts) — `f.max` is altijd undefined.
+  type VeldMeta = { label: string; max: number; stijl: 'cijfers' | 'sterren'; rating: boolean }
+  const cijferVeld = new Map<string, VeldMeta>()
   const scanFields = (fields: any[]) => {
     for (const f of fields ?? []) {
-      if (f.type === 'rating' || f.type === 'number') cijferVeld.set(f.id, f.label)
+      if (f.type === 'rating' || f.type === 'number') {
+        cijferVeld.set(f.id, {
+          label: f.label,
+          max: typeof f.validation?.max === 'number' ? f.validation.max : 10,
+          stijl: f.ratingStijl === 'sterren' ? 'sterren' : 'cijfers',
+          rating: f.type === 'rating',
+        })
+      }
       if (Array.isArray(f.children)) scanFields(f.children)
     }
   }
   for (const v of (versies ?? []) as any[]) scanFields(v.schema?.fields ?? [])
 
-  const som = new Map<string, { total: number; n: number }>()
+  // Aggregeren op label: hetzelfde veld heeft per formulierversie een ander id, maar dezelfde vraag.
+  const som = new Map<string, { total: number; n: number; meta: VeldMeta }>()
   for (const r of rijen) {
-    for (const [fid, label] of cijferVeld) {
+    for (const [fid, meta] of cijferVeld) {
       const raw = r.waarden?.[fid]
       const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw !== '' ? Number(raw) : NaN
       if (!Number.isFinite(n)) continue
-      const agg = som.get(label) ?? { total: 0, n: 0 }
+      const agg = som.get(meta.label) ?? { total: 0, n: 0, meta }
       agg.total += n; agg.n += 1
-      som.set(label, agg)
+      som.set(meta.label, agg)
     }
   }
 
   const cijfers: FeedbackCijfer[] = [...som.entries()].map(([label, a]) => ({
-    label, gemiddelde: Math.round((a.total / a.n) * 10) / 10, aantal: a.n,
+    label,
+    gemiddelde: Math.round((a.total / a.n) * 10) / 10,
+    aantal: a.n,
+    max: a.meta.max,
+    stijl: a.meta.stijl,
   }))
-  return { aantal: rijen.length, cijfers }
+
+  // Sterren winnen van cijfers: als de bouwer bewust sterren koos, is dát de tevredenheidsvraag.
+  const metMeta = [...som.values()]
+  const indexVan = (pred: (m: VeldMeta) => boolean) => metMeta.findIndex(a => pred(a.meta))
+  const i = indexVan(m => m.rating && m.stijl === 'sterren')
+  const j = i >= 0 ? i : indexVan(m => m.rating)
+  const hoofdscore = j >= 0 ? cijfers[j] : null
+
+  return { aantal: rijen.length, cijfers, hoofdscore }
 }
 
 /** Eén ingevuld veld van een feedbackinzending, klaar om te tonen. */
