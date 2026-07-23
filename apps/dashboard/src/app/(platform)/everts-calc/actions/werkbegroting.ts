@@ -463,7 +463,7 @@ export async function getWerkbegrotingGoedkeuringStatus(
 }
 
 export type AccordeerResultaat =
-  | { ok: true; prognose?: { verstuurd: boolean; melding: string } }
+  | { ok: true; bouw7?: BestelEnPrognoseResultaat }
   | { ok: false; error: string }
 
 /**
@@ -471,7 +471,8 @@ export type AccordeerResultaat =
  * actieve regel het snapshot vast, zet de aanvraag op 'goedgekeurd' en de
  * werkbegroting op 'geaccordeerd'. Autorisatie (controller/Directie/gedelegeerde)
  * wordt in keurGoed server-side afgedwongen. Accordeert een controller of de directie,
- * dan wordt de prognose direct (best effort) naar Bouw7 gestuurd.
+ * dan worden zowel de bestelregels ("verwachte kosten") als de prognose ("niet/anders
+ * begroot") direct (best effort) naar Bouw7 gestuurd.
  */
 export async function accordeerWerkbegroting(
   goedkeuringId: string,
@@ -531,9 +532,10 @@ export async function accordeerWerkbegroting(
   await db.from('werkbegrotingen').update({ status: 'geaccordeerd' }).eq('id', payload.wb.id)
   if (payload.dossierId) await refreshDossierWbVlag(payload.dossierId)
 
-  // 6. Auto-prognose naar Bouw7 — alleen als de accorderende gebruiker controller of
-  //    directie is (een gedelegeerde mag wél accorderen, maar niet de prognose sturen).
-  //    Best effort: het accorderen zelf blijft geslaagd, ook als de prognose faalt.
+  // 6. Auto naar Bouw7 — bestelregels ("verwachte kosten") én prognose ("niet/anders
+  //    begroot") in één handeling, maar alleen als de accorderende gebruiker controller of
+  //    directie is (een gedelegeerde mag wél accorderen, maar niet naar Bouw7 schrijven).
+  //    Best effort: het accorderen zelf blijft geslaagd, ook als de Bouw7-push (deels) faalt.
   if (payload.dossierId && (ctx.isController || ctx.isDirectie)) {
     try {
       // Doelhoofdstuk voor evt. nieuwe codes: meegegeven door de client → anders 'WB' → anders het eerste.
@@ -542,17 +544,10 @@ export async function accordeerWerkbegroting(
         const hs = await getProjectHoofdstukken(payload.dossierId)
         if (hs.ok) hoofdstuk = (hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB') ?? hs.hoofdstukken[0])?.id ?? null
       }
-      const totalen = berekenPrognoseTotalenUitPayload(payload)
-      const res = await stuurWerkbegrotingPrognoseBouw7(payload.dossierId, totalen, hoofdstuk, payload)
-      if (res.ok) {
-        const delen = [`${res.geschreven} bijgewerkt`]
-        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
-        if (res.gereset) delen.push(`${res.gereset} gereset`)
-        return { ok: true, prognose: { verstuurd: true, melding: `Prognose naar Bouw7: ${delen.join(', ')}.` } }
-      }
-      return { ok: true, prognose: { verstuurd: false, melding: `Prognose niet automatisch verstuurd: ${res.error}` } }
+      const bouw7 = await stuurBeideNaarBouw7Intern(payload.dossierId, payload, hoofdstuk)
+      return { ok: true, bouw7 }
     } catch (e) {
-      return { ok: true, prognose: { verstuurd: false, melding: `Prognose niet automatisch verstuurd: ${e instanceof Error ? e.message : 'onbekende fout'}` } }
+      return { ok: true, bouw7: { ok: false, melding: `Bouw7-push mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}`, fouten: [], bestelregels: null, prognose: null } }
     }
   }
 
@@ -1527,6 +1522,44 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
       bouw7LineId, pslId, actie, vergrendeld, reden,
     })
   }
+
+  // ── Idempotentie: bestaande Bouw7-bestelregels adopteren ─────────────────────
+  // Kern van de duplicaat-fix. Zonder dit maakt élke druk op de knop nieuwe regels aan
+  // zodra het bouw7_line_id niet bewaard is (de client-sync kan de kolom op null zetten,
+  // of een create gaf het id niet terug). We halen de bestaande regels van het project op
+  // en koppelen een component-zonder-id aan een identieke Bouw7-regel: dan wordt het een
+  // 'bijwerken' (upsert op dat id) i.p.v. 'aanmaken'. Best effort — faalt dit, dan valt de
+  // push terug op het oude gedrag (create), nooit op een harde fout.
+  try {
+    const ctx = await bouw7Context(dossierId)
+    if (ctx.ok) {
+      const bestaande = await ctx.client
+        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${ctx.bouw7Id} LIMIT 1000` })
+        .then(r => r.items ?? [])
+        .catch(() => [] as Bouw7ContractOrderLine[])
+    // Regels die al een id claimen niet nogmaals adopteren.
+      const geclaimd = new Set<number>()
+      for (const r of regels) if (r.bouw7LineId != null) geclaimd.add(r.bouw7LineId)
+      for (const r of regels) {
+        if (r.actie !== 'aanmaken') continue
+        const match = bestaande.find(ol =>
+          !geclaimd.has(ol.id) &&
+          (r.pslId != null
+            ? ol.projectSecurityLink?.id === r.pslId
+            : (ol.projectSecurityLink?.code ?? '').trim() === r.code && ol.costType === r.lineCt) &&
+          (ol.description ?? '') === (r.omschrijving || r.label) &&
+          Math.abs(getal(ol.unitPrice) - r.prijs) < 0.005,
+        )
+        if (match) {
+          r.bouw7LineId = match.id
+          r.pslId = match.projectSecurityLink?.id ?? r.pslId
+          r.actie = 'bijwerken'
+          geclaimd.add(match.id)
+        }
+      }
+    }
+  } catch { /* adoptie is best effort */ }
+
   return { ok: true, bouw7Id: resolved.bouw7Id, regels, vergrendeldeCodes }
 }
 
@@ -1738,6 +1771,84 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
 
   const overgeslagen = plan.regels.filter(r => r.actie === 'skip').length
   return { ok: true, aangemaakt, bijgewerkt, geneutraliseerd, overgeslagen, fouten, lineIdPerComponent, gewisteComponenten: teWissen }
+}
+
+// ─── Combineren: bestelregels + prognose in één keer naar Bouw7 ───────────────
+//
+// Bij het goedkeuren van een werkbegroting (en via de knop "Naar Bouw7") worden BEIDE
+// Bouw7-kolommen in één handeling bijgewerkt: de bestelregels ("verwachte kosten") en de
+// prognose ("niet/anders begroot"). Dit zijn twee losse kolommen in Bouw7 — ze tellen niet
+// dubbel in EVA's eigen financiën. Best effort: de ene helft kan slagen terwijl de andere
+// (bijv. door de goedkeurings-gate op de prognose) wordt overgeslagen.
+
+export type BestelEnPrognoseResultaat = {
+  /** True als minstens één van beide helften iets naar Bouw7 heeft geschreven. */
+  ok: boolean
+  /** Korte, leesbare samenvatting voor de toast. */
+  melding: string
+  /** Waarschuwingen/fouten per helft (niet fataal). */
+  fouten: string[]
+  /** Resultaat van de bestelregel-push (met lineIdPerComponent voor de client-patch). */
+  bestelregels: StuurBestelregelsResultaat | null
+  /** Resultaat van de prognose-push. */
+  prognose: StuurPrognoseResultaat | null
+}
+
+/** Interne combineerder (géén eigen autorisatie — callers regelen dat). */
+async function stuurBeideNaarBouw7Intern(
+  dossierId: string,
+  payload: WerkbegrotingPayload,
+  doelHoofdstukId: number | null,
+): Promise<BestelEnPrognoseResultaat> {
+  const fouten: string[] = []
+  const delen: string[] = []
+
+  // 1) Bestelregels ("verwachte kosten"). Idempotent — adopteert bestaande regels, dus geen duplicaten.
+  const bestel = await stuurWerkbegrotingBestelregelsBouw7(dossierId, payload, doelHoofdstukId)
+  if (bestel.ok) {
+    const d: string[] = []
+    if (bestel.aangemaakt) d.push(`${bestel.aangemaakt} aangemaakt`)
+    if (bestel.bijgewerkt) d.push(`${bestel.bijgewerkt} bijgewerkt`)
+    if (bestel.geneutraliseerd) d.push(`${bestel.geneutraliseerd} verwijderd`)
+    delen.push(`Bestelregels: ${d.join(', ') || 'niets te doen'}`)
+    fouten.push(...bestel.fouten)
+  } else {
+    fouten.push(`Bestelregels: ${bestel.error}`)
+  }
+
+  // 2) Prognose ("niet/anders begroot"). Zelf-gated: autorisatie (controller/directie) + volledige goedkeuring.
+  const totalen = berekenPrognoseTotalenUitPayload(payload)
+  const prognose = await stuurWerkbegrotingPrognoseBouw7(dossierId, totalen, doelHoofdstukId, payload)
+  if (prognose.ok) {
+    const d = [`${prognose.geschreven} bijgewerkt`]
+    if (prognose.aangemaakt) d.push(`${prognose.aangemaakt} aangemaakt`)
+    if (prognose.gereset) d.push(`${prognose.gereset} gereset`)
+    delen.push(`Prognose: ${d.join(', ')}`)
+    fouten.push(...prognose.fouten)
+  } else {
+    fouten.push(`Prognose: ${prognose.error}`)
+  }
+
+  return {
+    ok: bestel.ok || prognose.ok,
+    melding: delen.join(' · ') || 'Niets naar Bouw7 verstuurd.',
+    fouten,
+    bestelregels: bestel,
+    prognose,
+  }
+}
+
+/**
+ * Publieke variant (knop "Naar Bouw7"): stuurt bestelregels én prognose in één keer.
+ * De prognose-helft handhaaft zelf de autorisatie (controller/directie) en de
+ * goedkeurings-gate; de bestelregel-helft draait ook zonder die rechten.
+ */
+export async function stuurWerkbegrotingBestelEnPrognoseBouw7(
+  dossierId: string,
+  payload: WerkbegrotingPayload,
+  doelHoofdstukId: number | null = null,
+): Promise<BestelEnPrognoseResultaat> {
+  return stuurBeideNaarBouw7Intern(dossierId, payload, doelHoofdstukId)
 }
 
 /**

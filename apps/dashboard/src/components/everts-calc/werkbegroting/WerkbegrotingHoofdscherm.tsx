@@ -10,7 +10,7 @@ import {
   getWerkbegrotingWijzigingen, hydrateWerkbegroting,
   slaWerkbegrotingOp, slaWerkbegrotingComponentOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
-import { previewWerkbegrotingPrognoseBouw7, stuurWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelregelsBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
@@ -50,9 +50,10 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
    * apparaten op 'definitief' staan omdat de accordering die kolom niet terugschrijft.
    */
   const [goedkeuringStatus, setGoedkeuringStatus] = useState<string | null>(null)
-  const [prognoseOpen, setPrognoseOpen] = useState(false)
+  /** Eén gecombineerde "Naar Bouw7"-modal: stuurt bestelregels én prognose in één keer. */
+  const [bouw7Open, setBouw7Open] = useState(false)
+  const [bouw7Bezig, setBouw7Bezig] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
-  const [prognoseBezig, setPrognoseBezig] = useState(false)
   /** Bouw7-bewakingscodes van het gekoppelde project (null = niet gekoppeld / nog niet geladen). */
   const [bewakingscodes, setBewakingscodes] = useState<{ code: string; naam: string | null }[] | null>(null)
   /** Bestaande Bouw7-hoofdstukken + het gekozen doelhoofdstuk voor nieuwe codes (onthouden per dossier). */
@@ -60,10 +61,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
   /** Kale bewakingscodes waarop al inkoop verbruikt is → regels in de grid worden read-only. */
   const [vergrendeldeCodes, setVergrendeldeCodes] = useState<string[]>([])
-  /** Bestelregels → Bouw7: preview-modal state. */
-  const [bestelOpen, setBestelOpen] = useState(false)
   const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
-  const [bestelBezig, setBestelBezig] = useState(false)
 
   /** Directe (niet-gedebouncede) sync van een vers/lokaal aangemaakte WB → meteen gedeeld. */
   const syncWbNu = useCallback(async (w: Werkbegroting) => {
@@ -249,106 +247,77 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     return [...perCode.values()]
   }, [wb])
 
-  const openPrognose = useCallback(async () => {
+  /**
+   * Bestelregel-koppelingen (bouw7_line_id) lokaal + gedeeld bijwerken na een push. Óók bij een
+   * halve mislukking: regels die vóór de fout zijn aangemaakt staan al in Bouw7, dus hun id moet
+   * bewaard blijven — anders schrijft de volgende sync het oude/lege id terug en ontstaan duplicaten.
+   */
+  const patchBestelLineIds = useCallback(async (bestel: BestelEnPrognoseResultaat['bestelregels']) => {
+    if (!bestel) return
+    const comps = getWerkbegrotingComponenten()
+    let gewijzigd = false
+    for (const [compId, lineId] of Object.entries(bestel.lineIdPerComponent)) {
+      const c = comps.find(x => x.id === compId)
+      if (c && c.bouw7_line_id !== lineId) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: lineId }); gewijzigd = true }
+    }
+    for (const compId of bestel.gewisteComponenten) {
+      const c = comps.find(x => x.id === compId)
+      if (c && c.bouw7_line_id != null) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: undefined }); gewijzigd = true }
+    }
+    if (gewijzigd) { const p = bouwPayload(); if (p) await syncWerkbegrotingNaarSupabase(p) }
+  }, [bouwPayload])
+
+  // ─── Naar Bouw7: bestelregels ("verwachte kosten") + prognose ("niet/anders begroot") ────────
+  const openBouw7 = useCallback(async () => {
     if (!dossierId) return
-    setPrognoseOpen(true)
+    const payload = bouwPayload()
+    if (!payload) return
+    setBouw7Open(true)
+    setBestelPreview(null)
     setPrognosePreview(null)
-    setPrognoseBezig(true)
+    setBouw7Bezig(true)
     try {
-      const [preview, hs, opgeslagen] = await Promise.all([
+      const [bestel, prognose, hs, opgeslagen] = await Promise.all([
+        previewWerkbegrotingBestelregelsBouw7(dossierId, payload),
         previewWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen()),
         getProjectHoofdstukken(dossierId),
         laadPrognoseDoelHoofdstuk(dossierId),
       ])
-      setPrognosePreview(preview)
+      setBestelPreview(bestel)
+      setPrognosePreview(prognose)
       if (hs.ok) {
         setHoofdstukken(hs.hoofdstukken)
         const geldig = opgeslagen != null && hs.hoofdstukken.some(h => h.id === opgeslagen)
-        const wb = hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB')
-        setDoelHoofdstukId(geldig ? opgeslagen : (wb?.id ?? hs.hoofdstukken[0]?.id ?? null))
+        const wbHs = hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB')
+        setDoelHoofdstukId(geldig ? opgeslagen : (wbHs?.id ?? hs.hoofdstukken[0]?.id ?? null))
       }
     } finally {
-      setPrognoseBezig(false)
+      setBouw7Bezig(false)
     }
-  }, [dossierId, berekenPrognoseTotalen])
+  }, [dossierId, bouwPayload, berekenPrognoseTotalen])
 
-  const verstuurPrognose = useCallback(async () => {
+  const verstuurBouw7 = useCallback(async () => {
     if (!dossierId) return
-    setPrognoseBezig(true)
+    const payload = bouwPayload()
+    if (!payload) return
+    setBouw7Bezig(true)
     try {
       if (doelHoofdstukId != null) await bewaarPrognoseDoelHoofdstuk(dossierId, doelHoofdstukId)
-      const res = await stuurWerkbegrotingPrognoseBouw7(dossierId, berekenPrognoseTotalen(), doelHoofdstukId, bouwPayload() ?? undefined)
+      const res = await stuurWerkbegrotingBestelEnPrognoseBouw7(dossierId, payload, doelHoofdstukId)
+      await patchBestelLineIds(res.bestelregels)
       if (res.ok) {
-        const delen = [`${res.geschreven} bijgewerkt`]
-        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
-        if (res.gereset) delen.push(`${res.gereset} gereset`)
-        if (res.overgeslagen) delen.push(`${res.overgeslagen} overgeslagen`)
-        toast.success(`Prognose verzonden naar Bouw7: ${delen.join(', ')}.`)
-        if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
-        setPrognoseOpen(false)
-      } else {
-        toast.error(`Verzenden mislukt: ${res.error}`)
-      }
-    } finally {
-      setPrognoseBezig(false)
-    }
-  }, [dossierId, berekenPrognoseTotalen, doelHoofdstukId, bouwPayload])
-
-  // ─── Bestelregels naar Bouw7 ────────────────────────────────────────────────
-  const openBestel = useCallback(async () => {
-    if (!dossierId) return
-    const payload = bouwPayload()
-    if (!payload) return
-    setBestelOpen(true)
-    setBestelPreview(null)
-    setBestelBezig(true)
-    try {
-      setBestelPreview(await previewWerkbegrotingBestelregelsBouw7(dossierId, payload))
-    } finally {
-      setBestelBezig(false)
-    }
-  }, [dossierId, bouwPayload])
-
-  const verstuurBestel = useCallback(async () => {
-    if (!dossierId) return
-    const payload = bouwPayload()
-    if (!payload) return
-    setBestelBezig(true)
-    try {
-      const res = await stuurWerkbegrotingBestelregelsBouw7(dossierId, payload)
-      // Koppelingen lokaal bijwerken — óók als de push halverwege faalde, want de regels die
-      // daarvóór zijn aangemaakt staan wél in Bouw7. Zonder dit schrijft de sync hierna het oude
-      // (lege of verlopen) id vanuit localStorage terug en ontstaan er duplicaten.
-      const comps = getWerkbegrotingComponenten()
-      let gewijzigd = false
-      for (const [compId, lineId] of Object.entries(res.lineIdPerComponent)) {
-        const c = comps.find(x => x.id === compId)
-        if (c && c.bouw7_line_id !== lineId) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: lineId }); gewijzigd = true }
-      }
-      for (const compId of res.gewisteComponenten) {
-        const c = comps.find(x => x.id === compId)
-        if (c && c.bouw7_line_id != null) { slaWerkbegrotingComponentOp({ ...c, bouw7_line_id: undefined }); gewijzigd = true }
-      }
-      if (gewijzigd) { const p = bouwPayload(); if (p) await syncWerkbegrotingNaarSupabase(p) }
-
-      if (res.ok) {
-        const delen: string[] = []
-        if (res.aangemaakt) delen.push(`${res.aangemaakt} aangemaakt`)
-        if (res.bijgewerkt) delen.push(`${res.bijgewerkt} bijgewerkt`)
-        if (res.geneutraliseerd) delen.push(`${res.geneutraliseerd} verwijderd`)
-        if (res.overgeslagen) delen.push(`${res.overgeslagen} overgeslagen`)
-        toast.success(`Bestelregels naar Bouw7: ${delen.join(', ') || 'niets te doen'}.`)
+        toast.success(`Naar Bouw7: ${res.melding}`)
         if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
         // Vergrendelde codes kunnen veranderd zijn (nieuwe inkoop) — verversen.
         getVergrendeldeBewakingscodes(dossierId).then(r => { if (r.ok) setVergrendeldeCodes(r.codes) }).catch(() => {})
-        setBestelOpen(false)
+        setBouw7Open(false)
       } else {
-        toast.error(`Verzenden mislukt: ${res.error}`)
+        toast.error(`Naar Bouw7 mislukt: ${res.fouten.join(' · ') || res.melding}`)
       }
     } finally {
-      setBestelBezig(false)
+      setBouw7Bezig(false)
     }
-  }, [dossierId, bouwPayload])
+  }, [dossierId, bouwPayload, doelHoofdstukId, patchBestelLineIds])
 
   // Goedkeuring aanvragen: eerst de payload syncen zodat de aanvraag op echte data slaat.
   const handleAanvragen = useCallback(async (toelichting?: string) => {
@@ -374,15 +343,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       const bij: Werkbegroting = { ...wb, status: 'geaccordeerd', bijgewerkt_op: new Date().toISOString() }
       slaWerkbegrotingOp(bij); setWb(bij)
       await verversStatus()
-      // Auto-prognose naar Bouw7 (alleen bij accorderen door controller/directie).
-      if (res.prognose) {
-        if (res.prognose.verstuurd) toast.success(res.prognose.melding)
-        else toast(res.prognose.melding, { icon: '⚠️' })
+      // Auto naar Bouw7 (bestelregels + prognose) — alleen bij accorderen door controller/directie.
+      if (res.bouw7) {
+        if (res.bouw7.ok) toast.success(`Naar Bouw7: ${res.bouw7.melding}`)
+        else toast(`Naar Bouw7: ${res.bouw7.melding}`, { icon: '⚠️' })
+        if (res.bouw7.fouten.length) toast(`Let op: ${res.bouw7.fouten[0]}${res.bouw7.fouten.length > 1 ? ` (+${res.bouw7.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
+        await patchBestelLineIds(res.bouw7.bestelregels)
       }
       return { ok: true }
     }
     return res
-  }, [wb, bouwPayload, verversStatus, dossierId])
+  }, [wb, bouwPayload, verversStatus, dossierId, patchBestelLineIds])
 
   const toegestaneStatussen = ['gewonnen', 'opdracht', 'uitvoering', 'afgerond']
   const magAanmaken = toegestaneStatussen.includes(projectStatus)
@@ -473,34 +444,23 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           <Package className="w-3.5 h-3.5" />
           Bestellingen
         </button>
-        {dossierId && (
-          <button
-            onClick={openBestel}
-            title="Stuur de werkbegroting-regels als bestelregels (verwachte kosten) naar Bouw7"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-              border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Regels naar Bouw7
-          </button>
-        )}
         {magPrognose && (
           <button
-            onClick={openPrognose}
+            onClick={openBouw7}
             disabled={!dossierId || !volledigGoedgekeurd}
             title={
               !dossierId
                 ? 'Geen dossier gekoppeld'
                 : !volledigGoedgekeurd
                 ? 'Eerst de werkbegroting (opnieuw) laten goedkeuren'
-                : 'Stuur de werkbegroting-bedragen als prognose naar Bouw7'
+                : 'Stuur bestelregels (verwachte kosten) én prognose (niet/anders begroot) naar Bouw7'
             }
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-              border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100
+              border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100
               disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Send className="w-3.5 h-3.5" />
-            Prognose naar Bouw7
+            <Upload className="w-3.5 h-3.5" />
+            Naar Bouw7
           </button>
         )}
       </div>
@@ -552,30 +512,31 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         <BestellingenPaneel wb={wb} dossierId={dossierId ?? null} onSluit={() => setBestellingenOpen(false)} />
       )}
 
-      {prognoseOpen && (
+      {bouw7Open && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !prognoseBezig) setPrognoseOpen(false) }}
+          onClick={(e) => { if (e.target === e.currentTarget && !bouw7Bezig) setBouw7Open(false) }}
         >
-          <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
             <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-700">
-                <Send className="h-5 w-5" />
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-700">
+                <Upload className="h-5 w-5" />
               </div>
-              <h2 className="text-base font-bold text-gray-900">Prognose naar Bouw7</h2>
+              <h2 className="text-base font-bold text-gray-900">Naar Bouw7</h2>
             </div>
 
-            <div className="px-6 py-5">
-              <p className="mb-3 text-sm text-gray-600">
-                Per <strong>bewakingscode</strong> wordt <strong>&ldquo;Niet/anders begroot&rdquo;</strong> in Bouw7
-                gezet op de werkbegroting minus <strong>begroot + meerwerk</strong>, zodat de totale prognose gelijk
-                wordt aan de werkbegroting. De kostengroep in EVA wordt op de bewakingscode gematcht. Controleer
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <p className="mb-4 text-sm text-gray-600">
+                In één handeling worden twee dingen naar Bouw7 geschreven: de <strong>bestelregels
+                (&ldquo;verwachte kosten&rdquo;)</strong> per regel, en de <strong>prognose (&ldquo;niet/anders
+                begroot&rdquo;)</strong> per bewakingscode. Dit zijn twee losse kolommen in Bouw7. Controleer
                 hieronder vóór verzenden.
               </p>
 
-              {/* Doelhoofdstuk voor nieuwe codes — alleen relevant als er nieuwe codes aangemaakt worden. */}
-              {prognosePreview?.ok && prognosePreview.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode) && (
-                <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+              {/* Doelhoofdstuk voor nieuwe codes — gedeeld door beide helften. */}
+              {((bestelPreview?.ok && bestelPreview.regels.some(r => r.actie === 'aanmaken')) ||
+                (prognosePreview?.ok && prognosePreview.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode))) && (
+                <div className="mb-4 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
                   <span className="text-xs font-medium text-amber-800">Nieuwe codes plaatsen onder hoofdstuk:</span>
                   <select
                     value={doelHoofdstukId ?? ''}
@@ -588,40 +549,96 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                 </div>
               )}
 
-              {prognoseBezig && !prognosePreview && (
+              {bouw7Bezig && !bestelPreview && !prognosePreview && (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Bedragen ophalen uit Bouw7…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Vergelijken met Bouw7…
                 </div>
               )}
 
-              {prognosePreview && !prognosePreview.ok && (
-                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{prognosePreview.error}</div>
+              {/* ── Bestelregels ("verwachte kosten") ── */}
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-700">
+                <Upload className="h-3.5 w-3.5" /> Bestelregels — verwachte kosten
+              </h3>
+              {bestelPreview && !bestelPreview.ok && (
+                <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{bestelPreview.error}</div>
               )}
-
-              {prognosePreview?.ok && (
-                <div className="max-h-[55vh] overflow-auto">
+              {bestelPreview?.ok && (
+                <div className="mb-5 overflow-auto rounded-lg border border-gray-100">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-white">
                       <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
-                        <th className="py-1.5">Kostensoort</th>
+                        <th className="py-1.5 pl-2">Regel</th>
+                        <th className="py-1.5 text-right">Aantal</th>
+                        <th className="py-1.5 text-right">Stukprijs</th>
+                        <th className="py-1.5 text-right">Bedrag</th>
+                        <th className="py-1.5 pr-2 text-right">Actie</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groepeerBestelPerCode(bestelPreview.regels).map(([code, rs]) => (
+                        <Fragment key={code || '∅'}>
+                          <tr className="bg-gray-50">
+                            <td colSpan={5} className="py-1 px-2 text-xs font-semibold text-gray-600">
+                              {code ? code : 'Zonder bewakingscode'}
+                              {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
+                              {rs[0]?.vergrendeld && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">🔒 besteld</span>}
+                            </td>
+                          </tr>
+                          {rs.map((r) => (
+                            <tr key={r.componentId} className={`border-b border-gray-100 ${r.actie === 'skip' ? 'text-gray-400' : 'text-gray-800'}`}>
+                              <td className="py-1.5 pl-2">
+                                <span className="text-gray-700">{r.omschrijving || r.label}</span>
+                                <span className="ml-1 text-[11px] text-gray-400">({r.label})</span>
+                                {r.actie === 'skip' && r.reden && <span className="ml-1 text-[11px] text-gray-400">— {r.reden}</span>}
+                              </td>
+                              <td className="py-1.5 text-right tabular-nums">{r.aantal}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.prijs)}</td>
+                              <td className="py-1.5 text-right tabular-nums">{euro(r.bedrag)}</td>
+                              <td className="py-1.5 pr-2 text-right">
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${bestelActieStijl(r.actie)}`}>
+                                  {bestelActieLabel(r.actie)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── Prognose ("niet/anders begroot") ── */}
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                <Send className="h-3.5 w-3.5" /> Prognose — niet/anders begroot
+              </h3>
+              {prognosePreview && !prognosePreview.ok && (
+                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{prognosePreview.error}</div>
+              )}
+              {prognosePreview?.ok && (
+                <div className="overflow-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
+                        <th className="py-1.5 pl-2">Kostensoort</th>
                         <th className="py-1.5 text-right">Begroot</th>
                         <th className="py-1.5 text-right">Meerwerk</th>
                         <th className="py-1.5 text-right">Werkbegroting</th>
-                        <th className="py-1.5 text-right">Niet/anders begroot</th>
+                        <th className="py-1.5 pr-2 text-right">Niet/anders begroot</th>
                       </tr>
                     </thead>
                     <tbody>
                       {groepeerPerCode(prognosePreview.regels).map(([code, rs]) => (
                         <Fragment key={code || '∅'}>
                           <tr className="bg-gray-50">
-                            <td colSpan={5} className="py-1 px-1 text-xs font-semibold text-gray-600">
+                            <td colSpan={5} className="py-1 px-2 text-xs font-semibold text-gray-600">
                               {code ? code : 'Zonder bewakingscode'}
                               {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
                             </td>
                           </tr>
                           {rs.map((r) => (
                             <tr key={`${code}-${r.type}`} className={`border-b border-gray-100 ${r.actie === 'skip' ? 'text-gray-400' : 'text-gray-800'}`}>
-                              <td className="py-1.5 pl-3">
+                              <td className="py-1.5 pl-2">
                                 {r.label}
                                 {r.actie === 'aanmaken' && (
                                   <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
@@ -635,7 +652,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                               <td className="py-1.5 text-right tabular-nums">{euro(r.begroot)}</td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.meerwerk)}</td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.werkbegroting)}</td>
-                              <td className="py-1.5 text-right tabular-nums font-semibold">
+                              <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">
                                 {r.actie === 'skip' ? '—' : euro(r.verschil)}
                               </td>
                             </tr>
@@ -650,120 +667,24 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
 
             <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
               <button
-                onClick={() => setPrognoseOpen(false)}
-                disabled={prognoseBezig}
+                onClick={() => setBouw7Open(false)}
+                disabled={bouw7Bezig}
                 className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
               >
                 Annuleren
               </button>
               <button
-                onClick={verstuurPrognose}
-                disabled={prognoseBezig || !prognosePreview?.ok || !prognosePreview.regels.some(r => r.schrijfbaar)}
-                className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {prognoseBezig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Verstuur naar Bouw7
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {bestelOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !bestelBezig) setBestelOpen(false) }}
-        >
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-700">
-                <Upload className="h-5 w-5" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900">Bestelregels naar Bouw7</h2>
-            </div>
-
-            <div className="px-6 py-5">
-              <p className="mb-3 text-sm text-gray-600">
-                Elke werkbegroting-regel wordt als <strong>bestelregel (&ldquo;verwachte kosten&rdquo;)</strong> in
-                Bouw7 gezet, per bewakingscode. Nieuwe regels worden aangemaakt, eerder verzonden regels bijgewerkt.
-                <strong> Bestelde regels zijn vergrendeld</strong> en worden overgeslagen.
-              </p>
-              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Let op: gebruik dit náást de prognose-knop niet voor dezelfde bedragen — anders telt Bouw7 de
-                kosten dubbel (verwachte kosten én &ldquo;Niet/anders begroot&rdquo;).
-              </p>
-
-              {bestelBezig && !bestelPreview && (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Regels vergelijken met Bouw7…
-                </div>
-              )}
-
-              {bestelPreview && !bestelPreview.ok && (
-                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{bestelPreview.error}</div>
-              )}
-
-              {bestelPreview?.ok && (
-                <div className="max-h-[55vh] overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-white">
-                      <tr className="border-b border-gray-200 text-left text-xs font-semibold text-gray-500">
-                        <th className="py-1.5">Regel</th>
-                        <th className="py-1.5 text-right">Aantal</th>
-                        <th className="py-1.5 text-right">Stukprijs</th>
-                        <th className="py-1.5 text-right">Bedrag</th>
-                        <th className="py-1.5 text-right">Actie</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groepeerBestelPerCode(bestelPreview.regels).map(([code, rs]) => (
-                        <Fragment key={code || '∅'}>
-                          <tr className="bg-gray-50">
-                            <td colSpan={5} className="py-1 px-1 text-xs font-semibold text-gray-600">
-                              {code ? code : 'Zonder bewakingscode'}
-                              {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
-                              {rs[0]?.vergrendeld && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">🔒 besteld</span>}
-                            </td>
-                          </tr>
-                          {rs.map((r) => (
-                            <tr key={r.componentId} className={`border-b border-gray-100 ${r.actie === 'skip' ? 'text-gray-400' : 'text-gray-800'}`}>
-                              <td className="py-1.5 pl-3">
-                                <span className="text-gray-700">{r.omschrijving || r.label}</span>
-                                <span className="ml-1 text-[11px] text-gray-400">({r.label})</span>
-                                {r.actie === 'skip' && r.reden && <span className="ml-1 text-[11px] text-gray-400">— {r.reden}</span>}
-                              </td>
-                              <td className="py-1.5 text-right tabular-nums">{r.aantal}</td>
-                              <td className="py-1.5 text-right tabular-nums">{euro(r.prijs)}</td>
-                              <td className="py-1.5 text-right tabular-nums">{euro(r.bedrag)}</td>
-                              <td className="py-1.5 text-right">
-                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${bestelActieStijl(r.actie)}`}>
-                                  {bestelActieLabel(r.actie)}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <button
-                onClick={() => setBestelOpen(false)}
-                disabled={bestelBezig}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Annuleren
-              </button>
-              <button
-                onClick={verstuurBestel}
-                disabled={bestelBezig || !bestelPreview?.ok || !bestelPreview.regels.some(r => r.actie !== 'skip')}
+                onClick={verstuurBouw7}
+                disabled={
+                  bouw7Bezig ||
+                  !(
+                    (bestelPreview?.ok && bestelPreview.regels.some(r => r.actie !== 'skip')) ||
+                    (prognosePreview?.ok && prognosePreview.regels.some(r => r.schrijfbaar))
+                  )
+                }
                 className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {bestelBezig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {bouw7Bezig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Verstuur naar Bouw7
               </button>
             </div>
