@@ -480,6 +480,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
   // Samenvoegen modal
   const [samenvoegenItems, setSamenvoegenItems] = useState<SamenvoegenItem[] | null>(null)
+  const [samenvoegenType,  setSamenvoegenType]  = useState<'materieel' | 'arbeid'>('materieel')
 
   // Nieuwe kostengroep form
   const [kgFormOpen, setKgFormOpen] = useState(false)
@@ -628,13 +629,18 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       }
     }
 
-    // Samenvoegen: materiaal met zelfde artikelnummer + leverancier
+    // Samenvoegen (weergave): materiaal op artikelnummer + leverancier, arbeid op uurtype + tarief
     let verwerkt = displayRijen
     if (samenvoegen) {
       const merged: DisplayRij[] = []; const idx = new Map<string, DisplayRij>()
       for (const rij of displayRijen) {
-        if (rij.comp.type !== 'materieel' || !rij.comp.artikelnummer) { merged.push(rij); continue }
-        const key = `${rij.comp.artikelnummer}||${rij.comp.leverancier_naam ?? ''}`
+        let key: string | null = null
+        if (rij.comp.type === 'materieel' && rij.comp.artikelnummer) {
+          key = `mat|${rij.comp.artikelnummer}||${rij.comp.leverancier_naam ?? ''}`
+        } else if (rij.comp.type === 'arbeid' && rij.comp.uurtype) {
+          key = `arb|${rij.comp.uurtype}||${rij.comp.tarief}`
+        }
+        if (!key) { merged.push(rij); continue }
         const b = idx.get(key)
         if (b) { b.totaalAantal += rij.totaalAantal; b.totaalPrijs += rij.totaalPrijs; b.isSamengevoed = true }
         else { const k = { ...rij }; merged.push(k); idx.set(key, k) }
@@ -973,47 +979,71 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   }, [onComponentWijzig])
 
   // ─── Samenvoegen ──────────────────────────────────────────────────────────
-  const geselecteerdeMaterialen = useMemo(() =>
-    displayRijen.filter(r => selectie.has(r.comp.id) && r.comp.type === 'materieel'),
+  // Geselecteerde regels; samenvoegen kan voor materiaal (artikelnr) én arbeid (uurtype),
+  // mits homogeen van type. Onderaanneming (vaste prijs) kan niet samengevoegd worden.
+  const geselecteerdeRijen = useMemo(() =>
+    displayRijen.filter(r => selectie.has(r.comp.id)),
   [displayRijen, selectie])
 
+  const geselecteerdType = useMemo<'materieel' | 'arbeid' | null>(() => {
+    if (geselecteerdeRijen.length < 2) return null
+    const types = new Set(geselecteerdeRijen.map(r => r.comp.type))
+    if (types.size !== 1) return null
+    const t = geselecteerdeRijen[0].comp.type
+    return t === 'materieel' || t === 'arbeid' ? t : null
+  }, [geselecteerdeRijen])
+
   const samenvoegenFout = useMemo(() => {
-    if (geselecteerdeMaterialen.length < 2) return 'Selecteer minimaal 2 materiaalregels'
-    const kostengroepen = new Set(geselecteerdeMaterialen.map(r => r.regel.kostengroep ?? ''))
+    if (geselecteerdeRijen.length < 2) return 'Selecteer minimaal 2 regels'
+    const types = new Set(geselecteerdeRijen.map(r => r.comp.type))
+    if (types.size > 1) return 'Selecteer regels van hetzelfde type'
+    if (!geselecteerdType) return 'Onderaanneming kan niet samengevoegd worden'
+    const kostengroepen = new Set(geselecteerdeRijen.map(r => r.regel.kostengroep ?? ''))
     if (kostengroepen.size > 1) return 'Alle regels moeten dezelfde kostengroep hebben'
     return null
-  }, [geselecteerdeMaterialen])
+  }, [geselecteerdeRijen, geselecteerdType])
 
   const handleSamenvoegenKlik = useCallback(() => {
-    if (samenvoegenFout || geselecteerdeMaterialen.length < 2) return
+    if (samenvoegenFout || !geselecteerdType) return
+    const isArbeid = geselecteerdType === 'arbeid'
 
-    // Bepaal of alles dezelfde specificatie heeft (artikelnummer + naam + leverancier)
-    const getKey = (r: typeof geselecteerdeMaterialen[0]) =>
-      [r.comp.artikelnummer ?? r.comp.omschrijving ?? '', r.comp.leverancier_naam ?? ''].join('||')
-    const uniek = new Set(geselecteerdeMaterialen.map(getKey))
-    const isZelfdeSpec = uniek.size === 1 && geselecteerdeMaterialen[0].comp.artikelnummer !== undefined
+    // Dezelfde specificatie? Arbeid keyt op uurtype + tarief, materiaal op artikelnr + leverancier.
+    const getKey = (r: typeof geselecteerdeRijen[0]) => isArbeid
+      ? [r.comp.uurtype ?? r.comp.omschrijving ?? '', r.comp.tarief].join('||')
+      : [r.comp.artikelnummer ?? r.comp.omschrijving ?? '', r.comp.leverancier_naam ?? ''].join('||')
+    const uniek = new Set(geselecteerdeRijen.map(getKey))
+    const isZelfdeSpec = uniek.size === 1 &&
+      (isArbeid ? geselecteerdeRijen[0].comp.uurtype !== undefined
+                : geselecteerdeRijen[0].comp.artikelnummer !== undefined)
 
-    const items: SamenvoegenItem[] = geselecteerdeMaterialen.map(r => ({
+    const items: SamenvoegenItem[] = geselecteerdeRijen.map(r => ({
       comp: r.comp, regel: r.regel, totaalAantal: r.totaalAantal, totaalPrijs: r.totaalPrijs,
     }))
 
     if (isZelfdeSpec) {
-      // Automatisch samenvoegen zonder modal
+      // Automatisch samenvoegen zonder modal — zelfde spec én tarief
       const totaalAantal = items.reduce((s, i) => s + i.totaalAantal, 0)
       voerSamenvoegingUit({
         omschrijving:     items[0].comp.omschrijving ?? items[0].regel.omschrijving ?? '',
-        artikelnummer:    items[0].comp.artikelnummer,
-        leverancier_naam: items[0].comp.leverancier_naam,
-        eenheid:          items[0].comp.eenheid ?? items[0].regel.eenheid ?? 'st',
+        artikelnummer:    isArbeid ? undefined : items[0].comp.artikelnummer,
+        leverancier_naam: isArbeid ? undefined : items[0].comp.leverancier_naam,
+        uurtype:          isArbeid ? items[0].comp.uurtype : undefined,
+        eenheid:          items[0].comp.eenheid ?? items[0].regel.eenheid ?? (isArbeid ? 'uur' : 'st'),
         totaalAantal,
         prijsPerEenheid:  items[0].comp.tarief,
-      }, items)
+      }, items, geselecteerdType)
     } else {
       setSamenvoegenItems(items)
+      setSamenvoegenType(geselecteerdType)
     }
-  }, [samenvoegenFout, geselecteerdeMaterialen])  // eslint-disable-line
+  }, [samenvoegenFout, geselecteerdType, geselecteerdeRijen])  // eslint-disable-line
 
-  const voerSamenvoegingUit = useCallback((data: SamenvoegResultaat, bronItems: SamenvoegenItem[]) => {
+  const voerSamenvoegingUit = useCallback((
+    data: SamenvoegResultaat,
+    bronItems: SamenvoegenItem[],
+    type: 'materieel' | 'arbeid',
+  ) => {
+    const isArbeid = type === 'arbeid'
     const eersteRegel = bronItems[0].regel
 
     const nieuweRegel: WerkbegrotingRegel = {
@@ -1028,13 +1058,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     }
     const nieuweComp: WerkbegrotingComponent = {
       id: nieuweId(), werkbegroting_regel_id: nieuweRegel.id,
-      source_component_id: null, type: 'materieel',
+      source_component_id: null, type,
       norm_hoeveelheid: data.totaalAantal,
       eenheid: data.eenheid as WerkbegrotingComponent['eenheid'],
       tarief: data.prijsPerEenheid,
-      artikelnummer: data.artikelnummer,
+      artikelnummer: isArbeid ? undefined : data.artikelnummer,
       omschrijving: data.omschrijving,
-      leverancier_naam: data.leverancier_naam,
+      leverancier_naam: isArbeid ? undefined : data.leverancier_naam,
+      uurtype: isArbeid ? data.uurtype : undefined,
     }
 
     // Soft-delete bronregels
@@ -1391,7 +1422,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           )}
 
           <button onClick={() => setSamenvoegen(v => !v)}
-            title={samenvoegen ? 'Toon alle afzonderlijke regels' : 'Materiaal met zelfde artikelnr + leverancier samenvoegen'}
+            title={samenvoegen ? 'Toon alle afzonderlijke regels' : 'Materiaal (zelfde artikelnr) en arbeid (zelfde uurtype) samenvoegen'}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
               samenvoegen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}>
@@ -1399,22 +1430,22 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
             {samenvoegen ? 'Uitvouwen' : 'Weergave samenvoegen'}
           </button>
 
-          {/* Samenvoeg selectie — alleen zichtbaar bij selectie van ≥2 materialen */}
-          {geselecteerdeMaterialen.length >= 2 && (
+          {/* Samenvoeg selectie — zichtbaar bij selectie van ≥2 regels (materiaal of arbeid) */}
+          {geselecteerdeRijen.length >= 2 && (
             <button
               onClick={handleSamenvoegenKlik}
               disabled={!!samenvoegenFout}
-              title={samenvoegenFout ?? `${geselecteerdeMaterialen.length} materiaalregels samenvoegen`}
+              title={samenvoegenFout ?? `${geselecteerdeRijen.length} regels samenvoegen`}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors
                 bg-everts-50 border-everts/40 text-everts font-semibold
                 hover:bg-everts hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Merge className="w-3.5 h-3.5" />
-              Selectie samenvoegen ({geselecteerdeMaterialen.length})
+              Selectie samenvoegen ({geselecteerdeRijen.length})
             </button>
           )}
           {/* Waarschuwing als selectie ongeldige mix is */}
-          {geselecteerdeMaterialen.length >= 2 && samenvoegenFout && (
+          {geselecteerdeRijen.length >= 2 && samenvoegenFout && (
             <span className="text-[10px] text-red-500 font-medium">{samenvoegenFout}</span>
           )}
 
@@ -1651,7 +1682,8 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       {samenvoegenItems && (
         <SamenvoegenModal
           items={samenvoegenItems}
-          onBevestig={data => voerSamenvoegingUit(data, samenvoegenItems)}
+          type={samenvoegenType}
+          onBevestig={data => voerSamenvoegingUit(data, samenvoegenItems, samenvoegenType)}
           onSluit={() => setSamenvoegenItems(null)}
         />
       )}

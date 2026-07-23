@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Merge, Package } from 'lucide-react'
+import { Merge, Package, HardHat } from 'lucide-react'
 import { formatEuro } from '@/lib/everts-calc/calculations'
-import type { WerkbegrotingComponent, WerkbegrotingRegel } from '@/lib/everts-calc/types'
+import type { WerkbegrotingComponent, WerkbegrotingRegel, ComponentType } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,6 +25,7 @@ export interface SamenvoegResultaat {
   omschrijving: string
   artikelnummer?: string
   leverancier_naam?: string
+  uurtype?: string
   eenheid: string
   totaalAantal: number
   prijsPerEenheid: number
@@ -32,12 +33,14 @@ export interface SamenvoegResultaat {
 
 interface Props {
   items: SamenvoegenItem[]
+  /** Type van de samen te voegen regels — bepaalt de getoonde velden (materieel vs arbeid). */
+  type: ComponentType
   onBevestig: (data: SamenvoegResultaat) => void
   onSluit: () => void
 }
 
 // Afgeleid startpunt voor het samengevoegde resultaat
-function berekenStartwaarden(items: SamenvoegenItem[]): SamenvoegResultaat {
+function berekenStartwaarden(items: SamenvoegenItem[], type: ComponentType): SamenvoegResultaat {
   const totaalAantal    = items.reduce((s, i) => s + i.totaalAantal, 0)
   const totaalPrijs     = items.reduce((s, i) => s + i.totaalPrijs,  0)
   const prijsPerEenheid = totaalAantal > 0 ? totaalPrijs / totaalAantal : 0
@@ -51,18 +54,22 @@ function berekenStartwaarden(items: SamenvoegenItem[]): SamenvoegResultaat {
     ? eersteOmschrijving
     : items.map(i => i.comp.omschrijving ?? i.regel.omschrijving ?? '').filter(Boolean).join(' + ')
 
+  const defaultEenheid = type === 'arbeid' ? 'uur' : 'st'
+
   return {
     omschrijving,
-    artikelnummer:    items[0].comp.artikelnummer,
-    leverancier_naam: items[0].comp.leverancier_naam,
-    eenheid:          items[0].comp.eenheid ?? items[0].regel.eenheid ?? 'st',
+    artikelnummer:    type === 'arbeid' ? undefined : items[0].comp.artikelnummer,
+    leverancier_naam: type === 'arbeid' ? undefined : items[0].comp.leverancier_naam,
+    uurtype:          type === 'arbeid' ? items[0].comp.uurtype : undefined,
+    eenheid:          items[0].comp.eenheid ?? items[0].regel.eenheid ?? defaultEenheid,
     totaalAantal:     Math.round(totaalAantal * 100) / 100,
     prijsPerEenheid:  Math.round(prijsPerEenheid * 100) / 100,
   }
 }
 
-export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) {
-  const [data, setData] = useState<SamenvoegResultaat>(() => berekenStartwaarden(items))
+export default function SamenvoegenModal({ items, type, onBevestig, onSluit }: Props) {
+  const isArbeid = type === 'arbeid'
+  const [data, setData] = useState<SamenvoegResultaat>(() => berekenStartwaarden(items, type))
 
   const totaalPrijs = data.totaalAantal * data.prijsPerEenheid
 
@@ -101,13 +108,15 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
             <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
               {items.map(item => (
                 <div key={item.comp.id} className="flex items-center gap-3 px-3 py-2 bg-slate-50/50">
-                  <Package className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+                  {isArbeid
+                    ? <HardHat className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
+                    : <Package className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-slate-700 truncate">
                       {item.comp.omschrijving ?? item.regel.omschrijving ?? '—'}
                     </p>
-                    {item.comp.artikelnummer && (
-                      <p className="text-[10px] text-slate-400">{item.comp.artikelnummer}</p>
+                    {(isArbeid ? item.comp.uurtype : item.comp.artikelnummer) && (
+                      <p className="text-[10px] text-slate-400">{isArbeid ? item.comp.uurtype : item.comp.artikelnummer}</p>
                     )}
                   </div>
                   <div className="text-right flex-shrink-0">
@@ -140,32 +149,44 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
             />
           </div>
 
-          {/* Artikelnummer + Leverancier */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Specificatie: uurtype (arbeid) of artikelnummer + leverancier (materiaal) */}
+          {isArbeid ? (
             <div>
-              <p className={labelCls}>Artikelnummer</p>
+              <p className={labelCls}>Uurtype</p>
               <input
                 className={inputCls}
-                value={data.artikelnummer ?? ''}
-                placeholder="Artikelnr…"
-                onChange={e => patch({ artikelnummer: e.target.value || undefined })}
+                value={data.uurtype ?? ''}
+                placeholder="Bijv. Gezel, Leerling…"
+                onChange={e => patch({ uurtype: e.target.value || undefined })}
               />
             </div>
-            <div>
-              <p className={labelCls}>Leverancier</p>
-              <input
-                className={inputCls}
-                value={data.leverancier_naam ?? ''}
-                placeholder="Leverancier…"
-                onChange={e => patch({ leverancier_naam: e.target.value || undefined })}
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className={labelCls}>Artikelnummer</p>
+                <input
+                  className={inputCls}
+                  value={data.artikelnummer ?? ''}
+                  placeholder="Artikelnr…"
+                  onChange={e => patch({ artikelnummer: e.target.value || undefined })}
+                />
+              </div>
+              <div>
+                <p className={labelCls}>Leverancier</p>
+                <input
+                  className={inputCls}
+                  value={data.leverancier_naam ?? ''}
+                  placeholder="Leverancier…"
+                  onChange={e => patch({ leverancier_naam: e.target.value || undefined })}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Aantal + Eenheid + Prijs */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <p className={labelCls}>Totaal aantal</p>
+              <p className={labelCls}>{isArbeid ? 'Totaal uren' : 'Totaal aantal'}</p>
               <input
                 type="number" step="0.01" min="0"
                 className={inputCls}
@@ -179,12 +200,12 @@ export default function SamenvoegenModal({ items, onBevestig, onSluit }: Props) 
               <input
                 className={inputCls}
                 value={data.eenheid}
-                placeholder="st"
-                onChange={e => patch({ eenheid: e.target.value || 'st' })}
+                placeholder={isArbeid ? 'uur' : 'st'}
+                onChange={e => patch({ eenheid: e.target.value || (isArbeid ? 'uur' : 'st') })}
               />
             </div>
             <div>
-              <p className={labelCls}>Prijs per eenheid</p>
+              <p className={labelCls}>{isArbeid ? 'Uurtarief' : 'Prijs per eenheid'}</p>
               <div className="relative flex items-center">
                 <span className="absolute left-2.5 text-sm text-slate-400 ">€</span>
                 <input
