@@ -1689,11 +1689,13 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
     const db = createAdminClient() as any
     const nu = new Date().toISOString()
     for (const [componentId, lineId] of Object.entries(lineIdPerComponent)) {
-      await db.from('werkbegroting_componenten').update({ bouw7_line_id: lineId, bijgewerkt_op: nu }).eq('id', componentId).catch(() => {})
+      // Let op: de PostgREST-builder is thenable maar heeft géén `.catch` → nooit `.catch()` op de
+      // query zetten (dat gooit "catch is not a function"). Altijd await + try/catch.
+      try { await db.from('werkbegroting_componenten').update({ bouw7_line_id: lineId, bijgewerkt_op: nu }).eq('id', componentId) } catch { /* best effort */ }
     }
     // Verlopen koppelingen opruimen, anders loopt élke volgende push weer op dezelfde 404.
     if (teWissen.length > 0) {
-      await db.from('werkbegroting_componenten').update({ bouw7_line_id: null, bijgewerkt_op: nu }).in('id', teWissen).catch(() => {})
+      try { await db.from('werkbegroting_componenten').update({ bouw7_line_id: null, bijgewerkt_op: nu }).in('id', teWissen) } catch { /* best effort */ }
     }
   }
 
@@ -1877,7 +1879,8 @@ export async function resetBouw7Bestelregels(
   if (compIds.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = createAdminClient() as any
-    await db.from('werkbegroting_componenten').update({ bouw7_line_id: null }).in('id', compIds).catch(() => {})
+    // PostgREST-builder heeft geen `.catch` → await + try/catch.
+    try { await db.from('werkbegroting_componenten').update({ bouw7_line_id: null }).in('id', compIds) } catch { /* best effort */ }
   }
   return { ok: true }
 }

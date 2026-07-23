@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import { opleverPuntStatusLabels, type OpleverPuntStatus, type OpleverFotoSoort, type OpleverFoto } from '@everts/database'
 import {
-  setPuntStatus, uploadOpleverFoto, verwijderOpleverFoto, voegPuntReactieToe,
-  type OpleverPuntView,
+  opleverPuntStatusLabels,
+  type OpleverPuntStatus, type OpleverFotoSoort, type OpleverFoto, type OpleverToewijzingType,
+} from '@everts/database'
+import {
+  setPuntStatus, updateOpleverpunt, uploadOpleverFoto, verwijderOpleverFoto, voegPuntReactieToe,
+  type OpleverPuntView, type OpleverToewijsbaar,
 } from '@/lib/dossiers/oplevering'
 import { PUNT_TRANSITIES, TRIAGE_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
@@ -18,9 +21,10 @@ import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, OPPERVLAK, PUNT_KLEUR, v
  * Gedeeld tussen het overzicht (losse aandachtspunten, AP) en het uitvoerscherm (punten binnen een
  * moment, OP): het gedrag is identiek, alleen de nummerreeks verschilt.
  */
-export default function PuntKaart({ punt, prefix, onWijzig }: {
+export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
   punt: OpleverPuntView
   prefix: 'OP' | 'AP'
+  toewijsbaar: OpleverToewijsbaar | null
   onWijzig: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -29,6 +33,28 @@ export default function PuntKaart({ punt, prefix, onWijzig }: {
   const [opmerking, setOpmerking] = useState('')
   const voorRef = useRef<HTMLInputElement>(null)
   const naRef = useRef<HTMLInputElement>(null)
+
+  // De keuzelijst codeert type en id in één waarde, zodat er op een telefoon maar één select nodig
+  // is: "medewerker:<id>" of "relatie:<id>". Leeg = niet toegewezen.
+  const huidigeToewijzing =
+    punt.toegewezen_type === 'medewerker' && punt.toegewezen_medewerker_id
+      ? `medewerker:${punt.toegewezen_medewerker_id}`
+      : punt.toegewezen_type === 'relatie' && punt.toegewezen_relatie_id
+        ? `relatie:${punt.toegewezen_relatie_id}`
+        : ''
+
+  async function wijzigToewijzing(waarde: string) {
+    const [type, id] = waarde ? waarde.split(':') : []
+    setBezig(true); setFout(null)
+    const r = await updateOpleverpunt(punt.id, {
+      toegewezen_type: (type as OpleverToewijzingType) || null,
+      toegewezen_medewerker_id: type === 'medewerker' ? id : null,
+      toegewezen_relatie_id: type === 'relatie' ? id : null,
+    })
+    setBezig(false)
+    if (!r.ok) { setFout(r.error); return }
+    onWijzig()
+  }
 
   const { voor, na } = splitsFotos(punt.fotos)
   const mist = bewijsOntbreekt(punt.status, punt.fotos)
@@ -149,6 +175,34 @@ export default function PuntKaart({ punt, prefix, onWijzig }: {
               </div>
             </div>
           )}
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Toewijzen aan</div>
+            <select
+              style={veld}
+              value={huidigeToewijzing}
+              disabled={bezig}
+              onChange={e => wijzigToewijzing(e.target.value)}
+            >
+              <option value="">Niet toegewezen</option>
+              <optgroup label="Eigen personeel">
+                {(toewijsbaar?.medewerkers ?? []).map(m => (
+                  <option key={m.id} value={`medewerker:${m.id}`}>{m.naam}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Onderaannemers (besteld in dit dossier)">
+                {(toewijsbaar?.relaties ?? []).map(r => (
+                  <option key={r.id} value={`relatie:${r.id}`}>{r.naam}{r.onderaannemer ? ' (OA)' : ''}</option>
+                ))}
+              </optgroup>
+            </select>
+            {(toewijsbaar?.relaties.length ?? 0) === 0 && (
+              <div style={{ fontSize: 11.5, color: ZACHT, marginTop: 5 }}>
+                Nog geen bestelde partijen op dit dossier. Zodra er een bestelling naar een
+                onderaannemer is gegaan, kun je die hier kiezen.
+              </div>
+            )}
+          </div>
 
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Foto&apos;s</div>

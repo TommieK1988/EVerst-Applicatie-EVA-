@@ -847,8 +847,17 @@ export type OpleverToewijsbaar = {
   relaties: { id: string; naam: string; email: string | null; onderaannemer: boolean }[]
 }
 
-/** Lijsten voor de toewijzing-picker: actieve medewerkers + onderaannemer/leverancier-relaties. */
-export async function getOpleverToewijsbaar(): Promise<OpleverToewijsbaar> {
+/**
+ * Lijsten voor de toewijzing-picker: actieve medewerkers + onderaannemer/leverancier-relaties.
+ *
+ * Met een `dossierId` worden de relaties beperkt tot de **partijen die in dat dossier een bestelling
+ * hebben gehad** (via de werkbegroting) — niet elke onderaannemer in het systeem. Je wijst een
+ * herstelpunt immers toe aan een partij die je op dit project hebt ingezet. Zonder `dossierId`
+ * (of als er nog geen bestellingen zijn) blijft de volledige lijst staan.
+ *
+ * Medewerkers worden nooit gefilterd: eigen personeel kun je overal op inzetten.
+ */
+export async function getOpleverToewijsbaar(dossierId?: string): Promise<OpleverToewijsbaar> {
   const supabase = db()
   const [{ data: mw }, { data: rel }] = await Promise.all([
     supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').eq('actief', true).order('achternaam'),
@@ -859,12 +868,35 @@ export async function getOpleverToewijsbaar(): Promise<OpleverToewijsbaar> {
       .overlaps('types', ['onderaannemer', 'leverancier'])
       .order('naam'),
   ])
+
+  // Relaties beperken tot de bestelde partijen van dit dossier. bestelling → werkbegroting → dossier.
+  let besteldeRelaties: Set<string> | null = null
+  if (dossierId) {
+    const { data: wbs } = await supabase.from('werkbegrotingen').select('id').eq('dossier_id', dossierId)
+    const wbIds = (wbs ?? []).map((w: any) => w.id)
+    if (wbIds.length > 0) {
+      const { data: best } = await supabase
+        .from('werkbegroting_bestellingen')
+        .select('relatie_id')
+        .in('werkbegroting_id', wbIds)
+        .not('relatie_id', 'is', null)
+      besteldeRelaties = new Set((best ?? []).map((b: any) => b.relatie_id as string))
+    } else {
+      // Dossier zonder werkbegroting = zeker geen bestellingen. Lege set i.p.v. "alles tonen",
+      // anders zou het filter stil wegvallen precies wanneer er niets besteld is.
+      besteldeRelaties = new Set()
+    }
+  }
+  const gefilterdeRel = besteldeRelaties
+    ? (rel ?? []).filter((r: any) => besteldeRelaties!.has(r.id))
+    : (rel ?? [])
+
   return {
     medewerkers: (mw ?? []).map((m: any) => ({
       id: m.id,
       naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
     })),
-    relaties: (rel ?? []).map((r: any) => ({
+    relaties: gefilterdeRel.map((r: any) => ({
       id: r.id,
       naam: r.naam,
       email: r.email ?? null,

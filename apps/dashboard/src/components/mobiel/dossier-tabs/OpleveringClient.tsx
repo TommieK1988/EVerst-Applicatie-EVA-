@@ -9,7 +9,7 @@ import {
 } from '@everts/database'
 import {
   maakOplevermoment, maakLosOpleverpunt, setPuntStatus, uploadOpleverFoto,
-  type DossierOpleveringData, type OpleverPuntView, type OpleverFeedbackSamenvatting,
+  type DossierOpleveringData, type OpleverPuntView, type OpleverFeedbackSamenvatting, type OpleverToewijsbaar,
 } from '@/lib/dossiers/oplevering'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
@@ -19,10 +19,11 @@ import PuntKaart from '@/components/mobiel/oplevering/PuntKaart'
 import BottomSheet from '@/components/mobiel/oplevering/BottomSheet'
 import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
 
-export default function OpleveringClient({ dossierId, data, feedback }: {
+export default function OpleveringClient({ dossierId, data, feedback, toewijsbaar }: {
   dossierId: string
   data: DossierOpleveringData
   feedback: OpleverFeedbackSamenvatting
+  toewijsbaar: OpleverToewijsbaar
 }) {
   const router = useRouter()
   const [nieuwOpen, setNieuwOpen] = useState(false)
@@ -41,6 +42,7 @@ export default function OpleveringClient({ dossierId, data, feedback }: {
 
         <AandachtspuntenBlok
           punten={data.lossePunten}
+          toewijsbaar={toewijsbaar}
           onToevoegen={() => setPuntOpen(true)}
           onWijzig={() => router.refresh()}
         />
@@ -236,8 +238,9 @@ function MomentenBlok({ momenten }: { momenten: DossierOpleveringData['momenten'
 
 /* ───────────────────────────── Aandachtspunten ───────────────────────────── */
 
-function AandachtspuntenBlok({ punten, onToevoegen, onWijzig }: {
+function AandachtspuntenBlok({ punten, toewijsbaar, onToevoegen, onWijzig }: {
   punten: OpleverPuntView[]
+  toewijsbaar: OpleverToewijsbaar
   onToevoegen: () => void
   onWijzig: () => void
 }) {
@@ -251,7 +254,7 @@ function AandachtspuntenBlok({ punten, onToevoegen, onWijzig }: {
         </div>
       ) : (
         punten.map(p => (
-          <PuntKaart key={p.id} punt={p} prefix="AP" onWijzig={onWijzig} />
+          <PuntKaart key={p.id} punt={p} prefix="AP" toewijsbaar={toewijsbaar} onWijzig={onWijzig} />
         ))
       )}
       <button type="button" onClick={onToevoegen} style={{ ...secundaireKnop, width: '100%', marginTop: 2 }}>

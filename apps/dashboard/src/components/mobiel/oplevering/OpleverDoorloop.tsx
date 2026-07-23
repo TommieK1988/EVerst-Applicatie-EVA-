@@ -85,7 +85,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
           </div>
         ) : (
           moment.punten.map(p => (
-            <PuntKaart key={p.id} punt={p} prefix="OP" onWijzig={herlaad} />
+            <PuntKaart key={p.id} punt={p} prefix="OP" toewijsbaar={toewijsbaar} onWijzig={herlaad} />
           ))
         )}
 

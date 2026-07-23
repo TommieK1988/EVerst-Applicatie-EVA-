@@ -37,7 +37,8 @@ export default async function MobielOpleverMomentPage(
 
   const [data, toewijsbaar] = await Promise.all([
     getDossierOplevering(moment.dossier_id),
-    getOpleverToewijsbaar().catch(() => ({ medewerkers: [], relaties: [] })),
+    // Onderaannemers beperkt tot de partijen die op dit dossier zijn besteld.
+    getOpleverToewijsbaar(moment.dossier_id).catch(() => ({ medewerkers: [], relaties: [] })),
   ])
   const view = data.momenten.find(m => m.id === momentId)
   if (!view) notFound()

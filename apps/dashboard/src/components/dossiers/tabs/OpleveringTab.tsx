@@ -57,7 +57,8 @@ export default function OpleveringTab({ dossierId }: { dossierId: string }) {
   }
   useEffect(() => {
     herlaad()
-    getOpleverToewijsbaar().then(setToewijsbaar).catch(() => setToewijsbaar({ medewerkers: [], relaties: [] }))
+    // Onderaannemers beperkt tot de partijen die op dit dossier zijn besteld (niet alle OA's).
+    getOpleverToewijsbaar(dossierId).then(setToewijsbaar).catch(() => setToewijsbaar({ medewerkers: [], relaties: [] }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dossierId])
 

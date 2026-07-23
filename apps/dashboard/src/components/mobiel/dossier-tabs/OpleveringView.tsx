@@ -1,5 +1,5 @@
 import React from 'react'
-import { getDossierOplevering, getOpleverFeedbackSamenvatting } from '@/lib/dossiers/oplevering'
+import { getDossierOplevering, getOpleverFeedbackSamenvatting, getOpleverToewijsbaar } from '@/lib/dossiers/oplevering'
 import OpleveringClient from './OpleveringClient'
 
 /**
@@ -11,10 +11,12 @@ import OpleveringClient from './OpleveringClient'
  * Zelfde opzet als DetailplanningView → DetailplanningClient.
  */
 export default async function OpleveringView({ dossierId }: { dossierId: string }) {
-  const [data, feedback] = await Promise.all([
+  const [data, feedback, toewijsbaar] = await Promise.all([
     getDossierOplevering(dossierId).catch(() => ({ momenten: [], triage: [], lossePunten: [], afgewezen: [] })),
     getOpleverFeedbackSamenvatting(dossierId).catch(() => ({ aantal: 0, cijfers: [], hoofdscore: null })),
+    // Onderaannemers beperkt tot de partijen die op dit dossier zijn besteld.
+    getOpleverToewijsbaar(dossierId).catch(() => ({ medewerkers: [], relaties: [] })),
   ])
 
-  return <OpleveringClient dossierId={dossierId} data={data} feedback={feedback} />
+  return <OpleveringClient dossierId={dossierId} data={data} feedback={feedback} toewijsbaar={toewijsbaar} />
 }
