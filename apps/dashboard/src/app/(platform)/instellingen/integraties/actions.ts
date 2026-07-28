@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
+import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, syncMeerwerk, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 
@@ -94,7 +94,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -114,9 +114,10 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     const herinneringen = await syncOfferteHerinneringen({ mode })
     const todos = await syncBouw7Todos({ mode })
     const notities = await syncDossierNotities({ mode })
+    const meerwerk = await syncMeerwerk({ mode })
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -128,7 +129,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities, meerwerk }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }
@@ -162,6 +163,7 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     await syncOfferteHerinneringen({ onlyBouw7Ids: ids })
     await syncBouw7Todos({ onlyBouw7Ids: ids })
     await syncDossierNotities({ onlyBouw7Ids: ids })
+    await syncMeerwerk({ onlyBouw7Ids: ids })
 
     revalidatePath(`/dossiers/${dossierId}`)
     return { ok: true, projects, planning }

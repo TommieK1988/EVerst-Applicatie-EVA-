@@ -1,14 +1,14 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo, type Bouw7AdditionalWorkLine } from './client'
 import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
-import type { OrganisatieType, BtwSplitsingItem } from '@everts/database'
+import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 
 export type SyncResult = {
   nieuw: number
@@ -2205,6 +2205,154 @@ export async function syncDossierNotities(opts?: { mode?: SyncMode; onlyBouw7Ids
     result.foutMelding = e instanceof Error ? e.message : String(e)
   }
   await logSync('dossier_notities', 'in', result, Date.now() - start)
+  return result
+}
+
+// ─── Meerwerkregels (GET /list/additional-work-lines) → EVA meerwerk_regels ────────
+
+/** Bouw7-meerwerkstatus → dichtstbijzijnde EVA-status bij import/sync. */
+const BOUW7_MW_STATUS_NAAR_EVA: Record<number, MeerwerkStatus> = {
+  0: 'aangevraagd', // Geregistreerd
+  1: 'akkoord',     // Akkoord
+  2: 'afgewezen',   // Niet akkoord
+  3: 'voltooid',    // Opgeleverd
+  4: 'voltooid',    // Gefactureerd
+}
+
+const mwNum = (v: unknown): number => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  return 0
+}
+const mwRond = (n: number): number => Math.round(n * 100) / 100
+
+/**
+ * Bouw7-meerwerkregel → de door Bouw7 bepaalde EVA-velden (Bouw7 is leidend voor bron='bouw7_line').
+ * LET OP: `cost` = verkoopprijs excl. btw, `budgetAmount` = begroot. EVA-eigen velden (afrekenwijze,
+ * btw_pct, termijn_wijze, stelpost_grondslag) zitten hier bewust NIET in en blijven bij een update staan.
+ */
+function bouw7LineNaarEvaVelden(l: Bouw7AdditionalWorkLine): {
+  omschrijving: string
+  is_stelpost: boolean
+  bedrag_excl_btw: number
+  begroot_bedrag: number
+  status: MeerwerkStatus
+  bouw7_nummer: string | null
+} {
+  return {
+    omschrijving: l.description?.trim() || l.number || 'Meerwerk',
+    is_stelpost: !!l.isProvisional,
+    bedrag_excl_btw: mwRond(mwNum(l.cost)),
+    begroot_bedrag: mwRond(mwNum(l.budgetAmount)),
+    status: l.status != null ? (BOUW7_MW_STATUS_NAAR_EVA[l.status] ?? 'akkoord') : 'aangevraagd',
+    bouw7_nummer: l.number ?? null,
+  }
+}
+
+/**
+ * Meerwerkregels (GET /list/additional-work-lines, Heimdall) → EVA `meerwerk_regels` (bron 'bouw7_line').
+ * Bouw7 is leidend voor deze regels: nieuwe erbij, gewijzigde bijgewerkt (alleen Bouw7-velden — EVA-eigen
+ * velden als afrekenwijze/btw/termijn blijven staan), en in Bouw7 verwijderde regels verwijderd. EVA-native
+ * regels (bron 'eva') worden nooit aangeraakt, ook niet als ze via "Naar Bouw7" een line-id hebben.
+ * Eén bulk-sweep over álle projecten; gefilterd op de dossiers met een bouw7_id (optioneel scoped).
+ */
+export async function syncMeerwerk(opts?: { mode?: SyncMode; onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  try {
+    const bouw7 = await getBouw7Client()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any
+
+    const { data: dossierData } = await supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
+    const dossierMap = new Map<string, string>((dossierData ?? []).map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
+
+    // Eén bulk-sweep over álle projecten; daarna filteren op gekoppelde dossiers (+ scope).
+    const lines = await fetchAllPages<Bouw7AdditionalWorkLine>(bouw7, '/list/additional-work-lines')
+    const relevant = lines.filter(l => {
+      const pid = l.projectId != null ? String(l.projectId) : null
+      return !!pid && dossierMap.has(pid) && (!scoped || scoped.has(pid))
+    })
+
+    // Bestaande bron='bouw7_line'-regels (scoped), gemapt op bouw7_line_id.
+    let bq = supabase.from('meerwerk_regels')
+      .select('id, dossier_id, volgnummer, bouw7_line_id, omschrijving, bedrag_excl_btw, begroot_bedrag, is_stelpost, status, bouw7_nummer')
+      .eq('bron', 'bouw7_line')
+      .not('bouw7_line_id', 'is', null)
+    const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
+    if (scopeDossierIds) {
+      bq = scopeDossierIds.length ? bq.in('dossier_id', scopeDossierIds) : bq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
+    }
+    const { data: bestaande } = await bq
+    const bestaandByLine = new Map<string, { id: string; bouw7_line_id: number; omschrijving: string; bedrag_excl_btw: unknown; begroot_bedrag: unknown; is_stelpost: boolean; status: string; bouw7_nummer: string | null }>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (bestaande ?? []).map((r: any) => [String(r.bouw7_line_id), r]),
+    )
+
+    // Lopende max volgnummer per dossier (over álle regels, niet alleen bouw7_line) voor inserts.
+    const dossierIdsInScope = [...new Set(relevant.map(l => dossierMap.get(String(l.projectId))!))]
+    const maxVolg = new Map<string, number>()
+    if (dossierIdsInScope.length) {
+      const { data: volgRows } = await supabase.from('meerwerk_regels').select('dossier_id, volgnummer').in('dossier_id', dossierIdsInScope)
+      for (const r of (volgRows ?? []) as { dossier_id: string; volgnummer: number }[]) {
+        if ((r.volgnummer ?? 0) > (maxVolg.get(r.dossier_id) ?? 0)) maxVolg.set(r.dossier_id, r.volgnummer)
+      }
+    }
+
+    for (const l of relevant) {
+      const dossierId = dossierMap.get(String(l.projectId))!
+      const velden = bouw7LineNaarEvaVelden(l)
+      const cur = bestaandByLine.get(String(l.id))
+
+      if (!cur) {
+        const volg = (maxVolg.get(dossierId) ?? 0) + 1
+        maxVolg.set(dossierId, volg)
+        const { error } = await supabase.from('meerwerk_regels').insert({
+          dossier_id: dossierId,
+          volgnummer: volg,
+          ...velden,
+          afrekenwijze: 'aangenomen',
+          stelpost_grondslag: velden.is_stelpost ? 'eenheidsprijzen' : null,
+          factuurreferentie: l.quotation?.number ?? null,
+          bron: 'bouw7_line',
+          bouw7_bron_sleutel: `line:${l.id}`,
+          bouw7_line_id: l.id,
+        })
+        if (error) { result.fouten++; console.error('[sync meerwerk] insert:', error.message) } else { result.nieuw++ }
+        continue
+      }
+
+      // Bestaat al → uit de prune-set halen en alleen bij wijziging de Bouw7-velden bijwerken.
+      bestaandByLine.delete(String(l.id))
+      const gewijzigd =
+        cur.omschrijving !== velden.omschrijving ||
+        mwRond(mwNum(cur.bedrag_excl_btw)) !== velden.bedrag_excl_btw ||
+        mwRond(mwNum(cur.begroot_bedrag)) !== velden.begroot_bedrag ||
+        !!cur.is_stelpost !== velden.is_stelpost ||
+        cur.status !== velden.status ||
+        (cur.bouw7_nummer ?? null) !== velden.bouw7_nummer
+      if (!gewijzigd) { result.overgeslagen = (result.overgeslagen ?? 0) + 1; continue }
+      const { error } = await supabase.from('meerwerk_regels')
+        .update({ ...velden, updated_at: new Date().toISOString() })
+        .eq('id', cur.id)
+      if (error) { result.fouten++ } else { result.bijgewerkt++ }
+    }
+
+    // Prune: bron='bouw7_line'-regels die niet meer in Bouw7 staan → verwijderen. Veiligheid: bij een
+    // ongescopete bulk-sweep alleen prunen als er daadwerkelijk regels terugkwamen (voorkomt massale
+    // opschoning bij een onverwacht lege lijst-call). Per-dossier (scoped) is leeg wél betekenisvol.
+    if (scoped || lines.length > 0) {
+      for (const rij of bestaandByLine.values()) {
+        const { error } = await supabase.from('meerwerk_regels').delete().eq('id', rij.id)
+        if (error) { result.fouten++ } else { result.bijgewerkt++ }
+      }
+    }
+  } catch (e: unknown) {
+    result.fouten++
+    result.foutMelding = e instanceof Error ? e.message : String(e)
+  }
+  await logSync('bouw7_meerwerk', 'in', result, Date.now() - start)
   return result
 }
 

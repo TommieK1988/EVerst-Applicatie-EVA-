@@ -7,10 +7,8 @@ import { Card, CardHeader, CardBody, Button, Input, Badge } from '@/components/u
 import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, type MeerwerkTermijnWijze } from '@everts/database'
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
-  verwijderMeerwerkRegel, maakMeerwerkCalculatie, getBouw7Meerwerk, importeerBouw7Meerwerk,
-  importeerAlleBouw7Meerwerk, stuurMeerwerkNaarBouw7,
+  verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
-  type Bouw7MeerwerkData, type Bouw7MeerwerkLine,
 } from '@/lib/dossiers/meerwerk'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
@@ -23,6 +21,8 @@ const STATUS_TONE: Record<MeerwerkStatus, 'neutral' | 'info' | 'success' | 'erro
 
 const selectCls =
   'h-8 rounded-md border border-neutral-300 bg-white px-2 text-[12px] text-neutral-800 outline-none focus:border-brand-500'
+const inlineInputCls =
+  'w-full rounded border border-neutral-200 bg-white px-1.5 py-1 text-[12.5px] text-neutral-800 outline-none focus:border-brand-500'
 
 const LEGE_NIEUW: NieuweMeerwerkData = {
   omschrijving: '', afrekenwijze: 'aangenomen', is_stelpost: false, stelpost_grondslag: null,
@@ -34,35 +34,14 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
-  const [bouw7, setBouw7] = useState<Bouw7MeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
 
   function herlaad() {
     getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
-    getBouw7Meerwerk(dossierId).then(setBouw7).catch(() => setBouw7({ beschikbaar: false, regels: [], totaalVerkoop: 0 }))
   }
   useEffect(herlaad, [dossierId])
-
-  async function importLine(r: Bouw7MeerwerkLine) {
-    setBezig(true)
-    const res = await importeerBouw7Meerwerk(dossierId, {
-      sleutel: r.sleutel, lineId: r.lineId, nummer: r.nummer, omschrijving: r.omschrijving,
-      begroot: r.begroot, verkoop: r.verkoop, isStelpost: r.isStelpost, status: r.status, offerteNummer: r.offerteNummer,
-    })
-    setBezig(false)
-    if (!res.ok) { toast.error(res.error); return }
-    toast.success('Geïmporteerd als EVA-regel'); herlaad(); router.refresh()
-  }
-
-  async function importAlles() {
-    setBezig(true)
-    const res = await importeerAlleBouw7Meerwerk(dossierId)
-    setBezig(false)
-    if (!res.ok) { toast.error(res.error); return }
-    toast.success(res.aantal > 0 ? `${res.aantal} regel(s) geïmporteerd` : 'Niets te importeren'); herlaad(); router.refresh()
-  }
 
   async function voegToe() {
     if (!nieuw.omschrijving.trim()) { toast.error('Geef een omschrijving op.'); return }
@@ -89,7 +68,8 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
   async function wijzigVeld(id: string, patch: Partial<NieuweMeerwerkData> & { termijn_wijze?: MeerwerkTermijnWijze | null }) {
     const r = await updateMeerwerkRegel(id, patch)
     if (!r.ok) { toast.error(r.error); return }
-    herlaad()
+    if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
+    herlaad(); router.refresh()
   }
 
   async function naarBouw7(regel: MeerwerkRegelView) {
@@ -124,7 +104,7 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
     <div className="px-8 py-7 space-y-5">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex w-full items-center justify-between">
             <span>Meerwerk</span>
             {!readOnly && (
               <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
@@ -219,18 +199,40 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {data.regels.map(r => (
+                {data.regels.map(r => {
+                  const uitBouw7 = r.bron === 'bouw7_line'
+                  const bewerkbaar = !readOnly && !uitBouw7
+                  const bedragBewerkbaar = bewerkbaar && r.afrekenwijze === 'aangenomen' && !r.is_stelpost
+                  const oudBedrag = r.bedrag_excl_btw != null ? Number(r.bedrag_excl_btw) : null
+                  return (
                   <tr key={r.id} className="border-b border-neutral-100 text-[12.5px] align-top">
                     <td className="py-2 pr-2 tabular-nums text-neutral-500">
                       MW{String(r.volgnummer).padStart(2, '0')}
                       {r.bouw7_nummer && <div className="text-[10px] text-success-600" title="Gekoppeld aan Bouw7">↳ {r.bouw7_nummer}</div>}
+                      {uitBouw7 && <div className="text-[9.5px] uppercase tracking-wide text-neutral-400">uit Bouw7</div>}
                     </td>
                     <td className="py-2 px-2">
-                      <div className="text-neutral-800">{r.omschrijving}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-neutral-400">
-                        {r.is_stelpost ? `stelpost · ${r.stelpost_grondslag === 'geboekte_kosten' ? 'geboekte kosten' : 'eenheidsprijzen'}` : ''}
-                        {r.factuurreferentie ? `${r.is_stelpost ? ' · ' : ''}ref: ${r.factuurreferentie}` : ''}
-                      </div>
+                      {bewerkbaar ? (
+                        <div className="space-y-1">
+                          <input className={inlineInputCls} defaultValue={r.omschrijving} disabled={bezig}
+                            onBlur={e => { const v = e.target.value.trim(); if (v && v !== r.omschrijving) wijzigVeld(r.id, { omschrijving: v }) }} />
+                          <input className={`${inlineInputCls} text-[11px]`} defaultValue={r.factuurreferentie ?? ''} placeholder="Factuurreferentie" disabled={bezig}
+                            onBlur={e => { const v = e.target.value.trim() || null; if (v !== (r.factuurreferentie ?? null)) wijzigVeld(r.id, { factuurreferentie: v }) }} />
+                          {r.is_stelpost && (
+                            <div className="text-[10px] uppercase tracking-wide text-neutral-400">
+                              stelpost · {r.stelpost_grondslag === 'geboekte_kosten' ? 'geboekte kosten' : 'eenheidsprijzen'}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-neutral-800">{r.omschrijving}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-400">
+                            {r.is_stelpost ? `stelpost · ${r.stelpost_grondslag === 'geboekte_kosten' ? 'geboekte kosten' : 'eenheidsprijzen'}` : ''}
+                            {r.factuurreferentie ? `${r.is_stelpost ? ' · ' : ''}ref: ${r.factuurreferentie}` : ''}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="py-2 px-2">
                       <div className="flex flex-col gap-1">
@@ -277,7 +279,14 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                       </select>
                       )}
                     </td>
-                    <td className="py-2 px-2 text-right tabular-nums font-semibold text-neutral-900">{fmt(r.effectiefExcl)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums font-semibold text-neutral-900">
+                      {bedragBewerkbaar ? (
+                        <input className={`${inlineInputCls} text-right`} inputMode="decimal" defaultValue={r.bedrag_excl_btw ?? ''} disabled={bezig}
+                          onBlur={e => { const v = e.target.value ? Number(e.target.value.replace(',', '.')) : null; if (v !== oudBedrag) wijzigVeld(r.id, { bedrag_excl_btw: v }) }} />
+                      ) : (
+                        fmt(r.effectiefExcl)
+                      )}
+                    </td>
                     <td className="py-2 px-2 text-right tabular-nums text-neutral-500">{fmt(r.effectiefIncl)}</td>
                     <td className="py-2 pl-2 text-right whitespace-nowrap">
                       {readOnly ? (
@@ -302,7 +311,8 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr className="text-[12.5px] font-bold text-neutral-900">
@@ -314,79 +324,12 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
               </tfoot>
             </table>
           )}
+          <p className="mt-4 text-[11px] text-neutral-500">
+            Meerwerkregels uit Bouw7 worden automatisch geïmporteerd (herkenbaar aan “uit Bouw7”). Bij die regels is Bouw7 leidend
+            voor omschrijving, bedrag en status; die worden bij elke sync bijgewerkt en zijn hier daarom niet bewerkbaar.
+          </p>
         </CardBody>
       </Card>
-
-      {bouw7 && bouw7.beschikbaar && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <span>Meerwerkregels in Bouw7 (read-only)</span>
-              {!readOnly && bouw7.regels.some(r => !r.alGeimporteerd) && (
-                <Button variant="secondary" onClick={importAlles} disabled={bezig}>Alles importeren</Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardBody style={{ padding: 0 }}>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-400">
-                  <th className="py-1.5 pl-4 pr-2">#</th>
-                  <th className="py-1.5 px-2">Aangevraagd door</th>
-                  <th className="py-1.5 px-2">Omschrijving</th>
-                  <th className="py-1.5 px-2">Offerte</th>
-                  <th className="py-1.5 px-2 text-right">Begroot</th>
-                  <th className="py-1.5 px-2 text-right">Verkoop</th>
-                  <th className="py-1.5 px-2 text-center">Stelpost</th>
-                  <th className="py-1.5 px-2">Datum</th>
-                  <th className="py-1.5 px-2">Status</th>
-                  <th className="py-1.5 pl-2 pr-4 text-right">Actie</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bouw7.regels.map(r => (
-                  <tr key={r.sleutel} className="border-b border-neutral-100 text-[12.5px]">
-                    <td className="py-1.5 pl-4 pr-2 tabular-nums text-neutral-500">{r.nummer ?? '—'}</td>
-                    <td className="py-1.5 px-2 text-neutral-700">
-                      {r.aangevraagdDoor ?? '—'}
-                      {r.contactpersoon && <div className="text-[10px] text-neutral-400">{r.contactpersoon}</div>}
-                    </td>
-                    <td className="py-1.5 px-2 text-neutral-800">{r.omschrijving}</td>
-                    <td className="py-1.5 px-2 text-neutral-500">{r.offerteNummer ? `${r.offerteNummer}${r.offerteSubject ? ` — ${r.offerteSubject}` : ''}` : '—'}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(r.begroot)}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-neutral-900">{fmt(r.verkoop)}</td>
-                    <td className="py-1.5 px-2 text-center text-neutral-600">{r.isStelpost ? 'Ja' : 'Nee'}</td>
-                    <td className="py-1.5 px-2 text-neutral-500">{r.datum ?? '—'}</td>
-                    <td className="py-1.5 px-2">
-                      <Badge size="sm" tone={
-                        r.status === 1 ? 'success' : r.status === 2 ? 'error'
-                        : r.status === 3 ? 'brand' : r.status === 4 ? 'info' : 'neutral'
-                      }>{r.statusLabel}</Badge>
-                    </td>
-                    <td className="py-1.5 pl-2 pr-4 text-right">
-                      {r.alGeimporteerd
-                        ? <span className="text-[11px] text-neutral-400">Geïmporteerd</span>
-                        : readOnly
-                          ? <span className="text-neutral-300">—</span>
-                          : <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig} onClick={() => importLine(r)}>Importeer</button>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="text-[12.5px] font-bold text-neutral-900">
-                  <td className="pt-2.5 pl-4" colSpan={5}>Totaal verkoop</td>
-                  <td className="pt-2.5 px-2 text-right tabular-nums">{fmt(bouw7.totaalVerkoop)}</td>
-                  <td colSpan={4} />
-                </tr>
-              </tfoot>
-            </table>
-            <div className="px-4 py-3 text-[11px] text-neutral-500">
-              Live uit Bouw7 (de echte meerwerkregels van dit project). Importeren maakt een bewerkbare EVA-regel; dubbel importeren wordt voorkomen. Status: Geregistreerd · Akkoord · Niet akkoord · Opgeleverd · Gefactureerd.
-            </div>
-          </CardBody>
-        </Card>
-      )}
     </div>
   )
 }

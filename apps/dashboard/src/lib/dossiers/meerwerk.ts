@@ -14,7 +14,6 @@ import { bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { maakMeerwerkOfferte } from '@/app/(platform)/everts-calc/actions/quotes'
-import type { Bouw7AdditionalWorkLine } from '@/lib/bouw7/client'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -29,11 +28,6 @@ const TRANSITIES: Record<MeerwerkStatus, MeerwerkStatus[]> = {
 }
 
 const rond = (n: number): number => Math.round(n * 100) / 100
-const num = (v: unknown): number => {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-  if (typeof v === 'string') { const n = parseFloat(v.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
-  return 0
-}
 
 /** Effectief bedrag (excl. btw) per regel, afhankelijk van afrekenwijze/stelpost. */
 function effectiefExcl(regel: MeerwerkRegel, regiePerCode: Map<string, number>): number {
@@ -164,9 +158,9 @@ export async function maakMeerwerkRegel(
 export async function updateMeerwerkRegel(
   id: string,
   patch: Partial<NieuweMeerwerkData> & { termijn_wijze?: MeerwerkTermijnWijze | null },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
-  const { data: bestaand } = await supabase.from('meerwerk_regels').select('dossier_id').eq('id', id).single()
+  const { data: bestaand } = await supabase.from('meerwerk_regels').select('*').eq('id', id).single()
   if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
   const velden: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of ['omschrijving', 'afrekenwijze', 'is_stelpost', 'stelpost_grondslag', 'bedrag_excl_btw',
@@ -183,8 +177,17 @@ export async function updateMeerwerkRegel(
     .select('dossier_id')
     .single()
   if (error) return { ok: false, error: error.message }
+
+  // Twee-weg: een bewerkte EVA-eigen regel die aan een Bouw7-meerwerkregel hangt terugschrijven naar Bouw7.
+  // Geïmporteerde regels (bron='bouw7_line') niet — daar is Bouw7 leidend en de sync overschrijft toch.
+  let waarschuwing: string | undefined
+  if (bestaand?.bron === 'eva' && bestaand.bouw7_line_id != null) {
+    const res = await updateMeerwerkInBouw7({ ...(bestaand as MeerwerkRegel), ...(velden as Partial<MeerwerkRegel>) })
+    if (!res.ok) waarschuwing = `Wijziging in EVA opgeslagen, maar terugschrijven naar Bouw7 mislukt: ${res.error}`
+  }
+
   revalidatePath(`/opdrachten/${row.dossier_id}/meerwerk`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 export async function verwijderMeerwerkRegel(
@@ -304,194 +307,9 @@ export async function maakMeerwerkCalculatie(
   return { ok: true, quoteId: res.quoteId }
 }
 
-// ─── Bestaand Bouw7-meerwerk (echte meerwerkregels) lezen + importeren ─────────
-
-export type Bouw7MeerwerkLine = {
-  sleutel: string
-  lineId: number
-  nummer: string | null
-  aangevraagdDoor: string | null
-  contactpersoon: string | null
-  omschrijving: string
-  offerteNummer: string | null
-  offerteSubject: string | null
-  begroot: number
-  verkoop: number
-  isStelpost: boolean
-  datum: string | null
-  status: number | null
-  statusLabel: string
-  alGeimporteerd: boolean
-}
-export type Bouw7MeerwerkData = {
-  beschikbaar: boolean
-  regels: Bouw7MeerwerkLine[]
-  totaalVerkoop: number
-}
-
-/** Bouw7-meerwerkstatussen (bevestigd uit de Bouw7-UI, juli 2026). */
-const BOUW7_MW_STATUS_LABELS: Record<number, string> = {
-  0: 'Geregistreerd',
-  1: 'Akkoord',
-  2: 'Niet akkoord',
-  3: 'Opgeleverd',
-  4: 'Gefactureerd',
-}
-const bouw7StatusLabel = (s: number | null | undefined): string =>
-  s == null ? '—' : (BOUW7_MW_STATUS_LABELS[s] ?? `Status ${s}`)
-
-/**
- * Leest de echte Bouw7-meerwerkregels van een project (GET /list/additional-work-lines, Heimdall).
- * `cost` = verkoopprijs excl. btw, `budgetAmount` = begroot (kostprijs), `isProvisional` = stelpost.
- * Per regel wordt gemarkeerd of hij al als EVA-regel is geïmporteerd (op bronsleutel `line:{id}`).
- */
-export async function getBouw7Meerwerk(dossierId: string): Promise<Bouw7MeerwerkData> {
-  const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return { beschikbaar: false, regels: [], totaalVerkoop: 0 }
-  const { client, bouw7Id } = ctx
-
-  const supabase = createAdminClient() as any
-  const { data: bestaand } = await supabase
-    .from('meerwerk_regels')
-    .select('bouw7_bron_sleutel')
-    .eq('dossier_id', dossierId)
-    .not('bouw7_bron_sleutel', 'is', null)
-  const geimporteerd = new Set<string>((bestaand ?? []).map((r: any) => r.bouw7_bron_sleutel))
-
-  let items: Bouw7AdditionalWorkLine[] = []
-  try {
-    const resp = await client.get<{ items?: Bouw7AdditionalWorkLine[] }>('/list/additional-work-lines', {
-      q: `projectId = ${bouw7Id} LIMIT 500`,
-    })
-    items = resp.items ?? []
-  } catch {
-    return { beschikbaar: false, regels: [], totaalVerkoop: 0 }
-  }
-
-  const regels: Bouw7MeerwerkLine[] = items.map(it => {
-    const sleutel = `line:${it.id}`
-    const cp = it.executorContactPerson
-    return {
-      sleutel,
-      lineId: it.id,
-      nummer: it.number ?? null,
-      aangevraagdDoor: it.executor?.name ?? null,
-      contactpersoon: cp ? ([cp.firstName, cp.lastName].filter(Boolean).join(' ') || null) : null,
-      omschrijving: it.description?.trim() || it.number || 'Meerwerk',
-      offerteNummer: it.quotation?.number ?? null,
-      offerteSubject: it.quotation?.subject?.trim() || null,
-      begroot: rond(num(it.budgetAmount)),
-      verkoop: rond(num(it.cost)),
-      isStelpost: !!it.isProvisional,
-      datum: it.date ?? null,
-      status: it.status ?? null,
-      statusLabel: bouw7StatusLabel(it.status),
-      alGeimporteerd: geimporteerd.has(sleutel),
-    }
-  })
-  const totaalVerkoop = rond(regels.reduce((s, r) => s + r.verkoop, 0))
-  return { beschikbaar: regels.length > 0, regels, totaalVerkoop }
-}
-
-/** Bouw7-meerwerkstatus → dichtstbijzijnde EVA-status bij import. */
-const BOUW7_STATUS_NAAR_EVA: Record<number, MeerwerkStatus> = {
-  0: 'aangevraagd',  // Geregistreerd
-  1: 'akkoord',      // Akkoord
-  2: 'afgewezen',    // Niet akkoord
-  3: 'voltooid',     // Opgeleverd
-  4: 'voltooid',     // Gefactureerd
-}
-
-export type ImporteerMeerwerkLine = {
-  sleutel: string
-  lineId: number
-  nummer: string | null
-  omschrijving: string
-  begroot: number
-  verkoop: number
-  isStelpost: boolean
-  status: number | null
-  offerteNummer: string | null
-}
-
-/**
- * Importeert één echte Bouw7-meerwerkregel als bewerkbare EVA-regel. Dedupe op bronsleutel
- * (`line:{id}`) — dubbel importeren geeft de bestaande regel terug. De Bouw7-status wordt op de
- * dichtstbijzijnde EVA-status gemapt; er wordt niets naar Bouw7 teruggeschreven (de regel bestaat daar al).
- */
-export async function importeerBouw7Meerwerk(
-  dossierId: string,
-  item: ImporteerMeerwerkLine,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  await assertDossierBewerkbaar(dossierId)
-  const supabase = createAdminClient() as any
-
-  const { data: bestaand } = await supabase
-    .from('meerwerk_regels')
-    .select('id')
-    .eq('dossier_id', dossierId)
-    .eq('bouw7_bron_sleutel', item.sleutel)
-    .maybeSingle()
-  if (bestaand) return { ok: true, id: bestaand.id }
-
-  const { data: maxRow } = await supabase
-    .from('meerwerk_regels')
-    .select('volgnummer')
-    .eq('dossier_id', dossierId)
-    .order('volgnummer', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const volgnummer = (maxRow?.volgnummer ?? 0) + 1
-
-  const status: MeerwerkStatus = item.status != null ? (BOUW7_STATUS_NAAR_EVA[item.status] ?? 'akkoord') : 'aangevraagd'
-
-  const { data: ins, error } = await supabase
-    .from('meerwerk_regels')
-    .insert({
-      dossier_id: dossierId,
-      volgnummer,
-      omschrijving: item.omschrijving,
-      afrekenwijze: 'aangenomen',
-      is_stelpost: item.isStelpost,
-      stelpost_grondslag: item.isStelpost ? 'eenheidsprijzen' : null,
-      bedrag_excl_btw: item.verkoop,
-      begroot_bedrag: item.begroot,
-      status,
-      factuurreferentie: item.offerteNummer,
-      bron: 'bouw7_line',
-      bouw7_bron_sleutel: item.sleutel,
-      bouw7_line_id: item.lineId,
-      bouw7_nummer: item.nummer,
-    })
-    .select('id')
-    .single()
-  if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${dossierId}/meerwerk`)
-  return { ok: true, id: ins.id }
-}
-
-/** Importeert alle nog niet-geïmporteerde Bouw7-meerwerkregels in één keer. */
-export async function importeerAlleBouw7Meerwerk(
-  dossierId: string,
-): Promise<{ ok: true; aantal: number } | { ok: false; error: string }> {
-  await assertDossierBewerkbaar(dossierId)
-  const data = await getBouw7Meerwerk(dossierId)
-  const teImporteren = data.regels.filter(r => !r.alGeimporteerd)
-  let aantal = 0
-  for (const r of teImporteren) {
-    const res = await importeerBouw7Meerwerk(dossierId, {
-      sleutel: r.sleutel, lineId: r.lineId, nummer: r.nummer, omschrijving: r.omschrijving,
-      begroot: r.begroot, verkoop: r.verkoop, isStelpost: r.isStelpost, status: r.status, offerteNummer: r.offerteNummer,
-    })
-    if (res.ok) aantal++
-  }
-  revalidatePath(`/opdrachten/${dossierId}/meerwerk`)
-  return { ok: true, aantal }
-}
-
 // ─── Nieuwe meerwerkregel naar Bouw7 schrijven (POST additional-work-line) ─────
 
-/** EVA-status → Bouw7-meerwerkstatus (omgekeerde van BOUW7_STATUS_NAAR_EVA). */
+/** EVA-status → Bouw7-meerwerkstatus. */
 const EVA_STATUS_NAAR_BOUW7: Record<MeerwerkStatus, number> = {
   aangevraagd: 0,        // Geregistreerd
   offerte_verstuurd: 0,  // (geen Bouw7-equivalent) → Geregistreerd
