@@ -1943,7 +1943,7 @@ export async function syncOfferteHerinneringen(opts?: { mode?: SyncMode; onlyBou
       const dossierId = dossierMap.get(pid)
       if (!dossierId) continue
       const datum = r.remindAt ? r.remindAt.slice(0, 10) : null
-      const tekst = (r.description ?? '').trim() || '(geen omschrijving)'
+      const tekst = bouw7RichTextNaarTekst((r.description ?? '').trim()) || '(geen omschrijving)'
       const inhoud = `📌 Offerte-herinnering${datum ? ` (${datum})` : ''}: ${tekst}`
       const auteur = r.createdBy?.username ? (emailMap.get(r.createdBy.username.toLowerCase()) ?? null) : null
       gewenst.set(`reminder:${r.id}`, { dossier_id: dossierId, inhoud, medewerker_id: auteur })
@@ -2131,6 +2131,42 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
 }
 
 /**
+ * Zet Bouw7 rich-text (de `note`/`information`-velden komen als HTML binnen) om naar
+ * leesbare platte tekst. De notitie-weergave rendert bewust géén HTML (geen
+ * dangerouslySetInnerHTML → geen XSS), dus de opmaak moet hier al platgeslagen zijn.
+ * Behoudt de structuur: paragrafen en <br> worden regeleindes, lijst-items krijgen
+ * een bullet. Platte tekst zonder tags passeert vrijwel ongewijzigd.
+ */
+function bouw7RichTextNaarTekst(html: string): string {
+  if (!html) return ''
+  let s = html
+    .replace(/\r\n?/g, '\n')
+    // lijst-items → bullet op eigen regel
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<\/li>/gi, '')
+    // regel- en paragraaf-scheiders
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|ul|ol|tr)>/gi, '\n')
+    // resterende tags weg
+    .replace(/<[^>]+>/g, '')
+  // veelvoorkomende HTML-entities decoderen
+  s = s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+  // whitespace opschonen: spaties per regel trimmen, max één lege regel
+  return s
+    .split('\n')
+    .map(r => r.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
  * Interne projectnotitie (GET /project/{id}.note) → dossier-notitie (ref 'note:project') en de
  * projectomschrijving (`information`) → dossier-notitie (ref 'note:information'). Beide maximaal
  * één per dossier. Kost een detail-call per dossier: draait alléén bij `full`-sync of per-dossier
@@ -2196,8 +2232,8 @@ export async function syncDossierNotities(opts?: { mode?: SyncMode; onlyBouw7Ids
         const d = batch[j]
         const r = details[j]
         if (r.status !== 'fulfilled') { result.overgeslagen = (result.overgeslagen ?? 0) + 1; continue } // bv. gearchiveerd project (404)
-        await bewaar(d.id, 'note:project', (r.value?.note ?? '').trim(), '📝 Interne notitie (Bouw7): ')
-        await bewaar(d.id, 'note:information', (r.value?.information ?? '').trim(), '📄 Omschrijving (Bouw7): ')
+        await bewaar(d.id, 'note:project', bouw7RichTextNaarTekst((r.value?.note ?? '').trim()), '📝 Interne notitie (Bouw7): ')
+        await bewaar(d.id, 'note:information', bouw7RichTextNaarTekst((r.value?.information ?? '').trim()), '📄 Omschrijving (Bouw7): ')
       }
     }
   } catch (e: unknown) {
