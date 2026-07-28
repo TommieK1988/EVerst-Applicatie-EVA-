@@ -11,7 +11,8 @@ import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
-import { getScenarios } from '@/lib/everts-calc/local-store'
+import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import type { Scenario } from '@/lib/everts-calc/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
@@ -46,9 +47,29 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
   const [calcTick, setCalcTick]                     = useState(0)
+  const [gehydrateerd, setGehydrateerd]             = useState(false)
+
+  // Hydrateer de gedeelde calculatie uit Supabase (één keer per project) zodat álle
+  // scenario's — inclusief meerwerk-calculaties die op een ander moment/apparaat zijn
+  // gemaakt — hier zichtbaar zijn en niet alleen wat toevallig in localStorage staat.
   useEffect(() => {
+    let actief = true
+    setGehydrateerd(false)
+    if (!projectId) { setGehydrateerd(true); return }
+    ;(async () => {
+      try {
+        const snap = await laadCalculatieSnapshot(projectId)
+        if (actief && snap) hydrateCalculatie(projectId, snap)
+      } catch { /* val terug op lokaal */ }
+      finally { if (actief) setGehydrateerd(true) }
+    })()
+    return () => { actief = false }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!gehydrateerd) return
     setScenarios(projectId ? getScenarios(projectId) : [])
-  }, [projectId, toonCalculatie, calcTick])
+  }, [projectId, gehydrateerd, toonCalculatie, calcTick])
 
   const handleScenariosGewijzigd = (nieuwId?: string) => {
     setCalcTick(t => t + 1)
@@ -147,6 +168,12 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
         </Card>
       </div>
     )
+  }
+
+  // Wacht op de gedeelde calculatie uit Supabase zodat het overzicht niet met een lege/
+  // oude lijst flitst (en meerwerk-calculaties gegarandeerd meekomen).
+  if (!gehydrateerd) {
+    return <div className="px-8 py-7 text-[13px] text-neutral-500">Calculaties laden…</div>
   }
 
   // Overzicht van alle calculaties + offertes.

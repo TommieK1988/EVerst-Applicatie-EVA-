@@ -119,6 +119,10 @@ export interface Scenario {
   voorwaarden_tekst?: string | null
   uitsluitingen_tekst?: string | null
   opmerkingen_tekst?: string | null
+  /** Gezet wanneer deze calculatie de calculatie van een meerwerkregel is (i.p.v. een
+   *  contractversie). Zo blijft het meerwerk in hetzelfde dossier-project maar apart
+   *  herkenbaar (eigen blok in de versie-kiezer; offerte wordt als meerwerk gekoppeld). */
+  meerwerk_regel_id?: string | null
 }
 
 export interface Activiteit {

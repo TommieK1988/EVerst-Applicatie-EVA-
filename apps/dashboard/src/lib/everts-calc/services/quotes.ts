@@ -178,40 +178,6 @@ export async function getQuotesVoorDossier(
   return { projectId, projectAangemaakt, rijen }
 }
 
-/**
- * Alle everts-calc quotes van één project (op quotes.project_id). Gebruikt voor het eigen
- * calculatieproject van een meerwerkregel — dat hangt niet aan dossiers.everts_calc_project_id.
- */
-export async function getQuotesVoorProject(projectId: string): Promise<DossierQuoteRij[]> {
-  if (!projectId) return []
-  const supabase = await getDb()
-  const { data, error } = await supabase
-    .from('quotes')
-    .select(`
-      id, quote_nummer, type, status, titel, referentie,
-      datum, geldig_tot, subtotaal_ex_btw, btw_bedrag, totaal_inc_btw,
-      scenario_id, meerwerk_regel_id, versie, verzonden_at, created_at,
-      lines:quote_lines(hoeveelheid, kostprijs_pe)
-    `)
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-  if (error) throw new Error(error.message)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map((q: any) => {
-    const totaal_kostprijs = (q.lines ?? []).reduce(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (sum: number, l: any) => sum + ((l.hoeveelheid ?? 0) * (l.kostprijs_pe ?? 0)),
-      0,
-    )
-    const subtotaal = q.subtotaal_ex_btw ?? 0
-    const marge = subtotaal - totaal_kostprijs
-    const marge_pct = subtotaal > 0 ? (marge / subtotaal) * 100 : null
-    const { lines: _lines, created_at: _created_at, ...rest } = q
-    return { ...rest, totaal_kostprijs, marge, marge_pct } as DossierQuoteRij
-  })
-}
-
 export async function getQuotes(): Promise<Quote[]> {
   const supabase = await getDb()
   const { data, error } = await supabase

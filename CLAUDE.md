@@ -4,19 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo structure
 
-npm workspaces + Turborepo. Twee actieve Next.js 15 apps onder `apps/`, vijf interne packages onder `packages/`.
+npm workspaces + Turborepo. Eén actieve Next.js 15 app onder `apps/`, vijf interne packages onder `packages/`.
 
 **De centrale app is EVA** (`apps/dashboard`, package-naam `eva`). Alle modules (wagenpark, houtrotherstel, taken, everts-calc) zijn geïntegreerd in EVA — ze draaien **niet** meer als losse apps.
 
 | App | Port | Purpose |
 |-----|------|---------|
 | `apps/dashboard` (EVA) | 3000 | Centraal platform — alle modules geïntegreerd |
-| `apps/everts-calc` | 3001 | Legacy standalone (wordt samengevoegd met EVA, tijdelijk actief) |
 
 Gearchiveerde standalone apps (niet meer starten):
 - `apps/taken` — geïntegreerd in EVA onder `/taken` (heet in de interface **Acties**/Actielijsten;
   routes, mappen en DB-namen blijven bewust `taken`/`tasks`)
 - `apps/wagenpark` — geïntegreerd in EVA onder `/wagenpark`
+
+De losse **everts-calc** standalone-app (`apps/everts-calc`, poort 3001) is **verwijderd** (juli 2026);
+de calculatie-/offerte-module leeft volledig in EVA onder `apps/dashboard/src/**/everts-calc/`.
 
 **Houtrot** is geen aparte app of module meer. `apps/houtrotherstel-app` is verwijderd
 (juli 2026) en de losse schermen onder `/houtrotherstel` (dashboard, projecten,
@@ -42,7 +44,6 @@ npm run dev
 
 # Specifieke app starten
 npm run dev:eva              # EVA — port 3000
-npm run dev:everts-calc      # legacy calc — port 3001 (tijdelijk)
 
 # Of via Turbo filter (algemeen patroon)
 npx turbo run dev --filter=<app-name>

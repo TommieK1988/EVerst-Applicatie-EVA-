@@ -130,14 +130,15 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
 
   if (data == null) return <div className="px-8 py-7 text-[13px] text-neutral-500">Meerwerk laden…</div>
 
-  // Inline calculatie-omgeving van één meerwerkregel (eigen calculatieproject).
+  // Inline calculatie-omgeving van één meerwerkregel (scenario in het dossier-project).
   if (calcOpen) {
     return (
       <MeerwerkCalculatie
         projectId={calcOpen.projectId}
         dossierId={dossierId}
         meerwerkRegelId={calcOpen.regelId}
-        naam={`Meerwerk — ${calcOpen.omschrijving}`}
+        omschrijving={calcOpen.omschrijving}
+        naam={naam}
         nummer={nummer}
         clientNaam={clientNaam}
         initialOfferteId={calcOpen.offerteId}
@@ -347,7 +348,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                           )}
                           <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                             onClick={() => calculatie(r)}>
-                            {r.calc_project_id ? 'Open calculatie' : 'Calculatie'}
+                            Calculatie
                           </button>
                           {r.quote_id && (
                             <>

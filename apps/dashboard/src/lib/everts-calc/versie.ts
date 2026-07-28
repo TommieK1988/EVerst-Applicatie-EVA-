@@ -10,9 +10,10 @@
  * begroting klaar is (zonder calculatie geen offerte).
  */
 
-import { getScenario, getScenarios, kopieerScenario, slaScenarioOp } from '@/lib/everts-calc/local-store'
+import { getScenario, getScenarios, kopieerScenario, slaScenarioOp, getInstellingen } from '@/lib/everts-calc/local-store'
 import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Scenario } from '@/lib/everts-calc/types'
 
 /** Familie-anker van een scenario (root = v1 in de keten). */
@@ -65,5 +66,46 @@ export async function reviseerCalculatie(
   // Deel de nieuwe versie meteen met de server (gedeelde blob).
   await bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
 
+  return nieuw
+}
+
+// ─── Meerwerk-calculaties (scenario in het dossier-project, apart gemarkeerd) ──
+
+/** De (bestaande) meerwerk-calculatie van een meerwerkregel binnen een project. */
+export function vindMeerwerkScenario(projectId: string, meerwerkRegelId: string): Scenario | undefined {
+  return getScenarios(projectId).find(s => s.meerwerk_regel_id === meerwerkRegelId)
+}
+
+/**
+ * Maakt een verse meerwerk-calculatie (scenario) in het dossier-project, gemarkeerd met
+ * `meerwerk_regel_id` zodat hij niet als contractversie meetelt maar in een eigen blok
+ * verschijnt. Geen `is_standaard`. Persisteert meteen naar de gedeelde snapshot (net als
+ * reviseren) zodat de calculatie op elk apparaat zichtbaar is. Idempotent: bestaat er al
+ * een meerwerk-scenario voor deze regel, dan wordt dat teruggegeven.
+ */
+export async function maakMeerwerkScenario(
+  projectId: string,
+  meerwerkRegelId: string,
+  naam: string,
+): Promise<Scenario> {
+  const bestaand = vindMeerwerkScenario(projectId, meerwerkRegelId)
+  if (bestaand) return bestaand
+
+  const inst = getInstellingen()
+  const favorietTarief = inst.uurtarieven?.find(t => t.is_favoriet)?.tarief
+  const nieuw: Scenario = {
+    id: nieuweId(),
+    project_id: projectId,
+    naam,
+    is_standaard: false,
+    meerwerk_regel_id: meerwerkRegelId,
+    opslag_algemene_kosten: 8,
+    opslag_winst_risico: 10,
+    opslag_overhead: 0,
+    btw_pct_default: 21,
+    standaard_uurtarief: favorietTarief,
+  }
+  slaScenarioOp(nieuw)
+  await bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
   return nieuw
 }

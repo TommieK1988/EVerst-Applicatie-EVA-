@@ -58,17 +58,23 @@ export default function CalculatiesTabel({
   }, [projectId, scenarios, tick])
 
   const scenarioIds = new Set(scenarios.map(s => s.id))
-  // Offerte van een versie: de (niet-meerwerk) offerte van dit scenario.
+  // Offerte van een (contract- of meerwerk-)scenario: de offerte van dit scenario.
   const offerteVan = (sid: string) =>
     rijen.find(r => r.scenario_id === sid && !r.meerwerk_regel_id) ?? null
-  // Meerwerk-/legacy-offertes zonder gekoppelde calculatie(-versie).
+  const meerwerkOfferteVan = (sid: string) =>
+    rijen.find(r => r.scenario_id === sid) ?? null
+  // Meerwerk-scenario's staan in hetzelfde dossier-project maar apart gemarkeerd; ze
+  // tellen niet als contractversie.
+  const meerwerkScenarios = scenarios.filter(s => s.meerwerk_regel_id)
+  // Overige offertes: alleen echt losse offertes (geen scenario in dít project). Meerwerk-
+  // offertes met een scenario in dit project verschijnen in het Meerwerk-blok.
   const overigeOffertes = rijen.filter(
-    r => r.meerwerk_regel_id || !r.scenario_id || !scenarioIds.has(r.scenario_id),
+    r => !r.scenario_id || !scenarioIds.has(r.scenario_id),
   )
 
-  // Versies sorteren op familie (versie_root) en dan versienummer.
+  // Versies (contract, dus zonder meerwerk-markering) op familie + versienummer.
   const versies = useMemo(
-    () => [...scenarios].sort((a, b) => {
+    () => scenarios.filter(s => !s.meerwerk_regel_id).sort((a, b) => {
       const ra = versieRootVan(a), rb = versieRootVan(b)
       if (ra !== rb) return ra < rb ? -1 : 1
       return (a.versie ?? 1) - (b.versie ?? 1)
@@ -160,7 +166,71 @@ export default function CalculatiesTabel({
         </CardBody>
       </Card>
 
-      {/* Meerwerk-/losse offertes zonder gekoppelde calculatie-versie. */}
+      {/* Meerwerk-calculaties: scenario's in dit dossier-project, apart gemarkeerd. */}
+      {meerwerkScenarios.length > 0 && (
+        <Card>
+          <CardHeader>Meerwerk-calculaties</CardHeader>
+          <CardBody style={{ padding: 0 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <TH>Meerwerk</TH>
+                  <TH>Offerte</TH>
+                  <TH right>Excl. BTW</TH>
+                  <TH right>Incl. BTW</TH>
+                  <TH right>Marge</TH>
+                  <TH right>Acties</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {meerwerkScenarios.map(s => {
+                  const t = totalenPerScenario.get(s.id)
+                  const offerte = meerwerkOfferteVan(s.id)
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => onOpenCalculatie(s.id)}
+                      className="cursor-pointer hover:bg-neutral-50"
+                      title="Meerwerk-calculatie openen"
+                    >
+                      <TD vet>{s.naam || s.nummer || '—'}</TD>
+                      <TD>
+                        {offerte ? (
+                          <span
+                            onClick={e => { e.stopPropagation(); onOpenOfferte(offerte.id) }}
+                            className="cursor-pointer"
+                            title="Offerte openen"
+                          >
+                            <Badge tone={STATUS_TONE[offerte.status] ?? 'neutral'}>
+                              {offerte.quote_nummer}{' · '}{STATUS_LABELS[offerte.status] ?? offerte.status}
+                            </Badge>
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400 text-[12.5px]">Nog geen offerte</span>
+                        )}
+                      </TD>
+                      <TD right>{t ? fmt(t.subtotaal_ex_btw, true) : '—'}</TD>
+                      <TD right vet>{t ? fmt(t.totaal_incl_btw, true) : '—'}</TD>
+                      <TD right kleur={t && t.marge_pct < 10 ? '#d9534f' : undefined}>
+                        {t ? `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(t.marge_pct)} %` : '—'}
+                      </TD>
+                      <TD right>
+                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                          <Button variant="ghost" size="sm" onClick={() => onOpenCalculatie(s.id)}>
+                            <Calculator className="h-3.5 w-3.5" /> Openen
+                          </Button>
+                        </div>
+                      </TD>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Losse offertes zonder gekoppelde calculatie-versie in dit project. */}
       {overigeOffertes.length > 0 && (
         <Card>
           <CardHeader>Overige offertes</CardHeader>

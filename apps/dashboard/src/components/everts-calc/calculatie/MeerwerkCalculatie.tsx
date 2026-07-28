@@ -1,39 +1,36 @@
 'use client'
 
 /**
- * MeerwerkCalculatie — de calculatie-omgeving van één meerwerkregel, gebonden aan het
- * eigen everts-calc project van dat meerwerk (meerwerk_regels.calc_project_id). Volledig
- * geïsoleerd van de contractcalculatie. Spiegelt AanvraagCalculatieTab, maar het project
- * bestaat al (server-side aangemaakt door maakMeerwerkCalculatie) — dus géén koppel-stap.
- *
- * Flow: verse meerwerk-calculatie → direct de editor in (0 versies). Zodra er ≥1 versie is
- * landt hij op de versie-kiezer. De offerte maak je via de normale "Offerte aanmaken"-modal
- * (met lay-out-keuze); die wordt als meerwerk-offerte gekoppeld (meerwerkRegelId).
+ * MeerwerkCalculatie — opent de calculatie van één meerwerkregel. De calculatie is een
+ * scenario ín het dossier-project (dossiers.everts_calc_project_id), gemarkeerd met
+ * meerwerk_regel_id, zodat hij onder het Calculatie-tab in een eigen "Meerwerk-calculaties"-
+ * blok verschijnt (geen apart project meer). Dit component hydrateert het dossier-project,
+ * zoekt (of maakt) het meerwerk-scenario en opent de calculatie-omgeving erop. De offerte
+ * maak je daar via de normale "Offerte aanmaken"-modal (met lay-out-keuze); die wordt
+ * automatisch als meerwerk-offerte gekoppeld (op basis van scenario.meerwerk_regel_id).
  */
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import toast from 'react-hot-toast'
 import { ArrowLeft } from 'lucide-react'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
-import CalculatiesTabel from './CalculatiesTabel'
 import OfferteDetail from './OfferteDetail'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
-import { getMeerwerkCalcQuotes } from '@/lib/dossiers/meerwerk'
-import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
-import { reviseerCalculatie } from '@/lib/everts-calc/versie'
+import { hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { maakMeerwerkScenario, vindMeerwerkScenario } from '@/lib/everts-calc/versie'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import { Button } from '@/components/ui'
-import type { Scenario } from '@/lib/everts-calc/types'
-import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 
 interface Props {
-  /** Eigen everts-calc project van dit meerwerk. */
+  /** Dossier-project (dossiers.everts_calc_project_id) waarin het meerwerk-scenario leeft. */
   projectId: string
   /** Dossier waarin het meerwerk zit — voor de offerte-render en context. */
   dossierId: string
-  /** Meerwerkregel — de offerte die hier ontstaat wordt als meerwerk-offerte gekoppeld. */
+  /** Meerwerkregel — de calculatie/offerte wordt hieraan gekoppeld. */
   meerwerkRegelId: string
+  /** Omschrijving van het meerwerk — naam van het scenario. */
+  omschrijving: string
+  /** Dossier-naam/-nummer + klant voor de calculatie-omgeving. */
   naam: string
   nummer: string
   clientNaam?: string | null
@@ -44,7 +41,7 @@ interface Props {
 }
 
 export default function MeerwerkCalculatie({
-  projectId, dossierId, meerwerkRegelId, naam, nummer, clientNaam, initialOfferteId, onTerug,
+  projectId, dossierId, meerwerkRegelId, omschrijving, naam, nummer, clientNaam, initialOfferteId, onTerug,
 }: Props) {
   const readOnly = useDossierReadOnly()
   const searchParams = useSearchParams()
@@ -55,64 +52,42 @@ export default function MeerwerkCalculatie({
     if (q) setOfferteId(q)
   }, [searchParams])
 
-  const [scenarios, setScenarios]                   = useState<Scenario[]>([])
-  const [rijen, setRijen]                           = useState<DossierQuoteRij[]>([])
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
-  const [toonCalculatie, setToonCalculatie]         = useState(false)
-  const [calcTick, setCalcTick]                     = useState(0)
-  const [gehydrateerd, setGehydrateerd]             = useState(false)
+  const [scenarioId, setScenarioId] = useState<string | null>(null)
+  const [gereed, setGereed]         = useState(false)
+  const [fout, setFout]             = useState<string | null>(null)
 
-  // Hydrateer de gedeelde calculatie uit Supabase (één keer per project, vóór het grid
-  // rendert). Draait bewust NIET op calcTick, anders zou een lokaal net-gekopieerde (nog
-  // niet opgeslagen) calculatie overschreven worden.
+  // Hydrateer het dossier-project (vóór het grid rendert, zodat de andere scenario's
+  // niet overschreven worden), zoek dan het meerwerk-scenario of maak het aan.
   useEffect(() => {
     let actief = true
-    setGehydrateerd(false)
+    setGereed(false); setFout(null); setScenarioId(null)
     ;(async () => {
       try {
         const snap = await laadCalculatieSnapshot(projectId)
-        if (actief && snap) hydrateCalculatie(projectId, snap)
-      } catch { /* val terug op lokaal */ }
-      finally { if (actief) setGehydrateerd(true) }
+        if (!actief) return
+        if (snap) hydrateCalculatie(projectId, snap)
+
+        let sc = vindMeerwerkScenario(projectId, meerwerkRegelId)
+        if (!sc && !readOnly) {
+          sc = await maakMeerwerkScenario(projectId, meerwerkRegelId, `Meerwerk — ${omschrijving}`)
+        }
+        if (!actief) return
+        setScenarioId(sc?.id ?? null)
+      } catch (e) {
+        if (actief) setFout(e instanceof Error ? e.message : 'Meerwerk-calculatie laden mislukt.')
+      } finally {
+        if (actief) setGereed(true)
+      }
     })()
     return () => { actief = false }
-  }, [projectId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, meerwerkRegelId])
 
-  useEffect(() => {
-    if (!gehydrateerd) { setScenarios([]); return }
-    setScenarios(getScenarios(projectId))
-  }, [projectId, gehydrateerd, calcTick])
-
-  // Offertes van het meerwerk-project (voor de versie-kiezer). Herladen na hydratie,
-  // na lokale wijzigingen en zodra een geopende offerte weer gesloten wordt.
-  useEffect(() => {
-    if (!gehydrateerd) return
-    let actief = true
-    getMeerwerkCalcQuotes(projectId).then(r => { if (actief) setRijen(r) }).catch(() => {})
-    return () => { actief = false }
-  }, [projectId, gehydrateerd, calcTick, offerteId])
-
-  // Verse meerwerk-calculatie zonder versie → meteen de editor in om te bouwen.
-  useEffect(() => {
-    if (gehydrateerd && scenarios.length === 0) setToonCalculatie(true)
-  }, [gehydrateerd, scenarios.length])
-
-  const handleScenariosGewijzigd = (nieuwId?: string) => {
-    setCalcTick(t => t + 1)
-    if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
-  }
-  const handleReviseer = async (sid: string) => {
-    const nieuw = await reviseerCalculatie(projectId, sid)
-    if (!nieuw) { toast.error('Reviseren mislukt'); return }
-    toast.success('Nieuwe versie aangemaakt')
-    handleScenariosGewijzigd(nieuw.id)
-  }
-
-  const terugKnop = (label: string, onClick: () => void) => (
+  const terugKnop = (
     <div className="px-8 pt-4">
-      <Button variant="ghost" onClick={onClick}>
+      <Button variant="ghost" onClick={onTerug}>
         <ArrowLeft className="h-3.5 w-3.5" />
-        {label}
+        Terug naar meerwerk
       </Button>
     </div>
   )
@@ -124,13 +99,13 @@ export default function MeerwerkCalculatie({
         <OfferteDetail
           quoteId={offerteId}
           dossierId={dossierId}
-          onTerug={() => { setOfferteId(null); setCalcTick(t => t + 1) }}
+          onTerug={() => setOfferteId(null)}
         />
       </div>
     )
   }
 
-  if (!gehydrateerd) {
+  if (!gereed) {
     return (
       <div style={{ padding: '56px 40px', display: 'flex', justifyContent: 'center' }}>
         <p style={{ fontSize: 13, color: 'var(--fg-muted)', margin: 0 }}>Meerwerk-calculatie laden…</p>
@@ -138,44 +113,33 @@ export default function MeerwerkCalculatie({
     )
   }
 
-  // Versie-kiezer zodra er ≥1 calculatie is en de omgeving niet expliciet geopend is.
-  if (scenarios.length > 0 && !toonCalculatie) {
+  if (fout || !scenarioId) {
     return (
       <div>
-        {terugKnop('Terug naar meerwerk', onTerug)}
-        <CalculatiesTabel
-          projectId={projectId}
-          scenarios={scenarios}
-          rijen={rijen}
-          tick={calcTick}
-          readOnly={readOnly}
-          onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
-          onOpenOfferte={setOfferteId}
-          onReviseer={handleReviseer}
-        />
+        {terugKnop}
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: 'var(--fg-muted)', margin: 0 }}>
+            {fout ?? (readOnly
+              ? 'Dit meerwerk heeft nog geen calculatie en het dossier is alleen-lezen.'
+              : 'Geen meerwerk-calculatie beschikbaar.')}
+          </p>
+        </div>
       </div>
     )
   }
 
-  // Een gekozen (of nieuwe) calculatie → de calculatie-omgeving.
   return (
     <div>
-      {terugKnop(
-        scenarios.length > 0 ? 'Terug naar versies' : 'Terug naar meerwerk',
-        () => {
-          if (scenarios.length > 0) { setToonCalculatie(false); setSelectedScenarioId(null) }
-          else onTerug()
-        },
-      )}
+      {terugKnop}
       <CalculatieHoofdscherm
         projectId={projectId}
         projectNaam={naam}
         projectNummer={nummer}
         toonProjectDetail
         readOnly={readOnly}
-        scenarioId={selectedScenarioId ?? undefined}
-        dossierContext={{ dossierId, clientNaam, meerwerkRegelId }}
-        onScenariosGewijzigd={handleScenariosGewijzigd}
+        scenarioId={scenarioId}
+        dossierContext={{ dossierId, clientNaam }}
+        magReviseren={false}
       />
     </div>
   )
