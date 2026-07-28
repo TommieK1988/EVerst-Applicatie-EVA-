@@ -120,7 +120,7 @@ export type NieuweMeerwerkData = {
 export async function maakMeerwerkRegel(
   dossierId: string,
   data: NieuweMeerwerkData,
-): Promise<{ ok: true; id: string; waarschuwing?: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
@@ -131,8 +131,9 @@ export async function maakMeerwerkRegel(
     .limit(1)
     .maybeSingle()
   const volgnummer = (maxRow?.volgnummer ?? 0) + 1
-  const code = `MW${String(volgnummer).padStart(2, '0')}`
 
+  // Bewakingscode wordt bewust NIET hier aangemaakt — dat gebeurt pas bij status 'akkoord'
+  // (zie setMeerwerkStatus). Zo staan er geen losse codes in Bouw7 voor nog niet goedgekeurd meerwerk.
   const { data: ins, error } = await supabase
     .from('meerwerk_regels')
     .insert({
@@ -148,28 +149,12 @@ export async function maakMeerwerkRegel(
       hoeveelheid_werkelijk: data.hoeveelheid_werkelijk ?? null,
       btw_pct: data.btw_pct ?? null,
       factuurreferentie: data.factuurreferentie ?? null,
-      bewakingscode: code,
     })
     .select('id')
     .single()
   if (error) return { ok: false, error: error.message }
-
-  // Meteen een eigen bewakingscode (code = MW##, naam = omschrijving) in Bouw7 aanmaken — best effort.
-  // Prognose-seed alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
-  let waarschuwing: string | undefined
-  const bedrag = data.afrekenwijze === 'aangenomen' && !data.is_stelpost ? (data.bedrag_excl_btw ?? null) : null
-  const bc = await maakMeerwerkBewakingscodeBouw7(dossierId, { code, naam: data.omschrijving, bedrag })
-  if (bc.ok) {
-    await supabase.from('meerwerk_regels')
-      .update({ bouw7_chapter_id: bc.chapterId, bouw7_security_code_id: bc.pslId, updated_at: new Date().toISOString() })
-      .eq('id', ins.id)
-    if (bc.waarschuwing) waarschuwing = bc.waarschuwing
-  } else {
-    waarschuwing = `Meerwerkregel opgeslagen, maar bewakingscode in Bouw7 aanmaken mislukt: ${bc.error}`
-  }
-
   revalidatePath(`/opdrachten/${dossierId}/meerwerk`)
-  return { ok: true, id: ins.id, waarschuwing }
+  return { ok: true, id: ins.id }
 }
 
 export async function updateMeerwerkRegel(

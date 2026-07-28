@@ -21,6 +21,15 @@ const STATUS_TONE: Record<MeerwerkStatus, 'neutral' | 'info' | 'success' | 'erro
 
 const selectCls =
   'h-8 rounded-md border border-neutral-300 bg-white px-2 text-[12px] text-neutral-800 outline-none focus:border-brand-500'
+// Status-dropdown: per status ingekleurd (zelfde tonen als de Badge, zie ui/badge.tsx).
+const selectStatusBase = 'h-8 rounded-md border px-2 text-[12px] font-medium outline-none'
+const STATUS_SELECT_TONE: Record<MeerwerkStatus, string> = {
+  aangevraagd:       'bg-neutral-50 border-neutral-300 text-neutral-700',
+  offerte_verstuurd: 'bg-info-50 border-info-300 text-info-700',
+  akkoord:           'bg-success-50 border-success-300 text-success-700',
+  afgewezen:         'bg-error-50 border-error-300 text-error-700',
+  voltooid:          'bg-brand-50 border-brand-300 text-brand-700',
+}
 const inlineInputCls =
   'w-full rounded border border-neutral-200 bg-white px-1.5 py-1 text-[12.5px] text-neutral-800 outline-none focus:border-brand-500'
 
@@ -49,8 +58,7 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
     const r = await maakMeerwerkRegel(dossierId, nieuw)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
-    else toast.success('Meerwerkregel toegevoegd')
+    toast.success('Meerwerkregel toegevoegd')
     setNieuw(LEGE_NIEUW); setFormOpen(false); herlaad()
   }
 
@@ -239,7 +247,7 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                       {readOnly ? (
                         <Badge tone={STATUS_TONE[r.status]} size="sm">{meerwerkStatusLabels[r.status]}</Badge>
                       ) : (
-                        <select className={selectCls} value={r.status} disabled={bezig}
+                        <select className={`${selectStatusBase} ${STATUS_SELECT_TONE[r.status]}`} value={r.status} disabled={bezig}
                           onChange={e => { if (e.target.value !== r.status) wijzigStatus(r, e.target.value as MeerwerkStatus) }}>
                           {(Object.keys(meerwerkStatusLabels) as MeerwerkStatus[]).map(s => (
                             <option key={s} value={s}>{meerwerkStatusLabels[s]}</option>
