@@ -576,7 +576,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   [/^\/wagenpark\/werktijden$/, {
     title: 'Wagenpark — Werktijden',
-    description: 'Per medewerker per week: hoeveel minuten er te laat is begonnen en te vroeg is gestopt. Bedoeld om cijfers klaar te zetten voor een gesprek met de medewerker. Alleen zichtbaar voor directie en beheer.',
+    description: 'Per medewerker per week: hoeveel minuten er te laat is begonnen en te vroeg is gestopt. Bedoeld om cijfers klaar te zetten voor een gesprek met de medewerker. Alleen zichtbaar met het recht "Wagenpark: privé & werktijden" — standaard heeft alleen Directie dat.',
     sections: [
       { title: 'Hoe de tijden worden bepaald', body: 'Aankomst op het werk is het einde van de eerste zakelijke ritketen van de dag; vertrek is het begin van de laatste. Ritten met minder dan vijf minuten ertussen tellen als één rit, zodat een tankstop of een opgeknipte registratie niet voor aankomst wordt aangezien. Elke stop telt als werkplek — ook de groothandel of het depot. De grens is de dagstart en het dageind uit het werkrooster.' },
       { title: 'Wat er niet meetelt', body: 'Dagen met verlof of afwezigheid worden overgeslagen, net als de lopende dag. Handmatig toegekende signalen tellen niet mee: daar is geen tijd van bekend. Een ≈ achter de roostertijd betekent dat er op die datum nog geen rooster gold en de dichtstbijzijnde is gebruikt.' },
@@ -586,7 +586,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Weektotalen en periode', body: 'De regels zijn gebundeld per medewerker per week; rechts in de balk staat het weektotaal. Bovenaan kies je dit of vorig kwartaal, dit of vorig jaar, of een eigen van-tot. De drie totalen bovenin volgen je filters: filter op één medewerker en je ziet zijn cijfers.' },
       { title: 'Delen met de medewerker', body: 'Filter op één medewerker en kies de periode. Klik dan op Exporteer: je krijgt een Excel-bestand met één regel per dag, waarin de afwijking en de geboekte uren als getal staan. Onderaan staan de totalen: minuten, omgerekend naar uren en naar werkdagen van acht uur. Verklaarde dagen staan daar apart onder en tellen niet mee in het totaal. Het bestand volgt de filters die op dat moment aanstaan.' },
       { title: 'Geboekte uren', body: 'De uren komen rechtstreeks uit Bouw7 en zijn dus altijd actueel. Een streepje in de kolom Geboekt betekent dat de uren niet opgehaald konden worden — niet dat er niets geschreven is. Staat er 0,0, dan is er die dag daadwerkelijk niets geboekt.' },
-      { title: 'Privacy', body: 'Deze cijfers gaan over het doen en laten van een met naam genoemde medewerker. Deel het overzicht alleen met de betrokkene zelf en met wie het functioneel nodig heeft.' },
+      { title: 'Privacy en toegang', body: 'Deze cijfers gaan over het doen en laten van een met naam genoemde medewerker. Wie ze mag zien wordt bepaald door het recht "Wagenpark: privé & werktijden"; datzelfde recht bepaalt of iemand privé-ritten in het wagenpark ziet. Standaard heeft alleen Directie het. Een beheerder kan het per afdeling of per gebruiker aan- of uitzetten bij Instellingen → Gebruikers. Deel het overzicht alleen met de betrokkene zelf en met wie het functioneel nodig heeft.' },
     ],
   }],
 

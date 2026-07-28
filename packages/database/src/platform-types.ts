@@ -590,6 +590,12 @@ export const RECHTEN_MODULES = [
   { key: 'relaties',       label: 'Relaties' },
   { key: 'medewerkers',    label: 'Medewerkers' },
   { key: 'wagenpark',      label: 'Wagenpark' },
+  // Privacygevoelige wagenpark-data: privé-ritten (in Ritten, Bestuurders,
+  // Parkeren, Dashboard, Livetracker) én de Werktijden-pagina. Geen eigen
+  // menu-item — het is een schakelaar bovenop 'wagenpark' die bepaalt of je de
+  // aankomst/vertrektijden en privé-ritten van een met naam genoemde collega
+  // mag zien. Alleen Directie krijgt hem standaard (seed-migratie).
+  { key: 'wagenpark_prive', label: 'Wagenpark: privé & werktijden' },
   { key: 'kam',            label: 'KAM/VGM' },
   { key: 'houtrotherstel', label: 'Houtrotherstel' },
   { key: 'everts_calc',    label: 'EvertsCalc' },

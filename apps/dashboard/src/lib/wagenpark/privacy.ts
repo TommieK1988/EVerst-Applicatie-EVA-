@@ -1,6 +1,5 @@
 import 'server-only'
-import { getCurrentMedewerker, getEffectieveRechten, isBeheerder } from '@/lib/auth/rechten'
-import { DIRECTIE_AFDELING } from '@/lib/goedkeuring/types'
+import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 
 /**
  * SQL-fragment dat het effectieve rit-type bepaalt, inclusief verlof-override.
@@ -45,18 +44,24 @@ export function ritTypeEffectiefSql(alias = 't'): string {
 }
 
 /**
- * Mag de huidige gebruiker privé-ritten zien?
+ * Mag de huidige gebruiker privacygevoelige wagenpark-data zien — privé-ritten
+ * én de Werktijden-pagina?
  *
- * Alleen Directie (afdeling = 'Directie') en beheerders
- * (instellingen = beheren). Overige wagenpark-gebruikers zien uitsluitend
- * effectief-zakelijke ritten. Reads in dit domein gaan via de directe
- * Postgres-pooler (RLS geldt daar niet), dus deze check bepaalt het
- * privacyfilter dat expliciet in de SQL wordt toegevoegd.
+ * Gestuurd door het recht `wagenpark_prive` (niveau lezen volstaat). Dat recht
+ * krijgt Directie standaard via de seed-migratie; een beheerder passeert sowieso
+ * (`heeftModuleToegang` geeft een beheerder overal toegang), dus wie de rechten
+ * beheert kan zichzelf nooit buitensluiten. Overige wagenpark-gebruikers zien
+ * uitsluitend effectief-zakelijke ritten en niet de Werktijden-pagina.
+ *
+ * Reads in dit domein gaan via de directe Postgres-pooler (RLS geldt daar niet),
+ * dus deze check bepaalt het privacyfilter dat expliciet in de SQL wordt
+ * toegevoegd. De functienaam blijft `magPriveRittenZien` omdat alle bestaande
+ * call-sites hem zo aanroepen; de betekenis is verbreed naar "privacygevoelige
+ * wagenpark-data".
  */
 export async function magPriveRittenZien(): Promise<boolean> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return false
   const rechten = await getEffectieveRechten(medewerker)
-  if (isBeheerder(rechten)) return true
-  return (medewerker.afdeling ?? '').trim().toLowerCase() === DIRECTIE_AFDELING.toLowerCase()
+  return heeftModuleToegang(rechten, 'wagenpark_prive', 'lezen')
 }

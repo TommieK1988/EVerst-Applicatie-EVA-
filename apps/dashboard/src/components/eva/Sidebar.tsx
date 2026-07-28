@@ -14,7 +14,7 @@ import {
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
-import { magOnderdeelZien } from '@/lib/auth/rechten-shared'
+import { magOnderdeelZien, heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { FEATURES } from '@/lib/features'
 import { getDossierToggles, dossierHeeftCalculatie } from '@/lib/dossiers/actions'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
@@ -92,7 +92,8 @@ const ICON_SJABLONEN = 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'
 const APP_SUBNAV: Record<string, {
   label: string
   Icon: React.ComponentType<{ size?: number }>
-  items: { href: string; label: string; icon: string }[]
+  /** `recht` gate't een sub-item op een extra recht bovenop de app-module. */
+  items: { href: string; label: string; icon: string; recht?: RechtenModule }[]
 }> = {
   '/formulieren': {
     label: 'Formulieren',
@@ -128,7 +129,7 @@ const APP_SUBNAV: Record<string, {
       { href: '/wagenpark/dashboard',   label: 'Dashboard',   icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
       { href: '/wagenpark/voertuigen',  label: 'Voertuigen',  icon: 'M8 17H5a2 2 0 01-2-2V7a2 2 0 012-2h11a2 2 0 012 2v3m-4 9h6m-3-3v6M3 11h18' },
       { href: '/wagenpark/ritten',      label: 'Ritten',      icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7' },
-      { href: '/wagenpark/werktijden',  label: 'Werktijden',  icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { href: '/wagenpark/werktijden',  label: 'Werktijden',  icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', recht: 'wagenpark_prive' },
       { href: '/wagenpark/bestuurders', label: 'Bestuurders', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
       { href: '/wagenpark/parkeren',    label: 'Parkeren',    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z' },
       { href: '/wagenpark/diagnose',    label: 'Diagnose',    icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18' },
@@ -498,9 +499,11 @@ export default function Sidebar({
         </NavSection>
       ) : activeApp ? (
         <NavSection label={activeApp.label} collapsed={collapsed}>
-          {activeApp.items.map(({ href, label, icon }) => (
-            <NavItem key={href} href={href} icon={<SubIcon d={icon} size={16}/>} label={label} active={isActive(href)}/>
-          ))}
+          {activeApp.items
+            .filter(({ recht }) => !recht || heeftModuleToegang(rechten ?? {}, recht, 'lezen'))
+            .map(({ href, label, icon }) => (
+              <NavItem key={href} href={href} icon={<SubIcon d={icon} size={16}/>} label={label} active={isActive(href)}/>
+            ))}
         </NavSection>
       ) : (
         <>
