@@ -40,16 +40,26 @@ const fmtPct = (resultaat: number, omzet: number): string => {
 
 /* ── gedeelde cel-componenten ────────────────────────────────────────── */
 
-const TH = ({ children, right, compact }: { children?: React.ReactNode; right?: boolean; compact?: boolean }) => (
-  <th style={{
+const TH = ({ children, right, center, compact, groepKop, groepStart, rowSpan, colSpan }: {
+  children?: React.ReactNode
+  right?: boolean
+  center?: boolean
+  compact?: boolean
+  groepKop?: boolean    // component-kop over 2 subkolommen — geen onderrand (loopt door naar de subkoppen)
+  groepStart?: boolean  // eerste kolom van een groep — verticale scheidingslijn links
+  rowSpan?: number
+  colSpan?: number
+}) => (
+  <th rowSpan={rowSpan} colSpan={colSpan} style={{
     padding: compact ? '6px 6px' : '7px 12px',
-    textAlign: right ? 'right' : 'left',
+    textAlign: center ? 'center' : right ? 'right' : 'left',
     fontSize: compact ? 10 : 11,
     fontWeight: 700,
     color: 'var(--neutral-500)',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
-    borderBottom: '2px solid var(--border)',
+    borderBottom: groepKop ? 'none' : '2px solid var(--border)',
+    borderLeft: groepStart ? '1px solid var(--neutral-200)' : undefined,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -58,12 +68,13 @@ const TH = ({ children, right, compact }: { children?: React.ReactNode; right?: 
   </th>
 )
 
-const TD = ({ children, vet, accent, kleur, compact }: {
+const TD = ({ children, vet, accent, kleur, compact, groepStart }: {
   children: React.ReactNode
   vet?: boolean
   accent?: boolean
   kleur?: string
   compact?: boolean
+  groepStart?: boolean  // eerste kolom van een groep — verticale scheidingslijn links
 }) => (
   <td style={{
     padding: compact ? '5px 6px' : '6px 12px',
@@ -72,6 +83,7 @@ const TD = ({ children, vet, accent, kleur, compact }: {
     fontWeight: vet ? 700 : 400,
     color: kleur ?? (accent ? 'var(--accent)' : vet ? 'var(--neutral-900)' : 'var(--neutral-700)'),
     borderBottom: '1px solid var(--neutral-100, #f4f7f8)',
+    borderLeft: groepStart ? '1px solid var(--neutral-200)' : undefined,
     whiteSpace: 'nowrap',
   }}>
     {children}
@@ -113,20 +125,29 @@ const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) =>
 
 /* ── bewaking per bewakingscode (hoofdweergave) ──────────────────────── */
 
-/** Kolomkoppen van de bewakingstabel — de door de gebruiker gevraagde velden. */
-const BEWAKING_KOLOMMEN = [
-  'Begroot',
-  'Meerwerk',
-  'Tot. prognose',
-  'Prognose arbeid',
-  'Arbeidskosten',
-  'Onderaanneming',
-  'Materiaal',
-  'Inkoop/Mat./Afval',
-  'Geboekte kosten',
-  'Nog te verwachten',
-  '% gereed',
-] as const
+/** Subset dat zowel een regel als het totaal deelt — zo werken de selectors op beide. */
+type ComponentBron = {
+  arbeidPrognose: number; arbeidskosten: number
+  onderaannemingPrognose: number; onderaanneming: number
+  materiaalPrognose: number; materiaal: number
+  inkoopMaterieelAfvalPrognose: number; inkoopMaterieelAfval: number
+}
+
+/**
+ * De vier kostencomponenten. Elk krijgt twee smalle subkolommen naast elkaar:
+ * Prognose (begroot/verwacht, uit Bouw7 `prognosisAmount`) en Besteed (geboekt bij
+ * leveranciers, uit `costAmount`). Voorheen toonde de tabel alléén besteed, waardoor de
+ * prognose van OA/materiaal/inkoop enkel in het projecttotaal zichtbaar was.
+ */
+const COMPONENTEN: { kop: string; prognose: (r: ComponentBron) => number; besteed: (r: ComponentBron) => number }[] = [
+  { kop: 'Arbeid',            prognose: (r) => r.arbeidPrognose,               besteed: (r) => r.arbeidskosten },
+  { kop: 'Onderaanneming',    prognose: (r) => r.onderaannemingPrognose,       besteed: (r) => r.onderaanneming },
+  { kop: 'Materiaal',         prognose: (r) => r.materiaalPrognose,            besteed: (r) => r.materiaal },
+  { kop: 'Inkoop/Mat./Afval', prognose: (r) => r.inkoopMaterieelAfvalPrognose, besteed: (r) => r.inkoopMaterieelAfval },
+]
+
+/** Totaal aantal kolommen incl. bewakingscode (voor de hoofdstuk-header colSpan). */
+const KOLOM_AANTAL = 1 + 3 /* begroot, meerwerk, tot. prognose */ + COMPONENTEN.length * 2 + 3 /* geboekt, nog te verwachten, % gereed */
 
 /** Linker (bewakingscode) cel — vaste breedte, naam afgekapt zodat de rest past. */
 const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: string | null; vet?: boolean; achtergrond?: string }) => (
@@ -140,6 +161,14 @@ const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: 
   </td>
 )
 
+/** Twee smalle cellen (prognose | besteed) voor één kostencomponent. */
+const ComponentCellen = ({ prognose, besteed, vet }: { prognose: number; besteed: number; vet?: boolean }) => (
+  <>
+    <TD compact vet={vet} groepStart>{fmt(prognose)}</TD>
+    <TD compact vet={vet}>{fmt(besteed)}</TD>
+  </>
+)
+
 const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
   r: BewakingRegel; dossierId: string; bouw7Id: string | null; bewerkbaar: boolean
 }) => (
@@ -148,12 +177,10 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact>{fmt(r.begroot)}</TD>
     <TD compact>{fmt(r.meerwerk)}</TD>
     <TD compact>{fmt(r.prognose)}</TD>
-    <TD compact>{fmt(r.arbeidPrognose)}</TD>
-    <TD compact>{fmt(r.arbeidskosten)}</TD>
-    <TD compact>{fmt(r.onderaanneming)}</TD>
-    <TD compact>{fmt(r.materiaal)}</TD>
-    <TD compact>{fmt(r.inkoopMaterieelAfval)}</TD>
-    <TD compact accent={r.geboekteKosten > 0}>{fmt(r.geboekteKosten)}</TD>
+    {COMPONENTEN.map((c) => (
+      <ComponentCellen key={c.kop} prognose={c.prognose(r)} besteed={c.besteed(r)} />
+    ))}
+    <TD compact accent={r.geboekteKosten > 0} groepStart>{fmt(r.geboekteKosten)}</TD>
     <TD compact kleur={r.prognose - r.geboekteKosten < 0 ? ROOD : undefined}>{fmt(r.prognose - r.geboekteKosten)}</TD>
     <TD compact>
       {bewerkbaar && r.code && r.code !== '-'
@@ -191,20 +218,49 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
       <CardBody style={{ padding: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: '15%' }} />
-            {BEWAKING_KOLOMMEN.map((k) => <col key={k} />)}
+            <col style={{ width: '13%' }} />{/* Bewakingscode */}
+            <col style={{ width: '7%' }} />{/* Begroot */}
+            <col style={{ width: '6%' }} />{/* Meerwerk */}
+            <col style={{ width: '7%' }} />{/* Tot. prognose */}
+            {COMPONENTEN.map((c) => (
+              <Fragment key={c.kop}>
+                <col style={{ width: '5.5%' }} />{/* prognose */}
+                <col style={{ width: '5.5%' }} />{/* besteed */}
+              </Fragment>
+            ))}
+            <col style={{ width: '7%' }} />{/* Geboekte kosten */}
+            <col style={{ width: '7%' }} />{/* Nog te verwachten */}
+            <col style={{ width: '6%' }} />{/* % gereed */}
           </colgroup>
           <thead>
+            {/* Rij 1: losse koppen (rowspan 2) + component-groepskoppen (colspan 2). */}
             <tr>
-              <TH>Bewakingscode</TH>
-              {BEWAKING_KOLOMMEN.map((k) => <TH key={k} right compact>{k}</TH>)}
+              <TH rowSpan={2}>Bewakingscode</TH>
+              <TH rowSpan={2} right compact>Begroot</TH>
+              <TH rowSpan={2} right compact>Meerwerk</TH>
+              <TH rowSpan={2} right compact>Tot. prognose</TH>
+              {COMPONENTEN.map((c) => (
+                <TH key={c.kop} colSpan={2} center compact groepKop groepStart>{c.kop}</TH>
+              ))}
+              <TH rowSpan={2} right compact groepStart>Geboekte kosten</TH>
+              <TH rowSpan={2} right compact>Nog te verwachten</TH>
+              <TH rowSpan={2} right compact>% gereed</TH>
+            </tr>
+            {/* Rij 2: per component de subkoppen Prognose | Besteed. */}
+            <tr>
+              {COMPONENTEN.map((c) => (
+                <Fragment key={c.kop}>
+                  <TH right compact groepStart>Progn.</TH>
+                  <TH right compact>Best.</TH>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
             {data.hoofdstukken.map((h) => (
               <Fragment key={`h-${h.id}-${h.naam}`}>
                 <tr>
-                  <td colSpan={BEWAKING_KOLOMMEN.length + 1} style={{
+                  <td colSpan={KOLOM_AANTAL} style={{
                     padding: '10px 8px 4px', fontSize: 11, fontWeight: 700,
                     color: 'var(--neutral-400)', textTransform: 'uppercase', letterSpacing: '0.06em',
                     borderBottom: '1px solid var(--neutral-200)',
@@ -226,12 +282,10 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.begroot), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.meerwerk), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidPrognose))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.arbeidskosten))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.onderaanneming))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.materiaal))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.inkoopMaterieelAfval))}</TD>
-                  <TD compact vet>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
+                  {COMPONENTEN.map((c) => (
+                    <ComponentCellen key={c.kop} vet prognose={sub(h.regels, c.prognose)} besteed={sub(h.regels, c.besteed)} />
+                  ))}
+                  <TD compact vet groepStart>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
                   <TD compact vet kleur={sub(h.regels, (r) => r.prognose - r.geboekteKosten) < 0 ? ROOD : undefined}>{fmt(sub(h.regels, (r) => r.prognose - r.geboekteKosten))}</TD>
                   <TD compact>—</TD>
                 </tr>
@@ -243,12 +297,10 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               <TD compact vet>{fmt(t.begroot, true)}</TD>
               <TD compact vet>{fmt(t.meerwerk, true)}</TD>
               <TD compact vet>{fmt(t.prognose, true)}</TD>
-              <TD compact vet>{fmt(t.arbeidPrognose)}</TD>
-              <TD compact vet>{fmt(t.arbeidskosten)}</TD>
-              <TD compact vet>{fmt(t.onderaanneming)}</TD>
-              <TD compact vet>{fmt(t.materiaal)}</TD>
-              <TD compact vet>{fmt(t.inkoopMaterieelAfval)}</TD>
-              <TD compact vet accent={t.geboekteKosten > 0}>{fmt(t.geboekteKosten)}</TD>
+              {COMPONENTEN.map((c) => (
+                <ComponentCellen key={c.kop} vet prognose={c.prognose(t)} besteed={c.besteed(t)} />
+              ))}
+              <TD compact vet accent={t.geboekteKosten > 0} groepStart>{fmt(t.geboekteKosten)}</TD>
               <TD compact vet kleur={t.prognose - t.geboekteKosten < 0 ? ROOD : undefined}>{fmt(t.prognose - t.geboekteKosten)}</TD>
               <TD compact>—</TD>
             </tr>
@@ -258,13 +310,14 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
           padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
         }}>
-          Live uit Bouw7-projectbewaking. Arbeidskosten = kostensoort Arbeid; geboekte kosten = arbeid +
-          ingekochte kosten mét inkoopfactuur; nog te verwachten = Tot. prognose − geboekte kosten (rood = overschreden).
-          % gereed = waarde-gewogen gemiddelde over de kostensoorten. Uren staan op het Uren-tab.
+          Live uit Bouw7-projectbewaking. Per component staan <strong>Prognose</strong> (begrote/verwachte
+          kosten) en <strong>Besteed</strong> naast elkaar. Nog te verwachten = Tot. prognose − geboekte
+          kosten (rood = overschreden). % gereed = prognose-gewogen gemiddelde over de kostensoorten.
+          Uren staan op het Uren-tab.
           <br />
-          <strong>Let op het verschil:</strong> Onderaanneming, Materiaal en Inkoop/Mat./Afval komen uit
-          Bouw7 en tellen ook <em>afgeroepen maar nog niet gefactureerde</em> leverbonnen mee — dus wat er
-          vastligt bij leveranciers. <strong>Geboekte kosten</strong> telt alleen wat écht gefactureerd is.
+          <strong>Besteed</strong> (per component) telt ook <em>afgeroepen maar nog niet gefactureerde</em>
+          leverbonnen mee — dus wat er vastligt bij leveranciers. <strong>Geboekte kosten</strong> telt
+          alleen arbeid + inkoop mét inkoopfactuur — dus wat écht geboekt is.
         </div>
       </CardBody>
     </Card>

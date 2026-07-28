@@ -1339,11 +1339,15 @@ export type BewakingRegel = {
   prognose: number             // 2. Totale prognose
   prognoseUren: number         // 3. Aantal prognose-uren (arbeid)
   geboekteUren: number         // 4. Geboekte/bestede uren (arbeid)
-  arbeidskosten: number        // 5. Arbeidskosten (geboekt, kostensoort Arbeid)
-  arbeidPrognose: number       // 5b. Prognose-bedrag (kostensoort Arbeid, ct=1)
-  onderaanneming: number       // 6. Onderaanneming (geboekt)
-  materiaal: number            // 7. Materiaal (geboekt)
-  inkoopMaterieelAfval: number // 8. Inkoop + Materieel + Afval (geboekt)
+  // Per component staan prognose (begroot/verwacht) én besteed (geboekt) naast elkaar.
+  arbeidPrognose: number              // Arbeid — prognose (kostensoort 1, prognosisAmount)
+  arbeidskosten: number               // Arbeid — besteed (kostensoort 1, costAmount)
+  onderaannemingPrognose: number      // Onderaanneming — prognose (kostensoort 3)
+  onderaanneming: number              // Onderaanneming — besteed (kostensoort 3)
+  materiaalPrognose: number           // Materiaal — prognose (kostensoort 5)
+  materiaal: number                   // Materiaal — besteed (kostensoort 5)
+  inkoopMaterieelAfvalPrognose: number // Inkoop + Materieel + Afval — prognose (kostensoort 2/4/6)
+  inkoopMaterieelAfval: number         // Inkoop + Materieel + Afval — besteed (kostensoort 2/4/6)
   verwachteKosten: number      // 9. Alle verwachte-kosten-regels (contract-order-lines, incl. arbeid)
   geboekteKosten: number       // 10. Geboekte kosten = arbeid + inkoop mét inkoopfactuur
   progress: number | null      // 11. % gereed
@@ -1357,8 +1361,11 @@ export type BewakingTotalen = {
   geboekteUren: number
   arbeidPrognose: number
   arbeidskosten: number
+  onderaannemingPrognose: number
   onderaanneming: number
+  materiaalPrognose: number
   materiaal: number
+  inkoopMaterieelAfvalPrognose: number
   inkoopMaterieelAfval: number
   verwachteKosten: number
   geboekteKosten: number
@@ -1385,7 +1392,9 @@ const toGetal = (v: unknown): number => {
 const legeRegel = (): BewakingRegel => ({
   code: null, naam: null, hoofdstukId: null, hoofdstuk: null,
   begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0,
-  arbeidskosten: 0, arbeidPrognose: 0, onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0,
+  arbeidPrognose: 0, arbeidskosten: 0,
+  onderaannemingPrognose: 0, onderaanneming: 0, materiaalPrognose: 0, materiaal: 0,
+  inkoopMaterieelAfvalPrognose: 0, inkoopMaterieelAfval: 0,
   verwachteKosten: 0, geboekteKosten: 0, progress: null,
 })
 
@@ -1408,7 +1417,8 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     beschikbaar: false, bouw7Id: null, hoofdstukken: [],
     totalen: {
       begroot: 0, meerwerk: 0, prognose: 0, prognoseUren: 0, geboekteUren: 0, arbeidPrognose: 0, arbeidskosten: 0,
-      onderaanneming: 0, materiaal: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
+      onderaannemingPrognose: 0, onderaanneming: 0, materiaalPrognose: 0, materiaal: 0,
+      inkoopMaterieelAfvalPrognose: 0, inkoopMaterieelAfval: 0, verwachteKosten: 0, geboekteKosten: 0,
     },
     geboekteUrenProject: null,
     projectProgress: null,
@@ -1497,17 +1507,20 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       }
 
       const budget = toGetal(e.budgetAmount)
-      const kosten = toGetal(e.costAmount)
+      const kosten = toGetal(e.costAmount)      // besteed (costAmount)
+      const prognose = toGetal(e.prognosisAmount)
       r.begroot += budget
       r.meerwerk += toGetal(e.additionalWorkAmount)
-      r.prognose += toGetal(e.prognosisAmount)
+      r.prognose += prognose
       r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
       r.geboekteUren += toGetal(e.hourInfo?.costHours)
 
-      if (ct === 1) { r.arbeidskosten += kosten; r.arbeidPrognose += toGetal(e.prognosisAmount) }
-      else if (ct === 3) r.onderaanneming += kosten
-      else if (ct === 5) r.materiaal += kosten
-      else r.inkoopMaterieelAfval += kosten // 2=Inkoop, 4=Materieel, 6=Afval
+      // Per component prognose én besteed apart bijhouden (voorheen alleen besteed —
+      // waardoor de prognose van OA/materiaal/inkoop enkel in het projecttotaal zichtbaar was).
+      if (ct === 1)      { r.arbeidPrognose += prognose;              r.arbeidskosten += kosten }
+      else if (ct === 3) { r.onderaannemingPrognose += prognose;      r.onderaanneming += kosten }
+      else if (ct === 5) { r.materiaalPrognose += prognose;           r.materiaal += kosten }
+      else               { r.inkoopMaterieelAfvalPrognose += prognose; r.inkoopMaterieelAfval += kosten } // 2=Inkoop, 4=Materieel, 6=Afval
 
       // % gereed: prognose-gewogen gemiddelde over de kostensoorten (per code én projectbreed).
       // Kostensoorten met prognose 0 (weggestreept) tellen niet mee in de weging.
@@ -1646,8 +1659,11 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       geboekteUren: som((r) => r.geboekteUren),
       arbeidPrognose: som((r) => r.arbeidPrognose),
       arbeidskosten: som((r) => r.arbeidskosten),
+      onderaannemingPrognose: som((r) => r.onderaannemingPrognose),
       onderaanneming: som((r) => r.onderaanneming),
+      materiaalPrognose: som((r) => r.materiaalPrognose),
       materiaal: som((r) => r.materiaal),
+      inkoopMaterieelAfvalPrognose: som((r) => r.inkoopMaterieelAfvalPrognose),
       inkoopMaterieelAfval: som((r) => r.inkoopMaterieelAfval),
       verwachteKosten: orderLines.total || som((r) => r.verwachteKosten),
       geboekteKosten: som((r) => r.geboekteKosten),
