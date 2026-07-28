@@ -2,6 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@everts/database', '@everts/ui', '@everts/auth', '@everts/config'],
+  // qrcode heeft een `browser`-veld dat zijn entry naar een canvas-gebaseerde browserbuild
+  // remapt. Zou webpack die bundelen, dan draait server-side de browserbuild → toDataURL
+  // gooit "You need to specify a canvas element" en de QR-code blijft leeg. Extern houden
+  // dwingt de Node-build af (pngjs), die server-side wél werkt.
+  serverExternalPackages: ['qrcode'],
   devIndicators: false,
   // Twee gelijktijdige dev servers (bijv. twee Claude/terminal-sessies) mogen niet
   // dezelfde .next-map delen — dat corrumpeert elkaars build-manifests (random 404's).

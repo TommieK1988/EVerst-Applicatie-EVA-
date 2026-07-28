@@ -275,7 +275,14 @@ function schoonLink(waarde: string): string {
     .trim()
 }
 
-/** QR-code van een URL als PNG base64 data-URL. Best-effort: faalt hij, dan geen QR (''). */
+/**
+ * QR-code van een URL als PNG base64 data-URL. Best-effort: faalt hij, dan geen QR ('').
+ *
+ * `qrcode` moet server-side de Node-build draaien; anders gooit de browserbuild
+ * "You need to specify a canvas element". Daarom staat `qrcode` in `serverExternalPackages`
+ * (next.config.js). Een fout hier wordt gelogd i.p.v. stilzwijgend geslikt, zodat een
+ * verdwenen QR-code herleidbaar blijft.
+ */
 async function maakQrDataUrl(url: string): Promise<string> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -283,7 +290,8 @@ async function maakQrDataUrl(url: string): Promise<string> {
     const QR = mod.default ?? mod
     // toDataURL levert "data:image/png;base64,…" — de image-module str(ip)t het data:-deel zelf.
     return await QR.toDataURL(url, { margin: 1, width: 600, errorCorrectionLevel: 'M' })
-  } catch {
+  } catch (err) {
+    console.error('QR-code genereren mislukt (feedback-link):', err)
     return ''
   }
 }
