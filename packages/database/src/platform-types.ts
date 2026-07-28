@@ -418,6 +418,8 @@ export type MeerwerkRegel = {
   bouw7_security_code_id: number | null
   bouw7_chapter_id: number | null
   quote_id: string | null
+  /** Eigen everts-calc project van dit meerwerk (calculatie + offerte, los van de contractcalculatie). */
+  calc_project_id: string | null
   afgewezen_reden: string | null
   bron: MeerwerkBron
   bouw7_bron_sleutel: string | null

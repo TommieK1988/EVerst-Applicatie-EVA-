@@ -10,6 +10,7 @@ import {
   verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
+import MeerwerkCalculatie from '@/components/everts-calc/calculatie/MeerwerkCalculatie'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 const fmt = (v: number) =>
@@ -39,13 +40,24 @@ const LEGE_NIEUW: NieuweMeerwerkData = {
   btw_pct: null, factuurreferentie: null,
 }
 
-export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
+type MeerwerkTabProps = {
+  dossierId: string
+  naam?: string
+  nummer?: string
+  clientNaam?: string | null
+}
+
+/** Inline geopende meerwerk-calculatie (eigen calculatieproject van een regel). */
+type CalcOpen = { projectId: string; regelId: string; omschrijving: string; offerteId: string | null }
+
+export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '', clientNaam = null }: MeerwerkTabProps) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
+  const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
 
   function herlaad() {
     getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
@@ -89,13 +101,22 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
     toast.success(res.nummer ? `Aangemaakt in Bouw7 (${res.nummer})` : 'Aangemaakt in Bouw7'); herlaad(); router.refresh()
   }
 
+  // Opent (of maakt) de eigen calculatie van dit meerwerk en toont de calculatie-omgeving inline.
   async function calculatie(regel: MeerwerkRegelView) {
     setBezig(true)
     const r = await maakMeerwerkCalculatie(regel.id)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Meerwerk offerte aangemaakt')
-    router.push(`/everts-calc/quotes/${r.quoteId}?import=1`)
+    setCalcOpen({ projectId: r.projectId, regelId: regel.id, omschrijving: regel.omschrijving, offerteId: null })
+  }
+
+  // Opent de meerwerk-calculatie meteen op de gekoppelde offerte.
+  async function openOfferte(regel: MeerwerkRegelView) {
+    setBezig(true)
+    const r = await maakMeerwerkCalculatie(regel.id)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    setCalcOpen({ projectId: r.projectId, regelId: regel.id, omschrijving: regel.omschrijving, offerteId: regel.quote_id })
   }
 
   async function verwijder(regel: MeerwerkRegelView) {
@@ -108,6 +129,22 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
   }
 
   if (data == null) return <div className="px-8 py-7 text-[13px] text-neutral-500">Meerwerk laden…</div>
+
+  // Inline calculatie-omgeving van één meerwerkregel (eigen calculatieproject).
+  if (calcOpen) {
+    return (
+      <MeerwerkCalculatie
+        projectId={calcOpen.projectId}
+        dossierId={dossierId}
+        meerwerkRegelId={calcOpen.regelId}
+        naam={`Meerwerk — ${calcOpen.omschrijving}`}
+        nummer={nummer}
+        clientNaam={clientNaam}
+        initialOfferteId={calcOpen.offerteId}
+        onTerug={() => { setCalcOpen(null); herlaad(); router.refresh() }}
+      />
+    )
+  }
 
   return (
     <div className="px-8 py-7 space-y-5">
@@ -310,8 +347,15 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                           )}
                           <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                             onClick={() => calculatie(r)}>
-                            {r.quote_id ? 'Open offerte' : 'Calculatie'}
+                            {r.calc_project_id ? 'Open calculatie' : 'Calculatie'}
                           </button>
+                          {r.quote_id && (
+                            <>
+                              <span className="mx-1 text-neutral-300">·</span>
+                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                                onClick={() => openOfferte(r)}>Open offerte</button>
+                            </>
+                          )}
                           <span className="mx-1 text-neutral-300">·</span>
                           <button className="text-[11px] font-medium text-error-600 hover:underline" disabled={bezig}
                             onClick={() => verwijder(r)}>Verwijder</button>

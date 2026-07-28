@@ -33,6 +33,8 @@ interface Props {
   clientNaam: string | null
   projectNummer: string | null
   type: QuoteType
+  /** Meerwerkregel waarvan dit de offerte is — tagt de offerte als meerwerk-offerte. */
+  meerwerkRegelId?: string | null
   /** Waar je naartoe gaat na aanmaken. Standaard de losse offerte-preview; geef een
    *  dossier-tab-URL mee om in het dossier te blijven. */
   terugNaarUrl?: string
@@ -47,7 +49,7 @@ interface Layout {
 
 export default function OfferteAanmakenModal({
   open, onClose,
-  projectId, scenarioId, dossierId, projectNaam, clientNaam, projectNummer, type, terugNaarUrl,
+  projectId, scenarioId, dossierId, projectNaam, clientNaam, projectNummer, type, meerwerkRegelId, terugNaarUrl,
 }: Props) {
   const router = useRouter()
   const [layouts, setLayouts] = useState<Layout[]>([])
@@ -185,6 +187,8 @@ export default function OfferteAanmakenModal({
         voorwaardenTekst: actiefScenario?.voorwaarden_tekst ?? null,
         uitsluitingenTekst: actiefScenario?.uitsluitingen_tekst ?? null,
         opmerkingenTekst: actiefScenario?.opmerkingen_tekst ?? null,
+        // Meerwerk-offerte: koppel aan de meerwerkregel (leeg → gewone offerte).
+        meerwerkRegelId: meerwerkRegelId ?? null,
         importRegels,
         structuur,
       })

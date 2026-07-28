@@ -286,7 +286,12 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       <>
         {titleInjector}
         <Suspense fallback={<DossierTabSkeleton />}>
-          <MeerwerkTab dossierId={id} />
+          <MeerwerkTab
+            dossierId={id}
+            naam={dossier?.titel ?? 'Meerwerk'}
+            nummer={dossier?.dossiernummer ?? ''}
+            clientNaam={dossier?.klant_naam ?? ''}
+          />
         </Suspense>
       </>
     )

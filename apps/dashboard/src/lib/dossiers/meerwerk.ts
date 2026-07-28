@@ -10,10 +10,10 @@ import type {
   MeerwerkTermijnWijze,
 } from '@everts/database'
 import { getServicedeskRegie } from './servicedesk'
-import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
+import { bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
-import { maakMeerwerkOfferte } from '@/app/(platform)/everts-calc/actions/quotes'
+import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -271,47 +271,56 @@ export async function setMeerwerkStatus(
 }
 
 /**
- * Maakt (en koppelt) een "Meerwerk offerte"-calculatie voor een regel. Heeft het dossier nog geen
- * everts-calc project, dan wordt dat automatisch aangemaakt en gekoppeld. Slaat het quote-id op de regel op.
+ * Maakt (en koppelt) een eigen everts-calc calculatieproject voor een meerwerkregel — géén offerte.
+ * Elk meerwerk krijgt zo een volledig geïsoleerde calculatie (los van de contractcalculatie); de
+ * offerte wordt er later via de normale flow (met lay-out-keuze) van gemaakt. Idempotent: bestaat het
+ * project al, dan wordt het teruggegeven. Retourneert het project-id zodat de client de calculatie-
+ * omgeving kan openen.
  */
 export async function maakMeerwerkCalculatie(
   regelId: string,
-): Promise<{ ok: true; quoteId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; projectId: string; dossierId: string } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase
     .from('meerwerk_regels')
-    .select('id, dossier_id, omschrijving, factuurreferentie, quote_id')
+    .select('id, dossier_id, volgnummer, omschrijving, calc_project_id')
     .eq('id', regelId)
     .single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
   await assertDossierBewerkbaar(regel.dossier_id)
-  if (regel.quote_id) return { ok: true, quoteId: regel.quote_id }
-
-  const { data: dossier } = await supabase
-    .from('dossiers')
-    .select('everts_calc_project_id')
-    .eq('id', regel.dossier_id)
-    .single()
-  let projectId: string | null = dossier?.everts_calc_project_id ?? null
-  if (!projectId) {
-    // Geen calculatieproject? Zelf aanmaken en koppelen (idempotent) i.p.v. blokkeren.
-    const kp = await koppelCalculatieProject(regel.dossier_id)
-    if (!kp.ok) return { ok: false, error: kp.error }
-    projectId = kp.projectId
+  // Al een eigen calculatieproject? Hergebruik het (idempotent).
+  if (regel.calc_project_id) {
+    return { ok: true, projectId: regel.calc_project_id, dossierId: regel.dossier_id }
   }
 
-  const res = await maakMeerwerkOfferte({
-    projectId,
-    meerwerkRegelId: regelId,
-    omschrijving: regel.omschrijving,
-    referentie: regel.factuurreferentie ?? null,
-    dossierId: regel.dossier_id,
-  })
-  if (!res.ok) return res
+  // Eigen everts-calc project voor dit meerwerk (los van de contractcalculatie).
+  const naam = `Meerwerk MW${String(regel.volgnummer).padStart(2, '0')} — ${regel.omschrijving}`
+  let projectId: string
+  try {
+    const { id } = await maakProjectVanAanvraag(naam, '')
+    projectId = id
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Aanmaken calculatieproject mislukt.' }
+  }
 
-  await supabase.from('meerwerk_regels').update({ quote_id: res.quoteId, updated_at: new Date().toISOString() }).eq('id', regelId)
+  const { error } = await supabase
+    .from('meerwerk_regels')
+    .update({ calc_project_id: projectId, updated_at: new Date().toISOString() })
+    .eq('id', regelId)
+  if (error) return { ok: false, error: error.message }
+
   revalidatePath(`/opdrachten/${regel.dossier_id}/meerwerk`)
-  return { ok: true, quoteId: res.quoteId }
+  return { ok: true, projectId, dossierId: regel.dossier_id }
+}
+
+/**
+ * De offertes/calculaties van het eigen calculatieproject van een meerwerk (voor de versie-kiezer).
+ * Dunne server-action rond getQuotesVoorProject zodat de client-side MeerwerkCalculatie ze kan lezen.
+ */
+export async function getMeerwerkCalcQuotes(projectId: string) {
+  if (!projectId) return []
+  const { getQuotesVoorProject } = await import('@/lib/everts-calc/services/quotes')
+  try { return await getQuotesVoorProject(projectId) } catch { return [] }
 }
 
 // ─── Nieuwe meerwerkregel naar Bouw7 schrijven (POST additional-work-line) ─────

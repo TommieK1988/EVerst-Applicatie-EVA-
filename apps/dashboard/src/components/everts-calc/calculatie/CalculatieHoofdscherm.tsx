@@ -50,6 +50,9 @@ interface Props {
   dossierContext?: {
     dossierId: string
     clientNaam?: string | null
+    /** Aanwezig wanneer deze calculatie de calculatie van een meerwerkregel is —
+     *  de offerte die eruit ontstaat wordt dan als meerwerk-offerte gekoppeld. */
+    meerwerkRegelId?: string | null
   }
   /** Aangeroepen na een wijziging in de set scenario's (bijv. na kopiëren). De
    *  optionele parameter is het id van een nieuw/te-openen scenario. */
@@ -651,6 +654,7 @@ export default function CalculatieHoofdscherm({
           clientNaam={dossierContext.clientNaam ?? ''}
           projectNummer={projectNummer}
           type={offerteModalType}
+          meerwerkRegelId={dossierContext.meerwerkRegelId ?? null}
           terugNaarUrl={pathname}
         />
       )}
