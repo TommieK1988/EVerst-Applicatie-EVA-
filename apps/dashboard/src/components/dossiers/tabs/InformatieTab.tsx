@@ -20,6 +20,8 @@ import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
 import { DossierAutoVervers } from '../DossierAutoVervers'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
+import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
+import { zetOptieInOpdracht, wijsStelpostBewakingscodesToe } from '@/lib/dossiers/opdracht-onderdelen'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
@@ -176,6 +178,119 @@ function DatumLijst({ regels, deadlineUrgent }: {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/* ─── opdracht-samenstelling (stelposten + opties) ─────────────────────
+   Itemized opbouw van de opdracht in het Financiële-totalen-blok: per stelpost
+   (met eigen bewakingscode + begroot/werkelijk zodra toegekend) en per optie
+   (met in-opdracht-schakelaar). Read-only respecteert afgesloten dossiers. */
+function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes, pending }: {
+  overzicht: OpdrachtOverzicht
+  readOnly: boolean
+  onToggleOptie: (id: string, aan: boolean) => void
+  onWijsCodes: () => void
+  pending: boolean
+}) {
+  const { stelposten, opties } = overzicht
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Stelposten</span>
+          <span className="flex items-baseline gap-2">
+            {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
+              <button
+                type="button"
+                onClick={onWijsCodes}
+                disabled={pending}
+                className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
+                title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…). Gebruik die code als kostengroep in de werkbegroting."
+              >
+                Codes toewijzen
+              </button>
+            )}
+            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.stelpostenTotaal)}</span>
+          </span>
+        </div>
+        {stelposten.length === 0 ? (
+          <div className="text-[12px] italic text-neutral-400">Geen stelposten in deze offerte.</div>
+        ) : (
+          <div className="divide-y divide-neutral-100">
+            {stelposten.map(sp => (
+              <div key={sp.id} className="flex items-baseline justify-between gap-3 py-[5px]">
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                  <span className="truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
+                  {sp.bewakingscode && (
+                    <span className="shrink-0 rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
+                  )}
+                </span>
+                {sp.begroot != null && (
+                  <span
+                    className="shrink-0 tabular-nums text-[10px]"
+                    style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
+                    title="Geboekt / begroot"
+                  >
+                    {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
+                  </span>
+                )}
+                <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
+                  {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {stelposten.some(sp => sp.bewakingscode) && (
+          <p className="mt-2 text-[10px] italic text-neutral-400">
+            Gebruik deze codes als kostengroep in de werkbegroting; begroot/werkelijk verschijnt zodra de begroting naar Bouw7 is gestuurd.
+          </p>
+        )}
+      </div>
+
+      {opties.length > 0 && (
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Opties</span>
+            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.gekozenOptiesTotaal)} in opdracht</span>
+          </div>
+          <div className="divide-y divide-neutral-100">
+            {opties.map(op => (
+              <div key={op.id} className="flex items-baseline justify-between gap-3 py-[5px]">
+                <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{op.omschrijving}</span>
+                {readOnly ? (
+                  <span className={cn(
+                    'shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold',
+                    op.in_opdracht ? 'bg-brand-50 text-brand-600' : 'bg-neutral-100 text-neutral-500',
+                  )}>
+                    {op.in_opdracht ? 'In opdracht' : 'Niet gekozen'}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToggleOptie(op.id, !op.in_opdracht)}
+                    disabled={pending}
+                    title={op.in_opdracht ? 'Klik om uit de opdracht te halen' : 'Klik om in de opdracht op te nemen'}
+                    className={cn(
+                      'shrink-0 cursor-pointer rounded-full px-1.5 py-px text-[10px] font-semibold transition-colors disabled:opacity-50',
+                      op.in_opdracht ? 'bg-brand-50 text-brand-600 hover:bg-brand-100' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200',
+                    )}
+                  >
+                    {op.in_opdracht ? 'In opdracht' : 'Niet gekozen'}
+                  </button>
+                )}
+                <span className={cn(
+                  'shrink-0 tabular-nums text-[12px] font-semibold',
+                  op.in_opdracht ? 'text-neutral-800' : 'text-neutral-400',
+                )}>
+                  {op.bedrag_excl_btw != null ? fmtBedrag(op.bedrag_excl_btw) : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -448,13 +563,15 @@ type Props = {
   werkmaatschappijen?: WerkmaatschappijOptie[]
   /** Procesdatums (aanvraag → financieel gereed); server-side samengesteld. */
   datums?: DossierDatums
+  /** Opdracht-samenstelling (stelposten/opties + bewaking); alleen gevuld voor opdracht-dossiers. */
+  opdrachtOverzicht?: OpdrachtOverzicht | null
 }
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
   relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
   notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
-  datums = LEGE_DOSSIER_DATUMS,
+  datums = LEGE_DOSSIER_DATUMS, opdrachtOverzicht = null,
 }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
@@ -725,6 +842,33 @@ export function InformatieTab({
     ? Math.round((finTotaalIncl + meerwerk * btwFactor) * 100) / 100
     : finTotaalIncl
   const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
+
+  // Opdracht-samenstelling: gekozen opties tellen mee in het contracttotaal (excl. eigen bewakingscode).
+  const finGekozenOpties = opdrachtOverzicht?.gekozenOptiesTotaal ?? 0
+  const finContractIncl = finTotaalInclMeerwerk != null
+    ? Math.round((finTotaalInclMeerwerk + finGekozenOpties * btwFactor) * 100) / 100
+    : finTotaalInclMeerwerk
+  const heeftContractExtra = heeftMeerwerk || finGekozenOpties > 0
+  // Itemized opbouw alleen tonen als er daadwerkelijk stelposten/opties zijn; anders de aggregaten
+  // (zoals voorheen) laten staan — geen lege opbouw en geen verdwenen totaalregels.
+  const toonOpdrachtOpbouw = !!opdrachtOverzicht
+    && (opdrachtOverzicht.stelposten.length > 0 || opdrachtOverzicht.opties.length > 0)
+  const [optiePending, startOptieTransition] = React.useTransition()
+  function toggleOptie(id: string, aan: boolean) {
+    startOptieTransition(async () => {
+      const res = await zetOptieInOpdracht(id, aan)
+      if (!res.ok) { toast.error(res.error); return }
+      router.refresh()
+    })
+  }
+  function wijsCodesToe() {
+    startOptieTransition(async () => {
+      const res = await wijsStelpostBewakingscodesToe(dossier.id)
+      if (!res.ok) { toast.error(res.error); return }
+      if (res.aantal > 0) toast.success(`${res.aantal} bewakingscode${res.aantal === 1 ? '' : 's'} toegewezen`)
+      router.refresh()
+    })
+  }
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
   const werkmaatschappijOpties = werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))
@@ -1278,6 +1422,9 @@ export function InformatieTab({
               {heeftMeerwerk && finAanneemsomMeerwerk != null && (
                 <InfoVeld label="Aanneemsom incl. meerwerk (excl. BTW)" waarde={fmtBedrag(finAanneemsomMeerwerk)} numeric />
               )}
+              {finGekozenOpties > 0 && (
+                <InfoVeld label="Gekozen opties (excl. BTW)" waarde={fmtBedrag(finGekozenOpties)} numeric />
+              )}
               {finKostprijs != null ? (
                 <InfoVeld label="Gecalculeerde kostprijs" waarde={fmtBedrag(finKostprijs)} numeric />
               ) : (
@@ -1299,8 +1446,12 @@ export function InformatieTab({
                   </div>
                 </div>
               )}
-              <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
-              <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
+              {!toonOpdrachtOpbouw && (
+                <>
+                  <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
+                  <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
+                </>
+              )}
               {finBtwSplitsing ? (
                 finBtwSplitsing.map(t => (
                   <InfoVeld
@@ -1316,12 +1467,27 @@ export function InformatieTab({
                 <InfoVeld label="BTW" waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
               )}
             </div>
+
+            {toonOpdrachtOpbouw && (
+              <div className="mt-4 border-t border-neutral-100 pt-3">
+                <OpdrachtSamenstelling overzicht={opdrachtOverzicht} readOnly={readOnly} onToggleOptie={toggleOptie} onWijsCodes={wijsCodesToe} pending={optiePending} />
+                <Link
+                  href={`/opdrachten/${dossier.id}/bestanden`}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 no-underline"
+                  title="Naar Bestanden → Document opstellen → Opdrachtbevestiging"
+                >
+                  Opdrachtbevestiging opstellen
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 5l5 5-5 5" /></svg>
+                </Link>
+              </div>
+            )}
+
             <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">
-                {heeftMeerwerk ? 'Totaal incl. BTW & meerwerk' : 'Totaal incl. BTW'}
+                {heeftContractExtra ? 'Contracttotaal incl. BTW' : 'Totaal incl. BTW'}
               </span>
               <span className="tabular-nums text-[18px] font-bold text-neutral-900">
-                {finTotaalInclMeerwerk != null ? fmtBedrag(finTotaalInclMeerwerk) : '—'}
+                {finContractIncl != null ? fmtBedrag(finContractIncl) : '—'}
               </span>
             </div>
             <Separator className="my-3" />

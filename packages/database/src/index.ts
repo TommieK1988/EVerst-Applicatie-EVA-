@@ -46,6 +46,10 @@ export type {
   MeerwerkTermijnWijze,
   MeerwerkBron,
   MeerwerkRegel,
+  // Opdracht-onderdelen-module
+  OpdrachtOnderdeelSoort,
+  OpdrachtOnderdeelStatus,
+  OpdrachtOnderdeel,
   // Planning-module
   PlanningUursoort,
   PlanningWerkbegrotingRegel,

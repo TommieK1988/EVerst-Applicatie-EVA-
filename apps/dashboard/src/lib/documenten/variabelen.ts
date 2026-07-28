@@ -71,6 +71,20 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
   },
   {
+    groep: 'Opdracht (opdrachtbevestiging)',
+    uitleg: 'Alleen gevuld bij documentsoort "Opdrachtbevestiging": de onderdelen die in opdracht zijn gegeven, met bedragen — zonder interne bewakingscodes.',
+    items: [
+      { v: '{opdracht.aanneemsom}',            label: 'Aanneemsom excl. btw' },
+      { v: '{opdracht.stelposten_totaal}',     label: 'Totaal stelposten excl. btw' },
+      { v: '{opdracht.gekozen_opties_totaal}', label: 'Totaal gekozen opties excl. btw' },
+      { v: '{opdracht.contracttotaal}',        label: 'Contracttotaal excl. btw (aanneemsom + gekozen opties)' },
+      { v: '{#opdracht.onderdelen}…{/opdracht.onderdelen}', label: 'Lijst in-opdracht-onderdelen; binnenin: {soort} {omschrijving} {bedrag}' },
+      { v: '{#opdracht.stelposten}…{/opdracht.stelposten}', label: 'Alleen de stelposten; binnenin: {omschrijving} {bedrag}' },
+      { v: '{#opdracht.opties}…{/opdracht.opties}',         label: 'Alleen de gekozen opties; binnenin: {omschrijving} {bedrag}' },
+      { v: '{#opdracht.heeft}…{/opdracht.heeft}',           label: 'Alleen tonen als er een samenstelling is' },
+    ],
+  },
+  {
     groep: 'Geadresseerde',
     uitleg: 'Het werkadres van het dossier — bij een bewonersbrief is dat de bewoner.',
     items: [

@@ -17,6 +17,7 @@ import { fetchImage } from './render-docx'
 import { ROLLEN, type RolNaam } from './rollen'
 import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam } from './format'
 import type { DocumentSjabloon } from './types'
+import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -102,6 +103,11 @@ export async function buildDocumentContext(
   // Oplevering — laatste opgeleverde moment van dit dossier (voor het garantiecertificaat).
   const opleverDatum = await laadOpleverdatum(supabase, dossierId)
 
+  // Opdracht-samenstelling — alleen voor de opdrachtbevestiging (opsomming van in-opdracht-onderdelen).
+  const opdracht = sjabloon.documentsoort === 'opdrachtbevestiging'
+    ? await laadOpdrachtBlok(dossierId)
+    : LEEG_OPDRACHT_BLOK
+
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
 
   // Garantie: termijn komt uit de invoer (geen dossierfeit), einddatum is afgeleid.
@@ -175,6 +181,7 @@ export async function buildDocumentContext(
       tot_datum_iso: datumISO(garantieTot),
       behandelingen: genormaliseerd.behandelingen ?? '',
     },
+    opdracht,
     document: {
       datum: datumNL(new Date().toISOString()),
       datum_iso: datumISO(new Date().toISOString()),
@@ -253,5 +260,55 @@ async function laadOpleverdatum(
     return data?.opgeleverd_op ?? null
   } catch {
     return null
+  }
+}
+
+/** Formatteert een bedrag als € 1.234,56 voor de opdrachtbevestiging. */
+const EUR_FMT = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
+const fmtEur = (n: number | null | undefined): string => EUR_FMT.format(Number(n) || 0)
+
+type OpdrachtOnderdeelRegel = { soort: string; omschrijving: string; bedrag: string }
+type OpdrachtBlok = {
+  heeft: boolean
+  aanneemsom: string
+  stelposten_totaal: string
+  gekozen_opties_totaal: string
+  contracttotaal: string
+  onderdelen: OpdrachtOnderdeelRegel[]
+  stelposten: { omschrijving: string; bedrag: string }[]
+  opties: { omschrijving: string; bedrag: string }[]
+}
+const LEEG_OPDRACHT_BLOK: OpdrachtBlok = {
+  heeft: false, aanneemsom: '', stelposten_totaal: '', gekozen_opties_totaal: '',
+  contracttotaal: '', onderdelen: [], stelposten: [], opties: [],
+}
+
+/**
+ * Opsomming van de in-opdracht-onderdelen (basis + stelposten + gekozen opties) met bedragen, voor de
+ * opdrachtbevestiging. Best-effort — geen samenstelling → leeg blok, {#opdracht.heeft} blijft vals.
+ * Bevat geen interne bewakingscodes (die horen niet op de klant-PDF).
+ */
+async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
+  try {
+    const ov = await getOpdrachtOverzicht(dossierId)
+    if (!ov) return LEEG_OPDRACHT_BLOK
+    const gekozenOpties = ov.opties.filter(o => o.in_opdracht)
+    const contractExcl = (ov.aanneemsom ?? 0) + ov.gekozenOptiesTotaal
+    const onderdelen: OpdrachtOnderdeelRegel[] = []
+    if (ov.basis != null) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Aangenomen werk conform offerte', bedrag: fmtEur(ov.basis) })
+    for (const sp of ov.stelposten) onderdelen.push({ soort: 'Stelpost', omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })
+    for (const op of gekozenOpties) onderdelen.push({ soort: 'Optie', omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })
+    return {
+      heeft: onderdelen.length > 0,
+      aanneemsom: fmtEur(ov.aanneemsom),
+      stelposten_totaal: fmtEur(ov.stelpostenTotaal),
+      gekozen_opties_totaal: fmtEur(ov.gekozenOptiesTotaal),
+      contracttotaal: fmtEur(contractExcl),
+      onderdelen,
+      stelposten: ov.stelposten.map(sp => ({ omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })),
+      opties: gekozenOpties.map(op => ({ omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })),
+    }
+  } catch {
+    return LEEG_OPDRACHT_BLOK
   }
 }

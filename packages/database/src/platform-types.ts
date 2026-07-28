@@ -429,6 +429,35 @@ export type MeerwerkRegel = {
   created_by: string | null
 }
 
+/* ── Opdracht-onderdelen (samenstelling van een opdracht) ─────────── */
+
+export type OpdrachtOnderdeelSoort = 'basis' | 'stelpost' | 'optie'
+export type OpdrachtOnderdeelStatus = 'in_opdracht' | 'uitgesloten' | 'afgerond'
+
+/**
+ * Eén stelpost of optie uit de geaccepteerde offerte, met de vastlegging of hij in opdracht is en
+ * (voor stelposten) een eigen bewakingscode. De bewakingscode loopt via de werkbegroting-kostengroep.
+ */
+export type OpdrachtOnderdeel = {
+  id: string
+  dossier_id: string
+  quote_id: string | null
+  soort: OpdrachtOnderdeelSoort
+  quote_section_id: string | null
+  quote_line_id: string | null
+  omschrijving: string
+  volgnummer: number
+  in_opdracht: boolean
+  bedrag_excl_btw: number | null
+  btw_pct: number | null
+  bewakingscode: string | null
+  bouw7_chapter_id: number | null
+  status: OpdrachtOnderdeelStatus
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
 /** BTW per tarief uit de Bouw7-offerte (incl. AK/W&R in de grondslag). */
 export type BtwSplitsingItem = {
   /** Tarieflabel uit Bouw7, bv. 'Hoog 21%', 'Laag 9%', 'Verlegd 21'. */

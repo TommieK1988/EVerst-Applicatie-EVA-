@@ -10,10 +10,11 @@
  */
 
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
-export const DOCUMENTSOORTEN = ['bewonersbrief', 'garantiecertificaat', 'informatiebrief', 'overig'] as const
+export const DOCUMENTSOORTEN = ['opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief', 'overig'] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
 export const documentsoortLabels: Record<Documentsoort, string> = {
+  opdrachtbevestiging:'Opdrachtbevestiging',
   bewonersbrief:      'Bewonersbrief',
   garantiecertificaat:'Garantiecertificaat',
   informatiebrief:    'Tussentijdse informatiebrief',

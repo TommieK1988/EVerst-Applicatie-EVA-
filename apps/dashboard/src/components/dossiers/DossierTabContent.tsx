@@ -5,6 +5,7 @@ import { getDossierDatums } from '@/lib/dossiers/datums'
 import { LEGE_DOSSIER_DATUMS } from '@/lib/dossiers/datum-regels'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getGoedgekeurdMeerwerkExcl } from '@/lib/dossiers/meerwerk'
+import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
 import { getSjablonen, getUrgenteTakenVoorDossier } from '@/lib/taken/services/taken'
@@ -84,7 +85,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums] = await Promise.all([
+    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums, opdrachtOverzicht] = await Promise.all([
       getMedewerkers(),
       dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
       dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
@@ -100,6 +101,8 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       getWerkmaatschappijen().catch(() => []),
       // Procesdatums (aanvraag → financieel gereed) voor het Projectinformatie-blok.
       getDossierDatums(id).catch(() => LEGE_DOSSIER_DATUMS),
+      // Opdracht-samenstelling (stelposten/opties + bewaking) — alleen voor opdracht-dossiers.
+      sectie === 'opdracht' ? getOpdrachtOverzicht(id).catch(() => null) : Promise.resolve(null),
     ])
 
     // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
@@ -125,6 +128,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           currentMedewerkerId={currentMedewerker?.id ?? null}
           werkmaatschappijen={werkmaatschappijen}
           datums={datums}
+          opdrachtOverzicht={opdrachtOverzicht}
         />
       </>
     )
