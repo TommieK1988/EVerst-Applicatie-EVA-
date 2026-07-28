@@ -16,7 +16,7 @@
 import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
 import { stripHtml } from './docx-utils'
 import type { Quote } from './types-quotes'
-import { renderDocx, loadTemplateBuffer, fetchImage } from '../documenten/render-docx'
+import { renderDocx, loadTemplateBuffer, fetchImageDataUrl, bufferNaarDataUrl } from '../documenten/render-docx'
 
 // De engine woont in lib/documenten/render-docx.ts. Deze re-exports houden alle
 // bestaande import-paden (pdf/docx/pdf-preview/docx-preview-routes) ongewijzigd werkend.
@@ -53,9 +53,11 @@ export async function renderQuoteDocx(
 ): Promise<Buffer> {
   const ctx = buildRenderContext(quote, bedrijf, layout, extra.dossier)
 
-  // Logo's ophalen (best-effort) en image-context opbouwen
-  const logo = await fetchImage(bedrijf.logo_url)
-  const logoWit = await fetchImage(bedrijf.logo_wit_url)
+  // Logo's ophalen (best-effort) en image-context opbouwen. Als base64 data-URL, niet als
+  // kale Buffer: de sync image-render van docxtemplater-image-module-free crasht op objecten
+  // (zie bufferNaarDataUrl in render-docx.ts).
+  const logo = await fetchImageDataUrl(bedrijf.logo_url)
+  const logoWit = await fetchImageDataUrl(bedrijf.logo_wit_url)
 
   // Docx-vriendelijke context: HTML uit vrije-tekstvelden strippen naar platte tekst
   const docxCtx = {
@@ -68,10 +70,10 @@ export async function renderQuoteDocx(
     voorwaarden: stripHtml(ctx.voorwaarden),
     uitsluitingen: stripHtml(ctx.uitsluitingen),
     opmerkingen: stripHtml(ctx.opmerkingen),
-    // Image-tags
-    logo: logo ?? '',
-    logo_wit: logoWit ?? '',
-    handtekening: extra.handtekening ?? '',
+    // Image-tags (base64 data-URLs — nooit kale Buffers, zie bufferNaarDataUrl)
+    logo,
+    logo_wit: logoWit,
+    handtekening: bufferNaarDataUrl(extra.handtekening),
     // Conditioneel CONCEPT-blok in de Word-template.
     is_concept: extra.is_concept ?? false,
   }

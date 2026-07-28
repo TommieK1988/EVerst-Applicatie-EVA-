@@ -13,7 +13,7 @@
 
 import 'server-only'
 import { laadBedrijfEnDossier } from '../everts-calc/offerte-bronnen'
-import { fetchImage } from './render-docx'
+import { fetchImageDataUrl } from './render-docx'
 import { ROLLEN, type RolNaam } from './rollen'
 import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam } from './format'
 import type { DocumentSjabloon } from './types'
@@ -32,8 +32,8 @@ export interface RolContext {
   telefoon: string
   mobiel: string
   email: string
-  /** Afbeelding-bytes voor {%<rol>.foto} / {%foto_<rol>}; '' als er geen foto is. */
-  foto: Buffer | ''
+  /** Foto voor {%<rol>.foto} / {%foto_<rol>} als base64 data-URL; '' als er geen foto is. */
+  foto: string
 }
 
 export interface DocumentRenderContext {
@@ -53,7 +53,7 @@ const LEGE_ROL: RolContext = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function bouwRol(row: any): Promise<RolContext> {
   if (!row) return { ...LEGE_ROL }
-  const foto = await fetchImage(row.foto_url)
+  const foto = await fetchImageDataUrl(row.foto_url)
   return {
     heeft: true,
     naam: volledigeNaam(row),
@@ -63,7 +63,7 @@ async function bouwRol(row: any): Promise<RolContext> {
     mobiel: row.mobiel ?? '',
     // o365_email is het zakelijke adres dat men daadwerkelijk gebruikt.
     email: row.o365_email ?? row.email ?? '',
-    foto: foto ?? '',
+    foto,
   }
 }
 
@@ -110,6 +110,11 @@ export async function buildDocumentContext(
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
 
+  // Feedback-ronde: het eerste veld van type 'feedback_link' levert de gekozen
+  // bewoners-feedbacklink. Daaruit volgen de linktekst {feedback.url}, de QR-code
+  // {%feedback_qr} en (via genereer-document) het doel van de klik-knop.
+  const feedback = await bouwFeedbackBlok(sjabloon, genormaliseerd)
+
   // Garantie: termijn komt uit de invoer (geen dossierfeit), einddatum is afgeleid.
   const garantieJaren = Number(String(genormaliseerd.garantie_jaren ?? '').replace(',', '.'))
   const garantieTot =
@@ -117,8 +122,8 @@ export async function buildDocumentContext(
       ? nJaarLater(opleverDatum, garantieJaren)
       : null
 
-  const logo = await fetchImage(bedrijf.logo_url)
-  const logoWit = await fetchImage(bedrijf.logo_wit_url)
+  const logo = await fetchImageDataUrl(bedrijf.logo_url)
+  const logoWit = await fetchImageDataUrl(bedrijf.logo_wit_url)
 
   const geadresseerde = {
     naam: dossier.werkadres_naam || dossier.contactpersoon || '',
@@ -192,10 +197,15 @@ export async function buildDocumentContext(
       opdrachtnummer: dossier.opdracht_referentie || dossier.referentie || '',
     },
     invoer: genormaliseerd,
-    // Image-tags
-    logo: logo ?? '',
-    logo_wit: logoWit ?? '',
+    // Feedback-ronde (bewoners): linktekst + QR-code. De klik-knop wordt in
+    // genereer-document via de `hyperlinks`-optie op de sentinel gezet.
+    feedback,
+    // Image-tags (base64 data-URLs — nooit kale Buffers, zie bufferNaarDataUrl)
+    logo,
+    logo_wit: logoWit,
     handtekening: ondertekenaar.handtekening,
+    // Platte alias voor de QR-image-tag ({%feedback_qr}), zoals foto_<rol> het patroon volgt.
+    feedback_qr: feedback.qr,
   }
 
   // Platte alias per rol-foto ({%foto_uitvoerder}). De geneste vorm ({%uitvoerder.foto})
@@ -209,7 +219,11 @@ export async function buildDocumentContext(
 /** Max-kaders voor de image-tags van een document (naast de engine-standaarden). */
 export function documentImageMax(): Record<string, { w: number; h: number }> {
   const PASFOTO = { w: 160, h: 200 }
-  const max: Record<string, { w: number; h: number }> = {}
+  const QR = { w: 190, h: 190 }
+  const max: Record<string, { w: number; h: number }> = {
+    feedback_qr: QR,
+    'feedback.qr': QR,
+  }
   for (const rol of ROLLEN) {
     max[`foto_${rol}`] = PASFOTO
     max[`${rol}.foto`] = PASFOTO
@@ -217,12 +231,69 @@ export function documentImageMax(): Record<string, { w: number; h: number }> {
   return max
 }
 
+/** Feedback-ronde-blok: linktekst + QR-code van de gekozen bewoners-feedbacklink. */
+interface FeedbackBlok {
+  heeft: boolean
+  /** De opgeschoonde link als tekst (zonder een per ongeluk meegeplakt "KEY="-voorvoegsel). */
+  url: string
+  /**
+   * QR-code van de link als PNG **base64 data-URL** voor {%feedback_qr}; '' als er geen link is.
+   * Bewust een string en géén Buffer: docxtemplater-image-module-free behandelt in de
+   * synchrone render elk object (dus ook een Buffer) als een al-verwerkte afbeelding en
+   * crasht dan — alleen een base64/data-URL-string doorloopt het echte insluit-pad.
+   */
+  qr: string
+}
+
+const LEEG_FEEDBACK_BLOK: FeedbackBlok = { heeft: false, url: '', qr: '' }
+
+/**
+ * Zoekt het feedback_link-veld in het sjabloon, schoont de gekozen URL op en genereert
+ * er een QR-code bij. Geen veld / lege waarde → leeg blok (image-module toont dan niets).
+ */
+async function bouwFeedbackBlok(
+  sjabloon: DocumentSjabloon,
+  genormaliseerd: Record<string, string>,
+): Promise<FeedbackBlok> {
+  const veld = (sjabloon.velden ?? []).find(v => v.type === 'feedback_link')
+  if (!veld) return { ...LEEG_FEEDBACK_BLOK }
+  const url = schoonLink(genormaliseerd[veld.sleutel] ?? '')
+  if (!url) return { ...LEEG_FEEDBACK_BLOK }
+  const qr = await maakQrDataUrl(url)
+  return { heeft: true, url, qr }
+}
+
+/**
+ * Vangnet tegen een per ongeluk meegeplakt "NEXT_PUBLIC_APP_URL="-voorvoegsel (of andere
+ * "KEY=") en omringende quotes/spaties in een gekopieerde link.
+ */
+function schoonLink(waarde: string): string {
+  return String(waarde ?? '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/^[A-Z0-9_]+\s*=\s*/i, '')
+    .trim()
+}
+
+/** QR-code van een URL als PNG base64 data-URL. Best-effort: faalt hij, dan geen QR (''). */
+async function maakQrDataUrl(url: string): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mod: any = await import('qrcode')
+    const QR = mod.default ?? mod
+    // toDataURL levert "data:image/png;base64,…" — de image-module str(ip)t het data:-deel zelf.
+    return await QR.toDataURL(url, { margin: 1, width: 600, errorCorrectionLevel: 'M' })
+  } catch {
+    return ''
+  }
+}
+
 /** Ondertekenaar-blok: de ingelogde medewerker met handtekening. */
 async function laadOndertekenaar(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   medewerkerId?: string | null,
-): Promise<RolContext & { handtekening: Buffer | '' }> {
+): Promise<RolContext & { handtekening: string }> {
   if (!medewerkerId) return { ...LEGE_ROL, handtekening: '' }
   try {
     const { data } = await supabase
@@ -232,8 +303,8 @@ async function laadOndertekenaar(
       .maybeSingle()
     if (!data) return { ...LEGE_ROL, handtekening: '' }
     const rol = await bouwRol(data)
-    const handtekening = await fetchImage(data.handtekening_url)
-    return { ...rol, handtekening: handtekening ?? '' }
+    const handtekening = await fetchImageDataUrl(data.handtekening_url)
+    return { ...rol, handtekening }
   } catch {
     return { ...LEGE_ROL, handtekening: '' }
   }

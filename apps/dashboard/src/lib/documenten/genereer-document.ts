@@ -15,7 +15,7 @@
  */
 
 import 'server-only'
-import { renderDocx, loadTemplateBuffer, GeenTemplateError } from './render-docx'
+import { renderDocx, loadTemplateBuffer, GeenTemplateError, FEEDBACK_LINK_PLACEHOLDER } from './render-docx'
 import { buildDocumentContext, documentImageMax, ontbrekendeVelden } from './document-context'
 import { buildDemoDocumentContext } from './demo-document'
 import type { DocumentSjabloon } from './types'
@@ -69,7 +69,13 @@ export async function genereerDocumentDocx(
     : sjabloon
 
   const templateBuffer = await loadTemplateBuffer(templateBron)
-  return renderDocx(templateBuffer, ctx, { imageMax: documentImageMax() })
+
+  // Klik-knop: het sentinel-adres in de template wordt het echte feedback-adres.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const feedbackUrl = (ctx as any)?.feedback?.url as string | undefined
+  const hyperlinks = feedbackUrl ? { [FEEDBACK_LINK_PLACEHOLDER]: feedbackUrl } : undefined
+
+  return renderDocx(templateBuffer, ctx, { imageMax: documentImageMax(), hyperlinks })
 }
 
 /**

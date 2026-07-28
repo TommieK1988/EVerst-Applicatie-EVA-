@@ -103,6 +103,14 @@ export default function VeldenBuilder({
               >
                 {VELD_TYPES.map(t => <option key={t} value={t}>{veldTypeLabels[t]}</option>)}
               </select>
+              {veld.type === 'feedback_link' && (
+                <p className="rounded bg-brand-50 px-2 py-1 text-[10.5px] leading-snug text-brand-700">
+                  Bij het opstellen kies/maak je een bewoners-feedbacklink. Gebruik in het Word-bestand{' '}
+                  <code className="font-mono">{'{%feedback_qr}'}</code> (QR, eigen alinea),{' '}
+                  <code className="font-mono">{'{feedback.url}'}</code> (linktekst) en een knop-hyperlink naar{' '}
+                  <code className="font-mono">https://feedback-link.eva/</code>.
+                </p>
+              )}
               {veld.type === 'keuze' && (
                 <textarea
                   value={(veld.opties ?? []).join('\n')}

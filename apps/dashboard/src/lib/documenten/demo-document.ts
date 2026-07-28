@@ -22,6 +22,15 @@ const DEMO_START = '2026-09-07'
 const DEMO_EIND = '2026-10-02'
 const DEMO_OPLEVER = '2026-10-02'
 
+/** Voorbeeld-feedbacklink voor de preview. */
+const DEMO_FEEDBACK_URL = 'https://eva.everts.nl/p/feedback/VOORBEELD'
+/**
+ * Voorgebakken QR-PNG (base64) voor de preview. Bewust statisch: deze module blijft sync
+ * en server-only-vrij, dus we roepen hier geen `qrcode` aan. De image-module accepteert base64.
+ */
+const DEMO_FEEDBACK_QR =
+  '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'
+
 function demoRol(rol: string, index: number) {
   const namen = [
     { voornaam: 'Jeroen', naam: 'Jeroen de Wit',     functie: 'Projectleider' },
@@ -158,9 +167,12 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       opdrachtnummer: 'PO-88213',
     },
     invoer,
+    // Feedback-ronde: voorbeeld-link + voorgebakken QR, zodat de preview de QR én knop toont.
+    feedback: { heeft: true, url: DEMO_FEEDBACK_URL, qr: DEMO_FEEDBACK_QR },
     logo: '',
     logo_wit: '',
     handtekening: '',
+    feedback_qr: DEMO_FEEDBACK_QR,
   }
 
   for (const rol of ROLLEN) ctx[`foto_${rol}`] = ''

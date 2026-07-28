@@ -81,11 +81,67 @@ const STANDAARD_IMAGE_MAX: Record<string, { w: number; h: number }> = {
   foto_klein: PHOTO_MAX_KLEIN,
 }
 
+/**
+ * Sentinel-adres voor de dynamische feedback-knop. De sjabloonmaker zet in Word een
+ * hyperlink met exact dít adres; bij het renderen wordt het doel vervangen door de
+ * echte feedback-link (zie `hyperlinks` in {@link RenderDocxOpties}). Bewust een simpel
+ * ascii-adres zonder query, zodat Word het ongewijzigd in de relatie-XML bewaart.
+ */
+export const FEEDBACK_LINK_PLACEHOLDER = 'https://feedback-link.eva/'
+
 export interface RenderDocxOpties {
   /** Max-kader per image-tagnaam. Aangevuld op (niet vervangend voor) de standaarden. */
   imageMax?: Record<string, { w: number; h: number }>
   /** Kader voor image-tags zonder eigen instelling. Default: LOGO_MAX. */
   standaardImageMax?: { w: number; h: number }
+  /**
+   * Dynamische hyperlinks: sentinel-adres → echte URL. docxtemplater vervangt alleen
+   * tekst in de body, NIET het doel van een hyperlink — dat staat in `word/_rels/*.rels`.
+   * Voor elk paar wordt het sentinel-adres in die relatiebestanden vervangen door de
+   * (XML-ge-escapete) echte URL. Een trailing slash in de sentinel is optioneel bij het
+   * matchen, zodat het niet uitmaakt of Word hem bewaart of weglaat.
+   */
+  hyperlinks?: Record<string, string>
+}
+
+/** XML-attribuutwaarde escapen (het `Target="…"` van een relatie). */
+function escapeXmlAttr(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+/** Escapet een letterlijke string voor gebruik in een RegExp. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Vervangt sentinel-hyperlinkdoelen in de relatiebestanden (`_rels/*.rels`) van het zip.
+ * Hyperlinkdoelen leven in het `Target`-attribuut daar, niet in de document-body.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function vervangHyperlinks(zip: any, hyperlinks: Record<string, string>): void {
+  const paren = Object.entries(hyperlinks).filter(([, url]) => !!url)
+  if (paren.length === 0) return
+  const relsNamen = Object.keys(zip.files).filter((n: string) => /_rels\/[^/]*\.rels$/.test(n))
+  for (const naam of relsNamen) {
+    const bestand = zip.file(naam)
+    if (!bestand) continue
+    let xml: string = bestand.asText()
+    let gewijzigd = false
+    for (const [sentinel, url] of paren) {
+      // Trailing slash in de sentinel optioneel maken bij het matchen.
+      const patroon = escapeRegex(sentinel).replace(/\\?\/$/, '/?')
+      const re = new RegExp(patroon, 'g')
+      const nieuw = xml.replace(re, escapeXmlAttr(url))
+      if (nieuw !== xml) { xml = nieuw; gewijzigd = true }
+    }
+    if (gewijzigd) zip.file(naam, xml)
+  }
 }
 
 /**
@@ -165,7 +221,12 @@ export async function renderDocx(
     throw new Error(formatDocxError(renderErr))
   }
 
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+  const outZip = doc.getZip()
+  // Dynamische hyperlinkdoelen (bv. de feedback-knop) in de relatie-XML omzetten —
+  // ná render, want docxtemplater raakt de _rels-bestanden niet aan.
+  if (opties.hyperlinks) vervangHyperlinks(outZip, opties.hyperlinks)
+
+  return outZip.generate({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
 
 /**
@@ -230,6 +291,32 @@ export async function fetchImage(url?: string | null): Promise<Buffer | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * Zet afbeeldingsbytes om naar een base64 **data-URL**. Cruciaal: docxtemplater-image-module-free
+ * behandelt in de synchrone `render()` elke tag-waarde die een object is (dus óók een `Buffer`) als
+ * een al-verwerkte afbeelding en crasht dan ("Cannot read properties of undefined (reading '0')").
+ * Alleen een string (base64/data-URL) doorloopt het echte insluit-pad. Image-context daarom altijd
+ * via deze helper i.p.v. een kale Buffer in de render-context zetten.
+ */
+export function bufferNaarDataUrl(buf: Buffer | null | undefined | ''): string {
+  if (!buf || !Buffer.isBuffer(buf) || buf.length === 0) return ''
+  return `data:${detecteerMime(buf)};base64,${buf.toString('base64')}`
+}
+
+/** Grof mime-type uit de eerste bytes (PNG/JPEG/GIF/WebP); default PNG. */
+function detecteerMime(buf: Buffer): string {
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf.length >= 3 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'image/gif'
+  if (buf.length >= 12 && buf[0] === 0x52 && buf[1] === 0x49 && buf[8] === 0x57 && buf[9] === 0x45) return 'image/webp'
+  return 'image/png'
+}
+
+/** Haalt een afbeelding op en levert hem als base64 data-URL (''-safe). Zie {@link bufferNaarDataUrl}. */
+export async function fetchImageDataUrl(url?: string | null): Promise<string> {
+  return bufferNaarDataUrl(await fetchImage(url))
 }
 
 /** Nederlandse labels per docxtemplater-fout-id. */

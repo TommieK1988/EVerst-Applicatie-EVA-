@@ -186,6 +186,17 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
   },
   {
+    groep: 'Feedback-ronde (bewoners)',
+    uitleg: 'Voor een bewonersbrief met feedback-link. Voeg onderaan één invoerveld van type ' +
+      '"Feedback-link (bewoners)" toe; bij het opstellen kies/maak je de link. De KNOP maak je in Word als ' +
+      'hyperlink naar exact https://feedback-link.eva/ — dat adres wordt bij het opstellen vervangen door de echte link.',
+    items: [
+      { v: '{%feedback_qr}',   label: 'QR-code van de feedback-link (eigen alinea!)' },
+      { v: '{feedback.url}',   label: 'De feedback-link als tekst (opgeschoond)' },
+      { v: '{#feedback.heeft}…{/feedback.heeft}', label: 'Alleen tonen als er een link is gekozen' },
+    ],
+  },
+  {
     groep: 'Eigen invoervelden',
     uitleg: 'Velden die je onderaan bij "Invoervelden" toevoegt. Ze worden gevraagd bij het opstellen.',
     items: [

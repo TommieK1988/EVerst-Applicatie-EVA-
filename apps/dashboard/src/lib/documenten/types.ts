@@ -22,16 +22,20 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
 }
 
 /** Veldtypen voor de per-document invoervelden. */
-export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox'] as const
+export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link'] as const
 export type VeldType = (typeof VELD_TYPES)[number]
 
 export const veldTypeLabels: Record<VeldType, string> = {
-  tekst:       'Tekst (één regel)',
-  meerregelig: 'Tekst (meerdere regels)',
-  datum:       'Datum',
-  getal:       'Getal',
-  keuze:       'Keuzelijst',
-  checkbox:    'Ja/nee',
+  tekst:         'Tekst (één regel)',
+  meerregelig:   'Tekst (meerdere regels)',
+  datum:         'Datum',
+  getal:         'Getal',
+  keuze:         'Keuzelijst',
+  checkbox:      'Ja/nee',
+  // Bijzonder veld: bij het opstellen kies/maak je een feedback-link (bewoners). De
+  // waarde is de gekozen URL; die voedt {feedback.url}, de QR-code {%feedback_qr} en
+  // de klik-knop in de brief.
+  feedback_link: 'Feedback-link (bewoners)',
 }
 
 /**

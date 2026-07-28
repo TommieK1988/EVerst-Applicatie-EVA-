@@ -16,6 +16,10 @@ import {
 } from '@/lib/documenten/genereer-document'
 import { archiveerEnRegistreer, markeerGemaild } from '@/lib/documenten/archiveer'
 import type { DocumentSjabloon, DossierDocument } from '@/lib/documenten/types'
+import {
+  getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken,
+  type OpleverTokenLink,
+} from '@/lib/dossiers/oplevering'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function db(): any {
@@ -140,6 +144,44 @@ export async function mailDocument(args: MailDocumentArgs): Promise<{ ok: boolea
     console.error('Document mailen mislukt:', err)
     return { ok: false, fout: 'Mailen mislukt. Controleer of je met Microsoft bent ingelogd.' }
   }
+}
+
+/* ─────────────────────── Feedback-link (bewoners) ─────────────────────── */
+
+/**
+ * Bestaande bewoners-feedbacklinks van een dossier, voor de picker bij een
+ * feedback_link-invoerveld. Hergebruikt het Oplevering-tokensysteem (`/p/feedback/…`),
+ * zodat een link intrekbaar is en ook op de Oplevering-tab zichtbaar blijft.
+ */
+export async function getFeedbackLinks(dossierId: string): Promise<OpleverTokenLink[]> {
+  await vereisRecht('dossiers', 'lezen')
+  return getOpleverTokenLinks(dossierId, 'feedback')
+}
+
+/** Gepubliceerde feedbackformulieren (categorie 'oplevering') om een nieuwe link aan te hangen. */
+export async function getFeedbackFormulieren(): Promise<{ id: string; naam: string }[]> {
+  await vereisRecht('dossiers', 'lezen')
+  return getOpleverFeedbackTemplates()
+}
+
+/**
+ * Maakt een nieuwe bewoners-feedbacklink (60 dagen geldig) en geeft de volledige URL terug,
+ * klaar om als waarde van het feedback_link-veld te gebruiken.
+ */
+export async function maakFeedbackLink(
+  dossierId: string,
+  formTemplateId: string,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  await vereisRecht('dossiers', 'schrijven')
+  if (!formTemplateId) return { ok: false, error: 'Kies eerst een feedbackformulier.' }
+  const r = await maakToegangToken('feedback', {
+    dossierId,
+    formTemplateId,
+    omschrijving: 'Bewonersbrief',
+    geldigDagen: 60,
+  })
+  if (!r.ok) return { ok: false, error: r.error }
+  return { ok: true, url: r.url }
 }
 
 /** Standaard-ontvanger + gerenderde mailtekst voor de modal. */

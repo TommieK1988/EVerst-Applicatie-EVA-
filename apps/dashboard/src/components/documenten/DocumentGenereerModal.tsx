@@ -11,8 +11,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { X, RefreshCw, FileText, Download, Mail, Pencil } from 'lucide-react'
-import { mailDocument, getMailVoorstel } from '@/app/(platform)/documenten/actions'
+import { X, RefreshCw, FileText, Download, Mail, Pencil, QrCode, Plus } from 'lucide-react'
+import {
+  mailDocument, getMailVoorstel,
+  getFeedbackLinks, getFeedbackFormulieren, maakFeedbackLink,
+} from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 
 interface Props {
@@ -181,6 +184,7 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
                   <VeldInvoer
                     key={veld.sleutel}
                     veld={veld}
+                    dossierId={dossierId}
                     waarde={invoer[veld.sleutel] ?? ''}
                     onChange={w => setInvoer(s => ({ ...s, [veld.sleutel]: w }))}
                     onBlur={ververs}
@@ -259,8 +263,9 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
   )
 }
 
-function VeldInvoer({ veld, waarde, onChange, onBlur }: {
+function VeldInvoer({ veld, dossierId, waarde, onChange, onBlur }: {
   veld: DocumentVeld
+  dossierId: string
   waarde: string
   onChange: (v: string) => void
   onBlur: () => void
@@ -271,7 +276,9 @@ function VeldInvoer({ veld, waarde, onChange, onBlur }: {
       <label className="mb-1 block text-[11.5px] font-medium text-neutral-600">
         {veld.label}{veld.verplicht && <span className="text-red-500"> *</span>}
       </label>
-      {veld.type === 'meerregelig' ? (
+      {veld.type === 'feedback_link' ? (
+        <FeedbackLinkVeld dossierId={dossierId} waarde={waarde} onChange={v => { onChange(v); onBlur() }} />
+      ) : veld.type === 'meerregelig' ? (
         <textarea value={waarde} onChange={e => onChange(e.target.value)} onBlur={onBlur} rows={4} className={cls} />
       ) : veld.type === 'keuze' ? (
         <select value={waarde} onChange={e => { onChange(e.target.value) }} onBlur={onBlur} className={cls}>
@@ -290,6 +297,103 @@ function VeldInvoer({ veld, waarde, onChange, onBlur }: {
         />
       )}
       {veld.hint && <p className="mt-1 text-[10.5px] text-neutral-400">{veld.hint}</p>}
+    </div>
+  )
+}
+
+type FeedbackLink = { id: string; url: string; templateNaam: string | null; verlooptOp: string | null; verlopen: boolean }
+
+/**
+ * Picker voor een bewoners-feedbacklink: kies een bestaande link van dit dossier of maak
+ * er één (kies dan het feedbackformulier). De waarde is de gekozen URL — die voedt de
+ * QR-code, de klik-knop en de linktekst in de brief.
+ */
+function FeedbackLinkVeld({ dossierId, waarde, onChange }: {
+  dossierId: string
+  waarde: string
+  onChange: (v: string) => void
+}) {
+  const [links, setLinks] = useState<FeedbackLink[]>([])
+  const [laden, setLaden] = useState(true)
+  const [maakOpen, setMaakOpen] = useState(false)
+  const [formulieren, setFormulieren] = useState<{ id: string; naam: string }[]>([])
+  const [gekozenForm, setGekozenForm] = useState('')
+  const [bezig, startT] = useTransition()
+
+  useEffect(() => {
+    getFeedbackLinks(dossierId)
+      .then(setLinks)
+      .catch(() => { /* leeg is prima — je kunt er een maken */ })
+      .finally(() => setLaden(false))
+  }, [dossierId])
+
+  function openMaken() {
+    setMaakOpen(true)
+    if (formulieren.length === 0) {
+      getFeedbackFormulieren().then(setFormulieren).catch(() => toast.error('Feedbackformulieren laden mislukt'))
+    }
+  }
+
+  function maakLink() {
+    if (!gekozenForm) { toast.error('Kies eerst een feedbackformulier'); return }
+    startT(async () => {
+      const r = await maakFeedbackLink(dossierId, gekozenForm)
+      if (!r.ok) { toast.error(r.error); return }
+      const nieuw: FeedbackLink = {
+        id: r.url, url: r.url,
+        templateNaam: formulieren.find(f => f.id === gekozenForm)?.naam ?? 'Nieuw',
+        verlooptOp: null, verlopen: false,
+      }
+      setLinks(l => [nieuw, ...l])
+      onChange(r.url)
+      setMaakOpen(false)
+      toast.success('Feedback-link gemaakt')
+    })
+  }
+
+  const cls = 'w-full rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-500/30'
+  // Een gekozen waarde die (nog) niet in de lijst zit, tóch selecteerbaar tonen.
+  const waardeInLijst = links.some(l => l.url === waarde)
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+        <QrCode className="h-3.5 w-3.5" /> Wordt de QR-code én de knop in de brief.
+      </div>
+      <select value={waarde} onChange={e => onChange(e.target.value)} className={cls} disabled={laden}>
+        <option value="">{laden ? 'Laden…' : '— kies een feedback-link —'}</option>
+        {!waardeInLijst && waarde && <option value={waarde}>Huidige link</option>}
+        {links.map(l => (
+          <option key={l.id} value={l.url} disabled={l.verlopen}>
+            {(l.templateNaam ?? 'Feedback')}{l.verlopen ? ' (verlopen)' : ''}
+          </option>
+        ))}
+      </select>
+
+      {maakOpen ? (
+        <div className="space-y-1.5 rounded border border-neutral-200 bg-neutral-50 p-2">
+          <select value={gekozenForm} onChange={e => setGekozenForm(e.target.value)} className={cls}>
+            <option value="">— kies feedbackformulier —</option>
+            {formulieren.map(f => <option key={f.id} value={f.id}>{f.naam}</option>)}
+          </select>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={maakLink} disabled={bezig || !gekozenForm}
+              className="flex-1 rounded bg-brand-600 px-2 py-1 text-[11.5px] font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+              {bezig ? 'Maken…' : 'Maken'}
+            </button>
+            <button type="button" onClick={() => setMaakOpen(false)}
+              className="rounded border border-neutral-300 px-2 py-1 text-[11.5px] text-neutral-600 hover:bg-neutral-100">
+              Annuleren
+            </button>
+          </div>
+          <p className="text-[10.5px] text-neutral-400">Alleen gepubliceerde formulieren met categorie “oplevering”.</p>
+        </div>
+      ) : (
+        <button type="button" onClick={openMaken}
+          className="flex items-center gap-1.5 text-[11.5px] text-brand-600 hover:underline">
+          <Plus className="h-3.5 w-3.5" /> Nieuwe feedback-link maken
+        </button>
+      )}
     </div>
   )
 }
