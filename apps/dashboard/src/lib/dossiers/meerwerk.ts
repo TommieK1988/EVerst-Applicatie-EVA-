@@ -10,7 +10,7 @@ import type {
   MeerwerkTermijnWijze,
 } from '@everts/database'
 import { getServicedeskRegie } from './servicedesk'
-import { bouw7VoorDossier } from './actions'
+import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { maakMeerwerkOfferte } from '@/app/(platform)/everts-calc/actions/quotes'
@@ -120,7 +120,7 @@ export type NieuweMeerwerkData = {
 export async function maakMeerwerkRegel(
   dossierId: string,
   data: NieuweMeerwerkData,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string; waarschuwing?: string } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
@@ -131,6 +131,7 @@ export async function maakMeerwerkRegel(
     .limit(1)
     .maybeSingle()
   const volgnummer = (maxRow?.volgnummer ?? 0) + 1
+  const code = `MW${String(volgnummer).padStart(2, '0')}`
 
   const { data: ins, error } = await supabase
     .from('meerwerk_regels')
@@ -147,12 +148,28 @@ export async function maakMeerwerkRegel(
       hoeveelheid_werkelijk: data.hoeveelheid_werkelijk ?? null,
       btw_pct: data.btw_pct ?? null,
       factuurreferentie: data.factuurreferentie ?? null,
+      bewakingscode: code,
     })
     .select('id')
     .single()
   if (error) return { ok: false, error: error.message }
+
+  // Meteen een eigen bewakingscode (code = MW##, naam = omschrijving) in Bouw7 aanmaken — best effort.
+  // Prognose-seed alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
+  let waarschuwing: string | undefined
+  const bedrag = data.afrekenwijze === 'aangenomen' && !data.is_stelpost ? (data.bedrag_excl_btw ?? null) : null
+  const bc = await maakMeerwerkBewakingscodeBouw7(dossierId, { code, naam: data.omschrijving, bedrag })
+  if (bc.ok) {
+    await supabase.from('meerwerk_regels')
+      .update({ bouw7_chapter_id: bc.chapterId, bouw7_security_code_id: bc.pslId, updated_at: new Date().toISOString() })
+      .eq('id', ins.id)
+    if (bc.waarschuwing) waarschuwing = bc.waarschuwing
+  } else {
+    waarschuwing = `Meerwerkregel opgeslagen, maar bewakingscode in Bouw7 aanmaken mislukt: ${bc.error}`
+  }
+
   revalidatePath(`/opdrachten/${dossierId}/meerwerk`)
-  return { ok: true, id: ins.id }
+  return { ok: true, id: ins.id, waarschuwing }
 }
 
 export async function updateMeerwerkRegel(
@@ -232,16 +249,18 @@ export async function setMeerwerkStatus(
 
   let waarschuwing: string | undefined
 
-  // Bij akkoord: eigen bewakingscode in Bouw7 aanmaken (alleen voor EVA-native regels die nog geen
-  // Bouw7-koppeling hebben — geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
+  // Fallback/retry bij akkoord: normaal is de bewakingscode al bij het aanmaken van de regel gezet.
+  // De guard bouw7_chapter_id == null voorkomt dubbel aanmaken; alleen voor EVA-native regels zonder
+  // Bouw7-koppeling (geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
   if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_line_id == null && r.bouw7_chapter_id == null) {
-    const code = r.bewakingscode?.trim() || `MW${String(r.volgnummer).padStart(2, '0')}`
+    const code = `MW${String(r.volgnummer).padStart(2, '0')}`
     // Seed-bedrag: alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
     const bedrag = r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null
     const res = await maakMeerwerkBewakingscodeBouw7(r.dossier_id, { code, naam: r.omschrijving, bedrag })
     if (res.ok) {
       velden.bewakingscode = code
       velden.bouw7_chapter_id = res.chapterId
+      velden.bouw7_security_code_id = res.pslId
       if (res.waarschuwing) waarschuwing = res.waarschuwing
     } else {
       // Bouw7-write mislukt → statuswijziging gaat door; code lokaal vastleggen zodat EVA hem toont.
@@ -267,8 +286,8 @@ export async function setMeerwerkStatus(
 }
 
 /**
- * Maakt (en koppelt) een "Meerwerk offerte"-calculatie voor een regel. Vereist dat het dossier al een
- * everts-calc project heeft (open anders eerst de Calculatie-tab). Slaat het quote-id op de regel op.
+ * Maakt (en koppelt) een "Meerwerk offerte"-calculatie voor een regel. Heeft het dossier nog geen
+ * everts-calc project, dan wordt dat automatisch aangemaakt en gekoppeld. Slaat het quote-id op de regel op.
  */
 export async function maakMeerwerkCalculatie(
   regelId: string,
@@ -288,9 +307,12 @@ export async function maakMeerwerkCalculatie(
     .select('everts_calc_project_id')
     .eq('id', regel.dossier_id)
     .single()
-  const projectId: string | null = dossier?.everts_calc_project_id ?? null
+  let projectId: string | null = dossier?.everts_calc_project_id ?? null
   if (!projectId) {
-    return { ok: false, error: 'Dit dossier heeft nog geen calculatieproject. Open eerst de Calculatie-tab.' }
+    // Geen calculatieproject? Zelf aanmaken en koppelen (idempotent) i.p.v. blokkeren.
+    const kp = await koppelCalculatieProject(regel.dossier_id)
+    if (!kp.ok) return { ok: false, error: kp.error }
+    projectId = kp.projectId
   }
 
   const res = await maakMeerwerkOfferte({

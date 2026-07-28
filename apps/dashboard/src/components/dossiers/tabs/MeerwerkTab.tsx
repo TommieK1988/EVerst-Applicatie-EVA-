@@ -49,7 +49,8 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
     const r = await maakMeerwerkRegel(dossierId, nieuw)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Meerwerkregel toegevoegd')
+    if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
+    else toast.success('Meerwerkregel toegevoegd')
     setNieuw(LEGE_NIEUW); setFormOpen(false); herlaad()
   }
 
@@ -235,17 +236,16 @@ export default function MeerwerkTab({ dossierId }: { dossierId: string }) {
                       )}
                     </td>
                     <td className="py-2 px-2">
-                      <div className="flex flex-col gap-1">
+                      {readOnly ? (
                         <Badge tone={STATUS_TONE[r.status]} size="sm">{meerwerkStatusLabels[r.status]}</Badge>
-                        {!readOnly && (
+                      ) : (
                         <select className={selectCls} value={r.status} disabled={bezig}
                           onChange={e => { if (e.target.value !== r.status) wijzigStatus(r, e.target.value as MeerwerkStatus) }}>
                           {(Object.keys(meerwerkStatusLabels) as MeerwerkStatus[]).map(s => (
                             <option key={s} value={s}>{meerwerkStatusLabels[s]}</option>
                           ))}
                         </select>
-                        )}
-                      </div>
+                      )}
                     </td>
                     <td className="py-2 px-2">
                       {readOnly ? (
