@@ -203,9 +203,9 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
     )
   }
 
-  if (tab === 'houtrot') {
-    // Alleen wanneer de houtrot-toggle voor dit dossier aanstaat; anders valt de
-    // render door naar de generieke "niet beschikbaar"-weergave hieronder.
+  if (tab === 'houtrot' && sectie === 'opdracht') {
+    // Alleen bij een opdracht-dossier én wanneer de houtrot-toggle aanstaat; anders
+    // valt de render door naar de generieke "niet beschikbaar"-weergave hieronder.
     const toggles = await getDossierToggles(id)
     const houtrotAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
     if (houtrotAan) {

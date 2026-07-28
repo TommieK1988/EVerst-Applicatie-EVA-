@@ -2,6 +2,7 @@ import { createClient } from '@/lib/houtrotherstel/supabase/client'
 import type {
   RepairRegistration,
   RegistratieForm,
+  RegistratieRegelForm,
   RegistratieFilters,
 } from '@/lib/houtrotherstel/types'
 
@@ -15,8 +16,8 @@ export async function getRegistraties(
     .select(`
       *,
       projects(id, name, project_number),
-      standard_repairs(id, name, code, category),
-      repair_photos(id, photo_type, storage_path, file_name)
+      photos:repair_photos(id, photo_type, storage_path, file_name),
+      lines:repair_registration_lines(*)
     `)
     .order('registration_date', { ascending: false })
 
@@ -89,8 +90,8 @@ export async function getRegistratie(id: string): Promise<RepairRegistration | n
     .select(`
       *,
       projects(id, name, project_number, client_name),
-      standard_repairs(id, name, code, category, description),
-      repair_photos(id, photo_type, storage_path, file_name, created_at)
+      photos:repair_photos(id, photo_type, storage_path, file_name, created_at),
+      lines:repair_registration_lines(*)
     `)
     .eq('id', id)
     .single()
@@ -105,6 +106,12 @@ export async function createRegistratie(
   userId: string
 ): Promise<RepairRegistration> {
   const supabase = createClient()
+
+  // Werkzaamheden (recept + aantal) bepalen het reparatietotaal. De aggregaat-
+  // snapshots op de registratie zelf worden hieruit afgeleid, zodat overzichten en
+  // rapportages op één veld kunnen blijven leunen zonder de regels te joinen.
+  const regels = (form.werkzaamheden ?? []).filter(r => (r.aantal ?? 0) > 0)
+  const agg = aggregeerRegels(regels)
 
   const { data, error } = await supabase
     .from('repair_registrations')
@@ -122,7 +129,9 @@ export async function createRegistratie(
       damage_description: form.damage_description || null,
       damage_severity: form.damage_severity || null,
       damage_cause: form.damage_cause || null,
-      recept_id: form.recept_id || null,
+      // Legacy enkelvoudige velden: gevuld met het eerste recept (of het meegegeven
+      // legacy-veld) puur voor terugval; de waarheid staat in de regels.
+      recept_id: regels[0]?.recept_id || form.recept_id || null,
       standard_repair_id: form.standard_repair_id || null,
       custom_work_description: form.custom_work_description || null,
       notes: form.notes || null,
@@ -130,14 +139,14 @@ export async function createRegistratie(
       control_status: form.control_status,
       completed_at: form.completed_at || null,
       checked_at: form.checked_at || null,
-      labor_hours_snapshot: form.labor_hours_snapshot ?? null,
-      labor_rate_snapshot: form.labor_rate_snapshot ?? null,
+      labor_hours_snapshot: agg.labor_hours ?? form.labor_hours_snapshot ?? null,
+      labor_rate_snapshot: regels[0]?.labor_rate_snapshot ?? form.labor_rate_snapshot ?? null,
       labor_cost_snapshot: form.labor_cost_snapshot ?? null,
       material_cost_snapshot: form.material_cost_snapshot ?? null,
-      cost_price_snapshot: form.cost_price_snapshot ?? null,
-      sale_price_snapshot: form.sale_price_snapshot ?? null,
-      repair_code_snapshot: form.repair_code_snapshot || null,
-      repair_name_snapshot: form.repair_name_snapshot || null,
+      cost_price_snapshot: agg.cost_price ?? form.cost_price_snapshot ?? null,
+      sale_price_snapshot: agg.sale_price ?? form.sale_price_snapshot ?? null,
+      repair_code_snapshot: agg.code ?? form.repair_code_snapshot ?? null,
+      repair_name_snapshot: agg.naam ?? form.repair_name_snapshot ?? null,
       repair_description_snapshot: form.repair_description_snapshot || null,
       actual_labor_hours: form.actual_labor_hours ?? null,
       actual_material_cost: form.actual_material_cost ?? null,
@@ -149,9 +158,58 @@ export async function createRegistratie(
 
   if (error) throw new Error(error.message)
 
+  // Regels wegschrijven. Mislukt dit, dan de zojuist aangemaakte registratie weer
+  // opruimen — een reparatie zonder werkzaamheden heeft geen betekenis.
+  if (regels.length > 0) {
+    const { error: regelFout } = await supabase
+      .from('repair_registration_lines')
+      .insert(regels.map((r, i) => ({
+        registration_id: data.id,
+        recept_id: r.recept_id || null,
+        aantal: r.aantal,
+        repair_code_snapshot: r.repair_code_snapshot || null,
+        repair_name_snapshot: r.repair_name_snapshot || null,
+        repair_description_snapshot: r.repair_description_snapshot || null,
+        unit_snapshot: r.unit_snapshot || null,
+        labor_hours_snapshot: r.labor_hours_snapshot ?? null,
+        labor_rate_snapshot: r.labor_rate_snapshot ?? null,
+        cost_price_snapshot: r.cost_price_snapshot ?? null,
+        sale_price_snapshot: r.sale_price_snapshot ?? null,
+        volgorde: r.volgorde ?? i,
+      })))
+    if (regelFout) {
+      await supabase.from('repair_registrations').delete().eq('id', data.id)
+      throw new Error(regelFout.message)
+    }
+  }
+
   await logActivity(supabase, userId, 'registratie', data.id, 'create', null, form)
 
   return data as RepairRegistration
+}
+
+/** Telt werkzaamheden-regels op tot registratie-aggregaten (× aantal per stuk). */
+function aggregeerRegels(regels: RegistratieRegelForm[]) {
+  if (regels.length === 0) {
+    return { sale_price: null, cost_price: null, labor_hours: null, code: null, naam: null }
+  }
+  let sale = 0, cost = 0, uren = 0
+  for (const r of regels) {
+    const a = r.aantal ?? 0
+    sale += a * (r.sale_price_snapshot ?? 0)
+    cost += a * (r.cost_price_snapshot ?? 0)
+    uren += a * (r.labor_hours_snapshot ?? 0)
+  }
+  const naam = regels.length === 1
+    ? (regels[0].repair_name_snapshot ?? null)
+    : `${regels.length} werkzaamheden`
+  return {
+    sale_price: Math.round(sale * 100) / 100,
+    cost_price: Math.round(cost * 100) / 100,
+    labor_hours: Math.round(uren * 100) / 100,
+    code: regels[0].repair_code_snapshot ?? null,
+    naam,
+  }
 }
 
 export async function updateRegistratie(

@@ -235,12 +235,38 @@ export interface RepairRegistration {
   project?: Project
   standard_repair?: StandardRepair
   photos?: RepairPhoto[]
+  /** Werkzaamheden-regels (recept + aantal). Reparatietotaal = som van de regels. */
+  lines?: RepairRegistrationLine[]
   /**
    * Naam van de registrerende medewerker. Wordt aangevuld vanuit de view
    * `registraties_met_details`: de eigenaar staat in `public.medewerkers` en dat
    * schema is niet embedbaar vanuit de houtrot-client.
    */
   medewerker_naam?: string | null
+}
+
+/**
+ * Eén werkzaamheid binnen een reparatie-registratie: een recept met een aantal.
+ * Prijzen zijn een momentopname per stuk; `line_*_total` zijn generated kolommen
+ * (aantal × snapshot) — nooit zelf schrijven.
+ */
+export interface RepairRegistrationLine {
+  id: string
+  registration_id: string
+  recept_id: string | null
+  aantal: number
+  repair_code_snapshot: string | null
+  repair_name_snapshot: string | null
+  repair_description_snapshot: string | null
+  unit_snapshot: string | null
+  labor_hours_snapshot: number | null
+  labor_rate_snapshot: number | null
+  cost_price_snapshot: number | null
+  sale_price_snapshot: number | null
+  line_cost_total: number | null
+  line_sale_total: number | null
+  volgorde: number
+  created_at: string
 }
 
 export interface RepairPhoto {
@@ -353,7 +379,13 @@ export interface RegistratieForm {
   damage_description?: string
   damage_severity?: SchadeSeverity
   damage_cause?: string
-  /** Recept uit de calculatiebibliotheek (public.paint_items). */
+  /**
+   * Werkzaamheden binnen deze reparatie (recept + aantal). Eén reparatie kan er
+   * meerdere hebben; het reparatietotaal is de som. De aggregaat-snapshots op de
+   * registratie zelf (sale_price_snapshot etc.) worden hieruit afgeleid.
+   */
+  werkzaamheden?: RegistratieRegelForm[]
+  /** Recept uit de calculatiebibliotheek (public.paint_items). Legacy enkelvoudig veld. */
   recept_id?: string
   /** Vervallen: verwees naar de oude houtrot-reparatiebibliotheek. */
   standard_repair_id?: string
@@ -377,6 +409,21 @@ export interface RegistratieForm {
   actual_material_cost?: number
   actual_cost_price?: number
   actual_sale_price?: number
+}
+
+/** Eén werkzaamheid bij het opslaan: recept + aantal + prijs-momentopname per stuk. */
+export interface RegistratieRegelForm {
+  recept_id?: string
+  aantal: number
+  repair_code_snapshot?: string
+  repair_name_snapshot?: string
+  repair_description_snapshot?: string
+  unit_snapshot?: string
+  labor_hours_snapshot?: number
+  labor_rate_snapshot?: number
+  cost_price_snapshot?: number
+  sale_price_snapshot?: number
+  volgorde?: number
 }
 
 // ============================================================

@@ -36,14 +36,15 @@ export default async function MobielDossierTabPage(
   const res = await getDossierById(id)
   if (!res.ok) notFound()
 
-  // Houtrot verschijnt alleen bij dossiers waar de toggle aanstaat.
-  const toggles = await getDossierToggles(id).catch(() => [])
-  const houtrotAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
-  if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
-
-  // Oplevering (Fase 9) hoort bij een opdracht, niet bij een aanvraag.
+  // Oplevering (Fase 9) én Houtrot horen bij een opdracht, niet bij een aanvraag.
   const isOpdracht = (res.data as { hoofdstatus?: string }).hoofdstatus === 'opdracht'
   if (actief === 'oplevering' && !isOpdracht) redirect(`/m/dossiers/${id}/informatie`)
+
+  // Houtrot verschijnt alleen bij een opdracht-dossier waar de toggle aanstaat.
+  const toggles = await getDossierToggles(id).catch(() => [])
+  const houtrotAan =
+    isOpdracht && toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
+  if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
 
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

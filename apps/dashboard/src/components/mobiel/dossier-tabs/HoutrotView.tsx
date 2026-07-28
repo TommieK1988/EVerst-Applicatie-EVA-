@@ -4,11 +4,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { getRegistraties, createRegistratie, uploadPhoto } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
+import { verkleinFoto } from '@/lib/foto/verkleinFoto'
+import { formatCurrency } from '@/lib/houtrotherstel/utils'
 import {
   GEVEL_ZIJDEN, ONDERDEEL_TYPEN, SCHADE_SEVERITY, REGISTRATIE_STATUSSEN,
-  type RepairRegistration, type RegistratieForm, type SchadeSeverity,
+  type RepairRegistration, type RegistratieForm, type RegistratieRegelForm,
+  type SchadeSeverity,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
+
+/** Eén toegevoegde werkzaamheid in het formulier: gekozen recept + aantal. */
+type Werkzaamheid = { recept: Recept; aantal: number }
 
 /**
  * Houtrot binnen een dossier (mobiel). Registraties hangen aan het dossier, niet
@@ -54,7 +60,9 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [elementnr, setElementnr] = useState('')
   const [schade, setSchade] = useState('')
   const [ernst, setErnst] = useState<SchadeSeverity | ''>('')
-  const [reparatieId, setReparatieId] = useState('')
+  const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>([])
+  const [keuzeRecept, setKeuzeRecept] = useState('')
+  const [keuzeAantal, setKeuzeAantal] = useState('1')
   const [notitie, setNotitie] = useState('')
   const [voorFoto, setVoorFoto] = useState<File | null>(null)
   const [naFoto, setNaFoto] = useState<File | null>(null)
@@ -72,9 +80,33 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   function leegmaken() {
     setBlok(''); setVerdieping(''); setRuimte(''); setGevelzijde(''); setOnderdeel('')
-    setElementnr(''); setSchade(''); setErnst(''); setReparatieId(''); setNotitie('')
+    setElementnr(''); setSchade(''); setErnst(''); setNotitie('')
+    setWerkzaamheden([]); setKeuzeRecept(''); setKeuzeAantal('1')
     setVoorFoto(null); setNaFoto(null)
   }
+
+  function werkzaamheidToevoegen() {
+    const recept = recepten.find(r => r.id === keuzeRecept)
+    const aantal = Math.max(1, Math.round(Number(keuzeAantal.replace(',', '.')) || 0))
+    if (!recept || aantal < 1) return
+    setWerkzaamheden(prev => {
+      // Zelfde recept nog eens gekozen → tel het aantal op i.p.v. een dubbele regel.
+      const bestaand = prev.findIndex(w => w.recept.id === recept.id)
+      if (bestaand >= 0) {
+        const kopie = [...prev]
+        kopie[bestaand] = { ...kopie[bestaand], aantal: kopie[bestaand].aantal + aantal }
+        return kopie
+      }
+      return [...prev, { recept, aantal }]
+    })
+    setKeuzeRecept(''); setKeuzeAantal('1')
+  }
+
+  function werkzaamheidVerwijderen(receptId: string) {
+    setWerkzaamheden(prev => prev.filter(w => w.recept.id !== receptId))
+  }
+
+  const totaalVerkoop = werkzaamheden.reduce((s, w) => s + w.aantal * (w.recept.verkoopprijs || 0), 0)
 
   async function opslaan() {
     setBezig(true)
@@ -83,10 +115,27 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       const medewerker = await getHuidigeMedewerker()
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
 
-      const recept = recepten.find(r => r.id === reparatieId)
+      if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
+
+      // Prijs wordt per regel als momentopname vastgelegd: latere wijzigingen aan
+      // het recept of aan het uurtarief veranderen bestaande registraties niet.
+      const regels: RegistratieRegelForm[] = werkzaamheden.map((w, i) => ({
+        recept_id: w.recept.id,
+        aantal: w.aantal,
+        repair_code_snapshot: w.recept.code,
+        repair_name_snapshot: w.recept.naam,
+        repair_description_snapshot: w.recept.omschrijving ?? undefined,
+        unit_snapshot: w.recept.eenheid ?? undefined,
+        labor_hours_snapshot: w.recept.uren,
+        labor_rate_snapshot: w.recept.uurtarief,
+        cost_price_snapshot: w.recept.kostprijs,
+        sale_price_snapshot: w.recept.verkoopprijs,
+        volgorde: i,
+      }))
+
       const form: RegistratieForm = {
         dossier_id: dossierId,
-        recept_id: reparatieId || undefined,
+        werkzaamheden: regels,
         registration_date: new Date().toISOString().slice(0, 10),
         location_block: blok || undefined,
         floor: verdieping || undefined,
@@ -99,24 +148,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         notes: notitie || undefined,
         status: 'open',
         control_status: 'niet_gecontroleerd',
-        // Prijs wordt als momentopname vastgelegd: latere wijzigingen aan het
-        // recept of aan het uurtarief veranderen bestaande registraties niet.
-        ...(recept && {
-          repair_code_snapshot: recept.code,
-          repair_name_snapshot: recept.naam,
-          repair_description_snapshot: recept.omschrijving ?? undefined,
-          labor_hours_snapshot: recept.uren,
-          labor_rate_snapshot: recept.uurtarief,
-          labor_cost_snapshot: recept.arbeidskosten,
-          material_cost_snapshot: recept.materiaalkosten,
-          cost_price_snapshot: recept.kostprijs,
-          sale_price_snapshot: recept.verkoopprijs,
-        }),
       }
 
       const registratie = await createRegistratie(form, medewerker.id)
-      if (voorFoto) await uploadPhoto(registratie.id, voorFoto, 'voor').catch(() => null)
-      if (naFoto) await uploadPhoto(registratie.id, naFoto, 'na').catch(() => null)
+      // Foto's op de telefoon verkleinen (EXIF-rotatie + kleiner over 4G) vóór upload.
+      if (voorFoto) await uploadPhoto(registratie.id, await verkleinFoto(voorFoto), 'voor').catch(() => null)
+      if (naFoto) await uploadPhoto(registratie.id, await verkleinFoto(naFoto), 'na').catch(() => null)
 
       leegmaken()
       setInvoeren(false)
@@ -191,18 +228,82 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             </div>
           </Blok>
 
-          <Blok titel="Reparatie">
+          <Blok titel="Werkzaamheden">
+            {/* Toegevoegde werkzaamheden met aantal en regeltotaal. */}
+            {werkzaamheden.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {werkzaamheden.map(w => (
+                  <div key={w.recept.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {w.aantal}× {w.recept.naam}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#6b757c' }}>
+                        {w.recept.code} · {formatCurrency(w.recept.verkoopprijs || 0)} p/st
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', flexShrink: 0 }}>
+                      {formatCurrency(w.aantal * (w.recept.verkoopprijs || 0))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => werkzaamheidVerwijderen(w.recept.id)}
+                      aria-label="Werkzaamheid verwijderen"
+                      style={{
+                        flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
+                        background: 'var(--bg-elev)', color: '#b42318', fontSize: 16, lineHeight: 1, cursor: 'pointer',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 2px', fontSize: 13.5, fontWeight: 700, color: 'var(--fg)' }}>
+                  <span>Totaal</span>
+                  <span>{formatCurrency(totaalVerkoop)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Recept kiezen + aantal → toevoegen. */}
             <div>
-              <label style={label} htmlFor="hr-reparatie">Recept</label>
-              <select id="hr-reparatie" style={veld} value={reparatieId} onChange={e => setReparatieId(e.target.value)}>
-                <option value="">— geen —</option>
+              <label style={label} htmlFor="hr-reparatie">Werkzaamheid toevoegen</label>
+              <select id="hr-reparatie" style={veld} value={keuzeRecept} onChange={e => setKeuzeRecept(e.target.value)}>
+                <option value="">— kies een recept —</option>
                 {recepten.map(r => (
                   <option key={r.id} value={r.id}>
-                    {r.code} · {r.naam}{r.verkoopprijs ? ` — € ${r.verkoopprijs.toFixed(2)}` : ''}
+                    {r.code} · {r.naam}{r.verkoopprijs ? ` — ${formatCurrency(r.verkoopprijs)}` : ''}
                   </option>
                 ))}
               </select>
             </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+              <div style={{ width: 96 }}>
+                <label style={label} htmlFor="hr-aantal">Aantal</label>
+                <input
+                  id="hr-aantal" type="number" inputMode="numeric" min={1} step={1}
+                  style={veld} value={keuzeAantal}
+                  onChange={e => setKeuzeAantal(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={werkzaamheidToevoegen}
+                disabled={!keuzeRecept}
+                style={{
+                  flex: 1, padding: '11px 12px', borderRadius: 10, border: '1px solid var(--border)',
+                  background: keuzeRecept ? '#009439' : 'var(--bg-elev)',
+                  color: keuzeRecept ? '#fff' : '#9aa4ab',
+                  fontSize: 14, fontWeight: 700, cursor: keuzeRecept ? 'pointer' : 'default',
+                }}
+              >
+                Toevoegen
+              </button>
+            </div>
+
             <div>
               <label style={label} htmlFor="hr-notitie">Notitie</label>
               <textarea id="hr-notitie" style={{ ...veld, minHeight: 60, resize: 'vertical' }} value={notitie} onChange={e => setNotitie(e.target.value)} />
