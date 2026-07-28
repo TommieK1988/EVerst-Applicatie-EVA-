@@ -16,6 +16,7 @@ import { getSjablonenVoorDossier, getDossierDocumenten, verwijderDossierDocument
 import { documentsoortLabels, heeftTemplate, type DocumentSjabloon, type DossierDocument } from '@/lib/documenten/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import DocumentGenereerModal from './DocumentGenereerModal'
+import SjabloonKiezerModal from './SjabloonKiezerModal'
 
 const TH = 'py-1.5 px-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-400'
 
@@ -58,7 +59,7 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
             <span>Documenten</span>
             {!readOnly && bruikbaar.length > 0 && (
               <button
-                onClick={() => setKiezen(v => !v)}
+                onClick={() => setKiezen(true)}
                 className="flex items-center gap-1.5 rounded bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-700"
               >
                 <FilePlus2 className="h-3.5 w-3.5" /> Document opstellen
@@ -67,25 +68,6 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
           </div>
         </CardHeader>
         <CardBody style={{ padding: documenten.length ? 0 : undefined }}>
-          {/* Sjabloonkeuze */}
-          {kiezen && !readOnly && (
-            <div className="m-4 grid gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 sm:grid-cols-2">
-              {bruikbaar.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => { setActief({ sjabloon: s }); setKiezen(false) }}
-                  className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-left hover:border-brand-500"
-                >
-                  <div className="text-[12.5px] font-medium text-neutral-800">{s.naam}</div>
-                  <div className="text-[10.5px] text-neutral-400">
-                    {documentsoortLabels[s.documentsoort] ?? s.documentsoort}
-                    {s.velden.length ? ` · ${s.velden.length} in te vullen veld${s.velden.length === 1 ? '' : 'en'}` : ''}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Historie */}
           {sjablonen == null ? (
             <p className="text-[13px] text-neutral-500">Laden…</p>
@@ -152,6 +134,14 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
           )}
         </CardBody>
       </Card>
+
+      {kiezen && !readOnly && (
+        <SjabloonKiezerModal
+          sjablonen={bruikbaar}
+          onKies={s => { setActief({ sjabloon: s }); setKiezen(false) }}
+          onSluit={() => setKiezen(false)}
+        />
+      )}
 
       {actief && (
         <DocumentGenereerModal
