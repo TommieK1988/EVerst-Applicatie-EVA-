@@ -291,6 +291,8 @@ export interface RepairRegistrationLine {
   unit_snapshot: string | null
   labor_hours_snapshot: number | null
   labor_rate_snapshot: number | null
+  labor_cost_snapshot: number | null
+  material_cost_snapshot: number | null
   cost_price_snapshot: number | null
   sale_price_snapshot: number | null
   line_cost_total: number | null
@@ -455,6 +457,8 @@ export interface RegistratieRegelForm {
   unit_snapshot?: string
   labor_hours_snapshot?: number
   labor_rate_snapshot?: number
+  labor_cost_snapshot?: number
+  material_cost_snapshot?: number
   cost_price_snapshot?: number
   sale_price_snapshot?: number
   volgorde?: number

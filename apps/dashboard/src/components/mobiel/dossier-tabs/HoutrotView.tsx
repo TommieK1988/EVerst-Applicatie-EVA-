@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
+  regelVanRecept,
 } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import { getLocatieNiveaus } from '@/services/houtrotherstel/locatie-config'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
-  REGISTRATIE_STATUSSEN,
   type RepairRegistration, type RepairPhoto, type RegistratieForm,
-  type RegistratieRegelForm, type LocatieNiveau, type LocatieWaarde,
+  type LocatieNiveau, type LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 
@@ -22,6 +22,15 @@ type Werkzaamheid = { recept: Recept; aantal: number }
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const fotoUrl = (pad: string) => `${SUPABASE_URL}/storage/v1/object/public/repair-photos/${pad}`
 
+/** Kortere variant-tekst binnen een groep: strip het groepswoord uit de naam. */
+function variantLabel(r: Recept): string {
+  if (r.groep && r.naam.toLowerCase().startsWith(r.groep.toLowerCase())) {
+    const rest = r.naam.slice(r.groep.length).replace(/^[\s\-–—:]+/, '').trim()
+    return rest || r.naam
+  }
+  return r.naam
+}
+
 /** Bouwt een recept-vorm uit een opgeslagen werkzaamheden-regel (voor bewerken). */
 function receptVanLijn(l: NonNullable<RepairRegistration['lines']>[number]): Recept {
   return {
@@ -30,10 +39,11 @@ function receptVanLijn(l: NonNullable<RepairRegistration['lines']>[number]): Rec
     naam: l.repair_name_snapshot ?? 'Werkzaamheid',
     omschrijving: l.repair_description_snapshot ?? null,
     eenheid: l.unit_snapshot ?? null,
+    groep: null,
     uren: Number(l.labor_hours_snapshot ?? 0),
     uurtarief: Number(l.labor_rate_snapshot ?? 0),
-    arbeidskosten: 0,
-    materiaalkosten: 0,
+    arbeidskosten: Number(l.labor_cost_snapshot ?? 0),
+    materiaalkosten: Number(l.material_cost_snapshot ?? 0),
     kostprijs: Number(l.cost_price_snapshot ?? 0),
     margePct: null,
     verkoopprijs: Number(l.sale_price_snapshot ?? 0),
@@ -45,9 +55,8 @@ function receptVanLijn(l: NonNullable<RepairRegistration['lines']>[number]): Rec
  * Deze tab verschijnt alleen bij een opdracht-dossier met de toggle
  * `houtrot_registreren` aan.
  *
- * Twee standen in één component (lijst / invoeren) zodat er geen extra routes en
- * dus geen extra navigatiestappen op de telefoon nodig zijn. Bedragen worden hier
- * bewust NIET getoond — die zijn voor de projectleider in EVA.
+ * Twee standen in één component (lijst / invoeren). Bedragen worden hier bewust
+ * NIET getoond — die zijn voor de projectleider in EVA.
  */
 const veld: React.CSSProperties = {
   width: '100%', padding: '11px 12px', borderRadius: 10,
@@ -79,18 +88,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
-  // Locatie: per ingesteld niveau een gekozen waarde, óf één vrij tekstveld.
   const [locatieWaarden, setLocatieWaarden] = useState<Record<number, string>>({})
   const [vrijeLocatie, setVrijeLocatie] = useState('')
 
   const [regDatum, setRegDatum] = useState(new Date().toISOString().slice(0, 10))
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>([])
+  const [keuzeGroep, setKeuzeGroep] = useState('')
   const [keuzeRecept, setKeuzeRecept] = useState('')
   const [keuzeAantal, setKeuzeAantal] = useState('1')
   const [notitie, setNotitie] = useState('')
 
-  const [statusHandmatig, setStatusHandmatig] = useState(false)
-  const [statusKeuze, setStatusKeuze] = useState<'geregistreerd' | 'afgerond'>('geregistreerd')
+  // Status: eenvoudige tweestand. false = Geregistreerd (oranje), true = Afgerond (groen).
+  const [afgerond, setAfgerond] = useState(false)
 
   const [voorFoto, setVoorFoto] = useState<File | null>(null)
   const [naFoto, setNaFoto] = useState<File | null>(null)
@@ -109,24 +118,25 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     getLocatieNiveaus(dossierId).then(setNiveaus).catch(() => setNiveaus([]))
   }, [dossierId])
 
+  // Alleen houtrot-recepten (die met een groep) verschijnen in de keuze.
+  const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
+  const receptenInGroep = recepten.filter(r => r.groep === keuzeGroep)
+
   function leegmaken() {
     setBewerkId(null)
     setLocatieWaarden({}); setVrijeLocatie('')
     setRegDatum(new Date().toISOString().slice(0, 10))
-    setNotitie(''); setWerkzaamheden([]); setKeuzeRecept(''); setKeuzeAantal('1')
-    setStatusHandmatig(false); setStatusKeuze('geregistreerd')
+    setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
+    setAfgerond(false)
     setVoorFoto(null); setNaFoto(null); setBestaandeFotos([]); setVerwijderdeFotos(new Set())
   }
 
   function nieuwe() {
-    leegmaken()
-    setFout(null)
-    setInvoeren(true)
+    leegmaken(); setFout(null); setInvoeren(true)
   }
 
   function bewerken(r: RepairRegistration) {
     setBewerkId(r.id)
-    // Locatie terugzetten: per ingesteld niveau de opgeslagen waarde, anders vrij veld.
     const opgeslagen = (r.locatie ?? []) as LocatieWaarde[]
     if (niveaus && niveaus.length > 0) {
       const wrd: Record<number, string> = {}
@@ -146,8 +156,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
     )
     setNotitie(r.notes ?? '')
-    setStatusHandmatig(r.status_handmatig)
-    setStatusKeuze(r.status === 'afgerond' ? 'afgerond' : 'geregistreerd')
+    setAfgerond(r.status === 'afgerond')
+    setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setBestaandeFotos(r.photos ?? [])
     setVerwijderdeFotos(new Set())
     setVoorFoto(null); setNaFoto(null)
@@ -160,10 +170,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     const aantal = Math.max(1, Math.round(Number(keuzeAantal.replace(',', '.')) || 0))
     if (!recept || aantal < 1) return
     setWerkzaamheden(prev => {
-      const bestaand = prev.findIndex(w => w.recept.id === recept.id)
-      if (bestaand >= 0) {
+      const idx = prev.findIndex(w => w.recept.id === recept.id)
+      if (idx >= 0) {
         const kopie = [...prev]
-        kopie[bestaand] = { ...kopie[bestaand], aantal: kopie[bestaand].aantal + aantal }
+        kopie[idx] = { ...kopie[idx], aantal: kopie[idx].aantal + aantal }
         return kopie
       }
       return [...prev, { recept, aantal }]
@@ -179,14 +189,9 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setVerwijderdeFotos(prev => new Set(prev).add(id))
   }
 
-  // Effectieve foto's + afgeleide status (na-foto ⇒ afgerond). Voor de weergave in
-  // het formulier; de definitieve status wordt in opslaan() opnieuw bepaald.
   const zichtbareFotos = bestaandeFotos.filter(p => !verwijderdeFotos.has(p.id))
   const heeftVoorBestaand = zichtbareFotos.some(p => p.photo_type === 'voor')
   const heeftNaBestaand = zichtbareFotos.some(p => p.photo_type === 'na')
-  const naAanwezig = !!naFoto || heeftNaBestaand
-  const effectieveStatus: 'geregistreerd' | 'afgerond' =
-    statusHandmatig ? statusKeuze : (naAanwezig ? 'afgerond' : 'geregistreerd')
 
   async function opslaan() {
     setBezig(true)
@@ -196,23 +201,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
-      // Prijs per regel als momentopname: latere recept-/tariefwijzigingen raken
-      // bestaande registraties niet.
-      const regels: RegistratieRegelForm[] = werkzaamheden.map((w, i) => ({
-        recept_id: w.recept.id || undefined,
-        aantal: w.aantal,
-        repair_code_snapshot: w.recept.code,
-        repair_name_snapshot: w.recept.naam,
-        repair_description_snapshot: w.recept.omschrijving ?? undefined,
-        unit_snapshot: w.recept.eenheid ?? undefined,
-        labor_hours_snapshot: w.recept.uren,
-        labor_rate_snapshot: w.recept.uurtarief,
-        cost_price_snapshot: w.recept.kostprijs,
-        sale_price_snapshot: w.recept.verkoopprijs,
-        volgorde: i,
-      }))
+      const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
 
-      // Locatiewaarden opbouwen uit de ingestelde niveaus, of het vrije veld.
       const locatie: LocatieWaarde[] =
         niveaus && niveaus.length > 0
           ? niveaus
@@ -222,13 +212,9 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
             : []
 
-      // Foto-plan: vervangen = oude weg. Daaruit volgt of er een na-foto is.
       const teVerwijderen = new Set(verwijderdeFotos)
       if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
       if (naFoto) bestaandeFotos.filter(p => p.photo_type === 'na').forEach(p => teVerwijderen.add(p.id))
-      const naBlijft = bestaandeFotos.some(p => p.photo_type === 'na' && !teVerwijderen.has(p.id))
-      const naDefinitief = !!naFoto || naBlijft
-      const status = statusHandmatig ? statusKeuze : (naDefinitief ? 'afgerond' : 'geregistreerd')
 
       const form: RegistratieForm = {
         dossier_id: dossierId,
@@ -236,8 +222,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         locatie,
         registration_date: regDatum,
         notes: notitie || undefined,
-        status,
-        status_handmatig: statusHandmatig,
+        status: afgerond ? 'afgerond' : 'geregistreerd',
+        status_handmatig: true,
         control_status: 'niet_gecontroleerd',
       }
 
@@ -249,7 +235,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         regId = (await createRegistratie(form, medewerker.id)).id
       }
 
-      // Foto's op de telefoon verkleinen (EXIF-rotatie + kleiner over 4G).
       for (const id of teVerwijderen) {
         const p = bestaandeFotos.find(x => x.id === id)
         if (p) await deletePhoto(p.id, p.storage_path).catch(() => null)
@@ -336,15 +321,27 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               </div>
             )}
 
+            {/* Stap 1: soort. Stap 2: variant binnen die soort. */}
             <div>
-              <label style={label} htmlFor="hr-reparatie">Werkzaamheid toevoegen</label>
-              <select id="hr-reparatie" style={veld} value={keuzeRecept} onChange={e => setKeuzeRecept(e.target.value)}>
-                <option value="">— kies een werkzaamheid —</option>
-                {recepten.map(r => (
-                  <option key={r.id} value={r.id}>{r.code} · {r.naam}</option>
-                ))}
+              <label style={label} htmlFor="hr-groep">Soort</label>
+              <select id="hr-groep" style={veld} value={keuzeGroep}
+                onChange={e => { setKeuzeGroep(e.target.value); setKeuzeRecept('') }}>
+                <option value="">— kies een soort —</option>
+                {groepen.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
+            {keuzeGroep && (
+              <div>
+                <label style={label} htmlFor="hr-variant">Variant</label>
+                <select id="hr-variant" style={veld} value={keuzeRecept}
+                  onChange={e => setKeuzeRecept(e.target.value)}>
+                  <option value="">— kies —</option>
+                  {receptenInGroep.map(r => (
+                    <option key={r.id} value={r.id}>{variantLabel(r)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
               <div style={{ width: 96 }}>
                 <label style={label} htmlFor="hr-aantal">Aantal</label>
@@ -376,7 +373,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           </Blok>
 
           <Blok titel="Foto's">
-            {/* Bestaande foto's (bij bewerken) met verwijderknop. */}
             {zichtbareFotos.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {zichtbareFotos.map(p => (
@@ -408,30 +404,30 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           </Blok>
 
           <Blok titel="Status">
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
-              <span style={{ fontSize: 13.5, color: 'var(--fg)', fontWeight: 500 }}>Status handmatig instellen</span>
-              <input
-                type="checkbox"
-                checked={statusHandmatig}
-                onChange={e => setStatusHandmatig(e.target.checked)}
-                style={{ width: 20, height: 20, accentColor: '#009439' }}
-              />
-            </label>
-            {statusHandmatig ? (
-              <div>
-                <label style={label} htmlFor="hr-status">Status</label>
-                <select id="hr-status" style={veld} value={statusKeuze}
-                  onChange={e => setStatusKeuze(e.target.value as 'geregistreerd' | 'afgerond')}>
-                  <option value="geregistreerd">Geregistreerd</option>
-                  <option value="afgerond">Afgerond</option>
-                </select>
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: '#6b757c' }}>
-                Automatisch: <strong style={{ color: 'var(--fg)' }}>{REGISTRATIE_STATUSSEN[effectieveStatus]}</strong>
-                {' '}(afgerond zodra er een na-foto is).
-              </div>
-            )}
+            {/* Eenvoudige tweestand: oranje = Geregistreerd, groen = Afgerond. */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([false, true] as const).map(waarde => {
+                const actief = afgerond === waarde
+                const groen = waarde === true
+                const kleur = groen ? '#009439' : '#e08600'
+                return (
+                  <button
+                    key={String(waarde)}
+                    type="button"
+                    onClick={() => setAfgerond(waarde)}
+                    style={{
+                      flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700,
+                      cursor: 'pointer',
+                      border: `2px solid ${actief ? kleur : 'var(--border)'}`,
+                      background: actief ? kleur : 'var(--bg-elev)',
+                      color: actief ? '#fff' : '#6b757c',
+                    }}
+                  >
+                    {groen ? 'Afgerond' : 'Geregistreerd'}
+                  </button>
+                )
+              })}
+            </div>
           </Blok>
         </div>
 
@@ -483,6 +479,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
           const fotos = (r.photos ?? []).slice().sort(
             (a, b) => (a.photo_type === 'voor' ? 0 : 1) - (b.photo_type === 'voor' ? 0 : 1))
+          const afg = r.status === 'afgerond'
           return (
             <button
               key={r.id}
@@ -498,11 +495,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>{plaats}</div>
                 <span style={{
                   fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  flexShrink: 0, padding: '2px 7px', borderRadius: 999,
-                  color: r.status === 'afgerond' ? '#0a7a33' : '#1d4ed8',
-                  background: r.status === 'afgerond' ? '#e6f4ea' : '#e6edfe',
+                  flexShrink: 0, padding: '2px 8px', borderRadius: 999,
+                  color: afg ? '#0a7a33' : '#9a5b00',
+                  background: afg ? '#e6f4ea' : '#fde7cf',
                 }}>
-                  {REGISTRATIE_STATUSSEN[r.status] ?? r.status}
+                  {afg ? 'Afgerond' : 'Geregistreerd'}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: '#6b757c', marginTop: 3 }}>

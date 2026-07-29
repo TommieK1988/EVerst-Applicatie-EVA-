@@ -1,10 +1,30 @@
 import { createClient } from '@/lib/houtrotherstel/supabase/client'
+import type { Recept } from './recepten'
 import type {
   RepairRegistration,
   RegistratieForm,
   RegistratieRegelForm,
   RegistratieFilters,
 } from '@/lib/houtrotherstel/types'
+
+/** Bouwt een werkzaamheid-regel (met prijs-momentopname) uit een gekozen recept. */
+export function regelVanRecept(recept: Recept, aantal: number, volgorde: number): RegistratieRegelForm {
+  return {
+    recept_id: recept.id || undefined,
+    aantal,
+    repair_code_snapshot: recept.code,
+    repair_name_snapshot: recept.naam,
+    repair_description_snapshot: recept.omschrijving ?? undefined,
+    unit_snapshot: recept.eenheid ?? undefined,
+    labor_hours_snapshot: recept.uren,
+    labor_rate_snapshot: recept.uurtarief,
+    labor_cost_snapshot: recept.arbeidskosten,
+    material_cost_snapshot: recept.materiaalkosten,
+    cost_price_snapshot: recept.kostprijs,
+    sale_price_snapshot: recept.verkoopprijs,
+    volgorde,
+  }
+}
 
 export async function getRegistraties(
   filters?: RegistratieFilters
@@ -144,8 +164,8 @@ export async function createRegistratie(
       checked_at: form.checked_at || null,
       labor_hours_snapshot: agg.labor_hours ?? form.labor_hours_snapshot ?? null,
       labor_rate_snapshot: regels[0]?.labor_rate_snapshot ?? form.labor_rate_snapshot ?? null,
-      labor_cost_snapshot: form.labor_cost_snapshot ?? null,
-      material_cost_snapshot: form.material_cost_snapshot ?? null,
+      labor_cost_snapshot: agg.labor_cost ?? form.labor_cost_snapshot ?? null,
+      material_cost_snapshot: agg.material_cost ?? form.material_cost_snapshot ?? null,
       cost_price_snapshot: agg.cost_price ?? form.cost_price_snapshot ?? null,
       sale_price_snapshot: agg.sale_price ?? form.sale_price_snapshot ?? null,
       repair_code_snapshot: agg.code ?? form.repair_code_snapshot ?? null,
@@ -190,6 +210,8 @@ function bouwRegelRijen(registrationId: string, regels: RegistratieRegelForm[]) 
     unit_snapshot: r.unit_snapshot || null,
     labor_hours_snapshot: r.labor_hours_snapshot ?? null,
     labor_rate_snapshot: r.labor_rate_snapshot ?? null,
+    labor_cost_snapshot: r.labor_cost_snapshot ?? null,
+    material_cost_snapshot: r.material_cost_snapshot ?? null,
     cost_price_snapshot: r.cost_price_snapshot ?? null,
     sale_price_snapshot: r.sale_price_snapshot ?? null,
     volgorde: r.volgorde ?? i,
@@ -199,22 +221,30 @@ function bouwRegelRijen(registrationId: string, regels: RegistratieRegelForm[]) 
 /** Telt werkzaamheden-regels op tot registratie-aggregaten (× aantal per stuk). */
 function aggregeerRegels(regels: RegistratieRegelForm[]) {
   if (regels.length === 0) {
-    return { sale_price: null, cost_price: null, labor_hours: null, code: null, naam: null }
+    return {
+      sale_price: null, cost_price: null, labor_hours: null,
+      labor_cost: null, material_cost: null, code: null, naam: null,
+    }
   }
-  let sale = 0, cost = 0, uren = 0
+  let sale = 0, cost = 0, uren = 0, arbeid = 0, materiaal = 0
   for (const r of regels) {
     const a = r.aantal ?? 0
     sale += a * (r.sale_price_snapshot ?? 0)
     cost += a * (r.cost_price_snapshot ?? 0)
     uren += a * (r.labor_hours_snapshot ?? 0)
+    arbeid += a * (r.labor_cost_snapshot ?? 0)
+    materiaal += a * (r.material_cost_snapshot ?? 0)
   }
+  const rond = (n: number) => Math.round(n * 100) / 100
   const naam = regels.length === 1
     ? (regels[0].repair_name_snapshot ?? null)
     : `${regels.length} werkzaamheden`
   return {
-    sale_price: Math.round(sale * 100) / 100,
-    cost_price: Math.round(cost * 100) / 100,
-    labor_hours: Math.round(uren * 100) / 100,
+    sale_price: rond(sale),
+    cost_price: rond(cost),
+    labor_hours: rond(uren),
+    labor_cost: rond(arbeid),
+    material_cost: rond(materiaal),
     code: regels[0].repair_code_snapshot ?? null,
     naam,
   }
@@ -252,6 +282,8 @@ export async function updateRegistratie(
       recept_id: regels[0]?.recept_id || null,
       labor_hours_snapshot: agg.labor_hours,
       labor_rate_snapshot: regels[0]?.labor_rate_snapshot ?? null,
+      labor_cost_snapshot: agg.labor_cost,
+      material_cost_snapshot: agg.material_cost,
       cost_price_snapshot: agg.cost_price,
       sale_price_snapshot: agg.sale_price,
       repair_code_snapshot: agg.code,

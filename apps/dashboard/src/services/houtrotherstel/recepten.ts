@@ -21,6 +21,8 @@ export type Recept = {
   naam: string
   omschrijving: string | null
   eenheid: string | null
+  /** Groepslabel voor de tweetraps keuze in de houtrot-app (bv. "Epoxyherstel"). */
+  groep: string | null
   uren: number
   uurtarief: number
   arbeidskosten: number
@@ -43,7 +45,7 @@ export async function getRecepten(): Promise<Recept[]> {
     supabase
       .from('paint_items')
       .select(`
-        id, item_code, onderdeel, full_name, description, default_unit, marge_pct, active,
+        id, item_code, onderdeel, full_name, description, default_unit, marge_pct, groep, active,
         labor_norms:paint_labor_norms ( hours_per_unit, hour_rate, cost_per_unit, active, uurtarief_label ),
         material_norms:paint_material_norms ( cost_per_unit, active )
       `)
@@ -98,6 +100,7 @@ export async function getRecepten(): Promise<Recept[]> {
       naam: it.onderdeel ?? it.full_name ?? it.item_code,
       omschrijving: it.description ?? null,
       eenheid: it.default_unit ?? null,
+      groep: it.groep ?? null,
       uren: Math.round(uren * 100) / 100,
       uurtarief: laatstTarief,
       arbeidskosten: Math.round(arbeidskosten * 100) / 100,
