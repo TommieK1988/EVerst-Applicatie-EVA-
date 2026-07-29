@@ -4,7 +4,7 @@ import { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { UrenRegel, BewakingscodeOptie } from '@/lib/dossiers/actions'
-import { updateUurlogBewakingscode } from '@/lib/dossiers/actions'
+import { updateUurlogBewakingscode, updateUurlogBewakingscodeBulk } from '@/lib/dossiers/actions'
 import { fmt, fmtUren, fmtTarief, fmtDatum, TH, TD } from './tab-ui'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
@@ -58,6 +58,11 @@ function groepLabel(r: UrenRegel, key: SortKey): string {
     case 'code':       return r.code ? `${r.code}${r.codeNaam ? ` · ${r.codeNaam}` : ''}` : '—'
     default:           return ''
   }
+}
+
+/** Een regel is verplaatsbaar als hij de volledige Bouw7-sleutel heeft voor de upsert. */
+function magVerplaatsen(r: UrenRegel): boolean {
+  return r.bouw7Id != null && r.bouw7ProjectId != null && r.hourTypeId != null
 }
 
 function zoekMatch(r: UrenRegel, term: string): boolean {
@@ -137,10 +142,49 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
   const [sortKey, setSortKey] = useState<SortKey>('datum')
   const [sortAsc, setSortAsc] = useState(false)
   const [zoek, setZoek] = useState('')
+  const [sel, setSel] = useState<Set<number>>(new Set())
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc((v) => !v)
     else { setSortKey(key); setSortAsc(true) }
+  }
+
+  function toggleSel(bouw7Id: number) {
+    setSel((prev) => {
+      const n = new Set(prev)
+      n.has(bouw7Id) ? n.delete(bouw7Id) : n.add(bouw7Id)
+      return n
+    })
+  }
+
+  /** Verplaats de geselecteerde uren-regels naar één bewakingscode (bulk-upsert richting Bouw7). */
+  function verplaatsSelectie(nieuwCode: string) {
+    const optie = bewakingscodes.find((o) => o.code === nieuwCode)
+    if (!optie) return
+    const teVerplaatsen = regels
+      .filter((r) => magVerplaatsen(r) && sel.has(r.bouw7Id!))
+      .map((r) => ({
+        id: r.bouw7Id!,
+        bouw7ProjectId: r.bouw7ProjectId!,
+        logHours: String(r.uren),
+        logDate: r.datum ?? '',
+        hourTypeId: r.hourTypeId!,
+      }))
+    if (teVerplaatsen.length === 0) return
+    start(async () => {
+      const res = await updateUurlogBewakingscodeBulk(dossierId, teVerplaatsen, optie.pslId)
+      if (res.ok) {
+        toast.success(
+          res.mislukt && res.mislukt > 0
+            ? `${res.verplaatst} verplaatst, ${res.mislukt} mislukt`
+            : `${res.verplaatst} regel(s) verplaatst in Bouw7`,
+        )
+        setSel(new Set())
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Bouw7-update mislukt')
+      }
+    })
   }
 
   function wijzigCode(regel: UrenRegel, nieuwCode: string) {
@@ -209,6 +253,19 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
     return rijen
   }, [regels, zoek, sortKey, sortAsc, perMedewerker])
 
+  /* Verplaatsbare regel-IDs binnen de huidige filter — basis voor "alles selecteren". */
+  const verplaatsbareIds = useMemo(() => {
+    const q = zoek.trim()
+    return regels
+      .filter((r) => magVerplaatsen(r) && (!q || zoekMatch(r, q)))
+      .map((r) => r.bouw7Id!)
+  }, [regels, zoek])
+
+  // Kolom tonen we stabiel (los van de filter) zodra bewerken kan; de "alles"-checkbox
+  // is alleen actief als er binnen de filter überhaupt verplaatsbare regels zijn.
+  const toonSelectie = !readOnly && bewakingscodes.length > 0
+  const allesGeselecteerd = verplaatsbareIds.length > 0 && verplaatsbareIds.every((id) => sel.has(id))
+
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const subtotaalBg = 'var(--neutral-50, #f8fafb)'
 
@@ -258,11 +315,55 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
         />
       </div>
 
+      {/* Bulk-balk: verschijnt zodra er regels geselecteerd zijn */}
+      {toonSelectie && sel.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', background: 'var(--brand-50, #eff6ff)', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--fg)' }}>{sel.size} geselecteerd</span>
+          <select
+            disabled={pending}
+            value=""
+            onChange={(e) => { if (e.target.value) verplaatsSelectie(e.target.value) }}
+            style={{
+              fontSize: 12.5, border: '1px solid var(--neutral-200)', borderRadius: 6,
+              padding: '6px 10px', background: 'white', color: 'var(--fg)', cursor: 'pointer',
+            }}
+          >
+            <option value="">Verplaats naar bewakingscode…</option>
+            {bewakingscodes.map((o) => (
+              <option key={o.pslId} value={o.code}>{o.code}{o.naam ? ` · ${o.naam}` : ''}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setSel(new Set())}
+            style={{
+              fontSize: 12.5, border: '1px solid var(--neutral-200)', borderRadius: 6,
+              padding: '6px 10px', background: 'white', color: 'var(--neutral-600)', cursor: 'pointer',
+            }}
+          >
+            Deselecteren
+          </button>
+        </div>
+      )}
+
       {/* Tabel */}
       <div style={{ overflowX: 'auto', opacity: pending ? 0.6 : 1 }}>
         <table style={tabel}>
           <thead>
             <tr>
+              {toonSelectie && (
+                <th style={{ padding: '7px 12px', textAlign: 'center', width: 36, borderBottom: '2px solid var(--border)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Alles selecteren"
+                    disabled={pending || verplaatsbareIds.length === 0}
+                    checked={allesGeselecteerd}
+                    onChange={(e) => setSel(e.target.checked ? new Set(verplaatsbareIds) : new Set())}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
+              )}
               <THSortLeft sortKey="medewerker" huidig={sortKey} asc={sortAsc} onClick={toggleSort}>Medewerker</THSortLeft>
               <THSortLeft sortKey="datum"      huidig={sortKey} asc={sortAsc} onClick={toggleSort}>Datum</THSortLeft>
               <THSortLeft sortKey="weeknummer" huidig={sortKey} asc={sortAsc} onClick={toggleSort}>Week</THSortLeft>
@@ -278,7 +379,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
               if (rij.type === 'subtotaal') {
                 return (
                   <tr key={`sub-${i}`} style={{ background: subtotaalBg, borderTop: '1px solid var(--neutral-200)' }}>
-                    <td colSpan={5} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--neutral-600)' }}>
+                    <td colSpan={toonSelectie ? 6 : 5} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--neutral-600)' }}>
                       Subtotaal — {rij.label}
                     </td>
                     <td style={{ padding: '5px 12px', fontSize: 12, fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--neutral-900)' }}>
@@ -293,8 +394,23 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
               }
 
               const r = rij.regel
+              const selecteerbaar = magVerplaatsen(r)
               return (
-                <tr key={i}>
+                <tr key={i} style={selecteerbaar && sel.has(r.bouw7Id!) ? { background: 'var(--brand-50, #eff6ff)' } : undefined}>
+                  {toonSelectie && (
+                    <td style={{ padding: '3px 12px', textAlign: 'center' }}>
+                      {selecteerbaar && (
+                        <input
+                          type="checkbox"
+                          aria-label="Regel selecteren"
+                          disabled={pending}
+                          checked={sel.has(r.bouw7Id!)}
+                          onChange={() => toggleSel(r.bouw7Id!)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      )}
+                    </td>
+                  )}
                   <TD>{r.medewerker ?? '—'}</TD>
                   <TD>{fmtDatum(r.datum)}</TD>
                   <TD>{fmtWeek(r.datum)}</TD>
@@ -330,6 +446,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
 
             {/* Eindtotaal */}
             <tr style={{ background: 'var(--neutral-100, #eef2f3)' }}>
+              {toonSelectie && <td style={{ padding: '3px 12px' }} />}
               <TD vet>Totaal</TD>
               <TD>{''}</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
               <TD right vet>{fmtUren(totalen.uren, true)}</TD>

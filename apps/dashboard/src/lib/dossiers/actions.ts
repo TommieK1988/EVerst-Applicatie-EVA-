@@ -2985,6 +2985,47 @@ export async function updateUurlogBewakingscode(
   }
 }
 
+/**
+ * Verplaatst meerdere uur-logs in één keer naar een andere bewakingscode (project-security-link).
+ * Elk uurlog is een aparte POST /project/hour-log upsert richting Bouw7; er is geen bulk-endpoint,
+ * dus we sturen ze sequentieel en tellen mislukkingen op. De hele set faalt niet als één regel struikelt.
+ */
+export async function updateUurlogBewakingscodeBulk(
+  dossierId: string,
+  hourLogs: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number }[],
+  nieuwePslId: number,
+): Promise<{ ok: boolean; error?: string; verplaatst?: number; mislukt?: number }> {
+  await assertDossierBewerkbaar(dossierId)
+  if (hourLogs.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
+  const { client } = ctx
+
+  let verplaatst = 0
+  let mislukt = 0
+  let laatsteFout: string | undefined
+  for (const hourLog of hourLogs) {
+    try {
+      await client.post('/project/hour-log', {
+        id: hourLog.id,
+        project: { id: hourLog.bouw7ProjectId },
+        logHours: hourLog.logHours,
+        logDate: hourLog.logDate,
+        hourType: { id: hourLog.hourTypeId },
+        projectSecurityLink: { id: nieuwePslId },
+      })
+      verplaatst++
+    } catch (e) {
+      mislukt++
+      laatsteFout = e instanceof Error ? e.message : 'Bouw7-update mislukt.'
+    }
+  }
+
+  revalidatePath(`/opdrachten/${dossierId}/uren`)
+  if (verplaatst === 0) return { ok: false, error: laatsteFout ?? 'Bouw7-update mislukt.', verplaatst, mislukt }
+  return { ok: true, verplaatst, mislukt, error: mislukt > 0 ? laatsteFout : undefined }
+}
+
 /* — Delete calculaties & offertes — */
 
 /**
