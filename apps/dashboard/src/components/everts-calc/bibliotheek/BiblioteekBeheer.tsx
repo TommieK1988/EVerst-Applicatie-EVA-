@@ -367,11 +367,13 @@ function BewerkPaneel({
   item,
   eenheden,
   categorieen,
+  houtrotSoorten,
   onSluiten,
 }: {
   item: PaintItemMetNormen
   eenheden: EenheidConfig[]
   categorieen: string[]
+  houtrotSoorten: string[]
   onSluiten: () => void
 }) {
   const [isPending, start] = useTransition()
@@ -386,6 +388,7 @@ function BewerkPaneel({
   const [cat,    setCat]    = useState(item.onderdeel)
   const [omschr, setOmschr] = useState(item.description ?? '')
   const [btw,    setBtw]    = useState(item.btw_tarief ?? 'hoog')
+  const [groep,  setGroep]  = useState(item.groep ?? '')
 
   const slaBasiOp = () => {
     start(async () => {
@@ -397,6 +400,7 @@ function BewerkPaneel({
           onderdeel:    cat,
           description:  omschr,
           btw_tarief:   btw,
+          groep:        groep.trim() || null,
         })
         toast.success('Recept opgeslagen')
       } catch (err) { toast.error(err instanceof Error ? err.message : 'Fout') }
@@ -510,6 +514,18 @@ function BewerkPaneel({
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
                   {BTW_TARIEVEN.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-slate-500 mb-1">Houtrot-soort</label>
+                <input value={groep} onChange={e => setGroep(e.target.value)} list="houtrot-soorten"
+                  placeholder="bijv. Epoxyherstel — leeg = niet in de houtrot-app"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts" />
+                <datalist id="houtrot-soorten">
+                  {houtrotSoorten.map(s => <option key={s} value={s} />)}
+                </datalist>
+                <p className="mt-1 text-xs text-slate-400">
+                  Bepaalt de soort-keuze (stap 1) in de houtrot-app. Alleen recepten mét een soort verschijnen daar.
+                </p>
               </div>
             </div>
           </section>
@@ -748,6 +764,7 @@ function NieuwReceptModal({
   eenheden,
   categorieen,
   categorieCodes,
+  houtrotSoorten,
   onSluiten,
   onAangemaakt,
 }: {
@@ -755,6 +772,7 @@ function NieuwReceptModal({
   eenheden: EenheidConfig[]
   categorieen: string[]
   categorieCodes: Record<string, string>
+  houtrotSoorten: string[]
   onSluiten: () => void
   onAangemaakt: (id: string) => void
 }) {
@@ -765,6 +783,7 @@ function NieuwReceptModal({
   const [eenh,   setEenh]   = useState('m²')
   const [btw,    setBtw]    = useState('hoog')
   const [omschr, setOmschr] = useState('')
+  const [groep,  setGroep]  = useState('')
 
   const handleCatChange = (newCat: string) => {
     setCat(newCat)
@@ -786,6 +805,7 @@ function NieuwReceptModal({
         const id = await maakRecept({
           item_code: code, full_name: naam, default_unit: eenh,
           onderdeel: cat, description: omschr || undefined, btw_tarief: btw,
+          groep: groep.trim() || undefined,
         })
         toast.success('Recept aangemaakt')
         onAangemaakt(id)
@@ -841,6 +861,17 @@ function NieuwReceptModal({
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Houtrot-soort</label>
+            <input value={groep} onChange={e => setGroep(e.target.value)} list="houtrot-soorten-nieuw"
+              placeholder="bijv. Epoxyherstel — laat leeg voor gewone recepten"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts" />
+            <datalist id="houtrot-soorten-nieuw">
+              {houtrotSoorten.map(s => <option key={s} value={s} />)}
+            </datalist>
+            <p className="mt-1 text-xs text-slate-400">Alleen invullen als dit recept in de houtrot-app moet verschijnen.</p>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Werkomschrijving</label>
             <BulletTextarea
               value={omschr}
@@ -887,6 +918,8 @@ export default function BiblioteekBeheer({ items }: Props) {
   }
 
   const bewerkItem = items.find(i => i.id === bewerkItemId) ?? null
+  // Bestaande houtrot-soorten als suggesties (datalist) bij het bewerken/aanmaken.
+  const houtrotSoorten = Array.from(new Set(items.map(i => i.groep).filter((g): g is string => !!g))).sort()
 
   const gefilterd = items.filter(item => {
     if (categorie && item.onderdeel !== categorie) return false
@@ -1026,6 +1059,11 @@ export default function BiblioteekBeheer({ items }: Props) {
                           BTW {item.btw_tarief}
                         </span>
                       )}
+                      {item.groep && (
+                        <span className="text-xs px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded w-fit" title="Verschijnt in de houtrot-app">
+                          Houtrot · {item.groep}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right  text-blue-700">{formatEuro(arbeid)}</td>
@@ -1064,6 +1102,7 @@ export default function BiblioteekBeheer({ items }: Props) {
           item={bewerkItem}
           eenheden={eenheden}
           categorieen={categorieen}
+          houtrotSoorten={houtrotSoorten}
           onSluiten={() => setBewerkItemId(null)}
         />
       )}
@@ -1074,6 +1113,7 @@ export default function BiblioteekBeheer({ items }: Props) {
           eenheden={eenheden}
           categorieen={categorieen}
           categorieCodes={categorieCodes}
+          houtrotSoorten={houtrotSoorten}
           onSluiten={() => setNieuwOpen(false)}
           onAangemaakt={id => { setNieuwOpen(false); setBewerkItemId(id) }}
         />

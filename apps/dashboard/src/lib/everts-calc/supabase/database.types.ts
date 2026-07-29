@@ -960,6 +960,7 @@ export type Database = {
           description: string | null
           family_id: string
           full_name: string
+          groep: string | null
           id: string
           item_code: string
           onderdeel: string
@@ -974,6 +975,7 @@ export type Database = {
           description?: string | null
           family_id: string
           full_name: string
+          groep?: string | null
           id?: string
           item_code: string
           onderdeel: string
@@ -988,6 +990,7 @@ export type Database = {
           description?: string | null
           family_id?: string
           full_name?: string
+          groep?: string | null
           id?: string
           item_code?: string
           onderdeel?: string

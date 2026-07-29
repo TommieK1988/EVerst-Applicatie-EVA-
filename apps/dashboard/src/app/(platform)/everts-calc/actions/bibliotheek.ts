@@ -110,6 +110,8 @@ export async function updateRecept(id: string, data: {
   description?: string
   treatment_id?: string
   btw_tarief?: string
+  /** Houtrot-soort: groepslabel voor de tweetraps keuze in de houtrot-app. */
+  groep?: string | null
 }): Promise<void> {
   const supabase = await createClient()
   const { error } = await supabase.from('paint_items').update(data).eq('id', id)
@@ -206,6 +208,8 @@ export async function maakRecept(data: {
   onderdeel: string
   description?: string
   btw_tarief?: string
+  /** Houtrot-soort: groepslabel voor de tweetraps keuze in de houtrot-app. */
+  groep?: string
 }): Promise<string> {
   const supabase = await createClient()
   const FAMILIE_ID = '00000000-0000-0000-0000-000000000001'
