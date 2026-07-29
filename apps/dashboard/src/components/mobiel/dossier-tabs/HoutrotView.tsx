@@ -7,11 +7,12 @@ import {
 } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
-import { getLocatieNiveaus } from '@/services/houtrotherstel/locatie-config'
+import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
+import { cascadeRijen, bouwLocatiePad, selectieVanLocatie } from '@/lib/houtrotherstel/locatie-boom'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
   type RepairRegistration, type RepairPhoto, type RegistratieForm,
-  type LocatieNiveau, type LocatieWaarde,
+  type LocatieBoom, type LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 
@@ -82,13 +83,14 @@ function Blok({ titel, children }: { titel: string; children: React.ReactNode })
 export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
   const [recepten, setRecepten] = useState<Recept[]>([])
-  const [niveaus, setNiveaus] = useState<LocatieNiveau[] | null>(null)
+  const [boom, setBoom] = useState<LocatieBoom | null>(null)
   const [invoeren, setInvoeren] = useState(false)
   const [bewerkId, setBewerkId] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
-  const [locatieWaarden, setLocatieWaarden] = useState<Record<number, string>>({})
+  // Cascade-keuze: gekozen knoop-id per diepte. Terugval = vrij tekstveld (lege boom).
+  const [gekozen, setGekozen] = useState<string[]>([])
   const [vrijeLocatie, setVrijeLocatie] = useState('')
 
   const [regDatum, setRegDatum] = useState(new Date().toISOString().slice(0, 10))
@@ -115,8 +117,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   useEffect(() => { laad() }, [laad])
   useEffect(() => {
     getRecepten().then(setRecepten).catch(() => setRecepten([]))
-    getLocatieNiveaus(dossierId).then(setNiveaus).catch(() => setNiveaus([]))
+    getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
   }, [dossierId])
+
+  const heeftBoom = !!boom && boom.nodes.length > 0
 
   // Alleen houtrot-recepten (die met een groep) verschijnen in de keuze.
   const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
@@ -124,7 +128,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   function leegmaken() {
     setBewerkId(null)
-    setLocatieWaarden({}); setVrijeLocatie('')
+    setGekozen([]); setVrijeLocatie('')
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setAfgerond(false)
@@ -138,15 +142,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   function bewerken(r: RepairRegistration) {
     setBewerkId(r.id)
     const opgeslagen = (r.locatie ?? []) as LocatieWaarde[]
-    if (niveaus && niveaus.length > 0) {
-      const wrd: Record<number, string> = {}
-      niveaus.forEach((n, i) => {
-        const match = opgeslagen.find(l => l.naam === n.naam)
-        if (match) wrd[i] = match.waarde
-      })
-      setLocatieWaarden(wrd); setVrijeLocatie('')
+    if (heeftBoom && boom) {
+      setGekozen(selectieVanLocatie(boom.nodes, opgeslagen)); setVrijeLocatie('')
     } else {
-      setVrijeLocatie(opgeslagen[0]?.waarde ?? ''); setLocatieWaarden({})
+      setVrijeLocatie(opgeslagen[0]?.waarde ?? ''); setGekozen([])
     }
     setRegDatum(r.registration_date)
     setWerkzaamheden(
@@ -204,10 +203,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
 
       const locatie: LocatieWaarde[] =
-        niveaus && niveaus.length > 0
-          ? niveaus
-              .map((n, i) => ({ naam: n.naam, waarde: (locatieWaarden[i] ?? '').trim() }))
-              .filter(l => l.waarde.length > 0)
+        heeftBoom && boom
+          ? bouwLocatiePad(boom, gekozen)
           : vrijeLocatie.trim()
             ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
             : []
@@ -265,20 +262,20 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           )}
 
           <Blok titel="Locatie">
-            {niveaus === null ? (
+            {boom === null ? (
               <div style={{ fontSize: 13, color: '#6b757c' }}>Laden…</div>
-            ) : niveaus.length > 0 ? (
-              niveaus.map((n, i) => (
-                <div key={i}>
-                  <label style={label} htmlFor={`hr-niv-${i}`}>{n.naam}</label>
+            ) : heeftBoom ? (
+              cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
+                <div key={diepte}>
+                  <label style={label} htmlFor={`hr-niv-${diepte}`}>{boom.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
                   <select
-                    id={`hr-niv-${i}`}
+                    id={`hr-niv-${diepte}`}
                     style={veld}
-                    value={locatieWaarden[i] ?? ''}
-                    onChange={e => setLocatieWaarden(prev => ({ ...prev, [i]: e.target.value }))}
+                    value={gekozen[diepte] ?? ''}
+                    onChange={e => setGekozen(prev => [...prev.slice(0, diepte), e.target.value].filter(Boolean))}
                   >
                     <option value="">—</option>
-                    {n.opties.map(o => <option key={o} value={o}>{o}</option>)}
+                    {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
                   </select>
                 </div>
               ))

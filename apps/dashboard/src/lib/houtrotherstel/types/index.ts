@@ -41,23 +41,34 @@ export const REGISTRATIE_STATUSSEN: Record<RegistratieStatus, string> = {
 /** De twee statussen die het veldproces gebruikt (rest is historie/legacy). */
 export const VELD_STATUSSEN = ['geregistreerd', 'afgerond'] as const
 
-/** Eén locatieniveau zoals de projectleider het per dossier instelt. */
-export interface LocatieNiveau {
+/**
+ * Eén knoop in de locatieboom die de projectleider per dossier inricht. De boom
+ * staat als platte lijst met `parent_id` (zelfde model als de calculatie-boom);
+ * kinderen en volgorde worden bij render berekend. Max diepte 3.
+ */
+export interface LocatieNode {
+  id: string
+  parent_id: string | null
   naam: string
-  opties: string[]
+  volgorde: number
 }
 
-/** Per-dossier houtrotconfiguratie (locatieniveaus die de vakman kan kiezen). */
-export interface HoutrotDossierConfig {
-  dossier_id: string
-  niveaus: LocatieNiveau[]
-  updated_at?: string
+/** Per-dossier locatieboom: optionele niveaulabels + de platte knooplijst. */
+export interface LocatieBoom {
+  /** Optionele niveaunamen per diepte (max 3), bv. ["Gevelzijde","Etage","Huisnummer"]. */
+  labels: string[]
+  nodes: LocatieNode[]
 }
 
-/** Eén gekozen locatiewaarde op een registratie: niveau-naam + gekozen waarde. */
+/**
+ * Eén gekozen locatiewaarde op een registratie (pad van boven naar de gekozen
+ * knoop). `node_id` legt exact vast welke boomknoop is gekozen, zodat bewerken de
+ * keuze precies terugzet — knoopnamen mogen tussen takken herhalen.
+ */
 export interface LocatieWaarde {
   naam: string
   waarde: string
+  node_id?: string
 }
 
 export const USER_ROLES: Record<UserRole, string> = {

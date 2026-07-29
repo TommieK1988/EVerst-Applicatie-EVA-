@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistraties } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
-import { getLocatieNiveaus } from '@/services/houtrotherstel/locatie-config'
-import { type RepairRegistration, type LocatieNiveau } from '@/lib/houtrotherstel/types'
+import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
+import { type RepairRegistration, type LocatieBoom } from '@/lib/houtrotherstel/types'
 import { formatDateShort, formatCurrency } from '@/lib/houtrotherstel/utils'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
-import LocatieNiveausEditor from './LocatieNiveausEditor'
+import LocatieBoomEditor from './LocatieBoomEditor'
 import HoutrotRegistratieModal from './HoutrotRegistratieModal'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -73,7 +73,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   const readOnly = useDossierReadOnly()
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
   const [recepten, setRecepten] = useState<Recept[]>([])
-  const [niveaus, setNiveaus] = useState<LocatieNiveau[]>([])
+  const [boom, setBoom] = useState<LocatieBoom>({ labels: [], nodes: [] })
   const [fout, setFout] = useState<string | null>(null)
   // Modal: undefined = dicht; null = nieuw; object = bewerken.
   const [modal, setModal] = useState<RepairRegistration | null | undefined>(undefined)
@@ -87,7 +87,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   useEffect(() => { laad() }, [laad])
   useEffect(() => {
     getRecepten().then(setRecepten).catch(() => setRecepten([]))
-    getLocatieNiveaus(dossierId).then(setNiveaus).catch(() => setNiveaus([]))
+    getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
   }, [dossierId])
 
   const regelTotaal = (r: RepairRegistration) =>
@@ -109,7 +109,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <LocatieNiveausEditor dossierId={dossierId} />
+      <LocatieBoomEditor dossierId={dossierId} />
       <Card>
         <CardHeader>
           <div>
@@ -192,7 +192,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
         <HoutrotRegistratieModal
           dossierId={dossierId}
           registratie={modal}
-          niveaus={niveaus}
+          boom={boom}
           recepten={recepten}
           onClose={() => setModal(undefined)}
           onSaved={() => { setModal(undefined); setRegistraties(null); laad() }}

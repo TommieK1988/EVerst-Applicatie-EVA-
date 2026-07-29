@@ -8,8 +8,9 @@ import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import type { Recept } from '@/services/houtrotherstel/recepten'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { formatCurrency } from '@/lib/houtrotherstel/utils'
+import { cascadeRijen, bouwLocatiePad, selectieVanLocatie } from '@/lib/houtrotherstel/locatie-boom'
 import type {
-  RepairRegistration, RepairPhoto, RegistratieForm, LocatieNiveau, LocatieWaarde,
+  RepairRegistration, RepairPhoto, RegistratieForm, LocatieBoom, LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -45,28 +46,22 @@ const lblCls = 'mb-1 block text-xs font-semibold text-slate-500'
  * werkzaamheden, status, foto's). Bedragen zijn hier wél zichtbaar.
  */
 export default function HoutrotRegistratieModal({
-  dossierId, registratie, niveaus, recepten, onClose, onSaved,
+  dossierId, registratie, boom, recepten, onClose, onSaved,
 }: {
   dossierId: string
   registratie: RepairRegistration | null
-  niveaus: LocatieNiveau[]
+  boom: LocatieBoom
   recepten: Recept[]
   onClose: () => void
   onSaved: () => void
 }) {
   const bestaand = registratie
   const opgeslagenLoc = (bestaand?.locatie ?? []) as LocatieWaarde[]
+  const heeftBoom = boom.nodes.length > 0
 
-  const [locatieWaarden, setLocatieWaarden] = useState<Record<number, string>>(() => {
-    if (niveaus.length === 0) return {}
-    const w: Record<number, string> = {}
-    niveaus.forEach((n, i) => {
-      const m = opgeslagenLoc.find(l => l.naam === n.naam)
-      if (m) w[i] = m.waarde
-    })
-    return w
-  })
-  const [vrijeLocatie, setVrijeLocatie] = useState(niveaus.length === 0 ? (opgeslagenLoc[0]?.waarde ?? '') : '')
+  // Cascade-keuze: gekozen knoop-id per diepte. Bij bewerken uit het pad terugzetten.
+  const [gekozen, setGekozen] = useState<string[]>(() => selectieVanLocatie(boom.nodes, opgeslagenLoc))
+  const [vrijeLocatie, setVrijeLocatie] = useState(!heeftBoom ? (opgeslagenLoc[0]?.waarde ?? '') : '')
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>(
     (bestaand?.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
       .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
@@ -115,8 +110,8 @@ export default function HoutrotRegistratieModal({
 
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
       const locatie: LocatieWaarde[] =
-        niveaus.length > 0
-          ? niveaus.map((n, i) => ({ naam: n.naam, waarde: (locatieWaarden[i] ?? '').trim() })).filter(l => l.waarde)
+        heeftBoom
+          ? bouwLocatiePad(boom, gekozen)
           : vrijeLocatie.trim() ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }] : []
 
       const teVerwijderen = new Set(verwijderd)
@@ -173,15 +168,15 @@ export default function HoutrotRegistratieModal({
           {/* Locatie */}
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Locatie</h3>
-            {niveaus.length > 0 ? (
+            {heeftBoom ? (
               <div className="grid gap-3 sm:grid-cols-3">
-                {niveaus.map((n, i) => (
-                  <div key={i}>
-                    <label className={lblCls}>{n.naam}</label>
-                    <select className={inputCls} value={locatieWaarden[i] ?? ''}
-                      onChange={e => setLocatieWaarden(prev => ({ ...prev, [i]: e.target.value }))}>
+                {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
+                  <div key={diepte}>
+                    <label className={lblCls}>{boom.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
+                    <select className={inputCls} value={gekozen[diepte] ?? ''}
+                      onChange={e => setGekozen(prev => [...prev.slice(0, diepte), e.target.value].filter(Boolean))}>
                       <option value="">—</option>
-                      {n.opties.map(o => <option key={o} value={o}>{o}</option>)}
+                      {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
                     </select>
                   </div>
                 ))}
