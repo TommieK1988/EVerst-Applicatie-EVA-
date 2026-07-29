@@ -92,14 +92,17 @@ export async function schrijfBouw7VoortgangProject(
 }
 
 /**
- * Resolve ALLE ProjectSecurityLink-ids van een bewakingscode binnen een project.
+ * Resolve de ProjectSecurityLink-ids van een bewakingscode binnen ÉÉN hoofdstuk van een project.
  *
  * Bron: Athena `/project-control/{id}/cost-type/{ct}/chapters` → `securityCodes[].pslIds`
  * (zelfde PSL-ids als de prognose-feature en als de progress-READ). NB: NIET `securityCode.id`
  * uit `/project-security-links` — dat is de code-*definitie*-id en geeft een 403 protection_error.
  *
- * Eén code kan onder meerdere kostensoorten een eigen PSL hebben. De standopname (% gereed)
- * moet op ELKE kostensoort-PSL van de code geschreven worden → we verzamelen ze allemaal (dedup).
+ * Eén code kan onder meerdere kostensoorten een eigen PSL hebben → binnen het hoofdstuk verzamelen
+ * we ze allemaal (dedup). BELANGRIJK: bewakingscodes zijn NIET uniek per project — dezelfde code
+ * kan in meerdere hoofdstukken staan. Met `hoofdstukId` (chapterInfo.id) beperken we de write tot
+ * het bewerkte hoofdstuk; zonder zou de standopname naar élk gelijk-benoemd hoofdstuk lekken. Wordt
+ * `hoofdstukId` niet meegegeven (null), dan vallen we terug op alle hoofdstukken (oud gedrag).
  */
 const PSL_KOSTENSOORTEN: Bouw7CostTypeId[] = [1, 2, 3, 4, 5, 6]
 
@@ -107,6 +110,7 @@ async function resolvePslIds(
   client: Awaited<ReturnType<typeof getBouw7Client>>,
   bouw7Id: string | number,
   bewakingscode: string,
+  hoofdstukId?: number | null,
 ): Promise<number[]> {
   const doel = bewakingscode.trim()
   const responses = await Promise.all(
@@ -121,6 +125,7 @@ async function resolvePslIds(
   for (const resp of responses) {
     if (!resp) continue
     for (const item of resp.items ?? []) {
+      if (hoofdstukId != null && (item.chapterInfo?.id ?? null) !== hoofdstukId) continue
       for (const sc of item.securityCodes ?? []) {
         if ((sc.code ?? '').trim() !== doel) continue
         for (const psl of sc.pslIds ?? []) {
@@ -140,6 +145,7 @@ export async function schrijfBouw7VoortgangCode(
   bouw7Id: string | number,
   bewakingscode: string,
   pctGereed: number,
+  hoofdstukId?: number | null,
 ): Promise<VoortgangWriteResult> {
   const pct = normaliseerPct(pctGereed)
   if (!BOUW7_VOORTGANG_WRITE) return { ok: true, skipped: true }
@@ -147,7 +153,7 @@ export async function schrijfBouw7VoortgangCode(
   try {
     const client = await getBouw7Client()
 
-    const pslIds = await resolvePslIds(client, bouw7Id, bewakingscode)
+    const pslIds = await resolvePslIds(client, bouw7Id, bewakingscode, hoofdstukId)
     if (pslIds.length === 0) {
       return { ok: false, error: `Bewakingscode "${bewakingscode.trim()}" niet gevonden in Bouw7; % gereed niet teruggeschreven.` }
     }

@@ -184,7 +184,7 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact kleur={r.prognose - r.geboekteKosten < 0 ? ROOD : undefined}>{fmt(r.prognose - r.geboekteKosten)}</TD>
     <TD compact>
       {bewerkbaar && r.code && r.code !== '-'
-        ? <BewakingProgressCel dossierId={dossierId} bouw7Id={bouw7Id} code={r.code} initial={r.progress} />
+        ? <BewakingProgressCel dossierId={dossierId} bouw7Id={bouw7Id} code={r.code} hoofdstukId={r.hoofdstukId} initial={r.progress} />
         : fmtPctWaarde(r.progress)}
     </TD>
   </tr>

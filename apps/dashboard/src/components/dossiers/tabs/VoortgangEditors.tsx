@@ -22,6 +22,7 @@ function useVoortgangOpslaan(args: {
   bouw7Id: string | null
   niveau: VoortgangNiveau
   bewakingscode?: string | null
+  hoofdstukId?: number | null
 }) {
   const [bezig, setBezig] = useState(false)
 
@@ -35,6 +36,7 @@ function useVoortgangOpslaan(args: {
       dossierId: args.dossierId,
       niveau: args.niveau,
       bewakingscode: args.bewakingscode ?? null,
+      hoofdstukId: args.hoofdstukId ?? null,
       pctGereed: pct,
     })
     setBezig(false)
@@ -55,13 +57,13 @@ function parsePct(tekst: string): number {
 /* ── Per bewakingscode — inline cel ──────────────────────────────────── */
 
 export function BewakingProgressCel({
-  dossierId, bouw7Id, code, initial,
-}: { dossierId: string; bouw7Id: string | null; code: string; initial: number | null }) {
+  dossierId, bouw7Id, code, hoofdstukId, initial,
+}: { dossierId: string; bouw7Id: string | null; code: string; hoofdstukId: number | null; initial: number | null }) {
   const readOnly = useDossierReadOnly()
   const [waarde, setWaarde] = useState<number | null>(initial)
   const [editing, setEditing] = useState(false)
   const [tekst, setTekst] = useState('')
-  const { bezig, opslaan } = useVoortgangOpslaan({ dossierId, bouw7Id, niveau: 'bewakingscode', bewakingscode: code })
+  const { bezig, opslaan } = useVoortgangOpslaan({ dossierId, bouw7Id, niveau: 'bewakingscode', bewakingscode: code, hoofdstukId })
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Alleen-lezen dossier: toon de waarde zonder klik-om-te-bewerken.

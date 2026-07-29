@@ -1639,8 +1639,10 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     // (zodat een net-ingevoerde standopname blijft staan tot Bouw7 het bevestigt).
     const overlay = await getVoortgang(String(bouw7Id))
     if (overlay.codes.size > 0) {
-      for (const r of regelMap.values()) {
-        if (r.code && overlay.codes.has(r.code)) r.progress = overlay.codes.get(r.code)!
+      // Sleutel = `${hoofdstukId ?? 'x'}|${code}` (== regelMap-sleutel). Zo geldt een pending %
+      // alleen voor de bewerkte regel, niet voor gelijk-benoemde codes in andere hoofdstukken.
+      for (const [key, r] of regelMap) {
+        if (r.code && overlay.codes.has(key)) r.progress = overlay.codes.get(key)!
       }
     }
 

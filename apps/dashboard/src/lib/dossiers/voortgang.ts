@@ -27,6 +27,12 @@ export type BewaarVoortgangInput = {
   niveau: VoortgangNiveau
   /** Vereist bij niveau 'bewakingscode'. */
   bewakingscode?: string | null
+  /**
+   * Hoofdstuk-id (Bouw7 chapterInfo.id) van de regel — bij niveau 'bewakingscode'. Nodig omdat
+   * bewakingscodes NIET uniek zijn per project: dezelfde code kan in meerdere hoofdstukken staan.
+   * Zonder hoofdstuk zou een % gereed voor élke gelijk-benoemde code gelden.
+   */
+  hoofdstukId?: number | null
   /** 0–100. */
   pctGereed: number
 }
@@ -39,6 +45,7 @@ export type BewaarVoortgangResult =
 export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<BewaarVoortgangResult> {
   const { dossierId, bouw7Id, niveau } = input
   const bewakingscode = niveau === 'bewakingscode' ? (input.bewakingscode ?? null) : null
+  const hoofdstukId = niveau === 'bewakingscode' ? (input.hoofdstukId ?? null) : null
   const pct = Math.max(0, Math.min(100, Math.round(input.pctGereed * 100) / 100))
 
   if (!bouw7Id) return { ok: false, error: 'Geen Bouw7-koppeling voor dit project.' }
@@ -57,13 +64,14 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
         bouw7_id: bouw7Id,
         niveau,
         bewakingscode,
+        hoofdstuk_id: hoofdstukId,
         pct_gereed: pct,
         bron: 'eva',
         bouw7_sync_status: 'pending',
         bouw7_sync_fout: null,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'bouw7_id,niveau,bewakingscode' },
+      { onConflict: 'bouw7_id,niveau,bewakingscode,hoofdstuk_id' },
     )
   if (upsertError) return { ok: false, error: upsertError.message }
 
@@ -71,7 +79,7 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
   const write =
     niveau === 'project'
       ? await schrijfBouw7VoortgangProject(bouw7Id, pct)
-      : await schrijfBouw7VoortgangCode(bouw7Id, bewakingscode!, pct)
+      : await schrijfBouw7VoortgangCode(bouw7Id, bewakingscode!, pct, hoofdstukId)
 
   // 3. Sync-status bijwerken.
   const synced = write.ok && !write.skipped
@@ -82,7 +90,7 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
       bouw7_sync_fout: write.ok ? null : write.error,
       bouw7_laatst_sync: synced ? new Date().toISOString() : null,
     })
-    .match({ bouw7_id: bouw7Id, niveau, bewakingscode })
+    .match({ bouw7_id: bouw7Id, niveau, bewakingscode, hoofdstuk_id: hoofdstukId })
 
   // 4. Caches verversen.
   if (dossierId) {
@@ -103,7 +111,11 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
 export type VoortgangOverlay = {
   /** Project-brede % gereed (niveau 'project'), of null. */
   project: number | null
-  /** Per bewakingscode (niveau 'bewakingscode'). */
+  /**
+   * Per bewakingscode-regel. Sleutel = `${hoofdstuk_id ?? 'x'}|${bewakingscode}` — dezelfde vorm
+   * als de regelMap-sleutel in `getDossierBewaking`. Codes zijn niet uniek per project, dus het
+   * hoofdstuk hoort in de sleutel; anders lekt een pending % naar gelijk-benoemde codes.
+   */
   codes: Map<string, number>
 }
 
@@ -123,14 +135,14 @@ export async function getVoortgang(bouw7Id: string): Promise<VoortgangOverlay> {
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossier_voortgang')
-    .select('niveau, bewakingscode, pct_gereed, bouw7_sync_status')
+    .select('niveau, bewakingscode, hoofdstuk_id, pct_gereed, bouw7_sync_status')
     .eq('bouw7_id', bouw7Id)
     .in('bouw7_sync_status', OVERLAY_STATUSSEN)
 
-  for (const row of (data ?? []) as { niveau: string; bewakingscode: string | null; pct_gereed: number | string }[]) {
+  for (const row of (data ?? []) as { niveau: string; bewakingscode: string | null; hoofdstuk_id: number | null; pct_gereed: number | string }[]) {
     const pct = typeof row.pct_gereed === 'string' ? parseFloat(row.pct_gereed) : row.pct_gereed
     if (row.niveau === 'project') overlay.project = pct
-    else if (row.bewakingscode) overlay.codes.set(row.bewakingscode, pct)
+    else if (row.bewakingscode) overlay.codes.set(`${row.hoofdstuk_id ?? 'x'}|${row.bewakingscode}`, pct)
   }
   return overlay
 }
