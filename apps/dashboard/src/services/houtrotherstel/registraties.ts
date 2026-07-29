@@ -126,6 +126,9 @@ export async function createRegistratie(
       facade_side: form.facade_side || null,
       component_type: form.component_type || null,
       element_number: form.element_number || null,
+      // Instelbare locatiewaarden (per-dossier niveaus) + handmatig-statusvlag.
+      locatie: form.locatie ?? [],
+      status_handmatig: form.status_handmatig ?? false,
       damage_description: form.damage_description || null,
       damage_severity: form.damage_severity || null,
       damage_cause: form.damage_cause || null,
@@ -163,20 +166,7 @@ export async function createRegistratie(
   if (regels.length > 0) {
     const { error: regelFout } = await supabase
       .from('repair_registration_lines')
-      .insert(regels.map((r, i) => ({
-        registration_id: data.id,
-        recept_id: r.recept_id || null,
-        aantal: r.aantal,
-        repair_code_snapshot: r.repair_code_snapshot || null,
-        repair_name_snapshot: r.repair_name_snapshot || null,
-        repair_description_snapshot: r.repair_description_snapshot || null,
-        unit_snapshot: r.unit_snapshot || null,
-        labor_hours_snapshot: r.labor_hours_snapshot ?? null,
-        labor_rate_snapshot: r.labor_rate_snapshot ?? null,
-        cost_price_snapshot: r.cost_price_snapshot ?? null,
-        sale_price_snapshot: r.sale_price_snapshot ?? null,
-        volgorde: r.volgorde ?? i,
-      })))
+      .insert(bouwRegelRijen(data.id, regels))
     if (regelFout) {
       await supabase.from('repair_registrations').delete().eq('id', data.id)
       throw new Error(regelFout.message)
@@ -186,6 +176,24 @@ export async function createRegistratie(
   await logActivity(supabase, userId, 'registratie', data.id, 'create', null, form)
 
   return data as RepairRegistration
+}
+
+/** Bouwt de insert-rijen voor de werkzaamheden-regels van één registratie. */
+function bouwRegelRijen(registrationId: string, regels: RegistratieRegelForm[]) {
+  return regels.map((r, i) => ({
+    registration_id: registrationId,
+    recept_id: r.recept_id || null,
+    aantal: r.aantal,
+    repair_code_snapshot: r.repair_code_snapshot || null,
+    repair_name_snapshot: r.repair_name_snapshot || null,
+    repair_description_snapshot: r.repair_description_snapshot || null,
+    unit_snapshot: r.unit_snapshot || null,
+    labor_hours_snapshot: r.labor_hours_snapshot ?? null,
+    labor_rate_snapshot: r.labor_rate_snapshot ?? null,
+    cost_price_snapshot: r.cost_price_snapshot ?? null,
+    sale_price_snapshot: r.sale_price_snapshot ?? null,
+    volgorde: r.volgorde ?? i,
+  }))
 }
 
 /** Telt werkzaamheden-regels op tot registratie-aggregaten (× aantal per stuk). */
@@ -212,14 +220,21 @@ function aggregeerRegels(regels: RegistratieRegelForm[]) {
   }
 }
 
+/**
+ * Werkt een bestaande registratie bij (veld-editflow): locatie, status en de
+ * werkzaamheden-regels. De regels worden vervangen (verwijderen + opnieuw
+ * invoegen) en de aggregaat-snapshots opnieuw uit de regels afgeleid.
+ */
 export async function updateRegistratie(
   id: string,
-  form: Partial<RegistratieForm>,
+  form: RegistratieForm,
   userId: string
 ): Promise<RepairRegistration> {
   const supabase = createClient()
 
-  // Ophalen huidige staat voor audit log
+  const regels = (form.werkzaamheden ?? []).filter(r => (r.aantal ?? 0) > 0)
+  const agg = aggregeerRegels(regels)
+
   const { data: oldData } = await supabase
     .from('repair_registrations')
     .select('status, control_status')
@@ -228,17 +243,38 @@ export async function updateRegistratie(
 
   const { data, error } = await supabase
     .from('repair_registrations')
-    .update(form)
+    .update({
+      registration_date: form.registration_date,
+      locatie: form.locatie ?? [],
+      notes: form.notes || null,
+      status: form.status,
+      status_handmatig: form.status_handmatig ?? false,
+      recept_id: regels[0]?.recept_id || null,
+      labor_hours_snapshot: agg.labor_hours,
+      labor_rate_snapshot: regels[0]?.labor_rate_snapshot ?? null,
+      cost_price_snapshot: agg.cost_price,
+      sale_price_snapshot: agg.sale_price,
+      repair_code_snapshot: agg.code,
+      repair_name_snapshot: agg.naam,
+    })
     .eq('id', id)
     .select()
     .single()
 
   if (error) throw new Error(error.message)
 
-  // Log activiteit
+  // Regels vervangen: eerst weg, dan de actuele set terug.
+  await supabase.from('repair_registration_lines').delete().eq('registration_id', id)
+  if (regels.length > 0) {
+    const { error: regelFout } = await supabase
+      .from('repair_registration_lines')
+      .insert(bouwRegelRijen(id, regels))
+    if (regelFout) throw new Error(regelFout.message)
+  }
+
   await logActivity(supabase, userId, 'registratie', id, 'update', oldData, form)
 
-  return data
+  return data as RepairRegistration
 }
 
 export async function updateRegistratieStatus(

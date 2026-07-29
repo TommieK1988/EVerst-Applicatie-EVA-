@@ -9,6 +9,8 @@ export type ProjectStatus = 'concept' | 'actief' | 'afgerond' | 'gepauzeerd' | '
 export type RegistratieStatus =
   | 'open' | 'ingepland' | 'in_uitvoering' | 'gereed'
   | 'gecontroleerd' | 'afgekeurd' | 'hersteld_na_afkeur'
+  // Veldproces (nieuw): tweetraps status, automatisch uit de foto's of handmatig.
+  | 'geregistreerd' | 'afgerond'
 
 export type ControlStatus = 'niet_gecontroleerd' | 'goedgekeurd' | 'afgekeurd'
 
@@ -32,6 +34,30 @@ export const REGISTRATIE_STATUSSEN: Record<RegistratieStatus, string> = {
   gecontroleerd: 'Gecontroleerd',
   afgekeurd: 'Afgekeurd',
   hersteld_na_afkeur: 'Hersteld na afkeur',
+  geregistreerd: 'Geregistreerd',
+  afgerond: 'Afgerond',
+}
+
+/** De twee statussen die het veldproces gebruikt (rest is historie/legacy). */
+export const VELD_STATUSSEN = ['geregistreerd', 'afgerond'] as const
+
+/** Eén locatieniveau zoals de projectleider het per dossier instelt. */
+export interface LocatieNiveau {
+  naam: string
+  opties: string[]
+}
+
+/** Per-dossier houtrotconfiguratie (locatieniveaus die de vakman kan kiezen). */
+export interface HoutrotDossierConfig {
+  dossier_id: string
+  niveaus: LocatieNiveau[]
+  updated_at?: string
+}
+
+/** Eén gekozen locatiewaarde op een registratie: niveau-naam + gekozen waarde. */
+export interface LocatieWaarde {
+  naam: string
+  waarde: string
 }
 
 export const USER_ROLES: Record<UserRole, string> = {
@@ -204,6 +230,10 @@ export interface RepairRegistration {
   facade_side: string | null
   component_type: string | null
   element_number: string | null
+  /** Gekozen locatiewaarden (instelbare niveaus per dossier). Vervangt de vaste velden hierboven. */
+  locatie: LocatieWaarde[]
+  /** Automatische status (uit foto's) uitgeschakeld → status is handmatig gezet. */
+  status_handmatig: boolean
   damage_description: string | null
   damage_severity: SchadeSeverity | null
   damage_cause: string | null
@@ -376,6 +406,10 @@ export interface RegistratieForm {
   facade_side?: string
   component_type?: string
   element_number?: string
+  /** Gekozen locatiewaarden (instelbare niveaus per dossier). */
+  locatie?: LocatieWaarde[]
+  /** True → status is handmatig gezet, automatiek uit de foto's wordt overgeslagen. */
+  status_handmatig?: boolean
   damage_description?: string
   damage_severity?: SchadeSeverity
   damage_cause?: string

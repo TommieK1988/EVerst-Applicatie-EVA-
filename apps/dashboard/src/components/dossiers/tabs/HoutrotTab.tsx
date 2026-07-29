@@ -5,6 +5,7 @@ import { getRegistraties } from '@/services/houtrotherstel/registraties'
 import { REGISTRATIE_STATUSSEN, type RepairRegistration } from '@/lib/houtrotherstel/types'
 import { formatDateShort, formatCurrency } from '@/lib/houtrotherstel/utils'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
+import LocatieNiveausEditor from './LocatieNiveausEditor'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -83,6 +84,8 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   const totaal = (registraties ?? []).reduce((s, r) => s + regelTotaal(r), 0)
 
   return (
+    <div className="flex flex-col gap-4">
+    <LocatieNiveausEditor dossierId={dossierId} />
     <Card>
       <CardHeader>
         <h2 className="font-semibold text-slate-800">Houtrotregistraties</h2>
@@ -120,8 +123,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {registraties.map(r => {
-                const plaats = [r.location_block, r.floor, r.room_or_unit, r.facade_side, r.component_type, r.element_number]
-                  .filter(Boolean).join(' · ') || 'Plaats niet opgegeven'
+                const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
                 const bedrag = regelTotaal(r)
                 return (
                   <tr key={r.id} className="hover:bg-slate-50">
@@ -142,5 +144,6 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
         </div>
       )}
     </Card>
+    </div>
   )
 }

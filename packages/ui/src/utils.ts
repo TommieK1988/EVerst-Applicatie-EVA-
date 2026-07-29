@@ -102,6 +102,7 @@ export function getInitials(name: string): string {
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
     onderhanden: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    geregistreerd: 'bg-blue-100 text-blue-700 border-blue-200',
     afgerond: 'bg-green-100 text-green-700 border-green-200',
     niet_gecontroleerd: 'bg-gray-100 text-gray-600 border-gray-200',
     goedgekeurd: 'bg-emerald-100 text-emerald-700 border-emerald-200',

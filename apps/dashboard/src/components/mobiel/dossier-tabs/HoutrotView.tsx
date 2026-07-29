@@ -1,28 +1,53 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { getRegistraties, createRegistratie, uploadPhoto } from '@/services/houtrotherstel/registraties'
+import {
+  getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
+} from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
+import { getLocatieNiveaus } from '@/services/houtrotherstel/locatie-config'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
-import { formatCurrency } from '@/lib/houtrotherstel/utils'
 import {
-  GEVEL_ZIJDEN, ONDERDEEL_TYPEN, SCHADE_SEVERITY, REGISTRATIE_STATUSSEN,
-  type RepairRegistration, type RegistratieForm, type RegistratieRegelForm,
-  type SchadeSeverity,
+  REGISTRATIE_STATUSSEN,
+  type RepairRegistration, type RepairPhoto, type RegistratieForm,
+  type RegistratieRegelForm, type LocatieNiveau, type LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 
-/** Eén toegevoegde werkzaamheid in het formulier: gekozen recept + aantal. */
+/** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
 type Werkzaamheid = { recept: Recept; aantal: number }
 
+// De bucket `repair-photos` is publiek → URL rechtstreeks samenstellen.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const fotoUrl = (pad: string) => `${SUPABASE_URL}/storage/v1/object/public/repair-photos/${pad}`
+
+/** Bouwt een recept-vorm uit een opgeslagen werkzaamheden-regel (voor bewerken). */
+function receptVanLijn(l: NonNullable<RepairRegistration['lines']>[number]): Recept {
+  return {
+    id: l.recept_id ?? '',
+    code: l.repair_code_snapshot ?? '',
+    naam: l.repair_name_snapshot ?? 'Werkzaamheid',
+    omschrijving: l.repair_description_snapshot ?? null,
+    eenheid: l.unit_snapshot ?? null,
+    uren: Number(l.labor_hours_snapshot ?? 0),
+    uurtarief: Number(l.labor_rate_snapshot ?? 0),
+    arbeidskosten: 0,
+    materiaalkosten: 0,
+    kostprijs: Number(l.cost_price_snapshot ?? 0),
+    margePct: null,
+    verkoopprijs: Number(l.sale_price_snapshot ?? 0),
+  }
+}
+
 /**
- * Houtrot binnen een dossier (mobiel). Registraties hangen aan het dossier, niet
- * meer aan een losse houtrot-projectenlijst. Deze tab verschijnt alleen als de
- * dossier-toggle `houtrot_registreren` aanstaat.
+ * Houtrot binnen een dossier (mobiel). Registraties hangen aan het dossier.
+ * Deze tab verschijnt alleen bij een opdracht-dossier met de toggle
+ * `houtrot_registreren` aan.
  *
  * Twee standen in één component (lijst / invoeren) zodat er geen extra routes en
- * dus geen extra navigatiestappen op de telefoon nodig zijn.
+ * dus geen extra navigatiestappen op de telefoon nodig zijn. Bedragen worden hier
+ * bewust NIET getoond — die zijn voor de projectleider in EVA.
  */
 const veld: React.CSSProperties = {
   width: '100%', padding: '11px 12px', borderRadius: 10,
@@ -48,24 +73,29 @@ function Blok({ titel, children }: { titel: string; children: React.ReactNode })
 export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
   const [recepten, setRecepten] = useState<Recept[]>([])
+  const [niveaus, setNiveaus] = useState<LocatieNiveau[] | null>(null)
   const [invoeren, setInvoeren] = useState(false)
+  const [bewerkId, setBewerkId] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
-  const [blok, setBlok] = useState('')
-  const [verdieping, setVerdieping] = useState('')
-  const [ruimte, setRuimte] = useState('')
-  const [gevelzijde, setGevelzijde] = useState('')
-  const [onderdeel, setOnderdeel] = useState('')
-  const [elementnr, setElementnr] = useState('')
-  const [schade, setSchade] = useState('')
-  const [ernst, setErnst] = useState<SchadeSeverity | ''>('')
+  // Locatie: per ingesteld niveau een gekozen waarde, óf één vrij tekstveld.
+  const [locatieWaarden, setLocatieWaarden] = useState<Record<number, string>>({})
+  const [vrijeLocatie, setVrijeLocatie] = useState('')
+
+  const [regDatum, setRegDatum] = useState(new Date().toISOString().slice(0, 10))
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>([])
   const [keuzeRecept, setKeuzeRecept] = useState('')
   const [keuzeAantal, setKeuzeAantal] = useState('1')
   const [notitie, setNotitie] = useState('')
+
+  const [statusHandmatig, setStatusHandmatig] = useState(false)
+  const [statusKeuze, setStatusKeuze] = useState<'geregistreerd' | 'afgerond'>('geregistreerd')
+
   const [voorFoto, setVoorFoto] = useState<File | null>(null)
   const [naFoto, setNaFoto] = useState<File | null>(null)
+  const [bestaandeFotos, setBestaandeFotos] = useState<RepairPhoto[]>([])
+  const [verwijderdeFotos, setVerwijderdeFotos] = useState<Set<string>>(new Set())
 
   const laad = useCallback(() => {
     getRegistraties({ dossier_id: dossierId })
@@ -76,13 +106,53 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   useEffect(() => { laad() }, [laad])
   useEffect(() => {
     getRecepten().then(setRecepten).catch(() => setRecepten([]))
-  }, [])
+    getLocatieNiveaus(dossierId).then(setNiveaus).catch(() => setNiveaus([]))
+  }, [dossierId])
 
   function leegmaken() {
-    setBlok(''); setVerdieping(''); setRuimte(''); setGevelzijde(''); setOnderdeel('')
-    setElementnr(''); setSchade(''); setErnst(''); setNotitie('')
-    setWerkzaamheden([]); setKeuzeRecept(''); setKeuzeAantal('1')
+    setBewerkId(null)
+    setLocatieWaarden({}); setVrijeLocatie('')
+    setRegDatum(new Date().toISOString().slice(0, 10))
+    setNotitie(''); setWerkzaamheden([]); setKeuzeRecept(''); setKeuzeAantal('1')
+    setStatusHandmatig(false); setStatusKeuze('geregistreerd')
+    setVoorFoto(null); setNaFoto(null); setBestaandeFotos([]); setVerwijderdeFotos(new Set())
+  }
+
+  function nieuwe() {
+    leegmaken()
+    setFout(null)
+    setInvoeren(true)
+  }
+
+  function bewerken(r: RepairRegistration) {
+    setBewerkId(r.id)
+    // Locatie terugzetten: per ingesteld niveau de opgeslagen waarde, anders vrij veld.
+    const opgeslagen = (r.locatie ?? []) as LocatieWaarde[]
+    if (niveaus && niveaus.length > 0) {
+      const wrd: Record<number, string> = {}
+      niveaus.forEach((n, i) => {
+        const match = opgeslagen.find(l => l.naam === n.naam)
+        if (match) wrd[i] = match.waarde
+      })
+      setLocatieWaarden(wrd); setVrijeLocatie('')
+    } else {
+      setVrijeLocatie(opgeslagen[0]?.waarde ?? ''); setLocatieWaarden({})
+    }
+    setRegDatum(r.registration_date)
+    setWerkzaamheden(
+      (r.lines ?? [])
+        .slice()
+        .sort((a, b) => a.volgorde - b.volgorde)
+        .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
+    )
+    setNotitie(r.notes ?? '')
+    setStatusHandmatig(r.status_handmatig)
+    setStatusKeuze(r.status === 'afgerond' ? 'afgerond' : 'geregistreerd')
+    setBestaandeFotos(r.photos ?? [])
+    setVerwijderdeFotos(new Set())
     setVoorFoto(null); setNaFoto(null)
+    setFout(null)
+    setInvoeren(true)
   }
 
   function werkzaamheidToevoegen() {
@@ -90,7 +160,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     const aantal = Math.max(1, Math.round(Number(keuzeAantal.replace(',', '.')) || 0))
     if (!recept || aantal < 1) return
     setWerkzaamheden(prev => {
-      // Zelfde recept nog eens gekozen → tel het aantal op i.p.v. een dubbele regel.
       const bestaand = prev.findIndex(w => w.recept.id === recept.id)
       if (bestaand >= 0) {
         const kopie = [...prev]
@@ -102,11 +171,22 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setKeuzeRecept(''); setKeuzeAantal('1')
   }
 
-  function werkzaamheidVerwijderen(receptId: string) {
-    setWerkzaamheden(prev => prev.filter(w => w.recept.id !== receptId))
+  function werkzaamheidVerwijderen(index: number) {
+    setWerkzaamheden(prev => prev.filter((_, i) => i !== index))
   }
 
-  const totaalVerkoop = werkzaamheden.reduce((s, w) => s + w.aantal * (w.recept.verkoopprijs || 0), 0)
+  function fotoVerwijderen(id: string) {
+    setVerwijderdeFotos(prev => new Set(prev).add(id))
+  }
+
+  // Effectieve foto's + afgeleide status (na-foto ⇒ afgerond). Voor de weergave in
+  // het formulier; de definitieve status wordt in opslaan() opnieuw bepaald.
+  const zichtbareFotos = bestaandeFotos.filter(p => !verwijderdeFotos.has(p.id))
+  const heeftVoorBestaand = zichtbareFotos.some(p => p.photo_type === 'voor')
+  const heeftNaBestaand = zichtbareFotos.some(p => p.photo_type === 'na')
+  const naAanwezig = !!naFoto || heeftNaBestaand
+  const effectieveStatus: 'geregistreerd' | 'afgerond' =
+    statusHandmatig ? statusKeuze : (naAanwezig ? 'afgerond' : 'geregistreerd')
 
   async function opslaan() {
     setBezig(true)
@@ -114,13 +194,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     try {
       const medewerker = await getHuidigeMedewerker()
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
-
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
-      // Prijs wordt per regel als momentopname vastgelegd: latere wijzigingen aan
-      // het recept of aan het uurtarief veranderen bestaande registraties niet.
+      // Prijs per regel als momentopname: latere recept-/tariefwijzigingen raken
+      // bestaande registraties niet.
       const regels: RegistratieRegelForm[] = werkzaamheden.map((w, i) => ({
-        recept_id: w.recept.id,
+        recept_id: w.recept.id || undefined,
         aantal: w.aantal,
         repair_code_snapshot: w.recept.code,
         repair_name_snapshot: w.recept.naam,
@@ -133,27 +212,50 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         volgorde: i,
       }))
 
+      // Locatiewaarden opbouwen uit de ingestelde niveaus, of het vrije veld.
+      const locatie: LocatieWaarde[] =
+        niveaus && niveaus.length > 0
+          ? niveaus
+              .map((n, i) => ({ naam: n.naam, waarde: (locatieWaarden[i] ?? '').trim() }))
+              .filter(l => l.waarde.length > 0)
+          : vrijeLocatie.trim()
+            ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
+            : []
+
+      // Foto-plan: vervangen = oude weg. Daaruit volgt of er een na-foto is.
+      const teVerwijderen = new Set(verwijderdeFotos)
+      if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
+      if (naFoto) bestaandeFotos.filter(p => p.photo_type === 'na').forEach(p => teVerwijderen.add(p.id))
+      const naBlijft = bestaandeFotos.some(p => p.photo_type === 'na' && !teVerwijderen.has(p.id))
+      const naDefinitief = !!naFoto || naBlijft
+      const status = statusHandmatig ? statusKeuze : (naDefinitief ? 'afgerond' : 'geregistreerd')
+
       const form: RegistratieForm = {
         dossier_id: dossierId,
         werkzaamheden: regels,
-        registration_date: new Date().toISOString().slice(0, 10),
-        location_block: blok || undefined,
-        floor: verdieping || undefined,
-        room_or_unit: ruimte || undefined,
-        facade_side: gevelzijde || undefined,
-        component_type: onderdeel || undefined,
-        element_number: elementnr || undefined,
-        damage_description: schade || undefined,
-        damage_severity: ernst || undefined,
+        locatie,
+        registration_date: regDatum,
         notes: notitie || undefined,
-        status: 'open',
+        status,
+        status_handmatig: statusHandmatig,
         control_status: 'niet_gecontroleerd',
       }
 
-      const registratie = await createRegistratie(form, medewerker.id)
-      // Foto's op de telefoon verkleinen (EXIF-rotatie + kleiner over 4G) vóór upload.
-      if (voorFoto) await uploadPhoto(registratie.id, await verkleinFoto(voorFoto), 'voor').catch(() => null)
-      if (naFoto) await uploadPhoto(registratie.id, await verkleinFoto(naFoto), 'na').catch(() => null)
+      let regId: string
+      if (bewerkId) {
+        await updateRegistratie(bewerkId, form, medewerker.id)
+        regId = bewerkId
+      } else {
+        regId = (await createRegistratie(form, medewerker.id)).id
+      }
+
+      // Foto's op de telefoon verkleinen (EXIF-rotatie + kleiner over 4G).
+      for (const id of teVerwijderen) {
+        const p = bestaandeFotos.find(x => x.id === id)
+        if (p) await deletePhoto(p.id, p.storage_path).catch(() => null)
+      }
+      if (voorFoto) await uploadPhoto(regId, await verkleinFoto(voorFoto), 'voor').catch(() => null)
+      if (naFoto) await uploadPhoto(regId, await verkleinFoto(naFoto), 'na').catch(() => null)
 
       leegmaken()
       setInvoeren(false)
@@ -177,63 +279,38 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             </div>
           )}
 
-          <Blok titel="Plaats">
-            <div>
-              <label style={label} htmlFor="hr-blok">Blok</label>
-              <input id="hr-blok" style={veld} value={blok} onChange={e => setBlok(e.target.value)} placeholder="bijv. Blok A" />
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={label} htmlFor="hr-verdieping">Verdieping</label>
-                <input id="hr-verdieping" style={veld} value={verdieping} onChange={e => setVerdieping(e.target.value)} />
+          <Blok titel="Locatie">
+            {niveaus === null ? (
+              <div style={{ fontSize: 13, color: '#6b757c' }}>Laden…</div>
+            ) : niveaus.length > 0 ? (
+              niveaus.map((n, i) => (
+                <div key={i}>
+                  <label style={label} htmlFor={`hr-niv-${i}`}>{n.naam}</label>
+                  <select
+                    id={`hr-niv-${i}`}
+                    style={veld}
+                    value={locatieWaarden[i] ?? ''}
+                    onChange={e => setLocatieWaarden(prev => ({ ...prev, [i]: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {n.opties.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              ))
+            ) : (
+              <div>
+                <label style={label} htmlFor="hr-loc">Locatie</label>
+                <input id="hr-loc" style={veld} value={vrijeLocatie}
+                  onChange={e => setVrijeLocatie(e.target.value)} placeholder="bijv. Voorgevel, 2e etage" />
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={label} htmlFor="hr-ruimte">Ruimte / nr.</label>
-                <input id="hr-ruimte" style={veld} value={ruimte} onChange={e => setRuimte(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <label style={label} htmlFor="hr-gevel">Gevelzijde</label>
-              <select id="hr-gevel" style={veld} value={gevelzijde} onChange={e => setGevelzijde(e.target.value)}>
-                <option value="">—</option>
-                {GEVEL_ZIJDEN.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={label} htmlFor="hr-onderdeel">Onderdeel</label>
-                <select id="hr-onderdeel" style={veld} value={onderdeel} onChange={e => setOnderdeel(e.target.value)}>
-                  <option value="">—</option>
-                  {ONDERDEEL_TYPEN.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={label} htmlFor="hr-element">Elementnr.</label>
-                <input id="hr-element" style={veld} value={elementnr} onChange={e => setElementnr(e.target.value)} />
-              </div>
-            </div>
-          </Blok>
-
-          <Blok titel="Schade">
-            <div>
-              <label style={label} htmlFor="hr-schade">Omschrijving</label>
-              <textarea id="hr-schade" style={{ ...veld, minHeight: 80, resize: 'vertical' }} value={schade} onChange={e => setSchade(e.target.value)} />
-            </div>
-            <div>
-              <label style={label} htmlFor="hr-ernst">Ernst</label>
-              <select id="hr-ernst" style={veld} value={ernst} onChange={e => setErnst(e.target.value as SchadeSeverity | '')}>
-                <option value="">—</option>
-                {Object.entries(SCHADE_SEVERITY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
+            )}
           </Blok>
 
           <Blok titel="Werkzaamheden">
-            {/* Toegevoegde werkzaamheden met aantal en regeltotaal. */}
             {werkzaamheden.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {werkzaamheden.map(w => (
-                  <div key={w.recept.id} style={{
+                {werkzaamheden.map((w, i) => (
+                  <div key={i} style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
                     background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
                   }}>
@@ -241,16 +318,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {w.aantal}× {w.recept.naam}
                       </div>
-                      <div style={{ fontSize: 11.5, color: '#6b757c' }}>
-                        {w.recept.code} · {formatCurrency(w.recept.verkoopprijs || 0)} p/st
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', flexShrink: 0 }}>
-                      {formatCurrency(w.aantal * (w.recept.verkoopprijs || 0))}
+                      {w.recept.code && <div style={{ fontSize: 11.5, color: '#6b757c' }}>{w.recept.code}</div>}
                     </div>
                     <button
                       type="button"
-                      onClick={() => werkzaamheidVerwijderen(w.recept.id)}
+                      onClick={() => werkzaamheidVerwijderen(i)}
                       aria-label="Werkzaamheid verwijderen"
                       style={{
                         flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
@@ -261,22 +333,15 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                     </button>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 2px', fontSize: 13.5, fontWeight: 700, color: 'var(--fg)' }}>
-                  <span>Totaal</span>
-                  <span>{formatCurrency(totaalVerkoop)}</span>
-                </div>
               </div>
             )}
 
-            {/* Recept kiezen + aantal → toevoegen. */}
             <div>
               <label style={label} htmlFor="hr-reparatie">Werkzaamheid toevoegen</label>
               <select id="hr-reparatie" style={veld} value={keuzeRecept} onChange={e => setKeuzeRecept(e.target.value)}>
-                <option value="">— kies een recept —</option>
+                <option value="">— kies een werkzaamheid —</option>
                 {recepten.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} · {r.naam}{r.verkoopprijs ? ` — ${formatCurrency(r.verkoopprijs)}` : ''}
-                  </option>
+                  <option key={r.id} value={r.id}>{r.code} · {r.naam}</option>
                 ))}
               </select>
             </div>
@@ -311,16 +376,62 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           </Blok>
 
           <Blok titel="Foto's">
+            {/* Bestaande foto's (bij bewerken) met verwijderknop. */}
+            {zichtbareFotos.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {zichtbareFotos.map(p => (
+                  <div key={p.id} style={{ position: 'relative' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={fotoUrl(p.storage_path)} alt={p.photo_type}
+                      style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)' }} />
+                    <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 9, fontWeight: 700, textAlign: 'center', textTransform: 'uppercase', borderBottomLeftRadius: 10, borderBottomRightRadius: 10 }}>
+                      {p.photo_type}
+                    </span>
+                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label="Foto verwijderen"
+                      style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, border: 'none', background: '#b42318', color: '#fff', fontSize: 13, lineHeight: 1, cursor: 'pointer' }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div>
-              <label style={label} htmlFor="hr-voor">Voor</label>
+              <label style={label} htmlFor="hr-voor">Voor{heeftVoorBestaand && !voorFoto ? ' (vervangen)' : ''}</label>
               <input id="hr-voor" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
                 onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
             </div>
             <div>
-              <label style={label} htmlFor="hr-na">Na</label>
+              <label style={label} htmlFor="hr-na">Na{heeftNaBestaand && !naFoto ? ' (vervangen)' : ''}</label>
               <input id="hr-na" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
                 onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
             </div>
+          </Blok>
+
+          <Blok titel="Status">
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
+              <span style={{ fontSize: 13.5, color: 'var(--fg)', fontWeight: 500 }}>Status handmatig instellen</span>
+              <input
+                type="checkbox"
+                checked={statusHandmatig}
+                onChange={e => setStatusHandmatig(e.target.checked)}
+                style={{ width: 20, height: 20, accentColor: '#009439' }}
+              />
+            </label>
+            {statusHandmatig ? (
+              <div>
+                <label style={label} htmlFor="hr-status">Status</label>
+                <select id="hr-status" style={veld} value={statusKeuze}
+                  onChange={e => setStatusKeuze(e.target.value as 'geregistreerd' | 'afgerond')}>
+                  <option value="geregistreerd">Geregistreerd</option>
+                  <option value="afgerond">Afgerond</option>
+                </select>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: '#6b757c' }}>
+                Automatisch: <strong style={{ color: 'var(--fg)' }}>{REGISTRATIE_STATUSSEN[effectieveStatus]}</strong>
+                {' '}(afgerond zodra er een na-foto is).
+              </div>
+            )}
           </Blok>
         </div>
 
@@ -369,16 +480,28 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           </div>
         )}
         {registraties?.map(r => {
-          const plaats = [r.location_block, r.floor, r.room_or_unit, r.facade_side, r.component_type, r.element_number]
-            .filter(Boolean).join(' · ') || 'Plaats niet opgegeven'
+          const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
+          const fotos = (r.photos ?? []).slice().sort(
+            (a, b) => (a.photo_type === 'voor' ? 0 : 1) - (b.photo_type === 'voor' ? 0 : 1))
           return (
-            <div key={r.id} style={{
-              padding: '12px 14px', background: 'var(--bg-elev)',
-              border: '1px solid var(--border)', borderRadius: 12,
-            }}>
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => bewerken(r)}
+              style={{
+                textAlign: 'left', padding: '12px 14px', background: 'var(--bg-elev)',
+                border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer',
+                WebkitTapHighlightColor: 'transparent', font: 'inherit',
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>{plaats}</div>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b757c', flexShrink: 0 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                  flexShrink: 0, padding: '2px 7px', borderRadius: 999,
+                  color: r.status === 'afgerond' ? '#0a7a33' : '#1d4ed8',
+                  background: r.status === 'afgerond' ? '#e6f4ea' : '#e6edfe',
+                }}>
                   {REGISTRATIE_STATUSSEN[r.status] ?? r.status}
                 </span>
               </div>
@@ -386,7 +509,16 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 {r.registration_date}
                 {r.repair_name_snapshot ? ` · ${r.repair_name_snapshot}` : ''}
               </div>
-            </div>
+              {fotos.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  {fotos.map(p => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={p.id} src={fotoUrl(p.storage_path)} alt={p.photo_type}
+                      style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                  ))}
+                </div>
+              )}
+            </button>
           )
         })}
       </div>
@@ -394,7 +526,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       <MobielStickyFooter>
         <button
           type="button"
-          onClick={() => setInvoeren(true)}
+          onClick={nieuwe}
           style={{
             width: '100%', padding: '14px 16px', borderRadius: 12, border: 'none',
             background: '#009439', color: '#fff', fontSize: 16, fontWeight: 700,
