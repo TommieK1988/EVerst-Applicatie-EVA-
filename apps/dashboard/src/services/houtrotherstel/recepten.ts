@@ -97,7 +97,9 @@ export async function getRecepten(): Promise<Recept[]> {
     return {
       id: it.id,
       code: it.item_code,
-      naam: it.onderdeel ?? it.full_name ?? it.item_code,
+      // full_name eerst: `onderdeel` is de categorie (bv. "Houtrot") en mag de
+      // getoonde recept-/variantnaam niet overschrijven.
+      naam: it.full_name ?? it.onderdeel ?? it.item_code,
       omschrijving: it.description ?? null,
       eenheid: it.default_unit ?? null,
       groep: it.groep ?? null,
