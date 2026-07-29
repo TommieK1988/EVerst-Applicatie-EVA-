@@ -1476,8 +1476,27 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder prognose)
     const progressSimpelN = new Map<string, number>()   // aantal kostensoorten met % (fallback)
 
-    /** Bestaande regel ophalen of nieuwe aanmaken (gematcht op bewakingscode). */
+    /**
+     * Bestaande regel ophalen of nieuwe aanmaken. Bewakingscodes zijn NIET uniek per project:
+     * dezelfde codetekst (bv. ".A") kan in meerdere hoofdstukken voorkomen. Match daarom op
+     * hoofdstuk + code zodra het hoofdstuk bekend is — alleen wanneer dat ontbreekt (bv. bij
+     * bestelregels, die enkel een parentName dragen) vallen we terug op een code-match.
+     */
     const vindOfMaak = (code: string, hoofdstukId: number | null, hoofdstuk: string | null, naam: string | null) => {
+      if (hoofdstukId != null) {
+        const key = `${hoofdstukId}|${code}`
+        let r = regelMap.get(key)
+        if (!r) {
+          r = legeRegel()
+          r.code = code
+          r.naam = naam ?? code
+          r.hoofdstukId = hoofdstukId
+          r.hoofdstuk = hoofdstuk
+          regelMap.set(key, r)
+          if (!codeIndex.has(code)) codeIndex.set(code, r)
+        }
+        return r
+      }
       let r = codeIndex.get(code)
       if (!r) {
         r = legeRegel()
@@ -1568,10 +1587,13 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         bedrag: toGetal(dt.cost),
       })
     }
-    const gefactureerdPerCode = new Map<string, number>()
+    // Toewijzen aan de juiste (hoofdstuk+code)-regel en optellen per regel-object. Voorheen
+    // ging dit per code, waardoor dezelfde code in élk hoofdstuk het volledige gefactureerde
+    // bedrag kreeg — een code in 3 hoofdstukken telde de inkoop dus 3× → te hoge geboekte kosten.
+    const gefactureerdPerRegel = new Map<BewakingRegel, number>()
     for (const b of gefactureerdeBon.values()) {
-      gefactureerdPerCode.set(b.code, (gefactureerdPerCode.get(b.code) ?? 0) + b.bedrag)
-      vindOfMaak(b.code, b.chapterId, b.chapterNaam, b.naam)
+      const r = vindOfMaak(b.code, b.chapterId, b.chapterNaam, b.naam)
+      gefactureerdPerRegel.set(r, (gefactureerdPerRegel.get(r) ?? 0) + b.bedrag)
     }
 
     // Verwachte kosten (#9) = totaal van alle contract-order-lines per code (incl. arbeid).
@@ -1591,7 +1613,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     // Afgeleide kolommen per regel toekennen.
     for (const r of regelMap.values()) {
       const code = r.code ?? GEEN
-      r.geboekteKosten = r.arbeidskosten + (gefactureerdPerCode.get(code) ?? 0)
+      r.geboekteKosten = r.arbeidskosten + (gefactureerdPerRegel.get(r) ?? 0)
       r.verwachteKosten = verwachtPerCode.get(code) ?? 0
     }
 
