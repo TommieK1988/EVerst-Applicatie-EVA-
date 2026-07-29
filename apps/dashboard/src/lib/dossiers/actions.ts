@@ -1572,12 +1572,18 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       }
     })
 
-    // Geboekte kosten = arbeid (altijd geboekt) + inkoop mét inkoopfactuur.
+    // Geboekte kosten = arbeid (altijd geboekt) + inkoop mét ONTVANGEN inkoopfactuur.
+    // Een afgeroepen bon (uit een contract) verschijnt in Bouw7 als concept-inkoopfactuur ZONDER
+    // factuurnummer. Dat is een verplichting (telt in de kolom Besteed/costAmount), geen geboekte
+    // kost — pas als de leverancier écht factureert komt er een factuurnummer bij. Alleen facturen
+    // mét factuurnummer meetellen (conventie in de codebase: concept = geen factuurnummer).
     // Dedupe op deliveryTicket.id: termijn-facturen verwijzen naar dezelfde bon.
     const gefactureerdeBon = new Map<number, { code: string; chapterId: number | null; chapterNaam: string | null; naam: string | null; bedrag: number }>()
     for (const inv of invoices) {
       const dt = inv.deliveryTicket
-      if (!dt?.id || gefactureerdeBon.has(dt.id)) continue
+      if (!dt?.id) continue
+      if (!inv.invoiceNumber || inv.invoiceNumber.trim() === '') continue
+      if (gefactureerdeBon.has(dt.id)) continue
       const c = dt.securityLink?.code
       gefactureerdeBon.set(dt.id, {
         code: c?.code ?? GEEN,
@@ -1947,7 +1953,12 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     const correctieMap = new Map<number, InkoopCorrectie>()
     for (const c of correcties) correctieMap.set(Number(c.bron_id), c)
 
-    const geboekteKosten: GeboekteKostenRegel[] = (heimdallResp.items ?? []).map((inv) => {
+    // Alleen ontvangen facturen (mét factuurnummer). Een afgeroepen bon uit een contract staat in
+    // Bouw7 als concept-inkoopfactuur zonder factuurnummer — dat is een verplichting, geen geboekte
+    // kost, en hoort dus niet in de geboekte-kostenlijst.
+    const geboekteKosten: GeboekteKostenRegel[] = (heimdallResp.items ?? [])
+      .filter((inv) => !!inv.invoiceNumber && inv.invoiceNumber.trim() !== '')
+      .map((inv) => {
       const apolloCode =
         (inv.deliveryTicket?.id != null ? codePerBon.get(inv.deliveryTicket.id) : undefined) ??
         codePerInvoice.get(inv.id) ?? { code: null, naam: null }
