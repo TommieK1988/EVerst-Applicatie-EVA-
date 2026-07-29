@@ -120,8 +120,27 @@ function escapeRegex(s: string): string {
 }
 
 /**
- * Vervangt sentinel-hyperlinkdoelen in de relatiebestanden (`_rels/*.rels`) van het zip.
- * Hyperlinkdoelen leven in het `Target`-attribuut daar, niet in de document-body.
+ * Bouwt de match-regex voor één hyperlink-sleutel.
+ *
+ * - Een sleutel in accolade-vorm (`{feedback.url}`) matcht het adres dat een sjabloonmaker
+ *   intuïtief in Word invult. docxtemplater vult zulke tags NIET in het hyperlink-adres
+ *   (dat staat in de rels, niet in de body), en Word bewaart de accolades bovendien vaak
+ *   **percent-gecodeerd** (`%7B…%7D`). Daarom matchen we `{`/`%7b` en `}`/`%7d`.
+ * - Elke andere sleutel is een letterlijk sentinel-adres (bv. https://feedback-link.eva/);
+ *   een trailing slash is optioneel, want Word bewaart die soms wel en soms niet.
+ */
+function hyperlinkPatroon(sleutel: string): RegExp {
+  const accolade = sleutel.match(/^\{(.+)\}$/)
+  if (accolade) {
+    return new RegExp('(?:\\{|%7[bB])' + escapeRegex(accolade[1]) + '(?:\\}|%7[dD])', 'g')
+  }
+  return new RegExp(escapeRegex(sleutel).replace(/\\?\/$/, '/?'), 'g')
+}
+
+/**
+ * Vervangt hyperlinkdoelen in de relatiebestanden (`_rels/*.rels`) van het zip.
+ * Hyperlinkdoelen leven in het `Target`-attribuut daar, niet in de document-body, dus
+ * docxtemplater raakt ze niet aan.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function vervangHyperlinks(zip: any, hyperlinks: Record<string, string>): void {
@@ -133,11 +152,8 @@ function vervangHyperlinks(zip: any, hyperlinks: Record<string, string>): void {
     if (!bestand) continue
     let xml: string = bestand.asText()
     let gewijzigd = false
-    for (const [sentinel, url] of paren) {
-      // Trailing slash in de sentinel optioneel maken bij het matchen.
-      const patroon = escapeRegex(sentinel).replace(/\\?\/$/, '/?')
-      const re = new RegExp(patroon, 'g')
-      const nieuw = xml.replace(re, escapeXmlAttr(url))
+    for (const [sleutel, url] of paren) {
+      const nieuw = xml.replace(hyperlinkPatroon(sleutel), escapeXmlAttr(url))
       if (nieuw !== xml) { xml = nieuw; gewijzigd = true }
     }
     if (gewijzigd) zip.file(naam, xml)

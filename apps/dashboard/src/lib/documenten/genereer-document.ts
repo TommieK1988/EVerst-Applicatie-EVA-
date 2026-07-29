@@ -70,10 +70,14 @@ export async function genereerDocumentDocx(
 
   const templateBuffer = await loadTemplateBuffer(templateBron)
 
-  // Klik-knop: het sentinel-adres in de template wordt het echte feedback-adres.
+  // Klik-knop: het hyperlink-adres in de template wordt het echte feedback-adres.
+  // Twee vormen worden ondersteund: het sentinel-adres (mijn startsjabloon) én de
+  // intuïtieve tag {feedback.url} als hyperlink-adres (die Word vaak als %7B…%7D bewaart).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feedbackUrl = (ctx as any)?.feedback?.url as string | undefined
-  const hyperlinks = feedbackUrl ? { [FEEDBACK_LINK_PLACEHOLDER]: feedbackUrl } : undefined
+  const hyperlinks = feedbackUrl
+    ? { [FEEDBACK_LINK_PLACEHOLDER]: feedbackUrl, '{feedback.url}': feedbackUrl }
+    : undefined
 
   return renderDocx(templateBuffer, ctx, { imageMax: documentImageMax(), hyperlinks })
 }

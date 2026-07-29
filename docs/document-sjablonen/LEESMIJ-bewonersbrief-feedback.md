@@ -29,6 +29,7 @@ kies je een bestaande link of maak je er één (kies dan het feedbackformulier) 
 - `{%feedback_qr}` — de QR-code (moet **alleen** in zijn eigen alinea staan).
 - `{feedback.url}` — de link als tekst (automatisch opgeschoond).
 - `{#feedback.heeft}` … `{/feedback.heeft}` — dit blok verschijnt alleen als er een link is gekozen.
-- **De knop** is een gewone Word-hyperlink met als adres exact `https://feedback-link.eva/`.
-  Bij het opstellen wordt dat adres vervangen door de echte feedback-link. Wil je de knop
-  verplaatsen of de tekst wijzigen: houd het hyperlink-adres exact op `https://feedback-link.eva/`.
+- **De knop** is een gewone Word-hyperlink. Zet als **adres** van die hyperlink:
+  `{feedback.url}` (Insert → Link → Address). Bij het opstellen wordt dat adres vervangen
+  door de echte feedback-link. Word slaat de accolades soms op als `%7Bfeedback.url%7D`;
+  dat werkt ook. (Het oude sentinel-adres `https://feedback-link.eva/` blijft óók werken.)
