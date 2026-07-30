@@ -286,12 +286,60 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
   )
 }
 
-/* ─── opdracht-samenstelling (stelposten + opties) ─────────────────────
-   Itemized opbouw van de opdracht in het Financiële-totalen-blok: per stelpost
-   (met eigen bewakingscode, begroot/werkelijk en verrekening zodra toegekend) en
-   per optie (met in-opdracht-schakelaar). Stelposten kunnen ook handmatig worden
-   aangewezen als deel van een uit Bouw7 geïmporteerde aanneemsom.
-   Read-only respecteert afgesloten dossiers. */
+/* ─── inklapbaar paneel ─────────────────────────────────────────────────
+   Kop met titel, aantal en totaalbedrag; de regels zitten erachter. Het bedrag
+   staat bewust ín de kop, zodat dichtklappen nooit een financieel getal verbergt. */
+function InklapPaneel({ titel, aantal, totaal, totaalKleur, open, onToggle, children }: {
+  titel: string
+  aantal: number
+  totaal: string
+  totaalKleur?: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-lg border border-neutral-200">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-neutral-50"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <svg
+            width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className="shrink-0 text-neutral-400 transition-transform duration-150"
+            style={{ transform: open ? 'rotate(90deg)' : 'none' }}
+          >
+            <path d="M7 5l5 5-5 5" />
+          </svg>
+          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">{titel}</span>
+          {aantal > 0 && (
+            <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500">
+              {aantal}
+            </span>
+          )}
+        </span>
+        <span
+          className="shrink-0 tabular-nums text-[12px] font-bold"
+          style={{ color: totaalKleur ?? 'var(--fg, #171717)' }}
+        >
+          {totaal}
+        </span>
+      </button>
+      {open && <div className="border-t border-neutral-100 px-2.5 pb-2.5 pt-2">{children}</div>}
+    </div>
+  )
+}
+
+/* ─── opdracht-samenstelling (stelposten + meerwerk + opties) ───────────
+   Twee smalle kolommen in het Financiële-totalen-blok: links de stelposten (met
+   eigen bewakingscode, begroot/werkelijk en verrekening zodra toegekend), rechts
+   het goedgekeurde meerwerk. Beide standaard dichtgeklapt — het totaal staat in de
+   kop, de regels erachter. Opties (alleen bij een offerte) staan eronder over de
+   volle breedte. Read-only respecteert afgesloten dossiers. */
 function OpdrachtSamenstelling({
   overzicht, readOnly, onToggleOptie, onWijsCodes, onNieuweStelpost, onVerwijderStelpost,
   onVerreken, pending,
@@ -309,8 +357,11 @@ function OpdrachtSamenstelling({
   pending: boolean
 }) {
   const { stelposten, opties, meerwerken } = overzicht
+  const [openStelposten, setOpenStelposten] = React.useState(false)
+  const [openMeerwerk, setOpenMeerwerk]     = React.useState(false)
+  const [openOpties, setOpenOpties]         = React.useState(false)
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {overzicht.overschrijding && (
         <div
           className="rounded-md px-2 py-1.5 text-[11px] font-semibold"
@@ -331,123 +382,161 @@ function OpdrachtSamenstelling({
           bedragen nog kloppen — EVA past ze bewust niet zelf aan.
         </div>
       )}
-      <div>
-        <div className="mb-1.5 flex items-baseline justify-between gap-2">
-          <span className="flex items-baseline gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Stelposten</span>
-          </span>
-          <span className="flex items-baseline gap-2">
-            {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
-              <button
-                type="button"
-                onClick={onWijsCodes}
-                disabled={pending}
-                className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
-                title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…) en maak die in Bouw7 aan."
-              >
-                Codes toewijzen
-              </button>
-            )}
-            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.stelpostenTotaal)}</span>
-          </span>
-        </div>
-        {stelposten.length === 0 ? (
-          <div className="text-[12px] italic text-neutral-400">Nog geen stelposten aangewezen.</div>
-        ) : (
-          <div className="divide-y divide-neutral-100">
-            {stelposten.map(sp => (
-              <div key={sp.id} className="py-[5px]">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                    <span className="truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
+
+      <div className="grid grid-cols-2 items-start gap-3">
+        {/* ── Stelposten ── */}
+        <InklapPaneel
+          titel="Stelposten"
+          aantal={stelposten.length}
+          totaal={fmtBedrag(overzicht.stelpostenTotaal)}
+          open={openStelposten}
+          onToggle={() => setOpenStelposten(o => !o)}
+        >
+          {stelposten.length === 0 ? (
+            <div className="text-[12px] italic text-neutral-400">Nog geen stelposten aangewezen.</div>
+          ) : (
+            <div className="divide-y divide-neutral-100">
+              {stelposten.map(sp => (
+                <div key={sp.id} className="py-[5px] first:pt-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
+                    <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
+                      {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
+                    </span>
+                    {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
+                      <button
+                        type="button"
+                        onClick={() => onVerwijderStelpost(sp.id)}
+                        disabled={pending}
+                        title="Stelpost verwijderen"
+                        className="shrink-0 rounded px-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-50"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  {/* Kenmerken op een eigen regel — in een smalle kolom past dat niet naast de omschrijving. */}
+                  <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
                     {sp.bewakingscode && (
-                      <span className="shrink-0 rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
+                      <span className="rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
                     )}
                     {sp.in_aanneemsom ? (
                       <span
-                        className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
+                        className="rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
                         title="Zit in de aanneemsom — verlaagt de basisscope, telt niet extra mee in het contracttotaal."
                       >
                         in aanneemsom
                       </span>
                     ) : (
                       <span
-                        className="shrink-0 rounded-full px-1.5 py-px text-[9.5px] font-semibold"
+                        className="rounded-full px-1.5 py-px text-[9.5px] font-semibold"
                         style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
                         title="Valt buiten de aanneemsom — apart factureren, telt bij het contracttotaal op."
                       >
                         apart factureren
                       </span>
                     )}
-                  </span>
-                  {sp.begroot != null && (
-                    <span
-                      className="shrink-0 tabular-nums text-[10px]"
-                      style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
-                      title="Geboekt / begroot (kostprijs)"
-                    >
-                      {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
-                    </span>
-                  )}
-                  <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
-                    {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
-                  </span>
-                  {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
-                    <button
-                      type="button"
-                      onClick={() => onVerwijderStelpost(sp.id)}
-                      disabled={pending}
-                      title="Stelpost verwijderen"
-                      className="shrink-0 rounded px-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-50"
-                    >
-                      ×
-                    </button>
+                    {sp.begroot != null && (
+                      <span
+                        className="tabular-nums text-[10px]"
+                        style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
+                        title="Geboekt / begroot (kostprijs)"
+                      >
+                        {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
+                      </span>
+                    )}
+                  </div>
+                  {/* Verrekening: werkelijk vs. stelpost. Het verschil landt als één meer-/minderwerkregel. */}
+                  {sp.verrekenSaldo != null && (
+                    <div className="mt-0.5 flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 truncate text-[10.5px] text-neutral-400">
+                        werkelijk {fmtBedrag(sp.werkelijkVerkoop ?? 0)} ·{' '}
+                        <span style={{ color: sp.verrekenSaldo > 0 ? '#d97706' : sp.verrekenSaldo < 0 ? '#009439' : undefined }}>
+                          {sp.verrekenSaldo > 0 ? 'meerwerk' : 'minderwerk'} {fmtBedrag(Math.abs(sp.verrekenSaldo))}
+                        </span>
+                      </span>
+                      {sp.verrekendMeerwerkId ? (
+                        <span className="shrink-0 text-[10px] font-semibold text-neutral-400">verrekend</span>
+                      ) : (!readOnly && sp.verrekenSaldo !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onVerreken(sp.id)}
+                          disabled={pending}
+                          title="Maak van het verschil één meer-/minderwerkregel (status Aangevraagd, dus via klantakkoord)."
+                          className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
+                        >
+                          Verrekenen
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {/* Verrekening: werkelijk vs. stelpost. Het verschil landt als één meer-/minderwerkregel. */}
-                {sp.verrekenSaldo != null && (
-                  <div className="mt-0.5 flex items-baseline justify-between gap-3 pl-0.5">
-                    <span className="text-[10.5px] text-neutral-400">
-                      werkelijk {fmtBedrag(sp.werkelijkVerkoop ?? 0)} ·{' '}
-                      <span style={{ color: sp.verrekenSaldo > 0 ? '#d97706' : sp.verrekenSaldo < 0 ? '#009439' : undefined }}>
-                        {sp.verrekenSaldo > 0 ? 'meerwerk' : 'minderwerk'} {fmtBedrag(Math.abs(sp.verrekenSaldo))}
-                      </span>
-                    </span>
-                    {sp.verrekendMeerwerkId ? (
-                      <span className="shrink-0 text-[10px] font-semibold text-neutral-400">verrekend</span>
-                    ) : (!readOnly && sp.verrekenSaldo !== 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onVerreken(sp.id)}
-                        disabled={pending}
-                        title="Maak van het verschil één meer-/minderwerkregel (status Aangevraagd, dus via klantakkoord)."
-                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
-                      >
-                        Verrekenen
-                      </button>
-                    ))}
+              ))}
+            </div>
+          )}
+          {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
+            <button
+              type="button"
+              onClick={onWijsCodes}
+              disabled={pending}
+              className="mt-1.5 mr-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
+              title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…) en maak die in Bouw7 aan."
+            >
+              Codes toewijzen
+            </button>
+          )}
+          {!readOnly && overzicht.handmatigMogelijk && (
+            <NieuweStelpostRegel onOpslaan={onNieuweStelpost} pending={pending} />
+          )}
+          {stelposten.some(sp => sp.bewakingscode) && (
+            <p className="mt-2 text-[10px] italic text-neutral-400">
+              Gebruik deze codes als kostengroep in de werkbegroting; begroot/werkelijk verschijnt zodra de begroting naar Bouw7 is gestuurd.
+            </p>
+          )}
+        </InklapPaneel>
+
+        {/* ── Goedgekeurd meerwerk ── */}
+        <InklapPaneel
+          titel="Goedgekeurd meerwerk"
+          aantal={meerwerken.length}
+          totaal={fmtBedrag(overzicht.meerwerkTotaal)}
+          totaalKleur={overzicht.meerwerkTotaal < 0 ? '#009439' : undefined}
+          open={openMeerwerk}
+          onToggle={() => setOpenMeerwerk(o => !o)}
+        >
+          {meerwerken.length === 0 ? (
+            <div className="text-[12px] italic text-neutral-400">Geen goedgekeurd meerwerk.</div>
+          ) : (
+            <div className="divide-y divide-neutral-100">
+              {meerwerken.map(mw => (
+                <div key={mw.id} className="py-[5px] first:pt-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{mw.omschrijving}</span>
+                    <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">{fmtBedrag(mw.bedrag_excl_btw)}</span>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {!readOnly && overzicht.handmatigMogelijk && (
-          <NieuweStelpostRegel onOpslaan={onNieuweStelpost} pending={pending} />
-        )}
-        {stelposten.some(sp => sp.bewakingscode) && (
-          <p className="mt-2 text-[10px] italic text-neutral-400">
-            Gebruik deze codes als kostengroep in de werkbegroting; begroot/werkelijk verschijnt zodra de begroting naar Bouw7 is gestuurd.
-          </p>
-        )}
+                  {mw.opdrachtOnderdeelId && (
+                    <span
+                      className="mt-0.5 inline-block rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
+                      title="Dit is de verrekening van een stelpost — het verschil telt hier één keer mee."
+                    >
+                      verrekening
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </InklapPaneel>
       </div>
 
       {opties.length > 0 && (
-        <div>
-          <div className="mb-1.5 flex items-baseline justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Opties</span>
-            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.gekozenOptiesTotaal)} in opdracht</span>
-          </div>
+        <InklapPaneel
+          titel="Opties"
+          aantal={opties.length}
+          totaal={`${fmtBedrag(overzicht.gekozenOptiesTotaal)} in opdracht`}
+          open={openOpties}
+          onToggle={() => setOpenOpties(o => !o)}
+        >
           <div className="divide-y divide-neutral-100">
             {opties.map(op => (
               <div key={op.id} className="flex items-baseline justify-between gap-3 py-[5px]">
@@ -482,34 +571,7 @@ function OpdrachtSamenstelling({
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {meerwerken.length > 0 && (
-        <div>
-          <div className="mb-1.5 flex items-baseline justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Goedgekeurd meerwerk</span>
-            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.meerwerkTotaal)}</span>
-          </div>
-          <div className="divide-y divide-neutral-100">
-            {meerwerken.map(mw => (
-              <div key={mw.id} className="flex items-baseline justify-between gap-3 py-[5px]">
-                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <span className="truncate text-[12px] text-neutral-700">{mw.omschrijving}</span>
-                  {mw.opdrachtOnderdeelId && (
-                    <span
-                      className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
-                      title="Dit is de verrekening van een stelpost — het verschil telt hier één keer mee."
-                    >
-                      verrekening
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">{fmtBedrag(mw.bedrag_excl_btw)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </InklapPaneel>
       )}
     </div>
   )
@@ -1715,22 +1777,9 @@ export function InformatieTab({
                   <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
                 </>
               )}
-              {finBtwSplitsing ? (
-                finBtwSplitsing.map(t => (
-                  <InfoVeld
-                    key={t.label}
-                    label={t.percentage > 0
-                      ? `BTW ${t.percentage}%`
-                      : t.label.toLowerCase().includes('verlegd') ? 'BTW verlegd' : 'BTW 0%'}
-                    waarde={fmtBedrag(t.bedrag)}
-                    numeric
-                  />
-                ))
-              ) : (
-                <InfoVeld label="BTW" waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
-              )}
             </div>
 
+            {/* Opbouw: stelposten links, goedgekeurd meerwerk rechts — beide inklapbaar. */}
             {toonOpdrachtOpbouw && opdrachtOverzicht && (
               <div className="mt-4 border-t border-neutral-100 pt-3">
                 <OpdrachtSamenstelling
@@ -1753,6 +1802,24 @@ export function InformatieTab({
                 </Link>
               </div>
             )}
+
+            {/* BTW-verdeling — onder de opbouw, direct boven het eindtotaal. */}
+            <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-t border-neutral-100 pt-3">
+              {finBtwSplitsing ? (
+                finBtwSplitsing.map(t => (
+                  <InfoVeld
+                    key={t.label}
+                    label={t.percentage > 0
+                      ? `BTW ${t.percentage}%`
+                      : t.label.toLowerCase().includes('verlegd') ? 'BTW verlegd' : 'BTW 0%'}
+                    waarde={fmtBedrag(t.bedrag)}
+                    numeric
+                  />
+                ))
+              ) : (
+                <InfoVeld label="BTW" waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
+              )}
+            </div>
 
             <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">
@@ -1790,7 +1857,8 @@ export function InformatieTab({
             sectie={sectie}
             naam={dossier.titel}
             nummer={dossier.dossiernummer ?? ''}
-            onImported={() => setImportTick(t => t + 1)}
+            projectId={projectId}
+            onImported={pid => { setProjectId(pid); setImportTick(t => t + 1) }}
           />
         </div>
         )}
