@@ -18,6 +18,7 @@ import { ROLLEN, type RolNaam } from './rollen'
 import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam } from './format'
 import type { DocumentSjabloon } from './types'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
+import { getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken } from '@/lib/dossiers/oplevering'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -110,10 +111,10 @@ export async function buildDocumentContext(
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
 
-  // Feedback-ronde: het eerste veld van type 'feedback_link' levert de gekozen
-  // bewoners-feedbacklink. Daaruit volgen de linktekst {feedback.url}, de QR-code
-  // {%feedback_qr} en (via genereer-document) het doel van de klik-knop.
-  const feedback = await bouwFeedbackBlok(sjabloon, genormaliseerd)
+  // Feedback-ronde: de bewoners-feedbacklink wordt automatisch bepaald (opgehaald of
+  // aangemaakt) — daaruit volgen de linktekst {feedback.url}, de QR-code {%feedback_qr}
+  // en (via genereer-document) het doel van de klik-knop.
+  const feedback = await bouwFeedbackBlok(dossierId, sjabloon, genormaliseerd)
 
   // Garantie: termijn komt uit de invoer (geen dossierfeit), einddatum is afgeleid.
   const garantieJaren = Number(String(genormaliseerd.garantie_jaren ?? '').replace(',', '.'))
@@ -248,19 +249,58 @@ interface FeedbackBlok {
 const LEEG_FEEDBACK_BLOK: FeedbackBlok = { heeft: false, url: '', qr: '' }
 
 /**
- * Zoekt het feedback_link-veld in het sjabloon, schoont de gekozen URL op en genereert
- * er een QR-code bij. Geen veld / lege waarde → leeg blok (image-module toont dan niets).
+ * Bepaalt de bewoners-feedbacklink voor het document en genereert er een QR-code bij.
+ *
+ * De link wordt automatisch bepaald — géén handmatige keuze meer nodig:
+ *  1. Een expliciet feedback_link-invoerveld (indien aanwezig én ingevuld) wint, als override.
+ *  2. Anders, bij een bewonersbrief: de dossier-feedbacklink wordt opgehaald of, als die er
+ *     nog niet is, meteen aangemaakt ({@link resolveOfMaakFeedbackLink}).
+ *
+ * Geen link te bepalen → leeg blok (image-module toont dan niets, {#feedback.heeft} blijft vals).
  */
 async function bouwFeedbackBlok(
+  dossierId: string,
   sjabloon: DocumentSjabloon,
   genormaliseerd: Record<string, string>,
 ): Promise<FeedbackBlok> {
   const veld = (sjabloon.velden ?? []).find(v => v.type === 'feedback_link')
-  if (!veld) return { ...LEEG_FEEDBACK_BLOK }
-  const url = schoonLink(genormaliseerd[veld.sleutel] ?? '')
+  let url = veld ? schoonLink(genormaliseerd[veld.sleutel] ?? '') : ''
+  if (!url && sjabloon.documentsoort === 'bewonersbrief') {
+    url = schoonLink(await resolveOfMaakFeedbackLink(dossierId))
+  }
   if (!url) return { ...LEEG_FEEDBACK_BLOK }
   const qr = await maakQrDataUrl(url)
   return { heeft: true, url, qr }
+}
+
+/**
+ * Haalt de bewoners-feedbacklink van een dossier op, of maakt er automatisch één aan als
+ * die nog niet bestaat. Hergebruikt de nieuwste, niet-verlopen `/p/feedback/…`-tokenlink;
+ * anders wordt er één gemunt op het (eerste) gepubliceerde feedbackformulier. Best-effort:
+ * geen gepubliceerd formulier of een fout → '' (dan simpelweg geen QR/link in de brief).
+ *
+ * Idempotent per dossier: previews en de definitieve PDF hergebruiken dezelfde link, dus er
+ * ontstaat hooguit één token per dossier (geldig 60 dagen).
+ */
+async function resolveOfMaakFeedbackLink(dossierId: string): Promise<string> {
+  try {
+    const bestaande = await getOpleverTokenLinks(dossierId, 'feedback')
+    const bruikbaar = bestaande.find(l => !l.verlopen)
+    if (bruikbaar) return bruikbaar.url
+
+    const formulieren = await getOpleverFeedbackTemplates()
+    if (formulieren.length === 0) return ''
+    const r = await maakToegangToken('feedback', {
+      dossierId,
+      formTemplateId: formulieren[0].id,
+      omschrijving: 'Bewonersbrief',
+      geldigDagen: 60,
+    })
+    return r.ok ? r.url : ''
+  } catch (err) {
+    console.error('Feedback-link ophalen/aanmaken mislukt:', err)
+    return ''
+  }
 }
 
 /**
