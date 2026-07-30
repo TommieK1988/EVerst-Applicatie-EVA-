@@ -30,6 +30,13 @@ dat dossier. Geen extra stappen.
 - `{%feedback_qr}` — de QR-code (moet **alleen** in zijn eigen alinea staan).
 - `{feedback.url}` — de link als tekst (automatisch opgeschoond).
 - `{#feedback.heeft}` … `{/feedback.heeft}` — dit blok verschijnt alleen als er een link is.
+
+## Werkt het niet?
+
+- Maak het document **opnieuw** aan; een eerder gegenereerd bestand houdt de oude inhoud.
+- Zorg dat de **laatste** productie-deploy live is (Vercel "Redeploy" herbouwt dezelfde commit —
+  gebruik dat niet om nieuwe code op te halen; laat de push naar `main` auto-deployen).
+- `NEXT_PUBLIC_APP_URL` moet in Vercel op `https://eva.everts.chat` staan (alleen de URL).
 - **De knop** is een gewone Word-hyperlink. Zet als **adres** van die hyperlink:
   `{feedback.url}` (Insert → Link → Address). Bij het opstellen wordt dat adres vervangen
   door de echte feedback-link. Word slaat de accolades soms op als `%7Bfeedback.url%7D`;
