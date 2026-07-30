@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
-  regelVanRecept,
+  regelVanRecept, zetArchief, deleteRegistratie,
 } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
@@ -247,12 +247,54 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (voorFoto) await uploadPhoto(regId, await verkleinFoto(voorFoto), 'voor').catch(() => null)
       if (naFoto) await uploadPhoto(regId, await verkleinFoto(naFoto), 'na').catch(() => null)
 
-      leegmaken()
-      setInvoeren(false)
-      setRegistraties(null)
-      laad()
+      terugNaarLijst()
     } catch (e) {
       setFout(e instanceof Error ? e.message : 'Opslaan mislukt')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  /** Sluit de invoerstand en haalt de lijst opnieuw op. */
+  function terugNaarLijst() {
+    leegmaken()
+    setInvoeren(false)
+    setRegistraties(null)
+    laad()
+  }
+
+  /**
+   * Archiveren: uit de lijst en uit rapportages, maar niets gaat verloren.
+   * Terugzetten kan alleen in EVA op de desktop — in het veld is dat geen taak.
+   */
+  async function archiveren() {
+    if (!bewerkId) return
+    if (!confirm('Deze registratie archiveren? Hij verdwijnt uit de lijst en uit rapportages, maar blijft bewaard.')) return
+    setBezig(true)
+    setFout(null)
+    try {
+      const medewerker = await getHuidigeMedewerker()
+      if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
+      await zetArchief(bewerkId, true, medewerker.id)
+      terugNaarLijst()
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : 'Archiveren mislukt')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  async function verwijderen() {
+    if (!bewerkId) return
+    if (!confirm('Deze registratie definitief verwijderen? Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.')) return
+    setBezig(true)
+    setFout(null)
+    try {
+      const medewerker = await getHuidigeMedewerker()
+      await deleteRegistratie(bewerkId, medewerker?.id)
+      terugNaarLijst()
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : 'Verwijderen mislukt')
     } finally {
       setBezig(false)
     }
@@ -443,6 +485,41 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               })}
             </div>
           </Blok>
+
+          {bewerkId && (
+            <Blok titel="Deze registratie">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={archiveren}
+                  disabled={bezig}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    border: '1px solid var(--border)', background: 'var(--bg-elev)', color: '#6b757c',
+                    cursor: bezig ? 'default' : 'pointer',
+                  }}
+                >
+                  Archiveren
+                </button>
+                <button
+                  type="button"
+                  onClick={verwijderen}
+                  disabled={bezig}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    border: '1px solid #f0c8c2', background: 'var(--bg-elev)', color: '#b42318',
+                    cursor: bezig ? 'default' : 'pointer',
+                  }}
+                >
+                  Verwijderen
+                </button>
+              </div>
+              <div style={{ fontSize: 11.5, color: '#6b757c' }}>
+                Archiveren haalt de registratie uit de lijst en uit rapportages, maar bewaart hem.
+                Verwijderen is definitief.
+              </div>
+            </Blok>
+          )}
         </div>
 
         <MobielStickyFooter>

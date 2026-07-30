@@ -67,9 +67,12 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   const [fout, setFout] = useState<string | null>(null)
   // Modal: undefined = dicht; null = nieuw; object = bewerken.
   const [modal, setModal] = useState<RepairRegistration | null | undefined>(undefined)
+  const [toonArchief, setToonArchief] = useState(false)
 
   const laad = useCallback(() => {
-    getRegistraties({ dossier_id: dossierId })
+    // Gearchiveerde registraties komen wél mee: alleen zo weten we hoeveel er in
+    // het archief zitten. Ze worden hieronder uit de lijst en de totalen gefilterd.
+    getRegistraties({ dossier_id: dossierId, inclusief_gearchiveerd: true })
       .then(setRegistraties)
       .catch(e => setFout(e instanceof Error ? e.message : 'Laden mislukt'))
   }, [dossierId])
@@ -80,7 +83,11 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
     getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
   }, [dossierId])
 
-  const totaal = (registraties ?? []).reduce((s, r) => s + registratieVerkoop(r), 0)
+  const actief = (registraties ?? []).filter(r => !r.gearchiveerd_op)
+  const archiefAantal = (registraties?.length ?? 0) - actief.length
+  const zichtbaar = toonArchief ? (registraties ?? []) : actief
+  // Het totaal is dat van het werk dat telt; archief doet nergens aan mee.
+  const totaal = actief.reduce((s, r) => s + registratieVerkoop(r), 0)
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,11 +98,18 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
             <h2 className="font-semibold text-slate-800">Houtrotregistraties</h2>
             {registraties && registraties.length > 0 && (
               <span className="text-sm text-slate-500">
-                {registraties.length} registratie{registraties.length !== 1 ? 's' : ''} · {formatCurrency(totaal)}
+                {actief.length} registratie{actief.length !== 1 ? 's' : ''} · {formatCurrency(totaal)}
+                {archiefAantal > 0 && ` · ${archiefAantal} gearchiveerd`}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
+            {archiefAantal > 0 && (
+              <label className="flex items-center gap-1.5 text-sm text-slate-500">
+                <input type="checkbox" checked={toonArchief} onChange={e => setToonArchief(e.target.checked)} />
+                Archief tonen
+              </label>
+            )}
             <HoutrotRapportageKnop dossierId={dossierId} />
             {!readOnly && (
               <button
@@ -111,16 +125,18 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
 
         {fout && <div className="p-5 text-sm text-red-600">{fout}</div>}
         {!fout && registraties === null && <div className="p-5 text-sm text-slate-400">Laden…</div>}
-        {!fout && registraties?.length === 0 && (
+        {!fout && registraties && zichtbaar.length === 0 && (
           <EmptyState
-            title="Nog geen registraties"
-            description="Registreer in het veld op de telefoon (dossier → Houtrot) of via '+ Nieuwe registratie' hierboven."
+            title={archiefAantal > 0 ? 'Alleen gearchiveerde registraties' : 'Nog geen registraties'}
+            description={archiefAantal > 0
+              ? 'Zet «Archief tonen» aan om ze te bekijken of terug te zetten.'
+              : "Registreer in het veld op de telefoon (dossier → Houtrot) of via '+ Nieuwe registratie' hierboven."}
             tone="neutral"
             size="sm"
           />
         )}
 
-        {registraties && registraties.length > 0 && (
+        {zichtbaar.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -137,8 +153,9 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {registraties.map(r => {
+                {zichtbaar.map(r => {
                   const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
+                  const gearchiveerd = !!r.gearchiveerd_op
                   const bedrag = registratieVerkoop(r)
                   const uren = registratieUren(r)
                   const arbeid = registratieArbeid(r)
@@ -147,9 +164,16 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                     <tr
                       key={r.id}
                       onClick={() => { if (!readOnly) setModal(r) }}
-                      className={`hover:bg-slate-50 ${readOnly ? '' : 'cursor-pointer'}`}
+                      className={`hover:bg-slate-50 ${readOnly ? '' : 'cursor-pointer'} ${gearchiveerd ? 'text-slate-400 opacity-70' : ''}`}
                     >
-                      <td className="px-4 py-3 text-sm text-slate-700">{plaats}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {plaats}
+                        {gearchiveerd && (
+                          <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            Gearchiveerd
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-500">{formatDateShort(r.registration_date)}</td>
                       <td className="px-4 py-3 text-sm text-slate-500 hidden sm:table-cell">{werkzaamhedenTekst(r) || '—'}</td>
                       <td className="px-4 py-3"><FotoStrip registratie={r} /></td>

@@ -245,6 +245,12 @@ export interface RepairRegistration {
   locatie: LocatieWaarde[]
   /** Automatische status (uit foto's) uitgeschakeld → status is handmatig gezet. */
   status_handmatig: boolean
+  /**
+   * Gevuld = gearchiveerd. De registratie blijft bewaard maar telt nergens meer
+   * mee: niet in de dossier-tab, niet in de totalen en niet in de rapportage.
+   */
+  gearchiveerd_op: string | null
+  gearchiveerd_door: string | null
   damage_description: string | null
   damage_severity: SchadeSeverity | null
   damage_cause: string | null
@@ -482,6 +488,8 @@ export interface RegistratieRegelForm {
 export interface RegistratieFilters {
   dossier_id?: string
   project_id?: string
+  /** Standaard blijven gearchiveerde registraties buiten beeld; true = ook meenemen. */
+  inclusief_gearchiveerd?: boolean
   user_id?: string
   status?: RegistratieStatus
   control_status?: ControlStatus

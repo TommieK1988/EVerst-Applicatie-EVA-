@@ -41,6 +41,12 @@ export async function getRegistraties(
     `)
     .order('registration_date', { ascending: false })
 
+  // Gearchiveerde registraties horen nergens standaard in: overzichten, totalen en
+  // de rapportage-picker leunen allemaal op deze functie.
+  if (!filters?.inclusief_gearchiveerd) {
+    query = query.is('gearchiveerd_op', null)
+  }
+
   if (filters?.dossier_id) {
     query = query.eq('dossier_id', filters.dossier_id)
   }
@@ -336,13 +342,54 @@ export async function updateRegistratieStatus(
   await logActivity(supabase, userId, 'registratie', id, 'status_change', null, { status })
 }
 
-export async function deleteRegistratie(id: string): Promise<void> {
+/**
+ * Archiveert een registratie of zet 'm terug. Archiveren is de zachte variant van
+ * verwijderen: de registratie blijft met foto's en werkzaamheden bewaard, maar valt
+ * uit alle overzichten, totalen en rapportages (zie de `gearchiveerd_op`-filter in
+ * `getRegistraties` en in de rapportage-lader).
+ */
+export async function zetArchief(id: string, gearchiveerd: boolean, userId: string): Promise<void> {
   const supabase = createClient()
+
+  const { error } = await supabase
+    .from('repair_registrations')
+    .update({
+      gearchiveerd_op: gearchiveerd ? new Date().toISOString() : null,
+      gearchiveerd_door: gearchiveerd ? userId : null,
+    })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+
+  await logActivity(supabase, userId, 'registratie', id, gearchiveerd ? 'archive' : 'unarchive', null, null)
+}
+
+/**
+ * Verwijdert een registratie definitief. Werkzaamheden-regels en fotorijen vallen
+ * om via ON DELETE CASCADE; de fotobestanden staan in Storage en gaan daar niet in
+ * mee — die ruimen we hier eerst zelf op, anders blijven ze als wees achter.
+ */
+export async function deleteRegistratie(id: string, userId?: string): Promise<void> {
+  const supabase = createClient()
+
+  const { data: fotos } = await supabase
+    .from('repair_photos')
+    .select('storage_path')
+    .eq('registration_id', id)
+
+  const paden = (fotos ?? [])
+    .map((f: { storage_path: string | null }) => f.storage_path)
+    .filter((p: string | null): p is string => !!p)
+  // Mislukt het opruimen van een bestand, dan mag dat de verwijdering niet tegenhouden.
+  if (paden.length > 0) await supabase.storage.from('repair-photos').remove(paden)
+
   const { error } = await supabase
     .from('repair_registrations')
     .delete()
     .eq('id', id)
   if (error) throw new Error(error.message)
+
+  if (userId) await logActivity(supabase, userId, 'registratie', id, 'delete', null, null)
 }
 
 // Foto's

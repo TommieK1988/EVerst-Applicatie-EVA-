@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import {
   createRegistratie, updateRegistratie, uploadPhoto, deletePhoto, regelVanRecept,
+  zetArchief, deleteRegistratie,
 } from '@/services/houtrotherstel/registraties'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import type { Recept } from '@/services/houtrotherstel/recepten'
@@ -80,6 +81,7 @@ export default function HoutrotRegistratieModal({
   const [verwijderd, setVerwijderd] = useState<Set<string>>(new Set())
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+  const isGearchiveerd = !!bestaand?.gearchiveerd_op
 
   const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
   const receptenInGroep = recepten.filter(r => r.groep === keuzeGroep)
@@ -151,6 +153,35 @@ export default function HoutrotRegistratieModal({
     } catch (e) {
       setFout(e instanceof Error ? e.message : 'Opslaan mislukt')
     } finally {
+      setBezig(false)
+    }
+  }
+
+  async function archiveren() {
+    if (!bestaand) return
+    if (!isGearchiveerd && !confirm('Deze registratie archiveren? Hij verdwijnt uit het overzicht en uit rapportages, maar blijft bewaard.')) return
+    setBezig(true); setFout(null)
+    try {
+      const medewerker = await getHuidigeMedewerker()
+      if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden.')
+      await zetArchief(bestaand.id, !isGearchiveerd, medewerker.id)
+      onSaved()
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : 'Archiveren mislukt')
+      setBezig(false)
+    }
+  }
+
+  async function verwijderen() {
+    if (!bestaand) return
+    if (!confirm('Deze registratie definitief verwijderen? Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.')) return
+    setBezig(true); setFout(null)
+    try {
+      const medewerker = await getHuidigeMedewerker()
+      await deleteRegistratie(bestaand.id, medewerker?.id)
+      onSaved()
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : 'Verwijderen mislukt')
       setBezig(false)
     }
   }
@@ -329,7 +360,19 @@ export default function HoutrotRegistratieModal({
           </section>
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+          {bestaand && (
+            <div className="mr-auto flex gap-2">
+              <button type="button" onClick={archiveren} disabled={bezig}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                {isGearchiveerd ? 'Terugzetten' : 'Archiveren'}
+              </button>
+              <button type="button" onClick={verwijderen} disabled={bezig}
+                className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                Verwijderen
+              </button>
+            </div>
+          )}
           <button type="button" onClick={onClose} disabled={bezig}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             Annuleren

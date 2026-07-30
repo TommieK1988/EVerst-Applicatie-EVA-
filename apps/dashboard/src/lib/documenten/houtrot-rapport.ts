@@ -265,6 +265,8 @@ async function laadRegistraties(dossierId: string): Promise<RepairRegistration[]
       lines:repair_registration_lines(*)
     `)
     .eq('dossier_id', dossierId)
+    // Gearchiveerde registraties blijven bewaard maar horen niet in een rapport.
+    .is('gearchiveerd_op', null)
     .order('registration_date', { ascending: true })
   if (error) throw new Error(`Houtrotregistraties laden mislukt: ${error.message}`)
   return (data ?? []) as RepairRegistration[]
