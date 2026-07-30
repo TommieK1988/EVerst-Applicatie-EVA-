@@ -199,6 +199,22 @@ function beschermBevrorenScenarios(
   }
 }
 
+/**
+ * Van een lijst project-id's: welke bestaan er nog echt. Nodig voor de eenmalige
+ * overname van oude browsergegevens: `calculatie_snapshots.project_id` heeft een
+ * foreign key naar `projects`, dus een snapshot voor een verdwenen project wordt
+ * geweigerd. Zo kunnen we die vooraf overslaan in plaats van erop stuk te lopen.
+ */
+export async function filterBestaandeProjecten(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (await createClient()) as any
+  const { data, error } = await db.from('projects').select('id').in('id', ids)
+  if (error) throw new Error(error.message)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => r.id as string)
+}
+
 /** Schrijft de volledige calculatie (alle scenario's van het project) als JSONB. */
 export async function bewaarCalculatieSnapshot(
   projectId: string,
