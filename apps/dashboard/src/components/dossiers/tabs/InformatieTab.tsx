@@ -49,6 +49,7 @@ import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent,
   AlertDialogTitle, AlertDialogDescription, AlertDialogFooter,
   AlertDialogAction, AlertDialogCancel,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
@@ -286,64 +287,97 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
   )
 }
 
-/* ─── inklapbaar paneel ─────────────────────────────────────────────────
-   Kop met titel, aantal en totaalbedrag; de regels zitten erachter. Het bedrag
-   staat bewust ín de kop, zodat dichtklappen nooit een financieel getal verbergt. */
-function InklapPaneel({ titel, aantal, totaal, totaalKleur, open, onToggle, children }: {
-  titel: string
-  aantal: number
-  totaal: string
-  totaalKleur?: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
+/* ─── regel in de opbouw van de opdracht ────────────────────────────────
+   Eén regel van de rekensom: label links, bedrag rechts. `soort` bepaalt het
+   gewicht — 'post' telt mee in de optelling, 'waarvan' is een uitsplitsing van de
+   regel erboven (telt dus NIET mee), 'subtotaal' en 'eind' sluiten af. Met
+   `onClick` wordt de regel een knop die de specificatie opent. */
+function RekenRegel({ label, bedrag, soort = 'post', aantal, onClick, bedragKleur, titel }: {
+  label: string
+  bedrag: string
+  soort?: 'post' | 'waarvan' | 'btw' | 'subtotaal' | 'eind'
+  aantal?: number
+  onClick?: () => void
+  bedragKleur?: string
+  titel?: string
 }) {
-  return (
-    <div className="rounded-lg border border-neutral-200">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-neutral-50"
-      >
-        <span className="flex min-w-0 items-center gap-1.5">
+  const isEind      = soort === 'eind'
+  const isSubtotaal = soort === 'subtotaal'
+  const isWaarvan   = soort === 'waarvan'
+  const inhoud = (
+    <>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className={cn(
+          'truncate',
+          isEind      ? 'text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500'
+          : isSubtotaal ? 'text-[11px] font-semibold uppercase tracking-[0.06em] text-neutral-500'
+          : isWaarvan   ? 'text-[11.5px] text-neutral-400'
+          : 'text-[12.5px] text-neutral-700',
+        )}>
+          {label}
+        </span>
+        {aantal != null && aantal > 0 && (
+          <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500">
+            {aantal}
+          </span>
+        )}
+        {onClick && (
           <svg
             width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor"
             strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className="shrink-0 text-neutral-400 transition-transform duration-150"
-            style={{ transform: open ? 'rotate(90deg)' : 'none' }}
+            className="shrink-0 text-neutral-300"
           >
             <path d="M7 5l5 5-5 5" />
           </svg>
-          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">{titel}</span>
-          {aantal > 0 && (
-            <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500">
-              {aantal}
-            </span>
-          )}
-        </span>
-        <span
-          className="shrink-0 tabular-nums text-[12px] font-bold"
-          style={{ color: totaalKleur ?? 'var(--fg, #171717)' }}
-        >
-          {totaal}
-        </span>
-      </button>
-      {open && <div className="border-t border-neutral-100 px-2.5 pb-2.5 pt-2">{children}</div>}
-    </div>
+        )}
+      </span>
+      <span
+        className={cn(
+          'shrink-0 tabular-nums',
+          isEind ? 'text-[18px] font-bold text-neutral-900'
+          : isSubtotaal ? 'text-[13px] font-bold text-neutral-800'
+          : isWaarvan ? 'text-[11.5px] text-neutral-400'
+          : 'text-[12.5px] font-semibold text-neutral-800',
+        )}
+        style={bedragKleur ? { color: bedragKleur } : undefined}
+      >
+        {bedrag}
+      </span>
+    </>
+  )
+  const basis = cn(
+    'flex w-full items-baseline justify-between gap-3 py-[5px]',
+    isWaarvan && 'pl-3',
+    isEind && 'border-t-2 border-neutral-200 pt-2.5 mt-1',
+    isSubtotaal && 'border-t border-neutral-200 pt-2 mt-1',
+  )
+  if (!onClick) return <div className={basis} title={titel}>{inhoud}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={titel ?? 'Klik voor de specificatie'}
+      className={cn(basis, '-mx-1.5 w-[calc(100%+0.75rem)] rounded px-1.5 text-left transition-colors hover:bg-neutral-50')}
+    >
+      {inhoud}
+    </button>
   )
 }
 
-/* ─── opdracht-samenstelling (stelposten + meerwerk + opties) ───────────
-   Twee smalle kolommen in het Financiële-totalen-blok: links de stelposten (met
-   eigen bewakingscode, begroot/werkelijk en verrekening zodra toegekend), rechts
-   het goedgekeurde meerwerk. Beide standaard dichtgeklapt — het totaal staat in de
-   kop, de regels erachter. Opties (alleen bij een offerte) staan eronder over de
-   volle breedte. Read-only respecteert afgesloten dossiers. */
-function OpdrachtSamenstelling({
-  overzicht, readOnly, onToggleOptie, onWijsCodes, onNieuweStelpost, onVerwijderStelpost,
-  onVerreken, pending,
+/** Welke specificatie er in het pop-upvenster staat. */
+type OpdrachtDetailSoort = 'stelposten' | 'meerwerk' | 'opties'
+
+/* ─── specificatie-venster ──────────────────────────────────────────────
+   De opbouw in het Financiële-totalen-blok toont alleen bedragen; klikken op een
+   regel opent hier de onderliggende posten. Stelposten: met bewakingscode,
+   begroot/werkelijk, verrekening en het aanwijzen van een nieuwe stelpost.
+   Read-only respecteert afgesloten dossiers. */
+function OpdrachtDetailDialog({
+  soort, onClose, overzicht, readOnly, onToggleOptie, onWijsCodes, onNieuweStelpost,
+  onVerwijderStelpost, onVerreken, pending,
 }: {
+  soort: OpdrachtDetailSoort | null
+  onClose: () => void
   overzicht: OpdrachtOverzicht
   readOnly: boolean
   onToggleOptie: (id: string, aan: boolean) => void
@@ -357,41 +391,49 @@ function OpdrachtSamenstelling({
   pending: boolean
 }) {
   const { stelposten, opties, meerwerken } = overzicht
-  const [openStelposten, setOpenStelposten] = React.useState(false)
-  const [openMeerwerk, setOpenMeerwerk]     = React.useState(false)
-  const [openOpties, setOpenOpties]         = React.useState(false)
+  const titel = soort === 'meerwerk' ? 'Goedgekeurd meerwerk'
+    : soort === 'opties' ? 'Opties'
+    : 'Stelposten'
+  const totaal = soort === 'meerwerk' ? overzicht.meerwerkTotaal
+    : soort === 'opties' ? overzicht.gekozenOptiesTotaal
+    : overzicht.stelpostenTotaal
   return (
-    <div className="space-y-3">
-      {overzicht.overschrijding && (
-        <div
-          className="rounded-md px-2 py-1.5 text-[11px] font-semibold"
-          style={{ background: 'var(--danger-50, #fef2f2)', color: 'var(--danger-800, #991b1b)' }}
-        >
-          De stelposten in de aanneemsom ({fmtBedrag(overzicht.overschrijding.carveOuts)}) zijn samen hoger dan de
-          aanneemsom ({fmtBedrag(overzicht.overschrijding.aanneemsom)}). Corrigeer een bedrag of zet een stelpost
-          buiten de aanneemsom.
-        </div>
-      )}
-      {overzicht.aanneemsomDrift && (
-        <div
-          className="rounded-md px-2 py-1.5 text-[11px]"
-          style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
-        >
-          De aanneemsom is gewijzigd van {fmtBedrag(overzicht.aanneemsomDrift.snapshot)} naar{' '}
-          {fmtBedrag(overzicht.aanneemsomDrift.actueel)} nadat deze stelposten zijn aangewezen. Controleer of de
-          bedragen nog kloppen — EVA past ze bewust niet zelf aan.
-        </div>
-      )}
+    <Dialog open={soort != null} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>{titel}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="mb-2 flex items-baseline justify-between border-b border-neutral-200 pb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+              Totaal excl. BTW
+            </span>
+            <span className="tabular-nums text-[14px] font-bold text-neutral-900">{fmtBedrag(totaal)}</span>
+          </div>
 
-      <div className="grid grid-cols-2 items-start gap-3">
-        {/* ── Stelposten ── */}
-        <InklapPaneel
-          titel="Stelposten"
-          aantal={stelposten.length}
-          totaal={fmtBedrag(overzicht.stelpostenTotaal)}
-          open={openStelposten}
-          onToggle={() => setOpenStelposten(o => !o)}
-        >
+        {soort === 'stelposten' && (
+        <div className="space-y-3">
+          {overzicht.overschrijding && (
+            <div
+              className="rounded-md px-2 py-1.5 text-[11px] font-semibold"
+              style={{ background: 'var(--danger-50, #fef2f2)', color: 'var(--danger-800, #991b1b)' }}
+            >
+              De stelposten in de aanneemsom ({fmtBedrag(overzicht.overschrijding.carveOuts)}) zijn samen hoger dan de
+              aanneemsom ({fmtBedrag(overzicht.overschrijding.aanneemsom)}). Corrigeer een bedrag of zet een stelpost
+              buiten de aanneemsom.
+            </div>
+          )}
+          {overzicht.aanneemsomDrift && (
+            <div
+              className="rounded-md px-2 py-1.5 text-[11px]"
+              style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
+            >
+              De aanneemsom is gewijzigd van {fmtBedrag(overzicht.aanneemsomDrift.snapshot)} naar{' '}
+              {fmtBedrag(overzicht.aanneemsomDrift.actueel)} nadat deze stelposten zijn aangewezen. Controleer of de
+              bedragen nog kloppen — EVA past ze bewust niet zelf aan.
+            </div>
+          )}
+          <div>
           {stelposten.length === 0 ? (
             <div className="text-[12px] italic text-neutral-400">Nog geen stelposten aangewezen.</div>
           ) : (
@@ -493,17 +535,12 @@ function OpdrachtSamenstelling({
               Gebruik deze codes als kostengroep in de werkbegroting; begroot/werkelijk verschijnt zodra de begroting naar Bouw7 is gestuurd.
             </p>
           )}
-        </InklapPaneel>
+          </div>
+        </div>
+        )}
 
-        {/* ── Goedgekeurd meerwerk ── */}
-        <InklapPaneel
-          titel="Goedgekeurd meerwerk"
-          aantal={meerwerken.length}
-          totaal={fmtBedrag(overzicht.meerwerkTotaal)}
-          totaalKleur={overzicht.meerwerkTotaal < 0 ? '#009439' : undefined}
-          open={openMeerwerk}
-          onToggle={() => setOpenMeerwerk(o => !o)}
-        >
+        {soort === 'meerwerk' && (
+        <div>
           {meerwerken.length === 0 ? (
             <div className="text-[12px] italic text-neutral-400">Geen goedgekeurd meerwerk.</div>
           ) : (
@@ -526,17 +563,10 @@ function OpdrachtSamenstelling({
               ))}
             </div>
           )}
-        </InklapPaneel>
-      </div>
+        </div>
+        )}
 
-      {opties.length > 0 && (
-        <InklapPaneel
-          titel="Opties"
-          aantal={opties.length}
-          totaal={`${fmtBedrag(overzicht.gekozenOptiesTotaal)} in opdracht`}
-          open={openOpties}
-          onToggle={() => setOpenOpties(o => !o)}
-        >
+        {soort === 'opties' && (
           <div className="divide-y divide-neutral-100">
             {opties.map(op => (
               <div key={op.id} className="flex items-baseline justify-between gap-3 py-[5px]">
@@ -571,9 +601,10 @@ function OpdrachtSamenstelling({
               </div>
             ))}
           </div>
-        </InklapPaneel>
-      )}
-    </div>
+        )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1093,12 +1124,8 @@ export function InformatieTab({
   // Voorkeur: gegenereerde offerte (Supabase) → anders live calculatietotalen → anders Bouw7.
   const T                     = quoteTotalen ?? calcTotalen
   const finAanneemsom         = T?.subtotaal_ex_btw ?? dossier.bedrag_excl_btw ?? null
-  const finKostprijs          = T?.kostprijs        ?? dossier.kostprijs_excl_btw ?? null
-  // Marge alleen te bepalen als kostprijs én verkoopprijs bekend zijn — anders niet tonen.
-  const finMargeEuro          = T?.marge_euro
-    ?? (finAanneemsom != null && finKostprijs != null ? finAanneemsom - finKostprijs : null)
-  const finMargePct           = T?.marge_pct
-    ?? (finMargeEuro != null && finAanneemsom ? (finMargeEuro / finAanneemsom) * 100 : null)
+  // Kostprijs en marge staan bewust NIET in dit blok: het toont de opbouw van de opdracht en dus
+  // alleen verkoopbedragen. De marge leeft op het Financieel-tab, bij de bewaking.
   const finStelposten         = T?.stelposten_subtotaal ?? 0
   const finOptioneel          = T?.opties_subtotaal     ?? 0
   // Totaal incl. BTW komt uit de calculatie of uit Bouw7 (bedrag_incl_btw) — nooit zelf 21% schatten,
@@ -1119,14 +1146,13 @@ export function InformatieTab({
   const btwFactor             = (finTotaalIncl != null && finAanneemsom)
     ? finTotaalIncl / finAanneemsom
     : 1.21
-  const finAanneemsomMeerwerk = heeftMeerwerk && finAanneemsom != null ? finAanneemsom + meerwerk : finAanneemsom
   const finTotaalInclMeerwerk = heeftMeerwerk && finTotaalIncl != null
     ? Math.round((finTotaalIncl + meerwerk * btwFactor) * 100) / 100
     : finTotaalIncl
-  const margeKleur            = (finMargePct ?? 0) >= 20 ? '#009439' : (finMargePct ?? 0) >= 10 ? '#d97706' : '#d9534f'
 
   // Opdracht-samenstelling: gekozen opties tellen mee in het contracttotaal (excl. eigen bewakingscode).
   const finGekozenOpties = opdrachtOverzicht?.gekozenOptiesTotaal ?? 0
+  const [detailSoort, setDetailSoort] = React.useState<OpdrachtDetailSoort | null>(null)
   // Stelposten die BUITEN de aanneemsom vallen zijn extra omzet en moeten er bij op. Stelposten
   // ín de aanneemsom zijn carve-outs: die zitten al in finAanneemsom en mogen hier niet nog eens
   // meegeteld worden — dat zou dubbeltelling zijn.
@@ -1144,6 +1170,26 @@ export function InformatieTab({
     || (!!opdrachtOverzicht && opdrachtOverzicht.handmatigMogelijk && !readOnly)
   // De aggregaten uit de calculatie blijven staan zolang er niets itemized is én ze iets zeggen.
   const toonAggregaten = !heeftOpdrachtItems && (finStelposten > 0 || finOptioneel > 0)
+
+  /* ─── opbouw van de opdracht als rekensom ────────────────────────────
+     Alleen verkoopbedragen, van boven naar beneden optellend. De posten die
+     meetellen zijn de aanneemsom + meerwerk + stelposten búiten de som + gekozen
+     opties; stelposten ín de aanneemsom zijn een uitsplitsing en tellen dus niet
+     nog eens mee. De btw-regels worden zo opgebouwd dat subtotaal + btw exact op
+     het contracttotaal uitkomt — anders klopt de kolom zichtbaar niet. */
+  const finSubtotaalExcl = finAanneemsom == null ? null
+    : Math.round((finAanneemsom + (heeftMeerwerk ? meerwerk : 0) + finStelpostenApart + finGekozenOpties) * 100) / 100
+  const btwTeVerdelen = (finContractIncl != null && finSubtotaalExcl != null)
+    ? Math.round((finContractIncl - finSubtotaalExcl) * 100) / 100
+    : null
+  // De splitsing uit de calculatie/Bouw7 dekt alleen de aanneemsom. Wat er daarna bij is gekomen
+  // (meerwerk, opties, aparte stelposten) krijgt een eigen restregel, zodat de optelling sluit.
+  const btwUitSplitsing = finBtwSplitsing
+    ? Math.round(finBtwSplitsing.reduce((s, t) => s + (Number(t.bedrag) || 0), 0) * 100) / 100
+    : null
+  const btwRest = (btwTeVerdelen != null && btwUitSplitsing != null)
+    ? Math.round((btwTeVerdelen - btwUitSplitsing) * 100) / 100
+    : null
   const [optiePending, startOptieTransition] = React.useTransition()
   function toggleOptie(id: string, aan: boolean) {
     startOptieTransition(async () => {
@@ -1732,57 +1778,108 @@ export function InformatieTab({
         <Card>
           <CardHeader>Financiële totalen</CardHeader>
           <CardBody>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <InfoVeld label="Aanneemsom excl. BTW"   waarde={finAanneemsom != null ? fmtBedrag(finAanneemsom) : null} numeric />
-              {heeftMeerwerk && (
-                <InfoVeld label="Goedgekeurd meerwerk (excl. BTW)" waarde={fmtBedrag(meerwerk)} numeric />
-              )}
-              {heeftMeerwerk && finAanneemsomMeerwerk != null && (
-                <InfoVeld label="Aanneemsom incl. meerwerk (excl. BTW)" waarde={fmtBedrag(finAanneemsomMeerwerk)} numeric />
+            {/* Opbouw van de opdracht — alleen verkoopbedragen, van boven naar beneden optellend.
+                Klikken op stelposten/meerwerk/opties opent de specificatie in een venster. */}
+            <div>
+              <RekenRegel
+                label="Aanneemsom excl. BTW"
+                bedrag={finAanneemsom != null ? fmtBedrag(finAanneemsom) : '—'}
+              />
+              {toonOpdrachtOpbouw && opdrachtOverzicht && (
+                <RekenRegel
+                  soort="waarvan"
+                  label="waarvan stelposten"
+                  aantal={opdrachtOverzicht.stelposten.filter(sp => sp.in_aanneemsom).length}
+                  bedrag={fmtBedrag(opdrachtOverzicht.stelpostenInAanneemsomTotaal)}
+                  onClick={() => setDetailSoort('stelposten')}
+                  titel="Deel van de aanneemsom dat als stelpost is aangewezen — klik voor de specificatie."
+                />
               )}
               {finStelpostenApart > 0 && (
-                <InfoVeld
-                  label="Stelposten buiten de aanneemsom (excl. BTW)"
-                  waarde={fmtBedrag(finStelpostenApart)}
-                  numeric
+                <RekenRegel
+                  label="Stelposten buiten de aanneemsom"
+                  bedrag={fmtBedrag(finStelpostenApart)}
+                  onClick={() => setDetailSoort('stelposten')}
+                  titel="Apart te factureren stelposten — tellen bij het contracttotaal op."
+                />
+              )}
+              {heeftMeerwerk && (
+                <RekenRegel
+                  label="Goedgekeurd meerwerk"
+                  aantal={opdrachtOverzicht?.meerwerken.length}
+                  bedrag={fmtBedrag(meerwerk)}
+                  onClick={opdrachtOverzicht ? () => setDetailSoort('meerwerk') : undefined}
                 />
               )}
               {finGekozenOpties > 0 && (
-                <InfoVeld label="Gekozen opties (excl. BTW)" waarde={fmtBedrag(finGekozenOpties)} numeric />
-              )}
-              {finKostprijs != null ? (
-                <InfoVeld label="Gecalculeerde kostprijs" waarde={fmtBedrag(finKostprijs)} numeric />
-              ) : (
-                <div>
-                  <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Gecalculeerde kostprijs</div>
-                  <div className="text-[13px] italic text-neutral-400">Geen kostprijs berekend</div>
-                </div>
-              )}
-              {finMargePct != null && finMargeEuro != null && (
-                <div className="col-span-2">
-                  <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Marge</div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="tabular-nums text-[13px] font-bold" style={{ color: margeKleur }}>
-                      {finMargePct.toFixed(1)}%
-                    </span>
-                    <span className="tabular-nums text-[12px] text-neutral-400">
-                      ({fmtBedrag(finMargeEuro)})
-                    </span>
-                  </div>
-                </div>
+                <RekenRegel
+                  label="Gekozen opties"
+                  bedrag={fmtBedrag(finGekozenOpties)}
+                  onClick={opdrachtOverzicht ? () => setDetailSoort('opties') : undefined}
+                />
               )}
               {toonAggregaten && (
                 <>
-                  <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
-                  <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
+                  <RekenRegel soort="waarvan" label="waarvan stelposten (calculatie)" bedrag={fmtBedrag(finStelposten)} />
+                  <RekenRegel soort="waarvan" label="optioneel (calculatie)"          bedrag={fmtBedrag(finOptioneel)} />
                 </>
               )}
+
+              <RekenRegel
+                soort="subtotaal"
+                label="Subtotaal excl. BTW"
+                bedrag={finSubtotaalExcl != null ? fmtBedrag(finSubtotaalExcl) : '—'}
+              />
+
+              {finBtwSplitsing ? (
+                <>
+                  {finBtwSplitsing.map(t => (
+                    <RekenRegel
+                      key={t.label}
+                      soort="btw"
+                      label={t.percentage > 0
+                        ? `BTW ${t.percentage}%`
+                        : t.label.toLowerCase().includes('verlegd') ? 'BTW verlegd' : 'BTW 0%'}
+                      bedrag={fmtBedrag(t.bedrag)}
+                    />
+                  ))}
+                  {btwRest != null && Math.abs(btwRest) >= 0.01 && (
+                    <RekenRegel
+                      soort="btw"
+                      label="BTW over meerwerk en opties"
+                      bedrag={fmtBedrag(btwRest)}
+                      titel="De btw-splitsing uit de calculatie dekt alleen de aanneemsom; dit is de btw over wat er daarna bij is gekomen."
+                    />
+                  )}
+                </>
+              ) : (
+                <RekenRegel
+                  soort="btw"
+                  label="BTW"
+                  bedrag={(btwTeVerdelen ?? finBtw) != null ? fmtBedrag((btwTeVerdelen ?? finBtw) as number) : '—'}
+                />
+              )}
+
+              <RekenRegel
+                soort="eind"
+                label={heeftContractExtra ? 'Contracttotaal incl. BTW' : 'Totaal incl. BTW'}
+                bedrag={finContractIncl != null ? fmtBedrag(finContractIncl) : '—'}
+              />
             </div>
 
-            {/* Opbouw: stelposten links, goedgekeurd meerwerk rechts — beide inklapbaar. */}
             {toonOpdrachtOpbouw && opdrachtOverzicht && (
-              <div className="mt-4 border-t border-neutral-100 pt-3">
-                <OpdrachtSamenstelling
+              <>
+                <Link
+                  href={`/opdrachten/${dossier.id}/bestanden`}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 no-underline"
+                  title="Naar Bestanden → Document opstellen → Opdrachtbevestiging"
+                >
+                  Opdrachtbevestiging opstellen
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 5l5 5-5 5" /></svg>
+                </Link>
+                <OpdrachtDetailDialog
+                  soort={detailSoort}
+                  onClose={() => setDetailSoort(null)}
                   overzicht={opdrachtOverzicht}
                   readOnly={readOnly}
                   onToggleOptie={toggleOptie}
@@ -1792,43 +1889,8 @@ export function InformatieTab({
                   onVerreken={verrekenStelpostRegel}
                   pending={optiePending}
                 />
-                <Link
-                  href={`/opdrachten/${dossier.id}/bestanden`}
-                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 no-underline"
-                  title="Naar Bestanden → Document opstellen → Opdrachtbevestiging"
-                >
-                  Opdrachtbevestiging opstellen
-                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 5l5 5-5 5" /></svg>
-                </Link>
-              </div>
+              </>
             )}
-
-            {/* BTW-verdeling — onder de opbouw, direct boven het eindtotaal. */}
-            <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 border-t border-neutral-100 pt-3">
-              {finBtwSplitsing ? (
-                finBtwSplitsing.map(t => (
-                  <InfoVeld
-                    key={t.label}
-                    label={t.percentage > 0
-                      ? `BTW ${t.percentage}%`
-                      : t.label.toLowerCase().includes('verlegd') ? 'BTW verlegd' : 'BTW 0%'}
-                    waarde={fmtBedrag(t.bedrag)}
-                    numeric
-                  />
-                ))
-              ) : (
-                <InfoVeld label="BTW" waarde={finBtw != null ? fmtBedrag(finBtw) : null} numeric />
-              )}
-            </div>
-
-            <div className="mt-3 flex items-center justify-between border-t-2 border-neutral-200 pt-3">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500">
-                {heeftContractExtra ? 'Contracttotaal incl. BTW' : 'Totaal incl. BTW'}
-              </span>
-              <span className="tabular-nums text-[18px] font-bold text-neutral-900">
-                {finContractIncl != null ? fmtBedrag(finContractIncl) : '—'}
-              </span>
-            </div>
             <Separator className="my-3" />
             {editMode ? (
               <FormRow cols="2">
