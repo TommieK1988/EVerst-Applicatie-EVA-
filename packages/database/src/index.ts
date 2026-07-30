@@ -49,6 +49,8 @@ export type {
   // Opdracht-onderdelen-module
   OpdrachtOnderdeelSoort,
   OpdrachtOnderdeelStatus,
+  OpdrachtOnderdeelBron,
+  OpdrachtOnderdeelGrondslag,
   OpdrachtOnderdeel,
   // Planning-module
   PlanningUursoort,

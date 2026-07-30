@@ -1047,6 +1047,66 @@ export async function maakMeerwerkBewakingscodeBouw7(
   return { ok: true, chapterId, pslId, prognoseGezet, waarschuwing }
 }
 
+// ─── Stelposten: eigen bewakingscode aanmaken (zelfde pad, ander hoofdstuk) ────
+
+/**
+ * Zoekt een vrije bewakingscode op het project, beginnend bij `prefix01` en doorlopend tot een
+ * nummer dat nog niet als code op het project staat. Nodig omdat `zorgVoorOntbrekendePsls`
+ * read-modify-write is: blind doornummeren naar een code die al bestaat hangt de stelpost stil aan
+ * een vreemde bewakingscode, waarna je iets anders bewaakt dan je denkt. `bezet` bevat de codes die
+ * EVA zelf al heeft uitgedeeld maar die (nog) niet in Bouw7 staan.
+ */
+export async function vindVrijeBewakingscode(
+  dossierId: string,
+  prefix: string,
+  bezet: string[] = [],
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const gebruikt = new Set<string>(bezet.map(c => c.trim().toUpperCase()).filter(Boolean))
+  // Bouw7 is gezaghebbend over wat er al op het project staat; lukt de call niet, dan blijft de
+  // EVA-kant de enige bron (en geeft de codes-toewijzing hoogstens een botsing die Bouw7 weigert).
+  const resolved = await resolveBewakingscodes(dossierId)
+  if (resolved.ok) for (const c of resolved.codes) gebruikt.add(c.code.trim().toUpperCase())
+
+  for (let n = 1; n <= 99; n++) {
+    const kandidaat = `${prefix}${String(n).padStart(2, '0')}`
+    if (!gebruikt.has(kandidaat.toUpperCase())) return { ok: true, code: kandidaat }
+  }
+  return { ok: false, error: `Geen vrije ${prefix}-code beschikbaar op dit project.` }
+}
+
+/**
+ * Maakt voor een stelpost een eigen bewakingscode aan in Bouw7. Zelfde bewezen pad als meerwerk,
+ * met twee verschillen die financieel uitmaken:
+ *   1. het doelhoofdstuk is een stelpost-hoofdstuk (niet het meerwerk-hoofdstuk waar
+ *      `maakMeerwerkBewakingscodeBouw7` standaard op mikt) — anders staat je stelpost tussen het
+ *      meerwerk en telt hij daar visueel in mee;
+ *   2. `begroot` is een KOSTPRIJS die de gebruiker zelf invult. Nooit het stelpostbedrag: dat is
+ *      omzet inclusief AK en winst, en als budget zou het de verwachte kosten opblazen en de marge
+ *      op het Financieel-tab vernielen.
+ */
+export async function maakStelpostBewakingscodeBouw7(
+  dossierId: string,
+  opts: { code: string; naam: string; begroot?: number | null; kostensoort?: number },
+): Promise<MeerwerkBewakingscodeResultaat> {
+  const hk = await getProjectHoofdstukken(dossierId)
+  if (!hk.ok) return { ok: false, error: hk.error }
+  const stelpost = hk.hoofdstukken.find(h => /stelpost|^sp\b|^sp$/i.test(h.naam.trim()))
+  // Geen stelpost-hoofdstuk? Neem het eerste, maar nooit een hoofdstuk dat naar meerwerk verwijst.
+  const hoofdstukId = (stelpost
+    ?? hk.hoofdstukken.find(h => !/meerwerk|^mw\b|^mw$/i.test(h.naam.trim()))
+    ?? hk.hoofdstukken[0])?.id ?? null
+  if (hoofdstukId == null) {
+    return { ok: false, error: 'Geen hoofdstuk gevonden om de bewakingscode onder te plaatsen.' }
+  }
+  return maakMeerwerkBewakingscodeBouw7(dossierId, {
+    code: opts.code,
+    naam: opts.naam,
+    bedrag: opts.begroot ?? null,
+    kostensoort: opts.kostensoort,
+    hoofdstukId,
+  })
+}
+
 export type PrognoseRegel = {
   /** Kale bewakingscode (= kostengroep zonder omschrijving). */
   code: string

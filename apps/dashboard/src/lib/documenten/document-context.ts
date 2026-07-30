@@ -434,10 +434,13 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
     const ov = await getOpdrachtOverzicht(dossierId)
     if (!ov) return LEEG_OPDRACHT_BLOK
     const gekozenOpties = ov.opties.filter(o => o.in_opdracht)
+    // Alleen stelposten die in opdracht zijn: `basis` rekent ook alleen met die, dus zou een
+    // uitgesloten stelpost meenemen de opsomming hoger doen uitkomen dan het contracttotaal.
+    const stelpostenInOpdracht = ov.stelposten.filter(sp => sp.in_opdracht)
     const contractExcl = (ov.aanneemsomInclStelposten ?? ov.aanneemsom ?? 0) + ov.gekozenOptiesTotaal
     const onderdelen: OpdrachtOnderdeelRegel[] = []
     if (ov.basis != null) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Aangenomen werk conform offerte', bedrag: fmtEur(ov.basis) })
-    for (const sp of ov.stelposten) onderdelen.push({ soort: 'Stelpost', omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })
+    for (const sp of stelpostenInOpdracht) onderdelen.push({ soort: 'Stelpost', omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })
     for (const op of gekozenOpties) onderdelen.push({ soort: 'Optie', omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })
     return {
       heeft: onderdelen.length > 0,
@@ -446,7 +449,7 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
       gekozen_opties_totaal: fmtEur(ov.gekozenOptiesTotaal),
       contracttotaal: fmtEur(contractExcl),
       onderdelen,
-      stelposten: ov.stelposten.map(sp => ({ omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })),
+      stelposten: stelpostenInOpdracht.map(sp => ({ omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })),
       opties: gekozenOpties.map(op => ({ omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })),
     }
   } catch {

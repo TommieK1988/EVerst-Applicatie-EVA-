@@ -20,7 +20,10 @@ import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
-import { zetOptieInOpdracht, wijsStelpostBewakingscodesToe } from '@/lib/dossiers/opdracht-onderdelen'
+import {
+  zetOptieInOpdracht, wijsStelpostBewakingscodesToe,
+  maakStelpost, verwijderStelpost, verrekenStelpost,
+} from '@/lib/dossiers/opdracht-onderdelen'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
@@ -181,39 +184,157 @@ function DatumLijst({ regels, deadlineUrgent }: {
   )
 }
 
+/* ─── nieuwe-stelpost-formulier ─────────────────────────────────────────
+   Wijs een deel van de aanneemsom aan als stelpost. "In de aanneemsom" is de
+   normale keuze: dan herclassificeer je een deel van de bestaande som en gaat
+   het contracttotaal níet omhoog. "Apart factureren" is extra omzet. */
+function NieuweStelpostRegel({ onOpslaan, pending }: {
+  onOpslaan: (invoer: {
+    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+  }) => void
+  pending: boolean
+}) {
+  const [open, setOpen]         = React.useState(false)
+  const [oms, setOms]           = React.useState('')
+  const [bedrag, setBedrag]     = React.useState('')
+  const [inSom, setInSom]       = React.useState(true)
+  const [begroot, setBegroot]   = React.useState('')
+  const [grondslag, setGrondslag] = React.useState<'vast' | 'geboekte_kosten'>('geboekte_kosten')
+
+  const getal = (s: string): number | null => {
+    const n = parseFloat(s.replace(/\./g, '').replace(',', '.'))
+    return Number.isFinite(n) ? n : null
+  }
+  const bedragNum = getal(bedrag)
+  const geldig = oms.trim().length > 0 && bedragNum != null && bedragNum > 0
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
+      >
+        + Stelpost aanwijzen
+      </button>
+    )
+  }
+  const inputCls = 'w-full rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] text-neutral-800 outline-none focus:border-brand-400'
+  return (
+    <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50/60 p-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="col-span-2 block">
+          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Omschrijving</span>
+          <input className={inputCls} value={oms} onChange={e => setOms(e.target.value)} placeholder="bijv. Stelpost houtrotherstel" />
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Bedrag excl. BTW</span>
+          <input className={inputCls} value={bedrag} onChange={e => setBedrag(e.target.value)} placeholder="0,00" inputMode="decimal" />
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400" title="Kostprijs-budget voor de bewakingscode. Bewust niet het stelpostbedrag: dat is omzet inclusief AK en winst.">
+            Begroot (kostprijs)
+          </span>
+          <input className={inputCls} value={begroot} onChange={e => setBegroot(e.target.value)} placeholder="optioneel" inputMode="decimal" />
+        </label>
+        <label className="flex items-center gap-1.5 text-[11px] text-neutral-700">
+          <input type="checkbox" checked={inSom} onChange={e => setInSom(e.target.checked)} />
+          <span title="Aan: deel van de aanneemsom (contracttotaal blijft gelijk). Uit: valt erbuiten en wordt apart gefactureerd.">
+            Zit in de aanneemsom
+          </span>
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Afrekenen op</span>
+          <select
+            className={inputCls}
+            value={grondslag}
+            onChange={e => setGrondslag(e.target.value as 'vast' | 'geboekte_kosten')}
+          >
+            <option value="geboekte_kosten">Geboekte kosten (verrekenen)</option>
+            <option value="vast">Vast bedrag</option>
+          </select>
+        </label>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          disabled={!geldig || pending}
+          onClick={() => {
+            onOpslaan({
+              omschrijving: oms.trim(),
+              bedrag_excl_btw: bedragNum as number,
+              in_aanneemsom: inSom,
+              begroot_excl_btw: getal(begroot),
+              grondslag,
+            })
+            setOms(''); setBedrag(''); setBegroot(''); setInSom(true); setOpen(false)
+          }}
+          className="rounded-md bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+        >
+          Toevoegen
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setOms(''); setBedrag(''); setBegroot('') }}
+          className="rounded-md px-2 py-1 text-[11px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-100"
+        >
+          Annuleren
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ─── opdracht-samenstelling (stelposten + opties) ─────────────────────
    Itemized opbouw van de opdracht in het Financiële-totalen-blok: per stelpost
-   (met eigen bewakingscode + begroot/werkelijk zodra toegekend) en per optie
-   (met in-opdracht-schakelaar). Read-only respecteert afgesloten dossiers. */
-function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes, pending }: {
+   (met eigen bewakingscode, begroot/werkelijk en verrekening zodra toegekend) en
+   per optie (met in-opdracht-schakelaar). Stelposten kunnen ook handmatig worden
+   aangewezen als deel van een uit Bouw7 geïmporteerde aanneemsom.
+   Read-only respecteert afgesloten dossiers. */
+function OpdrachtSamenstelling({
+  overzicht, readOnly, onToggleOptie, onWijsCodes, onNieuweStelpost, onVerwijderStelpost,
+  onVerreken, pending,
+}: {
   overzicht: OpdrachtOverzicht
   readOnly: boolean
   onToggleOptie: (id: string, aan: boolean) => void
   onWijsCodes: () => void
+  onNieuweStelpost: (invoer: {
+    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+  }) => void
+  onVerwijderStelpost: (id: string) => void
+  onVerreken: (id: string) => void
   pending: boolean
 }) {
   const { stelposten, opties, meerwerken } = overzicht
   return (
     <div className="space-y-4">
+      {overzicht.overschrijding && (
+        <div
+          className="rounded-md px-2 py-1.5 text-[11px] font-semibold"
+          style={{ background: 'var(--danger-50, #fef2f2)', color: 'var(--danger-800, #991b1b)' }}
+        >
+          De stelposten in de aanneemsom ({fmtBedrag(overzicht.overschrijding.carveOuts)}) zijn samen hoger dan de
+          aanneemsom ({fmtBedrag(overzicht.overschrijding.aanneemsom)}). Corrigeer een bedrag of zet een stelpost
+          buiten de aanneemsom.
+        </div>
+      )}
+      {overzicht.aanneemsomDrift && (
+        <div
+          className="rounded-md px-2 py-1.5 text-[11px]"
+          style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
+        >
+          De aanneemsom is gewijzigd van {fmtBedrag(overzicht.aanneemsomDrift.snapshot)} naar{' '}
+          {fmtBedrag(overzicht.aanneemsomDrift.actueel)} nadat deze stelposten zijn aangewezen. Controleer of de
+          bedragen nog kloppen — EVA past ze bewust niet zelf aan.
+        </div>
+      )}
       <div>
         <div className="mb-1.5 flex items-baseline justify-between gap-2">
           <span className="flex items-baseline gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Stelposten</span>
-            {stelposten.length > 0 && (
-              overzicht.stelpostenInAanneemsom ? (
-                <span className="rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500" title="Deze stelposten zitten in de aanneemsom — niet apart factureren.">
-                  in aanneemsom
-                </span>
-              ) : (
-                <span
-                  className="rounded-full px-1.5 py-px text-[9.5px] font-semibold"
-                  style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
-                  title="Deze stelposten zitten niet in de aanneemsom — apart factureren."
-                >
-                  apart factureren
-                </span>
-              )
-            )}
           </span>
           <span className="flex items-baseline gap-2">
             {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
@@ -222,7 +343,7 @@ function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes
                 onClick={onWijsCodes}
                 disabled={pending}
                 className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
-                title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…). Gebruik die code als kostengroep in de werkbegroting."
+                title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…) en maak die in Bouw7 aan."
               >
                 Codes toewijzen
               </button>
@@ -231,32 +352,88 @@ function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes
           </span>
         </div>
         {stelposten.length === 0 ? (
-          <div className="text-[12px] italic text-neutral-400">Geen stelposten in deze offerte.</div>
+          <div className="text-[12px] italic text-neutral-400">Nog geen stelposten aangewezen.</div>
         ) : (
           <div className="divide-y divide-neutral-100">
             {stelposten.map(sp => (
-              <div key={sp.id} className="flex items-baseline justify-between gap-3 py-[5px]">
-                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <span className="truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
-                  {sp.bewakingscode && (
-                    <span className="shrink-0 rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
-                  )}
-                </span>
-                {sp.begroot != null && (
-                  <span
-                    className="shrink-0 tabular-nums text-[10px]"
-                    style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
-                    title="Geboekt / begroot"
-                  >
-                    {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
+              <div key={sp.id} className="py-[5px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                    <span className="truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
+                    {sp.bewakingscode && (
+                      <span className="shrink-0 rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
+                    )}
+                    {sp.in_aanneemsom ? (
+                      <span
+                        className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
+                        title="Zit in de aanneemsom — verlaagt de basisscope, telt niet extra mee in het contracttotaal."
+                      >
+                        in aanneemsom
+                      </span>
+                    ) : (
+                      <span
+                        className="shrink-0 rounded-full px-1.5 py-px text-[9.5px] font-semibold"
+                        style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
+                        title="Valt buiten de aanneemsom — apart factureren, telt bij het contracttotaal op."
+                      >
+                        apart factureren
+                      </span>
+                    )}
                   </span>
+                  {sp.begroot != null && (
+                    <span
+                      className="shrink-0 tabular-nums text-[10px]"
+                      style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
+                      title="Geboekt / begroot (kostprijs)"
+                    >
+                      {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
+                    </span>
+                  )}
+                  <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
+                    {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
+                  </span>
+                  {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
+                    <button
+                      type="button"
+                      onClick={() => onVerwijderStelpost(sp.id)}
+                      disabled={pending}
+                      title="Stelpost verwijderen"
+                      className="shrink-0 rounded px-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-50"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                {/* Verrekening: werkelijk vs. stelpost. Het verschil landt als één meer-/minderwerkregel. */}
+                {sp.verrekenSaldo != null && (
+                  <div className="mt-0.5 flex items-baseline justify-between gap-3 pl-0.5">
+                    <span className="text-[10.5px] text-neutral-400">
+                      werkelijk {fmtBedrag(sp.werkelijkVerkoop ?? 0)} ·{' '}
+                      <span style={{ color: sp.verrekenSaldo > 0 ? '#d97706' : sp.verrekenSaldo < 0 ? '#009439' : undefined }}>
+                        {sp.verrekenSaldo > 0 ? 'meerwerk' : 'minderwerk'} {fmtBedrag(Math.abs(sp.verrekenSaldo))}
+                      </span>
+                    </span>
+                    {sp.verrekendMeerwerkId ? (
+                      <span className="shrink-0 text-[10px] font-semibold text-neutral-400">verrekend</span>
+                    ) : (!readOnly && sp.verrekenSaldo !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onVerreken(sp.id)}
+                        disabled={pending}
+                        title="Maak van het verschil één meer-/minderwerkregel (status Aangevraagd, dus via klantakkoord)."
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
+                      >
+                        Verrekenen
+                      </button>
+                    ))}
+                  </div>
                 )}
-                <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
-                  {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
-                </span>
               </div>
             ))}
           </div>
+        )}
+        {!readOnly && overzicht.handmatigMogelijk && (
+          <NieuweStelpostRegel onOpslaan={onNieuweStelpost} pending={pending} />
         )}
         {stelposten.some(sp => sp.bewakingscode) && (
           <p className="mt-2 text-[10px] italic text-neutral-400">
@@ -317,7 +494,17 @@ function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes
           <div className="divide-y divide-neutral-100">
             {meerwerken.map(mw => (
               <div key={mw.id} className="flex items-baseline justify-between gap-3 py-[5px]">
-                <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{mw.omschrijving}</span>
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                  <span className="truncate text-[12px] text-neutral-700">{mw.omschrijving}</span>
+                  {mw.opdrachtOnderdeelId && (
+                    <span
+                      className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
+                      title="Dit is de verrekening van een stelpost — het verschil telt hier één keer mee."
+                    >
+                      verrekening
+                    </span>
+                  )}
+                </span>
                 <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">{fmtBedrag(mw.bedrag_excl_btw)}</span>
               </div>
             ))}
@@ -878,15 +1065,23 @@ export function InformatieTab({
 
   // Opdracht-samenstelling: gekozen opties tellen mee in het contracttotaal (excl. eigen bewakingscode).
   const finGekozenOpties = opdrachtOverzicht?.gekozenOptiesTotaal ?? 0
+  // Stelposten die BUITEN de aanneemsom vallen zijn extra omzet en moeten er bij op. Stelposten
+  // ín de aanneemsom zijn carve-outs: die zitten al in finAanneemsom en mogen hier niet nog eens
+  // meegeteld worden — dat zou dubbeltelling zijn.
+  const finStelpostenApart = opdrachtOverzicht?.stelpostenApartTotaal ?? 0
   const finContractIncl = finTotaalInclMeerwerk != null
-    ? Math.round((finTotaalInclMeerwerk + finGekozenOpties * btwFactor) * 100) / 100
+    ? Math.round((finTotaalInclMeerwerk + (finGekozenOpties + finStelpostenApart) * btwFactor) * 100) / 100
     : finTotaalInclMeerwerk
-  const heeftContractExtra = heeftMeerwerk || finGekozenOpties > 0
-  // Itemized opbouw alleen tonen als er daadwerkelijk stelposten/opties zijn; anders de aggregaten
-  // (zoals voorheen) laten staan — geen lege opbouw en geen verdwenen totaalregels.
-  const toonOpdrachtOpbouw = !!opdrachtOverzicht
+  const heeftContractExtra = heeftMeerwerk || finGekozenOpties > 0 || finStelpostenApart > 0
+  // Itemized opbouw tonen zodra er iets in staat, én op een bewerkbaar opdracht-dossier met
+  // aanneemsom (anders is er geen ingang om de eerste stelpost aan te wijzen).
+  const heeftOpdrachtItems = !!opdrachtOverzicht
     && (opdrachtOverzicht.stelposten.length > 0 || opdrachtOverzicht.opties.length > 0
         || opdrachtOverzicht.meerwerken.length > 0)
+  const toonOpdrachtOpbouw = heeftOpdrachtItems
+    || (!!opdrachtOverzicht && opdrachtOverzicht.handmatigMogelijk && !readOnly)
+  // De aggregaten uit de calculatie blijven staan zolang er niets itemized is én ze iets zeggen.
+  const toonAggregaten = !heeftOpdrachtItems && (finStelposten > 0 || finOptioneel > 0)
   const [optiePending, startOptieTransition] = React.useTransition()
   function toggleOptie(id: string, aan: boolean) {
     startOptieTransition(async () => {
@@ -900,6 +1095,36 @@ export function InformatieTab({
       const res = await wijsStelpostBewakingscodesToe(dossier.id)
       if (!res.ok) { toast.error(res.error); return }
       if (res.aantal > 0) toast.success(`${res.aantal} bewakingscode${res.aantal === 1 ? '' : 's'} toegewezen`)
+      if (res.waarschuwing) toast.error(res.waarschuwing)
+      router.refresh()
+    })
+  }
+  function nieuweStelpost(invoer: {
+    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+  }) {
+    startOptieTransition(async () => {
+      const res = await maakStelpost(dossier.id, invoer)
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Stelpost aangewezen')
+      router.refresh()
+    })
+  }
+  function verwijderStelpostRegel(id: string) {
+    startOptieTransition(async () => {
+      const res = await verwijderStelpost(id)
+      if (!res.ok) { toast.error(res.error); return }
+      router.refresh()
+    })
+  }
+  function verrekenStelpostRegel(id: string) {
+    startOptieTransition(async () => {
+      const res = await verrekenStelpost(id)
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success(
+        `${res.saldo > 0 ? 'Meerwerk' : 'Minderwerk'} van ${fmtBedrag(Math.abs(res.saldo))} aangemaakt — `
+        + 'staat op Aangevraagd, dus loopt via klantakkoord.',
+      )
       router.refresh()
     })
   }
@@ -1453,6 +1678,13 @@ export function InformatieTab({
               {heeftMeerwerk && finAanneemsomMeerwerk != null && (
                 <InfoVeld label="Aanneemsom incl. meerwerk (excl. BTW)" waarde={fmtBedrag(finAanneemsomMeerwerk)} numeric />
               )}
+              {finStelpostenApart > 0 && (
+                <InfoVeld
+                  label="Stelposten buiten de aanneemsom (excl. BTW)"
+                  waarde={fmtBedrag(finStelpostenApart)}
+                  numeric
+                />
+              )}
               {finGekozenOpties > 0 && (
                 <InfoVeld label="Gekozen opties (excl. BTW)" waarde={fmtBedrag(finGekozenOpties)} numeric />
               )}
@@ -1477,7 +1709,7 @@ export function InformatieTab({
                   </div>
                 </div>
               )}
-              {!toonOpdrachtOpbouw && (
+              {toonAggregaten && (
                 <>
                   <InfoVeld label="Totaal Stelposten" waarde={fmtBedrag(finStelposten)} numeric />
                   <InfoVeld label="Totaal Optioneel"  waarde={fmtBedrag(finOptioneel)}  numeric />
@@ -1499,9 +1731,18 @@ export function InformatieTab({
               )}
             </div>
 
-            {toonOpdrachtOpbouw && (
+            {toonOpdrachtOpbouw && opdrachtOverzicht && (
               <div className="mt-4 border-t border-neutral-100 pt-3">
-                <OpdrachtSamenstelling overzicht={opdrachtOverzicht} readOnly={readOnly} onToggleOptie={toggleOptie} onWijsCodes={wijsCodesToe} pending={optiePending} />
+                <OpdrachtSamenstelling
+                  overzicht={opdrachtOverzicht}
+                  readOnly={readOnly}
+                  onToggleOptie={toggleOptie}
+                  onWijsCodes={wijsCodesToe}
+                  onNieuweStelpost={nieuweStelpost}
+                  onVerwijderStelpost={verwijderStelpostRegel}
+                  onVerreken={verrekenStelpostRegel}
+                  pending={optiePending}
+                />
                 <Link
                   href={`/opdrachten/${dossier.id}/bestanden`}
                   className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 no-underline"

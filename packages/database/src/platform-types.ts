@@ -424,6 +424,11 @@ export type MeerwerkRegel = {
   bouw7_line_id: number | null
   bouw7_nummer: string | null
   begroot_bedrag: number | null
+  /**
+   * Gezet als deze regel de verrekening is van een stelpost uit `opdracht_onderdelen` (het verschil
+   * tussen werkelijk en stelpost). DB-uniek: één stelpost kan maximaal één verrekenregel hebben.
+   */
+  opdracht_onderdeel_id: string | null
   created_at: string
   updated_at: string
   created_by: string | null
@@ -433,10 +438,15 @@ export type MeerwerkRegel = {
 
 export type OpdrachtOnderdeelSoort = 'basis' | 'stelpost' | 'optie'
 export type OpdrachtOnderdeelStatus = 'in_opdracht' | 'uitgesloten' | 'afgerond'
+/** Herkomst: geseed uit een EVA-offerte of handmatig aangewezen (Bouw7-dossier zonder offerte). */
+export type OpdrachtOnderdeelBron = 'offerte' | 'handmatig'
+/** Hoe de stelpost afrekent: vast bedrag, of op de geboekte kosten van zijn bewakingscode. */
+export type OpdrachtOnderdeelGrondslag = 'vast' | 'geboekte_kosten'
 
 /**
- * Eén stelpost of optie uit de geaccepteerde offerte, met de vastlegging of hij in opdracht is en
- * (voor stelposten) een eigen bewakingscode. De bewakingscode loopt via de werkbegroting-kostengroep.
+ * Eén stelpost of optie in een opdracht, met de vastlegging of hij in opdracht is en (voor
+ * stelposten) een eigen bewakingscode. Geseed uit de geaccepteerde offerte óf handmatig aangewezen
+ * als deel van een uit Bouw7 geïmporteerde aanneemsom.
  */
 export type OpdrachtOnderdeel = {
   id: string
@@ -453,6 +463,18 @@ export type OpdrachtOnderdeel = {
   bewakingscode: string | null
   bouw7_chapter_id: number | null
   status: OpdrachtOnderdeelStatus
+  bron: OpdrachtOnderdeelBron
+  /**
+   * Carve-out (true) = zit in de aanneemsom, verlaagt de basisscope en telt NIET extra mee in het
+   * contracttotaal. False = staat erbuiten en moet apart worden gefactureerd (telt er wél bij op).
+   */
+  in_aanneemsom: boolean
+  /** Aanneemsom op het moment van aanwijzen — voor driftdetectie na een Bouw7-sync. */
+  aanneemsom_snapshot: number | null
+  /** Kostprijs-budget voor de bewakingscode. Nooit afgeleid uit bedrag_excl_btw (= omzet). */
+  begroot_excl_btw: number | null
+  grondslag: OpdrachtOnderdeelGrondslag | null
+  bouw7_security_code_id: number | null
   created_at: string
   updated_at: string
   created_by: string | null
