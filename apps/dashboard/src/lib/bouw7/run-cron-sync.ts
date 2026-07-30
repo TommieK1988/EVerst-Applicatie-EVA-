@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runFullSync } from '@/app/(platform)/instellingen/integraties/actions'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
+import { geocodeDossiers } from '@/lib/dossiers/geocode'
 import type { SyncMode } from '@/lib/bouw7/sync'
 
 /**
@@ -32,6 +33,17 @@ export async function runCronSync(req: NextRequest, mode: SyncMode): Promise<Nex
 
   const management = await syncManagementProjecten(mode)
 
+  // Werkadres-coördinaten bijwerken voor "dossier openen op locatie" (mobiel).
+  // Best-effort: Nominatim throttelt op ~1/s, dus per ronde begrensd — de
+  // gesynchte dossiers stromen zo over meerdere cron-rondes vol. Een fout hier
+  // (bijv. Nominatim onbereikbaar) mag de sync niet laten mislukken.
+  let geocode: unknown
+  try {
+    geocode = await geocodeDossiers({ max: 40 })
+  } catch (e) {
+    geocode = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   return NextResponse.json(
     {
       ok: true,
@@ -42,6 +54,7 @@ export async function runCronSync(req: NextRequest, mode: SyncMode): Promise<Nex
       projects: full.projects,
       planning: full.planning,
       management,
+      geocode,
       duur_ms: Date.now() - startedAt,
     },
     { status: 200 },

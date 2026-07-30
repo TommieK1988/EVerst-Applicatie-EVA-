@@ -2,6 +2,7 @@ import { createClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { logout } from '@/app/(auth)/login/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
+import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
 
 export const metadata = { title: 'Profiel · EVA Mobiel' }
 
@@ -72,6 +73,9 @@ export default async function MobielProfielPage() {
             )}
           </div>
         </div>
+
+        {/* Instellingen */}
+        <LocatieAutoToggle />
 
         {/* Uitloggen */}
         <form action={logout}>

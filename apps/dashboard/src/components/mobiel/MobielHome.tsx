@@ -2,6 +2,7 @@ import React from 'react'
 import { ListChecks, FolderOpen, Clock, CalendarDays, User } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
+import LocatieAutoOpen from './LocatieAutoOpen'
 
 /**
  * Mobiel grid-startscherm (OS-launcher). Zes grote tegels naar de buitendienst-
@@ -33,6 +34,8 @@ export default function MobielHome({
             en verschijnen als tab zodra de toggle `houtrot_registreren` aanstaat. */}
         <MobielTegel href="/m/profiel" label="Mijn gegevens" Icon={User} />
       </div>
+      {/* Automatisch dossier openen op locatie — draait één keer per sessie. */}
+      <LocatieAutoOpen />
     </>
   )
 }
