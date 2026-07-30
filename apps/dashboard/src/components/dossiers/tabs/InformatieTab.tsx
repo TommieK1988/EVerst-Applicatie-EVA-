@@ -1857,8 +1857,7 @@ export function InformatieTab({
             sectie={sectie}
             naam={dossier.titel}
             nummer={dossier.dossiernummer ?? ''}
-            projectId={projectId}
-            onImported={pid => { setProjectId(pid); setImportTick(t => t + 1) }}
+            onImported={() => setImportTick(t => t + 1)}
           />
         </div>
         )}
