@@ -53,6 +53,9 @@ export async function middleware(request: NextRequest) {
   // bewonersfeedback lopen zonder login via /p/<scope>/<token>. Server-side wordt elke actie
   // alsnog met een gehasht token gevalideerd — de route mag daarom publiek zijn.
   const isPubliekPortaal = pathname.startsWith('/p/')
+  // Set-wachtwoord na uitnodiging: bereikbaar voor ingelogde gebruikers zonder
+  // meteen naar /m gebounced te worden (mobiel én desktop volgen dezelfde link).
+  const isWachtwoordRoute = pathname === '/wachtwoord-instellen'
   const isOpMobiel = pathname === '/m' || pathname.startsWith('/m/')
 
   // Niet ingelogd → doorsturen naar login (behalve login-pagina, auth-callbacks, cron- en portaalroutes)
@@ -113,7 +116,7 @@ export async function middleware(request: NextRequest) {
 
     // Telefoon op een desktop-route → server-side naar de mobiele omgeving.
     // (Vervangt de client-side flash; MobileRedirect blijft als viewport-fallback.)
-    if (mobiel && !isOpMobiel && !isAuthRoute && !isApiRoute) {
+    if (mobiel && !isOpMobiel && !isAuthRoute && !isApiRoute && !isWachtwoordRoute) {
       return NextResponse.redirect(new URL('/m', request.url))
     }
   }

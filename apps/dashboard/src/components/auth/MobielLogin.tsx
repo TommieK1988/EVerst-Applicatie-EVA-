@@ -1,16 +1,33 @@
 'use client'
 import React from 'react'
 import { createClient } from '@everts/database/client'
+import { wachtwoordLogin, stuurHerstelLink } from '@/app/(auth)/login/actions'
 
 const HERO_BG =
   "url(\"/polygon-bg.png\"), linear-gradient(160deg, #009439 0%, #054f2e 100%)"
 
+const veldStyle: React.CSSProperties = {
+  width: '100%', padding: '14px 16px', fontSize: 15,
+  border: '1px solid #d0d0d0', borderRadius: 12,
+  background: '#fff', color: '#1a1a1a',
+  WebkitTapHighlightColor: 'transparent',
+}
+
 /**
  * Mobiele inlogpagina — los van de desktop-login. Full-bleed merkkop bovenaan,
  * grote touch-knop, veilige-zone (notch/home-indicator) gerespecteerd.
+ *
+ * Twee wegen naar binnen: Microsoft (@everts.chat) én e-mail + wachtwoord voor
+ * medewerkers zonder Microsoft-account (app-gebruikers). Desktop kent alleen
+ * Microsoft — platformgebruikers hebben altijd een @everts.chat-account.
  */
 export default function MobielLogin({ fout }: { fout?: string }) {
   const [loading, setLoading] = React.useState(false)
+  const [email, setEmail] = React.useState('')
+  const [wachtwoord, setWachtwoord] = React.useState('')
+  const [bezig, setBezig] = React.useState(false)
+  const [wwFout, setWwFout] = React.useState<string | null>(null)
+  const [melding, setMelding] = React.useState<string | null>(null)
 
   async function loginMetMicrosoft() {
     setLoading(true)
@@ -22,6 +39,23 @@ export default function MobielLogin({ fout }: { fout?: string }) {
         scopes: 'openid email profile',
       },
     })
+  }
+
+  async function loginMetWachtwoord(e: React.FormEvent) {
+    e.preventDefault()
+    setWwFout(null); setMelding(null); setBezig(true)
+    const res = await wachtwoordLogin({ email, wachtwoord })
+    if (!res.ok) { setWwFout(res.error); setBezig(false); return }
+    window.location.assign('/m')
+  }
+
+  async function wachtwoordVergeten() {
+    setWwFout(null); setMelding(null)
+    if (!email) { setWwFout('Vul eerst je e-mailadres in.'); return }
+    setBezig(true)
+    await stuurHerstelLink({ email })
+    setBezig(false)
+    setMelding('Als dit account bestaat, is er een link verstuurd om een wachtwoord in te stellen.')
   }
 
   return (
@@ -69,7 +103,7 @@ export default function MobielLogin({ fout }: { fout?: string }) {
           <p style={{
             margin: '8px 0 0', fontSize: 14, lineHeight: 1.5,
             color: 'var(--neutral-500, #6b757c)',
-          }}>Gebruik je Everts Microsoft-account om in te loggen.</p>
+          }}>Log in met je Microsoft-account of met e-mail en wachtwoord.</p>
 
           {fout === 'geen-toegang' && (
             <div style={{
@@ -81,6 +115,78 @@ export default function MobielLogin({ fout }: { fout?: string }) {
               Je account heeft geen toegang tot EVA. Neem contact op met je beheerder.
             </div>
           )}
+
+          {/* E-mail + wachtwoord (medewerkers zonder Microsoft-account) */}
+          <form onSubmit={loginMetWachtwoord} style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              placeholder="E-mailadres"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={veldStyle}
+              required
+            />
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="Wachtwoord"
+              value={wachtwoord}
+              onChange={e => setWachtwoord(e.target.value)}
+              style={veldStyle}
+              required
+            />
+
+            {wwFout && (
+              <div style={{
+                padding: '10px 14px', background: '#fff2f0', border: '1px solid #ffc9c0',
+                borderRadius: 10, fontSize: 13, color: '#c0392b',
+              }}>{wwFout}</div>
+            )}
+            {melding && (
+              <div style={{
+                padding: '10px 14px', background: '#eefaf0', border: '1px solid #b8e6c4',
+                borderRadius: 10, fontSize: 13, color: '#1f7a3a',
+              }}>{melding}</div>
+            )}
+
+            <button
+              type="submit"
+              disabled={bezig}
+              style={{
+                width: '100%', padding: '16px 20px',
+                background: bezig ? '#a7d3b6' : '#009439',
+                color: '#fff', border: 'none', borderRadius: 12,
+                fontSize: 15, fontWeight: 700,
+                cursor: bezig ? 'default' : 'pointer',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              {bezig ? 'Bezig…' : 'Inloggen'}
+            </button>
+
+            <button
+              type="button"
+              onClick={wachtwoordVergeten}
+              disabled={bezig}
+              style={{
+                background: 'none', border: 'none', padding: 4,
+                fontSize: 13, color: 'var(--neutral-500, #6b757c)',
+                textDecoration: 'underline', cursor: 'pointer',
+                alignSelf: 'center',
+              }}
+            >
+              Wachtwoord vergeten of instellen
+            </button>
+          </form>
+
+          {/* Scheiding */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0 4px' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--neutral-200, #e5e8ea)' }} />
+            <span style={{ fontSize: 11, color: 'var(--neutral-400, #9aa4ab)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>of</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--neutral-200, #e5e8ea)' }} />
+          </div>
         </div>
 
         <div>
@@ -123,7 +229,7 @@ export default function MobielLogin({ fout }: { fout?: string }) {
             marginTop: 20, fontSize: 11, textAlign: 'center',
             color: 'var(--neutral-400, #9aa4ab)',
           }}>
-            Toegang via je @everts.chat account.
+            Geen toegang? Neem contact op met je beheerder.
           </div>
         </div>
       </div>

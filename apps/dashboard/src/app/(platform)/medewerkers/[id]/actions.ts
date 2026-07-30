@@ -504,7 +504,10 @@ export async function verstuurUitnodiging(
   const headersList = await headers()
   const host = headersList.get('host') ?? 'localhost:3000'
   const protocol = host.startsWith('localhost') ? 'http' : 'https'
-  const redirectTo = `${protocol}://${host}/auth/callback`
+  // Na het volgen van de link zet de callback de sessie (met medewerker-poort) en
+  // stuurt door naar de set-wachtwoord-pagina, zodat de uitgenodigde een wachtwoord
+  // kiest waarmee hij voortaan kan inloggen.
+  const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inviteData, error: inviteErr } = await (supabase as any).auth.admin.inviteUserByEmail(med.email, {

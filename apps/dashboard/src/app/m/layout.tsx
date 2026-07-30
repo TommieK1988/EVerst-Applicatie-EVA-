@@ -1,5 +1,7 @@
 import React from 'react'
 import SessieVerloop from '@/components/eva/SessieVerloop'
+import GeenMobieleToegang from '@/components/auth/GeenMobieleToegang'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 
 /**
  * MobielShell — eigen mobiele omgeving (`/m`), los van de desktop-PlatformShell.
@@ -16,7 +18,14 @@ import SessieVerloop from '@/components/eva/SessieVerloop'
  */
 export const metadata = { title: 'EVA Mobiel' }
 
-export default function MobielLayout({ children }: { children: React.ReactNode }) {
+export default async function MobielLayout({ children }: { children: React.ReactNode }) {
+  // Defense in depth naast de login-poorten: een sessie zónder geldig medewerker-
+  // record (bijv. een wachtwoord-sessie die de poort omzeilde) mag /m niet zien.
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker || medewerker.gebruiker_type === 'geen') {
+    return <GeenMobieleToegang />
+  }
+
   return (
     <div
       className="eva"
