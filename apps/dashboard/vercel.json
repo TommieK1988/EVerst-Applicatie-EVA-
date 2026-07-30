@@ -3,11 +3,11 @@
   "crons": [
     {
       "path": "/api/cron/bouw7-sync/full",
-      "schedule": "30 4 * * *"
+      "schedule": "30 4,5 * * *"
     },
     {
       "path": "/api/cron/bouw7-sync/incremental",
-      "schedule": "45 10 * * *"
+      "schedule": "45 10,11 * * *"
     },
     {
       "path": "/api/cron/wagenpark-weeksamenvatting",
