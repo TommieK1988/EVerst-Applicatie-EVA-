@@ -60,7 +60,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
 
   function herlaad() {
-    getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
+    getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdAantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
   }
   useEffect(herlaad, [dossierId])
 

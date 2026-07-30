@@ -1135,9 +1135,10 @@ export function InformatieTab({
     (!quoteTotalen && calcTotalen?.btw_groepen?.length)
       ? calcTotalen.btw_groepen.map(g => ({ label: `BTW ${g.pct}%`, percentage: g.pct, bedrag: g.btw }))
       : (!quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null)
-  // Goedgekeurd meerwerk (live uit Bouw7) verhoogt de opdrachtwaarde. Excl. btw rechtstreeks bijtellen;
-  // voor incl. btw het effectieve btw-tarief van dit dossier hergebruiken (incl/excl-verhouding), anders 21%.
-  const heeftMeerwerk         = meerwerk > 0
+  // Goedgekeurd meerwerk verandert de opdrachtwaarde. Excl. btw rechtstreeks bijtellen; voor incl. btw
+  // het effectieve btw-tarief van dit dossier hergebruiken (incl/excl-verhouding), anders 21%.
+  // Een negatief bedrag (per saldo minderwerk) telt net zo goed mee en verlaagt het contracttotaal.
+  const heeftMeerwerk         = meerwerk !== 0
   const btwFactor             = (finTotaalIncl != null && finAanneemsom)
     ? finTotaalIncl / finAanneemsom
     : 1.21
@@ -1800,10 +1801,12 @@ export function InformatieTab({
               )}
               {heeftMeerwerk && (
                 <RekenRegel
-                  label="Goedgekeurd meerwerk"
+                  label={meerwerk < 0 ? 'Goedgekeurd minderwerk' : 'Goedgekeurd meerwerk'}
                   aantal={opdrachtOverzicht?.meerwerken.length}
                   bedrag={fmtBedrag(meerwerk)}
+                  bedragKleur={meerwerk < 0 ? '#009439' : undefined}
                   onClick={opdrachtOverzicht ? () => setDetailSoort('meerwerk') : undefined}
+                  titel={meerwerk < 0 ? 'Per saldo minderwerk — verlaagt het contracttotaal.' : undefined}
                 />
               )}
               {finGekozenOpties > 0 && (

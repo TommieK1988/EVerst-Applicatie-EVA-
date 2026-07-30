@@ -4,7 +4,7 @@ import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
 import { LEGE_DOSSIER_DATUMS } from '@/lib/dossiers/datum-regels'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
-import { getGoedgekeurdMeerwerkExcl } from '@/lib/dossiers/meerwerk'
+import { getGoedgekeurdMeerwerk } from '@/lib/dossiers/meerwerk'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
@@ -95,7 +95,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       // Goedgekeurd meerwerk komt live uit Bouw7; alleen ophalen bij gekoppeld dossier.
       dossier.bouw7_id ? getDossierFinancieel(id).catch(() => null) : Promise.resolve(null),
       // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
-      getGoedgekeurdMeerwerkExcl(id).catch(() => 0),
+      getGoedgekeurdMeerwerk(id).catch(() => ({ excl: 0, aantal: 0 })),
       getDossierNotities(id).catch(() => []),
       getCurrentMedewerker().catch(() => null),
       getWerkmaatschappijen().catch(() => []),
@@ -107,9 +107,11 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
 
     // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
     // valt het terug op het losse Bouw7-aggregaat (additionalWork.prognosis == .expected).
+    // Beslissend is het AANTAL goedgekeurde regels, niet het bedrag: bij per saldo minderwerk is de
+    // som negatief, en dat hoort het contracttotaal te verlagen in plaats van naar Bouw7 terug te vallen.
     const aw = financieel?.bouw7Financial?.additionalWork
     const meerwerkBouw7 = Number(aw?.prognosis ?? aw?.expected) || 0
-    const meerwerk = meerwerkEva > 0 ? meerwerkEva : meerwerkBouw7
+    const meerwerk = meerwerkEva.aantal > 0 ? meerwerkEva.excl : meerwerkBouw7
 
     return (
       <>

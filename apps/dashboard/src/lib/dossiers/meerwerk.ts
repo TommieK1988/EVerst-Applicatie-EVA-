@@ -51,7 +51,13 @@ export type MeerwerkRegelView = MeerwerkRegel & {
 
 export type DossierMeerwerkData = {
   regels: MeerwerkRegelView[]
-  totalen: { aantal: number; goedgekeurdExcl: number; goedgekeurdIncl: number }
+  totalen: {
+    aantal: number
+    /** Aantal regels dat als goedgekeurd meetelt — bepaalt óf EVA leidend is, los van het bedrag. */
+    goedgekeurdAantal: number
+    goedgekeurdExcl: number
+    goedgekeurdIncl: number
+  }
 }
 
 /**
@@ -83,24 +89,38 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
 
   let goedgekeurdExcl = 0
   let goedgekeurdIncl = 0
+  let goedgekeurdAantal = 0
   const views: MeerwerkRegelView[] = regels.map(r => {
     const excl = effectiefExcl(r, regiePerCode)
     const btwPct = r.btw_pct != null ? Number(r.btw_pct) : 21
     const incl = rond(excl * (1 + btwPct / 100))
-    if (GOEDGEKEURD.includes(r.status)) { goedgekeurdExcl += excl; goedgekeurdIncl += incl }
+    if (GOEDGEKEURD.includes(r.status)) { goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++ }
     return { ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct }
   })
 
   return {
     regels: views,
-    totalen: { aantal: regels.length, goedgekeurdExcl: rond(goedgekeurdExcl), goedgekeurdIncl: rond(goedgekeurdIncl) },
+    totalen: {
+      aantal: regels.length,
+      goedgekeurdAantal,
+      goedgekeurdExcl: rond(goedgekeurdExcl),
+      goedgekeurdIncl: rond(goedgekeurdIncl),
+    },
   }
 }
 
-/** Compacte som van goedgekeurd meerwerk (excl. btw) — voor contracttotaal-berekeningen elders. */
-export async function getGoedgekeurdMeerwerkExcl(dossierId: string): Promise<number> {
+/**
+ * Compacte som van goedgekeurd meerwerk (excl. btw) plus het aantal regels waarop die som rust.
+ *
+ * Het aantal is nodig om te bepalen óf EVA leidend is boven het Bouw7-aggregaat. Op het bedrag
+ * alleen afgaan gaat mis bij netto **minderwerk**: een som van bijvoorbeeld −€ 48.000 betekent niet
+ * "geen EVA-regels", maar "per saldo minder werk", en dat hoort het contracttotaal te verlagen.
+ */
+export async function getGoedgekeurdMeerwerk(
+  dossierId: string,
+): Promise<{ excl: number; aantal: number }> {
   const { totalen } = await getDossierMeerwerk(dossierId)
-  return totalen.goedgekeurdExcl
+  return { excl: totalen.goedgekeurdExcl, aantal: totalen.goedgekeurdAantal }
 }
 
 export type NieuweMeerwerkData = {
