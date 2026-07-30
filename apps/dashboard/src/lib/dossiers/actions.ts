@@ -1908,6 +1908,40 @@ async function getEvaContractIds(dossierId: string): Promise<Set<number>> {
   return new Set(((data ?? []) as { bouw7_contract_id: number }[]).map(r => Number(r.bouw7_contract_id)))
 }
 
+/**
+ * De bewakingscodes die in Bouw7 op dit project zijn aangemaakt (code → omschrijving).
+ *
+ * Bron: Athena `/project-control/{id}/cost-type/{ct}/chapters` — dezelfde bron als het
+ * Financieel-tab, dus wat je daar per code ziet is exact wat je hier kunt kiezen.
+ *
+ * Bewust **niet** afgeleid uit de codes die al op een inkooporder, OA-contract of geboekte
+ * kost staan: juist de code waar je een kost naártoe wilt verplaatsen is per definitie nog
+ * nergens in gebruik. Op een project waar in Bouw7 nog niets gecodeerd is (alle kosten onder
+ * `uncoded_costs`) leverde die afleiding een lege lijst op — hercoderen was dan onmogelijk.
+ */
+async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): Promise<Map<string, string | null>> {
+  const codes = new Map<string, string | null>()
+  const responses = await Promise.all(
+    BEWAKING_KOSTENSOORTEN.map((ct) =>
+      client
+        .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
+        .catch(() => null),
+    ),
+  )
+  for (const resp of responses) {
+    for (const hoofdstuk of resp?.items ?? []) {
+      const ci = hoofdstuk.chapterInfo
+      if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
+      for (const sc of hoofdstuk.securityCodes ?? []) {
+        const code = (sc.code ?? '').trim()
+        if (!code || codes.has(code)) continue
+        codes.set(code, sc.name?.trim() || null)
+      }
+    }
+  }
+  return codes
+}
+
 export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
   const leeg: DossierInkoopData = {
     beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [], signalen: [],
@@ -1918,7 +1952,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
   const { client, bouw7Id } = ctx
 
   try {
-    const [orderResp, subResp, apolloInvoices, heimdallResp, correcties] = await Promise.all([
+    const [orderResp, subResp, apolloInvoices, heimdallResp, correcties, bouw7Codes] = await Promise.all([
       client.get<Bouw7ListResponse<Bouw7PurchaseOrderContract>>('/list/purchase-order-contracts', {
         q: `project.id = ${bouw7Id} LIMIT 500`,
       }).catch(() => ({ items: [] as Bouw7PurchaseOrderContract[] } as Bouw7ListResponse<Bouw7PurchaseOrderContract>)),
@@ -1930,6 +1964,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         q: `project.id = ${bouw7Id} LIMIT 1000`,
       }).catch(() => ({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
       getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
+      getProjectBewakingscodes(client, bouw7Id).catch(() => new Map<string, string | null>()),
     ])
 
     // Welke contracten zijn vanuit een EVA-bestelling aangemaakt? Puur ter herkenning in de
@@ -2056,8 +2091,10 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       }
     })
 
-    // Projectbewakingscodes = codes die al op dit project voorkomen (contracten + geboekte kosten).
-    const codeMap = new Map<string, string | null>()
+    // Projectbewakingscodes = de codes die in Bouw7 op dit project staan, aangevuld met codes die
+    // al op een contract of geboekte kost voorkomen maar (nog) niet in de projectstructuur zitten —
+    // anders zou een bestaande codering uit de lijst vallen en niet meer te herstellen zijn.
+    const codeMap = new Map<string, string | null>(bouw7Codes)
     for (const o of orderResp.items ?? []) if (o.projectSecurityLink?.code && !codeMap.has(o.projectSecurityLink.code)) codeMap.set(o.projectSecurityLink.code, o.projectSecurityLink.name ?? null)
     for (const c of subResp.items ?? []) if (c.projectSecurityLink?.code && !codeMap.has(c.projectSecurityLink.code)) codeMap.set(c.projectSecurityLink.code, c.projectSecurityLink.name ?? null)
     for (const r of geboekteKosten) if (r.bronCode && !codeMap.has(r.bronCode)) codeMap.set(r.bronCode, r.codeNaam ?? null)

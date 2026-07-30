@@ -44,6 +44,12 @@ export interface GenereerOpties {
   } | null
   /** Overschrijft het briefpapier van het sjabloon (live preview). */
   briefpapierOverride?: string | null
+  /**
+   * Live preview: contextbouwers mogen zich beperken tot een handvol regels. Nodig
+   * voor de houtrot-rapportage — daar is elke render anders een volledig rapport
+   * met tientallen foto's, per toetsaanslag.
+   */
+  preview?: boolean
 }
 
 /**
@@ -62,7 +68,7 @@ export async function genereerDocumentDocx(
   const ctx =
     dossierId === DEMO_DOSSIER
       ? buildDemoDocumentContext(sjabloon)
-      : await buildDocumentContext(supabase, dossierId, sjabloon, invoer, ondertekenaarId)
+      : await buildDocumentContext(supabase, dossierId, sjabloon, invoer, ondertekenaarId, { preview: opties.preview })
 
   const templateBron = opties.templateOverride?.docx_template_url || opties.templateOverride?.docx_template_item_id
     ? { ...sjabloon, ...opties.templateOverride }

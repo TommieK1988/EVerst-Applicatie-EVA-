@@ -25,6 +25,8 @@ import {
 import { archiveerEnRegistreer } from '@/lib/documenten/archiveer'
 
 export const dynamic = 'force-dynamic'
+/** Een houtrot-rapportage haalt tientallen foto's op en laat Graph een PDF bouwen. */
+export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
   try {

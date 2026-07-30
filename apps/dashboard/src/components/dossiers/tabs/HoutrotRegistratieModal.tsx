@@ -9,12 +9,12 @@ import type { Recept } from '@/services/houtrotherstel/recepten'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { formatCurrency } from '@/lib/houtrotherstel/utils'
 import { cascadeRijen, bouwLocatiePad, selectieVanLocatie } from '@/lib/houtrotherstel/locatie-boom'
+import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
 import type {
   RepairRegistration, RepairPhoto, RegistratieForm, LocatieBoom, LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-const fotoUrl = (pad: string) => `${SUPABASE_URL}/storage/v1/object/public/repair-photos/${pad}`
+const fotoUrl = fotoPubliekeUrl
 
 type Werkzaamheid = { recept: Recept; aantal: number }
 

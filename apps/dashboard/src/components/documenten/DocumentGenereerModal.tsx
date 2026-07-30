@@ -17,6 +17,7 @@ import {
   getFeedbackLinks, getFeedbackFormulieren, maakFeedbackLink,
 } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
+import HoutrotOptiesVeld from './HoutrotOptiesVeld'
 
 interface Props {
   dossierId: string
@@ -278,6 +279,10 @@ function VeldInvoer({ veld, dossierId, waarde, onChange, onBlur }: {
       </label>
       {veld.type === 'feedback_link' ? (
         <FeedbackLinkVeld dossierId={dossierId} waarde={waarde} onChange={v => { onChange(v); onBlur() }} />
+      ) : veld.type === 'houtrot_opties' ? (
+        // Bewust géén onBlur: elke verversing rendert hier een volledig rapport met
+        // foto's. De gebruiker ververst zelf met de knop boven de preview.
+        <HoutrotOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
       ) : veld.type === 'meerregelig' ? (
         <textarea value={waarde} onChange={e => onChange(e.target.value)} onBlur={onBlur} rows={4} className={cls} />
       ) : veld.type === 'keuze' ? (

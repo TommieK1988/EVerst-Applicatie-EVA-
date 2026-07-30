@@ -10,7 +10,7 @@
  */
 
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
-export const DOCUMENTSOORTEN = ['opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief', 'overig'] as const
+export const DOCUMENTSOORTEN = ['opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief', 'houtrot_rapportage', 'overig'] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
 export const documentsoortLabels: Record<Documentsoort, string> = {
@@ -18,11 +18,12 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
   bewonersbrief:      'Bewonersbrief',
   garantiecertificaat:'Garantiecertificaat',
   informatiebrief:    'Tussentijdse informatiebrief',
+  houtrot_rapportage: 'Houtrot-rapportage',
   overig:             'Overig',
 }
 
 /** Veldtypen voor de per-document invoervelden. */
-export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link'] as const
+export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link', 'houtrot_opties'] as const
 export type VeldType = (typeof VELD_TYPES)[number]
 
 export const veldTypeLabels: Record<VeldType, string> = {
@@ -36,6 +37,10 @@ export const veldTypeLabels: Record<VeldType, string> = {
   // waarde is de gekozen URL; die voedt {feedback.url}, de QR-code {%feedback_qr} en
   // de klik-knop in de brief.
   feedback_link: 'Feedback-link (bewoners)',
+  // Bijzonder veld voor de houtrot-rapportage: bij het opstellen kies je hier het
+  // groeperingsniveau, de tak, het statusfilter, het aantal registraties per pagina
+  // en of verkoopprijzen mee mogen. De waarde is een JSON-tekst.
+  houtrot_opties:'Houtrot-rapportage (filters)',
 }
 
 /**

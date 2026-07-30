@@ -10,6 +10,8 @@
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, getCurrentMedewerker, GeenToegangError } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
+import { getDossierToggles } from '@/lib/dossiers/actions'
+import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import {
   genereerDocumentPdf, laadSjabloon, bestandsnaamVoor, assertInvoerCompleet,
@@ -48,7 +50,15 @@ export async function getSjablonenVoorDossier(dossierId: string): Promise<Docume
   const alle: DocumentSjabloon[] = (rijen ?? []).map(naarSjabloon)
   if (!dossier) return alle
 
+  // De houtrot-rapportage hoort alleen bij dossiers waar houtrot ook geregistreerd
+  // wordt — zelfde poort als de Houtrot-tab zelf (TAB_TOGGLE_GATES).
+  const heeftHoutrot = alle.some(s => s.documentsoort === 'houtrot_rapportage')
+  const houtrotAan = heeftHoutrot
+    ? (await getDossierToggles(dossierId)).some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
+    : false
+
   return alle.filter((s: DocumentSjabloon) => {
+    if (s.documentsoort === 'houtrot_rapportage' && !houtrotAan) return false
     if (s.categorie_filter?.length && !s.categorie_filter.includes(dossier.categorie)) return false
     if (s.hoofdstatus_filter?.length && !s.hoofdstatus_filter.includes(dossier.hoofdstatus)) return false
     if (s.werkmaatschappij_id && dossier.werkmaatschappij_id && s.werkmaatschappij_id !== dossier.werkmaatschappij_id) return false

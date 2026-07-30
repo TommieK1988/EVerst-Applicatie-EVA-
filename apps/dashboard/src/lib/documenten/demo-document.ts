@@ -10,8 +10,9 @@
 
 // Alleen pure helpers + types: deze module blijft bewust vrij van server-only
 // imports, zodat de demo-context ook los (bijv. in een test) te draaien is.
-import { normaliseerInvoer, datumNL, datumISO, nJaarLater } from './format'
+import { normaliseerInvoer, datumNL, datumISO, nJaarLater, euroNL, getalNL, afkappen } from './format'
 import { ROLLEN, rolLabels } from './rollen'
+import { parseRapportOpties, HOUTROT_OPTIES_SLEUTEL, PAGINABREUK_XML } from './houtrot-opties'
 import type { DocumentSjabloon } from './types'
 
 /** Zelfde vorm als de echte render-context; los gehouden i.v.m. de server-only chain. */
@@ -175,8 +176,130 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
     feedback_qr: DEMO_FEEDBACK_QR,
   }
 
+  // Houtrot-rapportage: zonder demo-blok kan een beheerder het sjabloon niet
+  // ontwerpen — de editor-preview draait immers op dossier_id=demo.
+  if (sjabloon.documentsoort === 'houtrot_rapportage') {
+    const keuze = parseRapportOpties(invoer[HOUTROT_OPTIES_SLEUTEL])
+    ctx.houtrot = demoHoutrotBlok(keuze.per_pagina, keuze.toon_prijzen)
+    ctx.toon_prijzen = keuze.toon_prijzen
+  } else {
+    ctx.houtrot = { heeft: false, aantal: 0, aantal_paginas: 0, paginas: [], groepen: [], alle_registraties: [] }
+    ctx.toon_prijzen = false
+  }
+
   for (const rol of ROLLEN) ctx[`foto_${rol}`] = ''
   return ctx
+}
+
+// ── Demo-houtrotrapportage ────────────────────────────────────────────────
+
+/** Zes voorbeeldregistraties over twee gevels, zodat groepering én pagina's zichtbaar zijn. */
+const DEMO_REGISTRATIES = [
+  { loc: ['Voorgevel', '1e etage', 'nr. 12'], werk: [{ aantal: 2, code: 'EP-K-001', naam: 'Epoxyherstel kozijnhoek', eenheid: 'st', uren: 0.75, prijs: 87.5 }], schade: 'Houtrot in de onderhoek van het kozijn, tot circa 4 cm diep.', ernst: 'Matig' },
+  { loc: ['Voorgevel', '1e etage', 'nr. 14'], werk: [{ aantal: 1, code: 'DV-DOR-001', naam: 'Deelvervanging onderdorpel', eenheid: 'm¹', uren: 2.5, prijs: 245 }], schade: 'Onderdorpel over de volle breedte aangetast.', ernst: 'Ernstig' },
+  { loc: ['Voorgevel', '2e etage', 'nr. 21'], werk: [{ aantal: 3, code: 'KIT-001', naam: 'Kit- en aansluitwerk', eenheid: 'm¹', uren: 0.2, prijs: 18.75 }], schade: 'Kitvoeg los, vochtdoorslag richting het houtwerk.', ernst: 'Licht' },
+  { loc: ['Achtergevel', 'Begane grond', 'nr. 3'], werk: [{ aantal: 1, code: 'VRV-GLA-001', naam: 'Vervangen glaslat', eenheid: 'st', uren: 0.5, prijs: 42 }, { aantal: 2, code: 'EP-K-001', naam: 'Epoxyherstel kozijnhoek', eenheid: 'st', uren: 0.75, prijs: 87.5 }], schade: 'Glaslat verrot, kozijnhoeken licht aangetast.', ernst: 'Matig' },
+  { loc: ['Achtergevel', 'Begane grond', 'nr. 5'], werk: [{ aantal: 1, code: 'DV-DOR-001', naam: 'Deelvervanging onderdorpel', eenheid: 'm¹', uren: 2.5, prijs: 245 }], schade: 'Aantasting onder de waterhol, doorlopend in de stijl.', ernst: 'Ernstig' },
+  { loc: ['Achtergevel', '1e etage', 'nr. 9'], werk: [{ aantal: 4, code: 'KIT-001', naam: 'Kit- en aansluitwerk', eenheid: 'm¹', uren: 0.2, prijs: 18.75 }], schade: 'Aansluiting kozijn/metselwerk open.', ernst: 'Licht' },
+]
+
+const DEMO_LABELS = ['Gevelzijde', 'Etage', 'Huisnummer']
+
+function demoRegistratie(index: number, toonPrijzen: boolean) {
+  const d = DEMO_REGISTRATIES[index % DEMO_REGISTRATIES.length]
+  const bedrag = (n: number) => (toonPrijzen ? euroNL(n) : '')
+  const verkoop = d.werk.reduce((s, w) => s + w.aantal * w.prijs, 0)
+  const uren = d.werk.reduce((s, w) => s + w.aantal * w.uren, 0)
+  const tekst = d.werk.map(w => `${w.aantal}× ${w.naam}`).join(' · ')
+
+  return {
+    nummer: index + 1,
+    datum: datumNL('2026-09-1' + ((index % 5) + 1)),
+    datum_iso: '2026-09-1' + ((index % 5) + 1),
+    locatie_pad: d.loc.join(' › '),
+    locatie_kort: d.loc[d.loc.length - 1],
+    loc1: d.loc[0], loc2: d.loc[1], loc3: d.loc[2],
+    locatie: d.loc.map((waarde, i) => ({ naam: DEMO_LABELS[i], waarde })),
+    status: 'afgerond',
+    status_label: 'Afgerond',
+    ernst_label: d.ernst,
+    controle_label: 'Goedgekeurd',
+    afgerond: true,
+    schade: d.schade,
+    schade_kort: afkappen(d.schade, 120),
+    oorzaak: 'Langdurige vochtbelasting',
+    notitie: '',
+    medewerker: 'Ahmed el Amrani',
+    werkzaamheden: d.werk.map(w => ({
+      aantal: String(w.aantal), aantal_num: w.aantal,
+      code: w.code, naam: w.naam, omschrijving: '', eenheid: w.eenheid,
+      uren: getalNL(w.uren * w.aantal),
+      prijs_per_stuk: bedrag(w.prijs),
+      totaal: bedrag(w.prijs * w.aantal),
+      totaal_num: toonPrijzen ? w.prijs * w.aantal : 0,
+      kostprijs_per_stuk: bedrag(w.prijs * 0.7),
+      kostprijs_totaal: bedrag(w.prijs * 0.7 * w.aantal),
+    })),
+    heeft_werkzaamheden: true,
+    werkzaamheden_tekst: tekst,
+    werkzaamheden_kort: afkappen(tekst, 160),
+    bedragen: {
+      verkoop: bedrag(verkoop), verkoop_num: toonPrijzen ? verkoop : 0,
+      kostprijs: bedrag(verkoop * 0.7), uren: getalNL(uren),
+      arbeid: bedrag(uren * 62.5), materiaal: bedrag(verkoop * 0.7 - uren * 62.5),
+    },
+    heeft_prijs: toonPrijzen,
+    // Geen demo-foto's: de image-module valt terug op een lege pixel, dus de
+    // beheerder ziet wél het fotoraster met de juiste celafmetingen.
+    foto_voor: '', foto_tijdens: '', foto_na: '',
+    fotos: { voor: '', tijdens: '', na: '' },
+    heeft_foto_voor: false, heeft_foto_tijdens: false, heeft_foto_na: false, heeft_foto: false,
+  }
+}
+
+function demoHoutrotBlok(perPagina: number, toonPrijzen: boolean) {
+  const registraties = DEMO_REGISTRATIES.map((_, i) => demoRegistratie(i, toonPrijzen))
+  const bedrag = (n: number) => (toonPrijzen ? euroNL(n) : '')
+  const totaalVan = (lijst: typeof registraties) => ({
+    verkoop: bedrag(lijst.reduce((s, r) => s + Number(r.bedragen.verkoop_num), 0)),
+    kostprijs: bedrag(lijst.reduce((s, r) => s + Number(r.bedragen.verkoop_num), 0) * 0.7),
+    uren: getalNL(lijst.length * 2),
+    arbeid: bedrag(lijst.length * 125),
+    materiaal: bedrag(lijst.length * 40),
+  })
+
+  const n = Math.max(1, perPagina)
+  const paginas = []
+  for (let i = 0; i < registraties.length; i += n) {
+    paginas.push({ registraties: registraties.slice(i, i + n), groep_naam: '', eerste_van_groep: false })
+  }
+  const metVlaggen = paginas.map((p, i) => {
+    const laatste = i === paginas.length - 1
+    return {
+      ...p,
+      pagina_nummer: i + 1, aantal_paginas: paginas.length,
+      eerste: i === 0, laatste, niet_laatste: !laatste,
+      paginabreuk: laatste ? '' : PAGINABREUK_XML,
+    }
+  })
+
+  const groepNamen = [...new Set(registraties.map(r => r.loc1))]
+  return {
+    heeft: true,
+    aantal: registraties.length,
+    aantal_paginas: metVlaggen.length,
+    per_pagina: n,
+    niveau_label: DEMO_LABELS[0],
+    filter_omschrijving: 'Afgerond',
+    is_voorbeeld: false,
+    totaal: totaalVan(registraties),
+    paginas: metVlaggen,
+    groepen: groepNamen.map(naam => {
+      const lijst = registraties.filter(r => r.loc1 === naam)
+      return { naam, niveau_label: DEMO_LABELS[0], aantal: lijst.length, totaal: totaalVan(lijst), registraties: lijst }
+    }),
+    alle_registraties: registraties,
+  }
 }
 
 /** Sprekende demo-waarden voor de conventionele invoersleutels. */

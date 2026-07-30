@@ -15,13 +15,12 @@ import {
   type LocatieBoom, type LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
+import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
 
 /** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
 type Werkzaamheid = { recept: Recept; aantal: number }
 
-// De bucket `repair-photos` is publiek → URL rechtstreeks samenstellen.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-const fotoUrl = (pad: string) => `${SUPABASE_URL}/storage/v1/object/public/repair-photos/${pad}`
+const fotoUrl = fotoPubliekeUrl
 
 /** Kortere variant-tekst binnen een groep: strip het groepswoord uit de naam. */
 function variantLabel(r: Recept): string {

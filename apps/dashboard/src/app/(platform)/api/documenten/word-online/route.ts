@@ -27,6 +27,8 @@ import {
 import { archiveerEnRegistreer } from '@/lib/documenten/archiveer'
 
 export const dynamic = 'force-dynamic'
+/** Een houtrot-rapportage haalt tientallen foto's op en uploadt een groot bestand. */
+export const maxDuration = 300
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 

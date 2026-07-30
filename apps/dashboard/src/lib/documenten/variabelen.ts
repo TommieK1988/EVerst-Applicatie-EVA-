@@ -19,6 +19,13 @@ export interface VariabeleGroep {
   /** Toelichting boven de groep. */
   uitleg?: string
   items: { v: string; label: string }[]
+  /**
+   * Tagnamen die alléén bínnen een loop van deze groep bestaan ({nummer},
+   * {locatie_pad}, …). Ze staan niet als los item in de lijst — dat zou de
+   * beheerder verleiden ze buiten de loop te plakken — maar moeten wél als bekend
+   * gelden, anders meldt "Template controleren" ze allemaal als onbekende variabele.
+   */
+  binnenLoop?: string[]
 }
 
 const ROL_LABELS: Record<string, string> = {
@@ -197,6 +204,83 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
   },
   {
+    groep: 'Houtrot-rapportage — algemeen',
+    uitleg: 'Alleen gevuld bij documentsoort "Houtrot-rapportage". Voeg onderaan één invoerveld van type ' +
+      '"Houtrot-rapportage (filters)" toe met sleutel "houtrot"; daar kiest de opsteller het groeperingsniveau, ' +
+      'het statusfilter, het aantal registraties per pagina en of verkoopprijzen mee mogen.',
+    items: [
+      { v: '{houtrot.aantal}',              label: 'Aantal registraties in de rapportage' },
+      { v: '{houtrot.aantal_paginas}',      label: 'Aantal registratiepagina\'s' },
+      { v: '{houtrot.per_pagina}',          label: 'Gekozen aantal registraties per pagina' },
+      { v: '{houtrot.niveau_label}',        label: 'Naam van het groeperingsniveau (bv. "Gevelzijde")' },
+      { v: '{houtrot.filter_omschrijving}', label: 'Toegepaste filters in tekst (voor het voorblad)' },
+      { v: '{houtrot.totaal.verkoop}',      label: 'Totaal verkoopprijs (leeg zonder prijzen)' },
+      { v: '{houtrot.totaal.kostprijs}',    label: 'Totaal kostprijs' },
+      { v: '{houtrot.totaal.uren}',         label: 'Totaal arbeidsuren' },
+      { v: '{houtrot.totaal.arbeid}',       label: 'Totaal arbeidskosten' },
+      { v: '{houtrot.totaal.materiaal}',    label: 'Totaal materiaalkosten' },
+      { v: '{#toon_prijzen}…{/toon_prijzen}', label: 'Alleen tonen als de opsteller prijzen heeft aangezet' },
+      { v: '{#houtrot.heeft}…{/houtrot.heeft}', label: 'Alleen tonen als er registraties zijn' },
+      { v: '{#houtrot.is_voorbeeld}…{/houtrot.is_voorbeeld}', label: 'Alleen in de preview (beperkt aantal registraties)' },
+    ],
+  },
+  {
+    groep: 'Houtrot-rapportage — registratiepagina\'s',
+    uitleg: 'De registraties komen in brokken van het gekozen aantal per pagina. Zet ná {/registraties} een alinea ' +
+      '{#niet_laatste}, dan een lege alinea met een handmatige paginabreuk (Ctrl+Enter), dan {/niet_laatste} — zo ' +
+      'staat er nooit een breuk achter de laatste pagina. Geef de fotorij in Word een EXACTE rijhoogte van 3,8 cm en ' +
+      'zet "Rijen niet over pagina\'s splitsen" aan: dan kan een registratie nooit over twee pagina\'s vallen.',
+    items: [
+      { v: '{#houtrot.paginas}…{/houtrot.paginas}', label: 'Loop over de pagina\'s' },
+      { v: '{#registraties}…{/registraties}',       label: 'Binnen een pagina: loop over de registraties' },
+      { v: '{pagina_nummer}',                       label: 'Nummer van deze pagina' },
+      { v: '{#niet_laatste}…{/niet_laatste}',       label: 'Paginabreuk hierin zetten (niet ná de laatste pagina)' },
+      { v: '{@paginabreuk}',                        label: 'Alternatief: paginabreuk als één tag (eigen alinea!)' },
+      { v: '{locatie_pad}',                         label: 'Registratie — volledige locatie ("Voorgevel › 2e etage › nr. 14")' },
+      { v: '{loc1}',                                label: 'Registratie — locatie niveau 1' },
+      { v: '{loc2}',                                label: 'Registratie — locatie niveau 2' },
+      { v: '{loc3}',                                label: 'Registratie — locatie niveau 3' },
+      { v: '{%foto_voor}',                          label: 'Foto vóór (eigen alinea, in een tabelcel)' },
+      { v: '{%foto_tijdens}',                       label: 'Foto tijdens (eigen alinea)' },
+      { v: '{%foto_na}',                            label: 'Foto na (eigen alinea)' },
+      { v: '{werkzaamheden_kort}',                  label: 'Werkzaamheden op één regel, afgekapt (voor de vaste indeling)' },
+      { v: '{werkzaamheden_tekst}',                 label: 'Werkzaamheden op één regel, volledig' },
+      { v: '{#werkzaamheden}…{/werkzaamheden}',     label: 'Regels per werkzaamheid; binnenin: {aantal} {code} {naam} {eenheid} {uren} {totaal}' },
+      { v: '{bedragen.verkoop}',                    label: 'Registratie — verkoopprijs (leeg zonder prijzen)' },
+    ],
+    binnenLoop: [
+      'pagina_nummer', 'aantal_paginas', 'eerste', 'laatste', 'niet_laatste', 'paginabreuk',
+      'groep_naam', 'eerste_van_groep', 'registraties',
+      'nummer', 'datum', 'datum_iso', 'locatie_pad', 'locatie_kort', 'loc1', 'loc2', 'loc3', 'locatie',
+      'status', 'status_label', 'ernst_label', 'controle_label', 'afgerond',
+      'schade', 'schade_kort', 'oorzaak', 'notitie', 'medewerker',
+      'werkzaamheden', 'heeft_werkzaamheden', 'werkzaamheden_tekst', 'werkzaamheden_kort',
+      'bedragen.verkoop', 'bedragen.kostprijs', 'bedragen.uren', 'bedragen.arbeid', 'bedragen.materiaal',
+      'heeft_prijs', 'toon_prijzen',
+      'foto_voor', 'foto_tijdens', 'foto_na', 'fotos.voor', 'fotos.tijdens', 'fotos.na',
+      'heeft_foto_voor', 'heeft_foto_tijdens', 'heeft_foto_na', 'heeft_foto',
+      // Binnen {#werkzaamheden}
+      'aantal', 'code', 'naam', 'omschrijving', 'eenheid', 'uren',
+      'prijs_per_stuk', 'totaal', 'kostprijs_per_stuk', 'kostprijs_totaal',
+      // Binnen {#houtrot.groepen} en {#locatie}
+      'niveau_label', 'waarde',
+    ],
+  },
+  {
+    groep: 'Houtrot-rapportage — totaalblad',
+    uitleg: 'Het totaalblad groepeert op het niveau dat de opsteller kiest. Zet vóór de kop een paginabreuk ' +
+      '(Alinea → Regel- en pagina-einden → "Pagina-einde ervoor"), buiten de loop.',
+    items: [
+      { v: '{#houtrot.groepen}…{/houtrot.groepen}', label: 'Loop over de groepen (bv. per gevelzijde)' },
+      { v: '{naam}',                                label: 'Groep — naam' },
+      { v: '{niveau_label}',                        label: 'Groep — naam van het niveau' },
+      { v: '{aantal}',                              label: 'Groep — aantal registraties' },
+      { v: '{totaal.verkoop}',                      label: 'Groep — totaal verkoopprijs' },
+      { v: '{#houtrot.alle_registraties}…{/houtrot.alle_registraties}', label: 'Alternatief: alle registraties zonder groepering' },
+    ],
+    binnenLoop: ['totaal.verkoop', 'totaal.kostprijs', 'totaal.uren', 'totaal.arbeid', 'totaal.materiaal'],
+  },
+  {
     groep: 'Eigen invoervelden',
     uitleg: 'Velden die je onderaan bij "Invoervelden" toevoegt. Ze worden gevraagd bij het opstellen.',
     items: [
@@ -211,9 +295,14 @@ export function bekendeVariabelen(): Set<string> {
   for (const groep of DOCUMENT_VARIABELEN) {
     for (const item of groep.items) {
       // '{klant.naam}' -> 'klant.naam'; loops/condities en placeholders overslaan.
-      const m = item.v.match(/^\{%?([a-z0-9_.]+)\}$/i)
+      // Ook de raw-vorm '{@paginabreuk}' telt mee.
+      const m = item.v.match(/^\{[%@]?([a-z0-9_.]+)\}$/i)
       if (m) set.add(m[1])
+      // Loop- en conditie-openers: '{#houtrot.paginas}…' -> 'houtrot.paginas'.
+      const lus = item.v.match(/^\{#([a-z0-9_.]+)\}/i)
+      if (lus) set.add(lus[1])
     }
+    for (const naam of groep.binnenLoop ?? []) set.add(naam)
   }
   return set
 }

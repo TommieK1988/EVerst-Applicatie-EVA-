@@ -11,6 +11,28 @@
 
 import type { DocumentVeld } from './types'
 
+const EUR_FMT = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
+
+/** Bedrag als "€ 1.234,50"; lege/ongeldige invoer → "€ 0,00". */
+export function euroNL(n: number | null | undefined): string {
+  return EUR_FMT.format(Number(n) || 0)
+}
+
+/** Getal met n decimalen in nl-NL ("12,50"); lege invoer → ''. */
+export function getalNL(n: number | null | undefined, decimalen = 2): string {
+  if (n == null || !Number.isFinite(Number(n))) return ''
+  return Number(n).toLocaleString('nl-NL', { minimumFractionDigits: decimalen, maximumFractionDigits: decimalen })
+}
+
+/** Kapt tekst af op een woordgrens en zet er … achter. Leeg blijft leeg. */
+export function afkappen(tekst: string | null | undefined, max: number): string {
+  const s = String(tekst ?? '').trim()
+  if (s.length <= max) return s
+  const knip = s.slice(0, max)
+  const spatie = knip.lastIndexOf(' ')
+  return (spatie > max * 0.6 ? knip.slice(0, spatie) : knip).trimEnd() + '…'
+}
+
 /** Datum als "14 juli 2026"; lege/ongeldige invoer → ''. */
 export function datumNL(iso?: string | null): string {
   if (!iso) return ''

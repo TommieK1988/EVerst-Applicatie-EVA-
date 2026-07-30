@@ -27,6 +27,8 @@ import {
 } from '@/lib/documenten/genereer-document'
 
 export const dynamic = 'force-dynamic'
+/** Een houtrot-rapportage haalt tientallen foto's op en laat Graph een PDF bouwen. */
+export const maxDuration = 300
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +74,9 @@ export async function GET(request: NextRequest) {
           }
         : null,
       briefpapierOverride: briefpapierUrl,
+      // Preview: contextbouwers mogen zich beperken (houtrot-rapportage rendert
+      // anders bij elke verversing tientallen foto's).
+      preview: true,
     })
 
     return new NextResponse(pdf.buffer as ArrayBuffer, {

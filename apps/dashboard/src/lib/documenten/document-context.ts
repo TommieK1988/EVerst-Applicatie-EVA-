@@ -15,10 +15,12 @@ import 'server-only'
 import { laadBedrijfEnDossier } from '../everts-calc/offerte-bronnen'
 import { fetchImageDataUrl } from './render-docx'
 import { ROLLEN, type RolNaam } from './rollen'
-import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam } from './format'
+import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam, euroNL } from './format'
 import type { DocumentSjabloon } from './types'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken } from '@/lib/dossiers/oplevering'
+import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
+import { RAPPORT_FOTO_MAX, parseRapportOpties, HOUTROT_OPTIES_SLEUTEL } from './houtrot-opties'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -86,6 +88,7 @@ export async function buildDocumentContext(
   sjabloon: DocumentSjabloon,
   invoer: Record<string, unknown> = {},
   ondertekenaarId?: string | null,
+  opties: { preview?: boolean } = {},
 ): Promise<DocumentRenderContext> {
   const { bedrijf, dossier, dossierRow, bedrijfRow } = await laadBedrijfEnDossier(supabase, {
     dossier_id: dossierId,
@@ -110,6 +113,12 @@ export async function buildDocumentContext(
     : LEEG_OPDRACHT_BLOK
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
+
+  // Houtrot-rapportage — zelfde patroon als `opdracht` hierboven: alleen laden als
+  // het sjabloon er om vraagt, zodat een brief geen registraties en foto's ophaalt.
+  const houtrot = sjabloon.documentsoort === 'houtrot_rapportage'
+    ? await bouwHoutrotBlok(dossierId, genormaliseerd, { preview: opties.preview })
+    : LEEG_HOUTROT_BLOK
 
   // Feedback-ronde: de bewoners-feedbacklink wordt automatisch bepaald (opgehaald of
   // aangemaakt) — daaruit volgen de linktekst {feedback.url}, de QR-code {%feedback_qr}
@@ -188,6 +197,12 @@ export async function buildDocumentContext(
       behandelingen: genormaliseerd.behandelingen ?? '',
     },
     opdracht,
+    houtrot,
+    // Platte vlag zodat {#toon_prijzen}…{/toon_prijzen} óók binnen de registratie-
+    // en groeploops oplost (de dotted parser valt door naar de buitenste scope).
+    toon_prijzen: houtrot.heeft
+      ? parseRapportOpties(genormaliseerd[HOUTROT_OPTIES_SLEUTEL]).toon_prijzen
+      : false,
     document: {
       datum: datumNL(new Date().toISOString()),
       datum_iso: datumISO(new Date().toISOString()),
@@ -228,6 +243,14 @@ export function documentImageMax(): Record<string, { w: number; h: number }> {
   for (const rol of ROLLEN) {
     max[`foto_${rol}`] = PASFOTO
     max[`${rol}.foto`] = PASFOTO
+  }
+  // Houtrot-rapportage: het kader begrenst de fotohoogte, en dáármee de hoogte van
+  // een registratieblok — de basis onder "vast aantal registraties per pagina".
+  // Zowel de platte tag ({%foto_voor}) als de geneste ({%fotos.voor}) registreren:
+  // de image-module krijgt de tagnaam letterlijk zoals hij in Word staat.
+  for (const type of ['voor', 'tijdens', 'na']) {
+    max[`foto_${type}`] = RAPPORT_FOTO_MAX
+    max[`fotos.${type}`] = RAPPORT_FOTO_MAX
   }
   return max
 }
@@ -383,8 +406,7 @@ async function laadOpleverdatum(
 }
 
 /** Formatteert een bedrag als € 1.234,56 voor de opdrachtbevestiging. */
-const EUR_FMT = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
-const fmtEur = (n: number | null | undefined): string => EUR_FMT.format(Number(n) || 0)
+const fmtEur = euroNL
 
 type OpdrachtOnderdeelRegel = { soort: string; omschrijving: string; bedrag: string }
 type OpdrachtBlok = {

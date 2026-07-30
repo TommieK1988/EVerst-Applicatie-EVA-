@@ -6,20 +6,19 @@ import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
 import { type RepairRegistration, type LocatieBoom } from '@/lib/houtrotherstel/types'
 import { formatDateShort, formatCurrency } from '@/lib/houtrotherstel/utils'
+import { fotoPubliekeUrl, FOTO_VOLGORDE, FOTO_LABELS } from '@/lib/houtrotherstel/fotos'
+import {
+  registratieVerkoop, registratieUren, registratieArbeid, registratieMateriaal, werkzaamhedenTekst,
+} from '@/lib/houtrotherstel/bedragen'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
 import LocatieBoomEditor from './LocatieBoomEditor'
 import HoutrotRegistratieModal from './HoutrotRegistratieModal'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
+import HoutrotRapportageKnop from '@/components/documenten/HoutrotRapportageKnop'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 
-// De bucket `repair-photos` is publiek, dus de URL kan rechtstreeks worden
-// samengesteld (geen signed URL nodig).
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-const fotoPubliekeUrl = (pad: string) =>
-  `${SUPABASE_URL}/storage/v1/object/public/repair-photos/${pad}`
-const FOTO_VOLGORDE: Record<string, number> = { voor: 0, tijdens: 1, na: 2 }
-const FOTO_LABELS: Record<string, string> = { voor: 'Voor', tijdens: 'Tijdens', na: 'Na' }
+const FOTO_LABEL = (t: string) => FOTO_LABELS[t as keyof typeof FOTO_LABELS] ?? t
 
 /** Voor/na-thumbnails van een registratie; klikken opent de foto op ware grootte. */
 function FotoStrip({ registratie }: { registratie: RepairRegistration }) {
@@ -36,33 +35,24 @@ function FotoStrip({ registratie }: { registratie: RepairRegistration }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={e => e.stopPropagation()}
-          title={FOTO_LABELS[f.photo_type] ?? f.photo_type}
+          title={FOTO_LABEL(f.photo_type)}
           className="relative block h-10 w-10 shrink-0 overflow-hidden rounded-md border border-slate-200 hover:border-slate-400"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fotoPubliekeUrl(f.storage_path)}
-            alt={FOTO_LABELS[f.photo_type] ?? 'Foto'}
+            alt={FOTO_LABEL(f.photo_type)}
             className="h-full w-full object-cover"
             loading="lazy"
           />
           <span className="absolute bottom-0 left-0 right-0 bg-black/55 text-center text-[8px] font-semibold uppercase leading-[11px] tracking-wide text-white">
-            {(FOTO_LABELS[f.photo_type] ?? f.photo_type)?.charAt(0)}
+            {FOTO_LABEL(f.photo_type).charAt(0)}
           </span>
         </a>
       ))}
     </div>
   )
 }
-
-// Aggregaten per registratie: uit de regels (aantal × per-stuk), met terugval op de
-// aggregaat-snapshot voor oude registraties zonder regels.
-const somRegels = (r: RepairRegistration, veld: 'labor_hours_snapshot' | 'labor_cost_snapshot' | 'material_cost_snapshot' | 'line_sale_total', fallback: number) =>
-  r.lines && r.lines.length > 0
-    ? r.lines.reduce((s, l) => s + (veld === 'line_sale_total'
-        ? Number(l.line_sale_total ?? 0)
-        : Number(l.aantal) * Number(l[veld] ?? 0)), 0)
-    : fallback
 
 /**
  * Houtrot binnen een dossier (desktop). Zichtbaar zodra de dossier-toggle
@@ -90,22 +80,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
     getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
   }, [dossierId])
 
-  const regelTotaal = (r: RepairRegistration) =>
-    somRegels(r, 'line_sale_total', Number(r.actual_sale_price ?? r.sale_price_snapshot ?? 0))
-  const uren = (r: RepairRegistration) => somRegels(r, 'labor_hours_snapshot', Number(r.labor_hours_snapshot ?? 0))
-  const arbeid = (r: RepairRegistration) => somRegels(r, 'labor_cost_snapshot', Number(r.labor_cost_snapshot ?? 0))
-  const materiaal = (r: RepairRegistration) => somRegels(r, 'material_cost_snapshot', Number(r.material_cost_snapshot ?? 0))
-
-  const werkzaamhedenTekst = (r: RepairRegistration) =>
-    r.lines && r.lines.length > 0
-      ? r.lines
-          .slice()
-          .sort((a, b) => a.volgorde - b.volgorde)
-          .map(l => `${Number(l.aantal)}× ${l.repair_name_snapshot ?? 'Werkzaamheid'}`)
-          .join(' · ')
-      : (r.repair_name_snapshot ?? '—')
-
-  const totaal = (registraties ?? []).reduce((s, r) => s + regelTotaal(r), 0)
+  const totaal = (registraties ?? []).reduce((s, r) => s + registratieVerkoop(r), 0)
 
   return (
     <div className="flex flex-col gap-4">
@@ -120,15 +95,18 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
               </span>
             )}
           </div>
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => setModal(null)}
-              className="rounded-lg bg-everts px-3 py-2 text-sm font-semibold text-white"
-            >
-              + Nieuwe registratie
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <HoutrotRapportageKnop dossierId={dossierId} />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="rounded-lg bg-everts px-3 py-2 text-sm font-semibold text-white"
+              >
+                + Nieuwe registratie
+              </button>
+            )}
+          </div>
         </CardHeader>
 
         {fout && <div className="p-5 text-sm text-red-600">{fout}</div>}
@@ -161,7 +139,10 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
               <tbody className="divide-y divide-slate-100">
                 {registraties.map(r => {
                   const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
-                  const bedrag = regelTotaal(r)
+                  const bedrag = registratieVerkoop(r)
+                  const uren = registratieUren(r)
+                  const arbeid = registratieArbeid(r)
+                  const materiaal = registratieMateriaal(r)
                   return (
                     <tr
                       key={r.id}
@@ -170,11 +151,11 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                     >
                       <td className="px-4 py-3 text-sm text-slate-700">{plaats}</td>
                       <td className="px-4 py-3 text-sm text-slate-500">{formatDateShort(r.registration_date)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500 hidden sm:table-cell">{werkzaamhedenTekst(r)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 hidden sm:table-cell">{werkzaamhedenTekst(r) || '—'}</td>
                       <td className="px-4 py-3"><FotoStrip registratie={r} /></td>
-                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{uren(r) > 0 ? uren(r).toFixed(2) : '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{arbeid(r) > 0 ? formatCurrency(arbeid(r)) : '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{materiaal(r) > 0 ? formatCurrency(materiaal(r)) : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{uren > 0 ? uren.toFixed(2) : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{arbeid > 0 ? formatCurrency(arbeid) : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 text-right hidden lg:table-cell">{materiaal > 0 ? formatCurrency(materiaal) : '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-700 text-right">{bedrag > 0 ? formatCurrency(bedrag) : '—'}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={r.status} size="sm" />

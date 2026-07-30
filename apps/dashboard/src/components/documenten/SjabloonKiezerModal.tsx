@@ -16,9 +16,11 @@ interface Props {
   sjablonen: DocumentSjabloon[]
   onKies: (s: DocumentSjabloon) => void
   onSluit: () => void
+  /** Kop van de popup; standaard "Document opstellen". */
+  titel?: string
 }
 
-export default function SjabloonKiezerModal({ sjablonen, onKies, onSluit }: Props) {
+export default function SjabloonKiezerModal({ sjablonen, onKies, onSluit, titel = 'Document opstellen' }: Props) {
   const [zoek, setZoek] = useState('')
 
   // Escape sluit de popup.
@@ -47,7 +49,7 @@ export default function SjabloonKiezerModal({ sjablonen, onKies, onSluit }: Prop
         {/* Kop */}
         <div className="flex flex-shrink-0 items-center gap-2.5 border-b border-neutral-200 px-5 py-3.5">
           <FileText className="h-4 w-4 text-neutral-400" />
-          <div className="text-[13.5px] font-semibold text-neutral-800">Document opstellen</div>
+          <div className="text-[13.5px] font-semibold text-neutral-800">{titel}</div>
           <button onClick={onSluit} className="ml-auto rounded p-1.5 text-neutral-400 hover:bg-neutral-100">
             <X className="h-4 w-4" />
           </button>
