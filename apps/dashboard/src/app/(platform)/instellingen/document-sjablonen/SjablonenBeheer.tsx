@@ -32,8 +32,9 @@ export default function SjablonenBeheer({ initial }: { initial: DocumentSjabloon
   function handleKopieer(id: string) {
     startT(async () => {
       try {
-        const nieuwId = await kopieerSjabloon(id)
-        toast.success('Sjabloon gekopieerd')
+        const { id: nieuwId, waarschuwing } = await kopieerSjabloon(id)
+        if (waarschuwing) toast(waarschuwing, { duration: 8000, icon: '⚠️' })
+        else toast.success('Sjabloon gekopieerd — met een eigen Word-bestand')
         router.push(`/instellingen/document-sjablonen/${nieuwId}`)
       } catch { toast.error('Fout bij kopiëren') }
     })

@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { vereisBeheerder } from '@/lib/auth/rechten'
+import { dupliceerTemplateBestanden } from '@/lib/documenten/template-dupliceren'
 import type { DocumentSjabloon, DocumentVeld } from '@/lib/documenten/types'
 
 const PAD = '/instellingen/document-sjablonen'
@@ -66,19 +67,45 @@ export async function updateSjabloon(id: string, data: Record<string, unknown>):
   revalidatePath(`${PAD}/${id}`)
 }
 
-export async function kopieerSjabloon(id: string): Promise<string> {
+/**
+ * Kopieert een sjabloon inclusief een EIGEN kopie van het Word-template en het
+ * briefpapier. Zonder die duplicatie wijzen origineel en kopie naar hetzelfde
+ * bestand — bij een SharePoint-koppeling bewerk je er dan twee tegelijk.
+ *
+ * De rij gaat er eerst template-loos in: het nieuwe id bepaalt het opslagpad, en
+ * zo kan de kopie ook bij een mislukte duplicatie nooit naar het bronbestand wijzen.
+ */
+export async function kopieerSjabloon(id: string): Promise<{ id: string; waarschuwing: string | null }> {
   await vereisBeheerder()
   const bron = await getSjabloon(id)
   if (!bron) throw new Error('Sjabloon niet gevonden')
   const { id: _id, created_at: _c, updated_at: _u, ...rest } = bron
+  const naam = `Kopie van ${bron.naam}`.slice(0, 120)
+
   const { data, error } = await db()
     .from('document_sjablonen')
-    .insert({ ...rest, naam: `Kopie van ${bron.naam}`.slice(0, 120) })
+    .insert({
+      ...rest,
+      naam,
+      docx_template_url: null,
+      docx_template_bron: null,
+      docx_template_drive_id: null,
+      docx_template_item_id: null,
+      docx_template_web_url: null,
+      briefpapier_pdf_url: null,
+    })
     .select('id')
     .single()
   if (error) throw new Error('Kopiëren mislukt')
+  const nieuwId = data.id as string
+
+  const { velden, waarschuwing } = await dupliceerTemplateBestanden(bron, nieuwId, naam)
+  if (Object.keys(velden).length > 0) {
+    await db().from('document_sjablonen').update(velden).eq('id', nieuwId)
+  }
+
   revalidatePath(PAD)
-  return data.id as string
+  return { id: nieuwId, waarschuwing }
 }
 
 export async function verwijderSjabloon(id: string): Promise<void> {

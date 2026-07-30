@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { dupliceerTemplateBestanden } from '@/lib/documenten/template-dupliceren'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getDb(): Promise<any> {
@@ -171,7 +172,12 @@ export async function updateLayout(id: string, data: Record<string, unknown>): P
   revalidatePath(`/instellingen/offerte-layout/${id}`)
 }
 
-export async function kopieerLayout(id: string): Promise<string> {
+/**
+ * Kopieert een layout inclusief een EIGEN kopie van het Word-template en het
+ * briefpapier — zie `dupliceerTemplateBestanden`. Zonder die duplicatie wijzen
+ * origineel en kopie naar hetzelfde bestand en bewerk je er twee tegelijk.
+ */
+export async function kopieerLayout(id: string): Promise<{ id: string; waarschuwing: string | null }> {
   const supabase = await getDb()
   const { data: bron, error: fetchErr } = await supabase
     .from('quote_layouts')
@@ -182,14 +188,33 @@ export async function kopieerLayout(id: string): Promise<string> {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { id: _id, created_at: _ca, updated_at: _ua, is_standaard: _std, ...velden } = bron
+  const naam = `Kopie van ${bron.naam}`
+  // Template-loos invoegen: het nieuwe id bepaalt het opslagpad, en zo wijst de
+  // kopie ook bij een mislukte duplicatie nooit naar het bestand van het origineel.
   const { data: nieuw, error: insertErr } = await supabase
     .from('quote_layouts')
-    .insert({ ...velden, naam: `Kopie van ${bron.naam}`, is_standaard: false })
+    .insert({
+      ...velden,
+      naam,
+      is_standaard: false,
+      docx_template_url: null,
+      docx_template_bron: null,
+      docx_template_drive_id: null,
+      docx_template_item_id: null,
+      docx_template_web_url: null,
+      briefpapier_pdf_url: null,
+    })
     .select('id')
     .single()
   if (insertErr || !nieuw) throw new Error(insertErr?.message ?? 'Kopiëren mislukt')
+
+  const { velden: bestandsVelden, waarschuwing } = await dupliceerTemplateBestanden(bron, nieuw.id, naam)
+  if (Object.keys(bestandsVelden).length > 0) {
+    await supabase.from('quote_layouts').update(bestandsVelden).eq('id', nieuw.id)
+  }
+
   revalidatePath('/instellingen/offertes')
-  return nieuw.id
+  return { id: nieuw.id, waarschuwing }
 }
 
 export async function verwijderLayout(id: string): Promise<void> {

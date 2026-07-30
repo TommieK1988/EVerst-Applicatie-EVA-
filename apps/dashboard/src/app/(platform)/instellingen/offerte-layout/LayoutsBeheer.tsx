@@ -42,8 +42,9 @@ export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
   function handleKopieer(id: string) {
     startT(async () => {
       try {
-        const nieuwId = await kopieerLayout(id)
-        toast.success('Layout gekopieerd')
+        const { id: nieuwId, waarschuwing } = await kopieerLayout(id)
+        if (waarschuwing) toast(waarschuwing, { duration: 8000, icon: '⚠️' })
+        else toast.success('Layout gekopieerd — met een eigen Word-bestand')
         router.push(`/instellingen/offerte-layout/${nieuwId}`)
       } catch { toast.error('Fout bij kopiëren') }
     })

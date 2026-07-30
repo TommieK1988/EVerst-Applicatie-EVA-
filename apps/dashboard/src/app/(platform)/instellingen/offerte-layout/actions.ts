@@ -33,10 +33,10 @@ export async function updateLayout(id: string, data: Record<string, unknown>): P
   revalidatePath(`${PAD}/${id}`)
 }
 
-export async function kopieerLayout(id: string): Promise<string> {
-  const newId = await _kopieerLayout(id)
+export async function kopieerLayout(id: string): Promise<{ id: string; waarschuwing: string | null }> {
+  const resultaat = await _kopieerLayout(id)
   revalidatePath(PAD)
-  return newId
+  return resultaat
 }
 
 export async function verwijderLayout(id: string): Promise<void> {
