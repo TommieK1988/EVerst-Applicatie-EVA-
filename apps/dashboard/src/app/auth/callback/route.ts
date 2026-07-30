@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@everts/database/server'
+import { MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobileUA } from '@/lib/isMobileUA'
 
 export async function GET(request: Request) {
@@ -10,7 +12,9 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? (mobiel ? '/m' : '/')
 
   if (code) {
-    const supabase = await createClient()
+    // Mobiele login → auth-cookies meteen persistent schrijven (de markercookie
+    // staat nog niet in de inkomende request, dus expliciet forceren).
+    const supabase = await createClient({ persistentSessie: mobiel })
     const { data: { user }, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && user?.email) {
@@ -29,6 +33,14 @@ export async function GET(request: Request) {
             .from('medewerkers')
             .update({ auth_user_id: user.id })
             .eq('id', medewerker.id)
+        }
+        if (mobiel) {
+          // Markercookie zodat de browser-client de auth-cookies vanaf nu
+          // persistent blijft schrijven bij token-refreshes.
+          const store = await cookies()
+          store.set(MOBIEL_MARKER_COOKIE, '1', {
+            path: '/', sameSite: 'lax', maxAge: MOBIEL_SESSIE_MAXAGE,
+          })
         }
         return NextResponse.redirect(`${origin}${next}`)
       }

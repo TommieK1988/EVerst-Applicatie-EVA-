@@ -12,6 +12,8 @@
  * kunnen lopen.
  */
 
+import { MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
+
 /** Klokuur (lokale tijd) waarop elke sessie vervalt — eind van de werkdag. */
 export const UITLOG_UUR = 18
 
@@ -50,4 +52,15 @@ export function volgendeUitlogTijd(nu: Date = new Date()): number {
   const overSeconden = doel > secondenNu ? doel - secondenNu : doel - secondenNu + 86_400
 
   return nu.getTime() + overSeconden * 1000
+}
+
+/**
+ * Vervalmoment voor een mobiele sessie: absoluut 3 dagen na login (ms sinds
+ * epoch). Anders dan {@link volgendeUitlogTijd} niet gekoppeld aan een klokuur,
+ * maar aan het inlogmoment — de mobiele gebruiker logt zo hooguit 1× per 3 dagen
+ * opnieuw in. Wordt bij de eerste request van de sessie gezet en daarna alleen
+ * gelézen, zodat verder gebruik het moment niet vooruitschuift.
+ */
+export function mobieleVervalTijd(nu: Date = new Date()): number {
+  return nu.getTime() + MOBIEL_SESSIE_MAXAGE * 1000
 }

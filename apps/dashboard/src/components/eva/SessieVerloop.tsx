@@ -5,7 +5,9 @@ import {
   COOKIE_SESSIE_VERLOOPT,
   STORAGE_SESSIE_VERLOOPT,
   volgendeUitlogTijd,
+  mobieleVervalTijd,
 } from '@/lib/sessie'
+import { MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 
 /**
  * Logt de gebruiker uit zodra het vervalmoment van de sessie is bereikt
@@ -42,8 +44,13 @@ export default function SessieVerloop() {
       const ts = Number(uitCookie)
       if (Number.isFinite(ts) && ts > 0) return ts
 
-      const nieuw = volgendeUitlogTijd()
-      document.cookie = `${COOKIE_SESSIE_VERLOOPT}=${nieuw}; Path=/; SameSite=Lax`
+      // Vangnet als de middleware de cookie (nog) niet zette. Mobiel: 3 dagen,
+      // persistent geschreven zodat hij een app-herstart overleeft; desktop: 18:00
+      // als sessie-cookie.
+      const opMobiel = location.pathname === '/m' || location.pathname.startsWith('/m/')
+      const nieuw = opMobiel ? mobieleVervalTijd() : volgendeUitlogTijd()
+      const maxAge = opMobiel ? `; Max-Age=${MOBIEL_SESSIE_MAXAGE}` : ''
+      document.cookie = `${COOKIE_SESSIE_VERLOOPT}=${nieuw}; Path=/${maxAge}; SameSite=Lax`
       try { localStorage.setItem(STORAGE_SESSIE_VERLOOPT, String(nieuw)) } catch { /* geblokkeerd */ }
       return nieuw
     }

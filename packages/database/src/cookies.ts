@@ -9,12 +9,38 @@
  */
 import type { CookieOptions } from '@supabase/ssr'
 
-export function alsSessieCookie(options?: CookieOptions): CookieOptions {
+/**
+ * Levensduur van een mobiele (persistente) sessie: 3 dagen in seconden.
+ * Mobiele gebruikers loggen zo hooguit 1× per 3 dagen opnieuw in i.p.v. dagelijks.
+ */
+export const MOBIEL_SESSIE_MAXAGE = 60 * 60 * 24 * 3
+
+/**
+ * Niet-httpOnly markercookie dat aangeeft dat de huidige sessie een mobiele,
+ * persistente sessie is. Gezet bij de mobiele login en ververst door de
+ * middleware; gelezen door de cookie-schrijvers (server én browser) om te
+ * bepalen of de auth-cookies een echte Max-Age krijgen i.p.v. sessie-cookies.
+ */
+export const MOBIEL_MARKER_COOKIE = 'eva_mobiel'
+
+/**
+ * Bepaalt de levensduur van een auth-cookie:
+ * - `persistent = false` (desktop): sessie-cookie, sterft bij het sluiten van de
+ *   browser/app — elke opstart loopt via het inlogscherm.
+ * - `persistent = true` (mobiel): vaste Max-Age van {@link MOBIEL_SESSIE_MAXAGE},
+ *   zodat de sessie een app-herstart overleeft.
+ * Verwijderingen (maxAge 0) blijven altijd intact, anders raak je cookies nooit kwijt.
+ */
+export function alsSessieCookie(options?: CookieOptions, persistent = false): CookieOptions {
   const opts: CookieOptions = { ...(options ?? {}) }
-  if (opts.maxAge !== 0) {
-    delete opts.maxAge
+  if (opts.maxAge === 0) return opts
+  if (persistent) {
+    opts.maxAge = MOBIEL_SESSIE_MAXAGE
     delete opts.expires
+    return opts
   }
+  delete opts.maxAge
+  delete opts.expires
   return opts
 }
 
@@ -49,8 +75,13 @@ export const browserSessieCookies = {
   },
   setAll(cookiesToSet: CookieToSet[]) {
     if (typeof document === 'undefined') return
+    // Mobiele sessie? Dan de auth-cookies persistent schrijven (Max-Age), zodat
+    // ze een app-herstart overleven. De marker wordt bij de mobiele login gezet.
+    const persistent = document.cookie
+      .split(/; */)
+      .some((deel) => deel.startsWith(`${MOBIEL_MARKER_COOKIE}=`))
     for (const { name, value, options } of cookiesToSet) {
-      const opts = alsSessieCookie(options)
+      const opts = alsSessieCookie(options, persistent)
       let cookie = `${name}=${encodeURIComponent(value)}`
       cookie += `; Path=${opts.path ?? '/'}`
       if (opts.domain) cookie += `; Domain=${opts.domain}`
