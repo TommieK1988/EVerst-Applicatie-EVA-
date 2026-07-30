@@ -92,6 +92,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   // Cascade-keuze: gekozen knoop-id per diepte. Terugval = vrij tekstveld (lege boom).
   const [gekozen, setGekozen] = useState<string[]>([])
   const [vrijeLocatie, setVrijeLocatie] = useState('')
+  // Bewerken van een oude registratie die nog niet op de (inmiddels ingestelde)
+  // boom staat: toon de vorige locatie als hint zodat je 'm juist kunt plaatsen.
+  const [vorigeLocatie, setVorigeLocatie] = useState('')
+  const [oudNietOpBoom, setOudNietOpBoom] = useState(false)
 
   const [regDatum, setRegDatum] = useState(new Date().toISOString().slice(0, 10))
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>([])
@@ -128,7 +132,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   function leegmaken() {
     setBewerkId(null)
-    setGekozen([]); setVrijeLocatie('')
+    setGekozen([]); setVrijeLocatie(''); setVorigeLocatie(''); setOudNietOpBoom(false)
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setAfgerond(false)
@@ -143,9 +147,14 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setBewerkId(r.id)
     const opgeslagen = (r.locatie ?? []) as LocatieWaarde[]
     if (heeftBoom && boom) {
-      setGekozen(selectieVanLocatie(boom.nodes, opgeslagen)); setVrijeLocatie('')
+      const sel = selectieVanLocatie(boom.nodes, opgeslagen)
+      setGekozen(sel); setVrijeLocatie('')
+      // Oude registratie zonder (passende) boom-locatie → hint met de vorige plek.
+      setVorigeLocatie(opgeslagen.map(l => l.waarde).filter(Boolean).join(' · '))
+      setOudNietOpBoom(sel.length === 0)
     } else {
       setVrijeLocatie(opgeslagen[0]?.waarde ?? ''); setGekozen([])
+      setVorigeLocatie(''); setOudNietOpBoom(false)
     }
     setRegDatum(r.registration_date)
     setWerkzaamheden(
@@ -265,7 +274,15 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             {boom === null ? (
               <div style={{ fontSize: 13, color: '#6b757c' }}>Laden…</div>
             ) : heeftBoom ? (
-              cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
+              <>
+              {oudNietOpBoom && (
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a5b00', borderRadius: 10, padding: '9px 11px', fontSize: 12.5 }}>
+                  {vorigeLocatie
+                    ? <>Nog niet op de boom geplaatst. Vorige locatie: <strong>{vorigeLocatie}</strong>. Kies hieronder de juiste plek.</>
+                    : 'Nog geen locatie. Kies hieronder de juiste plek op de boom.'}
+                </div>
+              )}
+              {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
                 <div key={diepte}>
                   <label style={label} htmlFor={`hr-niv-${diepte}`}>{boom.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
                   <select
@@ -278,7 +295,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                     {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
                   </select>
                 </div>
-              ))
+              ))}
+              </>
             ) : (
               <div>
                 <label style={label} htmlFor="hr-loc">Locatie</label>

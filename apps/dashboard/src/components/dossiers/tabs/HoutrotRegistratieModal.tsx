@@ -62,6 +62,9 @@ export default function HoutrotRegistratieModal({
   // Cascade-keuze: gekozen knoop-id per diepte. Bij bewerken uit het pad terugzetten.
   const [gekozen, setGekozen] = useState<string[]>(() => selectieVanLocatie(boom.nodes, opgeslagenLoc))
   const [vrijeLocatie, setVrijeLocatie] = useState(!heeftBoom ? (opgeslagenLoc[0]?.waarde ?? '') : '')
+  // Oude registratie die nog niet op de (inmiddels ingestelde) boom staat.
+  const vorigeLocatie = opgeslagenLoc.map(l => l.waarde).filter(Boolean).join(' · ')
+  const oudNietOpBoom = heeftBoom && !!bestaand && selectieVanLocatie(boom.nodes, opgeslagenLoc).length === 0
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>(
     (bestaand?.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
       .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
@@ -169,6 +172,14 @@ export default function HoutrotRegistratieModal({
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Locatie</h3>
             {heeftBoom ? (
+              <>
+              {oudNietOpBoom && (
+                <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+                  {vorigeLocatie
+                    ? <>Nog niet op de boom geplaatst. Vorige locatie: <strong>{vorigeLocatie}</strong>. Kies hieronder de juiste plek.</>
+                    : 'Nog geen locatie. Kies hieronder de juiste plek op de boom.'}
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-3">
                 {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
                   <div key={diepte}>
@@ -181,6 +192,7 @@ export default function HoutrotRegistratieModal({
                   </div>
                 ))}
               </div>
+              </>
             ) : (
               <div>
                 <label className={lblCls}>Locatie</label>
