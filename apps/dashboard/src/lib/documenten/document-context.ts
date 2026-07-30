@@ -372,7 +372,7 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
     const ov = await getOpdrachtOverzicht(dossierId)
     if (!ov) return LEEG_OPDRACHT_BLOK
     const gekozenOpties = ov.opties.filter(o => o.in_opdracht)
-    const contractExcl = (ov.aanneemsom ?? 0) + ov.gekozenOptiesTotaal
+    const contractExcl = (ov.aanneemsomInclStelposten ?? ov.aanneemsom ?? 0) + ov.gekozenOptiesTotaal
     const onderdelen: OpdrachtOnderdeelRegel[] = []
     if (ov.basis != null) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Aangenomen werk conform offerte', bedrag: fmtEur(ov.basis) })
     for (const sp of ov.stelposten) onderdelen.push({ soort: 'Stelpost', omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })

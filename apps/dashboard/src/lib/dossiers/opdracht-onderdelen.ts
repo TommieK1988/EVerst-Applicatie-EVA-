@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import type { OpdrachtOnderdeel } from '@everts/database'
 import { getDossierBewaking } from './actions'
 import { assertDossierBewerkbaar } from './guards'
+import { getDossierMeerwerk } from './meerwerk'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 const rond = (n: number): number => Math.round(n * 100) / 100
@@ -33,11 +34,20 @@ export type OpdrachtOptieView = {
   bedrag_excl_btw: number | null
   in_opdracht: boolean
 }
+export type OpdrachtMeerwerkView = {
+  id: string
+  omschrijving: string
+  bedrag_excl_btw: number
+}
 export type OpdrachtOverzicht = {
-  /** Aanneemsom excl. btw (incl. stelposten, excl. opties) uit de hoofd-offerte. */
+  /** Aanneemsom excl. btw uit de hoofd-offerte (bevat stelposten alleen als stelposten_in_totaal aan staat). */
   aanneemsom: number | null
-  /** Basisscope = aanneemsom − som stelposten. */
+  /** Aanneemsom mét de stelposten erin (ongeacht stelposten_in_totaal) — de orderbasis. */
+  aanneemsomInclStelposten: number | null
+  /** Basisscope = aanneemsom-incl-stelposten − som stelposten (het niet-stelpost-werk). */
   basis: number | null
+  /** Zitten de stelposten in de aanneemsom (quote.stelposten_in_totaal)? Zo niet: apart factureren. */
+  stelpostenInAanneemsom: boolean
   stelposten: OpdrachtStelpostView[]
   opties: OpdrachtOptieView[]
   stelpostenTotaal: number
@@ -45,16 +55,19 @@ export type OpdrachtOverzicht = {
   optiesTotaal: number
   /** Alleen de opties die in opdracht zijn. */
   gekozenOptiesTotaal: number
+  /** Goedgekeurde (akkoord/voltooid) meerwerkregels van het dossier. */
+  meerwerken: OpdrachtMeerwerkView[]
+  meerwerkTotaal: number
 }
 
 /** Hoofd-offerte (geen meerwerk-offerte) van een calculatieproject; nieuwste eerst. */
 async function vindHoofdOfferte(
   supabase: any,
   projectId: string,
-): Promise<{ id: string; subtotaal_ex_btw: number | null } | null> {
+): Promise<{ id: string; subtotaal_ex_btw: number | null; stelposten_in_totaal: boolean | null } | null> {
   const { data } = await supabase
     .from('quotes')
-    .select('id, subtotaal_ex_btw, meerwerk_regel_id')
+    .select('id, subtotaal_ex_btw, stelposten_in_totaal, meerwerk_regel_id')
     .eq('project_id', projectId)
     .is('meerwerk_regel_id', null)
     .order('updated_at', { ascending: false })
@@ -194,11 +207,29 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
 
   const aanneemsom = quote.subtotaal_ex_btw != null ? num(quote.subtotaal_ex_btw) : null
   const stelpostenTotaal = rond(stelposten.reduce((s, x) => s + num(x.bedrag_excl_btw), 0))
-  const basis = aanneemsom != null ? rond(aanneemsom - stelpostenTotaal) : null
+  // Stelposten zitten in de aanneemsom als de offerte dat zo instelt (default true). Zo niet, staan ze
+  // erbuiten en moeten ze apart worden gefactureerd — dan telt aanneemsomInclStelposten ze wél mee als
+  // orderbasis, zodat contracttotaal en opsomming kloppen.
+  const stelpostenInAanneemsom = quote.stelposten_in_totaal ?? true
+  const aanneemsomInclStelposten = aanneemsom == null
+    ? null
+    : rond(stelpostenInAanneemsom ? aanneemsom : aanneemsom + stelpostenTotaal)
+  const basis = aanneemsomInclStelposten == null ? null : rond(aanneemsomInclStelposten - stelpostenTotaal)
   const optiesTotaal = rond(opties.reduce((s, x) => s + num(x.bedrag_excl_btw), 0))
   const gekozenOptiesTotaal = rond(opties.filter(o => o.in_opdracht).reduce((s, x) => s + num(x.bedrag_excl_btw), 0))
 
-  return { aanneemsom, basis, stelposten, opties, stelpostenTotaal, optiesTotaal, gekozenOptiesTotaal }
+  // Goedgekeurde (akkoord/voltooid) meerwerkregels, itemized voor het blok.
+  const mw = await getDossierMeerwerk(dossierId).catch(() => null)
+  const meerwerken: OpdrachtMeerwerkView[] = (mw?.regels ?? [])
+    .filter(r => r.status === 'akkoord' || r.status === 'voltooid')
+    .map(r => ({ id: r.id, omschrijving: r.omschrijving, bedrag_excl_btw: rond(num(r.effectiefExcl)) }))
+  const meerwerkTotaal = rond(mw?.totalen.goedgekeurdExcl ?? 0)
+
+  return {
+    aanneemsom, aanneemsomInclStelposten, basis, stelpostenInAanneemsom,
+    stelposten, opties, stelpostenTotaal, optiesTotaal, gekozenOptiesTotaal,
+    meerwerken, meerwerkTotaal,
+  }
 }
 
 /**

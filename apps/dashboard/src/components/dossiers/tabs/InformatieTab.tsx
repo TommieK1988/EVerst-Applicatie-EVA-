@@ -18,7 +18,6 @@ import {
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
-import { DossierAutoVervers } from '../DossierAutoVervers'
 import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { zetOptieInOpdracht, wijsStelpostBewakingscodesToe } from '@/lib/dossiers/opdracht-onderdelen'
@@ -193,12 +192,29 @@ function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes
   onWijsCodes: () => void
   pending: boolean
 }) {
-  const { stelposten, opties } = overzicht
+  const { stelposten, opties, meerwerken } = overzicht
   return (
     <div className="space-y-4">
       <div>
         <div className="mb-1.5 flex items-baseline justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Stelposten</span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Stelposten</span>
+            {stelposten.length > 0 && (
+              overzicht.stelpostenInAanneemsom ? (
+                <span className="rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500" title="Deze stelposten zitten in de aanneemsom — niet apart factureren.">
+                  in aanneemsom
+                </span>
+              ) : (
+                <span
+                  className="rounded-full px-1.5 py-px text-[9.5px] font-semibold"
+                  style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
+                  title="Deze stelposten zitten niet in de aanneemsom — apart factureren."
+                >
+                  apart factureren
+                </span>
+              )
+            )}
+          </span>
           <span className="flex items-baseline gap-2">
             {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
               <button
@@ -286,6 +302,23 @@ function OpdrachtSamenstelling({ overzicht, readOnly, onToggleOptie, onWijsCodes
                 )}>
                   {op.bedrag_excl_btw != null ? fmtBedrag(op.bedrag_excl_btw) : '—'}
                 </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {meerwerken.length > 0 && (
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Goedgekeurd meerwerk</span>
+            <span className="tabular-nums text-[11px] font-semibold text-neutral-500">{fmtBedrag(overzicht.meerwerkTotaal)}</span>
+          </div>
+          <div className="divide-y divide-neutral-100">
+            {meerwerken.map(mw => (
+              <div key={mw.id} className="flex items-baseline justify-between gap-3 py-[5px]">
+                <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{mw.omschrijving}</span>
+                <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">{fmtBedrag(mw.bedrag_excl_btw)}</span>
               </div>
             ))}
           </div>
@@ -852,7 +885,8 @@ export function InformatieTab({
   // Itemized opbouw alleen tonen als er daadwerkelijk stelposten/opties zijn; anders de aggregaten
   // (zoals voorheen) laten staan — geen lege opbouw en geen verdwenen totaalregels.
   const toonOpdrachtOpbouw = !!opdrachtOverzicht
-    && (opdrachtOverzicht.stelposten.length > 0 || opdrachtOverzicht.opties.length > 0)
+    && (opdrachtOverzicht.stelposten.length > 0 || opdrachtOverzicht.opties.length > 0
+        || opdrachtOverzicht.meerwerken.length > 0)
   const [optiePending, startOptieTransition] = React.useTransition()
   function toggleOptie(id: string, aan: boolean) {
     startOptieTransition(async () => {
@@ -881,9 +915,6 @@ export function InformatieTab({
 
   const inhoud = (
     <div className="px-8 py-7">
-
-      {/* Auto-ververs uit Bouw7 bij openen (1× per sessie) + loading-balk bovenin */}
-      <DossierAutoVervers dossierId={dossier.id} bouw7Gekoppeld={!!dossier.bouw7_id} />
 
       {/* ── Pagina header ── */}
       <div className="mb-6 flex items-start justify-between gap-4">
