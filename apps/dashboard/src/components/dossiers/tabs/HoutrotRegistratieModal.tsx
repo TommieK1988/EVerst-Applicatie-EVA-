@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   createRegistratie, updateRegistratie, uploadPhoto, deletePhoto, regelVanRecept,
   zetArchief, deleteRegistratie,
@@ -9,7 +9,9 @@ import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import type { Recept } from '@/services/houtrotherstel/recepten'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { formatCurrency } from '@/lib/houtrotherstel/utils'
-import { cascadeRijen, bouwLocatiePad, selectieVanLocatie } from '@/lib/houtrotherstel/locatie-boom'
+import {
+  cascadeRijen, bouwLocatiePad, selectieVanLocatie, locatieKeuzeCompleet,
+} from '@/lib/houtrotherstel/locatie-boom'
 import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
 import type {
   RepairRegistration, RepairPhoto, RegistratieForm, LocatieBoom, LocatieWaarde,
@@ -51,21 +53,43 @@ export default function HoutrotRegistratieModal({
 }: {
   dossierId: string
   registratie: RepairRegistration | null
-  boom: LocatieBoom
+  /** `null` = de boom wordt nog geladen. Dan niet opslaan: zie het effect hieronder. */
+  boom: LocatieBoom | null
   recepten: Recept[]
   onClose: () => void
   onSaved: () => void
 }) {
   const bestaand = registratie
   const opgeslagenLoc = (bestaand?.locatie ?? []) as LocatieWaarde[]
-  const heeftBoom = boom.nodes.length > 0
+  const boomLaadt = boom === null
+  const heeftBoom = !!boom && boom.nodes.length > 0
 
   // Cascade-keuze: gekozen knoop-id per diepte. Bij bewerken uit het pad terugzetten.
-  const [gekozen, setGekozen] = useState<string[]>(() => selectieVanLocatie(boom.nodes, opgeslagenLoc))
-  const [vrijeLocatie, setVrijeLocatie] = useState(!heeftBoom ? (opgeslagenLoc[0]?.waarde ?? '') : '')
+  const [gekozen, setGekozen] = useState<string[]>(() => selectieVanLocatie(boom?.nodes ?? [], opgeslagenLoc))
+  const [zelfGekozen, setZelfGekozen] = useState(false)
+  const [vrijeLocatie, setVrijeLocatie] = useState(opgeslagenLoc[0]?.waarde ?? '')
+
+  // De boom komt uit een server action en kan ná het openen van de modal binnenkomen.
+  // Zonder deze herhydratatie blijft de cascade op de lege beginstand staan, en zou
+  // opslaan de bestaande locatie met een leeg pad overschrijven.
+  useEffect(() => {
+    if (!boom || zelfGekozen) return
+    setGekozen(selectieVanLocatie(boom.nodes, opgeslagenLoc))
+    // opgeslagenLoc is afgeleid van de registratie-prop en verandert niet tijdens de modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boom, zelfGekozen])
+
+  function kiesNiveau(diepte: number, nodeId: string) {
+    setZelfGekozen(true)
+    setGekozen(prev => [...prev.slice(0, diepte), nodeId].filter(Boolean))
+  }
+
   // Oude registratie die nog niet op de (inmiddels ingestelde) boom staat.
   const vorigeLocatie = opgeslagenLoc.map(l => l.waarde).filter(Boolean).join(' · ')
-  const oudNietOpBoom = heeftBoom && !!bestaand && selectieVanLocatie(boom.nodes, opgeslagenLoc).length === 0
+  const oudNietOpBoom = heeftBoom && !!bestaand && selectieVanLocatie(boom!.nodes, opgeslagenLoc).length === 0
+  const locatieCompleet = heeftBoom
+    ? locatieKeuzeCompleet(boom!.nodes, gekozen)
+    : !!vrijeLocatie.trim()
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>(
     (bestaand?.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
       .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
@@ -111,13 +135,21 @@ export default function HoutrotRegistratieModal({
     try {
       const medewerker = await getHuidigeMedewerker()
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden.')
+      // Zolang de boom niet binnen is, weten we niet of er een locatie-indeling is;
+      // opslaan zou de bestaande locatie met een leeg pad overschrijven.
+      if (boomLaadt) throw new Error('De locatie-indeling wordt nog geladen. Probeer het over een moment opnieuw.')
+      if (!locatieCompleet) {
+        throw new Error(heeftBoom
+          ? 'Kies eerst de volledige locatie (elk niveau).'
+          : 'Vul eerst een locatie in.')
+      }
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
       const locatie: LocatieWaarde[] =
         heeftBoom
-          ? bouwLocatiePad(boom, gekozen)
-          : vrijeLocatie.trim() ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }] : []
+          ? bouwLocatiePad(boom!, gekozen)
+          : [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
 
       const teVerwijderen = new Set(verwijderd)
       if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
@@ -202,7 +234,9 @@ export default function HoutrotRegistratieModal({
           {/* Locatie */}
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Locatie</h3>
-            {heeftBoom ? (
+            {boomLaadt ? (
+              <div className="text-sm text-slate-400">Locatie-indeling laden…</div>
+            ) : heeftBoom ? (
               <>
               {oudNietOpBoom && (
                 <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
@@ -212,17 +246,20 @@ export default function HoutrotRegistratieModal({
                 </div>
               )}
               <div className="grid gap-3 sm:grid-cols-3">
-                {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
+                {cascadeRijen(boom!.nodes, gekozen).map(({ diepte, opties }) => (
                   <div key={diepte}>
-                    <label className={lblCls}>{boom.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
+                    <label className={lblCls}>{boom!.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
                     <select className={inputCls} value={gekozen[diepte] ?? ''}
-                      onChange={e => setGekozen(prev => [...prev.slice(0, diepte), e.target.value].filter(Boolean))}>
+                      onChange={e => kiesNiveau(diepte, e.target.value)}>
                       <option value="">—</option>
                       {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
                     </select>
                   </div>
                 ))}
               </div>
+              {!locatieCompleet && (
+                <p className="mt-2 text-xs text-slate-500">Kies elk niveau; zonder volledige locatie kan de registratie niet worden opgeslagen.</p>
+              )}
               </>
             ) : (
               <div>
@@ -377,7 +414,7 @@ export default function HoutrotRegistratieModal({
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             Annuleren
           </button>
-          <button type="button" onClick={opslaan} disabled={bezig}
+          <button type="button" onClick={opslaan} disabled={bezig || boomLaadt}
             className="rounded-lg bg-everts px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">
             {bezig ? 'Opslaan…' : 'Opslaan'}
           </button>

@@ -63,7 +63,9 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   const readOnly = useDossierReadOnly()
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
   const [recepten, setRecepten] = useState<Recept[]>([])
-  const [boom, setBoom] = useState<LocatieBoom>({ labels: [], nodes: [] })
+  // null = nog aan het laden. Bewust te onderscheiden van "geen boom ingericht":
+  // de bewerkmodal mag niet opslaan zolang onbekend is of er een indeling is.
+  const [boom, setBoom] = useState<LocatieBoom | null>(null)
   const [fout, setFout] = useState<string | null>(null)
   // Modal: undefined = dicht; null = nieuw; object = bewerken.
   const [modal, setModal] = useState<RepairRegistration | null | undefined>(undefined)

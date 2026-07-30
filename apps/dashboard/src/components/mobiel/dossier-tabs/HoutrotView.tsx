@@ -8,7 +8,9 @@ import {
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
-import { cascadeRijen, bouwLocatiePad, selectieVanLocatie } from '@/lib/houtrotherstel/locatie-boom'
+import {
+  cascadeRijen, bouwLocatiePad, selectieVanLocatie, locatieKeuzeCompleet,
+} from '@/lib/houtrotherstel/locatie-boom'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
   type RepairRegistration, type RepairPhoto, type RegistratieForm,
@@ -90,11 +92,15 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   // Cascade-keuze: gekozen knoop-id per diepte. Terugval = vrij tekstveld (lege boom).
   const [gekozen, setGekozen] = useState<string[]>([])
+  const [zelfGekozen, setZelfGekozen] = useState(false)
   const [vrijeLocatie, setVrijeLocatie] = useState('')
-  // Bewerken van een oude registratie die nog niet op de (inmiddels ingestelde)
-  // boom staat: toon de vorige locatie als hint zodat je 'm juist kunt plaatsen.
-  const [vorigeLocatie, setVorigeLocatie] = useState('')
-  const [oudNietOpBoom, setOudNietOpBoom] = useState(false)
+  /**
+   * De opgeslagen locatie van de registratie die wordt bewerkt. Bewust de ruwe waarde
+   * bewaren en de hint eruit bérekenen: de boom komt uit een server action en kan later
+   * binnenkomen dan het moment waarop je op een registratie tikt. Als vlag-in-state
+   * bleef de hint dan onterecht weg — en werd de locatie bij opslaan gewist.
+   */
+  const [bewerkLocatie, setBewerkLocatie] = useState<LocatieWaarde[]>([])
 
   const [regDatum, setRegDatum] = useState(new Date().toISOString().slice(0, 10))
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>([])
@@ -123,7 +129,28 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
   }, [dossierId])
 
+  const boomLaadt = boom === null
   const heeftBoom = !!boom && boom.nodes.length > 0
+
+  // Hint + volledigheid als berekening, niet als state — zie `bewerkLocatie`.
+  const vorigeLocatie = bewerkLocatie.map(l => l.waarde).filter(Boolean).join(' · ')
+  const oudNietOpBoom = heeftBoom && !!bewerkId && selectieVanLocatie(boom.nodes, bewerkLocatie).length === 0
+  const locatieCompleet = heeftBoom
+    ? locatieKeuzeCompleet(boom.nodes, gekozen)
+    : !!vrijeLocatie.trim()
+
+  // De boom kan ná het openen van het formulier binnenkomen; dan de cascade opnieuw
+  // vullen uit de opgeslagen locatie, tenzij de gebruiker zelf al gekozen heeft.
+  useEffect(() => {
+    if (!boom || zelfGekozen) return
+    setGekozen(selectieVanLocatie(boom.nodes, bewerkLocatie))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boom, zelfGekozen, bewerkLocatie])
+
+  function kiesNiveau(diepte: number, nodeId: string) {
+    setZelfGekozen(true)
+    setGekozen(prev => [...prev.slice(0, diepte), nodeId].filter(Boolean))
+  }
 
   // Alleen houtrot-recepten (die met een groep) verschijnen in de keuze.
   const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
@@ -131,7 +158,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   function leegmaken() {
     setBewerkId(null)
-    setGekozen([]); setVrijeLocatie(''); setVorigeLocatie(''); setOudNietOpBoom(false)
+    setGekozen([]); setZelfGekozen(false); setVrijeLocatie(''); setBewerkLocatie([])
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setAfgerond(false)
@@ -144,17 +171,14 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   function bewerken(r: RepairRegistration) {
     setBewerkId(r.id)
+    // Alleen de ruwe locatie bewaren; de cascade wordt gevuld door het effect zodra de
+    // boom er is, en de hint wordt berekend. Zo maakt het niet uit of de boom al binnen
+    // was toen je op de registratie tikte.
     const opgeslagen = (r.locatie ?? []) as LocatieWaarde[]
-    if (heeftBoom && boom) {
-      const sel = selectieVanLocatie(boom.nodes, opgeslagen)
-      setGekozen(sel); setVrijeLocatie('')
-      // Oude registratie zonder (passende) boom-locatie → hint met de vorige plek.
-      setVorigeLocatie(opgeslagen.map(l => l.waarde).filter(Boolean).join(' · '))
-      setOudNietOpBoom(sel.length === 0)
-    } else {
-      setVrijeLocatie(opgeslagen[0]?.waarde ?? ''); setGekozen([])
-      setVorigeLocatie(''); setOudNietOpBoom(false)
-    }
+    setBewerkLocatie(opgeslagen)
+    setZelfGekozen(false)
+    setGekozen(boom ? selectieVanLocatie(boom.nodes, opgeslagen) : [])
+    setVrijeLocatie(opgeslagen[0]?.waarde ?? '')
     setRegDatum(r.registration_date)
     setWerkzaamheden(
       (r.lines ?? [])
@@ -206,6 +230,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     try {
       const medewerker = await getHuidigeMedewerker()
       if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
+      // Zolang de boom niet binnen is, weten we niet of er een locatie-indeling is;
+      // opslaan zou de bestaande locatie met een leeg pad overschrijven.
+      if (boomLaadt) throw new Error('De locatie wordt nog geladen. Probeer het over een moment opnieuw.')
+      if (!locatieCompleet) {
+        throw new Error(heeftBoom ? 'Kies eerst de volledige locatie.' : 'Vul eerst een locatie in.')
+      }
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
@@ -213,9 +243,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       const locatie: LocatieWaarde[] =
         heeftBoom && boom
           ? bouwLocatiePad(boom, gekozen)
-          : vrijeLocatie.trim()
-            ? [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
-            : []
+          : [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
 
       const teVerwijderen = new Set(verwijderdeFotos)
       if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
@@ -330,13 +358,16 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                     id={`hr-niv-${diepte}`}
                     style={veld}
                     value={gekozen[diepte] ?? ''}
-                    onChange={e => setGekozen(prev => [...prev.slice(0, diepte), e.target.value].filter(Boolean))}
+                    onChange={e => kiesNiveau(diepte, e.target.value)}
                   >
                     <option value="">—</option>
                     {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
                   </select>
                 </div>
               ))}
+              {!locatieCompleet && (
+                <div style={{ fontSize: 12, color: '#6b757c' }}>Kies elk niveau; zonder volledige locatie kun je niet opslaan.</div>
+              )}
               </>
             ) : (
               <div>
@@ -537,11 +568,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           <button
             type="button"
             onClick={opslaan}
-            disabled={bezig}
+            disabled={bezig || boomLaadt}
             style={{
               flex: 1, padding: '14px 16px', borderRadius: 12, border: 'none',
-              background: bezig ? '#9aa4ab' : '#009439', color: '#fff',
-              fontSize: 16, fontWeight: 700, cursor: bezig ? 'default' : 'pointer',
+              background: bezig || boomLaadt ? '#9aa4ab' : '#009439', color: '#fff',
+              fontSize: 16, fontWeight: 700, cursor: bezig || boomLaadt ? 'default' : 'pointer',
             }}
           >
             {bezig ? 'Opslaan…' : 'Opslaan'}

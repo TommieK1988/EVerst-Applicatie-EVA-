@@ -178,6 +178,20 @@ export function cascadeRijen(nodes: LocatieNode[], gekozenIds: string[]): { diep
   return rijen
 }
 
+/**
+ * Is de cascade-keuze volledig? Volledig = er is geen keuzelijst meer open.
+ *
+ * `cascadeRijen` toont per diepte een rij zolang de daarboven gekozen knoop kinderen
+ * heeft. Zijn er evenveel rijen als keuzes, dan is de diepste gekozen knoop een blad
+ * en is het pad af. Zijn er méér rijen dan keuzes, dan staat er nog een lijst op "—".
+ *
+ * Nodig omdat een half pad (alleen Blok, geen Zijde/Etage) anders stil wordt opgeslagen
+ * en de registratie in rapportages onder "niet ingevuld" belandt.
+ */
+export function locatieKeuzeCompleet(nodes: LocatieNode[], gekozenIds: string[]): boolean {
+  return cascadeRijen(nodes, gekozenIds).length === gekozenIds.filter(Boolean).length
+}
+
 /** Bouwt het locatiepad (voor opslag) uit de gekozen knoop-ids per diepte. */
 export function bouwLocatiePad(boom: LocatieBoom, gekozenIds: string[]): LocatieWaarde[] {
   const uit: LocatieWaarde[] = []
