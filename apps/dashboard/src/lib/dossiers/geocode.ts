@@ -1,6 +1,6 @@
 import 'server-only'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { geocodeAdres } from '@/lib/wagenpark/geocode'
+import { geocodeAdres, geocodeQuery } from '@/lib/wagenpark/geocode'
 
 /**
  * Geocoding voor dossier-werkadressen.
@@ -17,6 +17,21 @@ import { geocodeAdres } from '@/lib/wagenpark/geocode'
  * `dossiers_geocode_reset_trg` zet die status weer op null zodra het werkadres
  * wijzigt, zodat een gewijzigd adres vanzelf opnieuw wordt opgehaald.
  */
+
+/** Nederlandse 6-positie-postcode (PC6), bijv. "2518 PB" — straatsegment-precies. */
+const PC6 = /^[0-9]{4}\s?[a-z]{2}$/i
+
+/**
+ * Postcode-fallback-query. Corporatie-werkadressen zijn vaak te rommelig voor
+ * Nominatim (meerdere straten aan elkaar, "kamer 12"-toevoegingen, nummerreeksen),
+ * maar de PC6-postcode is heel precies. Geeft '' als er geen bruikbare PC6 is.
+ */
+function postcodeQuery(postcode?: string | null, plaats?: string | null): string {
+  const pc = (postcode ?? '').trim()
+  if (!PC6.test(pc)) return ''
+  const base = [pc, (plaats ?? '').trim()].filter((p) => p).join(' ')
+  return `${base}, Nederland`
+}
 
 export type GeocodeDossiersResultaat = {
   verwerkt: number
@@ -64,7 +79,12 @@ export async function geocodeDossiers(
     const straat = [d.werkadres_straat, d.werkadres_huisnummer]
       .filter((s) => s && s.trim())
       .join(' ')
-    const punt = await geocodeAdres(straat || null, d.werkadres_postcode, d.werkadres_stad)
+    let punt = await geocodeAdres(straat || null, d.werkadres_postcode, d.werkadres_stad)
+    // Lukt het volledige adres niet, val terug op de (precieze) PC6-postcode.
+    if (!punt) {
+      const pq = postcodeQuery(d.werkadres_postcode, d.werkadres_stad)
+      if (pq) punt = await geocodeQuery(pq)
+    }
     await pgQuery(
       `update public.dossiers
           set adres_lat = $2, adres_lng = $3, geocode_status = $4, geocode_op = now()
