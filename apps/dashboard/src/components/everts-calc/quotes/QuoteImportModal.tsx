@@ -55,10 +55,20 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
   const [isPending, setIsPending] = useState(false)
 
   useEffect(() => {
-    // Laad data vanuit localStorage (client-side only)
     async function laad() {
-      const { getGroepen, getCalculatieregels, getComponentregels, getScenarios } = await import('@/lib/everts-calc/local-store')
+      const { getGroepen, getCalculatieregels, getComponentregels, getScenarios, hydrateCalculatie } =
+        await import('@/lib/everts-calc/local-store')
       const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
+
+      // De calculatie uit Supabase halen; dit scherm kan geopend worden zonder dat
+      // de calculatie-omgeving in deze sessie al open is geweest.
+      if (projectId) {
+        try {
+          const { laadCalculatieSnapshot } = await import('@/app/(platform)/everts-calc/actions/sync')
+          const snap = await laadCalculatieSnapshot(projectId)
+          if (snap) hydrateCalculatie(projectId, snap)
+        } catch { /* val terug op wat er al in het werkgeheugen staat */ }
+      }
 
       const alleScenarios = getScenarios()
 

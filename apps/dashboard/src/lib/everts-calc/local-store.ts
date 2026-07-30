@@ -1,6 +1,19 @@
+/**
+ * Werkgeheugen van de calculatiemodule (calculatie, meetstaat, werkbegroting).
+ *
+ * Bewust géén localStorage meer: gegevens die alleen op één apparaat staan lopen
+ * uit de pas met de rest van EVA — een collega of een tweede browser zag iets
+ * anders, of niets. De bron van waarheid is Supabase. Dit bestand is puur de
+ * synchrone werkkopie van één sessie: bij het openen van een calculatie/werk-
+ * begroting wordt hij gevuld door hydrateCalculatie()/hydrateWerkbegroting(), en
+ * elke wijziging wordt door het scherm weer naar Supabase weggeschreven.
+ *
+ * Gevolg: wat niet is opgeslagen, overleeft een harde herlaadbeurt niet. De
+ * schermen slaan daarom automatisch op (debounce + flush bij wegnavigeren) en
+ * waarschuwen bij het sluiten met openstaande wijzigingen.
+ */
 import type {
-  Project, Deelproject, Locatie, Element, Activiteit,
-  CalculatieLijn, Scenario, BibliotheekActiviteit,
+  Scenario,
   Groep, Calculatieregel, Componentregel, Instellingen, EenheidConfig,
   Meetstaat, Meetregel, MeetregelAggregaat,
   Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent,
@@ -9,28 +22,18 @@ import type {
 import { nieuweId } from './utils'
 
 const KEYS = {
-  werkbegrotingen: 'evc_werkbegrotingen',
-  werkbegroting_regels: 'evc_werkbegroting_regels',
-  werkbegroting_componenten: 'evc_werkbegroting_componenten',
-  werkbegroting_wijzigingen: 'evc_werkbegroting_wijzigingen',
-  werkbegroting_bestellingen: 'evc_werkbegroting_bestellingen',
-  projecten: 'evc_projecten',
-  deelprojecten: 'evc_deelprojecten',
-  locaties: 'evc_locaties',
-  elementen: 'evc_elementen',
-  activiteiten: 'evc_activiteiten',
-  lijnen: 'evc_lijnen',
-  scenarios: 'evc_scenarios',
-  bibliotheek: 'evc_bibliotheek',
-  projectvolgnummer: 'evc_projectvolgnummer',
-  // Nieuwe structuur
-  groepen: 'evc_groepen',
-  calculatieregels: 'evc_calculatieregels',
-  componentregels: 'evc_componentregels',
-  instellingen: 'evc_instellingen',
-  meetstaten: 'evc_meetstaten',
-  meetregels: 'evc_meetregels',
-  meetregel_aggregaten: 'evc_meetregel_aggregaten',
+  werkbegrotingen: 'werkbegrotingen',
+  werkbegroting_regels: 'werkbegroting_regels',
+  werkbegroting_componenten: 'werkbegroting_componenten',
+  werkbegroting_wijzigingen: 'werkbegroting_wijzigingen',
+  werkbegroting_bestellingen: 'werkbegroting_bestellingen',
+  scenarios: 'scenarios',
+  groepen: 'groepen',
+  calculatieregels: 'calculatieregels',
+  componentregels: 'componentregels',
+  meetstaten: 'meetstaten',
+  meetregels: 'meetregels',
+  meetregel_aggregaten: 'meetregel_aggregaten',
 }
 
 // Standaard-eenheden met afkorting + volledige omschrijving.
@@ -77,7 +80,7 @@ function normaliseerEenheden(raw: unknown): EenheidConfig[] {
   return uit.length ? uit : STANDAARD_EENHEDEN
 }
 
-/** Normaliseert een ruwe Instellingen (uit localStorage of Supabase). */
+/** Normaliseert een ruwe Instellingen (zoals hij uit Supabase komt). */
 function normaliseerInstellingen(raw: Partial<Instellingen> | null | undefined): Instellingen {
   return {
     ...STANDAARD_INSTELLINGEN,
@@ -86,108 +89,18 @@ function normaliseerInstellingen(raw: Partial<Instellingen> | null | undefined):
   }
 }
 
+// Werkgeheugen van deze sessie. Op de server (SSR van client-componenten) leest en
+// schrijft dit niets: anders zou de module-state tussen requests gedeeld worden.
+const _geheugen = new Map<string, unknown[]>()
+
 function lees<T>(key: string, fallback: T[]): T[] {
   if (typeof window === 'undefined') return fallback
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch { return fallback }
+  return (_geheugen.get(key) as T[] | undefined) ?? fallback
 }
 
 function sla<T>(key: string, data: T[]): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(key, JSON.stringify(data))
-}
-
-// ─── Projectvolgnummer ────────────────────────────────────────────────────────
-
-export function getProjectVolgnummer(): number {
-  if (typeof window === 'undefined') return 1
-  return parseInt(localStorage.getItem(KEYS.projectvolgnummer) || '1', 10)
-}
-
-export function incrementProjectVolgnummer(): number {
-  const huidig = getProjectVolgnummer()
-  const nieuw = huidig + 1
-  localStorage.setItem(KEYS.projectvolgnummer, String(nieuw))
-  return nieuw
-}
-
-// ─── Projecten ────────────────────────────────────────────────────────────────
-
-export function getProjecten(): Project[] {
-  return lees<Project>(KEYS.projecten, [])
-}
-
-export function getProject(id: string): Project | undefined {
-  return getProjecten().find(p => p.id === id)
-}
-
-export function slaProjectOp(project: Project): void {
-  const lijst = getProjecten().filter(p => p.id !== project.id)
-  sla(KEYS.projecten, [...lijst, { ...project, bijgewerkt_op: new Date().toISOString() }])
-}
-
-export function verwijderProject(id: string): void {
-  sla(KEYS.projecten, getProjecten().filter(p => p.id !== id))
-  // Cascade
-  const dps = getDeelprojecten().filter(d => d.project_id === id)
-  dps.forEach(dp => verwijderDeelproject(dp.id))
-  sla(KEYS.scenarios, getScenarios().filter(s => s.project_id !== id))
-}
-
-// ─── Deelprojecten ────────────────────────────────────────────────────────────
-
-export function getDeelprojecten(project_id?: string): Deelproject[] {
-  const alle = lees<Deelproject>(KEYS.deelprojecten, [])
-  return project_id ? alle.filter(d => d.project_id === project_id) : alle
-}
-
-export function slaDeelprojectOp(dp: Deelproject): void {
-  const lijst = getDeelprojecten().filter(d => d.id !== dp.id)
-  sla(KEYS.deelprojecten, [...lijst, dp])
-}
-
-export function verwijderDeelproject(id: string): void {
-  sla(KEYS.deelprojecten, getDeelprojecten().filter(d => d.id !== id))
-  const locs = getLocaties().filter(l => l.deelproject_id === id)
-  locs.forEach(l => verwijderLocatie(l.id))
-}
-
-// ─── Locaties ─────────────────────────────────────────────────────────────────
-
-export function getLocaties(deelproject_id?: string): Locatie[] {
-  const alle = lees<Locatie>(KEYS.locaties, [])
-  return deelproject_id ? alle.filter(l => l.deelproject_id === deelproject_id) : alle
-}
-
-export function slaLocatieOp(locatie: Locatie): void {
-  const lijst = getLocaties().filter(l => l.id !== locatie.id)
-  sla(KEYS.locaties, [...lijst, locatie])
-}
-
-export function verwijderLocatie(id: string): void {
-  sla(KEYS.locaties, getLocaties().filter(l => l.id !== id))
-  const elms = getElementen().filter(e => e.locatie_id === id)
-  elms.forEach(e => verwijderElement(e.id))
-}
-
-// ─── Elementen ────────────────────────────────────────────────────────────────
-
-export function getElementen(locatie_id?: string): Element[] {
-  const alle = lees<Element>(KEYS.elementen, [])
-  return locatie_id ? alle.filter(e => e.locatie_id === locatie_id) : alle
-}
-
-export function slaElementOp(element: Element): void {
-  const lijst = getElementen().filter(e => e.id !== element.id)
-  sla(KEYS.elementen, [...lijst, element])
-}
-
-export function verwijderElement(id: string): void {
-  sla(KEYS.elementen, getElementen().filter(e => e.id !== id))
-  const acts = getActiviteiten().filter(a => a.element_id === id)
-  acts.forEach(a => verwijderActiviteit(a.id))
+  _geheugen.set(key, data)
 }
 
 // ─── Scenarios ────────────────────────────────────────────────────────────────
@@ -280,94 +193,6 @@ export function kopieerScenario(scenarioId: string, naam?: string): Scenario | n
   return nieuwScenario
 }
 
-// ─── Activiteiten ─────────────────────────────────────────────────────────────
-
-export function getActiviteiten(element_id?: string, scenario_id?: string): Activiteit[] {
-  const alle = lees<Activiteit>(KEYS.activiteiten, [])
-  return alle.filter(a =>
-    (!element_id || a.element_id === element_id) &&
-    (!scenario_id || a.scenario_id === scenario_id)
-  )
-}
-
-export function slaActiviteitOp(activiteit: Activiteit): void {
-  const lijst = getActiviteiten().filter(a => a.id !== activiteit.id)
-  sla(KEYS.activiteiten, [...lijst, activiteit])
-}
-
-export function verwijderActiviteit(id: string): void {
-  sla(KEYS.activiteiten, getActiviteiten().filter(a => a.id !== id))
-  sla(KEYS.lijnen, getLijnen().filter(l => l.activiteit_id !== id))
-}
-
-// ─── Calculatielijnen ─────────────────────────────────────────────────────────
-
-export function getLijnen(activiteit_id?: string): CalculatieLijn[] {
-  const alle = lees<CalculatieLijn>(KEYS.lijnen, [])
-  return activiteit_id ? alle.filter(l => l.activiteit_id === activiteit_id) : alle
-}
-
-export function slaLijnOp(lijn: CalculatieLijn): void {
-  const lijst = getLijnen().filter(l => l.id !== lijn.id)
-  sla(KEYS.lijnen, [...lijst, lijn])
-}
-
-export function verwijderLijn(id: string): void {
-  sla(KEYS.lijnen, getLijnen().filter(l => l.id !== id))
-}
-
-// ─── Bibliotheek ──────────────────────────────────────────────────────────────
-
-export function getBibliotheek(discipline?: string): BibliotheekActiviteit[] {
-  const alle = lees<BibliotheekActiviteit>(KEYS.bibliotheek, [])
-  return discipline ? alle.filter(b => b.discipline === discipline || b.discipline === 'algemeen') : alle
-}
-
-export function slaBibliotheekActiviteitOp(act: BibliotheekActiviteit): void {
-  const lijst = getBibliotheek().filter(b => b.id !== act.id)
-  sla(KEYS.bibliotheek, [...lijst, act])
-}
-
-// ─── Helpers: activiteit aanmaken vanuit bibliotheek ─────────────────────────
-
-export function voegBibliotheekActiviteitToe(
-  element_id: string,
-  scenario_id: string,
-  bib_act: BibliotheekActiviteit,
-  hoeveelheid: number
-): Activiteit {
-  const volgorde = getActiviteiten(element_id, scenario_id).length + 1
-  const activiteit: Activiteit = {
-    id: nieuweId(),
-    element_id,
-    scenario_id,
-    naam: bib_act.naam,
-    eenheid: bib_act.eenheid,
-    hoeveelheid,
-    bibliotheek_activiteit_id: bib_act.id,
-    volgorde,
-  }
-  slaActiviteitOp(activiteit)
-
-  // Maak calculatielijnen aan vanuit bibliotheekregels
-  bib_act.regels.forEach(regel => {
-    const lijn: CalculatieLijn = {
-      id: nieuweId(),
-      activiteit_id: activiteit.id,
-      lijn_type: regel.lijn_type,
-      omschrijving: regel.omschrijving,
-      hoeveelheid: regel.hoeveelheid_per_eenheid,
-      eenheid: regel.eenheid,
-      eenheidsprijs: regel.eenheidsprijs,
-      normtijd: regel.normtijd_per_eenheid,
-      verliesfactor: regel.verliesfactor,
-    }
-    slaLijnOp(lijn)
-  })
-
-  return activiteit
-}
-
 // ─── Groepen (nieuwe structuur) ───────────────────────────────────────────────
 
 export function getGroepen(scenario_id?: string): Groep[] {
@@ -418,16 +243,19 @@ export function verwijderCalculatieregel(id: string): void {
 }
 
 /**
- * Hydrateert de localStorage-cache met de gedeelde calculatie van een project
- * uit Supabase (verliesloze JSONB-snapshot). Supabase is de bron van waarheid;
- * deze functie vervangt álle lokale rijen van dit project (scenario's, groepen,
- * calculatieregels, componentregels) door de server-versie, zodat elke gebruiker/
+ * Vult het werkgeheugen met de gedeelde calculatie van een project uit Supabase
+ * (verliesloze JSONB-snapshot). Supabase is de bron van waarheid; deze functie
+ * vervangt álle rijen van dit project (scenario's, groepen, calculatieregels,
+ * componentregels én de meetstaten) door de server-versie, zodat elke gebruiker/
  * elk apparaat exact hetzelfde ziet. Aan te roepen bij het openen van de
  * calculatie, vóór het grid rendert. Spiegelt hydrateWerkbegroting().
  */
 export function hydrateCalculatie(
   projectId: string,
-  snapshot: { scenarios: Scenario[]; groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
+  snapshot: {
+    scenarios: Scenario[]; groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[]
+    meetstaten?: Meetstaat[]; meetregels?: Meetregel[]; meetregel_aggregaten?: MeetregelAggregaat[]
+  }
 ): void {
   if (typeof window === 'undefined') return
   const { scenarios, groepen, regels, componenten } = snapshot
@@ -451,6 +279,26 @@ export function hydrateCalculatie(
   sla(KEYS.groepen,          [...getGroepen().filter(g => !projectScenarioIds.has(g.scenario_id)), ...groepen])
   sla(KEYS.calculatieregels, [...getCalculatieregels().filter(r => !projectGroepIds.has(r.groep_id)), ...regels])
   sla(KEYS.componentregels,  [...getComponentregels().filter(c => !projectRegelIds.has(c.calculatieregel_id)), ...componenten])
+
+  // Meetstaten horen bij hetzelfde project en reizen mee in de snapshot; oudere
+  // snapshots hebben ze nog niet (dan blijft de meetstaat van dit project leeg).
+  const meetstaten = snapshot.meetstaten ?? []
+  const projectMeetstaatIds = new Set<string>([
+    ...getMeetstaten().filter(m => m.project_id === projectId).map(m => m.id),
+    ...meetstaten.map(m => m.id),
+  ])
+  sla(KEYS.meetstaten, [
+    ...getMeetstaten().filter(m => m.project_id !== projectId),
+    ...meetstaten,
+  ])
+  sla(KEYS.meetregels, [
+    ...getMeetregels().filter(r => !projectMeetstaatIds.has(r.meetstaat_id)),
+    ...(snapshot.meetregels ?? []),
+  ])
+  sla(KEYS.meetregel_aggregaten, [
+    ...getMeetregelAggregaten().filter(a => !projectMeetstaatIds.has(a.meetstaat_id)),
+    ...(snapshot.meetregel_aggregaten ?? []),
+  ])
 }
 
 // ─── Undo snapshot (nieuwe structuur) ────────────────────────────────────────
@@ -534,28 +382,45 @@ export function berekenScenarioKostprijsNieuw(scenario_id: string): number {
 // ─── Instellingen ─────────────────────────────────────────────────────────────
 
 // In-memory cache zodat getInstellingen() synchroon blijft. Bron van waarheid is
-// Supabase; localStorage is een offline-mirror. De cache wordt gevuld door
-// hydrateInstellingen() (bij opstart) en door slaInstellingenOp().
+// Supabase. De cache wordt gevuld door hydrateInstellingen() (bij opstart, vanuit
+// de platform-layout) en door slaInstellingenOp().
+//
+// De cache is tegelijk een mini-store: componenten die eenheden/categorieën tonen
+// abonneren zich via useInstellingen() (zie use-instellingen.ts). Zonder abonnement
+// leest een component de waarde bij de eerste render en mist het de hydratie die
+// een tel later uit Supabase binnenkomt.
 let _instellingenCache: Instellingen | null = null
+
+const _luisteraars = new Set<() => void>()
+
+/** Abonneer op wijzigingen in de instellingen. Retourneert een opzeg-functie. */
+export function subscribeInstellingen(fn: () => void): () => void {
+  _luisteraars.add(fn)
+  return () => { _luisteraars.delete(fn) }
+}
+
+function meldWijziging(): void {
+  for (const fn of _luisteraars) fn()
+}
 
 export function getInstellingen(): Instellingen {
   if (typeof window === 'undefined') return STANDAARD_INSTELLINGEN
-  if (_instellingenCache) return _instellingenCache
-  try {
-    const raw = localStorage.getItem(KEYS.instellingen)
-    _instellingenCache = normaliseerInstellingen(raw ? JSON.parse(raw) : null)
-  } catch {
-    _instellingenCache = STANDAARD_INSTELLINGEN
-  }
-  return _instellingenCache
+  // Vóór de hydratie uit Supabase: de standaardlijst. Componenten die de
+  // instellingen tonen gebruiken useInstellingen() en renderen opnieuw zodra de
+  // echte lijst binnen is.
+  return _instellingenCache ?? STANDAARD_INSTELLINGEN
 }
 
-/** Vul cache + localStorage met instellingen uit Supabase (aangeroepen bij opstart). */
+/** Stabiele snapshot voor server-rendering (useSyncExternalStore vereist referentie-gelijkheid). */
+export function getInstellingenServerSnapshot(): Instellingen {
+  return STANDAARD_INSTELLINGEN
+}
+
+/** Vul de cache met instellingen uit Supabase (aangeroepen bij opstart). */
 export function hydrateInstellingen(raw: Partial<Instellingen> | null): void {
   if (typeof window === 'undefined') return
-  const inst = normaliseerInstellingen(raw)
-  _instellingenCache = inst
-  try { localStorage.setItem(KEYS.instellingen, JSON.stringify(inst)) } catch { /* quota */ }
+  _instellingenCache = normaliseerInstellingen(raw)
+  meldWijziging()
 }
 
 // Optionele persist-callback (Supabase). Wordt gezet door de client-provider zodat
@@ -565,37 +430,22 @@ export function setInstellingenPersister(fn: (inst: Instellingen) => Promise<voi
   _persist = fn
 }
 
-export function slaInstellingenOp(inst: Instellingen): void {
+/**
+ * Schrijft de instellingen weg. De cache wordt meteen bijgewerkt zodat de UI
+ * responsief blijft; daarna volgt Supabase. Faalt die schrijfactie, dan gooit deze
+ * functie — de aanroeper hoort dat als fout te tonen en mag niet "opgeslagen"
+ * melden, anders denkt de gebruiker dat de wijziging bewaard is terwijl alleen deze
+ * sessie hem kent.
+ */
+export async function slaInstellingenOp(inst: Instellingen): Promise<void> {
   if (typeof window === 'undefined') return
   const genormaliseerd = normaliseerInstellingen(inst)
   _instellingenCache = genormaliseerd
-  try { localStorage.setItem(KEYS.instellingen, JSON.stringify(genormaliseerd)) } catch { /* quota */ }
-  // Wegschrijven naar Supabase (fire-and-forget; localStorage-mirror blijft bij falen).
-  _persist?.(genormaliseerd).catch(() => { /* stil: mirror is al bijgewerkt */ })
-}
-
-// ─── Kostprijs berekening voor heel project ───────────────────────────────────
-
-export function berekenProjectKostprijs(project_id: string, scenario_id: string): number {
-  const dps = getDeelprojecten(project_id)
-  let totaal = 0
-
-  for (const dp of dps) {
-    const locaties = getLocaties(dp.id)
-    for (const loc of locaties) {
-      const elementen = getElementen(loc.id)
-      for (const elm of elementen) {
-        const activiteiten = getActiviteiten(elm.id, scenario_id)
-        for (const act of activiteiten) {
-          const lijnen = getLijnen(act.id)
-          const lijnTotaal = lijnen.reduce((s, l) => s + l.hoeveelheid * l.eenheidsprijs * l.verliesfactor, 0)
-          totaal += lijnTotaal * act.hoeveelheid
-        }
-      }
-    }
+  meldWijziging()
+  if (!_persist) {
+    throw new Error('Instellingen konden niet centraal worden opgeslagen (geen verbinding met de server).')
   }
-
-  return totaal
+  await _persist(genormaliseerd)
 }
 
 // ─── MEETSTATEN ──────────────────────────────────────────────────────────────
@@ -700,7 +550,7 @@ export function verwijderWerkbegroting(id: string): void {
 }
 
 /**
- * Hydrateert de localStorage-cache met een gedeelde werkbegroting uit Supabase.
+ * Vult het werkgeheugen met een gedeelde werkbegroting uit Supabase.
  * Supabase is de bron van waarheid; deze functie vervangt álle lokale rijen van
  * deze werkbegroting (regels, componenten, wijzigingen, bestellingen) door de
  * server-versie zodat elke gebruiker/elk apparaat exact hetzelfde ziet. Wordt

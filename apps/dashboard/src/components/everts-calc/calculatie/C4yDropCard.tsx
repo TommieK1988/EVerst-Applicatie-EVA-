@@ -28,17 +28,10 @@ import {
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, formatEuro } from '@/lib/everts-calc/calculations'
 import { maakProjectVanAanvraag, setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
-import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
+import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
+import { koppelDossierAanProject } from '@/lib/dossiers/actions'
 import type { DossierSectie } from '@/components/dossiers/types'
-
-const MAP_KEY = 'aanvraag_project_ids'
-
-function leesProjectId(dossierId: string): string | null {
-  try {
-    const map: Record<string, string> = JSON.parse(localStorage.getItem(MAP_KEY) ?? '{}')
-    return map[dossierId] ?? null
-  } catch { return null }
-}
 
 interface Preview {
   resultaat:    C4yParseResultaat
@@ -53,11 +46,13 @@ interface Props {
   sectie:    DossierSectie
   naam:      string
   nummer:    string
+  /** Aan het dossier gekoppeld calculatieproject (dossiers.everts_calc_project_id). */
+  projectId?: string | null
   /** Wordt aangeroepen na een geslaagde import met het (mogelijk nieuwe) projectId. */
   onImported?: (projectId: string) => void
 }
 
-export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Props) {
+export default function C4yDropCard({ dossierId, sectie, naam, projectId: gekoppeldProjectId, onImported }: Props) {
   const [preview, setPreview]           = useState<Preview | null>(null)
   const [bezig, setBezig]               = useState(false)
   const [fout, setFout]                 = useState<string | null>(null)
@@ -74,12 +69,15 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
     try {
       const inhoud = await file.text()
 
-      // 1. Zorg voor project + scenario
-      let projectId = leesProjectId(dossierId)
+      // 1. Zorg voor project + scenario. Het gekoppelde project komt uit de database
+      //    (dossiers.everts_calc_project_id); een nieuw project wordt daar meteen aan
+      //    het dossier gehangen, zodat de import ook op een ander apparaat te vinden is.
+      let projectId = gekoppeldProjectId ?? null
       if (!projectId) {
         const { id } = await maakProjectVanAanvraag(naam, '')
-        slaAanvraagProjectIdOp(dossierId, id)
-        projectId = id
+        const r = await koppelDossierAanProject(dossierId, id)
+        if (!r.ok) throw new Error('Koppelen van de calculatie aan het dossier is mislukt.')
+        projectId = r.projectId ?? id
       }
       // Opslag% staat niet in het .c4y-bestand (net als bij CUF is dat handmatige
       // invoer in Calc4You) → leeg houden, in te vullen via de Opslag%-kolom.
@@ -111,10 +109,10 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
   function startImport() {
     if (!preview) return
     if (getWerkbegrotingVoorScenario(preview.scenarioId)) setBevestigOpen(true)
-    else bevestig()
+    else void bevestig()
   }
 
-  function bevestig() {
+  async function bevestig() {
     if (!preview) return
     setBevestigOpen(false)
     setBezig(true); setFout(null)
@@ -140,6 +138,18 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
       if (sectie === 'opdracht') {
         setProjectStatus(projectId, 'opdracht').catch(() => {})
         maakWerkbegrotingVanCalculatie(projectId, scenarioId)
+      }
+
+      // Import meteen naar de database wegschrijven. Zonder dit leeft een geïmporteerde
+      // calculatie alleen op dit apparaat, en zien de dossierkaart en collega's niets.
+      const { groepen: syncGroepen, regels: syncRegels } = verzamelSyncData(scenarioId)
+      const [syncRes, snapRes] = await Promise.all([
+        syncCalculatieNaarSupabase(projectId, syncGroepen, syncRegels),
+        bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId)),
+      ])
+      if (!syncRes.gelukt || !snapRes.gelukt) {
+        setFout(`Import gelukt, maar opslaan in de database mislukte: ${syncRes.fout ?? snapRes.fout ?? 'onbekende fout'}. Open de calculatie en sla hem op.`)
+        return
       }
 
       const aantal = resultaat.calculatieregels.length
@@ -256,7 +266,7 @@ export default function C4yDropCard({ dossierId, sectie, naam, onImported }: Pro
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuleren</AlertDialogCancel>
-            <AlertDialogAction onClick={bevestig}>Ja, wissen en importeren</AlertDialogAction>
+            <AlertDialogAction onClick={() => { void bevestig() }}>Ja, wissen en importeren</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

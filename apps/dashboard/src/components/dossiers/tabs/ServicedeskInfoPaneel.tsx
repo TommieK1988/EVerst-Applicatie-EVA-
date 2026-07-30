@@ -9,7 +9,6 @@ import {
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
-import { slaAanvraagProjectIdOp } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
 import { SERVICEDESK_STATUSSEN } from '../types'
 
 const fmt = (v: number) =>
@@ -70,7 +69,8 @@ export default function ServicedeskInfoPaneel({
     const r = await maakOfferteVoorServicedesk(dossierId)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    slaAanvraagProjectIdOp(dossierId, r.projectId)
+    // maakOfferteVoorServicedesk legt de koppeling al vast op het dossier
+    // (everts_calc_project_id); de calculatie-tab leest hem daar.
     router.push(`/servicedesk/${dossierId}/calculatie`)
     router.refresh()
   }

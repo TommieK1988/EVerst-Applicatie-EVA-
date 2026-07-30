@@ -146,7 +146,7 @@ export default function CalculatieHoofdscherm({
     let geannuleerd = false
     reserveerOfferteNummer().then(nr => {
       if (geannuleerd || !nr) return   // scenario gewisseld → deze reservering vervalt
-      const huidige = getScenario(sid)  // vers uit localStorage, om edits niet te overschrijven
+      const huidige = getScenario(sid)  // vers uit het werkgeheugen, om edits niet te overschrijven
       if (!huidige || huidige.nummer) return
       const bijgewerkt = { ...huidige, nummer: nr }
       slaScenarioOp(bijgewerkt)
@@ -231,9 +231,18 @@ export default function CalculatieHoofdscherm({
       void saveRef.current(true)
     }
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    // Bij herladen/sluiten is er geen tijd meer om de opslag af te maken, en de
+    // calculatie leeft alleen in het werkgeheugen — dus expliciet waarschuwen.
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('beforeunload', onBeforeUnload)
       flush()
     }
   }, [])

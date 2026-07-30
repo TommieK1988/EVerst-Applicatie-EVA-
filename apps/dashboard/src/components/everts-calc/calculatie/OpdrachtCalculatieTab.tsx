@@ -10,7 +10,6 @@ import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossi
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
-import { slaAanvraagProjectIdOp } from './AanvraagCalculatieTab'
 import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import type { Scenario } from '@/lib/everts-calc/types'
@@ -83,8 +82,8 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     const r = await koppelCalculatieProject(dossierId)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    // localStorage-mapping van de calc-module bijwerken zodat de calculatie-omgeving het project kent.
-    slaAanvraagProjectIdOp(dossierId, r.projectId)
+    // koppelCalculatieProject legt everts_calc_project_id op het dossier vast;
+    // de refresh haalt het nieuwe projectId als prop binnen.
     toast.success('Calculatie aangemaakt')
     router.refresh()
   }

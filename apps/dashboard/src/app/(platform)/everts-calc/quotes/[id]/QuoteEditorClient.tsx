@@ -150,7 +150,12 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50">
       {/* Auto-import als offerte nog leeg is */}
-      <AutoImporter quoteId={quote.id} hasSections={sections.length > 0} />
+      <AutoImporter
+        quoteId={quote.id}
+        hasSections={sections.length > 0}
+        projectId={quote.project_id}
+        scenarioId={quote.scenario_id}
+      />
 
       {/* Toolbar */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-3 flex-wrap">

@@ -354,10 +354,6 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
   // Databron: 'demo' = volledig gevulde testgegevens, 'echt' = een echte offerte.
   const [previewBron, setPreviewBron] = useState<'demo' | 'echt'>('demo')
 
-  const bedrijfJson = typeof window !== 'undefined'
-    ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
-    : '{}'
-
   const previewQuoteId = previewBron === 'echt' && voorbeeldQuoteId ? voorbeeldQuoteId : 'demo'
 
   // Word-only: voorbeeld vereist een gekoppelde .docx-template (SharePoint/OneDrive of Supabase)
@@ -370,13 +366,14 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
         : ''
   const heeftTemplate = templateParams !== ''
 
+  // Bedrijfsgegevens komen server-side uit de bedrijfsinstellingen (of de demo-set).
   const wordPreviewUrl = heeftTemplate
-    ? `/everts-calc/api/quotes/${previewQuoteId}/docx-preview?${templateParams}&bedrijf=${encodeURIComponent(bedrijfJson)}&_k=${previewKey}`
+    ? `/everts-calc/api/quotes/${previewQuoteId}/docx-preview?${templateParams}&_k=${previewKey}`
     : null
   const pdfPreviewUrl = heeftTemplate
     ? `/everts-calc/api/quotes/${previewQuoteId}/pdf-preview?${templateParams}` +
       `&briefpapier_url=${encodeURIComponent(form.briefpapier_pdf_url)}` +
-      `&bedrijf=${encodeURIComponent(bedrijfJson)}&_k=${previewKey}`
+      `&_k=${previewKey}`
     : null
 
   function slaOp() {

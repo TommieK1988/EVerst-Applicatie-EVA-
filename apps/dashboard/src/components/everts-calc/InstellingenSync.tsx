@@ -15,7 +15,7 @@ export default function InstellingenSync() {
     let actief = true
     getCalcInstellingen()
       .then(data => { if (actief) hydrateInstellingen(data) })
-      .catch(() => { /* offline: localStorage-mirror wordt gebruikt */ })
+      .catch(() => { /* offline: de standaardlijst blijft staan tot een volgende poging */ })
     return () => { actief = false }
   }, [])
 

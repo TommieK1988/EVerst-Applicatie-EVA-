@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Search, X, BookOpen, CheckSquare, Square, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
-  slaCalculatieregelOp, slaComponentregelOp, getCalculatieregels, getInstellingen, getScenario,
+  slaCalculatieregelOp, slaComponentregelOp, getCalculatieregels, getScenario,
 } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { formatEuro } from '@/lib/everts-calc/calculations'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Calculatieregel, Componentregel, Eenheid } from '@/lib/everts-calc/types'
@@ -56,10 +57,11 @@ export default function ActiviteitToevoegenModal({
   }, [open])
 
   // Categorieën uit Instellingen (zelfde als op bibliotheek- en receptenpagina)
-  const categorieen = useMemo(() => {
-    const inst = getInstellingen()
-    return inst.categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
-  }, [])
+  const inst = useInstellingen()
+  const categorieen = useMemo(
+    () => inst.categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig'],
+    [inst],
+  )
 
   const gefilterd = items.filter(b => {
     if (categorie && b.onderdeel !== categorie) return false

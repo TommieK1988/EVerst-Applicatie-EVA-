@@ -9,9 +9,13 @@ import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur
 interface Props {
   quoteId: string
   hasSections: boolean
+  /** Calculatieproject van deze offerte; bepaalt welke regels geïmporteerd worden. */
+  projectId?: string | null
+  /** Gekozen calculatieversie; zonder deze wordt de standaardversie gebruikt. */
+  scenarioId?: string | null
 }
 
-export default function AutoImporter({ quoteId, hasSections }: Props) {
+export default function AutoImporter({ quoteId, hasSections, projectId, scenarioId }: Props) {
   const router = useRouter()
   const hasRun = useRef(false)
   const [importing, setImporting] = useState(false)
@@ -25,11 +29,29 @@ export default function AutoImporter({ quoteId, hasSections }: Props) {
     async function doImport() {
       setImporting(true)
       try {
-        const { getGroepen, getCalculatieregels, getComponentregels } = await import('@/lib/everts-calc/local-store')
+        if (!projectId) return
+        const {
+          getGroepen, getCalculatieregels, getComponentregels, getScenarios, hydrateCalculatie,
+        } = await import('@/lib/everts-calc/local-store')
         const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
+        const { laadCalculatieSnapshot } = await import('@/app/(platform)/everts-calc/actions/sync')
 
-        const alleGroepen: Groep[] = getGroepen()
-        const alleRegels: Calculatieregel[] = getCalculatieregels()
+        // De calculatie van dít project uit Supabase halen. Vroeger werd geïmporteerd
+        // wat er toevallig in deze browser stond — dat kon de calculatie van een
+        // heel ander project zijn.
+        const snap = await laadCalculatieSnapshot(projectId)
+        if (!snap) return
+        hydrateCalculatie(projectId, snap)
+
+        const scenarios = getScenarios(projectId)
+        const actief = scenarioId
+          ? scenarios.find(s => s.id === scenarioId)
+          : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
+        if (!actief) return
+
+        const alleGroepen: Groep[] = getGroepen(actief.id)
+        const groepIds = new Set(alleGroepen.map(g => g.id))
+        const alleRegels: Calculatieregel[] = getCalculatieregels().filter(r => groepIds.has(r.groep_id))
         const alleComps = getComponentregels()
 
         if (alleGroepen.length === 0 || alleRegels.length === 0) {

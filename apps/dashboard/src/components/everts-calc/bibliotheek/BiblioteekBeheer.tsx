@@ -10,7 +10,7 @@ import {
   importeerExcel, maakRecept, leegMaakBibliotheek,
 } from '@/app/(platform)/everts-calc/actions/bibliotheek'
 import { formatEuro } from '@/lib/everts-calc/calculations'
-import { getInstellingen } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { PaintItemMetNormen, LaborNorm, MaterialNorm } from '@/lib/everts-calc/services/bibliotheek'
 import type { Materiaal, EenheidConfig } from '@/lib/everts-calc/types'
@@ -911,7 +911,7 @@ export default function BiblioteekBeheer({ items }: Props) {
   const [nieuwOpen, setNieuwOpen]     = useState(false)
   const [importBezig, setImportBezig] = useState(false)
 
-  const inst = getInstellingen()
+  const inst = useInstellingen()
   const eenheden      = inst.eenheden      ?? []
   // Houtrot altijd beschikbaar als categorie, ook als de instellingen een eigen lijst hebben.
   const categorieen   = Array.from(new Set([...(inst.categorieen ?? STANDAARD_CATEGORIEEN), HOUTROT_CATEGORIE]))

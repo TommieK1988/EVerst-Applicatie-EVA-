@@ -24,12 +24,9 @@ export default function PdfDownloadButton({ quoteId, quoteNummer, isConcept = fa
     setLoading(true)
     const toastId = toast.loading('PDF genereren...')
     try {
-      // Bedrijfsgegevens meesturen vanuit localStorage
-      const bedrijfRaw = typeof window !== 'undefined'
-        ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
-        : '{}'
-
-      const url = `/everts-calc/api/quotes/${quoteId}/pdf?bedrijf=${encodeURIComponent(bedrijfRaw)}`
+      // Bedrijfsgegevens komen server-side uit de bedrijfsinstellingen bij de
+      // werkmaatschappij van het dossier — niets meer vanaf dit apparaat meesturen.
+      const url = `/everts-calc/api/quotes/${quoteId}/pdf`
       const response = await fetch(url)
 
       if (!response.ok) {

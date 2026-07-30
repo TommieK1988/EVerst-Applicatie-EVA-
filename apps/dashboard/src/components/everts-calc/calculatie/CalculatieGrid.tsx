@@ -8,10 +8,11 @@ import toast from 'react-hot-toast'
 import {
   getGroepen, getCalculatieregels, getComponentregels,
   slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel,
-  verwijderGroep, verwijderCalculatieregel, verwijderComponentregel, voegComponentregelToe, getInstellingen,
+  verwijderGroep, verwijderCalculatieregel, verwijderComponentregel, voegComponentregelToe,
   getMeetregelAggregaten, slaMeetregelAggregaatOp,
   herstelSnapshot,
 } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import {
   berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP,
   berekenGroepUren, berekenGroepMaterieel, berekenGroepOA,
@@ -560,7 +561,7 @@ function OpslaanAlsReceptModal({
   componenten: Componentregel[]
   onSluiten: () => void
 }) {
-  const categorieen = getInstellingen().categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
+  const categorieen = useInstellingen().categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
   const [isPending, start] = useTransition()
   const [naam, setNaam] = useState(regel.omschrijving)
   const [categorie, setCategorie] = useState(categorieen[0] ?? 'Schilderwerk')
@@ -1841,8 +1842,9 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [projectie,    setProjectie]    = useState<Projectie | null>(null)
   const sleepStartX = useRef(0)
 
-  // Instellingen — altijd vers uitlezen zodat wijzigingen in de instellingenpagina direct zichtbaar zijn
-  const _inst        = getInstellingen()
+  // Instellingen — geabonneerd, zodat de lijst uit Supabase ook doorkomt als de
+  // hydratie pas ná de eerste render binnen is (dossiertab opent sneller dan de fetch).
+  const _inst        = useInstellingen()
   const btwTarieven  = _inst.btw_tarieven
   const kolomNamen   = (_inst.kolom_namen ?? {}) as Record<string, string>
   const uurtarieven  = _inst.uurtarieven ?? []
@@ -1863,17 +1865,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const resizeRef = useRef<{ col: ColId; startX: number; startW: number } | null>(null)
   const tabelRef  = useRef<HTMLTableElement>(null)
   const NON_HIDEABLE: ColId[] = ['omschrijving', 'acties']
-  const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(() => {
-    try {
-      const raw = localStorage.getItem('evc_ui_hidden_cols')
-      return raw ? new Set(JSON.parse(raw) as ColId[]) : new Set()
-    } catch { return new Set() }
-  })
+  // Verborgen kolommen horen bij de kolom-layout (per gebruiker in de database,
+  // zie gebruiker_layouts hieronder) en niet apart op dit apparaat: anders zag je
+  // op je tweede scherm een andere kolomindeling dan op je eerste.
+  const [hiddenCols, setHiddenCols] = useState<Set<ColId>>(new Set())
   const toggleHiddenCol = (id: ColId) => {
     setHiddenCols(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
-      try { localStorage.setItem('evc_ui_hidden_cols', JSON.stringify([...next])) } catch {}
       return next
     })
   }
@@ -2714,10 +2713,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                 <>
                   <div className="border-t border-slate-100 mt-1 pt-1">
                     <button
-                      onClick={() => {
-                        setHiddenCols(new Set())
-                        try { localStorage.removeItem('evc_ui_hidden_cols') } catch {}
-                      }}
+                      onClick={() => setHiddenCols(new Set())}
                       className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                     >
                       Alle kolommen tonen

@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, X } from 'lucide-react'
 import {
-  maakStandaardScenario, getGroepen,
+  maakStandaardScenario, getGroepen, hydrateCalculatie,
   getMeetstaten, maakNieuweMeetstaat, slaMeetstaatOp,
   getMeetregelAggregaten, slaMeetregelAggregaatOp,
   slaCalculatieregelOp, getCalculatieregels,
   getComponentregels, slaComponentregelOp, verwijderComponentregel,
 } from '@/lib/everts-calc/local-store'
+import { laadCalculatieSnapshot, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { nieuweId } from '@/lib/everts-calc/utils'
-import type { Meetstaat, Groep, Calculatieregel } from '@/lib/everts-calc/types'
+import type { Meetstaat, Groep, Calculatieregel, Scenario } from '@/lib/everts-calc/types'
 import { calculatieregelOmschrijving } from '@/lib/everts-calc/meetstaat-utils'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
@@ -33,7 +35,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
   onSluit?: () => void
   schilderData?: SchilderData
 }) {
-  const [scenario, setScenario] = useState(() => maakStandaardScenario(projectId))
+  const [scenario, setScenario] = useState<Scenario | null>(null)
   const [meetstaat, setMeetstaat] = useState<Meetstaat | null>(null)
   const [groepen, setGroepen] = useState<Groep[]>([])
   const [schilderData, setSchilderData] = useState<SchilderData | undefined>(schilderDataProp)
@@ -41,7 +43,63 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
   const [openenOpen, setOpenenOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [wijzigingsTeller, setWijzigingsTeller] = useState(0)
-  const onWijziging = useCallback(() => setWijzigingsTeller(n => n + 1), [])
+
+  // ─── Opslaan naar Supabase ────────────────────────────────────────────────
+  // De meetstaat reist mee in de calculatie-snapshot van dit project. Elke
+  // wijziging plant een stille opslag; bij wegnavigeren wordt die geflusht.
+  const bewaarTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const vuil = useRef(false)
+
+  const bewaarNu = useCallback(async () => {
+    if (!vuil.current) return
+    vuil.current = false
+    if (bewaarTimer.current) { clearTimeout(bewaarTimer.current); bewaarTimer.current = null }
+    const res = await bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
+      .catch(() => ({ gelukt: false, fout: 'geen verbinding' }))
+    if (!res.gelukt) {
+      vuil.current = true
+      toast.error(`Meetstaat opslaan mislukt: ${res.fout ?? 'onbekende fout'}`)
+    }
+  }, [projectId])
+
+  const planOpslag = useCallback(() => {
+    vuil.current = true
+    if (bewaarTimer.current) clearTimeout(bewaarTimer.current)
+    bewaarTimer.current = setTimeout(() => { bewaarTimer.current = null; void bewaarNu() }, 1200)
+  }, [bewaarNu])
+
+  const onWijziging = useCallback(() => {
+    setWijzigingsTeller(n => n + 1)
+    planOpslag()
+  }, [planOpslag])
+
+  // Altijd de actuele opslagfunctie bij de hand voor de flush (geen stale closure).
+  const bewaarRef = useRef(bewaarNu)
+  useEffect(() => { bewaarRef.current = bewaarNu }, [bewaarNu])
+  useEffect(() => {
+    const flush = () => { void bewaarRef.current() }
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      flush()
+    }
+  }, [])
+
+  // De calculatie (incl. meetstaten) uit Supabase halen vóórdat we het scenario
+  // bepalen. Zonder dit zou een rechtstreeks geopende meetstaat een nieuw,
+  // leeg scenario aanmaken naast de bestaande calculatie.
+  useEffect(() => {
+    let actief = true
+    ;(async () => {
+      try {
+        const snap = await laadCalculatieSnapshot(projectId)
+        if (actief && snap) hydrateCalculatie(projectId, snap)
+      } catch { /* zonder snapshot starten we met een vers scenario */ }
+      if (actief) setScenario(maakStandaardScenario(projectId))
+    })()
+    return () => { actief = false }
+  }, [projectId])
 
   // Haal schilderdata op als die niet als prop is meegegeven (bijv. vanuit calculatie-overlay)
   useEffect(() => {
@@ -88,8 +146,9 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
     if (!scenario) return
     const ms = maakNieuweMeetstaat(projectId, scenario.id)
     setMeetstaat(ms)
+    planOpslag()
     toast.success(`Meetstaat ${ms.code} aangemaakt`)
-  }, [scenario, projectId])
+  }, [scenario, projectId, planOpslag])
 
   const handleMeetstaatOpenen = useCallback((ms: Meetstaat) => {
     setMeetstaat(ms)
@@ -226,13 +285,17 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
 
       slaMeetstaatOp({ ...meetstaat, status: 'gesynchroniseerd' })
       setMeetstaat(prev => prev ? { ...prev, status: 'gesynchroniseerd' } : prev)
+      // De aangemaakte/bijgewerkte calculatieregels moeten direct de database in,
+      // anders staan ze alleen in deze sessie.
+      vuil.current = true
+      await bewaarNu()
       toast.success(`Gesynchroniseerd: ${aangemaakt} nieuwe, ${bijgewerkt} bijgewerkte calculatieregels`)
     } catch (e) {
       toast.error('Synchronisatie mislukt')
     } finally {
       setIsSyncing(false)
     }
-  }, [meetstaat, scenario])
+  }, [meetstaat, scenario, bewaarNu])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const aggregaten = meetstaat ? getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0) : []
@@ -396,7 +459,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
       )}
 
       {/* Modal: meetstaat openen */}
-      {openenOpen && (
+      {openenOpen && scenario && (
         <MeetstaatOpenenModal
           scenarioId={scenario.id}
           onSelecteer={handleMeetstaatOpenen}

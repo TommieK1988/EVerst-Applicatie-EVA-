@@ -10,11 +10,12 @@
  * Meerwerk-/losse offertes staan apart onder "Overige offertes".
  */
 
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Copy, Calculator } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
-import { berekenCalcTotalenVoorProject } from '@/lib/everts-calc/calc-totalen'
+import { berekenCalcTotalen, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
+import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { versieRootVan } from '@/lib/everts-calc/versie'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
@@ -49,11 +50,20 @@ export default function CalculatiesTabel({
   projectId, scenarios, rijen, tick = 0, readOnly = false,
   onOpenCalculatie, onOpenOfferte, onReviseer, headerExtra,
 }: Props) {
-  // Totalen per calculatie (client-side uit localStorage).
-  const totalenPerScenario = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof berekenCalcTotalenVoorProject>>()
-    for (const s of scenarios) map.set(s.id, berekenCalcTotalenVoorProject(projectId, s.id))
-    return map
+  // Totalen per calculatie, gerekend over de gedeelde calculatie uit Supabase
+  // (één snapshot voor alle versies) — niet uit de lokale kopie van dit apparaat.
+  const [totalenPerScenario, setTotalenPerScenario] = useState<Map<string, CalcTotalen | null>>(new Map())
+  useEffect(() => {
+    let actief = true
+    laadCalculatieSnapshot(projectId)
+      .then(snap => {
+        if (!actief) return
+        const map = new Map<string, CalcTotalen | null>()
+        for (const s of scenarios) map.set(s.id, berekenCalcTotalen(snap, s.id))
+        setTotalenPerScenario(map)
+      })
+      .catch(() => { if (actief) setTotalenPerScenario(new Map()) })
+    return () => { actief = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, scenarios, tick])
 

@@ -6,9 +6,10 @@ import toast from 'react-hot-toast'
 import {
   getGroepen, getWerkbegrotingRegels, getWerkbegrotingComponenten,
   slaWerkbegrotingRegelOp, slaWerkbegrotingComponentOp,
-  voegWijzigingToe, getInstellingen,
+  voegWijzigingToe,
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
 } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { getBouw7BewakingscodesImport } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { laadUursoorten } from '@/app/(platform)/instellingen/planning/actions'
 import type { PlanningUursoort } from '@everts/database/platform-types'
@@ -495,8 +496,8 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const [dragCompId,  setDragCompId]  = useState<string | null>(null)
   const [dragOverSep, setDragOverSep] = useState<string | null>(null)
 
-  // Instellingen (standaard kostengroepen)
-  const instellingen = useMemo(() => getInstellingen(), [])
+  // Instellingen (standaard kostengroepen) — geabonneerd op de hydratie uit Supabase
+  const instellingen = useInstellingen()
 
   // Uursoorten uit de instellingen (bron voor de arbeid-specificatie + kostprijs-tarief).
   const [uursoorten, setUursoorten] = useState<PlanningUursoort[]>([])

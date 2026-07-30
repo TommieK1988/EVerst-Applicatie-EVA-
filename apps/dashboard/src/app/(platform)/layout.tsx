@@ -2,6 +2,8 @@ import { createClient, createAdminClient } from '@everts/database/server'
 import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
 import MobileRedirect from '@/components/mobiel/MobileRedirect'
+import InstellingenSync from '@/components/everts-calc/InstellingenSync'
+import LegacyDataOvername from '@/components/everts-calc/LegacyDataOvername'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 import { getOngelezenNotificaties } from '@/app/(platform)/notificaties/actions'
 import { telOngelezenUpdates, getOngelezenUpdates } from '@/app/(platform)/wat-is-nieuw/actions'
@@ -65,6 +67,12 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       rechten={rechten}
     >
       <MobileRedirect />
+      {/* Calculatie-instellingen (eenheden, categorieën) hier laden en niet in de
+          everts-calc-layout: het calculatiegrid en de werkbegroting leven in de
+          dossiertabs, buiten /everts-calc. */}
+      <InstellingenSync />
+      {/* Eenmalig: calculatie-/meetstaatdata die nog in deze browser staat naar EVA tillen. */}
+      <LegacyDataOvername />
       {children}
       <ToastProvider />
     </PlatformShell>

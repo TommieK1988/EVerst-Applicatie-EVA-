@@ -18,11 +18,8 @@ export default function DocxDownloadButton({ quoteId, quoteNummer, isConcept = f
     setLoading(true)
     const toastId = toast.loading('Word document genereren...')
     try {
-      const bedrijfRaw = typeof window !== 'undefined'
-        ? (localStorage.getItem('evc_offerte_bedrijf') ?? '{}')
-        : '{}'
-
-      const url = `/everts-calc/api/quotes/${quoteId}/docx?bedrijf=${encodeURIComponent(bedrijfRaw)}`
+      // Bedrijfsgegevens komen server-side uit de bedrijfsinstellingen.
+      const url = `/everts-calc/api/quotes/${quoteId}/docx`
       const response = await fetch(url)
 
       if (!response.ok) {

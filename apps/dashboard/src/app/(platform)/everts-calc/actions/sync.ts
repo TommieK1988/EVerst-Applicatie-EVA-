@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
-import type { Scenario, Groep, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import type {
+  Scenario, Groep, Calculatieregel, Componentregel,
+  Meetstaat, Meetregel, MeetregelAggregaat,
+} from '@/lib/everts-calc/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +143,10 @@ export interface CalculatieSnapshot {
   groepen: Groep[]
   regels: Calculatieregel[]
   componenten: Componentregel[]
+  /** Meetstaten van dit project. Optioneel: snapshots van vóór juli 2026 hebben ze niet. */
+  meetstaten?: Meetstaat[]
+  meetregels?: Meetregel[]
+  meetregel_aggregaten?: MeetregelAggregaat[]
 }
 
 /**
@@ -185,6 +192,10 @@ function beschermBevrorenScenarios(
       ...incoming.componenten.filter(c => !bevrorenRegelIds.has(c.calculatieregel_id)),
       ...server.componenten.filter(c => bevrorenRegelIds.has(c.calculatieregel_id)),
     ],
+    // Meetstaten kennen geen bevriezing; de binnenkomende versie is leidend.
+    meetstaten: incoming.meetstaten,
+    meetregels: incoming.meetregels,
+    meetregel_aggregaten: incoming.meetregel_aggregaten,
   }
 }
 

@@ -5,12 +5,6 @@ import WerkbegrotingHoofdscherm from './WerkbegrotingHoofdscherm'
 import { setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
 import { maakStandaardScenario } from '@/lib/everts-calc/local-store'
 
-const MAP_KEY = 'aanvraag_project_ids'
-
-function leesMapping(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(MAP_KEY) ?? '{}') } catch { return {} }
-}
-
 /**
  * Stabiel synthetisch project-id voor een opdracht zónder gekoppelde EVA-calculatie.
  * Deterministisch op de aanvraag/dossier-id, zodat scenario + (lege) werkbegroting
@@ -24,14 +18,16 @@ interface Props {
   aanvraagId: string
   naam: string
   nummer: string
+  /** Gekoppeld calculatieproject (dossiers.everts_calc_project_id). */
+  gekoppeldProjectId?: string | null
 }
 
-export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer }: Props) {
+export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldProjectId }: Props) {
   const [projectId, setProjectId] = useState<string | null>(null)
   const statusBijgewerkt = useRef(false)
 
   useEffect(() => {
-    const gekoppeld = leesMapping()[aanvraagId] ?? null
+    const gekoppeld = gekoppeldProjectId ?? null
 
     if (gekoppeld) {
       // Gekoppelde EVA-calculatie → werkbegroting wordt standaard overgehaald.
@@ -47,7 +43,7 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer }: Props) {
       maakStandaardScenario(synthId)
       setProjectId(synthId)
     }
-  }, [aanvraagId])
+  }, [aanvraagId, gekoppeldProjectId])
 
   if (!projectId) {
     return (

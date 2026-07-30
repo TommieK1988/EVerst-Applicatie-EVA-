@@ -9,7 +9,7 @@ import { createContactpersoon, getContactpersonenVoorOrganisatie } from '@/lib/r
 import { zoekAdres, isHuisnummerReeks, eersteHuisnummer } from '@/lib/adres/pdok'
 import { uploadDossierBestandenNaarSharePoint } from '@/lib/dossiers/sharepoint-bestanden'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
-import { slaAanvraagProjectIdOp } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
+import { koppelDossierAanProject } from '@/lib/dossiers/actions'
 
 export type AanvraagCategorie = { id: number; name: string }
 export type AanvraagWerkmaatschappij = { id: string; naam: string; code: string | null }
@@ -254,7 +254,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
       const dossier = result.data
       try {
         const { id: projectId } = await maakProjectVanAanvraag(projectnaam, klantNaam)
-        slaAanvraagProjectIdOp(dossier.id, projectId)
+        await koppelDossierAanProject(dossier.id, projectId)
       } catch {
         // Koppeling kan later via de calculatie-tab worden aangemaakt
       }

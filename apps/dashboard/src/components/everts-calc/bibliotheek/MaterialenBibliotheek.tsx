@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Trash2, Download, Upload, Search, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import {
   getMaterialen,
   maakMateriaal,
@@ -40,6 +41,39 @@ function InlineTekst({
   )
 }
 
+function InlineGetal({
+  waarde, decimalen = 2, cls = '', onOpslaan,
+}: { waarde: number; decimalen?: number; cls?: string; onOpslaan: (v: number) => void }) {
+  const toon = (n: number) => n.toLocaleString('nl-NL', { minimumFractionDigits: decimalen, maximumFractionDigits: decimalen })
+  const [lokaal, setLokaal] = useState(toon(waarde))
+  useEffect(() => setLokaal(toon(waarde)), [waarde]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bevestig = () => {
+    // Nederlandse invoer: komma als decimaalteken, punt als duizendtal.
+    const genormaliseerd = lokaal.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')
+    const n = parseFloat(genormaliseerd)
+    if (isNaN(n) || n === waarde) { setLokaal(toon(waarde)); return }
+    onOpslaan(n)
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={lokaal}
+      onChange={e => setLokaal(e.target.value)}
+      onBlur={bevestig}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') { setLokaal(toon(waarde)); (e.target as HTMLInputElement).blur() }
+      }}
+      className={`w-full text-xs px-1.5 py-1 rounded border border-transparent text-right
+        hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
+        hover:bg-white focus:bg-white ${cls}`}
+    />
+  )
+}
+
 function InlineSelect({
   waarde, opties, onOpslaan, cls = '',
 }: { waarde: string; opties: { value: string; label: string }[]; onOpslaan: (v: string) => void; cls?: string }) {
@@ -59,17 +93,18 @@ function InlineSelect({
 // ─── Materiaal rij ────────────────────────────────────────────────────────────
 
 function MateriaalRij({
-  materiaal, groepOpties, onWijzig, onVerwijder,
+  materiaal, groepOpties, isNieuw = false, onWijzig, onVerwijder,
 }: {
   materiaal: Materiaal
   groepOpties: string[]
+  isNieuw?: boolean
   onWijzig: (patch: Partial<Materiaal>) => void
   onVerwijder: () => void
 }) {
   const isInactief = materiaal.status === 'inactief'
 
   return (
-    <tr className={`group border-b border-slate-100 hover:bg-slate-50/80 transition-colors ${isInactief ? 'opacity-50' : ''}`}>
+    <tr className={`group border-b border-slate-100 hover:bg-slate-50/80 transition-colors ${isInactief ? 'opacity-50' : ''} ${isNieuw ? 'bg-everts/5 ring-1 ring-inset ring-everts/30' : ''}`}>
       {/* Leverancier */}
       <td className="px-1 py-0.5">
         <InlineTekst
@@ -131,16 +166,24 @@ function MateriaalRij({
         )}
       </td>
 
-      {/* Eenheid — read-only (komt uit de leverancier/import) */}
+      {/* Eenheid — bewerkbaar; bij import gevuld vanuit de leverancier */}
       <td className="px-1 py-0.5 w-16">
-        <span className="block text-xs text-slate-500 px-1.5 py-1">{materiaal.eenheid}</span>
+        <InlineTekst
+          waarde={materiaal.eenheid}
+          placeholder="ltr"
+          onOpslaan={v => onWijzig({ eenheid: v.trim() || 'ltr' })}
+        />
       </td>
 
-      {/* Kostprijs — read-only (komt uit de leverancier/import) */}
+      {/* Kostprijs — bewerkbaar; bij import gevuld vanuit de leverancier */}
       <td className="px-1 py-0.5 w-24">
-        <span className="block text-xs text-right text-slate-700 px-1.5 py-1">
-          € {materiaal.kostprijs.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
+        <div className="flex items-center gap-0.5">
+          <span className="text-xs text-slate-400">€</span>
+          <InlineGetal
+            waarde={materiaal.kostprijs}
+            onOpslaan={v => onWijzig({ kostprijs: v })}
+          />
+        </div>
       </td>
 
       {/* Status */}
@@ -171,6 +214,145 @@ function MateriaalRij({
   )
 }
 
+// ─── Nieuw materiaal ──────────────────────────────────────────────────────────
+
+/**
+ * Aanmaken gaat via dit formulier en niet via een lege regel in de tabel: zo'n lege
+ * regel valt weg achter een actief filter, staat tussen ~1900 andere regels en laat
+ * halve records achter als je hem niet afmaakt.
+ */
+function NieuwMateriaalModal({
+  groepOpties, onSluiten, onOpslaan,
+}: {
+  groepOpties: string[]
+  onSluiten: () => void
+  onOpslaan: (m: Partial<Materiaal>) => Promise<void>
+}) {
+  const [omschrijving,   setOmschrijving]   = useState('')
+  const [leverancier,    setLeverancier]    = useState('')
+  const [merk,           setMerk]           = useState('')
+  const [artikelnummer,  setArtikelnummer]  = useState('')
+  const [materiaalgroep, setMateriaalgroep] = useState('')
+  const [eenheid,        setEenheid]        = useState('ltr')
+  const [kostprijs,      setKostprijs]      = useState('0,00')
+  const [bezig,          setBezig]          = useState(false)
+
+  const kostprijsGetal = (() => {
+    const n = parseFloat(kostprijs.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''))
+    return isNaN(n) ? 0 : n
+  })()
+
+  const kanOpslaan = omschrijving.trim().length > 0 && !bezig
+
+  const bewaar = async () => {
+    if (!kanOpslaan) return
+    setBezig(true)
+    try {
+      await onOpslaan({
+        omschrijving:   omschrijving.trim(),
+        leverancier:    leverancier.trim()   || undefined,
+        merk:           merk.trim()          || undefined,
+        artikelnummer:  artikelnummer.trim() || undefined,
+        materiaalgroep: materiaalgroep       || undefined,
+        eenheid:        eenheid.trim()       || 'ltr',
+        kostprijs:      kostprijsGetal,
+        status:         'actief',
+      })
+      onSluiten()
+    } catch {
+      // Fout is al als toast getoond; modal blijft open met de ingevulde gegevens.
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  const veld = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts'
+  const label = 'block text-xs font-medium text-slate-500 mb-1'
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/40 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
+      onMouseDown={e => { if (e.target === e.currentTarget) onSluiten() }}
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-auto">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200">
+          <h3 className="font-semibold text-slate-800">Nieuw materiaal</h3>
+          <Button variant="ghost" size="icon-sm" onClick={onSluiten} title="Sluiten">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div
+          className="p-5 space-y-4"
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void bewaar() } }}
+        >
+          <div>
+            <label className={label}>Omschrijving *</label>
+            <input
+              autoFocus
+              type="text"
+              value={omschrijving}
+              onChange={e => setOmschrijving(e.target.value)}
+              placeholder="Bijv. Grondverf wit 2,5 ltr"
+              className={veld}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>Leverancier</label>
+              <input type="text" value={leverancier} onChange={e => setLeverancier(e.target.value)} className={veld} />
+            </div>
+            <div>
+              <label className={label}>Merk</label>
+              <input type="text" value={merk} onChange={e => setMerk(e.target.value)} className={veld} />
+            </div>
+            <div>
+              <label className={label}>Artikelnummer</label>
+              <input type="text" value={artikelnummer} onChange={e => setArtikelnummer(e.target.value)} className={veld} />
+            </div>
+            <div>
+              <label className={label}>Materiaalgroep</label>
+              <select value={materiaalgroep} onChange={e => setMateriaalgroep(e.target.value)} className={veld}>
+                <option value="">— Kies —</option>
+                {groepOpties.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={label}>Eenheid</label>
+              <input
+                type="text"
+                value={eenheid}
+                onChange={e => setEenheid(e.target.value)}
+                placeholder="ltr"
+                className={veld}
+              />
+            </div>
+            <div>
+              <label className={label}>Kostprijs (€)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={kostprijs}
+                onChange={e => setKostprijs(e.target.value)}
+                className={`${veld} text-right`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-200">
+          <Button variant="ghost" size="sm" onClick={onSluiten}>Annuleren</Button>
+          <Button variant="primary" size="sm" onClick={() => { void bewaar() }} disabled={!kanOpslaan}>
+            {bezig ? <Spinner size="sm" /> : <Plus className="w-3.5 h-3.5" />}
+            Materiaal toevoegen
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Hoofd component ──────────────────────────────────────────────────────────
 
 export default function MaterialenBibliotheek() {
@@ -185,6 +367,11 @@ export default function MaterialenBibliotheek() {
   const [importResultaat, setImportResultaat] = useState<{ aangemaakt: number; bijgewerkt: number; fouten: string[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const dicoRef = useRef<HTMLInputElement>(null)
+  const tabelRef = useRef<HTMLDivElement>(null)
+  // Zojuist toegevoegde regel: krijgt een accent zodat hij niet ongemerkt tussen
+  // de rest verdwijnt.
+  const [nieuwId, setNieuwId] = useState<string | null>(null)
+  const [nieuwOpen, setNieuwOpen] = useState(false)
 
   const [groepOpties, setGroepOpties] = useState<string[]>([])
 
@@ -206,9 +393,25 @@ export default function MaterialenBibliotheek() {
     void wijzigMateriaal(id, patch).catch(() => { void laad() })
   }, [laad])
 
-  const voegToe = useCallback(async () => {
-    const nieuw = await maakMateriaal()
-    setMaterialen(prev => [...prev, nieuw])
+  const voegToe = useCallback(async (invoer: Partial<Materiaal>) => {
+    try {
+      const nieuw = await maakMateriaal(invoer)
+      // De nieuwe regel zou anders wegvallen achter een actief filter of onderaan de
+      // (op omschrijving gesorteerde) lijst van ~1900 regels belanden. Filters wissen
+      // en bovenaan tonen, met accent.
+      setZoek('')
+      setFilterGroep('')
+      setFilterLeverancier('')
+      setFilterMerk('')
+      setFilterStatus('actief')
+      setMaterialen(prev => [nieuw, ...prev])
+      setNieuwId(nieuw.id)
+      tabelRef.current?.scrollTo({ top: 0 })
+      toast.success('Materiaal toegevoegd')
+    } catch (err) {
+      toast.error(`Materiaal aanmaken mislukt: ${err instanceof Error ? err.message : 'onbekende fout'}`)
+      throw err
+    }
   }, [])
 
   const verwijder = useCallback((id: string) => {
@@ -441,12 +644,20 @@ export default function MaterialenBibliotheek() {
           <Button
             variant="primary"
             size="sm"
-            onClick={voegToe}
+            onClick={() => setNieuwOpen(true)}
           >
             <Plus className="w-3.5 h-3.5" /> Materiaal toevoegen
           </Button>
         </div>
       </div>
+
+      {nieuwOpen && (
+        <NieuwMateriaalModal
+          groepOpties={groepOpties}
+          onSluiten={() => setNieuwOpen(false)}
+          onOpslaan={voegToe}
+        />
+      )}
 
       {/* ─── Import resultaat ─────────────────────────────────────────────── */}
       {importResultaat && (
@@ -473,7 +684,7 @@ export default function MaterialenBibliotheek() {
       </div>
 
       {/* ─── Tabel ────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto">
+      <div ref={tabelRef} className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-sm" style={{ minWidth: '900px' }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
@@ -494,6 +705,7 @@ export default function MaterialenBibliotheek() {
                 key={m.id}
                 materiaal={m}
                 groepOpties={groepOpties}
+                isNieuw={m.id === nieuwId}
                 onWijzig={patch => wijzig(m.id, patch)}
                 onVerwijder={() => verwijder(m.id)}
               />

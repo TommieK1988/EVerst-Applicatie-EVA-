@@ -17,41 +17,13 @@ import { Button } from '@/components/ui'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 
-const MAP_KEY = 'aanvraag_project_ids'
-
-function leesMapping(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(MAP_KEY) ?? '{}') } catch { return {} }
-}
-
-function schrijfMapping(map: Record<string, string>) {
-  localStorage.setItem(MAP_KEY, JSON.stringify(map))
-}
-
-function migreerCalculatieData(oudId: string, nieuwId: string) {
-  for (const key of ['evc_scenarios', 'evc_meetstaten', 'evc_werkbegrotingen']) {
-    try {
-      const data: { project_id?: string }[] = JSON.parse(localStorage.getItem(key) ?? '[]')
-      localStorage.setItem(key, JSON.stringify(
-        data.map(item => item.project_id === oudId ? { ...item, project_id: nieuwId } : item)
-      ))
-    } catch {}
-  }
-}
-
-export function slaAanvraagProjectIdOp(aanvraagId: string, projectId: string) {
-  const mapping = leesMapping()
-  mapping[aanvraagId] = projectId
-  schrijfMapping(mapping)
-}
-
 interface Props {
   aanvraagId: string
   naam: string
   nummer: string
   /** Klantnaam (opdrachtgever) — voor het aanmaken van offertes vanuit de calculatie. */
   clientNaam?: string | null
-  /** Server-side gekoppeld everts-calc project (dossiers.everts_calc_project_id). Seedt de
-   *  localStorage-mapping zodat de calculatie ook in een verse browser zichtbaar is. */
+  /** Gekoppeld everts-calc project (dossiers.everts_calc_project_id) — de enige bron. */
   initieelProjectId?: string | null
   /** Aan het dossier gekoppelde offertes/calculaties (server-side opgehaald). */
   rijen?: DossierQuoteRij[]
@@ -70,17 +42,11 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     if (q) setOfferteId(q)
   }, [searchParams])
 
+  // De koppeling dossier ⇄ calculatieproject komt uit de database
+  // (dossiers.everts_calc_project_id) en nergens anders vandaan.
   useEffect(() => {
-    const mapping = leesMapping()
-    if (mapping[aanvraagId]) {
-      setProjectId(mapping[aanvraagId])
-    } else if (initieelProjectId) {
-      // Server zegt dat er een project gekoppeld is, maar deze browser kent de mapping nog niet.
-      mapping[aanvraagId] = initieelProjectId
-      schrijfMapping(mapping)
-      setProjectId(initieelProjectId)
-    }
-  }, [aanvraagId, initieelProjectId])
+    setProjectId(initieelProjectId ?? null)
+  }, [initieelProjectId])
 
   // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
@@ -137,15 +103,11 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     setFout(null)
     try {
       const { id } = await maakProjectVanAanvraag(naam, '')
-      // Koppeling server-side vastleggen (dossiers.everts_calc_project_id) zodat de
-      // calculatie ook op een vers apparaat/andere gebruiker teruggevonden wordt en
-      // niet enkel in localStorage leeft. Best-effort; localStorage blijft cache.
-      await koppelDossierAanProject(aanvraagId, id)
-      migreerCalculatieData(aanvraagId, id)
-      const mapping = leesMapping()
-      mapping[aanvraagId] = id
-      schrijfMapping(mapping)
-      setProjectId(id)
+      // Koppeling vastleggen in de database; die is leidend voor elk apparaat.
+      const r = await koppelDossierAanProject(aanvraagId, id)
+      if (!r.ok) throw new Error('Koppelen van de calculatie aan het dossier is mislukt.')
+      // Idempotent: als het dossier al gekoppeld was, wint dat bestaande project.
+      setProjectId(r.projectId ?? id)
     } catch (err) {
       setFout(err instanceof Error ? err.message : 'Fout bij aanmaken')
     } finally {

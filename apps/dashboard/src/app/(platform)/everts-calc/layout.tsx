@@ -1,4 +1,5 @@
-import InstellingenSync from '@/components/everts-calc/InstellingenSync'
+// InstellingenSync staat in de platform-layout (app/(platform)/layout.tsx), zodat de
+// calculatie-instellingen ook geladen worden in de dossiertabs buiten /everts-calc.
 
 export default function EvertsCalcLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,6 @@ export default function EvertsCalcLayout({ children }: { children: React.ReactNo
         '--ring':   '141 85% 26%',
       } as React.CSSProperties}
     >
-      <InstellingenSync />
       {children}
     </div>
   )

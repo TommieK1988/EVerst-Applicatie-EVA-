@@ -1,17 +1,22 @@
-/* ─── client-side calculatietotalen ───────────────────────────────────
-   Berekent verkoop/kostprijs/BTW direct uit de calculatie (localStorage) —
-   voor dossiers waar (nog) geen offerte in Supabase is gegenereerd, bijv.
-   meteen na een .c4y-import. Alleen client-side aanroepen (in een effect):
-   de local-store leest uit localStorage. Gedeeld door InformatieTab en
-   OpdrachtCalculatieTab. */
-import {
-  getScenarios, getGroepen,
-  getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
-} from '@/lib/everts-calc/local-store'
+/* ─── calculatietotalen ───────────────────────────────────────────────
+   Berekent verkoop/kostprijs/BTW direct uit de calculatie — voor dossiers waar
+   (nog) geen offerte in Supabase is gegenereerd, bijv. meteen na een .c4y-import.
+
+   Rekent over een calculatie-snapshot uit Supabase (`laadCalculatieSnapshot`), niet
+   over localStorage: anders zag je op het ene apparaat wél totalen en op het andere
+   niets. Zuivere functie, dus ook server-side bruikbaar. */
 import {
   berekenScenarioVP, berekenScenarioKostprijs, berekenBtwBreakdown, berekenCalculatieregel,
 } from '@/lib/everts-calc/calculations'
-import type { Groep } from '@/lib/everts-calc/types'
+import type { Groep, Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+
+/** Volledige calculatie van één project (vorm van `laadCalculatieSnapshot`). */
+export type CalculatieBron = {
+  scenarios: Scenario[]
+  groepen: Groep[]
+  regels: Calculatieregel[]
+  componenten: Componentregel[]
+}
 
 export type CalcTotalen = {
   subtotaal_ex_btw: number
@@ -26,20 +31,24 @@ export type CalcTotalen = {
 }
 
 /**
- * Totalen van één calculatie (scenario). Zonder `scenarioId` wordt het
- * standaard/eerste scenario van het project gebruikt (backward compatible).
+ * Totalen van één calculatie (scenario) uit een snapshot. Zonder `scenarioId`
+ * wordt het standaard/eerste scenario van het project gebruikt.
  */
-export function berekenCalcTotalenVoorProject(projectId: string, scenarioId?: string): CalcTotalen | null {
-  const scenarios = getScenarios(projectId)
+export function berekenCalcTotalen(bron: CalculatieBron | null, scenarioId?: string): CalcTotalen | null {
+  if (!bron) return null
   const scenario = scenarioId
-    ? scenarios.find(s => s.id === scenarioId)
-    : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
+    ? bron.scenarios.find(s => s.id === scenarioId)
+    : (bron.scenarios.find(s => s.is_standaard) ?? bron.scenarios[0])
   if (!scenario) return null
 
-  const groepen = getGroepen(scenario.id)
-  const regels = getCalculatieregelsVoorScenario(scenario.id)
+  // Zelfde afbakening als de local-store-getters: groepen op scenario, regels op
+  // die groepen, componenten op die regels.
+  const groepen = bron.groepen.filter(g => g.scenario_id === scenario.id)
+  const groepIds = new Set(groepen.map(g => g.id))
+  const regels = bron.regels.filter(r => groepIds.has(r.groep_id))
   if (regels.length === 0) return null
-  const componenten = getComponentregelsVoorScenario(scenario.id)
+  const regelIds = new Set(regels.map(r => r.id))
+  const componenten = bron.componenten.filter(c => regelIds.has(c.calculatieregel_id))
 
   // Optionele groepen (en hun nakomelingen) uitsluiten — zoals in CalculatieGrid.
   const optioneelIds = new Set(

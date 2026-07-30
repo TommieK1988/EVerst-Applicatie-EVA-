@@ -7,9 +7,10 @@ import Link from 'next/link'
 import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie,
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
-  getWerkbegrotingWijzigingen, hydrateWerkbegroting,
+  getWerkbegrotingWijzigingen, hydrateWerkbegroting, hydrateCalculatie,
   slaWerkbegrotingOp, slaWerkbegrotingComponentOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
+import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
@@ -99,7 +100,15 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         if (!actief) return
       }
 
-      // Nog geen gedeelde WB → lokaal uit de calculatie (vereist de calculatie op dit apparaat).
+      // Nog geen gedeelde WB → opbouwen uit de calculatie. Die eerst uit Supabase
+      // halen: de gebruiker kan rechtstreeks op dit tabblad binnenkomen zonder de
+      // calculatie-omgeving geopend te hebben.
+      try {
+        const calcSnap = await laadCalculatieSnapshot(projectId)
+        if (!actief) return
+        if (calcSnap) hydrateCalculatie(projectId, calcSnap)
+      } catch { /* zonder calculatie valt er niets op te bouwen */ }
+
       const scenarios = getScenarios(projectId)
       const standaard = scenarios.find(s => s.is_standaard) ?? scenarios[0]
       if (!standaard) { setInitBezig(false); return }

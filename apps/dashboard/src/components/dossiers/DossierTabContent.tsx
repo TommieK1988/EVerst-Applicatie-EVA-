@@ -142,6 +142,7 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
           aanvraagId={id}
           naam={dossier?.titel ?? 'Opdracht'}
           nummer={dossier?.dossiernummer ?? ''}
+          gekoppeldProjectId={(dossier as any)?.everts_calc_project_id ?? null}
         />
       </>
     )

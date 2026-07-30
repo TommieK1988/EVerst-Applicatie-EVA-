@@ -1,11 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import nextDynamic from 'next/dynamic'
 
 const DocxViewer = nextDynamic(() => import('@/components/everts-calc/DocxViewer'), { ssr: false })
-
-const BEDRIJF_KEY = 'evc_offerte_bedrijf'
 
 /**
  * Toont de offerte-voorvertoning. Standaard de échte PDF (mét briefpapier en —
@@ -14,15 +12,10 @@ const BEDRIJF_KEY = 'evc_offerte_bedrijf'
  */
 export default function BedrijfLoader({ quoteId }: { quoteId: string }) {
   const [modus, setModus] = useState<'pdf' | 'word'>('pdf')
-  const [bedrijfQuery, setBedrijfQuery] = useState('')
 
-  useEffect(() => {
-    const bedrijfRaw = localStorage.getItem(BEDRIJF_KEY)
-    setBedrijfQuery(bedrijfRaw ? `?bedrijf=${encodeURIComponent(bedrijfRaw)}` : '')
-  }, [quoteId])
-
-  const pdfSrc = `/everts-calc/api/quotes/${quoteId}/pdf-preview${bedrijfQuery}`
-  const docxSrc = `/everts-calc/api/quotes/${quoteId}/docx-preview${bedrijfQuery}`
+  // Bedrijfsgegevens komen server-side uit de bedrijfsinstellingen.
+  const pdfSrc = `/everts-calc/api/quotes/${quoteId}/pdf-preview`
+  const docxSrc = `/everts-calc/api/quotes/${quoteId}/docx-preview`
 
   return (
     <div className="flex flex-col h-full">

@@ -9,7 +9,7 @@ import {
   getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, koppelDossierAanProject } from '@/lib/dossiers/actions'
+import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import {
   bouwDatumRegels, formatDelta, LEGE_DOSSIER_DATUMS,
@@ -18,7 +18,8 @@ import {
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
 import { DossierVerversKnop } from '../DossierVerversKnop'
-import { berekenCalcTotalenVoorProject, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
+import { berekenCalcTotalen, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
+import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import {
   zetOptieInOpdracht, wijsStelpostBewakingscodesToe,
@@ -1022,31 +1023,25 @@ export function InformatieTab({
   const [calcTotalen, setCalcTotalen] = useState<CalcTotalen | null>(null)
   const [importTick,  setImportTick]  = useState(0)
 
+  // Het gekoppelde calculatieproject komt van het dossier zelf; na een import
+  // ververst de router de props (importTick trapt de afgeleide totalen aan).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('aanvraag_project_ids')
-      const map: Record<string, string> = raw ? JSON.parse(raw) : {}
-      setProjectId(map[dossier.id] ?? null)
-    } catch { /* localStorage niet beschikbaar */ }
-  }, [dossier.id, importTick])
-
-  // Zelfherstel: aanvraag/offerte-fase bewaarde het project alleen in localStorage.
-  // Persisteer de dossier ⇄ project-koppeling zodat de offerte-render het dossier
-  // (werkadres, werkmaatschappij, contactpersoon, opdrachtgever) terugvindt.
-  useEffect(() => {
-    if (projectId && !dossier.everts_calc_project_id) {
-      koppelDossierAanProject(dossier.id, projectId).catch(() => {})
-    }
-  }, [projectId, dossier.id, dossier.everts_calc_project_id])
+    setProjectId(dossier.everts_calc_project_id ?? null)
+  }, [dossier.everts_calc_project_id])
 
   useEffect(() => {
     if (!projectId) { setQuoteTotalen(null); return }
     getQuoteTotalenVoorProject(projectId).then(setQuoteTotalen).catch(() => {})
   }, [projectId, importTick])
 
+  // Totalen uit de gedeelde calculatie in Supabase, zodat ze op elk apparaat gelijk zijn.
   useEffect(() => {
     if (!projectId) { setCalcTotalen(null); return }
-    try { setCalcTotalen(berekenCalcTotalenVoorProject(projectId)) } catch { setCalcTotalen(null) }
+    let actief = true
+    laadCalculatieSnapshot(projectId)
+      .then(snap => { if (actief) setCalcTotalen(berekenCalcTotalen(snap)) })
+      .catch(() => { if (actief) setCalcTotalen(null) })
+    return () => { actief = false }
   }, [projectId, importTick])
 
   const set = (key: keyof FormValues) => (v: string) => setForm(p => ({ ...p, [key]: v }))
@@ -1919,7 +1914,8 @@ export function InformatieTab({
             sectie={sectie}
             naam={dossier.titel}
             nummer={dossier.dossiernummer ?? ''}
-            onImported={() => setImportTick(t => t + 1)}
+            projectId={projectId}
+            onImported={pid => { setProjectId(pid); setImportTick(t => t + 1) }}
           />
         </div>
         )}

@@ -71,20 +71,28 @@ export default function OfferteAanmakenModal({
       setFetchingData(false)
     }).catch(() => setFetchingData(false))
 
-    // Tel calculatieregels voor het gekozen (of standaard) scenario
-    import('@/lib/everts-calc/local-store').then(({ getScenarios, getGroepen, getCalculatieregels }) => {
+    // Tel calculatieregels voor het gekozen (of standaard) scenario. De calculatie
+    // eerst uit Supabase halen: dit scherm kan geopend worden zonder dat de
+    // calculatie-omgeving in deze sessie open is geweest.
+    ;(async () => {
       try {
+        const { getScenarios, getGroepen, getCalculatieregels, hydrateCalculatie } =
+          await import('@/lib/everts-calc/local-store')
+        const { laadCalculatieSnapshot } = await import('@/app/(platform)/everts-calc/actions/sync')
+        const snap = await laadCalculatieSnapshot(projectId)
+        if (snap) hydrateCalculatie(projectId, snap)
+
         const scenarios = getScenarios(projectId)
         const actief = scenarioId
           ? scenarios.find(s => s.id === scenarioId)
           : (scenarios.find(s => s.is_standaard) ?? scenarios[0])
-        const groepen = actief ? getGroepen(actief.id) : getGroepen()
+        const groepen = actief ? getGroepen(actief.id) : []
         const count = groepen.reduce((sum, g) => sum + getCalculatieregels(g.id).length, 0)
         setAantalRegels(count)
       } catch {
         setAantalRegels(0)
       }
-    })
+    })()
   }, [open, projectId, scenarioId])
 
   async function handleAanmaken() {

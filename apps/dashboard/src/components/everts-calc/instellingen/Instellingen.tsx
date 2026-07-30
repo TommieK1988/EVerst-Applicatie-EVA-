@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/everts-calc/shared/PageHeader'
 import {
   Save, Plus, X, FileText, ChevronRight, Calculator, Package,
 } from 'lucide-react'
-import { getInstellingen, slaInstellingenOp, hydrateInstellingen } from '@/lib/everts-calc/local-store'
-import { getCalcInstellingen } from '@/app/(platform)/everts-calc/actions/calc-instellingen'
+import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import type { EenheidConfig } from '@/lib/everts-calc/types'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
 import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
@@ -102,7 +102,9 @@ export default function Instellingen() {
 // ─── Tab: Calculatie ──────────────────────────────────────────────────────────
 
 function CalculatieTab() {
-  const inst = getInstellingen()
+  // Instellingen uit de gedeelde store: synchroon bij de eerste render (cache/mirror),
+  // en opnieuw zodra de hydratie uit Supabase binnen is.
+  const inst = useInstellingen()
 
   const [eenheden, setEenheden] = useState<EenheidConfig[]>(
     () => inst.eenheden ?? []
@@ -121,37 +123,55 @@ function CalculatieTab() {
   )
   const [nieuwKostengroep,  setNieuwKostengroep]  = useState('')
 
-  // De editor moet de authoritative Supabase-stand tonen. De synchrone init hierboven
-  // gebruikt de localStorage-cache voor een snelle eerste render; deze effect herlaadt
-  // uit Supabase zodra beschikbaar (voorkomt dat verse apparaten defaults overschrijven).
-  useEffect(() => {
-    let actief = true
-    getCalcInstellingen()
-      .then(data => {
-        if (!actief) return
-        hydrateInstellingen(data)
-        const fresh = getInstellingen()
-        setEenheden(fresh.eenheden ?? [])
-        setCategorieen(fresh.categorieen ?? [])
-        setKolomNamen((fresh.kolom_namen ?? {}) as Record<string, string>)
-        setKostengroepen(fresh.standaard_kostengroepen ?? [])
-      })
-      .catch(() => { /* offline: cache-init blijft staan */ })
-    return () => { actief = false }
-  }, [])
+  // Zodra de hydratie uit Supabase binnen is (platform-layout), zetten we de velden
+  // opnieuw. Dat gebeurt alleen als de gebruiker nog niets heeft aangepast — anders zou
+  // een trage fetch zijn wijzigingen onder zijn handen vandaan halen.
+  const geseed = useRef<string | null>(null)
 
-  const opslaan = () => {
+  useEffect(() => {
+    const huidig = JSON.stringify({ eenheden, categorieen, kolomNamen, kostengroepen })
+    if (geseed.current !== null && huidig !== geseed.current) return  // gebruiker is aan het bewerken
+    const vers = {
+      eenheden:     inst.eenheden ?? [],
+      categorieen:  inst.categorieen ?? [],
+      kolomNamen:   (inst.kolom_namen ?? {}) as Record<string, string>,
+      kostengroepen: inst.standaard_kostengroepen ?? [],
+    }
+    setEenheden(vers.eenheden)
+    setCategorieen(vers.categorieen)
+    setKolomNamen(vers.kolomNamen)
+    setKostengroepen(vers.kostengroepen)
+    geseed.current = JSON.stringify(vers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inst])
+
+  const [bezig, setBezig] = useState(false)
+
+  const opslaan = async () => {
     const schoonKolomNamen = Object.fromEntries(
       Object.entries(kolomNamen).filter(([, v]) => v.trim() !== '')
     )
-    slaInstellingenOp({
-      ...getInstellingen(),   // verse basis (btw, uurtarieven, categorieCodes)
-      kolom_namen: schoonKolomNamen,
-      eenheden,
-      categorieen,
-      standaard_kostengroepen: kostengroepen,
-    })
-    toast.success('Calculatie-instellingen opgeslagen')
+    setBezig(true)
+    try {
+      await slaInstellingenOp({
+        ...getInstellingen(),   // verse basis (btw, uurtarieven, categorieCodes)
+        kolom_namen: schoonKolomNamen,
+        eenheden,
+        categorieen,
+        standaard_kostengroepen: kostengroepen,
+      })
+      // Vanaf hier is de nieuwe stand de basis waartegen we "bewerkt de gebruiker?" meten.
+      geseed.current = JSON.stringify({ eenheden, categorieen, kolomNamen, kostengroepen })
+      toast.success('Calculatie-instellingen opgeslagen')
+    } catch (err) {
+      toast.error(
+        `Opslaan mislukt: ${err instanceof Error ? err.message : 'onbekende fout'}. ` +
+        'De wijziging is alleen op dit apparaat bekend — probeer het opnieuw.',
+        { duration: 8000 },
+      )
+    } finally {
+      setBezig(false)
+    }
   }
 
   return (
@@ -374,11 +394,12 @@ function CalculatieTab() {
       </div>
 
       <button
-        onClick={opslaan}
-        className="inline-flex items-center gap-2 bg-everts hover:bg-everts-dark text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors shadow-sm"
+        onClick={() => { void opslaan() }}
+        disabled={bezig}
+        className="inline-flex items-center gap-2 bg-everts hover:bg-everts-dark text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <Save className="w-4 h-4" />
-        Calculatie-instellingen opslaan
+        {bezig ? 'Opslaan…' : 'Calculatie-instellingen opslaan'}
       </button>
     </div>
   )
