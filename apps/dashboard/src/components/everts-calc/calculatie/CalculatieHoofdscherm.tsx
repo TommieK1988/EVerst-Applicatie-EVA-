@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  GitBranch, Pin, Ruler, CloudUpload, Check, Undo2,
+  GitBranch, Ruler, CloudUpload, Check, Undo2,
   ChevronsUp, Keyboard, BookOpen, Paintbrush, Package, X,
   FileUp, FileDown, ChevronDown, Library, Table2,
   SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
@@ -76,7 +76,6 @@ export default function CalculatieHoofdscherm({
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
   const [componentenVoorBtw, setComponentenVoorBtw]   = useState<Componentregel[]>([])
   const [boomUitgeklapt, setBoomUitgeklapt]           = useState(false)
-  const [boomVastgezet, setBoomVastgezet]             = useState(false)
   const [syncStatus, setSyncStatus]                   = useState<'idle' | 'bezig' | 'gelukt' | 'fout'>('idle')
   const [undoCount, setUndoCount]                     = useState(0)
   const [receptenOpen, setReceptenOpen]               = useState(false)
@@ -98,21 +97,10 @@ export default function CalculatieHoofdscherm({
   }, [])
 
   const handleBoomLeave = useCallback(() => {
-    if (boomVastgezet) return
     sluitTimerRef.current = setTimeout(() => setBoomUitgeklapt(false), 350)
-  }, [boomVastgezet])
-
-  const handlePin = useCallback(() => {
-    setBoomVastgezet(v => {
-      if (!v) setBoomUitgeklapt(true)
-      return !v
-    })
   }, [])
 
-  const handleSluitBoom = useCallback(() => {
-    setBoomUitgeklapt(false)
-    setBoomVastgezet(false)
-  }, [])
+  const handleSluitBoom = useCallback(() => setBoomUitgeklapt(false), [])
 
   const handleCollapseAll = useCallback(() => gridRef.current?.collapseAll(), [])
   const handleUndo        = useCallback(() => gridRef.current?.undo(), [])
@@ -355,9 +343,8 @@ export default function CalculatieHoofdscherm({
               size="sm"
               onMouseEnter={handleBoomEnter}
               onMouseLeave={handleBoomLeave}
-              onClick={handlePin}
-              className={boomVastgezet ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200' : undefined}
-              title="Structuur (hover = preview, klik = vastzetten)"
+              onClick={handleBoomEnter}
+              title="Structuur van de calculatie"
             >
               <GitBranch className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Structuur</span>
@@ -553,7 +540,7 @@ export default function CalculatieHoofdscherm({
         <aside
           className={`absolute left-0 top-0 h-full z-50 flex flex-col bg-white border-r border-slate-200 shadow-xl transition-all duration-200 ${
             boomUitgeklapt
-              ? 'w-56 xl:w-64 opacity-100'
+              ? 'w-80 xl:w-[26rem] opacity-100'
               : 'w-0 overflow-hidden opacity-0 pointer-events-none'
           }`}
           onMouseEnter={handleBoomEnter}
@@ -561,15 +548,6 @@ export default function CalculatieHoofdscherm({
         >
           <div className="flex items-center border-b border-slate-200 h-9 flex-shrink-0">
             <span className="text-xs text-slate-500 font-medium px-3 flex-1 truncate">Structuur</span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handlePin}
-              className={boomVastgezet ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-50 hover:text-emerald-600' : 'text-slate-300'}
-              title={boomVastgezet ? 'Losmaken' : 'Vastzetten'}
-            >
-              <Pin className="w-3.5 h-3.5" />
-            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -592,15 +570,10 @@ export default function CalculatieHoofdscherm({
           </div>
         </aside>
 
-        {/* Backdrop: sluit flyout bij klik op grid (alleen als niet vastgepind) */}
-        {boomUitgeklapt && !boomVastgezet && (
-          <div className="absolute inset-0 z-40 pointer-events-none" />
-        )}
-
         {/* Grid */}
         <div
           className="flex-1 flex flex-col overflow-hidden min-w-0 relative"
-          onMouseDown={() => { if (boomUitgeklapt && !boomVastgezet) handleSluitBoom() }}
+          onMouseDown={() => { if (boomUitgeklapt) handleSluitBoom() }}
         >
           <CalculatieGrid
             ref={gridRef}
