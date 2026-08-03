@@ -9,6 +9,7 @@ import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import { assertDossierBewerkbaar } from './guards'
+import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
 import {
   Bouw7Client,
@@ -1794,6 +1795,20 @@ export type GeboekteKostenRegel = {
    * koppelen — bijvoorbeeld omdat de bon al volledig was ingeboekt.
    */
   heeftLeverbon: boolean
+  /** Leverbon-id: dáár hangt de bewakingscode, en dus het aangrijpingspunt voor hercoderen. */
+  bonId: number | null
+  /**
+   * Kostensoort van de bon (`purchaseType`: 1=Arbeid, 2=Inkoop, 3=Onderaanneming, 4=Materieel,
+   * 5=Materiaal, 6=Afval; 0 = ongetypeerde bon). Een doelcode moet een PSL van dezelfde
+   * kostensoort hebben, anders landt de kost in de verkeerde kolom van de Financieel-tab.
+   */
+  kostensoort: number | null
+  /**
+   * Deze kost hangt via een inkooporder/OA-contract aan zijn bewakingscode (bonnummer =
+   * `<contractnummer>B<nr>`). Hercoderen is dan geblokkeerd: de code komt uit de contracttermijn,
+   * en de bon losweken laat contract en geboekte kosten uit elkaar lopen.
+   */
+  contractGebonden: boolean
 }
 
 /** Eén afwijking op de inkoop van dit dossier, bedoeld om op te volgen. */
@@ -1826,7 +1841,26 @@ export type InkoopFactuurDetail = {
   documentHash: string | null
   documentNaam: string | null
 }
-export type ProjectBewakingscode = { code: string; naam: string | null }
+/**
+ * Eén keuzemogelijkheid in de hercodeer-dropdown.
+ *
+ * Bewakingscodes zijn **niet uniek per project** — dezelfde codetekst kan onder meerdere
+ * hoofdstukken staan (zie de dubbeltelling-valkuil in `getDossierBewaking`). Daarom is een
+ * optie altijd hoofdstuk + code, en niet de code alleen: anders is bij het schrijven naar
+ * Bouw7 niet te bepalen wélke van de gelijknamige codes bedoeld wordt.
+ */
+export type ProjectBewakingscode = {
+  code: string
+  naam: string | null
+  hoofdstukId: number | null
+  hoofdstukNaam: string | null
+  /**
+   * ProjectSecurityLink-id per kostensoort (1=Arbeid … 6=Afval). Een code heeft alleen een PSL
+   * voor de kostensoorten waarvoor hij op dit project begroot of gebruikt is. Leeg = deze code
+   * bestaat wel op het project, maar er kan (nog) geen kost naartoe in Bouw7.
+   */
+  pslPerKostensoort: Record<number, number>
+}
 export type DossierInkoopData = {
   beschikbaar: boolean
   inkooporders: InkoopOrderRegel[]
@@ -1854,7 +1888,20 @@ export type InkoopCorrectie = {
 
 const PURCHASE_TYPE_LABELS: Record<string, string> = {
   labor: 'Arbeid', material: 'Materiaal', subcontractor: 'Onderaanneming',
+  // Bouw7 levert op de bon `subcontracting` (niet `subcontractor`) — zonder deze regel toonde de
+  // Type-kolom letterlijk "Subcontracting".
+  subcontracting: 'Onderaanneming', purchase_order: 'Inkoop', delivery_ticket: 'Bon',
+  remaining: 'Overig',
   equipment: 'Materieel', waste: 'Afval', misc: 'Overig', other: 'Overig',
+}
+/**
+ * Bon-`purchaseTypeName` (Heimdall) → `purchaseType`-nummer (Apollo), dat gelijk is aan de
+ * kostensoort van de bewakingslink (`purchaseType === projectSecurityLink.costType`, 701/701
+ * gemeten). Fallback voor het geval Apollo een bon niet meelevert.
+ */
+const PURCHASE_TYPE_IDS: Record<string, number> = {
+  delivery_ticket: 0, labor: 1, purchase_order: 2, subcontracting: 3, subcontractor: 3,
+  equipment: 4, material: 5, remaining: 6, waste: 6,
 }
 function typeKostenLabel(name?: string | null): string | null {
   if (!name) return null
@@ -1918,9 +1965,13 @@ async function getEvaContractIds(dossierId: string): Promise<Set<number>> {
  * kost staan: juist de code waar je een kost naártoe wilt verplaatsen is per definitie nog
  * nergens in gebruik. Op een project waar in Bouw7 nog niets gecodeerd is (alle kosten onder
  * `uncoded_costs`) leverde die afleiding een lege lijst op — hercoderen was dan onmogelijk.
+ *
+ * Per code komt daar ook de **PSL-id per kostensoort** vandaan (`securityCodes[].pslIds`) — dat is
+ * het aangrijpingspunt om de code van een geboekte kost in Bouw7 te verzetten. Gesleuteld op
+ * hoofdstuk + code, want dezelfde codetekst kan in meerdere hoofdstukken voorkomen.
  */
-async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): Promise<Map<string, string | null>> {
-  const codes = new Map<string, string | null>()
+async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): Promise<Map<string, ProjectBewakingscode>> {
+  const codes = new Map<string, ProjectBewakingscode>()
   const responses = await Promise.all(
     BEWAKING_KOSTENSOORTEN.map((ct) =>
       client
@@ -1928,17 +1979,32 @@ async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): P
         .catch(() => null),
     ),
   )
-  for (const resp of responses) {
+  responses.forEach((resp, i) => {
+    const ct = BEWAKING_KOSTENSOORTEN[i]
     for (const hoofdstuk of resp?.items ?? []) {
       const ci = hoofdstuk.chapterInfo
       if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
       for (const sc of hoofdstuk.securityCodes ?? []) {
         const code = (sc.code ?? '').trim()
-        if (!code || codes.has(code)) continue
-        codes.set(code, sc.name?.trim() || null)
+        if (!code) continue
+        const key = `${ci?.id ?? ''}|${code}`
+        let entry = codes.get(key)
+        if (!entry) {
+          entry = {
+            code,
+            naam: sc.name?.trim() || null,
+            hoofdstukId: ci?.id ?? null,
+            hoofdstukNaam: ci?.name ?? null,
+            pslPerKostensoort: {},
+          }
+          codes.set(key, entry)
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pslId = (sc as any).pslIds?.[0]
+        if (pslId != null && entry.pslPerKostensoort[ct] == null) entry.pslPerKostensoort[ct] = Number(pslId)
       }
     }
-  }
+  })
   return codes
 }
 
@@ -1964,7 +2030,7 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         q: `project.id = ${bouw7Id} LIMIT 1000`,
       }).catch(() => ({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
       getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
-      getProjectBewakingscodes(client, bouw7Id).catch(() => new Map<string, string | null>()),
+      getProjectBewakingscodes(client, bouw7Id).catch(() => new Map<string, ProjectBewakingscode>()),
     ])
 
     // Welke contracten zijn vanuit een EVA-bestelling aangemaakt? Puur ter herkenning in de
@@ -1974,11 +2040,16 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     // Apollo levert de bewakingscode: indexeer per deliveryTicket.id én per invoice.id (fallback).
     const codePerBon = new Map<number, { code: string | null; naam: string | null }>()
     const codePerInvoice = new Map<number, { code: string | null; naam: string | null }>()
+    // Kostensoort van de bon (`purchaseType`) — nodig om de doel-PSL bij het hercoderen te kiezen.
+    const kostensoortPerBon = new Map<number, number>()
     for (const inv of apolloInvoices) {
       const c = inv.deliveryTicket?.securityLink?.code
       const entry = { code: c?.code ?? null, naam: c?.name ?? null }
       if (inv.deliveryTicket?.id) codePerBon.set(inv.deliveryTicket.id, entry)
       if (inv.id) codePerInvoice.set(inv.id, entry)
+      if (inv.deliveryTicket?.id != null && inv.deliveryTicket.purchaseType != null) {
+        kostensoortPerBon.set(inv.deliveryTicket.id, inv.deliveryTicket.purchaseType)
+      }
     }
 
     // Bonnummer → order-id / contract-id voor Bouw7-linkage
@@ -2010,17 +2081,29 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
       let effOrderId: number | null = corr?.toegewezen_order_id != null ? Number(corr.toegewezen_order_id) : null
       let effContractId: number | null = corr?.toegewezen_contract_id != null ? Number(corr.toegewezen_contract_id) : null
       let linkBron: 'bouw7' | 'eva' | null = null
-      if (effOrderId != null || effContractId != null) {
-        linkBron = 'eva'
-      } else if (bon) {
+
+      // Contract-gebondenheid staat los van de EVA-toewijzing: een handmatige EVA-koppeling mag
+      // niet verhullen dat de code van deze bon uit een contracttermijn komt (→ niet hercoderen).
+      let bouw7OrderId: number | null = null
+      let bouw7ContractId: number | null = null
+      if (bon) {
         for (const [nummer, orderId] of orderNummerIndex) {
-          if (bon === nummer || bon.startsWith(nummer + 'B')) { effOrderId = orderId; linkBron = 'bouw7'; break }
+          if (bon === nummer || bon.startsWith(nummer + 'B')) { bouw7OrderId = orderId; break }
         }
-        if (linkBron === null) {
+        if (bouw7OrderId === null) {
           for (const [nummer, contractId] of contractNummerIndex) {
-            if (bon === nummer || bon.startsWith(nummer + 'B')) { effContractId = contractId; linkBron = 'bouw7'; break }
+            if (bon === nummer || bon.startsWith(nummer + 'B')) { bouw7ContractId = contractId; break }
           }
         }
+      }
+      const contractGebonden = bouw7OrderId != null || bouw7ContractId != null
+
+      if (effOrderId != null || effContractId != null) {
+        linkBron = 'eva'
+      } else if (contractGebonden) {
+        effOrderId = bouw7OrderId
+        effContractId = bouw7ContractId
+        linkBron = 'bouw7'
       }
 
       return {
@@ -2044,6 +2127,11 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
         toegewezenOrderId: effOrderId,
         toegewezenContractId: effContractId,
         heeftLeverbon: inv.deliveryTicket?.id != null,
+        bonId: inv.deliveryTicket?.id ?? null,
+        kostensoort:
+          (inv.deliveryTicket?.id != null ? kostensoortPerBon.get(inv.deliveryTicket.id) : undefined) ??
+          PURCHASE_TYPE_IDS[(inv.deliveryTicket?.purchaseTypeName ?? '').toLowerCase()] ?? null,
+        contractGebonden,
       }
     })
 
@@ -2094,13 +2182,21 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     // Projectbewakingscodes = de codes die in Bouw7 op dit project staan, aangevuld met codes die
     // al op een contract of geboekte kost voorkomen maar (nog) niet in de projectstructuur zitten —
     // anders zou een bestaande codering uit de lijst vallen en niet meer te herstellen zijn.
-    const codeMap = new Map<string, string | null>(bouw7Codes)
-    for (const o of orderResp.items ?? []) if (o.projectSecurityLink?.code && !codeMap.has(o.projectSecurityLink.code)) codeMap.set(o.projectSecurityLink.code, o.projectSecurityLink.name ?? null)
-    for (const c of subResp.items ?? []) if (c.projectSecurityLink?.code && !codeMap.has(c.projectSecurityLink.code)) codeMap.set(c.projectSecurityLink.code, c.projectSecurityLink.name ?? null)
-    for (const r of geboekteKosten) if (r.bronCode && !codeMap.has(r.bronCode)) codeMap.set(r.bronCode, r.codeNaam ?? null)
-    const projectcodes: ProjectBewakingscode[] = [...codeMap.entries()]
-      .map(([code, naam]) => ({ code, naam }))
-      .sort((a, b) => a.code.localeCompare(b.code))
+    //
+    // Zo'n aanvulling heeft géén hoofdstuk en géén PSL-ids: er valt niet naartoe te hercoderen in
+    // Bouw7, maar de bestaande codering blijft wel zichtbaar in de dropdown.
+    const codeMap = new Map<string, ProjectBewakingscode>(bouw7Codes)
+    const losseCodes = new Set([...codeMap.values()].map((c) => c.code))
+    const vulAan = (code?: string | null, naam?: string | null) => {
+      if (!code || losseCodes.has(code)) return
+      losseCodes.add(code)
+      codeMap.set(`|${code}`, { code, naam: naam ?? null, hoofdstukId: null, hoofdstukNaam: null, pslPerKostensoort: {} })
+    }
+    for (const o of orderResp.items ?? []) vulAan(o.projectSecurityLink?.code, o.projectSecurityLink?.name)
+    for (const c of subResp.items ?? []) vulAan(c.projectSecurityLink?.code, c.projectSecurityLink?.name)
+    for (const r of geboekteKosten) vulAan(r.bronCode, r.codeNaam)
+    const projectcodes: ProjectBewakingscode[] = [...codeMap.values()]
+      .sort((a, b) => a.code.localeCompare(b.code) || (a.hoofdstukNaam ?? '').localeCompare(b.hoofdstukNaam ?? ''))
 
     const besteld = inkooporders.reduce((s, r) => s + r.contractbedrag, 0)
     const onderaanneming = onderaannemers.reduce((s, c) => s + c.contractbedrag, 0)
@@ -2214,7 +2310,7 @@ export async function getInkoopFactuurDetail(
 
 /* — Inkoop-correcties (EVA-rekenlaag; geen Bouw7-write) — */
 
-type InkoopCorrectieResult = { ok: true } | { ok: false; error: string }
+type InkoopCorrectieResult = { ok: true; melding?: string } | { ok: false; error: string }
 
 /** Upsert helper: schrijf één veld-set naar inkoop_correcties voor (dossier, bron). */
 async function upsertInkoopCorrectie(
@@ -2247,25 +2343,118 @@ export async function verplaatsGeboekteKost(
   })
 }
 
-/** Zet een geboekte kost op een andere (bestaande) bewakingscode. Validatie tegen projectcodes. */
+/* — Hercoderen: verplaatst de kost ook in Bouw7 — */
+
+/**
+ * Zet een geboekte kost op een andere bewakingscode — **in Bouw7 zelf**, niet als EVA-overlay.
+ *
+ * Een EVA-only correctie liet het Inkoop-tab kloppen maar de Financieel-tab niet: die leest per
+ * bewakingscode rechtstreeks uit Bouw7 en kent de correctielaag niet. Daarom gaat de code nu naar
+ * de leverbon in Bouw7 (`lib/dossiers/bouw7-bewakingscode.ts`); daarmee kloppen beide tabs én het
+ * Bouw7-projectbewakingsscherm. Het fiscale deel van de factuur blijft onaangeroerd.
+ *
+ * Geweigerd wordt:
+ * - een kost die via een **inkooporder of OA-contract** aan zijn code hangt (die code komt uit de
+ *   contracttermijn — losweken laat contract en kosten uit elkaar lopen);
+ * - een doelcode zonder PSL voor de kostensoort van de bon (de kost zou in de verkeerde kolom
+ *   van de Financieel-tab landen; zet de code in Bouw7 eerst onder die kostensoort in de
+ *   begroting).
+ */
+async function hercodeerEen(
+  client: Bouw7Client,
+  bouw7Id: string,
+  rij: GeboekteKostenRegel,
+  doel: ProjectBewakingscode,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const wat = rij.factuurnummer ?? `factuur ${rij.bronId}`
+  if (rij.contractGebonden) {
+    return { ok: false, error: `${wat}: hangt aan een inkooporder/OA-contract — daar bepaalt het contract de bewakingscode.` }
+  }
+  if (rij.bonId == null) {
+    return { ok: false, error: `${wat}: heeft geen leverbon in Bouw7, dus er is niets om te hercoderen.` }
+  }
+  if (doel.hoofdstukId == null) {
+    return { ok: false, error: `${wat}: bewakingscode "${doel.code}" staat niet in de projectstructuur van Bouw7 en is daar dus niet te kiezen.` }
+  }
+  const res = await schrijfBouw7BonBewakingscode(client, bouw7Id, rij.bonId, doel)
+  return res.ok ? { ok: true } : { ok: false, error: `${wat}: ${res.error}` }
+}
+
+/**
+ * Zoekt de doelcode op. `hoofdstukId` hoort erbij omdat dezelfde codetekst in meerdere
+ * hoofdstukken kan staan; zonder hoofdstuk accepteren we alleen een code die maar één keer
+ * voorkomt — anders is niet te bepalen welke bedoeld is.
+ */
+function vindDoelcode(
+  codes: ProjectBewakingscode[],
+  code: string,
+  hoofdstukId: number | null,
+): { ok: true; doel: ProjectBewakingscode } | { ok: false; error: string } {
+  const kandidaten = codes.filter((c) => c.code === code)
+  if (kandidaten.length === 0) return { ok: false, error: 'Bewakingscode bestaat niet op dit project.' }
+  if (hoofdstukId != null) {
+    const exact = kandidaten.find((c) => c.hoofdstukId === hoofdstukId)
+    if (!exact) return { ok: false, error: 'Bewakingscode bestaat niet in dat hoofdstuk.' }
+    return { ok: true, doel: exact }
+  }
+  if (kandidaten.length > 1) {
+    return { ok: false, error: `Bewakingscode "${code}" komt in meerdere hoofdstukken voor — kies het hoofdstuk erbij.` }
+  }
+  return { ok: true, doel: kandidaten[0] }
+}
+
+/** Wist de oude EVA-code-overlay van een kost; de code staat nu immers in Bouw7 zelf. */
+async function wisCodeOverlay(dossierId: string, bronId: number): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('inkoop_correcties')
+    .select('id, toegewezen_order_id, toegewezen_contract_id, bewakingscode_override')
+    .eq('dossier_id', dossierId).eq('bron_type', 'purchase_invoice').eq('bron_id', bronId)
+    .maybeSingle()
+  if (!data?.id || data.bewakingscode_override == null) return
+  // Alleen de code-velden wissen; een handmatige order-/contracttoewijzing blijft staan.
+  if (data.toegewezen_order_id != null || data.toegewezen_contract_id != null) {
+    await supabase.from('inkoop_correcties')
+      .update({ bewakingscode_override: null, bewakingscode_naam_override: null, updated_at: new Date().toISOString() })
+      .eq('id', data.id)
+  } else {
+    await supabase.from('inkoop_correcties').delete().eq('id', data.id)
+  }
+}
+
+/** Revalidatie na een hercodering: raakt zowel het Inkoop- als het Financieel-tab. */
+function revalideerInkoopEnFinancieel(dossierId: string): void {
+  for (const basis of ['/opdrachten', '/servicedesk']) {
+    revalidatePath(`${basis}/${dossierId}/inkoop`)
+    revalidatePath(`${basis}/${dossierId}/financieel`)
+  }
+}
+
 export async function hercodeerGeboekteKost(
   dossierId: string,
   bronId: number,
   code: string,
-  naam: string | null,
+  hoofdstukId: number | null = null,
 ): Promise<InkoopCorrectieResult> {
   await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
-  // "Alleen bestaande projectcodes": valideer tegen de codes die al op het project voorkomen.
+
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
+
   const data = await getDossierInkoop(dossierId)
-  if (!data.projectcodes.some((c) => c.code === codeClean)) {
-    return { ok: false, error: 'Bewakingscode bestaat niet op dit project.' }
-  }
-  return upsertInkoopCorrectie(dossierId, bronId, {
-    bewakingscode_override: codeClean,
-    bewakingscode_naam_override: naam,
-  })
+  const doel = vindDoelcode(data.projectcodes, codeClean, hoofdstukId)
+  if (!doel.ok) return doel
+  const rij = data.geboekteKosten.find((r) => r.bronId === bronId)
+  if (!rij) return { ok: false, error: 'Geboekte kost niet gevonden op dit dossier.' }
+
+  const res = await hercodeerEen(ctx.client, ctx.bouw7Id, rij, doel.doel)
+  if (!res.ok) return res
+  await wisCodeOverlay(dossierId, bronId)
+  revalideerInkoopEnFinancieel(dossierId)
+  return { ok: true }
 }
 
 /** Verwijder de EVA-correctie van een geboekte kost (terug naar de Bouw7-waarde). */
@@ -2307,24 +2496,51 @@ async function upsertInkoopCorrectiesBulk(
   return { ok: true }
 }
 
-/** Bulk: zet meerdere geboekte kosten op dezelfde (bestaande) bewakingscode. */
+/**
+ * Bulk: zet meerdere geboekte kosten op dezelfde bewakingscode in Bouw7.
+ *
+ * Regel voor regel, want elke bon heeft zijn eigen kostensoort en dus zijn eigen doel-PSL.
+ * Een regel die niet mag of niet kan (contractgebonden, geen leverbon, code niet begroot voor
+ * die kostensoort) wordt overgeslagen en **benoemd** — stil overslaan zou de indruk wekken dat
+ * alles verplaatst is.
+ */
 export async function hercodeerGeboekteKostenBulk(
   dossierId: string,
   bronIds: number[],
   code: string,
-  naam: string | null,
+  hoofdstukId: number | null = null,
 ): Promise<InkoopCorrectieResult> {
   await assertDossierBewerkbaar(dossierId)
   const codeClean = (code ?? '').trim()
   if (!codeClean) return { ok: false, error: 'Geen bewakingscode opgegeven.' }
+  const ids = [...new Set(bronIds.filter((n) => Number.isFinite(n)))]
+  if (ids.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
+
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
+
   const data = await getDossierInkoop(dossierId)
-  if (!data.projectcodes.some((c) => c.code === codeClean)) {
-    return { ok: false, error: 'Bewakingscode bestaat niet op dit project.' }
+  const doel = vindDoelcode(data.projectcodes, codeClean, hoofdstukId)
+  if (!doel.ok) return doel
+
+  let gelukt = 0
+  const fouten: string[] = []
+  for (const bronId of ids) {
+    const rij = data.geboekteKosten.find((r) => r.bronId === bronId)
+    if (!rij) { fouten.push(`Kost ${bronId} niet gevonden.`); continue }
+    const res = await hercodeerEen(ctx.client, ctx.bouw7Id, rij, doel.doel)
+    if (res.ok) { gelukt++; await wisCodeOverlay(dossierId, bronId) }
+    else fouten.push(res.error)
   }
-  return upsertInkoopCorrectiesBulk(dossierId, bronIds, {
-    bewakingscode_override: codeClean,
-    bewakingscode_naam_override: naam,
-  })
+
+  revalideerInkoopEnFinancieel(dossierId)
+  if (gelukt === 0) return { ok: false, error: fouten.join(' · ') || 'Er is niets verplaatst.' }
+  return {
+    ok: true,
+    melding: fouten.length === 0
+      ? `${gelukt} regel(s) verplaatst naar ${codeClean}.`
+      : `${gelukt} van ${ids.length} verplaatst. Overgeslagen: ${fouten.join(' · ')}`,
+  }
 }
 
 /** Bulk: wijs meerdere geboekte kosten toe aan dezelfde inkooporder of OA-contract (exclusief). */

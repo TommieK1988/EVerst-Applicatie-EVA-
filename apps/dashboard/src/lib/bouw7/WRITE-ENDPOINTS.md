@@ -284,14 +284,66 @@ bevestiging/preview). Schrijft alleen kostensoorten met **precies één PSL** (a
 `GET /project-financial/{id}` · `GET /project-control/{id}/cost-type/{1..6}/chapters` · `GET /wip/report`
 · Apollo `GET /search/purchase-invoices` · `GET /search/delivery-tickets` · Heimdall `GET /list/contract-order-lines`.
 
-### Inkoopfacturen: bewust NIET schrijven (EVA-rekenlaag) — besluit juni 2026
-Het Inkoop-tab kan een geboekte kost **hercoderen** (andere bewakingscode) of **toewijzen** aan een
-inkooporder/OA-contract, zodat het saldo per order/contract en de kosten per bewakingscode in EVA kloppen
-ook bij een verkeerde inboeking. Deze correctie wordt **uitsluitend in EVA** opgeslagen
-(`public.inkoop_correcties`, gemerged in `getDossierInkoop`) en **NIET** naar Bouw7 teruggeschreven.
-Reden: een geboekte inkoopfactuur is **fiscaal-relevant** (bedrag/BTW/factuurnummer); die mag EVA niet muteren.
-Daarom géén `POST /purchase-invoice` / `PUT /purchase-invoice/{id}/update-status` vanuit EVA — niet alsnog
-inbouwen zonder uitdrukkelijk akkoord. Geboekte kosten leest EVA via Heimdall `GET /list/purchase-invoices`
+### Inkoopfacturen: het fiscale document blijft onaangeroerd — de bewakingscode niet meer (jul 2026)
+
+Het **factuurdocument** schrijft EVA nog steeds niet: géén `POST /purchase-invoice`, géén
+`PUT /purchase-invoice/{id}/update-status`. Bedrag, BTW, factuurnummer en boekstuk zijn fiscaal
+relevant en blijven van Bouw7. Dat besluit staat.
+
+**Wel gewijzigd:** de **bewakingscode** van een geboekte kost zit niet op de factuur maar op de
+**leverbon** eronder (`DeliveryTicket.projectSecurityLink`). Die is schrijfbaar, en sinds juli 2026
+schrijft EVA hem — anders week het Financieel-tab (leest per code rechtstreeks uit Bouw7) af van
+een hercodering in het Inkoop-tab.
+
+```
+POST /project/delivery-ticket   (upsert op id; read-modify-write)
+{ id, contact{id}, project{id}, ticketNumber, ticketDate, purchaseType, cost, processed,
+  description, projectSecurityLink: { id: <pslId> } }
+```
+
+Geverifieerd jul 2026 op project 3869371 (bon 11326492, daarna teruggezet): 200, code gewijzigd,
+`purchaseInvoice` (id/nummer/`isBooked`), `cost` en `initialCost` ongewijzigd — óók op een bon met
+`hasImmutablePurchaseInvoice: true`. Apollo `/search/purchase-invoices` gaf de nieuwe code direct terug.
+In de spec zijn `contract`, `purchaseInvoice`, `initialCost` en `file` `readOnly`, `projectSecurityLink` niet.
+
+**Drie regels die je niet mag omzeilen.**
+1. **Contract-gebonden kosten nooit verplaatsen.** Bij een afroepbon (`<contractnummer>B<nr>`) komt de
+   code uit de contracttermijn/bestelregel; de bon losweken laat contract en geboekte kosten uit elkaar
+   lopen. `getDossierInkoop` zet daarvoor `contractGebonden` op de regel (bonnummer-match op de
+   bestaande order-/contractnummers — **niet** `DeliveryTicket.contract`, dat is in de praktijk vaak `null`).
+2. **Kostensoort moet matchen.** `deliveryTicket.purchaseType === projectSecurityLink.costType` in
+   701/701 gemeten bonnen. De doel-PSL wordt daarom gekozen op de `purchaseType` van de bon zelf
+   (vers opgehaald), niet op lijstdata. **Uitzondering `purchaseType: 0`** ("delivery_ticket" — de
+   bon die Bouw7 maakt bij het inboeken van een losse factuur zónder inkooptype): die telt in de
+   projectbewaking mee onder **kostensoort 2 (Inkoop)**. Bewijs: op project 3582730 is de som van de
+   pt0-bonnen (€2.138,72) exact het bestede bedrag van ct2, en een pt0-bon met een ct2-PSL landt
+   aantoonbaar onder die code in ct2. In de Bouw7-UI krijgen pt0-bonnen nooit een code (0 van 229),
+   maar via de API kan het wél.
+3. **Terugcontrole na de write.** De spec bewijst niets over schrijfbaarheid (zie `linkedDeliveryTicket`):
+   na de POST leest `schrijfBouw7BonBewakingscode` de bon opnieuw en meldt een fout als de code er niet staat.
+
+Bewakingscodes zijn **hoofdstuk-gebonden** — dezelfde codetekst kan meerdere PSL's hebben. De doelcode
+wordt daarom altijd als hoofdstuk + code gekozen (`ProjectBewakingscode.hoofdstukId` + `pslPerKostensoort`).
+
+**Ontbreekt de code onder die kostensoort, dan maakt EVA de bewakingslink zelf aan** (`zorgVoorPsl`):
+begroot `'0'` zetten in `GET/POST /project/{id}/project-security-links` laat de PSL ontstaan, waarna de
+nieuwe PSL-id uit het Athena-chapters-endpoint komt. Zelfde mechaniek als `zorgVoorOntbrekendePsls` in
+de werkbegroting-prognose, met twee verschillen: het zoeken is **gescoped op het hoofdstuk** (anders pak
+je een gelijknamige code uit een ander hoofdstuk), en de **code zelf wordt nooit aangemaakt** — hercoderen
+kan alleen naar codes die al op het project staan. Kostensoort → structuurveld: 1 `laborCosts`
+(+ `laborHours`/`laborHourlyRate`, anders weigert Bouw7) · 2 `purchaseOrderCosts` · 3 `subcontractorCosts`
+· 4 `equipmentCosts` · 5 `materialCosts` · 6 `wasteCosts`. Geverifieerd op 3869371: de structuur-POST
+voegde exact één veld toe (`purchaseOrderCosts=0`) en liet de overige 8 rijen ongemoeid.
+
+> ⚠️ Die POST **vervangt de hele bewakingsstructuur** van het project. Alleen velden toevoegen, nooit
+> verwijderen, en altijd read-modify-write op de verse GET.
+
+De **toewijzing aan een inkooporder/OA-contract** (`inkoop_correcties.toegewezen_*`) blijft een pure
+EVA-rekenlaag zonder Bouw7-tegenhanger. De oude `bewakingscode_override` blijft op read gemerged voor
+bestaande correcties, maar wordt niet meer geschreven; bij een geslaagde Bouw7-write wist EVA hem.
+
+EVA-implementatie: `lib/dossiers/bouw7-bewakingscode.ts` + `hercodeerGeboekteKost(-Bulk)` in
+`lib/dossiers/actions.ts`. Geboekte kosten leest EVA via Heimdall `GET /list/purchase-invoices`
 (rijke financiën) + Apollo `GET /search/purchase-invoices` (bewakingscode), gemerged op `deliveryTicket.id`.
 
 ---

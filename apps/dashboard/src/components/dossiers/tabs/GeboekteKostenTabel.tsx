@@ -15,7 +15,7 @@ import {
 } from '@/lib/dossiers/actions'
 import {
   SlidersHorizontal, Search, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight,
-  ExternalLink, FileText,
+  ExternalLink, FileText, Lock,
 } from 'lucide-react'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
@@ -38,6 +38,28 @@ type Props = {
 
 const euro = (n: number | null | undefined): string =>
   n == null ? '—' : new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+
+/**
+ * Dropdown-waarde van een bewakingscode: hoofdstuk + code. Codes zijn niet uniek per project,
+ * dus de code alleen is niet genoeg om te bepalen waar de kost in Bouw7 naartoe moet.
+ */
+const codeKey = (c: ProjectBewakingscode): string => `${c.hoofdstukId ?? ''}|${c.code}`
+const parseCodeKey = (v: string): { hoofdstukId: number | null; code: string } => {
+  const i = v.indexOf('|')
+  const h = v.slice(0, i)
+  return { hoofdstukId: h ? Number(h) : null, code: v.slice(i + 1) }
+}
+const codeLabel = (c: ProjectBewakingscode): string =>
+  `${c.code}${c.naam ? ` · ${c.naam}` : ''}${c.hoofdstukNaam ? ` (${c.hoofdstukNaam})` : ''}`
+
+/**
+ * Codes waar een kost naartoe kan: alles wat in de bewakingsstructuur van het Bouw7-project staat.
+ * Staat de code daar nog niet onder de kostensoort van de kost, dan voegt EVA die bij het
+ * verplaatsen toe (begroot 0). Codes zonder hoofdstuk komen niet uit die structuur — ze zijn
+ * alleen aangevuld om een bestaande codering zichtbaar te houden, en zijn geen geldig doel.
+ */
+const kiesbareCodes = (codes: ProjectBewakingscode[]): ProjectBewakingscode[] =>
+  codes.filter((c) => c.hoofdstukId != null)
 
 const selectStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8,
@@ -213,8 +235,16 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     {
       key: 'code', label: 'Bewakingscode', breedte: 180, waarde: (r) => r.code ?? '',
       render: (r) => (
-        <span style={{ display: 'block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.codeNaam ?? undefined}>
-          {r.code ?? '— niet gecodeerd'}{r.codeNaam ? ` · ${r.codeNaam}` : ''}
+        <span
+          style={{ display: 'flex', alignItems: 'center', gap: 4, maxWidth: 180, overflow: 'hidden' }}
+          title={r.contractGebonden
+            ? `${r.codeNaam ?? ''}${r.codeNaam ? ' — ' : ''}Vast: de code komt uit het inkooporder/OA-contract`
+            : r.codeNaam ?? undefined}
+        >
+          {r.contractGebonden && <Lock size={11} style={{ flexShrink: 0, color: 'var(--neutral-400)' }} />}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {r.code ?? '— niet gecodeerd'}{r.codeNaam ? ` · ${r.codeNaam}` : ''}
+          </span>
         </span>
       ),
     },
@@ -280,20 +310,23 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const doe = (actie: () => Promise<{ ok: boolean; error?: string }>, succes: string) => {
+  // `melding` komt terug bij een gedeeltelijk resultaat (bv. bulk-verplaatsing waarbij een paar
+  // regels zijn overgeslagen) — die tekst is informatiever dan de standaard succesmelding.
+  type ActieResultaat = { ok: boolean; error?: string; melding?: string }
+  const doe = (actie: () => Promise<ActieResultaat>, succes: string) => {
     start(async () => {
       const res = await actie()
-      if (res.ok) { toast.success(succes); setActief(null); router.refresh() }
-      else toast.error(res.error ?? 'Mislukt')
+      if (res.ok) { toast.success(res.melding ?? succes); setActief(null); router.refresh() }
+      else toast.error(res.error ?? 'Mislukt', { duration: 8000 })
     })
   }
 
   // Bulk-actie op de geselecteerde regels — leegt de selectie bij succes.
-  const doeBulk = (actie: () => Promise<{ ok: boolean; error?: string }>, succes: string) => {
+  const doeBulk = (actie: () => Promise<ActieResultaat>, succes: string) => {
     start(async () => {
       const res = await actie()
-      if (res.ok) { toast.success(succes); setSel(new Set()); router.refresh() }
-      else toast.error(res.error ?? 'Mislukt')
+      if (res.ok) { toast.success(res.melding ?? succes, { duration: res.melding ? 10000 : 4000 }); setSel(new Set()); router.refresh() }
+      else toast.error(res.error ?? 'Mislukt', { duration: 10000 })
     })
   }
 
@@ -310,10 +343,20 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   [data])
   const totaalNietToegewezen = totaalAlles - totaalToegewezen
 
+  // Regels die niet mogen (contractgebonden, geen leverbon) worden server-side benoemd overgeslagen.
+  const bulkCodes = useMemo(() => kiesbareCodes(projectcodes), [projectcodes])
+
   const huidigeDoelwaarde = actief
     ? actief.toegewezenOrderId != null ? `order:${actief.toegewezenOrderId}`
       : actief.toegewezenContractId != null ? `contract:${actief.toegewezenContractId}` : ''
     : ''
+
+  // Codes waar déze kost naartoe kan, plus de huidige waarde in dezelfde vorm als de opties.
+  const actiefCodes = useMemo(() => (actief ? kiesbareCodes(projectcodes) : []), [actief, projectcodes])
+  const huidigeCodeWaarde = useMemo(() => {
+    if (!actief?.code) return ''
+    return codeKey(actiefCodes.find((c) => c.code === actief.code) ?? projectcodes.find((c) => c.code === actief.code) ?? { code: actief.code, hoofdstukId: null } as ProjectBewakingscode)
+  }, [actief, actiefCodes, projectcodes])
 
   const thStyle = (right?: boolean): React.CSSProperties => ({
     padding: '6px 10px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
@@ -358,15 +401,15 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
             disabled={pending}
             value=""
             onChange={(e) => {
-              const code = e.target.value
-              if (!code) return
-              const naam = projectcodes.find((p) => p.code === code)?.naam ?? null
-              doeBulk(() => hercodeerGeboekteKostenBulk(dossierId, [...sel], code, naam), `${sel.size} regel(s) gehercodeerd`)
+              const v = e.target.value
+              if (!v) return
+              const { code, hoofdstukId } = parseCodeKey(v)
+              doeBulk(() => hercodeerGeboekteKostenBulk(dossierId, [...sel], code, hoofdstukId), `${sel.size} regel(s) verplaatst`)
             }}
           >
-            <option value="">Hercodeer naar bewakingscode…</option>
-            {projectcodes.map((p) => (
-              <option key={p.code} value={p.code}>{p.code}{p.naam ? ` · ${p.naam}` : ''}</option>
+            <option value="">Verplaats naar bewakingscode…</option>
+            {bulkCodes.map((p) => (
+              <option key={codeKey(p)} value={codeKey(p)}>{codeLabel(p)}</option>
             ))}
           </select>
           <select
@@ -538,7 +581,8 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                     : actief.linkBron === 'eva'
                     ? 'Handmatig toegewezen in EVA. '
                     : 'Niet gekoppeld aan een order of contract. '}
-                  Alleen de toewijzing en bewakingscode zijn aanpasbaar; dit wijzigt niets in Bouw7.
+                  De toewijzing aan een order/contract is alleen een EVA-berekening; een gewijzigde
+                  bewakingscode gaat wél naar Bouw7.
                 </div>
               </div>
 
@@ -578,25 +622,55 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                 </select>
               </label>
 
+              {/* Oude EVA-only correctie: de code stond wel in EVA maar niet in Bouw7, waardoor het
+                  Financieel-tab afweek. Eén klik zet hem alsnog door. */}
+              {actief.code && actief.code !== actief.bronCode && !actief.contractGebonden && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 10px', borderRadius: 8, background: 'var(--warning-50, #fff7ed)', border: '1px solid var(--warning-200, #fed7aa)' }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--fg-soft)', flex: 1, minWidth: 200 }}>
+                    In Bouw7 staat deze kost nog op <strong>{actief.bronCode ?? 'geen code'}</strong>. De
+                    correctie naar <strong>{actief.code}</strong> geldt alleen in EVA — het Financieel-tab wijkt daardoor af.
+                  </span>
+                  <Button
+                    variant="secondary"
+                    disabled={pending || !actiefCodes.some((c) => c.code === actief.code)}
+                    onClick={() => {
+                      const doelCode = actiefCodes.find((c) => c.code === actief.code)
+                      if (!doelCode) return
+                      doe(() => hercodeerGeboekteKost(dossierId, actief.bronId, doelCode.code, doelCode.hoofdstukId), `Verplaatst naar ${doelCode.code}`)
+                    }}
+                  >
+                    Ook in Bouw7 zetten
+                  </Button>
+                </div>
+              )}
+
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)' }}>Bewakingscode</span>
                 <select
                   style={selectStyle}
-                  disabled={pending}
-                  value={actief.code ?? ''}
+                  disabled={pending || actief.contractGebonden || actiefCodes.length === 0}
+                  value={actief.contractGebonden ? '' : huidigeCodeWaarde}
                   onChange={(e) => {
-                    const code = e.target.value
-                    if (!code) return
-                    const naam = projectcodes.find((p) => p.code === code)?.naam ?? null
-                    doe(() => hercodeerGeboekteKost(dossierId, actief.bronId, code, naam), 'Bewakingscode bijgewerkt')
+                    const v = e.target.value
+                    if (!v) return
+                    const { code, hoofdstukId } = parseCodeKey(v)
+                    doe(() => hercodeerGeboekteKost(dossierId, actief.bronId, code, hoofdstukId), `Verplaatst naar ${code}`)
                   }}
                 >
                   <option value="">— Kies een bewakingscode —</option>
-                  {projectcodes.map((p) => (
-                    <option key={p.code} value={p.code}>{p.code}{p.naam ? ` · ${p.naam}` : ''}</option>
+                  {actiefCodes.map((p) => (
+                    <option key={codeKey(p)} value={codeKey(p)}>{codeLabel(p)}</option>
                   ))}
                 </select>
-                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>Alleen codes die al op dit project staan.</span>
+                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                  {actief.contractGebonden
+                    ? 'Deze kost hangt aan een inkooporder of onderaannemerscontract — daar bepaalt het contract de bewakingscode. Pas die in Bouw7 aan.'
+                    : actief.bonId == null
+                    ? 'Deze factuur heeft geen leverbon in Bouw7; er is niets om te verplaatsen.'
+                    : actiefCodes.length === 0
+                    ? 'Dit project heeft in Bouw7 nog geen bewakingscodes.'
+                    : 'De kost wordt ook in Bouw7 op deze code gezet, zodat het Financieel-tab meebeweegt. Staat de code daar nog niet onder deze kostensoort, dan voegt EVA hem toe met begroting 0.'}
+                </span>
               </label>
             </DialogBody>
           )}
