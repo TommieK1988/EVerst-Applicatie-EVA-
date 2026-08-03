@@ -25,7 +25,13 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
     <div
       ref={ref}
       className={cn(
-        'flex items-center justify-between border-b border-neutral-200 px-[18px] py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-700',
+        'flex items-center justify-between border-b px-[18px] py-[11px] text-[13.5px] font-semibold',
+        // Groene tint i.p.v. wit: bloktitels moeten op een volle tab in één
+        // oogopslag te scheiden zijn. Het trio --brand-50/-100/-700 kantelt
+        // samen in donkere modus, vast-licht thema én print (zie globals.css),
+        // dus de bg/border/tekst-verhouding klopt overal. Vaste `brand-*`
+        // Tailwind-klassen zouden dat NIET doen — die zijn literal hex.
+        'bg-[var(--brand-50)] border-[var(--brand-100)] text-[var(--brand-700)]',
         className,
       )}
       {...props}

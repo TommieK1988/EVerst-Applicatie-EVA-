@@ -320,7 +320,10 @@ function SchilderReceptCard({ combinatie, onRefresh }: {
 
   return (
     <Card>
-      <CardHeader className="bg-slate-50">
+      {/* Bewust slate i.p.v. de groene bloktitel-tint: dit is een herhaalde
+          rijkop per behandeling, geen paginablok. Tientallen groene balken
+          onder elkaar zouden de lijst juist onleesbaar maken. */}
+      <CardHeader className="bg-slate-50 border-slate-200">
         <div>
           <span className="text-sm font-semibold text-slate-800">{combinatie.behandeling.naam}</span>
           {combinatie.behandeling.code && (
