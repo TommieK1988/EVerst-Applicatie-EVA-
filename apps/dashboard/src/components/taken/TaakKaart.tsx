@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Calendar, MessageSquare, Paperclip, User, CheckSquare } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { cn } from '@/lib/taken/utils'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import { nl } from 'date-fns/locale'
@@ -34,7 +35,7 @@ export default function TaakKaart({ taak, onClick, compact = false }: Props) {
     try {
       await updateTaakStatus(taak.id, nieuweStatus)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fout bij wijzigen status')
+      toast.error(err instanceof Error ? err.message : 'Fout bij wijzigen status')
     } finally {
       setLoading(false)
     }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Check, ChevronRight, ChevronDown } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { importeerRegels } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { Button } from '@/components/ui/button'
@@ -206,7 +207,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
       )
       onClose()
     } catch (e) {
-      alert('Fout bij importeren: ' + String(e))
+      toast.error('Fout bij importeren: ' + String(e))
     } finally {
       setIsPending(false)
     }

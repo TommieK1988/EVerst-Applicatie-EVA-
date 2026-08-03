@@ -13,6 +13,7 @@ import { PUNT_TRANSITIES, TRIAGE_STATUSSEN } from '@/lib/dossiers/oplever-status
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, OPPERVLAK, PUNT_KLEUR, veld, secundaireKnop } from './stijl'
+import { useDialogen } from '@/components/ui/dialogen'
 
 /**
  * Eén opleverpunt op de telefoon: dichtgeklapt de stand, opengeklapt alles wat je op locatie doet
@@ -33,6 +34,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
   const [opmerking, setOpmerking] = useState('')
   const voorRef = useRef<HTMLInputElement>(null)
   const naRef = useRef<HTMLInputElement>(null)
+  const { vraagTekst } = useDialogen()
 
   // De keuzelijst codeert type en id in één waarde, zodat er op een telefoon maar één select nodig
   // is: "medewerker:<id>" of "relatie:<id>". Leeg = niet toegewezen.
@@ -64,7 +66,16 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
 
   async function wijzigStatus(status: OpleverPuntStatus) {
     let reden: string | null = null
-    if (status === 'geweigerd') reden = window.prompt('Reden van afwijzing (optioneel):') ?? null
+    if (status === 'geweigerd') {
+      const antwoord = await vraagTekst({
+        titel: 'Opleverpunt afwijzen',
+        label: 'Reden van afwijzing (optioneel)',
+        meerregelig: true,
+        bevestigLabel: 'Afwijzen',
+      })
+      if (antwoord === null) return
+      reden = antwoord.trim() || null
+    }
     setBezig(true); setFout(null)
     const r = await setPuntStatus(punt.id, status, { reden })
     setBezig(false)

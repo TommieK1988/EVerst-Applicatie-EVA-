@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useDialogen } from '@/components/ui/dialogen'
 import {
   getGroepen, getCalculatieregels, getComponentregels,
   slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel,
@@ -1890,6 +1891,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [actiefLayoutId, setActiefLayoutId] = useState<string | null>(null)
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
   const layoutMenuRef = useRef<HTMLDivElement>(null)
+  const { vraagTekst } = useDialogen()
 
   const pasLayoutToe = useCallback((cfg: KolomConfig[], layoutId: string | null) => {
     const { colOrder: o, hiddenCols: h, colWidths: w } = layoutNaarState(cfg)
@@ -1919,7 +1921,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
 
   const layoutOpslaanAlsNieuw = useCallback(async () => {
     if (!userId) return
-    const naam = window.prompt('Naam voor nieuwe kolom-layout')?.trim()
+    const naam = (await vraagTekst({
+      titel: 'Nieuwe kolom-layout',
+      label: 'Naam',
+      placeholder: 'Bijvoorbeeld: Calculatie compact',
+      verplicht: true,
+      bevestigLabel: 'Opslaan',
+    }))?.trim()
     if (!naam) return
     if (layouts.some(l => l.naam.toLowerCase() === naam.toLowerCase())) {
       toast.error('Er bestaat al een layout met deze naam'); return
@@ -1930,7 +1938,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     await herlaadLayouts()
     toast.success(`Layout "${naam}" opgeslagen`)
     setLayoutMenuOpen(false)
-  }, [userId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts])
+  }, [userId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts, vraagTekst])
 
   const layoutBijwerken = useCallback(async () => {
     if (!userId || !actiefLayoutId) return

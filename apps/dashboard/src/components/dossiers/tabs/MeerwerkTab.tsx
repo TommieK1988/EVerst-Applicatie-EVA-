@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Button, Input, Badge } from '@/components/ui'
+import { Card, CardHeader, CardBody, Button, Input, Badge, useDialogen } from '@/components/ui'
 import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, type MeerwerkTermijnWijze } from '@everts/database'
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
@@ -55,6 +55,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
+  const { bevestig, vraagTekst } = useDialogen()
   const [formOpen, setFormOpen] = useState(false)
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
@@ -76,7 +77,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
 
   async function wijzigStatus(regel: MeerwerkRegelView, status: MeerwerkStatus) {
     let afgewezenReden: string | null = null
-    if (status === 'afgewezen') afgewezenReden = window.prompt('Reden van afwijzing (optioneel):') ?? null
+    if (status === 'afgewezen') {
+      const antwoord = await vraagTekst({
+        titel: 'Meerwerk afwijzen',
+        label: 'Reden van afwijzing (optioneel)',
+        meerregelig: true,
+        bevestigLabel: 'Afwijzen',
+      })
+      if (antwoord === null) return
+      afgewezenReden = antwoord.trim() || null
+    }
     setBezig(true)
     const r = await setMeerwerkStatus(regel.id, status, { afgewezenReden })
     setBezig(false)
@@ -120,7 +130,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   }
 
   async function verwijder(regel: MeerwerkRegelView) {
-    if (!window.confirm(`Meerwerkregel "${regel.omschrijving}" verwijderen?`)) return
+    if (!await bevestig({ titel: `Meerwerkregel "${regel.omschrijving}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const r = await verwijderMeerwerkRegel(regel.id)
     setBezig(false)

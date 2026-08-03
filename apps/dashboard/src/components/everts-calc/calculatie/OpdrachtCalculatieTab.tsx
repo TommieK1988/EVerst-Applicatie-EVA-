@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import OfferteDetail from './OfferteDetail'
 import toast from 'react-hot-toast'
 import { Calculator, ArrowLeft, Trash2 } from 'lucide-react'
-import { Card, CardHeader, CardBody, Button } from '@/components/ui'
+import { Card, CardHeader, CardBody, Button, useDialogen } from '@/components/ui'
 import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossiers/actions'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
@@ -42,6 +42,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   }, [searchParams])
   const [bezig, setBezig] = useState(false)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
+  const { bevestig } = useDialogen()
   // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
@@ -89,7 +90,12 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   }
 
   async function handleDelete() {
-    if (!confirm('Alle calculaties en offertes verwijderen? Dit kan niet ongedaan worden.')) return
+    if (!await bevestig({
+      titel: 'Alle calculaties en offertes verwijderen?',
+      omschrijving: 'Dit kan niet ongedaan worden gemaakt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     setDeleteInProgress(true)
     const result = await deleteCalculatieVanDossier(dossierId)
     setDeleteInProgress(false)

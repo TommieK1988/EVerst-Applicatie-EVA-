@@ -8,6 +8,7 @@ import {
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+import { useDialogen } from '@/components/ui'
 import { useRouter } from 'next/navigation'
 import type {
   PlanningActiviteit, PlanningItemVerrijkt, Medewerker, PlanningUursoort,
@@ -1101,6 +1102,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [items,        setItems]        = useState(initI)
   const [fasen,        setFasen]        = useState(initF)
   const [afhankelijkheden, setAfhankelijkheden] = useState(initAfh)
+  const { vraagTekst } = useDialogen()
 
   // Sync vanuit server-props na router.refresh()
   useEffect(() => { setActiviteiten(initA) }, [initA])
@@ -1589,7 +1591,13 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                     faseStart={faseBereik[row.fase.id]?.start ?? null}
                     faseEind={faseBereik[row.fase.id]?.eind ?? null}
                     onEdit={async () => {
-                      const naam = window.prompt('Naam van de fase:', row.fase.naam)
+                      const naam = await vraagTekst({
+                        titel: 'Fase hernoemen',
+                        label: 'Naam van de fase',
+                        standaard: row.fase.naam,
+                        verplicht: true,
+                        bevestigLabel: 'Opslaan',
+                      })
                       if (naam && naam.trim() && naam.trim() !== row.fase.naam) {
                         const r = await updatePlanningFase(row.fase.id, { naam: naam.trim() })
                         if (!r.ok) toast.error(r.error)

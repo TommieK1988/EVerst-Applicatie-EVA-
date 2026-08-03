@@ -7,6 +7,7 @@ import QuoteLinesTable from './QuoteLinesTable'
 import type { QuoteSection, QuoteType, Discipline } from '@/lib/everts-calc/types-quotes'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useDialogen } from '@/components/ui/dialogen'
 
 const DISCIPLINE_COLORS: Record<Discipline, string> = {
   schilderwerk: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -34,6 +35,7 @@ export default function QuoteSectionBlock({ section, quoteId, type }: Props) {
   const [open, setOpen] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
 
   function toggleDetail() {
     startTransition(() => {
@@ -41,8 +43,8 @@ export default function QuoteSectionBlock({ section, quoteId, type }: Props) {
     })
   }
 
-  function verwijder() {
-    if (!confirm(`Sectie "${section.naam}" en alle regels verwijderen?`)) return
+  async function verwijder() {
+    if (!await bevestig({ titel: `Sectie "${section.naam}" en alle regels verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startTransition(() => {
       verwijderSection(section.id, quoteId)
     })

@@ -21,6 +21,7 @@ import {
   Textarea,
 } from '@/components/ui'
 import ToolboxMomentSectie from './ToolboxMomentSectie'
+import { useDialogen } from '@/components/ui'
 
 type Props = {
   item?: BedrijfsagendaItemMetDoelgroep
@@ -112,6 +113,7 @@ export default function AgendaItemModal({
   const isEdit = !!item
   const isOccurrence = !!seriesId && !!occurrenceDatum
   const [isPending, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
   const defaultDatum = initialDatum ?? vandaagStr()
 
   const [form, setForm] = useState<FormState>(() => ({
@@ -261,10 +263,10 @@ export default function AgendaItemModal({
     })
   }
 
-  function handleVerwijder() {
+  async function handleVerwijder() {
     if (!item && !isOccurrence) return
     const titel = item?.titel ?? 'Dit item'
-    if (!confirm(`"${titel}" verwijderen?`)) return
+    if (!await bevestig({ titel: `"${titel}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startTransition(async () => {
       if (isOccurrence && seriesId && occurrenceDatum) {
         const result = await verwijderEnkelOccurrence(seriesId, occurrenceDatum)

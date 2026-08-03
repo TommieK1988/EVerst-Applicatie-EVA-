@@ -18,6 +18,7 @@ import {
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
+import { useDialogen } from '@/components/ui/dialogen'
 
 /** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
 type Werkzaamheid = { recept: Recept; aantal: number }
@@ -89,6 +90,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [bewerkId, setBewerkId] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+  const { bevestig } = useDialogen()
 
   // Cascade-keuze: gekozen knoop-id per diepte. Terugval = vrij tekstveld (lege boom).
   const [gekozen, setGekozen] = useState<string[]>([])
@@ -297,7 +299,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
    */
   async function archiveren() {
     if (!bewerkId) return
-    if (!confirm('Deze registratie archiveren? Hij verdwijnt uit de lijst en uit rapportages, maar blijft bewaard.')) return
+    if (!await bevestig({
+      titel: 'Deze registratie archiveren?',
+      omschrijving: 'Hij verdwijnt uit de lijst en uit rapportages, maar blijft bewaard.',
+      bevestigLabel: 'Archiveren',
+    })) return
     setBezig(true)
     setFout(null)
     try {
@@ -314,7 +320,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
   async function verwijderen() {
     if (!bewerkId) return
-    if (!confirm('Deze registratie definitief verwijderen? Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.')) return
+    if (!await bevestig({
+      titel: 'Deze registratie definitief verwijderen?',
+      omschrijving: 'Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     setBezig(true)
     setFout(null)
     try {

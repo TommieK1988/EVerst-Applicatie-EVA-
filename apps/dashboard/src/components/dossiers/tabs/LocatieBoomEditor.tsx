@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { useDialogen } from '@/components/ui/dialogen'
 
 /**
  * De projectleider bouwt per dossier de locatie als boomstructuur: bv.
@@ -29,6 +30,7 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
   const [melding, setMelding] = useState<string | null>(null)
   // Reeks/lijst-dialog: undefined = dicht, null = onder de wortel, string = onder die knoop.
   const [reeksParent, setReeksParent] = useState<string | null | undefined>(undefined)
+  const { bevestig } = useDialogen()
 
   useEffect(() => {
     getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
@@ -105,7 +107,14 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
                 </>
               )}
               <IconBtn title="Verwijderen" danger
-                onClick={() => { if (confirm(`"${node.naam || 'Naamloos'}" en alles eronder verwijderen?`)) muteer(n => verwijderKnoop(n, node.id)) }}>
+                onClick={async () => {
+                  const ok = await bevestig({
+                    titel: `"${node.naam || 'Naamloos'}" en alles eronder verwijderen?`,
+                    bevestigLabel: 'Verwijderen',
+                    destructief: true,
+                  })
+                  if (ok) muteer(n => verwijderKnoop(n, node.id))
+                }}>
                 ×
               </IconBtn>
             </div>

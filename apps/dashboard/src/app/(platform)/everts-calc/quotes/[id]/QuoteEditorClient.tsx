@@ -31,6 +31,7 @@ import QuoteTermsEditor from '@/components/everts-calc/quotes/QuoteTermsEditor'
 import QuoteStatusBadge from '@/components/everts-calc/quotes/QuoteStatusBadge'
 import AutoImporter from './AutoImporter'
 import QuoteConditionsCard from '@/components/everts-calc/quotes/QuoteConditionsCard'
+import { useDialogen } from '@/components/ui'
 import type { Quote, QuoteSection, QuoteTemplate } from '@/lib/everts-calc/types-quotes'
 import type { Betalingsconditie } from '@/app/(platform)/everts-calc/actions/betalingscondities'
 import type { AlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/algemene-voorwaarden'
@@ -101,6 +102,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
   const [verwijderPending, startVerwijder] = useTransition()
   const [isDragging, setIsDragging] = useState(false)
   const [goedkeuringOpen, setGoedkeuringOpen] = useState(false)
+  const { bevestig } = useDialogen()
 
   // Lokale sectievolgorde voor optimistische UI
   const [sections, setSections] = useState<QuoteSection[]>(
@@ -140,8 +142,13 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
     })
   }
 
-  function handleVerwijder() {
-    if (!confirm(`Offerte "${quote.quote_nummer}" definitief verwijderen?`)) return
+  async function handleVerwijder() {
+    if (!await bevestig({
+      titel: `Offerte "${quote.quote_nummer}" definitief verwijderen?`,
+      omschrijving: 'De offerte en alle bijbehorende regels verdwijnen. Dit kan niet ongedaan worden gemaakt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     startVerwijder(() => {
       verwijderQuote(quote.id)
     })

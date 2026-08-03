@@ -9,6 +9,7 @@ import type { AlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/a
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
+import { useDialogen } from '@/components/ui/dialogen'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
     standaard_uitsluitingen: string | null
     standaard_opmerkingen: string | null
   } | null>(null)
+  const { bevestig } = useDialogen()
 
   useEffect(() => {
     const scs = getScenarios(projectId)
@@ -62,9 +64,13 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
   }
 
   /** Laad de drie teksten uit het standaard offerte-sjabloon (overschrijft huidige). */
-  const laadUitSjabloon = () => {
+  const laadUitSjabloon = async () => {
     if (!standaardSjabloon) return
-    if (!confirm('Huidige teksten overschrijven met het standaardsjabloon?')) return
+    if (!await bevestig({
+      titel: 'Huidige teksten overschrijven met het standaardsjabloon?',
+      omschrijving: 'Voorwaarden, uitsluitingen en opmerkingen worden vervangen.',
+      bevestigLabel: 'Overschrijven',
+    })) return
     wijzig({
       voorwaarden_tekst:   standaardSjabloon.standaard_voorwaarden ?? '',
       uitsluitingen_tekst: standaardSjabloon.standaard_uitsluitingen ?? '',

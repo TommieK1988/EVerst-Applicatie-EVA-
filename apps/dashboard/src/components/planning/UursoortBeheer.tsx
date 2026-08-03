@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import toast from 'react-hot-toast'
-import { Button, Input, EmptyState, Card, CardBody, Badge } from '@/components/ui'
+import { Button, Input, EmptyState, Card, CardBody, Badge, useDialogen } from '@/components/ui'
 import type { PlanningUursoort } from '@everts/database/platform-types'
 import {
   maakUursoort,
@@ -391,6 +391,7 @@ export default function UursoortBeheer({ initial }: { initial: PlanningUursoort[
   const [showNieuw, setShowNieuw] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -432,8 +433,13 @@ export default function UursoortBeheer({ initial }: { initial: PlanningUursoort[
     })
   }
 
-  function handleDelete(id: string) {
-    if (!confirm('Uursoort verwijderen? Bestaande planning-items behouden hun uursoort-referentie.')) return
+  async function handleDelete(id: string) {
+    if (!await bevestig({
+      titel: 'Uursoort verwijderen?',
+      omschrijving: 'Bestaande planning-items behouden hun uursoort-referentie.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     startTransition(async () => {
       const result = await verwijderUursoort(id)
       if (!result.ok) { toast.error(result.error); return }

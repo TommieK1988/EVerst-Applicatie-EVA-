@@ -10,6 +10,7 @@ import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, v
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import TaakCompletionActies from './TaakCompletionActies'
+import { useDialogen } from '@/components/ui/dialogen'
 import type { TaakMetDetails, TaskStatus, TaskPrioriteit, TaskAssigneeRol } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
@@ -55,6 +56,7 @@ const ASSIGNEE_ROLLEN: { value: TaskAssigneeRol; label: string }[] = [
 export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = 'dossier', takenInLijst = [] }: Props) {
   const isMedewerkerContext = context === 'medewerker'
   const [pending, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
   const [editTitel, setEditTitel]   = useState(false)
   const [titel, setTitel]           = useState(taak.titel)
   const [comment, setComment]       = useState('')
@@ -133,8 +135,8 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
     startTransition(() => updateTaak(taak.id, { geschatte_uren: uren }))
   }
 
-  const handleVerwijderen = () => {
-    if (!confirm(`Actie "${taak.titel}" verwijderen?`)) return
+  const handleVerwijderen = async () => {
+    if (!await bevestig({ titel: `Actie "${taak.titel}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startTransition(async () => {
       await verwijderTaak(taak.id)
       onSluit()
@@ -164,8 +166,8 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
     startTransition(() => updateTaakStatus(subId, huidigeStatus === 'gereed' ? 'open' : 'gereed'))
   }
 
-  const handleSubtaakVerwijderen = (subId: string, subTitel: string) => {
-    if (!confirm(`Subactie "${subTitel}" verwijderen?`)) return
+  const handleSubtaakVerwijderen = async (subId: string, subTitel: string) => {
+    if (!await bevestig({ titel: `Subactie "${subTitel}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startTransition(() => verwijderTaak(subId))
   }
 

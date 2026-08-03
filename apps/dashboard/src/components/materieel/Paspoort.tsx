@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'react-qr-code'
 import toast from 'react-hot-toast'
-import { PageHeader, Button } from '@/components/ui'
+import { PageHeader, Button, useDialogen } from '@/components/ui'
 import StatusBadge from './StatusBadge'
 import HistorieTijdlijn from './HistorieTijdlijn'
 import BestandenBlok from './BestandenBlok'
@@ -74,6 +74,7 @@ export default function Paspoort({
 
   const [modal, setModal] = React.useState<null | 'toewijzen' | 'keuring' | 'onderhoud' | 'status' | 'details'>(null)
   const [bezig, setBezig] = React.useState(false)
+  const { bevestig } = useDialogen()
 
   const qrValue = scanUrl(object.id, origin || undefined)
   const niveau = object.toewijzing_niveau as ToewijzingNiveau | null
@@ -109,7 +110,11 @@ export default function Paspoort({
             : <Button variant="secondary" disabled={bezig} onClick={() => run(() => neemTerug(object.id), 'Ingenomen — staat nu op algemeen gebruik')}>Innemen</Button>}
           <Button variant="secondary" onClick={() => setModal('status')}>Status</Button>
           <Link href={`/materieelbeheer/${object.id}/bewerken`}><Button variant="secondary">Bewerken</Button></Link>
-          <Button variant="secondary" disabled={bezig} onClick={() => { if (confirm('Dit materieel archiveren?')) run(() => archiveerMaterieelObject(object.id), 'Gearchiveerd').then((ok) => { if (ok) router.push('/materieelbeheer') }) }}>Archiveren</Button>
+          <Button variant="secondary" disabled={bezig} onClick={async () => {
+            if (!await bevestig({ titel: 'Dit materieel archiveren?', bevestigLabel: 'Archiveren' })) return
+            const ok = await run(() => archiveerMaterieelObject(object.id), 'Gearchiveerd')
+            if (ok) router.push('/materieelbeheer')
+          }}>Archiveren</Button>
         </div>
       </div>
 

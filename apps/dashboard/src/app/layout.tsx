@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Montserrat, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegister from '@/components/eva/ServiceWorkerRegister'
+import { DialoogProvider } from '@/components/ui/dialogen'
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -62,7 +63,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body className={`${montserrat.variable} ${jetbrainsMono.variable} font-sans`}>
-        {children}
+        {/* EVA-eigen bevestig-/meld-/tekstdialogen i.p.v. de browser-popups
+            (window.confirm/alert/prompt). Hier in de root zodat /(platform), /m
+            en de publieke routes er alle drie bij kunnen. */}
+        <DialoogProvider>{children}</DialoogProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

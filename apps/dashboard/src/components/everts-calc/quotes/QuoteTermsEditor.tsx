@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { upsertTerm } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { QuoteTerm, QuoteTemplate, TermType } from '@/lib/everts-calc/types-quotes'
-import { Button, Card, CardHeader, CardBody } from '@/components/ui'
+import { Button, Card, CardHeader, CardBody, useDialogen } from '@/components/ui'
 
 const PANELS: { key: TermType; label: string; placeholder: string }[] = [
   { key: 'voorwaarden',   label: 'Voorwaarden',  placeholder: 'Algemene voorwaarden...' },
@@ -19,6 +19,7 @@ interface Props {
 
 export default function QuoteTermsEditor({ quoteId, terms, templates = [] }: Props) {
   const [, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
     templates.find(t => t.is_standaard)?.id ?? templates[0]?.id ?? ''
   )
@@ -37,10 +38,14 @@ export default function QuoteTermsEditor({ quoteId, terms, templates = [] }: Pro
     })
   }
 
-  function laadUitTemplate() {
+  async function laadUitTemplate() {
     const tmpl = templates.find(t => t.id === selectedTemplateId)
     if (!tmpl) return
-    if (!confirm('Huidige tekst overschrijven met sjabloon?')) return
+    if (!await bevestig({
+      titel: 'Huidige tekst overschrijven met sjabloon?',
+      omschrijving: 'Voorwaarden, uitsluitingen en opmerkingen worden vervangen door de sjabloonteksten.',
+      bevestigLabel: 'Overschrijven',
+    })) return
     const nieuw: Record<TermType, string> = {
       voorwaarden:   tmpl.standaard_voorwaarden ?? '',
       uitsluitingen: tmpl.standaard_uitsluitingen ?? '',

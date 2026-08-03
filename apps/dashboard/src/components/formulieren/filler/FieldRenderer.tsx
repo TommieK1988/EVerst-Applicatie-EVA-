@@ -5,6 +5,7 @@ import type { AandachtspuntWaarde, FormField, VeldOpmaak } from '../types'
 import { CALLOUT_VARIANTEN, STANDAARD_ACCENT } from '../types'
 import type { MedewerkerWaarde } from '../format'
 import { Combobox } from '@/components/ui/combobox'
+import { useDialogen } from '@/components/ui/dialogen'
 
 type Props = {
   field: FormField
@@ -66,6 +67,9 @@ function Label({ field }: { field: FormField }) {
 }
 
 export default function FieldRenderer({ field, value, error, onChange, mobiel = false, medewerkers, accent = STANDAARD_ACCENT, onFotoUpload }: Props) {
+  // Let op: dit component keert op tientallen plekken vroegtijdig terug per veldtype,
+  // dus elke hook hoort hierboven te staan.
+  const { meld } = useDialogen()
 
   const inputStyle: React.CSSProperties = mobiel ? { ...inputBase, ...inputMobiel } : inputBase
   const optieFont = mobiel ? 15 : 14
@@ -503,10 +507,13 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
           <button
             type="button"
             onClick={() => {
-              if (!navigator.geolocation) { alert('GPS niet beschikbaar'); return }
+              if (!navigator.geolocation) {
+                void meld({ titel: 'GPS niet beschikbaar', omschrijving: 'Dit apparaat of deze browser geeft geen locatie door.' })
+                return
+              }
               navigator.geolocation.getCurrentPosition(
                 pos => onChange({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                () => alert('Locatie ophalen mislukt')
+                () => void meld({ titel: 'Locatie ophalen mislukt', omschrijving: 'Controleer of EVA toestemming heeft om je locatie te gebruiken.' })
               )
             }}
             style={{

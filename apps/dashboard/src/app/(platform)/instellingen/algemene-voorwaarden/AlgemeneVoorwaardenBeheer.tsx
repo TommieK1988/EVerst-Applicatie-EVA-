@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogBody,
   DialogFooter,
+  useDialogen,
 } from '@/components/ui'
 import type { AlgemeneVoorwaarden } from './actions'
 import {
@@ -25,6 +26,7 @@ import {
 
 export default function AlgemeneVoorwaardenBeheer({ initial }: { initial: AlgemeneVoorwaarden[] }) {
   const router = useRouter()
+  const { bevestig } = useDialogen()
   const [, startT] = useTransition()
   const [items, setItems] = useState(initial)
   const [modal, setModal] = useState(false)
@@ -67,8 +69,8 @@ export default function AlgemeneVoorwaardenBeheer({ initial }: { initial: Algeme
     }
   }
 
-  function verwijder(id: string, naam: string) {
-    if (!confirm(`"${naam}" verwijderen?`)) return
+  async function verwijder(id: string, naam: string) {
+    if (!await bevestig({ titel: `"${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startT(async () => {
       try {
         await verwijderAlgemeneVoorwaarden(id)

@@ -18,6 +18,7 @@ import Sterren from '@/components/mobiel/oplevering/Sterren'
 import PuntKaart from '@/components/mobiel/oplevering/PuntKaart'
 import BottomSheet from '@/components/mobiel/oplevering/BottomSheet'
 import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
+import { useDialogen } from '@/components/ui/dialogen'
 
 export default function OpleveringClient({ dossierId, data, feedback, toewijsbaar }: {
   dossierId: string
@@ -133,11 +134,19 @@ function Sterrenscore({ feedback }: { feedback: OpleverFeedbackSamenvatting }) {
 function TriageBlok({ punten, onWijzig }: { punten: OpleverPuntView[]; onWijzig: () => void }) {
   const [bezig, setBezig] = useState<string | null>(null)
   const [fout, setFout] = useState<string | null>(null)
+  const { vraagTekst } = useDialogen()
 
   async function beoordeel(punt: OpleverPuntView, status: 'open' | 'afgewezen') {
     let reden: string | null = null
     if (status === 'afgewezen') {
-      reden = window.prompt('Waarom is dit geen opleverpunt? (optioneel)') ?? null
+      const antwoord = await vraagTekst({
+        titel: 'Melding afwijzen',
+        label: 'Waarom is dit geen opleverpunt? (optioneel)',
+        meerregelig: true,
+        bevestigLabel: 'Afwijzen',
+      })
+      if (antwoord === null) return
+      reden = antwoord.trim() || null
     }
     setBezig(punt.id); setFout(null)
     const r = await setPuntStatus(punt.id, status, { reden })

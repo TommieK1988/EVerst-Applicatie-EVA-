@@ -5,6 +5,7 @@ import { updateQuoteHeader } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { Quote, QuoteTemplate } from '@/lib/everts-calc/types-quotes'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
+import { useDialogen } from '@/components/ui/dialogen'
 
 const AANHEF_OPTIES = [
   'Geachte heer/mevrouw,',
@@ -20,6 +21,7 @@ interface Props {
 
 export default function QuoteHeaderCard({ quote, templates = [] }: Props) {
   const [, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
     templates.find(t => t.is_standaard)?.id ?? templates[0]?.id ?? ''
   )
@@ -30,10 +32,14 @@ export default function QuoteHeaderCard({ quote, templates = [] }: Props) {
     })
   }
 
-  function laadVoorbladSjabloon(templateId: string) {
+  async function laadVoorbladSjabloon(templateId: string) {
     const tmpl = templates.find(t => t.id === templateId)
     if (!tmpl) return
-    if (!confirm('Aanhef, inleiding en slottekst overschrijven met sjabloon?')) return
+    if (!await bevestig({
+      titel: 'Aanhef, inleiding en slottekst overschrijven met sjabloon?',
+      omschrijving: 'De teksten die hier nu staan gaan verloren.',
+      bevestigLabel: 'Overschrijven',
+    })) return
     startTransition(() => {
       updateQuoteHeader(quote.id, {
         aanhef: tmpl.standaard_aanhef ?? quote.aanhef,

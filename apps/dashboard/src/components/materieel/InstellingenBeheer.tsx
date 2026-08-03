@@ -3,7 +3,7 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { PageHeader, Button } from '@/components/ui'
+import { PageHeader, Button, useDialogen } from '@/components/ui'
 import Modal, { modalInput, modalLabel } from './Modal'
 import { maakTeam, updateTeam, archiveerTeam, updateInstellingen } from '@/app/(platform)/materieelbeheer/beheer-actions'
 import {
@@ -49,10 +49,11 @@ function TeamsTab({ teams, medewerkerOpties }: { teams: MaterieelTeam[]; medewer
   const router = useRouter()
   const [modal, setModal] = React.useState<null | { team?: MaterieelTeam }>(null)
   const [bezig, setBezig] = React.useState(false)
+  const { bevestig } = useDialogen()
   const naamVan = (id: string | null) => (id ? medewerkerOpties.find((m) => m.id === id)?.naam ?? 'Onbekend' : null)
 
   async function verwijder(id: string) {
-    if (!confirm('Dit team archiveren?')) return
+    if (!await bevestig({ titel: 'Dit team archiveren?', bevestigLabel: 'Archiveren' })) return
     const res = await archiveerTeam(id)
     if (!res.ok) { toast.error(res.error); return }
     toast.success('Gearchiveerd'); router.refresh()

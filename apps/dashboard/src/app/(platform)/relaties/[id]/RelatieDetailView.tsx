@@ -21,7 +21,7 @@ import type {
 import { organisatieTypeLabels, organisatieTypeTone, opdrachtSubstatusLabels } from '@everts/database'
 import {
   Alert, Button, Card, CardBody, CardHeader, Badge, EmptyState,
-  FormField, FormRow, FormSection, Input, Textarea, Checkbox,
+  FormField, FormRow, FormSection, Input, Textarea, Checkbox, useDialogen,
 } from '@/components/ui'
 import {
   updateOrganisatieGegevens,
@@ -320,9 +320,14 @@ function ContactpersonenBlok({ relatieId, initial }: { relatieId: string; initia
   const [links, setLinks] = useState<ContactpersoonLink[]>(initial)
   const [bezig, setBezig] = useState(false)
   const router = useRouter()
+  const { bevestig } = useDialogen()
 
   async function ontkoppel(link: ContactpersoonLink) {
-    if (!confirm(`${link.contactpersoon.voornaam} ${link.contactpersoon.achternaam} ontkoppelen?`)) return
+    if (!await bevestig({
+      titel: `${link.contactpersoon.voornaam} ${link.contactpersoon.achternaam} ontkoppelen?`,
+      omschrijving: 'De contactpersoon blijft bestaan, maar is niet langer aan deze relatie gekoppeld.',
+      bevestigLabel: 'Ontkoppelen',
+    })) return
     setBezig(true)
     const res = await ontkoppelContactpersoonVanOrganisatie(link.id, link.contactpersoon_id, relatieId)
     setBezig(false)
@@ -458,6 +463,7 @@ function FactuuradrressenBlok({ relatieId, initial }: { relatieId: string; initi
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | 'nieuw' | null>(null)
+  const { bevestig } = useDialogen()
 
   const formVan = (fa?: RelatieFactuuradres): AdresForm => fa
     ? { label: fa.label, straat: fa.straat ?? '', postcode: fa.postcode ?? '', plaats: fa.plaats ?? '', land: fa.land ?? 'Nederland', opmerkingen: fa.opmerkingen ?? '' }
@@ -473,7 +479,7 @@ function FactuuradrressenBlok({ relatieId, initial }: { relatieId: string; initi
   }
 
   async function verwijder(id: string) {
-    if (!confirm('Factuuradres verwijderen?')) return
+    if (!await bevestig({ titel: 'Factuuradres verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const res = await deleteFactuuradres(id, relatieId)
     setBezig(false)
@@ -957,6 +963,7 @@ function PrijsAfspraakFormUI({ initial, onOpslaan, onAnnuleer, bezig }: {
 }
 
 function VerkoopPrijsafsprakenBlok({ relatieId, initial }: { relatieId: string; initial: RelatieVerkoopPrijsafspraak[] }) {
+  const { bevestig } = useDialogen()
   const [items, setItems] = useState<RelatieVerkoopPrijsafspraak[]>(initial)
   const [bezig, setBezig] = useState(false)
   const [editId, setEditId] = useState<string | 'nieuw' | null>(null)
@@ -971,7 +978,7 @@ function VerkoopPrijsafsprakenBlok({ relatieId, initial }: { relatieId: string; 
   }
 
   async function verwijder(id: string) {
-    if (!confirm('Prijsafspraak verwijderen?')) return
+    if (!await bevestig({ titel: 'Prijsafspraak verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const res = await deleteVerkoopPrijsafspraak(id, relatieId)
     setBezig(false)
@@ -1002,6 +1009,7 @@ function VerkoopPrijsafsprakenBlok({ relatieId, initial }: { relatieId: string; 
 /* ─── Kortingsafspraken blok (leverancier) ───────────────────────────── */
 
 function KortingsafsprakenBlok({ relatieId, initial }: { relatieId: string; initial: RelatieInkoopKortingsafspraak[] }) {
+  const { bevestig } = useDialogen()
   const [items, setItems] = useState<RelatieInkoopKortingsafspraak[]>(initial)
   const [bezig, setBezig] = useState(false)
   const [editId, setEditId] = useState<string | 'nieuw' | null>(null)
@@ -1018,7 +1026,7 @@ function KortingsafsprakenBlok({ relatieId, initial }: { relatieId: string; init
   }
 
   async function verwijder(id: string) {
-    if (!confirm('Kortingsafspraak verwijderen?')) return
+    if (!await bevestig({ titel: 'Kortingsafspraak verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const res = await deleteKortingsafspraak(id, relatieId)
     setBezig(false)
@@ -1093,6 +1101,7 @@ function KortingsafsprakenBlok({ relatieId, initial }: { relatieId: string; init
 /* ─── Inkoop prijsafspraken blok (onderaannemer) ─────────────────────── */
 
 function InkoopPrijsafsprakenBlok({ relatieId, initial }: { relatieId: string; initial: RelatieInkoopPrijsafspraak[] }) {
+  const { bevestig } = useDialogen()
   const [items, setItems] = useState<RelatieInkoopPrijsafspraak[]>(initial)
   const [bezig, setBezig] = useState(false)
   const [editId, setEditId] = useState<string | 'nieuw' | null>(null)
@@ -1107,7 +1116,7 @@ function InkoopPrijsafsprakenBlok({ relatieId, initial }: { relatieId: string; i
   }
 
   async function verwijder(id: string) {
-    if (!confirm('Prijsafspraak verwijderen?')) return
+    if (!await bevestig({ titel: 'Prijsafspraak verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const res = await deleteInkoopPrijsafspraak(id, relatieId)
     setBezig(false)

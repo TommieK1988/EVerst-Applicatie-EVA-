@@ -31,6 +31,7 @@ import {
 } from './layout/index'
 import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
+import { useDialogen } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import {
   DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster,
@@ -113,6 +114,7 @@ function PlanningItemEditDialog({
   onKopieer:   () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  const { bevestig } = useDialogen()
   const startDt = parseISO(entry.start_dt)
   const eindDt  = parseISO(entry.eind_dt)
 
@@ -142,8 +144,8 @@ function PlanningItemEditDialog({
     })
   }
 
-  function handleDelete() {
-    if (!confirm('Planitem verwijderen?')) return
+  async function handleDelete() {
+    if (!await bevestig({ titel: 'Planitem verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     startTransition(async () => {
       const result = await verwijderPlanningItem(entry.id)
       if (!result.ok) { toast.error(result.error); return }

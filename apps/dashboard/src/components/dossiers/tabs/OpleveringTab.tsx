@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Button, Input, Badge } from '@/components/ui'
+import { Card, CardHeader, CardBody, Button, Input, Badge, useDialogen } from '@/components/ui'
 import {
   opleverMomentStatusLabels, opleverMomentTypeLabels, opleverPuntStatusLabels,
   type OpleverMomentStatus, type OpleverMomentType, type OpleverPuntStatus, type OpleverToewijzingType,
@@ -199,6 +199,7 @@ function LinkRegel({ link, readOnly, onIngetrokken }: {
   onIngetrokken: () => void
 }) {
   const [bezig, setBezig] = useState(false)
+  const { bevestig } = useDialogen()
 
   async function kopieer() {
     try {
@@ -211,7 +212,12 @@ function LinkRegel({ link, readOnly, onIngetrokken }: {
     }
   }
   async function trekIn() {
-    if (!window.confirm('Deze link intrekken? Wie hem al heeft, kan het formulier daarna niet meer invullen.')) return
+    if (!await bevestig({
+      titel: 'Deze link intrekken?',
+      omschrijving: 'Wie hem al heeft, kan het formulier daarna niet meer invullen.',
+      bevestigLabel: 'Intrekken',
+      destructief: true,
+    })) return
     setBezig(true)
     const r = await verwijderToegangToken(link.id)
     setBezig(false)
@@ -430,11 +436,19 @@ function TriageBlok({ punten, readOnly, onChange }: {
   onChange: () => void
 }) {
   const [bezig, setBezig] = useState<string | null>(null)
+  const { vraagTekst } = useDialogen()
 
   async function beoordeel(punt: OpleverPuntView, status: 'open' | 'afgewezen') {
     let reden: string | null = null
     if (status === 'afgewezen') {
-      reden = window.prompt('Waarom is dit geen opleverpunt? (optioneel)') ?? null
+      const antwoord = await vraagTekst({
+        titel: 'Melding afwijzen',
+        label: 'Waarom is dit geen opleverpunt? (optioneel)',
+        meerregelig: true,
+        bevestigLabel: 'Afwijzen',
+      })
+      if (antwoord === null) return
+      reden = antwoord.trim() || null
     }
     setBezig(punt.id)
     const r = await setPuntStatus(punt.id, status, { reden })
@@ -595,6 +609,7 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
 }) {
   const [bezig, setBezig] = useState(false)
   const [puntOpen, setPuntOpen] = useState(false)
+  const { bevestig } = useDialogen()
 
   async function wijzigStatus(status: OpleverMomentStatus) {
     setBezig(true)
@@ -604,7 +619,7 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
     onChange()
   }
   async function verwijder() {
-    if (!window.confirm(`Oplevermoment "${moment.titel}" en alle punten verwijderen?`)) return
+    if (!await bevestig({ titel: `Oplevermoment "${moment.titel}" en alle punten verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const r = await verwijderOplevermoment(moment.id)
     setBezig(false)
@@ -962,10 +977,20 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
   const naRef = useRef<HTMLInputElement>(null)
   const { voor, na } = splitsFotos(punt.fotos)
   const mistBewijs = bewijsOntbreekt(punt.status, punt.fotos)
+  const { bevestig, vraagTekst } = useDialogen()
 
   async function wijzigStatus(status: OpleverPuntStatus) {
     let reden: string | null = null
-    if (status === 'geweigerd') reden = window.prompt('Reden van afwijzing (optioneel):') ?? null
+    if (status === 'geweigerd') {
+      const antwoord = await vraagTekst({
+        titel: 'Opleverpunt afwijzen',
+        label: 'Reden van afwijzing (optioneel)',
+        meerregelig: true,
+        bevestigLabel: 'Afwijzen',
+      })
+      if (antwoord === null) return
+      reden = antwoord.trim() || null
+    }
     setBezig(true)
     const r = await setPuntStatus(punt.id, status, { reden })
     setBezig(false)
@@ -1017,7 +1042,7 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
   }
 
   async function verwijder() {
-    if (!window.confirm('Opleverpunt verwijderen?')) return
+    if (!await bevestig({ titel: 'Opleverpunt verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const r = await verwijderOpleverpunt(punt.id)
     setBezig(false)

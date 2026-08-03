@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Button, Input, Card, CardBody, EmptyState } from '@/components/ui'
+import { Button, Input, Card, CardBody, EmptyState, useDialogen } from '@/components/ui'
 import type { Betalingsconditie, Termijn } from './actions'
 import {
   maakBetalingsconditie,
@@ -86,6 +86,7 @@ interface EditState {
 
 export default function BetalingsconditiesBeheer({ initial }: { initial: Betalingsconditie[] }) {
   const router = useRouter()
+  const { bevestig } = useDialogen()
   const [, startT] = useTransition()
   const [condities, setCondities] = useState(initial)
   const [edit, setEdit] = useState<EditState>({ open: false, naam: '', termijnen: [] })
@@ -129,7 +130,7 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
   }
 
   async function verwijder(id: string, naam: string) {
-    if (!confirm(`"${naam}" verwijderen?`)) return
+    if (!await bevestig({ titel: `"${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     try {
       await verwijderBetalingsconditie(id)
       setCondities(prev => prev.filter(c => c.id !== id))

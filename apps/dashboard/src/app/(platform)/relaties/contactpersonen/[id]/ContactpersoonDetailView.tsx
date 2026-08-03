@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@/components/ui'
+import { Badge, Button, Card, CardBody, CardHeader, EmptyState, useDialogen } from '@/components/ui'
 import { organisatieTypeLabels, organisatieTypeTone, type OrganisatieType } from '@everts/database'
 import {
   updateContactpersoon,
@@ -82,6 +82,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial }: Pr
   })
   const [bezig, setBezig] = useState(false)
   const router = useRouter()
+  const { bevestig } = useDialogen()
 
   const volledigeNaam = [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ')
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }))
@@ -116,7 +117,11 @@ export default function ContactpersoonDetailView({ contactpersoon: initial }: Pr
   }
 
   async function ontkoppel(link: ContactpersoonMetOrganisaties['koppelingen'][0]) {
-    if (!confirm(`Ontkoppelen van ${link.organisatie.naam}?`)) return
+    if (!await bevestig({
+      titel: `Ontkoppelen van ${link.organisatie.naam}?`,
+      omschrijving: 'De contactpersoon blijft bestaan, alleen de koppeling met deze organisatie vervalt.',
+      bevestigLabel: 'Ontkoppelen',
+    })) return
     setBezig(true)
     const res = await ontkoppelContactpersoonVanOrganisatie(link.id, cp.id, link.organisatie.id)
     setBezig(false)

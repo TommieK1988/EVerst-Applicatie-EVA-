@@ -13,6 +13,7 @@ import {
   cascadeRijen, bouwLocatiePad, selectieVanLocatie, locatieKeuzeCompleet,
 } from '@/lib/houtrotherstel/locatie-boom'
 import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
+import { useDialogen } from '@/components/ui/dialogen'
 import type {
   RepairRegistration, RepairPhoto, RegistratieForm, LocatieBoom, LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
@@ -105,6 +106,7 @@ export default function HoutrotRegistratieModal({
   const [verwijderd, setVerwijderd] = useState<Set<string>>(new Set())
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+  const { bevestig } = useDialogen()
   const isGearchiveerd = !!bestaand?.gearchiveerd_op
 
   const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
@@ -191,7 +193,11 @@ export default function HoutrotRegistratieModal({
 
   async function archiveren() {
     if (!bestaand) return
-    if (!isGearchiveerd && !confirm('Deze registratie archiveren? Hij verdwijnt uit het overzicht en uit rapportages, maar blijft bewaard.')) return
+    if (!isGearchiveerd && !await bevestig({
+      titel: 'Deze registratie archiveren?',
+      omschrijving: 'Hij verdwijnt uit het overzicht en uit rapportages, maar blijft bewaard.',
+      bevestigLabel: 'Archiveren',
+    })) return
     setBezig(true); setFout(null)
     try {
       const medewerker = await getHuidigeMedewerker()
@@ -206,7 +212,12 @@ export default function HoutrotRegistratieModal({
 
   async function verwijderen() {
     if (!bestaand) return
-    if (!confirm('Deze registratie definitief verwijderen? Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.')) return
+    if (!await bevestig({
+      titel: 'Deze registratie definitief verwijderen?',
+      omschrijving: 'Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     setBezig(true); setFout(null)
     try {
       const medewerker = await getHuidigeMedewerker()

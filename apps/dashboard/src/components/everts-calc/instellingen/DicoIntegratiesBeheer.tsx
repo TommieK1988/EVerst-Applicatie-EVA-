@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Plus, RefreshCw, Trash2, Save, X } from 'lucide-react'
+import { useDialogen } from '@/components/ui'
 import {
   getIntegraties, slaIntegratieOp, verwijderIntegratie, syncIntegratie,
   type DicoIntegratie, type DicoAuthType, type IntegratieInput,
@@ -22,6 +23,7 @@ export default function DicoIntegratiesBeheer() {
   const [laden, setLaden] = useState(true)
   const [form, setForm] = useState<IntegratieInput | null>(null)
   const [bezig, setBezig] = useState<string | null>(null)
+  const { bevestig } = useDialogen()
 
   const laad = async () => {
     setLaden(true)
@@ -48,7 +50,7 @@ export default function DicoIntegratiesBeheer() {
   }
 
   const verwijder = async (id: string) => {
-    if (!confirm('Integratie verwijderen?')) return
+    if (!await bevestig({ titel: 'Integratie verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     try { await verwijderIntegratie(id); await laad() }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Verwijderen mislukt') }
   }

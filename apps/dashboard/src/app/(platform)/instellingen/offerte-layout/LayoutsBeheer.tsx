@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Button, Input, Badge, EmptyState } from '@/components/ui'
+import { Button, Input, Badge, EmptyState, useDialogen } from '@/components/ui'
 import { maakLayout, kopieerLayout, verwijderLayout, setStandaardLayout } from './actions'
 
 interface LayoutItem {
@@ -21,6 +21,7 @@ interface LayoutItem {
 
 export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
   const router = useRouter()
+  const { bevestig } = useDialogen()
   const [, startT] = useTransition()
   const [layouts, setLayouts] = useState(initial)
   const [showNieuw, setShowNieuw] = useState(false)
@@ -50,8 +51,8 @@ export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
     })
   }
 
-  function handleVerwijder(id: string, naam: string) {
-    if (!confirm(`Layout "${naam}" verwijderen?`)) return
+  async function handleVerwijder(id: string, naam: string) {
+    if (!await bevestig({ titel: `Layout "${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startT(async () => {
       try {
         await verwijderLayout(id)

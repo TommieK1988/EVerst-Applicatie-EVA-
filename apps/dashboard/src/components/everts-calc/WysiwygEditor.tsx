@@ -25,6 +25,7 @@ import {
   Type, Palette, SeparatorHorizontal, Upload, LayoutGrid,
 } from 'lucide-react'
 import { forwardRef, useImperativeHandle, useEffect, useRef, useState } from 'react'
+import { useDialogen } from '@/components/ui/dialogen'
 
 // ─── FontSize via TextStyle ───────────────────────────────────────────────────
 
@@ -332,6 +333,8 @@ const WysiwygEditor = forwardRef<WysiwygEditorRef, Props>(
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
+  const { vraagTekst } = useDialogen()
+
   if (!editor) return <div className="flex-1 bg-white" />
 
   // Afbeelding geselecteerd?
@@ -343,10 +346,17 @@ const WysiwygEditor = forwardRef<WysiwygEditorRef, Props>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const huidigSize = (editor.getAttributes('textStyle') as any)?.fontSize ?? ''
 
-  function handleLink() {
+  async function handleLink() {
     if (!editor) return
     const bestaand = editor.getAttributes('link').href ?? ''
-    const url = prompt('URL:', bestaand)
+    const url = await vraagTekst({
+      titel: 'Link toevoegen',
+      omschrijving: 'Laat het veld leeg om de link te verwijderen.',
+      label: 'URL',
+      standaard: bestaand,
+      placeholder: 'https://…',
+      bevestigLabel: 'Toepassen',
+    })
     if (url === null) return
     if (url === '') editor.chain().focus().unsetLink().run()
     else editor.chain().focus().setLink({ href: url, target: '_blank' }).run()
@@ -364,9 +374,15 @@ const WysiwygEditor = forwardRef<WysiwygEditorRef, Props>(
     e.target.value = ''
   }
 
-  function handleImageUrl() {
+  async function handleImageUrl() {
     if (!editor) return
-    const url = prompt('URL van de afbeelding:')
+    const url = await vraagTekst({
+      titel: 'Afbeelding via URL',
+      label: 'URL van de afbeelding',
+      placeholder: 'https://…',
+      verplicht: true,
+      bevestigLabel: 'Invoegen',
+    })
     if (url) editor.chain().focus().setImage({ src: url } as never).run()
   }
 

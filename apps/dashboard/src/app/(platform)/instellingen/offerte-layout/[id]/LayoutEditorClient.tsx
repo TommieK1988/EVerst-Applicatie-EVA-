@@ -13,6 +13,7 @@ import {
   FileText, Upload, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useDialogen } from '@/components/ui'
 import { updateLayout } from '@/app/(platform)/instellingen/offerte-layout/actions'
 import { maakSjabloontekst, updateSjabloontekst, verwijderSjabloontekst } from '@/app/(platform)/everts-calc/actions/sjabloonteksten'
 import type { Sjabloontekst } from '@/app/(platform)/everts-calc/actions/sjabloonteksten'
@@ -347,6 +348,7 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
   const [stModal, setStModal] = useState<{ open: boolean; item?: Sjabloontekst }>({ open: false })
   const [stForm, setStForm] = useState({ naam: '', inhoud_html: '', categorie: 'algemeen' })
   const [, startStTransition] = useTransition()
+  const { bevestig } = useDialogen()
 
   // Preview: 'word' = snelle client-render (docx-preview, geen briefpapier),
   //          'pdf'  = echte PDF via Graph mét briefpapier-achtergrond.
@@ -448,8 +450,8 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
     })
   }
 
-  function verwijderSt(id: string, naam: string) {
-    if (!confirm(`"${naam}" verwijderen?`)) return
+  async function verwijderSt(id: string, naam: string) {
+    if (!await bevestig({ titel: `"${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startStTransition(async () => {
       try {
         await verwijderSjabloontekst(id)

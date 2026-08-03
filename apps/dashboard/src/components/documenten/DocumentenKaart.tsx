@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody } from '@/components/ui'
+import { Card, CardHeader, CardBody, useDialogen } from '@/components/ui'
 import { FilePlus2 } from 'lucide-react'
 import { getSjablonenVoorDossier, getDossierDocumenten, verwijderDossierDocument } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, heeftTemplate, type DocumentSjabloon, type DossierDocument } from '@/lib/documenten/types'
@@ -27,6 +27,7 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
   const [kiezen, setKiezen] = useState(false)
   const [actief, setActief] = useState<{ sjabloon: DocumentSjabloon; invoer?: Record<string, unknown> } | null>(null)
   const [, start] = useTransition()
+  const { bevestig } = useDialogen()
 
   const laadDocumenten = useCallback(() => {
     getDossierDocumenten(dossierId).then(setDocumenten).catch(() => setDocumenten([]))
@@ -41,8 +42,13 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
   // bieden we niet aan.
   const bruikbaar = (sjablonen ?? []).filter(heeftTemplate)
 
-  function verwijder(id: string) {
-    if (!confirm('Deze registratie verwijderen? Het bestand blijft in SharePoint staan.')) return
+  async function verwijder(id: string) {
+    if (!await bevestig({
+      titel: 'Deze registratie verwijderen?',
+      omschrijving: 'Het bestand blijft in SharePoint staan.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     start(async () => {
       try {
         await verwijderDossierDocument(id, dossierId)

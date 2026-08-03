@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Check, X, Pencil, Tags } from 'lucide-react'
+import { useDialogen } from '@/components/ui'
 import {
   getMateriaalgroepen, maakMateriaalgroep, hernoemMateriaalgroep, verwijderMateriaalgroep,
 } from '@/app/(platform)/everts-calc/actions/materialen'
@@ -14,6 +15,7 @@ export default function MateriaalgroepenBeheer() {
   const [laden, setLaden] = useState(true)
   const [nieuw, setNieuw] = useState('')
   const [bewerk, setBewerk] = useState<{ oud: string; waarde: string } | null>(null)
+  const { bevestig } = useDialogen()
 
   const laad = async () => {
     setLaden(true)
@@ -37,7 +39,12 @@ export default function MateriaalgroepenBeheer() {
   }
 
   const verwijder = async (naam: string) => {
-    if (!confirm(`Materiaalgroep "${naam}" verwijderen? Artikelen in deze groep raken hun groep kwijt.`)) return
+    if (!await bevestig({
+      titel: `Materiaalgroep "${naam}" verwijderen?`,
+      omschrijving: 'Artikelen in deze groep raken hun groep kwijt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
     try { await verwijderMateriaalgroep(naam); await laad() }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Verwijderen mislukt') }
   }

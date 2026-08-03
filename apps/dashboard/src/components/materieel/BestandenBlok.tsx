@@ -3,7 +3,7 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Button } from '@/components/ui'
+import { Button, useDialogen } from '@/components/ui'
 import Modal, { modalInput, modalLabel } from './Modal'
 import { uploadDocument, verwijderDocument, zetHoofdfoto } from '@/app/(platform)/materieelbeheer/bestand-actions'
 import {
@@ -36,12 +36,13 @@ export default function BestandenBlok({ objectId, documenten }: {
   const [modal, setModal] = React.useState(false)
   const [bezig, setBezig] = React.useState(false)
   const [voorbeeld, setVoorbeeld] = React.useState<MaterieelDocumentRij | null>(null)
+  const { bevestig } = useDialogen()
 
   const fotos = documenten.filter(isAfbeelding)
   const overige = documenten.filter((d) => !isAfbeelding(d))
 
   async function verwijder(d: MaterieelDocumentRij) {
-    if (!confirm(`"${d.bestandsnaam ?? 'Dit bestand'}" verwijderen?`)) return
+    if (!await bevestig({ titel: `"${d.bestandsnaam ?? 'Dit bestand'}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
     const res = await verwijderDocument(d.id, objectId)
     setBezig(false)

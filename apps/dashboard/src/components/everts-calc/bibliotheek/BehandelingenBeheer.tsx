@@ -11,6 +11,7 @@ import type { Database } from '@/lib/everts-calc/supabase/database.types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useDialogen } from '@/components/ui/dialogen'
 
 type DbPaintTreatment = Database['public']['Tables']['paint_treatments']['Row']
 
@@ -27,6 +28,7 @@ function BehandelingRij({
   const [bewerkModus, setBewerkModus] = useState(false)
   const [code, setCode] = useState(behandeling.treatment_code ?? '')
   const [naam, setNaam] = useState(behandeling.name)
+  const { bevestig } = useDialogen()
 
   const sla = () => {
     if (!code || !naam) { toast.error('Vul code en naam in'); return }
@@ -45,8 +47,8 @@ function BehandelingRij({
       catch (err) { toast.error(err instanceof Error ? err.message : 'Fout') }
     })
 
-  const verwijder = () => {
-    if (!confirm(`Behandeling "${behandeling.name}" verwijderen?`)) return
+  const verwijder = async () => {
+    if (!await bevestig({ titel: `Behandeling "${behandeling.name}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     start(async () => {
       try { await verwijderBehandeling(behandeling.id); onVerwijder() }
       catch (err) { toast.error(err instanceof Error ? err.message : 'Fout') }

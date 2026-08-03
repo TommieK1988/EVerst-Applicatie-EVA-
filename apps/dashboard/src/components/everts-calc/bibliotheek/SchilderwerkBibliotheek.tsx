@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronRight, ChevronDown, Plus, Trash2, Check, X, Upload, Download, Pencil, Search,
 } from 'lucide-react'
-import { Button, Card, CardHeader, CardBody, Spinner, EmptyState, Alert } from '@/components/ui'
+import { Button, Card, CardHeader, CardBody, Spinner, EmptyState, Alert, useDialogen } from '@/components/ui'
 import type { SchilderOnderdeel, SchilderType, SchilderBehandeling, SchilderCombinatie } from '@/lib/everts-calc/services/schilderwerk'
 import {
   haalCombinaties,
@@ -589,6 +589,7 @@ function BehandelingRijInline({
   onRefresh: () => void
 }) {
   const [, start] = useTransition()
+  const { bevestig } = useDialogen()
 
   const wijzig = (data: Parameters<typeof wijzigBehandeling>[1]) => {
     start(async () => {
@@ -596,8 +597,8 @@ function BehandelingRijInline({
     })
   }
 
-  const verwijder = () => {
-    if (!confirm(`Behandeling "${behandeling.naam}" verwijderen?`)) return
+  const verwijder = async () => {
+    if (!await bevestig({ titel: `Behandeling "${behandeling.naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     start(async () => {
       try { await verwijderBehandeling(behandeling.id); onRefresh() } catch { /* stil */ }
     })
