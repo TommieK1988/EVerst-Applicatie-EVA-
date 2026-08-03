@@ -9,6 +9,7 @@ import {
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog';
 import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
 import type { DossierRij } from '@/components/dossiers/types';
+import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier';
 import {
   getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
 } from '@/components/dossiers/types';
@@ -268,6 +269,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
                 {dossierHref ? (
                   <a
                     href={dossierHref}
+                    {...NAAR_NIEUW_TABBLAD}
                     style={{
                       display: 'block', marginTop: 1,
                       fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
@@ -333,6 +335,7 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
             <a
               key={d.id}
               href={`/${sectie}/${d.id}`}
+              {...NAAR_NIEUW_TABBLAD}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '6px 2px',

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getNotificaties, markeerAlsGelezen, markeerAlleAlsGelezen, type Notificatie } from '@/app/(platform)/notificaties/actions'
+import { isDossierPad, openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 
 const TYPE_ICOON: Record<string, string> = {
   formulier_taak:      '📋',
@@ -60,7 +61,12 @@ export default function NotificatiesDropdown({ aantalOngelezen: initialCount }: 
         setNotificaties(prev => prev.map(x => x.id === n.id ? { ...x, gelezen: true } : x))
         setOngelezen(prev => Math.max(0, prev - 1))
       }
-      if (n.url) router.push(n.url)
+      // Verwijst de notificatie naar een dossier, dan opent dat — zoals overal in
+      // EVA — in een nieuw tabblad; overige bestemmingen in het huidige.
+      if (n.url) {
+        if (isDossierPad(n.url)) openDossierInNieuwTabblad(n.url)
+        else router.push(n.url)
+      }
     })
   }
 

@@ -4,6 +4,7 @@ import { addDays, parseISO, startOfDay } from 'date-fns'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { OPDRACHT_STATUSSEN } from '@/components/dossiers/types'
+import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import { crewKleur } from '@/lib/utils/crew'
 import {
   KLEUR, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
@@ -155,6 +156,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
             {width > 0 && (
               <Link
                 href={`/opdrachten/${o.id}/informatie`}
+                {...NAAR_NIEUW_TABBLAD}
                 className="gantt-balk"
                 style={{
                   position: 'absolute', top: 8, bottom: 8,

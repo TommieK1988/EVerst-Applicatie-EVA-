@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import { DossierTabContent } from '@/components/dossiers/DossierTabContent'
+import { dossierMetadata } from '@/lib/dossiers/paginatitel'
 
-export const metadata: Metadata = { title: 'Servicedesk' }
+export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await props.params
+  return dossierMetadata(id, 'Servicedesk')
+}
 
 export default async function ServicedeskTabPage(props: { params: Promise<{ id: string; tab: string }> }) {
   const params = await props.params;

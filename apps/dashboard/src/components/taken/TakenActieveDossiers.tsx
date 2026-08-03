@@ -12,6 +12,7 @@ import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/over
 import type { TaakRij } from '@/lib/taken/services/taken'
 import type { TaakMetDetails, TaskStatus } from '@/lib/taken/supabase/database.types'
 import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import { haalTaakVoorPaneel, updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import TaakDetailPanel from './TaakDetailPanel'
 
@@ -209,11 +210,12 @@ export default function TakenActieveDossiers({
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   }
 
-  // Medewerker-taken hangen niet aan een dossier: die linken naar de medewerkerpagina.
+  // Medewerker-taken hangen niet aan een dossier: die linken naar de medewerkerpagina
+  // (zelfde tabblad). Een dossier opent altijd in een nieuw tabblad.
   const openContext = (r: TaakRij) =>
     r.medewerker_id
       ? router.push(`/medewerkers/${r.medewerker_id}`)
-      : router.push(`/${r.dossier_sectie}/${r.dossier_id}/taken`)
+      : openDossierInNieuwTabblad(`/${r.dossier_sectie}/${r.dossier_id}/taken`)
 
   const kolommen = useMemo<KolomDefinitie<TaakRij>[]>(() => [
     { key: 'dossiernummer', label: 'Dossier', vast: true, breedte: 110,
@@ -309,7 +311,7 @@ export default function TakenActieveDossiers({
   // Taaknaam-klik: WB-controletaak → werkbegroting-tab, rest → detailpaneel.
   function onTaakKlik(r: TaakRij) {
     if (r.titel === BEOORDEEL_TAAK_TITEL.werkbegroting) {
-      router.push(`/${r.dossier_sectie}/${r.dossier_id}/werkbegroting`)
+      openDossierInNieuwTabblad(`/${r.dossier_sectie}/${r.dossier_id}/werkbegroting`)
       return
     }
     void openTaak(r.id)

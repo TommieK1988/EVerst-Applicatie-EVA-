@@ -39,6 +39,8 @@ import {
   deleteInkoopPrijsafspraak,
 } from '@/lib/relaties/actions'
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
+import { dossierHref } from '@/lib/dossiers/href'
+import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
 
@@ -865,7 +867,8 @@ function OmzetBlok({ omzet }: { omzet: OmzetData }) {
                 {omzet.openstaand.map(d => (
                   <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <a href={`/dossiers/${d.id}`} style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', textDecoration: 'none' }}>
+                      {/* Deze lijst bevat alleen opdracht-dossiers; er bestaat geen /dossiers-route. */}
+                      <a href={dossierHref(d.id, 'opdracht')} {...NAAR_NIEUW_TABBLAD} style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', textDecoration: 'none' }}>
                         {d.dossiernummer ? `${d.dossiernummer} · ` : ''}{d.titel}
                       </a>
                       <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>

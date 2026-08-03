@@ -1,7 +1,7 @@
 'use client'
 import React from 'react'
-import { useRouter } from 'next/navigation'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import {
@@ -101,8 +101,6 @@ type Props = {
 }
 
 export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
-  const router = useRouter()
-
   const kolommen: KolomDefinitie<CalculatieRij>[] = React.useMemo(() => [
     {
       key: 'calculatie',
@@ -250,7 +248,7 @@ export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
       user_id={user_id}
       onRijKlik={r => {
         const route = dossierRoute(r)
-        if (route) router.push(route)
+        if (route) openDossierInNieuwTabblad(route)
       }}
     />
   )

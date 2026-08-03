@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { LegeStaat } from '@/components/dossiers/tabs/tab-ui'
+import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import type { UrenOverzichtData, UrenOverzichtRegel } from '@/lib/uren/actions'
 import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
 
@@ -87,7 +88,7 @@ function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtReg
     key: 'dossier', label: 'Dossier', breedte: 260, filterType: 'tekst',
     sorteerWaarde: (r) => dossierLabel(r),
     render: (r) => (r.dossierHref
-      ? <Link href={r.dossierHref} style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}>{dossierLabel(r)}</Link>
+      ? <Link href={r.dossierHref} {...NAAR_NIEUW_TABBLAD} style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}>{dossierLabel(r)}</Link>
       : tekst(dossierLabel(r))),
   },
   {
