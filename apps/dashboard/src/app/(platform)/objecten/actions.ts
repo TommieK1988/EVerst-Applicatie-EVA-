@@ -14,6 +14,7 @@ import { vereisRecht } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { schrijfPropertyAssetNaarBouw7, syncPropertyAssets } from '@/lib/bouw7/property-assets'
 import { objectSchema, type ObjectInvoer, type OvernemenKeuze } from '@/lib/objecten/validations'
+import { adresWijktAf, objectAdresRegel } from '@/lib/objecten/adres'
 import type { VastgoedObjectRol } from '@everts/database'
 
 export type ActieResultaat<T = undefined> =
@@ -272,6 +273,42 @@ export async function ontkoppelDossierVanObject(dossierId: string): Promise<Acti
   herlaad()
   revalidatePath(`/opdrachten/${dossierId}`)
   return { ok: true }
+}
+
+/**
+ * Het object waaraan een dossier hangt, plus of het werkadres ervan afwijkt.
+ * Eigen action zodat het koppelblok op het dossier zichzelf kan vullen en de
+ * dossier-pagina er geen extra query voor hoeft door te geven.
+ */
+export async function getDossierObject(dossierId: string): Promise<{
+  object: { id: string; naam: string; objectnummer: string; adres: string } | null
+  wijktAf: boolean
+}> {
+  await vereisRecht('objectenbeheer', 'lezen')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('object_id, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad')
+    .eq('id', dossierId).maybeSingle()
+  if (!dossier?.object_id) return { object: null, wijktAf: false }
+
+  const { data: object } = await supabase
+    .from('vastgoed_objecten')
+    .select('id, naam, objectnummer, adres_straat, adres_huisnummer, adres_postcode, adres_plaats')
+    .eq('id', dossier.object_id).maybeSingle()
+  if (!object) return { object: null, wijktAf: false }
+
+  return {
+    object: {
+      id: object.id,
+      naam: object.naam,
+      objectnummer: object.objectnummer,
+      adres: objectAdresRegel(object),
+    },
+    wijktAf: adresWijktAf(dossier, object),
+  }
 }
 
 /** Neem het adres van het object over op een dossier dat ervan is afgeweken. */

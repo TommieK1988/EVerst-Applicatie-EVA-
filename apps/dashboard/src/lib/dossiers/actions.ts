@@ -792,6 +792,8 @@ export async function maakAanvraag(input: {
   werkadres_huisnummer?: string | null
   werkadres_postcode?: string | null
   werkadres_stad?: string | null
+  /** Vastgoedobject (VvE/complex) waar deze aanvraag bij hoort; heeft de velden hierboven voorgevuld. */
+  object_id?: string | null
 }): Promise<MaakAanvraagResult> {
   const supabase = createAdminClient() as any
 
@@ -816,6 +818,9 @@ export async function maakAanvraag(input: {
       werkadres_huisnummer: input.werkadres_huisnummer ?? null,
       werkadres_postcode:   input.werkadres_postcode ?? null,
       werkadres_stad:       input.werkadres_stad ?? null,
+      object_id:            input.object_id ?? null,
+      object_gekoppeld_op:  input.object_id ? new Date().toISOString() : null,
+      object_koppel_bron:   input.object_id ? 'aanmaak' : null,
       bouw7_sync_status:    'pending',
     })
     .select(`*, ${ROL_SELECT}`)

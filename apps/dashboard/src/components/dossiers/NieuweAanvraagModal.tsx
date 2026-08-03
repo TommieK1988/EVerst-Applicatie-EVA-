@@ -4,6 +4,9 @@ import toast from 'react-hot-toast'
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui'
 import type { DossierRij } from './types'
 import { maakAanvraag, zoekRelaties, getAanvraagCategorieen, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
+import type { VastgoedObject } from '@everts/database'
+import { FEATURES } from '@/lib/features'
+import ObjectVoorinvullen from '@/components/objecten/ObjectVoorinvullen'
 import { createOrganisatie } from '@/lib/relaties/actions'
 import { createContactpersoon, getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres, isHuisnummerReeks, eersteHuisnummer } from '@/lib/adres/pdok'
@@ -65,6 +68,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   const [bestanden,      setBestanden]      = React.useState<File[]>([])
   const [isLaden,        setIsLaden]        = React.useState(false)
   const [nieuweOrgOpen,  setNieuweOrgOpen]  = React.useState(false)
+  const [object,         setObject]         = React.useState<VastgoedObject | null>(null)
   const [nieuweCpOpen,   setNieuweCpOpen]   = React.useState(false)
   const [catGeladen,     setCatGeladen]     = React.useState<AanvraagCategorie[]>(categorieen ?? [])
 
@@ -136,6 +140,28 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         setZoekBezig(false)
       }
     }, 280)
+  }
+
+  /**
+   * Object gekozen: vul de velden die het object kent.
+   *
+   * Alleen lege velden worden gevuld — wat iemand al heeft ingetypt is bewuster dan wat
+   * het object standaard aanbiedt. Werkmaatschappij en categorie blijven er buiten: die
+   * hangen aan de opdracht, niet aan het pand.
+   */
+  function kiesObject(o: VastgoedObject, opdrachtgeverNaam: string | null) {
+    setObject(o)
+
+    const adres = [o.adres_straat, o.adres_huisnummer].filter(Boolean).join(' ').trim()
+    if (adres && !straatHuisnr.trim()) setStraatHuisnr(adres)
+    if (o.adres_postcode && !postcode.trim()) setPostcode(o.adres_postcode)
+    if (o.adres_plaats && !stad.trim()) setStad(o.adres_plaats)
+    if (o.vve_code && !vveCode.trim()) setVveCode(o.vve_code)
+
+    if (o.standaard_opdrachtgever_id && !klantId) {
+      setKlantId(o.standaard_opdrachtgever_id)
+      if (opdrachtgeverNaam) { setKlantNaam(opdrachtgeverNaam); setZoekQuery(opdrachtgeverNaam) }
+    }
   }
 
   function selecteerRelatie(rel: OpdrachtgeverZoekResultaat) {
@@ -248,6 +274,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         werkadres_huisnummer: parsedAdres.huisnummer || null,
         werkadres_postcode: postcode.trim() || null,
         werkadres_stad: stad.trim() || null,
+        object_id: object?.id ?? null,
       })
       if (!result.ok) { toast.error(result.error); return }
 
@@ -302,6 +329,16 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         </DialogHeader>
 
         <DialogBody>
+          {FEATURES.objectenbeheer && (
+            <Groep titel="Object">
+              <ObjectVoorinvullen
+                gekozen={object}
+                onKies={kiesObject}
+                onWis={() => setObject(null)}
+              />
+            </Groep>
+          )}
+
           <Groep titel="Basisgegevens">
             <Rij>
               {/* Opdrachtgever combobox */}

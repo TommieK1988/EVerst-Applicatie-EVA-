@@ -56,26 +56,7 @@ export default function ObjectDetailView({
   const bouw7 = bouw7StatusLabel(object)
   const afwijkend = dossiers.filter(d => d.adres_wijkt_af).length
 
-  const opdrachten = totalen.aantalPerFase.opdracht + totalen.aantalPerFase.afgesloten
-  const voorbehouden: string[] = []
-  if (totalen.servicedeskDossiers > 0) {
-    voorbehouden.push(
-      `${totalen.servicedeskDossiers} van de ${totalen.aantalDossiers} dossiers zijn servicedeskwerk. ` +
-      'Dat wordt op regie afgerekend en heeft geen aanneemsom, dus die omzet zit niet in de bedragen hierboven.',
-    )
-  } else if (totalen.zonderBedrag > 0) {
-    voorbehouden.push(
-      `${totalen.zonderBedrag} uitgevoerde ${totalen.zonderBedrag === 1 ? 'dossier heeft' : 'dossiers hebben'} ` +
-      'geen vastgelegd bedrag, dus de bedragen hierboven dekken niet al het werk.',
-    )
-  }
-  if (totalen.zonderKostprijs > 0 && opdrachten > 0) {
-    voorbehouden.push(
-      totalen.zonderKostprijs >= opdrachten
-        ? 'Van geen enkele opdracht is een kostprijs bekend, dus er valt geen marge te berekenen. Een kostprijs ontstaat pas als de offerte via de calculatiemodule is opgebouwd.'
-        : `Van ${totalen.zonderKostprijs} van de ${opdrachten} opdrachten is geen kostprijs bekend. De marge hierboven is daardoor te rooskleurig.`,
-    )
-  }
+  const maxPerJaar = Math.max(1, ...totalen.perJaar.map(j => j.aantal))
 
   function doe(actie: () => Promise<{ ok: true } | { ok: false; fout: string }>, gelukt: string) {
     start(async () => {
@@ -128,53 +109,57 @@ export default function ObjectDetailView({
         </div>
       )}
 
-      {/* ── Totalen ─────────────────────────────────────────────────────── */}
+      {/* ── Totalen: gefactureerd + het werk per jaar ───────────────────── */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 12, marginBottom: 24,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+        gap: 12, marginBottom: 16,
       }}>
         <StatCard label="Dossiers" value={totalen.aantalDossiers} tone="brand" />
-        <StatCard label="Aanneemsom" value={euro(totalen.aanneemsom)} />
-        <StatCard
-          label={totalen.meerwerkBenadering ? 'Goedgekeurd meerwerk (bij benadering)' : 'Goedgekeurd meerwerk'}
-          value={`${totalen.meerwerkBenadering ? '≈ ' : ''}${euro(totalen.goedgekeurdMeerwerk)}`}
-        />
-        <StatCard
-          label="Contracttotaal"
-          value={`${totalen.meerwerkBenadering ? '≈ ' : ''}${euro(totalen.contractTotaal)}`}
-          tone="success"
-        />
-        <StatCard
-          label={totalen.marge == null ? 'Marge (geen kostprijs bekend)' : 'Marge'}
-          value={totalen.marge == null ? '—' : euro(totalen.marge)}
-          unit={totalen.margePct != null ? `${totalen.margePct.toFixed(1)}%` : undefined}
-          tone={totalen.marge == null ? undefined : totalen.marge >= 0 ? 'success' : 'error'}
-        />
-        <StatCard label="Open offertes" value={euro(totalen.openOffertes)} tone="info" />
+        <StatCard label="Gefactureerd (excl. btw)" value={euro(totalen.gefactureerdExcl)} tone="success" />
+        <StatCard label="Laatste activiteit" value={datum(totalen.laatsteActiviteit)} />
       </div>
 
-      {/* Voorbehouden bij de cijfers. Zonder deze uitleg leest een object met tientallen
-          afgehandelde servicedeskklussen als "€ 0 omzet", en een half ingevulde kostprijs
-          als een echte marge. Beide getallen worden gebruikt om beslissingen op te nemen. */}
-      {voorbehouden.length > 0 && (
-        <div style={{ marginTop: -12, marginBottom: 24 }}>
+      {/* Het gefactureerde bedrag komt uit de management-sync; die kan achterlopen op de
+          dossiers. Een te laag totaal moet zichzelf verklaren in plaats van als volledig te lezen. */}
+      {totalen.zonderFacturatiegegevens > 0 && (
+        <div style={{ marginBottom: 16 }}>
           <Alert tone="info">
-            {voorbehouden.length === 1 ? voorbehouden[0] : (
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {voorbehouden.map((v, i) => <li key={i}>{v}</li>)}
-              </ul>
-            )}
+            Van {totalen.zonderFacturatiegegevens} uitgevoerde {totalen.zonderFacturatiegegevens === 1 ? 'dossier' : 'dossiers'} zijn
+            nog geen facturatiegegevens opgehaald. Het bedrag hierboven kan daardoor te laag zijn.
           </Alert>
+        </div>
+      )}
+
+      {/* ── Dossiers per jaar ───────────────────────────────────────────── */}
+      {totalen.perJaar.length > 0 && (
+        <div style={{ ...blok, marginBottom: 24 }}>
+          <div style={kopje}>Gekoppelde dossiers per jaar</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {totalen.perJaar.map(j => (
+              <div key={j.jaar} style={{ display: 'grid', gridTemplateColumns: '52px 1fr 40px', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{j.jaar}</span>
+                <div style={{ height: 10, background: 'var(--bg-subtle)', borderRadius: 5, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.round((j.aantal / maxPerJaar) * 100)}%`,
+                    height: '100%', background: 'hsl(var(--primary))', borderRadius: 5,
+                  }} />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {j.aantal}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--fg-muted)', margin: '12px 0 0' }}>
+            Op aanmaakdatum van het project.
+          </p>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16, alignItems: 'start' }}>
         {/* ── Gekoppelde dossiers ───────────────────────────────────────── */}
         <div style={blok}>
-          <div style={{ ...kopje, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Gekoppelde dossiers ({dossiers.length})</span>
-            <span style={{ fontWeight: 400, fontSize: 12 }}>Laatste activiteit: {datum(totalen.laatsteActiviteit)}</span>
-          </div>
+          <div style={kopje}>Gekoppelde dossiers ({dossiers.length})</div>
 
           {afwijkend > 0 && (
             <div style={{ marginBottom: 14 }}>
