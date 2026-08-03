@@ -128,14 +128,20 @@ interface SleepProjectie extends Projectie {
  * inspringing van het doelniveau — dat maakt het niveau afleesbaar zonder de lijn met
  * omliggende rijen te hoeven vergelijken — en het label noemt niveau en nieuwe ouder.
  * De rij heeft echte hoogte, zodat er zichtbaar ruimte "openklapt" op de landingsplek.
+ *
+ * Die hoogte maakt hem óók een hindernis: hij verschijnt onder je cursor en duwt de
+ * doelrij weg. Daarom is de lijn zélf een geldig doel — zonder `onDragOver` met
+ * `preventDefault()` weigert de browser de drop en gebeurt er bij loslaten niets.
  */
-function DropIndicator({ diepte, ouderNaam, colCount }: {
+function DropIndicator({ diepte, ouderNaam, colCount, onDragOver, onDrop }: {
   diepte: number
   ouderNaam: string | null
   colCount: number
+  onDragOver: (e: React.DragEvent) => void
+  onDrop: (e: React.DragEvent) => void
 }) {
   return (
-    <tr aria-hidden="true">
+    <tr aria-hidden="true" onDragOver={onDragOver} onDrop={onDrop}>
       <td colSpan={colCount} style={{ padding: 0, border: 0 }}>
         <div
           className="flex items-center h-4 gap-1"
@@ -1573,9 +1579,9 @@ interface GroepSectieProps {
   sleepGroepId: string | null
   sleepRegelId: string | null
   onDragStart: (groep: Groep, e: React.DragEvent) => void
-  /** `forceerNa` = altijd ná de kop invoegen; gebruikt door regelrijen, die "in deze groep" betekenen. */
-  onDragOver: (e: React.DragEvent, groep: Groep, forceerNa?: boolean) => void
-  onDrop: (e: React.DragEvent, doelGroep: Groep, forceerNa?: boolean) => void
+  /** `positieHint` slaat het boven/onder-oordeel over: regelrijen en de indicatorlijn weten het al. */
+  onDragOver: (e: React.DragEvent, groep: Groep, positieHint?: 'boven' | 'onder') => void
+  onDrop: (e: React.DragEvent, doelGroep: Groep, positieHint?: 'boven' | 'onder') => void
   onDragEnd: () => void
   onRegelDragStartNaarGroep: (regelId: string) => void
   onRegelDragEnd: () => void
@@ -1641,13 +1647,13 @@ function GroepSectie({
     e.preventDefault()
     // Sleep je een gróép, dan zijn de regelrijen geen dood gebied: ze staan voor
     // "in deze groep", dus we mikken op de positie direct ná de kop.
-    if (sleepGroepId) { onDragOver(e, groep, true); return }
+    if (sleepGroepId) { onDragOver(e, groep, 'onder'); return }
     // Zelfde groep drag óf cross-groep drag (sleepRegelId is dan het grid-niveau id)
     const actief = dragRegelId ?? sleepRegelId
     if (actief && actief !== id) setDragOverRegelId(id)
   }
   const handleRegelDrop = (e: React.DragEvent, targetId: string) => {
-    if (sleepGroepId) { onDrop(e, groep, true); return }
+    if (sleepGroepId) { onDrop(e, groep, 'onder'); return }
     const isCrossGroep = sleepRegelId !== null && dragRegelId === null
     if (isCrossGroep) {
       // Verplaats van andere groep naar positie voor targetId
@@ -1690,7 +1696,11 @@ function GroepSectie({
   return (
     <>
       {indicatorBoven && (
-        <DropIndicator diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount} />
+        <DropIndicator
+          diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount}
+          onDragOver={e => onDragOver(e, groep, 'boven')}
+          onDrop={e => onDrop(e, groep, 'boven')}
+        />
       )}
 
       <tr
@@ -1830,7 +1840,11 @@ function GroepSectie({
       </tr>
 
       {indicatorOnder && (
-        <DropIndicator diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount} />
+        <DropIndicator
+          diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount}
+          onDragOver={e => onDragOver(e, groep, 'onder')}
+          onDrop={e => onDrop(e, groep, 'onder')}
+        />
       )}
 
       {!ingeklapt && (
@@ -2441,11 +2455,16 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
    *  - verticaal: de boven- of onderhelft van de doelkop bepaalt de invoegpositie;
    *  - horizontaal: de verplaatsing t.o.v. de greep bepaalt het niveau, waarbij de
    *    groep zonder zijwaartse beweging zijn eigen niveau houdt.
-   * `doel === null` is de strook onderaan de tabel (= achteraan invoegen); `forceerNa`
-   * komt van de regelrijen, die altijd "in deze groep" betekenen.
+   * `doel === null` is de strook onderaan de tabel (= achteraan invoegen). `positieHint`
+   * slaat het boven/onder-oordeel over: regelrijen betekenen altijd "in deze groep", en
+   * de indicatorlijn zelf houdt vast aan de positie die hij toont.
    * Levert `null` als de drop niet mag — bijv. op de eigen tak.
    */
-  const berekenProjectie = useCallback((e: React.DragEvent, doel: Groep | null, forceerNa = false): SleepProjectie | null => {
+  const berekenProjectie = useCallback((
+    e: React.DragEvent,
+    doel: Groep | null,
+    positieHint?: 'boven' | 'onder',
+  ): SleepProjectie | null => {
     if (!sleepGroep) return null
     const eigenTak = subtreeIds(groepen, sleepGroep.id)
     // Outline-lijst zónder de gesleepte tak: die verhuist immers mee.
@@ -2464,19 +2483,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     const doelIndex = lijst.findIndex(p => p.groep.id === doel.id)
     if (doelIndex === -1) return null
 
-    const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const naDoel = forceerNa || e.clientY > rect.top + rect.height / 2
-    const proj   = projecteer(lijst, doelIndex + (naDoel ? 1 : 0), gewensteDiepte, maxEigenDiepte)
+    let naDoel: boolean
+    if (positieHint) {
+      naDoel = positieHint === 'onder'
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      naDoel = e.clientY > rect.top + rect.height / 2
+    }
+    const proj = projecteer(lijst, doelIndex + (naDoel ? 1 : 0), gewensteDiepte, maxEigenDiepte)
     return { ...proj, ankerGroepId: doel.id, positie: naDoel ? 'onder' : 'boven' }
   }, [sleepGroep, groepen])
 
-  const handleDragOver  = useCallback((e: React.DragEvent, doel: Groep | null, forceerNa = false) => {
+  const handleDragOver  = useCallback((e: React.DragEvent, doel: Groep | null, positieHint?: 'boven' | 'onder') => {
     e.preventDefault()
     if (sleepRegelId) { if (doel) setDragOverId(doel.id); return }
     if (!sleepGroep) return
     autoScroll(e.clientY)
     if (doel && sleepGroep.id === doel.id) return
-    const proj = berekenProjectie(e, doel, forceerNa)
+    const proj = berekenProjectie(e, doel, positieHint)
     if (proj) setProjectie(proj)
   }, [sleepGroep, sleepRegelId, berekenProjectie, autoScroll])
 
@@ -2487,18 +2511,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     setProjectie(null); setDragOverId(null)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent, doel: Groep | null, forceerNa = false) => {
-    e.preventDefault()
-    if (sleepRegelId) {
-      // Drop op groepskop → achteraan de groep plaatsen
-      if (doel) handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
-      return
-    }
+  /** Voert de verplaatsing uit die `proj` beschrijft — het enige punt dat groepen wegschrijft. */
+  const pasVerplaatsingToe = useCallback((proj: Projectie) => {
     const opruimen = () => { setSleepGroep(null); setDragOverId(null); setProjectie(null) }
-    if (!sleepGroep || (doel && sleepGroep.id === doel.id)) { opruimen(); return }
-
-    const proj = berekenProjectie(e, doel, forceerNa)
-    if (!proj) { opruimen(); return }
+    if (!sleepGroep) { opruimen(); return }
 
     const gewijzigd = verplaatsGroep(groepen, sleepGroep.id, proj.parentId, proj.voorGroepId)
     if (gewijzigd.length === 0) { opruimen(); return }
@@ -2515,7 +2531,41 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       : ouderNaam      ? `"${sleepGroep.naam}" naar niveau ${proj.diepte + 1}, onder "${ouderNaam}"`
                        : `"${sleepGroep.naam}" naar niveau 1 (hoofdgroep)`,
     )
-  }, [sleepGroep, sleepRegelId, groepen, berekenProjectie, duwSnapshot, handleVerplaatsRegelNaarPositie, laadAlles, onWijziging])
+  }, [sleepGroep, groepen, duwSnapshot, laadAlles, onWijziging])
+
+  const handleDrop = useCallback((e: React.DragEvent, doel: Groep | null, positieHint?: 'boven' | 'onder') => {
+    e.preventDefault()
+    // Afgehandeld: niet nóg eens door de vangnet-drop op de tabel laten oppakken.
+    e.stopPropagation()
+    if (sleepRegelId) {
+      // Drop op groepskop → achteraan de groep plaatsen
+      if (doel) handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
+      return
+    }
+    if (!sleepGroep || (doel && sleepGroep.id === doel.id)) {
+      setSleepGroep(null); setDragOverId(null); setProjectie(null); return
+    }
+    const proj = berekenProjectie(e, doel, positieHint)
+    if (!proj) { setSleepGroep(null); setDragOverId(null); setProjectie(null); return }
+    pasVerplaatsingToe(proj)
+  }, [sleepGroep, sleepRegelId, berekenProjectie, pasVerplaatsingToe, handleVerplaatsRegelNaarPositie])
+
+  /**
+   * Vangnet op de hele tabel. Zonder dit moet je precies een rij mét drag-handlers
+   * raken; land je ergens anders (tussen rijen, op de voettekst), dan weigert de
+   * browser de drop en gebeurt er stilzwijgend niets. Nu geldt overal: waar de lijn
+   * staat, dáár komt de groep.
+   */
+  const handleDragOverTabel = useCallback((e: React.DragEvent) => {
+    if (sleepGroep || sleepRegelId) e.preventDefault()
+  }, [sleepGroep, sleepRegelId])
+
+  const handleDropTabel = useCallback((e: React.DragEvent) => {
+    if (!sleepGroep) return
+    e.preventDefault()
+    if (projectie) pasVerplaatsingToe(projectie)
+    else { setSleepGroep(null); setDragOverId(null); setProjectie(null) }
+  }, [sleepGroep, projectie, pasVerplaatsingToe])
 
   // ─── Mutaties ──────────────────────────────────────────────────────────────
   const handleRegelWijzig = useCallback((id: string, veld: Partial<Calculatieregel>) => {
@@ -2890,6 +2940,8 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         disabled={readOnly}
         ref={scrollRef}
         onDragLeave={handleDragLeaveTabel}
+        onDragOver={handleDragOverTabel}
+        onDrop={handleDropTabel}
         className="calc-fs flex-1 overflow-auto min-h-0 min-w-0 border-0 p-0 m-0"
       >
         {roots.length > 0 ? (
@@ -2954,7 +3006,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
               {sleepGroep && (
                 <>
                   {projectie?.ankerGroepId === null && (
-                    <DropIndicator diepte={projectie.diepte} ouderNaam={dropOuderNaam} colCount={visibleColOrder.length} />
+                    <DropIndicator
+                      diepte={projectie.diepte} ouderNaam={dropOuderNaam} colCount={visibleColOrder.length}
+                      onDragOver={e => handleDragOver(e, null)}
+                      onDrop={e => handleDrop(e, null)}
+                    />
                   )}
                   <tr
                     onDragOver={e => handleDragOver(e, null)}
