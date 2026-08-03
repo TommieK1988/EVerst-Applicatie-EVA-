@@ -23,6 +23,12 @@ interface Props {
   onWijziging: () => void
   /** Aangeroepen vlak vóór een verplaatsing, zodat Ctrl+Z in het rekenblad hem terugdraait. */
   onVoorWijziging?: () => void
+  /**
+   * Meldt of er op dit moment gesleept wordt. Het paneel mag dan niet dichtklappen:
+   * de browser geeft bij het starten van een sleep een `mouseleave` af, en verdwijnt
+   * het paneel, dan verdwijnt ook het element dat je vasthoudt en breekt de sleep af.
+   */
+  onSleepActief?: (actief: boolean) => void
   /** Bevroren calculatie: structuur is te bekijken, niet te wijzigen. */
   readOnly?: boolean
 }
@@ -105,7 +111,7 @@ const NIVEAU_KLEUR = ['bg-everts', 'bg-everts/70', 'bg-everts/40']
 
 export default function StructuurBoom({
   scenarioId, actiefGroepId, refreshTrigger, onSelecteer, onWijziging,
-  onVoorWijziging, readOnly = false,
+  onVoorWijziging, onSleepActief, readOnly = false,
 }: Props) {
   const [groepen,   setGroepen]   = useState<Groep[]>([])
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
@@ -200,7 +206,9 @@ export default function StructuurBoom({
     else if (clientY > r.bottom - AUTOSCROLL_ZONE) c.scrollTop += AUTOSCROLL_STAP
   }, [])
 
-  const resetSleep = useCallback(() => { setSleepId(null); setDoel(null) }, [])
+  const resetSleep = useCallback(() => {
+    setSleepId(null); setDoel(null); onSleepActief?.(false)
+  }, [onSleepActief])
 
   const handleDragStart = (e: React.DragEvent, groep: Groep) => {
     if (readOnly) return
@@ -208,6 +216,7 @@ export default function StructuurBoom({
     e.dataTransfer.setData('text/plain', groep.id)
     setSleepId(groep.id)
     setDoel(null)
+    onSleepActief?.(true)
     zetSleepBadge(e, `${nummers.get(groep.id) ?? ''} ${groep.naam}`.trim())
   }
 
