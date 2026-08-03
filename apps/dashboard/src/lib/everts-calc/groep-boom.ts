@@ -135,8 +135,10 @@ function eersteBroerVanaf(
 /**
  * Verplaatst een groep naar `nieuweParentId`, vóór `voorGroepId` (null = achteraan).
  *
- * @returns alle groepen waarvan `parent_id`, `niveau` of `volgorde` wijzigt — de
- *          aanroeper schrijft die stuk voor stuk weg. Lege array = niets te doen.
+ * @returns alleen de groepen waarvan `parent_id`, `niveau` of `volgorde` écht wijzigt — de
+ *          aanroeper schrijft die stuk voor stuk weg. Lege array = niets te doen, en
+ *          dus ook geen "gelukt"-melding: een verplaatsing naar de eigen plek is geen
+ *          verplaatsing.
  */
 export function verplaatsGroep(
   groepen: Groep[],
@@ -191,5 +193,14 @@ export function verplaatsGroep(
       .forEach((g, i) => { if (g.volgorde !== i + 1) zet(g, { volgorde: i + 1 }) })
   }
 
-  return Array.from(gewijzigd.values())
+  // Loslaten op de eigen plek levert hierboven wél een patch voor de gesleepte groep op,
+  // maar met exact dezelfde waarden. Die eruit filteren, zodat de aanroeper aan een lege
+  // lijst ziet dat er niets te doen is — en niet ten onrechte "gelukt" meldt.
+  return Array.from(gewijzigd.values()).filter(g => {
+    const oud = groepen.find(x => x.id === g.id)
+    if (!oud) return true
+    return (oud.parent_id ?? null) !== (g.parent_id ?? null)
+      || oud.niveau   !== g.niveau
+      || oud.volgorde !== g.volgorde
+  })
 }
