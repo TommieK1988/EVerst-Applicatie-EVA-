@@ -72,55 +72,64 @@ export interface Projectie {
 }
 
 /**
- * Bepaalt waar een gesleepte groep landt op basis van de doelrij (verticaal) en de
- * gewenste diepte (horizontaal). Drie uitkomsten, van ondiep naar diep:
+ * Bepaalt waar een gesleepte groep landt. Het model is een **invoegpositie tussen twee
+ * rijen** (`invoegIndex`) plus een gewenste diepte; de buren bepalen wat er mogelijk is:
  *
- *  - diepte < doel  → broer/zus van een vóórouder van de doelrij, vlak vóór die tak;
- *  - diepte = doel  → broer/zus van de doelrij, er direct vóór;
- *  - diepte = doel+1 → eerste subgroep ván de doelrij ("sleep hem erin").
+ *  - dieper dan `vorige.diepte + 1` kan niet — daar hangt geen ouder tussen;
+ *  - ondieper dan `volgende.diepte` kan niet — die rij zou zijn ouder kwijtraken;
+ *  - staat er niets meer ná de invoegpositie, dan mag álles tot niveau 1 (= onderaan).
+ *
+ * Daardoor zijn "achteraan in een ouder" en "helemaal onderaan" gewone uitkomsten in
+ * plaats van onbereikbare gevallen.
  *
  * @param platteLijst     outline-volgorde zónder de gesleepte tak
- * @param doelIndex       index van de rij waar de muis boven hangt
- * @param gewensteDiepte  diepte die de muispositie suggereert
+ * @param invoegIndex     positie tussen de rijen: 0 = bovenaan, lijst.length = onderaan
+ * @param gewensteDiepte  diepte die de horizontale muispositie suggereert
  * @param maxEigenDiepte  MAX_NIVEAU - 1 - hoogte van de gesleepte tak
  */
 export function projecteer(
   platteLijst: PlatteGroep[],
-  doelIndex: number,
+  invoegIndex: number,
   gewensteDiepte: number,
   maxEigenDiepte: number,
 ): Projectie {
-  const doel = platteLijst[doelIndex]
-  if (!doel) return { parentId: null, diepte: 0, voorGroepId: null }
-  const maxDiepte = Math.min(doel.diepte + 1, maxEigenDiepte)
-  const diepte = Math.max(0, Math.min(gewensteDiepte, maxDiepte))
+  const index    = Math.max(0, Math.min(invoegIndex, platteLijst.length))
+  const vorige   = platteLijst[index - 1]
+  const volgende = platteLijst[index]
 
-  // Eén niveau dieper dan de doelrij = erin: als eerste subgroep.
-  if (diepte === doel.diepte + 1) {
-    const eersteKind = platteLijst[doelIndex + 1]
-    return {
-      parentId: doel.groep.id,
-      diepte,
-      voorGroepId: eersteKind?.groep.parent_id === doel.groep.id ? eersteKind.groep.id : null,
-    }
-  }
+  const maxDiepte = Math.min(vorige ? vorige.diepte + 1 : 0, Math.max(0, maxEigenDiepte))
+  const minDiepte = Math.min(volgende ? volgende.diepte : 0, maxDiepte)
+  const diepte    = Math.max(minDiepte, Math.min(gewensteDiepte, maxDiepte))
 
-  // Anders vóór de doelrij, op het gekozen niveau: de nieuwe ouder is de
-  // dichtstbijzijnde voorgaande rij één niveau hoger (= de voorouderketen van de doelrij).
+  // Nieuwe ouder = de dichtstbijzijnde rij hierbóven die precies één niveau hoger zit.
   let parentId: string | null = null
   if (diepte > 0) {
-    for (let i = doelIndex; i >= 0; i--) {
+    for (let i = index - 1; i >= 0; i--) {
       if (platteLijst[i].diepte === diepte - 1) { parentId = platteLijst[i].groep.id; break }
     }
+    if (!parentId) return { parentId: null, diepte: 0, voorGroepId: eersteBroerVanaf(platteLijst, index, null, 0) }
   }
-  // Broer/zus van de doelrij → er direct vóór; hoger in de boom → vóór de hele tak,
-  // wat neerkomt op de plek van de voorouder op dat niveau.
-  let voorGroepId: string | null = null
-  for (let i = doelIndex; i >= 0; i--) {
-    if (platteLijst[i].diepte === diepte) { voorGroepId = platteLijst[i].groep.id; break }
-    if (platteLijst[i].diepte < diepte) break
+
+  return { parentId, diepte, voorGroepId: eersteBroerVanaf(platteLijst, index, parentId, diepte) }
+}
+
+/**
+ * Eerste directe kind van `parentId` op of ná `vanaf` — dáár komt de groep vóór.
+ * `null` betekent achteraan bij die ouder: er volgt geen broer/zus meer.
+ */
+function eersteBroerVanaf(
+  platteLijst: PlatteGroep[],
+  vanaf: number,
+  parentId: string | null,
+  diepte: number,
+): string | null {
+  for (let i = vanaf; i < platteLijst.length; i++) {
+    const rij = platteLijst[i]
+    if ((rij.groep.parent_id ?? null) === parentId) return rij.groep.id
+    // Ondieper dan het gekozen niveau = de tak van de ouder is voorbij.
+    if (rij.diepte < diepte) break
   }
-  return { parentId, diepte, voorGroepId }
+  return null
 }
 
 /**
