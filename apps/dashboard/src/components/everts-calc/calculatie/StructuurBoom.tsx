@@ -321,7 +321,6 @@ export default function StructuurBoom({
         onDrop={handleDrop}
         className={cn(
           'flex items-center group rounded-lg mx-1 my-0.5 transition-colors',
-          magSlepen && 'cursor-grab active:cursor-grabbing',
           gaatMee && 'opacity-40',
           isDropDoel && doel?.geldig && 'ring-2 ring-everts bg-everts-50',
           isDropDoel && !doel?.geldig && 'ring-2 ring-red-300',
@@ -332,6 +331,21 @@ export default function StructuurBoom({
         {/* Actieve balk */}
         {isActief && (
           <div className={`absolute left-0 w-0.5 h-6 rounded-r ${NIVEAU_KLEUR[diepte] ?? 'bg-everts'}`} />
+        )}
+
+        {/* Sleepgreep. Eigen `draggable`, want de rest van de rij bestaat uit knoppen en
+            die slikken het sleepgebaar op — de browser start dan geen drag. Altijd
+            zichtbaar, zodat duidelijk is wáár je moet beetpakken. */}
+        {magSlepen && (
+          <span
+            draggable
+            onDragStart={e => { e.stopPropagation(); handleDragStart(e, groep) }}
+            onDragEnd={resetSleep}
+            title="Sleep om te verplaatsen"
+            className="flex-shrink-0 flex items-center justify-center w-4 h-6 -ml-0.5 mr-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </span>
         )}
 
         {/* Expand toggle */}
@@ -371,7 +385,6 @@ export default function StructuurBoom({
 
         {/* Hover acties */}
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 pr-1">
-          {magSlepen && <GripVertical className="w-3 h-3 text-slate-300" />}
           {!readOnly && groep.niveau < 3 && (
             <Button
               variant="ghost"
