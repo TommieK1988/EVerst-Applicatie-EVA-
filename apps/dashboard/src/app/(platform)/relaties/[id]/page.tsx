@@ -14,6 +14,7 @@ import type {
 } from '@everts/database'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { getOmzetVoorRelatie } from '@/lib/relaties/actions'
+import { getRelatieObjecten } from '@/lib/objecten/data'
 import RelatieDetailView from './RelatieDetailView'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -39,6 +40,7 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
     inkoopPrijsafspraken,
     contactpersonen,
     omzet,
+    objecten,
   ] = await Promise.all([
     supabase.from('relaties').select('*').eq('id', params.id).maybeSingle(),
     supabase.from('relatie_factuuradressen').select('*').eq('relatie_id', params.id).order('label'),
@@ -50,6 +52,7 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
     supabase.from('relatie_inkoop_prijsafspraken').select('*').eq('relatie_id', params.id).order('omschrijving'),
     getContactpersonenVoorOrganisatie(params.id),
     getOmzetVoorRelatie(params.id),
+    getRelatieObjecten(params.id),
   ])
 
   if (!relatieRes.data) notFound()
@@ -66,6 +69,7 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
       inkoopPrijsafspraken={(inkoopPrijsafspraken.data ?? []) as RelatieInkoopPrijsafspraak[]}
       contactpersonen={contactpersonen}
       omzet={omzet as OmzetData}
+      objecten={objecten}
     />
   )
 }

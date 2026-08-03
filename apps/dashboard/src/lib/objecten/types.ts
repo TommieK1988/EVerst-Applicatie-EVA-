@@ -5,6 +5,17 @@
 
 import type { VastgoedObject } from '@everts/database'
 
+/** Object zoals het op de relatiepagina getoond wordt. */
+export type RelatieObject = {
+  id: string
+  naam: string
+  objectnummer: string
+  adres: string
+  /** Rollabels van deze relatie bij dit object ("Beheerder", "VvE"). */
+  rollen: string[]
+  aantalDossiers: number
+}
+
 /**
  * Velden die Bouw7 beheert. Zodra een object daar bestaat
  * (`bouw7_property_asset_id` gevuld) zijn ze in EVA read-only: de sync overschrijft
