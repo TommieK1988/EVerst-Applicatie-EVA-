@@ -52,6 +52,9 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
 
   // Beheer
   [/^\/relaties$/, { title: 'Relaties', breadcrumb: 'Beheer' }],
+  [/^\/objecten$/, { title: 'Objecten', breadcrumb: 'Beheer' }],
+  [/^\/objecten\/nieuw$/, { title: 'Objecten › Nieuw object', breadcrumb: 'Beheer' }],
+  [/^\/objecten\/[^/]+$/, { title: 'Object — detail', breadcrumb: 'Beheer' }],
   [/^\/medewerkers$/, { title: 'Medewerkers', breadcrumb: 'Beheer' }],
   [/^\/management\/instellingen$/, { title: 'Management › Instellingen', breadcrumb: 'Beheer' }],
   [/^\/management$/, { title: 'Management', breadcrumb: 'Beheer' }],

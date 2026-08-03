@@ -275,6 +275,27 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Beheer: Objecten ───────────────────────────────────────────────────
+  [/^\/objecten$/, {
+    title: 'Objecten',
+    description: 'Overzicht van alle vastgoedobjecten: VvE\'s, complexen en panden waar je werkt. Een object bundelt alle dossiers op dezelfde locatie, zodat je in één oogopslag ziet wat er in de loop der jaren is gedaan en wat dat heeft opgeleverd.',
+    sections: [
+      { title: 'Waarom objecten', body: 'Zonder object staat elk werkadres los op het dossier. Koppel je dossiers aan een object, dan hoef je het adres, de opdrachtgever en de contactpersoon ter plaatse niet telkens opnieuw in te typen, en zie je per complex de totalen en de volledige werkhistorie.' },
+      { title: 'Nieuw object', body: 'Klik op "Nieuw object". Het objectnummer is de code waarmee het object herkenbaar is (bijvoorbeeld HW1013 of OMMEREN) en moet uniek zijn. Nieuwe objecten worden ook in Bouw7 aangemaakt, zodat beide systemen hetzelfde object kennen.' },
+      { title: 'Uit Bouw7', body: 'Objecten die al in Bouw7 bestaan worden automatisch overgenomen, inclusief naam, adres en factuurrelatie. Die velden zijn in EVA niet te wijzigen — pas ze in Bouw7 aan. De EVA-eigen velden (soort, contactpersoon ter plaatse, notities) blijven bij een synchronisatie ongemoeid.' },
+    ],
+  }],
+
+  [/^\/objecten\/[^/]+$/, {
+    title: 'Object — detail',
+    description: 'Alle informatie over één VvE, complex of pand: adresgegevens, betrokken relaties, de gekoppelde dossiers en de totalen daarvan.',
+    sections: [
+      { title: 'Gekoppelde dossiers', body: 'Alle aanvragen, offertes en opdrachten op dit object, nieuwste eerst. Staat er een waarschuwing bij een dossier, dan wijkt het werkadres op dat dossier af van het adres van het object — meestal doordat iemand het adres in Bouw7 heeft aangepast.' },
+      { title: 'Totalen', body: 'De aanneemsom telt de opdrachten en afgesloten dossiers op; goedgekeurd meerwerk komt daar bovenop. Samen vormen ze het contracttotaal. Openstaande offertes tellen niet mee in dat totaal maar staan apart vermeld.' },
+      { title: 'Betrokken relaties', body: 'Een complex heeft vaak meerdere partijen tegelijk: de VvE zelf, de beheerder en de partij die de factuur betaalt. Leg ze allemaal vast met hun rol. De opdrachtgever die je als standaard instelt wordt voorgesteld bij een nieuwe aanvraag op dit object.' },
+    ],
+  }],
+
   // ── Beheer: Medewerkers ────────────────────────────────────────────────
   [/^\/medewerkers$/, {
     title: 'Medewerkers',

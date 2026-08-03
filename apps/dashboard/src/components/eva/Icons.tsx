@@ -32,6 +32,9 @@ export function IconToolbox(p: IconProps) { return <IconBase {...p}><path d="M2.
 
 export function IconMaterieel(p: IconProps) { return <IconBase {...p}><path d="M3 8.4h18v10.2a1.2 1.2 0 0 1-1.2 1.2H4.2A1.2 1.2 0 0 1 3 18.6V8.4Z"/><path d="M8.4 8.4V6a1.8 1.8 0 0 1 1.8-1.8h3.6A1.8 1.8 0 0 1 15.6 6v2.4"/><path d="M3 12.6h18"/></IconBase> }
 
+/** Objectenbeheer — flatgebouw/complex: één blok met vensters plus een lager buurblok. */
+export function IconObjecten(p: IconProps) { return <IconBase {...p}><path d="M3.6 20.4V6a1.2 1.2 0 0 1 1.2-1.2h7.2A1.2 1.2 0 0 1 13.2 6v14.4"/><path d="M13.2 20.4V10.8h6a1.2 1.2 0 0 1 1.2 1.2v8.4"/><path d="M2.4 20.4h19.2"/><path d="M6.6 8.4h3.6M6.6 12h3.6M6.6 15.6h3.6M16.2 14.4h1.2M16.2 17.4h1.2"/></IconBase> }
+
 export const IconHome     = (p: IconProps) => <IconBase {...p}><path d="M3.6 10.2L12 3.6l8.4 6.6V19.2a1.2 1.2 0 0 1-1.2 1.2H15V14.4H9V20.4H4.8a1.2 1.2 0 0 1-1.2-1.2V10.2Z"/></IconBase>;
 export const IconChat     = (p: IconProps) => <IconBase {...p}><path d="M3.6 7.2a2.4 2.4 0 0 1 2.4-2.4h12a2.4 2.4 0 0 1 2.4 2.4v7.2a2.4 2.4 0 0 1-2.4 2.4H12l-4.8 3.6V16.8H6a2.4 2.4 0 0 1-2.4-2.4V7.2Z"/></IconBase>;
 export const IconLibrary  = (p: IconProps) => <IconBase {...p}><path d="M4.8 4.8h4.8v14.4H4.8zM10.8 4.8h3.6v14.4H10.8zM16.2 6l3.6.96L16.8 19.8l-3.6-.96L16.2 6Z"/></IconBase>;

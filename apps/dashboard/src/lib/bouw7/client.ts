@@ -418,6 +418,13 @@ export type Bouw7Project = {
   workPlanner?:   { id: number; firstName?: string; lastName?: string }
   executor?:      { id: number; firstName?: string; lastName?: string } | null
   branch?: { id: number; name: string }
+  /**
+   * Vastgoedobject waar dit project bij hoort (Bouw7 "objectenbeheer").
+   * Geverifieerd aug 2026: 174 van de 579 projecten hebben dit gevuld, en één object kan
+   * aan véél projecten hangen (Zamenhofstraat 6 → 18). Dit is de betrouwbare bron voor
+   * `dossiers.object_id`; adres- of VvE-code-matching is dat aantoonbaar niet.
+   */
+  propertyAsset?: { id: number; name?: string } | null
   /** Adres — API levert `streetName` + losse `houseNumber`; géén `street`/`postCode`. */
   streetName?: string
   houseNumber?: string | null
@@ -973,6 +980,63 @@ export type Bouw7ContractOrderLine = {
   } | null
   purchaseOrderContract?: unknown | null
   subcontractorContract?: unknown | null
+}
+
+/**
+ * Vastgoedobject uit `GET /list/property-assets` (Heimdall) — Bouw7's objectenbeheer.
+ *
+ * Geverifieerd tegen de live API (aug 2026). Twee dingen die de Swagger niet vertelt:
+ * de spec kent dit schema helemáál niet (alleen POST/DELETE stonden gedocumenteerd), en
+ * het pad is **meervoud**: `/list/property-asset` geeft 404, `GET /property-asset` geeft
+ * 403 "Allow: POST, DELETE". Apollo `GET /search/property-assets` werkt ook maar levert
+ * `project` niet mee.
+ *
+ * LET OP het adres: bij complexen zet Bouw7 de héle reeks in `streetName`
+ * ("Netscherstraat 9 t/m 91 / Ruijsdaelstraat 65 t/m 73") en laat `houseNumber` en
+ * `zipCode` leeg. Postcode is dus geen betrouwbare sleutel — match op `id`/`number`.
+ */
+export type Bouw7PropertyAsset = {
+  id: number
+  /** Objectcode, met de hand getypt: "HW1013", "KESSZAM6", "OMMEREN". Uniek en verplicht. */
+  number: string
+  name: string
+  /** Bij lézen heet de factuurrelatie `invoiceRecipient`; bij schrijven `invoiceContact`. */
+  invoiceRecipient?: { id: number; name?: string; type?: string; typeId?: number; emailAddress?: string | null } | null
+  /** Bewoner — in de praktijk vrijwel altijd null. */
+  resident?: { id: number; name?: string } | null
+  /** Vrije opsomming van de adressen; bevat HTML. */
+  description?: string | null
+  streetName?: string | null
+  houseNumber?: string | null
+  zipCode?: string | null
+  city?: string | null
+  country?: string | null
+  firstDeliveryDate?: string | null
+  secondDeliveryDate?: string | null
+  /** Vrijwel altijd null (44 van de 46) — géén 1:1-signaal met een project. */
+  project?: { id: number; name?: string } | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Schrijfvorm voor `POST /property-asset` (upsert: `id` erin = update).
+ *
+ * Verplicht volgens de live validatie (POST met lege body → 400):
+ * `number`, `name` en **`invoiceContact`** — let op, dat veld heet bij het lezen
+ * `invoiceRecipient`. Zonder een geldige `invoiceContact.id` weigert Bouw7 de create.
+ */
+export type Bouw7PropertyAssetCreate = {
+  id?: number
+  number: string
+  name: string
+  invoiceContact: { id: number }
+  description?: string | null
+  streetName?: string | null
+  houseNumber?: string | null
+  zipCode?: string | null
+  city?: string | null
+  country?: string | null
 }
 
 /* ── Two-way / list-endpoints (geverifieerd via Swagger jun 2026) ─────

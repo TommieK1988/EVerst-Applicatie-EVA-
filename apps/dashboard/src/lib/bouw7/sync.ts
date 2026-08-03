@@ -1117,7 +1117,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     const { data: dossierData } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, calculator_id, bouw7_sync_hash')
+      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, calculator_id, bouw7_sync_hash, object_id, object_koppel_bron, object_gekoppeld_op')
       .not('bouw7_id', 'is', null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
@@ -1197,6 +1197,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         ref:       p.reference ?? null,
         statusId:  p.status?.id ?? null,
         statusNm:  p.status?.name ?? null,
+        // Vastgoedobject: moet in de fingerprint, anders slaat de incrementele sync een project
+        // over waarvan alléén de objectkoppeling in Bouw7 is gewijzigd.
+        asset:     p.propertyAsset?.id ?? null,
         catId:     p.category?.id ?? null,
         catNm:     p.category?.name ?? null,
         price:     p.fixedPrice ?? null,
@@ -1428,6 +1431,20 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     }
 
     const bouw7IdsInResponse = new Set(projects.map(p => String(p.id)))
+
+    // Vastgoedobjecten: Bouw7 `propertyAsset` op het project → EVA `dossiers.object_id`.
+    // Dit is de enige betrouwbare bron voor de koppeling (adres- en VvE-code-matching is
+    // aantoonbaar te zwak: 177 projecten hebben geen postcode en 96 VvE-codes zijn 95× uniek).
+    // Objecten die nog niet in EVA staan leveren geen hit; die komen na `syncPropertyAssets`.
+    const { data: objectData } = await supabase
+      .from('vastgoed_objecten')
+      .select('id, bouw7_property_asset_id')
+      .not('bouw7_property_asset_id', 'is', null)
+    const objectMap = new Map<string, string>(
+      (objectData ?? []).map((o: { id: string; bouw7_property_asset_id: number }) =>
+        [String(o.bouw7_property_asset_id), o.id]),
+    )
+
     const rows: Record<string, unknown>[] = []
     // Servicedesk-substatuswijzigingen voor de doorlooptijd-historie (na de upsert weggeschreven).
     const substatusWijzigingen: { bouw7_id: string; substatus: string }[] = []
@@ -1498,7 +1515,20 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         ?? existing?.calculator_id
         ?? null
 
+      // Objectkoppeling. Bouw7 wint zodra het project een bekend object noemt; noemt het er
+      // geen (of kennen we het nog niet), dan blijft een in EVA gelegde koppeling staan —
+      // de sync mag handwerk niet wegvagen.
+      const bouw7ObjectId = p.propertyAsset?.id ? (objectMap.get(String(p.propertyAsset.id)) ?? null) : null
+      const objectId = bouw7ObjectId ?? existing?.object_id ?? null
+      // Alleen stempelen bij een níeuwe koppeling; een bestaande houdt zijn eigen herkomst.
+      // Beide velden staan er altijd in: PostgREST eist gelijke sleutels binnen één bulk-upsert,
+      // dus een voorwaardelijke spread zou de overige rijen op null zetten.
+      const objectNieuwGekoppeld = !!bouw7ObjectId && bouw7ObjectId !== existing?.object_id
+
       rows.push({
+        object_id:                objectId,
+        object_koppel_bron:       objectNieuwGekoppeld ? 'bouw7' : (existing?.object_koppel_bron ?? null),
+        object_gekoppeld_op:      objectNieuwGekoppeld ? new Date().toISOString() : (existing?.object_gekoppeld_op ?? null),
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
         titel:                    p.name,
         klant_id:                 p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
