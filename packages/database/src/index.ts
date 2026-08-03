@@ -88,6 +88,11 @@ export type {
   OpleverFoto,
   OpleverHandtekening,
   OpleverToegangToken,
+  // Objectenbeheer
+  VastgoedObject,
+  VastgoedObjectRelatie,
+  VastgoedObjectSoort,
+  VastgoedObjectRol,
 } from './platform-types'
 export {
   logoSlotLabels,
@@ -105,4 +110,7 @@ export {
   afhankelijkheidsTypeLabels,
   planningActiviteitStatusLabels,
   medewerkerAfwezigheidLabels,
+  // Objectenbeheer
+  VASTGOED_OBJECT_SOORTEN,
+  VASTGOED_OBJECT_ROLLEN,
 } from './platform-types'

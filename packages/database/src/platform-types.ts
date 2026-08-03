@@ -554,6 +554,14 @@ export type Dossier = {
   werkadres_stad: string | null
   /** VvE-code van het object; gesynct naar Bouw7 als custom attribute caVveCode. */
   vve_code: string | null
+  /**
+   * Gekoppeld vastgoedobject (VvE/complex/pand). Dit is een PREFILL-relatie, geen live join:
+   * de werkadres_*-velden hierboven blijven de bron voor documenten, planning en Bouw7 —
+   * het object vult ze bij het koppelen éénmalig. Bron in Bouw7: `project.propertyAsset`.
+   */
+  object_id: string | null
+  object_gekoppeld_op: string | null
+  object_koppel_bron: 'aanmaak' | 'handmatig' | 'bouw7' | 'backfill' | null
   /** Datum van de aanvraag. Leeg = het dossier is aangemaakt op `created_at`. */
   aanvraagdatum: string | null
   /** Deadline: de datum waarop de offerte verzonden had moeten zijn (optioneel). */
@@ -567,6 +575,94 @@ export type Dossier = {
   created_at: string
   updated_at: string
   created_by: string | null
+}
+
+/* ── Objectenbeheer ─────────────────────────────────────────────────────────
+ * Een object is een VvE, complex of pand waaraan meerdere dossiers hangen.
+ * Bouw7-tegenhanger: `property-assets`. Bouw7 is bron voor de identiteit
+ * (objectnummer, naam, adres, factuurrelatie); de EVA-eigen velden hieronder
+ * (soort, contact_*, notities, lat/lng, standaard_contactpersoon_id) worden door
+ * de sync nooit aangeraakt.
+ */
+
+export type VastgoedObjectSoort = 'vve' | 'complex' | 'pand' | 'locatie' | 'overig'
+
+/** Rol van een relatie bij een object. Een VvE-complex heeft er vaak meerdere tegelijk. */
+export type VastgoedObjectRol = 'vve' | 'eigenaar' | 'beheerder' | 'opdrachtgever' | 'overig'
+
+export const VASTGOED_OBJECT_SOORTEN: { key: VastgoedObjectSoort; label: string }[] = [
+  { key: 'vve',     label: 'VvE' },
+  { key: 'complex', label: 'Complex' },
+  { key: 'pand',    label: 'Pand' },
+  { key: 'locatie', label: 'Locatie' },
+  { key: 'overig',  label: 'Overig' },
+]
+
+export const VASTGOED_OBJECT_ROLLEN: { key: VastgoedObjectRol; label: string }[] = [
+  { key: 'vve',           label: 'VvE' },
+  { key: 'eigenaar',      label: 'Eigenaar' },
+  { key: 'beheerder',     label: 'Beheerder' },
+  { key: 'opdrachtgever', label: 'Opdrachtgever' },
+  { key: 'overig',        label: 'Overig' },
+]
+
+export type VastgoedObject = {
+  id: string
+  /** Bouw7 `number` — met de hand getypte objectcode (HW1013, KESSZAM6). Uniek. */
+  objectnummer: string
+  naam: string
+  soort: VastgoedObjectSoort
+  vve_code: string | null
+  /**
+   * Bij complexen zet Bouw7 de héle adressenreeks in dit veld
+   * ("Netscherstraat 9 t/m 91 / Ruijsdaelstraat 65 t/m 73") en laat huisnummer
+   * en postcode leeg. Reken hier dus niet op een gestructureerd adres.
+   */
+  adres_straat: string | null
+  adres_huisnummer: string | null
+  adres_postcode: string | null
+  adres_plaats: string | null
+  adres_land: string
+  /** Vrije opsomming van de adressen (Bouw7 `description`, HTML gestript). */
+  omschrijving: string | null
+  lat: number | null
+  lng: number | null
+  geocode_bron: string | null
+  /** Contactpersoon ter plaatse (huismeester/beheerder) — EVA-eigen, kent Bouw7 niet. */
+  contact_naam: string | null
+  contact_telefoon: string | null
+  contact_email: string | null
+  standaard_opdrachtgever_id: string | null
+  standaard_contactpersoon_id: string | null
+  eerste_opleverdatum: string | null
+  tweede_opleverdatum: string | null
+  notities: string | null
+  details: Record<string, unknown>
+  /** Reservekolom voor een later complex → gebouw-niveau; nog zonder UI. */
+  hoort_bij_object_id: string | null
+  bouw7_property_asset_id: number | null
+  bouw7_laatst_sync: string | null
+  bouw7_sync_status: string | null
+  bouw7_sync_fout: string | null
+  bouw7_sync_hash: string | null
+  bron: 'eva' | 'bouw7' | 'backfill'
+  backfill_run_id: string | null
+  actief: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  /** Gegenereerd: 'POSTCODE|huisnummer'. Niet uniek — vaak '|' omdat Bouw7 die velden leeg laat. */
+  adres_sleutel: string | null
+}
+
+export type VastgoedObjectRelatie = {
+  id: string
+  object_id: string
+  relatie_id: string
+  rol: VastgoedObjectRol
+  primair: boolean
+  opmerking: string | null
+  created_at: string
 }
 
 /** Actieve substatus ophalen ongeacht fase. */
@@ -639,6 +735,7 @@ export const RECHTEN_MODULES = [
   { key: 'management',     label: 'Management' },
   { key: 'planning',       label: 'Planning' },
   { key: 'relaties',       label: 'Relaties' },
+  { key: 'objectenbeheer', label: 'Objecten' },
   { key: 'medewerkers',    label: 'Medewerkers' },
   { key: 'wagenpark',      label: 'Wagenpark' },
   // Privacygevoelige wagenpark-data: privé-ritten (in Ritten, Bestuurders,
