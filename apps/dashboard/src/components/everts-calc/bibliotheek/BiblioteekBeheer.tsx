@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition, useRef, useEffect } from 'react'
-import { Search, BookOpen, Pencil, Trash2, Plus, Upload, ChevronDown, Download } from 'lucide-react'
+import { useState, useTransition, useRef, useEffect, useMemo } from 'react'
+import { BookOpen, Trash2, Plus, Upload, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/everts-calc/shared/PageHeader'
 import {
@@ -14,10 +14,11 @@ import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/materialen'
 import type { PaintItemMetNormen, LaborNorm, MaterialNorm } from '@/lib/everts-calc/services/bibliotheek'
 import type { Materiaal, EenheidConfig } from '@/lib/everts-calc/types'
+import type { GebruikerLayout } from '@everts/database/platform-types'
+import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
-import { EmptyState } from '@/components/ui/empty-state'
+import { useDialogen } from '@/components/ui/dialogen'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
 } from '@/components/ui/dialog'
@@ -371,12 +372,14 @@ function BewerkPaneel({
   categorieen,
   houtrotSoorten,
   onSluiten,
+  onVerwijder,
 }: {
   item: PaintItemMetNormen
   eenheden: EenheidConfig[]
   categorieen: string[]
   houtrotSoorten: string[]
   onSluiten: () => void
+  onVerwijder: () => void
 }) {
   const [isPending, start] = useTransition()
   const [nwLaborOpen, setNwLaborOpen]   = useState(false)
@@ -754,6 +757,15 @@ function BewerkPaneel({
         </DialogBody>
 
         <DialogFooter>
+          {/* Verwijderen zit hier en niet als knopje per tabelrij: dat scheelt een
+              kolom in het overzicht en je ziet eerst waar je van af wilt. */}
+          <Button
+            variant="ghost"
+            onClick={onVerwijder}
+            className="mr-auto text-error-700 hover:bg-error-50"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Verwijderen
+          </Button>
           <Button variant="ghost" onClick={onSluiten}>Sluiten</Button>
           <Button onClick={slaBasiOp} loading={isPending}>Opslaan</Button>
         </DialogFooter>
@@ -898,15 +910,48 @@ function NieuwReceptModal({
   )
 }
 
+// ─── Tabelkolommen ────────────────────────────────────────────────────────────
+
+/** Recept met de drie kostenkolommen al uitgerekend, zodat sorteren en filteren
+ *  op dezelfde getallen werken als de cellen tonen. */
+type ReceptRij = PaintItemMetNormen & {
+  arbeid:    number
+  materiaal: number
+  oa:        number
+  totaal:    number
+}
+
+const BTW_LABEL: Record<string, string> = {
+  hoog: 'Hoog (21%)', laag: 'Laag (9%)', vrijgesteld: 'Vrijgesteld (0%)',
+}
+
+/** De everts-calc-layout zet --border en --accent om naar losse HSL-kanalen voor de
+ *  shadcn-primitives; OverzichtTabel gebruikt ze als kléur (`var(--border)`), en dan
+ *  vallen randen en accenten weg. Binnen de tabel zetten we ze terug naar de
+ *  DS-tokens — die volgen het thema, dus donkere modus blijft kloppen. */
+const DS_TOKENS = {
+  '--border': 'var(--neutral-200)',
+  '--accent': 'var(--brand)',
+} as React.CSSProperties
+
+function Bedrag({ waarde, kleur, vet = false }: { waarde: number; kleur?: string; vet?: boolean }) {
+  if (!waarde) return <div style={{ textAlign: 'right', color: 'var(--neutral-400)' }}>—</div>
+  return (
+    <div style={{ textAlign: 'right', fontSize: 12.5, fontWeight: vet ? 700 : 600, color: kleur ?? 'var(--neutral-700)' }}>
+      {formatEuro(waarde)}
+    </div>
+  )
+}
+
 // ─── BiblioteekBeheer (hoofd) ─────────────────────────────────────────────────
 
 interface Props {
-  items: PaintItemMetNormen[]
+  items:   PaintItemMetNormen[]
+  layouts: GebruikerLayout[]
+  user_id: string | null
 }
 
-export default function BiblioteekBeheer({ items }: Props) {
-  const [zoek, setZoek]               = useState('')
-  const [categorie, setCategorie]     = useState('')
+export default function BiblioteekBeheer({ items, layouts, user_id }: Props) {
   const [bewerkItemId, setBewerkItemId] = useState<string | null>(null)
   const [nieuwOpen, setNieuwOpen]     = useState(false)
   const [importBezig, setImportBezig] = useState(false)
@@ -917,9 +962,15 @@ export default function BiblioteekBeheer({ items }: Props) {
   const categorieen   = Array.from(new Set([...(inst.categorieen ?? STANDAARD_CATEGORIEEN), HOUTROT_CATEGORIE]))
   const categorieCodes = { [HOUTROT_CATEGORIE]: 'HR', ...(inst.categorieCodes ?? STANDAARD_CATEGORIE_CODES) }
   const fileRef = useRef<HTMLInputElement>(null)
+  const { bevestig } = useDialogen()
 
-  const handleLeegMaak = () => {
-    if (!confirm('Alle recepten en normen definitief verwijderen? Dit kan niet ongedaan gemaakt worden.')) return
+  const handleLeegMaak = async () => {
+    if (!await bevestig({
+      titel: 'Alle recepten en normen definitief verwijderen?',
+      omschrijving: 'Dit kan niet ongedaan gemaakt worden.',
+      bevestigLabel: 'Alles verwijderen',
+      destructief: true,
+    })) return
     leegMaakBibliotheek()
       .then(() => toast.success('Bibliotheek leeggemaakt'))
       .catch(err => toast.error(err instanceof Error ? err.message : 'Fout'))
@@ -929,20 +980,153 @@ export default function BiblioteekBeheer({ items }: Props) {
   // Bestaande houtrot-soorten als suggesties (datalist) bij het bewerken/aanmaken.
   const houtrotSoorten = Array.from(new Set(items.map(i => i.groep).filter((g): g is string => !!g))).sort()
 
-  const gefilterd = items.filter(item => {
-    if (categorie && item.onderdeel !== categorie) return false
-    if (zoek) {
-      const q = zoek.toLowerCase()
-      return (
-        item.full_name.toLowerCase().includes(q) ||
-        (item.item_code ?? '').toLowerCase().includes(q)
-      )
-    }
-    return true
-  })
+  const rijen: ReceptRij[] = useMemo(() => items.map(item => {
+    const arbeid    = item.labor_norms.reduce((s, n) => s + n.cost_per_unit, 0)
+    const oa        = item.material_norms.filter(n => n.norm_type === 'onderaanneming').reduce((s, n) => s + n.cost_per_unit, 0)
+    const materiaal = item.material_norms.filter(n => n.norm_type !== 'onderaanneming').reduce((s, n) => s + n.cost_per_unit, 0)
+    return { ...item, arbeid, materiaal, oa, totaal: arbeid + materiaal + oa }
+  }), [items])
 
-  const handleVerwijder = (id: string) => {
-    if (!confirm('Recept en alle normen verwijderen?')) return
+  const kolommen: KolomDefinitie<ReceptRij>[] = useMemo(() => {
+    const uniek = (waarden: (string | null | undefined)[]) =>
+      Array.from(new Set(waarden.filter((w): w is string => !!w))).sort()
+
+    return [
+      {
+        key: 'code',
+        label: 'Code',
+        vast: true,
+        breedte: 110,
+        filterType: 'tekst',
+        sorteerWaarde: r => r.item_code ?? '',
+        render: r => (
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--neutral-500)' }}>
+            {r.item_code ?? '—'}
+          </span>
+        ),
+      },
+      {
+        key: 'naam',
+        label: 'Naam',
+        breedte: 300,
+        filterType: 'tekst',
+        sorteerWaarde: r => r.full_name,
+        render: r => (
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--neutral-900)' }}>{r.full_name}</span>
+        ),
+      },
+      {
+        key: 'categorie',
+        label: 'Categorie',
+        breedte: 140,
+        filterType: 'select',
+        filterOpties: uniek(rijen.map(r => r.onderdeel)),
+        sorteerWaarde: r => r.onderdeel ?? '',
+        render: r => (
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+            background: 'var(--neutral-100)', color: 'var(--neutral-600)',
+          }}>
+            {r.onderdeel}
+          </span>
+        ),
+      },
+      {
+        key: 'eenheid',
+        label: 'Eenheid',
+        breedte: 90,
+        filterType: 'select',
+        filterOpties: uniek(rijen.map(r => r.default_unit)),
+        sorteerWaarde: r => r.default_unit ?? '',
+        render: r => <span style={{ fontSize: 12.5, color: 'var(--neutral-600)' }}>{r.default_unit ?? '—'}</span>,
+      },
+      {
+        key: 'arbeid',
+        label: 'Arbeid',
+        breedte: 110,
+        sorteerWaarde: r => r.arbeid,
+        render: r => <Bedrag waarde={r.arbeid} kleur="var(--info-700)" />,
+      },
+      {
+        key: 'materiaal',
+        label: 'Materiaal',
+        breedte: 110,
+        sorteerWaarde: r => r.materiaal,
+        render: r => <Bedrag waarde={r.materiaal} kleur="var(--error-700)" />,
+      },
+      {
+        key: 'onderaanneming',
+        label: 'Onderaanneming',
+        breedte: 130,
+        sorteerWaarde: r => r.oa,
+        render: r => <Bedrag waarde={r.oa} kleur="#7c3aed" />,
+      },
+      {
+        key: 'totaal',
+        label: 'Totaal',
+        breedte: 110,
+        sorteerWaarde: r => r.totaal,
+        render: r => <Bedrag waarde={r.totaal} vet />,
+      },
+      {
+        key: 'houtrot_soort',
+        label: 'Houtrot-soort',
+        breedte: 160,
+        standaard_zichtbaar: false,
+        filterType: 'select',
+        filterOpties: uniek(rijen.map(r => r.groep)),
+        sorteerWaarde: r => r.groep ?? '',
+        render: r => r.groep
+          ? <span style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 9999,
+              background: 'var(--warning-50)', color: 'var(--warning-700)',
+            }} title="Verschijnt in de houtrot-registratie">{r.groep}</span>
+          : <span style={{ color: 'var(--neutral-400)' }}>—</span>,
+      },
+      {
+        key: 'btw',
+        label: 'BTW',
+        breedte: 120,
+        standaard_zichtbaar: false,
+        filterType: 'select',
+        filterOpties: Object.values(BTW_LABEL),
+        sorteerWaarde: r => BTW_LABEL[r.btw_tarief ?? 'hoog'] ?? (r.btw_tarief ?? ''),
+        render: r => (
+          <span style={{ fontSize: 12, color: 'var(--neutral-600)' }}>
+            {BTW_LABEL[r.btw_tarief ?? 'hoog'] ?? r.btw_tarief}
+          </span>
+        ),
+      },
+      {
+        key: 'omschrijving',
+        label: 'Werkomschrijving',
+        breedte: 320,
+        standaard_zichtbaar: false,
+        filterType: 'tekst',
+        sorteerWaarde: r => r.description ?? '',
+        render: r => (
+          <span style={{ fontSize: 12, color: 'var(--neutral-600)' }} title={r.description ?? undefined}>
+            {r.description ?? '—'}
+          </span>
+        ),
+      },
+      {
+        key: 'aantal_normen',
+        label: 'Normregels',
+        breedte: 110,
+        standaard_zichtbaar: false,
+        sorteerWaarde: r => r.labor_norms.length + r.material_norms.length,
+        render: r => (
+          <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--neutral-600)' }}>
+            {r.labor_norms.length + r.material_norms.length}
+          </div>
+        ),
+      },
+    ]
+  }, [rijen])
+
+  const handleVerwijder = async (id: string) => {
+    if (!await bevestig({ titel: 'Recept en alle normen verwijderen?', bevestigLabel: 'Verwijderen', destructief: true })) return
     verwijderRecept(id).then(() => toast.success('Verwijderd')).catch(err => toast.error(err.message))
     if (bewerkItemId === id) setBewerkItemId(null)
   }
@@ -975,135 +1159,51 @@ export default function BiblioteekBeheer({ items }: Props) {
         description={`${items.length} recepten — arbeid en materiaal per activiteit`}
       />
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text" value={zoek} onChange={e => setZoek(e.target.value)}
-            placeholder="Zoeken op naam of code..."
-            className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
-          />
-        </div>
-
-        <div className="relative">
-          <select value={categorie} onChange={e => setCategorie(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
-            <option value="">Alle categorieën</option>
-            {categorieen.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" size="md" asChild>
-            <a href="/everts-calc/api/bibliotheek/sjabloon" download="import-sjabloon.xlsx" className="whitespace-nowrap">
-              <Download className="w-4 h-4" /> Sjabloon
-            </a>
-          </Button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => fileRef.current?.click()}
-            disabled={importBezig}
-            className="whitespace-nowrap"
-          >
-            {importBezig ? <><Spinner size="sm" /> Importeren...</> : <><Upload className="w-4 h-4" /> Importeer Excel</>}
-          </Button>
-          <Button
-            variant="outline"
-            size="md"
-            onClick={handleLeegMaak}
-            className="border-red-200 text-red-500 hover:bg-red-50 whitespace-nowrap"
-            title="Alle recepten verwijderen"
-          >
-            <Trash2 className="w-4 h-4" /> Leeg maken
-          </Button>
-          <Button size="md" onClick={() => setNieuwOpen(true)} className="whitespace-nowrap">
-            <Plus className="w-4 h-4" /> Nieuw recept
-          </Button>
-        </div>
+      <div style={DS_TOKENS}>
+        <OverzichtTabel
+          scherm="everts-calc-recepten"
+          data={rijen}
+          kolommen={kolommen}
+          layouts={layouts}
+          user_id={user_id}
+          selecteerbaar={false}
+          eenregelig
+          dicht
+          beginSortering={[{ id: 'code', desc: false }]}
+          onRijKlik={r => setBewerkItemId(r.id)}
+          acties={
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <a href="/everts-calc/api/bibliotheek/sjabloon" download="import-sjabloon.xlsx" className="whitespace-nowrap">
+                  <Download className="w-3.5 h-3.5" /> Sjabloon
+                </a>
+              </Button>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={importBezig}
+                className="whitespace-nowrap"
+              >
+                {importBezig ? <><Spinner size="sm" /> Importeren…</> : <><Upload className="w-3.5 h-3.5" /> Excel</>}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLeegMaak}
+                className="border-error-300 text-error-700 hover:bg-error-50 whitespace-nowrap"
+                title="Alle recepten verwijderen"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Leeg maken
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setNieuwOpen(true)} className="whitespace-nowrap">
+                <Plus className="w-3.5 h-3.5" /> Nieuw recept
+              </Button>
+            </>
+          }
+        />
       </div>
-
-      {/* Tabel */}
-      <Card>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-28">Code</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Naam</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-20">Eenh</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-32">Categorie</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-24">Arbeid</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-24">Materiaal</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-24">OA</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-24">Totaal</th>
-              <th className="w-20" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {gefilterd.map(item => {
-              const arbeid    = item.labor_norms.reduce((s, n) => s + n.cost_per_unit, 0)
-              const oa        = item.material_norms.filter(n => n.norm_type === 'onderaanneming').reduce((s, n) => s + n.cost_per_unit, 0)
-              const materiaal = item.material_norms.filter(n => n.norm_type !== 'onderaanneming').reduce((s, n) => s + n.cost_per_unit, 0)
-              const totaal    = arbeid + materiaal + oa
-
-              return (
-                <tr key={item.id}
-                  className={`group hover:bg-slate-50 transition-colors ${!item.active ? 'opacity-40' : ''}`}>
-                  <td className="px-4 py-3">
-                    <span className=" text-xs text-slate-400">{item.item_code ?? '—'}</span>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-800">{item.full_name}</td>
-                  <td className="px-4 py-3 text-slate-500">{item.default_unit ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full w-fit">
-                        {item.onderdeel}
-                      </span>
-                      {item.btw_tarief && item.btw_tarief !== 'hoog' && (
-                        <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded w-fit">
-                          BTW {item.btw_tarief}
-                        </span>
-                      )}
-                      {item.groep && (
-                        <span className="text-xs px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded w-fit" title="Verschijnt in de houtrot-app">
-                          Houtrot · {item.groep}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right  text-blue-700">{formatEuro(arbeid)}</td>
-                  <td className="px-4 py-3 text-right  text-red-700">{formatEuro(materiaal)}</td>
-                  <td className="px-4 py-3 text-right  text-purple-700">{oa > 0 ? formatEuro(oa) : <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3 text-right  font-semibold text-everts-dark">{formatEuro(totaal)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon-sm" onClick={() => setBewerkItemId(item.id)} title="Bewerken">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => handleVerwijder(item.id)}
-                        className="text-slate-400 hover:text-red-500 hover:bg-red-50" title="Verwijderen">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-
-        {gefilterd.length === 0 && (
-          <EmptyState
-            icon={<BookOpen className="w-6 h-6" />}
-            title="Geen recepten gevonden"
-            description={zoek ? 'Probeer een andere zoekterm' : undefined}
-            tone="neutral"
-          />
-        )}
-      </Card>
 
       {bewerkItem && (
         <BewerkPaneel
@@ -1112,6 +1212,7 @@ export default function BiblioteekBeheer({ items }: Props) {
           categorieen={categorieen}
           houtrotSoorten={houtrotSoorten}
           onSluiten={() => setBewerkItemId(null)}
+          onVerwijder={() => handleVerwijder(bewerkItem.id)}
         />
       )}
 

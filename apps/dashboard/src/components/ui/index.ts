@@ -15,6 +15,7 @@ export * from './page-header'
 // Feedback & states
 export * from './alert'
 export * from './alert-dialog'
+export * from './dialogen'
 export * from './spinner'
 export * from './skeleton'
 export * from './empty-state'

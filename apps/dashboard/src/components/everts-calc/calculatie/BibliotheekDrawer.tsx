@@ -77,8 +77,10 @@ export default function BibliotheekDrawer({ type, open, onClose }: Props) {
             </div>
           )}
 
+          {/* In de lade zonder opgeslagen layouts: kolommen aanpassen kan wel,
+              bewaren hoort thuis op de bibliotheekpagina zelf. */}
           {!laden && type === 'recepten' && receptenData && (
-            <BiblioteekBeheer items={receptenData} />
+            <BiblioteekBeheer items={receptenData} layouts={[]} user_id={null} />
           )}
 
           {!laden && type === 'schilderwerk' && schilderwerkData && (
@@ -90,7 +92,7 @@ export default function BibliotheekDrawer({ type, open, onClose }: Props) {
           )}
 
           {!laden && type === 'materialen' && (
-            <MaterialenBibliotheek />
+            <MaterialenBibliotheek layouts={[]} user_id={null} />
           )}
         </DrawerBody>
       </DrawerContent>
