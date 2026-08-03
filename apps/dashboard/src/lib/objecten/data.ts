@@ -10,7 +10,10 @@
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import type { VastgoedObject, VastgoedObjectRol, Hoofdstatus } from '@everts/database'
-import { adresWijktAf } from './adres'
+import { VASTGOED_OBJECT_ROLLEN } from '@everts/database'
+import { FEATURES } from '@/lib/features'
+import { adresWijktAf, objectAdresRegel } from './adres'
+import type { RelatieObject } from './types'
 
 const rond = (n: number): number => Math.round(n * 100) / 100
 
@@ -338,6 +341,32 @@ export async function zoekObjecten(term: string, limiet = 20): Promise<VastgoedO
   }
   const { data } = await query.order('naam', { ascending: true }).limit(limiet)
   return (data ?? []) as VastgoedObject[]
+}
+
+/**
+ * Objecten van een relatie in de vorm die het blok op de relatiepagina toont.
+ *
+ * Geeft een lege lijst terug als objectenbeheer uit staat of de gebruiker er geen
+ * leesrecht op heeft — het blok verdwijnt dan gewoon, in plaats van de hele
+ * relatiepagina te laten struikelen over een recht dat met relaties niets te maken heeft.
+ */
+export async function getRelatieObjecten(relatieId: string): Promise<RelatieObject[]> {
+  if (!FEATURES.objectenbeheer) return []
+  try {
+    await vereisRecht('objectenbeheer', 'lezen')
+  } catch {
+    return []
+  }
+
+  const objecten = await getObjectenVoorRelatie(relatieId)
+  return objecten.map((o) => ({
+    id: o.id,
+    naam: o.naam,
+    objectnummer: o.objectnummer,
+    adres: objectAdresRegel(o),
+    rollen: o.rollen.map((r) => VASTGOED_OBJECT_ROLLEN.find((x) => x.key === r)?.label ?? r),
+    aantalDossiers: o.aantal_dossiers,
+  }))
 }
 
 /**

@@ -40,6 +40,7 @@ import {
 } from '@/lib/relaties/actions'
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { dossierHref } from '@/lib/dossiers/href'
+import type { RelatieObject } from '@/lib/objecten/types'
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
@@ -885,6 +886,40 @@ function OmzetBlok({ omzet }: { omzet: OmzetData }) {
   )
 }
 
+/* ─── Vastgoedobjecten ───────────────────────────────────────────────── */
+
+function ObjectenBlok({ objecten }: { objecten: RelatieObject[] }) {
+  return (
+    <Blok titel={`Objecten (${objecten.length})`}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {objecten.map((o, i) => (
+          <Link
+            key={o.id}
+            href={`/objecten/${o.id}`}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              padding: '10px 0', textDecoration: 'none', color: 'inherit',
+              borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{o.naam}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                {o.objectnummer}
+                {o.adres ? ` · ${o.adres}` : ''}
+                {o.rollen.length > 0 ? ` · ${o.rollen.join(', ')}` : ''}
+              </div>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--fg-soft)', whiteSpace: 'nowrap' }}>
+              {o.aantalDossiers} {o.aantalDossiers === 1 ? 'dossier' : 'dossiers'}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Blok>
+  )
+}
+
 /* ─── Placeholder blokken ────────────────────────────────────────────── */
 
 function PlaceholderBlok({ titel }: { titel: string }) {
@@ -1182,6 +1217,8 @@ type Props = {
   inkoopPrijsafspraken: RelatieInkoopPrijsafspraak[]
   contactpersonen: (ContactpersoonOrganisatie & { contactpersoon: any })[]
   omzet: OmzetData
+  /** Leeg als objectenbeheer uit staat of de gebruiker er geen leesrecht op heeft. */
+  objecten: RelatieObject[]
 }
 
 export default function RelatieDetailView({
@@ -1195,6 +1232,7 @@ export default function RelatieDetailView({
   inkoopPrijsafspraken,
   contactpersonen,
   omzet,
+  objecten,
 }: Props) {
   const isOpdrachtgever = relatie.types.includes('opdrachtgever')
   const isLeverancier   = relatie.types.includes('leverancier')
@@ -1236,6 +1274,11 @@ export default function RelatieDetailView({
 
           {/* Altijd: Opmerkingen */}
           <OmerkingenBlok relatie={relatie} />
+
+          {/* Vastgoedobjecten. Bewust buiten de type-secties: bij een complex is de
+              beheerder vaak een andere partij dan de opdrachtgever, en die hoeft niet
+              als 'opdrachtgever' getypeerd te zijn om er objecten aan te hebben hangen. */}
+          {objecten.length > 0 && <ObjectenBlok objecten={objecten} />}
 
           {/* Type-specifieke secties */}
           {isOpdrachtgever && (
