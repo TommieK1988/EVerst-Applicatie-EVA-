@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { Progress } from '@/components/ui/progress'
 import type { ManagementProject } from '@/lib/dashboard/aggregaties'
 import { bewaarVoortgang } from '@/lib/dossiers/voortgang'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 
 /* ── Formatters ──────────────────────────────────────────────────── */
 
@@ -35,7 +36,7 @@ export function filiaalKleur(filiaal: string | null | undefined): string {
 export function openDossierTab(p: ManagementProject) {
   if (!p.dossier_id || !p.dossier_sectie) return
   // Vanuit Management direct naar het Financieel-tab van het dossier.
-  window.open(`/${p.dossier_sectie}/${p.dossier_id}/financieel`, '_blank', 'noopener')
+  openDossierInNieuwTabblad(`/${p.dossier_sectie}/${p.dossier_id}/financieel`)
 }
 
 /* ── Cel-renderers ───────────────────────────────────────────────── */

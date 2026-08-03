@@ -1,11 +1,11 @@
 'use client'
 import React from 'react'
-import { useRouter } from 'next/navigation'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { getDossierSubstatus } from './types'
 import { isVerlopen } from './kaart-indicatoren'
+import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { IconPlusDS } from '@/components/eva/Icons'
@@ -19,13 +19,6 @@ const STATUS_COLORS = [
   'var(--success-500)',
   'var(--error-500)',
 ]
-
-const SECTIE_ROUTE: Record<DossierSectie, string> = {
-  aanvraag:    'aanvragen',
-  offerte:     'offertes',
-  opdracht:    'opdrachten',
-  servicedesk: 'servicedesk',
-}
 
 const HOOFDSTATUS_LABEL: Record<string, string> = {
   aanvraag: 'Aanvraag',
@@ -178,7 +171,6 @@ export function DossierLijst({
   onDossierKlik,
   scherm: schermProp,
 }: Props) {
-  const router = useRouter()
   const [modalOpen, setModalOpen] = React.useState(false)
   const [data, setData] = React.useState<DossierRij[]>(dossiers)
   React.useEffect(() => { setData(dossiers) }, [dossiers])
@@ -739,7 +731,7 @@ export function DossierLijst({
     if (onDossierKlik) {
       onDossierKlik(d)
     } else if (sectie) {
-      router.push(`/${SECTIE_ROUTE[sectie]}/${d.id}/informatie`)
+      openDossierInNieuwTabblad(dossierPad(sectie, d.id))
     }
   }
 

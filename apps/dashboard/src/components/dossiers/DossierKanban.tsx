@@ -12,6 +12,7 @@ import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschap
 import toast from 'react-hot-toast'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
+import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -23,13 +24,6 @@ const STATUS_COLORS = [
   'var(--success-500)',
   'var(--error-500)',
 ]
-
-const SECTIE_ROUTE: Record<DossierSectie, string> = {
-  aanvraag:   'aanvragen',
-  offerte:    'offertes',
-  opdracht:   'opdrachten',
-  servicedesk: 'servicedesk',
-}
 
 /**
  * Bepaalt welk veld als kanban-kolomsleutel wordt gebruikt.
@@ -63,7 +57,6 @@ export function DossierKanban<K extends string>({
   kolomKeyModus = 'auto', onStatusChange,
 }: Props<K>) {
   const router    = useRouter()
-  const routeBase = SECTIE_ROUTE[sectie]
 
   const [dossiers,    setDossiers]    = React.useState<DossierRij[]>(initieel)
   const [draggingId,  setDraggingId]  = React.useState<string | null>(null)
@@ -313,7 +306,7 @@ export function DossierKanban<K extends string>({
                         dossier={d}
                         sectie={sectie}
                         draggingActief={draggingId != null}
-                        onClick={() => { if (draggingId) return; router.push(`/${routeBase}/${d.id}/informatie`) }}
+                        onClick={() => { if (draggingId) return; openDossierInNieuwTabblad(dossierPad(sectie, d.id)) }}
                       />
                     </div>
                   ))}

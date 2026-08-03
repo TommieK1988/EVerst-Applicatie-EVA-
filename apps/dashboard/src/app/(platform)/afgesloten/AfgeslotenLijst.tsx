@@ -1,10 +1,10 @@
 'use client'
 import React from 'react'
-import { useRouter } from 'next/navigation'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
 import { getDossierSubstatus } from '@/components/dossiers/types'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import type { DossierRij } from '@/components/dossiers/types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 
@@ -53,7 +53,6 @@ type Props = {
 }
 
 export function AfgeslotenLijst({ dossiers, layouts, user_id }: Props) {
-  const router = useRouter()
   const [slicer, setSlicer] = React.useState<SlicerWaarde>({})
 
   const data = React.useMemo(() => {
@@ -164,7 +163,7 @@ export function AfgeslotenLijst({ dossiers, layouts, user_id }: Props) {
         beginSortering={[{ id: 'laatst_bewerkt', desc: true }]}
         onRijKlik={d => {
           const segment = HOOFDSTATUS_ROUTE[d.hoofdstatus] ?? 'opdrachten'
-          router.push(`/${segment}/${d.id}/informatie`)
+          openDossierInNieuwTabblad(`/${segment}/${d.id}/informatie`)
         }}
       />
     </div>

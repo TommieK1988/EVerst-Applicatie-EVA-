@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 
 import type {
   Medewerker, MedewerkerAfwezigheid, MedewerkerAfwezigheidType, MedewerkerRooster,
@@ -1275,7 +1276,7 @@ export default function MedewerkerTimeline({
 
   function openDossier(entry: EntryMetDossier) {
     if (!entry.dossier_id) { toast.error('Geen dossier gekoppeld aan dit planitem'); return }
-    router.push(`/opdrachten/${entry.dossier_id}/informatie`)
+    openDossierInNieuwTabblad(`/opdrachten/${entry.dossier_id}/informatie`)
   }
 
   async function onDragEnd(event: DragEndEvent) {

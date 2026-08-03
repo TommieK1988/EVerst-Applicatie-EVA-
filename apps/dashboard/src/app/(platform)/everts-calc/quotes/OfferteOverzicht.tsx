@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import QuoteStatusBadge from '@/components/everts-calc/quotes/QuoteStatusBadge'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import { Button } from '@/components/ui/button'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import type { OfferteRij } from '@/lib/everts-calc/services/quotes'
@@ -243,7 +244,12 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       kolommen={kolommen}
       layouts={layouts}
       user_id={user_id}
-      onRijKlik={q => router.push(offerteRoute(q))}
+      onRijKlik={q => {
+        // Een gekoppeld dossier opent in een nieuw tabblad; de losse quote-editor niet.
+        const route = offerteRoute(q)
+        if (q.dossier_id && q.dossier_hoofdstatus) openDossierInNieuwTabblad(route)
+        else router.push(route)
+      }}
       acties={acties}
     />
   )

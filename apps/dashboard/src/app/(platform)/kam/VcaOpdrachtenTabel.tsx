@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import type { VcaOpdrachtRij } from './actions'
 
 type Props = { rijen: VcaOpdrachtRij[] }
@@ -67,6 +68,7 @@ export function VcaOpdrachtenTabel({ rijen }: Props) {
                 <td style={cel}>
                   <Link
                     href={`/opdrachten/${r.dossier_id}/vca`}
+                    {...NAAR_NIEUW_TABBLAD}
                     style={{ display: 'block', textDecoration: 'none' }}
                   >
                     {r.dossiernummer && (

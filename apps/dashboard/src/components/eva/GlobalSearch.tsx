@@ -3,7 +3,19 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { IconSparkle, IconChat } from './Icons'
+import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import type { GroupedResults, SearchHit, MedewerkerProfiel } from '@/lib/search/global'
+
+/**
+ * Een dossier uit de snelzoeker opent in een nieuw tabblad (zoals overal in EVA);
+ * relaties, contactpersonen en particulieren blijven in het huidige tabblad —
+ * daar is de zoeker juist een navigatiemiddel.
+ */
+function gaNaarHit(hit: SearchHit, router: ReturnType<typeof useRouter>) {
+  if (!hit.href) return
+  if (hit.type === 'dossier') openDossierInNieuwTabblad(hit.href)
+  else router.push(hit.href)
+}
 
 /* ─── Context (⌘K + de TopBar-popup delen één open-status) ───────────────── */
 
@@ -254,7 +266,7 @@ export function EvaSearchField({
             term={term}
             results={results}
             loading={loading}
-            onNavigate={(hit) => { onDone?.(); router.push(hit.href!) }}
+            onNavigate={(hit) => { onDone?.(); gaNaarHit(hit, router) }}
           />
         </div>
       )}
@@ -328,7 +340,7 @@ export function TopbarZoek() {
             term={term}
             results={results}
             loading={loading}
-            onNavigate={(hit) => { close(); router.push(hit.href!) }}
+            onNavigate={(hit) => { close(); gaNaarHit(hit, router) }}
           />
         </div>
       )}
