@@ -134,16 +134,16 @@ type ComponentBron = {
 }
 
 /**
- * De vier kostencomponenten. Elk krijgt twee smalle subkolommen naast elkaar:
- * Prognose (begroot/verwacht, uit Bouw7 `prognosisAmount`) en Besteed (geboekt bij
- * leveranciers, uit `costAmount`). Voorheen toonde de tabel alléén besteed, waardoor de
- * prognose van OA/materiaal/inkoop enkel in het projecttotaal zichtbaar was.
+ * De vier kostencomponenten. Elk krijgt twee smalle subkolommen naast elkaar: Prognose
+ * (begroot/verwacht) en Geboekt (arbeid + ontvangen inkoopfacturen). De vier geboekt-kolommen
+ * tellen per rij exact op tot de kolom Geboekte kosten — openstaande inkooporders en
+ * onderaannemerscontracten zitten er bewust niet in (die staan op het Inkoop-tab).
  */
-const COMPONENTEN: { kop: string; prognose: (r: ComponentBron) => number; besteed: (r: ComponentBron) => number }[] = [
-  { kop: 'Arbeid',            prognose: (r) => r.arbeidPrognose,               besteed: (r) => r.arbeidskosten },
-  { kop: 'Onderaanneming',    prognose: (r) => r.onderaannemingPrognose,       besteed: (r) => r.onderaanneming },
-  { kop: 'Materiaal',         prognose: (r) => r.materiaalPrognose,            besteed: (r) => r.materiaal },
-  { kop: 'Inkoop/Mat./Afval', prognose: (r) => r.inkoopMaterieelAfvalPrognose, besteed: (r) => r.inkoopMaterieelAfval },
+const COMPONENTEN: { kop: string; prognose: (r: ComponentBron) => number; geboekt: (r: ComponentBron) => number }[] = [
+  { kop: 'Arbeid',            prognose: (r) => r.arbeidPrognose,               geboekt: (r) => r.arbeidskosten },
+  { kop: 'Onderaanneming',    prognose: (r) => r.onderaannemingPrognose,       geboekt: (r) => r.onderaanneming },
+  { kop: 'Materiaal',         prognose: (r) => r.materiaalPrognose,            geboekt: (r) => r.materiaal },
+  { kop: 'Inkoop/Mat./Afval', prognose: (r) => r.inkoopMaterieelAfvalPrognose, geboekt: (r) => r.inkoopMaterieelAfval },
 ]
 
 /** Totaal aantal kolommen incl. bewakingscode (voor de hoofdstuk-header colSpan). */
@@ -161,11 +161,11 @@ const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: 
   </td>
 )
 
-/** Twee smalle cellen (prognose | besteed) voor één kostencomponent. */
-const ComponentCellen = ({ prognose, besteed, vet }: { prognose: number; besteed: number; vet?: boolean }) => (
+/** Twee smalle cellen (prognose | geboekt) voor één kostencomponent. */
+const ComponentCellen = ({ prognose, geboekt, vet }: { prognose: number; geboekt: number; vet?: boolean }) => (
   <>
     <TD compact vet={vet} groepStart>{fmt(prognose)}</TD>
-    <TD compact vet={vet}>{fmt(besteed)}</TD>
+    <TD compact vet={vet}>{fmt(geboekt)}</TD>
   </>
 )
 
@@ -178,7 +178,7 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
     <TD compact>{fmt(r.meerwerk)}</TD>
     <TD compact>{fmt(r.prognose)}</TD>
     {COMPONENTEN.map((c) => (
-      <ComponentCellen key={c.kop} prognose={c.prognose(r)} besteed={c.besteed(r)} />
+      <ComponentCellen key={c.kop} prognose={c.prognose(r)} geboekt={c.geboekt(r)} />
     ))}
     <TD compact accent={r.geboekteKosten > 0} groepStart>{fmt(r.geboekteKosten)}</TD>
     <TD compact kleur={r.prognose - r.geboekteKosten < 0 ? ROOD : undefined}>{fmt(r.prognose - r.geboekteKosten)}</TD>
@@ -251,7 +251,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               {COMPONENTEN.map((c) => (
                 <Fragment key={c.kop}>
                   <TH right compact groepStart>Progn.</TH>
-                  <TH right compact>Best.</TH>
+                  <TH right compact>Geboekt</TH>
                 </Fragment>
               ))}
             </tr>
@@ -283,7 +283,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.meerwerk), true)}</TD>
                   <TD compact vet>{fmt(sub(h.regels, (r) => r.prognose), true)}</TD>
                   {COMPONENTEN.map((c) => (
-                    <ComponentCellen key={c.kop} vet prognose={sub(h.regels, c.prognose)} besteed={sub(h.regels, c.besteed)} />
+                    <ComponentCellen key={c.kop} vet prognose={sub(h.regels, c.prognose)} geboekt={sub(h.regels, c.geboekt)} />
                   ))}
                   <TD compact vet groepStart>{fmt(sub(h.regels, (r) => r.geboekteKosten))}</TD>
                   <TD compact vet kleur={sub(h.regels, (r) => r.prognose - r.geboekteKosten) < 0 ? ROOD : undefined}>{fmt(sub(h.regels, (r) => r.prognose - r.geboekteKosten))}</TD>
@@ -298,7 +298,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               <TD compact vet>{fmt(t.meerwerk, true)}</TD>
               <TD compact vet>{fmt(t.prognose, true)}</TD>
               {COMPONENTEN.map((c) => (
-                <ComponentCellen key={c.kop} vet prognose={c.prognose(t)} besteed={c.besteed(t)} />
+                <ComponentCellen key={c.kop} vet prognose={c.prognose(t)} geboekt={c.geboekt(t)} />
               ))}
               <TD compact vet accent={t.geboekteKosten > 0} groepStart>{fmt(t.geboekteKosten)}</TD>
               <TD compact vet kleur={t.prognose - t.geboekteKosten < 0 ? ROOD : undefined}>{fmt(t.prognose - t.geboekteKosten)}</TD>
@@ -311,13 +311,14 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
         }}>
           Live uit Bouw7-projectbewaking. Per component staan <strong>Prognose</strong> (begrote/verwachte
-          kosten) en <strong>Besteed</strong> naast elkaar. Nog te verwachten = Tot. prognose − geboekte
+          kosten) en <strong>Geboekt</strong> naast elkaar. Nog te verwachten = Tot. prognose − geboekte
           kosten (rood = overschreden). % gereed = prognose-gewogen gemiddelde over de kostensoorten.
           Uren staan op het Uren-tab.
           <br />
-          <strong>Besteed</strong> (per component) telt ook <em>afgeroepen maar nog niet gefactureerde</em>
-          leverbonnen mee — dus wat er vastligt bij leveranciers. <strong>Geboekte kosten</strong> telt
-          alleen arbeid + inkoop mét inkoopfactuur — dus wat écht geboekt is.
+          <strong>Geboekt</strong> is alleen wat écht geboekt is: eigen arbeid plus de <em>ontvangen
+          inkoopfacturen</em>. De vier componenten tellen dus precies op tot <strong>Geboekte kosten</strong>.
+          Wat al wel besteld of afgeroepen is maar nog niet gefactureerd — inkooporders en
+          onderaannemerscontracten — staat op het <strong>Inkoop</strong>-tab.
         </div>
       </CardBody>
     </Card>

@@ -1340,15 +1340,18 @@ export type BewakingRegel = {
   prognose: number             // 2. Totale prognose
   prognoseUren: number         // 3. Aantal prognose-uren (arbeid)
   geboekteUren: number         // 4. Geboekte/bestede uren (arbeid)
-  // Per component staan prognose (begroot/verwacht) én besteed (geboekt) naast elkaar.
+  // Per component staan prognose (begroot/verwacht) én geboekt naast elkaar.
+  // LET OP: de geboekt-velden tellen ALLEEN ontvangen inkoopfacturen mee (arbeid uitgezonderd,
+  // die is altijd geboekt) — géén openstaande inkooporders of onderaannemerscontracten. Zo is
+  // arbeid + onderaanneming + materiaal + inkoop/mat./afval per regel exact `geboekteKosten`.
   arbeidPrognose: number              // Arbeid — prognose (kostensoort 1, prognosisAmount)
-  arbeidskosten: number               // Arbeid — besteed (kostensoort 1, costAmount)
+  arbeidskosten: number               // Arbeid — geboekt (kostensoort 1, costAmount = urenregistratie)
   onderaannemingPrognose: number      // Onderaanneming — prognose (kostensoort 3)
-  onderaanneming: number              // Onderaanneming — besteed (kostensoort 3)
+  onderaanneming: number              // Onderaanneming — geboekt (inkoopfacturen purchaseType 3)
   materiaalPrognose: number           // Materiaal — prognose (kostensoort 5)
-  materiaal: number                   // Materiaal — besteed (kostensoort 5)
+  materiaal: number                   // Materiaal — geboekt (inkoopfacturen purchaseType 5)
   inkoopMaterieelAfvalPrognose: number // Inkoop + Materieel + Afval — prognose (kostensoort 2/4/6)
-  inkoopMaterieelAfval: number         // Inkoop + Materieel + Afval — besteed (kostensoort 2/4/6)
+  inkoopMaterieelAfval: number         // Inkoop + Materieel + Afval — geboekt (overige inkoopfacturen)
   verwachteKosten: number      // 9. Alle verwachte-kosten-regels (contract-order-lines, incl. arbeid)
   geboekteKosten: number       // 10. Geboekte kosten = arbeid + inkoop mét inkoopfactuur
   progress: number | null      // 11. % gereed
@@ -1410,6 +1413,12 @@ const UNCODED_HOOFDSTUK_ID = -1
  * (zie lib/bouw7/ENDPOINTS.md). Geverifieerd: `costAmount` per kostensoort == de realisatie
  * in `/project-financial`. Eén code kan onder meerdere kostensoorten begroot zijn — begroting,
  * prognose en kosten worden dan per code gesommeerd.
+ *
+ * **Geboekt ≠ costAmount.** De begroting/prognose komt uit de projectbewaking, maar de geboekte
+ * kant van onderaanneming/materiaal/inkoop komt uit de ontvangen inkoopfacturen. `costAmount`
+ * telt namelijk óók afgeroepen inkooporders en onderaannemerscontracten mee (verplichtingen
+ * zonder factuur); die stonden dan wél in de componentkolommen maar niet in Geboekte kosten,
+ * waardoor de tabel horizontaal noch verticaal optelde. Verplichtingen staan op het Inkoop-tab.
  *
  * Géén opslag — alles wordt live opgehaald bij het openen van de tab.
  */
@@ -1527,7 +1536,6 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       }
 
       const budget = toGetal(e.budgetAmount)
-      const kosten = toGetal(e.costAmount)      // besteed (costAmount)
       const prognose = toGetal(e.prognosisAmount)
       r.begroot += budget
       r.meerwerk += toGetal(e.additionalWorkAmount)
@@ -1535,12 +1543,14 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       r.prognoseUren += toGetal(e.hourInfo?.prognosisHours)
       r.geboekteUren += toGetal(e.hourInfo?.costHours)
 
-      // Per component prognose én besteed apart bijhouden (voorheen alleen besteed —
-      // waardoor de prognose van OA/materiaal/inkoop enkel in het projecttotaal zichtbaar was).
-      if (ct === 1)      { r.arbeidPrognose += prognose;              r.arbeidskosten += kosten }
-      else if (ct === 3) { r.onderaannemingPrognose += prognose;      r.onderaanneming += kosten }
-      else if (ct === 5) { r.materiaalPrognose += prognose;           r.materiaal += kosten }
-      else               { r.inkoopMaterieelAfvalPrognose += prognose; r.inkoopMaterieelAfval += kosten } // 2=Inkoop, 4=Materieel, 6=Afval
+      // Prognose per component uit de projectbewaking. De geboekt-kant komt NIET uit `costAmount`:
+      // die telt ook afgeroepen inkooporders en onderaannemerscontracten mee (verplichtingen zonder
+      // factuur), waardoor de componenten niet optelden tot de kolom Geboekte kosten. Alleen arbeid
+      // komt hier vandaan — uren zijn altijd geboekt en kennen geen inkoopfactuur.
+      if (ct === 1)      { r.arbeidPrognose += prognose;               r.arbeidskosten += toGetal(e.costAmount) }
+      else if (ct === 3) { r.onderaannemingPrognose += prognose }
+      else if (ct === 5) { r.materiaalPrognose += prognose }
+      else               { r.inkoopMaterieelAfvalPrognose += prognose } // 2=Inkoop, 4=Materieel, 6=Afval
 
       // % gereed: prognose-gewogen gemiddelde over de kostensoorten (per code én projectbreed).
       // Kostensoorten met prognose 0 (weggestreept) tellen niet mee in de weging.
@@ -1575,11 +1585,11 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
 
     // Geboekte kosten = arbeid (altijd geboekt) + inkoop mét ONTVANGEN inkoopfactuur.
     // Een afgeroepen bon (uit een contract) verschijnt in Bouw7 als concept-inkoopfactuur ZONDER
-    // factuurnummer. Dat is een verplichting (telt in de kolom Besteed/costAmount), geen geboekte
-    // kost — pas als de leverancier écht factureert komt er een factuurnummer bij. Alleen facturen
-    // mét factuurnummer meetellen (conventie in de codebase: concept = geen factuurnummer).
+    // factuurnummer. Dat is een verplichting (telt wél in `costAmount`), geen geboekte kost — pas
+    // als de leverancier écht factureert komt er een factuurnummer bij. Alleen facturen mét
+    // factuurnummer meetellen (conventie in de codebase: concept = geen factuurnummer).
     // Dedupe op deliveryTicket.id: termijn-facturen verwijzen naar dezelfde bon.
-    const gefactureerdeBon = new Map<number, { code: string; chapterId: number | null; chapterNaam: string | null; naam: string | null; bedrag: number }>()
+    const gefactureerdeBon = new Map<number, { code: string; chapterId: number | null; chapterNaam: string | null; naam: string | null; bedrag: number; purchaseType: number | null }>()
     for (const inv of invoices) {
       const dt = inv.deliveryTicket
       if (!dt?.id) continue
@@ -1592,15 +1602,23 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
         chapterNaam: c?.code ? (c.chapter?.name ?? null) : 'Kosten zonder bewaking',
         naam: c?.code ? (c.name ?? null) : 'Kosten zonder bewaking',
         bedrag: toGetal(dt.cost),
+        purchaseType: dt.purchaseType ?? null,
       })
     }
     // Toewijzen aan de juiste (hoofdstuk+code)-regel en optellen per regel-object. Voorheen
     // ging dit per code, waardoor dezelfde code in élk hoofdstuk het volledige gefactureerde
     // bedrag kreeg — een code in 3 hoofdstukken telde de inkoop dus 3× → te hoge geboekte kosten.
-    const gefactureerdPerRegel = new Map<BewakingRegel, number>()
+    //
+    // De bon draagt ook zijn `purchaseType` (3 = onderaanneming, 5 = materiaal, rest = inkoop/
+    // materieel/afval). Daarmee landt élke gefactureerde euro in precies één componentkolom, zodat
+    // arbeid + onderaanneming + materiaal + inkoop per regel exact de geboekte kosten opleveren.
+    // Arbeid-facturen (purchaseType 1, bv. ZZP via een inkoopfactuur) vallen bewust in de
+    // rest-emmer: `arbeidskosten` blijft zo puur de urenregistratie, waar het Uren-tab op rekent.
     for (const b of gefactureerdeBon.values()) {
       const r = vindOfMaak(b.code, b.chapterId, b.chapterNaam, b.naam)
-      gefactureerdPerRegel.set(r, (gefactureerdPerRegel.get(r) ?? 0) + b.bedrag)
+      if (b.purchaseType === 3)      r.onderaanneming += b.bedrag
+      else if (b.purchaseType === 5) r.materiaal += b.bedrag
+      else                           r.inkoopMaterieelAfval += b.bedrag
     }
 
     // Verwachte kosten (#9) = totaal van alle contract-order-lines per code (incl. arbeid).
@@ -1617,10 +1635,11 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       )
     }
 
-    // Afgeleide kolommen per regel toekennen.
+    // Afgeleide kolommen per regel toekennen. Geboekte kosten = de vier componentkolommen bij
+    // elkaar — per definitie gelijk aan arbeid + alles mét inkoopfactuur.
     for (const r of regelMap.values()) {
       const code = r.code ?? GEEN
-      r.geboekteKosten = r.arbeidskosten + (gefactureerdPerRegel.get(r) ?? 0)
+      r.geboekteKosten = r.arbeidskosten + r.onderaanneming + r.materiaal + r.inkoopMaterieelAfval
       r.verwachteKosten = verwachtPerCode.get(code) ?? 0
     }
 
