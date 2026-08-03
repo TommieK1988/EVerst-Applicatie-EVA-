@@ -10,7 +10,7 @@ import {
   IconFacturen, IconInkoop, IconUren,
   IconKam,
   IconSjablonen, IconWagenpark, IconEvertsCalc,
-  IconFormulieren, IconMaterieel, IconToolbox,
+  IconFormulieren, IconMaterieel, IconToolbox, IconObjecten,
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -58,6 +58,10 @@ const NAV: NavEntry[] = [
 
 const BEHEER: NavEntry[] = [
   { href: '/relaties',    label: 'Relaties',    Icon: IconRelaties,    module: 'relaties'    },
+  // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).
+  ...(FEATURES.objectenbeheer
+    ? [{ href: '/objecten', label: 'Objecten', Icon: IconObjecten, module: 'objectenbeheer' as RechtenModule }]
+    : []),
   { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers, module: 'medewerkers' },
   { href: '/wagenpark',   label: 'Wagenpark',   Icon: IconWagenpark,   module: 'wagenpark'   },
   { href: '/kam', label: 'KAM/VGM', Icon: IconKam, module: 'kam' },
