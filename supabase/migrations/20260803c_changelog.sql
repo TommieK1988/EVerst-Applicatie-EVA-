@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-03','opgelost','Financieel','Geboekte kosten tellen weer op in de bewakingstabel',
+   'Op het Financieel-tab van een opdracht telden de bedragen per kostensoort niet op tot de kolom Geboekte kosten. Dat kwam doordat bestelde inkooporders en onderaannemerscontracten al meetelden terwijl er nog geen factuur was. De kolom heet nu Geboekt en laat alleen eigen arbeid plus ontvangen inkoopfacturen zien, zodat de rijen en kolommen precies kloppen. Wat wel besteld maar nog niet gefactureerd is, vind je op het Inkoop-tab.');
