@@ -8,8 +8,8 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
+import { vereisRecht } from '@/lib/auth/rechten'
 import type { VastgoedObject, VastgoedObjectRol, Hoofdstatus } from '@everts/database'
-import { getGoedgekeurdMeerwerkExclBatch } from '@/lib/dossiers/meerwerk'
 import { adresWijktAf } from './adres'
 
 const rond = (n: number): number => Math.round(n * 100) / 100
@@ -29,6 +29,7 @@ type FaseVelden = {
   gearchiveerd: boolean | null
 }
 
+/** Offertestatussen waarna er niets meer loopt — gelijk aan `isActiefDossier`. */
 const OFFERTE_EIND = new Set(['gewonnen', 'verloren', 'vervallen'])
 
 function bepaalFase(d: FaseVelden): ObjectFase {
@@ -37,11 +38,28 @@ function bepaalFase(d: FaseVelden): ObjectFase {
   if (d.servicedesk_substatus) {
     return d.servicedesk_substatus === 'financieel_gereed' ? 'afgesloten' : 'servicedesk'
   }
+  // Een gewonnen offerte is inmiddels een opdracht, een verloren of vervallen offerte is
+  // afgehandeld — in beide gevallen loopt er niets meer op dit dossier.
+  if (d.hoofdstatus === 'offerte' && OFFERTE_EIND.has(d.offerte_substatus ?? '')) return 'afgesloten'
   return d.hoofdstatus
 }
 
 /** Kolommen die `bepaalFase` nodig heeft — één plek, zodat de selects niet uit elkaar lopen. */
 const FASE_KOLOMMEN = 'hoofdstatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd'
+
+/**
+ * Jaar waarin het dossier is ontstaan.
+ *
+ * `created_at` is uitdrukkelijk de laatste keus: dat is de dag waarop de bulk-sync het dossier
+ * in EVA zette. Van de 174 gekoppelde dossiers vallen die datums op slechts 14 dagen, dus
+ * daarop groeperen zou een verzonnen jaarverdeling geven. `bouw7_aanmaakdatum` is de echte
+ * aanmaakdatum van het project en is overal gevuld.
+ */
+function jaarVan(d: { bouw7_aanmaakdatum: string | null; aanvraagdatum: string | null; created_at: string }): number | null {
+  const bron = d.bouw7_aanmaakdatum ?? d.aanvraagdatum ?? d.created_at
+  const jaar = Number(String(bron ?? '').slice(0, 4))
+  return Number.isFinite(jaar) && jaar > 1990 ? jaar : null
+}
 
 /** Objectrij zoals het overzicht hem toont: het object plus een paar afgeleide tellingen. */
 export type ObjectRij = VastgoedObject & {
@@ -67,42 +85,36 @@ export type ObjectDossier = {
   adres_wijkt_af: boolean
 }
 
+/** Eén staaf in het jaaroverzicht. */
+export type ObjectJaar = { jaar: number; aantal: number }
+
 export type ObjectTotalen = {
-  aantalPerFase: Record<ObjectFase, number>
   aantalDossiers: number
-  /** Σ bedrag_excl_btw over alle opdrachten (ook de afgesloten en de servicedesk-opdrachten). */
-  aanneemsom: number
-  goedgekeurdMeerwerk: number
-  /** aanneemsom + goedgekeurd meerwerk — zelfde definitie als het Financieel-tab. */
-  contractTotaal: number
-  kostprijs: number
+  aantalPerFase: Record<ObjectFase, number>
   /**
-   * Marge en percentage zijn `null` zodra er géén kostprijs bekend is. `kostprijs_excl_btw`
-   * wordt alleen gevuld als de offerte via de Bouw7-calculatiemodule is opgebouwd; zonder
-   * die controle zou een object met een onbekende kostprijs "100% marge" tonen, en dat is
-   * een getal waar iemand beslissingen op neemt.
+   * Gefactureerd excl. btw, opgeteld over de gekoppelde dossiers.
+   *
+   * Bron: `management_projecten.gefactureerd` (Athena `revenue.realised`) — dezelfde waarde
+   * die het Management-dashboard gebruikt, zodat de twee schermen niet uit elkaar lopen.
+   * Die tabel bevat alléén opdrachten en servicedeskdossiers; een aanvraag of offerte is
+   * nog niet gefactureerd, dus dat klopt.
    */
-  marge: number | null
-  margePct: number | null
-  /** Aantal opdrachten waarvan de kostprijs ontbreekt — maakt een onvolledige marge zichtbaar. */
-  zonderKostprijs: number
-  /** Σ bedrag_excl_btw van nog lopende offertes; telt níét mee in contractTotaal. */
-  openOffertes: number
+  gefactureerdExcl: number
+  /**
+   * Dossiers dié gefactureerd horen te zijn maar nog geen regel in `management_projecten`
+   * hebben — die tabel wordt door een eigen sync gevuld en kan achterlopen. Zonder dit
+   * getal zou een te laag totaal als volledig lezen.
+   */
+  zonderFacturatiegegevens: number
+  /**
+   * Aantal gekoppelde dossiers per jaar, oplopend.
+   *
+   * Op `bouw7_aanmaakdatum`, NIET op `created_at`: dat laatste is de dag waarop de
+   * bulk-sync het dossier in EVA zette (174 dossiers verdeeld over 14 importdagen),
+   * wat een volstrekt verzonnen jaarverdeling zou opleveren.
+   */
+  perJaar: ObjectJaar[]
   laatsteActiviteit: string | null
-  /**
-   * true = het meerwerk kon niet volledig worden uitgerekend (te veel regie-dossiers of
-   * Bouw7 onbereikbaar). De UI hoort het totaal dan als benadering te tonen.
-   */
-  meerwerkBenadering: boolean
-  /**
-   * Servicedeskdossiers (dagelijks onderhoud, mutaties). Die houden `hoofdstatus = 'aanvraag'`
-   * en worden op regie afgerekend, dus ze hebben géén aanneemsom. Zonder dit getal lijkt een
-   * object met 43 afgehandelde servicedeskklussen "€ 0 omzet" te hebben — de UI moet dat
-   * kunnen uitleggen in plaats van een misleidend nul te tonen.
-   */
-  servicedeskDossiers: number
-  /** Uitgevoerd werk zonder vastgelegd bedrag. Maakt zichtbaar dat het totaal niet alles dekt. */
-  zonderBedrag: number
 }
 
 export type ObjectRelatieRij = {
@@ -188,79 +200,71 @@ export async function getObjectDossiers(objectId: string): Promise<ObjectDossier
 }
 
 /**
- * Totalen over de gekoppelde dossiers.
+ * Totalen over de gekoppelde dossiers: gefactureerd excl. btw en de aantallen per jaar.
  *
- * Contracttotaal = aanneemsom + goedgekeurd meerwerk, dezelfde definitie als op het
- * Financieel-tab van een dossier — anders tellen twee schermen hetzelfde werk verschillend.
- * Offertes tellen bewust niet mee: dat is nog geen verkocht werk.
+ * Bewust géén aanneemsom, meerwerk of marge. Servicedeskwerk — het leeuwendeel op een VvE —
+ * loopt op regie en heeft helemaal geen aanneemsom, en `kostprijs_excl_btw` is alleen gevuld
+ * als de offerte via de calculatiemodule is opgebouwd. Beide zouden dus een deel van het werk
+ * als nul presenteren. Gefactureerd dekt alles wat er daadwerkelijk is uitgegaan.
  */
 export async function getObjectTotalen(objectId: string): Promise<ObjectTotalen> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossiers')
-    .select(`id, ${FASE_KOLOMMEN}, bedrag_excl_btw, kostprijs_excl_btw, updated_at`)
+    .select(`id, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, created_at, updated_at`)
     .eq('object_id', objectId)
 
   const dossiers = (data ?? []) as (FaseVelden & {
     id: string
-    bedrag_excl_btw: number | null; kostprijs_excl_btw: number | null; updated_at: string
+    bouw7_aanmaakdatum: string | null
+    aanvraagdatum: string | null
+    created_at: string
+    updated_at: string
   })[]
 
   const aantalPerFase: Record<ObjectFase, number> =
     { aanvraag: 0, offerte: 0, opdracht: 0, servicedesk: 0, afgesloten: 0 }
-  let aanneemsom = 0
-  let kostprijs = 0
-  let openOffertes = 0
+  const perJaarMap = new Map<number, number>()
   let laatsteActiviteit: string | null = null
-  let servicedeskDossiers = 0
-  let zonderBedrag = 0
-  let zonderKostprijs = 0
 
   for (const d of dossiers) {
-    const fase = bepaalFase(d)
-    aantalPerFase[fase]++
-    if (d.servicedesk_substatus) servicedeskDossiers++
-    // Uitgevoerd werk zonder bedrag: bijna altijd regie (servicedesk rekent op nacalculatie af).
-    if ((d.servicedesk_substatus || isVerkocht(d.hoofdstatus)) && !Number(d.bedrag_excl_btw)) {
-      zonderBedrag++
-    }
-    if (isVerkocht(d.hoofdstatus)) {
-      aanneemsom += Number(d.bedrag_excl_btw) || 0
-      kostprijs  += Number(d.kostprijs_excl_btw) || 0
-      if (!Number(d.kostprijs_excl_btw)) zonderKostprijs++
-    }
-    // Alleen offertes die nog lopen; gewonnen/verloren/vervallen zijn geen openstaande kans meer.
-    if (d.hoofdstatus === 'offerte' && !OFFERTE_EIND.has(d.offerte_substatus ?? '')) {
-      openOffertes += Number(d.bedrag_excl_btw) || 0
-    }
+    aantalPerFase[bepaalFase(d)]++
+    const jaar = jaarVan(d)
+    if (jaar != null) perJaarMap.set(jaar, (perJaarMap.get(jaar) ?? 0) + 1)
     if (!laatsteActiviteit || d.updated_at > laatsteActiviteit) laatsteActiviteit = d.updated_at
   }
 
-  // Meerwerk telt alleen mee voor dossiers die ook in de aanneemsom zitten.
-  const contractIds = dossiers.filter((d) => isVerkocht(d.hoofdstatus)).map((d) => d.id)
-  const { perDossier, regieOvergeslagen } = await getGoedgekeurdMeerwerkExclBatch(contractIds)
-  const goedgekeurdMeerwerk = [...perDossier.values()].reduce((t, n) => t + n, 0)
+  // Gefactureerd komt uit management_projecten (Athena revenue.realised), dezelfde bron als
+  // het Management-dashboard. Die tabel dekt alleen opdrachten en servicedeskdossiers.
+  const ids = dossiers.map((d) => d.id)
+  let gefactureerdExcl = 0
+  const metRegel = new Set<string>()
+  if (ids.length) {
+    const { data: mgmt } = await supabase
+      .from('management_projecten')
+      .select('dossier_id, gefactureerd')
+      .in('dossier_id', ids)
+    for (const r of (mgmt ?? []) as { dossier_id: string; gefactureerd: number | null }[]) {
+      metRegel.add(r.dossier_id)
+      gefactureerdExcl += Number(r.gefactureerd) || 0
+    }
+  }
 
-  const contractTotaal = rond(aanneemsom + goedgekeurdMeerwerk)
-  // Geen kostprijs bekend = geen marge te melden. Anders zou 0 kostprijs als 100% marge lezen.
-  const marge = kostprijs > 0 ? rond(contractTotaal - kostprijs) : null
+  // Alleen uitgevoerd werk hóórt een facturatieregel te hebben; een aanvraag of offerte niet.
+  const zonderFacturatiegegevens = dossiers.filter(
+    (d) => (isVerkocht(d.hoofdstatus) || d.servicedesk_substatus) && !metRegel.has(d.id),
+  ).length
 
   return {
-    aantalPerFase,
     aantalDossiers: dossiers.length,
-    aanneemsom: rond(aanneemsom),
-    goedgekeurdMeerwerk: rond(goedgekeurdMeerwerk),
-    contractTotaal,
-    kostprijs: rond(kostprijs),
-    marge,
-    margePct: marge != null && contractTotaal > 0 ? rond((marge / contractTotaal) * 100) : null,
-    zonderKostprijs,
-    openOffertes: rond(openOffertes),
+    aantalPerFase,
+    gefactureerdExcl: rond(gefactureerdExcl),
+    zonderFacturatiegegevens,
+    perJaar: [...perJaarMap.entries()]
+      .map(([jaar, aantal]) => ({ jaar, aantal }))
+      .sort((a, b) => a.jaar - b.jaar),
     laatsteActiviteit,
-    meerwerkBenadering: regieOvergeslagen.length > 0,
-    servicedeskDossiers,
-    zonderBedrag,
   }
 }
 
@@ -316,6 +320,10 @@ export async function getObjectenVoorRelatie(
  * Zoekt op naam, objectnummer, VvE-code, straat, postcode en plaats.
  */
 export async function zoekObjecten(term: string, limiet = 20): Promise<VastgoedObject[]> {
+  // Eigen gate: deze functie wordt rechtstreeks vanuit client-componenten aangeroepen en is
+  // daarmee een kale RPC. De overige functies hierboven draaien alleen vanaf een page die
+  // zelf al `vereisRecht` doet.
+  await vereisRecht('objectenbeheer', 'lezen')
   const zoek = term.trim()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
@@ -330,4 +338,20 @@ export async function zoekObjecten(term: string, limiet = 20): Promise<VastgoedO
   }
   const { data } = await query.order('naam', { ascending: true }).limit(limiet)
   return (data ?? []) as VastgoedObject[]
+}
+
+/**
+ * Naam van de standaard-opdrachtgever van een object. Het aanvraagformulier toont in het
+ * klantveld een naam terwijl het object alleen een id draagt; dit vult dat gat zonder de
+ * hele relatie mee te sturen.
+ */
+export async function getObjectOpdrachtgeverNaam(objectId: string): Promise<string | null> {
+  await vereisRecht('objectenbeheer', 'lezen')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('vastgoed_objecten')
+    .select('relaties:standaard_opdrachtgever_id(naam)')
+    .eq('id', objectId).maybeSingle()
+  return data?.relaties?.naam ?? null
 }
