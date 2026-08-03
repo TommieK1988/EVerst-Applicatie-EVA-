@@ -76,6 +76,8 @@ export default function CalculatieHoofdscherm({
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
   const [componentenVoorBtw, setComponentenVoorBtw]   = useState<Componentregel[]>([])
   const [boomUitgeklapt, setBoomUitgeklapt]           = useState(false)
+  /** Er wordt een groep versleept in de boom — het paneel mag dan niet dichtklappen. */
+  const [boomSleepActief, setBoomSleepActief]         = useState(false)
   const [syncStatus, setSyncStatus]                   = useState<'idle' | 'bezig' | 'gelukt' | 'fout'>('idle')
   const [undoCount, setUndoCount]                     = useState(0)
   const [receptenOpen, setReceptenOpen]               = useState(false)
@@ -97,8 +99,11 @@ export default function CalculatieHoofdscherm({
   }, [])
 
   const handleBoomLeave = useCallback(() => {
+    // Tijdens het slepen niet sluiten: de browser stuurt bij dragstart een mouseleave,
+    // en een verdwijnend paneel breekt de sleep af omdat het sleepelement verdwijnt.
+    if (boomSleepActief) return
     sluitTimerRef.current = setTimeout(() => setBoomUitgeklapt(false), 350)
-  }, [])
+  }, [boomSleepActief])
 
   const handleSluitBoom = useCallback(() => setBoomUitgeklapt(false), [])
 
@@ -554,6 +559,10 @@ export default function CalculatieHoofdscherm({
           }`}
           onMouseEnter={handleBoomEnter}
           onMouseLeave={handleBoomLeave}
+          // Tweede vangnet: zolang er iets over het paneel gesleept wordt, blijft het open,
+          // ook als er onverhoopt toch een sluittimer liep.
+          onDragOver={handleBoomEnter}
+          onDragEnter={handleBoomEnter}
         >
           <div className="flex items-center border-b border-slate-200 h-9 flex-shrink-0">
             <span className="text-xs text-slate-500 font-medium px-3 flex-1 truncate">Structuur</span>
@@ -576,6 +585,7 @@ export default function CalculatieHoofdscherm({
               onSelecteer={setActiefGroepId}
               onWijziging={handleWijziging}
               onVoorWijziging={() => gridRef.current?.duwSnapshot()}
+              onSleepActief={setBoomSleepActief}
               readOnly={readOnly}
             />
           </div>
