@@ -19,10 +19,6 @@ import {
   berekenGroepUren, berekenGroepMaterieel, berekenGroepOA,
   berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal, parseGetal,
 } from '@/lib/everts-calc/calculations'
-import {
-  platteGroepen, subtreeIds, subtreeHoogte, projecteer, verplaatsGroep, MAX_NIVEAU,
-  type Projectie,
-} from '@/lib/everts-calc/groep-boom'
 import { nieuweId, cn } from '@/lib/everts-calc/utils'
 import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
@@ -55,6 +51,8 @@ interface Props {
 export interface CalculatieGridHandle {
   undo: () => void
   collapseAll: () => void
+  /** Zet een herstelpunt vóór een wijziging van buitenaf (structuurboom), zodat Ctrl+Z die terugdraait. */
+  duwSnapshot: () => void
 }
 
 type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
@@ -103,80 +101,10 @@ const COL_DEFS: ColDef[] = [
 ]
 
 /**
- * Inspringing per groepsniveau (px). Ook de sleepstap: zoveel px naar links/rechts tijdens
- * het slepen = één niveau. Ruim genoeg dat de niveaus af te lezen zijn én dat een trillende
- * muis niet meteen een niveau omslaat — bijstellen kan met deze ene constante.
+ * Inspringing per groepsniveau (px) — puur visueel, zodat de nesting in het rekenblad
+ * af te lezen is. Groepen herordenen doe je in de structuurboom, niet hier.
  */
 const NIVEAU_INSPRING = 24
-
-/** Marge vanaf de rand van de scrollcontainer waarbinnen slepen automatisch doorscrollt. */
-const AUTOSCROLL_ZONE = 60
-const AUTOSCROLL_STAP = 14
-
-/**
- * Een projectie plus waar de indicatorlijn getekend moet worden. `ankerGroepId` en
- * `positie` zijn puur visueel; de verplaatsing zelf loopt volledig via `verplaatsGroep`.
- */
-interface SleepProjectie extends Projectie {
-  /** Groepskop waar de lijn bij hoort; `null` = de strook onderaan de tabel. */
-  ankerGroepId: string | null
-  positie: 'boven' | 'onder'
-}
-
-/**
- * Lijn die toont wáár de gesleepte groep landt. De verticale stub markeert de
- * inspringing van het doelniveau — dat maakt het niveau afleesbaar zonder de lijn met
- * omliggende rijen te hoeven vergelijken — en het label noemt niveau en nieuwe ouder.
- * De rij heeft echte hoogte, zodat er zichtbaar ruimte "openklapt" op de landingsplek.
- *
- * Die hoogte maakt hem óók een hindernis: hij verschijnt onder je cursor en duwt de
- * doelrij weg. Daarom is de lijn zélf een geldig doel — zonder `onDragOver` met
- * `preventDefault()` weigert de browser de drop en gebeurt er bij loslaten niets.
- */
-function DropIndicator({ diepte, ouderNaam, colCount, onDragOver, onDrop }: {
-  diepte: number
-  ouderNaam: string | null
-  colCount: number
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent) => void
-}) {
-  return (
-    <tr aria-hidden="true" onDragOver={onDragOver} onDrop={onDrop}>
-      <td colSpan={colCount} style={{ padding: 0, border: 0 }}>
-        <div
-          className="flex items-center h-4 gap-1"
-          style={{ paddingLeft: 8 + diepte * NIVEAU_INSPRING, paddingRight: 8 }}
-        >
-          <span className="w-0.5 h-3 rounded-sm bg-everts flex-shrink-0" />
-          <span className="px-1.5 py-px rounded bg-everts text-white text-[10px] font-semibold whitespace-nowrap flex-shrink-0">
-            niveau {diepte + 1}{ouderNaam ? ` · in "${ouderNaam}"` : ' · hoofdgroep'}
-          </span>
-          <span className="flex-1 h-0.5 rounded bg-everts" />
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-/**
- * Vervangt het standaard drag-image (een screenshot van de hele tabelrij, die over de
- * volle breedte precies de drop-indicator afdekt) door een compacte badge.
- */
-function zetSleepBadge(e: React.DragEvent, tekst: string) {
-  const badge = document.createElement('div')
-  badge.textContent = tekst
-  Object.assign(badge.style, {
-    position: 'fixed', top: '-1000px', left: '0',
-    padding: '4px 10px', borderRadius: '6px',
-    background: '#013a20', color: '#fff',
-    font: '600 12px/1.4 system-ui, sans-serif', whiteSpace: 'nowrap',
-    boxShadow: '0 4px 12px rgba(0,0,0,.3)',
-  } satisfies Partial<CSSStyleDeclaration>)
-  document.body.appendChild(badge)
-  e.dataTransfer.setDragImage(badge, 14, 14)
-  // Pas ná deze tick heeft de browser de snapshot gemaakt.
-  setTimeout(() => badge.remove(), 0)
-}
 
 const COL_MAP     = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Record<ColId, ColDef>
 const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
@@ -1569,19 +1497,11 @@ interface GroepSectieProps {
   onWijzigGroep: (id: string, patch: Partial<Groep>) => void
   onVoegRegelToe: (groepId: string) => void
   onVoegSubgroepToe: (groep: Groep) => void
-  /** Groep waarboven een régel hangt — alleen voor de blauwe ring bij regel-drops. */
+  /** Groep waarboven een régel hangt — voor de blauwe ring bij regel-drops. */
   dragOverGroepId: string | null
-  /** Waar de gesleepte groep landt: positie van de indicatorlijn, niveau en nieuwe ouder. */
-  dragIndicator: SleepProjectie | null
-  /** Naam van de nieuwe ouder, voor het label op de indicatorlijn. */
-  dropOuderNaam: string | null
-  /** Id van de groep die op dit moment gesleept wordt (dimt zijn eigen kop). */
-  sleepGroepId: string | null
   sleepRegelId: string | null
-  onDragStart: (groep: Groep, e: React.DragEvent) => void
-  /** `positieHint` slaat het boven/onder-oordeel over: regelrijen en de indicatorlijn weten het al. */
-  onDragOver: (e: React.DragEvent, groep: Groep, positieHint?: 'boven' | 'onder') => void
-  onDrop: (e: React.DragEvent, doelGroep: Groep, positieHint?: 'boven' | 'onder') => void
+  onDragOver: (e: React.DragEvent, groep: Groep) => void
+  onDrop: (e: React.DragEvent, doelGroep: Groep) => void
   onDragEnd: () => void
   onRegelDragStartNaarGroep: (regelId: string) => void
   onRegelDragEnd: () => void
@@ -1601,8 +1521,7 @@ function GroepSectie({
   onKlik, onRegelWijzig, onRegelComponentWijzig, onWijzigComponentExtra,
   onVoegComponentToe, onVerwijderComponent,
   onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onVoegRegelToe, onVoegSubgroepToe,
-  dragOverGroepId, dragIndicator, dropOuderNaam, sleepGroepId, sleepRegelId,
-  onDragStart, onDragOver, onDrop, onDragEnd,
+  dragOverGroepId, sleepRegelId, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel,
@@ -1616,27 +1535,11 @@ function GroepSectie({
   useEffect(() => { setNaamEdit(groep.naam) }, [groep.naam])
   const [dragRegelId,     setDragRegelId]     = useState<string | null>(null)
   const [dragOverRegelId, setDragOverRegelId] = useState<string | null>(null)
-  // Slepen start alleen vanaf de greep, zodat klikken (selecteren) en dubbelklikken
-  // (hernoemen) op de kop niet per ongeluk een verplaatsing worden.
-  const [grijpActief,     setGrijpActief]     = useState(false)
-  // Loslaten zónder te slepen (of buiten de rij) moet de greep ook weer vrijgeven.
-  // Tijdens een echte sleep levert de browser geen mouseup — die eindigt op `dragend`.
-  useEffect(() => {
-    if (!grijpActief) return
-    const los = () => setGrijpActief(false)
-    document.addEventListener('mouseup', los)
-    return () => document.removeEventListener('mouseup', los)
-  }, [grijpActief])
   const directeRegels = alleRegels.filter(r => r.groep_id === groep.id).sort((a, b) => a.volgorde - b.volgorde)
   const subGroepen    = alleGroepen.filter(g => g.parent_id === groep.id).sort((a, b) => a.volgorde - b.volgorde)
   const kostprijs     = berekenGroepKostprijs(groep.id, alleGroepen, alleRegels, alleComponenten)
   const nummer        = nummers.get(groep.id) ?? ''
   const isRegelDropTarget   = sleepRegelId !== null && dragOverGroepId === groep.id
-  const wordtGesleept       = sleepGroepId === groep.id
-  /** Deze kop is de nieuwe ouder van de gesleepte groep — licht op zodat je ziet waar hij in landt. */
-  const isDropOuder         = dragIndicator !== null && dragIndicator.parentId === groep.id
-  const indicatorBoven      = dragIndicator?.ankerGroepId === groep.id && dragIndicator.positie === 'boven'
-  const indicatorOnder      = dragIndicator?.ankerGroepId === groep.id && dragIndicator.positie === 'onder'
   const colCount      = colOrder.length
 
   const handleRegelDragStart = (_e: React.DragEvent, id: string) => {
@@ -1645,15 +1548,11 @@ function GroepSectie({
   }
   const handleRegelDragOver = (e: React.DragEvent, id: string) => {
     e.preventDefault()
-    // Sleep je een gróép, dan zijn de regelrijen geen dood gebied: ze staan voor
-    // "in deze groep", dus we mikken op de positie direct ná de kop.
-    if (sleepGroepId) { onDragOver(e, groep, 'onder'); return }
     // Zelfde groep drag óf cross-groep drag (sleepRegelId is dan het grid-niveau id)
     const actief = dragRegelId ?? sleepRegelId
     if (actief && actief !== id) setDragOverRegelId(id)
   }
-  const handleRegelDrop = (e: React.DragEvent, targetId: string) => {
-    if (sleepGroepId) { onDrop(e, groep, 'onder'); return }
+  const handleRegelDrop = (targetId: string) => {
     const isCrossGroep = sleepRegelId !== null && dragRegelId === null
     if (isCrossGroep) {
       // Verplaats van andere groep naar positie voor targetId
@@ -1689,43 +1588,22 @@ function GroepSectie({
   const kopBgStijl = kopBgStijlen[diepte] ?? kopBgStijlen[2]
   const kopPadding = diepte === 0 ? 'py-2.5' : 'py-1.5'
   const kopTekst   = diepte === 0 ? 'text-sm font-bold' : diepte === 1 ? 'text-xs font-semibold' : 'text-xs font-medium'
-  // Zichtbare inspringing per niveau: zonder dat verschil is horizontaal slepen
-  // (een groep een niveau in/uit) niet te richten.
+  /** Zichtbare inspringing per niveau, zodat de nesting af te lezen is. */
   const indent     = 4 + diepte * NIVEAU_INSPRING
 
   return (
     <>
-      {indicatorBoven && (
-        <DropIndicator
-          diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount}
-          onDragOver={e => onDragOver(e, groep, 'boven')}
-          onDrop={e => onDrop(e, groep, 'boven')}
-        />
-      )}
-
       <tr
         id={`groepkop-${groep.id}`}
-        draggable={!readOnly && grijpActief}
-        className={`border-b cursor-pointer group/kop select-none ${kopStijl} ${isActief ? 'ring-1 ring-inset ring-everts/50' : ''} ${isRegelDropTarget ? 'ring-2 ring-inset ring-blue-400' : ''} ${isDropOuder ? 'ring-2 ring-inset ring-everts' : ''} ${wordtGesleept ? 'opacity-40' : ''}`}
+        className={`border-b cursor-pointer group/kop select-none ${kopStijl} ${isActief ? 'ring-1 ring-inset ring-everts/50' : ''} ${isRegelDropTarget ? 'ring-2 ring-inset ring-blue-400' : ''}`}
         style={kopBgStijl}
         onClick={() => onKlik(groep.id)}
-        onDragStart={e => onDragStart(groep, e)}
         onDragOver={e => onDragOver(e, groep)}
-        onDrop={e => { setGrijpActief(false); onDrop(e, groep) }}
-        onDragEnd={() => { setGrijpActief(false); onDragEnd() }}
+        onDrop={e => onDrop(e, groep)}
+        onDragEnd={onDragEnd}
       >
         <td colSpan={colCount} className={kopPadding} style={{ paddingLeft: `${indent}px` }}>
           <div className="flex items-center gap-2">
-            {/* Greep: alleen hiervandaan start een sleep, zodat klikken en dubbelklikken
-                op de kop blijven werken zoals ze horen. */}
-            <span
-              title="Sleep om te verplaatsen · zijwaarts slepen wijzigt het niveau"
-              onMouseDown={() => { if (!readOnly) setGrijpActief(true) }}
-              onClick={e => e.stopPropagation()}
-              className={`text-xs leading-none px-1 py-1 -my-1 rounded opacity-50 hover:opacity-100 cursor-grab active:cursor-grabbing select-none ${diepte <= 1 ? 'text-white hover:bg-paper/15' : 'text-slate-400 hover:bg-slate-200'} ${readOnly ? 'pointer-events-none opacity-20' : ''}`}
-            >
-              ⠿
-            </span>
             <span
               role="button"
               tabIndex={0}
@@ -1839,14 +1717,6 @@ function GroepSectie({
         </td>
       </tr>
 
-      {indicatorOnder && (
-        <DropIndicator
-          diepte={dragIndicator!.diepte} ouderNaam={dropOuderNaam} colCount={colCount}
-          onDragOver={e => onDragOver(e, groep, 'onder')}
-          onDrop={e => onDrop(e, groep, 'onder')}
-        />
-      )}
-
       {!ingeklapt && (
         <>
           {directeRegels.map(r => (
@@ -1867,7 +1737,7 @@ function GroepSectie({
               isDragOver={dragOverRegelId === r.id}
               onDragStart={e => handleRegelDragStart(e, r.id)}
               onDragOver={e => handleRegelDragOver(e, r.id)}
-              onDrop={e => handleRegelDrop(e, r.id)}
+              onDrop={() => handleRegelDrop(r.id)}
               onDragEnd={handleRegelDragEnd}
               collapseSignal={collapseSignal}
               readOnly={readOnly}
@@ -1885,9 +1755,7 @@ function GroepSectie({
               onVerwijderRegel={onVerwijderRegel} onVerwijderGroep={onVerwijderGroep}
               onWijzigGroep={onWijzigGroep}
               onVoegRegelToe={onVoegRegelToe} onVoegSubgroepToe={onVoegSubgroepToe}
-              dragOverGroepId={dragOverGroepId} dragIndicator={dragIndicator}
-              dropOuderNaam={dropOuderNaam} sleepGroepId={sleepGroepId} sleepRegelId={sleepRegelId}
-              onDragStart={onDragStart}
+              dragOverGroepId={dragOverGroepId} sleepRegelId={sleepRegelId}
               onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
               onRegelDragStartNaarGroep={onRegelDragStartNaarGroep}
               onRegelDragEnd={onRegelDragEnd}
@@ -1947,16 +1815,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const klembordRegels     = useRef<Calculatieregel[]>([])
   const klembordComponenten = useRef<Componentregel[]>([])
 
-  // Groep drag & drop. Verticaal bepaalt de invoegpositie (boven- of onderhelft van een
-  // groepskop), horizontaal het niveau: de muisverplaatsing t.o.v. de greep (`sleepStartX`)
-  // wordt via `projecteer` vertaald naar een nieuwe ouder + diepte (`projectie`).
-  const [sleepGroep,   setSleepGroep]   = useState<Groep | null>(null)
+  // Regels slepen (binnen en tussen groepen). Groepen zelf herorden je in de
+  // structuurboom: daar is elke rij een groep, dus zijn de doelen groot en eenduidig.
   const [sleepRegelId, setSleepRegelId] = useState<string | null>(null)
   const [dragOverId,   setDragOverId]   = useState<string | null>(null)
-  const [projectie,    setProjectie]    = useState<SleepProjectie | null>(null)
-  const sleepStartX = useRef(0)
-  /** Scrollcontainer rond de tabel — nodig om tijdens het slepen automatisch door te scrollen. */
-  const scrollRef = useRef<HTMLFieldSetElement>(null)
 
   // Instellingen — geabonneerd, zodat de lijst uit Supabase ook doorkomt als de
   // hydratie pas ná de eerste render binnen is (dossiertab opent sneller dan de fetch).
@@ -2154,7 +2016,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     setCollapseSignal(s => s + 1)
   }, [groepen])
 
-  useImperativeHandle(ref, () => ({ undo, collapseAll }), [undo, collapseAll])
+  useImperativeHandle(ref, () => ({ undo, collapseAll, duwSnapshot }), [undo, collapseAll, duwSnapshot])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {
@@ -2403,16 +2265,9 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   }
   const onColDragEnd = () => { setDragCol(null); setDragOverCol(null) }
 
-  // ─── Rij drag & drop ───────────────────────────────────────────────────────
-  const handleDragStart = useCallback((g: Groep, e: React.DragEvent) => {
-    setSleepGroep(g); setSleepRegelId(null); setProjectie(null)
-    // De greep zit op de inspringing van de groep zelf, dus is de horizontale
-    // verplaatsing letterlijk "hoeveel schuif ik deze groep in of uit".
-    sleepStartX.current = e.clientX
-    zetSleepBadge(e, `⠿  ${nummers.get(g.id) ?? ''} ${g.naam}`.replace(/\s+/g, ' '))
-  }, [nummers])
-  const handleRegelDragStartGrid = useCallback((id: string) => { setSleepRegelId(id); setSleepGroep(null); setProjectie(null) }, [])
-  const handleDragEnd            = useCallback(() => { setSleepGroep(null); setSleepRegelId(null); setDragOverId(null); setProjectie(null) }, [])
+  // ─── Regel drag & drop ─────────────────────────────────────────────────────
+  const handleRegelDragStartGrid = useCallback((id: string) => { setSleepRegelId(id) }, [])
+  const handleDragEnd            = useCallback(() => { setSleepRegelId(null); setDragOverId(null) }, [])
 
   const handleVerplaatsRegelNaarPositie = useCallback((regelId: string, doelGroepId: string, voorRegelId: string | null) => {
     const regel = regels.find(r => r.id === regelId)
@@ -2441,131 +2296,17 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     toast.success('Regel verplaatst')
   }, [regels, duwSnapshot, laadAlles, onWijziging, syncAggregaatGroep])
 
-  /** Scrollt mee zodra je tijdens het slepen tegen de boven- of onderrand aan komt. */
-  const autoScroll = useCallback((clientY: number) => {
-    const container = scrollRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    if      (clientY < rect.top + AUTOSCROLL_ZONE)    container.scrollTop -= AUTOSCROLL_STAP
-    else if (clientY > rect.bottom - AUTOSCROLL_ZONE) container.scrollTop += AUTOSCROLL_STAP
-  }, [])
-
-  /**
-   * Waar landt de gesleepte groep als je nú loslaat?
-   *  - verticaal: de boven- of onderhelft van de doelkop bepaalt de invoegpositie;
-   *  - horizontaal: de verplaatsing t.o.v. de greep bepaalt het niveau, waarbij de
-   *    groep zonder zijwaartse beweging zijn eigen niveau houdt.
-   * `doel === null` is de strook onderaan de tabel (= achteraan invoegen). `positieHint`
-   * slaat het boven/onder-oordeel over: regelrijen betekenen altijd "in deze groep", en
-   * de indicatorlijn zelf houdt vast aan de positie die hij toont.
-   * Levert `null` als de drop niet mag — bijv. op de eigen tak.
-   */
-  const berekenProjectie = useCallback((
-    e: React.DragEvent,
-    doel: Groep | null,
-    positieHint?: 'boven' | 'onder',
-  ): SleepProjectie | null => {
-    if (!sleepGroep) return null
-    const eigenTak = subtreeIds(groepen, sleepGroep.id)
-    // Outline-lijst zónder de gesleepte tak: die verhuist immers mee.
-    const lijst = platteGroepen(groepen).filter(p => !eigenTak.has(p.groep.id))
-
-    const stappen        = Math.round((e.clientX - sleepStartX.current) / NIVEAU_INSPRING)
-    const gewensteDiepte = (sleepGroep.niveau - 1) + stappen
-    const maxEigenDiepte = MAX_NIVEAU - 1 - subtreeHoogte(groepen, sleepGroep.id)
-
-    if (!doel) {
-      const proj = projecteer(lijst, lijst.length, gewensteDiepte, maxEigenDiepte)
-      return { ...proj, ankerGroepId: null, positie: 'onder' }
-    }
-
-    if (eigenTak.has(doel.id)) return null
-    const doelIndex = lijst.findIndex(p => p.groep.id === doel.id)
-    if (doelIndex === -1) return null
-
-    let naDoel: boolean
-    if (positieHint) {
-      naDoel = positieHint === 'onder'
-    } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-      naDoel = e.clientY > rect.top + rect.height / 2
-    }
-    const proj = projecteer(lijst, doelIndex + (naDoel ? 1 : 0), gewensteDiepte, maxEigenDiepte)
-    return { ...proj, ankerGroepId: doel.id, positie: naDoel ? 'onder' : 'boven' }
-  }, [sleepGroep, groepen])
-
-  const handleDragOver  = useCallback((e: React.DragEvent, doel: Groep | null, positieHint?: 'boven' | 'onder') => {
+  /** Een régel boven een groepskop: die groep licht op als doel. */
+  const handleDragOver = useCallback((e: React.DragEvent, doel: Groep) => {
     e.preventDefault()
-    if (sleepRegelId) { if (doel) setDragOverId(doel.id); return }
-    if (!sleepGroep) return
-    autoScroll(e.clientY)
-    if (doel && sleepGroep.id === doel.id) return
-    const proj = berekenProjectie(e, doel, positieHint)
-    if (proj) setProjectie(proj)
-  }, [sleepGroep, sleepRegelId, berekenProjectie, autoScroll])
+    if (sleepRegelId) setDragOverId(doel.id)
+  }, [sleepRegelId])
 
-  /** Sleep verlaat de tabel (niet: van rij naar rij) → indicator weg. */
-  const handleDragLeaveTabel = useCallback((e: React.DragEvent) => {
-    const naar = e.relatedTarget as Node | null
-    if (naar && e.currentTarget.contains(naar)) return
-    setProjectie(null); setDragOverId(null)
-  }, [])
-
-  /** Voert de verplaatsing uit die `proj` beschrijft — het enige punt dat groepen wegschrijft. */
-  const pasVerplaatsingToe = useCallback((proj: Projectie) => {
-    const opruimen = () => { setSleepGroep(null); setDragOverId(null); setProjectie(null) }
-    if (!sleepGroep) { opruimen(); return }
-
-    const gewijzigd = verplaatsGroep(groepen, sleepGroep.id, proj.parentId, proj.voorGroepId)
-    if (gewijzigd.length === 0) { opruimen(); return }
-
-    duwSnapshot()
-    gewijzigd.forEach(g => slaGroepOp(g))
-    laadAlles(); onWijziging()
-    opruimen()
-
-    const zelfdeOuder = (sleepGroep.parent_id ?? null) === proj.parentId
-    const ouderNaam   = proj.parentId ? groepen.find(g => g.id === proj.parentId)?.naam : null
-    toast.success(
-      zelfdeOuder      ? `"${sleepGroep.naam}" verplaatst`
-      : ouderNaam      ? `"${sleepGroep.naam}" naar niveau ${proj.diepte + 1}, onder "${ouderNaam}"`
-                       : `"${sleepGroep.naam}" naar niveau 1 (hoofdgroep)`,
-    )
-  }, [sleepGroep, groepen, duwSnapshot, laadAlles, onWijziging])
-
-  const handleDrop = useCallback((e: React.DragEvent, doel: Groep | null, positieHint?: 'boven' | 'onder') => {
+  /** Drop op een groepskop → de regel achteraan die groep plaatsen. */
+  const handleDrop = useCallback((e: React.DragEvent, doel: Groep) => {
     e.preventDefault()
-    // Afgehandeld: niet nóg eens door de vangnet-drop op de tabel laten oppakken.
-    e.stopPropagation()
-    if (sleepRegelId) {
-      // Drop op groepskop → achteraan de groep plaatsen
-      if (doel) handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
-      return
-    }
-    if (!sleepGroep || (doel && sleepGroep.id === doel.id)) {
-      setSleepGroep(null); setDragOverId(null); setProjectie(null); return
-    }
-    const proj = berekenProjectie(e, doel, positieHint)
-    if (!proj) { setSleepGroep(null); setDragOverId(null); setProjectie(null); return }
-    pasVerplaatsingToe(proj)
-  }, [sleepGroep, sleepRegelId, berekenProjectie, pasVerplaatsingToe, handleVerplaatsRegelNaarPositie])
-
-  /**
-   * Vangnet op de hele tabel. Zonder dit moet je precies een rij mét drag-handlers
-   * raken; land je ergens anders (tussen rijen, op de voettekst), dan weigert de
-   * browser de drop en gebeurt er stilzwijgend niets. Nu geldt overal: waar de lijn
-   * staat, dáár komt de groep.
-   */
-  const handleDragOverTabel = useCallback((e: React.DragEvent) => {
-    if (sleepGroep || sleepRegelId) e.preventDefault()
-  }, [sleepGroep, sleepRegelId])
-
-  const handleDropTabel = useCallback((e: React.DragEvent) => {
-    if (!sleepGroep) return
-    e.preventDefault()
-    if (projectie) pasVerplaatsingToe(projectie)
-    else { setSleepGroep(null); setDragOverId(null); setProjectie(null) }
-  }, [sleepGroep, projectie, pasVerplaatsingToe])
+    if (sleepRegelId) handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
+  }, [sleepRegelId, handleVerplaatsRegelNaarPositie])
 
   // ─── Mutaties ──────────────────────────────────────────────────────────────
   const handleRegelWijzig = useCallback((id: string, veld: Partial<Calculatieregel>) => {
@@ -2699,10 +2440,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const totaalOA    = groepenZonderOptioneel.filter(g => g.parent_id === null)
     .reduce((s, g) => s + berekenGroepOA(g.id, groepenZonderOptioneel, regels, componenten), 0)
   const roots    = groepen.filter(g => g.parent_id === null).sort((a, b) => a.volgorde - b.volgorde)
-  /** Naam van de nieuwe ouder tijdens het slepen — voor het label op de indicatorlijn. */
-  const dropOuderNaam = projectie?.parentId
-    ? (groepen.find(g => g.id === projectie.parentId)?.naam ?? null)
-    : null
   const visibleColOrder = colOrder.filter(id => !hiddenCols.has(id))
   const totalW   = visibleColOrder.reduce((s, id) => s + colWidths[id], 0)
 
@@ -2938,10 +2675,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
           <fieldset disabled>; in/uitklappen blijft werken (die knoppen zijn <span>). */}
       <fieldset
         disabled={readOnly}
-        ref={scrollRef}
-        onDragLeave={handleDragLeaveTabel}
-        onDragOver={handleDragOverTabel}
-        onDrop={handleDropTabel}
         className="calc-fs flex-1 overflow-auto min-h-0 min-w-0 border-0 p-0 m-0"
       >
         {roots.length > 0 ? (
@@ -2985,10 +2718,8 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   onWijzigGroep={handleWijzigGroep}
                   onVoegRegelToe={handleVoegRegelToe}
                   onVoegSubgroepToe={handleVoegSubgroepToe}
-                  dragOverGroepId={dragOverId} dragIndicator={projectie}
-                  dropOuderNaam={dropOuderNaam} sleepGroepId={sleepGroep?.id ?? null} sleepRegelId={sleepRegelId}
-                  onDragStart={handleDragStart} onDragOver={handleDragOver}
-                  onDrop={handleDrop} onDragEnd={handleDragEnd}
+                  dragOverGroepId={dragOverId} sleepRegelId={sleepRegelId}
+                  onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}
                   onRegelDragStartNaarGroep={handleRegelDragStartGrid}
                   onRegelDragEnd={handleDragEnd}
                   onRegelVerplaatsNaarPositie={handleVerplaatsRegelNaarPositie}
@@ -3000,34 +2731,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   readOnly={readOnly}
                 />
               ))}
-
-              {/* Strook onderaan: maakt "helemaal onderaan plaatsen" een expliciet doel in
-                  plaats van iets wat je onder de laatste rij moet zien te raken. */}
-              {sleepGroep && (
-                <>
-                  {projectie?.ankerGroepId === null && (
-                    <DropIndicator
-                      diepte={projectie.diepte} ouderNaam={dropOuderNaam} colCount={visibleColOrder.length}
-                      onDragOver={e => handleDragOver(e, null)}
-                      onDrop={e => handleDrop(e, null)}
-                    />
-                  )}
-                  <tr
-                    onDragOver={e => handleDragOver(e, null)}
-                    onDrop={e => handleDrop(e, null)}
-                  >
-                    <td colSpan={visibleColOrder.length} className="p-0">
-                      <div className={`m-1 h-9 rounded border-2 border-dashed flex items-center justify-center text-xs transition-colors ${
-                        projectie?.ankerGroepId === null
-                          ? 'border-everts bg-everts-50 text-everts-dark font-semibold'
-                          : 'border-slate-200 text-slate-400'
-                      }`}>
-                        Hier loslaten om onderaan te plaatsen
-                      </div>
-                    </td>
-                  </tr>
-                </>
-              )}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50">

@@ -575,6 +575,8 @@ export default function CalculatieHoofdscherm({
               refreshTrigger={refreshTotalen}
               onSelecteer={setActiefGroepId}
               onWijziging={handleWijziging}
+              onVoorWijziging={() => gridRef.current?.duwSnapshot()}
+              readOnly={readOnly}
             />
           </div>
         </aside>
