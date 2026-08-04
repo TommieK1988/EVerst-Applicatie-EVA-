@@ -86,26 +86,6 @@ function InlineForm({ placeholder, onOpslaan, onAnnuleer }: InlineFormProps) {
   )
 }
 
-/**
- * Compacte badge als sleepbeeld, náást de cursor. Het standaard sleepbeeld is een
- * screenshot van de hele rij die precies over de indicator en zijn label heen valt.
- */
-function zetSleepBadge(e: React.DragEvent, tekst: string) {
-  const badge = document.createElement('div')
-  badge.textContent = tekst
-  Object.assign(badge.style, {
-    position: 'fixed', top: '-1000px', left: '0',
-    padding: '3px 8px', borderRadius: '6px',
-    background: '#013a20', color: '#fff',
-    font: '600 11px/1.4 system-ui, sans-serif', whiteSpace: 'nowrap',
-    boxShadow: '0 4px 12px rgba(0,0,0,.3)',
-  })
-  document.body.appendChild(badge)
-  // Negatieve offset: de badge hangt rechtsonder náást de cursor, niet eronder.
-  e.dataTransfer.setDragImage(badge, -14, -6)
-  setTimeout(() => badge.remove(), 0)
-}
-
 // Niveau-kleur voor de actieve indicator
 const NIVEAU_KLEUR = ['bg-everts', 'bg-everts/70', 'bg-everts/40']
 
@@ -121,6 +101,10 @@ export default function StructuurBoom({
   const [sleepId,   setSleepId]   = useState<string | null>(null)
   const [doel,      setDoel]      = useState<Doel | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  /** Zwevend label dat de cursor volgt; los van de state, zodat bewegen niet hertekent. */
+  const badgeRef  = useRef<HTMLDivElement>(null)
+  /** Lopend sleepgebaar. Een ref, want pointermove mag geen hertekening afwachten. */
+  const sleepRef  = useRef<{ id: string; startX: number; startY: number; actief: boolean } | null>(null)
 
   const laad = useCallback(() => {
     const gs = getGroepen(scenarioId).sort((a, b) => a.volgorde - b.volgorde)
@@ -197,6 +181,10 @@ export default function StructuurBoom({
     [groepen, sleepId],
   )
 
+  const roots = groepen.filter(g => g.parent_id === null).sort((a, b) => a.volgorde - b.volgorde)
+  const magSlepen = !readOnly && groepen.length > 1
+  const sleepGroep = sleepId ? groepen.find(g => g.id === sleepId) : null
+
   /* ── Slepen ───────────────────────────────────────────────────────────────── */
   const autoScroll = useCallback((clientY: number) => {
     const c = scrollRef.current
@@ -207,72 +195,65 @@ export default function StructuurBoom({
   }, [])
 
   const resetSleep = useCallback(() => {
+    sleepRef.current = null
+    document.body.style.cursor = ''
     setSleepId(null); setDoel(null); onSleepActief?.(false)
   }, [onSleepActief])
 
-  const handleDragStart = (e: React.DragEvent, groep: Groep) => {
-    if (readOnly) return
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', groep.id)
-    setSleepId(groep.id)
-    setDoel(null)
-    onSleepActief?.(true)
-    zetSleepBadge(e, `${nummers.get(groep.id) ?? ''} ${groep.naam}`.trim())
-  }
-
   /** Bouwt het doel voor een vlak en bepaalt meteen of het mag. */
   const maakDoel = useCallback((
+    sleepIdArg: string,
     soort: Doel['soort'],
     sleutel: string,
     positie: Doelpositie | null,
     label: string,
   ): Doel | null => {
-    if (!sleepId || !positie) return null
-    const geldig = magVerplaatsenNaar(groepen, sleepId, positie.parentId)
-    const reden = positie.parentId && subtreeIds(groepen, sleepId).has(positie.parentId)
+    if (!positie) return null
+    const geldig = magVerplaatsenNaar(groepen, sleepIdArg, positie.parentId)
+    const reden = positie.parentId && subtreeIds(groepen, sleepIdArg).has(positie.parentId)
       ? 'kan niet binnen zichzelf'
       : 'past niet — maximaal 3 niveaus'
     return {
       soort, sleutel, positie, geldig,
       omschrijving: geldig ? `${label} · niveau ${positie.diepte + 1}` : reden,
     }
-  }, [sleepId, groepen])
+  }, [groepen])
 
   /**
-   * Ongeldige doelen krijgen bewust géén `preventDefault()`: de browser toont dan zelf
-   * een verbodscursor en weigert de drop, terwijl de statusstrook de reden noemt.
+   * Wat ligt er onder de cursor? Elke strook en elke rij draagt een `data-doel`, dus
+   * één hittest volstaat. Dat is bewust géén drop-target-mechaniek: bij pointer-capture
+   * blijven alle events bij de greep, ongeacht wat eronder ligt of hertekend wordt.
    */
-  const richtOp = (e: React.DragEvent, nieuwDoel: Doel | null) => {
-    if (!sleepId) return
-    autoScroll(e.clientY)
-    setDoel(nieuwDoel)
-    if (nieuwDoel?.geldig) e.preventDefault()
-  }
+  const doelUitPunt = useCallback((sleepIdArg: string, x: number, y: number): Doel | null => {
+    const raak = document.elementFromPoint(x, y)
+    const vlak = raak instanceof Element ? raak.closest('[data-doel]') as HTMLElement | null : null
+    const spec = vlak?.dataset.doel
+    if (!spec) return null
 
-  const strookOver = (e: React.DragEvent, index: number) => {
-    const onder = zichtbaar[index]
-    richtOp(e, onder
-      ? maakDoel('strook', `strook-${index}`, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
-      : maakDoel('strook', `strook-${index}`, positieIn(groepen, null), 'onderaan als hoofdgroep'))
-  }
+    if (spec.startsWith('strook-')) {
+      const i = Number(spec.slice('strook-'.length))
+      const onder = zichtbaar[i]
+      return onder
+        ? maakDoel(sleepIdArg, 'strook', spec, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
+        : maakDoel(sleepIdArg, 'strook', spec, positieIn(groepen, null), 'onderaan als hoofdgroep')
+    }
 
-  const rijOver = (e: React.DragEvent, groep: Groep) => {
-    if (eigenTak.has(groep.id)) { richtOp(e, null); return }
-    richtOp(e, maakDoel('rij', `rij-${groep.id}`, positieIn(groepen, groep.id), `in "${groep.naam}", als laatste`))
-  }
+    const groep = groepen.find(g => g.id === spec.slice('rij-'.length))
+    if (!groep || subtreeIds(groepen, sleepIdArg).has(groep.id)) return null
+    return maakDoel(sleepIdArg, 'rij', spec, positieIn(groepen, groep.id), `in "${groep.naam}", als laatste`)
+  }, [zichtbaar, groepen, maakDoel])
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    if (!sleepId || !doel?.geldig) { resetSleep(); return }
-    const sleep = groepen.find(g => g.id === sleepId)
-    const gewijzigd = verplaatsGroep(groepen, sleepId, doel.positie.parentId, doel.positie.voorGroepId)
-    if (gewijzigd.length === 0) { resetSleep(); return }
+  const voerVerplaatsingUit = useCallback((sleepIdArg: string, d: Doel | null) => {
+    if (!d?.geldig) return
+    const sleep = groepen.find(g => g.id === sleepIdArg)
+    const gewijzigd = verplaatsGroep(groepen, sleepIdArg, d.positie.parentId, d.positie.voorGroepId)
+    if (gewijzigd.length === 0) return
 
     onVoorWijziging?.()
     gewijzigd.forEach(g => slaGroepOp(g))
     // Nieuwe ouder openklappen, anders verdwijnt de groep uit beeld.
-    if (doel.positie.parentId) {
-      const ouderId = doel.positie.parentId
+    if (d.positie.parentId) {
+      const ouderId = d.positie.parentId
       setIngeklapt(prev => {
         const next = new Set(prev)
         next.delete(ouderId)
@@ -281,12 +262,54 @@ export default function StructuurBoom({
     }
     laad()
     onWijziging()
-    resetSleep()
-    toast.success(`"${sleep?.naam ?? 'Groep'}" ${doel.omschrijving.replace(/ · niveau \d+$/, '')}`)
+    toast.success(`"${sleep?.naam ?? 'Groep'}" ${d.omschrijving.replace(/ · niveau \d+$/, '')}`)
+  }, [groepen, onVoorWijziging, laad, onWijziging])
+
+  /* ── Greep: pointer-capture in plaats van HTML5 drag & drop ──────────────────
+     Met capture blijven alle pointer-events bij de greep tot je loslaat. Een
+     hertekening, een wegvallend paneel of een doel dat de drop niet accepteert
+     kan het gebaar dan niet meer stilzwijgend afbreken. */
+  const greepDown = (e: React.PointerEvent, groep: Groep) => {
+    if (!magSlepen || e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    sleepRef.current = { id: groep.id, startX: e.clientX, startY: e.clientY, actief: false }
   }
 
-  const roots = groepen.filter(g => g.parent_id === null).sort((a, b) => a.volgorde - b.volgorde)
-  const magSlepen = !readOnly && groepen.length > 1
+  const greepMove = (e: React.PointerEvent) => {
+    const s = sleepRef.current
+    if (!s) return
+    if (!s.actief) {
+      // Pas slepen na een duidelijke beweging, zodat een klik een klik blijft.
+      if (Math.hypot(e.clientX - s.startX, e.clientY - s.startY) < 4) return
+      s.actief = true
+      setSleepId(s.id)
+      onSleepActief?.(true)
+      document.body.style.cursor = 'grabbing'
+    }
+    autoScroll(e.clientY)
+    if (badgeRef.current) {
+      badgeRef.current.style.left = `${e.clientX + 14}px`
+      badgeRef.current.style.top  = `${e.clientY + 10}px`
+    }
+    setDoel(doelUitPunt(s.id, e.clientX, e.clientY))
+  }
+
+  const greepUp = (e: React.PointerEvent) => {
+    const s = sleepRef.current
+    if (!s) return
+    if (s.actief) voerVerplaatsingUit(s.id, doelUitPunt(s.id, e.clientX, e.clientY))
+    resetSleep()
+  }
+
+  // Escape breekt af zonder te verplaatsen.
+  useEffect(() => {
+    if (!sleepId) return
+    const opEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') resetSleep() }
+    window.addEventListener('keydown', opEscape)
+    return () => window.removeEventListener('keydown', opEscape)
+  }, [sleepId, resetSleep])
 
   /** Invoegstrook tussen twee rijen. Alleen tijdens het slepen, want dan is het een mikpunt. */
   const renderStrook = (index: number) => {
@@ -296,8 +319,7 @@ export default function StructuurBoom({
     const inspring = 8 + (onder ? onder.diepte : 0) * INSPRING
     return (
       <div
-        onDragOver={e => strookOver(e, index)}
-        onDrop={handleDrop}
+        data-doel={`strook-${index}`}
         className="flex items-center"
         style={{ height: STROOK_HOOGTE, paddingLeft: inspring, paddingRight: 8 }}
       >
@@ -323,11 +345,7 @@ export default function StructuurBoom({
 
     return (
       <div
-        draggable={magSlepen}
-        onDragStart={e => handleDragStart(e, groep)}
-        onDragEnd={resetSleep}
-        onDragOver={e => rijOver(e, groep)}
-        onDrop={handleDrop}
+        data-doel={`rij-${groep.id}`}
         className={cn(
           'flex items-center group rounded-lg mx-1 my-0.5 transition-colors',
           gaatMee && 'opacity-40',
@@ -342,16 +360,16 @@ export default function StructuurBoom({
           <div className={`absolute left-0 w-0.5 h-6 rounded-r ${NIVEAU_KLEUR[diepte] ?? 'bg-everts'}`} />
         )}
 
-        {/* Sleepgreep. Eigen `draggable`, want de rest van de rij bestaat uit knoppen en
-            die slikken het sleepgebaar op — de browser start dan geen drag. Altijd
-            zichtbaar, zodat duidelijk is wáár je moet beetpakken. */}
+        {/* Sleepgreep. Vangt de muis met pointer-capture, dus het gebaar loopt door
+            ongeacht wat eronder ligt of hertekend wordt. */}
         {magSlepen && (
           <span
-            draggable
-            onDragStart={e => { e.stopPropagation(); handleDragStart(e, groep) }}
-            onDragEnd={resetSleep}
+            onPointerDown={e => greepDown(e, groep)}
+            onPointerMove={greepMove}
+            onPointerUp={greepUp}
+            onPointerCancel={resetSleep}
             title="Sleep om te verplaatsen"
-            className="flex-shrink-0 flex items-center justify-center w-4 h-6 -ml-0.5 mr-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 cursor-grab active:cursor-grabbing"
+            className="flex-shrink-0 flex items-center justify-center w-5 h-7 -ml-0.5 mr-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-grab active:cursor-grabbing touch-none"
           >
             <GripVertical className="w-3.5 h-3.5" />
           </span>
@@ -501,6 +519,17 @@ export default function StructuurBoom({
           />
         )}
       </div>
+      {/* Zwevend label bij de cursor. `pointer-events-none`, anders zou de hittest
+          hem raken in plaats van de strook eronder. */}
+      {sleepGroep && (
+        <div
+          ref={badgeRef}
+          className="fixed z-[100] pointer-events-none px-2 py-1 rounded-md bg-everts-dark text-white text-[11px] font-semibold whitespace-nowrap shadow-lg"
+        >
+          {`${nummers.get(sleepGroep.id) ?? ''} ${sleepGroep.naam}`.trim()}
+        </div>
+      )}
+
       <ConfirmDialog
         open={confirmId !== null}
         onOpenChange={open => { if (!open) setConfirmId(null) }}
