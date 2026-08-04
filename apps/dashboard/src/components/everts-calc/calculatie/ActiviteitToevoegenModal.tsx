@@ -7,7 +7,7 @@ import {
   slaCalculatieregelOp, slaComponentregelOp, getCalculatieregels, getScenario,
 } from '@/lib/everts-calc/local-store'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
-import { formatEuro } from '@/lib/everts-calc/calculations'
+import { formatEuro, parseGetal } from '@/lib/everts-calc/calculations'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Calculatieregel, Componentregel, Eenheid } from '@/lib/everts-calc/types'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
@@ -35,9 +35,11 @@ export default function ActiviteitToevoegenModal({
   const [categorie, setCategorie] = useState('')
   const [gefocust, setGefocust]   = useState<BibliotheekItemVereenvoudigd | null>(null)
 
-  // Multiselect: set van geselecteerde IDs + hoeveelheid per ID
+  // Multiselect: set van geselecteerde IDs + hoeveelheid per ID.
+  // De hoeveelheid staat bewust als tekst in de state: het veld begint leeg (geen voorgevulde 1
+  // die je eerst moet weghalen) en mag tijdens het typen ook even leeg of onaf zijn.
   const [selectie, setSelectie]         = useState<Set<string>>(new Set())
-  const [hoeveelheden, setHoeveelheden] = useState<Record<string, number>>({})
+  const [hoeveelheden, setHoeveelheden] = useState<Record<string, string>>({})
 
   // Vers geladen items (overschrijft de prop zodra geladen)
   const [items, setItems] = useState<BibliotheekItemVereenvoudigd[]>(bibliotheekItems)
@@ -77,19 +79,25 @@ export default function ActiviteitToevoegenModal({
     setSelectie(prev => {
       const nieuw = new Set(prev)
       if (nieuw.has(item.id)) { nieuw.delete(item.id) }
-      else {
-        nieuw.add(item.id)
-        if (!hoeveelheden[item.id]) {
-          setHoeveelheden(h => ({ ...h, [item.id]: 1 }))
-        }
-      }
+      else { nieuw.add(item.id) }
       return nieuw
     })
   }
 
-  const setHoeveelheid = (id: string, val: number) => {
+  const setHoeveelheid = (id: string, val: string) => {
     setHoeveelheden(prev => ({ ...prev, [id]: val }))
   }
+
+  /** Leeg of onleesbaar veld telt als 1 — dat was ook de oude voorgevulde waarde. */
+  const hoeveelheidVan = (id: string): number => {
+    const ruw = hoeveelheden[id]
+    if (!ruw?.trim()) return 1
+    const n = parseGetal(ruw)
+    return n > 0 ? n : 1
+  }
+
+  /** Klik in het hoeveelheidveld selecteert de inhoud, zodat typen die meteen vervangt. */
+  const selecteerBijFocus = (e: React.FocusEvent<HTMLInputElement>) => e.currentTarget.select()
 
   // Items die echt toegevoegd worden: selectie als die >0 is, anders alleen gefocust
   const teToevoegen: BibliotheekItemVereenvoudigd[] =
@@ -107,7 +115,7 @@ export default function ActiviteitToevoegenModal({
     const bestaandeVolgorde = getCalculatieregels(elementId).length
 
     teToevoegen.forEach((item, idx) => {
-      const hoeveelheid = hoeveelheden[item.id] ?? 1
+      const hoeveelheid = hoeveelheidVan(item.id)
       const regelId = nieuweId()
 
       const btw_pct_default = getScenario(scenarioId)?.btw_pct_default
@@ -163,7 +171,9 @@ export default function ActiviteitToevoegenModal({
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent size="lg" className="flex flex-col p-0">
+      {/* Ruimer dan de standaard lg: de linkerhelft moet de categoriefilters én lange
+          receptnamen kwijt kunnen. Vaste hoogte houdt de lijst rustig bij het filteren. */}
+      <DialogContent size="xl" className="flex flex-col p-0 max-w-[1120px] h-[82vh]">
 
         {/* Header */}
         <DialogHeader className="px-5 py-4 border-b border-slate-200">
@@ -183,38 +193,41 @@ export default function ActiviteitToevoegenModal({
           <div className="flex flex-1 overflow-hidden">
 
             {/* Links: zoeken + lijst */}
-            <div className="flex flex-col w-1/2 border-r border-slate-200">
+            <div className="flex flex-col w-[58%] border-r border-slate-200">
               {/* Zoek + categorie filter */}
-              <div className="p-3 border-b border-slate-100 space-y-2">
+              <div className="p-3 border-b border-slate-100 space-y-2.5">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     autoFocus
                     type="text"
                     value={zoek}
                     onChange={e => setZoek(e.target.value)}
                     placeholder="Zoeken in recepten..."
-                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                   />
                 </div>
-                <div className="flex gap-1 flex-wrap">
+                <div className="flex gap-1.5 flex-wrap">
                   <button
                     onClick={() => setCategorie('')}
-                    className={`px-2 py-1 text-xs rounded-full border transition-colors ${
-                      categorie === '' ? 'bg-everts text-white border-everts' : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      categorie === '' ? 'bg-everts text-white border-everts' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                     }`}
                   >
                     Alle
                   </button>
                   {categorieen.map(c => (
                     <button key={c} onClick={() => setCategorie(categorie === c ? '' : c)}
-                      className={`px-2 py-1 text-xs rounded-full border transition-colors ${
-                        categorie === c ? 'bg-everts text-white border-everts' : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                        categorie === c ? 'bg-everts text-white border-everts' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
                       {c}
                     </button>
                   ))}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {gefilterd.length} {gefilterd.length === 1 ? 'recept' : 'recepten'}
                 </div>
               </div>
 
@@ -232,18 +245,19 @@ export default function ActiviteitToevoegenModal({
                     <div
                       key={item.id}
                       onClick={() => toggleSelecteer(item)}
-                      className={`w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-50 select-none ${
+                      className={`w-full flex items-start gap-2.5 px-4 py-3 text-left cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-100 select-none ${
                         isGesel ? 'bg-everts-50 border-l-2 border-l-everts' :
                         isFocus ? 'bg-slate-50' : ''
                       }`}
                     >
                       {isGesel
-                        ? <CheckSquare className="w-4 h-4 text-everts flex-shrink-0" />
-                        : <Square className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                        ? <CheckSquare className="w-4 h-4 mt-0.5 text-everts flex-shrink-0" />
+                        : <Square className="w-4 h-4 mt-0.5 text-slate-300 flex-shrink-0" />
                       }
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-700 truncate">{item.full_name}</div>
-                        <div className="text-xs text-slate-400">{item.item_code} · {item.default_unit}</div>
+                        {/* Geen truncate: lange receptnamen mogen over twee regels doorlopen */}
+                        <div className="text-sm font-medium text-slate-700 leading-snug break-words line-clamp-2">{item.full_name}</div>
+                        <div className="mt-0.5 text-xs text-slate-400">{item.item_code} · {item.default_unit}</div>
                       </div>
                     </div>
                   )
@@ -272,11 +286,12 @@ export default function ActiviteitToevoegenModal({
                           <div className="text-xs text-slate-400">{item.item_code}</div>
                         </div>
                         <input
-                          type="number" step="0.01" min="0.01"
-                          value={hoeveelheden[item.id] ?? 1}
-                          onChange={e => setHoeveelheid(item.id, parseFloat(e.target.value) || 1)}
+                          type="text" inputMode="decimal" placeholder="1"
+                          value={hoeveelheden[item.id] ?? ''}
+                          onChange={e => setHoeveelheid(item.id, e.target.value)}
+                          onFocus={selecteerBijFocus}
                           onClick={e => e.stopPropagation()}
-                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                         />
                         <span className="text-xs text-slate-400 w-6 flex-shrink-0">{item.default_unit}</span>
                         <Button
@@ -333,10 +348,11 @@ export default function ActiviteitToevoegenModal({
                   <div className="mt-4 flex items-center gap-3">
                     <label className="text-sm text-slate-600 flex-shrink-0">Hoeveelheid:</label>
                     <input
-                      type="number" step="0.01" min="0.01"
-                      value={hoeveelheden[gefocust.id] ?? 1}
-                      onChange={e => setHoeveelheid(gefocust.id, parseFloat(e.target.value) || 1)}
-                      className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm text-right  focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
+                      type="text" inputMode="decimal" placeholder="1"
+                      value={hoeveelheden[gefocust.id] ?? ''}
+                      onChange={e => setHoeveelheid(gefocust.id, e.target.value)}
+                      onFocus={selecteerBijFocus}
+                      className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm text-right placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts"
                     />
                     <span className="text-sm text-slate-500">{gefocust.default_unit}</span>
                   </div>
@@ -349,7 +365,7 @@ export default function ActiviteitToevoegenModal({
                         {formatEuro((
                           gefocust.labor_norms.reduce((s, n) => s + n.cost_per_unit, 0) +
                           gefocust.material_norms.reduce((s, n) => s + n.cost_per_unit, 0)
-                        ) * (hoeveelheden[gefocust.id] ?? 1))}
+                        ) * hoeveelheidVan(gefocust.id))}
                       </span>
                     </div>
                   )}
