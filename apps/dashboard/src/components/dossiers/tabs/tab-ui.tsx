@@ -44,24 +44,38 @@ export const fmtPct = (v: number | null): string => {
   return `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(v)} %`
 }
 
-export const TH = ({ children, right }: { children?: React.ReactNode; right?: boolean }) => (
+export const TH = ({ children, right, breedte }: {
+  children?: React.ReactNode; right?: boolean; breedte?: number | string
+}) => (
   <th style={{
     padding: '7px 12px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
     color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: '0.04em',
-    borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap',
+    borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap', width: breedte,
   }}>
     {children}
   </th>
 )
 
-export const TD = ({ children, right, vet, accent, kleur }: {
+/**
+ * `wrap` laat de cel over meerdere regels breken in plaats van de tabel breder te maken dan het
+ * kaartje. Gebruik het voor vrije tekst (omschrijvingen); bedragen en datums blijven op één regel.
+ */
+export const TD = ({ children, right, vet, accent, kleur, wrap, colSpan }: {
   children: React.ReactNode; right?: boolean; vet?: boolean; accent?: boolean; kleur?: string
+  wrap?: boolean; colSpan?: number
 }) => (
-  <td style={{
+  <td colSpan={colSpan} style={{
     padding: '6px 12px', fontSize: 13, textAlign: right ? 'right' : 'left', fontWeight: vet ? 700 : 400,
     color: kleur ?? (accent ? 'var(--accent)' : vet ? 'var(--neutral-900)' : 'var(--neutral-700)'),
-    borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap',
-    overflow: 'hidden', textOverflow: 'ellipsis',
+    borderBottom: '1px solid var(--neutral-100, #f4f7f8)',
+    // Bovenlijnen: in een rij waarvan de omschrijving over meerdere regels loopt, blijven de
+    // bedragen dan op één lijn met de eerste tekstregel in plaats van in het midden te zweven.
+    verticalAlign: 'top',
+    whiteSpace: wrap ? 'normal' : 'nowrap',
+    overflow: wrap ? undefined : 'hidden',
+    textOverflow: wrap ? undefined : 'ellipsis',
+    overflowWrap: wrap ? 'anywhere' : undefined,
+    lineHeight: wrap ? 1.4 : undefined,
   }}>
     {children}
   </td>
