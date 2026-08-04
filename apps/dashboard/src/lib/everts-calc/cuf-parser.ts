@@ -17,6 +17,7 @@
 import type { Groep, Calculatieregel, Componentregel, Eenheid } from './types'
 import { EENHEDEN } from './types'
 import { nieuweId } from './utils'
+import { saneerXml } from './xml-sanitize'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -120,8 +121,8 @@ export function parseerCufXml(
   bron:       'calc4you' | 'gilde' = 'calc4you',
   opslagPct:  number = 0,
 ): CufParseResultaat {
-  // Verwijder BOM (Byte Order Mark) als die aanwezig is
-  const schoon = xmlString.replace(/^\uFEFF/, '').trim()
+  // Verwijder BOM (Byte Order Mark) en tekens die XML niet toestaat
+  const schoon = saneerXml(xmlString.replace(/^\uFEFF/, '')).trim()
 
   const parser = new DOMParser()
   const doc = parser.parseFromString(schoon, 'application/xml')

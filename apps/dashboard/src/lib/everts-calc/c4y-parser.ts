@@ -27,6 +27,7 @@
 import type { Groep, Calculatieregel, Componentregel, Eenheid } from './types'
 import { EENHEDEN } from './types'
 import { nieuweId } from './utils'
+import { saneerXml } from './xml-sanitize'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ interface RuweRij {
 // ─── Hoofd parser ─────────────────────────────────────────────────────────────
 
 export function parseC4y(xmlString: string, scenarioId: string): C4yParseResultaat {
-  const schoon = xmlString.replace(/^﻿/, '').trim()
+  const schoon = saneerXml(xmlString.replace(/^﻿/, '')).trim()
 
   const doc = new DOMParser().parseFromString(schoon, 'application/xml')
   const foutEl = doc.querySelector('parsererror')
