@@ -95,7 +95,6 @@ export default function PlatformShell({ children, userName, userInitials, userSu
       }}
     >
       <div
-        onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
         style={{ display: 'flex' }}
       >
@@ -104,7 +103,7 @@ export default function PlatformShell({ children, userName, userInitials, userSu
           collapsed={collapsed && !hovering}
           pinned={!collapsed}
           onToggle={() => setCollapsed(c => !c)}
-          onMouseEnter={() => setHovering(true)}
+          onIconEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}
           userName={userName}
           userInitials={userInitials}

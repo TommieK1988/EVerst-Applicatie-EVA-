@@ -226,7 +226,9 @@ export type SidebarProps = {
   /** Echte vastzet-status (los van hover-uitklappen) — stuurt het punaise-icoon. */
   pinned: boolean
   onToggle: () => void
-  onMouseEnter?: () => void
+  /** Vuurt alleen vanaf een icoon/nav-item — niet vanaf de lege witte strook.
+   *  Zo klapt de sidebar niet open als je langs de rand werkt. */
+  onIconEnter?: () => void
   onMouseLeave?: () => void
   userName?: string
   userInitials?: string
@@ -237,7 +239,7 @@ export type SidebarProps = {
 }
 
 export default function Sidebar({
-  density, collapsed, pinned, onToggle, onMouseEnter, onMouseLeave,
+  density, collapsed, pinned, onToggle, onIconEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
   userFotoUrl, rechten,
 }: SidebarProps) {
@@ -386,11 +388,11 @@ export default function Sidebar({
     )
 
     if (comingSoon || !href) {
-      return <div style={itemStyle}>{innerContent}</div>
+      return <div style={itemStyle} onMouseEnter={onIconEnter}>{innerContent}</div>
     }
 
     return (
-      <Link href={href} title={collapsed ? label : undefined} style={itemStyle}>
+      <Link href={href} title={collapsed ? label : undefined} style={itemStyle} onMouseEnter={onIconEnter}>
         {innerContent}
       </Link>
     )
@@ -398,7 +400,6 @@ export default function Sidebar({
 
   return (
     <aside
-      onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={{
         width, flexShrink: 0,
@@ -439,6 +440,7 @@ export default function Sidebar({
       <Link
         href="/"
         title="Naar overzicht"
+        onMouseEnter={onIconEnter}
         style={{
           // Negative margin fills the 10px aside padding on three sides
           margin: '-14px -10px 0',
@@ -607,7 +609,10 @@ export default function Sidebar({
             textDecoration: 'none',
             cursor: 'pointer',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-active)' }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-active)'
+            onIconEnter?.()
+          }}
           onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
         >
           {/* Avatar */}
