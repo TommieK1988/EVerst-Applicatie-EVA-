@@ -490,6 +490,14 @@ export interface BibliotheekItemVereenvoudigd {
   description?: string | null
   onderdeel: string
   default_unit: string
+  /**
+   * Gevuld bij recepten uit de Schilderwerkbibliotheek. Bij het toevoegen aan een
+   * calculatie wordt de behandeling gekoppeld in plaats van de werkomschrijving
+   * gekopieerd — zo blijft de tekst live tot hij bij de offerte bevriest.
+   */
+  schilderbehandeling_id?: string | null
+  /** Code van die behandeling ("OHD 03"); de receptenzoeker zoekt er mede op. */
+  behandeling_code?: string | null
   labor_norms: {
     hours_per_unit: number
     hour_rate: number
