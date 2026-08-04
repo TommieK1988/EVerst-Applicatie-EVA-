@@ -369,7 +369,7 @@ export default function StructuurBoom({
             onPointerUp={greepUp}
             onPointerCancel={resetSleep}
             title="Sleep om te verplaatsen"
-            className="flex-shrink-0 flex items-center justify-center w-5 h-7 -ml-0.5 mr-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-grab active:cursor-grabbing touch-none"
+            className="flex-shrink-0 flex items-center justify-center w-4 h-5 -ml-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-grab active:cursor-grabbing touch-none"
           >
             <GripVertical className="w-3.5 h-3.5" />
           </span>
@@ -401,7 +401,7 @@ export default function StructuurBoom({
         <button
           onClick={() => scrollNaarGroep(groep.id)}
           className={cn(
-            'flex-1 text-left py-2 min-w-0 flex items-baseline gap-1',
+            'flex-1 text-left py-1.5 min-w-0 flex items-baseline gap-1',
             isActief ? 'text-everts-dark font-semibold' : 'text-slate-700',
             diepte === 0 ? 'text-xs font-semibold' : 'text-xs',
           )}
