@@ -2,14 +2,12 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { FEATURES } from '@/lib/features'
 import { getObject, getObjectDossiers, getObjectRelaties, getObjectTotalen } from '@/lib/objecten/data'
 import ObjectDetailView from './ObjectDetailView'
 
 export const metadata: Metadata = { title: 'Object' }
 
 export default async function ObjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!FEATURES.objectenbeheer) notFound()
   const { rechten } = await vereisRecht('objectenbeheer', 'lezen')
 
   const { id } = await params

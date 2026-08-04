@@ -5,7 +5,6 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, D
 import type { DossierRij } from './types'
 import { maakAanvraag, zoekRelaties, getAanvraagCategorieen, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import type { VastgoedObject } from '@everts/database'
-import { FEATURES } from '@/lib/features'
 import ObjectVoorinvullen from '@/components/objecten/ObjectVoorinvullen'
 import { createOrganisatie } from '@/lib/relaties/actions'
 import { createContactpersoon, getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
@@ -329,15 +328,13 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         </DialogHeader>
 
         <DialogBody>
-          {FEATURES.objectenbeheer && (
-            <Groep titel="Object">
-              <ObjectVoorinvullen
-                gekozen={object}
-                onKies={kiesObject}
-                onWis={() => setObject(null)}
-              />
-            </Groep>
-          )}
+          <Groep titel="Object">
+            <ObjectVoorinvullen
+              gekozen={object}
+              onKies={kiesObject}
+              onWis={() => setObject(null)}
+            />
+          </Groep>
 
           <Groep titel="Basisgegevens">
             <Rij>

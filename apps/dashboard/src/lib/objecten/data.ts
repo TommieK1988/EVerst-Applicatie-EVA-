@@ -11,7 +11,6 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import type { VastgoedObject, VastgoedObjectRol, Hoofdstatus } from '@everts/database'
 import { VASTGOED_OBJECT_ROLLEN } from '@everts/database'
-import { FEATURES } from '@/lib/features'
 import { adresWijktAf, objectAdresRegel } from './adres'
 import type { RelatieObject } from './types'
 
@@ -351,7 +350,6 @@ export async function zoekObjecten(term: string, limiet = 20): Promise<VastgoedO
  * relatiepagina te laten struikelen over een recht dat met relaties niets te maken heeft.
  */
 export async function getRelatieObjecten(relatieId: string): Promise<RelatieObject[]> {
-  if (!FEATURES.objectenbeheer) return []
   try {
     await vereisRecht('objectenbeheer', 'lezen')
   } catch {

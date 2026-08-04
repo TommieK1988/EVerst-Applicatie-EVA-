@@ -3,15 +3,12 @@ import { notFound } from 'next/navigation'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { FEATURES } from '@/lib/features'
 import { getObjecten } from '@/lib/objecten/data'
 import ObjectenOverzicht from './ObjectenOverzicht'
 
 export const metadata: Metadata = { title: 'Objecten' }
 
 export default async function ObjectenPage() {
-  // De module is in productie afwezig tot de vlag aangaat; 404 in plaats van een leeg scherm.
-  if (!FEATURES.objectenbeheer) notFound()
   const { rechten } = await vereisRecht('objectenbeheer', 'lezen')
 
   let user_id: string | null = null

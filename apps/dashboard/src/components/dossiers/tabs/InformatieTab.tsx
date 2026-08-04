@@ -33,7 +33,6 @@ import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import ObjectKoppeling from '@/components/objecten/ObjectKoppeling'
-import { FEATURES } from '@/lib/features'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
 import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
@@ -1624,11 +1623,9 @@ export function InformatieTab({
           <CardBody>
             {/* Objectkoppeling (VvE/complex). Vult zichzelf; staat los van het formulier omdat
                 koppelen meteen wegschrijft en niet op "Opslaan" hoort te wachten. */}
-            {FEATURES.objectenbeheer && (
-              <div className="mb-4 border-b border-[var(--border)] pb-3">
-                <ObjectKoppeling dossierId={dossier.id} readOnly={readOnly} />
-              </div>
-            )}
+            <div className="mb-4 border-b border-[var(--border)] pb-3">
+              <ObjectKoppeling dossierId={dossier.id} readOnly={readOnly} />
+            </div>
             {editMode ? (
               <FormRow cols="2">
                 <FormField upper label="Naam" className="col-span-2">

@@ -58,10 +58,7 @@ const NAV: NavEntry[] = [
 
 const BEHEER: NavEntry[] = [
   { href: '/relaties',    label: 'Relaties',    Icon: IconRelaties,    module: 'relaties'    },
-  // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).
-  ...(FEATURES.objectenbeheer
-    ? [{ href: '/objecten', label: 'Objecten', Icon: IconObjecten, module: 'objectenbeheer' as RechtenModule }]
-    : []),
+  { href: '/objecten',    label: 'Objecten',    Icon: IconObjecten,    module: 'objectenbeheer' },
   { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers, module: 'medewerkers' },
   { href: '/wagenpark',   label: 'Wagenpark',   Icon: IconWagenpark,   module: 'wagenpark'   },
   { href: '/kam', label: 'KAM/VGM', Icon: IconKam, module: 'kam' },

@@ -2,14 +2,12 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { FEATURES } from '@/lib/features'
 import { PageHeader } from '@/components/ui'
 import ObjectFormClient from '../ObjectFormClient'
 
 export const metadata: Metadata = { title: 'Nieuw object' }
 
 export default async function NieuwObjectPage() {
-  if (!FEATURES.objectenbeheer) notFound()
   await vereisRecht('objectenbeheer', 'schrijven')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

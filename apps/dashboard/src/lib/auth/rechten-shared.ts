@@ -12,6 +12,7 @@ const NIVEAU_RANG: Record<ModuleRechten, number> = { lezen: 1, schrijven: 2, beh
  */
 export const AFGEDWONGEN_MODULES: RechtenModule[] = [
   'management', 'mijn_taken', 'wagenpark', 'materieelbeheer', 'taken', 'formulieren', 'toolbox',
+  'objectenbeheer',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */
