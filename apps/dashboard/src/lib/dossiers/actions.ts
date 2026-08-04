@@ -1885,8 +1885,19 @@ export type ProjectBewakingscode = {
    */
   pslPerKostensoort: Record<number, number>
 }
+
+/**
+ * Herkomst van een Bouw7-overzicht. Nodig omdat een leeg resultaat drie totaal verschillende dingen
+ * kan betekenen: het dossier hangt niet aan Bouw7, de call is mislukt, of er is écht niets. Voor de
+ * tabs maakt dat weinig uit — voor de compleetheidscontrole bij gereedmelden alles: een storing mag
+ * daar nooit als "alles compleet" doorgaan.
+ */
+export type Bouw7Bron = 'bouw7' | 'geen_koppeling' | 'fout'
+
 export type DossierInkoopData = {
   beschikbaar: boolean
+  /** Kwam dit overzicht daadwerkelijk uit Bouw7? Zie `Bouw7Bron`. */
+  bron: Bouw7Bron
   inkooporders: InkoopOrderRegel[]
   onderaannemers: OnderaannemerContract[]
   geboekteKosten: GeboekteKostenRegel[]
@@ -2034,25 +2045,34 @@ async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): P
 
 export async function getDossierInkoop(dossierId: string): Promise<DossierInkoopData> {
   const leeg: DossierInkoopData = {
-    beschikbaar: false, inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [], signalen: [],
+    beschikbaar: false, bron: 'geen_koppeling',
+    inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [], signalen: [],
     totalen: { besteld: 0, onderaanneming: 0, geboekt: 0, toegewezen: 0, nietToegewezen: 0 },
   }
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return leeg
   const { client, bouw7Id } = ctx
 
+  // Elke deelcall vangt zijn eigen fout op zodat één uitvaller de tab niet leegtrekt. Daardoor
+  // ziet de buitenste catch een storing echter nooit, en zou een volledig platte Bouw7 als "geen
+  // inkooporders" doorgaan. Dat is precies het verschil waar `bron` voor bestaat, dus houden we
+  // per call bij of hij gefaald heeft.
+  let callGefaald = false
+  const gefaald = <T>(leeg: T) => (): T => { callGefaald = true; return leeg }
+
   try {
     const [orderResp, subResp, apolloInvoices, heimdallResp, correcties, bouw7Codes] = await Promise.all([
       client.get<Bouw7ListResponse<Bouw7PurchaseOrderContract>>('/list/purchase-order-contracts', {
         q: `project.id = ${bouw7Id} LIMIT 500`,
-      }).catch(() => ({ items: [] as Bouw7PurchaseOrderContract[] } as Bouw7ListResponse<Bouw7PurchaseOrderContract>)),
+      }).catch(gefaald({ items: [] as Bouw7PurchaseOrderContract[] } as Bouw7ListResponse<Bouw7PurchaseOrderContract>)),
       client.get<Bouw7ListResponse<Bouw7SubcontractorContract>>('/list/subcontractor-contracts', {
         q: `project.id = ${bouw7Id} LIMIT 500`,
-      }).catch(() => ({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
-      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
+      }).catch(gefaald({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
+      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`)
+        .catch(gefaald([] as Bouw7PurchaseInvoice[])),
       client.get<Bouw7PurchaseInvoiceListResponse>('/list/purchase-invoices', {
         q: `project.id = ${bouw7Id} LIMIT 1000`,
-      }).catch(() => ({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
+      }).catch(gefaald({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
       getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
       getProjectBewakingscodes(client, bouw7Id).catch(() => new Map<string, ProjectBewakingscode>()),
     ])
@@ -2277,11 +2297,12 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
 
     return {
       beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
+      bron: callGefaald ? 'fout' : 'bouw7',
       inkooporders, onderaannemers, geboekteKosten, projectcodes, signalen,
       totalen: { besteld, onderaanneming, geboekt, toegewezen, nietToegewezen },
     }
   } catch {
-    return leeg
+    return { ...leeg, bron: 'fout' }
   }
 }
 
@@ -2754,6 +2775,8 @@ export type TermijnenDekking = {
 }
 export type DossierVerkoopData = {
   beschikbaar: boolean
+  /** Kwam dit overzicht daadwerkelijk uit Bouw7? Zie `Bouw7Bron`. */
+  bron: Bouw7Bron
   termijnenBeschikbaar: boolean
   termijnen: VerkoopTermijn[]
   facturen: VerkoopFactuur[]
@@ -2786,7 +2809,8 @@ function termijnStatus(
  */
 export async function getDossierVerkoop(dossierId: string): Promise<DossierVerkoopData> {
   const leeg: DossierVerkoopData = {
-    beschikbaar: false, termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
+    beschikbaar: false, bron: 'geen_koppeling',
+    termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
     totalen: { aanneemsom: 0, meerwerk: 0, contractTotaal: 0, gefactureerd: 0, openstaand: 0 }, termijnenDekking: null,
   }
   const ctx = await bouw7VoorDossier(dossierId)
@@ -2796,6 +2820,10 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     return { ...leeg, betaalgegevens: relatieFacturatie }
   }
   const { client, bouw7Id } = ctx
+  // Er ís een koppeling, dus vanaf hier telt elke mislukte call als storing — niet als "niets gevonden".
+  // `fetchBouw7Financial` slikt zijn eigen fouten in en geeft dan null; met een geldige ctx betekent
+  // die null dus dat Athena niet antwoordde, en dat mag geen contracttotaal van 0 opleveren.
+  let bron: Bouw7Bron = bouw7Financial == null ? 'fout' : 'bouw7'
 
   let termijnenBeschikbaar = false
   let termijnen: VerkoopTermijn[] = []
@@ -2821,6 +2849,7 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     }))
   } catch {
     facturen = []
+    bron = 'fout'
   }
 
   // Termijnen: eerst de termijnstaat (statement) van het project, dan de losse termijnen daaronder.
@@ -2890,6 +2919,7 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
 
   return {
     beschikbaar: termijnen.length > 0 || facturen.length > 0 || contractTotaal > 0,
+    bron,
     termijnenBeschikbaar,
     termijnen,
     facturen,

@@ -28,7 +28,8 @@ import {
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
-import { plaatsDossierNotitie, type DossierNotitie } from '@/lib/dossiers/notities-actions'
+import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
+import FinancieelGereedDialog from '../FinancieelGereedDialog'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
@@ -42,13 +43,13 @@ import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
 import {
   Button, Card, CardHeader, CardBody,
-  Input, Textarea,
+  Input,
   FormField, FormRow, FormSection,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   DatePicker,
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverItem,
   Separator,
-  AlertDialog, AlertDialogTrigger, AlertDialogContent,
+  AlertDialog, AlertDialogContent,
   AlertDialogTitle, AlertDialogDescription, AlertDialogFooter,
   AlertDialogAction, AlertDialogCancel,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
@@ -898,7 +899,10 @@ export function InformatieTab({
     // en zou anders terugvallen op aanvraag_substatus ('nieuw').
     sectie === 'servicedesk' ? ((dossier as any).servicedesk_substatus ?? 'nieuw') : getDossierSubstatus(dossier)
   )
+  /** Gereedmeld-dialoog met de vier compleetheidscontroles. */
   const [finDialoogOpen, setFinDialoogOpen] = React.useState(false)
+  /** De statuskeuze staat gecontroleerd zodat hij kan sluiten vóór de gereedmeld-dialoog opent. */
+  const [statusPopoverOpen, setStatusPopoverOpen] = React.useState(false)
   /** Gezet zodra er een afsluitende status gekozen is; de dialoog bevestigt of annuleert. */
   const [afsluitBevestiging, setAfsluitBevestiging] = React.useState<string | null>(null)
 
@@ -965,6 +969,14 @@ export function InformatieTab({
   async function zetSubstatus(next: string) {
     if (isAfsluitendeSubstatus(sectie, next)) {
       setAfsluitBevestiging(next)
+      return
+    }
+    // Financieel gereed loopt altijd langs de compleetheidscontrole — ook als de status via de
+    // keuzelijst wordt gezet in plaats van via de knop. Anders is de controle met twee klikken
+    // te omzeilen. De dialoog roept daarna `voerSubstatusUit` aan, niet `zetSubstatus`.
+    if (sectie === 'opdracht' && next === 'financieel_gereed' && !readOnly) {
+      setStatusPopoverOpen(false)
+      setFinDialoogOpen(true)
       return
     }
     await voerSubstatusUit(next)
@@ -1053,7 +1065,9 @@ export function InformatieTab({
     // Fase wegschrijven. Opdracht-dossiers zijn two-way (schrijft ook naar Bouw7); voor aanvraag/offerte
     // alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen blijven daar alleen-lezen).
     if (sectie === 'opdracht') {
-      zetSubstatus(substatus).catch(() => {})
+      // Direct wegschrijven, niet via `zetSubstatus`: Opslaan bevestigt de al gekozen status en
+      // mag niet opnieuw de gereedmeld-dialoog openen bij een dossier dat al financieel gereed is.
+      voerSubstatusUit(substatus).catch(() => {})
     } else if (sectie === 'servicedesk') {
       updateServicedeskSubstatus(dossier.id, substatus).catch(() => {})
     } else if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
@@ -1271,7 +1285,7 @@ export function InformatieTab({
                 {statusLabel(substatus)}
               </span>
             ) : (
-            <Popover>
+            <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
               <PopoverTrigger asChild>
                 <button
                   className="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
@@ -1344,6 +1358,18 @@ export function InformatieTab({
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Gereedmelden met compleetheidscontrole. Staat buiten de knop-render: de statuskeuze
+            hierboven opent dezelfde dialoog, ook vanuit een andere substatus. */}
+        {sectie === 'opdracht' && !readOnly && (
+          <FinancieelGereedDialog
+            dossierId={dossier.id}
+            dossierHref={`/opdrachten/${dossier.id}`}
+            open={finDialoogOpen}
+            onOpenChange={setFinDialoogOpen}
+            onBevestigd={() => voerSubstatusUit('financieel_gereed')}
+          />
+        )}
+
         {/* Acties rechts */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {bouw7Url && (
@@ -1365,32 +1391,12 @@ export function InformatieTab({
           )}
           {sectie === 'opdracht' && substatus === 'uitvoering_gereed' && !readOnly && (
             <>
-              <AlertDialog open={finDialoogOpen} onOpenChange={setFinDialoogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
-                    </svg>
-                    Financieel gereed melden
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogTitle>Financieel gereed melden</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Weet je zeker dat je alle kosten binnen hebt en alle verkoopfacturen verstuurd zijn?
-                  </AlertDialogDescription>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Annuleren</AlertDialogCancel>
-                    <AlertDialogAction onClick={async () => {
-                      await zetSubstatus('financieel_gereed')
-                      setFinDialoogOpen(false)
-                      router.refresh()
-                    }}>
-                      Ja, melden
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button variant="ghost" onClick={() => setFinDialoogOpen(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+                </svg>
+                Financieel gereed melden
+              </Button>
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}
