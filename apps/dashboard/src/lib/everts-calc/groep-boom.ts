@@ -62,7 +62,11 @@ export function subtreeHoogte(groepen: Groep[], id: string): number {
   return 1 + Math.max(...kinderen.map(k => subtreeHoogte(groepen, k.id)))
 }
 
-export interface Projectie {
+/**
+ * Een landingsplek: bij welke ouder, en vóór welke broer/zus (`null` = achteraan).
+ * Elke denkbare positie in de boom is hiermee te beschrijven.
+ */
+export interface Doelpositie {
   /** Nieuwe ouder (null = hoofdgroep). */
   parentId: string | null
   /** 0-gebaseerde diepte waarop de groep landt. */
@@ -72,64 +76,41 @@ export interface Projectie {
 }
 
 /**
- * Bepaalt waar een gesleepte groep landt. Het model is een **invoegpositie tussen twee
- * rijen** (`invoegIndex`) plus een gewenste diepte; de buren bepalen wat er mogelijk is:
- *
- *  - dieper dan `vorige.diepte + 1` kan niet — daar hangt geen ouder tussen;
- *  - ondieper dan `volgende.diepte` kan niet — die rij zou zijn ouder kwijtraken;
- *  - staat er niets meer ná de invoegpositie, dan mag álles tot niveau 1 (= onderaan).
- *
- * Daardoor zijn "achteraan in een ouder" en "helemaal onderaan" gewone uitkomsten in
- * plaats van onbereikbare gevallen.
- *
- * @param platteLijst     outline-volgorde zónder de gesleepte tak
- * @param invoegIndex     positie tussen de rijen: 0 = bovenaan, lijst.length = onderaan
- * @param gewensteDiepte  diepte die de horizontale muispositie suggereert
- * @param maxEigenDiepte  MAX_NIVEAU - 1 - hoogte van de gesleepte tak
+ * Mag `sleepId` onder `nieuweParentId` hangen? Twee redenen van niet: je zou hem in zijn
+ * eigen tak stoppen (die raakt dan los van de wortel), of de tak zou voorbij `MAX_NIVEAU`
+ * duiken. De UI gebruikt dit om onbereikbare doelen meteen als geblokkeerd te tonen, in
+ * plaats van een drop te accepteren die daarna niets doet.
  */
-export function projecteer(
-  platteLijst: PlatteGroep[],
-  invoegIndex: number,
-  gewensteDiepte: number,
-  maxEigenDiepte: number,
-): Projectie {
-  const index    = Math.max(0, Math.min(invoegIndex, platteLijst.length))
-  const vorige   = platteLijst[index - 1]
-  const volgende = platteLijst[index]
-
-  const maxDiepte = Math.min(vorige ? vorige.diepte + 1 : 0, Math.max(0, maxEigenDiepte))
-  const minDiepte = Math.min(volgende ? volgende.diepte : 0, maxDiepte)
-  const diepte    = Math.max(minDiepte, Math.min(gewensteDiepte, maxDiepte))
-
-  // Nieuwe ouder = de dichtstbijzijnde rij hierbóven die precies één niveau hoger zit.
-  let parentId: string | null = null
-  if (diepte > 0) {
-    for (let i = index - 1; i >= 0; i--) {
-      if (platteLijst[i].diepte === diepte - 1) { parentId = platteLijst[i].groep.id; break }
-    }
-    if (!parentId) return { parentId: null, diepte: 0, voorGroepId: eersteBroerVanaf(platteLijst, index, null, 0) }
-  }
-
-  return { parentId, diepte, voorGroepId: eersteBroerVanaf(platteLijst, index, parentId, diepte) }
+export function magVerplaatsenNaar(
+  groepen: Groep[],
+  sleepId: string,
+  nieuweParentId: string | null,
+): boolean {
+  if (nieuweParentId === sleepId) return false
+  if (nieuweParentId && subtreeIds(groepen, sleepId).has(nieuweParentId)) return false
+  const ouder = nieuweParentId ? groepen.find(g => g.id === nieuweParentId) : null
+  if (nieuweParentId && !ouder) return false
+  const nieuweDiepte = ouder ? ouder.niveau : 0
+  return nieuweDiepte + 1 + subtreeHoogte(groepen, sleepId) <= MAX_NIVEAU
 }
 
 /**
- * Eerste directe kind van `parentId` op of ná `vanaf` — dáár komt de groep vóór.
- * `null` betekent achteraan bij die ouder: er volgt geen broer/zus meer.
+ * De landingsplek "vlak vóór `voorGroep`" — de invoegstrook boven een rij. De nieuwe
+ * ouder is simpelweg de ouder van die rij, dus het niveau volgt uit wáár je loslaat en
+ * niet uit een zijwaartse beweging.
  */
-function eersteBroerVanaf(
-  platteLijst: PlatteGroep[],
-  vanaf: number,
-  parentId: string | null,
-  diepte: number,
-): string | null {
-  for (let i = vanaf; i < platteLijst.length; i++) {
-    const rij = platteLijst[i]
-    if ((rij.groep.parent_id ?? null) === parentId) return rij.groep.id
-    // Ondieper dan het gekozen niveau = de tak van de ouder is voorbij.
-    if (rij.diepte < diepte) break
-  }
-  return null
+export function positieVoor(groepen: Groep[], voorGroepId: string): Doelpositie | null {
+  const doel = groepen.find(g => g.id === voorGroepId)
+  if (!doel) return null
+  return { parentId: doel.parent_id ?? null, diepte: doel.niveau - 1, voorGroepId: doel.id }
+}
+
+/** De landingsplek "achteraan in `parentId`" — een rij zelf, of onderaan de boom (null). */
+export function positieIn(groepen: Groep[], parentId: string | null): Doelpositie | null {
+  if (!parentId) return { parentId: null, diepte: 0, voorGroepId: null }
+  const ouder = groepen.find(g => g.id === parentId)
+  if (!ouder) return null
+  return { parentId: ouder.id, diepte: ouder.niveau, voorGroepId: null }
 }
 
 /**
