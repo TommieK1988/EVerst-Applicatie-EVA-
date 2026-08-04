@@ -954,6 +954,9 @@ export type Database = {
       }
       paint_items: {
         Row: {
+          vergrendeld: boolean
+          schilder_combinatie_id: string | null
+          marge_pct: number | null
           active: boolean
           btw_tarief: string
           default_unit: string | null
@@ -969,6 +972,9 @@ export type Database = {
           type: string
         }
         Insert: {
+          vergrendeld?: boolean
+          schilder_combinatie_id?: string | null
+          marge_pct?: number | null
           active?: boolean
           btw_tarief?: string
           default_unit?: string | null
@@ -984,6 +990,9 @@ export type Database = {
           type: string
         }
         Update: {
+          vergrendeld?: boolean
+          schilder_combinatie_id?: string | null
+          marge_pct?: number | null
           active?: boolean
           btw_tarief?: string
           default_unit?: string | null
@@ -1017,6 +1026,7 @@ export type Database = {
       }
       paint_labor_norms: {
         Row: {
+          uurtarief_label: string | null
           active: boolean
           cost_per_unit: number | null
           description: string | null
@@ -1029,6 +1039,7 @@ export type Database = {
           unit: string | null
         }
         Insert: {
+          uurtarief_label?: string | null
           active?: boolean
           cost_per_unit?: number | null
           description?: string | null
@@ -1041,6 +1052,7 @@ export type Database = {
           unit?: string | null
         }
         Update: {
+          uurtarief_label?: string | null
           active?: boolean
           cost_per_unit?: number | null
           description?: string | null

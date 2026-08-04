@@ -35,6 +35,13 @@ export interface PaintItemMetNormen extends DbPaintItem {
   family: Pick<DbPaintSystemFamily, 'id' | 'name' | 'family_code'> | null
   labor_norms: LaborNorm[]
   material_norms: MaterialNorm[]
+  /**
+   * Recept is een spiegel van de Schilderwerkbibliotheek en hier alleen-lezen;
+   * een database-trigger schrijft het bij elke bronwijziging opnieuw.
+   * Staat nog niet in de gegenereerde `database.types.ts`.
+   */
+  vergrendeld: boolean
+  schilder_combinatie_id: string | null
 }
 
 // ─── Data ophalen ─────────────────────────────────────────────────────────────

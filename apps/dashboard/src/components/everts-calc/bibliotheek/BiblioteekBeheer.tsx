@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect, useMemo } from 'react'
-import { BookOpen, Trash2, Plus, Upload, Download } from 'lucide-react'
+import { BookOpen, Trash2, Plus, Upload, Download, Lock } from 'lucide-react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/everts-calc/shared/PageHeader'
 import {
@@ -94,8 +95,8 @@ function InlineTekst({
 // ─── Textarea met bullet-knop ─────────────────────────────────────────────────
 
 function BulletTextarea({
-  value, onChange, rows = 3, placeholder,
-}: { value: string; onChange: (v: string) => void; rows?: number; placeholder?: string }) {
+  value, onChange, rows = 3, placeholder, disabled = false,
+}: { value: string; onChange: (v: string) => void; rows?: number; placeholder?: string; disabled?: boolean }) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const insertBullet = () => {
@@ -115,20 +116,23 @@ function BulletTextarea({
 
   return (
     <div>
-      <div className="flex justify-end mb-1">
-        <button type="button" onClick={insertBullet}
-          className="text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded transition-colors"
-          title="Bullet toevoegen">
-          • Bullet
-        </button>
-      </div>
+      {!disabled && (
+        <div className="flex justify-end mb-1">
+          <button type="button" onClick={insertBullet}
+            className="text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded transition-colors"
+            title="Bullet toevoegen">
+            • Bullet
+          </button>
+        </div>
+      )}
       <textarea
         ref={ref}
         value={value}
         onChange={e => onChange(e.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-none"
+        disabled={disabled}
+        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-none disabled:bg-slate-50 disabled:text-slate-500"
       />
     </div>
   )
@@ -233,7 +237,7 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
 
 // ─── Arbeidsnorm rij ──────────────────────────────────────────────────────────
 
-function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
+function LaborRij({ norm, eenheid, vergrendeld = false }: { norm: LaborNorm; eenheid: string; vergrendeld?: boolean }) {
   const [, start] = useTransition()
 
   const sla = (data: { hours_per_unit?: number; hour_rate?: number; description?: string }) =>
@@ -256,17 +260,23 @@ function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
         <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">AB</span>
       </td>
       <td className="py-1 text-slate-600">
-        <InlineTekst
-          waarde={norm.description ?? ''}
-          placeholder={`Arbeid (${eenheid})`}
-          breedte="w-36"
-          onOpslaan={v => sla({ description: v })}
-        />
+        {vergrendeld ? (
+          <span className="px-1">{norm.description || `Arbeid (${eenheid})`}</span>
+        ) : (
+          <InlineTekst
+            waarde={norm.description ?? ''}
+            placeholder={`Arbeid (${eenheid})`}
+            breedte="w-36"
+            onOpslaan={v => sla({ description: v })}
+          />
+        )}
       </td>
       <td className="py-1 text-right">
         <div className="flex items-center justify-end gap-1">
-          <InlineGetal waarde={minuten} stap="1" breedte="w-16"
-            onOpslaan={v => sla({ hours_per_unit: v / 60 })} />
+          {vergrendeld
+            ? <span className="px-1">{minuten}</span>
+            : <InlineGetal waarde={minuten} stap="1" breedte="w-16"
+                onOpslaan={v => sla({ hours_per_unit: v / 60 })} />}
           <span className="text-slate-400 text-xs">min</span>
         </div>
         <div className="text-right text-xs text-slate-400  pr-1">
@@ -274,16 +284,17 @@ function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
         </div>
       </td>
       <td className="py-1 text-right">
-        <InlineGetal waarde={norm.hour_rate} stap="0.01"
-          onOpslaan={v => sla({ hour_rate: v })} />
+        {vergrendeld
+          ? <span className="px-1">{norm.hour_rate}</span>
+          : <InlineGetal waarde={norm.hour_rate} stap="0.01" onOpslaan={v => sla({ hour_rate: v })} />}
         <span className="text-slate-400 text-xs ml-1">€/u</span>
       </td>
       <td className="py-1 text-right  text-blue-700 pr-2">{formatEuro(norm.cost_per_unit)}</td>
       <td className="py-1 pr-2">
-        <Button variant="ghost" size="icon-sm" onClick={verwijder}
+        {!vergrendeld && <Button variant="ghost" size="icon-sm" onClick={verwijder}
           className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity">
           <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        </Button>}
       </td>
     </tr>
   )
@@ -291,7 +302,7 @@ function LaborRij({ norm, eenheid }: { norm: LaborNorm; eenheid: string }) {
 
 // ─── Materiaalnorm rij ────────────────────────────────────────────────────────
 
-function MateriaalRij({ norm, eenheid }: { norm: MaterialNorm; eenheid: string }) {
+function MateriaalRij({ norm, eenheid, vergrendeld = false }: { norm: MaterialNorm; eenheid: string; vergrendeld?: boolean }) {
   const [, start] = useTransition()
   const isOA = norm.norm_type === 'onderaanneming'
 
@@ -316,13 +327,17 @@ function MateriaalRij({ norm, eenheid }: { norm: MaterialNorm; eenheid: string }
       </td>
       <td className="py-1 text-slate-600 text-xs">
         <div className="flex items-center gap-1">
-          <InlineTekst
-            waarde={norm.material_name ?? ''}
-            placeholder={isOA ? 'Onderaannemer omschrijving' : 'Materiaalomschrijving'}
-            breedte="w-36"
-            onOpslaan={v => sla({ material_name: v })}
-          />
-          {!isOA && (
+          {vergrendeld ? (
+            <span className="px-1">{norm.material_name}</span>
+          ) : (
+            <InlineTekst
+              waarde={norm.material_name ?? ''}
+              placeholder={isOA ? 'Onderaannemer omschrijving' : 'Materiaalomschrijving'}
+              breedte="w-36"
+              onOpslaan={v => sla({ material_name: v })}
+            />
+          )}
+          {!isOA && !vergrendeld && (
             <MateriaalBibliotheekZoeker
               onSelect={m => sla({ material_name: m.omschrijving, unit_price: m.kostprijs, unit: m.eenheid })}
             />
@@ -332,21 +347,27 @@ function MateriaalRij({ norm, eenheid }: { norm: MaterialNorm; eenheid: string }
       {isOA ? (
         <>
           <td className="py-1 text-right" colSpan={2}>
-            <InlineGetal waarde={norm.unit_price} stap="0.01"
-              onOpslaan={v => sla({ unit_price: v, quantity_per_unit: 1 })} />
+            {vergrendeld
+              ? <span className="px-1">{norm.unit_price}</span>
+              : <InlineGetal waarde={norm.unit_price} stap="0.01"
+                  onOpslaan={v => sla({ unit_price: v, quantity_per_unit: 1 })} />}
             <span className="text-slate-400 text-xs ml-1">€/{eenheid}</span>
           </td>
         </>
       ) : (
         <>
           <td className="py-1 text-right">
-            <InlineGetal waarde={norm.quantity_per_unit} stap="0.001"
-              onOpslaan={v => sla({ quantity_per_unit: v })} />
+            {vergrendeld
+              ? <span className="px-1">{norm.quantity_per_unit}</span>
+              : <InlineGetal waarde={norm.quantity_per_unit} stap="0.001"
+                  onOpslaan={v => sla({ quantity_per_unit: v })} />}
             <span className="text-slate-400 text-xs ml-1">{norm.unit ?? 'ltr'}/{eenheid}</span>
           </td>
           <td className="py-1 text-right">
-            <InlineGetal waarde={norm.unit_price} stap="0.01"
-              onOpslaan={v => sla({ unit_price: v })} />
+            {vergrendeld
+              ? <span className="px-1">{norm.unit_price}</span>
+              : <InlineGetal waarde={norm.unit_price} stap="0.01"
+                  onOpslaan={v => sla({ unit_price: v })} />}
             <span className="text-slate-400 text-xs ml-1">€/{norm.unit ?? 'ltr'}</span>
           </td>
         </>
@@ -355,10 +376,12 @@ function MateriaalRij({ norm, eenheid }: { norm: MaterialNorm; eenheid: string }
         {formatEuro(norm.cost_per_unit)}
       </td>
       <td className="py-1 pr-2">
-        <Button variant="ghost" size="icon-sm" onClick={verwijder}
-          className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity">
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        {!vergrendeld && (
+          <Button variant="ghost" size="icon-sm" onClick={verwijder}
+            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity">
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </td>
     </tr>
   )
@@ -477,12 +500,35 @@ function BewerkPaneel({
       <DialogContent size="lg">
         <DialogHeader>
           <div>
-            <DialogTitle>{item.full_name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {item.vergrendeld && <Lock className="w-4 h-4 shrink-0 text-slate-400" />}
+              {item.full_name}
+            </DialogTitle>
             <div className="text-xs text-slate-400  mt-0.5">{item.item_code}</div>
           </div>
         </DialogHeader>
 
         <DialogBody className="space-y-6">
+          {/* Dit recept is een spiegel van de Schilderwerkbibliotheek: een
+              database-trigger schrijft het bij elke bronwijziging opnieuw, dus
+              een aanpassing hier zou stilzwijgend verdwijnen. */}
+          {item.vergrendeld && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <Lock className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+              <div className="text-sm text-amber-900">
+                <p className="font-medium">Dit recept wordt beheerd in de Schilderwerkbibliotheek.</p>
+                <p className="mt-1 text-amber-800">
+                  Hier is het alleen-lezen, zodat de twee bibliotheken niet uit elkaar lopen.{' '}
+                  <Link href="/everts-calc/bibliotheek/schilderwerk"
+                    className="font-medium underline underline-offset-2 hover:text-amber-950">
+                    Pas het daar aan
+                  </Link>{' '}
+                  — de wijziging komt vanzelf hier terug.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Basisgegevens */}
           <section>
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Basisgegevens</h3>
@@ -493,30 +539,30 @@ function BewerkPaneel({
               ].map(({ label, val, set }) => (
                 <div key={label}>
                   <label className="block text-xs text-slate-500 mb-1">{label}</label>
-                  <input value={val} onChange={e => set(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts" />
+                  <input value={val} onChange={e => set(e.target.value)} disabled={item.vergrendeld}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts disabled:bg-slate-50 disabled:text-slate-500" />
                 </div>
               ))}
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Eenheid</label>
-                <select value={eenh} onChange={e => setEenh(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
+                <select value={eenh} onChange={e => setEenh(e.target.value)} disabled={item.vergrendeld}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white disabled:bg-slate-50 disabled:text-slate-500">
                   {eenheden.map(e => <option key={e.afkorting} value={e.afkorting} title={e.omschrijving}>{e.afkorting}</option>)}
                   {!eenheden.some(e => e.afkorting === eenh) && eenh && <option value={eenh}>{eenh}</option>}
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Categorie</label>
-                <select value={cat} onChange={e => setCat(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
+                <select value={cat} onChange={e => setCat(e.target.value)} disabled={item.vergrendeld}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white disabled:bg-slate-50 disabled:text-slate-500">
                   {categorieen.map(c => <option key={c} value={c}>{c}</option>)}
                   {!categorieen.includes(cat) && cat && <option value={cat}>{cat}</option>}
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">BTW tarief</label>
-                <select value={btw} onChange={e => setBtw(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white">
+                <select value={btw} onChange={e => setBtw(e.target.value)} disabled={item.vergrendeld}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white disabled:bg-slate-50 disabled:text-slate-500">
                   {BTW_TARIEVEN.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
@@ -524,6 +570,7 @@ function BewerkPaneel({
                 <div className="col-span-2">
                   <label className="block text-xs text-slate-500 mb-1">Houtrot-soort (tussengroep)</label>
                   <input value={groep} onChange={e => setGroep(e.target.value)} list="houtrot-soorten"
+                    disabled={item.vergrendeld}
                     placeholder="bijv. Epoxyherstel — leeg = niet in de houtrot-app"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts" />
                   <datalist id="houtrot-soorten">
@@ -545,6 +592,7 @@ function BewerkPaneel({
               value={omschr}
               onChange={setOmschr}
               rows={3}
+              disabled={item.vergrendeld}
               placeholder="Uitgebreide omschrijving van de werkzaamheden..."
             />
           </section>
@@ -556,9 +604,11 @@ function BewerkPaneel({
                 Arbeidsnormen
                 <span className="ml-2 text-blue-700  normal-case">{formatEuro(totaalArbeid)}/{eenheid}</span>
               </h3>
-              <Button variant="ghost" size="sm" onClick={() => setNwLaborOpen(o => !o)}>
-                <Plus className="w-3.5 h-3.5" /> Toevoegen
-              </Button>
+              {!item.vergrendeld && (
+                <Button variant="ghost" size="sm" onClick={() => setNwLaborOpen(o => !o)}>
+                  <Plus className="w-3.5 h-3.5" /> Toevoegen
+                </Button>
+              )}
             </div>
 
             {item.labor_norms.length > 0 ? (
@@ -575,7 +625,7 @@ function BewerkPaneel({
                 </thead>
                 <tbody>
                   {item.labor_norms.map(n => (
-                    <LaborRij key={n.id} norm={n} eenheid={eenheid} />
+                    <LaborRij key={n.id} norm={n} eenheid={eenheid} vergrendeld={item.vergrendeld} />
                   ))}
                 </tbody>
               </table>
@@ -624,16 +674,18 @@ function BewerkPaneel({
                 Materiaalnormen
                 <span className="ml-2 text-red-700  normal-case">{formatEuro(totaalMateriaal)}/{eenheid}</span>
               </h3>
-              <Button variant="ghost" size="sm" onClick={() => setNwMatOpen(o => !o)}>
-                <Plus className="w-3.5 h-3.5" /> Toevoegen
-              </Button>
+              {!item.vergrendeld && (
+                <Button variant="ghost" size="sm" onClick={() => setNwMatOpen(o => !o)}>
+                  <Plus className="w-3.5 h-3.5" /> Toevoegen
+                </Button>
+              )}
             </div>
 
             {materiaalNorms.length > 0 ? (
               <table className="w-full">
                 <tbody>
                   {materiaalNorms.map(n => (
-                    <MateriaalRij key={n.id} norm={n} eenheid={eenheid} />
+                    <MateriaalRij key={n.id} norm={n} eenheid={eenheid} vergrendeld={item.vergrendeld} />
                   ))}
                 </tbody>
               </table>
@@ -688,16 +740,18 @@ function BewerkPaneel({
                 Onderaanneming
                 <span className="ml-2 text-purple-700  normal-case">{formatEuro(totaalOa)}/{eenheid}</span>
               </h3>
-              <Button variant="ghost" size="sm" onClick={() => setNwOaOpen(o => !o)}>
-                <Plus className="w-3.5 h-3.5" /> Toevoegen
-              </Button>
+              {!item.vergrendeld && (
+                <Button variant="ghost" size="sm" onClick={() => setNwOaOpen(o => !o)}>
+                  <Plus className="w-3.5 h-3.5" /> Toevoegen
+                </Button>
+              )}
             </div>
 
             {oaNorms.length > 0 ? (
               <table className="w-full">
                 <tbody>
                   {oaNorms.map(n => (
-                    <MateriaalRij key={n.id} norm={n} eenheid={eenheid} />
+                    <MateriaalRij key={n.id} norm={n} eenheid={eenheid} vergrendeld={item.vergrendeld} />
                   ))}
                 </tbody>
               </table>
@@ -767,7 +821,9 @@ function BewerkPaneel({
             <Trash2 className="w-3.5 h-3.5" /> Verwijderen
           </Button>
           <Button variant="ghost" onClick={onSluiten}>Sluiten</Button>
-          <Button onClick={slaBasiOp} loading={isPending}>Opslaan</Button>
+          {!item.vergrendeld && (
+            <Button onClick={slaBasiOp} loading={isPending}>Opslaan</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1012,7 +1068,17 @@ export default function BiblioteekBeheer({ items, layouts, user_id }: Props) {
         filterType: 'tekst',
         sorteerWaarde: r => r.full_name,
         render: r => (
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--neutral-900)' }}>{r.full_name}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {/* Slotje: dit recept wordt in de Schilderwerkbibliotheek beheerd en
+                is hier alleen-lezen. */}
+            {r.vergrendeld && (
+              <Lock
+                style={{ width: 12, height: 12, flexShrink: 0, color: 'var(--neutral-400)' }}
+                aria-label="Beheerd in de Schilderwerkbibliotheek"
+              />
+            )}
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--neutral-900)' }}>{r.full_name}</span>
+          </span>
         ),
       },
       {

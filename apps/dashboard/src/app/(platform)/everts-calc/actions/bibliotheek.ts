@@ -45,6 +45,46 @@ function codeNaarUuid(prefix: string, code: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
 }
 
+// ─── Vergrendelde recepten ────────────────────────────────────────────────────
+
+/**
+ * Recepten met `vergrendeld = true` zijn een spiegel van de Schilderwerk-
+ * bibliotheek: een database-trigger schrijft ze bij elke wijziging daar opnieuw.
+ * Iets aanpassen in de recepten-bibliotheek zou dus bij de eerstvolgende
+ * wijziging aan de bronkant stilzwijgend verdwijnen. Daarom blokkeren we het
+ * hier — de UI toont een slotje, maar dít is de harde grens.
+ */
+const VERGRENDELD_MELDING =
+  'Dit recept komt uit de Schilderwerkbibliotheek en wordt daar beheerd. ' +
+  'Pas het daar aan; de wijziging komt vanzelf hier terug.'
+
+async function weigerAlsVergrendeld(itemIds: string[]): Promise<void> {
+  const ids = itemIds.filter(Boolean)
+  if (ids.length === 0) return
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('paint_items')
+    .select('id')
+    .in('id', ids)
+    .eq('vergrendeld', true)
+    .limit(1)
+
+  if (error) throw new Error(`Fout bij controleren recept: ${error.message}`)
+  if (data && data.length > 0) throw new Error(VERGRENDELD_MELDING)
+}
+
+/** Zoekt het recept op waar een norm bij hoort en controleert de vergrendeling. */
+async function weigerAlsNormVanVergrendeldRecept(
+  tabel: 'paint_labor_norms' | 'paint_material_norms',
+  normId: string,
+): Promise<void> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.from(tabel).select('item_id').eq('id', normId).single()
+  if (error) throw new Error(`Fout bij opzoeken norm: ${error.message}`)
+  await weigerAlsVergrendeld([data?.item_id].filter((v): v is string => Boolean(v)))
+}
+
 // ─── Arbeidsnorm bijwerken ────────────────────────────────────────────────────
 
 export async function updateLaborNorm(id: string, data: {
@@ -52,6 +92,7 @@ export async function updateLaborNorm(id: string, data: {
   hour_rate?: number
   description?: string
 }): Promise<void> {
+  await weigerAlsNormVanVergrendeldRecept('paint_labor_norms', id)
   const supabase = await createClient()
 
   const bestaand = await supabase
@@ -80,6 +121,7 @@ export async function updateMaterialNorm(id: string, data: {
   material_name?: string
   unit?: string
 }): Promise<void> {
+  await weigerAlsNormVanVergrendeldRecept('paint_material_norms', id)
   const supabase = await createClient()
 
   const bestaand = await supabase
@@ -113,6 +155,7 @@ export async function updateRecept(id: string, data: {
   /** Houtrot-soort: groepslabel voor de tweetraps keuze in de houtrot-app. */
   groep?: string | null
 }): Promise<void> {
+  await weigerAlsVergrendeld([id])
   const supabase = await createClient()
   const { error } = await supabase.from('paint_items').update(data).eq('id', id)
   if (error) throw new Error(`Fout bij bijwerken recept: ${error.message}`)
@@ -122,6 +165,7 @@ export async function updateRecept(id: string, data: {
 // ─── Recept verwijderen ───────────────────────────────────────────────────────
 
 export async function verwijderRecept(id: string): Promise<void> {
+  await weigerAlsVergrendeld([id])
   const supabase = await createClient()
   // Cascade: verwijder norms eerst
   await supabase.from('paint_labor_norms').delete().eq('item_id', id)
@@ -139,6 +183,7 @@ export async function voegLaborNormToe(itemId: string, treatmentId: string, sour
   unit?: string
   description?: string
 }): Promise<void> {
+  await weigerAlsVergrendeld([itemId])
   const supabase = await createClient()
   const { error } = await supabase.from('paint_labor_norms').insert({
     item_id: itemId,
@@ -158,6 +203,7 @@ export async function voegLaborNormToe(itemId: string, treatmentId: string, sour
 // ─── Arbeidsnorm verwijderen ──────────────────────────────────────────────────
 
 export async function verwijderLaborNorm(id: string): Promise<void> {
+  await weigerAlsNormVanVergrendeldRecept('paint_labor_norms', id)
   const supabase = await createClient()
   const { error } = await supabase.from('paint_labor_norms').delete().eq('id', id)
   if (error) throw new Error(`Fout bij verwijderen arbeidsnorm: ${error.message}`)
@@ -173,6 +219,7 @@ export async function voegMaterialNormToe(itemId: string, treatmentId: string, s
   unit?: string
   norm_type?: string
 }): Promise<void> {
+  await weigerAlsVergrendeld([itemId])
   const supabase = await createClient()
   const { error } = await supabase.from('paint_material_norms').insert({
     item_id: itemId,
@@ -193,6 +240,7 @@ export async function voegMaterialNormToe(itemId: string, treatmentId: string, s
 // ─── Materiaalnorm verwijderen ────────────────────────────────────────────────
 
 export async function verwijderMaterialNorm(id: string): Promise<void> {
+  await weigerAlsNormVanVergrendeldRecept('paint_material_norms', id)
   const supabase = await createClient()
   const { error } = await supabase.from('paint_material_norms').delete().eq('id', id)
   if (error) throw new Error(`Fout bij verwijderen materiaalnorm: ${error.message}`)
@@ -318,9 +366,21 @@ export async function slaRegelOpAlsRecept(data: {
 
 export async function leegMaakBibliotheek(): Promise<void> {
   const supabase = await createClient()
-  await supabase.from('paint_labor_norms').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-  await supabase.from('paint_material_norms').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-  const { error } = await supabase.from('paint_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+  // Gespiegelde recepten blijven staan: die horen bij de Schilderwerkbibliotheek
+  // en zouden door de trigger toch meteen terugkomen.
+  const { data: teVerwijderen, error: leesFout } = await supabase
+    .from('paint_items')
+    .select('id')
+    .eq('vergrendeld', false)
+  if (leesFout) throw new Error(`Fout bij leegmaken bibliotheek: ${leesFout.message}`)
+
+  const ids = (teVerwijderen ?? []).map(r => r.id)
+  if (ids.length === 0) return
+
+  await supabase.from('paint_labor_norms').delete().in('item_id', ids)
+  await supabase.from('paint_material_norms').delete().in('item_id', ids)
+  const { error } = await supabase.from('paint_items').delete().in('id', ids)
   if (error) throw new Error(`Fout bij leegmaken bibliotheek: ${error.message}`)
   revalidatePath('/bibliotheek')
 }
@@ -328,6 +388,7 @@ export async function leegMaakBibliotheek(): Promise<void> {
 // ─── Item deactiveren ─────────────────────────────────────────────────────────
 
 export async function toggleItemActief(id: string, actief: boolean): Promise<void> {
+  await weigerAlsVergrendeld([id])
   const supabase = await createClient()
   const { error } = await supabase.from('paint_items').update({ active: actief }).eq('id', id)
   if (error) throw new Error(`Fout bij bijwerken item: ${error.message}`)
