@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, cloneElement, forwardRef, useImperativeHandle, useTransition } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, cloneElement, forwardRef, useImperativeHandle, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus } from 'lucide-react'
@@ -40,6 +40,8 @@ interface Props {
   onGroepActief: (id: string) => void
   onWijziging: () => void
   onUndoCountChange?: (count: number) => void
+  /** Meldt of de diepste groepen allemaal ingeklapt zijn — voedt het label van de in-/uitklapknop. */
+  onInklapStatusChange?: (allesIngeklapt: boolean) => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
   /** Alleen-lezen (bevroren calculatie): inhoud is te bekijken en in/uit te klappen,
    *  maar niets is bewerkbaar. */
@@ -48,7 +50,9 @@ interface Props {
 
 export interface CalculatieGridHandle {
   undo: () => void
-  collapseAll: () => void
+  /** true = de diepste groepen inklappen (elke groepskop blijft zichtbaar, regels verdwijnen);
+   *  false = alles uitklappen. */
+  zetInklap: (ingeklapt: boolean) => void
   /** Zet een herstelpunt vóór een wijziging van buitenaf (structuurboom), zodat Ctrl+Z die terugdraait. */
   duwSnapshot: () => void
 }
@@ -1493,6 +1497,8 @@ interface GroepSectieProps {
   onVerwijderRegel: (id: string) => void
   onVerwijderGroep: (id: string) => void
   onWijzigGroep: (id: string, patch: Partial<Groep>) => void
+  /** Klap één groep in/uit — apart van onWijzigGroep, want in-/uitklappen is geen inhoudelijke wijziging. */
+  onToggleInklap: (id: string) => void
   onVoegRegelToe: (groepId: string) => void
   onVoegSubgroepToe: (groep: Groep) => void
   /** Groep waarboven een régel hangt — voor de blauwe ring bij regel-drops. */
@@ -1518,15 +1524,14 @@ function GroepSectie({
   isActief, defaultOpslag, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId, onHerlaad,
   onKlik, onRegelWijzig, onRegelComponentWijzig, onWijzigComponentExtra,
   onVoegComponentToe, onVerwijderComponent,
-  onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onVoegRegelToe, onVoegSubgroepToe,
+  onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onToggleInklap, onVoegRegelToe, onVoegSubgroepToe,
   dragOverGroepId, sleepRegelId, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel,
   collapseSignal, readOnly = false,
 }: GroepSectieProps) {
-  const [ingeklapt,       setIngeklapt]       = useState(groep.ingeklapt ?? false)
-  useLayoutEffect(() => { setIngeklapt(groep.ingeklapt ?? false) }, [groep.ingeklapt])
+  const ingeklapt = groep.ingeklapt ?? false
   const [confirmVerwijder, setConfirmVerwijder] = useState(false)
   const [editingNaam,     setEditingNaam]     = useState(false)
   const [naamEdit,        setNaamEdit]        = useState(groep.naam)
@@ -1605,7 +1610,7 @@ function GroepSectie({
             <span
               role="button"
               tabIndex={0}
-              onClick={e => { e.stopPropagation(); setIngeklapt(v => !v) }}
+              onClick={e => { e.stopPropagation(); onToggleInklap(groep.id) }}
               className={`p-0.5 rounded cursor-pointer ${diepte <= 1 ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
             >
               {ingeklapt ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -1751,7 +1756,7 @@ function GroepSectie({
               onWijzigComponentExtra={onWijzigComponentExtra}
               onVoegComponentToe={onVoegComponentToe} onVerwijderComponent={onVerwijderComponent}
               onVerwijderRegel={onVerwijderRegel} onVerwijderGroep={onVerwijderGroep}
-              onWijzigGroep={onWijzigGroep}
+              onWijzigGroep={onWijzigGroep} onToggleInklap={onToggleInklap}
               onVoegRegelToe={onVoegRegelToe} onVoegSubgroepToe={onVoegSubgroepToe}
               dragOverGroepId={dragOverGroepId} sleepRegelId={sleepRegelId}
               onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
@@ -1785,7 +1790,7 @@ function GroepSectie({
 // ─── Hoofd CalculatieGrid ─────────────────────────────────────────────────────
 
 const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function CalculatieGrid(
-  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onUndoCountChange, bibliotheekItems = [], readOnly = false },
+  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onUndoCountChange, onInklapStatusChange, bibliotheekItems = [], readOnly = false },
   ref
 ) {
   const [groepen,     setGroepen]     = useState<Groep[]>([])
@@ -2002,14 +2007,39 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     toast.success('Ongedaan gemaakt')
   }, [scenarioId, onUndoCountChange, onWijziging])
 
-  const collapseAll = useCallback(() => {
-    const bijgewerkt = groepen.map(g => ({ ...g, ingeklapt: true }))
-    bijgewerkt.forEach(g => slaGroepOp(g))
+  /** Groepen die zelf subgroepen hebben. Die blijven bij "inklappen" open staan,
+   *  anders verdwijnen hun subgroepen uit beeld. */
+  const groepenMetSubgroepen = useMemo(
+    () => new Set(groepen.map(g => g.parent_id).filter((id): id is string => !!id)),
+    [groepen]
+  )
+
+  const zetInklap = useCallback((ingeklapt: boolean) => {
+    // Inklappen raakt alleen de diepste groepen: alle groepskoppen blijven zichtbaar,
+    // alleen de calculatieregels verdwijnen. Uitklappen opent alles.
+    const bijgewerkt = groepen.map(g => ({ ...g, ingeklapt: ingeklapt && !groepenMetSubgroepen.has(g.id) }))
+    bijgewerkt.forEach((g, i) => { if ((groepen[i].ingeklapt ?? false) !== g.ingeklapt) slaGroepOp(g) })
     setGroepen(bijgewerkt)
-    setCollapseSignal(s => s + 1)
+    if (ingeklapt) setCollapseSignal(s => s + 1)
+  }, [groepen, groepenMetSubgroepen])
+
+  const handleToggleInklap = useCallback((id: string) => {
+    const groep = groepen.find(g => g.id === id)
+    if (!groep) return
+    const bijgewerkt = { ...groep, ingeklapt: !(groep.ingeklapt ?? false) }
+    slaGroepOp(bijgewerkt)
+    setGroepen(prev => prev.map(g => g.id === id ? bijgewerkt : g))
   }, [groepen])
 
-  useImperativeHandle(ref, () => ({ undo, collapseAll, duwSnapshot }), [undo, collapseAll, duwSnapshot])
+  /** Alles ingeklapt = elke diepste groep is dicht. Bepaalt of de knop in- of uitklapt. */
+  const allesIngeklapt = useMemo(() => {
+    const diepste = groepen.filter(g => !groepenMetSubgroepen.has(g.id))
+    return diepste.length > 0 && diepste.every(g => g.ingeklapt)
+  }, [groepen, groepenMetSubgroepen])
+
+  useEffect(() => { onInklapStatusChange?.(allesIngeklapt) }, [allesIngeklapt, onInklapStatusChange])
+
+  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot }), [undo, zetInklap, duwSnapshot])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {
@@ -2711,7 +2741,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   onVerwijderComponent={handleVerwijderComponent}
                   onVerwijderRegel={handleVerwijderRegel}
                   onVerwijderGroep={handleVerwijderGroep}
-                  onWijzigGroep={handleWijzigGroep}
+                  onWijzigGroep={handleWijzigGroep} onToggleInklap={handleToggleInklap}
                   onVoegRegelToe={handleVoegRegelToe}
                   onVoegSubgroepToe={handleVoegSubgroepToe}
                   dragOverGroepId={dragOverId} sleepRegelId={sleepRegelId}

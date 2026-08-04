@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   GitBranch, Ruler, CloudUpload, Check, Undo2,
-  ChevronsUp, Keyboard, BookOpen, Paintbrush, Package, X,
+  ChevronsUp, ChevronsDown, Keyboard, BookOpen, Paintbrush, Package, X,
   FileUp, FileDown, ChevronDown, Library, Table2,
   SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
 } from 'lucide-react'
@@ -80,6 +80,8 @@ export default function CalculatieHoofdscherm({
   const [boomSleepActief, setBoomSleepActief]         = useState(false)
   const [syncStatus, setSyncStatus]                   = useState<'idle' | 'bezig' | 'gelukt' | 'fout'>('idle')
   const [undoCount, setUndoCount]                     = useState(0)
+  /** Zijn de diepste groepen allemaal ingeklapt? Bepaalt of de knop in- of uitklapt. */
+  const [allesIngeklapt, setAllesIngeklapt]           = useState(false)
   const [receptenOpen, setReceptenOpen]               = useState(false)
   const [schilderwerkOpen, setSchilderwerkOpen]       = useState(false)
   const [materialenOpen, setMaterialenOpen]           = useState(false)
@@ -107,8 +109,8 @@ export default function CalculatieHoofdscherm({
 
   const handleSluitBoom = useCallback(() => setBoomUitgeklapt(false), [])
 
-  const handleCollapseAll = useCallback(() => gridRef.current?.collapseAll(), [])
-  const handleUndo        = useCallback(() => gridRef.current?.undo(), [])
+  const handleToggleInklap = useCallback(() => gridRef.current?.zetInklap(!allesIngeklapt), [allesIngeklapt])
+  const handleUndo         = useCallback(() => gridRef.current?.undo(), [])
 
   /* ── Escape sluit boom ───────────────────────────────────────────── */
   useEffect(() => {
@@ -357,10 +359,17 @@ export default function CalculatieHoofdscherm({
 
             <span className="w-px h-4 bg-slate-200 mx-0.5" />
 
-            {/* Inklappen */}
-            <Button variant="outline" size="sm" onClick={handleCollapseAll} title="Alle groepen inklappen">
-              <ChevronsUp className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Inklappen</span>
+            {/* In-/uitklappen */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleInklap}
+              title={allesIngeklapt
+                ? 'Alles uitklappen — alle regels zichtbaar'
+                : 'Inklappen — alleen de groepen zichtbaar, zonder regels'}
+            >
+              {allesIngeklapt ? <ChevronsDown className="w-3.5 h-3.5" /> : <ChevronsUp className="w-3.5 h-3.5" />}
+              <span className="hidden lg:inline">{allesIngeklapt ? 'Uitklappen' : 'Inklappen'}</span>
             </Button>
 
             {/* Ongedaan */}
@@ -595,6 +604,7 @@ export default function CalculatieHoofdscherm({
             onGroepActief={setActiefGroepId}
             onWijziging={handleWijziging}
             onUndoCountChange={setUndoCount}
+            onInklapStatusChange={setAllesIngeklapt}
             bibliotheekItems={bibliotheekItems}
             readOnly={readOnly}
           />
