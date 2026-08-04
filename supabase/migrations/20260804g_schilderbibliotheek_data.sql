@@ -2376,7 +2376,14 @@ select k.id, 'Arbeid schilder', b.minuten, b.tarief, b.kosten, b.eenheid, 'Arbei
   from bron b join public.schilder_combinaties k on k.bron_code = b.bron_code;
 
 -- Calc4You geeft één samengesteld materiaalbedrag per eenheid; de opbouw in
--- losse producten zit niet in het bestand. Daarom één norm met hoeveelheid 1.
+-- losse producten zit niet in het bestand. Voor de werkbegroting is het
+-- onderscheid verf/non-paints wél nodig, dus splitsen we het bedrag met de
+-- vuistregel 90/10. Non-paints is het tweede deel
+-- (kwasten, rollers, tape, schuurpapier, afdekmateriaal).
+--
+-- Het non-paints-deel is het restant na afronding, niet een tweede
+-- vermenigvuldiging: zo tellen de twee regels altijd exact op tot het
+-- oorspronkelijke bedrag, zonder centverschil.
 with bron (bron_code, prijs, eenheid) as (values
   ('OHD01-dhg-m²', 3.46::numeric, 'm²'),
   ('OHD01-dhpr-m²', 3.47::numeric, 'm²'),
@@ -3223,8 +3230,13 @@ with bron (bron_code, prijs, eenheid) as (values
 )
 insert into public.schilder_materiaal_normen
   (combinatie_id, naam, norm_type, quantity_per_unit, eenheid, unit_price, cost_per_unit, actief, volgorde)
-select k.id, 'Materiaal (samengesteld)', 'materiaal', 1, b.eenheid, b.prijs, b.prijs, true, 1
-  from bron b join public.schilder_combinaties k on k.bron_code = b.bron_code
+select k.id, deel.naam, 'materiaal', 1, b.eenheid, deel.prijs, deel.prijs, true, deel.volgorde
+  from bron b
+  join public.schilder_combinaties k on k.bron_code = b.bron_code
+  cross join lateral (values
+    ('Verfmaterialen', round(b.prijs * 0.9, 4), 1),
+    ('Non-paints',     b.prijs - round(b.prijs * 0.9, 4), 2)
+  ) as deel(naam, prijs, volgorde)
  where b.prijs > 0;
 
 -- ── Spiegel bijwerken ─────────────────────────────────────────────────────

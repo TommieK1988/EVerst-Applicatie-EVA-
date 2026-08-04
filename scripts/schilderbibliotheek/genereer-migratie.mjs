@@ -33,6 +33,12 @@ const HIER = dirname(fileURLToPath(import.meta.url))
 
 /** Het uurtarief-label in `bedrijfsinstellingen.uurtarieven` dat op € 45 staat. */
 const UURTARIEF_LABEL = 'Arbeid schilder'
+/**
+ * Calc4You geeft één samengesteld materiaalbedrag. Voor de werkbegroting moet
+ * verf gescheiden zijn van non-paints (kwasten, rollers, tape, afdekmateriaal).
+ * Die opbouw zit niet in het bronbestand, dus splitsen we met een vuistregel.
+ */
+const NON_PAINTS_AANDEEL = 0.10
 const BRON = 'Calc4You Bibliotheek Onderhoud 2025'
 /** Vaste id van familie 'EVT' (Everts Normbibliotheek), waar BP/BB onder komen. */
 const FAMILIE_EVT = '00000000-0000-0000-0000-000000000001'
@@ -248,7 +254,14 @@ P(`select k.id, 'Arbeid schilder', b.minuten, b.tarief, b.kosten, b.eenheid, ${q
 P(`  from bron b join public.schilder_combinaties k on k.bron_code = b.bron_code;`)
 P()
 P(`-- Calc4You geeft één samengesteld materiaalbedrag per eenheid; de opbouw in`)
-P(`-- losse producten zit niet in het bestand. Daarom één norm met hoeveelheid 1.`)
+P(`-- losse producten zit niet in het bestand. Voor de werkbegroting is het`)
+P(`-- onderscheid verf/non-paints wél nodig, dus splitsen we het bedrag met de`)
+P(`-- vuistregel ${(1 - NON_PAINTS_AANDEEL) * 100}/${NON_PAINTS_AANDEEL * 100}. Non-paints is het tweede deel`)
+P(`-- (kwasten, rollers, tape, schuurpapier, afdekmateriaal).`)
+P(`--`)
+P(`-- Het non-paints-deel is het restant na afronding, niet een tweede`)
+P(`-- vermenigvuldiging: zo tellen de twee regels altijd exact op tot het`)
+P(`-- oorspronkelijke bedrag, zonder centverschil.`)
 P(`with bron (bron_code, prijs, eenheid) as (values`)
 P(cellen
   .map(c => `  (${q(c.regelCode)}, ${n(c.materiaalPerEenheid)}::numeric, ${q(c.eenheid)})`)
@@ -256,8 +269,13 @@ P(cellen
 P(`)`)
 P(`insert into public.schilder_materiaal_normen`)
 P(`  (combinatie_id, naam, norm_type, quantity_per_unit, eenheid, unit_price, cost_per_unit, actief, volgorde)`)
-P(`select k.id, 'Materiaal (samengesteld)', 'materiaal', 1, b.eenheid, b.prijs, b.prijs, true, 1`)
-P(`  from bron b join public.schilder_combinaties k on k.bron_code = b.bron_code`)
+P(`select k.id, deel.naam, 'materiaal', 1, b.eenheid, deel.prijs, deel.prijs, true, deel.volgorde`)
+P(`  from bron b`)
+P(`  join public.schilder_combinaties k on k.bron_code = b.bron_code`)
+P(`  cross join lateral (values`)
+P(`    ('Verfmaterialen', round(b.prijs * ${1 - NON_PAINTS_AANDEEL}, 4), 1),`)
+P(`    ('Non-paints',     b.prijs - round(b.prijs * ${1 - NON_PAINTS_AANDEEL}, 4), 2)`)
+P(`  ) as deel(naam, prijs, volgorde)`)
 P(` where b.prijs > 0;`)
 P()
 
