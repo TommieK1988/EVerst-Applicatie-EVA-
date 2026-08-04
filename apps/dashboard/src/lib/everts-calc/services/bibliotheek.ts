@@ -42,6 +42,14 @@ export interface PaintItemMetNormen extends DbPaintItem {
    */
   vergrendeld: boolean
   schilder_combinatie_id: string | null
+  /**
+   * De schilderbehandeling achter dit recept. Wordt bij het toevoegen aan een
+   * calculatie gekoppeld in plaats van de werkomschrijving te kopiëren, zodat de
+   * tekst live blijft tot hij bij de offerte bevriest.
+   */
+  schilder_behandeling_id: string | null
+  /** Code van die behandeling ("OHD 03") — waar de receptenzoeker op zoekt. */
+  behandeling_code: string | null
 }
 
 // ─── Data ophalen ─────────────────────────────────────────────────────────────

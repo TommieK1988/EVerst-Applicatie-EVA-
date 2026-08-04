@@ -61,13 +61,42 @@ export default function ActiviteitToevoegenModal({
     return inst.categorieen ?? ['Schilderwerk', 'Timmerwerk', 'Metselwerk', 'Dakwerk', 'Voegwerk', 'Overig']
   }, [])
 
+  /**
+   * Alles waarop een recept te vinden moet zijn, als één doorzoekbare tekst:
+   * naam, code, categorie en de behandeling.
+   *
+   * Twee varianten, omdat dezelfde behandeling in verschillende schrijfwijzen
+   * voorkomt: de receptcode heeft geen spatie (`OHD03-khn-m¹`), de
+   * behandelingscode wel (`OHD 03`). De tweede variant heeft alle spaties,
+   * koppeltekens en punten eruit, zodat "ohd03", "ohd 03" en "OHD-03" alle drie
+   * dezelfde recepten vinden.
+   */
+  const zoekIndex = useMemo(() => {
+    const index = new Map<string, { normaal: string; samengetrokken: string }>()
+    for (const b of items) {
+      const tekst = [b.full_name, b.item_code, b.onderdeel, b.behandeling_code]
+        .filter(Boolean).join(' ').toLowerCase()
+      index.set(b.id, { normaal: tekst, samengetrokken: tekst.replace(/[\s.\-_]/g, '') })
+    }
+    return index
+  }, [items])
+
+  /**
+   * Losse woorden moeten allemaal raak zijn, maar mogen in verschillende velden
+   * zitten: "kozijn ohd03" vindt het kozijnrecept binnen behandeling OHD 03.
+   * Zonder die AND-over-woorden moet je precies weten hoe iets is opgeslagen.
+   */
   const gefilterd = items.filter(b => {
     if (categorie && b.onderdeel !== categorie) return false
-    if (zoek) {
-      const q = zoek.toLowerCase()
-      return b.full_name.toLowerCase().includes(q) || b.item_code.toLowerCase().includes(q)
-    }
-    return true
+    const termen = zoek.toLowerCase().split(/\s+/).filter(Boolean)
+    if (termen.length === 0) return true
+
+    const tekst = zoekIndex.get(b.id)
+    if (!tekst) return false
+    return termen.every(term => {
+      const kaal = term.replace(/[\s.\-_]/g, '')
+      return tekst.normaal.includes(term) || (kaal !== '' && tekst.samengetrokken.includes(kaal))
+    })
   })
 
   const toggleSelecteer = (item: BibliotheekItemVereenvoudigd) => {
@@ -109,15 +138,24 @@ export default function ActiviteitToevoegenModal({
       const regelId = nieuweId()
 
       const btw_pct_default = getScenario(scenarioId)?.btw_pct_default
+
+      // Komt het recept uit de Schilderwerkbibliotheek, dan koppelen we de
+      // behandeling in plaats van haar werkomschrijving over te nemen. Die tekst
+      // wordt dan live uit de bibliotheek gehaald en bevriest pas bij het
+      // verzenden van de offerte; een gekopieerde tekst zou verouderen zodra de
+      // bibliotheek wijzigt.
+      const heeftBehandeling = Boolean(item.schilderbehandeling_id)
+
       const regel: Calculatieregel = {
         id: regelId,
         groep_id: elementId,
         omschrijving: item.full_name,
-        werkomschrijving: item.description ?? undefined,
+        werkomschrijving: heeftBehandeling ? undefined : (item.description ?? undefined),
         hoeveelheid,
         eenheid: (item.default_unit || 'st') as Eenheid,
         volgorde: bestaandeVolgorde + idx + 1,
         btw_pct: btw_pct_default,
+        ...(heeftBehandeling ? { schilderbehandeling_id: item.schilderbehandeling_id! } : {}),
       }
       slaCalculatieregelOp(regel)
 
@@ -241,7 +279,14 @@ export default function ActiviteitToevoegenModal({
                       }
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-slate-700 truncate">{item.full_name}</div>
-                        <div className="text-xs text-slate-400">{item.item_code} · {item.default_unit}</div>
+                        <div className="text-xs text-slate-400 truncate">
+                          {/* De behandeling vooraan: daar zoek je op, dus daar wil je
+                              ook op kunnen aflezen wélke je te pakken hebt. */}
+                          {item.behandeling_code && (
+                            <span className="font-medium text-everts">{item.behandeling_code} · </span>
+                          )}
+                          {item.item_code} · {item.default_unit}
+                        </div>
                       </div>
                     </div>
                   )

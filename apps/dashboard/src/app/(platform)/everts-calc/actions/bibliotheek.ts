@@ -22,6 +22,8 @@ export async function haalBibliotheekItemsOp(): Promise<BibliotheekItemVereenvou
     description: item.description ?? null,
     onderdeel: item.onderdeel,
     default_unit: item.default_unit ?? 'm2',
+    schilderbehandeling_id: item.schilder_behandeling_id ?? null,
+    behandeling_code: item.behandeling_code ?? null,
     labor_norms: item.labor_norms.map(n => ({
       hours_per_unit: n.hours_per_unit,
       hour_rate: n.hour_rate,

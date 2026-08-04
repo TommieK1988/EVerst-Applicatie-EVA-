@@ -954,6 +954,8 @@ export type Database = {
       }
       paint_items: {
         Row: {
+          schilder_behandeling_id: string | null
+          behandeling_code: string | null
           vergrendeld: boolean
           schilder_combinatie_id: string | null
           marge_pct: number | null
@@ -971,6 +973,8 @@ export type Database = {
           type: string
         }
         Insert: {
+          schilder_behandeling_id?: string | null
+          behandeling_code?: string | null
           vergrendeld?: boolean
           schilder_combinatie_id?: string | null
           marge_pct?: number | null
@@ -988,6 +992,8 @@ export type Database = {
           type: string
         }
         Update: {
+          schilder_behandeling_id?: string | null
+          behandeling_code?: string | null
           vergrendeld?: boolean
           schilder_combinatie_id?: string | null
           marge_pct?: number | null
