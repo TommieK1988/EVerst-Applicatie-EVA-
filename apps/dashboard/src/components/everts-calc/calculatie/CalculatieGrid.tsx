@@ -57,6 +57,12 @@ export interface CalculatieGridHandle {
   zetInklap: (ingeklapt: boolean) => void
   /** Zet een herstelpunt vóór een wijziging van buitenaf (structuurboom), zodat Ctrl+Z die terugdraait. */
   duwSnapshot: () => void
+  /**
+   * Leest groepen, regels en componenten opnieuw in. Nodig na een wijziging van buitenaf:
+   * het grid laadt zijn gegevens verder alleen bij het openen, dus zonder dit blijft een
+   * verplaatsing uit de structuurboom onzichtbaar tot je de pagina ververst.
+   */
+  herlaad: () => void
 }
 
 type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
@@ -2046,7 +2052,8 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
 
   useEffect(() => { onInklapStatusChange?.(allesIngeklapt) }, [allesIngeklapt, onInklapStatusChange])
 
-  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot }), [undo, zetInklap, duwSnapshot])
+  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles }),
+    [undo, zetInklap, duwSnapshot, laadAlles])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {

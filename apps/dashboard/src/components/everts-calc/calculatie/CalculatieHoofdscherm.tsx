@@ -286,6 +286,19 @@ export default function CalculatieHoofdscherm({
     planAutoSave()
   }
 
+  /**
+   * Wijziging vanuit de structuurboom (verplaatsen, toevoegen, verwijderen). Het
+   * rekenblad leest zijn gegevens alleen bij het openen, dus moet het hier expliciet
+   * opnieuw inlezen — anders zie je het resultaat pas na een verversing.
+   *
+   * Bewust niet in `handleWijziging` zelf: die vuurt ook bij elke bewerking ín het
+   * rekenblad, en een herlaad midden in het typen zou de invoer onderbreken.
+   */
+  const handleBoomWijziging = () => {
+    handleWijziging()
+    gridRef.current?.herlaad()
+  }
+
   const handleScenarioWijzig = (patch: Partial<Scenario>) => {
     const bijgewerkt = { ...scenario, ...patch }
     slaScenarioOp(bijgewerkt)
@@ -592,7 +605,7 @@ export default function CalculatieHoofdscherm({
               actiefGroepId={actiefGroepId}
               refreshTrigger={refreshTotalen}
               onSelecteer={setActiefGroepId}
-              onWijziging={handleWijziging}
+              onWijziging={handleBoomWijziging}
               onVoorWijziging={() => gridRef.current?.duwSnapshot()}
               onSleepActief={setBoomSleepActief}
               readOnly={readOnly}
