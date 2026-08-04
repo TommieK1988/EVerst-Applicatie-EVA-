@@ -1,0 +1,884 @@
+{
+  "OHD 01": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk schrapen, 1 x bijwerken grondverf, 1 x bijwerken dekverf",
+    "pagina": 35,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Plaatselijk aanbrengen van één laag dekverf"
+  },
+  "OHD 02": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk schrapen, 1 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 35,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag dekverf"
+  },
+  "OHD 03": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken grondverf, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 35,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OHD 04": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken grondverf, 1 x geheel grondverf, 2 x geheel dekverf",
+    "pagina": 35,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 05": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 36,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OHD 06": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken grondverf, 2 x geheel dekverf",
+    "pagina": 36,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 07": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel grondverf",
+    "pagina": 36,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen door afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag grondverf"
+  },
+  "OHD 08": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel grondverf, 2 x geheel dekverf",
+    "pagina": 36,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen door afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 09": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel grondverf, 2 x geheel dekverf",
+    "pagina": 37,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen door afbranden, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag grondverf inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 50": {
+    "aantal_stappen": 9,
+    "bestek_titel": "Binnen-buitenwerk, 2 x bijwerken grondverf, 1 x bijwerken dekverf",
+    "pagina": 37,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Liggende dagkanten geheel en staande tot een hoogte van minstens 10 cm uit liggende dagkant, evenals daaraan grenzende vlakken voor zover de verflagen daarop gebreken vertonen:\n- Plaatselijk schrapen\n- Losse kit verwijderen\n- Oppervlak en naden reinigen en schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk uitstoppen / afkitten\n- Plaatselijk plamuren, schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk aanbrengen van één laag dekverf in bestaande kleur"
+  },
+  "OHD 51": {
+    "aantal_stappen": 8,
+    "bestek_titel": "Binnen-buitenwerk, 1 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 37,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Liggende dagkanten geheel en staande tot een hoogte van minstens 10 cm uit liggende dagkant, evenals daaraan grenzende vlakken voor zover de verflagen daarop gebreken vertonen:\n- Plaatselijk schrapen\n- Losse kit verwijderen\n- Oppervlak en naden reinigen en schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk uitstoppen / afkitten\n- Plaatselijk plamuren, schuren\n- Aanbrengen van één laag dekverf in bestaande kleur"
+  },
+  "OHD 52": {
+    "aantal_stappen": 7,
+    "bestek_titel": "2 x Bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 51,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk afkitten, uitstoppen\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OHD 53": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken grondverf, plaatselijk plamuren, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 51,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk afkitten, uitstoppen en plamuren\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OHD 54": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken grondverf, 1 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 51,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk afkitten en voorplamuren\n- Geheel éénmaal plamuren, schuren\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 55": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken grondverf, 2 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 51,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen, afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk afkitten en voorplamuren\n- Geheel tweemaal plamuren, slijpen\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 56": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel grondverf, 2 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 52,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle verflagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Aanbrengen van één laag grondverf\n- Plaatselijk afkitten en voorplamuren\n- Geheel tweemaal plamuren, slijpen\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHD 57": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel grondverf, 2 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 52,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle verflagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Aanbrengen van twee lagen grondverf\n- Plaatselijk afkitten en voorplamuren\n- Geheel tweemaal plamuren, slijpen\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OHR 01": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Aangetast hout verwijderen, hout plaatsen",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Aangetast hout verwijderen tot het gezonde hout\n- Hechtvlakken behandelen met primer volgens voorschrift van de betreffende leverancier\n- Nieuw stuk kozijnhout plaatsen met gelijke profilering in combinatie met een reparatiemiddel"
+  },
+  "OHR 02": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Aangetast hout verwijderen, houtreparatiemiddel aanbrengen",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Aangetast hout verwijderen tot het gezonde hout\n- Hechtvlakken behandelen met primer volgens voorschrift van de betreffende leverancier\n- Vullen met een houtreparatiemiddel"
+  },
+  "OHR 03": {
+    "aantal_stappen": 0,
+    "bestek_titel": "VERVALLEN",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": ""
+  },
+  "OHR 04": {
+    "aantal_stappen": 1,
+    "bestek_titel": "Injecteren houtverbindingen",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Houtverbindingen vullen door middel van injecteren volgens voorschrift van de betreffende leverancier"
+  },
+  "OHR 05": {
+    "aantal_stappen": 1,
+    "bestek_titel": "Verbindingsnaden en scheuren uitfrezen en vullen",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Verbindingsnaden en scheuren uitfrezen en vullen met een reparatiemiddel/kit volgens voorschrift van de betreffende fabrikant"
+  },
+  "OHR 06": {
+    "aantal_stappen": 1,
+    "bestek_titel": "Scherpe kanten afronden",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Scherpe kanten afronden tot een afrondingsstraal van 5 tot 8 mm, door middel van schuren of frezen"
+  },
+  "OHT 01": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk schrapen, 1 x bijwerken transparante beits, 1 x geheel transparante beits",
+    "pagina": 37,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag transparante beits inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag transparante beits"
+  },
+  "OHT 02": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken transparante beits, 2 x geheel transparante beits",
+    "pagina": 38,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk beitslagen verwijderen door schrapen, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag transparante beits inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van twee lagen transparante beits"
+  },
+  "OHT 03": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken transparante beits, 1 x geheel transparante beits",
+    "pagina": 38,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk beitslagen verwijderen door schrapen, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag transparante beits inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Plaatselijk aanbrengen van één laag transparante beits\n- Aanbrengen van één laag transparante beits"
+  },
+  "OHT 04": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel transparante beits",
+    "pagina": 38,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle (beits)lagen verwijderen door afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag transparante beits inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van één laag transparante beits"
+  },
+  "OHT 05": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 3 x geheel transparante beits",
+    "pagina": 38,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle (beits)lagen verwijderen door afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag transparante beits inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van twee lagen transparante beits"
+  },
+  "OHT 50": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken transparante beits, 2 x geheel transparante beits",
+    "pagina": 52,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk beitslagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag transparante beits\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen transparante beits"
+  },
+  "OHT 51": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel transparante beits",
+    "pagina": 52,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle (beits)lagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag transparante beits\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van één laag transparante beits"
+  },
+  "OHT 52": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 3 x geheel transparante beits",
+    "pagina": 52,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle (beits)lagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag transparante beits\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen transparante beits"
+  },
+  "OHV 01": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken vernis, 2 x geheel vernis",
+    "pagina": 39,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk vernislagen verwijderen door schrapen, afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van twee lagen vernis inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 02": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, ontweren, 3 x geheel vernis",
+    "pagina": 39,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle vernislagen verwijderen door afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel ontweren en schuren\n- Aanbrengen van één laag vernis inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 03": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, ontweren, 4 x geheel vernis",
+    "pagina": 39,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle vernislagen verwijderen door afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel ontweren en schuren\n- Aanbrengen van één laag vernis inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van drie lagen vernis"
+  },
+  "OHV 04": {
+    "aantal_stappen": 7,
+    "bestek_titel": "Geheel verwijderen, ontweren, poriën vullen, 3 x geheel vernis",
+    "pagina": 39,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle vernislagen verwijderen door afföhnen of afbijten, verweerd hout verwijderen\n- Losse stopverf/kit verwijderen\n- Geheel ontweren en schuren\n- Poriën vullen\n- Aanbrengen van één laag vernis inclusief de sponningen waaruit de stopverf/kit is verwijderd\n- Plaatselijk uitstoppen en aanstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 05": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk schrapen, 2 x geheel vernis",
+    "pagina": 39,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 50": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk schrapen, 1 x bijwerken vernis, 1 x geheel vernis",
+    "pagina": 53,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag vernis\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van één laag vernis"
+  },
+  "OHV 51": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk schrapen, 2 x geheel vernis",
+    "pagina": 53,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk schrapen\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 52": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken vernis, 2 x geheel vernis",
+    "pagina": 53,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk vernislagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van twee lagen vernis\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 53": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 3 x geheel vernis",
+    "pagina": 53,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle vernislagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag vernis\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van twee lagen vernis"
+  },
+  "OHV 54": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 4 x geheel vernis",
+    "pagina": 53,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Alle vernislagen verwijderen door afföhnen of afbijten\n- Losse stopverf/kit verwijderen\n- Geheel schuren\n- Aanbrengen van één laag vernis\n- Plaatselijk uitstoppen / afkitten\n- Aanbrengen van drie lagen vernis"
+  },
+  "OKD 01": {
+    "aantal_stappen": 1,
+    "bestek_titel": "Reinigen",
+    "pagina": 50,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Het oppervlak reinigen door middel van borstelen en wassen."
+  },
+  "OKD 02": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x geheel hechtprimer, 1 x geheel dekverf",
+    "pagina": 50,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Het oppervlak reinigen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag dekverf"
+  },
+  "OKD 03": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x geheel hechtprimer, 2 x geheel dekverf",
+    "pagina": 50,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Het oppervlak reinigen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OKD 04": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel dekverf",
+    "pagina": 50,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen of afbijten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag dekverf"
+  },
+  "OKD 05": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 2 x geheel dekverf",
+    "pagina": 50,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen of afbijten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OKD 50": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x Geheel hechtprimer, 1 x geheel dekverf",
+    "pagina": 59,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Het oppervlak reinigen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag dekverf"
+  },
+  "OKD 51": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x Geheel hechtprimer, 2 x geheel dekverf",
+    "pagina": 60,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Het oppervlak reinigen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OKD 52": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel dekverf",
+    "pagina": 60,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen of afbijten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag dekverf"
+  },
+  "OKD 53": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 2 x geheel dekverf",
+    "pagina": 60,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door schrapen of afbijten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OMA 01": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Ontvetten\n- Oxyde verwijderen en geheel schuren,\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 02": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x bijwerken grondverf, 1 x bijwerken dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontvetten\n- Intacte lagen reinigen, oxyde verwijderen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk aanbrengen van één laag dekverf"
+  },
+  "OMA 03": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontvetten\n- Intacte lagen reinigen, oxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 04": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontvetten\n- Intacte lagen reinigen, oxyde verwijderen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 05": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen, ontvetten\n- Oxyde verwijderen en geheel schuren,\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 50": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 55,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Ontvetten\n- Oxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 51": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 55,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontvetten\n- Intacte lagen reinigen, oxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMA 52": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel hechtprimer, 1 x geheel dekverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Ontvetten\n- Oxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprime"
+  },
+  "OMS 01": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x bijwerken grondverf, 1 x bijwerken dekverf",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk aanbrengen van één laag dekverf"
+  },
+  "OMS 02": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken corrosiewerende primer, 1 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 40,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van twee lagen corrosiewerende primer\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 03": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van twee lagen corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 04": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 2 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van twee lagen grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 05": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x geheel corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 06": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x geheel corrosiewerende primer, 2 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van twee lagen grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 07": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen, ontroesten en ontvetten\n- Aanbrengen van twee lagen corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 08": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 41,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen, ontroesten en ontvetten\n- Aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 50": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x bijwerken dekverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Plaatselijk aanbrengen van één laag dekverf"
+  },
+  "OMS 51": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x geheel radiatorenverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van één laag radiatorenverf"
+  },
+  "OMS 52": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 2 x geheel radiatorenverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van twee lagen radiatorenverf"
+  },
+  "OMS 53": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 54": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x bijwerken corrosiewerende primer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van twee lagen corrosiewerende primer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMS 55": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken corrosiewerende primer, 1 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 54,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen en geheel schuren\n- Plaatselijk aanbrengen van één laag corrosiewerende primer\n- Geheel éénmaal plamuren, schuren\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OMV 01": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Niet eerder behandeld, 1 x hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Ontroesten en ontvetten\n- Zinkoxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 02": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x bijwerken grondverf, 1 x bijwerken dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en plaatselijk schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Plaatselijk aanbrengen van één laag grondverf\n- Plaatselijk aanbrengen van één laag dekverf"
+  },
+  "OMV 03": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x bijwerken grondverf, 1 x geheel dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Plaatselijk aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 04": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 05": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 2 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van twee lagen grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 06": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 42,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen, ontroesten en ontvetten\n- Zinkoxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 07": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel hechtprimer, 1 x geheel grondverf, 2 x geheel dekverf",
+    "pagina": 43,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen, ontroesten en ontvetten\n- Zinkoxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OMV 50": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 55,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk ontroesten en ontvetten\n- Zinkoxyde verwijderen en geheel schuren\n- Aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 51": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel grondverf, 1 x geheel dekverf",
+    "pagina": 55,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Aanbrengen van één laag grondverf\n- Aanbrengen van één laag dekverf"
+  },
+  "OMV 52": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x bijwerken hechtprimer, 1 x geheel plamuren, 2 x geheel dekverf",
+    "pagina": 55,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen, ontroesten en ontvetten\n- Intacte lagen reinigen, zinkoxyde verwijderen en geheel schuren\n- Plaatselijk aanbrengen van één laag hechtprimer\n- Geheel éénmaal plamuren, schuren\n- Aanbrengen van één laag grondverf en één laag dekverf of twee lagen dekverf"
+  },
+  "OSA 01": {
+    "aantal_stappen": 2,
+    "bestek_titel": "2 x Geheel behandelen antigraffiti",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van twee lagen antigraffiti-coating"
+  },
+  "OSA 02": {
+    "aantal_stappen": 2,
+    "bestek_titel": "3 x Geheel behandelen antigraffiti",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van drie lagen antigraffiti-coating"
+  },
+  "OSD 01": {
+    "aantal_stappen": 1,
+    "bestek_titel": "1 x Hogedruk reinigen",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen door middel van hogedruk"
+  },
+  "OSD 02": {
+    "aantal_stappen": 2,
+    "bestek_titel": "1 x Geheel voorstrijken",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag voorstrijkmiddel"
+  },
+  "OSD 03": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x Geheel fixeren",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag fixeermiddel\n- N.B. De behandelingen ‘OSD 01, 02 en 03’ dienen altijd in combinatie met één van de andere systemen te worden toegepast"
+  },
+  "OSD 04": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Niet eerder behandeld, 2 x geheel muurverf",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 05": {
+    "aantal_stappen": 3,
+    "bestek_titel": "2 x Bijwerken muurverf",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Plaatselijk reinigen\n- Plaatselijk aanbrengen van twee lagen muurverf"
+  },
+  "OSD 06": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Bijwerken muurverf, 1 x geheel muurverf",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Plaatselijk aanbrengen van één laag muurverf\n- Aanbrengen van één laag muurverf"
+  },
+  "OSD 07": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Bijwerken muurverf, 2 x geheel muurverf",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Plaatselijk aanbrengen van één laag muurverf\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 08": {
+    "aantal_stappen": 4,
+    "bestek_titel": "2 x Geheel muurverf",
+    "pagina": 44,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 09": {
+    "aantal_stappen": 4,
+    "bestek_titel": "2 x Geheel structuurverf",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen structuurverf"
+  },
+  "OSD 10": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Geheel verwijderen, 2 x geheel muurverf",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle verflagen verwijderen door afbijten of stralen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 11": {
+    "aantal_stappen": 5,
+    "bestek_titel": "Plaatselijk verwijderen , 1 x bijwerken muurverf, 2 x geheel muurverf",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afbijten of stralen\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Plaatselijk aanbrengen van één laag muurverf\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 12": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Geheel structuurverf, 1 x geheel muurverf",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van een laag structuurverf\n- Aanbrengen van een laag muurverf"
+  },
+  "OSD 50": {
+    "aantal_stappen": 1,
+    "bestek_titel": "1 x Geheel voorstrijken",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Aanbrengen van één laag voorstrijkmiddel"
+  },
+  "OSD 51": {
+    "aantal_stappen": 1,
+    "bestek_titel": "1 x Geheel fixeren",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Aanbrengen van één laag fixeermiddel"
+  },
+  "OSD 52": {
+    "aantal_stappen": 2,
+    "bestek_titel": "1 x Geheel isoleren",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Aanbrengen van één laag isoleermiddel\n- N.B. De behandelingen ‘OSD 50, 51 en 52’ dienen altijd in combinatie met één van de andere systemen te worden toegepast"
+  },
+  "OSD 53": {
+    "aantal_stappen": 1,
+    "bestek_titel": "2 x Bijwerken muurverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk aanbrengen van twee lagen muurverf"
+  },
+  "OSD 54": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Bijwerken muurverf, 1 x geheel muurverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Plaatselijk aanbrengen van één laag muurverf\n- Aanbrengen van één laag muurverf"
+  },
+  "OSD 55": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Bijwerken muurverf, 2 x geheel muurverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Plaatselijk aanbrengen van één laag muurverf\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 56": {
+    "aantal_stappen": 4,
+    "bestek_titel": "2 x Geheel muurverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen muurverf"
+  },
+  "OSD 57": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Geheel muurverf, 1 x geheel bespuiten met meerkleurenmuurverf",
+    "pagina": 56,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van één laag muurverf\n- Geheel bespuiten met een meerkleurenmuurverf"
+  },
+  "OSD 58": {
+    "aantal_stappen": 4,
+    "bestek_titel": "2 x Geheel structuurverf",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen structuurverf"
+  },
+  "OSD 59": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x Geheel structuurverf, 1 x geheel sierpleister",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag structuurverf\n- Aanbrengen van sierpleister"
+  },
+  "OSD 60": {
+    "aantal_stappen": 5,
+    "bestek_titel": "1 x Geheel structuurverf, 1 x geheel muurverf",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afsteken\n- Intacte lagen reinigen\n- Plaatselijk repareren\n- Aanbrengen van een laag structuurverf\n- Aanbrengen van een laag muurverf"
+  },
+  "OSH 01": {
+    "aantal_stappen": 2,
+    "bestek_titel": "Geheel hydrofoberen",
+    "pagina": 45,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen\n- Verzadigend aanbrengen van hydrofobeermiddel"
+  },
+  "OSR 01": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Plaatselijk verwijderen, repareren met hydraulisch-gebonden mortel",
+    "pagina": 47,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk loszittende niet intact zijnde delen verwijderen\n- Hechtvlakken voorbehandelen en aanbranden\n- Plaatselijk repareren met een hydraulisch-gebonden mortel en aanpassen in de bestaande structuur"
+  },
+  "OSR 02": {
+    "aantal_stappen": 3,
+    "bestek_titel": "Plaatselijk verwijderen, repareren met kunststof-gebonden mortel",
+    "pagina": 47,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk loszittende niet intact zijnde delen verwijderen\n- Hechtvlakken voorbehandelen en aanbrengen primer\n- Plaatselijk repareren met een kunststof-gebonden mortel en aanpassen in de bestaande structuur"
+  },
+  "OSR 03": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, wapeningsstaal ontroesten, repareren met hydraulisch-gebonden mortel",
+    "pagina": 47,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk loszittende niet intact zijnde delen verwijderen\n- Wapeningsstaal rondom vrijhakken, ontroesten en aanbrengen primer (instrooien)\n- Hechtvlakken voorbehandelen en aanbranden\n- Plaatselijk repareren met een hydraulisch-gebonden mortel en aanpassen in de bestaande structuur"
+  },
+  "OSR 04": {
+    "aantal_stappen": 11,
+    "bestek_titel": "Plaatselijk verwijderen, wapeningsstaal ontroesten, repareren met kunststof-gebonden mortel",
+    "pagina": 47,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk loszittende niet intact zijnde delen verwijderen\n- Wapeningsstaal rondom vrijhakken, ontroesten\n- Hechtvlakken voorbehandelen en aanbrengen primer\n- Plaatselijk repareren met een kunststof-gebonden mortel en aanpassen in de bestaande structuur OBS 01 Glas verwijderen, beglazen met stoppasta\n- Glas verwijderen\n- Losgeraakte profielen/stoppasta/kitresten verwijderen\n- Sponning plaatselijk gronden\n- Ruit plaatsen en stellen op steun- en stel- en met spatieblokjes\n- Pennen of veren toepassen\n- Binnenvoeg en omtrekspeling vullen met kit\n- Buitenzijde aanstoppen met stoppasta"
+  },
+  "OSV 01": {
+    "aantal_stappen": 1,
+    "bestek_titel": "Geheel aanstralen",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Geheel reinigen en opruwen door middel van aanstralen (wapperen)"
+  },
+  "OSV 02": {
+    "aantal_stappen": 1,
+    "bestek_titel": "1 x Geheel hogedruk reinigen",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Reinigen door middel van hogedruk"
+  },
+  "OSV 03": {
+    "aantal_stappen": 2,
+    "bestek_titel": "1 x Geheel voorstrijken",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Aanbrengen van één laag voorstrijkmiddel\n- N.B. De behandelingen ‘OSV 01, 02 en 03’ dienen altijd in combinatie met één van de andere systemen te worden toegepast"
+  },
+  "OSV 04": {
+    "aantal_stappen": 2,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel vloercoating",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk repareren\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 05": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Niet eerder behandeld, 1 x geheel vloercoating, instrooien, 1 x geheel vloercoating",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk repareren\n- Aanbrengen van één laag vloercoating\n- Instrooien van de loopgedeelten\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 06": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Geheel verwijderen, 1 x geheel vloercoating, instrooien, 1 x geheel vloercoating",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Alle oude lagen verwijderen door afbijten of stralen\n- Reinigen\n- Plaatselijk repareren\n- Aanbrengen van één laag vloercoating\n- Instrooien van de loopgedeelten\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 07": {
+    "aantal_stappen": 6,
+    "bestek_titel": "Plaatselijk verwijderen, 1 x geheel vloercoating, instrooien, 1 x geheel vloercoating",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afbijten of stralen\n- Reinigen\n- Plaatselijk repareren\n- Aanbrengen van één laag vloercoating\n- Instrooien van de loopgedeelten\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 08": {
+    "aantal_stappen": 4,
+    "bestek_titel": "Plaatselijk verwijderen, 2 x geheel vloercoating",
+    "pagina": 46,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk oude lagen verwijderen door afbijten of stralen\n- Reinigen\n- Plaatselijk repareren\n- Aanbrengen van twee lagen vloercoating"
+  },
+  "OSV 09": {
+    "aantal_stappen": 4,
+    "bestek_titel": "1 x bijwerken, 1 x geheel vloercoating",
+    "pagina": 47,
+    "toepassing": "buiten",
+    "werkomschrijving": "- Plaatselijk verflagen verwijderen\n- Intacte lagen reinigen\n- Plaatselijk aanbrengen van één laag vloercoating\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 50": {
+    "aantal_stappen": 1,
+    "bestek_titel": "1 x Geheel schuren",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Geheel schuren"
+  },
+  "OSV 51": {
+    "aantal_stappen": 2,
+    "bestek_titel": "1 x Geheel voorstrijken",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag voorstrijkmiddel N.B. De behandelingen ‘OSV 50 en 51’ dienen altijd in combinatie met één van de andere systemen te worden toegepast"
+  },
+  "OSV 52": {
+    "aantal_stappen": 2,
+    "bestek_titel": "1 x geheel vloercoating",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag vloercoating"
+  },
+  "OSV 53": {
+    "aantal_stappen": 2,
+    "bestek_titel": "2 x geheel vloercoating",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van twee lagen vloercoating"
+  },
+  "OSV 54": {
+    "aantal_stappen": 3,
+    "bestek_titel": "1 x geheel vloercoating, instrooien, 1 x geheel vloercoating",
+    "pagina": 57,
+    "toepassing": "binnen",
+    "werkomschrijving": "- Reinigen\n- Aanbrengen van één laag vloercoating\n- Geheel instrooien"
+  }
+}
