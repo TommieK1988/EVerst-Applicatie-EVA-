@@ -49,6 +49,37 @@ function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
   }
 }
 
+/**
+ * De bestandsnaam ís de actie. Een aparte actiekolom bood nooit een keuze — er stond
+ * altijd precies één ding in — en kostte wel breedte, die in een halve kolom schaars is.
+ *
+ * Een mail opent in het leesvenster, de rest in de bron (SharePoint/Office online) of,
+ * als die er niet is, als download.
+ */
+function BestandsnaamActie({ rij, onOpenMail }: { rij: BestandRij; onOpenMail: (r: BestandRij) => void }) {
+  const stijl = 'block text-left text-neutral-800 hover:text-brand-700 hover:underline'
+
+  if (rij.soort === 'mail') {
+    return (
+      <button onClick={() => onOpenMail(rij)} title={`${rij.naam} — lezen`} className={stijl}>
+        {rij.naam}
+      </button>
+    )
+  }
+
+  return (
+    <a
+      href={rij.openUrl ?? bestandUrl(rij, { download: true })}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${rij.naam} — ${rij.openUrl ? 'openen' : 'downloaden'}`}
+      className={stijl}
+    >
+      {rij.naam}
+    </a>
+  )
+}
+
 const BRON_STIJL: Record<BestandRij['bron'], string> = {
   Bouw7: 'bg-brand-50 text-brand-700',
   SharePoint: 'bg-neutral-100 text-neutral-600',
@@ -173,7 +204,6 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
                   In app
                 </th>
               )}
-              <th className={`${KOP} pr-3 text-right`}>Actie</th>
             </tr>
           </thead>
           <tbody>
@@ -183,7 +213,7 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
                   <span className="flex items-center gap-1.5">
                     {r.soort === 'mail' && <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
                     <span className="min-w-0">
-                      <span className="block text-neutral-800">{r.naam}</span>
+                      <BestandsnaamActie rij={r} onOpenMail={onOpenMail} />
                       {r.omschrijving && (
                         <span className="block text-[10px] text-neutral-400">{r.omschrijving}</span>
                       )}
@@ -214,37 +244,11 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
                     )}
                   </td>
                 )}
-                <td className={`${CEL} pr-3 text-right`}>
-                  {r.soort === 'mail' ? (
-                    <button
-                      onClick={() => onOpenMail(r)}
-                      className="text-[11px] font-medium text-brand-600 hover:underline"
-                    >
-                      Lezen
-                    </button>
-                  ) : r.openUrl ? (
-                    <a
-                      href={r.openUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-medium text-brand-600 hover:underline"
-                    >
-                      Openen
-                    </a>
-                  ) : (
-                    <a
-                      href={bestandUrl(r, { download: true })}
-                      className="text-[11px] font-medium text-brand-600 hover:underline"
-                    >
-                      Downloaden
-                    </a>
-                  )}
-                </td>
               </tr>
             ))}
             {zichtbaar.length === 0 && (
               <tr>
-                <td colSpan={KOLOMMEN.length + (toonAppKolom ? 2 : 1)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
+                <td colSpan={KOLOMMEN.length + (toonAppKolom ? 1 : 0)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
                   {rijen.length === 0 ? (legeTekst ?? 'Geen bestanden.') : 'Geen bestanden gevonden.'}
                 </td>
               </tr>
