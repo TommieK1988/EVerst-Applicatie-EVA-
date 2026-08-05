@@ -1231,6 +1231,8 @@ export type KolomConfig = {
   zichtbaar: boolean
   volgorde:  number
   breedte?:  number
+  /** Eigen kolomnaam van deze gebruiker; leeg = de standaardnaam van het scherm. */
+  naam?:     string
 }
 
 export type GebruikerLayout = {

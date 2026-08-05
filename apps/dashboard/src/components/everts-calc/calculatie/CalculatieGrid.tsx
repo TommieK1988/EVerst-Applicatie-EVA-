@@ -122,6 +122,12 @@ const DEFAULT_WIDTHS = Object.fromEntries(COL_DEFS.map(c => [c.id, c.dw])) as Re
 
 // ─── Kolom-layouts (per gebruiker, tabel gebruiker_layouts, scherm 'evc_calculatie') ──
 const LAYOUT_SCHERM = 'evc_calculatie'
+/**
+ * Eigen kolomnamen staan los van de layouts: ze horen bij de gebruiker, niet bij
+ * een bepaalde kolomindeling. Daarom één vaste rij per gebruiker onder een eigen
+ * scherm-sleutel, die direct wordt bewaard zodra je een kop hernoemt.
+ */
+const NAMEN_SCHERM = 'evc_calculatie_kolomnamen'
 const NON_HIDEABLE_COLS: ColId[] = ['omschrijving', 'acties']
 
 /** Huidige gridstaat → KolomConfig[] voor opslag. */
@@ -208,7 +214,9 @@ function GetalInput({
 interface TabelHeaderProps {
   colOrder: ColId[]
   colWidths: Record<ColId, number>
+  /** Zichtbare naam per kolom: eigen naam van de gebruiker, anders die uit de instellingen, anders de standaard. */
   kolomNamen: Record<string, string>
+  onHernoem: (col: ColId, naam: string) => void
   onStartResize: (col: ColId, e: React.MouseEvent) => void
   dragOverCol: ColId | null
   onColDragStart: (col: ColId) => void
@@ -218,26 +226,40 @@ interface TabelHeaderProps {
 }
 
 function TabelHeader({
-  colOrder, colWidths, kolomNamen, onStartResize, dragOverCol,
+  colOrder, colWidths, kolomNamen, onHernoem, onStartResize, dragOverCol,
   onColDragStart, onColDragOver, onColDrop, onColDragEnd,
 }: TabelHeaderProps) {
+  // Dubbelklik op een kop = hernoemen. De <th> is draggable, dus tijdens het
+  // bewerken zetten we dat uit — anders pakt de browser de drag i.p.v. de cursor.
+  const [bewerkt,  setBewerkt]  = useState<ColId | null>(null)
+  const [naamEdit, setNaamEdit] = useState('')
+
+  const start = (id: ColId) => { setBewerkt(id); setNaamEdit(kolomNamen[id] ?? '') }
+  const commit = () => {
+    if (bewerkt) onHernoem(bewerkt, naamEdit)
+    setBewerkt(null)
+  }
+
   return (
     <thead className="sticky top-0 z-10">
       <tr className="bg-white border-b-2 border-slate-200 shadow-sm">
         {colOrder.map(id => {
           const col = COL_MAP[id]
+          const inBewerking = bewerkt === id
           return (
             <th
               key={id}
               data-col={id}
-              title={col.title}
-              draggable={id !== 'acties'}
+              title={col.title ? `${col.title} — dubbelklik om te hernoemen` : 'Dubbelklik om te hernoemen'}
+              draggable={id !== 'acties' && !inBewerking}
               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onColDragStart(id) }}
               onDragOver={e => onColDragOver(e, id)}
               onDrop={() => onColDrop(id)}
               onDragEnd={onColDragEnd}
+              onDoubleClick={() => { if (id !== 'acties') start(id) }}
               className={[
-                'relative px-2 py-2 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
+                'relative px-2 py-2 text-[11px] font-normal uppercase tracking-wide',
+                'whitespace-normal break-words leading-tight align-bottom',
                 'select-none cursor-grab active:cursor-grabbing',
                 col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                 col.thCls ?? (!col.thStyle ? 'text-slate-500' : ''),
@@ -245,8 +267,25 @@ function TabelHeader({
               ].filter(Boolean).join(' ')}
               style={{ width: colWidths[id], ...col.thStyle }}
             >
-              {kolomNamen[id] ?? col.label}
-              {id !== 'acties' && (
+              {inBewerking ? (
+                <input
+                  autoFocus
+                  value={naamEdit}
+                  placeholder={col.label}
+                  onChange={e => setNaamEdit(e.target.value)}
+                  onBlur={commit}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter')  (e.target as HTMLInputElement).blur()
+                    if (e.key === 'Escape') setBewerkt(null)
+                  }}
+                  onMouseDown={e => e.stopPropagation()}
+                  className="w-full normal-case tracking-normal text-[11px] px-1 py-0.5 rounded
+                    border border-everts/50 bg-white text-slate-800 focus:outline-none"
+                />
+              ) : (
+                kolomNamen[id] ?? col.label
+              )}
+              {id !== 'acties' && !inBewerking && (
                 <div
                   className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-everts/40 z-20"
                   onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onStartResize(id, e) }}
@@ -257,6 +296,108 @@ function TabelHeader({
         })}
       </tr>
     </thead>
+  )
+}
+
+// ─── KolomNaamVeld ────────────────────────────────────────────────────────────
+
+/** Hernoemveld in het kolommen-menu; bewaart pas bij verlaten of Enter. */
+function KolomNaamVeld({
+  waarde, standaard, onCommit,
+}: {
+  waarde: string
+  standaard: string
+  onCommit: (naam: string) => void
+}) {
+  const [tekst, setTekst] = useState(waarde)
+  useEffect(() => { setTekst(waarde) }, [waarde])
+
+  return (
+    <input
+      value={tekst}
+      placeholder={standaard}
+      onChange={e => setTekst(e.target.value)}
+      onBlur={() => { if (tekst !== waarde) onCommit(tekst) }}
+      onKeyDown={e => {
+        if (e.key === 'Enter')  (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') setTekst(waarde)
+      }}
+      className="flex-1 min-w-0 text-xs px-1.5 py-0.5 rounded border border-transparent bg-transparent
+        text-slate-700 placeholder-slate-400
+        hover:border-slate-200 focus:bg-white focus:border-everts/40 focus:outline-none"
+    />
+  )
+}
+
+// ─── OmschrijvingVeld ─────────────────────────────────────────────────────────
+
+/**
+ * Invoerveld voor de omschrijving dat naar rechts uitschuift zodra de tekst niet
+ * meer in de kolom past, zodat je de hele regel kunt lezen én bewerken.
+ *
+ * Het veld wordt tijdens het bewerken absoluut gepositioneerd binnen zijn eigen
+ * wikkel; de wikkel houdt zijn plek in de flexrij (met de gemeten hoogte), zodat
+ * de knoppen erachter niet verspringen.
+ */
+function OmschrijvingVeld({
+  waarde, onWijzig, italic,
+}: {
+  waarde: string
+  onWijzig: (v: string) => void
+  italic?: boolean
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const meetRef  = useRef<HTMLSpanElement>(null)
+  /** Maten van vóór het uitschuiven — daarna staat het veld buiten de flow en
+   *  zou een nieuwe meting de wikkel laten meegroeien (en blijven groeien). */
+  const basisRef = useRef<{ w: number; h: number } | null>(null)
+  const [gefocust,  setGefocust]  = useState(false)
+  const [uitschuif, setUitschuif] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!gefocust) { setUitschuif(null); return }
+    const basis = basisRef.current, meet = meetRef.current
+    if (!basis || !meet) return
+    const nodig = meet.offsetWidth + 18   // padding + ruimte voor de cursor
+    setUitschuif(nodig > basis.w ? Math.min(nodig, 900) : null)
+  }, [gefocust, waarde])
+
+  const veldCls = `text-xs px-1 py-1 rounded border bg-transparent border-transparent
+    hover:bg-slate-50 hover:border-slate-200
+    focus:bg-white focus:border-everts/40 focus:outline-none text-slate-800 ${italic ? 'italic' : ''}`
+
+  const basis = basisRef.current
+
+  return (
+    <div
+      className="relative flex-1 min-w-0"
+      style={uitschuif && basis ? { width: basis.w, height: basis.h, flex: 'none', zIndex: 40 } : undefined}
+    >
+      <input
+        ref={inputRef}
+        className={`w-full ${veldCls} ${uitschuif ? 'shadow-md' : ''}`}
+        style={uitschuif ? { position: 'absolute', left: 0, top: 0, width: uitschuif, backgroundColor: '#fff' } : undefined}
+        value={waarde}
+        placeholder="Omschrijving..."
+        maxLength={150}
+        onFocus={e => {
+          const el = e.currentTarget
+          basisRef.current = { w: el.offsetWidth, h: el.offsetHeight }
+          setGefocust(true)
+        }}
+        onBlur={() => setGefocust(false)}
+        onChange={e => onWijzig(e.target.value)}
+      />
+      {gefocust && (
+        <span
+          ref={meetRef}
+          aria-hidden
+          className={`absolute invisible pointer-events-none whitespace-pre ${veldCls}`}
+        >
+          {waarde || 'Omschrijving...'}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -900,15 +1041,10 @@ function CalculatieregelRij({
                 title="Afkomstig uit meetstaat"
               >MS</span>
             )}
-            <input
-              className={`flex-1 min-w-0 text-xs px-1 py-1 rounded border-0 bg-transparent
-                hover:bg-slate-50 hover:border hover:border-slate-200
-                focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-800
-                ${regel.gemarkeerd ? 'italic' : ''}`}
-              value={regel.omschrijving}
-              placeholder="Omschrijving..."
-              maxLength={150}
-              onChange={e => onWijzig(regel.id, { omschrijving: e.target.value })}
+            <OmschrijvingVeld
+              waarde={regel.omschrijving}
+              italic={regel.gemarkeerd}
+              onWijzig={v => onWijzig(regel.id, { omschrijving: v })}
             />
             {/* Naam van de gekoppelde behandeling, afgeleid uit de bibliotheek — hij
                 staat bewust náást het invoerveld, niet erin, zodat `omschrijving` de
@@ -1528,12 +1664,14 @@ interface GroepSectieProps {
   /** Groep waarboven een régel hangt — voor de blauwe ring bij regel-drops. */
   dragOverGroepId: string | null
   sleepRegelId: string | null
+  /** Alle regels die met de huidige sleep meegaan (bij een multiselectie meer dan één). */
+  sleepRegelIds: Set<string>
   onDragOver: (e: React.DragEvent, groep: Groep) => void
   onDrop: (e: React.DragEvent, doelGroep: Groep) => void
   onDragEnd: () => void
   onRegelDragStartNaarGroep: (regelId: string) => void
   onRegelDragEnd: () => void
-  onRegelVerplaatsNaarPositie: (regelId: string, doelGroepId: string, voorRegelId: string | null) => void
+  onRegelVerplaatsNaarPositie: (regelIds: string[], doelGroepId: string, voorRegelId: string | null) => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
   /** Bibliotheek van schilderbehandelingen; één keer geladen door het grid. */
   behandelingen?: SchilderBehandeling[]
@@ -1549,7 +1687,7 @@ function GroepSectie({
   onKlik, onRegelWijzig, onRegelComponentWijzig, onWijzigComponentExtra,
   onVoegComponentToe, onVerwijderComponent,
   onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onToggleInklap, onVoegRegelToe, onVoegSubgroepToe,
-  dragOverGroepId, sleepRegelId, onDragOver, onDrop, onDragEnd,
+  dragOverGroepId, sleepRegelId, sleepRegelIds, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel,
@@ -1560,7 +1698,6 @@ function GroepSectie({
   const [editingNaam,     setEditingNaam]     = useState(false)
   const [naamEdit,        setNaamEdit]        = useState(groep.naam)
   useEffect(() => { setNaamEdit(groep.naam) }, [groep.naam])
-  const [dragRegelId,     setDragRegelId]     = useState<string | null>(null)
   const [dragOverRegelId, setDragOverRegelId] = useState<string | null>(null)
   const directeRegels = alleRegels.filter(r => r.groep_id === groep.id).sort((a, b) => a.volgorde - b.volgorde)
   const subGroepen    = alleGroepen.filter(g => g.parent_id === groep.id).sort((a, b) => a.volgorde - b.volgorde)
@@ -1569,37 +1706,34 @@ function GroepSectie({
   const isRegelDropTarget   = sleepRegelId !== null && dragOverGroepId === groep.id
   const colCount      = colOrder.length
 
+  // Alle regels die met deze sleep meegaan — bij een multiselectie is dat de hele
+  // selectie, anders alleen de opgepakte regel. Het grid bepaalt de set.
   const handleRegelDragStart = (_e: React.DragEvent, id: string) => {
-    setDragRegelId(id)
     onRegelDragStartNaarGroep(id)
   }
   const handleRegelDragOver = (e: React.DragEvent, id: string) => {
     e.preventDefault()
-    // Zelfde groep drag óf cross-groep drag (sleepRegelId is dan het grid-niveau id)
-    const actief = dragRegelId ?? sleepRegelId
-    if (actief && actief !== id) setDragOverRegelId(id)
+    if (sleepRegelId && !sleepRegelIds.has(id)) setDragOverRegelId(id)
   }
   const handleRegelDrop = (targetId: string) => {
-    const isCrossGroep = sleepRegelId !== null && dragRegelId === null
-    if (isCrossGroep) {
-      // Verplaats van andere groep naar positie voor targetId
-      onRegelVerplaatsNaarPositie(sleepRegelId!, groep.id, targetId)
-      setDragOverRegelId(null)
-      return
-    }
-    if (!dragRegelId || dragRegelId === targetId) { setDragRegelId(null); setDragOverRegelId(null); return }
-    const gesorteerd = [...directeRegels]
-    const vanIdx = gesorteerd.findIndex(r => r.id === dragRegelId)
-    const naarIdx = gesorteerd.findIndex(r => r.id === targetId)
-    if (vanIdx === -1 || naarIdx === -1) { setDragRegelId(null); setDragOverRegelId(null); return }
-    gesorteerd.splice(naarIdx, 0, gesorteerd.splice(vanIdx, 1)[0])
-    gesorteerd.forEach((r, i) => { if (r.volgorde !== i + 1) onRegelWijzig(r.id, { volgorde: i + 1 }) })
-    setDragRegelId(null); setDragOverRegelId(null)
+    setDragOverRegelId(null)
+    // Op een regel die zelf meegesleept wordt kun je niet droppen.
+    if (!sleepRegelId || sleepRegelIds.has(targetId)) return
+    onRegelVerplaatsNaarPositie([...sleepRegelIds], groep.id, targetId)
   }
   const handleRegelDragEnd = () => {
-    setDragRegelId(null); setDragOverRegelId(null)
+    setDragOverRegelId(null)
     onRegelDragEnd()
   }
+
+  // Groepstotalen — getoond in een eigen rij ónder de groep, per kolom uitgelijnd.
+  // Alleen doorrekenen als er iets te tonen valt: elke berekening loopt de hele
+  // subboom af en dat gebeurt bij elke render van elke groep opnieuw.
+  const toonTotalen = kostprijs > 0
+  const groepVP   = toonTotalen ? berekenGroepVP(groep.id, alleGroepen, alleRegels, alleComponenten, defaultOpslag) : 0
+  const groepUren = toonTotalen ? berekenGroepUren(groep.id, alleGroepen, alleRegels, alleComponenten) : 0
+  const groepMT   = toonTotalen ? berekenGroepMaterieel(groep.id, alleGroepen, alleRegels, alleComponenten) : 0
+  const groepOA   = toonTotalen ? berekenGroepOA(groep.id, alleGroepen, alleRegels, alleComponenten) : 0
 
   const kopStijlen = [
     'text-white',
@@ -1617,6 +1751,13 @@ function GroepSectie({
   const kopTekst   = diepte === 0 ? 'text-sm font-bold' : diepte === 1 ? 'text-xs font-semibold' : 'text-xs font-medium'
   /** Zichtbare inspringing per niveau, zodat de nesting af te lezen is. */
   const indent     = 4 + diepte * NIVEAU_INSPRING
+
+  /** Totaalrij: hoe dieper de groep, hoe rustiger de streep eronder. */
+  const totaalRijCls   = diepte === 0
+    ? 'border-t-2 border-b-2 border-everts/30'
+    : 'border-t border-b border-slate-200'
+  const totaalRijStijl: React.CSSProperties = { backgroundColor: diepte === 0 ? 'rgba(5,79,46,0.07)' : 'rgba(241,245,249,0.9)' }
+  const totaalTekst    = diepte === 0 ? 'text-everts-dark' : 'text-slate-600'
 
   return (
     <>
@@ -1676,37 +1817,8 @@ function GroepSectie({
               {subGroepen.length > 0 && ` · ${subGroepen.length} subgroep${subGroepen.length !== 1 ? 'en' : ''}`}
             </span>
             <div className="flex-1" />
-            {kostprijs > 0 && (() => {
-              const groepVP  = berekenGroepVP(groep.id, alleGroepen, alleRegels, alleComponenten, defaultOpslag)
-              const groepUren = berekenGroepUren(groep.id, alleGroepen, alleRegels, alleComponenten)
-              const groepMT  = berekenGroepMaterieel(groep.id, alleGroepen, alleRegels, alleComponenten)
-              const groepOA  = berekenGroepOA(groep.id, alleGroepen, alleRegels, alleComponenten)
-              return (
-                <div className="flex items-center gap-3 flex-wrap">
-                  {groepUren > 0 && (
-                    <span className={` text-xs ${diepte <= 1 ? 'text-blue-200' : 'text-blue-500'}`}>
-                      {formatGetal(groepUren, 1)} u
-                    </span>
-                  )}
-                  {groepMT > 0 && (
-                    <span className={` text-xs ${diepte <= 1 ? 'text-red-200' : 'text-red-500'}`}>
-                      MA: {formatEuro(groepMT)}
-                    </span>
-                  )}
-                  {groepOA > 0 && (
-                    <span className={` text-xs ${diepte <= 1 ? 'text-purple-200' : 'text-purple-500'}`}>
-                      OA: {formatEuro(groepOA)}
-                    </span>
-                  )}
-                  <span className={` text-xs ${diepte <= 1 ? 'text-white/70' : 'text-slate-500'}`}>
-                    KP: {formatEuro(kostprijs)}
-                  </span>
-                  <span className={` text-xs font-semibold ${diepte <= 1 ? 'text-white' : 'text-everts'}`}>
-                    VP: {formatEuro(groepVP)}
-                  </span>
-                </div>
-              )
-            })()}
+            {/* De groepstotalen staan bewust niet meer hier maar in een eigen rij
+                onder de groep, uitgelijnd op de bijbehorende kolommen. */}
             <div className="opacity-0 group-hover/kop:opacity-100 flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
               <button
                 onClick={() => onWijzigGroep(groep.id, { optioneel: !groep.optioneel })}
@@ -1760,7 +1872,7 @@ function GroepSectie({
               behandelingen={behandelingen}
               isGeselecteerd={geselecteerdeRegels?.has(r.id)}
               onSelecteer={(ctrl, shift) => onSelecteerRegel?.(r.id, ctrl, shift)}
-              isDragging={dragRegelId === r.id}
+              isDragging={sleepRegelIds.has(r.id)}
               isDragOver={dragOverRegelId === r.id}
               onDragStart={e => handleRegelDragStart(e, r.id)}
               onDragOver={e => handleRegelDragOver(e, r.id)}
@@ -1782,7 +1894,7 @@ function GroepSectie({
               onVerwijderRegel={onVerwijderRegel} onVerwijderGroep={onVerwijderGroep}
               onWijzigGroep={onWijzigGroep} onToggleInklap={onToggleInklap}
               onVoegRegelToe={onVoegRegelToe} onVoegSubgroepToe={onVoegSubgroepToe}
-              dragOverGroepId={dragOverGroepId} sleepRegelId={sleepRegelId}
+              dragOverGroepId={dragOverGroepId} sleepRegelId={sleepRegelId} sleepRegelIds={sleepRegelIds}
               onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
               onRegelDragStartNaarGroep={onRegelDragStartNaarGroep}
               onRegelDragEnd={onRegelDragEnd}
@@ -1798,6 +1910,33 @@ function GroepSectie({
 
         </>
       )}
+
+      {/* Groepstotaal — onderaan de groep, elk bedrag in zijn eigen kolom.
+          Blijft ook zichtbaar als de groep is ingeklapt. */}
+      {toonTotalen && (
+        <tr className={totaalRijCls} style={totaalRijStijl}>
+          {colOrder.map(id => {
+            const uitlijning = COL_MAP[id].align === 'right' ? 'text-right' : COL_MAP[id].align === 'center' ? 'text-center' : 'text-left'
+            const cel = (inhoud: React.ReactNode, extra = '') => (
+              <td key={id} data-col={id} className={`px-2 py-1.5 ${uitlijning} ${extra}`}>{inhoud}</td>
+            )
+            switch (id) {
+              case 'omschrijving': return (
+                <td key={id} data-col={id} className="py-1.5 pr-2" style={{ paddingLeft: `${indent + 18}px` }}>
+                  <span className={`text-xs font-semibold ${totaalTekst}`}>Totaal {groep.naam}</span>
+                </td>
+              )
+              case 'tot_uren':  return cel(groepUren > 0 ? <span className="text-xs font-semibold text-blue-700">{formatGetal(groepUren, 1)}</span> : null)
+              case 'bedrag_mt': return cel(groepMT  > 0 ? <span className="text-xs font-semibold text-red-700">{formatEuro(groepMT)}</span> : null)
+              case 'bedrag_oa': return cel(groepOA  > 0 ? <span className="text-xs font-semibold text-purple-700">{formatEuro(groepOA)}</span> : null)
+              case 'tot_kp':    return cel(<span className="text-xs font-semibold text-everts-dark">{formatEuro(kostprijs)}</span>)
+              case 'tot_vp':    return cel(<span className="text-xs font-bold text-everts">{formatEuro(groepVP)}</span>)
+              default:          return <td key={id} data-col={id} className="py-1.5" />
+            }
+          })}
+        </tr>
+      )}
+
       <ConfirmDialog
         open={confirmVerwijder}
         onOpenChange={setConfirmVerwijder}
@@ -1844,8 +1983,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
 
   // Regels slepen (binnen en tussen groepen). Groepen zelf herorden je in de
   // structuurboom: daar is elke rij een groep, dus zijn de doelen groot en eenduidig.
-  const [sleepRegelId, setSleepRegelId] = useState<string | null>(null)
-  const [dragOverId,   setDragOverId]   = useState<string | null>(null)
+  const [sleepRegelId,  setSleepRegelId]  = useState<string | null>(null)
+  /** Regels die met de huidige sleep meegaan: de hele selectie als je een
+   *  geselecteerde regel oppakt, anders alleen die ene regel. */
+  const [sleepRegelIds, setSleepRegelIds] = useState<Set<string>>(new Set())
+  const [dragOverId,    setDragOverId]    = useState<string | null>(null)
 
   // Instellingen — geabonneerd, zodat de lijst uit Supabase ook doorkomt als de
   // hydratie pas ná de eerste render binnen is (dossiertab opent sneller dan de fetch).
@@ -1897,23 +2039,40 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const layoutMenuRef = useRef<HTMLDivElement>(null)
   const { vraagTekst } = useDialogen()
 
+  // Eigen kolomnamen van deze gebruiker (leeg = de naam uit de instellingen/standaard)
+  const [colNamen,      setColNamen]      = useState<Partial<Record<ColId, string>>>({})
+  const [namenRijId,    setNamenRijId]    = useState<string | null>(null)
+
   const pasLayoutToe = useCallback((cfg: KolomConfig[], layoutId: string | null) => {
     const { colOrder: o, hiddenCols: h, colWidths: w } = layoutNaarState(cfg)
     setColOrder(o); setHiddenCols(h); setColWidths(w); setActiefLayoutId(layoutId)
   }, [])
 
-  // Layouts laden bij mount; standaard-layout toepassen indien aanwezig
+  // Layouts + eigen kolomnamen laden bij mount; standaard-layout toepassen indien aanwezig
   useEffect(() => {
     let afgebroken = false
     ;(async () => {
       const id = await haalHuidigeGebruikerId()
       if (afgebroken || !id) return
       setUserId(id)
-      const rijen = await laadLayouts(id, LAYOUT_SCHERM)
+      const [rijen, namenRijen] = await Promise.all([
+        laadLayouts(id, LAYOUT_SCHERM),
+        laadLayouts(id, NAMEN_SCHERM),
+      ])
       if (afgebroken) return
       setLayouts(rijen)
       const standaard = rijen.find(l => l.is_standaard)
       if (standaard) pasLayoutToe(standaard.kolommen, standaard.id)
+
+      const namenRij = namenRijen[0]
+      if (namenRij) {
+        setNamenRijId(namenRij.id)
+        const namen: Partial<Record<ColId, string>> = {}
+        for (const c of namenRij.kolommen) {
+          if (c.naam && (c.key as ColId) in COL_MAP) namen[c.key as ColId] = c.naam
+        }
+        setColNamen(namen)
+      }
     })()
     return () => { afgebroken = true }
   }, [pasLayoutToe])
@@ -1922,6 +2081,36 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     if (!userId) return
     setLayouts(await laadLayouts(userId, LAYOUT_SCHERM))
   }, [userId])
+
+  /** Naam die je in de kop ziet: eigen naam > naam uit de instellingen > standaard. */
+  const standaardKolomNaam = useCallback(
+    (id: ColId) => kolomNamen[id] ?? COL_MAP[id].label,
+    [kolomNamen],
+  )
+  const effectieveKolomNamen = useMemo(() => {
+    const uit: Record<string, string> = {}
+    for (const c of COL_DEFS) uit[c.id] = colNamen[c.id] ?? kolomNamen[c.id] ?? c.label
+    return uit
+  }, [colNamen, kolomNamen])
+
+  const bewaarKolomNamen = useCallback(async (namen: Partial<Record<ColId, string>>) => {
+    if (!userId) return
+    const cfg: KolomConfig[] = Object.entries(namen)
+      .map(([key, naam], i) => ({ key, zichtbaar: true, volgorde: i, naam: naam as string }))
+    const res = await slaLayoutOp(userId, NAMEN_SCHERM, 'kolomnamen', cfg, namenRijId ?? undefined)
+    if (!res.ok) { toast.error(res.error); return }
+    if (!namenRijId && res.id) setNamenRijId(res.id)
+  }, [userId, namenRijId])
+
+  /** Kolom hernoemen. Leeg of gelijk aan de standaardnaam = terug naar standaard. */
+  const zetKolomNaam = useCallback((id: ColId, naam: string) => {
+    const schoon = naam.trim()
+    const volgende = { ...colNamen }
+    if (!schoon || schoon === standaardKolomNaam(id)) delete volgende[id]
+    else volgende[id] = schoon
+    setColNamen(volgende)
+    void bewaarKolomNamen(volgende)
+  }, [colNamen, standaardKolomNaam, bewaarKolomNamen])
 
   const layoutOpslaanAlsNieuw = useCallback(async () => {
     if (!userId) return
@@ -2319,35 +2508,70 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const onColDragEnd = () => { setDragCol(null); setDragOverCol(null) }
 
   // ─── Regel drag & drop ─────────────────────────────────────────────────────
-  const handleRegelDragStartGrid = useCallback((id: string) => { setSleepRegelId(id) }, [])
-  const handleDragEnd            = useCallback(() => { setSleepRegelId(null); setDragOverId(null) }, [])
+  const handleRegelDragStartGrid = useCallback((id: string) => {
+    setSleepRegelId(id)
+    // Sleep je een regel uit een bestaande selectie, dan gaat de hele selectie mee.
+    setSleepRegelIds(
+      geselecteerdeRegels.has(id) && geselecteerdeRegels.size > 1
+        ? new Set(geselecteerdeRegels)
+        : new Set([id]),
+    )
+  }, [geselecteerdeRegels])
 
-  const handleVerplaatsRegelNaarPositie = useCallback((regelId: string, doelGroepId: string, voorRegelId: string | null) => {
-    const regel = regels.find(r => r.id === regelId)
-    if (!regel) return
+  const handleDragEnd = useCallback(() => {
+    setSleepRegelId(null); setSleepRegelIds(new Set()); setDragOverId(null)
+  }, [])
+
+  /** Volgorde waarin de groepen in het rekenblad staan — bepaalt de leesvolgorde
+   *  waarin meerdere gesleepte regels bij elkaar worden gezet. */
+  const groepVolgordeIndex = useMemo(() => {
+    const map = new Map<string, number>()
+    let i = 0
+    const loop = (parentId: string | null) => {
+      groepen.filter(g => g.parent_id === parentId).sort((a, b) => a.volgorde - b.volgorde)
+        .forEach(g => { map.set(g.id, i++); loop(g.id) })
+    }
+    loop(null)
+    return map
+  }, [groepen])
+
+  const handleVerplaatsRegelsNaarPositie = useCallback((
+    regelIds: string[], doelGroepId: string, voorRegelId: string | null,
+  ) => {
+    const ids = new Set(regelIds)
+    if (voorRegelId && ids.has(voorRegelId)) return   // droppen op jezelf
+    const teVerplaatsen = regels
+      .filter(r => ids.has(r.id))
+      .sort((a, b) =>
+        (groepVolgordeIndex.get(a.groep_id) ?? 0) - (groepVolgordeIndex.get(b.groep_id) ?? 0)
+        || a.volgorde - b.volgorde)
+    if (teVerplaatsen.length === 0) return
     duwSnapshot()
-    // Doelgroepregels zonder de te verplaatsen regel, gesorteerd
+
+    // Doelgroep opnieuw opbouwen: bestaande regels zonder de gesleepte, dan invoegen
     const doelRegels = regels
-      .filter(r => r.groep_id === doelGroepId && r.id !== regelId)
+      .filter(r => r.groep_id === doelGroepId && !ids.has(r.id))
       .sort((a, b) => a.volgorde - b.volgorde)
     const invoegenIdx = voorRegelId
       ? Math.max(0, doelRegels.findIndex(r => r.id === voorRegelId))
       : doelRegels.length
-    doelRegels.splice(invoegenIdx, 0, { ...regel, groep_id: doelGroepId })
+    doelRegels.splice(invoegenIdx, 0, ...teVerplaatsen.map(r => ({ ...r, groep_id: doelGroepId })))
     doelRegels.forEach((r, i) => slaCalculatieregelOp({ ...r, volgorde: i + 1 }))
-    // Brongroep herordenen als het een echte verplaatsing is
-    if (regel.groep_id !== doelGroepId) {
-      regels
-        .filter(r => r.groep_id === regel.groep_id && r.id !== regelId)
+
+    // Brongroepen dichttrekken en de meetstaat-koppeling meeverhuizen
+    const bronGroepen = new Set(teVerplaatsen.map(r => r.groep_id).filter(gid => gid !== doelGroepId))
+    bronGroepen.forEach(gid => {
+      regels.filter(r => r.groep_id === gid && !ids.has(r.id))
         .sort((a, b) => a.volgorde - b.volgorde)
         .forEach((r, i) => slaCalculatieregelOp({ ...r, volgorde: i + 1 }))
-      // Meetstaat aggregaat ook bijwerken
-      syncAggregaatGroep(regelId, doelGroepId)
-    }
-    setSleepRegelId(null); setDragOverId(null)
+    })
+    teVerplaatsen.forEach(r => { if (r.groep_id !== doelGroepId) syncAggregaatGroep(r.id, doelGroepId) })
+
+    setSleepRegelId(null); setSleepRegelIds(new Set()); setDragOverId(null)
     laadAlles(); onWijziging()
-    toast.success('Regel verplaatst')
-  }, [regels, duwSnapshot, laadAlles, onWijziging, syncAggregaatGroep])
+    const n = teVerplaatsen.length
+    toast.success(`${n} regel${n !== 1 ? 's' : ''} verplaatst`)
+  }, [regels, groepVolgordeIndex, duwSnapshot, laadAlles, onWijziging, syncAggregaatGroep])
 
   /** Een régel boven een groepskop: die groep licht op als doel. */
   const handleDragOver = useCallback((e: React.DragEvent, doel: Groep) => {
@@ -2355,11 +2579,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     if (sleepRegelId) setDragOverId(doel.id)
   }, [sleepRegelId])
 
-  /** Drop op een groepskop → de regel achteraan die groep plaatsen. */
+  /** Drop op een groepskop → de regels achteraan die groep plaatsen. */
   const handleDrop = useCallback((e: React.DragEvent, doel: Groep) => {
     e.preventDefault()
-    if (sleepRegelId) handleVerplaatsRegelNaarPositie(sleepRegelId, doel.id, null)
-  }, [sleepRegelId, handleVerplaatsRegelNaarPositie])
+    if (sleepRegelIds.size > 0) handleVerplaatsRegelsNaarPositie([...sleepRegelIds], doel.id, null)
+  }, [sleepRegelIds, handleVerplaatsRegelsNaarPositie])
 
   // ─── Mutaties ──────────────────────────────────────────────────────────────
   const handleRegelWijzig = useCallback((id: string, veld: Partial<Calculatieregel>) => {
@@ -2683,33 +2907,49 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             Kolommen{hiddenCols.size > 0 ? ` (${hiddenCols.size} verborgen)` : ''}
           </button>
           {colPickerOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-[150] min-w-[200px]">
+            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-[150] w-[300px] max-h-[70vh] overflow-auto">
               <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
-                Kolommen tonen/verbergen
+                Kolommen tonen en hernoemen
               </div>
-              {COL_DEFS.filter(c => !NON_HIDEABLE.includes(c.id)).map(c => (
-                <label key={c.id} className="flex items-center gap-2 px-3 py-1 hover:bg-slate-50 cursor-pointer">
+              {COL_DEFS.map(c => (
+                <div key={c.id} className="flex items-center gap-2 px-3 py-1 hover:bg-slate-50">
                   <input
                     type="checkbox"
                     checked={!hiddenCols.has(c.id)}
+                    disabled={NON_HIDEABLE.includes(c.id)}
                     onChange={() => toggleHiddenCol(c.id)}
-                    className="w-3.5 h-3.5 rounded accent-everts"
+                    className="w-3.5 h-3.5 rounded accent-everts flex-shrink-0 disabled:opacity-30"
+                    title={NON_HIDEABLE.includes(c.id) ? 'Deze kolom is altijd zichtbaar' : 'Kolom tonen/verbergen'}
                   />
-                  <span className="text-xs text-slate-700">{c.title ?? c.label}</span>
-                </label>
+                  <KolomNaamVeld
+                    waarde={colNamen[c.id] ?? ''}
+                    standaard={standaardKolomNaam(c.id)}
+                    onCommit={naam => zetKolomNaam(c.id, naam)}
+                  />
+                </div>
               ))}
-              {hiddenCols.size > 0 && (
-                <>
-                  <div className="border-t border-slate-100 mt-1 pt-1">
-                    <button
-                      onClick={() => setHiddenCols(new Set())}
-                      className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                    >
-                      Alle kolommen tonen
-                    </button>
-                  </div>
-                </>
-              )}
+              <div className="border-t border-slate-100 mt-1 pt-1">
+                <p className="px-3 py-1 text-[10px] text-slate-400 leading-snug">
+                  Eigen kolomnamen gelden alleen voor jou. Leeg laten = standaardnaam.
+                  Je kunt ook dubbelklikken op een kolomkop.
+                </p>
+                {hiddenCols.size > 0 && (
+                  <button
+                    onClick={() => setHiddenCols(new Set())}
+                    className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  >
+                    Alle kolommen tonen
+                  </button>
+                )}
+                {Object.keys(colNamen).length > 0 && (
+                  <button
+                    onClick={() => { setColNamen({}); void bewaarKolomNamen({}) }}
+                    className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  >
+                    Kolomnamen herstellen
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -2747,7 +2987,8 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
               {visibleColOrder.map(id => <col key={id} style={{ width: colWidths[id] }} />)}
             </colgroup>
             <TabelHeader
-              colOrder={visibleColOrder} colWidths={colWidths} kolomNamen={kolomNamen}
+              colOrder={visibleColOrder} colWidths={colWidths} kolomNamen={effectieveKolomNamen}
+              onHernoem={zetKolomNaam}
               onStartResize={startResize} dragOverCol={dragOverCol}
               onColDragStart={onColDragStart} onColDragOver={onColDragOver}
               onColDrop={onColDrop} onColDragEnd={onColDragEnd}
@@ -2771,11 +3012,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   onWijzigGroep={handleWijzigGroep} onToggleInklap={handleToggleInklap}
                   onVoegRegelToe={handleVoegRegelToe}
                   onVoegSubgroepToe={handleVoegSubgroepToe}
-                  dragOverGroepId={dragOverId} sleepRegelId={sleepRegelId}
+                  dragOverGroepId={dragOverId} sleepRegelId={sleepRegelId} sleepRegelIds={sleepRegelIds}
                   onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}
                   onRegelDragStartNaarGroep={handleRegelDragStartGrid}
                   onRegelDragEnd={handleDragEnd}
-                  onRegelVerplaatsNaarPositie={handleVerplaatsRegelNaarPositie}
+                  onRegelVerplaatsNaarPositie={handleVerplaatsRegelsNaarPositie}
                   bibliotheekItems={bibliotheekItems}
                   behandelingen={behandelingen}
                   geselecteerdeRegels={geselecteerdeRegels}
