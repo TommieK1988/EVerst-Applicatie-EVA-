@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-05','nieuw','Inkoop','Inkooporder en opdracht versturen vanuit EVA',
+   'Een inkooporder of onderaannemersopdracht stuur je nu vanuit EVA naar de leverancier. Aanmaken zet hem als concept in Bouw7; met Versturen maakt EVA een order-PDF, mailt die namens jou via Outlook, en maakt Bouw7 de leverbon per regel aan — zodat elke inkoopfactuur straks netjes op de juiste regel afboekt. Onderwerp en bericht kun je vóór verzending nog aanpassen. Een verstuurde bestelling ligt vast; een nog niet verstuurde kun je intrekken.');
