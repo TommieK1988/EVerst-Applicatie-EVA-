@@ -542,8 +542,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                   </label>
                   <label className="block text-xs text-slate-500">
                     Bericht
-                    <textarea value={mail.bericht} onChange={e => setMail(m => ({ ...m, bericht: e.target.value }))} rows={5}
+                    <textarea value={mail.bericht} onChange={e => setMail(m => ({ ...m, bericht: e.target.value }))} rows={8}
                       className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40 resize-none" />
+                    <span className="mt-1 block text-[11px] text-slate-400">
+                      Onder je bericht komt automatisch een blokje met ordernummer, project, werkadres,
+                      leverdatum en bedrag. Je naam komt uit je Outlook-handtekening.
+                    </span>
                   </label>
                 </>
               )}

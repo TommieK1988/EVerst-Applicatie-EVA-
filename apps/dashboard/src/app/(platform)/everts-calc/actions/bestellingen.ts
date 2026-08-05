@@ -536,10 +536,15 @@ export async function getBestellingMailConcept(bestellingId: string): Promise<Be
   const soortWoord = soort === 'oa_contract' ? 'opdracht' : 'inkooporder'
   const nummer = b?.bouw7_nummer ?? ''
   const onderwerp = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${nummer}`.trim()
+  // Platte tekst met echte regeleinden; de HTML-opmaak gebeurt bij het versturen
+  // (bouwBestellingMailHtml). De naam van de afzender staat er bewust niet onder: die komt
+  // uit de Outlook-handtekening.
   const bericht =
     `Beste ${relatie?.naam ?? 'relatie'},\n\n` +
-    `In de bijlage vind je onze ${soortWoord}${nummer ? ` met nummer ${nummer}` : ''}. ` +
-    `Graag ontvangen we een bevestiging.\n\n` +
+    `Hierbij ontvangt u onze ${soortWoord}${nummer ? ` ${nummer}` : ''}. ` +
+    `De volledige omschrijving staat in de bijgevoegde pdf.\n\n` +
+    `Wilt u de ${soortWoord} bevestigen? Vermeld bij facturatie het ` +
+    `${soort === 'oa_contract' ? 'opdrachtnummer' : 'ordernummer'}, dan verwerken wij uw factuur vlot.\n\n` +
     `Met vriendelijke groet,`
 
   return { to: relatie?.email ?? '', onderwerp, bericht, heeftAdres: !!relatie?.email }
@@ -650,8 +655,19 @@ export async function verstuurBestelling(
   }
 
   const bestandsnaam = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${rij.bouw7_nummer ?? ''}`.trim().replace(/[\\/:*?"<>|#%]/g, '-') + '.pdf'
-  const bodyHtml = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;white-space:pre-wrap">${input.bericht
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}\n${afzender}</div>`
+  // Opmaak van de mail: alinea's + een gegevensblok met dezelfde kern als de PDF. Outlook
+  // negeert `white-space:pre-wrap`, dus regeleinden moeten als echte <p>/<br> in de HTML.
+  const { bouwBestellingMailHtml } = await import('@/lib/bouw7/bestelling-mail')
+  const bodyHtml = bouwBestellingMailHtml({
+    soort: soort === 'oa_contract' ? 'oa_contract' : 'inkooporder',
+    bericht: input.bericht,
+    nummer: rij.bouw7_nummer ?? null,
+    project: [dossier?.dossiernummer, dossier?.titel].filter(Boolean).join(' — ') || null,
+    werkadres,
+    leverdatum: rij.levering_datum ? nlDatum(rij.levering_datum) : (rij.levering_tekst ?? null),
+    betaalafspraak: rij.betaalafspraak ?? null,
+    totaal,
+  })
 
   // Mailen via Outlook namens de medewerker. Pas ná succes gaan we verder.
   try {
