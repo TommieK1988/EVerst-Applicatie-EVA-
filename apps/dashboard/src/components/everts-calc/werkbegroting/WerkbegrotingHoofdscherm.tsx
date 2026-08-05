@@ -552,7 +552,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                     onChange={(e) => setDoelHoofdstukId(e.target.value ? Number(e.target.value) : null)}
                     className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-400"
                   >
-                    {hoofdstukken.length === 0 && <option value="">— geen hoofdstukken gevonden —</option>}
+                    {/* Leeg project: EVA legt zelf het hoofdstuk "Totaal" aan bij het verzenden. */}
+                    {hoofdstukken.length === 0 && <option value="">— nieuw hoofdstuk &ldquo;Totaal&rdquo; —</option>}
                     {hoofdstukken.map((h) => <option key={h.id} value={h.id}>{h.naam || `Hoofdstuk ${h.id}`}</option>)}
                   </select>
                 </div>

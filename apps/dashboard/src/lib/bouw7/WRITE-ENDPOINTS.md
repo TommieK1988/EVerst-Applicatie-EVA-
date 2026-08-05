@@ -24,7 +24,8 @@ Bouw7. Kern: `apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegrotin
 | **Prognose zetten** per PSL | `POST /project/update-prognosis-other` (Heimdall) | `{ id: <pslId>, prognosisOtherAmount: "<bedrag>", prognosisOtherHours?: "<uren>" }`. **Prognose = begroot + prognosisOtherAmount.** Uren alleen voor Arbeid. |
 | **Structuur lezen** (codes+begroting) | `GET /project/{id}/project-security-links` (Heimdall) | `[{ securityObject, securityCodesPerChapters: [{ securityCodeChapter{id,name}, budgetDataPerSecurityCodes: [{ securityCode{id,code,name}, laborCosts, subcontractorCosts, materialCosts, … }] }] }]` |
 | **Structuur schrijven** (PSL aanmaken) | `POST /project/{id}/project-security-links` (Heimdall) | Body `{ securityCodeChaptersPerObjects: [...zelfde array...] }` — **read-modify-write** (vervangt alles). Code+kostensoort toevoegen = kostensoort-veld op `"0"` zetten → PSL ontstaat (begroot 0). |
-| **Bewakingscode aanmaken** | `POST /security-code` (Heimdall) | `{ name, code, securityCodeChapter: { id } }` → response `{ id }`. Hoofdstuk-id moet **bestaan** (geen betrouwbaar create-hoofdstuk-endpoint gevonden). |
+| **Bewakingscode aanmaken** | `POST /security-code` (Heimdall) | `{ name, code, securityCodeChapter: { id } }` → response `{ id }`. Hoofdstuk-id moet bestaan — zie de rij hieronder. |
+| **Hoofdstuk aanmaken** | `POST /security-code-chapter` (Heimdall) | `{ name, code }` → 201 `{ id }`. **Globale stamdata** (lijst: `GET /list/security-code-chapters`), niet project-eigen. `code` mag **niet leeg** zijn. |
 | **Bewakingscodes/begroting lezen** | Athena `GET /project-control/{id}/cost-type/{1,3,5}/chapters` | `securityCodes[].pslIds[0]` = PSL-id per (code × kostensoort); `budgetAmount`, `hourInfo.budgetHours`. |
 | **Bestelregels** (import) | `GET /list/contract-order-lines` (Heimdall, `q`-DSL) | items: `quantity`, `quantityFactor`, `unitPrice`, `unit`, `totalPrice`, `costType` (regel-enum!), `projectSecurityLink{code,costType}`. Aantal = `quantity × quantityFactor`. |
 | **Bestelregels** (schrijven) | `POST /contract-order-line` (Heimdall, **ongedocumenteerd**) | Zie §2b. **Niet** `/project/{id}/contract-order-line` — die is material-only. |
@@ -47,9 +48,32 @@ ct6 Afval → `wasteCosts` · ct7 Overig → `miscellaneousCosts`. EVA voedt all
   en worden dus **niet** gereset.
 - **Skip alleen** bij leeg werkbegroting-bedrag of lege kostengroep.
 
+### Hoofdstuk aanmaken — kan wél (geverifieerd aug 2026)
+Hoofdstukken zijn **globale stamdata**, niet iets van één project: `GET /list/security-code-chapters`
+geeft ze allemaal, en een project "heeft" alleen de hoofdstukken waaronder codes hangen. Aanmaken:
+
+```
+POST /security-code-chapter   { "name": "Totaal", "code": "Totaal" }   → 201 { id }
+```
+
+> ⚠️ **`code` mag niet leeg zijn** — `{ name, code: "" }` geeft
+> `400 "SecurityCodeChapter::$code failed. This value should not be blank."` Hierop strandden de
+> eerdere pogingen (en op de aanname dat een leeg hoofdstuk in de structuur-POST volstaat: dat blok
+> moet minstens één code bevatten, anders valt het weg).
+
+Volledige keten, geverifieerd op testproject 3869371 (en daarna weer opgeruimd):
+1. `POST /security-code-chapter {name, code}` → 201 — mag een hoofdstuk zijn dat op géén enkel project staat.
+2. `POST /security-code {name, code, securityCodeChapter:{id}}` → 201.
+3. Structuur-POST met een nieuw blok `{ securityCodeChapter:{id}, budgetDataPerSecurityCodes:[{…}] }`
+   → 200; het hoofdstuk staat daarna op het project (alleen `id` nodig — Bouw7 echoot naam/code als null).
+4. Athena `/cost-type/1/chapters` geeft de code mét `pslIds` terug → de PSL bestaat en is beschrijfbaar.
+
+EVA gebruikt dit in `zorgVoorTotaalHoofdstuk`, maar pas als laatste stap. De volgorde bij nieuwe
+codes is: **(1)** het door de gebruiker gekozen hoofdstuk → **(2)** een hoofdstuk dat al op het
+project staat ("WB" bij voorkeur, anders het eerste) → **(3)** pas bij een project zónder enig
+hoofdstuk het gedeelde hoofdstuk **"Totaal"**.
+
 ### Niet (betrouwbaar) mogelijk gebleken
-- **Hoofdstuk aanmaken** via API — daarom kiest de gebruiker een bestaand hoofdstuk. ("+ Hoofdstuk" in de
-  Bouw7-UI gaf geen bruikbare afgevangen call; een leeg hoofdstuk meesturen in de structuur-POST werkte niet.)
 - **Prognose direct lezen** per code uit het chapters-endpoint (`prognosisOtherAmount` ontbreekt daar) →
   daarom de onvoorwaardelijke reset.
 
@@ -203,7 +227,7 @@ POST /contract-order-line      (Heimdall — staat NIET in de Swagger-spec)
 |---|---|---|
 | `project` `{id}` | **REQ** | staat alleen in de body (geen path-param) |
 | `costType` | **REQ voor niet-materiaal** | kostentype van de **regel** — zie enum hieronder. Weggelaten = 0 (Materiaal) |
-| `projectSecurityLink` `{id}` | opt | **bewakingscode** — moet qua kostensoort bij `costType` passen |
+| `projectSecurityLink` `{id}` | **REQ** | **bewakingscode** — moet qua kostensoort bij `costType` passen. Weglaten geeft `400 validation_error "ContractOrderLine::$projectSecurityLink … This value should not be null."` — óók bij een upsert mét `id` (de POST vervangt de hele regel). Zie hieronder. |
 | `description` | opt | regelomschrijving |
 | `quantity`, `unitPrice` | opt | Bouw7 rekent `totalPrice` = quantity × unitPrice zelf |
 | `quantityFactor` | opt | default `1.00` |
@@ -226,6 +250,23 @@ UI-dropdown) en is *niet* de kostensoort-nummering van de bewakingscode/PSL:
 Afgeleid uit 625 bestaande bestelregels (de koppeling is 100% consistent) en bevestigd met
 schrijftests op 3869371. Let hierop bij het **lezen**: `ol.costType` als PSL-kostensoort
 interpreteren maakt van elke OA-regel (`1`) een arbeid-regel.
+
+#### Geen PSL → 400, en waar de PSL vandaan komt
+```
+400 {"type":"validation_error","message":"Validation of property
+     \"B7\\Schema\\Project\\Contract\\ContractOrderLine::$projectSecurityLink\" failed.
+     \"This value should not be null.\""}
+```
+`resolveBewakingscodes` leest de PSL-ids uit `/cost-type/{ct}/chapters`; een bewakingscode **zonder
+begroting** staat daar niet in, dus die levert geen PSL op. `bouwBestelregelPlan` vult de PSL daarom
+bij vanuit de **bestaande bestelregel** (`/list/contract-order-lines`, gematcht op `bouw7_line_id`) —
+die draagt er per definitie één. Dat dekt *bijwerken* en *neutraliseren*; voor *aanmaken* maakt
+`zorgVoorOntbrekendePsls` de PSL alsnog aan (begroot 0).
+
+Blijft de PSL dan nog null (bv. geen doelhoofdstuk gekozen, of het aanmaken van de code mislukte),
+dan slaat `stuurWerkbegrotingBestelregelsBouw7` **die ene regel over** met een melding in `fouten`.
+Nooit alsnog posten: de 400 hierboven is een harde fout die anders de hele push afbreekt — inclusief
+de regels die er niets mee te maken hebben.
 
 #### Verlopen `id` → 404, en waarom dat geen harde fout mag zijn
 Een in Bouw7 verwijderde regel waarvan EVA het id nog bewaart (o.a. ids die uit de import komen)

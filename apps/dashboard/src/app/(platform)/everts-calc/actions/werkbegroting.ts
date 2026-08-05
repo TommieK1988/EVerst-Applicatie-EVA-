@@ -877,12 +877,36 @@ async function createSecurityCode(client: Bouw7Client, naam: string, code: strin
   return res.id
 }
 
+/** Naam én code van het hoofdstuk dat EVA zelf aanlegt als een project nog geen hoofdstuk heeft. */
+const FALLBACK_HOOFDSTUK = 'Totaal'
+
+/**
+ * Zoekt het hoofdstuk "Totaal" op en maakt het aan als het nog niet bestaat.
+ *
+ * Hoofdstukken zijn in Bouw7 **globale stamdata** (`GET /list/security-code-chapters`), niet iets
+ * van één project: een project "heeft" alleen de hoofdstukken waaronder daadwerkelijk codes hangen.
+ * Aanmaken kan via `POST /security-code-chapter` — met als valkuil dat `code` **niet leeg** mag zijn
+ * (`400 "SecurityCodeChapter::$code … should not be blank"`). Daar strandden eerdere pogingen op.
+ * Geverifieerd aug 2026: 201 met `{ name: 'Totaal', code: 'Totaal' }`.
+ */
+async function zorgVoorTotaalHoofdstuk(client: Bouw7Client): Promise<number> {
+  const lijst = await client
+    .get<{ items?: { id: number; name?: string | null }[] }>('/list/security-code-chapters', { q: 'LIMIT 500' })
+    .then(r => r.items ?? [])
+    .catch(() => [] as { id: number; name?: string | null }[])
+  const bestaand = lijst.find(c => (c.name ?? '').trim().toLowerCase() === FALLBACK_HOOFDSTUK.toLowerCase())
+  if (bestaand) return bestaand.id
+  const nieuw = await client.post<{ id: number }>('/security-code-chapter', { name: FALLBACK_HOOFDSTUK, code: FALLBACK_HOOFDSTUK })
+  return nieuw.id
+}
+
 /**
  * Zorgt dat voor elke ontbrekende (code × kostensoort) een PSL bestaat: voegt de code/kostensoort
  * met begroot 0 toe aan de project-security-links structuur (read-modify-write), en maakt de code
- * eerst aan als die nog niet op het project staat. Nieuwe codes gaan onder het gekozen bestaande
- * hoofdstuk (`doelHoofdstukId`, per dossier ingesteld in EVA); ontbreekt dat, dan wordt de code
- * overgeslagen + gemeld.
+ * eerst aan als die nog niet op het project staat. Nieuwe codes gaan onder het gekozen hoofdstuk
+ * (`doelHoofdstukId`, per dossier ingesteld in EVA); is er niets gekozen, dan onder een hoofdstuk
+ * dat al op het project staat ("WB" bij voorkeur, anders het eerste). Pas als het project helemáál
+ * geen hoofdstuk heeft, legt EVA het hoofdstuk "Totaal" aan (of hergebruikt het).
  */
 async function zorgVoorOntbrekendePsls(
   client: Bouw7Client,
@@ -905,11 +929,38 @@ async function zorgVoorOntbrekendePsls(
     }
   }
 
-  // Nieuwe codes komen onder het in EVA gekozen bestaande hoofdstuk (doelHoofdstukId, per dossier).
-  const doelChapter = (): SecChapter | null =>
-    doelHoofdstukId == null
-      ? null
-      : (obj.securityCodesPerChapters.find(ch => ch.securityCodeChapter?.id === doelHoofdstukId) ?? null)
+  /**
+   * Blok van een hoofdstuk in de structuur — bestaat het nog niet op dit project, dan wordt het
+   * toegevoegd. Alleen `id` is nodig; Bouw7 echoot naam/code toch als null terug.
+   */
+  const blokVoor = (chapterId: number): SecChapter => {
+    const bestaand = obj.securityCodesPerChapters.find(ch => ch.securityCodeChapter?.id === chapterId)
+    if (bestaand) return bestaand
+    const nieuw: SecChapter = { securityCodeChapter: { id: chapterId }, budgetDataPerSecurityCodes: [] }
+    obj.securityCodesPerChapters.push(nieuw)
+    return nieuw
+  }
+
+  // Nieuwe codes komen onder het in EVA gekozen hoofdstuk (doelHoofdstukId, per dossier). Is er
+  // niets gekozen, dan pakken we een hoofdstuk dat al op het project staat — "WB" als die er is,
+  // anders het eerste, dezelfde voorkeur als de dropdown in EVA. Staat er helemaal niets (vers
+  // project zónder hoofdstukken → lege dropdown), dan legt EVA het hoofdstuk "Totaal" aan.
+  let doel: SecChapter | null | undefined
+  let hoofdstukFout: string | null = null
+  const doelChapter = async (): Promise<SecChapter | null> => {
+    if (doel !== undefined) return doel
+    if (doelHoofdstukId != null) { doel = blokVoor(doelHoofdstukId); return doel }
+    const opProject = obj.securityCodesPerChapters
+    const bestaandChapter = opProject.find(ch => (ch.securityCodeChapter?.name ?? '').trim().toUpperCase() === 'WB') ?? opProject[0]
+    if (bestaandChapter) { doel = bestaandChapter; return doel }
+    try {
+      doel = blokVoor(await zorgVoorTotaalHoofdstuk(client))
+    } catch (e) {
+      hoofdstukFout = e instanceof Error ? e.message : 'onbekende fout'
+      doel = null
+    }
+    return doel
+  }
 
   // Per code groeperen (we maken een code max één keer aan).
   const perCode = new Map<string, { naam: string | null; cts: number[] }>()
@@ -924,8 +975,8 @@ async function zorgVoorOntbrekendePsls(
   for (const [code, { naam, cts }] of perCode) {
     let bd = codeEntry.get(code)
     if (!bd) {
-      const chap = doelChapter()
-      if (!chap) { fouten.push(`Geen (geldig) doelhoofdstuk gekozen voor nieuwe code "${code}". Kies een hoofdstuk in EVA bij 'Prognose naar Bouw7'.`); continue }
+      const chap = await doelChapter()
+      if (!chap) { fouten.push(`Geen hoofdstuk voor nieuwe code "${code}": aanmaken van hoofdstuk "${FALLBACK_HOOFDSTUK}" mislukte (${hoofdstukFout ?? 'onbekende fout'}). Kies anders zelf een hoofdstuk in EVA bij 'Naar Bouw7'.`); continue }
       try {
         const newId = await createSecurityCode(client, naam ?? code, code, chap.securityCodeChapter.id)
         bd = { securityCode: { id: newId, name: naam ?? code, code, chapterName: chap.securityCodeChapter.name } }
@@ -1001,17 +1052,17 @@ export async function maakMeerwerkBewakingscodeBouw7(
   if (!code) return { ok: false, error: 'Lege bewakingscode.' }
   const ct = opts.kostensoort ?? 5 // Materiaal als neutrale default-kostensoort.
 
-  // 1. Doelhoofdstuk: expliciet meegegeven → anders een hoofdstuk dat op 'meerwerk'/'MW' lijkt → anders het eerste.
+  // 1. Doelhoofdstuk: expliciet meegegeven → anders een hoofdstuk dat op 'meerwerk'/'MW' lijkt →
+  //    anders het eerste. Levert dat niets op (project zónder hoofdstukken), dan blijft het null
+  //    en legt `zorgVoorOntbrekendePsls` zelf het hoofdstuk "Totaal" aan — niet afbreken dus.
   let chapterId = opts.hoofdstukId ?? null
-  let chapterFout: string | undefined
   if (chapterId == null) {
     const hk = await getProjectHoofdstukken(dossierId)
     if (hk.ok) {
       const mw = hk.hoofdstukken.find(h => /meerwerk|^mw\b|^mw$/i.test(h.naam.trim()))
       chapterId = (mw ?? hk.hoofdstukken[0])?.id ?? null
-    } else chapterFout = hk.error
+    }
   }
-  if (chapterId == null) return { ok: false, error: chapterFout ?? 'Geen hoofdstuk gevonden om de bewakingscode onder te plaatsen.' }
 
   // 2. Code + PSL aanmaken (begroot 0) — read-modify-write op de structuur.
   let maakRes: { aangemaakt: number; fouten: string[] }
@@ -1601,6 +1652,21 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
     // Regels die al een id claimen niet nogmaals adopteren.
       const geclaimd = new Set<number>()
       for (const r of regels) if (r.bouw7LineId != null) geclaimd.add(r.bouw7LineId)
+
+      // PSL bijvullen vanuit de bestaande Bouw7-regel. Bouw7 eist `projectSecurityLink` bij ELKE
+      // POST /contract-order-line — ook bij bijwerken/neutraliseren (de POST vervangt de hele regel;
+      // laten we het veld weg, dan komt er een 400 "projectSecurityLink … should not be null").
+      // `resolveBewakingscodes` kan de PSL missen als de bewakingscode niet in
+      // /cost-type/{ct}/chapters opduikt (bv. een code zonder begroting). Een bestaande bestelregel
+      // draagt de PSL per definitie wél, dus die is hier de betrouwbaarste bron.
+      const perLineId = new Map<number, Bouw7ContractOrderLine>()
+      for (const ol of bestaande) perLineId.set(ol.id, ol)
+      for (const r of regels) {
+        if (r.pslId != null || r.bouw7LineId == null) continue
+        const psl = perLineId.get(r.bouw7LineId)?.projectSecurityLink?.id
+        if (psl != null) r.pslId = psl
+      }
+
       for (const r of regels) {
         if (r.actie !== 'aanmaken') continue
         const match = bestaande.find(ol =>
@@ -1763,6 +1829,17 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
   try {
     for (const r of plan.regels) {
       if (r.actie === 'skip') continue
+      // Zonder bewakingscode weigert Bouw7 de regel hoe dan ook:
+      // 400 validation_error "ContractOrderLine::$projectSecurityLink … should not be null".
+      // Kon de PSL hierboven niet worden gevonden of aangemaakt (bv. geen doelhoofdstuk gekozen,
+      // of het aanmaken van de code mislukte — die reden staat al in `fouten`), dan slaan we deze
+      // ene regel over. De rest van de push blijft doorlopen; eerder klapte de hele push hierop.
+      if (r.pslId == null) {
+        r.actie = 'skip'
+        r.reden = 'Geen bewakingscode in Bouw7 (PSL niet gevonden of niet aangemaakt).'
+        fouten.push(`Bewakingscode "${r.code || '—'}" (${r.label}) bestaat niet in Bouw7 — regel "${r.omschrijving || r.label}" overgeslagen.`)
+        continue
+      }
       const comp = compById.get(r.componentId)
       const relatieId = comp?.relatie_id && UUID_RE.test(comp.relatie_id) ? comp.relatie_id : null
       const contactId = relatieId ? contactPerRelatie.get(relatieId) : undefined
@@ -1774,7 +1851,8 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
         unitPrice: String(r.prijs),
         costType: r.lineCt,
         ...(r.eenheid ? { unit: r.eenheid } : {}),
-        ...(r.pslId != null ? { projectSecurityLink: { id: r.pslId } } : {}),
+        // Verplicht — Bouw7 valideert op niet-null (zie de guard hierboven).
+        projectSecurityLink: { id: r.pslId },
         ...(contactId != null ? { contact: { id: contactId } } : {}),
         ...(r.bouw7LineId != null ? { id: r.bouw7LineId } : {}),
       }
