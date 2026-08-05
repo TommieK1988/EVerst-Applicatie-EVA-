@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-05','opgelost','Calculatie','Werkbegroting naar Bouw7 stopt niet meer bij één regel zonder bewakingscode',
+   'Ontbrak bij één regel de bewakingscode in Bouw7, dan mislukte het versturen van de hele werkbegroting — ook de regels die wél klopten. Nu wordt alleen die ene regel overgeslagen, met een melding welke het is, en gaat de rest gewoon door. Ontbreekt er een bewakingscode, dan maakt EVA die zelf aan onder het gekozen hoofdstuk; heeft het project in Bouw7 nog helemaal geen hoofdstuk, dan wordt het hoofdstuk Totaal aangelegd.');
