@@ -75,8 +75,10 @@ export type ObjectDossier = {
   titel: string
   hoofdstatus: Hoofdstatus
   fase: ObjectFase
-  bedrag_excl_btw: number | null
-  kostprijs_excl_btw: number | null
+  /** Gefactureerd excl. btw voor dit dossier; null als er nog geen facturatiegegevens zijn. */
+  gefactureerd: number | null
+  /** Jaar waarin het project is aangemaakt — dezelfde bron als het jaaroverzicht. */
+  jaar: number | null
   werkadres_straat: string | null
   werkadres_huisnummer: string | null
   werkadres_postcode: string | null
@@ -176,21 +178,36 @@ export async function getObjectDossiers(objectId: string): Promise<ObjectDossier
       .select('adres_straat, adres_huisnummer, adres_postcode, adres_plaats')
       .eq('id', objectId).maybeSingle(),
     supabase.from('dossiers')
-      .select(`id, dossiernummer, titel, ${FASE_KOLOMMEN}, bedrag_excl_btw, kostprijs_excl_btw, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad, updated_at, klant:relaties!dossiers_klant_id_fkey(naam)`)
+      .select(`id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, created_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad, updated_at, klant:relaties!dossiers_klant_id_fkey(naam)`)
       .eq('object_id', objectId)
       .order('updated_at', { ascending: false }),
   ])
 
   const object = objectRes.data ?? {}
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((dossiersRes.data ?? []) as any[]).map((d) => ({
+  const rijen = (dossiersRes.data ?? []) as any[]
+
+  // Gefactureerd per dossier uit management_projecten — zelfde bron als het totaal, zodat
+  // de kolom en de tegel bovenaan niet uit elkaar kunnen lopen.
+  const gefactureerdPer = new Map<string, number>()
+  if (rijen.length) {
+    const { data: mgmt } = await supabase
+      .from('management_projecten')
+      .select('dossier_id, gefactureerd')
+      .in('dossier_id', rijen.map((d) => d.id))
+    for (const m of (mgmt ?? []) as { dossier_id: string; gefactureerd: number | null }[]) {
+      gefactureerdPer.set(m.dossier_id, Number(m.gefactureerd) || 0)
+    }
+  }
+
+  return rijen.map((d) => ({
     id: d.id,
     dossiernummer: d.dossiernummer,
     titel: d.titel,
     hoofdstatus: d.hoofdstatus,
     fase: bepaalFase(d),
-    bedrag_excl_btw: d.bedrag_excl_btw,
-    kostprijs_excl_btw: d.kostprijs_excl_btw,
+    gefactureerd: gefactureerdPer.has(d.id) ? gefactureerdPer.get(d.id)! : null,
+    jaar: jaarVan(d),
     werkadres_straat: d.werkadres_straat,
     werkadres_huisnummer: d.werkadres_huisnummer,
     werkadres_postcode: d.werkadres_postcode,

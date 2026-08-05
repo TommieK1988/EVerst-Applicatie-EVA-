@@ -7,6 +7,8 @@ import toast from 'react-hot-toast'
 import type { VastgoedObject, VastgoedObjectRol } from '@everts/database'
 import { VASTGOED_OBJECT_SOORTEN, VASTGOED_OBJECT_ROLLEN } from '@everts/database'
 import { PageHeader, Button, Badge, StatCard, Alert } from '@/components/ui'
+import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
+import type { GebruikerLayout } from '@everts/database'
 import { dossierHref } from '@/lib/dossiers/href'
 import { objectAdresRegel } from '@/lib/objecten/adres'
 import { bouw7StatusLabel } from '@/lib/objecten/types'
@@ -41,10 +43,12 @@ type Props = {
   objectRelaties: ObjectRelatieRij[]
   relaties: RelatieOptie[]
   magSchrijven: boolean
+  layouts: GebruikerLayout[]
+  user_id: string | null
 }
 
 export default function ObjectDetailView({
-  object, dossiers, totalen, objectRelaties, relaties, magSchrijven,
+  object, dossiers, totalen, objectRelaties, relaties, magSchrijven, layouts, user_id,
 }: Props) {
   const router = useRouter()
   const [bewerken, setBewerken] = useState(false)
@@ -66,6 +70,93 @@ export default function ObjectDetailView({
       router.refresh()
     })
   }
+
+  // Kolommen van de dossiertabel. Binnen het component omdat de acties `doe`, `object.id`
+  // en `magSchrijven` nodig hebben; `useMemo` houdt de referentie stabiel zodat de
+  // OverzichtTabel niet elke render zijn kolombeheer opnieuw opbouwt.
+  const kolommen = React.useMemo<KolomDefinitie<ObjectDossier>[]>(() => [
+    {
+      key: 'dossier', label: 'Dossier', vast: true, filterType: 'tekst', breedte: 320,
+      sorteerWaarde: d => (d.dossiernummer ?? d.titel).toLowerCase(),
+      render: d => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 600 }}>{d.titel}</span>
+          {d.dossiernummer && (
+            <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{d.dossiernummer}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'fase', label: 'Fase', filterType: 'select',
+      filterOpties: [...new Set(dossiers.map(d => FASE_LABEL[d.fase] ?? d.fase))],
+      sorteerWaarde: d => FASE_LABEL[d.fase] ?? d.fase,
+      render: d => <Badge tone="neutral">{FASE_LABEL[d.fase] ?? d.fase}</Badge>,
+    },
+    {
+      key: 'jaar', label: 'Jaar', breedte: 80,
+      sorteerWaarde: d => d.jaar ?? 0,
+      render: d => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{d.jaar ?? '—'}</span>,
+    },
+    {
+      key: 'klant', label: 'Opdrachtgever', filterType: 'tekst', breedte: 200,
+      sorteerWaarde: d => (d.klant_naam ?? '').toLowerCase(),
+      render: d => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{d.klant_naam ?? '—'}</span>,
+    },
+    {
+      key: 'gefactureerd', label: 'Gefactureerd', breedte: 130,
+      sorteerWaarde: d => d.gefactureerd ?? -1,
+      render: d => (
+        <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-soft)' }}>
+          {d.gefactureerd != null ? euro(d.gefactureerd) : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'werkadres', label: 'Werkadres', standaard_zichtbaar: false, filterType: 'tekst', breedte: 240,
+      sorteerWaarde: d => (d.werkadres_straat ?? '').toLowerCase(),
+      render: d => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{d.werkadres_straat ?? '—'}</span>,
+    },
+    {
+      key: 'afwijking', label: 'Adres', breedte: 190,
+      sorteerWaarde: d => (d.adres_wijkt_af ? 0 : 1),
+      render: d => d.adres_wijkt_af ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
+          <Badge tone="warning">Wijkt af</Badge>
+          {magSchrijven && (
+            <button
+              type="button" disabled={bezig}
+              onClick={() => doe(() => neemObjectadresOver(d.id, object.id), 'Objectadres overgenomen')}
+              style={{
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                fontSize: 12, color: 'hsl(var(--primary))', textDecoration: 'underline',
+              }}
+            >
+              Overnemen
+            </button>
+          )}
+        </div>
+      ) : <span style={{ fontSize: 13, color: 'var(--fg-muted)' }}>—</span>,
+    },
+    ...(magSchrijven ? [{
+      key: 'ontkoppelen', label: '', breedte: 110,
+      render: (d: ObjectDossier) => (
+        <div onClick={e => e.stopPropagation()}>
+          <button
+            type="button" disabled={bezig}
+            onClick={() => doe(() => ontkoppelDossierVanObject(d.id), 'Dossier ontkoppeld')}
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 12, color: 'var(--fg-muted)',
+            }}
+          >
+            Ontkoppelen
+          </button>
+        </div>
+      ),
+    } as KolomDefinitie<ObjectDossier>] : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [dossiers, magSchrijven, bezig, object.id])
 
   if (bewerken) {
     return (
@@ -156,92 +247,8 @@ export default function ObjectDetailView({
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16, alignItems: 'start' }}>
-        {/* ── Gekoppelde dossiers ───────────────────────────────────────── */}
-        <div style={blok}>
-          <div style={kopje}>Gekoppelde dossiers ({dossiers.length})</div>
-
-          {afwijkend > 0 && (
-            <div style={{ marginBottom: 14 }}>
-              <Alert tone="warning">
-                Bij {afwijkend} {afwijkend === 1 ? 'dossier' : 'dossiers'} wijkt het werkadres af van dit object.
-                Meestal is het adres in Bouw7 aangepast; de sync overschrijft dat werkadres bij elke run.
-              </Alert>
-            </div>
-          )}
-
-          {dossiers.length === 0 ? (
-            <p style={{ fontSize: 14, color: 'var(--fg-muted)' }}>
-              Nog geen dossiers gekoppeld. Koppelen kan op het dossier zelf, bij het werkadres,
-              of gebeurt automatisch als het project in Bouw7 aan dit object hangt.
-            </p>
-          ) : (
-            <div style={{ display: 'grid', gap: 2 }}>
-              {dossiers.map(d => (
-                <div
-                  key={d.id}
-                  style={{
-                    display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 12,
-                    alignItems: 'center', padding: '10px 8px', borderRadius: 8,
-                    borderBottom: '1px solid var(--border-subtle, var(--border))',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <Link
-                      href={dossierHref(d.id, d.hoofdstatus)}
-                      style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', textDecoration: 'none' }}
-                    >
-                      {d.dossiernummer ? `${d.dossiernummer} · ` : ''}{d.titel}
-                    </Link>
-                    <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
-                      {FASE_LABEL[d.fase] ?? d.fase}
-                      {d.klant_naam ? ` · ${d.klant_naam}` : ''}
-                      {d.werkadres_straat ? ` · ${d.werkadres_straat}` : ''}
-                    </div>
-                    {d.adres_wijkt_af && (
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-                        <Badge tone="warning">Adres wijkt af</Badge>
-                        {magSchrijven && (
-                          <button
-                            onClick={() => doe(() => neemObjectadresOver(d.id, object.id), 'Objectadres overgenomen')}
-                            disabled={bezig}
-                            style={{
-                              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-                              fontSize: 12, color: 'hsl(var(--primary))', textDecoration: 'underline',
-                            }}
-                          >
-                            Neem objectadres over
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-soft)' }}>
-                      {d.bedrag_excl_btw != null ? euro(Number(d.bedrag_excl_btw)) : '—'}
-                    </span>
-                    {magSchrijven && (
-                      <button
-                        onClick={() => doe(() => ontkoppelDossierVanObject(d.id), 'Dossier ontkoppeld')}
-                        disabled={bezig}
-                        title="Ontkoppelen van dit object"
-                        style={{
-                          border: 'none', background: 'none', cursor: 'pointer',
-                          fontSize: 12, color: 'var(--fg-muted)',
-                        }}
-                      >
-                        Ontkoppelen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Zijkolom ──────────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 24 }}>
+        {/* ── Kenmerken, relaties en het werk per jaar ──────────────────── */}
           <div style={blok}>
             <div style={kopje}>Gegevens</div>
             <dl style={{ display: 'grid', gap: 10, margin: 0, fontSize: 13 }}>
@@ -331,8 +338,38 @@ export default function ObjectDetailView({
               )}
             </dl>
           </div>
-        </div>
       </div>
+
+      {/* ── Gekoppelde dossiers ─────────────────────────────────────────── */}
+      {afwijkend > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert tone="warning">
+            Bij {afwijkend} {afwijkend === 1 ? 'dossier wijkt' : 'dossiers wijkt'} het werkadres af van dit object.
+            Meestal is het adres in Bouw7 aangepast; de sync overschrijft dat werkadres bij elke run.
+          </Alert>
+        </div>
+      )}
+
+      {dossiers.length === 0 ? (
+        <div style={blok}>
+          <div style={kopje}>Gekoppelde dossiers</div>
+          <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: 0 }}>
+            Nog geen dossiers gekoppeld. Koppelen kan op het dossier zelf bij het werkadres,
+            of gebeurt automatisch als het project in Bouw7 aan dit object hangt.
+          </p>
+        </div>
+      ) : (
+        <OverzichtTabel
+          scherm="object-dossiers"
+          data={dossiers}
+          kolommen={kolommen}
+          layouts={layouts}
+          user_id={user_id}
+          dicht
+          beginSortering={[{ id: 'jaar', desc: true }]}
+          onRijKlik={d => router.push(dossierHref(d.id, d.hoofdstatus))}
+        />
+      )}
     </div>
   )
 }

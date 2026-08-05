@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { createAdminClient } from '@everts/database/server'
+import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
+import { laadLayouts } from '@/app/actions/layouts'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { getObject, getObjectDossiers, getObjectRelaties, getObjectTotalen } from '@/lib/objecten/data'
 import ObjectDetailView from './ObjectDetailView'
@@ -14,13 +15,24 @@ export default async function ObjectDetailPage({ params }: { params: Promise<{ i
   const object = await getObject(id)
   if (!object) notFound()
 
+  let user_id: string | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionClient = (await createServerClient()) as any
+    const { data: { user } } = await sessionClient.auth.getUser()
+    user_id = user?.id ?? null
+  } catch {
+    // niet ingelogd of sessie niet beschikbaar — de tabel valt terug op de standaardkolommen
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-  const [dossiers, totalen, objectRelaties, relatiesRes] = await Promise.all([
+  const [dossiers, totalen, objectRelaties, relatiesRes, layouts] = await Promise.all([
     getObjectDossiers(id),
     getObjectTotalen(id),
     getObjectRelaties(id),
     supabase.from('relaties').select('id, naam, bouw7_id').eq('actief', true).order('naam', { ascending: true }),
+    user_id ? laadLayouts(user_id, 'object-dossiers') : [],
   ])
 
   const relaties = ((relatiesRes.data ?? []) as { id: string; naam: string; bouw7_id: string | null }[])
@@ -34,6 +46,8 @@ export default async function ObjectDetailPage({ params }: { params: Promise<{ i
       objectRelaties={objectRelaties}
       relaties={relaties}
       magSchrijven={rechten.objectenbeheer === 'schrijven' || rechten.objectenbeheer === 'beheren'}
+      layouts={layouts}
+      user_id={user_id}
     />
   )
 }
