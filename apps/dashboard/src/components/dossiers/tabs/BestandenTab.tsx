@@ -241,9 +241,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           daardoor vanzelf in de lijst hieronder. */}
       <DocumentenKaart dossierId={dossierId} />
 
-      {/* Lijst links, foto's rechts — elk de helft. Zonder foto's krijgt de lijst de
-          volle breedte in plaats van een lege kolom ernaast. Onder lg stapelen ze. */}
-      <div className={fotos.length ? 'grid items-start gap-5 lg:grid-cols-2' : ''}>
+      {/* Lijst links, foto's rechts — elk de helft. Het fotoblok blijft ook staan als
+          er geen foto's zijn, zodat de indeling niet verspringt. Onder lg stapelen ze. */}
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <Card
           className="relative"
           onDragEnter={opDragEnter}
