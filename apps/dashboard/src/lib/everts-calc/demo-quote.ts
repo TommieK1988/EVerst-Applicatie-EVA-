@@ -49,6 +49,7 @@ function regel(
     uren_pe: null,
     opmerking: null,
     schilderbehandeling: null,
+    schilderbehandeling_naam: null,
     is_stelpost: false,
     line_total,
     created_at: NU.toISOString(),
@@ -155,6 +156,7 @@ export function buildDemoQuote(): Quote {
         hoeveelheid: 48.5, eenheid: 'm²', eenheidsprijs: 27.5, btw_pct: 9,
         opmerking: 'Twee lagen dekkend op basis van hoogglans lakverf.',
         schilderbehandeling: 'Schuren, plamuren, gronden en 2× aflakken',
+        schilderbehandeling_naam: '2-laags dekkend hoogglans',
         werkomschrijving_afbeeldingen: [DEMO_FOTO],
         kostprijs_pe: 18.2, uren_pe: 0.35,
       }),
@@ -163,6 +165,7 @@ export function buildDemoQuote(): Quote {
         hoeveelheid: 6, eenheid: 'st', eenheidsprijs: 85, btw_pct: 9,
         opmerking: 'Aanhelen met 2-componenten reparatiemortel.',
         schilderbehandeling: 'Uitfrezen, epoxy-injectie en afwerken',
+        schilderbehandeling_naam: 'Houtrotherstel HR-3',
       }),
     ],
   )
@@ -176,6 +179,7 @@ export function buildDemoQuote(): Quote {
         omschrijving: 'Sauswerk wanden en plafonds',
         hoeveelheid: 120, eenheid: 'm²', eenheidsprijs: 9.75,
         schilderbehandeling: 'Voorstrijken en 2× latex sausen',
+        schilderbehandeling_naam: 'Sauswerk binnen',
       }),
       regel('demo-sec-2', 1, {
         omschrijving: 'Stelpost meerwerk elektra',

@@ -148,6 +148,165 @@ function mergeSplitTagsInXml(xml: string): string {
   return result
 }
 
+// ─── Onderstreepte tag-splitsing ──────────────────────────────────────────────
+
+/**
+ * Eén tag die tijdens het renderen wordt opgesplitst in twee Word-runs: een
+ * onderstreepte en een normale. Zo kan een deel van een variabele opgemaakt worden
+ * zonder dat het template daar iets voor hoeft te doen.
+ */
+export interface OnderstreeptSplitsing {
+  /** Tag zoals hij in het template staat, bv. `schilderbehandeling`. */
+  tag: string
+  /** Tag voor de onderstreepte run, bv. `behandeling_naam`. */
+  onderstreept: string
+  /** Tag voor de normale run erachter, bv. `behandeling_tekst`. */
+  normaal: string
+  /**
+   * Alleen splitsen binnen deze loop (`{#binnen}` … `{/binnen}`). Nodig voor een tag
+   * die elders een andere betekenis heeft — `{.}` staat in élke string-loop.
+   */
+  binnen?: string
+  /**
+   * Vervanger voor tags die niet gesplitst konden worden omdat de run een afwijkende
+   * opbouw heeft. Alleen zinvol samen met `binnen`: buiten die loop weten we niet of de
+   * vervanging klopt. Zonder terugval blijft de tag staan zoals hij is.
+   */
+  terugval?: string
+}
+
+/**
+ * Splitst in alle Word-XML van een PizZip-archief de opgegeven tags op in een
+ * onderstreepte en een normale run. Draai dit ná `fixSplitDocxTags`, zodat elke tag
+ * gegarandeerd in één `<w:t>` staat.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function splitOnderstreepteTags(zip: any, splitsingen: OnderstreeptSplitsing[]): void {
+  if (splitsingen.length === 0) return
+
+  const xmlFiles = Object.keys(zip.files as Record<string, unknown>).filter(
+    (name) =>
+      name.startsWith('word/') &&
+      name.endsWith('.xml') &&
+      !name.includes('_rels') &&
+      !name.includes('theme') &&
+      !name.includes('fontTable') &&
+      !name.includes('settings') &&
+      !name.includes('webSettings'),
+  )
+
+  for (const fileName of xmlFiles) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const file = (zip.files as any)[fileName]
+    if (!file || file.dir) continue
+
+    const original: string = file.asText()
+    const nieuw = splitOnderstreepteTagsInXml(original, splitsingen)
+    if (nieuw !== original) zip.file(fileName, nieuw)
+  }
+}
+
+/** Eén tekst-run: `<w:r>`, optionele opmaak, één `<w:t>`, `</w:r>`. */
+const SIMPELE_RUN =
+  /<w:r(?:\s[^>]*)?>\s*(<w:rPr(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/w:rPr>))?\s*<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>\s*<\/w:r>/g
+
+/**
+ * Vervangt in één XML-string elke run die `{tag}` bevat door maximaal vier runs:
+ * de tekst vóór de tag, de onderstreepte tag, de normale tag, en de tekst erna.
+ * De oorspronkelijke opmaak (`<w:rPr>`) gaat mee naar álle runs — alleen de eerste
+ * krijgt er onderstreping bij, zodat lettertype, grootte en kleur van het template
+ * behouden blijven.
+ *
+ * Runs met een afwijkende opbouw (tabs, breaks, meerdere `<w:t>`'s in één run) worden
+ * bewust met rust gelaten: de tag blijft dan gewoon staan en rendert als platte tekst.
+ * Liever geen onderstreping dan kapotte XML.
+ */
+export function splitOnderstreepteTagsInXml(xml: string, splitsingen: OnderstreeptSplitsing[]): string {
+  if (splitsingen.length === 0) return xml
+  // Snelle uitweg: staat geen van de tags in dit bestand, dan niets te doen.
+  if (!splitsingen.some(s => xml.includes(`{${s.tag}}`))) return xml
+
+  const gesplitst = xml.replace(SIMPELE_RUN, (heleRun, rPr: string | undefined, tekst: string, offset: number) => {
+    const s = splitsingen.find(x =>
+      tekst.includes(`{${x.tag}}`) && (!x.binnen || binnenLoop(xml, offset, x.binnen, tekst)),
+    )
+    if (!s) return heleRun
+
+    const run = (opmaak: string, inhoud: string) =>
+      `<w:r>${opmaak}<w:t xml:space="preserve">${inhoud}</w:t></w:r>`
+
+    // De omringende tekst blijft behouden; tussen elk paar delen komt het gesplitste
+    // stel runs. Staat de tag meer dan één keer in dezelfde run, dan gaan ze allemaal mee.
+    const delen = tekst.split(`{${s.tag}}`)
+    let runs = ''
+    delen.forEach((deel, i) => {
+      if (deel) runs += run(rPr ?? '', deel)
+      if (i < delen.length - 1) {
+        runs += run(metOnderstreping(rPr), `{${s.onderstreept}}`)
+        runs += run(rPr ?? '', `{${s.normaal}}`)
+      }
+    })
+    return runs
+  })
+
+  // Wat nu nog over is, zat in een run met een afwijkende opbouw. Binnen een loop met
+  // een terugval-tag weten we wél waar de waarde vandaan komt: die tag is de veilige
+  // platte-tekst-variant. Zonder dit zou `{.}` daar een object opleveren.
+  return splitsingen.reduce(
+    (acc, s) => (s.binnen && s.terugval ? vervangInLoop(acc, s.binnen, s.tag, s.terugval) : acc),
+    gesplitst,
+  )
+}
+
+/**
+ * Staat de match op `offset` binnen `{#loop}` … `{/loop}`? Een tag in dezelfde run als
+ * de loop-opening telt mee — dat is de veelvoorkomende `{#loop}{.}{/loop}` op één regel.
+ */
+function binnenLoop(xml: string, offset: number, loop: string, runTekst: string): boolean {
+  if (runTekst.includes(`{#${loop}}`)) return true
+  const ervoor = xml.slice(0, offset)
+  return ervoor.lastIndexOf(`{#${loop}}`) > ervoor.lastIndexOf(`{/${loop}}`)
+}
+
+/** Vervangt `{van}` door `{naar}`, maar alleen tussen `{#loop}` en `{/loop}`. */
+function vervangInLoop(xml: string, loop: string, van: string, naar: string): string {
+  const start = `{#${loop}}`
+  const eind = `{/${loop}}`
+  let resultaat = ''
+  let pos = 0
+  for (;;) {
+    const s = xml.indexOf(start, pos)
+    if (s < 0) break
+    const e = xml.indexOf(eind, s + start.length)
+    if (e < 0) break
+    const na = e + eind.length
+    resultaat += xml.slice(pos, s) + xml.slice(s, na).split(`{${van}}`).join(`{${naar}}`)
+    pos = na
+  }
+  return resultaat + xml.slice(pos)
+}
+
+/**
+ * Elementen die in `<w:rPr>` ná `<w:u>` horen te staan. De volgorde binnen `<w:rPr>`
+ * ligt in het OOXML-schema vast; `<w:u>` er achteraan plakken levert een bestand op
+ * dat Word als beschadigd kan aanmerken. Daarom zoeken we het eerste element dat ná
+ * de onderstreping komt en zetten `<w:u>` daarvóór.
+ */
+const NA_ONDERSTREPING =
+  /<w:(?:effect|bdr|shd|fitText|vertAlign|rtl|cs|em|lang|eastAsianLayout|specVanish|oMath|rPrChange)(?=[\s/>])/
+
+/** Geeft dezelfde run-opmaak terug, maar dan onderstreept. */
+function metOnderstreping(rPr: string | undefined): string {
+  const U = '<w:u w:val="single"/>'
+  if (!rPr || /^<w:rPr(?:\s[^>]*)?\/>$/.test(rPr)) return `<w:rPr>${U}</w:rPr>`
+  // Al onderstreept (of expliciet op "none" gezet door de template-auteur): niet aanraken.
+  if (/<w:u(?=[\s/>])/.test(rPr)) return rPr
+
+  const treffer = NA_ONDERSTREPING.exec(rPr)
+  if (treffer) return rPr.slice(0, treffer.index) + U + rPr.slice(treffer.index)
+  return rPr.replace(/<\/w:rPr>$/, `${U}</w:rPr>`)
+}
+
 // ─── Template-analyse (proactieve controle) ─────────────────────────────────────
 
 export type TagType = 'waarde' | 'loop-open' | 'loop-sluit' | 'inverse' | 'afbeelding'

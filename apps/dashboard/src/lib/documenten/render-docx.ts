@@ -17,7 +17,7 @@
  *  - `getImage`/`getSize` — elke tak daarin is een opgeloste bug.
  */
 
-import { fixSplitDocxTags } from '../everts-calc/docx-utils'
+import { fixSplitDocxTags, splitOnderstreepteTags, type OnderstreeptSplitsing } from '../everts-calc/docx-utils'
 import { appGraphGetRaw } from '../o365/graph'
 
 /** Gegooid wanneer een layout/sjabloon (nog) geen Word-template heeft gekoppeld. */
@@ -94,6 +94,12 @@ export interface RenderDocxOpties {
   imageMax?: Record<string, { w: number; h: number }>
   /** Kader voor image-tags zonder eigen instelling. Default: LOGO_MAX. */
   standaardImageMax?: { w: number; h: number }
+  /**
+   * Tags die in twee runs worden gesplitst: de eerste onderstreept, de tweede normaal.
+   * Voor waarden waarvan een deel altijd onderstreept hoort te zijn zonder dat elk
+   * Word-template daarvoor aangepast moet worden.
+   */
+  splitsOnderstreept?: OnderstreeptSplitsing[]
   /**
    * Dynamische hyperlinks: sentinel-adres → echte URL. docxtemplater vervangt alleen
    * tekst in de body, NIET het doel van een hyperlink — dat staat in `word/_rels/*.rels`.
@@ -179,6 +185,9 @@ export async function renderDocx(
 
   const zip = new PizZip(templateBuffer as ArrayBuffer)
   fixSplitDocxTags(zip)
+  // Ná het samenvoegen van opgeknipte tags: dan staat elke tag gegarandeerd compleet
+  // in één run en is hij te splitsen.
+  if (opties.splitsOnderstreept?.length) splitOnderstreepteTags(zip, opties.splitsOnderstreept)
 
   const imageModule = new ImageModule({
     centered: false,
@@ -253,7 +262,7 @@ export async function renderDocx(
  * waar het hele variabelenpaneel op is gebaseerd. Zonder deze parser bleven al die
  * variabelen leeg. De parser splitst op `.` en zoekt de waarde in de huidige scope
  * en — voor gebruik binnen loops — in de omliggende scopes. `{.}` geeft de scope
- * zelf terug (voor string-array-loops zoals `behandelingen_overzicht`).
+ * zelf terug (voor string-array-loops).
  */
 export function dottedTagParser(tag: string): {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

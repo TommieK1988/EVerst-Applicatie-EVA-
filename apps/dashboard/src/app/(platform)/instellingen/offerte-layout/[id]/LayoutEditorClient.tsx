@@ -227,8 +227,10 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'opmerking',                label: 'Opmerking bij de regel' },
     { v: 'werkomschrijving',         label: 'Uitgebreide werkomschrijving (= opmerking)' },
     { v: 'heeft_opmerking',          label: 'Boolean: heeft een opmerking' },
-    { v: 'schilderbehandeling',      label: 'Schilderbehandeling van de regel' },
+    { v: 'schilderbehandeling',      label: 'Schilderbehandeling: naam (onderstreept) + werkomschrijving eronder' },
     { v: 'heeft_schilderbehandeling',label: 'Boolean: heeft een schilderbehandeling' },
+    { v: 'behandeling_naam',         label: 'Alleen de naam van de behandeling (niet vanzelf onderstreept)' },
+    { v: 'behandeling_tekst',        label: 'Alleen de werkomschrijving van de behandeling' },
     { v: 'heeft_afbeeldingen',       label: 'Boolean: heeft foto(s) bij de werkomschrijving' },
     { v: '#afbeeldingen',            label: 'Begin loop — foto’s bij de werkomschrijving' },
     { v: '%foto',                    label: 'De foto zelf (afbeelding — eigen alinea; tag begint met %)' },
@@ -252,7 +254,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
   ]},
   { groep: 'Loop: behandelingen_overzicht', items: [
     { v: '#behandelingen_overzicht', label: 'Begin loop — unieke schilderbehandelingen' },
-    { v: '.',                        label: 'De behandeling zelf (losse tekstwaarde)' },
+    { v: '.',                        label: 'De behandeling zelf — naam (onderstreept) + werkomschrijving eronder' },
     { v: '/behandelingen_overzicht', label: 'Einde loop' },
   ]},
   { groep: 'Loop: per niveau', items: [

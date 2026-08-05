@@ -1031,6 +1031,13 @@ export async function importeerRegels(
           (r.schilderbehandeling_id ? behandelingTeksten.get(r.schilderbehandeling_id) : null) ??
           r.schilderbehandeling
         if (behandeling) updates.schilderbehandeling = behandeling
+        // Naam apart bevriezen: de offerte toont hem onderstreept bóven de tekst, dus
+        // hij moet los van `schilderbehandeling` (die alleen de werkomschrijving bevat)
+        // en los van `omschrijving` (waar hij als suffix in vastzit) beschikbaar zijn.
+        const behandelingNaam = r.schilderbehandeling_id
+          ? behandelingNamen.get(r.schilderbehandeling_id)
+          : null
+        if (behandelingNaam) updates.schilderbehandeling_naam = behandelingNaam
         if (r.werkomschrijving_afbeeldingen && r.werkomschrijving_afbeeldingen.length > 0) {
           updates.werkomschrijving_afbeeldingen = r.werkomschrijving_afbeeldingen
         }

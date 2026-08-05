@@ -213,7 +213,7 @@ export interface RenderContext {
   boom: BoomNode[]
   optie_secties: SectieContext[]
   stelpost_regels: StelpostContext[]
-  behandelingen_overzicht: string[]
+  behandelingen_overzicht: BehandelingContext[]
   btw_groepen: BtwGroepContext[]   // top-level alias voor {#btw_groepen}-loops
   heeft_meerdere_btw: boolean      // top-level alias voor {#heeft_meerdere_btw}
   heeft_stelposten: boolean
@@ -298,8 +298,13 @@ interface RegelContext {
   opmerking: string
   werkomschrijving: string  // alias voor opmerking (uitgebreide werkomschrijving)
   heeft_opmerking: boolean
-  schilderbehandeling: string
+  schilderbehandeling: string       // naam + werkomschrijving, als platte tekst
   heeft_schilderbehandeling: boolean
+  // De twee helften waar {schilderbehandeling} bij het renderen in wordt opgesplitst
+  // (zie `splitsOnderstreept` in render-docx): de naam komt onderstreept op een eigen
+  // regel, de tekst eronder. Los bruikbaar in een template dat ze zelf wil plaatsen.
+  behandeling_naam: string          // "2-laags dekkend"
+  behandeling_tekst: string         // werkomschrijving, met leidende \n als er een naam boven staat
   // Foto's bij de werkomschrijving. Loop in de template: {#afbeeldingen}{%foto}{/afbeeldingen}
   // `foto_klein` is dezelfde afbeelding met een kleiner max-kader, bedoeld voor
   // gebruik binnen een tabelcel (waar {%foto} anders te breed is en wordt afgesneden).
@@ -309,6 +314,19 @@ interface RegelContext {
   kostprijs: string
   uren: string
   marge_pct: string
+}
+
+/**
+ * Eén unieke schilderbehandeling in `behandelingen_overzicht`.
+ *
+ * Bewust een object en geen kale string: `{.}` in de template wordt bij het renderen
+ * vervangen door de onderstreepte `naam` met `tekst` erachter (zie `splitsOnderstreept`
+ * in render-quote-docx). Lukt dat splitsen niet, dan valt `{.}` terug op `volledig`.
+ */
+interface BehandelingContext {
+  naam: string      // "2-laags dekkend"
+  tekst: string     // werkomschrijving, met leidende \n als er een naam boven staat
+  volledig: string  // naam + werkomschrijving als platte tekst
 }
 
 interface StelpostContext {
@@ -365,6 +383,33 @@ function numRaw(n: number | null | undefined): string {
   const num = n == null ? 0 : Number(n)
   if (isNaN(num)) return '—'
   return num.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+/**
+ * Splitst de bevroren schilderbehandeling in de naam en de werkomschrijving.
+ *
+ * De naam hoort als eerste regel in de offerte te staan (en wordt daar onderstreept);
+ * de werkomschrijving komt eronder. Twee gevallen die geen dubbele tekst mogen geven:
+ *  - de behandeling heeft geen eigen omschrijving → de tekst ís de naam (bevriezen valt
+ *    daarop terug). Dan alleen de naam tonen.
+ *  - oude offerteregels zonder bevroren naam → alleen de tekst, precies zoals voorheen.
+ *
+ * `tekst` krijgt een leidende newline zodra er een naam boven staat, zodat de twee
+ * losse Word-runs (onderstreept + normaal) samen één regelovergang opleveren zonder
+ * dat het template daar iets voor hoeft te doen.
+ */
+function splitsBehandeling(
+  behandeling: string | null | undefined,
+  naam: string | null | undefined,
+): { naam: string; tekst: string; volledig: string } {
+  const n = (naam ?? '').trim()
+  const rauw = (behandeling ?? '').trim()
+  const tekst = rauw && rauw !== n ? rauw : ''
+  return {
+    naam: n,
+    tekst: n && tekst ? '\n' + tekst : tekst,
+    volledig: [n, tekst].filter(Boolean).join('\n'),
+  }
 }
 
 /**
@@ -436,6 +481,7 @@ export function buildRenderContext(
     const kp = line.kostprijs_pe ?? 0
     const vp = line.eenheidsprijs
     const marge = kp > 0 ? ((vp - kp) / vp * 100) : null
+    const behandeling = splitsBehandeling(line.schilderbehandeling, line.schilderbehandeling_naam)
     return {
       id: line.id,
       omschrijving: line.omschrijving,
@@ -457,8 +503,10 @@ export function buildRenderContext(
       opmerking: line.opmerking ?? '',
       werkomschrijving: line.opmerking ?? '',
       heeft_opmerking: !!line.opmerking,
-      schilderbehandeling: line.schilderbehandeling ?? '',
-      heeft_schilderbehandeling: !!line.schilderbehandeling,
+      schilderbehandeling: behandeling.volledig,
+      heeft_schilderbehandeling: !!behandeling.volledig,
+      behandeling_naam: behandeling.naam,
+      behandeling_tekst: behandeling.tekst,
       afbeeldingen: (line.werkomschrijving_afbeeldingen ?? []).map(foto => ({ foto, foto_klein: foto })),
       heeft_afbeeldingen: (line.werkomschrijving_afbeeldingen ?? []).length > 0,
       kostprijs: kp > 0 ? euro(kp) : '—',
@@ -516,14 +564,22 @@ export function buildRenderContext(
     }
   }
 
-  // Deduplicated schilderbehandeling descriptions across all secties
-  const behandelingenSet = new Set<string>()
+  // Unieke schilderbehandelingen (naam + werkomschrijving) over alle secties heen.
+  // Ontdubbeld op de volledige tekst, zodat twee behandelingen met dezelfde naam maar
+  // een andere werkomschrijving allebei blijven staan.
+  const behandelingenSet = new Map<string, BehandelingContext>()
   for (const s of secties) {
     for (const r of s.regels) {
-      if (r.schilderbehandeling) behandelingenSet.add(r.schilderbehandeling)
+      if (r.schilderbehandeling && !behandelingenSet.has(r.schilderbehandeling)) {
+        behandelingenSet.set(r.schilderbehandeling, {
+          naam: r.behandeling_naam,
+          tekst: r.behandeling_tekst,
+          volledig: r.schilderbehandeling,
+        })
+      }
     }
   }
-  const behandelingen_overzicht = Array.from(behandelingenSet)
+  const behandelingen_overzicht = Array.from(behandelingenSet.values())
 
   const voorwaarden   = terms.find(t => t.type === 'voorwaarden')?.inhoud   ?? ''
   const uitsluitingen = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''

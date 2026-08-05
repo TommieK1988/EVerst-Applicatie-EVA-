@@ -14,7 +14,7 @@
  */
 
 import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
-import { stripHtml } from './docx-utils'
+import { stripHtml, type OnderstreeptSplitsing } from './docx-utils'
 import type { Quote } from './types-quotes'
 import { renderDocx, loadTemplateBuffer, fetchImageDataUrl, bufferNaarDataUrl } from '../documenten/render-docx'
 
@@ -30,6 +30,32 @@ export { formatDocxError, GeenTemplateError } from '../documenten/render-docx'
  * @throws GeenTemplateError als er geen template gekoppeld is.
  */
 export const loadQuoteTemplateBuffer = loadTemplateBuffer
+
+/**
+ * `{schilderbehandeling}` toont de naam van de behandeling met de werkomschrijving
+ * eronder. De naam hoort altijd onderstreept te zijn, ook in templates die daar niets
+ * voor zijn ingericht — daarom splitst de engine de tag in twee runs met de opmaak van
+ * het template, waarvan alleen de eerste onderstreept wordt.
+ */
+const BEHANDELING_SPLITSING: OnderstreeptSplitsing = {
+  tag: 'schilderbehandeling',
+  onderstreept: 'behandeling_naam',
+  normaal: 'behandeling_tekst',
+}
+
+/**
+ * Hetzelfde voor de losse `{.}` in de behandelingen-lijst. Die tag betekent "de waarde
+ * van deze lus" en komt in élke string-loop voor, dus de splitsing geldt uitsluitend
+ * binnen `{#behandelingen_overzicht}`. Lukt het splitsen niet, dan wordt `{.}` daar
+ * `{volledig}` — de platte naam-plus-tekst van dezelfde behandeling.
+ */
+const BEHANDELING_OVERZICHT_SPLITSING: OnderstreeptSplitsing = {
+  tag: '.',
+  onderstreept: 'naam',
+  normaal: 'tekst',
+  binnen: 'behandelingen_overzicht',
+  terugval: 'volledig',
+}
 
 interface ExtraImages {
   /** Handtekening-bytes (optioneel; tag {%handtekening}). */
@@ -78,7 +104,9 @@ export async function renderQuoteDocx(
     is_concept: extra.is_concept ?? false,
   }
 
-  // Geen opties: de engine-defaults (LOGO_MAX, en PHOTO_MAX/PHOTO_MAX_KLEIN voor
-  // {%foto}/{%foto_klein}) zijn precies het bestaande offerte-gedrag.
-  return renderDocx(templateBuffer, docxCtx)
+  // Image-kaders blijven op de engine-defaults (LOGO_MAX, en PHOTO_MAX/PHOTO_MAX_KLEIN
+  // voor {%foto}/{%foto_klein}) — precies het bestaande offerte-gedrag.
+  return renderDocx(templateBuffer, docxCtx, {
+    splitsOnderstreept: [BEHANDELING_SPLITSING, BEHANDELING_OVERZICHT_SPLITSING],
+  })
 }

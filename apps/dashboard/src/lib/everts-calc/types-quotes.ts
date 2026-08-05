@@ -83,6 +83,8 @@ export interface QuoteLine {
   uren_pe?: number | null
   opmerking?: string | null
   schilderbehandeling?: string | null
+  /** Bevroren naam van de behandeling ("2-laags dekkend") — los van de tekst, zodat de offerte hem onderstreept kan tonen. */
+  schilderbehandeling_naam?: string | null
   /** Base64 data-URL's van foto's bij de werkomschrijving (overgenomen uit de calculatie). */
   werkomschrijving_afbeeldingen?: string[] | null
   is_stelpost: boolean
