@@ -247,7 +247,7 @@ export async function zetBouw7ContractStatus(
 }
 
 export type AfroepResultaat =
-  | { ok: true; bonId: number | null; bonnummer: string | null }
+  | { ok: true; bonId: number | null; bonnummer: string | null; bonAantal: number }
   | { ok: false; error: string }
 
 /** Termijn zoals Bouw7 hem teruggeeft; gaat integraal terug in de afroep-body. */
@@ -258,14 +258,22 @@ type Bouw7ContractTermijn = Record<string, unknown> & {
 }
 
 /**
- * Roep alle termijnen van een contract volledig af, zodat Bouw7 de leverbon aanmaakt.
+ * Roep de termijnen van een contract volledig af, zodat Bouw7 de leverbon(nen) aanmaakt.
  *
- * `items` bevat de **complete** termijn-objecten uit `GET /contracts/{soort}/{id}` — de UI stuurt
- * ze ook onverkort terug. Per termijn zetten we `partiallyAmountReceived`/`partiallyCostReceived`
- * op het volledige bedrag; dát bepaalt het bonbedrag.
+ * ⚠️ **Per termijn een aparte call — nooit alle termijnen in één keer.** Geverifieerd op Bouw7
+ * (aug 2026, wegwerpcontract): één `approve-contract-terms` met álle termijnen levert **één
+ * gebundelde leverbon** voor het hele contractbedrag; een aparte call per termijn levert **één
+ * leverbon per contractregel** (`…B001`, `…B002`, …). Dat laatste is wat je wilt: een inkoopfactuur
+ * voor één regel boekt dan schoon af op díé regel-bon. Met één gebundelde bon matcht een deelfactuur
+ * tegen het volle contractbedrag en klopt de afboeking niet — Bouw7 ziet het contract dan als
+ * volledig ontvangen.
+ *
+ * `items` bevat het **complete** termijn-object uit `GET /contracts/{soort}/{id}` (de UI stuurt het
+ * ook onverkort terug), met `partiallyAmountReceived`/`partiallyCostReceived` op het volledige
+ * regelbedrag — dát bepaalt het bonbedrag.
  *
  * Bewust uit: `createPdf` (geen afroepbon-PDF nodig) en alle recipients — een gevulde `recipient`
- * laat Bouw7 de leverancier mailen, en EVA mailt nooit zelf naar een leverancier.
+ * laat Bouw7 de leverancier mailen, en EVA verstuurt de order zelf via Outlook.
  * `signatureImage` is optioneel gebleken; alleen `signee` volstaat.
  */
 export async function roepBouw7ContractAf(
@@ -282,27 +290,28 @@ export async function roepBouw7ContractAf(
     const termijnen = detail.contractTerms ?? []
     if (termijnen.length === 0) return { ok: false, error: 'Contract heeft geen termijnen om af te roepen.' }
 
-    await client.post(`${PAD[soort]}/approve-contract-terms`, {
-      items: termijnen.map(t => ({
-        ...t,
-        partiallyAmountReceived: t.amount ?? null,
-        partiallyCostReceived: t.subTotal ?? null,
-      })),
-      createDeliveryTickets: true,
-      createPdf: false,
-      signee,
-      comments: '',
-      recipient: null,
-      ccRecipients: null,
-      bccRecipients: null,
-    })
+    // Al afgeroepen termijnen (approved) overslaan, zodat een herstelpad geen duplicaat-bonnen maakt.
+    const nogAfTeRoepen = termijnen.filter(t => (t as { approved?: boolean }).approved !== true)
+    for (const t of nogAfTeRoepen) {
+      await client.post(`${PAD[soort]}/approve-contract-terms`, {
+        items: [{ ...t, partiallyAmountReceived: t.amount ?? null, partiallyCostReceived: t.subTotal ?? null }],
+        createDeliveryTickets: true,
+        createPdf: false,
+        signee,
+        comments: '',
+        recipient: null,
+        ccRecipients: null,
+        bccRecipients: null,
+      })
+    }
 
-    // De bon zelf komt niet in de response (204). Teruglezen levert 'm via de termijn.
+    // De bonnen komen niet in de response (204). Teruglezen levert ze via de termijnen.
     const na = await client.get<{ contractTerms?: { deliveryTickets?: { id?: number; ticketNumber?: string }[] }[] }>(
       `${PAD[soort]}/${contractId}`,
     )
-    const bon = (na.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])[0]
-    return { ok: true, bonId: bon?.id ?? null, bonnummer: bon?.ticketNumber ?? null }
+    const bonnen = (na.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])
+    const eerste = bonnen[0]
+    return { ok: true, bonId: eerste?.id ?? null, bonnummer: eerste?.ticketNumber ?? null, bonAantal: bonnen.length }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
   }
@@ -327,6 +336,40 @@ export async function verwijderBouw7Leverbon(
       ticketDate: context.datum,
       processed: false,
     })
+    return { ok: true }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
+  }
+}
+
+/**
+ * Verwijder **alle** leverbonnen van een contract. Nodig omdat het afroepen per regel gebeurt en
+ * er dus meerdere bonnen (`…B001`, `…B002`, …) kunnen hangen. Weigert zodra er op één bon een
+ * inkoopfactuur zit (`processed`) — dan moet het in Bouw7 worden afgehandeld.
+ */
+export async function verwijderBouw7ContractLeverbonnen(
+  soort: ContractSoort,
+  contractId: number,
+): Promise<VerwijderResultaat> {
+  try {
+    const client = await getBouw7Client()
+    const detail = await client.get<{
+      contractTerms?: { deliveryTickets?: { id?: number; ticketNumber?: string; ticketDate?: string; processed?: boolean }[] }[]
+    }>(`${PAD[soort]}/${contractId}`)
+    const bonnen = (detail.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])
+    const geboekt = bonnen.find(b => b.processed)
+    if (geboekt) {
+      return { ok: false, error: `Op leverbon ${geboekt.ticketNumber} zit al een inkoopfactuur — handel dit in Bouw7 af.` }
+    }
+    for (const b of bonnen) {
+      if (b.id == null) continue
+      await client.del('/project/delivery-ticket', {
+        id: b.id,
+        ticketNumber: b.ticketNumber ?? '',
+        ticketDate: (b.ticketDate ?? new Date().toISOString()).slice(0, 10),
+        processed: false,
+      })
+    }
     return { ok: true }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }

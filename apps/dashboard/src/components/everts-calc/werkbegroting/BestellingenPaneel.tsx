@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X, Package, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus, Undo2, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Package, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus, Undo2, ChevronDown, ChevronRight, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getWerkbegrotingRegels, getWerkbegrotingComponenten,
@@ -15,6 +15,7 @@ import {
 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import {
   stelBestellingenVoor, maakBestellingInBouw7, trekBestellingIn,
+  getBestellingMailConcept, verstuurBestelling,
   type BestellingVoorstel,
 } from '@/app/(platform)/everts-calc/actions/bestellingen'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
@@ -35,6 +36,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
   const [omschrijving, setOmschrijving] = useState('')
   const [goedgekeurdRegels, setGoedgekeurdRegels] = useState<Set<string>>(new Set())
+
+  /** Verzendvenster: welke bestelling wordt verstuurd + de (bewerkbare) mailvelden. */
+  const [verstuurB, setVerstuurB] = useState<WerkbegrotingBestelling | null>(null)
+  const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bericht: '' })
+  const [mailLaden, setMailLaden] = useState(false)
+  const [verstuurBezig, setVerstuurBezig] = useState(false)
 
   /** Automatische voorstellen per leverancier (server-side berekend uit de werkbegroting). */
   const [voorstellen, setVoorstellen] = useState<BestellingVoorstel[] | null>(null)
@@ -178,17 +185,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     try {
       const res = await maakBestellingInBouw7(dossierId, bestelling, bouwPayload())
       if (res.ok) {
-        // Lokale cache bijwerken zodat het nummer meteen zichtbaar is zonder herladen.
-        slaBestellingOp({
-          ...bestelling, status: 'verzonden',
-          bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer, bouw7_bonnummer: res.bonnummer,
-        })
-        if (res.bonWaarschuwing) {
-          // Het contract staat er, maar zonder leverbon kan Bouw7 de factuur er niet aan koppelen.
-          toast.error(`${v.soortLabel} ${res.nummer ?? ''} aangemaakt, maar de leverbon niet: ${res.bonWaarschuwing}`, { duration: 8000 })
-        } else {
-          toast.success(`${v.soortLabel} ${res.nummer ?? ''} + leverbon ${res.bonnummer ?? ''} aangemaakt`)
-        }
+        // Contract staat als concept in Bouw7. Nog niet verstuurd, nog geen leverbon.
+        slaBestellingOp({ ...bestelling, bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer })
+        toast.success(`${v.soortLabel} ${res.nummer ?? ''} aangemaakt — verstuur hem nu naar de leverancier`)
       } else if (res.reden === 'niet_goedgekeurd') {
         toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`)
       } else {
@@ -198,6 +197,38 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       setBezigId(null)
       setTick(t => t + 1)
     }
+  }
+
+  /** Open het verzendvenster met een voorgevuld mailconcept. */
+  async function openVerstuur(b: WerkbegrotingBestelling) {
+    setVerstuurB(b)
+    setMailLaden(true)
+    setMail({ to: '', cc: '', onderwerp: '', bericht: '' })
+    try {
+      const concept = await getBestellingMailConcept(b.id)
+      setMail({ to: concept.to, cc: '', onderwerp: concept.onderwerp, bericht: concept.bericht })
+    } catch { /* laat leeg */ } finally { setMailLaden(false) }
+  }
+
+  async function doeVerstuur() {
+    if (!dossierId || !verstuurB) return
+    if (!mail.to.trim()) { toast.error('Vul een e-mailadres van de leverancier in.'); return }
+    setVerstuurBezig(true)
+    try {
+      const res = await verstuurBestelling(dossierId, verstuurB.id, mail)
+      if (res.ok) {
+        slaBestellingOp({ ...verstuurB, status: 'verzonden', verstuurd_op: new Date().toISOString(), bouw7_bonnummer: res.bonnummer })
+        if (res.bonWaarschuwing) {
+          toast.error(`Verstuurd, maar de leverbon niet aangemaakt: ${res.bonWaarschuwing}`, { duration: 8000 })
+        } else {
+          toast.success(`Verstuurd naar de leverancier — ${res.bonAantal} leverbon(nen) aangemaakt`)
+        }
+        setVerstuurB(null)
+        setTick(t => t + 1)
+      } else {
+        toast.error(res.error, { duration: 7000 })
+      }
+    } finally { setVerstuurBezig(false) }
   }
 
   async function trekIn(b: WerkbegrotingBestelling) {
@@ -228,11 +259,11 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
 
         <div className="px-6 py-4 overflow-y-auto flex-1">
           <p className="text-xs text-slate-500 mb-4">
-            EVA stelt per leverancier én bewakingscode een bestelling voor. Aanmaken maakt in Bouw7 een
-            inkooporder of onderaannemerscontract <strong>met leverbon</strong>, zodat een inkoopfactuur er
-            straks automatisch op afboekt. Er wordt niets gemaild — versturen naar de leverancier doe je in Bouw7.
-            Voorwaarde: de regels zijn <strong>geaccordeerd</strong> en staan al als bestelregel in Bouw7.
-            Eenmaal aangemaakt is een bestelling <strong>niet meer te wijzigen</strong>.
+            EVA stelt per leverancier én bewakingscode een bestelling voor. <strong>Aanmaken</strong> zet een
+            inkooporder of onderaannemerscontract als concept in Bouw7. Met <strong>Versturen</strong> mailt EVA
+            de order naar de leverancier en maakt Bouw7 de leverbon(nen) aan, zodat een inkoopfactuur er straks op
+            afboekt. Voorwaarde: de regels zijn <strong>geaccordeerd</strong> en staan al als bestelregel in Bouw7.
+            Eenmaal verstuurd is een bestelling <strong>niet meer te wijzigen</strong>.
           </p>
 
           {/* ── Voorstellen per leverancier ────────────────────────────────── */}
@@ -356,8 +387,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
           <div className="space-y-2">
             {bestellingen.map(b => {
               const blokkerend = bestellingGeblokkeerd(b)
-              const isVerzonden = b.status !== 'concept'
               const inBouw7 = b.bouw7_contract_id != null
+              const isVerstuurd = !!b.verstuurd_op
+              const isLegacyVerzonden = !inBouw7 && b.status !== 'concept'
               const bezig = bezigId === b.id
               return (
                 <div key={b.id} className="rounded-lg border border-slate-200 px-4 py-3">
@@ -371,17 +403,26 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {inBouw7 ? (
+                      {isVerstuurd ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Verstuurd
+                        </span>
+                      ) : inBouw7 ? (
                         <>
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> In Bouw7
-                          </span>
+                          <button
+                            onClick={() => openVerstuur(b)}
+                            disabled={bezig}
+                            title="Order naar de leverancier mailen"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-everts text-white hover:bg-everts/90 disabled:opacity-40"
+                          >
+                            <Mail className="w-3.5 h-3.5" /> Versturen
+                          </button>
                           <button onClick={() => trekIn(b)} disabled={bezig} title="Concept in Bouw7 verwijderen"
                             className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
                             {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} Intrekken
                           </button>
                         </>
-                      ) : isVerzonden ? (
+                      ) : isLegacyVerzonden ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Verzonden
                         </span>
@@ -395,7 +436,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                           {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Verzenden
                         </button>
                       )}
-                      {!isVerzonden && (
+                      {!inBouw7 && !isLegacyVerzonden && (
                         <button onClick={() => werkBij(b)} disabled={bezig} title="Snapshot bijwerken naar de huidige werkbegroting"
                           className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
                           <RefreshCw className="w-3.5 h-3.5" /> Bijwerken
@@ -408,7 +449,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {b.bouw7_sync_fout}
                     </p>
                   )}
-                  {!isVerzonden && blokkerend.length > 0 && (
+                  {!inBouw7 && !isLegacyVerzonden && blokkerend.length > 0 && (
                     <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                       Bevat niet-geaccordeerde regels: {blokkerend.join(', ')}
@@ -461,6 +502,63 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
           )}
         </div>
       </div>
+
+      {/* ── Verzendvenster ─────────────────────────────────────────────────── */}
+      {verstuurB && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
+          onClick={e => { if (e.target === e.currentTarget && !verstuurBezig) setVerstuurB(null) }}>
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-everts" />
+                <h2 className="text-base font-bold text-gray-900">Versturen naar leverancier</h2>
+              </div>
+              <button onClick={() => !verstuurBezig && setVerstuurB(null)} className="text-gray-400 hover:text-gray-600 rounded-md p-1 hover:bg-gray-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1 space-y-3">
+              <p className="text-xs text-slate-500">
+                EVA maakt een order-PDF en mailt die namens jou. Daarna zet Bouw7 de order op verstuurd en
+                maakt de leverbon(nen) aan. <strong>Bijlage: {verstuurB.omschrijving} ({verstuurB.bouw7_nummer}).pdf</strong>
+              </p>
+              {mailLaden ? (
+                <div className="py-8 text-center text-slate-400"><Loader2 className="w-5 h-5 animate-spin inline" /></div>
+              ) : (
+                <>
+                  <label className="block text-xs text-slate-500">
+                    Aan
+                    <input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))}
+                      placeholder="leverancier@voorbeeld.nl"
+                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                  </label>
+                  <label className="block text-xs text-slate-500">
+                    CC (optioneel)
+                    <input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))}
+                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                  </label>
+                  <label className="block text-xs text-slate-500">
+                    Onderwerp
+                    <input value={mail.onderwerp} onChange={e => setMail(m => ({ ...m, onderwerp: e.target.value }))}
+                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
+                  </label>
+                  <label className="block text-xs text-slate-500">
+                    Bericht
+                    <textarea value={mail.bericht} onChange={e => setMail(m => ({ ...m, bericht: e.target.value }))} rows={5}
+                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40 resize-none" />
+                  </label>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-3">
+              <button onClick={() => setVerstuurB(null)} disabled={verstuurBezig}
+                className="text-sm px-3 py-1.5 text-slate-500 hover:text-slate-700 disabled:opacity-40">Annuleren</button>
+              <button onClick={doeVerstuur} disabled={verstuurBezig || mailLaden || !mail.to.trim()}
+                className="inline-flex items-center gap-1.5 text-sm px-4 py-1.5 bg-everts text-white rounded-lg hover:bg-everts/90 disabled:opacity-40 font-semibold">
+                {verstuurBezig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Versturen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

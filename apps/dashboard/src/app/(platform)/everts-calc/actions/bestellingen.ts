@@ -22,8 +22,8 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
-  schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7Leverbon,
-  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId, PURCHASE_TYPE,
+  schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
+  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId, leesBouw7Contract, PURCHASE_TYPE,
   type ContractSoort, type ContractTermijn,
 } from '@/lib/bouw7/contracten'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
@@ -68,9 +68,10 @@ async function voerAfroepUit(
   soort: ContractSoort,
   contractId: number,
   signee: string,
-): Promise<{ bonnummer: string | null; fout: string | null }> {
+): Promise<{ bonnummer: string | null; bonAantal: number; fout: string | null }> {
   let bonId: number | null = null
   let bonnummer: string | null = null
+  let bonAantal = 0
   let fout: string | null = null
 
   const afroepStatus = await getAfroepStatusId(soort).catch(() => null)
@@ -82,7 +83,7 @@ async function voerAfroepUit(
       fout = `Status doorzetten mislukt: ${statusRes.error}`
     } else {
       const afroep = await roepBouw7ContractAf(soort, contractId, signee)
-      if (afroep.ok) { bonId = afroep.bonId; bonnummer = afroep.bonnummer }
+      if (afroep.ok) { bonId = afroep.bonId; bonnummer = afroep.bonnummer; bonAantal = afroep.bonAantal }
       else fout = `Afroepen mislukt: ${afroep.error}`
     }
   }
@@ -98,7 +99,7 @@ async function voerAfroepUit(
     })
     .eq('id', bestellingId)
 
-  return { bonnummer, fout }
+  return { bonnummer, bonAantal, fout }
 }
 
 export type VoorstelRegel = {
@@ -252,20 +253,15 @@ export async function stelBestellingenVoor(
 }
 
 export type MaakBestellingResultaat =
-  | {
-      ok: true; contractId: number; nummer: string | null; soort: ContractSoort
-      /** Leverbon die Bouw7 bij het afroepen aanmaakte, bv. "20261.00357OA002B001". */
-      bonnummer: string | null
-      /** Contract staat er, maar de leverbon is niet gelukt — de factuur kan dan niet matchen. */
-      bonWaarschuwing: string | null
-    }
+  | { ok: true; contractId: number; nummer: string | null; soort: ContractSoort }
   | { ok: false; reden: 'niet_goedgekeurd' | 'verouderd' | 'fout'; error: string; regels?: string[] }
 
 /**
- * Zet een bestelling klaar én maak (of werk bij) het bijbehorende Bouw7-document.
+ * Maak (of werk bij) het Bouw7-document als **concept** — nog niet verstuurd, nog geen leverbon.
  *
  * Eén action voor beide gevallen — een voorstel dat de gebruiker accepteert en een handmatig
- * samengestelde bestelling — zodat er maar één plek is waar de poortwachters draaien.
+ * samengestelde bestelling — zodat er maar één plek is waar de poortwachters draaien. Het
+ * daadwerkelijk versturen (mail + afroep + leverbon) gebeurt in `verstuurBestelling`.
  */
 export async function maakBestellingInBouw7(
   dossierId: string,
@@ -303,40 +299,21 @@ export async function maakBestellingInBouw7(
   })
   if (!gate.ok) return gate
 
-  const signee = await bepaalSignee()
-
-  // Een verstuurde order is definitief: er hangt een leverbon aan en Bouw7 kan er kosten op
-  // boeken. Wijzigen gaat via een nieuwe bestelregel + nieuwe goedkeuring, niet door dit
-  // document te overschrijven.
+  // Een verstuurde order is definitief (er hangt een leverbon aan en Bouw7 kan er kosten op
+  // boeken). Wijzigen gaat via een nieuwe bestelregel + nieuwe goedkeuring, niet door dit
+  // document te overschrijven. Een aangemaakt-maar-nog-niet-verstuurd concept mag wél opnieuw
+  // (upsert op het bestaande contract), zodat een gewijzigde omschrijving/bedrag nog meekan.
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('bouw7_contract_id, bouw7_leverbon_id')
+    .select('bouw7_contract_id, verstuurd_op')
     .eq('id', bestelling.id)
     .maybeSingle()
   const bestaandContractId: number | null = rij?.bouw7_contract_id ?? null
-  const bestaandeBonId: number | null = rij?.bouw7_leverbon_id ?? null
 
-  if (bestaandContractId != null && bestaandeBonId != null) {
+  if (rij?.verstuurd_op != null) {
     return {
       ok: false, reden: 'fout',
-      error: 'Deze bestelling staat al in Bouw7 en kan niet meer gewijzigd worden. Maak een nieuwe bestelregel aan en laat die opnieuw accorderen.',
-    }
-  }
-
-  // Herstelpad: het contract is er wel, maar de afroep (en dus de leverbon) is eerder mislukt.
-  // Alleen die stap opnieuw doen — géén tweede contract aanmaken.
-  if (bestaandContractId != null) {
-    const { data: bestaand } = await db
-      .from('werkbegroting_bestellingen')
-      .select('soort, bouw7_nummer')
-      .eq('id', bestelling.id)
-      .maybeSingle()
-    const soortBestaand = (bestaand?.soort ?? 'inkooporder') as ContractSoort
-    const afroep = await voerAfroepUit(db, bestelling.id, soortBestaand, bestaandContractId, signee)
-    revalidatePath(`/dossiers/${dossierId}`)
-    return {
-      ok: true, contractId: bestaandContractId, nummer: bestaand?.bouw7_nummer ?? null,
-      soort: soortBestaand, bonnummer: afroep.bonnummer, bonWaarschuwing: afroep.fout,
+      error: 'Deze bestelling is al naar de leverancier verstuurd en kan niet meer gewijzigd worden. Maak een nieuwe bestelregel aan en laat die opnieuw accorderen.',
     }
   }
 
@@ -433,13 +410,13 @@ export async function maakBestellingInBouw7(
     return { ok: false, reden: 'fout', error: res.error }
   }
 
-  // Contract staat er. Vanaf hier is het contract-id het belangrijkste dat EVA moet onthouden:
-  // gaat de afroep hierna mis, dan mag een volgende poging géén tweede contract maken.
+  // Contract staat als CONCEPT in Bouw7. Géén status-wissel en géén afroep hier: de leverbon
+  // ontstaat pas bij "Versturen naar leverancier" (zie verstuurBestelling). Zo klopt de volgorde
+  // met Bouw7 — je roept pas af als de order echt de deur uit gaat — en verschijnt er niet
+  // administratief een levering vóór de order verstuurd is.
   await db.from('werkbegroting_bestellingen')
     .update({
       soort,
-      status: 'verzonden',
-      verzonden_op: nu,
       bouw7_contract_id: res.contractId,
       bouw7_nummer: res.nummer,
       bouw7_sync_status: 'ok',
@@ -448,13 +425,8 @@ export async function maakBestellingInBouw7(
     })
     .eq('id', bestelling.id)
 
-  const afroep = await voerAfroepUit(db, bestelling.id, soort, res.contractId, signee)
-
   revalidatePath(`/dossiers/${dossierId}`)
-  return {
-    ok: true, contractId: res.contractId, nummer: res.nummer, soort,
-    bonnummer: afroep.bonnummer, bonWaarschuwing: afroep.fout,
-  }
+  return { ok: true, contractId: res.contractId, nummer: res.nummer, soort }
 }
 
 export type TrekInResultaat = { ok: true } | { ok: false; error: string }
@@ -473,7 +445,7 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
   const db = createAdminClient() as any
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('id, soort, bouw7_contract_id, bouw7_leverbon_id, bouw7_bonnummer, bouw7_afroep_op, relatie_id')
+    .select('id, soort, bouw7_contract_id, bouw7_leverbon_id, relatie_id')
     .eq('id', bestellingId)
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
@@ -489,25 +461,23 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
     return { ok: false, error: 'Kan het contract niet intrekken: project- of leveranciers-koppeling ontbreekt.' }
   }
 
-  // Eerst de leverbon: die draagt de kosten en zou anders als losse post op de bewakingscode
-  // blijven staan zonder order erbij. Zit er al een inkoopfactuur op, dan weigert Bouw7 het
-  // verwijderen — dan stoppen we hier en laten we het contract met rust.
+  const soort = (rij.soort ?? 'inkooporder') as ContractSoort
+
+  // Eerst de leverbon(nen): die dragen de kosten en zouden anders als losse post op de
+  // bewakingscode blijven staan zonder order erbij. Er kunnen er meerdere zijn (één per regel).
+  // Zit er al een inkoopfactuur op, dan weigert Bouw7 het verwijderen — dan stoppen we hier.
   if (rij.bouw7_leverbon_id != null) {
-    const datum = (rij.bouw7_afroep_op ?? new Date().toISOString()).slice(0, 10)
-    const bonRes = await verwijderBouw7Leverbon(Number(rij.bouw7_leverbon_id), {
-      bonnummer: rij.bouw7_bonnummer ?? '',
-      datum,
-    })
+    const bonRes = await verwijderBouw7ContractLeverbonnen(soort, Number(rij.bouw7_contract_id))
     if (!bonRes.ok) {
       return {
         ok: false,
-        error: `De leverbon kan niet verwijderd worden (${bonRes.error}). Zit er al een inkoopfactuur op, dan moet dit in Bouw7 worden afgehandeld.`,
+        error: `De leverbon(nen) kunnen niet verwijderd worden (${bonRes.error}).`,
       }
     }
   }
 
   const res = await verwijderBouw7Contract(
-    (rij.soort ?? 'inkooporder') as ContractSoort,
+    soort,
     Number(rij.bouw7_contract_id),
     { projectId, relatieBouw7Id, bedrag: '0.00' },
   )
@@ -516,6 +486,7 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
   await db.from('werkbegroting_bestellingen')
     .update({
       status: 'concept', verzonden_op: null,
+      verstuurd_op: null, verstuurd_door: null, verstuurd_naar: null,
       bouw7_contract_id: null, bouw7_nummer: null,
       bouw7_leverbon_id: null, bouw7_bonnummer: null, bouw7_afroep_op: null,
       bouw7_sync_status: null, bouw7_sync_fout: null,
@@ -525,4 +496,190 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
 
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true }
+}
+
+// ─── Versturen naar de leverancier ────────────────────────────────────────────
+//
+// EVA maakt zelf een order-/contract-PDF (Bouw7 levert er geen die op te halen is) en mailt die
+// via Outlook namens de ingelogde medewerker. Pas ná een geslaagde mail wordt afgeroepen
+// (status uit concept + leverbon per regel) — zo klopt de volgorde met Bouw7: je roept pas af als
+// de order echt de deur uit is.
+
+/** Datum als dd-mm-jjjj voor op de PDF. */
+function nlDatum(iso: string): string {
+  const d = iso.slice(0, 10).split('-')
+  return d.length === 3 ? `${d[2]}-${d[1]}-${d[0]}` : iso
+}
+
+export type BestellingMailConcept = {
+  to: string
+  onderwerp: string
+  bericht: string
+  /** Leeg als de leverancier geen e-mailadres heeft — dan moet de gebruiker het invullen. */
+  heeftAdres: boolean
+}
+
+/** Prefill voor het verzendvenster: ontvanger, onderwerp en berichttekst. Puur lezend. */
+export async function getBestellingMailConcept(bestellingId: string): Promise<BestellingMailConcept> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data: b } = await db
+    .from('werkbegroting_bestellingen')
+    .select('soort, bouw7_nummer, omschrijving, relatie_id, werkbegroting_id')
+    .eq('id', bestellingId)
+    .maybeSingle()
+  const soort = (b?.soort ?? 'inkooporder') as ContractSoort
+  const { data: relatie } = b?.relatie_id
+    ? await db.from('relaties').select('naam, email').eq('id', b.relatie_id).maybeSingle()
+    : { data: null }
+
+  const soortWoord = soort === 'oa_contract' ? 'opdracht' : 'inkooporder'
+  const nummer = b?.bouw7_nummer ?? ''
+  const onderwerp = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${nummer}`.trim()
+  const bericht =
+    `Beste ${relatie?.naam ?? 'relatie'},\n\n` +
+    `In de bijlage vind je onze ${soortWoord}${nummer ? ` met nummer ${nummer}` : ''}. ` +
+    `Graag ontvangen we een bevestiging.\n\n` +
+    `Met vriendelijke groet,`
+
+  return { to: relatie?.email ?? '', onderwerp, bericht, heeftAdres: !!relatie?.email }
+}
+
+export type VerstuurBestellingResultaat =
+  | { ok: true; bonnummer: string | null; bonAantal: number; bonWaarschuwing: string | null }
+  | { ok: false; error: string }
+
+type VerstuurInput = { to: string; cc?: string; onderwerp: string; bericht: string }
+
+/**
+ * Verstuur de order/het contract naar de leverancier: PDF genereren → mailen via Outlook →
+ * afroepen (status + leverbon per regel) → verstuurd vastleggen → in SharePoint archiveren.
+ */
+export async function verstuurBestelling(
+  dossierId: string,
+  bestellingId: string,
+  input: VerstuurInput,
+): Promise<VerstuurBestellingResultaat> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  const { data: rij } = await db
+    .from('werkbegroting_bestellingen')
+    .select('id, soort, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
+    .eq('id', bestellingId)
+    .maybeSingle()
+  if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
+  if (rij.bouw7_contract_id == null) return { ok: false, error: 'Maak de bestelling eerst aan in Bouw7.' }
+
+  const soort = (rij.soort ?? 'inkooporder') as ContractSoort
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) return { ok: false, error: 'Geen ingelogde medewerker gevonden om namens te versturen.' }
+  const afzender = [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' ').trim() || 'Everts'
+
+  // Herstelpad: al gemaild, maar de afroep (leverbon) is toen mislukt → alleen die overdoen,
+  // NIET opnieuw mailen (dubbelverzend voorkomen).
+  if (rij.verstuurd_op != null) {
+    if (rij.bouw7_leverbon_id != null) {
+      return { ok: false, error: 'Deze bestelling is al verstuurd.' }
+    }
+    const afroep = await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
+    revalidatePath(`/dossiers/${dossierId}`)
+    return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
+  }
+
+  const ontvangers = input.to.split(/[;,]/).map(s => s.trim()).filter(Boolean)
+  if (ontvangers.length === 0) return { ok: false, error: 'Vul een e-mailadres van de leverancier in.' }
+
+  // Contractinhoud uit Bouw7 lezen — dat is de bron van waarheid voor wat er op de PDF komt.
+  const contract = await leesBouw7Contract(soort, Number(rij.bouw7_contract_id)).catch(() => null)
+  if (!contract) return { ok: false, error: 'Kon het contract niet uit Bouw7 lezen.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const termijnen = (contract.contractTerms as any[] | undefined) ?? []
+  const regels = termijnen.map(t => ({
+    omschrijving: String(t.description ?? ''),
+    aantal: String(t.amount ?? '1'),
+    eenheid: String(t.unit ?? ''),
+    stukprijs: Number(t.unitPrice ?? 0),
+    bedrag: Number(t.subTotal ?? 0),
+  }))
+  const totaal = Number(contract.cost ?? regels.reduce((s, r) => s + r.bedrag, 0))
+
+  // Leverancier + dossiergegevens voor de PDF.
+  const { data: relatie } = rij.relatie_id
+    ? await db.from('relaties').select('naam, adres_straat, adres_postcode, adres_plaats').eq('id', rij.relatie_id).maybeSingle()
+    : { data: null }
+  const { data: dossier } = await db
+    .from('dossiers')
+    .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
+    .eq('id', dossierId)
+    .maybeSingle()
+  const werkadres = [
+    [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
+    [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join(' '),
+  ].filter(Boolean).join(', ') || null
+
+  // Briefpapier van de standaard offerte-layout (best-effort; geen briefpapier → eigen tekstkop).
+  const { data: layout } = await db.from('quote_layouts').select('briefpapier_pdf_url').eq('is_standaard', true).maybeSingle()
+  const { fetchBriefpapier } = await import('@/lib/everts-calc/briefpapier')
+  const briefpapier = await fetchBriefpapier(layout?.briefpapier_pdf_url ?? null)
+
+  const nu = new Date().toISOString()
+  const { genereerBestellingPdf } = await import('@/lib/bouw7/bestelling-pdf')
+  let pdf: Uint8Array
+  try {
+    pdf = await genereerBestellingPdf({
+      soort: soort === 'oa_contract' ? 'oa_contract' : 'inkooporder',
+      documentnummer: rij.bouw7_nummer ?? '',
+      datum: nlDatum(nu),
+      leverancier: {
+        naam: relatie?.naam ?? '',
+        adres: relatie?.adres_straat ?? null,
+        postcodePlaats: [relatie?.adres_postcode, relatie?.adres_plaats].filter(Boolean).join(' ') || null,
+      },
+      project: { nummer: dossier?.dossiernummer ?? null, naam: dossier?.titel ?? null, werkadres },
+      regels,
+      totaal,
+      isWinkel: false,
+      leverdatum: rij.levering_datum ? nlDatum(rij.levering_datum) : (rij.levering_tekst ?? null),
+      betaalafspraak: rij.betaalafspraak ?? null,
+      notitie: rij.interne_notitie ?? null,
+      afzender,
+    }, briefpapier)
+  } catch (e) {
+    return { ok: false, error: `Kon de order-PDF niet maken: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+  }
+
+  const bestandsnaam = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${rij.bouw7_nummer ?? ''}`.trim().replace(/[\\/:*?"<>|#%]/g, '-') + '.pdf'
+  const bodyHtml = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;white-space:pre-wrap">${input.bericht
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}\n${afzender}</div>`
+
+  // Mailen via Outlook namens de medewerker. Pas ná succes gaan we verder.
+  try {
+    const { verstuurMailNamensMedewerker } = await import('@/lib/o365/mail')
+    await verstuurMailNamensMedewerker(medewerker.id, {
+      to: ontvangers,
+      cc: (input.cc ?? '').split(/[;,]/).map(s => s.trim()).filter(Boolean),
+      subject: input.onderwerp || bestandsnaam.replace(/\.pdf$/, ''),
+      bodyHtml,
+      attachments: [{ naam: bestandsnaam, contentType: 'application/pdf', inhoud: pdf }],
+    })
+  } catch (e) {
+    return { ok: false, error: `Mail versturen mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+  }
+
+  // Mail is uit → vastleggen als verstuurd (dubbelverzend geblokkeerd), en pas nu afroepen.
+  await db.from('werkbegroting_bestellingen')
+    .update({ verstuurd_op: nu, verstuurd_door: medewerker.id, verstuurd_naar: ontvangers.join(', '), status: 'verzonden' })
+    .eq('id', bestellingId)
+
+  const afroep = await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
+
+  // Archiveren in SharePoint — best-effort, mag het versturen niet laten falen.
+  try {
+    const { uploadBuffersNaarDossierMap } = await import('@/lib/o365/dossier-map')
+    await uploadBuffersNaarDossierMap(dossierId, [{ naam: bestandsnaam, contentType: 'application/pdf', bytes: pdf }])
+  } catch { /* stil */ }
+
+  revalidatePath(`/dossiers/${dossierId}`)
+  return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
 }

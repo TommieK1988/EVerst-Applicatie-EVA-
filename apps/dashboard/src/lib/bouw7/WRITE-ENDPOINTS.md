@@ -460,20 +460,47 @@ POST /contracts/purchase-order/approve-contract-terms     (inkooporder)
 
 Dus: aanmaken in concept (0) → `PUT /contracts/{soort}/{id}/update-status/1` → afroepen.
 
+> ### ⚠️ Roep PER TERMIJN af — nooit alle termijnen in één call
+> Geverifieerd (aug 2026, wegwerpcontract met 3 regels):
+> - **Alle termijnen in één `approve-contract-terms`-call** → **één gebundelde leverbon** voor het
+>   hele contractbedrag (`…B001` van €1.500). Een inkoopfactuur voor één regel matcht dan tegen het
+>   volle bedrag; Bouw7 ziet het contract als volledig ontvangen en de afboeking klopt niet.
+> - **Eén call per termijn** → **één leverbon per contractregel** (`…B001`, `…B002`, `…B003`, elk
+>   het regelbedrag). Een factuur per regel boekt dan schoon af op zijn eigen bon. **Dit is wat je
+>   wilt.** `roepBouw7ContractAf` loopt dus over de termijnen en doet een aparte call per stuk
+>   (al afgeroepen — `approved: true` — termijnen overslaan, zodat een herstelpad geen duplicaten maakt).
+
 **Bewezen resultaat** (project 3869371, beide soorten, testobjecten weer verwijderd):
 - termijn krijgt `approved: true`, `amountReceived`/`costReceived` gevuld, `costToReceive: 0`;
-- er ontstaat bon `<contractnummer>B001` met **`contract: { id, type, contractNumber }`** — de
+- er ontstaat bon `<contractnummer>B00x` met **`contract: { id, type, contractNumber }`** — de
   koppeling die via `POST /project/delivery-ticket` onbereikbaar is;
 - bon krijgt automatisch de juiste `projectSecurityLink` en `purchaseType` (3 bij OA, 5 bij materiaal);
-- `outstandingCosts` van het contract gaat naar 0 (= volledig afgeroepen).
+- bon is `processed: false` (nog geen factuur) — pas een echte inkoopfactuur zet dat op `true`.
 
-**Volgorde in EVA:** bestelregels → contract (concept, termijnen verwijzen naar de bestelregels) →
-status 1 → `approve-contract-terms`. Opruimen in omgekeerde volgorde: bon, contract, bestelregel.
+**Volgorde in EVA (herzien aug 2026):** aanmaken en versturen zijn nu **twee stappen**.
+1. **Aanmaken** (`maakBestellingInBouw7`) — bestelregels → contract als **concept** (status 0).
+   Géén statuswissel, géén afroep. Nog geen leverbon.
+2. **Versturen** (`verstuurBestelling`) — EVA maakt een order-PDF (`lib/bouw7/bestelling-pdf.ts`,
+   pdf-lib + briefpapier), mailt die via Outlook (`verstuurMailNamensMedewerker`, namens de
+   ingelogde medewerker, `recipient` in Bouw7 blijft dus `null`), en pas ná een geslaagde mail:
+   status → 1 + **per-regel afroepen** (leverbonnen). Zo klopt de volgorde met Bouw7 — je roept pas
+   af als de order echt de deur uit is.
+
+Opruimen (`trekBestellingIn`) in omgekeerde volgorde: **alle** bonnen
+(`verwijderBouw7ContractLeverbonnen`, weigert zodra één bon `processed` is) → contract → de
+bestelregels blijven staan.
 
 **Implementatie:** `lib/bouw7/contracten.ts` (`getAfroepStatusId`, `zetBouw7ContractStatus`,
-`roepBouw7ContractAf`, `verwijderBouw7Leverbon`) · `everts-calc/actions/bestellingen.ts`
-(`voerAfroepUit`, aangeroepen na `schrijfBouw7Contract`) · migratie `20260722a_leverbon_winkel.sql`
-(`bouw7_leverbon_id`, `bouw7_bonnummer`, `bouw7_afroep_op`, plus `is_winkel` op de componenten).
+`roepBouw7ContractAf` (per termijn), `verwijderBouw7ContractLeverbonnen`, `leesBouw7Contract`) ·
+`lib/bouw7/bestelling-pdf.ts` (order-PDF) · `everts-calc/actions/bestellingen.ts`
+(`maakBestellingInBouw7` = alleen concept, `verstuurBestelling` = mail + afroep, `voerAfroepUit`,
+`getBestellingMailConcept`) · migraties `20260722a_leverbon_winkel.sql` (`bouw7_leverbon_id`,
+`bouw7_bonnummer`, `bouw7_afroep_op`, `is_winkel`) en `20260805a_bestelling_versturen.sql`
+(`verstuurd_op`, `verstuurd_door`, `verstuurd_naar`).
+
+Toestanden van een bestelling: **concept** (nog niet in Bouw7) → **aangemaakt**
+(`bouw7_contract_id` gezet, concept in Bouw7, wijzigbaar) → **verstuurd** (`verstuurd_op` gezet,
+gemaild + leverbonnen, onwijzigbaar).
 
 > **Twee dingen die je niet mag omdraaien.**
 > 1. Bij een mislukte afroep blijft `bouw7_contract_id` staan en wordt alleen de bon als fout

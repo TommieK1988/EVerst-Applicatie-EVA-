@@ -466,6 +466,8 @@ export interface WerkbegrotingBestelling {
   bouw7_bonnummer?: string | null
   bouw7_sync_status?: string | null
   bouw7_sync_fout?: string | null
+  /** Gevuld zodra de order naar de leverancier is gemaild; maakt de bestelling onwijzigbaar. */
+  verstuurd_op?: string | null
   /** Lever-/startdatum (ISO-datum) of vrije tekst ("week 34") — Bouw7 accepteert beide. */
   levering_datum?: string | null
   levering_tekst?: string | null
