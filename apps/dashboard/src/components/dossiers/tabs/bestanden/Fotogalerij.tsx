@@ -18,9 +18,19 @@ import { Card, CardHeader, CardBody } from '@/components/ui'
 import { ChevronLeft, ChevronRight, X, Download, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
 
-/** De preview vult een halve kolom; op een scherm met hoge resolutie is 1200 scherp genoeg. */
-const PREVIEW_BREEDTE = 1200
+/** De preview vult een halve kolom; op een scherm met hoge resolutie is 900 scherp genoeg. */
+const PREVIEW_BREEDTE = 900
 const GROOT_BREEDTE = 1800
+
+/**
+ * Bron voor de preview. SharePoint levert zelf een voorvertoning van ~800px vanaf
+ * zijn CDN; die is er meteen. Zonder dat moet EVA het volledige origineel bij de
+ * bron ophalen (een telefoonfoto is zo 6 MB) en het daarna verkleinen — dat is waar
+ * het wachten zit, niet in het formaat dat er uiteindelijk uit komt.
+ */
+function previewBron(foto: BestandRij): string {
+  return foto.previewUrl ?? bestandUrl(foto, { breedte: PREVIEW_BREEDTE })
+}
 
 /** Pijl over de foto. Halfdoorzichtig zwart werkt op zowel lichte als donkere foto's. */
 function Pijl({ kant, onClick, titel, groot }: {
@@ -54,10 +64,17 @@ function Preview({ foto, index, totaal, onVorige, onVolgende, onVergroot }: {
   onVolgende: () => void
   onVergroot: () => void
 }) {
+  const eigenUrl = bestandUrl(foto, { breedte: PREVIEW_BREEDTE })
+  const voorkeur = previewBron(foto)
+  const [src, setSrc] = useState(voorkeur)
   const [mislukt, setMislukt] = useState(false)
-  const src = bestandUrl(foto, { breedte: PREVIEW_BREEDTE })
+  const [laadt, setLaadt] = useState(true)
 
-  useEffect(() => { setMislukt(false) }, [src])
+  useEffect(() => {
+    setSrc(voorkeur)
+    setMislukt(false)
+    setLaadt(true)
+  }, [voorkeur])
 
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
@@ -66,14 +83,24 @@ function Preview({ foto, index, totaal, onVorige, onVolgende, onVergroot }: {
           Deze afbeelding kon niet geladen worden.
         </div>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt={foto.naam}
-          onError={() => setMislukt(true)}
-          onClick={onVergroot}
-          className="h-full w-full cursor-zoom-in object-contain"
-        />
+        <>
+          {/* Graph-voorvertoningen verlopen na ongeveer een uur; dan neemt de eigen
+              proxy het over in plaats van een gebroken plaatje te tonen. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={foto.naam}
+            onLoad={() => setLaadt(false)}
+            onError={() => (src === eigenUrl ? setMislukt(true) : (setSrc(eigenUrl), setLaadt(true)))}
+            onClick={onVergroot}
+            className="h-full w-full cursor-zoom-in object-contain"
+          />
+          {laadt && (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center text-[11.5px] text-neutral-400">
+              Foto laden…
+            </div>
+          )}
+        </>
       )}
 
       {totaal > 1 && (
@@ -231,6 +258,23 @@ export default function Fotogalerij({ fotos }: { fotos: BestandRij[] }) {
 
   const vorige = () => setHuidige((index - 1 + fotos.length) % fotos.length)
   const volgende = () => setHuidige((index + 1) % fotos.length)
+
+  // Buurfoto's alvast ophalen terwijl je naar de huidige kijkt. Voor Bouw7-foto's
+  // moet EVA het origineel bij de bron ophalen en verkleinen; dat duurt te lang om
+  // pas te beginnen als je op de pijl drukt. De browser cachet ze, dus de klik is
+  // daarna meteen raak.
+  useEffect(() => {
+    if (fotos.length < 2) return
+    const buren = [
+      fotos[(index + 1) % fotos.length],
+      fotos[(index - 1 + fotos.length) % fotos.length],
+    ]
+    for (const buur of buren) {
+      if (!buur || buur === fotos[index]) continue
+      const img = new Image()
+      img.src = previewBron(buur)
+    }
+  }, [index, fotos])
 
   // Het blok blijft staan als er niets is: de vaste plek naast de bestandenlijst
   // maakt duidelijk dát er foto's kunnen zijn, in plaats van dat het onderdeel

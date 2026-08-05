@@ -22,6 +22,12 @@ export interface SharePointBestand {
   driveId: string | null
   /** Door Graph gegenereerde thumbnail (afbeeldingen/PDF's). Kortlevende URL. */
   thumbUrl: string | null
+  /**
+   * Grotere voorvertoning (~800px) van Graph zelf. Die komt van hun CDN, dus zonder
+   * dat EVA het origineel hoeft op te halen en te verkleinen — een stuk sneller.
+   * Kortlevende URL, net als thumbUrl.
+   */
+  previewUrl: string | null
 }
 
 /** Een map in de container, zoals de picker hem toont. */
@@ -43,7 +49,7 @@ interface DriveItem {
   file?: { mimeType?: string }
   createdBy?: { user?: { displayName?: string } }
   parentReference?: { driveId?: string; id?: string }
-  thumbnails?: { medium?: { url?: string } }[]
+  thumbnails?: { medium?: { url?: string }; large?: { url?: string } }[]
 }
 
 export type MatchStatus = 'gematcht' | 'niet_gevonden' | 'meerdere'
@@ -336,7 +342,7 @@ export async function listFolderChildren(driveId: string, itemId: string): Promi
   const res = await appGraphGet<{ value?: DriveItem[] }>(
     `/drives/${driveId}/items/${itemId}/children` +
       `?$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,createdBy,parentReference` +
-      `&$expand=thumbnails($select=medium)&$top=200`,
+      `&$expand=thumbnails($select=medium,large)&$top=200`,
   )
   return (res.value ?? [])
     .filter((it) => it.file)
@@ -352,6 +358,7 @@ export async function listFolderChildren(driveId: string, itemId: string): Promi
         door: f.createdBy?.user?.displayName ?? null,
         driveId: f.parentReference?.driveId ?? driveId,
         thumbUrl: f.thumbnails?.[0]?.medium?.url ?? null,
+        previewUrl: f.thumbnails?.[0]?.large?.url ?? null,
       }
     })
 }

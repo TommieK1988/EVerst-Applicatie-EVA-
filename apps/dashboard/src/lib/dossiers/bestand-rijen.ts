@@ -37,6 +37,12 @@ export type BestandRij = {
   openUrl: string | null
   /** Kant-en-klare thumbnail van de bron (SharePoint); null = zelf renderen. */
   thumbUrl: string | null
+  /**
+   * Kant-en-klare voorvertoning van ~800px, rechtstreeks van het CDN van de bron.
+   * Scheelt het ophalen én verkleinen van het origineel — bij een telefoonfoto van
+   * 6 MB is dat het verschil tussen wachten en meteen beeld. Bouw7 heeft dit niet.
+   */
+  previewUrl: string | null
 }
 
 const AFBEELDING_EXT = new Set([
@@ -93,6 +99,7 @@ export function bouw7Rij(b: DossierBestand): BestandRij {
     bronQuery: query.toString(),
     openUrl: `/api/dossier-bestand?${query.toString()}`,
     thumbUrl: null,
+    previewUrl: null,
   }
 }
 
@@ -120,6 +127,7 @@ export function sharePointRij(b: SharePointBestand): BestandRij {
     // rechtstreeks open in Word/Excel online.
     openUrl: b.webUrl ?? (b.driveId ? `/api/dossier-bestand?${query.toString()}` : null),
     thumbUrl: b.thumbUrl,
+    previewUrl: b.previewUrl,
   }
 }
 
