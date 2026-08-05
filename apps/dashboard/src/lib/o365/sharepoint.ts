@@ -18,6 +18,10 @@ export interface SharePointBestand {
   webUrl: string | null
   datum: string | null
   door: string | null
+  /** Drive waar het bestand in staat — nodig om de bytes via de EVA-proxy op te halen. */
+  driveId: string | null
+  /** Door Graph gegenereerde thumbnail (afbeeldingen/PDF's). Kortlevende URL. */
+  thumbUrl: string | null
 }
 
 /** Een map in de container, zoals de picker hem toont. */
@@ -39,6 +43,7 @@ interface DriveItem {
   file?: { mimeType?: string }
   createdBy?: { user?: { displayName?: string } }
   parentReference?: { driveId?: string; id?: string }
+  thumbnails?: { medium?: { url?: string } }[]
 }
 
 export type MatchStatus = 'gematcht' | 'niet_gevonden' | 'meerdere'
@@ -320,10 +325,18 @@ export async function matchDossierFolder(dossier: DossierMatchInput, ctx: DriveC
 
 /* ─── Bestanden ───────────────────────────────────────────────────────────── */
 
-/** Lijst de bestanden (geen submappen) in een dossiermap. */
+/**
+ * Lijst de bestanden (geen submappen) in een dossiermap.
+ *
+ * `$expand=thumbnails` levert de voorbeeldplaatjes in dezelfde call, zodat de
+ * fotogalerij geen aparte call per afbeelding hoeft te doen. Graph geeft die
+ * alleen voor bestandstypen die het kan renderen; voor de rest blijft hij leeg.
+ */
 export async function listFolderChildren(driveId: string, itemId: string): Promise<SharePointBestand[]> {
   const res = await appGraphGet<{ value?: DriveItem[] }>(
-    `/drives/${driveId}/items/${itemId}/children?$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,createdBy&$top=200`,
+    `/drives/${driveId}/items/${itemId}/children` +
+      `?$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,createdBy,parentReference` +
+      `&$expand=thumbnails($select=medium)&$top=200`,
   )
   return (res.value ?? [])
     .filter((it) => it.file)
@@ -337,6 +350,8 @@ export async function listFolderChildren(driveId: string, itemId: string): Promi
         webUrl: f.webUrl ?? null,
         datum: f.lastModifiedDateTime ? f.lastModifiedDateTime.slice(0, 10) : null,
         door: f.createdBy?.user?.displayName ?? null,
+        driveId: f.parentReference?.driveId ?? driveId,
+        thumbUrl: f.thumbnails?.[0]?.medium?.url ?? null,
       }
     })
 }
