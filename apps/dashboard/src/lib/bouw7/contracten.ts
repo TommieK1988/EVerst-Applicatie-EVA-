@@ -410,3 +410,25 @@ export async function leesBouw7Contract(soort: ContractSoort, contractId: number
   const client = await getBouw7Client()
   return client.get<Record<string, unknown>>(`${PAD[soort]}/${contractId}`)
 }
+
+/** Staat het contract er nog, is het weg, of viel het niet vast te stellen? */
+export type ContractStand = 'aanwezig' | 'verwijderd' | 'onbekend'
+
+/**
+ * Bestaat dit contract nog in Bouw7?
+ *
+ * `verwijderd` alleen bij een hard 404/410 of een lege response — élke andere fout (netwerk,
+ * 401/403, kapotte JSON) levert `onbekend`. Die asymmetrie is bewust: een storing mag nooit als
+ * "weggegooid" gelezen worden, want daarop wordt de contractkoppeling losgelaten en zouden de
+ * regels opnieuw besteld kunnen worden — een dubbele order in Bouw7.
+ */
+export async function bestaatBouw7Contract(soort: ContractSoort, contractId: number): Promise<ContractStand> {
+  try {
+    const client = await getBouw7Client()
+    const detail = await client.get<{ id?: number } | null>(`${PAD[soort]}/${contractId}`)
+    return detail?.id != null ? 'aanwezig' : 'verwijderd'
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : ''
+    return /\((404|410)\)/.test(msg) ? 'verwijderd' : 'onbekend'
+  }
+}

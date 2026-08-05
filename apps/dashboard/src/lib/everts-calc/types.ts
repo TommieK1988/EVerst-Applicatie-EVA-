@@ -468,6 +468,11 @@ export interface WerkbegrotingBestelling {
   bouw7_sync_fout?: string | null
   /** Gevuld zodra de order naar de leverancier is gemaild; maakt de bestelling onwijzigbaar. */
   verstuurd_op?: string | null
+  /**
+   * Gevuld zodra EVA merkt dat het contract in Bouw7 is verwijderd. De koppelvelden zijn dan
+   * leeg (regels weer bestelbaar); `bouw7_nummer` blijft staan als spoor van wat er stond.
+   */
+  bouw7_verwijderd_op?: string | null
   /** Lever-/startdatum (ISO-datum) of vrije tekst ("week 34") — Bouw7 accepteert beide. */
   levering_datum?: string | null
   levering_tekst?: string | null

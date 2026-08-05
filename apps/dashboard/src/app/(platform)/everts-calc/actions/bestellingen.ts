@@ -23,9 +23,12 @@ import { revalidatePath } from 'next/cache'
 import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
   schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
-  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId, leesBouw7Contract, PURCHASE_TYPE,
+  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId, leesBouw7Contract,
+  bestaatBouw7Contract, PURCHASE_TYPE,
   type ContractSoort, type ContractTermijn,
 } from '@/lib/bouw7/contracten'
+import { getBouw7Client } from '@/lib/bouw7/sync'
+import type { Bouw7ListResponse } from '@/lib/bouw7/client'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import {
   syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase,
@@ -38,7 +41,13 @@ const SOORT_PER_TYPE: Record<'onderaanneming' | 'materieel', ContractSoort> = {
   materieel: 'inkooporder',
 }
 
-const soortLabel = (s: ContractSoort) => (s === 'oa_contract' ? 'OA-contract' : 'Inkooporder')
+/**
+ * Wat de gebruiker leest. Bewust in gewone taal en niet in Bouw7-jargon: een onderaannemer krijgt
+ * een **opdracht** (compleet stuk werk, vaste prijs, plant zijn eigen werk), een leverancier een
+ * **bestelling** (materiaal of materieel). Dat onderscheid stuurt de hele afhandeling.
+ */
+const soortLabel = (s: ContractSoort) =>
+  s === 'oa_contract' ? 'Opdracht onderaannemer' : 'Bestelling leverancier'
 
 /**
  * Naam die als ondertekenaar van de afroep in Bouw7 komt te staan. De ingelogde medewerker, zodat
@@ -421,6 +430,7 @@ export async function maakBestellingInBouw7(
       bouw7_nummer: res.nummer,
       bouw7_sync_status: 'ok',
       bouw7_sync_fout: null,
+      bouw7_verwijderd_op: null,
       bouw7_gesynct_op: nu,
     })
     .eq('id', bestelling.id)
@@ -489,10 +499,162 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
       verstuurd_op: null, verstuurd_door: null, verstuurd_naar: null,
       bouw7_contract_id: null, bouw7_nummer: null,
       bouw7_leverbon_id: null, bouw7_bonnummer: null, bouw7_afroep_op: null,
-      bouw7_sync_status: null, bouw7_sync_fout: null,
+      bouw7_sync_status: null, bouw7_sync_fout: null, bouw7_verwijderd_op: null,
       bouw7_gesynct_op: new Date().toISOString(),
     })
     .eq('id', bestellingId)
+
+  revalidatePath(`/dossiers/${dossierId}`)
+  return { ok: true }
+}
+
+// ─── Reconciliatie: wat in Bouw7 is weggegooid, mag EVA niet als besteld tonen ────────────────
+//
+// Een order of opdracht die EVA aanmaakte kan in Bouw7 worden verwijderd. Zonder controle bleef
+// hij in EVA staan als stond hij er nog, én bleven zijn regels geblokkeerd voor een nieuwe
+// inkoop — het werk leek besteld terwijl er niets meer lag.
+
+/** Bouw7-stand van één bestelling; wat de client nodig heeft om zijn cache gelijk te trekken. */
+export type BestellingStand = {
+  id: string
+  status: WerkbegrotingBestelling['status']
+  soort: ContractSoort | null
+  bouw7_contract_id: number | null
+  bouw7_nummer: string | null
+  bouw7_leverbon_id: number | null
+  bouw7_bonnummer: string | null
+  bouw7_sync_status: string | null
+  bouw7_sync_fout: string | null
+  bouw7_verwijderd_op: string | null
+  verstuurd_op: string | null
+}
+
+const STAND_VELDEN =
+  'id, status, soort, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, bouw7_bonnummer, ' +
+  'bouw7_sync_status, bouw7_sync_fout, bouw7_verwijderd_op, verstuurd_op'
+
+export type VerversStandResultaat =
+  | { ok: true; bestellingen: BestellingStand[]; verdwenen: string[] }
+  | { ok: false; error: string }
+
+/**
+ * Controleer per bestelling of het Bouw7-document er nog is, en werk de EVA-stand bij.
+ *
+ * Twee stappen, omdat geen van beide alleen betrouwbaar genoeg is:
+ *  1. De **projectlijsten** (`/list/purchase-order-contracts`, `/list/subcontractor-contracts`)
+ *     leveren in één call alles wat er nog op het project hangt.
+ *  2. Staat een contract niet in die lijst, dan wordt dat **per contract bevestigd** met een
+ *     directe GET. Zou de lijst ooit gefilterd blijken (status, paginering), dan leidt dat zo
+ *     niet tot het onterecht loslaten van een koppeling.
+ *
+ * Alleen een bevestigde 404 telt als verwijderd; bij twijfel gebeurt er niets. Een koppeling ten
+ * onrechte loslaten zou namelijk een dubbele order in Bouw7 opleveren.
+ *
+ * `verstuurd_op` blijft staan als het document ooit gemaild is — dat is echt gebeurd en is
+ * historie. Alleen de Bouw7-koppeling wordt losgelaten.
+ */
+export async function verversBestellingenUitBouw7(
+  dossierId: string,
+  werkbegrotingId: string,
+): Promise<VerversStandResultaat> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  const { data: rijen, error } = await db
+    .from('werkbegroting_bestellingen')
+    .select(STAND_VELDEN)
+    .eq('werkbegroting_id', werkbegrotingId)
+  if (error) return { ok: false, error: error.message }
+
+  const alle = (rijen ?? []) as BestellingStand[]
+  const gekoppeld = alle.filter(b => b.bouw7_contract_id != null)
+  if (gekoppeld.length === 0) return { ok: true, bestellingen: alle, verdwenen: [] }
+
+  // Stap 1 — alles wat nu nog op het project hangt.
+  const { data: dossier } = await db.from('dossiers').select('bouw7_id').eq('id', dossierId).maybeSingle()
+  const projectId = dossier?.bouw7_id != null ? Number(dossier.bouw7_id) : NaN
+
+  const opProject = new Set<number>()
+  let lijstGelukt = false
+  if (Number.isFinite(projectId)) {
+    try {
+      const client = await getBouw7Client()
+      const q = { q: `project.id = ${projectId} LIMIT 500` }
+      const [orders, subs] = await Promise.all([
+        client.get<Bouw7ListResponse<{ id?: number }>>('/list/purchase-order-contracts', q),
+        client.get<Bouw7ListResponse<{ id?: number }>>('/list/subcontractor-contracts', q),
+      ])
+      for (const c of [...(orders.items ?? []), ...(subs.items ?? [])]) {
+        if (c.id != null) opProject.add(Number(c.id))
+      }
+      lijstGelukt = true
+    } catch {
+      // Geen lijst → stap 2 draait voor álle gekoppelde bestellingen. Duurder, even veilig.
+      lijstGelukt = false
+    }
+  }
+
+  // Stap 2 — bevestigen per contract dat ontbreekt (of, zonder lijst, per contract punt).
+  const nu = new Date().toISOString()
+  const verdwenen: string[] = []
+  for (const b of gekoppeld) {
+    const contractId = Number(b.bouw7_contract_id)
+    if (lijstGelukt && opProject.has(contractId)) continue
+
+    const stand = await bestaatBouw7Contract((b.soort ?? 'inkooporder') as ContractSoort, contractId)
+    if (stand !== 'verwijderd') continue
+
+    // Koppelvelden los: daarmee tellen de regels weer als "nog te bestellen". `bouw7_nummer`
+    // blijft staan zodat de gebruiker ziet welk document verdwenen is.
+    await db.from('werkbegroting_bestellingen')
+      .update({
+        status: 'concept',
+        verzonden_op: null,
+        bouw7_contract_id: null,
+        bouw7_leverbon_id: null, bouw7_bonnummer: null, bouw7_afroep_op: null,
+        bouw7_sync_status: 'verwijderd_in_bouw7', bouw7_sync_fout: null,
+        bouw7_verwijderd_op: nu, bouw7_gesynct_op: nu,
+      })
+      .eq('id', b.id)
+    verdwenen.push(b.id)
+  }
+
+  if (verdwenen.length === 0) return { ok: true, bestellingen: alle, verdwenen: [] }
+
+  const { data: opnieuw } = await db
+    .from('werkbegroting_bestellingen')
+    .select(STAND_VELDEN)
+    .eq('werkbegroting_id', werkbegrotingId)
+  revalidatePath(`/dossiers/${dossierId}`)
+  return { ok: true, bestellingen: (opnieuw ?? alle) as BestellingStand[], verdwenen }
+}
+
+export type OpruimResultaat = { ok: true } | { ok: false; error: string }
+
+/**
+ * Haal een inkoop helemaal uit EVA. Alleen toegestaan als er geen Bouw7-document (meer) aan hangt —
+ * anders zou de koppeling wegvallen terwijl het contract blijft staan, en maakt een volgende push
+ * een tweede contract. Intrekken gaat via `trekBestellingIn`.
+ */
+export async function verwijderBestellingUitEva(
+  dossierId: string,
+  bestellingId: string,
+): Promise<OpruimResultaat> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data: rij } = await db
+    .from('werkbegroting_bestellingen')
+    .select('id, bouw7_contract_id')
+    .eq('id', bestellingId)
+    .maybeSingle()
+  if (!rij) return { ok: true } // al weg — geen foutmelding waard
+  if (rij.bouw7_contract_id != null) {
+    return { ok: false, error: 'Deze inkoop staat nog in Bouw7. Trek hem daar eerst in.' }
+  }
+
+  await db.from('werkbegroting_bestelling_regels').delete().eq('bestelling_id', bestellingId)
+  const { error } = await db.from('werkbegroting_bestellingen').delete().eq('id', bestellingId)
+  if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true }

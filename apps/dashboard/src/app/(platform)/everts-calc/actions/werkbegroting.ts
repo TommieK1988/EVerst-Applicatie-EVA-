@@ -321,6 +321,7 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       bouw7_bonnummer: b.bouw7_bonnummer ?? null,
       bouw7_sync_status: b.bouw7_sync_status ?? null,
       bouw7_sync_fout: b.bouw7_sync_fout ?? null,
+      bouw7_verwijderd_op: b.bouw7_verwijderd_op ?? null,
       verstuurd_op: b.verstuurd_op ?? null,
       levering_datum: b.levering_datum ?? null,
       levering_tekst: b.levering_tekst ?? null,

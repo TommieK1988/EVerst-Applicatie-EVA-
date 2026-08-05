@@ -17,7 +17,7 @@ import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
 import BestellingenPaneel from './BestellingenPaneel'
-import { X, ClipboardCheck as ClipboardIcon, Package } from 'lucide-react'
+import { X, ClipboardCheck as ClipboardIcon, ShoppingCart } from 'lucide-react'
 
 interface Props {
   projectId: string
@@ -448,10 +448,10 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
         <button
           onClick={() => setBestellingenOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
-          title="Bestellingen klaarzetten en verzenden"
+          title="Opdrachten aan onderaannemers en bestellingen bij leveranciers klaarzetten"
         >
-          <Package className="w-3.5 h-3.5" />
-          Bestellingen
+          <ShoppingCart className="w-3.5 h-3.5" />
+          Inkopen
         </button>
         {magPrognose && (
           <button
