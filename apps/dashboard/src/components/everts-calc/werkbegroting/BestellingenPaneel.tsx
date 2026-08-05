@@ -201,11 +201,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
 
   /** Open het verzendvenster met een voorgevuld mailconcept. */
   async function openVerstuur(b: WerkbegrotingBestelling) {
+    if (!dossierId) return
     setVerstuurB(b)
     setMailLaden(true)
     setMail({ to: '', cc: '', onderwerp: '', bericht: '' })
     try {
-      const concept = await getBestellingMailConcept(b.id)
+      const concept = await getBestellingMailConcept(dossierId, b.id)
       setMail({ to: concept.to, cc: '', onderwerp: concept.onderwerp, bericht: concept.bericht })
     } catch { /* laat leeg */ } finally { setMailLaden(false) }
   }

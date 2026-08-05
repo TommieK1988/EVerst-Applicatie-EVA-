@@ -519,35 +519,59 @@ export type BestellingMailConcept = {
   heeftAdres: boolean
 }
 
-/** Prefill voor het verzendvenster: ontvanger, onderwerp en berichttekst. Puur lezend. */
-export async function getBestellingMailConcept(bestellingId: string): Promise<BestellingMailConcept> {
+/**
+ * Prefill voor het verzendvenster: ontvanger, onderwerp en berichttekst uit het sjabloon dat in
+ * Instellingen → Inkoop-e-mail staat. Puur lezend.
+ *
+ * De tekst is platte tekst met echte regeleinden; de HTML-opmaak gebeurt pas bij het versturen
+ * (bouwBestellingMailHtml). De naam van de afzender staat er bewust niet onder: die komt uit de
+ * Outlook-handtekening.
+ */
+export async function getBestellingMailConcept(
+  dossierId: string,
+  bestellingId: string,
+): Promise<BestellingMailConcept> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
   const { data: b } = await db
     .from('werkbegroting_bestellingen')
-    .select('soort, bouw7_nummer, omschrijving, relatie_id, werkbegroting_id')
+    .select('soort, bouw7_nummer, omschrijving, relatie_id, werkbegroting_id, levering_datum, levering_tekst')
     .eq('id', bestellingId)
     .maybeSingle()
   const soort = (b?.soort ?? 'inkooporder') as ContractSoort
-  const { data: relatie } = b?.relatie_id
-    ? await db.from('relaties').select('naam, email').eq('id', b.relatie_id).maybeSingle()
-    : { data: null }
+  const [{ data: relatie }, { data: dossier }] = await Promise.all([
+    b?.relatie_id
+      ? db.from('relaties').select('naam, email').eq('id', b.relatie_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from('dossiers')
+      .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
+      .eq('id', dossierId).maybeSingle(),
+  ])
 
-  const soortWoord = soort === 'oa_contract' ? 'opdracht' : 'inkooporder'
-  const nummer = b?.bouw7_nummer ?? ''
-  const onderwerp = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${nummer}`.trim()
-  // Platte tekst met echte regeleinden; de HTML-opmaak gebeurt bij het versturen
-  // (bouwBestellingMailHtml). De naam van de afzender staat er bewust niet onder: die komt
-  // uit de Outlook-handtekening.
-  const bericht =
-    `Beste ${relatie?.naam ?? 'relatie'},\n\n` +
-    `Hierbij ontvangt u onze ${soortWoord}${nummer ? ` ${nummer}` : ''}. ` +
-    `De volledige omschrijving staat in de bijgevoegde pdf.\n\n` +
-    `Wilt u de ${soortWoord} bevestigen? Vermeld bij facturatie het ` +
-    `${soort === 'oa_contract' ? 'opdrachtnummer' : 'ordernummer'}, dan verwerken wij uw factuur vlot.\n\n` +
-    `Met vriendelijke groet,`
+  const { getBestellingMailSjablonen, renderBestellingMailTekst } =
+    await import('@/lib/bouw7/bestelling-mail-sjabloon')
+  const sjablonen = await getBestellingMailSjablonen()
+  const sjabloon = soort === 'oa_contract' ? sjablonen.oa_contract : sjablonen.inkooporder
 
-  return { to: relatie?.email ?? '', onderwerp, bericht, heeftAdres: !!relatie?.email }
+  const vars: Record<string, string> = {
+    'leverancier.naam': relatie?.naam ?? '',
+    'bestelling.nummer': b?.bouw7_nummer ?? '',
+    'bestelling.soort': soort === 'oa_contract' ? 'opdracht' : 'inkooporder',
+    'project.nummer': dossier?.dossiernummer ?? '',
+    'project.naam': dossier?.titel ?? '',
+    'project.werkadres': [
+      [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
+      [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join(' '),
+    ].filter(Boolean).join(', '),
+    'levering.datum': b?.levering_datum ? nlDatum(b.levering_datum) : (b?.levering_tekst ?? ''),
+  }
+
+  return {
+    to: relatie?.email ?? '',
+    onderwerp: renderBestellingMailTekst(sjabloon.onderwerp, vars).trim(),
+    bericht: renderBestellingMailTekst(sjabloon.tekst, vars),
+    heeftAdres: !!relatie?.email,
+  }
 }
 
 export type VerstuurBestellingResultaat =

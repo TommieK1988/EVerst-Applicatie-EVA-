@@ -182,7 +182,7 @@ const SLUG_LABELS: Record<string, string> = {
   'offerte-layout': 'Offerte-opmaak', 'functies-afdelingen': 'Functies & afdelingen',
   'gebruikers': 'Gebruikers & rechten', 'medewerker-attributen': 'Medewerker-attributen',
   'integraties': 'Integraties', 'cao': 'CAO-beheer', 'formulieren-pdf': 'Formulier PDF-opmaak',
-  'foutenlog': 'Foutenlog',
+  'foutenlog': 'Foutenlog', 'offerte-mail': 'Offerte-e-mail', 'inkoop-mail': 'Inkoop-e-mail',
   // Overige
   'nieuw': 'Nieuw', 'bewerken': 'Bewerken', 'import': 'Importeren', 'sync': 'Synchroniseren',
   'zones': 'Zones', 'rapportage': 'Rapportage', 'rapportages': 'Rapportages',
