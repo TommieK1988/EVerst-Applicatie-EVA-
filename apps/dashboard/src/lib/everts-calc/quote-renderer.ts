@@ -137,10 +137,10 @@ export interface BtwGroepContext {
   verlegd: boolean
   nominaal_pct: number     // gelijk aan pct; apart veld voor sjablonen die het los tonen
   grondslag: string        // € geformatteerd
-  grondslag_raw: string    // kaal met duizendpunt (10.000)
+  grondslag_raw: string    // kaal met duizendpunt, 2 decimalen (10.000,00)
   grondslag_bedrag: string // 10.000,00 (zonder €)
   btw_bedrag: string       // € geformatteerd
-  btw_bedrag_raw: string   // kaal met duizendpunt (2.100)
+  btw_bedrag_raw: string   // kaal met duizendpunt, 2 decimalen (2.100,00)
   btw_bedrag_getal: string // 2.100,00 (zonder €)
 }
 
@@ -233,14 +233,14 @@ export interface RenderContext {
   opmerkingen: string
   totalen: {
     subtotaal: string          // formatted (€)
-    subtotaal_raw: string      // kaal met duizendpunt (10.000)
+    subtotaal_raw: string      // kaal met duizendpunt, 2 decimalen (10.000,00)
     subtotaal_bedrag: string   // 10.000,00 (zonder €)
     btw_pct: number
     btw_bedrag: string         // formatted (€)
-    btw_bedrag_raw: string     // kaal met duizendpunt
+    btw_bedrag_raw: string     // kaal met duizendpunt, 2 decimalen
     btw_bedrag_getal: string   // 2.100,00 (zonder €)
     totaal: string             // formatted (€)
-    totaal_raw: string         // kaal met duizendpunt
+    totaal_raw: string         // kaal met duizendpunt, 2 decimalen
     totaal_bedrag: string      // 12.100,00 (zonder €)
     stelposten_subtotaal: string
     stelposten_subtotaal_raw: string
@@ -266,7 +266,7 @@ interface SectieContext {
   niveau: number
   volgorde: number
   subtotaal: string         // formatted (€)
-  subtotaal_raw: string     // kaal met duizendpunt (5.000)
+  subtotaal_raw: string     // kaal met duizendpunt, 2 decimalen (5.000,00)
   subtotaal_num: number     // intern: numerieke waarde voor de boom-optelling
   subtotaal_bedrag: string  // 5.000,00 (zonder €)
   toon_detail: boolean
@@ -286,7 +286,7 @@ interface BoomNode extends SectieContext {
   kinderen: BoomNode[]
   heeft_kinderen: boolean
   subtotaal_incl: string        // opgerold, geformatteerd (€ 12.500,00)
-  subtotaal_incl_raw: string    // opgerold, kaal met duizendpunt (12.500)
+  subtotaal_incl_raw: string    // opgerold, kaal met duizendpunt, 2 decimalen (12.500,00)
   subtotaal_incl_bedrag: string // opgerold, zonder € (12.500,00)
 }
 
@@ -297,10 +297,10 @@ interface RegelContext {
   hoeveelheid: string       // formatted number
   eenheid: string
   eenheidsprijs: string     // formatted (€)
-  eenheidsprijs_raw: string // kaal met duizendpunt
+  eenheidsprijs_raw: string // kaal met duizendpunt, 2 decimalen
   eenheidsprijs_bedrag: string // 12,50 (zonder €)
   totaal: string            // formatted (€)
-  totaal_raw: string        // kaal met duizendpunt
+  totaal_raw: string        // kaal met duizendpunt, 2 decimalen
   totaal_bedrag: string     // 131,25 (zonder €)
   btw_pct: number           // BTW percentage bijv. 21
   is_stelpost: boolean
@@ -383,15 +383,19 @@ function numEuroPlain(n: number | null | undefined): string {
 }
 
 /**
- * "Kaal" bedrag mét duizendscheiding, zonder euroteken en zonder verplichte
- * decimalen (bv. 10000 → "10.000", 12.5 → "12,5", 131.25 → "131,25"). Voor de
+ * "Kaal" bedrag mét duizendscheiding en altijd twee decimalen, zonder euroteken
+ * (bv. 10000 → "10.000,00", 12.5 → "12,50", 131.25 → "131,25"). Voor de
  * `*_raw`-variabelen: nummer-look, maar wél met duizendpunt zodat grote bedragen
  * leesbaar blijven.
+ *
+ * De decimalen zijn verplicht: een offerte met "€ 10.000" naast "€ 131,25" in
+ * dezelfde kolom leest slordig. Bedragen horen op de cent uit te lijnen, ook als
+ * die cent nul is.
  */
 function numRaw(n: number | null | undefined): string {
   const num = n == null ? 0 : Number(n)
   if (isNaN(num)) return '—'
-  return num.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return num.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /**
