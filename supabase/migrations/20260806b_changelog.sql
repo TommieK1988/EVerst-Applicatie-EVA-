@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-06','nieuw','Offertes','Offerte aanpassen in Word, zonder hem los te trekken van het dossier',
+   'Met de knop "Bewerken in Word" opent de offerte in Word Online en komt hij meteen in de map van het dossier te staan. Je aanpassingen blijven zo aan de offerte hangen: de voorvertoning, de PDF en de mail naar de klant gebruiken vanaf dat moment jouw bewerkte versie, en goedkeuring aanvragen en versturen blijven gewoon vanuit EVA werken. Pas je na de goedkeuring nog iets aan in Word, dan vraagt EVA opnieuw om goedkeuring.');
