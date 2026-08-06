@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -360,6 +360,14 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
   const [fotos, setFotos] = useState<File[]>([])
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const bibliotheekRef = useRef<HTMLInputElement>(null)
+
+  /** Aanvullen, niet vervangen: een foto van de camera en een uit de bibliotheek horen bij hetzelfde punt. */
+  function voegFotosToe(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setFotos(bestaand => [...bestaand, ...Array.from(files)])
+  }
 
   async function opslaan() {
     if (!omschrijving.trim()) { setFout('Beschrijf wat er aan de hand is.'); return }
@@ -399,12 +407,31 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
           placeholder="Bijv. hal, kozijn achtergevel" />
       </div>
       <div>
-        <label style={label} htmlFor="ap-foto">Foto&apos;s</label>
-        <input id="ap-foto" type="file" accept="image/*" capture="environment" multiple
-          style={{ ...veld, padding: 9 }}
-          onChange={e => setFotos(Array.from(e.target.files ?? []))} />
+        <span style={label}>Foto&apos;s</span>
+        {/* Camera en bibliotheek apart: `capture` dwingt de camera af, zonder dat kenmerk kies je
+            een bestaande foto. Meestal fotografeer je ter plekke, maar soms staat het beeld er al. */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }}
+            onChange={e => { voegFotosToe(e.target.files); e.target.value = '' }} />
+          <input ref={bibliotheekRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+            onChange={e => { voegFotosToe(e.target.files); e.target.value = '' }} />
+          <button type="button" onClick={() => cameraRef.current?.click()}
+            style={{ ...secundaireKnop, flex: 1, fontSize: 14 }}>
+            📷 Foto maken
+          </button>
+          <button type="button" onClick={() => bibliotheekRef.current?.click()}
+            style={{ ...secundaireKnop, flex: 1, fontSize: 14 }}>
+            🖼 Uit bibliotheek
+          </button>
+        </div>
         {fotos.length > 0 && (
-          <div style={{ fontSize: 12, color: GRIJS, marginTop: 4 }}>{fotos.length} foto&apos;s geselecteerd</div>
+          <div style={{ fontSize: 12, color: GRIJS, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{fotos.length} foto{fotos.length > 1 ? "'s" : ''} gekozen</span>
+            <button type="button" onClick={() => setFotos([])}
+              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: GRIJS, textDecoration: 'underline', cursor: 'pointer' }}>
+              wissen
+            </button>
+          </div>
         )}
       </div>
       <button type="button" onClick={opslaan} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>

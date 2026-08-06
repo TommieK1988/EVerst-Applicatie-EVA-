@@ -1122,9 +1122,12 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
                 <input type="checkbox" checked={punt.is_extra_werk} disabled={bezig} onChange={toggleExtraWerk} />
                 Extra werk
               </label>
-              <input ref={voorRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+              {/* Bewust géén `capture`: dat dwingt op een telefoon of tablet de camera af, terwijl
+                  je hier meestal een bestaande foto uit de bibliotheek of van de schijf kiest. Zonder
+                  het kenmerk biedt het toestel beide aan. */}
+              <input ref={voorRef} type="file" accept="image/*" multiple className="hidden"
                 onChange={e => { uploadFotos(e.target.files, 'voor'); e.target.value = '' }} />
-              <input ref={naRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+              <input ref={naRef} type="file" accept="image/*" multiple className="hidden"
                 onChange={e => { uploadFotos(e.target.files, 'na'); e.target.value = '' }} />
               <Button variant="secondary" onClick={() => voorRef.current?.click()} disabled={bezig}>Foto vooraf</Button>
               <Button variant="secondary" onClick={() => naRef.current?.click()} disabled={bezig}>Foto na herstel</Button>

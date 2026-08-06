@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/database'
 import { portaalUploadFoto, portaalAfmeldenPunt, type OnderaannemerPortaalData, type PortaalPunt } from '../../actions'
+import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 
 // 'nieuw' en 'afgewezen' horen bij de interne triage van gemelde aandachtspunten en komen hier niet
 // voor — een onderaannemer ziet alleen punten die aan hem zijn toegewezen. Wel volledig invullen,
@@ -22,6 +23,10 @@ const card: React.CSSProperties = { background: '#fff', border: '1px solid #e4e8
 const knop: React.CSSProperties = {
   background: '#009439', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px',
   fontSize: 13.5, fontWeight: 600, cursor: 'pointer',
+}
+const fotoKnop: React.CSSProperties = {
+  background: '#fff', color: '#3a444c', border: '1px solid #d4dad8', borderRadius: 8,
+  padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 }
 
 export function OnderaannemerPortaal({ token, data }: { token: string; data: OnderaannemerPortaalData }) {
@@ -63,6 +68,7 @@ export function OnderaannemerPortaal({ token, data }: { token: string; data: Ond
 function PuntKaart({ token, punt, readOnly }: { token: string; punt: PortaalPunt; readOnly?: boolean }) {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+  const bibliotheekRef = useRef<HTMLInputElement>(null)
   const [opmerking, setOpmerking] = useState('')
   const [fotoUrls, setFotoUrls] = useState<string[]>([])
   const [bezig, setBezig] = useState(false)
@@ -74,7 +80,9 @@ function PuntKaart({ token, punt, readOnly }: { token: string; punt: PortaalPunt
     setBezig(true); setFout(null)
     for (const file of Array.from(files)) {
       const fd = new FormData()
-      fd.append('foto', file)
+      // Verkleinen vóór verzenden: een foto uit de bibliotheek of van de camera is zo enkele MB's
+      // en loopt anders tegen de body-limiet van server-actions aan.
+      fd.append('foto', await verkleinFoto(file))
       const r = await portaalUploadFoto(token, punt.id, fd)
       if (!r.ok) { setFout(r.error); break }
       setFotoUrls(prev => [...prev, r.url])
@@ -144,12 +152,19 @@ function PuntKaart({ token, punt, readOnly }: { token: string; punt: PortaalPunt
             </div>
           )}
           {fout && <div style={{ color: '#a12020', fontSize: 12.5, margin: '6px 0' }}>{fout}</div>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          {/* Wrappen: op een smal scherm passen drie knoppen niet op één regel. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {/* Twee velden: `capture` opent de camera, zonder dat kenmerk de fotobibliotheek.
+                Een onderaannemer heeft het bewijs vaak al op zijn telefoon staan. */}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }}
-              onChange={e => upload(e.target.files)} />
-            <button onClick={() => fileRef.current?.click()} disabled={bezig}
-              style={{ background: '#fff', color: '#3a444c', border: '1px solid #d4dad8', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              📷 Foto toevoegen
+              onChange={e => { upload(e.target.files); e.target.value = '' }} />
+            <input ref={bibliotheekRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+              onChange={e => { upload(e.target.files); e.target.value = '' }} />
+            <button onClick={() => fileRef.current?.click()} disabled={bezig} style={fotoKnop}>
+              📷 Foto maken
+            </button>
+            <button onClick={() => bibliotheekRef.current?.click()} disabled={bezig} style={fotoKnop}>
+              🖼 Uit bibliotheek
             </button>
             <button onClick={afmelden} disabled={bezig} style={{ ...knop, opacity: bezig ? 0.6 : 1 }}>
               {punt.status === 'opgelost' ? 'Bijwerken' : 'Afmelden als opgelost'}

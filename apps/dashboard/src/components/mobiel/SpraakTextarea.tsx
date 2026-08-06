@@ -14,6 +14,16 @@ import React, { useEffect, useRef, useState } from 'react'
  * Kent de browser het niet (o.a. Firefox), dan verdwijnt de knop en blijft er een gewoon tekstveld
  * over — nooit een knop die niets doet.
  *
+ * Twee eigenaardigheden van de Web Speech API vragen om extra werk, anders ziet de gebruiker zijn
+ * ingesproken tekst verschijnen en weer verdwijnen:
+ *
+ * 1. Herkende tekst is eerst *voorlopig* en wordt pas later *definitief*. Stopt de herkenning
+ *    voordat die omslag komt — op een telefoon gebeurt dat vaak — dan is die tekst weg. Daarom
+ *    zetten we bij het einde van elke ronde vast wat er nog voorlopig in staat.
+ * 2. De herkenning stopt al na een paar seconden stilte, ook midden in een gedachte. Zolang de
+ *    gebruiker niet op stoppen tikte pakken we hem meteen weer op. Na een paar stille rondes gaat
+ *    de microfoon alsnog uit: hij mag nooit ongemerkt aan blijven staan.
+ *
  * LET OP: spraakherkenning vraagt om HTTPS én om toestemming voor de microfoon. Lokaal op
  * http://localhost werkt het; op een http-adres in het netwerk niet.
  */
@@ -47,6 +57,13 @@ function maakHerkenner(): Herkenner | null {
   return Ctor ? new Ctor() : null
 }
 
+/**
+ * Zoveel rondes zonder een woord voordat de microfoon vanzelf uitgaat. Bij ongeveer vijf seconden
+ * stilte per ronde is dat een kleine kwart minuut: lang genoeg om na te denken, kort genoeg om
+ * geen microfoon in een broekzak te laten meeluisteren.
+ */
+const MAX_STILLE_RONDES = 3
+
 const FOUT_TEKST: Record<string, string> = {
   'not-allowed': 'Geen toegang tot de microfoon. Sta dat toe in je browserinstellingen.',
   'service-not-allowed': 'Geen toegang tot de microfoon. Sta dat toe in je browserinstellingen.',
@@ -73,31 +90,67 @@ export default function SpraakTextarea({
   // De tekst zoals die was toen het inspreken begon. Wat er wordt herkend komt hierachter, zodat
   // een tussentijds resultaat dat later wordt bijgesteld niet steeds achter zichzelf plakt.
   const basisRef = useRef('')
+  // Het voorlopige resultaat ook als ref: de afhandelaars van de herkenner lezen hem buiten een
+  // render om, en `tussentijds` uit de state zou daar de waarde van bij het starten zijn.
+  const tussentijdsRef = useRef('')
+  // Wil de gebruiker nog luisteren? Blijft `true` tot hij op stoppen tikt of er iets misgaat, en
+  // bepaalt of een ronde die vanzelf eindigt weer wordt opgepakt.
+  const wilLuisterenRef = useRef(false)
+  const stilleRondesRef = useRef(0)
   // `value` via een ref, anders zou de handler bij elke toetsaanslag opnieuw gebonden moeten worden.
   const valueRef = useRef(value)
   valueRef.current = value
+  // Idem voor `onChange`: de afhandelaars van een ronde blijven leven over renders heen.
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
   useEffect(() => {
     setOndersteund(maakHerkenner() !== null)
-    return () => { herkennerRef.current?.abort() }
+    return () => { wilLuisterenRef.current = false; herkennerRef.current?.abort() }
   }, [])
 
-  function stop() {
-    herkennerRef.current?.stop()
-    setLuistert(false)
+  /** Zet vast wat er voorlopig herkend is, zodat het niet verloren gaat als de ronde stopt. */
+  function vastzetten() {
+    const rest = tussentijdsRef.current
+    tussentijdsRef.current = ''
     setTussentijds('')
+    if (!rest.trim()) return
+    basisRef.current = voegSamen(basisRef.current, rest)
+    onChangeRef.current(basisRef.current)
+  }
+
+  function stop() {
+    wilLuisterenRef.current = false
+    setLuistert(false)
+    // Niet `abort()`: `stop()` levert het laatste resultaat nog af. Wat dan nog voorlopig is,
+    // wordt in `onend` vastgezet.
+    herkennerRef.current?.stop()
   }
 
   function start() {
+    setFout(null)
+    basisRef.current = valueRef.current
+    tussentijdsRef.current = ''
+    setTussentijds('')
+    wilLuisterenRef.current = true
+    stilleRondesRef.current = 0
+
+    if (!luisterRonde()) {
+      wilLuisterenRef.current = false
+      setFout('Inspreken kon niet starten.')
+      return
+    }
+    setLuistert(true)
+  }
+
+  /** Eén herkenningssessie. Geeft `false` als de browser hem niet wil starten. */
+  function luisterRonde(): boolean {
     const h = maakHerkenner()
-    if (!h) return
+    if (!h) return false
     herkennerRef.current = h
     h.lang = 'nl-NL'
     h.continuous = true
     h.interimResults = true
-
-    basisRef.current = valueRef.current
-    setFout(null)
 
     h.onresult = e => {
       let definitief = ''
@@ -108,32 +161,38 @@ export default function SpraakTextarea({
         if (res.isFinal) definitief += tekst
         else voorlopig += tekst
       }
+      if (definitief.trim() || voorlopig.trim()) stilleRondesRef.current = 0
       if (definitief) {
         basisRef.current = voegSamen(basisRef.current, definitief)
-        onChange(basisRef.current)
+        onChangeRef.current(basisRef.current)
       }
+      tussentijdsRef.current = voorlopig
       setTussentijds(voorlopig)
     }
 
     h.onerror = e => {
-      // 'no-speech' en 'aborted' zijn geen fouten om de gebruiker mee lastig te vallen: dat is
-      // gewoon "je zei even niets" of "je tikte op stoppen".
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      // 'no-speech' is geen fout om de gebruiker mee lastig te vallen — dat is gewoon "je zei even
+      // niets", en `onend` pakt de volgende ronde op. 'aborted' is "je tikte op stoppen".
+      if (e.error === 'no-speech') return
+      if (e.error !== 'aborted') {
         setFout(FOUT_TEKST[e.error] ?? 'Inspreken lukte niet. Probeer het opnieuw of typ de tekst.')
       }
-      setLuistert(false)
-      setTussentijds('')
+      wilLuisterenRef.current = false
     }
 
-    // De herkenning stopt vanzelf na een stilte (op iOS al na een paar seconden). Bewust niet
-    // automatisch herstarten: dat geeft een microfoon die ongemerkt aan blijft staan.
-    h.onend = () => { setLuistert(false); setTussentijds('') }
+    h.onend = () => {
+      vastzetten()
+      stilleRondesRef.current += 1
+      if (wilLuisterenRef.current && stilleRondesRef.current <= MAX_STILLE_RONDES && luisterRonde()) return
+      wilLuisterenRef.current = false
+      setLuistert(false)
+    }
 
     try {
       h.start()
-      setLuistert(true)
+      return true
     } catch {
-      setFout('Inspreken kon niet starten.')
+      return false
     }
   }
 
@@ -142,7 +201,9 @@ export default function SpraakTextarea({
       <div style={{ position: 'relative' }}>
         <textarea
           id={id}
-          value={luistert && tussentijds ? voegSamen(value, tussentijds) : value}
+          // Ook ná het stoppen nog het voorlopige resultaat tonen: dat wordt in `onend` alsnog
+          // vastgezet, en tot dat moment de tekst laten verdwijnen leest als verlies.
+          value={tussentijds ? voegSamen(value, tussentijds) : value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
           rows={rows}

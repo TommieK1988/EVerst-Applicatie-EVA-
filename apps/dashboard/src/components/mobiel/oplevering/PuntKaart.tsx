@@ -32,8 +32,6 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
   const [opmerking, setOpmerking] = useState('')
-  const voorRef = useRef<HTMLInputElement>(null)
-  const naRef = useRef<HTMLInputElement>(null)
   const { vraagTekst } = useDialogen()
 
   // De keuzelijst codeert type en id in één waarde, zodat er op een telefoon maar één select nodig
@@ -217,19 +215,10 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
 
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Foto&apos;s</div>
-            <input ref={voorRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }}
-              onChange={e => { uploadFotos(e.target.files, 'voor'); e.target.value = '' }} />
-            <input ref={naRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }}
-              onChange={e => { uploadFotos(e.target.files, 'na'); e.target.value = '' }} />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" disabled={bezig} onClick={() => voorRef.current?.click()}
-                style={{ ...secundaireKnop, flex: 1, fontSize: 14 }}>
-                Foto vooraf
-              </button>
-              <button type="button" disabled={bezig} onClick={() => naRef.current?.click()}
-                style={{ ...secundaireKnop, flex: 1, fontSize: 14, borderColor: mist ? AMBER : RAND, color: mist ? AMBER : GRIJS }}>
-                Foto na herstel
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <FotoRij label="Foto vooraf" disabled={bezig} onKies={f => uploadFotos(f, 'voor')} />
+              <FotoRij label="Foto na herstel" disabled={bezig} accent={mist ? AMBER : null}
+                onKies={f => uploadFotos(f, 'na')} />
             </div>
           </div>
 
@@ -282,6 +271,45 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Eén soort bewijs toevoegen: met de camera, of uit de fotobibliotheek van de telefoon.
+ *
+ * Twee aparte invoervelden en niet één: `capture="environment"` dwingt de camera af, en zónder dat
+ * kenmerk opent de bibliotheek (op iOS met de camera als keuze in het menu). Meestal fotografeer je
+ * ter plekke — die knop blijft dus groot en voorop — maar soms staat het beeld er al, gemaakt vóór
+ * de ronde of door een collega gestuurd. Dat is de tweede knop.
+ */
+function FotoRij({ label, disabled, accent, onKies }: {
+  label: string
+  disabled: boolean
+  accent?: string | null
+  onKies: (files: FileList | null) => void
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const bibliotheekRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple style={{ display: 'none' }}
+        onChange={e => { onKies(e.target.files); e.target.value = '' }} />
+      <input ref={bibliotheekRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+        onChange={e => { onKies(e.target.files); e.target.value = '' }} />
+      <button type="button" disabled={disabled} onClick={() => cameraRef.current?.click()}
+        style={{
+          ...secundaireKnop, flex: 1, fontSize: 14,
+          borderColor: accent ?? RAND, color: accent ?? GRIJS,
+        }}>
+        📷 {label}
+      </button>
+      <button type="button" disabled={disabled} onClick={() => bibliotheekRef.current?.click()}
+        aria-label={`${label} uit bibliotheek kiezen`}
+        style={{ ...secundaireKnop, width: 56, fontSize: 16, padding: '13px 0', flexShrink: 0 }}>
+        🖼
+      </button>
     </div>
   )
 }
