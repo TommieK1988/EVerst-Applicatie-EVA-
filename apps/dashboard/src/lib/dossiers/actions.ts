@@ -31,6 +31,7 @@ import {
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
 import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
+import { laadKaartBedragen } from './kaart-bedragen'
 
 type DossierResult =
   | { ok: true; data: DossierRij[] }
@@ -182,11 +183,20 @@ async function getTakenTellingen(ids: string[]): Promise<Map<string, { open: num
   return tellingen
 }
 
-/** Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit) en de taken-tellers. */
+/**
+ * Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit), de taken-tellers en de EVA-eigen
+ * bedragen (calculatie-offerte, goedgekeurd meerwerk, stelposten, opties). Dat laatste is nodig
+ * omdat `bedrag_excl_btw` alleen door de Bouw7-sync wordt geschreven; zie kaart-bedragen.ts.
+ */
 async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
   const ids = rijen.map(r => r.id)
-  const [internSet, taken] = await Promise.all([getInternDossierIds(ids), getTakenTellingen(ids)])
-  if (internSet.size === 0 && taken.size === 0) return rijen
+  const [internSet, taken, bedragen] = await Promise.all([
+    getInternDossierIds(ids),
+    getTakenTellingen(ids),
+    // Best effort: zonder verrijking valt de kaart terug op het kale Bouw7-bedrag.
+    laadKaartBedragen(rijen).catch(() => new Map()),
+  ])
+  if (internSet.size === 0 && taken.size === 0 && bedragen.size === 0) return rijen
 
   return rijen.map(r => {
     const telling = taken.get(r.id)
@@ -195,6 +205,7 @@ async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
       intern: internSet.has(r.id) || r.intern,
       taken_open:   telling?.open   ?? 0,
       taken_totaal: telling?.totaal ?? 0,
+      ...(bedragen.get(r.id) ?? {}),
     }
   })
 }

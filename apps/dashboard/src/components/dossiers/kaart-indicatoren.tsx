@@ -3,6 +3,7 @@ import React from 'react'
 import { IconClock, IconEuro, IconWarn, IconSend, IconAgenda, IconTaken } from '@/components/eva/Icons'
 import { isDossierAfgesloten } from './types'
 import type { DossierRij, DossierSectie } from './types'
+import type { KaartBedrag } from './kaart-bedrag'
 
 /**
  * Eén bron voor de kanban-kaart-indicatoren: de compacte kaart rendert ze als icoon-chip,
@@ -140,7 +141,11 @@ export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): Kaar
  * niet mee — die staat al op de compacte kaart — zodat een kaal dossier niet opengaat met een
  * paneel waar niets in staat.
  */
-export function heeftKaartDetail(d: DossierRij, indicatoren: KaartIndicator[]): boolean {
+export function heeftKaartDetail(
+  d: DossierRij,
+  indicatoren: KaartIndicator[],
+  bedrag?: KaartBedrag,
+): boolean {
   return (
     indicatoren.length > 0 ||
     !!d.klant_naam ||
@@ -148,6 +153,10 @@ export function heeftKaartDetail(d: DossierRij, indicatoren: KaartIndicator[]): 
     !!d.verwacht_startdatum ||
     !!d.verwacht_einddatum ||
     !!d.verzonden_op ||
+    // Er valt iets uit te splitsen (meerwerk/stelposten/opties) of er is een kostprijs om de
+    // marge mee te tonen.
+    !!bedrag?.heeftOpbouw ||
+    (bedrag?.kostprijs != null && bedrag.kostprijs > 0) ||
     (d.kostprijs_excl_btw != null && d.kostprijs_excl_btw > 0)
   )
 }

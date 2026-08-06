@@ -3,6 +3,7 @@ import React from 'react'
 import type { DossierRij, DossierSectie } from './types'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
 import { DossierKaartDetail } from './DossierKaartDetail'
+import { berekenKaartBedrag } from './kaart-bedrag'
 import {
   getKaartIndicatoren, heeftKaartDetail, IndicatorIcoon, TONE_KLEUREN,
   type KaartIndicator,
@@ -63,7 +64,12 @@ export function DossierKaart({
   const sluitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const indicatoren = getKaartIndicatoren(dossier, sectie)
-  const heeftDetail = heeftKaartDetail(dossier, indicatoren)
+
+  // Aanneemsom + goedgekeurd meerwerk + stelposten buiten de som + gekozen opties, uit dezelfde
+  // rekenregel als het Financiële-totalen-blok op het Informatie-tab. Zie ./kaart-bedrag.
+  const bedrag      = berekenKaartBedrag(dossier, sectie)
+  const toonBedrag  = bedrag.totaalExclBtw
+  const heeftDetail = heeftKaartDetail(dossier, indicatoren, bedrag)
 
   const wisTimers = React.useCallback(() => {
     if (openTimerRef.current)  clearTimeout(openTimerRef.current)
@@ -119,14 +125,6 @@ export function DossierKaart({
     : (dossier.projectleider_kleur ?? null)
   const persoonsKleur = persoonsDbKleur ?? (persoonsNaam ? crewKleur(crewInitialen(persoonsNaam)) : 'var(--neutral-300)')
   const persoonsInit  = persoonsNaam ? crewInitialen(persoonsNaam) : ''
-
-  // Meerdere offertes op status "Verstuurd": toon de som (excl. btw) van álle verstuurde offertes
-  // i.p.v. automatisch het bedrag van de laatst opgestelde offerte. (De indicator zit in de chips.)
-  const verstuurdSom      = dossier.offerte_verstuurd_som_excl_btw ?? null
-  const meerdereVerstuurd = sectie === 'offerte'
-    && (dossier.offerte_verstuurd_aantal ?? 0) > 1
-    && verstuurdSom != null
-  const toonBedrag = meerdereVerstuurd ? verstuurdSom! : dossier.bedrag_excl_btw
 
   const bouw7Url = dossier.bouw7_id
     ? `https://start.bouw7.nl/project/view?id=${dossier.bouw7_id}#/`
@@ -198,7 +196,8 @@ export function DossierKaart({
               </a>
             )}
           </div>
-          {toonBedrag != null && toonBedrag > 0 && (
+          {/* Ook een negatief totaal tonen: per saldo minderwerk is een echte uitkomst. */}
+          {toonBedrag != null && toonBedrag !== 0 && (
             <span style={{
               fontSize: 12, fontWeight: 700,
               color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
@@ -251,7 +250,7 @@ export function DossierKaart({
           transition: 'grid-template-rows 180ms ease',
         }}>
           <div style={{ overflow: 'hidden', minHeight: 0 }}>
-            <DossierKaartDetail dossier={dossier} sectie={sectie} indicatoren={indicatoren} />
+            <DossierKaartDetail dossier={dossier} sectie={sectie} indicatoren={indicatoren} bedrag={bedrag} />
           </div>
         </div>
       )}

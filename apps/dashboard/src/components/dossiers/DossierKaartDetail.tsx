@@ -2,6 +2,7 @@
 import React from 'react'
 import type { DossierRij, DossierSectie } from './types'
 import { IndicatorIcoon, TONE_KLEUREN, isVerlopen, type KaartIndicator } from './kaart-indicatoren'
+import { berekenKaartBedrag, type KaartBedrag } from './kaart-bedrag'
 
 /**
  * Het paneel dat onder de kanban-kaart uitschuift bij hoveren. Geeft de indicatoren van de
@@ -26,6 +27,31 @@ function opslagKleur(pct: number): string {
   return 'var(--error-600, #d9534f)'
 }
 
+/** Eén regel in de opbouw van het kaartbedrag. */
+function BedragRegel({ label, bedrag, kleur, vet = false }: {
+  label: string
+  bedrag: number
+  kleur?: string
+  vet?: boolean
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8,
+      ...(vet ? { marginTop: 2, paddingTop: 3, borderTop: '1px solid var(--border)' } : null),
+    }}>
+      <span style={{ fontSize: 11, color: vet ? 'var(--neutral-700)' : 'var(--neutral-500)', fontWeight: vet ? 600 : 400 }}>
+        {label}
+      </span>
+      <span style={{
+        fontSize: 11, fontWeight: vet ? 700 : 500, whiteSpace: 'nowrap',
+        color: kleur ?? 'var(--neutral-700)',
+      }}>
+        {formatBedrag(bedrag)}
+      </span>
+    </div>
+  )
+}
+
 function DatumRegel({ label, iso, markeerVerlopen = false }: {
   label: string
   iso: string | null
@@ -46,13 +72,18 @@ function DatumRegel({ label, iso, markeerVerlopen = false }: {
   )
 }
 
-export function DossierKaartDetail({ dossier, sectie, indicatoren }: {
+export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
   dossier: DossierRij
   sectie?: DossierSectie
   indicatoren: KaartIndicator[]
+  /** Voorberekend door DossierKaart; los aangeroepen valt hij terug op dezelfde rekenregel. */
+  bedrag?: KaartBedrag
 }) {
-  const verkoopprijs = dossier.bedrag_excl_btw
-  const kostprijs    = dossier.kostprijs_excl_btw
+  const b = bedrag ?? berekenKaartBedrag(dossier, sectie)
+  // Verkoop en kostprijs moeten uit dezelfde offerte komen, anders is de opslag betekenisloos.
+  // `berekenKaartBedrag` levert ze als paar; ontbreekt de kostprijs, dan tonen we geen opslag.
+  const verkoopprijs = b.aanneemsom
+  const kostprijs    = b.kostprijs
   const toonFinancieel = sectie === 'offerte'
     && kostprijs != null && kostprijs > 0
     && verkoopprijs != null && verkoopprijs > 0
@@ -84,6 +115,28 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren }: {
                 {opslagPct.toFixed(1)}% opslag
               </span>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Opbouw van het kaartbedrag: alleen tonen als er iets bij de aanneemsom op komt, zodat
+          zichtbaar is waarom de kaart een ander bedrag toont dan de kale aanneemsom. */}
+      {b.heeftOpbouw && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {b.aanneemsom != null && <BedragRegel label="Aanneemsom" bedrag={b.aanneemsom} />}
+          {b.meerwerk !== 0 && (
+            <BedragRegel
+              label={b.meerwerk < 0 ? 'Goedgekeurd minderwerk' : 'Goedgekeurd meerwerk'}
+              bedrag={b.meerwerk}
+              kleur={b.meerwerk < 0 ? 'var(--success-600, #009439)' : undefined}
+            />
+          )}
+          {b.stelpostenApart !== 0 && (
+            <BedragRegel label="Stelposten buiten de aanneemsom" bedrag={b.stelpostenApart} />
+          )}
+          {b.gekozenOpties !== 0 && <BedragRegel label="Gekozen opties" bedrag={b.gekozenOpties} />}
+          {b.totaalExclBtw != null && (
+            <BedragRegel label="Totaal excl. BTW" bedrag={b.totaalExclBtw} vet />
           )}
         </div>
       )}

@@ -5,6 +5,7 @@ import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { getDossierSubstatus } from './types'
 import { isVerlopen } from './kaart-indicatoren'
+import { berekenKaartBedrag } from './kaart-bedrag'
 import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -264,10 +265,12 @@ export function DossierLijst({
       key: 'bedrag',
       label: 'Bedrag',
       breedte: 100,
-      sorteerWaarde: d => d.bedrag_excl_btw ?? 0,
+      // Zelfde rekenregel als de kanban-kaart en het Informatie-tab, anders tonen bord en lijst
+      // verschillende bedragen voor hetzelfde dossier. Zie ./kaart-bedrag.
+      sorteerWaarde: d => berekenKaartBedrag(d, sectie).totaalExclBtw ?? 0,
       render: d => (
         <span style={{ fontSize: 12.5, color: 'var(--neutral-700)', fontWeight: 500 }}>
-          {formatBedrag(d.bedrag_excl_btw)}
+          {formatBedrag(berekenKaartBedrag(d, sectie).totaalExclBtw)}
         </span>
       ),
     },
@@ -493,9 +496,11 @@ export function DossierLijst({
       label: 'Kostprijs',
       breedte: 120,
       standaard_zichtbaar: false,
-      sorteerWaarde: d => d.kostprijs_excl_btw ?? 0,
+      sorteerWaarde: d => berekenKaartBedrag(d, sectie).kostprijs ?? 0,
       render: d => (
-        <span style={{ fontSize: 12.5, color: 'var(--neutral-600)' }}>{formatEuro(d.kostprijs_excl_btw)}</span>
+        <span style={{ fontSize: 12.5, color: 'var(--neutral-600)' }}>
+          {formatEuro(berekenKaartBedrag(d, sectie).kostprijs)}
+        </span>
       ),
     },
     {
@@ -503,13 +508,18 @@ export function DossierLijst({
       label: 'Marge',
       breedte: 110,
       standaard_zichtbaar: false,
-      sorteerWaarde: d =>
-        d.bedrag_excl_btw == null && d.kostprijs_excl_btw == null
+      // Marge = aanneemsom − kostprijs uit dezelfde offerte. Het kaarttotaal (incl. meerwerk en
+      // stelposten) hoort hier niet: daar staat geen kostprijs tegenover.
+      sorteerWaarde: d => {
+        const b = berekenKaartBedrag(d, sectie)
+        return b.aanneemsom == null && b.kostprijs == null
           ? Number.NEGATIVE_INFINITY
-          : (d.bedrag_excl_btw ?? 0) - (d.kostprijs_excl_btw ?? 0),
+          : (b.aanneemsom ?? 0) - (b.kostprijs ?? 0)
+      },
       render: d => {
-        if (d.bedrag_excl_btw == null && d.kostprijs_excl_btw == null) return <Tekst waarde={null} />
-        const marge = (d.bedrag_excl_btw ?? 0) - (d.kostprijs_excl_btw ?? 0)
+        const b = berekenKaartBedrag(d, sectie)
+        if (b.aanneemsom == null && b.kostprijs == null) return <Tekst waarde={null} />
+        const marge = (b.aanneemsom ?? 0) - (b.kostprijs ?? 0)
         return (
           <span style={{ fontSize: 12.5, fontWeight: 500, color: marge < 0 ? 'var(--error-600)' : 'var(--success-700)' }}>
             {formatEuro(marge)}
@@ -523,14 +533,16 @@ export function DossierLijst({
       breedte: 90,
       standaard_zichtbaar: false,
       sorteerWaarde: d => {
-        const omzet = d.bedrag_excl_btw ?? 0
+        const b = berekenKaartBedrag(d, sectie)
+        const omzet = b.aanneemsom ?? 0
         if (!omzet) return Number.NEGATIVE_INFINITY
-        return ((omzet - (d.kostprijs_excl_btw ?? 0)) / omzet) * 100
+        return ((omzet - (b.kostprijs ?? 0)) / omzet) * 100
       },
       render: d => {
-        const omzet = d.bedrag_excl_btw ?? 0
+        const b = berekenKaartBedrag(d, sectie)
+        const omzet = b.aanneemsom ?? 0
         if (!omzet) return <Tekst waarde={null} />
-        const pct = ((omzet - (d.kostprijs_excl_btw ?? 0)) / omzet) * 100
+        const pct = ((omzet - (b.kostprijs ?? 0)) / omzet) * 100
         return (
           <span style={{ fontSize: 12.5, color: pct < 0 ? 'var(--error-600)' : 'var(--neutral-700)' }}>
             {pct.toFixed(1)}%

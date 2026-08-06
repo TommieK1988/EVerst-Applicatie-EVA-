@@ -47,6 +47,20 @@ export type DossierRij = Dossier & {
   /** Taken-tellers (server-side geteld over losse taken + actielijst-taken; zie verrijkDossiers). */
   taken_open?: number
   taken_totaal?: number
+  /* ── EVA-eigen bedragen (zie lib/dossiers/kaart-bedragen.ts) ────────────────
+     `bedrag_excl_btw` / `kostprijs_excl_btw` komen alleen uit de Bouw7-sync. Deze velden vullen aan
+     wat in EVA zelf ontstaat, zodat de kaart en de lijst hetzelfde tonen als het Informatie-tab.
+     Reken er niet los mee — gebruik `berekenKaartBedrag` uit ./kaart-bedrag. */
+  /** Verkoopsom excl. btw uit de EVA-hoofdofferte van de gekoppelde calculatie. */
+  eva_offerte_excl_btw?: number | null
+  /** Kostprijs excl. btw bij diezelfde EVA-hoofdofferte. */
+  eva_kostprijs_excl_btw?: number | null
+  /** Som van goedgekeurd meer-/minderwerk excl. btw; negatief bij per saldo minderwerk. */
+  meerwerk_goedgekeurd_excl_btw?: number
+  /** Stelposten buiten de aanneemsom (apart factureren) — extra omzet. */
+  stelposten_apart_excl_btw?: number
+  /** Gekozen opties — extra omzet. */
+  gekozen_opties_excl_btw?: number
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
   intern: boolean
 }
