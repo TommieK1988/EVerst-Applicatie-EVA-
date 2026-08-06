@@ -329,16 +329,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   }, [dossierId, bouwPayload, doelHoofdstukId, patchBestelLineIds])
 
   // Goedkeuring aanvragen: eerst de payload syncen zodat de aanvraag op echte data slaat.
-  const handleAanvragen = useCallback(async (toelichting?: string) => {
+  const handleAanvragen = useCallback(async (toelichting?: string, beoordelaarId?: string | null) => {
     if (!wb) return { ok: false, error: 'Geen werkbegroting geladen.' }
     const payload = bouwPayload()
     if (payload) await syncWerkbegrotingNaarSupabase(payload)
-    const res = await vraagGoedkeuringAan({ objectType: 'werkbegroting', objectId: wb.id, dossierId: dossierId ?? null, toelichting })
+    const res = await vraagGoedkeuringAan({ objectType: 'werkbegroting', objectId: wb.id, dossierId: dossierId ?? null, toelichting, beoordelaarId })
     if (res.ok) {
       const bij: Werkbegroting = { ...wb, status: 'definitief', bijgewerkt_op: new Date().toISOString() }
       slaWerkbegrotingOp(bij); setWb(bij)
+      return { ok: true, beoordelaarNaam: res.beoordelaarNaam, waarschuwing: res.waarschuwing }
     }
-    return res.ok ? { ok: true } : { ok: false, error: res.error }
+    return { ok: false, error: res.error }
   }, [wb, dossierId, bouwPayload])
 
   // Accorderen: payload + snapshot via de server-action, dan lokaal 'geaccordeerd' markeren.

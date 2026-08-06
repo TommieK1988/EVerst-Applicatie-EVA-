@@ -7,6 +7,24 @@ export type GoedkeuringStatus = 'aangevraagd' | 'goedgekeurd' | 'afgekeurd' | 'i
 /** Rol van de ingelogde gebruiker t.o.v. een goedkeuringsaanvraag. */
 export type GoedkeuringRol = 'beoordelaar' | 'meekijker' | 'aanvrager' | 'geen'
 
+/** Iemand die een aanvraag kan beoordelen (zie `beoordelaars.ts`). */
+export type BeoordelaarRef = {
+  id: string
+  naam: string
+  /** Zonder auth-koppeling kan de medewerker geen melding of taak ontvangen. */
+  authUserId: string | null
+}
+
+/** Naar wie gaat een aanvraag op dit dossier? */
+export type BeoordelingsRoute = {
+  /** Controller van het dossier (null = niet ingesteld, of geen dossier). */
+  controller: BeoordelaarRef | null
+  /** Actieve directieleden — de keuzelijst als er geen controller is. */
+  directie: BeoordelaarRef[]
+  /** true = de aanvrager moet zelf een beoordelaar aanwijzen. */
+  keuzeNodig: boolean
+}
+
 export type Goedkeuring = {
   id: string
   object_type: GoedkeuringObjectType
@@ -18,6 +36,8 @@ export type Goedkeuring = {
   toelichting: string | null
   aangevraagd_door: string | null
   aangevraagd_op: string
+  /** Aan wie is de aanvraag gericht: controller van het dossier, of gekozen directielid. */
+  beoordelaar_id: string | null
   beoordeeld_door: string | null
   beoordeeld_op: string | null
   gedelegeerd_aan: string | null
@@ -47,6 +67,7 @@ export type GoedkeuringGebeurtenis = {
 
 export type GoedkeuringMetDetails = Goedkeuring & {
   aangevraagd_door_naam: string | null
+  beoordelaar_naam: string | null
   beoordeeld_door_naam: string | null
   gedelegeerd_aan_naam: string | null
   meekijker_namen: string[]

@@ -66,7 +66,7 @@ export default function GoedkeuringKnop({ quoteId, dossierId, totaalBedrag, onDo
       return {
         label: 'Ter beoordeling',
         cls: 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
-        title: 'Wacht op beoordeling door de controller',
+        title: 'Wacht op beoordeling — open het venster om te zien bij wie',
       }
     }
     if (status?.status === 'afgekeurd') {
@@ -86,7 +86,7 @@ export default function GoedkeuringKnop({ quoteId, dossierId, totaalBedrag, onDo
     return {
       label: 'Goedkeuring',
       cls: 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
-      title: 'Controller-goedkeuring aanvragen of beoordelen',
+      title: 'Goedkeuring aanvragen of beoordelen',
     }
   }
 

@@ -1,14 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle, RotateCcw, Send, Loader2, MessageSquare, UserPlus, Share2, Clock, Lock, AlertTriangle } from 'lucide-react'
+import { CheckCircle, RotateCcw, Send, Loader2, MessageSquare, UserPlus, Share2, Clock, Lock, AlertTriangle, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
-  getGoedkeuring, vraagGoedkeuringAan, keurGoed, keurAf, trekIn,
+  getGoedkeuring, getBeoordelingsRoute, vraagGoedkeuringAan, keurGoed, keurAf, trekIn,
   draagOver, voegMeekijkerToe, plaatsOpmerking, type GoedkeuringOverzicht,
 } from '@/lib/goedkeuring/actions'
 import { zoekMedewerkers } from '@/lib/goedkeuring/medewerkers'
-import type { GoedkeuringObjectType } from '@/lib/goedkeuring/types'
+import type { BeoordelingsRoute, GoedkeuringObjectType } from '@/lib/goedkeuring/types'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 
 interface Props {
@@ -22,7 +22,13 @@ interface Props {
    */
   accordeer?: (goedkeuringId: string, opmerking?: string) => Promise<{ ok: boolean; error?: string }>
   /** Werkbegroting geeft een eigen aanvraag-functie mee (sync payload eerst). */
-  aanvragen?: (toelichting?: string) => Promise<{ ok: boolean; error?: string; goedkeuringId?: string }>
+  aanvragen?: (toelichting?: string, beoordelaarId?: string | null) => Promise<{
+    ok: boolean
+    error?: string
+    goedkeuringId?: string
+    beoordelaarNaam?: string | null
+    waarschuwing?: string | null
+  }>
   /**
    * Inhouds-status t.o.v. de laatste goedkeuring. Voorkomt dat je opnieuw
    * goedkeuring aanvraagt op iets dat al is goedgekeurd én niet is gewijzigd.
@@ -55,6 +61,8 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
   const [nieuweOpmerking, setNieuweOpmerking] = useState('')
   const [delegatie, setDelegatie] = useState<'overdragen' | 'meekijken' | null>(null)
   const [medewerkerOpties, setMedewerkerOpties] = useState<ComboboxOption[]>([])
+  const [route, setRoute] = useState<BeoordelingsRoute | null>(null)
+  const [gekozenBeoordelaar, setGekozenBeoordelaar] = useState('')
 
   const objectLabel = objectType === 'werkbegroting' ? 'werkbegroting' : 'offerte'
 
@@ -65,6 +73,16 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
   }, [objectType, objectId])
 
   useEffect(() => { herlaad() }, [herlaad])
+
+  // Naar wie gaat de aanvraag? Zonder controller op het dossier kiest de aanvrager
+  // zelf een directielid — anders belandt de aanvraag bij niemand.
+  useEffect(() => {
+    let afgebroken = false
+    getBeoordelingsRoute(dossierId)
+      .then(r => { if (!afgebroken) setRoute(r) })
+      .catch(() => { /* stil — de server valideert de keuze alsnog */ })
+    return () => { afgebroken = true }
+  }, [dossierId])
 
   const zoek = useCallback(async (q: string) => {
     const res = await zoekMedewerkers(q)
@@ -95,6 +113,13 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
    */
   const magAanvragen = !isOpen && !(isGoedgekeurd && ongewijzigd)
 
+  // ── Beoordelaar ──
+  /** Geen controller op het dossier → de aanvrager moet zelf een directielid kiezen. */
+  const keuzeNodig = route?.keuzeNodig === true
+  const keuzeCompleet = !keuzeNodig || gekozenBeoordelaar !== ''
+  /** Bij wie ligt de openstaande aanvraag? */
+  const ligtBij = actueel?.gedelegeerd_aan_naam ?? actueel?.beoordelaar_naam ?? null
+
   const aantalGewijzigd = wijzigingsInfo?.aantalGewijzigd
   const wijzigingSuffix = aantalGewijzigd
     ? ` (${aantalGewijzigd} ${aantalGewijzigd === 1 ? 'wijziging' : 'wijzigingen'})`
@@ -107,12 +132,24 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
 
   // ── Acties ──
   async function doeAanvragen() {
+    if (keuzeNodig && !gekozenBeoordelaar) {
+      toast.error('Kies eerst wie deze aanvraag beoordeelt.')
+      return
+    }
+    const beoordelaarId = gekozenBeoordelaar || null
     setBezig(true)
     try {
       const res = aanvragen
-        ? await aanvragen(notitie.trim() || undefined)
-        : await vraagGoedkeuringAan({ objectType, objectId, dossierId, toelichting: notitie.trim() || undefined })
-      if (res.ok) { toast.success('Goedkeuring aangevraagd'); setNotitie(''); await naVeranderd() }
+        ? await aanvragen(notitie.trim() || undefined, beoordelaarId)
+        : await vraagGoedkeuringAan({ objectType, objectId, dossierId, toelichting: notitie.trim() || undefined, beoordelaarId })
+      if (res.ok) {
+        const naam = 'beoordelaarNaam' in res ? res.beoordelaarNaam : null
+        toast.success(naam ? `Goedkeuring aangevraagd bij ${naam}` : 'Goedkeuring aangevraagd')
+        const waarschuwing = 'waarschuwing' in res ? res.waarschuwing : null
+        if (waarschuwing) toast(waarschuwing, { icon: '⚠️', duration: 6000 })
+        setNotitie('')
+        await naVeranderd()
+      }
       else toast.error(res.error ?? 'Aanvragen mislukt')
     } finally { setBezig(false) }
   }
@@ -197,6 +234,48 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
         </div>
       </div>
 
+      {/* Bij wie ligt de openstaande aanvraag? */}
+      {isOpen && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          <UserCheck className="h-4 w-4 shrink-0 text-blue-600" />
+          <span>
+            {ligtBij
+              ? <>Ligt ter beoordeling bij <span className="font-semibold">{ligtBij}</span>.</>
+              : 'Deze aanvraag is aan niemand gericht — vraag de directie om hem op te pakken.'}
+          </span>
+        </div>
+      )}
+
+      {/* Beoordelaar kiezen: het dossier heeft geen controller. */}
+      {magAanvragen && keuzeNodig && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <label className="mb-1 block text-xs font-semibold text-amber-900">
+            Wie beoordeelt deze {objectLabel}?
+          </label>
+          <p className="mb-2 text-xs text-amber-800">
+            Dit dossier heeft geen controller. Kies een directielid — die krijgt een melding en een taak.
+          </p>
+          <select
+            value={gekozenBeoordelaar}
+            onChange={e => setGekozenBeoordelaar(e.target.value)}
+            className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="">Kies een beoordelaar…</option>
+            {(route?.directie ?? []).map(d => (
+              <option key={d.id} value={d.id}>{d.naam}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Vaste controller: geen keuze nodig, wel duidelijk waar het heen gaat. */}
+      {magAanvragen && !keuzeNodig && route?.controller && (
+        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+          <UserCheck className="h-3.5 w-3.5" />
+          Gaat ter beoordeling naar <span className="font-medium text-slate-700">{route.controller.naam}</span> (controller van dit dossier).
+        </p>
+      )}
+
       {/* Meekijkers / gedelegeerde */}
       {actueel && (actueel.gedelegeerd_aan_naam || actueel.meekijker_namen.length > 0) && (
         <div className="flex flex-wrap gap-2 text-xs">
@@ -248,8 +327,9 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
       <div className="flex flex-wrap items-center justify-end gap-2">
         {/* Aanvragen (geen open aanvraag én er valt iets te accorderen) */}
         {magAanvragen && (
-          <button onClick={doeAanvragen} disabled={bezig}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors">
+          <button onClick={doeAanvragen} disabled={bezig || !keuzeCompleet}
+            title={keuzeCompleet ? undefined : 'Kies eerst wie deze aanvraag beoordeelt'}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {bezig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             {gewijzigdNaGoedkeuring
               ? `Opnieuw ter goedkeuring indienen${wijzigingSuffix}`
@@ -289,7 +369,9 @@ export default function GoedkeuringPaneel({ objectType, objectId, dossierId, tot
           </button>
         )}
         {isOpen && !magBeoordelen && rol !== 'aanvrager' && (
-          <span className="flex items-center gap-1.5 text-xs text-slate-400"><Clock className="w-3.5 h-3.5" /> Wacht op beoordeling door de controller.</span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-400">
+            <Clock className="w-3.5 h-3.5" /> Wacht op beoordeling{ligtBij ? ` door ${ligtBij}` : ''}.
+          </span>
         )}
       </div>
 

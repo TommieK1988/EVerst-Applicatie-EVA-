@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { bepaalBeoordeelContext } from './autorisatie'
+import { bepaalBeoordelingsRoute, haalBeoordelaar, magBeoordelaarZijn } from './beoordelaars'
 import { maakBeoordeelTaak, sluitBeoordeelTaken, type BeoordeelTaakResultaat } from './taken'
 import { berekenWerkbegrotingStatus } from './werkbegroting-status'
 import {
   AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL,
+  type BeoordelaarRef, type BeoordelingsRoute,
   type Goedkeuring, type GoedkeuringGebeurtenis, type GoedkeuringMetDetails,
   type GoedkeuringObjectType, type GoedkeuringOpmerking, type GoedkeuringRegelSnapshot, type GoedkeuringRol,
 } from './types'
@@ -93,7 +95,7 @@ export async function getGoedkeuring(
   }
 
   const namen = await medewerkerNamen([
-    ...lijst.flatMap(g => [g.aangevraagd_door, g.beoordeeld_door, g.gedelegeerd_aan, ...(g.meekijkers ?? [])]),
+    ...lijst.flatMap(g => [g.aangevraagd_door, g.beoordelaar_id, g.beoordeeld_door, g.gedelegeerd_aan, ...(g.meekijkers ?? [])]),
     ...opmerkingen.map(o => o.medewerker_id),
     ...gebeurtenissen.map(g => g.medewerker_id),
   ])
@@ -103,6 +105,7 @@ export async function getGoedkeuring(
     ...g,
     meekijkers: g.meekijkers ?? [],
     aangevraagd_door_naam: naam(g.aangevraagd_door),
+    beoordelaar_naam: naam(g.beoordelaar_id),
     beoordeeld_door_naam: naam(g.beoordeeld_door),
     gedelegeerd_aan_naam: naam(g.gedelegeerd_aan),
     meekijker_namen: (g.meekijkers ?? []).map(id => namen.get(id) ?? '?'),
@@ -131,15 +134,31 @@ export async function getGoedkeuring(
 
 // ─── Aanvragen ────────────────────────────────────────────────────────────────
 
+/** Wie kan deze aanvraag beoordelen? Voedt de beoordelaar-keuze in het paneel. */
+export async function getBeoordelingsRoute(dossierId: string | null): Promise<BeoordelingsRoute> {
+  return bepaalBeoordelingsRoute(dossierId)
+}
+
 export type VraagGoedkeuringResultaat =
-  | { ok: true; goedkeuringId: string; bestond: boolean; taak: BeoordeelTaakResultaat | null }
-  | { ok: false; error: string }
+  | {
+      ok: true
+      goedkeuringId: string
+      bestond: boolean
+      taak: BeoordeelTaakResultaat | null
+      /** Naam van de beoordelaar bij wie de aanvraag nu ligt. */
+      beoordelaarNaam: string | null
+      /** Gezet als de aanvraag wél is vastgelegd maar niet iedereen bereikt is. */
+      waarschuwing: string | null
+    }
+  | { ok: false; error: string; keuzeNodig?: boolean }
 
 export async function vraagGoedkeuringAan(opts: {
   objectType: GoedkeuringObjectType
   objectId: string
   dossierId: string | null
   toelichting?: string
+  /** Expliciet gekozen beoordelaar — verplicht als het dossier geen controller heeft. */
+  beoordelaarId?: string | null
 }): Promise<VraagGoedkeuringResultaat> {
   const db = admin()
   const ctx = await bepaalBeoordeelContext(opts.dossierId)
@@ -148,12 +167,38 @@ export async function vraagGoedkeuringAan(opts: {
   // Bestaat er al een open aanvraag? Dan die teruggeven (geen dubbele).
   const { data: open } = await db
     .from('goedkeuringen')
-    .select('id')
+    .select('id, beoordelaar_id')
     .eq('object_type', opts.objectType)
     .eq('object_id', opts.objectId)
     .eq('status', 'aangevraagd')
     .maybeSingle()
-  if (open) return { ok: true, goedkeuringId: open.id, bestond: true, taak: null }
+  if (open) {
+    const bestaande = open.beoordelaar_id ? await haalBeoordelaar(open.beoordelaar_id) : null
+    return {
+      ok: true, goedkeuringId: open.id, bestond: true, taak: null,
+      beoordelaarNaam: bestaande?.naam ?? null, waarschuwing: null,
+    }
+  }
+
+  // Beoordelaar vóór het opslaan vaststellen: een aanvraag zonder duidelijke ontvanger
+  // blijft liggen zonder dat iemand dat merkt. Heeft het dossier geen controller, dan
+  // moet de aanvrager zelf een directielid aanwijzen.
+  const route = await bepaalBeoordelingsRoute(opts.dossierId)
+  let beoordelaar: BeoordelaarRef | null = null
+  if (opts.beoordelaarId) {
+    if (!(await magBeoordelaarZijn(opts.dossierId, opts.beoordelaarId))) {
+      return { ok: false, error: 'Deze medewerker kan de aanvraag niet beoordelen. Kies de controller of een directielid.' }
+    }
+    beoordelaar = await haalBeoordelaar(opts.beoordelaarId)
+  } else if (route.controller) {
+    beoordelaar = route.controller
+  } else if (route.keuzeNodig) {
+    return {
+      ok: false,
+      keuzeNodig: true,
+      error: 'Dit dossier heeft geen controller. Kies wie de aanvraag beoordeelt.',
+    }
+  }
 
   const { data: vorige } = await db
     .from('goedkeuringen')
@@ -175,6 +220,7 @@ export async function vraagGoedkeuringAan(opts: {
       status: 'aangevraagd',
       toelichting: opts.toelichting?.trim() || null,
       aangevraagd_door: ctx.medewerker.id,
+      beoordelaar_id: beoordelaar?.id ?? null,
     })
     .select('id')
     .single()
@@ -189,22 +235,88 @@ export async function vraagGoedkeuringAan(opts: {
     })
   }
 
-  // Beoordeeltaak voor de controller (fallback Tom Kamminga).
+  // Beoordeeltaak voor de vastgestelde beoordelaar.
   let taak: BeoordeelTaakResultaat | null = null
   if (opts.dossierId) {
     try {
-      taak = await maakBeoordeelTaak(opts.dossierId, BEOORDEEL_TAAK_TITEL[opts.objectType])
+      taak = await maakBeoordeelTaak(opts.dossierId, BEOORDEEL_TAAK_TITEL[opts.objectType], beoordelaar?.id ?? null)
     } catch {
       // Taak is ondersteunend — aanvraag zelf is al vastgelegd.
     }
   }
+
+  // Melding voor de beoordelaar: dit is het signaal dat er iets op hem wacht.
+  // Best effort — de aanvraag zelf mag hier niet op stuklopen.
+  try {
+    await notificeerBeoordelaar({
+      objectType: opts.objectType,
+      objectId: opts.objectId,
+      dossierId: opts.dossierId,
+      beoordelaar,
+      aanvragerId: ctx.medewerker.id,
+      aanvragerNaam: [ctx.medewerker.voornaam, ctx.medewerker.tussenvoegsel, ctx.medewerker.achternaam]
+        .filter(Boolean).join(' ') || null,
+    })
+  } catch { /* ondersteunend */ }
 
   // Offerte in aanvraag-fase → substatus 'controle_begroting'.
   if (opts.objectType === 'offerte' && opts.dossierId) {
     await zetAanvraagSubstatus(opts.dossierId, 'controle_begroting')
   }
 
-  return { ok: true, goedkeuringId: nieuw.id, bestond: false, taak }
+  const waarschuwing = !beoordelaar
+    ? 'Er is geen controller en geen directielid gevonden — niemand heeft een melding gekregen.'
+    : !beoordelaar.authUserId
+    ? `${beoordelaar.naam} heeft geen EVA-login, dus kon er geen melding worden verstuurd.`
+    : !opts.dossierId
+    ? 'Deze aanvraag hangt niet aan een dossier, dus er is geen taak aangemaakt — de melding is wel verstuurd.'
+    : null
+
+  return { ok: true, goedkeuringId: nieuw.id, bestond: false, taak, beoordelaarNaam: beoordelaar?.naam ?? null, waarschuwing }
+}
+
+/**
+ * Zet een belletje-notificatie klaar voor de beoordelaar: er wacht een offerte of
+ * werkbegroting op zijn akkoord. Slaat over als de beoordelaar zichzelf aanwijst of
+ * geen gekoppeld auth-account heeft.
+ */
+async function notificeerBeoordelaar(opts: {
+  objectType: GoedkeuringObjectType
+  objectId: string
+  dossierId: string | null
+  beoordelaar: BeoordelaarRef | null
+  aanvragerId: string | null
+  aanvragerNaam: string | null
+}): Promise<void> {
+  const { beoordelaar } = opts
+  if (!beoordelaar?.authUserId) return
+  if (opts.aanvragerId && beoordelaar.id === opts.aanvragerId) return
+
+  const db = admin()
+
+  let dossierTitel: string | null = null
+  if (opts.dossierId) {
+    const { data: dossier } = await db.from('dossiers').select('titel, dossiernummer').eq('id', opts.dossierId).maybeSingle()
+    dossierTitel = dossier ? [dossier.dossiernummer, dossier.titel].filter(Boolean).join(' — ') : null
+  }
+
+  const isWb = opts.objectType === 'werkbegroting'
+  const onderwerp = isWb ? 'de werkbegroting' : 'de offerte'
+  // De beoordelaar landt op het scherm waar de accordeerknop staat.
+  const url = isWb
+    ? (opts.dossierId ? `/opdrachten/${opts.dossierId}/werkbegroting` : null)
+    : `/everts-calc/quotes/${opts.objectId}/preview`
+
+  await db.from('notificaties').insert({
+    user_id:      beoordelaar.authUserId,
+    type:         'algemeen',
+    titel:        isWb ? 'Werkbegroting ter goedkeuring' : 'Offerte ter goedkeuring',
+    body:         `${opts.aanvragerNaam ?? 'Een collega'} vraagt je goedkeuring op ${onderwerp}${dossierTitel ? ` van ${dossierTitel}` : ''}.`,
+    url,
+    dossier_id:   opts.dossierId ?? null,
+    dossier_naam: dossierTitel,
+    gelezen:      false,
+  })
 }
 
 /** Substatus-koppeling: alleen zetten als het dossier in de aanvraag-fase zit. */
@@ -406,6 +518,20 @@ export async function draagOver(goedkeuringId: string, medewerkerId: string): Pr
   if (g.dossier_id) {
     try { await maakBeoordeelTaak(g.dossier_id, BEOORDEEL_TAAK_TITEL[g.object_type], medewerkerId) } catch { /* ondersteunend */ }
   }
+
+  // Ook bij overdragen een melding — anders merkt de nieuwe beoordelaar het niet.
+  try {
+    await notificeerBeoordelaar({
+      objectType: g.object_type,
+      objectId: g.object_id,
+      dossierId: g.dossier_id,
+      beoordelaar: await haalBeoordelaar(medewerkerId),
+      aanvragerId: ctx.medewerker!.id,
+      aanvragerNaam: [ctx.medewerker!.voornaam, ctx.medewerker!.tussenvoegsel, ctx.medewerker!.achternaam]
+        .filter(Boolean).join(' ') || null,
+    })
+  } catch { /* ondersteunend */ }
+
   return { ok: true }
 }
 

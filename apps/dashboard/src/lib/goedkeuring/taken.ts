@@ -5,8 +5,8 @@ import { createAdminClient } from '@everts/database/server'
 export interface BeoordeelTaakResultaat {
   /** Naam van de medewerker aan wie de taak is toegewezen (null als niemand gevonden). */
   toegewezenAan: string | null
-  /** True als er geen doelmedewerker was en is teruggevallen op Tom Kamminga. */
-  isFallback: boolean
+  /** True als de taak aan niemand kon worden toegewezen — hij staat dan alleen op het dossier. */
+  zonderOntvanger: boolean
   /** True als er al een openstaande taak met deze titel bestond (geen nieuwe gemaakt). */
   bestond: boolean
   taakId: string | null
@@ -14,9 +14,11 @@ export interface BeoordeelTaakResultaat {
 
 /**
  * Maakt een taak op het dossier aan, toegewezen aan de opgegeven medewerker.
- * Zonder `medewerkerId` valt de toewijzing terug op de controller van het dossier,
- * en als die er niet is op Tom Kamminga. Bestaat er al een openstaande taak met
- * dezelfde titel op het dossier, dan wordt er geen dubbele aangemaakt.
+ * Zonder `medewerkerId` valt de toewijzing terug op de controller van het dossier.
+ * Is ook die er niet, dan wordt de taak wél aangemaakt maar aan niemand toegewezen;
+ * de aanroeper hoort dat af te vangen (zie `bepaalBeoordelingsRoute`) in plaats van
+ * op een stille terugval te leunen. Bestaat er al een openstaande taak met dezelfde
+ * titel op het dossier, dan wordt er geen dubbele aangemaakt.
  * (Generalisatie van de eerdere maakWerkbegrotingControleTaak.)
  */
 export async function maakBeoordeelTaak(
@@ -28,7 +30,6 @@ export async function maakBeoordeelTaak(
   const db = createAdminClient() as any
 
   let doelId: string | null = medewerkerId ?? null
-  let isFallback = false
 
   // 1. Geen expliciete medewerker → controller van het dossier.
   if (!doelId) {
@@ -40,20 +41,7 @@ export async function maakBeoordeelTaak(
     doelId = dossier?.controller_id ?? null
   }
 
-  // 2. Nog steeds niemand → terugvallen op Tom Kamminga.
-  if (!doelId) {
-    isFallback = true
-    const { data: tom } = await db
-      .from('medewerkers')
-      .select('id')
-      .ilike('voornaam', 'Tom')
-      .ilike('achternaam', 'Kamminga')
-      .limit(1)
-      .maybeSingle()
-    doelId = tom?.id ?? null
-  }
-
-  // 3. Naam + auth-koppeling van de toegewezen medewerker.
+  // 2. Naam + auth-koppeling van de toegewezen medewerker.
   let naam: string | null = null
   let authUserId: string | null = null
   if (doelId) {
@@ -68,7 +56,7 @@ export async function maakBeoordeelTaak(
     }
   }
 
-  // 4. Bestaat er al een openstaande taak met deze titel? Dan niet dubbel aanmaken.
+  // 3. Bestaat er al een openstaande taak met deze titel? Dan niet dubbel aanmaken.
   const { data: bestaand } = await db
     .from('tasks')
     .select('id')
@@ -79,10 +67,10 @@ export async function maakBeoordeelTaak(
     .maybeSingle()
 
   if (bestaand) {
-    return { toegewezenAan: naam, isFallback, bestond: true, taakId: bestaand.id }
+    return { toegewezenAan: naam, zonderOntvanger: authUserId == null, bestond: true, taakId: bestaand.id }
   }
 
-  // 5. Taak aanmaken, rechtstreeks aan het dossier gekoppeld. Beoordelen is urgent:
+  // 4. Taak aanmaken, rechtstreeks aan het dossier gekoppeld. Beoordelen is urgent:
   //    prioriteit hoog + deadline op uiterlijk morgen (max 1 dag later).
   const morgen = new Date()
   morgen.setDate(morgen.getDate() + 1)
@@ -104,7 +92,7 @@ export async function maakBeoordeelTaak(
 
   if (error) throw new Error(`Fout bij aanmaken taak: ${error.message}`)
 
-  // 6. Toewijzen.
+  // 5. Toewijzen.
   if (authUserId) {
     await db.from('task_assignees').insert({
       task_id: taak.id,
@@ -116,7 +104,7 @@ export async function maakBeoordeelTaak(
   revalidatePath('/opdrachten')
   revalidatePath('/taken')
 
-  return { toegewezenAan: naam, isFallback, bestond: false, taakId: taak.id }
+  return { toegewezenAan: naam, zonderOntvanger: authUserId == null, bestond: false, taakId: taak.id }
 }
 
 /** Sluit alle openstaande taken met deze titel op het dossier (status → gereed). */

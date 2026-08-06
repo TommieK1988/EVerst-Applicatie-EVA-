@@ -15,13 +15,15 @@ export type BeoordeelContext = {
 
 /**
  * Bepaalt of de ingelogde gebruiker een goedkeuring op dit dossier mag beoordelen:
- * de toegewezen controller van het dossier, iedereen uit afdeling Directie, of de
- * gebruiker aan wie de aanvraag is overgedragen. Zonder toegewezen controller kan
- * alleen Directie beoordelen. Meekijkers mogen opmerken maar niet keuren.
+ * de toegewezen controller van het dossier, iedereen uit afdeling Directie, de
+ * medewerker aan wie de aanvraag is gericht, of de gebruiker aan wie hij is
+ * overgedragen. Zonder toegewezen controller kan alleen Directie beoordelen —
+ * daarom wijst de aanvrager er dan zelf één aan. Meekijkers mogen opmerken maar
+ * niet keuren.
  */
 export async function bepaalBeoordeelContext(
   dossierId: string | null,
-  goedkeuring?: Pick<Goedkeuring, 'gedelegeerd_aan' | 'meekijkers' | 'aangevraagd_door'> | null,
+  goedkeuring?: Pick<Goedkeuring, 'gedelegeerd_aan' | 'meekijkers' | 'aangevraagd_door' | 'beoordelaar_id'> | null,
 ): Promise<BeoordeelContext> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return { medewerker: null, magBeoordelen: false, rol: 'geen', isDirectie: false, isController: false }
@@ -37,10 +39,11 @@ export async function bepaalBeoordeelContext(
   }
 
   const isGedelegeerde = goedkeuring?.gedelegeerd_aan != null && goedkeuring.gedelegeerd_aan === medewerker.id
+  const isAangewezen = goedkeuring?.beoordelaar_id != null && goedkeuring.beoordelaar_id === medewerker.id
   const isMeekijker = (goedkeuring?.meekijkers ?? []).includes(medewerker.id)
   const isAanvrager = goedkeuring?.aangevraagd_door != null && goedkeuring.aangevraagd_door === medewerker.id
 
-  const magBeoordelen = isController || isDirectie || isGedelegeerde
+  const magBeoordelen = isController || isDirectie || isGedelegeerde || isAangewezen
 
   const rol: GoedkeuringRol = magBeoordelen
     ? 'beoordelaar'

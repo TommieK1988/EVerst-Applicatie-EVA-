@@ -420,8 +420,8 @@ export async function bulkUpdateComponenten(
 export interface ControleTaakResultaat {
   /** Naam van de medewerker aan wie de taak is toegewezen (null als niemand gevonden). */
   toegewezenAan: string | null
-  /** True als er geen controller op het dossier stond en is teruggevallen op Tom Kamminga. */
-  isFallback: boolean
+  /** True als de taak aan niemand kon worden toegewezen — hij staat dan alleen op het dossier. */
+  zonderOntvanger: boolean
   /** True als er al een openstaande controletaak bestond (er is dan geen nieuwe gemaakt). */
   bestond: boolean
   taakId: string | null
@@ -430,7 +430,9 @@ export interface ControleTaakResultaat {
 /**
  * Maakt bij het indienen van een werkbegroting ter goedkeuring een taak
  * "Werkbegroting controleren" aan op het dossier, toegewezen aan de controller.
- * Staat er geen controller op het dossier, dan valt de taak terug op Tom Kamminga.
+ * Heeft het dossier geen controller, dan komt de taak zonder ontvanger op het
+ * dossier te staan — de aanvraagflow zelf wijst dan een directielid aan
+ * (`vraagGoedkeuringAan`), dus die route hoort hier niet meer langs te komen.
  */
 export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<ControleTaakResultaat> {
   const { maakBeoordeelTaak } = await import('@/lib/goedkeuring/taken')
