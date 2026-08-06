@@ -124,6 +124,20 @@ function SectionRows({ section, isIntern }: { section: QuoteSection; isIntern: b
                 const isStelpost = line.is_stelpost
                 const lineColor = isStelpost ? '#92400e' : '#334155'
                 const lineBg = isEven ? '#ffffff' : '#f8fafc'
+                // Tekstregel: één doorlopende regel over de volle breedte, zoals
+                // hij ook in de Word-uitvoer verschijnt — geen aantal, geen bedrag.
+                if (line.soort === 'tekst') {
+                  return (
+                    <tr key={line.id} style={{ background: lineBg }}>
+                      <td
+                        colSpan={colSpanTotal}
+                        style={{ padding: '2mm 3mm', color: '#334155', whiteSpace: 'pre-line', lineHeight: 1.5 }}
+                      >
+                        {line.omschrijving}
+                      </td>
+                    </tr>
+                  )
+                }
                 return (
                   <>
                     <tr key={line.id} style={{ background: lineBg }}>

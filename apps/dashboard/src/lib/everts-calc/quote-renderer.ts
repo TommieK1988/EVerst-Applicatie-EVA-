@@ -292,6 +292,8 @@ interface BoomNode extends SectieContext {
 
 interface RegelContext {
   id: string
+  /** Tekstregel zonder bedrag: hoeveelheid, eenheid, prijs en totaal zijn leeg. */
+  is_tekstregel: boolean
   omschrijving: string
   omschrijving_volledig: string  // omschrijving + \n + werkomschrijving (indien gevuld)
   hoeveelheid: string       // formatted number
@@ -498,6 +500,9 @@ export function groepeerBtwPerTarief(
     for (const line of (s.lines ?? [])) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const l = line as any
+      // Tekstregels hebben geen bedrag en dus geen BTW-grondslag; anders zou er een
+      // lege 0%-rij in de uitsplitsing verschijnen.
+      if (l.soort === 'tekst') continue
       const pct = Number(l.btw_pct ?? fallbackPct ?? STANDAARD_BTW_HOOG_PCT)
       const tarief = l.btw_tarief ?? null
       const sleutel = tarief?.id ? `t:${tarief.id}` : `pct:${pct}`
@@ -564,20 +569,27 @@ export function buildRenderContext(
     const vp = line.eenheidsprijs
     const marge = kp > 0 ? ((vp - kp) / vp * 100) : null
     const behandeling = splitsBehandeling(line.schilderbehandeling, line.schilderbehandeling_naam)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isTekst = (line as any).soort === 'tekst'
+    // Een tekstregel vult dezelfde sjabloonrij als een gewone regel, maar alle
+    // getalvelden blijven leeg in plaats van "€ 0,00" en "0 st". Zo tonen bestaande
+    // sjablonen hem meteen goed zonder dat iemand zijn Word-document hoeft aan te
+    // passen; wie de rij écht anders wil opmaken kan {#is_tekstregel} gebruiken.
     return {
       id: line.id,
+      is_tekstregel: isTekst,
       omschrijving: line.omschrijving,
       omschrijving_volledig: line.opmerking
         ? `${line.omschrijving}\n${line.opmerking}`
         : line.omschrijving,
-      hoeveelheid: numNL(line.hoeveelheid),
-      eenheid: line.eenheid,
-      eenheidsprijs: euro(line.eenheidsprijs),
-      eenheidsprijs_raw: numRaw(line.eenheidsprijs),
-      eenheidsprijs_bedrag: numEuroPlain(line.eenheidsprijs),
-      totaal: euro(line.line_total),
-      totaal_raw: numRaw(line.line_total),
-      totaal_bedrag: numEuroPlain(line.line_total),
+      hoeveelheid: isTekst ? '' : numNL(line.hoeveelheid),
+      eenheid: isTekst ? '' : line.eenheid,
+      eenheidsprijs: isTekst ? '' : euro(line.eenheidsprijs),
+      eenheidsprijs_raw: isTekst ? '' : numRaw(line.eenheidsprijs),
+      eenheidsprijs_bedrag: isTekst ? '' : numEuroPlain(line.eenheidsprijs),
+      totaal: isTekst ? '' : euro(line.line_total),
+      totaal_raw: isTekst ? '' : numRaw(line.line_total),
+      totaal_bedrag: isTekst ? '' : numEuroPlain(line.line_total),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       btw_pct: (line as any).btw_pct ?? STANDAARD_BTW_HOOG_PCT,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

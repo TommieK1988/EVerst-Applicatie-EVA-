@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { importeerRegels } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
+import { isTekstregel } from '@/lib/everts-calc/types'
 import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
 
 interface Props {
@@ -88,6 +89,9 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
               calculatieregel_id: regel.id,
               opmerking: regel.werkomschrijving ?? null,
               is_stelpost: regel.is_stelpost ?? false,
+              // Tekstregel: de server zet hoeveelheid/prijs/BTW op nul en laat hem
+              // buiten de subtotalen. Alleen de omschrijving haalt de offerte.
+              soort: isTekstregel(regel) ? 'tekst' : null,
               btw_pct: regel.btw_pct ?? null,
               btw_tarief_id: regel.btw_tarief_id ?? null,
               // Alleen de koppeling; de tekst bevriest de server op dít moment.

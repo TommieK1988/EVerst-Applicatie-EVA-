@@ -1,4 +1,5 @@
 import type { CalculatieLijn, Activiteit, Scenario, ProjectTotalen, BtwGroep, Groep, Calculatieregel, Componentregel, ComponentType, WerkbegrotingRegel, WerkbegrotingComponent } from './types'
+import { isTekstregel } from './types'
 import { nominaalPercentage } from '@/lib/stamdata/btw'
 
 // ─── Lijn berekeningen ────────────────────────────────────────────────────────
@@ -155,11 +156,26 @@ export interface RegelBedragen {
   arbeid_vp: number;    materieel_vp: number;    oa_vp: number
 }
 
+/** Alles nul — voor regels die per definitie geen bedrag hebben (tekstregels). */
+const LEGE_BEDRAGEN: RegelBedragen = {
+  arbeid_pe: 0,    arbeid_totaal: 0,
+  materieel_pe: 0, materieel_totaal: 0,
+  oa_pe: 0,        oa_totaal: 0,
+  kp_pe: 0,        kp_totaal: 0,
+  uren_pe: 0,      uren_totaal: 0, min_pe: 0,
+  vp_pe: 0,        vp_totaal: 0,
+  arbeid_vp: 0,    materieel_vp: 0,    oa_vp: 0,
+}
+
 export function berekenCalculatieregel(
   regel: Calculatieregel,
   componenten: Componentregel[],
   opslag_pct = 0
 ): RegelBedragen {
+  // Een tekstregel is puur toelichting: nooit een bedrag, ook niet als er ooit
+  // componenten onder hebben gehangen (bv. een post die naar tekst is omgezet).
+  if (isTekstregel(regel)) return LEGE_BEDRAGEN
+
   const getAll = (type: ComponentType) =>
     componenten.filter(c => c.calculatieregel_id === regel.id && c.type === type)
 

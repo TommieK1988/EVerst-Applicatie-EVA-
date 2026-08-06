@@ -19,6 +19,7 @@ import type {
   Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent,
   WerkbegrotingWijziging, WerkbegrotingBestelling,
 } from './types'
+import { isTekstregel } from './types'
 import { nieuweId } from './utils'
 
 const KEYS = {
@@ -679,7 +680,9 @@ export function maakWerkbegrotingVanCalculatie(
   slaWerkbegrotingOp(wb)
 
   const groepIds = new Set(getGroepen(scenarioId).map(g => g.id))
-  const regels = getCalculatieregels().filter(r => groepIds.has(r.groep_id))
+  // Tekstregels blijven achter in de calculatie: ze horen bij de offerte, niet bij
+  // de uitvoering. Zo kunnen ze ook nooit als bestelregel in Bouw7 belanden.
+  const regels = getCalculatieregels().filter(r => groepIds.has(r.groep_id) && !isTekstregel(r))
 
   for (const regel of regels) {
     const wbRegel: WerkbegrotingRegel = {
@@ -729,7 +732,8 @@ export function heroverhaalWerkbegroting(
   modus: 'volledig' | 'gewijzigd'
 ): void {
   const groepIds   = new Set(getGroepen(scenarioId).map(g => g.id))
-  const calcRegels = getCalculatieregels().filter(r => groepIds.has(r.groep_id))
+  // Idem als bij het aanmaken: tekstregels horen niet in de werkbegroting.
+  const calcRegels = getCalculatieregels().filter(r => groepIds.has(r.groep_id) && !isTekstregel(r))
 
   if (modus === 'volledig') {
     // Verwijder alles en kopieer opnieuw

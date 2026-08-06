@@ -42,6 +42,18 @@ export default function QuoteLinesTable({ quoteId, sectionId, lines, type }: Pro
     })
   }
 
+  function voegTekstregelToe() {
+    startTransition(() => {
+      maakLine({
+        quote_id: quoteId,
+        section_id: sectionId ?? null,
+        omschrijving: '',
+        volgorde: lines.length,
+        soort: 'tekst',
+      })
+    })
+  }
+
   function verwijder(lineId: string) {
     startTransition(() => { verwijderLine(lineId, quoteId) })
   }
@@ -77,7 +89,15 @@ export default function QuoteLinesTable({ quoteId, sectionId, lines, type }: Pro
           </tr>
         </thead>
         <tbody>
-          {lines.map((line, idx) => (
+          {lines.map((line, idx) => line.soort === 'tekst' ? (
+            <TekstregelRow
+              key={line.id}
+              line={line}
+              isIntern={isIntern}
+              onBlur={handleLineBlur}
+              onDelete={() => verwijder(line.id)}
+            />
+          ) : (
             <LineRow
               key={line.id}
               idx={idx + 1}
@@ -90,7 +110,7 @@ export default function QuoteLinesTable({ quoteId, sectionId, lines, type }: Pro
         </tbody>
       </table>
 
-      <div className="px-2 py-2 border-t border-slate-100">
+      <div className="px-2 py-2 border-t border-slate-100 flex items-center gap-1">
         <Button
           variant="ghost"
           size="sm"
@@ -100,8 +120,64 @@ export default function QuoteLinesTable({ quoteId, sectionId, lines, type }: Pro
           <Plus className="w-3 h-3" />
           Regel toevoegen
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={voegTekstregelToe}
+          className="text-slate-400 hover:text-everts"
+          title="Tekstregel — alleen tekst, telt niet mee in de totalen"
+        >
+          <Plus className="w-3 h-3" />
+          Tekstregel
+        </Button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Tekstregel: één tekstvlak over de volle breedte, zonder aantal, prijs of totaal.
+ * Krijgt bewust geen volgnummer — hij hoort niet in de nummering van de posten.
+ */
+function TekstregelRow({
+  line, isIntern, onBlur, onDelete,
+}: {
+  line: QuoteLine
+  isIntern: boolean
+  onBlur: (lineId: string, field: string, raw: string, huidig: QuoteLine) => void
+  onDelete: () => void
+}) {
+  return (
+    <tr className="group hover:bg-sky-50/50 border-b border-slate-50 bg-sky-50/30">
+      <td className="px-2 py-1 align-top pt-2">
+        <span
+          className="text-[9px] font-medium tracking-wide px-1 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200"
+          title="Tekstregel — telt niet mee in de totalen"
+        >
+          T
+        </span>
+      </td>
+      <td colSpan={isIntern ? 8 : 5} className="px-2 py-1 align-top">
+        <textarea
+          defaultValue={line.omschrijving}
+          onBlur={(e) => onBlur(line.id, 'omschrijving', e.target.value, line)}
+          rows={2}
+          placeholder="Tekstregel voor in de offerte…"
+          className="w-full bg-transparent border border-transparent rounded text-slate-700 hover:border-slate-200
+            focus:outline-none focus:bg-white focus:border-everts/30 px-1 py-0.5 text-xs resize-y leading-relaxed"
+        />
+      </td>
+      <td className="px-1 py-1 align-top">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50"
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </td>
+    </tr>
   )
 }
 

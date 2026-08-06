@@ -238,6 +238,23 @@ export interface Groep {
   optioneel?: boolean   // telt niet mee in eindtotaal
 }
 
+/**
+ * Soort calculatieregel.
+ *
+ *  - `post`  — de gewone rekenregel: hoeveelheid × prijs, met componenten eronder.
+ *  - `tekst` — een tekstregel: alleen woorden, geen bedrag. Staat op een vaste plek
+ *              tussen de posten en reist mee naar de offerte, maar telt nergens mee
+ *              (niet in de calculatie, niet in de werkbegroting, niet in Bouw7).
+ *
+ * Leeg/afwezig betekent `post`, zodat alle bestaande regels ongemoeid blijven.
+ */
+export type RegelSoort = 'post' | 'tekst'
+
+/** Een tekstregel? Leeg/afwezig `soort` = gewone post. */
+export function isTekstregel(regel: { soort?: RegelSoort | string | null } | null | undefined): boolean {
+  return regel?.soort === 'tekst'
+}
+
 export interface Calculatieregel {
   id: string
   groep_id: string
@@ -246,6 +263,8 @@ export interface Calculatieregel {
   hoeveelheid: number
   eenheid: Eenheid
   volgorde: number
+  /** `tekst` = tekstregel zonder bedrag; leeg/`post` = gewone rekenregel. */
+  soort?: RegelSoort
   opslag_pct?: number    // opslag per regel; default = scenario AK + W&R
   is_stelpost?: boolean      // provisorische som / stelpost
   is_verrekenbaar?: boolean  // verrekenbare post (apart getoond in offerte)

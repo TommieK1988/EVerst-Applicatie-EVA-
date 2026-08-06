@@ -224,6 +224,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'totaal_raw',               label: 'Totaal — kaal, mét duizendpunt (131,25)' },
     { v: 'btw_pct',                  label: 'BTW percentage (bv. 21)' },
     { v: 'is_stelpost',              label: 'Boolean: is dit een stelpost' },
+    { v: 'is_tekstregel',            label: 'Boolean: tekstregel (aantal/prijs/totaal zijn dan leeg)' },
     { v: 'opmerking',                label: 'Opmerking bij de regel' },
     { v: 'werkomschrijving',         label: 'Uitgebreide werkomschrijving (= opmerking)' },
     { v: 'heeft_opmerking',          label: 'Boolean: heeft een opmerking' },

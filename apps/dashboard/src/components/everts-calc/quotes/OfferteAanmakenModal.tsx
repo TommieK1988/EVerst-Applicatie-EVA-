@@ -8,6 +8,7 @@ import { getBetalingscondities } from '@/app/(platform)/everts-calc/actions/beta
 import { maakQuoteVanuitProjectMetImport } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
+import { isTekstregel } from '@/lib/everts-calc/types'
 import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -161,6 +162,9 @@ export default function OfferteAanmakenModal({
             calculatieregel_id: regel.id,
             opmerking: regel.werkomschrijving ?? null,
             is_stelpost: regel.is_stelpost ?? false,
+            // Tekstregel: de server zet hoeveelheid/prijs/BTW op nul en laat hem
+            // buiten de subtotalen. Alleen de omschrijving haalt de offerte.
+            soort: isTekstregel(regel) ? 'tekst' : null,
             // Zonder eigen keuze het standaardtarief van de calculatie (leeg → server pakt 21%).
             btw_pct: regel.btw_pct ?? actiefScenario?.btw_pct_default ?? null,
             btw_tarief_id: regel.btw_tarief_id ?? actiefScenario?.btw_tarief_id_default ?? null,

@@ -15,6 +15,7 @@ import {
   getMeetregelAggregaten,
 } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, berekeningNummers } from '@/lib/everts-calc/calculations'
+import { isTekstregel } from '@/lib/everts-calc/types'
 import type { SyncGroep, SyncRegel, CalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 
 export function verzamelSyncData(scenarioId: string): {
@@ -35,7 +36,10 @@ export function verzamelSyncData(scenarioId: string): {
     group_number:    nummers.get(g.id) ?? null,
   }))
 
-  const syncRegels: SyncRegel[] = regels.map(r => {
+  // Tekstregels blijven buiten de genormaliseerde projectie: die voedt de
+  // werkbegroting en rapportage, en daar heeft een regel zonder bedrag niets
+  // te zoeken. De verliesloze snapshot hieronder bewaart ze wél.
+  const syncRegels: SyncRegel[] = regels.filter(r => !isTekstregel(r)).map(r => {
     const bedragen = berekenCalculatieregel(r, comps)
     return {
       id:               r.id,

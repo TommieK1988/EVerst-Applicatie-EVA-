@@ -122,6 +122,8 @@ export type ImportRegel = {
   calculatieregel_id?: string | null
   opmerking?: string | null
   is_stelpost?: boolean
+  /** `tekst` = tekstregel zonder bedrag; leeg/`post` = gewone rekenregel. */
+  soort?: 'post' | 'tekst' | null
   /** Te heffen percentage — gelijk aan het nominale tarief, ook bij verlegging. */
   btw_pct?: number | null
   /** Gekozen tarief uit de stamgegevens; draagt label + verlegd-vlag naar de offerte. */
@@ -645,11 +647,16 @@ export async function maakLine(data: {
   opmerking?: string | null
   calculatieregel_id?: string | null
   groep_id?: string | null
+  /** `tekst` = tekstregel zonder bedrag; leeg/`post` = gewone rekenregel. */
+  soort?: 'post' | 'tekst' | null
 }): Promise<string> {
   await assertQuoteBewerkbaar(data.quote_id)
   const supabase = await getDb()
-  const hoeveelheid = data.hoeveelheid ?? 1
-  const eenheidsprijs = data.eenheidsprijs ?? 0
+  // Een tekstregel heeft per definitie geen bedrag — ook niet als de aanroeper er
+  // toch een meegeeft.
+  const isTekst = data.soort === 'tekst'
+  const hoeveelheid = isTekst ? 0 : (data.hoeveelheid ?? 1)
+  const eenheidsprijs = isTekst ? 0 : (data.eenheidsprijs ?? 0)
   const line_total = Math.round(hoeveelheid * eenheidsprijs * 100) / 100
 
   const { data: line, error } = await supabase
@@ -658,12 +665,13 @@ export async function maakLine(data: {
       quote_id: data.quote_id,
       section_id: data.section_id ?? null,
       omschrijving: data.omschrijving,
+      soort: isTekst ? 'tekst' : null,
       hoeveelheid,
-      eenheid: data.eenheid ?? 'st',
+      eenheid: isTekst ? '' : (data.eenheid ?? 'st'),
       eenheidsprijs,
       line_total,
-      btw_pct: data.btw_pct ?? STANDAARD_BTW_HOOG_PCT,
-      btw_tarief_id: data.btw_tarief_id ?? null,
+      btw_pct: isTekst ? 0 : (data.btw_pct ?? STANDAARD_BTW_HOOG_PCT),
+      btw_tarief_id: isTekst ? null : (data.btw_tarief_id ?? null),
       volgorde: data.volgorde ?? 0,
       kostprijs_pe: data.kostprijs_pe ?? null,
       uren_pe: data.uren_pe ?? null,
@@ -763,7 +771,7 @@ export async function herbereken(quoteId: string): Promise<void> {
   // 1. Haal alle lines op incl. btw_pct per regel voor correcte BTW-berekening
   const { data: lines } = await supabase
     .from('quote_lines')
-    .select('id, section_id, line_total, btw_pct')
+    .select('id, section_id, line_total, btw_pct, soort')
     .eq('quote_id', quoteId)
 
   if (!lines) return
@@ -805,7 +813,10 @@ export async function herbereken(quoteId: string): Promise<void> {
   // BTW per tarief (op basis van per-regel btw_pct)
   const btwPerTarief = new Map<number, number>()
 
-  for (const line of lines as { id: string; section_id: string | null; line_total: number; btw_pct?: number }[]) {
+  for (const line of lines as { id: string; section_id: string | null; line_total: number; btw_pct?: number; soort?: string | null }[]) {
+    // Tekstregels zijn toelichting zonder bedrag: ze horen niet in een subtotaal en
+    // mogen al helemaal geen eigen 0%-regel in de BTW-uitsplitsing opleveren.
+    if (line.soort === 'tekst') continue
     const sectionId = line.section_id ?? '__geen__'
     const bedrag = line.line_total ?? 0
     sectieMap[sectionId] = (sectieMap[sectionId] ?? 0) + bedrag
@@ -912,6 +923,7 @@ export async function importeerRegels(
     calculatieregel_id?: string | null
     opmerking?: string | null
     is_stelpost?: boolean
+    soort?: 'post' | 'tekst' | null
     btw_pct?: number | null
     btw_tarief_id?: string | null
     schilderbehandeling_id?: string | null
@@ -1007,27 +1019,33 @@ export async function importeerRegels(
     if (groepRegels.length === 0) continue
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const linesToInsert = (groepRegels as any[]).map((r: any, i: number) => ({
-      quote_id: quoteId,
-      section_id: section.id,
-      groep_id: def.groep_id,
-      calculatieregel_id: r.calculatieregel_id ?? null,
-      // Gekoppelde behandeling erachter: "Kozijnen voorgevel – 2-laags dekkend".
-      omschrijving: omschrijvingMetBehandeling(
-        r.omschrijving,
-        r.schilderbehandeling_id ? behandelingNamen.get(r.schilderbehandeling_id) : null,
-      ),
-      hoeveelheid: r.hoeveelheid,
-      eenheid: r.eenheid,
-      eenheidsprijs: r.eenheidsprijs,
-      line_total: Math.round(r.hoeveelheid * r.eenheidsprijs * 100) / 100,
-      btw_pct: r.btw_pct ?? STANDAARD_BTW_HOOG_PCT,
-      btw_tarief_id: r.btw_tarief_id ?? null,
-      volgorde: i,
-      kostprijs_pe: r.kostprijs_pe ?? null,
-      uren_pe: r.uren_pe ?? null,
-      opmerking: r.opmerking ?? null,
-    }))
+    const linesToInsert = (groepRegels as any[]).map((r: any, i: number) => {
+      // Een tekstregel is puur toelichting: alles wat naar een bedrag riekt gaat op
+      // nul en krijgt geen BTW-tarief, zodat hij nergens in mee kan tellen.
+      const isTekst = r.soort === 'tekst'
+      return {
+        quote_id: quoteId,
+        section_id: section.id,
+        groep_id: def.groep_id,
+        calculatieregel_id: r.calculatieregel_id ?? null,
+        // Gekoppelde behandeling erachter: "Kozijnen voorgevel – 2-laags dekkend".
+        omschrijving: isTekst ? r.omschrijving : omschrijvingMetBehandeling(
+          r.omschrijving,
+          r.schilderbehandeling_id ? behandelingNamen.get(r.schilderbehandeling_id) : null,
+        ),
+        soort: isTekst ? 'tekst' : null,
+        hoeveelheid: isTekst ? 0 : r.hoeveelheid,
+        eenheid: isTekst ? '' : r.eenheid,
+        eenheidsprijs: isTekst ? 0 : r.eenheidsprijs,
+        line_total: isTekst ? 0 : Math.round(r.hoeveelheid * r.eenheidsprijs * 100) / 100,
+        btw_pct: isTekst ? 0 : (r.btw_pct ?? STANDAARD_BTW_HOOG_PCT),
+        btw_tarief_id: isTekst ? null : (r.btw_tarief_id ?? null),
+        volgorde: i,
+        kostprijs_pe: isTekst ? null : (r.kostprijs_pe ?? null),
+        uren_pe: isTekst ? null : (r.uren_pe ?? null),
+        opmerking: isTekst ? null : (r.opmerking ?? null),
+      }
+    })
     const { data: insertedLines } = await supabase.from('quote_lines').insert(linesToInsert).select('id')
 
     // Optioneel: is_stelpost + schilderbehandeling per regel bijwerken (v3)

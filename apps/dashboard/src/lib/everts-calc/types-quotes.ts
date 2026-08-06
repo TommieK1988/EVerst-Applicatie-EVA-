@@ -82,6 +82,11 @@ export interface QuoteLine {
   /** Gekozen tarief uit `btw_tarieven` — bepaalt label en verlegd-vermelding op de offerte. */
   btw_tarief_id?: string | null
   volgorde: number
+  /**
+   * `tekst` = tekstregel zonder bedrag; leeg/`post` = gewone rekenregel.
+   * Tekstregels tellen niet mee in het sectiesubtotaal of de BTW-uitsplitsing.
+   */
+  soort?: 'post' | 'tekst' | null
   kostprijs_pe?: number | null
   uren_pe?: number | null
   opmerking?: string | null
