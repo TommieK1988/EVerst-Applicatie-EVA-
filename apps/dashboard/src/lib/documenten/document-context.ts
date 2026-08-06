@@ -17,6 +17,11 @@ import { fetchImageDataUrl } from './render-docx'
 import { ROLLEN, type RolNaam } from './rollen'
 import { datumNL, datumISO, nJaarLater, normaliseerInvoer, ontbrekendeVelden, volledigeNaam, euroNL } from './format'
 import type { DocumentSjabloon } from './types'
+import { isInkoopSoort } from './types'
+import {
+  laadBestellingBlokken, bestellingHoortBijDossier,
+  LEEG_BESTELLING_BLOK, LEEG_LEVERANCIER_BLOK,
+} from './bestelling-blok'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken } from '@/lib/dossiers/oplevering'
 import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
@@ -45,6 +50,14 @@ export interface DocumentRenderContext {
 
 const LEGE_ROL: RolContext = {
   heeft: false, naam: '', voornaam: '', functie: '', telefoon: '', mobiel: '', email: '', foto: '',
+}
+
+/** De meegegeven bestelling hoort bij een ander dossier — nooit renderen. */
+export class BestellingNietVanDossierError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BestellingNietVanDossierError'
+  }
 }
 
 // ── Rollen ────────────────────────────────────────────────────────────
@@ -80,6 +93,8 @@ async function bouwRol(row: any): Promise<RolContext> {
  * @param sjabloon   het gekozen sjabloon (levert documentsoort + velddefinities)
  * @param invoer     door de gebruiker ingevulde waarden
  * @param ondertekenaarId  medewerker-id van de ingelogde gebruiker (nooit uit de client)
+ * @param opties     preview beperkt zware contextbouwers; bestellingId vult de
+ *                   inkoopblokken ({bestelling.*}, {leverancier.*})
  */
 export async function buildDocumentContext(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,7 +103,7 @@ export async function buildDocumentContext(
   sjabloon: DocumentSjabloon,
   invoer: Record<string, unknown> = {},
   ondertekenaarId?: string | null,
-  opties: { preview?: boolean } = {},
+  opties: { preview?: boolean; bestellingId?: string | null } = {},
 ): Promise<DocumentRenderContext> {
   const { bedrijf, dossier, dossierRow, bedrijfRow } = await laadBedrijfEnDossier(supabase, {
     dossier_id: dossierId,
@@ -111,6 +126,20 @@ export async function buildDocumentContext(
   const opdracht = sjabloon.documentsoort === 'opdrachtbevestiging'
     ? await laadOpdrachtBlok(dossierId)
     : LEEG_OPDRACHT_BLOK
+
+  // Inkoopblokken — alleen bij een inkooporder/OA-contract, en alleen als er een
+  // bestelling bij hoort. Zonder bestelling blijft {#bestelling.heeft} vals.
+  //
+  // De bestelling-id komt uit de client; hij moet bij dít dossier horen. Dat is
+  // hier afgedwongen en niet in de aanroepende routes, zodat elke ingang
+  // (preview, PDF, mailen) dezelfde controle krijgt.
+  let inkoop = { bestelling: LEEG_BESTELLING_BLOK, leverancier: LEEG_LEVERANCIER_BLOK }
+  if (isInkoopSoort(sjabloon.documentsoort) && opties.bestellingId) {
+    if (!(await bestellingHoortBijDossier(supabase, opties.bestellingId, dossierId))) {
+      throw new BestellingNietVanDossierError('Deze bestelling hoort niet bij dit dossier.')
+    }
+    inkoop = await laadBestellingBlokken(supabase, opties.bestellingId)
+  }
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
 
@@ -203,6 +232,8 @@ export async function buildDocumentContext(
     toon_prijzen: houtrot.heeft
       ? parseRapportOpties(genormaliseerd[HOUTROT_OPTIES_SLEUTEL]).toon_prijzen
       : false,
+    bestelling: inkoop.bestelling,
+    leverancier: inkoop.leverancier,
     document: {
       datum: datumNL(new Date().toISOString()),
       datum_iso: datumISO(new Date().toISOString()),
@@ -211,6 +242,9 @@ export async function buildDocumentContext(
       naam: sjabloon.naam ?? '',
       dossiernummer: dossier.dossiernummer,
       opdrachtnummer: dossier.opdracht_referentie || dossier.referentie || '',
+      // Bij inkoop is het Bouw7-contractnummer het kenmerk waar de leverancier
+      // naar verwijst; bij brieven bestaat het niet en blijft dit leeg.
+      nummer: inkoop.bestelling.nummer,
     },
     invoer: genormaliseerd,
     // Feedback-ronde (bewoners): linktekst + QR-code. De klik-knop wordt in

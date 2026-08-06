@@ -13,6 +13,7 @@
 import { normaliseerInvoer, datumNL, datumISO, nJaarLater, euroNL, getalNL, afkappen } from './format'
 import { ROLLEN, rolLabels } from './rollen'
 import { parseRapportOpties, HOUTROT_OPTIES_SLEUTEL, PAGINABREUK_XML } from './houtrot-opties'
+import { isInkoopSoort } from './types'
 import type { DocumentSjabloon } from './types'
 
 /** Zelfde vorm als de echte render-context; los gehouden i.v.m. de server-only chain. */
@@ -158,6 +159,7 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       tot_datum_iso: datumISO(garantieTot),
       behandelingen: invoer.behandelingen || 'Houtwerk: 1× grondlaag, 2× aflak (Sigma S2U Nova).',
     },
+    ...demoInkoop(sjabloon.documentsoort),
     document: {
       datum: datumNL('2026-08-14'),
       datum_iso: '2026-08-14',
@@ -166,6 +168,7 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       naam: sjabloon.naam ?? '',
       dossiernummer: '20261.00598',
       opdrachtnummer: 'PO-88213',
+      nummer: DEMO_ORDERNUMMER[sjabloon.documentsoort ?? ''] ?? '',
     },
     invoer,
     // Feedback-ronde: voorbeeld-link + voorgebakken QR, zodat de preview de QR én knop toont.
@@ -299,6 +302,129 @@ function demoHoutrotBlok(perPagina: number, toonPrijzen: boolean) {
       return { naam, niveau_label: DEMO_LABELS[0], aantal: lijst.length, totaal: totaalVan(lijst), registraties: lijst }
     }),
     alle_registraties: registraties,
+  }
+}
+
+/** Bouw7 nummert per soort anders (…IO… voor inkoop, …OA… voor onderaanneming). */
+const DEMO_ORDERNUMMER: Record<string, string> = {
+  inkooporder: '20261.00598IO004',
+  oa_contract: '20261.00598OA002',
+}
+
+/**
+ * De inkoopblokken met testgegevens. Ze worden alleen gevuld bij een
+ * inkooporder-/OA-contractsjabloon; bij een brief blijven ze leeg zodat
+ * {#bestelling.heeft} zich in de preview net zo gedraagt als in het echt.
+ *
+ * De vorm spiegelt `BestellingBlok`/`LeverancierBlok` uit `bestelling-blok.ts`.
+ * Die module is server-only (hij leest Supabase), vandaar dat de demo-waarden
+ * hier los staan — wijzig je daar een sleutel, pas hem hier ook aan.
+ */
+function demoInkoop(soort: string | null | undefined): Record<string, unknown> {
+  if (!isInkoopSoort(soort)) {
+    return {
+      bestelling: {
+        heeft: false, nummer: '', bonnummer: '', soort: '', soort_label: '', omschrijving: '',
+        levering: '', levering_datum: '', levering_datum_iso: '', betaalafspraak: '', interne_notitie: '',
+        offertenummer: '', aantal_regels: '0', totaal: '€ 0,00', totaal_getal: 0, regels: [],
+        termijnen: [], is_oa: false, is_inkooporder: false,
+      },
+      leverancier: {
+        heeft: false, naam: '', nummer: '', adres: '', postcode: '', plaats: '', volledig_adres: '',
+        email: '', telefoon: '', website: '', kvk: '', btw: '',
+        contactpersoon: '', contactpersoon_email: '', contactpersoon_telefoon: '',
+      },
+    }
+  }
+
+  const isOa = soort === 'oa_contract'
+  const nummer = DEMO_ORDERNUMMER[soort] ?? ''
+  const regels = isOa
+    ? [
+        { nummer: '1', omschrijving: 'Steigerwerk voor- en achtergevel, plaatsen en verwijderen', aantal: '1', eenheid: 'post', stukprijs: '€ 7.450,00', bedrag: '€ 7.450,00', code: '21.10', bedrag_getal: 7450 },
+        { nummer: '2', omschrijving: 'Wekelijkse keuring en aanpassingen', aantal: '4', eenheid: 'wk', stukprijs: '€ 185,00', bedrag: '€ 740,00', code: '21.10', bedrag_getal: 740 },
+      ]
+    : [
+        { nummer: '1', omschrijving: 'Sigma S2U Nova zijdeglans, wit RAL 9010', aantal: '48', eenheid: 'l', stukprijs: '€ 21,40', bedrag: '€ 1.027,20', code: '43.20', bedrag_getal: 1027.2 },
+        { nummer: '2', omschrijving: 'Grondverf Sigma Amarol Primer', aantal: '20', eenheid: 'l', stukprijs: '€ 18,75', bedrag: '€ 375,00', code: '43.20', bedrag_getal: 375 },
+        { nummer: '3', omschrijving: 'Schuurpapier K180, rol', aantal: '6', eenheid: 'st', stukprijs: '€ 12,50', bedrag: '€ 75,00', code: '43.20', bedrag_getal: 75 },
+      ]
+  const totaal = regels.reduce((s, r) => s + r.bedrag_getal, 0)
+  const eur = (n: number) =>
+    new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(n)
+
+  // Spiegelt TERMIJN_SCHEMA in bestelling-blok.ts (20 / 20 / rest / 10).
+  const termijnPcts = [
+    { omschrijving: '1e termijn — bij opdracht', pct: 20 },
+    { omschrijving: '2e termijn — bij start', pct: 20 },
+    { omschrijving: 'Termijnen naar rato', pct: 50 },
+    { omschrijving: 'Oplevertermijn — na oplevering', pct: 10 },
+  ]
+  let verdeeld = 0
+  const termijnen = termijnPcts.map((t, i) => {
+    const laatste = i === termijnPcts.length - 1
+    const bedrag = laatste ? Math.round((totaal - verdeeld) * 100) / 100 : Math.round(totaal * t.pct) / 100
+    verdeeld = Math.round((verdeeld + bedrag) * 100) / 100
+    return { nummer: String(i + 1), omschrijving: t.omschrijving, percentage: `${t.pct}%`, bedrag: eur(bedrag) }
+  })
+
+  return {
+    bestelling: {
+      heeft: true,
+      nummer,
+      bonnummer: `${nummer}B001`,
+      soort,
+      soort_label: isOa ? 'Onderaannemerscontract' : 'Inkooporder',
+      omschrijving: isOa ? 'Steigerwerk Galileïstraat' : 'Verf en schuurmateriaal Galileïstraat',
+      levering: 'week 37',
+      levering_datum: datumNL('2026-09-07'),
+      levering_datum_iso: '2026-09-07',
+      betaalafspraak: '30 dagen netto',
+      interne_notitie: '',
+      offertenummer: isOa ? 'OF-2026-1184' : 'VGM-88213',
+      aantal_regels: String(regels.length),
+      totaal: eur(totaal),
+      totaal_getal: totaal,
+      regels,
+      termijnen,
+      is_oa: isOa,
+      is_inkooporder: !isOa,
+    },
+    leverancier: isOa
+      ? {
+          heeft: true,
+          naam: 'Van Leeuwen Steigerbouw B.V.',
+          nummer: '03358',
+          adres: 'Ambachtsweg 7',
+          postcode: '3771 MG',
+          plaats: 'Barneveld',
+          volledig_adres: 'Ambachtsweg 7, 3771 MG Barneveld',
+          email: 'planning@vanleeuwensteigers.nl',
+          telefoon: '0342 - 41 22 90',
+          website: 'www.vanleeuwensteigers.nl',
+          kvk: '32145678',
+          btw: 'NL803456789B01',
+          contactpersoon: 'Dennis van Leeuwen',
+          contactpersoon_email: 'dennis@vanleeuwensteigers.nl',
+          contactpersoon_telefoon: '06 - 51 22 33 44',
+        }
+      : {
+          heeft: true,
+          naam: 'Verfgroothandel Midden B.V.',
+          nummer: '03686',
+          adres: 'Handelsweg 22',
+          postcode: '3903 LN',
+          plaats: 'Veenendaal',
+          volledig_adres: 'Handelsweg 22, 3903 LN Veenendaal',
+          email: 'orders@verfgroothandelmidden.nl',
+          telefoon: '0318 - 52 10 10',
+          website: 'www.verfgroothandelmidden.nl',
+          kvk: '30987654',
+          btw: 'NL809876543B01',
+          contactpersoon: 'Karin de Groot',
+          contactpersoon_email: 'k.degroot@verfgroothandelmidden.nl',
+          contactpersoon_telefoon: '0318 - 52 10 15',
+        },
   }
 }
 

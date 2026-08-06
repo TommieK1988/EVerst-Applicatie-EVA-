@@ -22,6 +22,9 @@ import {
   verversBestellingenUitBouw7, verwijderBestellingUitEva,
   type BestellingVoorstel,
 } from '@/app/(platform)/everts-calc/actions/bestellingen'
+import {
+  getInkoopSjablonen, type SjabloonKeuze,
+} from '@/app/(platform)/everts-calc/actions/bestelling-document'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 
 interface Props {
@@ -90,6 +93,16 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bericht: '' })
   const [mailLaden, setMailLaden] = useState(false)
   const [verstuurBezig, setVerstuurBezig] = useState(false)
+  /** Sjabloon dat de opmaak van het te versturen document levert, plus de keuzelijst. */
+  const [verstuurSjabloon, setVerstuurSjabloon] = useState<string | null>(null)
+  const [verstuurSjablonen, setVerstuurSjablonen] = useState<{ id: string; naam: string }[]>([])
+
+  /** Beschikbare opmaak-sjablonen per soort (beheerd in Instellingen → Documentsjablonen). */
+  const [sjablonen, setSjablonen] = useState<Record<Soort, SjabloonKeuze[]>>({
+    inkooporder: [], oa_contract: [],
+  })
+  /** Per voorstel: de gekozen opmaak voor het document dat de partij krijgt. */
+  const [sjabloonPerVoorstel, setSjabloonPerVoorstel] = useState<Record<string, string>>({})
 
   /** Automatische voorstellen per leverancier (server-side berekend uit de werkbegroting). */
   const [voorstellen, setVoorstellen] = useState<BestellingVoorstel[] | null>(null)
@@ -125,6 +138,24 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   }, [wb.id])
 
   useEffect(() => { verversStatus() }, [verversStatus, tick])
+
+  // Sjablonen één keer laden: ze veranderen alleen als een beheerder ze wijzigt.
+  useEffect(() => {
+    let actief = true
+    Promise.all([
+      getInkoopSjablonen('inkooporder', dossierId),
+      getInkoopSjablonen('oa_contract', dossierId),
+    ])
+      .then(([inkooporder, oa_contract]) => { if (actief) setSjablonen({ inkooporder, oa_contract }) })
+      .catch(() => { /* zonder sjablonen blijft de keuzelijst leeg met uitleg */ })
+    return () => { actief = false }
+  }, [dossierId])
+
+  /** Eerste bruikbare sjabloon van een soort — de voorselectie als niemand kiest. */
+  const standaardSjabloon = useCallback(
+    (soort: Soort) => sjablonen[soort].find(s => s.heeftTemplate)?.id ?? '',
+    [sjablonen],
+  )
 
   /**
    * Haal de echte stand uit Bouw7 op: wat daar is weggegooid, mag hier niet als besteld staan.
@@ -262,6 +293,8 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       soort: v.soort,
       levering_tekst: levering[v.sleutel]?.trim() || null,
       betaalafspraak: betaling[v.sleutel]?.trim() || null,
+      // Opmaak van het document dat de partij krijgt; server-side gevalideerd.
+      sjabloon_id: sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null,
     }
     slaBestellingOp(bestelling)
     setBezigId(v.sleutel)
@@ -286,16 +319,28 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     }
   }
 
-  /** Open het verzendvenster met een voorgevuld mailconcept. */
+  /**
+   * Open het verzendvenster met een voorgevuld mailconcept. Onderwerp en tekst horen
+   * bij het sjabloon, dus die worden opnieuw opgehaald als de gebruiker wisselt.
+   */
+  async function laadConcept(b: WerkbegrotingBestelling, sjabloonKeuze?: string | null) {
+    if (!dossierId) return
+    setMailLaden(true)
+    try {
+      const concept = await getBestellingMailConcept(dossierId, b.id, sjabloonKeuze)
+      setMail(m => ({ to: m.to || concept.to, cc: m.cc, onderwerp: concept.onderwerp, bericht: concept.bericht }))
+      setVerstuurSjabloon(concept.sjabloonId)
+      setVerstuurSjablonen(concept.sjablonen)
+    } catch { /* laat leeg */ } finally { setMailLaden(false) }
+  }
+
   async function openVerstuur(b: WerkbegrotingBestelling) {
     if (!dossierId) return
     setVerstuurB(b)
-    setMailLaden(true)
     setMail({ to: '', cc: '', onderwerp: '', bericht: '' })
-    try {
-      const concept = await getBestellingMailConcept(dossierId, b.id)
-      setMail({ to: concept.to, cc: '', onderwerp: concept.onderwerp, bericht: concept.bericht })
-    } catch { /* laat leeg */ } finally { setMailLaden(false) }
+    setVerstuurSjabloon(null)
+    setVerstuurSjablonen([])
+    await laadConcept(b, b.sjabloon_id ?? null)
   }
 
   async function doeVerstuur() {
@@ -303,7 +348,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     if (!mail.to.trim()) { toast.error('Vul een e-mailadres van de leverancier in.'); return }
     setVerstuurBezig(true)
     try {
-      const res = await verstuurBestelling(dossierId, verstuurB.id, mail)
+      const res = await verstuurBestelling(dossierId, verstuurB.id, { ...mail, sjabloonId: verstuurSjabloon })
       if (res.ok) {
         slaBestellingOp({ ...verstuurB, status: 'verzonden', verstuurd_op: new Date().toISOString(), bouw7_bonnummer: res.bonnummer })
         if (res.bonWaarschuwing) {
@@ -424,6 +469,28 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                   className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
               </label>
             </div>
+
+            <label className="block text-xs text-slate-500">
+              Opmaak van het document
+              {sjablonen[v.soort].length === 0 ? (
+                <p className="mt-1 rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
+                  Nog geen sjabloon voor {v.soort === 'oa_contract' ? 'een opdracht' : 'een inkooporder'}. Maak er een aan
+                  bij Instellingen → Documentsjablonen; meerdere sjablonen naast elkaar zijn de varianten waar je hier uit kiest.
+                </p>
+              ) : (
+                <select
+                  value={sjabloonPerVoorstel[v.sleutel] ?? standaardSjabloon(v.soort)}
+                  onChange={e => setSjabloonPerVoorstel(p => ({ ...p, [v.sleutel]: e.target.value }))}
+                  className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40"
+                >
+                  {sjablonen[v.soort].map(s => (
+                    <option key={s.id} value={s.id} disabled={!s.heeftTemplate}>
+                      {s.naam}{s.heeftTemplate ? '' : ' (geen Word-template)'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
 
             <div className="space-y-1">
               {v.regels.map(r => (
@@ -674,13 +741,41 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             </div>
             <div className="px-6 py-4 overflow-y-auto flex-1 space-y-3">
               <p className="text-xs text-slate-500">
-                EVA maakt een order-PDF en mailt die namens jou. Daarna zet Bouw7 de order op verstuurd en
-                maakt de leverbon(nen) aan. <strong>Bijlage: {verstuurB.omschrijving} ({verstuurB.bouw7_nummer}).pdf</strong>
+                EVA stelt het document op in de gekozen opmaak en mailt het namens jou. Daarna zet Bouw7
+                de order op verstuurd en maakt de leverbon(nen) aan.
               </p>
               {mailLaden ? (
                 <div className="py-8 text-center text-slate-400"><Loader2 className="w-5 h-5 animate-spin inline" /></div>
               ) : (
                 <>
+                  <label className="block text-xs text-slate-500">
+                    Opmaak
+                    {verstuurSjablonen.length === 0 ? (
+                      <p className="mt-1 rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
+                        Er is geen bruikbaar sjabloon voor dit soort document. Maak er een aan bij
+                        Instellingen → Documentsjablonen, anders kan de order niet verstuurd worden.
+                      </p>
+                    ) : (
+                      <>
+                        <select
+                          value={verstuurSjabloon ?? ''}
+                          onChange={e => { setVerstuurSjabloon(e.target.value); laadConcept(verstuurB, e.target.value) }}
+                          className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40"
+                        >
+                          {verstuurSjablonen.map(s => <option key={s.id} value={s.id}>{s.naam}</option>)}
+                        </select>
+                        {dossierId && verstuurSjabloon && (
+                          <a
+                            href={`/api/documenten/preview?sjabloon_id=${verstuurSjabloon}&dossier_id=${dossierId}&bestelling_id=${verstuurB.id}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="mt-1 inline-block text-[11px] text-everts hover:underline"
+                          >
+                            Voorbeeld bekijken →
+                          </a>
+                        )}
+                      </>
+                    )}
+                  </label>
                   <label className="block text-xs text-slate-500">
                     Aan
                     <input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))}
@@ -712,7 +807,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-3">
               <button onClick={() => setVerstuurB(null)} disabled={verstuurBezig}
                 className="text-sm px-3 py-1.5 text-slate-500 hover:text-slate-700 disabled:opacity-40">Annuleren</button>
-              <button onClick={doeVerstuur} disabled={verstuurBezig || mailLaden || !mail.to.trim()}
+              <button onClick={doeVerstuur} disabled={verstuurBezig || mailLaden || !mail.to.trim() || !verstuurSjabloon}
                 className="inline-flex items-center gap-1.5 text-sm px-4 py-1.5 bg-everts text-white rounded-lg hover:bg-everts/90 disabled:opacity-40 font-semibold">
                 {verstuurBezig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Versturen
               </button>

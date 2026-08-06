@@ -26,6 +26,8 @@ export interface ArchiveerArgs {
   medewerkerId: string | null
   /** False = alleen registreren, niet naar SharePoint. */
   archiveren: boolean
+  /** Bij een inkooporder/OA-contract: de bestelling waar dit document bij hoort. */
+  bestellingId?: string | null
 }
 
 export interface ArchiveerResultaat {
@@ -75,6 +77,7 @@ export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<Archiv
         sharepoint_item_id: itemId,
         sharepoint_web_url: webUrl,
         gegenereerd_door: medewerkerId,
+        bestelling_id: args.bestellingId ?? null,
       })
       .select('id')
       .maybeSingle()

@@ -10,7 +10,10 @@
  */
 
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
-export const DOCUMENTSOORTEN = ['opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief', 'houtrot_rapportage', 'overig'] as const
+export const DOCUMENTSOORTEN = [
+  'opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief',
+  'houtrot_rapportage', 'inkooporder', 'oa_contract', 'overig',
+] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
 export const documentsoortLabels: Record<Documentsoort, string> = {
@@ -19,7 +22,22 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
   garantiecertificaat:'Garantiecertificaat',
   informatiebrief:    'Tussentijdse informatiebrief',
   houtrot_rapportage: 'Houtrot-rapportage',
+  inkooporder:        'Inkooporder',
+  oa_contract:        'Onderaannemerscontract',
   overig:             'Overig',
+}
+
+/**
+ * De twee inkoopsoorten. Ze verschillen van de brieven: de geadresseerde is de
+ * leverancier (niet de bewoner/opdrachtgever) en de inhoud komt uit een bestelling.
+ * De sleutels zijn gelijk aan `ContractSoort` in `lib/bouw7/contracten`, zodat de
+ * soort van een bestelling rechtstreeks de documentsoort selecteert.
+ */
+export const INKOOP_DOCUMENTSOORTEN = ['inkooporder', 'oa_contract'] as const
+export type InkoopDocumentsoort = (typeof INKOOP_DOCUMENTSOORTEN)[number]
+
+export function isInkoopSoort(s: string | null | undefined): s is InkoopDocumentsoort {
+  return s === 'inkooporder' || s === 'oa_contract'
 }
 
 /** Veldtypen voor de per-document invoervelden. */

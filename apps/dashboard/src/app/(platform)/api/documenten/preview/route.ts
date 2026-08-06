@@ -77,6 +77,8 @@ export async function GET(request: NextRequest) {
       // Preview: contextbouwers mogen zich beperken (houtrot-rapportage rendert
       // anders bij elke verversing tientallen foto's).
       preview: true,
+      // Inkoopdocument: vult {bestelling.*}/{leverancier.*} met de echte order.
+      bestellingId: q.get('bestelling_id'),
     })
 
     return new NextResponse(pdf.buffer as ArrayBuffer, {

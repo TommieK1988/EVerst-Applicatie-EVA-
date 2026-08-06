@@ -23,6 +23,8 @@ import {
   DocumentInvoerError,
 } from '@/lib/documenten/genereer-document'
 import { archiveerEnRegistreer } from '@/lib/documenten/archiveer'
+import { bestellingOrdernummer } from '@/lib/documenten/bestelling-blok'
+import { BestellingNietVanDossierError } from '@/lib/documenten/document-context'
 
 export const dynamic = 'force-dynamic'
 /** Een houtrot-rapportage haalt tientallen foto's op en laat Graph een PDF bouwen. */
@@ -36,14 +38,20 @@ export async function POST(request: NextRequest) {
     throw e
   }
 
-  let body: { sjabloon_id?: string; dossier_id?: string; invoer?: Record<string, unknown>; archiveren?: boolean }
+  let body: {
+    sjabloon_id?: string; dossier_id?: string; invoer?: Record<string, unknown>
+    archiveren?: boolean; bestelling_id?: string | null
+  }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Ongeldige aanvraag' }, { status: 400 })
   }
 
-  const { sjabloon_id: sjabloonId, dossier_id: dossierId, invoer = {}, archiveren = true } = body
+  const {
+    sjabloon_id: sjabloonId, dossier_id: dossierId, invoer = {}, archiveren = true,
+    bestelling_id: bestellingId = null,
+  } = body
   if (!sjabloonId || !dossierId) {
     return NextResponse.json({ error: 'sjabloon_id en dossier_id zijn verplicht' }, { status: 400 })
   }
@@ -60,11 +68,13 @@ export async function POST(request: NextRequest) {
     assertInvoerCompleet(sjabloon, invoer)
 
     const medewerker = await getCurrentMedewerker()
-    const pdf = await genereerDocumentPdf(supabase, sjabloon, dossierId, invoer, medewerker?.id)
+    const pdf = await genereerDocumentPdf(supabase, sjabloon, dossierId, invoer, medewerker?.id, { bestellingId })
 
-    const { data: dossier } = await supabase
-      .from('dossiers').select('dossiernummer').eq('id', dossierId).maybeSingle()
-    const naam = bestandsnaamVoor(sjabloon, dossier?.dossiernummer)
+    const [{ data: dossier }, ordernummer] = await Promise.all([
+      supabase.from('dossiers').select('dossiernummer').eq('id', dossierId).maybeSingle(),
+      bestellingOrdernummer(supabase, bestellingId),
+    ])
+    const naam = bestandsnaamVoor(sjabloon, dossier?.dossiernummer, ordernummer)
 
     // Archiveren + registreren is best-effort: de download mag er nooit op stuklopen.
     const archief = await archiveerEnRegistreer({
@@ -76,6 +86,7 @@ export async function POST(request: NextRequest) {
       bytes: pdf,
       medewerkerId: medewerker?.id ?? null,
       archiveren,
+      bestellingId,
     })
 
     return new NextResponse(pdf.buffer as ArrayBuffer, {
@@ -89,6 +100,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     if (err instanceof GeenToegangError) return NextResponse.json({ error: 'Dossier is afgesloten' }, { status: 403 })
+    if (err instanceof BestellingNietVanDossierError) return NextResponse.json({ error: err.message }, { status: 403 })
     if (err instanceof DocumentInvoerError) return NextResponse.json({ error: err.message }, { status: 400 })
     if (err instanceof GeenTemplateError) {
       return NextResponse.json({ error: 'Koppel eerst een Word-template aan dit sjabloon.' }, { status: 422 })

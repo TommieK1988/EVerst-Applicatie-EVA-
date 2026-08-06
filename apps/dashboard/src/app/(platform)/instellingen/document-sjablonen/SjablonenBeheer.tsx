@@ -58,7 +58,10 @@ export default function SjablonenBeheer({ initial }: { initial: DocumentSjabloon
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>
           Een sjabloon koppelt een Word-bestand aan de gegevens uit het dossier. Medewerkers kiezen het
-          sjabloon op het Bestanden-tab van een dossier en stellen het document met één klik op.
+          sjabloon op het Bestanden-tab van een dossier en stellen het document met één klik op. Sjablonen
+          van het soort <strong>Inkooporder</strong> of <strong>Onderaannemerscontract</strong> verschijnen bij
+          het inkopen in de werkbegroting. Meerdere sjablonen van hetzelfde soort mag: dat zijn de varianten
+          waar de opsteller uit kiest — gebruik <strong>Kopieer</strong> om er een te maken.
         </p>
         <Button variant="primary" size="sm" onClick={() => setShowNieuw(true)} style={{ flexShrink: 0 }}>
           + Nieuw sjabloon

@@ -488,6 +488,13 @@ export interface WerkbegrotingBestelling {
   levering_tekst?: string | null
   betaalafspraak?: string | null
   interne_notitie?: string | null
+  /**
+   * Gekozen documentsjabloon (document_sjablonen) voor het inkoopdocument dat EVA
+   * naar de leverancier stuurt. Server-side eigendom, net als de bouw7_*-velden:
+   * de client draagt de keuze aan bij het aanmaken, maar schrijft hem niet terug
+   * via de werkbegroting-sync (een stale cache zou hem anders wissen).
+   */
+  sjabloon_id?: string | null
 }
 
 export interface RelatieRef {

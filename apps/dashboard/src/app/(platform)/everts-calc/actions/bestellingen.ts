@@ -5,8 +5,13 @@
  *
  * Een "bestelling" is een bundel werkbegroting-componenten van één leverancier. Deze module
  * maakt daar het formele document van: een **inkooporder** (materiaal/materieel) of een
- * **onderaannemerscontract** (onderaanneming), altijd in **concept** — versturen naar de
- * leverancier gebeurt in Bouw7 zelf.
+ * **onderaannemerscontract** (onderaanneming). Aanmaken zet het als concept in Bouw7;
+ * `verstuurBestelling` mailt het daarna vanuit EVA naar de partij en roept dán pas af.
+ *
+ * De opmaak van dat document komt uit een Word-sjabloon (documentsoort `inkooporder` of
+ * `oa_contract`), zodat de business hem zelf kan beheren en er varianten naast elkaar
+ * kunnen bestaan. Bouw7 blijft de administratie: contract + leverbon, zodat de
+ * inkoopfactuur erop afboekt.
  *
  * Belangrijkste ontwerpregel: het contract maakt **geen eigen regels** aan, maar koppelt de
  * bestelregels die de werkbegroting-push (`stuurWerkbegrotingBestelregelsBouw7`) al in Bouw7
@@ -23,13 +28,14 @@ import { revalidatePath } from 'next/cache'
 import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
   schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
-  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId, leesBouw7Contract,
+  zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId,
   bestaatBouw7Contract, PURCHASE_TYPE,
   type ContractSoort, type ContractTermijn,
 } from '@/lib/bouw7/contracten'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7ListResponse } from '@/lib/bouw7/client'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { heeftTemplate } from '@/lib/documenten/types'
 import {
   syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase,
   previewWerkbegrotingBestelregelsBouw7, type WerkbegrotingPayload,
@@ -109,6 +115,59 @@ async function voerAfroepUit(
     .eq('id', bestellingId)
 
   return { bonnummer, bonAantal, fout }
+}
+
+/**
+ * Geeft het sjabloon-id terug als het bestaat, actief is en een inkoopsoort heeft;
+ * anders null. Zo kan een client geen willekeurig (of verwijderd) sjabloon aan een
+ * order hangen.
+ */
+async function geldigInkoopSjabloon(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  sjabloonId: string | null,
+): Promise<string | null> {
+  if (!sjabloonId) return null
+  const { data } = await db
+    .from('document_sjablonen')
+    .select('id, documentsoort, actief')
+    .eq('id', sjabloonId)
+    .maybeSingle()
+  if (!data?.actief) return null
+  return data.documentsoort === 'inkooporder' || data.documentsoort === 'oa_contract' ? data.id : null
+}
+
+/**
+ * Het sjabloon waarmee deze order wordt opgemaakt: de keuze van de opsteller, of
+ * anders het eerste actieve sjabloon van de juiste soort dat een Word-template heeft.
+ *
+ * Die terugval is bewust: een order moet de deur uit kunnen zonder dat iemand eerst
+ * een keuzelijst langsloopt. Is er niets bruikbaars, dan geeft dit null en meldt de
+ * aanroeper dat als beheerfout.
+ */
+async function kiesInkoopSjabloon(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  sjabloonId: string | null,
+  soort: ContractSoort,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bruikbaar = (r: any) => r && r.actief && heeftTemplate(r)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const normaliseer = (r: any) => ({ ...r, velden: Array.isArray(r.velden) ? r.velden : [] })
+
+  if (sjabloonId) {
+    const { data } = await db.from('document_sjablonen').select('*')
+      .eq('id', sjabloonId).eq('documentsoort', soort).maybeSingle()
+    if (bruikbaar(data)) return normaliseer(data)
+  }
+
+  const { data: lijst } = await db.from('document_sjablonen').select('*')
+    .eq('actief', true).eq('documentsoort', soort)
+    .order('volgorde', { ascending: true }).order('naam', { ascending: true })
+  const eerste = (lijst ?? []).find(bruikbaar)
+  return eerste ? normaliseer(eerste) : null
 }
 
 export type VoorstelRegel = {
@@ -294,8 +353,18 @@ export async function maakBestellingInBouw7(
   // huidige stand van de werkbegroting klaargezet.
   const gekozen = payload.componenten.filter(c => componentIds.has(c.id) && !c.is_verwijderd)
   const hash = await hashComponentenSet(gekozen)
+
+  // Sjabloonkeuze voor het EVA-document. Server-side gevalideerd — de client geeft
+  // alleen een id door, en een verkeerd sjabloon zou een order in de opmaak van een
+  // bewonersbrief opleveren.
+  const sjabloonId = await geldigInkoopSjabloon(db, bestelling.sjabloon_id ?? null)
+
   await db.from('werkbegroting_bestellingen')
-    .update({ componenten_hash: hash, klaargezet_op: new Date().toISOString() })
+    .update({
+      componenten_hash: hash,
+      klaargezet_op: new Date().toISOString(),
+      ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
+    })
     .eq('id', bestelling.id)
 
   const gate = await controleerBestellingGates({
@@ -679,25 +748,68 @@ export type BestellingMailConcept = {
   bericht: string
   /** Leeg als de leverancier geen e-mailadres heeft — dan moet de gebruiker het invullen. */
   heeftAdres: boolean
+  /** Sjabloon dat de opmaak levert; null als er geen bruikbaar sjabloon is. */
+  sjabloonId: string | null
+  /** Alle bruikbare sjablonen van deze soort, zodat het verzendvenster kan wisselen. */
+  sjablonen: { id: string; naam: string }[]
+}
+
+/** Terugvaltekst als het sjabloon geen mailtekst heeft ingevuld. */
+const STANDAARD_MAILTEKST: Record<'inkooporder' | 'oa_contract', { onderwerp: string; tekst: string }> = {
+  inkooporder: {
+    onderwerp: 'Inkooporder {bestelling.nummer}',
+    tekst: 'Goedemiddag,\n\nIn de bijlage vindt u onze inkooporder voor het project {project.naam}.\n\nWij verzoeken u het ordernummer te vermelden op uw pakbon en factuur, en de factuur te mailen naar inkoop@everts.chat.\n\nMet vriendelijke groet,',
+  },
+  oa_contract: {
+    onderwerp: 'Opdracht {bestelling.nummer}',
+    tekst: 'Goedemiddag,\n\nIn de bijlage vindt u onze opdracht voor het project {project.naam}.\n\nWij verzoeken u het opdrachtnummer te vermelden op uw factuur en deze te mailen naar inkoop@everts.chat.\n\nMet vriendelijke groet,',
+  },
 }
 
 /**
- * Prefill voor het verzendvenster: ontvanger, onderwerp en berichttekst uit het sjabloon dat in
- * Instellingen → Inkoop-e-mail staat. Puur lezend.
+ * Vult {sleutel}-plaatshouders. Onbekende sleutels worden leeggemaakt, zodat er nooit
+ * een letterlijke accolade-tekst bij de leverancier belandt.
+ */
+function vulMailTekst(tekst: string, vars: Record<string, string>): string {
+  return (tekst ?? '').replace(/\{([a-z0-9_.]+)\}/gi, (_, sleutel: string) => vars[sleutel] ?? '')
+}
+
+/**
+ * De mailtekst van een sjabloon is platte tekst met regeleinden — `bouwBestellingMailHtml`
+ * maakt er Outlook-proof HTML van. Oudere sjablonen kunnen er HTML in hebben staan; die
+ * wordt hier teruggebracht tot tekst zodat de alinea-indeling blijft kloppen.
+ */
+function naarPlatteTekst(ruw: string): string {
+  return (ruw ?? '')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*p\s*>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Prefill voor het verzendvenster: ontvanger, onderwerp en berichttekst uit het gekozen
+ * documentsjabloon, plus de sjablonen waaruit gewisseld kan worden. Puur lezend.
  *
  * De tekst is platte tekst met echte regeleinden; de HTML-opmaak gebeurt pas bij het versturen
  * (bouwBestellingMailHtml). De naam van de afzender staat er bewust niet onder: die komt uit de
  * Outlook-handtekening.
+ *
+ * `sjabloonKeuze` laat het venster de tekst opnieuw ophalen als de gebruiker een ander
+ * sjabloon kiest, zonder die keuze al vast te leggen.
  */
 export async function getBestellingMailConcept(
   dossierId: string,
   bestellingId: string,
+  sjabloonKeuze?: string | null,
 ): Promise<BestellingMailConcept> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
   const { data: b } = await db
     .from('werkbegroting_bestellingen')
-    .select('soort, bouw7_nummer, omschrijving, relatie_id, werkbegroting_id, levering_datum, levering_tekst')
+    .select('soort, sjabloon_id, bouw7_nummer, omschrijving, relatie_id, werkbegroting_id, levering_datum, levering_tekst')
     .eq('id', bestellingId)
     .maybeSingle()
   const soort = (b?.soort ?? 'inkooporder') as ContractSoort
@@ -710,10 +822,18 @@ export async function getBestellingMailConcept(
       .eq('id', dossierId).maybeSingle(),
   ])
 
-  const { getBestellingMailSjablonen, renderBestellingMailTekst } =
-    await import('@/lib/bouw7/bestelling-mail-sjabloon')
-  const sjablonen = await getBestellingMailSjablonen()
-  const sjabloon = soort === 'oa_contract' ? sjablonen.oa_contract : sjablonen.inkooporder
+  // Opmaak én mailtekst komen uit hetzelfde sjabloon; zo blijven document en
+  // begeleidende mail bij elkaar horen.
+  const sjabloon = await kiesInkoopSjabloon(db, sjabloonKeuze ?? b?.sjabloon_id ?? null, soort)
+  const { data: lijst } = await db.from('document_sjablonen').select('id, naam, docx_template_url, docx_template_bron, docx_template_drive_id, docx_template_item_id')
+    .eq('actief', true).eq('documentsoort', soort)
+    .order('volgorde', { ascending: true }).order('naam', { ascending: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bruikbareSjablonen = ((lijst ?? []) as any[]).filter(heeftTemplate).map(s => ({ id: s.id, naam: s.naam }))
+
+  const terugval = STANDAARD_MAILTEKST[soort === 'oa_contract' ? 'oa_contract' : 'inkooporder']
+  const onderwerpBron = sjabloon?.mail_onderwerp?.trim() || terugval.onderwerp
+  const berichtBron = naarPlatteTekst(sjabloon?.mail_body_html ?? '') || terugval.tekst
 
   const vars: Record<string, string> = {
     'leverancier.naam': relatie?.naam ?? '',
@@ -730,9 +850,11 @@ export async function getBestellingMailConcept(
 
   return {
     to: relatie?.email ?? '',
-    onderwerp: renderBestellingMailTekst(sjabloon.onderwerp, vars).trim(),
-    bericht: renderBestellingMailTekst(sjabloon.tekst, vars),
+    onderwerp: vulMailTekst(onderwerpBron, vars).trim(),
+    bericht: vulMailTekst(berichtBron, vars),
     heeftAdres: !!relatie?.email,
+    sjabloonId: sjabloon?.id ?? null,
+    sjablonen: bruikbareSjablonen,
   }
 }
 
@@ -740,7 +862,11 @@ export type VerstuurBestellingResultaat =
   | { ok: true; bonnummer: string | null; bonAantal: number; bonWaarschuwing: string | null }
   | { ok: false; error: string }
 
-type VerstuurInput = { to: string; cc?: string; onderwerp: string; bericht: string }
+type VerstuurInput = {
+  to: string; cc?: string; onderwerp: string; bericht: string
+  /** Sjabloon dat de opmaak levert; leeg = de eerder vastgelegde of de eerste bruikbare. */
+  sjabloonId?: string | null
+}
 
 /**
  * Verstuur de order/het contract naar de leverancier: PDF genereren → mailen via Outlook →
@@ -756,7 +882,7 @@ export async function verstuurBestelling(
 
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('id, soort, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
+    .select('id, soort, sjabloon_id, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
     .eq('id', bestellingId)
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
@@ -781,24 +907,14 @@ export async function verstuurBestelling(
   const ontvangers = input.to.split(/[;,]/).map(s => s.trim()).filter(Boolean)
   if (ontvangers.length === 0) return { ok: false, error: 'Vul een e-mailadres van de leverancier in.' }
 
-  // Contractinhoud uit Bouw7 lezen — dat is de bron van waarheid voor wat er op de PDF komt.
-  const contract = await leesBouw7Contract(soort, Number(rij.bouw7_contract_id)).catch(() => null)
-  if (!contract) return { ok: false, error: 'Kon het contract niet uit Bouw7 lezen.' }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const termijnen = (contract.contractTerms as any[] | undefined) ?? []
-  const regels = termijnen.map(t => ({
-    omschrijving: String(t.description ?? ''),
-    aantal: String(t.amount ?? '1'),
-    eenheid: String(t.unit ?? ''),
-    stukprijs: Number(t.unitPrice ?? 0),
-    bedrag: Number(t.subTotal ?? 0),
-  }))
-  const totaal = Number(contract.cost ?? regels.reduce((s, r) => s + r.bedrag, 0))
+  // Wat er op het document komt, komt uit dezelfde bron als het voorbeeld in het
+  // verzendvenster: `laadBestellingBlokken` over de bestelregels in Supabase. Zou dit
+  // uit Bouw7 komen, dan kon het verstuurde document afwijken van wat de opsteller
+  // zag — dezelfde gegevens zijn immers als contracttermijnen naar Bouw7 gepusht.
+  const { laadBestellingBlokken } = await import('@/lib/documenten/bestelling-blok')
+  const { bestelling: blok } = await laadBestellingBlokken(db, bestellingId)
+  const totaal = blok.totaal_getal
 
-  // Leverancier + dossiergegevens voor de PDF.
-  const { data: relatie } = rij.relatie_id
-    ? await db.from('relaties').select('naam, adres_straat, adres_postcode, adres_plaats').eq('id', rij.relatie_id).maybeSingle()
-    : { data: null }
   const { data: dossier } = await db
     .from('dossiers')
     .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
@@ -809,38 +925,29 @@ export async function verstuurBestelling(
     [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
 
-  // Briefpapier van de standaard offerte-layout (best-effort; geen briefpapier → eigen tekstkop).
-  const { data: layout } = await db.from('quote_layouts').select('briefpapier_pdf_url').eq('is_standaard', true).maybeSingle()
-  const { fetchBriefpapier } = await import('@/lib/everts-calc/briefpapier')
-  const briefpapier = await fetchBriefpapier(layout?.briefpapier_pdf_url ?? null)
-
-  const nu = new Date().toISOString()
-  const { genereerBestellingPdf } = await import('@/lib/bouw7/bestelling-pdf')
-  let pdf: Uint8Array
-  try {
-    pdf = await genereerBestellingPdf({
-      soort: soort === 'oa_contract' ? 'oa_contract' : 'inkooporder',
-      documentnummer: rij.bouw7_nummer ?? '',
-      datum: nlDatum(nu),
-      leverancier: {
-        naam: relatie?.naam ?? '',
-        adres: relatie?.adres_straat ?? null,
-        postcodePlaats: [relatie?.adres_postcode, relatie?.adres_plaats].filter(Boolean).join(' ') || null,
-      },
-      project: { nummer: dossier?.dossiernummer ?? null, naam: dossier?.titel ?? null, werkadres },
-      regels,
-      totaal,
-      isWinkel: false,
-      leverdatum: rij.levering_datum ? nlDatum(rij.levering_datum) : (rij.levering_tekst ?? null),
-      betaalafspraak: rij.betaalafspraak ?? null,
-      notitie: rij.interne_notitie ?? null,
-      afzender,
-    }, briefpapier)
-  } catch (e) {
-    return { ok: false, error: `Kon de order-PDF niet maken: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+  // De opmaak komt uit het gekozen Word-sjabloon; briefpapier en bestandsnaam zitten
+  // daar in. Zonder sjabloon valt er niets te versturen — dat is een beheerfout en
+  // moet als zodanig gemeld worden, niet stilzwijgend terugvallen op iets anders.
+  const { genereerDocumentPdf, bestandsnaamVoor } = await import('@/lib/documenten/genereer-document')
+  const sjabloon = await kiesInkoopSjabloon(db, input.sjabloonId ?? rij.sjabloon_id ?? null, soort)
+  if (!sjabloon) {
+    return {
+      ok: false,
+      error: `Er is nog geen bruikbaar sjabloon voor ${soort === 'oa_contract' ? 'een opdracht aan een onderaannemer' : 'een inkooporder'}. Maak er een aan bij Instellingen → Documentsjablonen.`,
+    }
   }
 
-  const bestandsnaam = `${soort === 'oa_contract' ? 'Opdracht' : 'Inkooporder'} ${rij.bouw7_nummer ?? ''}`.trim().replace(/[\\/:*?"<>|#%]/g, '-') + '.pdf'
+  const nu = new Date().toISOString()
+  let pdf: Uint8Array
+  try {
+    // Invoervelden van het sjabloon krijgen hun standaardwaarde: het verzendvenster
+    // vraagt er niet om, want een order hoort zonder extra invulwerk de deur uit te kunnen.
+    pdf = await genereerDocumentPdf(db, sjabloon, dossierId, {}, medewerker.id, { bestellingId })
+  } catch (e) {
+    return { ok: false, error: `Kon het document niet opstellen: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+  }
+
+  const bestandsnaam = `${bestandsnaamVoor(sjabloon, dossier?.dossiernummer, rij.bouw7_nummer)}.pdf`
   // Opmaak van de mail: alinea's + een gegevensblok met dezelfde kern als de PDF. Outlook
   // negeert `white-space:pre-wrap`, dus regeleinden moeten als echte <p>/<br> in de HTML.
   const { bouwBestellingMailHtml } = await import('@/lib/bouw7/bestelling-mail')
@@ -871,15 +978,28 @@ export async function verstuurBestelling(
 
   // Mail is uit → vastleggen als verstuurd (dubbelverzend geblokkeerd), en pas nu afroepen.
   await db.from('werkbegroting_bestellingen')
-    .update({ verstuurd_op: nu, verstuurd_door: medewerker.id, verstuurd_naar: ontvangers.join(', '), status: 'verzonden' })
+    .update({
+      verstuurd_op: nu, verstuurd_door: medewerker.id, verstuurd_naar: ontvangers.join(', '),
+      status: 'verzonden',
+      // Vastleggen wélke opmaak de leverancier heeft gekregen; dat is naderhand niet
+      // meer af te leiden als iemand het standaardsjabloon wijzigt.
+      sjabloon_id: sjabloon.id,
+    })
     .eq('id', bestellingId)
 
   const afroep = await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
 
-  // Archiveren in SharePoint — best-effort, mag het versturen niet laten falen.
+  // Archiveren in SharePoint én registreren bij het dossier — best-effort, mag het
+  // versturen niet laten falen. Via `archiveerEnRegistreer` komt de order in dezelfde
+  // documentenlijst als de brieven te staan, herleidbaar aan `bestelling_id`.
   try {
-    const { uploadBuffersNaarDossierMap } = await import('@/lib/o365/dossier-map')
-    await uploadBuffersNaarDossierMap(dossierId, [{ naam: bestandsnaam, contentType: 'application/pdf', bytes: pdf }])
+    const { archiveerEnRegistreer, markeerGemaild } = await import('@/lib/documenten/archiveer')
+    const archief = await archiveerEnRegistreer({
+      supabase: db, dossierId, sjabloon, invoer: {},
+      bestandsnaam, bytes: pdf, medewerkerId: medewerker.id,
+      archiveren: true, bestellingId,
+    })
+    if (archief.documentId) await markeerGemaild(db, archief.documentId, ontvangers)
   } catch { /* stil */ }
 
   revalidatePath(`/dossiers/${dossierId}`)

@@ -178,14 +178,6 @@ const calcOfferteItems: SettingsItem[] = [
     kicker: 'Offerte',
     module: 'dossiers',
   },
-  {
-    href: '/instellingen/inkoop-mail',
-    title: 'Inkoop-e-mail',
-    description: 'Standaard onderwerp en tekst voor het mailen van inkooporders en onderaannemersopdrachten.',
-    ready: true,
-    kicker: 'Inkoop',
-    module: 'dossiers',
-  },
 ]
 
 const appItems: SettingsItem[] = [

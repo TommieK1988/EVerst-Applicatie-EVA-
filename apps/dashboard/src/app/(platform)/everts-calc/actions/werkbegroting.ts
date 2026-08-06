@@ -181,6 +181,8 @@ export async function syncBestellingenNaarSupabase(
         // meegeschreven. Die zijn server-side eigendom van de contract-push; zou de client ze
         // vanuit een oude localStorage-cache terugsturen, dan wist een lege waarde de koppeling
         // en maakt de volgende push een duplicaat-contract in Bouw7 (zelfde les als bouw7_line_id).
+        // Om dezelfde reden ontbreekt sjabloon_id: dat wordt gezet door
+        // `maakBestellingInBouw7` en `bewaarBestellingSjabloon`.
         .upsert({
           id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving,
           relatie_id: uuidOfNull(b.relatie_id), status: b.status, bijgewerkt_op: nu,
@@ -329,6 +331,7 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       levering_tekst: b.levering_tekst ?? null,
       betaalafspraak: b.betaalafspraak ?? null,
       interne_notitie: b.interne_notitie ?? null,
+      sjabloon_id: b.sjabloon_id ?? null,
     })),
   }
 }

@@ -1134,16 +1134,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/instellingen\/inkoop-mail$/, {
-    title: 'Instellingen — Inkoop-e-mail',
-    description: 'De standaardteksten waarmee een inkooporder of onderaannemersopdracht naar de leverancier wordt gemaild.',
-    sections: [
-      { title: 'Twee sjablonen', body: 'Een inkooporder gaat naar een leverancier van materiaal, een onderaannemersopdracht naar een partij die werk uitvoert. Beide hebben een eigen onderwerp en tekst; kies bovenaan welke je bewerkt.' },
-      { title: 'Variabelen', body: 'Gebruik variabelen als {leverancier.naam}, {bestelling.nummer} en {project.werkadres}; die worden bij het versturen ingevuld. Onder je bericht komt automatisch een blokje met ordernummer, project, werkadres, lever- of startdatum, bedrag en betaalafspraak — zet die gegevens dus niet zelf in de tekst.' },
-      { title: 'Verzenden', body: 'Bij het versturen vanuit de werkbegroting zie je een venster waarin je de tekst nog kunt aanpassen. De mail gaat vanuit het Outlook-postvak van de ingelogde medewerker, met de order-PDF als bijlage.' },
-    ],
-  }],
-
   [/^\/instellingen\/offerte-layout$/, {
     title: 'Instellingen — Offerte-opmaak',
     description: 'Beheer de Word-sjablonen (lay-outs) voor offertes: huisstijl, kleuren en papierindeling. Gebruik meerdere lay-outs voor verschillende klanttypen of werksoorten.',

@@ -50,6 +50,11 @@ export interface GenereerOpties {
    * met tientallen foto's, per toetsaanslag.
    */
   preview?: boolean
+  /**
+   * Bestelling waarvoor dit document wordt opgesteld: vult {bestelling.*} en
+   * {leverancier.*}. Alleen zinvol bij de documentsoorten inkooporder/oa_contract.
+   */
+  bestellingId?: string | null
 }
 
 /**
@@ -68,7 +73,10 @@ export async function genereerDocumentDocx(
   const ctx =
     dossierId === DEMO_DOSSIER
       ? buildDemoDocumentContext(sjabloon)
-      : await buildDocumentContext(supabase, dossierId, sjabloon, invoer, ondertekenaarId, { preview: opties.preview })
+      : await buildDocumentContext(supabase, dossierId, sjabloon, invoer, ondertekenaarId, {
+          preview: opties.preview,
+          bestellingId: opties.bestellingId ?? null,
+        })
 
   const templateBron = opties.templateOverride?.docx_template_url || opties.templateOverride?.docx_template_item_id
     ? { ...sjabloon, ...opties.templateOverride }
@@ -125,18 +133,23 @@ export async function genereerDocumentPdf(
 /**
  * Bestandsnaam voor het document. Sjabloon-eigen patroon wint; anders
  * "<Documentsoort> <dossiernummer>". Zonder extensie.
+ *
+ * Bij een inkooporder/OA-contract is het ordernummer het kenmerk waar iedereen
+ * naar zoekt — dat wint dan van het dossiernummer in de standaardnaam.
  */
 export function bestandsnaamVoor(
   sjabloon: DocumentSjabloon,
   dossiernummer: string | null | undefined,
+  ordernummer?: string | null,
 ): string {
   const soortLabel = documentsoortLabels[sjabloon.documentsoort as Documentsoort] ?? sjabloon.naam
   const ruw = sjabloon.bestandsnaam_sjabloon?.trim()
     ? sjabloon.bestandsnaam_sjabloon
         .replace(/\{documentsoort\}/g, soortLabel)
         .replace(/\{sjabloon\}/g, sjabloon.naam)
+        .replace(/\{bestelling\.nummer\}|\{ordernummer\}/g, ordernummer ?? '')
         .replace(/\{dossier\.dossiernummer\}|\{dossiernummer\}/g, dossiernummer ?? '')
-    : [soortLabel, dossiernummer].filter(Boolean).join(' ')
+    : [soortLabel, ordernummer || dossiernummer].filter(Boolean).join(' ')
 
   // Tekens die Windows/SharePoint niet accepteren in een bestandsnaam.
   return (ruw || 'Document').replace(/[\\/:*?"<>|#%]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120)
