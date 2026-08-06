@@ -28,12 +28,23 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'EVA',
   },
-  // Let op: het beeldmerk zelf is WIT (bedoeld voor een donkere ondergrond) en
-  // valt daardoor weg als favicon/app-icoon op een licht startscherm. Gebruik
-  // daarom de iconen mét groene achtergrond.
+  // Alle iconen zijn gerenderd uit /logo-beeldmerk.svg (het echte Everts-
+  // beeldmerk: groene tegel met witte E en punt). Voor het tabblad en het
+  // iOS-startscherm gebruiken we een doorlopende variant zónder afgeronde
+  // hoeken: op 16-32px gaat de afronding verloren, en iOS rondt zelf al af —
+  // dubbele afronding geeft anders een lelijke rand.
+  //
+  // De ?v= is een cache-buster: browsers bewaren favicons hardnekkig, dus zonder
+  // die parameter blijven bestaande gebruikers het oude icoon zien. Ophogen
+  // zodra de iconen opnieuw wijzigen.
   icons: {
-    icon: '/favicon-32.png',
-    apple: '/apple-icon.png',
+    icon: [
+      { url: '/favicon.ico?v=2', sizes: '16x16 32x32 48x48' },
+      { url: '/favicon-16.png?v=2', type: 'image/png', sizes: '16x16' },
+      { url: '/favicon-32.png?v=2', type: 'image/png', sizes: '32x32' },
+      { url: '/icon-192.png?v=2', type: 'image/png', sizes: '192x192' },
+    ],
+    apple: [{ url: '/apple-icon.png?v=2', sizes: '180x180', type: 'image/png' }],
   },
 }
 

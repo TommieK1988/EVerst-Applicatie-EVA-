@@ -4,9 +4,9 @@ import type { MetadataRoute } from 'next'
  * PWA web-app manifest (App Router metadata-route → /manifest.webmanifest).
  * Online-only scaffold; geen offline-caching in deze versie.
  *
- * Icons: echte PNG's met de merkgroene achtergrond. Het losse beeldmerk is WIT
- * (bedoeld voor een donkere ondergrond) en werd daardoor onzichtbaar als
- * app-icoon op een licht startscherm.
+ * Icons: gerenderd uit /logo-beeldmerk.svg (groene tegel met witte E en punt).
+ * Het losse beeldmerk is WIT (bedoeld voor een donkere ondergrond) en zou als
+ * los app-icoon onzichtbaar zijn op een licht startscherm — vandaar de tegel.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -23,11 +23,18 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#009439',
     lang: 'nl',
     icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      // Maskable: de mark staat binnen de veilige zone, dus launchers mogen
-      // vrij bijsnijden zonder dat de E wordt aangetast.
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/icon-192.png?v=2', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icon-512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      // Maskable is een ANDER bestand: de achtergrond loopt door tot de rand en
+      // de E staat kleiner in het midden (binnen de veilige zone). Hier de
+      // gewone tegel opgeven zou betekenen dat Android-launchers dwars door de
+      // afgeronde hoeken heen snijden.
+      {
+        src: '/icon-maskable-512.png?v=2',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
     ],
   }
 }
