@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
@@ -334,7 +335,18 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
             {dossier.titel}
           </h1>
           <div style={{ fontSize: 13, color: 'var(--neutral-500, #6b757c)', marginTop: 6, fontWeight: 500 }}>
-            {dossier.klant_naam}
+            {dossier.klant_id && dossier.klant_naam ? (
+              <Link
+                href={`/relaties/${dossier.klant_id}`}
+                title="Open de relatiegegevens"
+                style={{ color: 'inherit', textDecoration: 'none' }}
+                className="hover:underline"
+              >
+                {dossier.klant_naam}
+              </Link>
+            ) : (
+              dossier.klant_naam
+            )}
           </div>
         </div>
       ) : (

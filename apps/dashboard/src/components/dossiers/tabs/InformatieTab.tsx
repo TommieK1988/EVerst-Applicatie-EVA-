@@ -119,13 +119,16 @@ const DEFAULT_CATEGORIEEN = ['Schilderwerk', 'Houtrotherstel', 'Stukadoorwerk', 
 
 /* ─── read-only veld ──────────────────────────────────────────────── */
 function InfoVeld({
-  label, waarde, mono, numeric, urgentie,
+  label, waarde, mono, numeric, urgentie, href, hrefTitel,
 }: {
   label: string
   waarde?: string | null
   mono?: boolean
   numeric?: boolean
   urgentie?: boolean
+  /** Maakt de waarde klikbaar, bv. naar de relatie- of contactpersoonpagina. */
+  href?: string | null
+  hrefTitel?: string
 }) {
   const heeftWaarde = waarde != null && waarde !== ''
   return (
@@ -142,7 +145,19 @@ function InfoVeld({
           ? urgentie ? 'text-warning-700' : 'text-neutral-800'
           : 'text-neutral-400',
       )}>
-        {heeftWaarde ? waarde : '—'}
+        {heeftWaarde
+          ? href
+            ? (
+              <Link
+                href={href}
+                title={hrefTitel}
+                className="text-brand-600 no-underline hover:underline"
+              >
+                {waarde}
+              </Link>
+            )
+            : waarde
+          : '—'}
       </div>
     </div>
   )
@@ -1323,7 +1338,17 @@ export function InformatieTab({
               </PopoverContent>
             </Popover>
             )}
-            <span className="text-[12px] font-medium text-neutral-500">{dossier.klant_naam}</span>
+            {dossier.klant_id && dossier.klant_naam ? (
+              <Link
+                href={`/relaties/${dossier.klant_id}`}
+                title="Open de relatiegegevens"
+                className="text-[12px] font-medium text-neutral-500 no-underline hover:text-brand-600 hover:underline"
+              >
+                {dossier.klant_naam}
+              </Link>
+            ) : (
+              <span className="text-[12px] font-medium text-neutral-500">{dossier.klant_naam}</span>
+            )}
           </div>
         </div>
 
@@ -1482,7 +1507,12 @@ export function InformatieTab({
           <CardBody>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <InfoVeld label="Dossiernummer"  waarde={dossier.dossiernummer} mono />
-              <InfoVeld label="Opdrachtgever"  waarde={dossier.klant_naam} />
+              <InfoVeld
+                label="Opdrachtgever"
+                waarde={dossier.klant_naam}
+                href={dossier.klant_id ? `/relaties/${dossier.klant_id}` : null}
+                hrefTitel="Open de relatiegegevens"
+              />
               <InfoVeld label="Projectnaam"    waarde={dossier.titel} />
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
               <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
@@ -1683,7 +1713,14 @@ export function InformatieTab({
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               {relatie ? (
                 <>
-                  <div className="col-span-2"><InfoVeld label="Naam"       waarde={relatie.naam} /></div>
+                  <div className="col-span-2">
+                    <InfoVeld
+                      label="Naam"
+                      waarde={relatie.naam}
+                      href={`/relaties/${relatie.id}`}
+                      hrefTitel="Open de relatiegegevens"
+                    />
+                  </div>
                   <InfoVeld label="KvK nummer" waarde={relatie.kvk_nummer} />
                   <InfoVeld label="BTW nummer" waarde={relatie.btw_nummer} />
                   <InfoVeld label="Telefoon"   waarde={relatie.telefoon} />
@@ -1725,7 +1762,12 @@ export function InformatieTab({
               const email    = geselecteerd?.email    ?? (dossier as any).contactpersoon_email    ?? null
               return (
                 <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <InfoVeld label="Naam"     waarde={naam} />
+                  <InfoVeld
+                    label="Naam"
+                    waarde={naam}
+                    href={form.contactpersoon_id ? `/relaties/contactpersonen/${form.contactpersoon_id}` : null}
+                    hrefTitel="Open de contactpersoongegevens"
+                  />
                   <InfoVeld label="Telefoon" waarde={telefoon} mono />
                   <div className="col-span-2">
                     <InfoVeld label="E-mail" waarde={email} />
