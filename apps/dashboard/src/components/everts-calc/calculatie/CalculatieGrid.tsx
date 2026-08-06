@@ -6,6 +6,7 @@ import type { ReactElement } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
+import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import {
   getGroepen, getCalculatieregels, getComponentregels,
   slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel,
@@ -1569,15 +1570,17 @@ function CalculatieregelRij({
       {werkUitgeklapt && (
         <tr className={`border-b border-slate-100 ${regel.gemarkeerd ? 'bg-orange-50/60' : 'bg-slate-50/30'}`}>
           <td colSpan={colOrder.length} className="pb-2 pt-1 space-y-2" style={{ paddingLeft: `${indent + 8}px`, paddingRight: '12px' }}>
-            <textarea
+            <BulletTextarea
               autoFocus
               value={regel.werkomschrijving ?? ''}
-              onChange={e => onWijzig(regel.id, { werkomschrijving: e.target.value })}
+              onChange={tekst => onWijzig(regel.id, { werkomschrijving: tekst })}
               placeholder="Uitgebreide werkomschrijving..."
-              rows={3}
+              minRows={3}
+              maxRows={30}
+              toolbarClassName="-mt-0.5"
               className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded bg-white
                 focus:outline-none focus:border-everts/40 focus:ring-1 focus:ring-everts/20
-                resize-none text-slate-600 placeholder-slate-300"
+                text-slate-600 placeholder-slate-300 leading-relaxed"
             />
             {/* Afbeeldingen */}
             <div className="flex flex-wrap items-center gap-2">

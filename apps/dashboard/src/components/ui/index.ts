@@ -23,6 +23,7 @@ export * from './progress'
 export * from './toast'
 // Formulierpatronen
 export * from './form-field'
+export * from './bullet-textarea'
 export * from './combobox'
 export * from './date-picker'
 export * from './file-upload'

@@ -18,6 +18,7 @@ import type { Materiaal, EenheidConfig } from '@/lib/everts-calc/types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { Button } from '@/components/ui/button'
+import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import { Spinner } from '@/components/ui/spinner'
 import { useDialogen } from '@/components/ui/dialogen'
 import {
@@ -94,47 +95,20 @@ function InlineTekst({
 
 // ─── Textarea met bullet-knop ─────────────────────────────────────────────────
 
-function BulletTextarea({
-  value, onChange, rows = 3, placeholder, disabled = false,
-}: { value: string; onChange: (v: string) => void; rows?: number; placeholder?: string; disabled?: boolean }) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-
-  const insertBullet = () => {
-    const el = ref.current
-    if (!el) return
-    const start = el.selectionStart
-    const before = value.substring(0, start)
-    const after = value.substring(el.selectionEnd)
-    const prefix = before.length === 0 || before.endsWith('\n') ? '• ' : '\n• '
-    const newVal = before + prefix + after
-    onChange(newVal)
-    setTimeout(() => {
-      el.selectionStart = el.selectionEnd = start + prefix.length
-      el.focus()
-    }, 0)
-  }
-
+/** Werkomschrijving-veld: groeit mee met de tekst en kan opsommingen maken. */
+function WerkomschrijvingVeld({
+  value, onChange, minRows = 3, placeholder, disabled = false,
+}: { value: string; onChange: (v: string) => void; minRows?: number; placeholder?: string; disabled?: boolean }) {
   return (
-    <div>
-      {!disabled && (
-        <div className="flex justify-end mb-1">
-          <button type="button" onClick={insertBullet}
-            className="text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded transition-colors"
-            title="Bullet toevoegen">
-            • Bullet
-          </button>
-        </div>
-      )}
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        rows={rows}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-none disabled:bg-slate-50 disabled:text-slate-500"
-      />
-    </div>
+    <BulletTextarea
+      value={value}
+      onChange={onChange}
+      minRows={minRows}
+      placeholder={placeholder}
+      disabled={disabled}
+      toonKnop={!disabled}
+      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts disabled:bg-slate-50 disabled:text-slate-500"
+    />
   )
 }
 
@@ -588,10 +562,10 @@ function BewerkPaneel({
           {/* Uitgebreide werkomschrijving */}
           <section>
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Werkomschrijving</h3>
-            <BulletTextarea
+            <WerkomschrijvingVeld
               value={omschr}
               onChange={setOmschr}
-              rows={3}
+              minRows={3}
               disabled={item.vergrendeld}
               placeholder="Uitgebreide omschrijving van de werkzaamheden..."
             />
@@ -948,10 +922,10 @@ function NieuwReceptModal({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Werkomschrijving</label>
-            <BulletTextarea
+            <WerkomschrijvingVeld
               value={omschr}
               onChange={setOmschr}
-              rows={3}
+              minRows={3}
               placeholder="Omschrijving van de werkzaamheden..."
             />
           </div>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronRight, ChevronDown, Plus, Trash2, Check, X, Upload, Download, Pencil, Search,
 } from 'lucide-react'
-import { Button, Card, CardHeader, CardBody, Spinner, EmptyState, Alert, useDialogen } from '@/components/ui'
+import { Button, Card, CardHeader, CardBody, Spinner, EmptyState, Alert, useDialogen, BulletTextarea } from '@/components/ui'
 import type { SchilderOnderdeel, SchilderType, SchilderBehandeling, SchilderCombinatie } from '@/lib/everts-calc/services/schilderwerk'
 import {
   haalCombinaties,
@@ -593,6 +593,7 @@ function BehandelingRijInline({
 }) {
   const [, start] = useTransition()
   const { bevestig } = useDialogen()
+  const [werkTekst, setWerkTekst] = useState(behandeling.uitgebreide_werkomschrijving ?? '')
 
   const wijzig = (data: Parameters<typeof wijzigBehandeling>[1]) => {
     start(async () => {
@@ -631,15 +632,17 @@ function BehandelingRijInline({
         />
       </td>
       <td className="px-2 py-1 align-top">
-        <textarea
-          key={behandeling.id + '_werk'}
-          defaultValue={behandeling.uitgebreide_werkomschrijving ?? ''}
-          rows={2}
+        <BulletTextarea
+          value={werkTekst}
+          onChange={setWerkTekst}
+          minRows={2}
+          maxRows={20}
+          toonKnop={false}
           placeholder="Uitgebreide werkomschrijving..."
           onBlur={e => wijzig({ uitgebreide_werkomschrijving: e.target.value || null })}
           className="w-full text-xs px-1 py-0.5 rounded border border-transparent
             hover:border-slate-200 focus:border-everts/40 focus:outline-none bg-transparent
-            hover:bg-white focus:bg-white placeholder-slate-300 resize-y leading-relaxed"
+            hover:bg-white focus:bg-white placeholder-slate-300 leading-relaxed"
         />
       </td>
       <td className="px-2 py-1 w-10 text-center align-top">

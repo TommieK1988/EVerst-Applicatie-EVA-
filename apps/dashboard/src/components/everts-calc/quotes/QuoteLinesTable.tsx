@@ -5,6 +5,7 @@ import { Trash2, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { maakLine, updateLine, verwijderLine } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { QuoteLine, QuoteType } from '@/lib/everts-calc/types-quotes'
 import { Button } from '@/components/ui/button'
+import { BulletTextarea } from '@/components/ui/bullet-textarea'
 
 interface Props {
   quoteId: string
@@ -311,14 +312,15 @@ function LineRow({
           <td />
           <td colSpan={isIntern ? 8 : 5} className="px-4 pb-2 pt-1">
             <div className="pl-4 border-l-2 border-everts/20">
-              <div className="text-xs text-slate-400 mb-1 font-medium">Werkomschrijving</div>
-              <textarea
+              <BulletTextarea
+                label={<span className="text-xs text-slate-400 font-medium">Werkomschrijving</span>}
                 value={werkText}
-                onChange={(e) => setWerkText(e.target.value)}
+                onChange={setWerkText}
                 onBlur={(e) => onBlur(line.id, 'opmerking', e.target.value, line)}
-                rows={3}
+                minRows={3}
+                maxRows={30}
                 placeholder="Uitgebreide werkomschrijving..."
-                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-everts/30 focus:border-everts resize-none leading-relaxed bg-white"
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-everts/30 focus:border-everts leading-relaxed bg-white"
               />
             </div>
           </td>
