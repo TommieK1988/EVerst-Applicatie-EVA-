@@ -445,10 +445,10 @@ function ComponentRegelRij({
 
   // Bedragen + VP (gebruik lokale edit-staat voor live feedback)
   const compBedrag      = normEdit * tariefEdit * regelHoeveelheid
-  const compKpPe        = regelHoeveelheid > 0 ? compBedrag / regelHoeveelheid : 0
+  const compKpPe        = regelHoeveelheid !== 0 ? compBedrag / regelHoeveelheid : 0
   const effectiefOpslag = comp.opslag_pct ?? regelOpslag
   const compVpTotaal    = compBedrag * (1 + effectiefOpslag / 100)
-  const compVpPe        = regelHoeveelheid > 0 ? compVpTotaal / regelHoeveelheid : 0
+  const compVpPe        = regelHoeveelheid !== 0 ? compVpTotaal / regelHoeveelheid : 0
 
   const niComp = (val: number, onChange: (v: number) => void, decimalen = 2, cls = '') => (
     <GetalInput
@@ -575,7 +575,7 @@ function ComponentRegelRij({
       )
       case 'bedrag_ab': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {comp.type === 'arbeid' && compBedrag > 0 && (
+          {comp.type === 'arbeid' && compBedrag !== 0 && (
             <span className=" text-xs text-blue-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
@@ -591,7 +591,7 @@ function ComponentRegelRij({
       )
       case 'bedrag_mt': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {comp.type === 'materieel' && compBedrag > 0 && (
+          {comp.type === 'materieel' && compBedrag !== 0 && (
             <span className=" text-xs text-red-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
@@ -607,26 +607,26 @@ function ComponentRegelRij({
       )
       case 'bedrag_oa': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {comp.type === 'onderaanneming' && compBedrag > 0 && (
+          {comp.type === 'onderaanneming' && compBedrag !== 0 && (
             <span className=" text-xs text-purple-700 font-semibold">{formatEuro(compBedrag)}</span>
           )}
         </td>
       )
       case 'tot_uren': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {comp.type === 'arbeid' && normEdit > 0 && regelHoeveelheid > 0 && (
+          {comp.type === 'arbeid' && normEdit !== 0 && regelHoeveelheid !== 0 && (
             <span className=" text-xs text-blue-600">{formatGetal(normEdit * regelHoeveelheid, 2)}</span>
           )}
         </td>
       )
       case 'kp_eenh': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {compKpPe > 0 && <span className=" text-xs text-slate-600">{formatEuro(compKpPe)}</span>}
+          {compKpPe !== 0 && <span className=" text-xs text-slate-600">{formatEuro(compKpPe)}</span>}
         </td>
       )
       case 'tot_kp': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {compBedrag > 0 && <span className=" text-xs text-slate-700 font-semibold">{formatEuro(compBedrag)}</span>}
+          {compBedrag !== 0 && <span className=" text-xs text-slate-700 font-semibold">{formatEuro(compBedrag)}</span>}
         </td>
       )
       case 'opslag_pct': return (
@@ -653,7 +653,7 @@ function ComponentRegelRij({
               onChange={e => {
                 setVpEenhEdit(e.target.value)
                 const v = parseGetal(e.target.value)
-                if (v > 0 && compKpPe > 0) {
+                if (v !== 0 && compKpPe !== 0) {
                   const pct = +((v / compKpPe - 1) * 100).toFixed(2)
                   onWijzig({ opslag_pct: pct })
                 }
@@ -667,7 +667,7 @@ function ComponentRegelRij({
               onClick={() => setVpEenhEdit(compVpPe === 0 ? '' : String(+compVpPe.toFixed(2)))}
               title="Klik om aan te passen"
             >
-              {compVpPe > 0 ? formatEuro(compVpPe) : <span className="text-slate-200">—</span>}
+              {compVpPe !== 0 ? formatEuro(compVpPe) : <span className="text-slate-200">—</span>}
             </span>
           )}
         </td>
@@ -682,7 +682,7 @@ function ComponentRegelRij({
               onChange={e => {
                 setTotVpEdit(e.target.value)
                 const v = parseGetal(e.target.value)
-                if (v > 0 && compBedrag > 0) {
+                if (v !== 0 && compBedrag !== 0) {
                   const pct = +((v / compBedrag - 1) * 100).toFixed(2)
                   onWijzig({ opslag_pct: pct })
                 }
@@ -696,7 +696,7 @@ function ComponentRegelRij({
               onClick={() => setTotVpEdit(compVpTotaal === 0 ? '' : String(+compVpTotaal.toFixed(2)))}
               title="Klik om aan te passen"
             >
-              {compVpTotaal > 0 ? formatEuro(compVpTotaal) : <span className="text-slate-200">—</span>}
+              {compVpTotaal !== 0 ? formatEuro(compVpTotaal) : <span className="text-slate-200">—</span>}
             </span>
           )}
         </td>
@@ -929,34 +929,37 @@ function CalculatieregelRij({
   }
 
   // Berekende waarden (op basis van lokale state)
+  // `!== 0` en niet `> 0`: een minderwerkregel heeft een negatieve prijs en moet
+  // net zo goed uit de lokale edit-staat komen, anders zie je tijdens het typen
+  // nog de opgeslagen (of lege) waarde in plaats van je eigen invoer.
   const tmpComps = [
-    ...(!multiAb && (abUren > 0 || abTarief > 0) ? [{ id: 'ab', calculatieregel_id: regel.id, type: 'arbeid'         as const, norm_hoeveelheid: abUren, tarief: abTarief, opslag_pct: ab?.opslag_pct }] : allAb),
-    ...(!multiMt && mtPrijs > 0                   ? [{ id: 'mt', calculatieregel_id: regel.id, type: 'materieel'      as const, norm_hoeveelheid: 1,      tarief: mtPrijs,  opslag_pct: mt?.opslag_pct }] : allMt),
-    ...(!multiOa && oaPrijs > 0                   ? [{ id: 'oa', calculatieregel_id: regel.id, type: 'onderaanneming' as const, norm_hoeveelheid: 1,      tarief: oaPrijs,  opslag_pct: oa?.opslag_pct }] : allOa),
+    ...(!multiAb && (abUren !== 0 || abTarief !== 0) ? [{ id: 'ab', calculatieregel_id: regel.id, type: 'arbeid'         as const, norm_hoeveelheid: abUren, tarief: abTarief, opslag_pct: ab?.opslag_pct }] : allAb),
+    ...(!multiMt && mtPrijs !== 0                     ? [{ id: 'mt', calculatieregel_id: regel.id, type: 'materieel'      as const, norm_hoeveelheid: 1,      tarief: mtPrijs,  opslag_pct: mt?.opslag_pct }] : allMt),
+    ...(!multiOa && oaPrijs !== 0                     ? [{ id: 'oa', calculatieregel_id: regel.id, type: 'onderaanneming' as const, norm_hoeveelheid: 1,      tarief: oaPrijs,  opslag_pct: oa?.opslag_pct }] : allOa),
   ]
   const { arbeid_totaal, materieel_totaal, oa_totaal, kp_pe, kp_totaal, uren_pe, uren_totaal, vp_pe, vp_totaal } =
     berekenCalculatieregel(regel, tmpComps, opslag)
 
   const hasCompOverride = regelComps.some(c => c.opslag_pct !== undefined)
-  const displayOpslag = hasCompOverride && kp_pe > 0
+  const displayOpslag = hasCompOverride && kp_pe !== 0
     ? +((vp_pe / kp_pe - 1) * 100).toFixed(2)
     : opslag
 
   // Terugrekenen totaalprijs → eenheidsprijs
   const onBedragAb = (v: number) => {
-    if (abUren > 0 && regel.hoeveelheid > 0) {
+    if (abUren !== 0 && regel.hoeveelheid !== 0) {
       const t = +(v / (abUren * regel.hoeveelheid)).toFixed(4)
       setAbTarief(t); deb('abt', () => onWijzigComponent(regel.id, 'arbeid', abUren, t))
     }
   }
   const onBedragMt = (v: number) => {
-    if (regel.hoeveelheid > 0) {
+    if (regel.hoeveelheid !== 0) {
       const t = +(v / regel.hoeveelheid).toFixed(4)
       setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, t))
     }
   }
   const onBedragOa = (v: number) => {
-    if (regel.hoeveelheid > 0) {
+    if (regel.hoeveelheid !== 0) {
       const t = +(v / regel.hoeveelheid).toFixed(4)
       setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, t))
     }
@@ -1202,7 +1205,7 @@ function CalculatieregelRij({
       )
       case 'tot_uren': return (
         <td key={id} className={`px-2 py-1 text-right ${base}`} style={tdSt}>
-          {uren_totaal > 0
+          {uren_totaal !== 0
             ? <span className=" text-xs text-blue-700">{formatGetal(uren_totaal, 2)}</span>
             : <span className="text-slate-200">—</span>
           }
@@ -1224,14 +1227,14 @@ function CalculatieregelRij({
       case 'uur_eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
-            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe, 2) : ''}</span>
+            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe !== 0 ? formatGetal(uren_pe, 2) : ''}</span>
             : ni(abUren, onUrenChange, 2)}
         </td>
       )
       case 'min_eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiAb
-            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe > 0 ? formatGetal(uren_pe * 60, 2) : ''}</span>
+            ? <span className="text-xs  text-slate-400 block text-right px-1">{uren_pe !== 0 ? formatGetal(uren_pe * 60, 2) : ''}</span>
             : ni(abMin, onMinChange, 2)}
         </td>
       )
@@ -1259,7 +1262,7 @@ function CalculatieregelRij({
             onChange={e => {
               setMtBedragEdit(e.target.value)
               const v = parseGetal(e.target.value)
-              if (v > 0 && regel.hoeveelheid > 0) {
+              if (v !== 0 && regel.hoeveelheid !== 0) {
                 const t = +(v / regel.hoeveelheid).toFixed(4)
                 setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, t))
               }
@@ -1285,7 +1288,7 @@ function CalculatieregelRij({
             onChange={e => {
               setOaBedragEdit(e.target.value)
               const v = parseGetal(e.target.value)
-              if (v > 0 && regel.hoeveelheid > 0) {
+              if (v !== 0 && regel.hoeveelheid !== 0) {
                 const t = +(v / regel.hoeveelheid).toFixed(4)
                 setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, t))
               }
@@ -1333,7 +1336,7 @@ function CalculatieregelRij({
               onChange={e => {
                 setVpEenhEdit(e.target.value)
                 const v = parseGetal(e.target.value)
-                if (v > 0 && kp_pe > 0) {
+                if (v !== 0 && kp_pe !== 0) {
                   const pct = +((v / kp_pe - 1) * 100).toFixed(2)
                   onWijzig(regel.id, { opslag_pct: pct })
                 }
@@ -1347,7 +1350,7 @@ function CalculatieregelRij({
               onClick={() => setVpEenhEdit(vp_pe === 0 ? '' : String(+vp_pe.toFixed(2)))}
               title="Klik om aan te passen"
             >
-              {vp_pe > 0 ? formatEuro(vp_pe) : <span className="text-slate-200">—</span>}
+              {vp_pe !== 0 ? formatEuro(vp_pe) : <span className="text-slate-200">—</span>}
             </span>
           )}
         </td>
@@ -1362,7 +1365,7 @@ function CalculatieregelRij({
               onChange={e => {
                 setTotVpEdit(e.target.value)
                 const v = parseGetal(e.target.value)
-                if (v > 0 && kp_pe > 0 && regel.hoeveelheid > 0) {
+                if (v !== 0 && kp_pe !== 0 && regel.hoeveelheid !== 0) {
                   const vpPe = v / regel.hoeveelheid
                   const pct = +((vpPe / kp_pe - 1) * 100).toFixed(2)
                   onWijzig(regel.id, { opslag_pct: pct })
@@ -1377,7 +1380,7 @@ function CalculatieregelRij({
               onClick={() => setTotVpEdit(vp_totaal === 0 ? '' : String(+vp_totaal.toFixed(2)))}
               title="Klik om aan te passen"
             >
-              {vp_totaal > 0 ? formatEuro(vp_totaal) : <span className="text-slate-200">—</span>}
+              {vp_totaal !== 0 ? formatEuro(vp_totaal) : <span className="text-slate-200">—</span>}
             </span>
           )}
         </td>
@@ -1749,8 +1752,9 @@ function GroepSectie({
 
   // Groepstotalen — getoond in een eigen rij ónder de groep, per kolom uitgelijnd.
   // Alleen doorrekenen als er iets te tonen valt: elke berekening loopt de hele
-  // subboom af en dat gebeurt bij elke render van elke groep opnieuw.
-  const toonTotalen = kostprijs > 0
+  // subboom af en dat gebeurt bij elke render van elke groep opnieuw. Een groep
+  // met alleen minderwerk komt negatief uit en heeft net zo goed een totaalrij.
+  const toonTotalen = kostprijs !== 0
   const groepVP   = toonTotalen ? berekenGroepVP(groep.id, alleGroepen, alleRegels, alleComponenten, defaultOpslag) : 0
   const groepUren = toonTotalen ? berekenGroepUren(groep.id, alleGroepen, alleRegels, alleComponenten) : 0
   const groepMT   = toonTotalen ? berekenGroepMaterieel(groep.id, alleGroepen, alleRegels, alleComponenten) : 0
@@ -1947,9 +1951,9 @@ function GroepSectie({
                   <span className={`text-xs font-semibold ${totaalTekst}`}>Totaal {groep.naam}</span>
                 </td>
               )
-              case 'tot_uren':  return cel(groepUren > 0 ? <span className="text-xs font-semibold text-blue-700">{formatGetal(groepUren, 1)}</span> : null)
-              case 'bedrag_mt': return cel(groepMT  > 0 ? <span className="text-xs font-semibold text-red-700">{formatEuro(groepMT)}</span> : null)
-              case 'bedrag_oa': return cel(groepOA  > 0 ? <span className="text-xs font-semibold text-purple-700">{formatEuro(groepOA)}</span> : null)
+              case 'tot_uren':  return cel(groepUren !== 0 ? <span className="text-xs font-semibold text-blue-700">{formatGetal(groepUren, 1)}</span> : null)
+              case 'bedrag_mt': return cel(groepMT  !== 0 ? <span className="text-xs font-semibold text-red-700">{formatEuro(groepMT)}</span> : null)
+              case 'bedrag_oa': return cel(groepOA  !== 0 ? <span className="text-xs font-semibold text-purple-700">{formatEuro(groepOA)}</span> : null)
               case 'tot_kp':    return cel(<span className="text-xs font-semibold text-everts-dark">{formatEuro(kostprijs)}</span>)
               case 'tot_vp':    return cel(<span className="text-xs font-bold text-everts">{formatEuro(groepVP)}</span>)
               default:          return <td key={id} data-col={id} className="py-1.5" />
@@ -3067,17 +3071,17 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   )
                   if (id === 'bedrag_mt') return (
                     <td key={id} className="px-3 py-3 text-right bg-red-50/40">
-                      {totaalMT > 0 && <span className=" text-sm font-bold text-red-700">{formatEuro(totaalMT)}</span>}
+                      {totaalMT !== 0 && <span className=" text-sm font-bold text-red-700">{formatEuro(totaalMT)}</span>}
                     </td>
                   )
                   if (id === 'bedrag_oa') return (
                     <td key={id} className="px-3 py-3 text-right bg-purple-50/40">
-                      {totaalOA > 0 && <span className=" text-sm font-bold text-purple-700">{formatEuro(totaalOA)}</span>}
+                      {totaalOA !== 0 && <span className=" text-sm font-bold text-purple-700">{formatEuro(totaalOA)}</span>}
                     </td>
                   )
                   if (id === 'tot_uren') return (
                     <td key={id} className="px-3 py-3 text-right bg-blue-50/40">
-                      {totaalUren > 0 && <span className=" text-sm font-bold text-blue-700">{formatGetal(totaalUren, 2)}</span>}
+                      {totaalUren !== 0 && <span className=" text-sm font-bold text-blue-700">{formatGetal(totaalUren, 2)}</span>}
                     </td>
                   )
                   if (id === 'tot_kp') return (

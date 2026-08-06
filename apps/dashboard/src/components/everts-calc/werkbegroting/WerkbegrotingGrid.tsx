@@ -174,7 +174,9 @@ function BedragInput({ value, onChange, className }: {
       onBlur={() => {
         bewerkend.current = false
         const v = parseFloat(intern.replace(',', '.'))
-        if (!isNaN(v) && v > 0) { setIntern(v.toFixed(2)); onChange(v) }
+        // Elk getal behalve nul blijft staan — een minderwerkpost is negatief en
+        // werd hier eerder bij het verlaten van het veld teruggezet naar leeg.
+        if (!isNaN(v) && v !== 0) { setIntern(v.toFixed(2)); onChange(v) }
         else { setIntern(''); onChange(0) }
       }}
     />
@@ -368,16 +370,16 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
               { label: 'Arbeid',        wb: totalen.totaalArbeid,    calc: totalen.calcArbeid,    cls: 'text-blue-700'   },
               { label: 'Materiaal',     wb: totalen.totaalMateriaal, calc: totalen.calcMateriaal, cls: 'text-red-700'    },
               { label: 'Onderaanneming',wb: totalen.totaalOA,        calc: totalen.calcOA,        cls: 'text-purple-700' },
-            ].filter(r => r.wb > 0 || r.calc > 0).map(r => {
+            ].filter(r => r.wb !== 0 || r.calc !== 0).map(r => {
               const diff = r.wb - r.calc
-              const pct  = r.calc > 0 ? (diff / r.calc) * 100 : null
+              const pct  = r.calc !== 0 ? (diff / r.calc) * 100 : null
               return (
                 <tr key={r.label} className="border-b border-slate-100/60">
                   <td className={`${tdCls} ${r.cls} font-medium`}>{r.label}</td>
-                  <td className={`${tdCls} text-right  text-slate-400`}>{r.calc > 0 ? formatEuro(r.calc) : '—'}</td>
-                  <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{r.wb > 0 ? formatEuro(r.wb) : '—'}</td>
+                  <td className={`${tdCls} text-right  text-slate-400`}>{r.calc !== 0 ? formatEuro(r.calc) : '—'}</td>
+                  <td className={`${tdCls} text-right  font-semibold text-slate-800`}>{r.wb !== 0 ? formatEuro(r.wb) : '—'}</td>
                   <td className={`${tdCls} text-right`}>
-                    {r.calc > 0 && <VerschilBadge verschil={diff} pct={pct} />}
+                    {r.calc !== 0 && <VerschilBadge verschil={diff} pct={pct} />}
                   </td>
                 </tr>
               )
@@ -389,7 +391,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
               <td className="pt-1.5 text-right  text-[10px] text-slate-400">{formatEuro(totalen.calcTotaal)}</td>
               <td className="pt-1.5 text-right  text-[11px] font-bold text-everts">{formatEuro(totalen.eindtotaal)}</td>
               <td className="pt-1.5 text-right">
-                {totalen.calcTotaal > 0 && (
+                {totalen.calcTotaal !== 0 && (
                   <VerschilBadge
                     verschil={totalen.eindtotaal - totalen.calcTotaal}
                     pct={(totalen.eindtotaal - totalen.calcTotaal) / totalen.calcTotaal * 100}
@@ -441,13 +443,13 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
       </div>
 
       {/* Eindtotaal */}
-      {totalen.eindtotaal > 0 && (
+      {totalen.eindtotaal !== 0 && (
         <div className="px-4 py-3 border-t-2 border-slate-300 bg-white sticky bottom-0">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700">Totaal werkbegroting</span>
             <span className=" text-sm font-bold text-everts">{formatEuro(totalen.eindtotaal)}</span>
           </div>
-          {totalen.calcTotaal > 0 && (() => {
+          {totalen.calcTotaal !== 0 && (() => {
             const diff = totalen.eindtotaal - totalen.calcTotaal
             const pct  = (diff / totalen.calcTotaal) * 100
             return (
@@ -1204,7 +1206,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
               placeholder="0"
               onChange={e => {
                 const nieuw = parseFloat(e.target.value) || 0
-                const normH = regel.hoeveelheid > 0 ? nieuw / regel.hoeveelheid : nieuw
+                const normH = regel.hoeveelheid !== 0 ? nieuw / regel.hoeveelheid : nieuw
                 onComponentWijzig(comp.id, { norm_hoeveelheid: normH })
               }}
             />
@@ -1319,8 +1321,8 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       case 'totaalprijs':
         return (
           <td key={id} className={`px-2 py-1.5 ${base}`}>
-            <span className={` font-semibold ${totaalPrijs > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
-              {totaalPrijs > 0 ? formatEuro(totaalPrijs) : '—'}
+            <span className={` font-semibold ${totaalPrijs !== 0 ? 'text-slate-800' : 'text-slate-300'}`}>
+              {totaalPrijs !== 0 ? formatEuro(totaalPrijs) : '—'}
             </span>
           </td>
         )
@@ -1539,15 +1541,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                             {isHovered && <span className="ml-2 normal-case font-normal text-everts/70">↓ Hier neerzetten</span>}
                           </span>
                           <div className="flex items-center gap-3 flex-shrink-0">
-                            {rij.groepCalcTotaal > 0 && (
+                            {rij.groepCalcTotaal !== 0 && (
                               <span className="text-[10px] text-slate-400 ">
                                 Calc: {formatEuro(rij.groepCalcTotaal)}
                               </span>
                             )}
-                            {rij.groepTotaal > 0 && (
+                            {rij.groepTotaal !== 0 && (
                               <span className=" text-[11px] font-bold text-slate-700">{formatEuro(rij.groepTotaal)}</span>
                             )}
-                            {rij.groepCalcTotaal > 0 && rij.groepTotaal > 0 && (() => {
+                            {rij.groepCalcTotaal !== 0 && rij.groepTotaal !== 0 && (() => {
                               const diff = rij.groepTotaal - rij.groepCalcTotaal
                               const pct  = (diff / rij.groepCalcTotaal) * 100
                               return <VerschilBadge verschil={diff} pct={pct} />
@@ -1653,7 +1655,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                         </span>
 
                         {/* Bedrag */}
-                        {totaalPrijs > 0 && (
+                        {totaalPrijs !== 0 && (
                           <span className="text-xs  text-slate-500 flex-shrink-0 line-through">{formatEuro(totaalPrijs)}</span>
                         )}
 

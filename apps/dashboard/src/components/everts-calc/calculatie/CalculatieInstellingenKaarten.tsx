@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import toast from 'react-hot-toast'
 import { getScenarios, slaScenarioOp } from '@/lib/everts-calc/local-store'
+import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
+import { bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { createClient } from '@/lib/everts-calc/supabase/client'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { Betalingsconditie } from '@/app/(platform)/everts-calc/actions/betalingscondities'
@@ -15,6 +18,10 @@ import { useDialogen } from '@/components/ui/dialogen'
 
 interface Props {
   projectId: string
+  /** Calculatie waar de keuzes op horen. Leeg → standaard/eerste scenario. Geef dit
+   *  mee vanuit een geopende calculatie: na een revisie is het geopende scenario een
+   *  ander dan het standaard-scenario, en de offerte wordt van het geopende gemaakt. */
+  scenarioId?: string
   /** Verplicht-modus: toon een waarschuwing + "Doorgaan"-knop die pas actief is als
    *  beide keuzes gemaakt zijn (gebruikt vóór het aanmaken van een offerte). */
   vereist?: boolean
@@ -22,7 +29,7 @@ interface Props {
   onVoltooid?: () => void
 }
 
-export default function CalculatieInstellingenKaarten({ projectId, vereist = false, onVoltooid }: Props) {
+export default function CalculatieInstellingenKaarten({ projectId, scenarioId, vereist = false, onVoltooid }: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
@@ -32,12 +39,20 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
     standaard_uitsluitingen: string | null
     standaard_opmerkingen: string | null
   } | null>(null)
+  const [opslaan, setOpslaan] = useState(false)
   const { bevestig } = useDialogen()
+
+  // Wachtende opslag: `openstaand` = er is iets gewijzigd dat nog niet in Supabase
+  // staat; `lopend` = de schrijfactie die op dit moment onderweg is.
+  const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openstaand = useRef(false)
+  const lopend     = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     const scs = getScenarios(projectId)
     if (scs.length === 0) return
-    const sc = scs.find(s => s.is_standaard) ?? scs[0]
+    const sc = (scenarioId ? scs.find(s => s.id === scenarioId) : undefined)
+      ?? scs.find(s => s.is_standaard) ?? scs[0]
     setScenario(sc)
 
     // Betalingscondities + AV ophalen via Supabase browser client
@@ -52,15 +67,56 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
       .eq('is_standaard', true).maybeSingle()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then(({ data }: { data: any }) => setStandaardSjabloon(data ?? null))
+  }, [projectId, scenarioId])
+
+  /**
+   * Schrijft de calculatie (inclusief dit scenario) naar Supabase.
+   *
+   * Zonder deze stap blijft de keuze alleen in het werkgeheugen van deze browser
+   * staan: een collega ziet 'm dan niet, en het offerte-dialoog haalt de gedeelde
+   * snapshot op vóór het aanmaken — die overschrijft de keuze weer met leeg.
+   */
+  const bewaarNu = useCallback(async (): Promise<void> => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    // Een al lopende schrijfactie eerst afmaken, anders keert "Doorgaan" terug
+    // vóórdat de keuze op de server staat.
+    if (lopend.current) await lopend.current
+    if (!openstaand.current) return
+    openstaand.current = false
+    setOpslaan(true)
+    const taak = bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
+      .then(res => {
+        if (!res.gelukt) {
+          openstaand.current = true
+          toast.error(res.fout ?? 'Opslaan van de offerte-instellingen mislukt')
+        }
+      })
+      .catch((e: unknown) => {
+        openstaand.current = true
+        toast.error(e instanceof Error ? e.message : 'Opslaan van de offerte-instellingen mislukt')
+      })
+      .finally(() => { lopend.current = null; setOpslaan(false) })
+    lopend.current = taak
+    await taak
   }, [projectId])
+
+  // Nog niet weggeschreven wijziging alsnog opslaan als het dialoog sluit.
+  useEffect(() => () => { void bewaarNu() }, [bewaarNu])
 
   if (!scenario) return null
 
-  /** Sla scenario op voor offerte-instellingen (betalingsconditie, AV). */
-  const wijzig = (patch: Partial<Scenario>) => {
+  /**
+   * Sla scenario op voor offerte-instellingen (betalingsconditie, AV, teksten).
+   * `direct` voor keuzelijsten (één klik = klaar), debounce voor tekstvelden.
+   */
+  const wijzig = (patch: Partial<Scenario>, direct = false) => {
     const bijgewerkt = { ...scenario, ...patch }
     slaScenarioOp(bijgewerkt)
     setScenario(bijgewerkt)
+    openstaand.current = true
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    if (direct) void bewaarNu()
+    else saveTimer.current = setTimeout(() => { saveTimer.current = null; void bewaarNu() }, 800)
   }
 
   /** Laad de drie teksten uit het standaard offerte-sjabloon (overschrijft huidige). */
@@ -75,7 +131,7 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
       voorwaarden_tekst:   standaardSjabloon.standaard_voorwaarden ?? '',
       uitsluitingen_tekst: standaardSjabloon.standaard_uitsluitingen ?? '',
       opmerkingen_tekst:   standaardSjabloon.standaard_opmerkingen ?? '',
-    })
+    }, true)
   }
 
   const TEKSTVELDEN: { key: 'voorwaarden_tekst' | 'uitsluitingen_tekst' | 'opmerkingen_tekst'; label: string; placeholder: string }[] = [
@@ -104,7 +160,7 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Betalingscondities</label>
               <select
                 value={scenario.betalingsconditie_id ?? ''}
-                onChange={e => wijzig({ betalingsconditie_id: e.target.value || null })}
+                onChange={e => wijzig({ betalingsconditie_id: e.target.value || null }, true)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
               >
                 <option value="">— Geen voorkeur —</option>
@@ -119,7 +175,7 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Algemene Voorwaarden</label>
               <select
                 value={scenario.algemene_voorwaarden_id ?? ''}
-                onChange={e => wijzig({ algemene_voorwaarden_id: e.target.value || null })}
+                onChange={e => wijzig({ algemene_voorwaarden_id: e.target.value || null }, true)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
               >
                 <option value="">— Geen voorkeur —</option>
@@ -167,8 +223,16 @@ export default function CalculatieInstellingenKaarten({ projectId, vereist = fal
 
       {vereist && (
         <div className="flex justify-end">
-          <Button variant="primary" size="md" disabled={!beideGekozen} onClick={onVoltooid}>
-            Doorgaan naar offerte
+          {/* Eerst de keuze vastleggen, dan pas door: het offerte-dialoog haalt bij
+              openen de gedeelde calculatie op en zou een niet-opgeslagen keuze
+              overschrijven. */}
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!beideGekozen || opslaan}
+            onClick={async () => { await bewaarNu(); onVoltooid?.() }}
+          >
+            {opslaan ? 'Opslaan…' : 'Doorgaan naar offerte'}
           </Button>
         </div>
       )}

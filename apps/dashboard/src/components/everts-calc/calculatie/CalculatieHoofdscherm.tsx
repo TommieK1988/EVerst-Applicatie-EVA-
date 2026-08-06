@@ -310,8 +310,10 @@ export default function CalculatieHoofdscherm({
    *  betalingsconditie én algemene voorwaarden op de calculatie; anders opent
    *  eerst het instellingen-dialoog (verplicht-modus). */
   const startOfferte = (type: QuoteType) => {
+    // Kijk naar het geopende scenario — dát is het scenario waarvan de offerte
+    // gemaakt wordt. Na een revisie is dat een ander dan het standaard-scenario.
     const scs = getScenarios(projectId)
-    const actief = scs.find(s => s.is_standaard) ?? scs[0]
+    const actief = scs.find(s => s.id === scenario.id) ?? scs.find(s => s.is_standaard) ?? scs[0]
     if (!actief?.betalingsconditie_id || !actief?.algemene_voorwaarden_id) {
       setPendingOfferteType(type)
       setInstellingenVereist(true)
@@ -691,6 +693,7 @@ export default function CalculatieHoofdscherm({
             </p>
             <CalculatieInstellingenKaarten
               projectId={projectId}
+              scenarioId={scenario.id}
               vereist={instellingenVereist}
               onVoltooid={handleInstellingenVoltooid}
             />
