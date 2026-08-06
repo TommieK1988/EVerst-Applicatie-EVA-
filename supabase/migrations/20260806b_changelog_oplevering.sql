@@ -1,0 +1,5 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-06','opgelost','Oplevering','Ingesproken tekst bij een opleverpunt blijft nu staan',
+   'Sprak je een opleverpunt in, dan verscheen de tekst wel in beeld maar was hij daarna weer verdwenen. Dat is verholpen: alles wat je inspreekt blijft staan. De telefoon luistert bovendien door als je even nadenkt, zodat je niet steeds opnieuw op de microfoon hoeft te tikken. Blijft het een halve minuut stil, dan gaat de microfoon vanzelf uit.'),
+  ('2026-08-06','verbeterd','Oplevering','Foto bij een opleverpunt ook uit je eigen fotobibliotheek',
+   'Tot nu toe opende de knop bij een opleverpunt altijd de camera. Naast Foto maken staat er nu een knop om een foto uit de fotobibliotheek van je telefoon te kiezen — handig als het beeld er al staat of een collega het je heeft gestuurd. Dat geldt voor de voor- en na-foto, voor een gemeld aandachtspunt en voor onderaannemers die een punt afmelden via hun link.');
