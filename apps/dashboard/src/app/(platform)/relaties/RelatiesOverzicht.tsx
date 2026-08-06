@@ -81,6 +81,8 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     filterType: 'select',
     filterOpties: ['Opdrachtgever', 'Leverancier', 'Onderaannemer'],
     sorteerWaarde: r => r.types.map(t => organisatieTypeLabels[t]).join(', '),
+    // Een relatie kan meerdere types hebben; elk type apart moet raak zijn.
+    filterWaarde: r => r.types.map(t => organisatieTypeLabels[t]),
     render: r => (
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {r.types.map(t => (
@@ -175,6 +177,9 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
     filterType: 'select',
     filterOpties: ['Nederland', 'Overig'],
     sorteerWaarde: r => r.adres_land ?? '',
+    // De cel toont het land zelf; het filter bundelt alles buiten Nederland.
+    // Zonder land matcht een rij geen van beide opties.
+    filterWaarde: r => (r.adres_land ? (r.adres_land === 'Nederland' ? 'Nederland' : 'Overig') : ''),
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.adres_land ?? '—'}</span>,
   },
   {
@@ -401,6 +406,9 @@ const KOLOMMEN_PARTICULIEREN: KolomDefinitie<ParticulierRij>[] = [
     filterType: 'select',
     filterOpties: ['Nederland', 'Overig'],
     sorteerWaarde: r => r.adres_land ?? '',
+    // De cel toont het land zelf; het filter bundelt alles buiten Nederland.
+    // Zonder land matcht een rij geen van beide opties.
+    filterWaarde: r => (r.adres_land ? (r.adres_land === 'Nederland' ? 'Nederland' : 'Overig') : ''),
     render: r => <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{r.adres_land ?? '—'}</span>,
   },
 ]

@@ -220,9 +220,14 @@ export function DossierLijst({
       breedte: 165,
       filterType: 'select',
       filterOpties: statussen.map(s => s.label),
+      // Sorteren op procesvolgorde, filteren op het getoonde label.
       sorteerWaarde: d => {
         const idx = statussen.findIndex(s => s.key === actieveSubstatus(d, sectie))
         return idx >= 0 ? idx : statussen.length
+      },
+      filterWaarde: d => {
+        const sub = actieveSubstatus(d, sectie)
+        return statussen.find(s => s.key === sub)?.label ?? sub
       },
       render: d => {
         const sub = actieveSubstatus(d, sectie)
@@ -403,6 +408,7 @@ export function DossierLijst({
       filterType: 'select',
       filterOpties: ['Aanvraag', 'Offerte', 'Opdracht'],
       sorteerWaarde: d => d.hoofdstatus,
+      filterWaarde: d => HOOFDSTATUS_LABEL[d.hoofdstatus] ?? d.hoofdstatus,
       render: d => <Tekst waarde={HOOFDSTATUS_LABEL[d.hoofdstatus] ?? d.hoofdstatus} />,
     },
     {
@@ -568,6 +574,8 @@ export function DossierLijst({
       filterType: 'select',
       filterOpties: ['Regie', 'Termijnen'],
       sorteerWaarde: d => d.facturatiemethode ?? '',
+      filterWaarde: d => d.facturatiemethode === 'termijnen' ? 'Termijnen'
+        : d.facturatiemethode === 'regie' ? 'Regie' : '',
       render: d => <Tekst waarde={d.facturatiemethode === 'termijnen' ? 'Termijnen' : d.facturatiemethode === 'regie' ? 'Regie' : null} />,
     },
 

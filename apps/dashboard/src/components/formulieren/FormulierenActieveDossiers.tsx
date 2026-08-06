@@ -119,6 +119,7 @@ export default function FormulierenActieveDossiers({
       sorteerWaarde: r => r.klant_naam ?? '',
       render: r => r.klant_naam ?? '—' },
     { key: 'fase', label: 'Fase', breedte: 160, filterType: 'select',
+      filterOpties: [...new Set(data.map(r => r.dossier_fase))].sort(),
       sorteerWaarde: r => r.dossier_fase,
       render: r => (
         <span>
@@ -129,7 +130,9 @@ export default function FormulierenActieveDossiers({
         </span>
       ) },
     { key: 'status', label: 'Status', breedte: 130, filterType: 'select',
+      filterOpties: [...new Set(data.map(r => STATUS_META[r.status]?.label ?? r.status))],
       sorteerWaarde: r => r.status,
+      filterWaarde: r => STATUS_META[r.status]?.label ?? r.status,
       render: r => <Badge meta={STATUS_META[r.status]} /> },
     { key: 'deadline', label: 'Deadline', breedte: 120,
       sorteerWaarde: r => r.deadline ?? '9999',
@@ -158,7 +161,7 @@ export default function FormulierenActieveDossiers({
     { key: 'verwacht_einddatum', label: 'Verwacht eind', breedte: 130, standaard_zichtbaar: false,
       sorteerWaarde: r => r.verwacht_einddatum ?? '9999',
       render: r => fmtDatum(r.verwacht_einddatum) },
-  ], [])
+  ], [data])
 
   const openRij = (r: FormulierTaakRij) => {
     if (r.inzending_id) {

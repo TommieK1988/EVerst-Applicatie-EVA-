@@ -118,6 +118,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
       label: 'Type',
       filterType: 'select',
       filterOpties: ['Verkoopofferte', 'Intern'],
+      filterWaarde: q => TYPE_LABELS[q.type] ?? q.type,
       render: q => (
         <span style={{
           display: 'inline-flex', alignItems: 'center',
@@ -140,6 +141,7 @@ export function OfferteOverzicht({ offertes, layouts, user_id }: Props) {
         const idx = volgorde.indexOf(q.status)
         return idx >= 0 ? idx : 99
       },
+      filterWaarde: q => STATUS_LABELS[q.status] ?? q.status,
       render: q => <QuoteStatusBadge status={q.status} />,
     },
     {

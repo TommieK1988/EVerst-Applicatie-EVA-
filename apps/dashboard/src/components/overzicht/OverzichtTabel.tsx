@@ -58,6 +58,20 @@ export type KolomDefinitie<T> = {
   sorteerWaarde?:      (item: T) => string | number | null
   filterType?:         'tekst' | 'select'
   filterOpties?:       string[]
+  /**
+   * Waarde waarop het select-filter matcht. Moet exact een van `filterOpties`
+   * teruggeven — dus het getoonde label, niet de onderliggende sleutel.
+   *
+   * Nodig zodra `sorteerWaarde` iets anders teruggeeft dan wat de cel toont
+   * (een volgorde-index, een enum-sleutel, een aantal dagen). Zonder deze
+   * functie filtert de tabel op `sorteerWaarde` en vergelijkt hij bv. "0" met
+   * "Verzonden" — dan valt de lijst leeg zodra je iets aanvinkt.
+   *
+   * Een array betekent dat de rij meerdere waarden heeft (bv. een relatie die
+   * zowel leverancier als onderaannemer is); de rij blijft staan zodra één
+   * daarvan is aangevinkt.
+   */
+  filterWaarde?:       (item: T) => string | string[] | null
   breedte?:            number
 }
 
@@ -208,12 +222,22 @@ function SortIco({ dir }: { dir: false | 'asc' | 'desc' }) {
 
 // ─── Multiselect kolomfilter ──────────────────────────────────────────────────
 
-/** Filterwaarde is een array van gekozen opties; lege array of undefined = geen filter. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const inLijstFilter: FilterFn<any> = (row, columnId, filterValue) => {
-  const gekozen = filterValue as string[]
-  if (!Array.isArray(gekozen) || gekozen.length === 0) return true
-  return gekozen.includes(String(row.getValue(columnId) ?? ''))
+/**
+ * Filterwaarde is een array van gekozen opties; lege array of undefined = geen filter.
+ *
+ * Er wordt vergeleken met `kolom.filterWaarde`, en alleen als die ontbreekt met
+ * de accessor-waarde (= `sorteerWaarde`). Sorteren en filteren hebben namelijk
+ * niet dezelfde waarde nodig: een statuskolom sorteert op procesvolgorde maar
+ * moet op zijn label filteren.
+ */
+function maakInLijstFilter<T>(kolom: KolomDefinitie<T>): FilterFn<T> {
+  return (row, columnId, filterValue) => {
+    const gekozen = filterValue as string[]
+    if (!Array.isArray(gekozen) || gekozen.length === 0) return true
+    const ruw = kolom.filterWaarde ? kolom.filterWaarde(row.original) : row.getValue(columnId)
+    const waarden = Array.isArray(ruw) ? ruw : [String(ruw ?? '')]
+    return waarden.some(w => gekozen.includes(w))
+  }
 }
 
 function MultiSelectFilter({
@@ -460,11 +484,39 @@ export default function OverzichtTabel<T extends { id: string }>({
       enableSorting: !!k.sorteerWaarde,
       enableColumnFilter: !!k.filterType,
       enableResizing: true,
-      filterFn: k.filterType === 'select' ? inLijstFilter : ('includesString' as const),
+      filterFn: k.filterType === 'select' ? maakInLijstFilter(k) : ('includesString' as const),
       size: k.breedte ?? 150,
       minSize: 60,
     })),
   ]
+
+  // Vangnet tegen een filter dat altijd leeg blijft: als geen enkele rij een
+  // waarde heeft die in `filterOpties` voorkomt, klopt de koppeling tussen de
+  // opties en de gefilterde waarde niet. Alleen tijdens ontwikkelen.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || data.length === 0) return
+    for (const k of kolommen) {
+      if (k.filterType !== 'select') continue
+      if (!k.filterOpties?.length) {
+        console.warn(`[OverzichtTabel:${scherm}] kolom "${k.key}" heeft filterType 'select' zonder filterOpties — de keuzelijst blijft leeg.`)
+        continue
+      }
+      const steekproef = data.slice(0, 200)
+      const raak = steekproef.some(rij => {
+        const ruw = k.filterWaarde
+          ? k.filterWaarde(rij)
+          : k.sorteerWaarde
+            ? k.sorteerWaarde(rij)
+            : ''
+        const waarden = Array.isArray(ruw) ? ruw : [String(ruw ?? '')]
+        return waarden.some(w => k.filterOpties!.includes(w))
+      })
+      if (!raak) {
+        console.warn(`[OverzichtTabel:${scherm}] kolom "${k.key}": geen enkele rij matcht een van de filterOpties — filteren levert altijd 0 rijen. Voeg een filterWaarde toe die het getoonde label teruggeeft.`)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kolommen, data, scherm])
 
   // De groepeerkolom mag nooit als cel of in het kolombeheer opduiken.
   // Gememoized: een verse object-identiteit per render laat TanStack's interne
@@ -611,6 +663,12 @@ export default function OverzichtTabel<T extends { id: string }>({
     const headers = zichtbareKolommen.map(k => k.label)
     const rijen = table.getFilteredRowModel().rows.map(row =>
       zichtbareKolommen.map(k => {
+        // filterWaarde geeft de getoonde tekst; sorteerWaarde mag een index of
+        // sleutel zijn en zou dan als "0" of "regie" in het bestand belanden.
+        if (k.filterWaarde) {
+          const gefilterd = k.filterWaarde(row.original)
+          return Array.isArray(gefilterd) ? gefilterd.join(', ') : (gefilterd ?? '')
+        }
         const waarde = k.sorteerWaarde ? k.sorteerWaarde(row.original) : ''
         // Getallen als getal behouden zodat Excel ermee rekent; null → lege cel
         if (waarde == null) return ''

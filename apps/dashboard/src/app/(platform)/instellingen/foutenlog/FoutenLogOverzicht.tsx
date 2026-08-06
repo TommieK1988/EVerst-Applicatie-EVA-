@@ -129,6 +129,7 @@ const KOLOMMEN: KolomDefinitie<FoutRij>[] = [
   {
     key: 'module',
     label: 'Module',
+    // Keuzelijst wordt in het scherm gevuld met de modules die echt voorkomen.
     filterType: 'select',
     breedte: 120,
     sorteerWaarde: r => r.module ?? '',
@@ -338,6 +339,14 @@ export default function FoutenLogOverzicht({
     return fouten
   }, [fouten, weergave])
 
+  // De modulelijst is vrije tekst uit de logging; de opties komen dus uit de data.
+  const kolommen = useMemo<KolomDefinitie<FoutRij>[]>(
+    () => KOLOMMEN.map(k => k.key === 'module'
+      ? { ...k, filterOpties: [...new Set(fouten.map(f => f.module).filter((m): m is string => !!m))].sort() }
+      : k),
+    [fouten],
+  )
+
   const tabs: Array<[Weergave, string]> = [
     ['open', `Open (${aantalOpen})`],
     ['opgelost', 'Opgelost'],
@@ -359,7 +368,7 @@ export default function FoutenLogOverzicht({
       <OverzichtTabel
         scherm="fouten-log"
         data={zichtbaar}
-        kolommen={KOLOMMEN}
+        kolommen={kolommen}
         layouts={layouts}
         user_id={user_id}
         dicht

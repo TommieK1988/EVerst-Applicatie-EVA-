@@ -158,6 +158,14 @@ export function CalculatieOverzicht({ calculaties, layouts, user_id }: Props) {
         const idx = statussen.findIndex(s => s.key === r.dossier_substatus)
         return idx >= 0 ? idx : 99
       },
+      // Sorteren gaat op procesvolgorde; filteren moet op het label uit de badge.
+      filterWaarde: r => {
+        if (!r.dossier_substatus) return ''
+        const statussen = r.dossier_hoofdstatus === 'aanvraag' ? AANVRAAG_STATUSSEN
+          : r.dossier_hoofdstatus === 'offerte' ? OFFERTE_STATUSSEN
+          : OPDRACHT_STATUSSEN
+        return statussen.find(s => s.key === r.dossier_substatus)?.label ?? r.dossier_substatus
+      },
       render: r => <DossierStatusBadge rij={r} />,
     },
     {

@@ -31,7 +31,9 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
     breedte: 120,
     filterType: 'select',
     filterOpties: ['Op tijd', '< 30 dgn te laat', '30+ dgn te laat'],
+    // Sorteren op hoeveel dagen te laat, filteren op het stoplicht zelf.
     sorteerWaarde: r => r.dagen_na_vervaldatum ?? -9999,
+    filterWaarde: r => STOPLICHT_LABEL[r.stoplicht],
     render: r => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: STOPLICHT_KLEUR[r.stoplicht] }} />
