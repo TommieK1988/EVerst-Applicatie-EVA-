@@ -188,8 +188,15 @@ Body: `HourLog`. Vereist een actieve user gekoppeld aan een medewerker.
 | `startTime`, `endTime` | string | opt | alleen bij dagstaat-modus |
 | `approved`, `paidOff` | bool | opt | |
 
-### `POST /quotation` — offerte
-Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, `contact{id}`, `quotationDate`, `language` (bv. `nl-NL`), `layout`. Regels via `chapters[] → QuotationLineChapter`. AK/W&R via `overheads`/`profitAndRisk` (+ hun `CondensedVatTariff`). **Complex** — laatste fase.
+### `POST /quotation` — offerte — **BEWUST NIET GEBRUIKT**
+Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, `contact{id}`, `quotationDate`, `language` (bv. `nl-NL`), `layout`. Regels via `chapters[] → QuotationLineChapter`. AK/W&R via `overheads`/`profitAndRisk` (+ hun `CondensedVatTariff`).
+
+> **Besluit aug 2026 (Tom):** EVA maakt géén offertes aan in Bouw7. Bij het verzenden van een
+> EVA-offerte volgt alleen de **status** mee: het dossier gaat op substatus `verzonden`, wat via
+> `updateDossierSubstatus(..., { schrijfBouw7: true })` → `substatus-attr.ts` als **"07. Verzonden"**
+> naar het maatwerkveld *Offerte Sub-status* op het Bouw7-project wordt geschreven.
+> Een eerdere poging tot `POST /quotation` liep vast op de regelvalidatie (`QuotationLine::$subtotal`,
+> `$vatTariffPercentage` en `$sortIndex` mogen niet null zijn) en is verwijderd.
 
 ### `POST /project/delivery-ticket` — bon/leverbon
 Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `ticketDate`, `purchaseType` (int), `processed` (bool). Optioneel `cost`, `description`, `file`.
@@ -734,7 +741,7 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 | **3** | **Relaties** | `POST/DELETE /contact` | Groter schema, raakt facturatie-instellingen |
 | **4** | **Urenregistratie** | `POST /project/hour-log` | Hoge businesswaarde (mobiele buitendienst), maar vereist medewerker-koppeling + uursoort-mapping |
 | **5** | **Bonnen / leverbonnen** | `POST /project/delivery-ticket` | |
-| **6** | **Offertes** | `POST /quotation` (+ chapters/lines) | Meest complexe schema; pas als calculatie-flow in EVA staat |
+| ~~**6**~~ | ~~**Offertes**~~ | ~~`POST /quotation`~~ | **Vervallen** — EVA schrijft alleen de offerte-substatus naar Bouw7, geen offertes (zie hierboven) |
 | **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg |
 
 **Per fase telkens dezelfde stappen:** (a) `Condensed*`-mapper EVA→Bouw7 schrijven, (b) `client.post/del` aanroepen, (c) resultaat (id) terugschrijven naar `bouw7_id`, (d) `logSync()`, (e) `sync_vergrendeld`/`bron`-velden respecteren om schrijf-loops te voorkomen.

@@ -131,14 +131,45 @@ function splitAdressen(v: string | undefined): string[] {
 }
 
 /**
+ * Zet het dossier van een zojuist verstuurde offerte op substatus **Verzonden** — in EVA én
+ * (write-through) in het gedeelde Bouw7-maatwerkveld "Offerte Sub-status" ("07. Verzonden").
+ * Staat het dossier nog in de aanvraagfase, dan promoveert het daarmee naar de offertefase.
+ *
+ * Overslaan wanneer "Verzonden" geen zinnige stap is: een dossier dat al opdracht is, een
+ * servicedesk-melding (eigen ladder), of een offerte die al gewonnen is. Geeft altijd een korte
+ * melding terug voor de toast; gooit niet.
+ */
+async function zetDossierOpVerzonden(dossierId: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data: d } = await admin
+    .from('dossiers')
+    .select('hoofdstatus, offerte_substatus, servicedesk_substatus, bouw7_id')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!d) return 'dossier niet gevonden'
+  if (d.servicedesk_substatus != null)   return 'servicedeskmelding, status ongewijzigd'
+  if (d.hoofdstatus === 'opdracht')      return 'dossier is al opdracht, status ongewijzigd'
+  if (d.offerte_substatus === 'gewonnen') return 'offerte staat op Gewonnen, status ongewijzigd'
+  if (d.hoofdstatus === 'offerte' && d.offerte_substatus === 'verzonden') return 'stond al op Verzonden'
+
+  const { updateDossierSubstatus } = await import('@/lib/dossiers/actions')
+  const res = await updateDossierSubstatus(dossierId, 'verzonden', { schrijfBouw7: true })
+  if (!res.ok) return res.error
+  if (res.bouw7 && !res.bouw7.ok) return `Verzonden in EVA · Bouw7: ${res.bouw7.error}`
+  return d.bouw7_id ? 'Verzonden (EVA + Bouw7)' : 'Verzonden (alleen EVA)'
+}
+
+/**
  * Verstuurt de goedgekeurde offerte per e-mail namens de ingelogde medewerker,
- * zet de status op 'verzonden' na een geslaagde verzending (HTTP 202) en
- * archiveert de PDF + verzonden mail (.eml) in de SharePoint-dossiermap.
+ * zet de status op 'verzonden' na een geslaagde verzending (HTTP 202), zet het dossier op
+ * substatus Verzonden (EVA + Bouw7) en archiveert de PDF + verzonden mail (.eml) in de
+ * SharePoint-dossiermap.
  */
 export async function verstuurOfferte(
   quoteId: string,
   input: { to: string; cc?: string; subject: string; bodyHtml: string },
-): Promise<{ ok: true; sharepoint: string; bouw7: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; sharepoint: string; status: string } | { ok: false; error: string }> {
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd.' }
 
@@ -212,26 +243,29 @@ export async function verstuurOfferte(
     await bevriesCalculatieVoorOfferte(quoteId)
   } catch { /* niet blokkerend voor de verzending */ }
 
-  // ── Offerte als Bouw7-offerte registreren (POST /quotation) ─────────────────
-  // Best-effort: schrijft de kopgegevens + totaal excl. BTW als samenvattingsregel weg naar het
-  // gekoppelde Bouw7-project. Faalt nooit de verzending; resultaat gaat mee terug voor een toast.
-  let bouw7 = 'niet naar Bouw7 geschreven'
-  try {
-    const { stuurOfferteNaarBouw7 } = await import('@/lib/dossiers/bouw7-offerte')
-    const res = await stuurOfferteNaarBouw7(quoteId)
-    bouw7 = res.ok ? 'naar Bouw7 geschreven' : res.error
-  } catch (e) {
-    bouw7 = e instanceof Error ? e.message : 'Bouw7-offerte schrijven mislukt'
-  }
-
-  // ── SharePoint-archief (fail-soft) ──────────────────────────────────────────
-  let sharepoint = 'niet gearchiveerd'
   // Dossier-UUID bepalen: directe koppeling of via het calc-project.
   let dossierId: string | null = quote.dossier_id ?? null
   if (!dossierId && quote.project_id) {
     const { data: d } = await admin.from('dossiers').select('id').eq('everts_calc_project_id', quote.project_id).maybeSingle()
     dossierId = d?.id ?? null
   }
+
+  // ── Dossierstatus → Verzonden (EVA + Bouw7) ─────────────────────────────────
+  // Er wordt bewust géén offerte in Bouw7 aangemaakt; alleen de status volgt mee. Best-effort:
+  // faalt nooit de verzending, het resultaat gaat mee terug voor een toast.
+  let status = 'geen dossier gekoppeld'
+  if (quote.type === 'interne_calculatie') {
+    status = 'interne calculatie, status ongewijzigd'
+  } else if (dossierId) {
+    try {
+      status = await zetDossierOpVerzonden(dossierId)
+    } catch (e) {
+      status = e instanceof Error ? e.message : 'status bijwerken mislukt'
+    }
+  }
+
+  // ── SharePoint-archief (fail-soft) ──────────────────────────────────────────
+  let sharepoint = 'niet gearchiveerd'
   if (dossierId) {
     const bestanden: { naam: string; contentType: string; bytes: Uint8Array }[] = [
       { naam: bestandsnaamPdf, contentType: 'application/pdf', bytes: offertePdf },
@@ -248,5 +282,5 @@ export async function verstuurOfferte(
 
   revalidatePath(`/quotes/${quoteId}`)
   revalidatePath(`/everts-calc/quotes/${quoteId}`)
-  return { ok: true, sharepoint, bouw7 }
+  return { ok: true, sharepoint, status }
 }
