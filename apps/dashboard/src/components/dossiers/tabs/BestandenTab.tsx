@@ -33,6 +33,7 @@ import SharePointMapPicker from './SharePointMapPicker'
 import BestandenLijst from './bestanden/BestandenLijst'
 import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
+import OpenInVerkenner from './OpenInVerkenner'
 
 /**
  * Uploaden loopt via een server-action, en die heeft een maximale payload
@@ -384,6 +385,7 @@ function SharePointKoppeling({
         </span>
         <span className="flex items-center gap-3">
           {!readOnly && <MapActies onKies={onKies} onOntkoppel={onOntkoppel} bezig={bezig} />}
+          {data.mapUrl && <OpenInVerkenner mapUrl={data.mapUrl} />}
           {data.mapUrl && (
             <a href={data.mapUrl} target="_blank" rel="noopener noreferrer"
               className="text-[11px] font-medium text-brand-600 hover:underline">
