@@ -1005,6 +1005,11 @@ export type PlanningActiviteit = {
   id: string
   dossier_id: string
   uursoort_id: string | null
+  /**
+   * Externe partij die de activiteit uitvoert of levert (verwijst naar `relaties`).
+   * Historische naam: het veld houdt zowel onderaannemers als leveranciers vast —
+   * de rol volgt uit `relaties.types`.
+   */
   onderaannemer_id: string | null
   fase_id: string | null
   titel: string

@@ -27,7 +27,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   // Stap 1: data die niet van elkaar afhankelijk zijn
   const [
     medewerkerRes, activiteitenRes, roostersRes,
-    afwezigheidRes, werkbegrotingRes, uursoortRes, dossierRes, onderaannemerRes,
+    afwezigheidRes, werkbegrotingRes, uursoortRes, dossierRes, partijenRes,
     fasenRes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
@@ -40,7 +40,9 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
       .eq('dossier_id', dossier_id),
     supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true),
     supabase.from('dossiers').select('everts_calc_project_id, titel, dossiernummer, bouw7_id').eq('id', dossier_id).single(),
-    supabase.from('relaties').select('id, naam').eq('type', 'onderaannemer').eq('actief', true).order('naam'),
+    // Externe partijen die aan een activiteit gekoppeld kunnen worden. `relaties.types`
+    // is een array (een relatie kan zowel leverancier als onderaannemer zijn).
+    supabase.from('relaties').select('id, naam, types').overlaps('types', ['onderaannemer', 'leverancier']).eq('actief', true).order('naam'),
     supabase.from('planning_fasen').select('*').eq('dossier_id', dossier_id).order('volgorde'),
   ])
 
@@ -85,7 +87,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const roosters          = (roostersRes.data ?? []) as MedewerkerRooster[]
   const afwezigheid       = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
   const uursoorten        = (uursoortRes.data ?? []) as PlanningUursoort[]
-  const onderaannemers    = (onderaannemerRes.data ?? []) as Pick<Relatie, 'id' | 'naam'>[]
+  const partijen          = (partijenRes.data ?? []) as Pick<Relatie, 'id' | 'naam' | 'types'>[]
   const fasen             = (fasenRes.data ?? []) as PlanningFase[]
   const afhankelijkheden  = (afhankelijkhedenRes.data ?? []) as PlanningAfhankelijkheid[]
   const heeftCalcProject  = !!(dossierRes.data?.everts_calc_project_id)
@@ -165,7 +167,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
             items={items}
             medewerkers={medewerkers}
             uursoorten={uursoorten}
-            onderaannemers={onderaannemers}
+            partijen={partijen}
             werkbegrotingUursoortIds={budgetRegels.map(r => r.uursoort_id)}
             fasen={fasen}
             afhankelijkheden={afhankelijkheden}

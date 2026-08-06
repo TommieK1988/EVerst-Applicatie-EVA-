@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import type {
   PlanningActiviteit, PlanningItemVerrijkt, Medewerker, PlanningUursoort,
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType, Uurtarief,
-  MedewerkerRooster, MedewerkerAfwezigheid,
+  MedewerkerRooster, MedewerkerAfwezigheid, OrganisatieType,
 } from '@everts/database/platform-types'
 import {
   maakPlanningActiviteit, updatePlanningActiviteit,
@@ -36,7 +36,26 @@ const FASE_HOOGTE = 36
 const LEFT_W      = 400
 const DRAG_MIN_PX = 4
 
-type OA   = { id: string; naam: string }
+/**
+ * Externe partij die een activiteit uitvoert of levert. Wordt opgeslagen in
+ * `planning_activiteiten.onderaannemer_id`; dat veld houdt zowel onderaannemers
+ * als leveranciers vast — de rol volgt uit `relaties.types`.
+ */
+type Partij = { id: string; naam: string; types: OrganisatieType[] }
+
+type PartijSoort = 'onderaannemer' | 'leverancier'
+
+const PARTIJ_STIJL: Record<PartijSoort, { kort: string; label: string; kleur: string }> = {
+  onderaannemer: { kort: 'OA',  label: 'Onderaannemer', kleur: '#8650c4' },
+  leverancier:   { kort: 'LEV', label: 'Leverancier',   kleur: '#1f7a8c' },
+}
+
+/** Onderaannemer wint wanneer een relatie beide rollen heeft. */
+function partijSoort(p: Partij | undefined): PartijSoort {
+  if (p?.types?.includes('leverancier') && !p.types.includes('onderaannemer')) return 'leverancier'
+  return 'onderaannemer'
+}
+
 export type TaakMarker = {
   id: string
   titel: string
@@ -210,9 +229,9 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 
 // ─── ActiviteitEditModal ──────────────────────────────────────────────────────
 
-function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, medewerkers, fasen, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onClose }: {
+function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerkers, fasen, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onClose }: {
   activiteit: PlanningActiviteit; items: PlanningItemVerrijkt[]; uursoorten: PlanningUursoort[]
-  onderaannemers: OA[]; medewerkers: Medewerker[]; fasen: PlanningFase[]
+  partijen: Partij[]; medewerkers: Medewerker[]; fasen: PlanningFase[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
   alleActiviteiten: PlanningActiviteit[]; afhankelijkheden: PlanningAfhankelijkheid[]
   werkbegrotingUursoortIds: string[]; dossier_id: string
@@ -226,7 +245,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
   const [titel,        setTitel]        = useState(activiteit.titel)
   const [uursoortId,   setUursoortId]   = useState(activiteit.uursoort_id ?? '')
   const [faseId,       setFaseId]       = useState(activiteit.fase_id ?? '')
-  const [oaId,         setOaId]         = useState(activiteit.onderaannemer_id ?? '')
+  const [partijId,     setPartijId]     = useState(activiteit.onderaannemer_id ?? '')
   const [start,        setStart]        = useState(activiteit.gewenste_start ?? '')
   const [deadline,     setDeadline]     = useState(activiteit.deadline ?? '')
   const [uren,         setUren]         = useState(activiteit.geschatte_uren != null ? String(activiteit.geschatte_uren) : '')
@@ -240,6 +259,8 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
 
   const metB = uursoorten.filter(u => werkbegrotingUursoortIds.includes(u.id))
   const zB   = uursoorten.filter(u => !werkbegrotingUursoortIds.includes(u.id))
+  const onderaannemers = partijen.filter(p => p.types?.includes('onderaannemer'))
+  const leveranciers   = partijen.filter(p => p.types?.includes('leverancier'))
   const voorgangers = afhankelijkheden.filter(a => a.naar_activiteit_id === activiteit.id)
   const opvolgers   = afhankelijkheden.filter(a => a.van_activiteit_id  === activiteit.id)
   const andereActiviteiten = alleActiviteiten.filter(a => a.id !== activiteit.id)
@@ -247,7 +268,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
   async function opslaan() {
     if (!titel.trim()) return
     setBusy(true)
-    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: oaId || null, gewenste_start: start || null, deadline: deadline || null, geschatte_uren: uren ? parseFloat(uren) : null, omschrijving: omschrijving || null })
+    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: partijId || null, gewenste_start: start || null, deadline: deadline || null, geschatte_uren: uren ? parseFloat(uren) : null, omschrijving: omschrijving || null })
     setBusy(false); onClose()
   }
 
@@ -305,11 +326,25 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
           </div>
 
           <div>
-            <label style={S.lbl}>Onderaannemer</label>
-            <select className="eva-input" value={oaId} onChange={e => setOaId(e.target.value)}>
+            <label style={S.lbl}>Onderaannemer / leverancier</label>
+            <select className="eva-input" value={partijId} onChange={e => setPartijId(e.target.value)}>
               <option value="">— eigen uitvoering —</option>
-              {onderaannemers.map(oa => <option key={oa.id} value={oa.id}>{oa.naam}</option>)}
+              {onderaannemers.length > 0 && (
+                <optgroup label="Onderaannemers">
+                  {onderaannemers.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
+                </optgroup>
+              )}
+              {leveranciers.length > 0 && (
+                <optgroup label="Leveranciers">
+                  {leveranciers.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
+                </optgroup>
+              )}
             </select>
+            {partijen.length === 0 && (
+              <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+                Geen actieve onderaannemers of leveranciers gevonden bij Relaties.
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -427,9 +462,9 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, onderaannemers, me
 
 // ─── ActiviteitBalk (draggable achtergrond-balk) ──────────────────────────────
 
-function ActiviteitBalk({ activiteit, vs, ppd, totalDays, accentKleur, isOA, onUpdated, onEdit }: {
+function ActiviteitBalk({ activiteit, vs, ppd, totalDays, accentKleur, partijKleur, onUpdated, onEdit }: {
   activiteit: PlanningActiviteit; vs: Date; ppd: number; totalDays: number
-  accentKleur: string; isOA: boolean
+  accentKleur: string; partijKleur: string | null
   onUpdated: (p: Partial<PlanningActiviteit>) => void; onEdit: () => void
 }) {
   const dragRef = useRef<{ type: 'move' | 'left' | 'right'; startX: number; origStart: string; origDeadline: string } | null>(null)
@@ -481,8 +516,8 @@ function ActiviteitBalk({ activiteit, vs, ppd, totalDays, accentKleur, isOA, onU
     onUpdated(patch)
   }
 
-  const barColor  = isOA ? 'rgba(134,80,196,0.13)' : `${accentKleur}1a`
-  const bordColor = isOA ? '#8650c4' : accentKleur
+  const barColor  = partijKleur ? `${partijKleur}22` : `${accentKleur}1a`
+  const bordColor = partijKleur ?? accentKleur
   const hdl: React.CSSProperties = { position: 'absolute', top: 0, bottom: 0, width: 10, cursor: 'ew-resize', zIndex: 4 }
 
   return (
@@ -852,11 +887,11 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
 
 // ─── ActiviteitGanttRij ───────────────────────────────────────────────────────
 
-function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap, gridUnits, vs, ppd, totalDays, uursoort, onderaannemer, medewerkers, dossier_id, roosters, afwezigheid, isDragging, isDropIndicatorAbove, dragHandleDown, dragHandleMove, dragHandleUp, onEdit, onActiviteitUpdated, onItemCreated, onItemUpdated, onItemVerwijderd, onTimelineClick }: {
+function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap, gridUnits, vs, ppd, totalDays, uursoort, partij, medewerkers, dossier_id, roosters, afwezigheid, isDragging, isDropIndicatorAbove, dragHandleDown, dragHandleMove, dragHandleUp, onEdit, onActiviteitUpdated, onItemCreated, onItemUpdated, onItemVerwijderd, onTimelineClick }: {
   nr: number; activiteit: PlanningActiviteit; items: PlanningItemVerrijkt[]
   uitgeklapt: boolean; onToggleUitklap: () => void
   gridUnits: GridUnit[]; vs: Date; ppd: number; totalDays: number
-  uursoort: PlanningUursoort | undefined; onderaannemer: OA | undefined
+  uursoort: PlanningUursoort | undefined; partij: Partij | undefined
   medewerkers: Medewerker[]; dossier_id: string
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
   isDragging: boolean; isDropIndicatorAbove: boolean
@@ -874,7 +909,8 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
   const [paintDrag, setPaintDrag] = useState<{ startX: number; currentX: number } | null>(null)
 
   const accentKleur = uursoort?.kleur ?? '#4a7c9e'
-  const isOA        = !!activiteit.onderaannemer_id
+  const isExtern    = !!activiteit.onderaannemer_id
+  const partijStijl = isExtern ? PARTIJ_STIJL[partijSoort(partij)] : null
   const totW        = totalDays * ppd
   const heeftDatums = !!activiteit.gewenste_start || !!activiteit.deadline
   const duurDagen   = activiteit.gewenste_start && activiteit.deadline
@@ -941,10 +977,10 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activiteit.titel}</span>
-              {isOA && <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8650c4', background: 'rgba(134,80,196,0.08)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>OA</span>}
+              {partijStijl && <span title={partijStijl.label} style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: partijStijl.kleur, background: `${partijStijl.kleur}16`, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>{partijStijl.kort}</span>}
             </div>
             <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 1 }}>
-              {isOA && onderaannemer ? onderaannemer.naam : uursoort?.naam ?? ''}
+              {isExtern && partij ? partij.naam : uursoort?.naam ?? ''}
             </div>
           </div>
           <div style={{ width: 36, flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--fg-muted)', marginRight: 8 }}>{duurDagen != null ? `${duurDagen}d` : ''}</div>
@@ -990,7 +1026,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
             return <div style={{ position: 'absolute', top: 12, bottom: 12, left, width, borderRadius: 6, background: `${accentKleur}33`, border: `2px dashed ${accentKleur}`, zIndex: 5, pointerEvents: 'none' }} />
           })()}
 
-          <ActiviteitBalk activiteit={activiteit} vs={vs} ppd={ppd} totalDays={totalDays} accentKleur={accentKleur} isOA={isOA} onUpdated={onActiviteitUpdated} onEdit={onEdit} />
+          <ActiviteitBalk activiteit={activiteit} vs={vs} ppd={ppd} totalDays={totalDays} accentKleur={accentKleur} partijKleur={partijStijl?.kleur ?? null} onUpdated={onActiviteitUpdated} onEdit={onEdit} />
         </div>
       </div>
 
@@ -1078,7 +1114,7 @@ type Props = {
   dossier_id: string
   activiteiten: PlanningActiviteit[]; items: PlanningItemVerrijkt[]
   medewerkers: Medewerker[]; uursoorten: PlanningUursoort[]
-  onderaannemers: OA[]; werkbegrotingUursoortIds: string[]
+  partijen: Partij[]; werkbegrotingUursoortIds: string[]
   fasen: PlanningFase[]; afhankelijkheden: PlanningAfhankelijkheid[]
   roosters?: MedewerkerRooster[]
   afwezigheid?: MedewerkerAfwezigheid[]
@@ -1086,7 +1122,7 @@ type Props = {
   taken?: TaakMarker[]
 }
 
-export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, onderaannemers, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
+export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, partijen, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
   const router     = useRouter()
   const [, startT] = useTransition()
   const rowsRef    = useRef<HTMLDivElement>(null)
@@ -1152,7 +1188,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
 
   // Lookup maps
   const uursoortMap       = useMemo(() => Object.fromEntries(uursoorten.map(u => [u.id, u])), [uursoorten])
-  const oaMap             = useMemo(() => Object.fromEntries(onderaannemers.map(o => [o.id, o])), [onderaannemers])
+  const partijMap         = useMemo(() => Object.fromEntries(partijen.map(p => [p.id, p])), [partijen])
   const activiteitMap     = useMemo(() => Object.fromEntries(activiteiten.map(a => [a.id, a])), [activiteiten])
   const medewerkerKleuren = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m.kleur])), [medewerkers])
   const uursoortKleuren   = useMemo(() => Object.fromEntries(uursoorten.filter(u => u.kleur).map(u => [u.id, u.kleur])), [uursoorten])
@@ -1644,7 +1680,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                 onToggleUitklap={() => toggleUitklap(row.activiteit.id)}
                 gridUnits={gridUnits} vs={vs} ppd={ppd} totalDays={totalDays}
                 uursoort={uursoortMap[row.activiteit.uursoort_id ?? '']}
-                onderaannemer={oaMap[row.activiteit.onderaannemer_id ?? '']}
+                partij={partijMap[row.activiteit.onderaannemer_id ?? '']}
                 medewerkers={medewerkers} dossier_id={dossier_id}
                 roosters={roosters} afwezigheid={afwezigheid}
                 isDragging={draggingActiviteitId === row.activiteit.id}
@@ -1707,7 +1743,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         <ActiviteitEditModal
           activiteit={editActiviteit}
           items={itemsPerActiviteit[editActiviteit.id] ?? []}
-          uursoorten={uursoorten} onderaannemers={onderaannemers}
+          uursoorten={uursoorten} partijen={partijen}
           medewerkers={medewerkers} fasen={fasen}
           roosters={roosters} afwezigheid={afwezigheid}
           alleActiviteiten={activiteiten}
