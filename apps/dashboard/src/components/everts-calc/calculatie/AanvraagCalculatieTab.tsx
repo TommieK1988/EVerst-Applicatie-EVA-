@@ -118,7 +118,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
   // Inline offerte-detail (bekijken/goedkeuren/verzenden) binnen het dossier.
   if (offerteId) {
     return (
-      <div style={{ padding: '24px 32px' }}>
+      <div style={{ padding: '12px 32px' }}>
         <OfferteDetail
           quoteId={offerteId}
           dossierId={aanvraagId}

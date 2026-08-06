@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Maximize2, Minimize2 } from 'lucide-react'
 import BedrijfLoader from '@/app/(platform)/everts-calc/quotes/[id]/preview/BedrijfLoader'
 import PdfDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PdfDownloadButton'
 import DocxDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/DocxDownloadButton'
@@ -24,6 +24,14 @@ interface Props {
 }
 
 /**
+ * Hoogte van de kaart binnen een dossiertab: het volledige venster minus de
+ * topbalk (60px + 1px rand) en de verticale ruimte rond de kaart (2×12px).
+ * De preview vult daarmee alles wat er in beeld past, in plaats van een vaste
+ * fractie van het venster.
+ */
+const KAART_HOOGTE = 'calc(100dvh - 85px)'
+
+/**
  * Inline offerte-detail binnen het dossier: PDF-preview + toolbar (status,
  * goedkeuren, verzenden, downloaden, printen). Geen route-sprong naar
  * /everts-calc; alle acties gebeuren in de dossier-tab. Een nieuwe versie maak je
@@ -36,6 +44,9 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
   // Verhoogt bij elke actie die de voorvertoning verandert (bv. het Word-document
   // koppelen of ontkoppelen): remount van de preview haalt de nieuwe PDF op.
   const [previewKey, setPreviewKey] = useState(0)
+  // Volledig scherm: de kaart legt zich over het venster heen, zodat er niets
+  // van de offerte buiten beeld valt. Escape sluit hem weer.
+  const [volledigScherm, setVolledigScherm] = useState(false)
 
   async function ververs() {
     try {
@@ -49,12 +60,26 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
 
   useEffect(() => { laadOfferteDetailStatus(quoteId).then(setInfo).catch(() => setInfo(null)) }, [quoteId])
 
+  useEffect(() => {
+    if (!volledigScherm) return
+    function opToets(e: KeyboardEvent) { if (e.key === 'Escape') setVolledigScherm(false) }
+    window.addEventListener('keydown', opToets)
+    return () => window.removeEventListener('keydown', opToets)
+  }, [volledigScherm])
+
   const isIntern = info?.isIntern ?? false
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <div
+      className={
+        volledigScherm
+          ? 'fixed inset-0 z-50 flex flex-col bg-white overflow-hidden'
+          : 'flex flex-col rounded-xl border border-slate-200 bg-white overflow-hidden'
+      }
+      style={volledigScherm ? undefined : { height: KAART_HOOGTE }}
+    >
       {/* Toolbar */}
-      <div className="flex-shrink-0 flex items-center gap-2 flex-wrap px-4 py-2.5 border-b border-slate-200 bg-white">
+      <div className="flex-shrink-0 flex items-center gap-2 flex-wrap px-4 py-2 border-b border-slate-200 bg-white">
         <button
           onClick={onTerug}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors"
@@ -78,11 +103,19 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
           {!isIntern && info && (
             <VerzendOfferteKnop quoteId={quoteId} verzendbaar={info.verzendbaar} onDone={ververs} />
           )}
+          <button
+            onClick={() => setVolledigScherm(v => !v)}
+            title={volledigScherm ? 'Verlaat volledig scherm (Esc)' : 'Volledig scherm'}
+            aria-label={volledigScherm ? 'Verlaat volledig scherm' : 'Volledig scherm'}
+            className="flex items-center justify-center p-1.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            {volledigScherm ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </div>
 
-      {/* PDF-preview */}
-      <div className="h-[75vh] bg-slate-100">
+      {/* PDF-preview — vult alle resterende hoogte van de kaart. */}
+      <div className="flex-1 min-h-0 bg-slate-100">
         <BedrijfLoader key={previewKey} quoteId={quoteId} />
       </div>
     </div>

@@ -110,7 +110,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   // Inline offerte-detail (bekijken/goedkeuren/verzenden) binnen het dossier.
   if (offerteId) {
     return (
-      <div className="px-8 py-6">
+      <div className="px-8 py-3">
         <OfferteDetail
           quoteId={offerteId}
           dossierId={dossierId}

@@ -19,7 +19,7 @@ export default function BedrijfLoader({ quoteId }: { quoteId: string }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-shrink-0 flex items-center gap-1 px-4 py-2 border-b border-slate-200 bg-white print:hidden">
+      <div className="flex-shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white print:hidden">
         <span className="text-xs text-slate-400 mr-1">Weergave:</span>
         <button
           onClick={() => setModus('pdf')}
