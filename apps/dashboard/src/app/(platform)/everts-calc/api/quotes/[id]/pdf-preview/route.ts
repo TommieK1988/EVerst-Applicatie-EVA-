@@ -140,21 +140,35 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       } catch { /* db/demo-bedrijf gebruiken */ }
     }
 
-    // ── 3. Template ophalen + vullen → ingevuld .docx ────────────────────────
+    // ── 3. Bron-.docx ────────────────────────────────────────────────────────
+    // Hangt er een bewerkt Word-document aan de offerte, dan toont de
+    // voorvertoning dát bestand. Niet bij demo of een template-override: die
+    // previews gaan juist over het sjabloon zelf (layout-editor).
+    const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
     let docxBuffer: Buffer
     try {
-      let templateBuffer: Buffer
-      if (driveIdParam && itemIdParam) {
-        templateBuffer = await appGraphGetRaw(`/drives/${driveIdParam}/items/${itemIdParam}/content`)
+      const bewerkt = !isDemo && !templateOverride
+        ? await (await import('@/lib/everts-calc/offerte-word')).haalBewerkteOfferteDocx(id)
+        : null
+
+      if (bewerkt) {
+        docxBuffer = bewerkt
+      } else if (driveIdParam && itemIdParam) {
+        const templateBuffer = await appGraphGetRaw(`/drives/${driveIdParam}/items/${itemIdParam}/content`)
+        docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
       } else if (templateUrlParam) {
         const res = await fetch(templateUrlParam)
         if (!res.ok) return foutHtml('Template ophalen mislukt', `HTTP ${res.status}`, 502)
-        templateBuffer = Buffer.from(await res.arrayBuffer())
+        const templateBuffer = Buffer.from(await res.arrayBuffer())
+        docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
       } else {
-        templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
+        const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
+        docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
       }
-      docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
     } catch (err) {
+      if (err instanceof Error && err.name === 'WordBronError') {
+        return foutHtml('Word-document niet beschikbaar', err.message, 200)
+      }
       if (err instanceof GeenTemplateError) {
         return foutHtml(
           'Geen Word-template geconfigureerd',
@@ -196,7 +210,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // ── 6. CONCEPT-watermerk voor een echte, nog niet goedgekeurde offerte ────
     // (niet bij demo of een template-override-preview in de layout-editor).
-    const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
     if (!isDemo && !templateOverride) {
       try {
         const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')

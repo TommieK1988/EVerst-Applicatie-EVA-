@@ -6,6 +6,7 @@ import { getQuote } from '@/lib/everts-calc/services/quotes'
 import QuotePreview from '@/components/everts-calc/quotes/QuotePreview'
 import PdfDownloadButton from './PdfDownloadButton'
 import DocxDownloadButton from './DocxDownloadButton'
+import WordOnlineKnop from './WordOnlineKnop'
 import PrintButton from './PrintButton'
 import BedrijfLoader from './BedrijfLoader'
 import GoedkeuringKnop from './GoedkeuringKnop'
@@ -47,6 +48,7 @@ export default async function QuotePreviewPage({ params }: Props) {
             />
           )}
           <PrintButton />
+          <WordOnlineKnop quoteId={quote.id} />
           <DocxDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} isConcept={!verzendbaar} />
           <PdfDownloadButton quoteId={quote.id} quoteNummer={quote.quote_nummer} isConcept={!verzendbaar} />
           {!isIntern && <VerzendOfferteKnop quoteId={quote.id} verzendbaar={verzendbaar} />}

@@ -28,6 +28,7 @@ import {
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
 import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
+import { haalBewerkteOfferteDocx, WordBronError } from '@/lib/everts-calc/offerte-word'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
 export const dynamic = 'force-dynamic'
@@ -120,12 +121,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // ── 4. Template ophalen + vullen ─────────────────────────────────────────
+    // ── 4. Bron-.docx: bewerkt Word-document, anders het sjabloon vullen ─────
+    // Hangt er een Word Online-document aan de offerte, dan is dát wat de
+    // gebruiker downloadt — inclusief zijn handmatige aanpassingen.
     let output: Buffer
     try {
-      const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
-      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier, is_concept: isConcept })
+      const bewerkt = await haalBewerkteOfferteDocx(id)
+      if (bewerkt) {
+        output = bewerkt
+      } else {
+        const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
+        output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier, is_concept: isConcept })
+      }
     } catch (err) {
+      if (err instanceof WordBronError) {
+        return NextResponse.json({ error: err.message }, { status: 502 })
+      }
       if (err instanceof GeenTemplateError) {
         return NextResponse.json(
           { error: 'Geen Word-template geconfigureerd voor deze layout.' },

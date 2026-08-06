@@ -241,6 +241,10 @@ export async function keurGoed(
   // dan matcht de hash niet meer en is opnieuw goedkeuring nodig.
   let objectHash = opts?.objectHash ?? null
   if (!objectHash && g.object_type === 'offerte') {
+    // Eerst de versie van een gekoppeld Word-document ophalen, zodat de
+    // beoordelaar de actuele SharePoint-versie goedkeurt en niet een oudere.
+    const { ververWordVersie } = await import('@/lib/everts-calc/offerte-word')
+    await ververWordVersie(g.object_id).catch(() => null)
     const { berekenOfferteHash } = await import('./offerte')
     objectHash = await berekenOfferteHash(g.object_id)
   }

@@ -128,16 +128,26 @@ export async function offerteGoedkeuringVereist(quoteId: string): Promise<Offert
   return { vereist: true, reden: 'categorie', dossierId: dossier?.id ?? null, categorie, drempel, subtotaalExBtw: subtotaal }
 }
 
-/** Actuele inhouds-hash van een offerte (regels + subtotaal). */
+/**
+ * Actuele inhouds-hash van een offerte (regels + subtotaal, plus de versie van een
+ * gekoppeld Word-document).
+ *
+ * De Word-versie leest hier uit de database, niet live bij SharePoint: dit wordt
+ * ook bij elke voorvertoning aangeroepen. Op de momenten die tellen — goedkeuren
+ * en verzenden — wordt `ververWordVersie()` eerst uitgevoerd, zodat de hash daar
+ * op de werkelijke SharePoint-versie is gebaseerd.
+ */
 export async function berekenOfferteHash(quoteId: string): Promise<string> {
   const d = db()
   const [{ data: quote }, { data: lines }] = await Promise.all([
-    d.from('quotes').select('subtotaal_ex_btw').eq('id', quoteId).maybeSingle(),
+    d.from('quotes').select('subtotaal_ex_btw, word_item_id, word_etag').eq('id', quoteId).maybeSingle(),
     d.from('quote_lines').select('id, omschrijving, hoeveelheid, eenheidsprijs, btw_pct').eq('quote_id', quoteId),
   ])
+  const wordVersie = quote?.word_item_id ? `${quote.word_item_id}:${quote.word_etag ?? ''}` : null
   return hashOfferte(
     ((lines ?? []) as HashbareOfferteRegel[]),
     Number(quote?.subtotaal_ex_btw) || 0,
+    wordVersie,
   )
 }
 

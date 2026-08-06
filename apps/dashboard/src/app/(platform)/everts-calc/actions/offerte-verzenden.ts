@@ -36,6 +36,10 @@ export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteD
   if (!q) throw new Error('Offerte niet gevonden')
 
   const isIntern = q.type === 'interne_calculatie'
+  // Eerst de versie van een gekoppeld Word-document ophalen: is er in Word Online
+  // gewijzigd, dan moet de toolbar dat meteen laten zien (goedkeuring verlopen).
+  const { ververWordVersie } = await import('@/lib/everts-calc/offerte-word')
+  await ververWordVersie(quoteId).catch(() => null)
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
   const verzendbaar = !isIntern && (await assertOfferteVerzendbaar(quoteId)).ok
 
@@ -74,6 +78,11 @@ export interface OfferteGoedkeuringKnopStatus {
 export async function getOfferteGoedkeuringKnopStatus(quoteId: string): Promise<OfferteGoedkeuringKnopStatus> {
   const { getGoedkeuring } = await import('@/lib/goedkeuring/actions')
   const { offerteGoedkeuringVereist, berekenOfferteHash } = await import('@/lib/goedkeuring/offerte')
+
+  // Word-versie bijwerken vóór de hashvergelijking, anders blijft de knop
+  // "Goedgekeurd" tonen terwijl er in Word Online al iets is aangepast.
+  const { ververWordVersie } = await import('@/lib/everts-calc/offerte-word')
+  await ververWordVersie(quoteId).catch(() => null)
 
   const [overzicht, vereistInfo] = await Promise.all([
     getGoedkeuring('offerte', quoteId),
@@ -132,6 +141,14 @@ export async function verstuurOfferte(
 ): Promise<{ ok: true; sharepoint: string; bouw7: string } | { ok: false; error: string }> {
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd.' }
+
+  // Word-versie ophalen vóór de gate. Dit is het moment dat telt: zonder deze
+  // sync zou een bewerking in Word Online ná de goedkeuring ongemerkt naar de
+  // klant gaan — de regels in de database veranderen daar immers niet van.
+  // Bewust fail-closed: lukt de sync niet, dan gaat de offerte niet de deur uit.
+  const { ververWordVersie } = await import('@/lib/everts-calc/offerte-word')
+  const wordSync = await ververWordVersie(quoteId)
+  if (!wordSync.ok) return { ok: false, error: wordSync.fout }
 
   // Harde gate: alleen een goedgekeurde offerte mag de deur uit.
   const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')

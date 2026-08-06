@@ -25,6 +25,7 @@ import {
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
 import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
+import { haalBewerkteOfferteDocx, WordBronError } from '@/lib/everts-calc/offerte-word'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
@@ -123,12 +124,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // ── 4. Template ophalen + vullen → ingevuld .docx ────────────────────────
+    // ── 4. Bron-.docx: bewerkt Word-document, anders het sjabloon vullen ─────
     let docxBuffer: Buffer
     try {
-      const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
-      docxBuffer = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
+      const bewerkt = await haalBewerkteOfferteDocx(id)
+      if (bewerkt) {
+        docxBuffer = bewerkt
+      } else {
+        const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
+        docxBuffer = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
+      }
     } catch (err) {
+      if (err instanceof WordBronError) {
+        return NextResponse.json({ error: err.message }, { status: 502 })
+      }
       if (err instanceof GeenTemplateError) {
         return NextResponse.json(
           { error: 'Koppel eerst een Word-template aan deze offerte-layout.' },

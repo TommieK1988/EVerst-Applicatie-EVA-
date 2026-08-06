@@ -89,14 +89,23 @@ export type HashbareOfferteRegel = {
  * Hash van de offerte-inhoud op het goedkeurmoment. Wordt bewaard in
  * `goedkeuringen.object_hash`; wijzigt de offerte daarna, dan matcht de hash
  * niet meer en is opnieuw goedkeuring nodig.
+ *
+ * `wordVersie` is de versiemarker van een gekoppeld Word-document (item-id +
+ * cTag). Zonder die marker zou een bewerking in Word Online ná de goedkeuring
+ * onopgemerkt de deur uit gaan: de regels in de database veranderen daar immers
+ * niet van. Het veld wordt alléén toegevoegd wanneer er een Word-document hangt,
+ * zodat de hash van alle bestaande (sjabloon-)offertes ongewijzigd blijft.
  */
 export async function hashOfferte(
   regels: HashbareOfferteRegel[],
   subtotaalExBtw: number,
+  wordVersie?: string | null,
 ): Promise<string> {
   const rs = regels
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id))
     .map(r => [r.id, str(r.omschrijving), num(r.hoeveelheid), num(r.eenheidsprijs), num(r.btw_pct)])
-  return sha256(JSON.stringify([num(subtotaalExBtw), rs]))
+  const canoniek: unknown[] = [num(subtotaalExBtw), rs]
+  if (wordVersie) canoniek.push(wordVersie)
+  return sha256(JSON.stringify(canoniek))
 }

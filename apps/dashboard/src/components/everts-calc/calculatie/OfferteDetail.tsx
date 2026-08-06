@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react'
 import BedrijfLoader from '@/app/(platform)/everts-calc/quotes/[id]/preview/BedrijfLoader'
 import PdfDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PdfDownloadButton'
 import DocxDownloadButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/DocxDownloadButton'
+import WordOnlineKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/WordOnlineKnop'
 import PrintButton from '@/app/(platform)/everts-calc/quotes/[id]/preview/PrintButton'
 import GoedkeuringKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/GoedkeuringKnop'
 import VerzendOfferteKnop from '@/app/(platform)/everts-calc/quotes/[id]/preview/VerzendOfferteKnop'
@@ -32,6 +33,9 @@ interface Props {
 export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
   const router = useRouter()
   const [info, setInfo] = useState<OfferteDetailStatus | null>(null)
+  // Verhoogt bij elke actie die de voorvertoning verandert (bv. het Word-document
+  // koppelen of ontkoppelen): remount van de preview haalt de nieuwe PDF op.
+  const [previewKey, setPreviewKey] = useState(0)
 
   async function ververs() {
     try {
@@ -39,6 +43,7 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Kon offerte niet laden')
     }
+    setPreviewKey(k => k + 1)
     router.refresh() // lijst-statussen bijwerken
   }
 
@@ -67,6 +72,7 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
 
         <div className="ml-auto flex items-center gap-2">
           <PrintButton />
+          <WordOnlineKnop quoteId={quoteId} onDone={ververs} />
           <DocxDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />
           <PdfDownloadButton quoteId={quoteId} quoteNummer={info?.quoteNummer ?? ''} isConcept={info ? !info.verzendbaar : false} />
           {!isIntern && info && (
@@ -77,7 +83,7 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
 
       {/* PDF-preview */}
       <div className="h-[75vh] bg-slate-100">
-        <BedrijfLoader quoteId={quoteId} />
+        <BedrijfLoader key={previewKey} quoteId={quoteId} />
       </div>
     </div>
   )

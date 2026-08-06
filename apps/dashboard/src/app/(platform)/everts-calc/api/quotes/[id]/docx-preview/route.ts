@@ -142,6 +142,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Hangt er een bewerkt Word-document aan de offerte, dan is dát de voorvertoning.
+    // Niet bij demo of een template-override: die previews gaan juist over het sjabloon.
+    const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
+    if (!isDemo && !templateOverride) {
+      const { haalBewerkteOfferteDocx } = await import('@/lib/everts-calc/offerte-word')
+      const bewerkt = await haalBewerkteOfferteDocx(id)
+      if (bewerkt) {
+        return new NextResponse(bewerkt as unknown as BodyInit, {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition': 'inline',
+            'Cache-Control': 'no-store',
+          },
+        })
+      }
+    }
+
     // Template-buffer: Graph-override (drive+item), URL-override (live upload-preview), of uit de layout
     let templateBuffer: Buffer
     try {
@@ -194,6 +211,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (err) {
+    if (err instanceof Error && err.name === 'WordBronError') {
+      return htmlMelding(`<p style="color:#b45309">${err.message}</p>`, 200)
+    }
     // M3: foutdetails niet naar de client lekken — alleen server-side loggen.
     console.error('Docx preview fout:', err)
     return htmlMelding('<p style="color:#dc2626">Er ging iets mis</p>', 500)
