@@ -60,8 +60,9 @@ export default function BtwTarievenBeheer({ tarieven }: { tarieven: BtwTarief[] 
       <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', margin: 0 }}>
         BTW-tarieven worden read-only overgenomen uit de Bouw7-offertes, zodat ze altijd
         overeenkomen met wat naar Bouw7 wordt teruggeschreven. Wijzigen kan alleen in Bouw7.
-        Bij een <strong>verlegd</strong> tarief rekent de offerte 0% en komt er een vermelding
-        onder het totaal dat de BTW naar de afnemer is verlegd.
+        Een <strong>verlegd</strong> tarief rekent hier gewoon zijn eigen percentage; het bedrag
+        telt mee in het totaal inclusief BTW. Onder het totaal komt wel de vermelding dat er een
+        verlegd tarief is gebruikt.
       </p>
     </div>
   )

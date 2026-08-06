@@ -122,7 +122,7 @@ export type ImportRegel = {
   calculatieregel_id?: string | null
   opmerking?: string | null
   is_stelpost?: boolean
-  /** Te heffen percentage (0 bij een verlegd tarief). */
+  /** Te heffen percentage — gelijk aan het nominale tarief, ook bij verlegging. */
   btw_pct?: number | null
   /** Gekozen tarief uit de stamgegevens; draagt label + verlegd-vlag naar de offerte. */
   btw_tarief_id?: string | null

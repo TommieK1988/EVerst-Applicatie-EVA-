@@ -1,9 +1,14 @@
 // BTW-tarieven — pure helpers (geen server-imports → bruikbaar in client- én server-components).
 //
 // De tabel `btw_tarieven` (afgeleid uit Bouw7) is de enige bron van waarheid. Een tarief is
-// méér dan een percentage: "Hoog 21%" en "Verlegd Hoog 21%" delen hetzelfde percentage maar
-// hebben een ander gevolg. Daarom draagt elke regel een `btw_tarief_id`, en is `btw_pct` het
-// *te heffen* percentage — bij een verlegd tarief dus 0.
+// méér dan een percentage: "Hoog 21%" en "Verlegd Hoog 21%" heten anders en worden anders
+// vermeld. Daarom draagt elke regel een `btw_tarief_id` naast `btw_pct`.
+//
+// LET OP — bewuste bedrijfskeuze (aug 2026, vastgelegd door Tom): een verlegd tarief heft
+// hier gewoon zijn nominale percentage, en dat bedrag telt mee in het totaal inclusief BTW.
+// Dat wijkt af van de verleggingsregeling, waarbij de leverancier 0% in rekening brengt en
+// de afnemer de BTW afdraagt. Verander dit niet "terug" zonder overleg: het bepaalt wat er
+// bij de klant in rekening wordt gebracht.
 
 import type { BtwTarief } from '@everts/database/platform-types'
 
@@ -18,26 +23,27 @@ export type BtwTariefKeuze = {
 }
 
 /**
- * Het percentage dat daadwerkelijk geheven wordt. Bij verlegging draagt de afnemer de BTW
- * af, dus rekent de offerte 0% — het nominale percentage blijft alleen ter vermelding.
- */
-export function heffingsPercentage(t: Pick<BtwTariefKeuze, 'percentage' | 'verlegd'>): number {
-  return t.verlegd ? 0 : Number(t.percentage)
-}
-
-/**
- * Het tarief zoals de klant het kent, ook bij verlegging.
+ * Het tarief zoals het heet: 21 bij "Verlegd Hoog 21%", 9 bij "Verlegd 9%".
  *
  * Bouw7 is hierin niet consequent: "Verlegd Hoog 21%" staat er met percentage 21, maar
- * "Verlegd 21%" en "Verlegd 9%" met percentage 0 (het geheven bedrag). Voor die laatste
- * lezen we het percentage uit het label, anders zou de offerte "BTW verlegd (0%)" melden.
- * We corrigeren alleen de weergave — de tabel blijft een getrouwe kopie van Bouw7.
+ * "Verlegd 21%" en "Verlegd 9%" met percentage 0. Voor die laatste lezen we het percentage
+ * uit het label — anders zouden twee tarieven die hetzelfde heten zich verschillend
+ * gedragen. De tabel zelf blijft een getrouwe kopie van Bouw7; alleen hier corrigeren we.
  */
 export function nominaalPercentage(t: Pick<BtwTariefKeuze, 'percentage' | 'verlegd' | 'label'>): number {
   const pct = Number(t.percentage)
   if (!t.verlegd || pct > 0) return pct
   const uitLabel = /(\d+(?:[.,]\d+)?)\s*%/.exec(t.label)
   return uitLabel ? parseFloat(uitLabel[1].replace(',', '.')) : pct
+}
+
+/**
+ * Het percentage dat in rekening wordt gebracht — gelijk aan het nominale tarief, óók bij
+ * verlegging (zie de bedrijfskeuze bovenaan dit bestand). Dit is de waarde die als
+ * `btw_pct` op een regel wordt vastgelegd en waarmee alle bedragen worden gerekend.
+ */
+export function heffingsPercentage(t: Pick<BtwTariefKeuze, 'percentage' | 'verlegd' | 'label'>): number {
+  return nominaalPercentage(t)
 }
 
 /** Korte weergave voor tabellen en dropdowns. */

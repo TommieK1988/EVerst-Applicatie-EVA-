@@ -211,7 +211,7 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
   // Zelfde uitsplitsing als de PDF: één blok per tarief, met verlegd apart benoemd.
   const btwGroepen = groepeerBtwPerTarief(sections, quote.btw_pct)
   const btwVerlegdTekst = btwGroepen.some(g => g.verlegd)
-    ? `BTW verlegd naar de afnemer (${[...new Set(btwGroepen.filter(g => g.verlegd).map(g => g.nominaal_pct))]
+    ? `Verlegd tarief van toepassing (${[...new Set(btwGroepen.filter(g => g.verlegd).map(g => g.nominaal_pct))]
         .sort((a, b) => b - a).map(p => `${p}%`).join(' en ')}).`
     : ''
 

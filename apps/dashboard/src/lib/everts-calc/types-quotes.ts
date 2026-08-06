@@ -77,7 +77,7 @@ export interface QuoteLine {
   eenheid: string
   eenheidsprijs: number
   line_total: number
-  /** Te heffen BTW-percentage; 0 bij een verlegd tarief. */
+  /** Te heffen BTW-percentage — gelijk aan het nominale tarief, ook bij verlegging. */
   btw_pct: number
   /** Gekozen tarief uit `btw_tarieven` — bepaalt label en verlegd-vermelding op de offerte. */
   btw_tarief_id?: string | null

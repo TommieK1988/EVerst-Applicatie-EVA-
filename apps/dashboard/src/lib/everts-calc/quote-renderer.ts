@@ -131,11 +131,11 @@ export const LEEG_DOSSIER: DossierContext = {
 
 /** Eén BTW-tarief-groep met grondslag + BTW-bedrag (voor meerdere tarieven in één offerte). */
 export interface BtwGroepContext {
-  pct: number              // te heffen percentage — 0 bij verlegd
+  pct: number              // te heffen percentage
   pct_str: string          // "21%" of "21% verlegd"
   label: string            // tariefnaam uit de stamgegevens, bijv. 'Verlegd Hoog 21%'
   verlegd: boolean
-  nominaal_pct: number     // 21 bij "Verlegd Hoog 21%", ook al wordt er 0 geheven
+  nominaal_pct: number     // gelijk aan pct; apart veld voor sjablonen die het los tonen
   grondslag: string        // € geformatteerd
   grondslag_raw: string    // kaal met duizendpunt (10.000)
   grondslag_bedrag: string // 10.000,00 (zonder €)
@@ -477,10 +477,9 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
 /**
  * BTW-uitsplitsing per tarief over alle niet-optionele regels.
  *
- * Groeperen op percentage alleen zou "Verlegd Hoog 21%" en "Geen" op één hoop gooien —
- * beide heffen 0%, maar op de offerte horen ze los, want bij verlegging moet vermeld
- * worden dat de BTW naar de afnemer is verlegd. `btw_pct` is het te heffen percentage;
- * het nominale tarief komt uit het gekoppelde `btw_tarief`.
+ * Groeperen op percentage alleen zou "Hoog 21%" en "Verlegd Hoog 21%" op één hoop gooien —
+ * beide heffen 21%, maar op de offerte horen ze los, want alleen bij de verlegde variant
+ * hoort de vermelding dat er een verlegd tarief is gebruikt.
  *
  * Gedeeld door de Word/PDF-render én het offertescherm, zodat die niet uiteen kunnen lopen.
  */
@@ -533,14 +532,15 @@ export function groepeerBtwPerTarief(
 }
 
 /**
- * Verplichte vermelding bij verlegging: de afnemer draagt de BTW af, dus de offerte
- * rekent 0%. Leeg als er geen verlegd tarief in de offerte zit.
+ * Vermelding welke verlegde tarieven op deze offerte staan. Bewust géén zin over "de
+ * afnemer draagt de BTW af": de offerte brengt het tarief wél in rekening (zie de
+ * bedrijfskeuze in lib/stamdata/btw.ts). Leeg als er geen verlegd tarief in zit.
  */
 function btwVerlegdTekst(groepen: BtwGroepContext[]): string {
   const verlegd = groepen.filter(g => g.verlegd)
   if (verlegd.length === 0) return ''
   const pcten = [...new Set(verlegd.map(g => g.nominaal_pct))].sort((a, b) => b - a)
-  return `BTW verlegd (${pcten.map(p => `${p}%`).join(' en ')}) — de omzetbelasting wordt verlegd naar de afnemer.`
+  return `Verlegd tarief van toepassing (${pcten.map(p => `${p}%`).join(' en ')}).`
 }
 
 // ─── Context builder ─────────────────────────────────────────────────────────

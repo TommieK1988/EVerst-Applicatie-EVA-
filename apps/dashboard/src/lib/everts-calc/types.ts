@@ -188,7 +188,7 @@ export interface ActiviteitTotaal {
 }
 
 export interface BtwGroep {
-  pct: number     // te heffen percentage (0 bij verlegd)
+  pct: number     // te heffen percentage
   basis: number   // verkoopprijs waarover dit tarief berekend wordt
   btw: number     // BTW bedrag
   tarief_id?: string   // btw_tarieven.id, als de regels een tarief dragen
@@ -252,7 +252,7 @@ export interface Calculatieregel {
   gemarkeerd?: boolean       // visuele markering (oranje)
   /** Gekozen tarief uit `btw_tarieven` (stamgegevens); draagt label + verlegd-vlag. */
   btw_tarief_id?: string
-  /** Te heffen BTW-percentage. Bij een verlegd tarief 0 — het tarief zelf staat in btw_tarief_id. */
+  /** Te heffen BTW-percentage — gelijk aan het nominale tarief, ook bij verlegging. */
   btw_pct?: number
   opmerking?: string     // interne opmerking (niet zichtbaar voor opdrachtgever)
   schilderbehandeling_id?: string  // gekozen schilder_behandelingen.id — de bron; tekst wordt pas bij de offerte bevroren
