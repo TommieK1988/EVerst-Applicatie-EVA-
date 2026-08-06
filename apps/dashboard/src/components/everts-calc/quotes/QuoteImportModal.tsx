@@ -31,6 +31,7 @@ interface ImportRegel {
   calculatieregel_id: string
   is_stelpost?: boolean
   btw_pct?: number | null
+  btw_tarief_id?: string | null
   schilderbehandeling_id?: string | null
   schilderbehandeling?: string | null
 }
@@ -120,6 +121,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
             is_stelpost: r.is_stelpost ?? false,
             // Zonder eigen keuze het standaardtarief van de calculatie (leeg → server pakt 21%).
             btw_pct: r.btw_pct ?? scenario?.btw_pct_default ?? null,
+            btw_tarief_id: r.btw_tarief_id ?? scenario?.btw_tarief_id_default ?? null,
             // Alleen de koppeling; de tekst bevriest de server op dít moment.
             schilderbehandeling_id: r.schilderbehandeling_id ?? null,
             schilderbehandeling: r.schilderbehandeling ?? null,
@@ -201,6 +203,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
           })(),
           is_stelpost: r.is_stelpost ?? false,
           btw_pct: r.btw_pct ?? null,
+          btw_tarief_id: r.btw_tarief_id ?? null,
           schilderbehandeling_id: r.schilderbehandeling_id ?? null,
           schilderbehandeling: r.schilderbehandeling ?? null,
         }))

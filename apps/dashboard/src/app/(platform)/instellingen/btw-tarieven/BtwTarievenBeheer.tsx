@@ -2,6 +2,7 @@
 
 import type { BtwTarief } from '@everts/database/platform-types'
 import { Badge, EmptyState } from '@/components/ui'
+import { nominaalPercentage } from '@/lib/stamdata/btw'
 
 function formatDatum(iso: string | null): string {
   if (!iso) return '—'
@@ -9,13 +10,7 @@ function formatDatum(iso: string | null): string {
   return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function BtwTarievenBeheer({
-  tarieven,
-  legacyMismatch,
-}: {
-  tarieven: BtwTarief[]
-  legacyMismatch: number[]
-}) {
+export default function BtwTarievenBeheer({ tarieven }: { tarieven: BtwTarief[] }) {
   const laatsteSync = tarieven
     .map(t => t.bouw7_laatst_sync)
     .filter(Boolean)
@@ -45,8 +40,11 @@ export default function BtwTarievenBeheer({
               display: 'grid', gridTemplateColumns: '70px 1fr auto', alignItems: 'center', gap: 12,
               padding: '10px 4px', borderBottom: '1px solid var(--border)',
             }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
-                {Number(t.percentage)}%
+              <span
+                style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}
+                title={t.verlegd ? `Nominaal ${nominaalPercentage(t)}%, te heffen 0% (verlegd)` : undefined}
+              >
+                {nominaalPercentage(t)}%
               </span>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>
                 {t.label}
@@ -59,20 +57,11 @@ export default function BtwTarievenBeheer({
         </div>
       )}
 
-      {legacyMismatch.length > 0 && (
-        <div style={{
-          background: 'var(--bg)', border: '1px solid var(--warning, #d4a017)', borderRadius: 8,
-          padding: '10px 12px', fontSize: 12, color: 'var(--fg-muted)',
-        }}>
-          <strong style={{ color: 'var(--fg)' }}>Let op:</strong> de oude handmatige instelling bevat
-          percentage(s) <strong>{legacyMismatch.join('%, ')}%</strong> die niet voorkomen in de
-          uit Bouw7 afgeleide lijst. Controleer of deze nog kloppen — Bouw7 is leidend.
-        </div>
-      )}
-
       <p style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', margin: 0 }}>
         BTW-tarieven worden read-only overgenomen uit de Bouw7-offertes, zodat ze altijd
         overeenkomen met wat naar Bouw7 wordt teruggeschreven. Wijzigen kan alleen in Bouw7.
+        Bij een <strong>verlegd</strong> tarief rekent de offerte 0% en komt er een vermelding
+        onder het totaal dat de BTW naar de afnemer is verlegd.
       </p>
     </div>
   )

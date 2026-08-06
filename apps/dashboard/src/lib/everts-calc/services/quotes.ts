@@ -204,7 +204,7 @@ export async function getQuote(id: string): Promise<Quote | null> {
       client:clients(*),
       sections:quote_sections(
         *,
-        lines:quote_lines(* )
+        lines:quote_lines(*, btw_tarief:btw_tarieven(id, label, percentage, verlegd))
       ),
       terms:quote_terms(*)
     `)

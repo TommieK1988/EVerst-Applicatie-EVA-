@@ -28,7 +28,7 @@
  * zijn — anders worden ze op runtime uit de Bouw7-API afgeleid:
  *  - `quotation_layout_id`            (verplicht veld bij create; anders runtime-probe)
  *  - `quotation_status_verzonden_id`  / `quotation_status_concept_id`
- *  - `quotation_vat_tariff_id`        (BTW-tarief op de samenvattingsregel; optioneel)
+ *  - `quotation_vat_tariff_id`        (terugval-BTW-tarief; het tarief van de offerteregels wint)
  */
 
 import { getBouw7Client } from '@/lib/bouw7/sync'
@@ -123,6 +123,31 @@ async function resolveQuotationStatusId(
 function resolveQuotationLayout(cfg: Record<string, unknown>): string {
   const v = cfg.quotation_layout
   return typeof v === 'string' && v.trim() ? v.trim() : 'default'
+}
+
+/**
+ * Het BTW-tarief dat de offerteregels zelf dragen: het tarief met de grootste grondslag wint,
+ * want de Bouw7-offerte krijgt één samenvattingsregel. Zo komt een verlegde offerte ook in
+ * Bouw7 als verlegd binnen, in plaats van als gewoon 21%. `null` = geen tarief gevonden.
+ */
+async function vatTariffIdVanOfferteregels(quoteId: string): Promise<number | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data } = await admin
+    .from('quote_lines')
+    .select('line_total, btw_tarief:btw_tarieven(bouw7_id)')
+    .eq('quote_id', quoteId)
+    .not('btw_tarief_id', 'is', null)
+  if (!data?.length) return null
+
+  const perTarief = new Map<number, number>()
+  for (const r of data as { line_total: number | null; btw_tarief: { bouw7_id: number | null } | null }[]) {
+    const id = r.btw_tarief?.bouw7_id
+    if (id == null) continue
+    perTarief.set(id, (perTarief.get(id) ?? 0) + Math.abs(Number(r.line_total ?? 0)))
+  }
+  if (perTarief.size === 0) return null
+  return [...perTarief.entries()].sort((a, b) => b[1] - a[1])[0][0]
 }
 
 /**
@@ -223,7 +248,11 @@ export async function stuurOfferteNaarBouw7(quoteId: string): Promise<Bouw7Write
       return { ok: false, error: 'Bouw7-offertestatus niet gevonden; stel quotation_status_verzonden_id in bij Integraties.' }
     }
     const layout = resolveQuotationLayout(cfg)
-    const vatTariffId = await resolveVatTariffId(client, cfg)
+    // Het tarief van de offerteregels wint: die is bewust gekozen in de calculatie. Pas als
+    // geen enkele regel een tarief draagt (offertes van vóór de tariefkoppeling) vallen we
+    // terug op de config-override / een probe op de Bouw7-tarievenlijst.
+    const vatTariffId = await vatTariffIdVanOfferteregels(quoteId)
+      ?? await resolveVatTariffId(client, cfg)
 
     // 5. Body samenstellen + upsert.
     const subject = (dossier.titel || q.quote_nummer || 'Offerte').toString()

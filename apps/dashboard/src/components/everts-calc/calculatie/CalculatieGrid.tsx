@@ -26,6 +26,8 @@ import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/Activi
 import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
 import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
 import { laadBehandelingen } from '@/app/(platform)/everts-calc/actions/schilderwerk'
+import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
+import { heffingsPercentage, tariefKort, vindTarief, type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import { behandelingSuffix as maakBehandelingSuffix } from '@/lib/everts-calc/behandeling-label'
 import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import { slaRegelOpAlsRecept } from '@/app/(platform)/everts-calc/actions/bibliotheek'
@@ -106,7 +108,7 @@ const COL_DEFS: ColDef[] = [
   { id: 'opslag_pct',label: 'Opsl.%',   dw: 52,  minW: 44, align: 'right', thStyle: { color: '#009439', backgroundColor: 'rgba(0,148,57,0.08)' },     tdStyle: { backgroundColor: 'rgba(0,148,57,0.04)' } },
   { id: 'vp_eenh',   label: 'VP/e.',    dw: 68,  minW: 48, align: 'right', thStyle: { color: '#057a5c', backgroundColor: 'rgba(5,122,92,0.08)' },     tdStyle: { backgroundColor: 'rgba(5,122,92,0.04)' } },
   { id: 'tot_vp',    label: 'Tot. VP',  dw: 80,  minW: 60, align: 'right', thStyle: { color: '#057a5c', backgroundColor: 'rgba(5,122,92,0.08)' },     tdStyle: { backgroundColor: 'rgba(5,122,92,0.04)' } },
-  { id: 'btw_pct',   label: 'BTW %',   dw: 44,  minW: 36, align: 'right', thStyle: { color: '#b85a00', backgroundColor: 'rgba(184,90,0,0.08)' },     tdStyle: { backgroundColor: 'rgba(184,90,0,0.04)' } },
+  { id: 'btw_pct',   label: 'BTW',     dw: 96,  minW: 64, align: 'right', thStyle: { color: '#b85a00', backgroundColor: 'rgba(184,90,0,0.08)' },     tdStyle: { backgroundColor: 'rgba(184,90,0,0.04)' } },
   { id: 'acties',    label: '',         dw: 28,  minW: 28, align: 'center' },
 ]
 
@@ -823,13 +825,24 @@ function OpslaanAlsReceptModal({
 
 // ─── CalculatieregelRij ───────────────────────────────────────────────────────
 
+/**
+ * Wat er op een regel wordt vastgelegd als je een BTW-tarief kiest. `btw_pct` is het te
+ * héffen percentage: bij een verlegd tarief 0, want dan draagt de afnemer de BTW af. Het
+ * nominale tarief blijft bewaard via `btw_tarief_id` en komt zo op de offerte terecht.
+ */
+function kiesBtwTarief(tarieven: BtwTariefKeuze[], tariefId: string): Partial<Calculatieregel> {
+  const t = tarieven.find(x => x.id === tariefId)
+  if (!t) return { btw_tarief_id: undefined, btw_pct: undefined }
+  return { btw_tarief_id: t.id, btw_pct: heffingsPercentage(t) }
+}
+
 interface RegelRijProps {
   regel: Calculatieregel
   componenten: Componentregel[]
   diepte: number
   defaultOpslag: number
   colOrder: ColId[]
-  btwTarieven: number[]
+  btwTarieven: BtwTariefKeuze[]
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
   scenarioId: string
@@ -1369,20 +1382,28 @@ function CalculatieregelRij({
           )}
         </td>
       )
-      case 'btw_pct': return (
-        <td key={id} className={`px-2 py-1 ${base}`} style={tdSt}>
-          <select
-            value={regel.btw_pct ?? ''}
-            onChange={e => onWijzig(regel.id, { btw_pct: e.target.value !== '' ? parseInt(e.target.value) : undefined })}
-            className="w-full text-xs  text-right px-1 py-0.5 rounded border-0 bg-transparent
-              hover:bg-white hover:border hover:border-slate-200
-              focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
-          >
-            <option value="">—</option>
-            {btwTarieven.map(t => <option key={t} value={t}>{t}%</option>)}
-          </select>
-        </td>
-      )
+      case 'btw_pct': {
+        // Regels van vóór de tariefkoppeling dragen alleen een percentage; die vallen terug
+        // op het niet-verlegde tarief met dat percentage.
+        const gekozen = vindTarief(btwTarieven, regel.btw_tarief_id, regel.btw_pct)
+        return (
+          <td key={id} className={`px-2 py-1 ${base}`} style={tdSt}>
+            <select
+              value={gekozen?.id ?? ''}
+              title={gekozen ? gekozen.label : undefined}
+              onChange={e => onWijzig(regel.id, kiesBtwTarief(btwTarieven, e.target.value))}
+              className="w-full text-xs  text-right px-1 py-0.5 rounded border-0 bg-transparent
+                hover:bg-white hover:border hover:border-slate-200
+                focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
+            >
+              <option value="">—</option>
+              {btwTarieven.map(t => (
+                <option key={t.id} value={t.id}>{tariefKort(t)}</option>
+              ))}
+            </select>
+          </td>
+        )
+      }
       case 'acties': return (
         <td key={id} className="px-1 py-1 text-center">
           <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1643,7 +1664,7 @@ interface GroepSectieProps {
   isActief: boolean
   defaultOpslag: number
   colOrder: ColId[]
-  btwTarieven: number[]
+  btwTarieven: BtwTariefKeuze[]
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
   scenarioId: string
@@ -1992,10 +2013,16 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   // Instellingen — geabonneerd, zodat de lijst uit Supabase ook doorkomt als de
   // hydratie pas ná de eerste render binnen is (dossiertab opent sneller dan de fetch).
   const _inst        = useInstellingen()
-  const btwTarieven  = _inst.btw_tarieven
   const kolomNamen   = (_inst.kolom_namen ?? {}) as Record<string, string>
   const uurtarieven  = _inst.uurtarieven ?? []
   const eenheden     = _inst.eenheden ?? []
+
+  // BTW-tarieven komen uit de stamgegevens (afgeleid uit Bouw7), niet uit de calc-instellingen:
+  // zo staan de tarieven in de calculatie gelijk aan die in de offerte en in Bouw7.
+  const [btwTarieven, setBtwTarieven] = useState<BtwTariefKeuze[]>([])
+  useEffect(() => {
+    laadBtwTarieven().then(setBtwTarieven).catch(() => setBtwTarieven([]))
+  }, [])
 
   // Schilderbehandelingen: één keer voor het hele grid, zodat elke regel de naam
   // van zijn gekoppelde behandeling live kan tonen zonder eigen fetch per rij.
@@ -2657,11 +2684,17 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const handleVoegRegelToe = useCallback((groepId: string) => {
     duwSnapshot()
     const volgorde = regels.filter(r => r.groep_id === groepId).length + 1
-    const nieuw: Calculatieregel = { id: nieuweId(), groep_id: groepId, omschrijving: '', hoeveelheid: 1, eenheid: 'st', volgorde, btw_pct: scenario.btw_pct_default ?? undefined }
+    const standaardBtw = scenario.btw_tarief_id_default
+      ? kiesBtwTarief(btwTarieven, scenario.btw_tarief_id_default)
+      : { btw_pct: scenario.btw_pct_default ?? undefined }
+    const nieuw: Calculatieregel = {
+      id: nieuweId(), groep_id: groepId, omschrijving: '', hoeveelheid: 1, eenheid: 'st', volgorde,
+      ...standaardBtw,
+    }
     slaCalculatieregelOp(nieuw)
     setRegels(prev => [...prev, nieuw])
     onWijziging()
-  }, [duwSnapshot, regels, onWijziging])
+  }, [duwSnapshot, regels, onWijziging, scenario, btwTarieven])
 
   const handleVoegSubgroepToe = useCallback((parent: Groep) => {
     setNieuwGroepParent(parent); setNieuwGroepNaam('')

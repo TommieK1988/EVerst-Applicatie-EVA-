@@ -1,4 +1,5 @@
 import type { CalculatieLijn, Activiteit, Scenario, ProjectTotalen, BtwGroep, Groep, Calculatieregel, Componentregel, ComponentType, WerkbegrotingRegel, WerkbegrotingComponent } from './types'
+import { nominaalPercentage } from '@/lib/stamdata/btw'
 
 // ─── Lijn berekeningen ────────────────────────────────────────────────────────
 
@@ -18,24 +19,44 @@ export function berekenActiviteitKostprijs(
 
 // ─── Project totalen ──────────────────────────────────────────────────────────
 
-/** Bereken BTW per tarief op basis van individuele calculatieregels */
+/**
+ * Bereken BTW per tarief op basis van individuele calculatieregels.
+ *
+ * Regels met hetzelfde te heffen percentage maar een verschillend tarief blijven apart:
+ * "Verlegd Hoog 21%" en "Geen" heffen allebei 0%, maar horen los op de offerte. Geef
+ * `tarieven` mee (uit de stamgegevens) om de groepen van label en verlegd-vlag te voorzien.
+ */
 export function berekenBtwBreakdown(
   regels: Calculatieregel[],
   componenten: Componentregel[],
   defaultOpslag: number,
-  btwDefault: number
+  btwDefault: number,
+  tarieven?: { id: string; label: string; percentage: number; verlegd: boolean }[],
 ): BtwGroep[] {
-  const groepen = new Map<number, number>()
+  type Bucket = { pct: number; basis: number; tarief_id?: string }
+  const groepen = new Map<string, Bucket>()
   for (const r of regels) {
     const opslag = r.opslag_pct ?? defaultOpslag
     const { vp_totaal } = berekenCalculatieregel(r, componenten, opslag)
     if (vp_totaal === 0) continue
     const pct = r.btw_pct ?? btwDefault
-    groepen.set(pct, (groepen.get(pct) ?? 0) + vp_totaal)
+    const sleutel = r.btw_tarief_id ?? `pct:${pct}`
+    const bestaand = groepen.get(sleutel)
+    if (bestaand) bestaand.basis += vp_totaal
+    else groepen.set(sleutel, { pct, basis: vp_totaal, tarief_id: r.btw_tarief_id })
   }
-  return Array.from(groepen.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([pct, basis]) => ({ pct, basis, btw: basis * (pct / 100) }))
+  return Array.from(groepen.values())
+    .map(({ pct, basis, tarief_id }) => {
+      const t = tarief_id ? tarieven?.find(x => x.id === tarief_id) : undefined
+      return {
+        pct, basis, btw: basis * (pct / 100),
+        tarief_id,
+        label: t?.label,
+        verlegd: t?.verlegd,
+        nominaal_pct: t ? nominaalPercentage(t) : pct,
+      }
+    })
+    .sort((a, b) => a.pct - b.pct || (a.nominaal_pct ?? 0) - (b.nominaal_pct ?? 0))
 }
 
 export function berekenProjectTotalen(

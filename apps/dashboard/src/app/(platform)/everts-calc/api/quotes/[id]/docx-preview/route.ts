@@ -73,7 +73,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .select(`
           *,
           client:clients(*),
-          sections:quote_sections(*, lines:quote_lines(*)),
+          sections:quote_sections(*, lines:quote_lines(*, btw_tarief:btw_tarieven(id, label, percentage, verlegd))),
           terms:quote_terms(*),
           layout:quote_layouts(*),
           betalingsconditie:betalingscondities(*),

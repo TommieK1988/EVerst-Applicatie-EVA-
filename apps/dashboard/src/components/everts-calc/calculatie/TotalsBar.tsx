@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { berekenBtwBreakdown, formatEuro, formatPct } from '@/lib/everts-calc/calculations'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
+import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 
 interface Props {
   scenario: Scenario
@@ -20,6 +22,13 @@ export default function TotalsBar({
   const defaultOpslag = scenario.opslag_algemene_kosten + (scenario.opslag_winst_risico ?? 0)
   const btwDefault = scenario.btw_pct_default ?? 0
 
+  // Tarieven uit de stamgegevens, zodat een verlegd tarief hier als "21% verlegd" leest
+  // in plaats van als een kale 0%.
+  const [tarieven, setTarieven] = useState<BtwTariefKeuze[]>([])
+  useEffect(() => {
+    laadBtwTarieven().then(setTarieven).catch(() => setTarieven([]))
+  }, [])
+
   const [btw_groepen, setBtwGroepen] = useState(() =>
     regels && componenten && regels.length > 0
       ? berekenBtwBreakdown(regels, componenten, defaultOpslag, btwDefault)
@@ -28,7 +37,7 @@ export default function TotalsBar({
 
   useEffect(() => {
     if (regels && componenten && regels.length > 0) {
-      setBtwGroepen(berekenBtwBreakdown(regels, componenten, defaultOpslag, btwDefault))
+      setBtwGroepen(berekenBtwBreakdown(regels, componenten, defaultOpslag, btwDefault, tarieven))
     } else {
       setBtwGroepen([{
         pct: btwDefault,
@@ -36,7 +45,7 @@ export default function TotalsBar({
         btw: verkoopprijs_live * (btwDefault / 100),
       }])
     }
-  }, [verkoopprijs_live, kostprijs_live, regels, componenten, defaultOpslag, btwDefault])
+  }, [verkoopprijs_live, kostprijs_live, regels, componenten, defaultOpslag, btwDefault, tarieven])
 
   const btw_totaal   = btw_groepen.reduce((s, g) => s + g.btw, 0)
   const totaal_incl  = verkoopprijs_live + btw_totaal
@@ -94,8 +103,10 @@ export default function TotalsBar({
 
         {/* BTW: per tarief (altijd read-only; instellen via rekenregels) */}
         {btw_groepen.map(g => (
-          <div key={g.pct} className="px-4 py-2.5 min-w-0 flex-shrink-0">
-            <div className="text-white/50 text-xs mb-0.5">BTW {g.pct}%</div>
+          <div key={g.tarief_id ?? `pct:${g.pct}`} className="px-4 py-2.5 min-w-0 flex-shrink-0">
+            <div className="text-white/50 text-xs mb-0.5" title={g.label}>
+              {g.verlegd ? `BTW ${g.nominaal_pct ?? g.pct}% verlegd` : `BTW ${g.pct}%`}
+            </div>
             <div className=" text-sm text-white/80">+ {formatEuro(g.btw)}</div>
           </div>
         ))}

@@ -7,6 +7,7 @@ import type { NieuweQuoteData, QuoteType, QuoteStatus, Discipline, TermType } fr
 import type { StructuurGroep } from '@/lib/everts-calc/import-structuur'
 import { assertQuoteBewerkbaar } from '@/lib/everts-calc/quote-guards'
 import { omschrijvingMetBehandeling } from '@/lib/everts-calc/behandeling-label'
+import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
 
 const PAD = '/quotes'
 
@@ -121,7 +122,10 @@ export type ImportRegel = {
   calculatieregel_id?: string | null
   opmerking?: string | null
   is_stelpost?: boolean
+  /** Te heffen percentage (0 bij een verlegd tarief). */
   btw_pct?: number | null
+  /** Gekozen tarief uit de stamgegevens; draagt label + verlegd-vlag naar de offerte. */
+  btw_tarief_id?: string | null
   /** Koppeling naar de bibliotheek; de tekst wordt hier pas bevroren (zie importeerRegels). */
   schilderbehandeling_id?: string | null
   schilderbehandeling?: string | null
@@ -404,7 +408,7 @@ export async function dupliceerQuoteAlsNieuweVersie(quoteId: string): Promise<{ 
 
   const { data: orig, error: oErr } = await supabase
     .from('quotes')
-    .select('*, sections:quote_sections(*, lines:quote_lines(*)), terms:quote_terms(*)')
+    .select('*, sections:quote_sections(*, lines:quote_lines(*, btw_tarief:btw_tarieven(id, label, percentage, verlegd))), terms:quote_terms(*)')
     .eq('id', quoteId)
     .single()
   if (oErr || !orig) throw new Error('Offerte niet gevonden')
@@ -634,6 +638,7 @@ export async function maakLine(data: {
   eenheid?: string
   eenheidsprijs?: number
   btw_pct?: number
+  btw_tarief_id?: string | null
   volgorde?: number
   kostprijs_pe?: number | null
   uren_pe?: number | null
@@ -657,7 +662,8 @@ export async function maakLine(data: {
       eenheid: data.eenheid ?? 'st',
       eenheidsprijs,
       line_total,
-      btw_pct: data.btw_pct ?? 21,
+      btw_pct: data.btw_pct ?? STANDAARD_BTW_HOOG_PCT,
+      btw_tarief_id: data.btw_tarief_id ?? null,
       volgorde: data.volgorde ?? 0,
       kostprijs_pe: data.kostprijs_pe ?? null,
       uren_pe: data.uren_pe ?? null,
@@ -678,6 +684,7 @@ export async function updateLine(id: string, quoteId: string, data: {
   eenheid?: string
   eenheidsprijs?: number
   btw_pct?: number
+  btw_tarief_id?: string | null
   volgorde?: number
   kostprijs_pe?: number | null
   uren_pe?: number | null
@@ -812,7 +819,7 @@ export async function herbereken(quoteId: string): Promise<void> {
     }
     // Accumuleer BTW per tarief (stelposten en normale regels, geen optie)
     if (!optieSectieIds.has(sectionId)) {
-      const pct = line.btw_pct ?? 21
+      const pct = line.btw_pct ?? STANDAARD_BTW_HOOG_PCT
       btwPerTarief.set(pct, (btwPerTarief.get(pct) ?? 0) + bedrag)
     }
   }
@@ -840,7 +847,7 @@ export async function herbereken(quoteId: string): Promise<void> {
     .eq('id', quoteId)
     .single()
 
-  const fallbackBtwPct = quote?.btw_pct ?? 21
+  const fallbackBtwPct = quote?.btw_pct ?? STANDAARD_BTW_HOOG_PCT
   const stelposten_in_totaal = quoteV3?.stelposten_in_totaal ?? true
 
   const stelposten_subtotaal = Math.round(stelpostEx * 100) / 100
@@ -906,6 +913,7 @@ export async function importeerRegels(
     opmerking?: string | null
     is_stelpost?: boolean
     btw_pct?: number | null
+    btw_tarief_id?: string | null
     schilderbehandeling_id?: string | null
     schilderbehandeling?: string | null
     werkomschrijving_afbeeldingen?: string[] | null
@@ -1013,7 +1021,8 @@ export async function importeerRegels(
       eenheid: r.eenheid,
       eenheidsprijs: r.eenheidsprijs,
       line_total: Math.round(r.hoeveelheid * r.eenheidsprijs * 100) / 100,
-      btw_pct: r.btw_pct ?? 21,
+      btw_pct: r.btw_pct ?? STANDAARD_BTW_HOOG_PCT,
+      btw_tarief_id: r.btw_tarief_id ?? null,
       volgorde: i,
       kostprijs_pe: r.kostprijs_pe ?? null,
       uren_pe: r.uren_pe ?? null,

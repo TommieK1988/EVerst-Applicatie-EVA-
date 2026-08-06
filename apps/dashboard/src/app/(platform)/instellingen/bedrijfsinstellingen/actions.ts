@@ -15,7 +15,8 @@ export async function getBedrijfsinstellingen(): Promise<Bedrijfsinstellingen> {
     .single()
 
   if (error || !data) {
-    return { id: 1, uurtarieven: [], btw_tarieven: [0, 9, 21], overige: {}, updated_at: new Date().toISOString() }
+    // btw_tarieven is een vervallen kolom (zie de tabel `btw_tarieven`); leeg laten.
+    return { id: 1, uurtarieven: [], btw_tarieven: [], overige: {}, updated_at: new Date().toISOString() }
   }
   return data as Bedrijfsinstellingen
 }
@@ -40,13 +41,8 @@ export async function setUurtarieven(
   return updateBedrijfsinstellingen({ uurtarieven })
 }
 
-export async function setBtwTarieven(
-  btw_tarieven: number[],
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const result = await updateBedrijfsinstellingen({ btw_tarieven })
-  if (result.ok) revalidatePath('/instellingen/btw-tarieven')
-  return result
-}
+// setBtwTarieven() is vervallen: BTW-tarieven staan in de tabel `btw_tarieven` (afgeleid
+// uit Bouw7), niet meer als losse percentagelijst in de bedrijfsinstellingen.
 
 /** Instelbaar drempelbedrag (excl. btw) waarboven Mutatie/Dagelijks-onderhoud-offertes goedkeuring vereisen. */
 export async function getGoedkeuringDrempelOfferte(): Promise<number> {

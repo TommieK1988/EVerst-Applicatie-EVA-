@@ -20,6 +20,8 @@
  */
 
 import type { Quote, QuoteSection, QuoteLine } from './types-quotes'
+import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
+import { nominaalPercentage } from '@/lib/stamdata/btw'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,8 +131,11 @@ export const LEEG_DOSSIER: DossierContext = {
 
 /** Eén BTW-tarief-groep met grondslag + BTW-bedrag (voor meerdere tarieven in één offerte). */
 export interface BtwGroepContext {
-  pct: number
-  pct_str: string          // "21%"
+  pct: number              // te heffen percentage — 0 bij verlegd
+  pct_str: string          // "21%" of "21% verlegd"
+  label: string            // tariefnaam uit de stamgegevens, bijv. 'Verlegd Hoog 21%'
+  verlegd: boolean
+  nominaal_pct: number     // 21 bij "Verlegd Hoog 21%", ook al wordt er 0 geheven
   grondslag: string        // € geformatteerd
   grondslag_raw: string    // kaal met duizendpunt (10.000)
   grondslag_bedrag: string // 10.000,00 (zonder €)
@@ -216,6 +221,8 @@ export interface RenderContext {
   behandelingen_overzicht: BehandelingContext[]
   btw_groepen: BtwGroepContext[]   // top-level alias voor {#btw_groepen}-loops
   heeft_meerdere_btw: boolean      // top-level alias voor {#heeft_meerdere_btw}
+  heeft_verlegde_btw: boolean      // minstens één regel met een verlegd tarief
+  btw_verlegd_tekst: string        // standaardvermelding; leeg als er niets verlegd is
   heeft_stelposten: boolean
   heeft_opties: boolean
   heeft_terms: boolean
@@ -244,6 +251,8 @@ export interface RenderContext {
     opties_subtotaal_bedrag: string
     btw_groepen: BtwGroepContext[]
     heeft_meerdere_btw: boolean
+    heeft_verlegde_btw: boolean
+    btw_verlegd_tekst: string
   }
   layout: LayoutContext
 }
@@ -465,6 +474,75 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
   return behouden
 }
 
+/**
+ * BTW-uitsplitsing per tarief over alle niet-optionele regels.
+ *
+ * Groeperen op percentage alleen zou "Verlegd Hoog 21%" en "Geen" op één hoop gooien —
+ * beide heffen 0%, maar op de offerte horen ze los, want bij verlegging moet vermeld
+ * worden dat de BTW naar de afnemer is verlegd. `btw_pct` is het te heffen percentage;
+ * het nominale tarief komt uit het gekoppelde `btw_tarief`.
+ *
+ * Gedeeld door de Word/PDF-render én het offertescherm, zodat die niet uiteen kunnen lopen.
+ */
+export function groepeerBtwPerTarief(
+  sections: QuoteSection[],
+  fallbackPct: number | null | undefined,
+): BtwGroepContext[] {
+  type Bucket = { pct: number; grondslag: number; label: string; verlegd: boolean; nominaal: number }
+  const perTarief = new Map<string, Bucket>()
+  for (const s of sections) {
+    if (s.is_optioneel) continue
+    for (const line of (s.lines ?? [])) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const l = line as any
+      const pct = Number(l.btw_pct ?? fallbackPct ?? STANDAARD_BTW_HOOG_PCT)
+      const tarief = l.btw_tarief ?? null
+      const sleutel = tarief?.id ? `t:${tarief.id}` : `pct:${pct}`
+      const bestaand = perTarief.get(sleutel)
+      if (bestaand) {
+        bestaand.grondslag += line.line_total ?? 0
+      } else {
+        perTarief.set(sleutel, {
+          pct,
+          grondslag: line.line_total ?? 0,
+          label: tarief?.label ?? `${pct}%`,
+          verlegd: tarief?.verlegd ?? false,
+          nominaal: tarief ? nominaalPercentage(tarief) : pct,
+        })
+      }
+    }
+  }
+  return Array.from(perTarief.values())
+    .sort((a, b) => b.nominaal - a.nominaal || Number(a.verlegd) - Number(b.verlegd))
+    .map(({ pct, grondslag, label, verlegd, nominaal }) => {
+      const btwBedrag = Math.round(grondslag * (pct / 100) * 100) / 100
+      return {
+        pct,
+        pct_str: verlegd ? `${nominaal}% verlegd` : `${pct}%`,
+        label,
+        verlegd,
+        nominaal_pct: nominaal,
+        grondslag: euro(grondslag),
+        grondslag_raw: numRaw(grondslag),
+        grondslag_bedrag: numEuroPlain(grondslag),
+        btw_bedrag: euro(btwBedrag),
+        btw_bedrag_raw: numRaw(btwBedrag),
+        btw_bedrag_getal: numEuroPlain(btwBedrag),
+      }
+    })
+}
+
+/**
+ * Verplichte vermelding bij verlegging: de afnemer draagt de BTW af, dus de offerte
+ * rekent 0%. Leeg als er geen verlegd tarief in de offerte zit.
+ */
+function btwVerlegdTekst(groepen: BtwGroepContext[]): string {
+  const verlegd = groepen.filter(g => g.verlegd)
+  if (verlegd.length === 0) return ''
+  const pcten = [...new Set(verlegd.map(g => g.nominaal_pct))].sort((a, b) => b - a)
+  return `BTW verlegd (${pcten.map(p => `${p}%`).join(' en ')}) — de omzetbelasting wordt verlegd naar de afnemer.`
+}
+
 // ─── Context builder ─────────────────────────────────────────────────────────
 
 export function buildRenderContext(
@@ -497,7 +575,7 @@ export function buildRenderContext(
       totaal_raw: numRaw(line.line_total),
       totaal_bedrag: numEuroPlain(line.line_total),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      btw_pct: (line as any).btw_pct ?? 21,
+      btw_pct: (line as any).btw_pct ?? STANDAARD_BTW_HOOG_PCT,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       is_stelpost: (line as any).is_stelpost ?? false,
       opmerking: line.opmerking ?? '',
@@ -623,31 +701,8 @@ export function buildRenderContext(
     opmerkingen: d.contactpersoon_opmerkingen,
   }
 
-  // BTW-uitsplitsing per tarief: groepeer alle niet-optionele regels op btw_pct.
-  const grondslagPerTarief = new Map<number, number>()
-  for (const s of sections) {
-    if (s.is_optioneel) continue
-    for (const line of (s.lines ?? [])) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pct = Number((line as any).btw_pct ?? quote.btw_pct ?? 21)
-      grondslagPerTarief.set(pct, (grondslagPerTarief.get(pct) ?? 0) + (line.line_total ?? 0))
-    }
-  }
-  const btw_groepen: BtwGroepContext[] = Array.from(grondslagPerTarief.entries())
-    .sort((a, b) => b[0] - a[0])
-    .map(([pct, grondslag]) => {
-      const btwBedrag = Math.round(grondslag * (pct / 100) * 100) / 100
-      return {
-        pct,
-        pct_str: `${pct}%`,
-        grondslag: euro(grondslag),
-        grondslag_raw: numRaw(grondslag),
-        grondslag_bedrag: numEuroPlain(grondslag),
-        btw_bedrag: euro(btwBedrag),
-        btw_bedrag_raw: numRaw(btwBedrag),
-        btw_bedrag_getal: numEuroPlain(btwBedrag),
-      }
-    })
+  const btw_groepen = groepeerBtwPerTarief(sections, quote.btw_pct)
+  const heeft_verlegde_btw = btw_groepen.some(g => g.verlegd)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const betalingsconditie = (quote as any).betalingsconditie ?? null
@@ -722,6 +777,8 @@ export function buildRenderContext(
     behandelingen_overzicht,
     btw_groepen,
     heeft_meerdere_btw: btw_groepen.length > 1,
+    heeft_verlegde_btw,
+    btw_verlegd_tekst: btwVerlegdTekst(btw_groepen),
     heeft_stelposten: stelpost_regels.length > 0,
     heeft_opties: optie_secties.length > 0,
     heeft_behandelingen: behandelingen_overzicht.length > 0,
@@ -757,6 +814,8 @@ export function buildRenderContext(
       opties_subtotaal_bedrag: numEuroPlain(Number((quote as any).opties_subtotaal ?? 0)),
       btw_groepen,
       heeft_meerdere_btw: btw_groepen.length > 1,
+      heeft_verlegde_btw,
+      btw_verlegd_tekst: btwVerlegdTekst(btw_groepen),
     },
     layout,
   }

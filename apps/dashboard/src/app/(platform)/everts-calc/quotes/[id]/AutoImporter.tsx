@@ -89,6 +89,7 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
               opmerking: regel.werkomschrijving ?? null,
               is_stelpost: regel.is_stelpost ?? false,
               btw_pct: regel.btw_pct ?? null,
+              btw_tarief_id: regel.btw_tarief_id ?? null,
               // Alleen de koppeling; de tekst bevriest de server op dít moment.
               schilderbehandeling_id: regel.schilderbehandeling_id ?? null,
               schilderbehandeling: regel.schilderbehandeling ?? null,

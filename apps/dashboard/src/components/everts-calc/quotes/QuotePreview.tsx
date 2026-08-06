@@ -1,4 +1,5 @@
 import type { Quote, QuoteSection, QuoteLine } from '@/lib/everts-calc/types-quotes'
+import { groepeerBtwPerTarief } from '@/lib/everts-calc/quote-renderer'
 
 export interface BedrijfsInstellingen {
   naam: string
@@ -207,6 +208,13 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
   const normaleSections = sections.filter(s => !s.is_optioneel)
   const optieSections = sections.filter(s => s.is_optioneel)
 
+  // Zelfde uitsplitsing als de PDF: één blok per tarief, met verlegd apart benoemd.
+  const btwGroepen = groepeerBtwPerTarief(sections, quote.btw_pct)
+  const btwVerlegdTekst = btwGroepen.some(g => g.verlegd)
+    ? `BTW verlegd naar de afnemer (${[...new Set(btwGroepen.filter(g => g.verlegd).map(g => g.nominaal_pct))]
+        .sort((a, b) => b - a).map(p => `${p}%`).join(' en ')}).`
+    : ''
+
   // Alle stelpost lines uit normale secties
   const stelpostLines: { sectionNaam: string; line: QuoteLine }[] = []
   for (const s of normaleSections) {
@@ -367,14 +375,24 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
                     <span>{euro(quote.opties_subtotaal)}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm', fontSize: '9pt', color: '#475569' }}>
-                  <span>BTW {quote.btw_pct}%</span>
-                  <span>{euro(quote.btw_bedrag)}</span>
-                </div>
+                {(btwGroepen.length > 0
+                  ? btwGroepen
+                  : [{ pct_str: `${quote.btw_pct}%`, btw_bedrag: euro(quote.btw_bedrag), label: '', verlegd: false }]
+                ).map((g, i) => (
+                  <div key={g.label || i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2mm', fontSize: '9pt', color: '#475569' }}>
+                    <span>BTW {g.pct_str}</span>
+                    <span>{g.btw_bedrag}</span>
+                  </div>
+                ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #7dd3fc', paddingTop: '2mm', fontWeight: 800, fontSize: '12pt' }}>
                   <span>Totaal incl BTW</span>
                   <span>{euro(quote.totaal_inc_btw)}</span>
                 </div>
+                {btwVerlegdTekst && (
+                  <div style={{ marginTop: '2mm', fontSize: '8pt', color: '#92400e', fontStyle: 'italic' }}>
+                    {btwVerlegdTekst}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -475,10 +493,15 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
                     <span>{euro(quote.stelposten_subtotaal)}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3mm', color: '#475569' }}>
-                  <span>BTW {quote.btw_pct}%</span>
-                  <span>{euro(quote.btw_bedrag)}</span>
-                </div>
+                {(btwGroepen.length > 0
+                  ? btwGroepen
+                  : [{ pct_str: `${quote.btw_pct}%`, btw_bedrag: euro(quote.btw_bedrag), label: '', verlegd: false }]
+                ).map((g, i) => (
+                  <div key={g.label || i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3mm', color: '#475569' }}>
+                    <span>BTW {g.pct_str}</span>
+                    <span>{g.btw_bedrag}</span>
+                  </div>
+                ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #334155', paddingTop: '2mm', fontWeight: 800, fontSize: '11pt' }}>
                   <span>Totaal incl BTW</span>
                   <span>{euro(quote.totaal_inc_btw)}</span>

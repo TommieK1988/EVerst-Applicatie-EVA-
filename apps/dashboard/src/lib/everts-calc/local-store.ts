@@ -53,7 +53,8 @@ const STANDAARD_EENHEDEN: EenheidConfig[] = [
 ]
 
 const STANDAARD_INSTELLINGEN: Instellingen = {
-  btw_tarieven: [0, 9, 21],
+  // BTW-tarieven staan hier bewust niet meer: die komen uit de stamgegevenstabel
+  // `btw_tarieven` (afgeleid uit Bouw7). Een kopie hier liep onvermijdelijk uit de pas.
   // Uurtarieven komen uit EVA → Bedrijfsinstellingen → Planning (geen demo-data hier).
   uurtarieven: [],
   eenheden: STANDAARD_EENHEDEN,
@@ -82,9 +83,11 @@ function normaliseerEenheden(raw: unknown): EenheidConfig[] {
 
 /** Normaliseert een ruwe Instellingen (zoals hij uit Supabase komt). */
 function normaliseerInstellingen(raw: Partial<Instellingen> | null | undefined): Instellingen {
+  // Vervallen sleutel opruimen zodat de oude percentagelijst niet blijft rondzwerven.
+  const { btw_tarieven: _vervallen, ...rest } = (raw ?? {}) as Partial<Instellingen> & { btw_tarieven?: unknown }
   return {
     ...STANDAARD_INSTELLINGEN,
-    ...(raw ?? {}),
+    ...rest,
     eenheden: normaliseerEenheden(raw?.eenheden),
   }
 }
@@ -691,6 +694,7 @@ export function maakWerkbegrotingVanCalculatie(
       volgorde: regel.volgorde,
       opslag_pct: regel.opslag_pct,
       btw_pct: regel.btw_pct,
+      btw_tarief_id: regel.btw_tarief_id,
       opmerking: regel.opmerking,
       is_stelpost: regel.is_stelpost,
     }
@@ -738,7 +742,8 @@ export function heroverhaalWerkbegroting(
         omschrijving: regel.omschrijving, hoeveelheid: regel.hoeveelheid,
         eenheid: regel.eenheid, kostengroep: regel.kostengroep,
         volgorde: regel.volgorde, opslag_pct: regel.opslag_pct,
-        btw_pct: regel.btw_pct, opmerking: regel.opmerking,
+        btw_pct: regel.btw_pct, btw_tarief_id: regel.btw_tarief_id,
+        opmerking: regel.opmerking,
         is_stelpost: regel.is_stelpost,
       }
       slaWerkbegrotingRegelOp(wbRegel)
@@ -768,6 +773,12 @@ export function heroverhaalWerkbegroting(
         if (wbRegel.omschrijving !== calcRegel.omschrijving) patch.omschrijving = calcRegel.omschrijving
         if (wbRegel.eenheid      !== calcRegel.eenheid)      patch.eenheid      = calcRegel.eenheid
         if (wbRegel.kostengroep  !== calcRegel.kostengroep)  patch.kostengroep  = calcRegel.kostengroep
+        // BTW-tarief en -percentage horen bij elkaar: een correctie in de calculatie moet
+        // ook in de werkbegroting landen, anders lopen de twee uiteen.
+        if (wbRegel.btw_tarief_id !== calcRegel.btw_tarief_id || wbRegel.btw_pct !== calcRegel.btw_pct) {
+          patch.btw_tarief_id = calcRegel.btw_tarief_id
+          patch.btw_pct = calcRegel.btw_pct
+        }
         if (Object.keys(patch).length > 0) slaWerkbegrotingRegelOp({ ...wbRegel, ...patch })
 
         // Voeg nieuwe componenten toe die nog niet in WB staan
@@ -793,7 +804,8 @@ export function heroverhaalWerkbegroting(
           omschrijving: calcRegel.omschrijving, hoeveelheid: calcRegel.hoeveelheid,
           eenheid: calcRegel.eenheid, kostengroep: calcRegel.kostengroep,
           volgorde: calcRegel.volgorde, opslag_pct: calcRegel.opslag_pct,
-          btw_pct: calcRegel.btw_pct, opmerking: calcRegel.opmerking,
+          btw_pct: calcRegel.btw_pct, btw_tarief_id: calcRegel.btw_tarief_id,
+          opmerking: calcRegel.opmerking,
           is_stelpost: calcRegel.is_stelpost,
         }
         slaWerkbegrotingRegelOp(nieuwWbRegel)

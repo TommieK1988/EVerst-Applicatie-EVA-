@@ -110,7 +110,8 @@ export interface Scenario {
   opslag_algemene_kosten: number   // percentage bijv. 8
   opslag_winst_risico: number      // percentage bijv. 10
   opslag_overhead: number          // percentage bijv. 0
-  btw_pct_default?: number         // standaard BTW% voor nieuwe regels, bijv. 21
+  btw_pct_default?: number         // standaard te heffen BTW% voor nieuwe regels, bijv. 21
+  btw_tarief_id_default?: string   // standaard BTW-tarief (btw_tarieven.id) voor nieuwe regels
   standaard_uurtarief?: number     // standaard uurtarief voor nieuwe arbeid-componenten
   betalingsconditie_id?: string | null
   algemene_voorwaarden_id?: string | null
@@ -187,9 +188,13 @@ export interface ActiviteitTotaal {
 }
 
 export interface BtwGroep {
-  pct: number
+  pct: number     // te heffen percentage (0 bij verlegd)
   basis: number   // verkoopprijs waarover dit tarief berekend wordt
   btw: number     // BTW bedrag
+  tarief_id?: string   // btw_tarieven.id, als de regels een tarief dragen
+  label?: string       // bijv. 'Verlegd Hoog 21%'
+  verlegd?: boolean
+  nominaal_pct?: number  // tarief zoals de klant het kent (21 bij verlegd hoog)
 }
 
 export interface ProjectTotalen {
@@ -245,7 +250,10 @@ export interface Calculatieregel {
   is_stelpost?: boolean      // provisorische som / stelpost
   is_verrekenbaar?: boolean  // verrekenbare post (apart getoond in offerte)
   gemarkeerd?: boolean       // visuele markering (oranje)
-  btw_pct?: number       // BTW percentage bijv. 21
+  /** Gekozen tarief uit `btw_tarieven` (stamgegevens); draagt label + verlegd-vlag. */
+  btw_tarief_id?: string
+  /** Te heffen BTW-percentage. Bij een verlegd tarief 0 — het tarief zelf staat in btw_tarief_id. */
+  btw_pct?: number
   opmerking?: string     // interne opmerking (niet zichtbaar voor opdrachtgever)
   schilderbehandeling_id?: string  // gekozen schilder_behandelingen.id — de bron; tekst wordt pas bij de offerte bevroren
   schilderbehandeling?: string  // legacy snapshot van de behandelingstekst (oude regels zonder _id); fallback bij import
@@ -257,7 +265,8 @@ export interface Calculatieregel {
 // ─── Instellingen ─────────────────────────────────────────────────────────────
 
 export interface Instellingen {
-  btw_tarieven: number[]                         // bijv. [0, 9, 21]
+  // NB: hier stond ooit `btw_tarieven: number[]`. Vervallen — BTW-tarieven komen uit de
+  // stamgegevenstabel `btw_tarieven` (zie lib/stamdata/btw.ts), niet uit calc-instellingen.
   kolom_namen?: Partial<Record<string, string>>  // ColId → aangepaste naam
   uurtarieven?: { label: string; tarief: number; is_favoriet?: boolean }[]
   eenheden?: EenheidConfig[]                     // afkorting + omschrijving; STP/VRR = auto-vinkje
@@ -408,6 +417,7 @@ export interface WerkbegrotingRegel {
   kostengroep?: string
   volgorde: number
   opslag_pct?: number
+  btw_tarief_id?: string
   btw_pct?: number
   opmerking?: string
   is_stelpost?: boolean
