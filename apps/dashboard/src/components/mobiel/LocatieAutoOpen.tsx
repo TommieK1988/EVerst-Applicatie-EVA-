@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import StatusBadge from './StatusBadge'
 import { dossierBijLocatie, type LocatieDossier, type LocatieResultaat } from '@/lib/dossiers/locatie'
+import { haalLocatie, leesStatus } from '@/lib/locatie/toestemming'
 
 /**
  * Automatisch dossier openen op locatie (mobiele buitendienst).
@@ -17,7 +18,13 @@ import { dossierBijLocatie, type LocatieDossier, type LocatieResultaat } from '@
  * Bewuste keuzes:
  *  - één keer per sessie (sessionStorage) — niet bij elke terugkeer naar home;
  *  - uit te zetten via de toggle op "Mijn gegevens" (localStorage-vlag);
- *  - afbreekbaar, zodat wie de app aan kantoor opent niet wordt weggestuurd.
+ *  - afbreekbaar, zodat wie de app aan kantoor opent niet wordt weggestuurd;
+ *  - **vraagt zelf nooit om toestemming**. Dit draaide ongevraagd bij het openen
+ *    van de mobiele home, en omdat EVA elke werkdag opnieuw laat inloggen kwam de
+ *    toestemmingsvraag dus telkens terug — precies de klacht "hij blijft het
+ *    vragen". Staat de toestemming nog niet vast, dan gebeurt hier niets en
+ *    regelt de monteur het één keer rustig via het Toestemmingen-blok op
+ *    "Mijn gegevens".
  */
 
 /** localStorage-sleutel: staat de automatische detectie aan? ('uit' = uit) */
@@ -55,19 +62,19 @@ export default function LocatieAutoOpen() {
       /* private mode e.d. — dan gewoon draaien */
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        dossierBijLocatie(pos.coords.latitude, pos.coords.longitude)
-          .then((r) => {
-            if (r.status === 'een' || r.status === 'meerdere') setRes(r)
-          })
-          .catch(() => {})
-      },
-      () => {
+    void (async () => {
+      // Alleen doorgaan als de toestemming al vaststaat. Anders zou dit scherm
+      // de vraag stellen op het moment dat de monteur er het minst op zit te
+      // wachten — bij het openen van de app.
+      if ((await leesStatus()) !== 'toegestaan') return
+      try {
+        const fix = await haalLocatie({ maxLeeftijdMs: 60_000, timeoutMs: 8000 })
+        const r = await dossierBijLocatie(fix.lat, fix.lng)
+        if (r.status === 'een' || r.status === 'meerdere') setRes(r)
+      } catch {
         /* geweigerd of geen fix — stil */
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-    )
+      }
+    })()
   }, [])
 
   const open = (id: string) => router.replace(`/m/dossiers/${id}`)

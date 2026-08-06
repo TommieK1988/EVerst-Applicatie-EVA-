@@ -3,6 +3,7 @@ import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { logout } from '@/app/(auth)/login/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
 import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
+import ToestemmingenBlok from '@/components/mobiel/ToestemmingenBlok'
 
 export const metadata = { title: 'Profiel · EVA Mobiel' }
 
@@ -73,6 +74,10 @@ export default async function MobielProfielPage() {
             )}
           </div>
         </div>
+
+        {/* Toestemmingen — één keer regelen i.p.v. steeds midden in een formulier.
+            Staat bewust bóven de toggle: zonder toestemming doet die niets. */}
+        <ToestemmingenBlok />
 
         {/* Instellingen */}
         <LocatieAutoToggle />

@@ -6,6 +6,7 @@ import { CALLOUT_VARIANTEN, STANDAARD_ACCENT } from '../types'
 import type { MedewerkerWaarde } from '../format'
 import { Combobox } from '@/components/ui/combobox'
 import { useDialogen } from '@/components/ui/dialogen'
+import { useLocatie, herstelUitleg } from '@/lib/locatie/toestemming'
 
 type Props = {
   field: FormField
@@ -489,50 +490,7 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
   }
 
   if (field.type === 'location') {
-    const locVal = value as { lat: number; lng: number; adres?: string } | null
-    return wrap(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {locVal ? (
-          <div style={{ padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2)', fontSize: 13 }}>
-            📍 {locVal.adres ?? `${locVal.lat.toFixed(6)}, ${locVal.lng.toFixed(6)}`}
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
-            >
-              Wissen
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              if (!navigator.geolocation) {
-                void meld({ titel: 'GPS niet beschikbaar', omschrijving: 'Dit apparaat of deze browser geeft geen locatie door.' })
-                return
-              }
-              navigator.geolocation.getCurrentPosition(
-                pos => onChange({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                () => void meld({ titel: 'Locatie ophalen mislukt', omschrijving: 'Controleer of EVA toestemming heeft om je locatie te gebruiken.' })
-              )
-            }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '8px 14px', borderRadius: 7,
-              border: '1px solid var(--border)',
-              background: 'var(--surface)', color: 'var(--text)',
-              fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-              <circle cx="12" cy="11" r="3"/>
-            </svg>
-            Huidige locatie gebruiken
-          </button>
-        )}
-      </div>
-    )
+    return wrap(<LocatieVeld value={value as LocatieWaarde} onChange={onChange} />)
   }
 
   if (field.type === 'barcode') {
@@ -890,6 +848,80 @@ function AandachtspuntFotos({
       )}
 
       {fout && <p style={{ fontSize: 12, color: '#e53e3e', margin: '4px 0 0' }}>{fout}</p>}
+    </div>
+  )
+}
+
+// ── Locatie / GPS ─────────────────────────────────────────────────────
+
+type LocatieWaarde = { lat: number; lng: number; adres?: string } | null
+
+const locatieKnop: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 8,
+  padding: '8px 14px', borderRadius: 7,
+  border: '1px solid var(--border)',
+  background: 'var(--surface)', color: 'var(--text)',
+  fontSize: 13, cursor: 'pointer',
+}
+
+function LocatiePin({ maat = 14 }: { maat?: number }) {
+  return (
+    <svg width={maat} height={maat} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+      <circle cx="12" cy="11" r="3"/>
+    </svg>
+  )
+}
+
+/**
+ * GPS-veld. Haalt de locatie op via `lib/locatie/toestemming`, die een net opgehaalde
+ * positie hergebruikt — daardoor levert een reeks velden op hetzelfde adres hooguit één
+ * toestemmingsvraag op in plaats van één per veld.
+ */
+function LocatieVeld({ value, onChange }: { value: LocatieWaarde; onChange: (v: unknown) => void }) {
+  const { status, bezig, fout, vraagLocatie } = useLocatie()
+
+  async function pak(vernieuwen = false) {
+    const fix = await vraagLocatie({ vernieuwen })
+    if (fix) onChange({ lat: fix.lat, lng: fix.lng })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {value ? (
+        <div style={{ padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2)', fontSize: 13 }}>
+          📍 {value.adres ?? `${value.lat.toFixed(6)}, ${value.lng.toFixed(6)}`}
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}
+          >
+            Wissen
+          </button>
+        </div>
+      ) : (
+        <button type="button" disabled={bezig} onClick={() => pak(false)} style={{ ...locatieKnop, opacity: bezig ? 0.6 : 1 }}>
+          <LocatiePin />
+          {bezig ? 'Locatie ophalen…' : 'Huidige locatie gebruiken'}
+        </button>
+      )}
+
+      {fout && (
+        <p style={{ fontSize: 12, color: '#e53e3e', margin: 0 }}>
+          {fout.message}
+          {status === 'geweigerd' && <> {herstelUitleg()}</>}
+          {/* Geen fix maar wel iets bekends: aanbieden in plaats van de gebruiker laten hangen. */}
+          {fout.laatstBekend && fout.soort !== 'geweigerd' && (
+            <button
+              type="button"
+              onClick={() => onChange({ lat: fout.laatstBekend!.lat, lng: fout.laatstBekend!.lng })}
+              style={{ marginLeft: 6, background: 'none', border: 'none', padding: 0, color: 'var(--text)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Laatst bekende locatie gebruiken
+            </button>
+          )}
+        </p>
+      )}
     </div>
   )
 }

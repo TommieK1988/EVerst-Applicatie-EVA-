@@ -22,6 +22,25 @@ const nextConfig = {
       bodySizeLimit: '8mb',
     },
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            // Expliciet toestaan wat EVA Mobiel op locatie nodig heeft. Zonder deze header
+            // geldt de browserstandaard (`self`) en gaat het meestal ook goed, maar een
+            // tussenliggende proxy of een strenger wordende browserstandaard kan de
+            // toestemming dan zonder melding negeren — en dan lijkt het alsof een verleende
+            // toestemming "niet blijft hangen". Alleen `self`: EVA's eigen pagina's mogen
+            // erom vragen, ingesloten iframes (YouTube in de toolbox) niet.
+            key: 'Permissions-Policy',
+            value: 'geolocation=(self), camera=(self)',
+          },
+        ],
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig
