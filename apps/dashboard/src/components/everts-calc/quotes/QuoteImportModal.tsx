@@ -323,7 +323,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
                               <span className="text-sm text-slate-700 truncate block">{regel.omschrijving}</span>
                               <span className="text-xs text-slate-400">
                                 {regel.hoeveelheid} {regel.eenheid}
-                                {regel.eenheidsprijs > 0 && ` · € ${regel.eenheidsprijs.toFixed(2)}/eenh`}
+                                {regel.eenheidsprijs !== 0 && ` · € ${regel.eenheidsprijs.toFixed(2)}/eenh`}
                               </span>
                             </div>
                             <span className="text-sm font-medium text-slate-600 flex-shrink-0">

@@ -203,7 +203,11 @@ export function berekenCalculatieregel(
     return s + (c.norm_hoeveelheid ?? 0) * (c.tarief ?? 0) * regel.hoeveelheid * (1 + pct / 100)
   }, 0)
   const vp_totaal = arbeid_vp + materieel_vp + oa_vp
-  const vp_pe     = regel.hoeveelheid > 0 ? vp_totaal / regel.hoeveelheid : 0
+  // `!== 0` en niet `> 0`: een minderwerk- of kortingsregel heeft een negatieve
+  // hoeveelheid (bv. -1 post). Met `> 0` viel de verkoopprijs per eenheid op nul,
+  // waardoor de offerte-import zo'n regel voor € 0,00 overnam en het offertetotaal
+  // niet meer klopte. Alleen bij hoeveelheid 0 valt er niets te delen.
+  const vp_pe     = regel.hoeveelheid !== 0 ? vp_totaal / regel.hoeveelheid : 0
 
   return {
     arbeid_pe,    arbeid_totaal:    arbeid_pe    * regel.hoeveelheid,
@@ -398,7 +402,9 @@ export function berekenWerkbegrotingRegel(
     return s + (c.norm_hoeveelheid ?? 0) * (c.tarief ?? 0) * regel.hoeveelheid * (1 + pct / 100)
   }, 0)
   const vp_totaal = arbeid_vp + materieel_vp + oa_vp
-  const vp_pe     = regel.hoeveelheid > 0 ? vp_totaal / regel.hoeveelheid : 0
+  // Zie berekenCalculatieregel: `!== 0` zodat minderwerk (negatieve hoeveelheid)
+  // ook hier een verkoopprijs per eenheid houdt.
+  const vp_pe     = regel.hoeveelheid !== 0 ? vp_totaal / regel.hoeveelheid : 0
 
   return {
     arbeid_pe,    arbeid_totaal:    arbeid_pe    * regel.hoeveelheid,
