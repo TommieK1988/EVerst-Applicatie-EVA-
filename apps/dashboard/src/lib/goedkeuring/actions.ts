@@ -6,6 +6,7 @@ import { bepaalBeoordeelContext } from './autorisatie'
 import { bepaalBeoordelingsRoute, haalBeoordelaar, magBeoordelaarZijn } from './beoordelaars'
 import { maakBeoordeelTaak, sluitBeoordeelTaken, type BeoordeelTaakResultaat } from './taken'
 import { berekenWerkbegrotingStatus } from './werkbegroting-status'
+import { maakNotificatie } from '@/lib/notificaties/maak'
 import {
   AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL, naarRegelSnapshot,
   type BeoordelaarRef, type BeoordelingsRoute,
@@ -307,7 +308,7 @@ async function notificeerBeoordelaar(opts: {
     ? (opts.dossierId ? `/opdrachten/${opts.dossierId}/werkbegroting` : null)
     : `/everts-calc/quotes/${opts.objectId}/preview`
 
-  await db.from('notificaties').insert({
+  await maakNotificatie({
     user_id:      beoordelaar.authUserId,
     type:         'algemeen',
     titel:        isWb ? 'Werkbegroting ter goedkeuring' : 'Offerte ter goedkeuring',
@@ -315,7 +316,6 @@ async function notificeerBeoordelaar(opts: {
     url,
     dossier_id:   opts.dossierId ?? null,
     dossier_naam: dossierTitel,
-    gelezen:      false,
   })
 }
 
@@ -423,7 +423,7 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
     ? (isWb ? `/opdrachten/${g.dossier_id}/werkbegroting` : `/opdrachten/${g.dossier_id}`)
     : null
 
-  await db.from('notificaties').insert({
+  await maakNotificatie({
     user_id:      authUserId,
     type:         'algemeen',
     titel:        isWb ? 'Werkbegroting goedgekeurd' : 'Offerte goedgekeurd',
@@ -433,7 +433,6 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
     url,
     dossier_id:   g.dossier_id ?? null,
     dossier_naam: dossierTitel,
-    gelezen:      false,
   })
 }
 

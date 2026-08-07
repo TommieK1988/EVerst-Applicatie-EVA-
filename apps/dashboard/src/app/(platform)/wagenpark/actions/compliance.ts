@@ -16,6 +16,7 @@ import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { pgQuery, getPgPool } from '@/lib/wagenpark/db'
 import { ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { vereisRecht } from '@/lib/auth/rechten'
+import { stuurPush } from '@/lib/notificaties/push'
 
 export async function runComplianceAction(): Promise<{
   totaal: number
@@ -492,6 +493,24 @@ async function notificeerWerktijdSignalen(
       rijen.map(() => false),
     ],
   )
+
+  // Push: bewust één melding per ontvanger, niet één per signaal. Een controleronde
+  // levert makkelijk tientallen signalen op; die stuk voor stuk naar de telefoon
+  // sturen is geen melding meer maar een storing.
+  if (meldingen.length > 0) {
+    const kop = meldingen.length === 1
+      ? meldingen[0]
+      : {
+          titel: `${meldingen.length} werktijd-signalen`,
+          body: 'Er zijn nieuwe signalen uit de rittencontrole.',
+          url: '/wagenpark/ritten',
+        }
+    await Promise.all(
+      ontvangers.map((o) =>
+        stuurPush(o.auth_user_id, { titel: kop.titel, body: kop.body, url: kop.url, type: 'algemeen' }),
+      ),
+    )
+  }
 }
 
 export async function markeerUitzonderingAction(bevinding_id: string, toelichting: string) {

@@ -1,5 +1,6 @@
 import 'server-only'
 import { pgQuery } from './db'
+import { stuurPush } from '@/lib/notificaties/push'
 
 /**
  * Gedeelde helpers voor wagenpark-meldingen (in-app belletje).
@@ -43,6 +44,9 @@ export async function maakWagenparkMelding(
        values ($1, 'algemeen', $2, $3, $4, false)`,
       [uid, titel, body, url],
     )
+    // De insert loopt via de pooler, dus de push gaat er los achteraan in plaats
+    // van via lib/notificaties/maak.ts.
+    await stuurPush(uid, { titel, body, url, type: 'algemeen' })
     verzonden++
   }
   return verzonden

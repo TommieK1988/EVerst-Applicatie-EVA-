@@ -6,6 +6,7 @@ import AvatarBeheer from './AvatarBeheer'
 import ProfielForm from './ProfielForm'
 import BeveiligingForm from './BeveiligingForm'
 import NotificatieVoorkeurenForm from './NotificatieVoorkeuren'
+import PushMeldingen from '@/components/eva/PushMeldingen'
 import HandtekeningBeheer from '@/components/medewerkers/HandtekeningBeheer'
 import { PageHeader, Card, CardBody } from '@/components/ui'
 
@@ -160,6 +161,14 @@ export default async function AccountPage() {
         </Section>
 
         {/* ── Meldingen ── */}
+        <Section
+          kicker="Meldingen"
+          title="Pushmeldingen"
+          description="Ontvang meldingen op je telefoon of pc, ook als EVA dicht staat. Zet dit aan op elk apparaat waarop je meldingen wilt krijgen."
+        >
+          <PushMeldingen />
+        </Section>
+
         <Section
           kicker="Meldingen"
           title="Notificaties"

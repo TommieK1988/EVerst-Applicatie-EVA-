@@ -2,6 +2,10 @@
 
 import { createClient, createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import {
+  maakNotificatie as maakNotificatieIntern,
+  type NotificatieInvoer,
+} from '@/lib/notificaties/maak'
 
 export type Notificatie = {
   id: string
@@ -81,25 +85,10 @@ export async function markeerAlleAlsGelezen(): Promise<void> {
   revalidatePath('/', 'layout')
 }
 
-/** Aanmaken van een notificatie (door server-side logica) */
-export async function maakNotificatie(input: {
-  user_id: string
-  type: string
-  titel: string
-  body?: string
-  url?: string
-  dossier_id?: string | null
-  dossier_naam?: string | null
-}): Promise<void> {
-  const admin = createAdminClient()
-  await admin.from('notificaties').insert({
-    user_id:      input.user_id,
-    type:         input.type,
-    titel:        input.titel,
-    body:         input.body ?? null,
-    url:          input.url  ?? null,
-    dossier_id:   input.dossier_id   ?? null,
-    dossier_naam: input.dossier_naam ?? null,
-    gelezen:      false,
-  })
+/**
+ * Aanmaken van een notificatie (door server-side logica).
+ * Delegeert naar lib/notificaties/maak.ts — daar zit ook de push naar de telefoon.
+ */
+export async function maakNotificatie(input: NotificatieInvoer): Promise<void> {
+  await maakNotificatieIntern(input)
 }

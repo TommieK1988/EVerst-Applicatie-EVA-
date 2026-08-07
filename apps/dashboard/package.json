@@ -57,6 +57,7 @@
     "@tiptap/pm": "^3.22.3",
     "@tiptap/react": "^3.22.3",
     "@tiptap/starter-kit": "^3.22.3",
+    "@types/web-push": "^3.6.4",
     "@xyflow/react": "^12.3.6",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -89,6 +90,7 @@
     "sharp": "^0.34.5",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^3.23.8"
   },

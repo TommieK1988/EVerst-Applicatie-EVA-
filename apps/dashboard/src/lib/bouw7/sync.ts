@@ -10,6 +10,7 @@ import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
+import { maakNotificatie } from '@/lib/notificaties/maak'
 
 export type SyncResult = {
   nieuw: number
@@ -1947,7 +1948,7 @@ async function verwerkDebiteurTakenEnReminders(supabase: any, nu: Date, vandaag:
 
   async function notify(userIds: string[], titel: string, body: string, dossierNaam?: string | null) {
     for (const uid of userIds) {
-      await supabase.from('notificaties').insert({ user_id: uid, type: 'debiteur', titel, body, url: '/facturen', dossier_naam: dossierNaam ?? null, gelezen: false })
+      await maakNotificatie({ user_id: uid, type: 'debiteur', titel, body, url: '/facturen', dossier_naam: dossierNaam ?? null })
     }
   }
 

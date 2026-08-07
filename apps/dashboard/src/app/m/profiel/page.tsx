@@ -4,6 +4,7 @@ import { logout } from '@/app/(auth)/login/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
 import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
 import ToestemmingenBlok from '@/components/mobiel/ToestemmingenBlok'
+import PushMeldingen from '@/components/eva/PushMeldingen'
 
 export const metadata = { title: 'Profiel · EVA Mobiel' }
 
@@ -80,6 +81,7 @@ export default async function MobielProfielPage() {
         <ToestemmingenBlok />
 
         {/* Instellingen */}
+        <PushMeldingen weergave="mobiel" />
         <LocatieAutoToggle />
 
         {/* Uitloggen */}

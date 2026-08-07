@@ -3588,6 +3588,39 @@ export type Database = {
         }
         Relationships: []
       }
+      push_abonnementen: {
+        Row: {
+          aangemaakt_op: string
+          auth: string
+          endpoint: string
+          id: string
+          laatst_gebruikt: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          aangemaakt_op?: string
+          auth: string
+          endpoint: string
+          id?: string
+          laatst_gebruikt?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          aangemaakt_op?: string
+          auth?: string
+          endpoint?: string
+          id?: string
+          laatst_gebruikt?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       quote_layouts: {
         Row: {
           accent_kleur: string | null

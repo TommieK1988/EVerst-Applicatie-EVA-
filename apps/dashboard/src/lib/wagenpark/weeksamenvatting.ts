@@ -1,5 +1,6 @@
 import 'server-only'
 import { pgQuery } from './db'
+import { stuurPush } from '@/lib/notificaties/push'
 
 export type WeeksamenvattingResultaat = {
   verzonden: number
@@ -126,6 +127,9 @@ export async function stuurWagenparkWeeksamenvatting(
        values ($1, 'algemeen', $2, $3, false)`,
       [r.auth_user_id, titel, body],
     )
+    // De insert loopt hier via de pooler (zie kop van dit bestand), dus de push
+    // gaat er los achteraan in plaats van via lib/notificaties/maak.ts.
+    await stuurPush(r.auth_user_id, { titel, body, url: '/wagenpark', type: 'algemeen' })
     verzonden++
   }
 
