@@ -1416,23 +1416,27 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                     onWis={() => onComponentWijzig(comp.id, { relatie_id: undefined, leverancier_naam: undefined, aannemersnaam: undefined })}
                   />
                 </div>
-                {/* Winkelbudget: budgetreservering bij deze leverancier i.p.v. losse artikelen.
-                    Alleen bij materiaal, en alleen zinvol mét gekoppelde leverancier — zonder
-                    relatie kan er in Bouw7 geen order/leverbon op naam gemaakt worden. */}
-                {comp.type === 'materieel' && (
+                {/* Reservering: één budgetbedrag bij deze partij in plaats van losse regels,
+                    en zonder order/opdracht de deur uit. Voor een winkelpot bij de bouwmarkt
+                    net zo goed als voor transport of een chemisch toilet. Alleen zinvol mét
+                    gekoppelde relatie — zonder relatie kan er in Bouw7 geen contract en
+                    leverbon op naam komen, en dan is er niets om de factuur op te boeken. */}
+                {(comp.type === 'materieel' || comp.type === 'onderaanneming') && (
                   <button
-                    onClick={() => onComponentWijzig(comp.id, { is_winkel: !comp.is_winkel })}
+                    onClick={() => onComponentWijzig(comp.id, { is_reservering: !comp.is_reservering })}
                     disabled={!comp.relatie_id}
                     title={comp.relatie_id
-                      ? (comp.is_winkel ? 'Winkelbudget uitzetten' : 'Als winkelbudget bestellen — één bedrag i.p.v. losse artikelen')
-                      : 'Kies eerst een leverancier'}
+                      ? (comp.is_reservering
+                          ? 'Reservering uitzetten'
+                          : 'Als reservering vastleggen — één bedrag in Bouw7, geen order of opdracht naar de partij')
+                      : comp.type === 'onderaanneming' ? 'Kies eerst een onderaannemer' : 'Kies eerst een leverancier'}
                     className={`flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
-                      comp.is_winkel
+                      comp.is_reservering
                         ? 'border-amber-300 bg-amber-50 text-amber-700 font-semibold'
                         : 'border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50'
                     }`}
                   >
-                    {comp.is_winkel ? '✓ Winkel' : 'Winkel'}
+                    {comp.is_reservering ? '✓ Reservering' : 'Reservering'}
                   </button>
                 )}
               </div>

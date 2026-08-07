@@ -194,8 +194,11 @@ export type BestellingVoorstel = {
   /** Bewakingscode waar dit hele voorstel op landt. Eén order = één code = één leverbon. */
   code: string
   codeNaam: string | null
-  /** Winkelbudget: wordt als één samengevatte regel besteld i.p.v. per artikel. */
-  isWinkel: boolean
+  /**
+   * Reservering: één samengevat bedrag in Bouw7 in plaats van losse regels, en zonder
+   * document of mail naar de partij. Nooit gemengd met gewone regels — de sleutel splitst erop.
+   */
+  isReservering: boolean
   regels: VoorstelRegel[]
   totaal: number
   /** Redenen waarom deze bestelling (nog) niet aangemaakt kan worden. */
@@ -268,7 +271,7 @@ export async function stelBestellingenVoor(
     // Groeperen op relatie × soort × bewakingscode. De code is bepalend: een leverbon draagt
     // precies één bewakingscode, dus een order die meerdere codes zou omvatten kan niet met één
     // bon worden afgeroepen en de kosten zouden op de verkeerde code landen.
-    const sleutel = `${relatieId ?? 'onbekend'}|${soort}|${p.code || 'geen-code'}|${comp.is_winkel ? 'winkel' : 'regulier'}`
+    const sleutel = `${relatieId ?? 'onbekend'}|${soort}|${p.code || 'geen-code'}|${comp.is_reservering ? 'reservering' : 'regulier'}`
     let groep = groepen.get(sleutel)
     if (!groep) {
       groep = {
@@ -277,7 +280,7 @@ export async function stelBestellingenVoor(
         relatieBouw7Id: relatie?.bouw7Id ?? null,
         soort, soortLabel: soortLabel(soort),
         code: p.code, codeNaam: p.codeNaam ?? null,
-        isWinkel: !!comp.is_winkel,
+        isReservering: !!comp.is_reservering,
         regels: [], totaal: 0, blokkades: [],
       }
       groepen.set(sleutel, groep)
@@ -321,7 +324,15 @@ export async function stelBestellingenVoor(
 }
 
 export type MaakBestellingResultaat =
-  | { ok: true; contractId: number; nummer: string | null; soort: ContractSoort }
+  | {
+      ok: true; contractId: number; nummer: string | null; soort: ContractSoort
+      /** Reservering: meteen afgeroepen, er volgt geen verzendstap. */
+      isReservering: boolean
+      /** Alleen bij een reservering: de leverbon die hier al is aangemaakt. */
+      bonnummer: string | null
+      /** Alleen bij een reservering: het afroepen mislukte, het contract staat er wel. */
+      bonWaarschuwing: string | null
+    }
   | { ok: false; reden: 'niet_goedgekeurd' | 'verouderd' | 'fout'; error: string; regels?: string[] }
 
 /**
@@ -383,10 +394,11 @@ export async function maakBestellingInBouw7(
   // (upsert op het bestaande contract), zodat een gewijzigde omschrijving/bedrag nog meekan.
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('bouw7_contract_id, verstuurd_op')
+    .select('bouw7_contract_id, bouw7_leverbon_id, verstuurd_op')
     .eq('id', bestelling.id)
     .maybeSingle()
   const bestaandContractId: number | null = rij?.bouw7_contract_id ?? null
+  const heeftAlLeverbon = rij?.bouw7_leverbon_id != null
 
   if (rij?.verstuurd_op != null) {
     return {
@@ -416,9 +428,9 @@ export async function maakBestellingInBouw7(
     return { ok: false, reden: 'fout', error: `${relatie?.naam ?? 'De leverancier'} is niet gekoppeld aan Bouw7 — synchroniseer eerst de relaties.` }
   }
 
-  // Winkelbudget: geen artikelregels maar één bedrag. De onderliggende bestelregels blijven
+  // Reservering: geen losse regels maar één bedrag. De onderliggende bestelregels blijven
   // bestaan en worden allemaal aan die ene termijn gekoppeld, zodat ze niet dubbel tellen.
-  const isWinkel = gate.componenten.every(c => c.is_winkel)
+  const isReservering = gate.componenten.every(c => c.is_reservering)
 
   const termijnen: ContractTermijn[] = []
   let totaal = 0
@@ -431,7 +443,7 @@ export async function maakBestellingInBouw7(
         error: 'Niet alle regels staan al als bestelregel in Bouw7. Stuur eerst "Bestelregels naar Bouw7" en probeer het opnieuw.',
       }
     }
-    if (isWinkel) { totaal += p.bedrag; continue }
+    if (isReservering) { totaal += p.bedrag; continue }
     termijnen.push({
       nummer: String(i + 1),
       omschrijving: p.omschrijving || 'Werkzaamheden',
@@ -445,11 +457,11 @@ export async function maakBestellingInBouw7(
     totaal += p.bedrag
   }
 
-  if (isWinkel) {
+  if (isReservering) {
     const eerste = planById.get(gate.componenten[0].id)
     termijnen.push({
       nummer: '1',
-      omschrijving: bestelling.omschrijving || 'Winkelbudget',
+      omschrijving: bestelling.omschrijving || 'Reservering',
       eenheid: 'post',
       aantal: '1',
       stukprijs: totaal.toFixed(2),
@@ -495,6 +507,7 @@ export async function maakBestellingInBouw7(
   await db.from('werkbegroting_bestellingen')
     .update({
       soort,
+      is_reservering: isReservering,
       bouw7_contract_id: res.contractId,
       bouw7_nummer: res.nummer,
       bouw7_sync_status: 'ok',
@@ -504,8 +517,30 @@ export async function maakBestellingInBouw7(
     })
     .eq('id', bestelling.id)
 
+  // Een reservering gaat níét de deur uit — er is geen order om te versturen. Het hele doel
+  // is dat de inkoopfactuur ergens op kan afboeken, en daarvoor is de leverbon nodig. Dus
+  // hier meteen afroepen; "Versturen" bestaat voor dit soort niet.
+  // Al een bon? Dan niet nog eens afroepen: een tweede leverbon telt de kosten dubbel
+  // op de bewakingscode. Zelfde les als bij een mislukte afroep hierboven.
+  let afroep: { bonnummer: string | null; bonAantal: number; fout: string | null } | null = null
+  if (isReservering && !heeftAlLeverbon) {
+    const medewerker = await getCurrentMedewerker()
+    const signee = medewerker
+      ? [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' ').trim() || 'Everts'
+      : 'Everts'
+    afroep = await voerAfroepUit(db, bestelling.id, soort, Number(res.contractId), signee)
+  }
+
   revalidatePath(`/dossiers/${dossierId}`)
-  return { ok: true, contractId: res.contractId, nummer: res.nummer, soort }
+  return {
+    ok: true,
+    contractId: res.contractId,
+    nummer: res.nummer,
+    soort,
+    isReservering,
+    bonnummer: afroep?.bonnummer ?? null,
+    bonWaarschuwing: afroep?.fout ?? null,
+  }
 }
 
 export type TrekInResultaat = { ok: true } | { ok: false; error: string }
@@ -775,6 +810,18 @@ function vulMailTekst(tekst: string, vars: Record<string, string>): string {
 }
 
 /**
+ * Een leeggebleven variabele laat zijn scheidingsteken achter: "Inkooporder 123 — ".
+ * Voor het onderwerp (één regel) halen we die rommel weg.
+ */
+function netteRegel(tekst: string): string {
+  return tekst
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s*[—–|-]\s*$/, '')
+    .replace(/^\s*[—–|-]\s*/, '')
+    .trim()
+}
+
+/**
  * De mailtekst van een sjabloon is platte tekst met regeleinden — `bouwBestellingMailHtml`
  * maakt er Outlook-proof HTML van. Oudere sjablonen kunnen er HTML in hebben staan; die
  * wordt hier teruggebracht tot tekst zodat de alinea-indeling blijft kloppen.
@@ -818,7 +865,10 @@ export async function getBestellingMailConcept(
       ? db.from('relaties').select('naam, email').eq('id', b.relatie_id).maybeSingle()
       : Promise.resolve({ data: null }),
     db.from('dossiers')
-      .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
+      // LET OP: de kolom heet `werkadres_stad`. Stond hier eerder als `werkadres_plaats`
+      // (zo heet de sjabloonvariabele), waardoor de héle select faalde en `dossier` null
+      // bleef — nummer, titel en werkadres verdwenen daardoor stilzwijgend uit de mail.
+      .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad')
       .eq('id', dossierId).maybeSingle(),
   ])
 
@@ -835,22 +885,35 @@ export async function getBestellingMailConcept(
   const onderwerpBron = sjabloon?.mail_onderwerp?.trim() || terugval.onderwerp
   const berichtBron = naarPlatteTekst(sjabloon?.mail_body_html ?? '') || terugval.tekst
 
+  const werkadres = [
+    [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
+    [dossier?.werkadres_postcode, dossier?.werkadres_stad].filter(Boolean).join(' '),
+  ].filter(Boolean).join(', ')
+
+  // Twee namen voor hetzelfde: de Word-sjablonen (en de voorbeeldteksten in de
+  // sjabloon-editor) spreken van {dossier.*}, de eerste mailteksten van {project.*}.
+  // Beide invullen, anders levert een sjabloon een lege plek op — zoals het onderwerp
+  // "Inkooporder 20261.00518IO001 — " deed.
   const vars: Record<string, string> = {
     'leverancier.naam': relatie?.naam ?? '',
     'bestelling.nummer': b?.bouw7_nummer ?? '',
     'bestelling.soort': soort === 'oa_contract' ? 'opdracht' : 'inkooporder',
+    'bestelling.omschrijving': b?.omschrijving ?? '',
+    'dossier.titel': dossier?.titel ?? '',
+    'dossier.naam': dossier?.titel ?? '',
+    'dossier.dossiernummer': dossier?.dossiernummer ?? '',
+    'dossier.nummer': dossier?.dossiernummer ?? '',
+    'dossier.werkadres': werkadres,
+    'dossier.plaats': dossier?.werkadres_stad ?? '',
     'project.nummer': dossier?.dossiernummer ?? '',
     'project.naam': dossier?.titel ?? '',
-    'project.werkadres': [
-      [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
-      [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join(' '),
-    ].filter(Boolean).join(', '),
+    'project.werkadres': werkadres,
     'levering.datum': b?.levering_datum ? nlDatum(b.levering_datum) : (b?.levering_tekst ?? ''),
   }
 
   return {
     to: relatie?.email ?? '',
-    onderwerp: vulMailTekst(onderwerpBron, vars).trim(),
+    onderwerp: netteRegel(vulMailTekst(onderwerpBron, vars)),
     bericht: vulMailTekst(berichtBron, vars),
     heeftAdres: !!relatie?.email,
     sjabloonId: sjabloon?.id ?? null,
@@ -882,11 +945,16 @@ export async function verstuurBestelling(
 
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('id, soort, sjabloon_id, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
+    .select('id, soort, sjabloon_id, is_reservering, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
     .eq('id', bestellingId)
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
   if (rij.bouw7_contract_id == null) return { ok: false, error: 'Maak de bestelling eerst aan in Bouw7.' }
+  // Een reservering is bewust geen order: er gaat niets naar de partij toe. Hij is bij het
+  // vastleggen al afgeroepen, dus hier zou een tweede leverbon ontstaan.
+  if (rij.is_reservering) {
+    return { ok: false, error: 'Een reservering wordt niet verstuurd — hij staat al vastgelegd in Bouw7.' }
+  }
 
   const soort = (rij.soort ?? 'inkooporder') as ContractSoort
   const medewerker = await getCurrentMedewerker()
@@ -922,7 +990,7 @@ export async function verstuurBestelling(
     .maybeSingle()
   const werkadres = [
     [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
-    [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join(' '),
+    [dossier?.werkadres_postcode, dossier?.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
 
   // De opmaak komt uit het gekozen Word-sjabloon; briefpapier en bestandsnaam zitten

@@ -460,8 +460,12 @@ export interface WerkbegrotingComponent {
   artikelnummer?: string     // specificatie bij materieel
   uurtype?: string           // specificatie bij arbeid (bijv. 'Gezel', 'Leerling')
   bouw7_line_id?: number     // Bouw7 contract-order-line id (dedup bij re-import uit Bouw7)
-  /** Winkelbudget: budgetreservering bij een leverancier i.p.v. losse artikelen (alleen materiaal). */
-  is_winkel?: boolean
+  /**
+   * Reservering: één budgetbedrag bij deze leverancier of onderaannemer in plaats van
+   * losse regels, vastgelegd in Bouw7 zonder dat er een order/opdracht naartoe gaat.
+   * Voor een winkelpot bij de bouwmarkt én voor transport, een toilet, enz.
+   */
+  is_reservering?: boolean
   is_verwijderd?: boolean
 }
 
@@ -514,6 +518,11 @@ export interface WerkbegrotingBestelling {
    * via de werkbegroting-sync (een stale cache zou hem anders wissen).
    */
   sjabloon_id?: string | null
+  /**
+   * Reservering: vastgelegd in Bouw7 (contract + leverbon) zonder document en zonder mail.
+   * Volgt uit de componenten en wordt server-side gezet, net als `sjabloon_id`.
+   */
+  is_reservering?: boolean | null
 }
 
 export interface RelatieRef {

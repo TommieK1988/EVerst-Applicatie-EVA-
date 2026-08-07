@@ -99,7 +99,7 @@ export async function syncWerkbegrotingNaarSupabase(
             aannemersnaam: c.aannemersnaam ?? null, offertenummer: c.offertenummer ?? null,
             artikelnummer: c.artikelnummer ?? null, uurtype: c.uurtype ?? null,
             bouw7_line_id: c.bouw7_line_id ?? null,
-            is_winkel: c.is_winkel ?? false,
+            is_reservering: c.is_reservering ?? false,
             is_verwijderd: c.is_verwijderd ?? false,
             bijgewerkt_op: nu,
           })),
@@ -181,8 +181,9 @@ export async function syncBestellingenNaarSupabase(
         // meegeschreven. Die zijn server-side eigendom van de contract-push; zou de client ze
         // vanuit een oude localStorage-cache terugsturen, dan wist een lege waarde de koppeling
         // en maakt de volgende push een duplicaat-contract in Bouw7 (zelfde les als bouw7_line_id).
-        // Om dezelfde reden ontbreekt sjabloon_id: dat wordt gezet door
-        // `maakBestellingInBouw7` en `bewaarBestellingSjabloon`.
+        // Om dezelfde reden ontbreken sjabloon_id (gezet door `maakBestellingInBouw7`
+        // en `bewaarBestellingSjabloon`) en is_reservering (afgeleid uit de componenten
+        // door `maakBestellingInBouw7`).
         .upsert({
           id: b.id, werkbegroting_id: b.werkbegroting_id, omschrijving: b.omschrijving,
           relatie_id: uuidOfNull(b.relatie_id), status: b.status, bijgewerkt_op: nu,
@@ -303,7 +304,7 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       offertenummer: c.offertenummer ?? undefined, artikelnummer: c.artikelnummer ?? undefined,
       uurtype: c.uurtype ?? undefined,
       bouw7_line_id: c.bouw7_line_id ?? undefined,
-      is_winkel: c.is_winkel ?? false,
+      is_reservering: c.is_reservering ?? false,
       is_verwijderd: c.is_verwijderd ?? false,
     })),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -332,6 +333,7 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       betaalafspraak: b.betaalafspraak ?? null,
       interne_notitie: b.interne_notitie ?? null,
       sjabloon_id: b.sjabloon_id ?? null,
+      is_reservering: b.is_reservering ?? false,
     })),
   }
 }

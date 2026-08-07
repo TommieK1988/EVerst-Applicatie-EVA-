@@ -534,6 +534,13 @@ Dus: aanmaken in concept (0) → `PUT /contracts/{soort}/{id}/update-status/1` �
    status → 1 + **per-regel afroepen** (leverbonnen). Zo klopt de volgorde met Bouw7 — je roept pas
    af als de order echt de deur uit is.
 
+**Uitzondering: een reservering** (`is_reservering`, alle componenten van de bestelling).
+Dat is een budgetpot bij een leverancier (de oude "winkel") of bij een onderaannemer waar géén
+opdracht naartoe gaat — transport, een chemisch toilet — terwijl de inkoopfactuur wél ergens op
+moet afboeken. Stap 2 bestaat daar niet: `maakBestellingInBouw7` schrijft één samengevatte
+termijn en roept **meteen** af, zonder document en zonder mail. `verstuurBestelling` weigert een
+reservering, anders ontstaat er een tweede leverbon.
+
 Opruimen (`trekBestellingIn`) in omgekeerde volgorde: **alle** bonnen
 (`verwijderBouw7ContractLeverbonnen`, weigert zodra één bon `processed` is) → contract → de
 bestelregels blijven staan.
@@ -543,8 +550,9 @@ bestelregels blijven staan.
 `lib/bouw7/bestelling-pdf.ts` (order-PDF) · `everts-calc/actions/bestellingen.ts`
 (`maakBestellingInBouw7` = alleen concept, `verstuurBestelling` = mail + afroep, `voerAfroepUit`,
 `getBestellingMailConcept`) · migraties `20260722a_leverbon_winkel.sql` (`bouw7_leverbon_id`,
-`bouw7_bonnummer`, `bouw7_afroep_op`, `is_winkel`) en `20260805a_bestelling_versturen.sql`
-(`verstuurd_op`, `verstuurd_door`, `verstuurd_naar`).
+`bouw7_bonnummer`, `bouw7_afroep_op`, `is_winkel`), `20260805a_bestelling_versturen.sql`
+(`verstuurd_op`, `verstuurd_door`, `verstuurd_naar`) en `20260807d_reservering.sql`
+(`is_winkel` → `is_reservering`, plus `werkbegroting_bestellingen.is_reservering`).
 
 Toestanden van een bestelling: **concept** (nog niet in Bouw7) → **aangemaakt**
 (`bouw7_contract_id` gezet, concept in Bouw7, wijzigbaar) → **verstuurd** (`verstuurd_op` gezet,

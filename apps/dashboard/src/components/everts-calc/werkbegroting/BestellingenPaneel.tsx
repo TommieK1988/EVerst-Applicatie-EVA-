@@ -302,21 +302,36 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       soort: v.soort,
       levering_tekst: levering[v.sleutel]?.trim() || null,
       betaalafspraak: betaling[v.sleutel]?.trim() || null,
-      // Opmaak van het document dat de partij krijgt; server-side gevalideerd.
-      sjabloon_id: sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null,
+      // Opmaak van het document dat de partij krijgt; server-side gevalideerd. Een
+      // reservering krijgt geen document, dus ook geen sjabloon.
+      sjabloon_id: v.isReservering ? null : (sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null),
+      is_reservering: v.isReservering,
     }
     slaBestellingOp(bestelling)
     setBezigId(v.sleutel)
     try {
       const res = await maakBestellingInBouw7(dossierId, bestelling, bouwPayload())
       if (res.ok) {
-        // Contract staat als concept in Bouw7. Nog niet verstuurd, nog geen leverbon.
-        slaBestellingOp({ ...bestelling, bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer, bouw7_verwijderd_op: null })
-        toast.success(
-          v.soort === 'oa_contract'
-            ? `Opdracht ${res.nummer ?? ''} aangemaakt — verstuur hem nu naar de onderaannemer`
-            : `Bestelling ${res.nummer ?? ''} aangemaakt — verstuur hem nu naar de leverancier`,
-        )
+        // Contract staat als concept in Bouw7. Nog niet verstuurd, nog geen leverbon —
+        // behalve bij een reservering: die is meteen afgeroepen en daarmee klaar.
+        slaBestellingOp({
+          ...bestelling,
+          bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer, bouw7_verwijderd_op: null,
+          bouw7_bonnummer: res.bonnummer ?? undefined,
+        })
+        if (res.isReservering) {
+          if (res.bonWaarschuwing) {
+            toast.error(`Reservering ${res.nummer ?? ''} vastgelegd, maar de leverbon niet aangemaakt: ${res.bonWaarschuwing}`, { duration: 8000 })
+          } else {
+            toast.success(`Reservering ${res.nummer ?? ''} vastgelegd in Bouw7 — de factuur kan er nu op geboekt worden`)
+          }
+        } else {
+          toast.success(
+            v.soort === 'oa_contract'
+              ? `Opdracht ${res.nummer ?? ''} aangemaakt — verstuur hem nu naar de onderaannemer`
+              : `Bestelling ${res.nummer ?? ''} aangemaakt — verstuur hem nu naar de leverancier`,
+          )
+        }
       } else if (res.reden === 'niet_goedgekeurd') {
         toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`)
       } else {
@@ -460,8 +475,8 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                 {v.code && <span className="ml-1.5 text-xs font-normal text-slate-400">{v.code}</span>}
               </p>
               <p className="text-xs text-slate-400">
-                {v.isWinkel && <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 mr-1.5 text-[10px] font-medium text-amber-700">Winkelbudget</span>}
-                {v.isWinkel
+                {v.isReservering && <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 mr-1.5 text-[10px] font-medium text-amber-700">Reservering</span>}
+                {v.isReservering
                   ? `${gekozen.length} regel(s) → één budgetbedrag · ${formatEuro(totaal)}`
                   : `${gekozen.length} van ${v.regels.length} regel(s) · ${formatEuro(totaal)}`}
               </p>
@@ -470,10 +485,15 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
           <button
             onClick={() => maakInBouw7(v)}
             disabled={bezig || geblokkeerd || gekozen.length === 0}
-            title={geblokkeerd ? v.blokkades.join(' ') : 'Als concept aanmaken in Bouw7 — versturen doe je daarna'}
+            title={geblokkeerd
+              ? v.blokkades.join(' ')
+              : v.isReservering
+                ? 'Vastleggen in Bouw7 — contract én leverbon, zodat de factuur erop kan. Er gaat niets naar de partij toe.'
+                : 'Als concept aanmaken in Bouw7 — versturen doe je daarna'}
             className="inline-flex items-center gap-1.5 shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-everts text-white hover:bg-everts/90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} {SOORT[soort].knop}
+            {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {v.isReservering ? 'Reservering vastleggen' : SOORT[soort].knop}
           </button>
         </div>
 
@@ -508,6 +528,13 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
               </label>
             </div>
 
+            {v.isReservering ? (
+              <p className="rounded bg-slate-50 px-2 py-1.5 text-[11px] leading-snug text-slate-500">
+                Reservering: EVA legt één budgetbedrag vast in Bouw7 en roept het meteen af, zodat
+                de inkoopfactuur erop kan afboeken. Er gaat geen order of opdracht naar de partij,
+                dus is er ook geen opmaak te kiezen.
+              </p>
+            ) : (
             <label className="block text-xs text-slate-500">
               Opmaak van het document
               {sjablonen[v.soort].length === 0 ? (
@@ -529,6 +556,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                 </select>
               )}
             </label>
+            )}
 
             <div className="space-y-1">
               {v.regels.map(r => (
@@ -631,6 +659,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
               const isLegacyVerzonden = !inBouw7 && !wegInBouw7 && b.status !== 'concept'
               const soort = (b.soort ?? null) as Soort | null
               const bezig = bezigId === b.id
+              // Reservering: al vastgelegd én afgeroepen bij het aanmaken. Geen document,
+              // geen mail, dus ook geen opmaak en geen Versturen-knop.
+              const isReservering = !!b.is_reservering
               // Opmaak: oude inkopen zonder soort tellen als inkooporder, net als bij het versturen.
               const docSoort: Soort = soort ?? 'inkooporder'
               const sjabloonLijst = sjablonen[docSoort]
@@ -664,6 +695,17 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Verstuurd
                         </span>
+                      ) : inBouw7 && isReservering ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded-lg"
+                            title="Vastgelegd in Bouw7 met leverbon; er gaat niets naar de partij toe.">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Vastgelegd
+                          </span>
+                          <button onClick={() => trekIn(b)} disabled={bezig} title="Reservering in Bouw7 verwijderen"
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                            {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} Intrekken
+                          </button>
+                        </>
                       ) : inBouw7 ? (
                         <>
                           <button
@@ -704,7 +746,13 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                   {/* Opmaak van het document dat de partij krijgt — ook ná het aanmaken nog te
                       wisselen; anders zit je vast aan de keuze uit het voorstel. Alleen bij een
                       inkoop die in Bouw7 staat: die krijgt de Versturen-knop met document. */}
-                  {inBouw7 && !isVerstuurd && (
+                  {inBouw7 && isReservering && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Reservering — vastgelegd in Bouw7 zodat de inkoopfactuur erop kan afboeken.
+                      Er gaat geen order of opdracht naar de partij.
+                    </p>
+                  )}
+                  {inBouw7 && !isVerstuurd && !isReservering && (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="text-xs text-slate-500">Opmaak</span>
                       {sjabloonLijst.length === 0 ? (

@@ -238,7 +238,7 @@ export async function laadBestellingBlokken(
     if (!rij) return leeg
 
     const [{ regels, offertenummer }, leverancier] = await Promise.all([
-      laadRegels(supabase, bestellingId),
+      laadRegels(supabase, bestellingId, rij.omschrijving ?? ''),
       laadLeverancier(supabase, rij.relatie_id),
     ])
 
@@ -280,11 +280,17 @@ export async function laadBestellingBlokken(
  * De bestelde regels, in de volgorde van de werkbegroting. Componenten die
  * inmiddels zijn verwijderd of geen bedrag hebben, vallen af — die staan ook niet
  * op het Bouw7-contract.
+ *
+ * Bij een **reservering** (alle componenten `is_reservering`) wordt het één regel met het
+ * totaalbedrag, precies zoals `maakBestellingInBouw7` er één contracttermijn van maakt.
+ * Een reservering gaat niet als document de deur uit, maar hij wordt wel gearchiveerd en
+ * kan als voorbeeld worden bekeken — en dan hoort er hetzelfde te staan als in Bouw7.
  */
 async function laadRegels(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   bestellingId: string,
+  bestellingOmschrijving: string,
 ): Promise<{ regels: BestellingRegel[]; offertenummer: string }> {
   const { data: junction } = await supabase
     .from('werkbegroting_bestelling_regels')
@@ -296,7 +302,7 @@ async function laadRegels(
 
   const { data: comps } = await supabase
     .from('werkbegroting_componenten')
-    .select('id, werkbegroting_regel_id, omschrijving, norm_hoeveelheid, tarief, eenheid, offertenummer, is_verwijderd')
+    .select('id, werkbegroting_regel_id, omschrijving, norm_hoeveelheid, tarief, eenheid, offertenummer, is_reservering, is_verwijderd')
     .in('id', compIds)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -341,6 +347,24 @@ async function laadRegels(
   // Staat per component; in de praktijk hoort één order bij één leveranciersofferte,
   // dus de eerste gevulde is de juiste.
   const offertenummer = gesorteerd.find(c => c.offertenummer?.trim())?.offertenummer?.trim() ?? ''
+
+  // Reservering: samenvouwen tot dezelfde ene post die Bouw7 als contracttermijn kreeg.
+  if (uit.length > 0 && gesorteerd.every(c => c.is_reservering)) {
+    const totaal = rond(uit.reduce((s, r) => s + r.bedrag_getal, 0))
+    return {
+      regels: [{
+        nummer: '1',
+        omschrijving: bestellingOmschrijving.trim() || 'Reservering',
+        aantal: fmtGetal(1),
+        eenheid: 'post',
+        stukprijs: fmtEur(totaal),
+        bedrag: fmtEur(totaal),
+        code: uit[0].code,
+        bedrag_getal: totaal,
+      }],
+      offertenummer,
+    }
+  }
 
   return { regels: uit, offertenummer }
 }
