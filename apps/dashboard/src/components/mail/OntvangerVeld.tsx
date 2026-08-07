@@ -173,7 +173,14 @@ export default function OntvangerVeld({
               <ChevronDown className="h-3 w-3" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[340px] p-0">
+          {/*
+            De kiezer wordt naar document.body geportaleerd en staat standaard op z-50 —
+            onder élk mailvenster (die zitten op z-[60] t/m z-[400]). Zonder deze z-index
+            opent de lijst achter het venster en lijkt de knop niets te doen.
+            Hoog genoeg voor alle vier de mailvensters, en bewust lager dan de
+            toasts en de zijpanelen (z-[1000]) die er juist overheen horen.
+          */}
+          <PopoverContent align="end" className="z-[500] w-[340px] p-0">
             <Command className="overflow-hidden">
               <div className="flex items-center gap-2 border-b border-neutral-100 px-3">
                 <Search className="h-4 w-4 shrink-0 text-neutral-400" />
