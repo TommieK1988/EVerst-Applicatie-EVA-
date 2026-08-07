@@ -38,13 +38,20 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { KolomConfig, GebruikerLayout } from '@everts/database/platform-types'
+import type { KolomConfig, GebruikerLayout, TabelWerkstand } from '@everts/database/platform-types'
 import { slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
+import { laadWerkstand, bewaarWerkstand } from '@/app/actions/werkstand'
+import {
+  type KolomBasis, type TabelStand,
+  standaardStand, standUitLayout, standUitWerkstand, werkstandUitStand,
+  lokaleSleutel, leesLokaal, schrijfLokaal,
+  PAGINA_GROOTTES,
+} from './werkstand'
 import {
   GripVertical,
   Eye, EyeOff, X, Check, Layers, SlidersHorizontal, ChevronDown as ChevronDownSm,
   Search, ChevronLeft, ChevronRight, MoreHorizontal, Download,
-  ChevronsUpDown, ChevronsDownUp,
+  ChevronsUpDown, ChevronsDownUp, RotateCcw,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -145,6 +152,13 @@ const GROEP_KOLOM = '__groep'
  * async resetExpanded in de wachtrij → oneindige update-lus (bevroren tab).
  */
 const GROEP_GROUPING = [GROEP_KOLOM]
+
+/**
+ * `useLayoutEffect` waar dat kan, `useEffect` op de server. De bewaarde werkstand
+ * toepassen vóór de eerste schildering voorkomt dat de standaardkolommen even
+ * zichtbaar zijn; op de server draaien effecten toch niet en zou React waarschuwen.
+ */
+const useLayoutEffectVeilig = typeof window !== 'undefined' ? React.useLayoutEffect : useEffect
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
 
@@ -362,26 +376,58 @@ export default function OverzichtTabel<T extends { id: string }>({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const defaultVisibility: VisibilityState = Object.fromEntries(
-    kolommen.map(k => [k.key, k.standaard_zichtbaar !== false])
-  )
-  const defaultOrder: ColumnOrderState = kolommen.map(k => k.key)
+  // ── Werkstand: kolommen, sortering, filters en zoekterm overleven het scherm ──
+  // Wisselen naar kanban unmount deze tabel; zonder deze laag begon je daarna weer
+  // met de standaardkolommen. Zie ./werkstand.ts voor opslag en reconciliatie.
 
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(defaultVisibility)
-  const [columnOrder, setColumnOrder]           = useState<ColumnOrderState>(defaultOrder)
-  const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>({})
-  const [sorting, setSorting]                   = useState<SortingState>(beginSortering ?? [])
-  const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>([])
-  const [globalFilter, setGlobalFilter]         = useState('')
+  // Alleen de velden die de werkstand nodig heeft, gememoïseerd op hun inhoud: de
+  // `kolommen`-prop is bij de meeste aanroepers een verse array per render.
+  const kolomHandtekening = kolommen
+    .map(k => `${k.key}:${k.standaard_zichtbaar === false ? 0 : 1}:${k.vast ? 1 : 0}:${k.filterType ?? ''}:${k.breedte ?? ''}`)
+    .join('|')
+  const kolomBasis = React.useMemo<KolomBasis[]>(
+    () => kolommen.map(k => ({
+      key: k.key, standaard_zichtbaar: k.standaard_zichtbaar,
+      vast: k.vast, filterType: k.filterType, breedte: k.breedte,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kolomHandtekening],
+  )
+  const kolomBasisRef = useRef(kolomBasis)
+  kolomBasisRef.current = kolomBasis
+
+  const werkstandSleutel = lokaleSleutel(user_id, scherm)
+
+  /**
+   * De stand voor de eerste render. Bewust *zonder* localStorage: dit component wordt
+   * ook op de server gerenderd, en daar bestaat die opslag niet — een andere uitkomst
+   * op de server dan in de browser geeft een hydratiefout. De bewaarde werkstand komt
+   * er meteen na hydratie overheen (zie de layout-effecten hieronder).
+   */
+  const beginStand = React.useMemo<{ stand: TabelStand; layout_id: string | null }>(() => {
+    const basis = standaardStand(kolomBasis, beginSortering)
+    const standaardLayout = initialLayouts.find(l => l.is_standaard)
+    return standaardLayout
+      ? { stand: standUitLayout(standaardLayout.kolommen, kolomBasis, basis), layout_id: standaardLayout.id }
+      : { stand: basis, layout_id: null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(beginStand.stand.columnVisibility)
+  const [columnOrder, setColumnOrder]           = useState<ColumnOrderState>(beginStand.stand.columnOrder)
+  const [columnSizing, setColumnSizing]         = useState<ColumnSizingState>(beginStand.stand.columnSizing)
+  const [sorting, setSorting]                   = useState<SortingState>(beginStand.stand.sorting)
+  const [columnFilters, setColumnFilters]       = useState<ColumnFiltersState>(beginStand.stand.columnFilters)
+  const [globalFilter, setGlobalFilter]         = useState(beginStand.stand.globalFilter)
   const [rowSelection, setRowSelection]         = useState<RowSelectionState>({})
-  const [pagination, setPagination]             = useState<PaginationState>({ pageIndex: 0, pageSize: 25 })
+  const [pagination, setPagination]             = useState<PaginationState>({ pageIndex: 0, pageSize: beginStand.stand.pageSize })
   const [expanded, setExpanded]                 = useState<ExpandedState>(groepering?.standaardOpen ? true : {})
 
   const [layouts, setLayouts]             = useState<GebruikerLayout[]>(initialLayouts)
-  const [activeLayoutId, setActiveLayoutId] = useState<string | null>(
-    initialLayouts.find(l => l.is_standaard)?.id ?? null
-  )
-  const [isDirty, setIsDirty]           = useState(false)
+  const [activeLayoutId, setActiveLayoutId] = useState<string | null>(beginStand.layout_id)
+  // Voor de hydratie-effecten, die maar één keer draaien en toch de actuele lijst nodig hebben.
+  const layoutsRef = useRef(layouts)
+  layoutsRef.current = layouts
   const [showSaveAs, setShowSaveAs]     = useState(false)
   const [saveAsNaam, setSaveAsNaam]     = useState('')
   const [showLayoutMenu, setShowLayoutMenu] = useState(false)
@@ -401,28 +447,151 @@ export default function OverzichtTabel<T extends { id: string }>({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const applyLayout = useCallback((layout: GebruikerLayout) => {
-    const sorted = [...layout.kolommen].sort((a, b) => a.volgorde - b.volgorde)
-    setColumnOrder(sorted.map(k => k.key))
-    setColumnVisibility(Object.fromEntries(sorted.map(k => [k.key, k.zichtbaar])))
-    const sizing: ColumnSizingState = {}
-    sorted.forEach(k => { if (k.breedte) sizing[k.key] = k.breedte })
-    setColumnSizing(sizing)
-    setActiveLayoutId(layout.id)
-    setIsDirty(false)
+  /** Alle bewaarde onderdelen in één keer zetten (hydratie, layoutkeuze, herstellen). */
+  const zetStand = useCallback((s: TabelStand) => {
+    setColumnOrder(s.columnOrder)
+    setColumnVisibility(s.columnVisibility)
+    setColumnSizing(s.columnSizing)
+    setSorting(s.sorting)
+    setColumnFilters(s.columnFilters)
+    setGlobalFilter(s.globalFilter)
+    setPagination(p => ({ ...p, pageIndex: 0, pageSize: s.pageSize }))
   }, [])
+
+  const applyLayout = useCallback((layout: GebruikerLayout) => {
+    const basis = standaardStand(kolomBasisRef.current, beginSortering)
+    const stand = standUitLayout(layout.kolommen, kolomBasisRef.current, basis)
+    // Een layout gaat alleen over kolommen: sortering, filters en zoekterm blijven staan.
+    setColumnOrder(stand.columnOrder)
+    setColumnVisibility(stand.columnVisibility)
+    setColumnSizing(stand.columnSizing)
+    setActiveLayoutId(layout.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Werkstand bewaren en terugzetten ───────────────────────────────────────
+  // localStorage direct (goedkoop, en overleeft een unmount midden in een actie),
+  // de server gedempt zodat slepen of typen geen stroom aan schrijfacties oplevert.
+  const SERVER_VERTRAGING_MS = 1200
+  const serverTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const laatsteStaat = useRef<TabelWerkstand | null>(null)
+
+  /**
+   * De stand die we het laatst hebben *ingelezen* of weggeschreven, zonder tijdstempel.
+   * Dankzij deze vergelijking schrijft een zojuist gehydrateerde stand zichzelf niet
+   * terug — anders zou elke keer openen de lokale tijdstempel opfrissen en zou een
+   * nieuwere stand van een ander apparaat er nooit meer in komen.
+   */
+  const bekendeKern = useRef<string | null>(null)
+  const kern = (staat: TabelWerkstand) => JSON.stringify({ ...staat, opgeslagen_op: '' })
+  if (bekendeKern.current === null) {
+    bekendeKern.current = kern(werkstandUitStand(beginStand.stand, beginStand.layout_id))
+  }
+
+  /**
+   * Poort voor het opslaan. React draait de passieve effecten van de eerste render
+   * ná het layout-effect dat de werkstand inleest — dat effect zou dus met de
+   * standaardwaarden draaien en de zojuist ingelezen stand overschrijven. Als state
+   * (geen ref) zodat het effect ná de hydratie opnieuw draait, met de juiste waarden.
+   */
+  const [gehydrateerd, setGehydrateerd] = useState(false)
+
+  const schrijfNaarServer = useCallback(() => {
+    if (!user_id || !laatsteStaat.current) return
+    void bewaarWerkstand(user_id, scherm, laatsteStaat.current)
+  }, [user_id, scherm])
 
   useEffect(() => {
-    const standaard = initialLayouts.find(l => l.is_standaard)
-    if (standaard) applyLayout(standaard)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!gehydrateerd) return
+    const staat = werkstandUitStand({
+      columnOrder, columnVisibility, columnSizing, sorting,
+      columnFilters, globalFilter, pageSize: pagination.pageSize,
+    }, activeLayoutId)
+    if (kern(staat) === bekendeKern.current) return   // niets nieuws t.o.v. wat er al ligt
+
+    bekendeKern.current = kern(staat)
+    laatsteStaat.current = staat
+    schrijfLokaal(werkstandSleutel, staat)
+
+    if (serverTimer.current) clearTimeout(serverTimer.current)
+    serverTimer.current = setTimeout(schrijfNaarServer, SERVER_VERTRAGING_MS)
+  }, [
+    gehydrateerd, columnOrder, columnVisibility, columnSizing, sorting, columnFilters,
+    globalFilter, pagination.pageSize, activeLayoutId, werkstandSleutel, schrijfNaarServer,
+  ])
+
+  // Doorschrijven bij unmount (kanban-wissel, navigeren) en zodra de tab naar de
+  // achtergrond gaat — anders gaat de laatste wijziging binnen de demping verloren.
+  useEffect(() => {
+    function flush() {
+      if (!serverTimer.current) return
+      clearTimeout(serverTimer.current)
+      serverTimer.current = null
+      schrijfNaarServer()
+    }
+    function bijVerbergen() { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', bijVerbergen)
+    return () => {
+      document.removeEventListener('visibilitychange', bijVerbergen)
+      flush()
+    }
+  }, [schrijfNaarServer])
+
+  /** Een bewaarde werkstand toepassen zonder hem als nieuwe wijziging te tellen. */
+  const pasWerkstandToe = useCallback((staat: TabelWerkstand): boolean => {
+    const basis = standaardStand(kolomBasisRef.current, beginSortering)
+    const stand = standUitWerkstand(staat, kolomBasisRef.current, basis)
+    if (!stand) return false
+    const layout_id = staat.layout_id && layoutsRef.current.some(l => l.id === staat.layout_id)
+      ? staat.layout_id
+      : null
+    bekendeKern.current = kern(werkstandUitStand(stand, layout_id))
+    zetStand(stand)
+    setActiveLayoutId(layout_id)
+    return true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zetStand])
+
+  // Lokale werkstand: vóór de eerste schildering na hydratie, zodat de standaard-
+  // kolommen niet zichtbaar wegflitsen. Pas daarna gaat de opslag-poort open.
+  useLayoutEffectVeilig(() => {
+    const lokaal = leesLokaal(werkstandSleutel)
+    if (lokaal) pasWerkstandToe(lokaal)
+    setGehydrateerd(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const markDirty = () => setIsDirty(true)
+  // Werkstand van een ander apparaat: alleen als hij nieuwer is dan wat hier ligt.
+  // Elke wijziging van de gebruiker verfrist de lokale tijdstempel, dus deze controle
+  // dekt ook het geval dat iemand al aan het filteren was toen het antwoord binnenkwam.
+  useEffect(() => {
+    if (!user_id) return
+    let afgebroken = false
+    void (async () => {
+      const server = await laadWerkstand(user_id, scherm)
+      if (afgebroken || !server?.opgeslagen_op) return
+      const lokaal = leesLokaal(werkstandSleutel)
+      if (lokaal?.opgeslagen_op && lokaal.opgeslagen_op >= server.opgeslagen_op) return
+      if (pasWerkstandToe(server)) schrijfLokaal(werkstandSleutel, server)
+    })()
+    return () => { afgebroken = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Terug naar de standaardweergave (of naar de layout die als standaard staat). */
+  function herstelWeergave() {
+    const basis = standaardStand(kolomBasisRef.current, beginSortering)
+    const standaardLayout = layouts.find(l => l.is_standaard)
+    zetStand(standaardLayout
+      ? standUitLayout(standaardLayout.kolommen, kolomBasisRef.current, basis)
+      : basis)
+    setActiveLayoutId(standaardLayout?.id ?? null)
+    setShowKolomBeheer(false)
+    toast.success('Weergave hersteld')
+  }
 
   function handleVisibilityChange(key: string, value: boolean) {
     setColumnVisibility(prev => ({ ...prev, [key]: value }))
-    markDirty()
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -430,11 +599,9 @@ export default function OverzichtTabel<T extends { id: string }>({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    setColumnOrder(prev => {
-      const next = arrayMove(prev, prev.indexOf(active.id as string), prev.indexOf(over.id as string))
-      markDirty()
-      return next
-    })
+    setColumnOrder(prev =>
+      arrayMove(prev, prev.indexOf(active.id as string), prev.indexOf(over.id as string)),
+    )
   }
 
   // ── Selection column ──────────────────────────────────────────────────────
@@ -579,7 +746,7 @@ export default function OverzichtTabel<T extends { id: string }>({
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }])
       setActiveLayoutId(result.id!)
-      setIsDirty(false); setShowSaveAs(false); setSaveAsNaam('')
+      setShowSaveAs(false); setSaveAsNaam('')
       toast.success('Layout opgeslagen')
     })
   }
@@ -592,7 +759,6 @@ export default function OverzichtTabel<T extends { id: string }>({
       const result = await slaLayoutOp(user_id, scherm, layout.naam, currentKolommen(), activeLayoutId)
       if (!result.ok) { toast.error(result.error); return }
       setLayouts(prev => prev.map(l => l.id === activeLayoutId ? { ...l, kolommen: currentKolommen() } : l))
-      setIsDirty(false)
       toast.success('Layout bijgewerkt')
     })
   }
@@ -655,6 +821,26 @@ export default function OverzichtTabel<T extends { id: string }>({
   const activeLayoutNaam = activeLayoutId
     ? (layouts.find(l => l.id === activeLayoutId)?.naam ?? 'Layout')
     : 'Weergave'
+
+  /**
+   * Wijkt de kolomstand af van de gekozen layout? Afgeleid in plaats van bijgehouden:
+   * de werkstand wordt nu automatisch bewaard, dus de tabel kán bij het openen al
+   * afwijken van de layout — een handmatig gezette vlag zou dat missen.
+   *
+   * Vergelijken gebeurt tegen de layout zoals hij *nu* uitpakt, zodat een kolom die
+   * later in de code is bijgekomen niet iedereen een valse wijzigingsstip geeft.
+   */
+  const isDirty = React.useMemo(() => {
+    const layout = activeLayoutId ? layouts.find(l => l.id === activeLayoutId) : null
+    if (!layout) return false
+    const vanLayout = standUitLayout(layout.kolommen, kolomBasis, standaardStand(kolomBasis, beginSortering))
+    if (vanLayout.columnOrder.join('|') !== columnOrder.join('|')) return true
+    return columnOrder.some(key =>
+      (vanLayout.columnVisibility[key] !== false) !== (columnVisibility[key] !== false)
+      || (vanLayout.columnSizing[key] ?? null) !== (columnSizing[key] ?? null)
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayoutId, layouts, kolomBasis, columnOrder, columnVisibility, columnSizing])
 
   // ── Excel Export ───────────────────────────────────────────────────────────
   async function exportNaarExcel() {
@@ -942,6 +1128,20 @@ export default function OverzichtTabel<T extends { id: string }>({
                     {k.label}
                   </label>
                 ))}
+
+                {/* Uitweg uit een zelf dichtgeschroefde weergave — de instellingen worden
+                    automatisch bewaard, dus zonder deze knop blijf je eraan vastzitten. */}
+                <div style={{ borderTop: '1px solid var(--border-soft)', marginTop: 6, paddingTop: 6 }}>
+                  <button
+                    onClick={herstelWeergave}
+                    style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--fg-muted)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-active)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    <RotateCcw size={13} strokeWidth={1.8} />
+                    Weergave herstellen
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1224,7 +1424,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                 onChange={e => { table.setPageSize(Number(e.target.value)); setPagination(p => ({ ...p, pageIndex: 0 })) }}
                 style={{ height: 26, padding: '0 6px', border: '1px solid var(--border)', borderRadius: 5, fontFamily: 'var(--font-ui)', fontSize: 12, background: 'white', cursor: 'pointer' }}
               >
-                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                {PAGINA_GROOTTES.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
           </div>

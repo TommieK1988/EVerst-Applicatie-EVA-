@@ -1251,6 +1251,41 @@ export type GebruikerLayout = {
   updated_at:   string
 }
 
+// ─── Werkstand (laatst gebruikte tabelinstellingen) ─────────────────────────
+
+/**
+ * De stand waarin een gebruiker een overzichttabel achterliet. Anders dan een
+ * `GebruikerLayout` is dit geen benoemde weergave die je bewust opslaat, maar de
+ * automatisch bewaarde werkstand: hij overleeft het wisselen naar kanban, een
+ * verversing en het navigeren naar een andere pagina.
+ *
+ * Verklaring van `versie`: bij een onbekende (hogere of ontbrekende) versie wordt de
+ * werkstand genegeerd in plaats van half toegepast, zodat een oud formaat nooit een
+ * kapotte tabel oplevert.
+ */
+export type TabelWerkstand = {
+  versie:        number
+  /** Kolomvolgorde, zichtbaarheid en breedte — zelfde vorm als een layout. */
+  kolommen:      KolomConfig[]
+  sortering:     { id: string; desc: boolean }[]
+  /** Kolomfilters; `waarde` is een tekst (tekstfilter) of een lijst (selectfilter). */
+  filters:       { id: string; waarde: unknown }[]
+  /** Zoekterm uit de zoekbalk. */
+  zoek:          string
+  paginaGrootte: number
+  /** De benoemde layout die actief was, zodat de naam in de knop blijft kloppen. */
+  layout_id:     string | null
+  /** Moment van opslaan; bepaalt wie wint als twee apparaten uiteenlopen. */
+  opgeslagen_op: string
+}
+
+export type GebruikerWerkstand = {
+  user_id:    string
+  scherm:     string
+  staat:      TabelWerkstand
+  updated_at: string
+}
+
 // ─── Bedrijfsagenda ──────────────────────────────────────────────────────────
 
 export type BedrijfsagendaType =
