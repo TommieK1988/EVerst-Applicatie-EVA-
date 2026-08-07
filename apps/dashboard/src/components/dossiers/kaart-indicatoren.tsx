@@ -1,6 +1,6 @@
 'use client'
 import React from 'react'
-import { IconClock, IconEuro, IconWarn, IconSend, IconAgenda, IconTaken } from '@/components/eva/Icons'
+import { IconClock, IconEuro, IconWarn, IconSend, IconAgenda, IconTaken, IconNotitie } from '@/components/eva/Icons'
 import { isDossierAfgesloten } from './types'
 import type { DossierRij, DossierSectie } from './types'
 import type { KaartBedrag } from './kaart-bedrag'
@@ -11,7 +11,7 @@ import type { KaartBedrag } from './kaart-bedrag'
  * en de uitleg niet uit elkaar lopen.
  */
 
-export type IndicatorSoort = 'uren' | 'begroting' | 'wb' | 'verstuurd' | 'deadline' | 'taken'
+export type IndicatorSoort = 'uren' | 'begroting' | 'wb' | 'verstuurd' | 'deadline' | 'notitie' | 'taken'
 export type IndicatorTone = 'error' | 'warning' | 'info' | 'neutral'
 
 export type KaartIndicator = {
@@ -21,6 +21,11 @@ export type KaartIndicator = {
   chip?: string
   /** Volledige uitleg in het uitklappaneel. */
   uitleg: string
+  /**
+   * Het uitklappaneel toont deze indicator als eigen blok in plaats van als uitleg-regel — voor
+   * signalen met echte inhoud (de notitie), die meer ruimte nodig hebben dan één zin.
+   */
+  eigenBlok?: boolean
 }
 
 const ICONEN: Record<IndicatorSoort, (p: { size?: number }) => React.ReactElement> = {
@@ -29,6 +34,7 @@ const ICONEN: Record<IndicatorSoort, (p: { size?: number }) => React.ReactElemen
   wb:        IconWarn,
   verstuurd: IconSend,
   deadline:  IconAgenda,
+  notitie:   IconNotitie,
   taken:     IconTaken,
 }
 
@@ -120,6 +126,19 @@ export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): Kaar
           : `Deadline over ${dagenTekst(dagen)} — ${datumKort(deadline)}.`,
       })
     }
+  }
+
+  // Notitie-signaal: op de kaart alleen het icoon (met het aantal bij meer dan één); de nieuwste
+  // notitie zelf staat in het uitklappaneel.
+  const notitieAantal = d.notitie_aantal ?? 0
+  if (sectie === 'offerte' && notitieAantal > 0) {
+    indicatoren.push({
+      soort: 'notitie', tone: 'info', eigenBlok: true,
+      chip: notitieAantal > 1 ? String(notitieAantal) : undefined,
+      uitleg: notitieAantal === 1
+        ? 'Er staat een notitie op dit dossier.'
+        : `Er staan ${notitieAantal} notities op dit dossier — hieronder de nieuwste.`,
+    })
   }
 
   const takenTotaal = d.taken_totaal ?? 0

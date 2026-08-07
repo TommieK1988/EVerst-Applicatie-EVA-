@@ -21,6 +21,31 @@ function formatDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function formatTijdstip(iso: string): string {
+  return new Date(iso).toLocaleString('nl-NL', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/**
+ * Notities die uit Bouw7 zijn overgenomen bevatten HTML (`<p>…&nbsp;</p>`). Voor de korte
+ * voorvertoning op de kaart platslaan tot leesbare tekst; de notitie zelf blijft ongemoeid.
+ */
+function alsPlatteTekst(inhoud: string): string {
+  return inhoud
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function opslagKleur(pct: number): string {
   if (pct >= 25) return 'var(--success-600, #009439)'
   if (pct >= 15) return 'var(--warning-600, #d97706)'
@@ -72,6 +97,51 @@ function DatumRegel({ label, iso, markeerVerlopen = false }: {
   )
 }
 
+/**
+ * De nieuwste notitie van het dossier. Krijgt een eigen blok in plaats van een uitleg-regel omdat
+ * het om echte inhoud gaat; langere notities worden afgekapt zodat de kaart niet uitdijt — de
+ * volledige lijst staat op het Informatie-tab van het dossier.
+ */
+function NotitieBlok({ indicator, dossier }: { indicator: KaartIndicator; dossier: DossierRij }) {
+  const kleur = TONE_KLEUREN[indicator.tone]
+  const aantal = dossier.notitie_aantal ?? 0
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 4,
+      padding: '7px 9px', borderRadius: 6,
+      background: kleur.bg, border: `1px solid ${kleur.border}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ display: 'inline-grid', placeItems: 'center', color: kleur.fg, flexShrink: 0 }}>
+          <IndicatorIcoon soort="notitie" size={11} />
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: kleur.fg }}>
+          {aantal > 1 ? `Nieuwste notitie · ${aantal} in totaal` : 'Notitie'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+        {dossier.notitie_laatste_auteur && (
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--neutral-700)' }}>
+            {dossier.notitie_laatste_auteur}
+          </span>
+        )}
+        {dossier.notitie_laatste_op && (
+          <span style={{ fontSize: 10.5, color: 'var(--neutral-500)' }}>
+            {formatTijdstip(dossier.notitie_laatste_op)}
+          </span>
+        )}
+      </div>
+      <div style={{
+        fontSize: 11.5, lineHeight: 1.45, color: 'var(--neutral-800)',
+        whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+        display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 5, overflow: 'hidden',
+      }}>
+        {alsPlatteTekst(dossier.notitie_laatste_inhoud ?? '')}
+      </div>
+    </div>
+  )
+}
+
 export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
   dossier: DossierRij
   sectie?: DossierSectie
@@ -91,6 +161,9 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
 
   const heeftDatums = !!(dossier.deadline || dossier.verwacht_startdatum
     || dossier.verwacht_einddatum || (sectie === 'offerte' && dossier.verzonden_op))
+
+  const uitlegIndicatoren = indicatoren.filter(ind => !ind.eigenBlok)
+  const notitieIndicator  = indicatoren.find(ind => ind.soort === 'notitie')
 
   return (
     <div style={{
@@ -141,10 +214,11 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
         </div>
       )}
 
-      {/* Signalen: dezelfde indicatoren als de chips, nu met volledige uitleg */}
-      {indicatoren.length > 0 && (
+      {/* Signalen: dezelfde indicatoren als de chips, nu met volledige uitleg. Indicatoren met
+          een eigen blok (de notitie) staan hieronder, niet als regel. */}
+      {uitlegIndicatoren.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {indicatoren.map(ind => {
+          {uitlegIndicatoren.map(ind => {
             const kleur = TONE_KLEUREN[ind.tone]
             return (
               <div key={ind.soort} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
@@ -162,6 +236,11 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
             )
           })}
         </div>
+      )}
+
+      {/* Nieuwste notitie */}
+      {notitieIndicator && dossier.notitie_laatste_inhoud && (
+        <NotitieBlok indicator={notitieIndicator} dossier={dossier} />
       )}
 
       {/* Datums */}

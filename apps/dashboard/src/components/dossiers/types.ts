@@ -47,6 +47,12 @@ export type DossierRij = Dossier & {
   /** Taken-tellers (server-side geteld over losse taken + actielijst-taken; zie verrijkDossiers). */
   taken_open?: number
   taken_totaal?: number
+  /* ── Notities (zie verrijkDossiers) ─────────────────────────────────────────
+     Voedt de notitie-indicator op de kaart; de nieuwste notitie vult het uitklappaneel. */
+  notitie_aantal?: number
+  notitie_laatste_inhoud?: string | null
+  notitie_laatste_auteur?: string | null
+  notitie_laatste_op?: string | null
   /* ── EVA-eigen bedragen (zie lib/dossiers/kaart-bedragen.ts) ────────────────
      `bedrag_excl_btw` / `kostprijs_excl_btw` komen alleen uit de Bouw7-sync. Deze velden vullen aan
      wat in EVA zelf ontstaat, zodat de kaart en de lijst hetzelfde tonen als het Informatie-tab.

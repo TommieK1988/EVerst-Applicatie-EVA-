@@ -67,6 +67,7 @@ export const IconSync     = (p: IconProps) => <IconBase {...p}><path d="M3.6 12a
 export const IconWarn     = (p: IconProps) => <IconBase {...p}><path d="M12 3.6 2.4 20.4h19.2L12 3.6ZM12 9.6v4.8M12 18v.6"/></IconBase>;
 export const IconBuilding = (p: IconProps) => <IconBase {...p}><path d="M4.8 20.4V6a1.2 1.2 0 0 1 1.2-1.2h7.2a1.2 1.2 0 0 1 1.2 1.2v14.4M14.4 20.4V10.8h3.6a1.2 1.2 0 0 1 1.2 1.2v8.4M3.6 20.4h16.8M8.4 8.4h2.4M8.4 12h2.4M8.4 15.6h2.4"/></IconBase>;
 export const IconEuro     = (p: IconProps) => <IconBase {...p}><path d="M18 6a6 6 0 0 0-10.8 3.6M18 18a6 6 0 0 1-10.8-3.6M3.6 10.8h9.6M3.6 14.4h8.4"/></IconBase>;
+export const IconNotitie  = (p: IconProps) => <IconBase {...p}><path d="M4.8 4.8h14.4v9.6l-4.8 4.8H4.8V4.8Z"/><path d="M19.2 14.4h-4.8v4.8"/><path d="M8.4 9h7.2M8.4 12.6h4.2"/></IconBase>;
 export const IconOffice      = (p: IconProps) => <IconBase {...p}><path d="M4.8 4.8l9.6-1.2v16.8l-9.6-1.2V4.8ZM14.4 6h4.8v12h-4.8"/></IconBase>;
 export const IconRelaties    = (p: IconProps) => <IconBase {...p}><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 12h3.6l2.4-3.6M12.6 12l2.4 3.6"/></IconBase>;
 export const IconMedewerkers = (p: IconProps) => <IconBase {...p}><circle cx="9" cy="7.2" r="3"/><path d="M2.4 20.4c.84-3.36 3.36-5.4 6.6-5.4s5.76 2.04 6.6 5.4"/><circle cx="16.8" cy="7.2" r="2.4"/><path d="M16.2 15c1.56-.36 3.24.24 4.2 1.8"/></IconBase>;
