@@ -63,6 +63,20 @@ voor iedereen, met voor elke gebruiker het juiste lokale pad.
 niet genoeg; Chrome blijft standaard in de achtergrond draaien en kent het
 nieuwe protocol dan nog niet. Afdwingen kan met `taskkill /IM chrome.exe /F`.
 
+### Waarom de installer zich als applicatie aanmeldt
+
+De installer schrijft niet alleen de klasse-registratie (`HKCR\eva`), maar meldt
+EVA ook aan onder `RegisteredApplications`, met een `Capabilities\URLAssociations`
+die `eva` aan de ProgID `EVA.Verkenner` koppelt.
+
+Dat is nodig omdat er twee verschillende wegen naar een protocol-handler zijn.
+`ShellExecute` — Win+R, `Start-Process` — neemt genoegen met de kale
+klasse-registratie. Browsers en het Windows-venster *"Hoe wil je dit openen?"*
+kijken naar de aangemelde applicaties. Ontbreekt die aanmelding, dan doet een
+klik in EVA niets, of verschijnt *"Uw pc heeft geen app die deze koppeling kan
+openen"* — terwijl hetzelfde adres via Win+R wél werkt. OneDrive registreert
+zijn `odopen`-protocol op precies dezelfde manier.
+
 ### Verwijderen
 
 ```powershell

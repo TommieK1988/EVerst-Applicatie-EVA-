@@ -48,18 +48,29 @@ if ($Machine -and -not (Test-Beheerder)) {
 }
 
 if ($Machine) {
-  $doelMap  = Join-Path $env:ProgramFiles 'EVA'
-  $protocol = 'HKLM:\SOFTWARE\Classes\eva'
-  $bereik   = 'voor alle gebruikers van deze pc'
+  $doelMap      = Join-Path $env:ProgramFiles 'EVA'
+  $wortel       = 'HKLM:\SOFTWARE'
+  $classes      = 'HKLM:\SOFTWARE\Classes'
+  $bereik       = 'voor alle gebruikers van deze pc'
 } else {
-  $doelMap  = Join-Path $env:LOCALAPPDATA 'EVA'
-  $protocol = 'HKCU:\Software\Classes\eva'
-  $bereik   = 'voor de huidige gebruiker'
+  $doelMap      = Join-Path $env:LOCALAPPDATA 'EVA'
+  $wortel       = 'HKCU:\Software'
+  $classes      = 'HKCU:\Software\Classes'
+  $bereik       = 'voor de huidige gebruiker'
 }
-$doelScript = Join-Path $doelMap 'eva-verkenner.ps1'
+$doelScript   = Join-Path $doelMap 'eva-verkenner.ps1'
+$protocol     = Join-Path $classes 'eva'
+$progId       = Join-Path $classes 'EVA.Verkenner'
+$capabilities = Join-Path $wortel 'EVA\Capabilities'
+$registered   = Join-Path $wortel 'RegisteredApplications'
 
 if ($Verwijderen) {
-  if (Test-Path $protocol)   { Remove-Item $protocol -Recurse -Force }
+  foreach ($k in @($protocol, $progId, (Join-Path $wortel 'EVA'))) {
+    if (Test-Path $k) { Remove-Item $k -Recurse -Force }
+  }
+  if (Test-Path $registered) {
+    Remove-ItemProperty -Path $registered -Name 'EVA' -ErrorAction SilentlyContinue
+  }
   if (Test-Path $doelScript) { Remove-Item $doelScript -Force }
   Write-Host "EVA-protocolhandler verwijderd ($bereik)." -ForegroundColor Green
   return
@@ -80,13 +91,37 @@ Copy-Item -LiteralPath $bron -Destination $doelScript -Force
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $commando   = "`"$powershell`" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$doelScript`" -Uri `"%1`""
 
-New-Item -Path $protocol -Force | Out-Null
-Set-ItemProperty -Path $protocol -Name '(default)'    -Value 'URL:EVA'
-Set-ItemProperty -Path $protocol -Name 'URL Protocol' -Value ''
+function Zet-Sleutel([string]$Pad, [hashtable]$Waarden) {
+  New-Item -Path $Pad -Force | Out-Null
+  foreach ($naam in $Waarden.Keys) {
+    Set-ItemProperty -Path $Pad -Name $naam -Value $Waarden[$naam]
+  }
+}
 
-$commandoSleutel = Join-Path $protocol 'shell\open\command'
-New-Item -Path $commandoSleutel -Force | Out-Null
-Set-ItemProperty -Path $commandoSleutel -Name '(default)' -Value $commando
+# 1. Het protocol zelf. Dit is wat ShellExecute gebruikt (Win+R, Start-Process).
+Zet-Sleutel $protocol @{ '(default)' = 'URL:EVA'; 'URL Protocol' = '' }
+Zet-Sleutel (Join-Path $protocol 'shell\open\command') @{ '(default)' = $commando }
+
+# 2. Dezelfde handler nog eens als benoemd programma (ProgID).
+Zet-Sleutel $progId @{ '(default)' = 'EVA — dossiermap openen in Verkenner'; 'URL Protocol' = '' }
+Zet-Sleutel (Join-Path $progId 'shell\open\command') @{ '(default)' = $commando }
+
+# 3. Aanmelden als applicatie die het eva-protocol afhandelt.
+#
+#    Zonder dit werkt het protocol wél via ShellExecute, maar niet vanuit een
+#    browser: Chrome en het Windows-dialoog "Hoe wil je dit openen?" kijken naar
+#    RegisteredApplications, niet naar de kale klasse-registratie. Een klik in
+#    EVA doet dan niets, of levert "Uw pc heeft geen app die deze koppeling kan
+#    openen" op. OneDrive registreert zijn odopen-protocol op dezelfde manier.
+Zet-Sleutel $capabilities @{
+  'ApplicationName'        = 'EVA'
+  'ApplicationDescription' = 'Opent dossiermappen uit EVA in Verkenner.'
+}
+Zet-Sleutel (Join-Path $capabilities 'URLAssociations') @{ 'eva' = 'EVA.Verkenner' }
+
+# De verwijzing is een registerpad zonder hive-voorvoegsel.
+$capabilitiesPad = ($capabilities -replace '^HK(LM|CU):\\', '')
+Zet-Sleutel $registered @{ 'EVA' = $capabilitiesPad }
 
 Write-Host "EVA-protocolhandler geïnstalleerd ($bereik)." -ForegroundColor Green
 Write-Host "  Script:  $doelScript"
