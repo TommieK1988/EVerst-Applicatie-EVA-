@@ -58,8 +58,10 @@ export async function plaatsDossierNotitie(
 
   if (error || !data) return { ok: false, error: error?.message ?? 'Plaatsen mislukt' }
 
+  // De borden tonen een notitie-indicator op de kaart, dus die moeten mee verversen.
   revalidatePath('/opdrachten')
   revalidatePath('/servicedesk')
+  revalidatePath('/offertes')
   return {
     ok: true,
     notitie: {
@@ -97,7 +99,9 @@ export async function verwijderDossierNotitie(
 
   if (error) return { ok: false, error: error.message }
 
+  // De borden tonen een notitie-indicator op de kaart, dus die moeten mee verversen.
   revalidatePath('/opdrachten')
   revalidatePath('/servicedesk')
+  revalidatePath('/offertes')
   return { ok: true }
 }

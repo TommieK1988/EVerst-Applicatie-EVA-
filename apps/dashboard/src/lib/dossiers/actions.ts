@@ -183,28 +183,77 @@ async function getTakenTellingen(ids: string[]): Promise<Map<string, { open: num
   return tellingen
 }
 
+type NotitieSamenvatting = {
+  aantal: number
+  inhoud: string
+  auteur: string | null
+  op: string
+}
+
 /**
- * Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit), de taken-tellers en de EVA-eigen
- * bedragen (calculatie-offerte, goedgekeurd meerwerk, stelposten, opties). Dat laatste is nodig
- * omdat `bedrag_excl_btw` alleen door de Bouw7-sync wordt geschreven; zie kaart-bedragen.ts.
+ * Vat de notities per dossier samen: hoeveel er zijn en welke de nieuwste is. Voedt de
+ * notitie-indicator op de kanban-kaart. `dossier_notities` bevat zowel handmatige notities als de
+ * uit Bouw7 gesynchroniseerde aantekeningen.
+ */
+async function getNotitieSamenvattingen(ids: string[]): Promise<Map<string, NotitieSamenvatting>> {
+  const samenvattingen = new Map<string, NotitieSamenvatting>()
+  if (ids.length === 0) return samenvattingen
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  // Expliciete bovengrens: PostgREST kapt anders stilzwijgend af op de default (1000) en dan
+  // klopt de teller niet meer. Nieuwste eerst, zodat de eerste rij per dossier de laatste is.
+  const { data } = await supabase
+    .from('dossier_notities')
+    .select('dossier_id, inhoud, created_at, medewerkers(voornaam, tussenvoegsel, achternaam)')
+    .in('dossier_id', ids)
+    .order('created_at', { ascending: false })
+    .range(0, 9999)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const n of (data ?? []) as any[]) {
+    const bestaand = samenvattingen.get(n.dossier_id)
+    if (bestaand) { bestaand.aantal += 1; continue }
+    samenvattingen.set(n.dossier_id, {
+      aantal: 1,
+      inhoud: n.inhoud ?? '',
+      auteur: medNaam(n.medewerkers ?? null),
+      op:     n.created_at,
+    })
+  }
+
+  return samenvattingen
+}
+
+/**
+ * Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit), de taken-tellers, de notitie-
+ * samenvatting en de EVA-eigen bedragen (calculatie-offerte, goedgekeurd meerwerk, stelposten,
+ * opties). Dat laatste is nodig omdat `bedrag_excl_btw` alleen door de Bouw7-sync wordt
+ * geschreven; zie kaart-bedragen.ts.
  */
 async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
   const ids = rijen.map(r => r.id)
-  const [internSet, taken, bedragen] = await Promise.all([
+  const [internSet, taken, notities, bedragen] = await Promise.all([
     getInternDossierIds(ids),
     getTakenTellingen(ids),
+    getNotitieSamenvattingen(ids),
     // Best effort: zonder verrijking valt de kaart terug op het kale Bouw7-bedrag.
     laadKaartBedragen(rijen).catch(() => new Map()),
   ])
-  if (internSet.size === 0 && taken.size === 0 && bedragen.size === 0) return rijen
+  if (internSet.size === 0 && taken.size === 0 && notities.size === 0 && bedragen.size === 0) return rijen
 
   return rijen.map(r => {
     const telling = taken.get(r.id)
+    const notitie = notities.get(r.id)
     return {
       ...r,
       intern: internSet.has(r.id) || r.intern,
       taken_open:   telling?.open   ?? 0,
       taken_totaal: telling?.totaal ?? 0,
+      notitie_aantal:         notitie?.aantal ?? 0,
+      notitie_laatste_inhoud: notitie?.inhoud ?? null,
+      notitie_laatste_auteur: notitie?.auteur ?? null,
+      notitie_laatste_op:     notitie?.op     ?? null,
       ...(bedragen.get(r.id) ?? {}),
     }
   })
@@ -931,12 +980,22 @@ export async function getDossierById(id: string): Promise<{ ok: true; data: Doss
  * heeft de substatus intussen omgezet) de EVA-wijziging kan tegenhouden in plaats van de verse
  * waarde van de ander te overschrijven. Andere Bouw7-fouten houden de EVA-update niet tegen; die
  * komen terug in `bouw7` zodat de UI een toast kan tonen (de lees-sync corrigeert de drift).
+ *
+ * `opts.forceerBouw7`: schrijf óók bij een conflict. Voor wijzigingen die een feit zijn (de offerte
+ * is gemaild) en voor de "toch overschrijven"-keuze die de UI aanbiedt na een conflictmelding.
+ *
+ * Een conflict komt terug mét `conflict.bouw7Label`, zodat de aanroeper kan tonen wát er in Bouw7
+ * staat en de keuze kan voorleggen. Mislukte writes landen in `bouw7_sync_status`/`bouw7_sync_fout`,
+ * zodat een stille drift achteraf terug te vinden is.
  */
 export async function updateDossierSubstatus(
   id: string,
   nieuweSubstatus: DossierSubstatus,
-  opts?: { schrijfBouw7?: boolean }
-): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
+  opts?: { schrijfBouw7?: boolean; forceerBouw7?: boolean }
+): Promise<
+  | { ok: true; bouw7?: Bouw7WriteResult }
+  | { ok: false; error: string; conflict?: { bouw7Label: string } }
+> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient()
 
@@ -961,11 +1020,16 @@ export async function updateDossierSubstatus(
     // Aanvraag + 'verzonden' promoveert hieronder naar offerte/verzonden; in Bouw7 is dat
     // hetzelfde label ("07. Verzonden"), dus schrijven we het als offerte-substatus weg.
     const doelSectie = sectie === 'aanvraag' && nieuweSubstatus === 'verzonden' ? 'offerte' : sectie
-    const res = await schrijfBouw7Substatus(huidig.bouw7_id, doelSectie, nieuweSubstatus, {
-      sectie,
-      substatus: sectie === 'aanvraag' ? huidig.aanvraag_substatus : huidig.offerte_substatus,
-    })
-    if (!res.ok && res.conflict) return { ok: false, error: res.error }
+    const res = await schrijfBouw7Substatus(
+      huidig.bouw7_id,
+      doelSectie,
+      nieuweSubstatus,
+      { sectie, substatus: sectie === 'aanvraag' ? huidig.aanvraag_substatus : huidig.offerte_substatus },
+      { forceer: opts?.forceerBouw7 === true },
+    )
+    // Conflict → EVA-wijziging laten vervallen, mét het Bouw7-label zodat de UI kan vragen of de
+    // gebruiker Bouw7 volgt of tóch overschrijft (die tweede weg komt terug met `forceerBouw7`).
+    if (!res.ok && res.conflict) return { ok: false, error: res.error, conflict: res.conflict }
     bouw7 = res.ok ? { ok: true } : { ok: false, error: res.error }
   }
 
@@ -986,6 +1050,16 @@ export async function updateDossierSubstatus(
     update = { offerte_substatus: nieuweSubstatus as OfferteSubstatus }
   } else {
     update = { opdracht_substatus: nieuweSubstatus as OpdrachtSubstatus }
+  }
+
+  // Uitkomst van de write-through vastleggen op het dossier: een mislukte Bouw7-write was tot nu toe
+  // alleen een toast en dus achteraf onvindbaar. Meelift op dezelfde update — geen extra DB-call.
+  // `bouw7_laatst_sync` blijft bewust ongemoeid: dat is het moment van de vólledige sync, en één
+  // weggeschreven veld mag een dossier niet als "zojuist volledig gesynct" laten ogen in de lijst.
+  if (bouw7) {
+    update = bouw7.ok
+      ? { ...update, bouw7_sync_status: 'synced', bouw7_sync_fout: null }
+      : { ...update, bouw7_sync_status: 'error', bouw7_sync_fout: bouw7.error }
   }
 
   const { error } = await supabase
@@ -1009,6 +1083,11 @@ export async function updateDossierSubstatus(
   // De aanvraag/offerte-fase is hierboven al weggeschreven (maatwerkveld i.p.v. projectstatus).
   if (opts?.schrijfBouw7 && huidig.hoofdstatus === 'opdracht' && huidig.bouw7_id != null) {
     bouw7 = await schrijfBouw7Projectstatus(huidig.bouw7_id, nieuweSubstatus, 'opdracht')
+    await supabase.from('dossiers').update(
+      bouw7.ok
+        ? { bouw7_sync_status: 'synced', bouw7_sync_fout: null }
+        : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7.error },
+    ).eq('id', id)
   }
 
   revalidatePath('/aanvragen')

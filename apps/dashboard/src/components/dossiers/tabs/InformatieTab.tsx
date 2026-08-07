@@ -9,7 +9,9 @@ import {
   getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateDossierSubstatus, updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
+import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import {
   bouwDatumRegels, formatDelta, LEGE_DOSSIER_DATUMS,
@@ -906,6 +908,7 @@ export function InformatieTab({
 }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
+  const { bevestig } = useDialogen()
   const [editModeRaw, setEditMode]  = React.useState(false)
   // Bij een afgesloten (alleen-lezen) dossier kan de bewerkmodus nooit actief zijn.
   const editMode = editModeRaw && !readOnly
@@ -962,18 +965,11 @@ export function InformatieTab({
       return
     }
     // Two-way: opdracht naar de projectstatus, aanvraag/offerte naar het gedeelde maatwerkveld
-    // "Offerte Sub-status".
-    const res = await updateDossierSubstatus(dossier.id, next as any, { schrijfBouw7: true })
-    if (!res.ok) {
-      // O.a. een conflict: de andere Bouw7-app heeft deze substatus intussen omgezet.
-      setSubstatus(vorige)
-      toast.error(res.error)
-      router.refresh()
-    } else if (res.bouw7 && !res.bouw7.ok) {
-      toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
-    } else {
-      router.refresh()
-    }
+    // "Offerte Sub-status". Botst dat met de tweede Bouw7-app, dan legt de gedeelde helper de
+    // keuze voor (Bouw7 volgen of tóch overschrijven) in plaats van alleen te melden dat het niet kan.
+    const res = await wijzigSubstatusMetConflict({ dossierId: dossier.id, substatus: next as any, sectie, bevestig })
+    if (!res.ok) setSubstatus(vorige)
+    router.refresh()
   }
 
   /**
@@ -1077,16 +1073,17 @@ export function InformatieTab({
   function opslaan() {
     setOpgeslagen(form)
     setEditMode(false)
-    // Fase wegschrijven. Opdracht-dossiers zijn two-way (schrijft ook naar Bouw7); voor aanvraag/offerte
-    // alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen blijven daar alleen-lezen).
-    if (sectie === 'opdracht') {
+    // Fase wegschrijven — altijd langs `voerSubstatusUit`, dus mét terugschrijven naar Bouw7. Deze
+    // tak schreef voor aanvraag/offerte alleen in EVA: daardoor liep EVA vooruit op het gedeelde
+    // maatwerkveld en strandde elke vólgende wijziging op een conflict dat niet meer op te lossen was.
+    // Voor aanvraag/offerte alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen
+    // blijven daar alleen-lezen).
+    if (sectie === 'servicedesk') {
+      updateServicedeskSubstatus(dossier.id, substatus).catch(() => {})
+    } else if (sectie === 'opdracht' || !bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
       // Direct wegschrijven, niet via `zetSubstatus`: Opslaan bevestigt de al gekozen status en
       // mag niet opnieuw de gereedmeld-dialoog openen bij een dossier dat al financieel gereed is.
-      voerSubstatusUit(substatus).catch(() => {})
-    } else if (sectie === 'servicedesk') {
-      updateServicedeskSubstatus(dossier.id, substatus).catch(() => {})
-    } else if (!bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
-      updateDossierSubstatus(dossier.id, substatus as any).catch(() => {})
+      voerSubstatusUit(substatus).catch(() => toast.error('Substatus opslaan mislukt'))
     }
     // Rollen zijn nu volledig bewerkbaar en worden bij Bouw7-dossiers direct teruggeschreven naar Bouw7
     // (projectleider→projectLeader, calculator→workPlanner, uitvoerder→executor, controller→custom attr

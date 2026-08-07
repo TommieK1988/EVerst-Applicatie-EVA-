@@ -283,7 +283,14 @@ async function verwerkVoltooiingsActies(taakId: string, dossierId: string | null
     const config = actie.config as Record<string, string>
     try {
       if (actie.actie_type === 'dossier_substatus_wijzigen' && dossierId && config.nieuwe_substatus) {
-        await updateDossierSubstatus(dossierId, config.nieuwe_substatus as DossierSubstatus)
+        // Mét terugschrijven naar Bouw7, net als elke andere statuswijziging in EVA. Zonder dat liep
+        // EVA vooruit op het gedeelde maatwerkveld en strandde de volgende write op een conflict.
+        // Geforceerd: er is hier geen gebruiker om een botsing aan voor te leggen, en het afronden
+        // van de taak is een feit — bij twijfel wint de EVA-stand die de taak zojuist bepaalde.
+        await updateDossierSubstatus(dossierId, config.nieuwe_substatus as DossierSubstatus, {
+          schrijfBouw7: true,
+          forceerBouw7: true,
+        })
       } else if (actie.actie_type === 'dossier_rol_toewijzen' && dossierId && config.dossier_veld && config.medewerker_id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
@@ -295,8 +302,10 @@ async function verwerkVoltooiingsActies(taakId: string, dossierId: string | null
       } else if (actie.actie_type === 'sjabloon_activeren' && dossierId && config.template_id) {
         await activeerSjabloon({ template_id: config.template_id, dossier_id: dossierId })
       }
-    } catch {
-      // individuele actie-fouten stoppen andere acties niet
+    } catch (e) {
+      // individuele actie-fouten stoppen andere acties niet — wel loggen, anders verdwijnt
+      // bijvoorbeeld een mislukte Bouw7-write hier spoorloos.
+      console.error(`[taak-completion] actie "${actie.actie_type}" mislukt voor taak ${taakId}:`, e)
     }
   }
 }

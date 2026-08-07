@@ -144,15 +144,31 @@ function splitAdressen(v: string | undefined): string[] {
 }
 
 /**
+ * Offerte-substatussen die ná "07. Verzonden" in de ladder liggen. Die zetten we niet terug wanneer
+ * er opnieuw een offerte de deur uit gaat: dat de klant al nagebeld is of mondeling toegezegd heeft,
+ * is informatie die een hernieuwde verzending niet ongedaan maakt.
+ */
+const VERDER_DAN_VERZONDEN = new Set([
+  'nabellen', 'in_behandeling', 'mondelinge_toezegging', 'gewonnen', 'verloren', 'vervallen',
+])
+
+/**
  * Zet het dossier van een zojuist verstuurde offerte op substatus **Verzonden** — in EVA én
  * (write-through) in het gedeelde Bouw7-maatwerkveld "Offerte Sub-status" ("07. Verzonden").
  * Staat het dossier nog in de aanvraagfase, dan promoveert het daarmee naar de offertefase.
  *
- * Overslaan wanneer "Verzonden" geen zinnige stap is: een dossier dat al opdracht is, een
- * servicedesk-melding (eigen ladder), of een offerte die al gewonnen is. Geeft altijd een korte
- * melding terug voor de toast; gooit niet.
+ * De mail is hier al de deur uit, dus "Verzonden" is een **feit**, geen voorstel: de write gaat
+ * met `forceerBouw7` zodat de conflictcheck hem niet tegenhoudt wanneer EVA en Bouw7 uit elkaar
+ * gelopen zijn. Om dezelfde reden schrijven we ook door als EVA zelf al op Verzonden staat — het
+ * gaat er juist om dát het maatwerkveld in Bouw7 gevuld raakt, en dat kan achterlopen.
+ *
+ * Overslaan alleen wanneer "Verzonden" geen zinnige stap is: een dossier dat al opdracht is, een
+ * servicedesk-melding (eigen ladder), of een offerte die al verder in de ladder staat — die
+ * terugzetten zou informatie weggooien.
+ *
+ * Geeft een melding terug voor de toast plus of de statusstap slaagde; gooit niet.
  */
-async function zetDossierOpVerzonden(dossierId: string): Promise<string> {
+async function zetDossierOpVerzonden(dossierId: string): Promise<{ ok: boolean; tekst: string }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
   const { data: d } = await admin
@@ -160,17 +176,21 @@ async function zetDossierOpVerzonden(dossierId: string): Promise<string> {
     .select('hoofdstatus, offerte_substatus, servicedesk_substatus, bouw7_id')
     .eq('id', dossierId)
     .maybeSingle()
-  if (!d) return 'dossier niet gevonden'
-  if (d.servicedesk_substatus != null)   return 'servicedeskmelding, status ongewijzigd'
-  if (d.hoofdstatus === 'opdracht')      return 'dossier is al opdracht, status ongewijzigd'
-  if (d.offerte_substatus === 'gewonnen') return 'offerte staat op Gewonnen, status ongewijzigd'
-  if (d.hoofdstatus === 'offerte' && d.offerte_substatus === 'verzonden') return 'stond al op Verzonden'
+  if (!d)                                 return { ok: false, tekst: 'dossier niet gevonden' }
+  if (d.servicedesk_substatus != null)    return { ok: true,  tekst: 'servicedeskmelding, status ongewijzigd' }
+  if (d.hoofdstatus === 'opdracht')       return { ok: true,  tekst: 'dossier is al opdracht, status ongewijzigd' }
+  if (d.offerte_substatus && VERDER_DAN_VERZONDEN.has(d.offerte_substatus)) {
+    return { ok: true, tekst: `offerte staat al verder in de ladder (${d.offerte_substatus}), status ongewijzigd` }
+  }
 
   const { updateDossierSubstatus } = await import('@/lib/dossiers/actions')
-  const res = await updateDossierSubstatus(dossierId, 'verzonden', { schrijfBouw7: true })
-  if (!res.ok) return res.error
-  if (res.bouw7 && !res.bouw7.ok) return `Verzonden in EVA · Bouw7: ${res.bouw7.error}`
-  return d.bouw7_id ? 'Verzonden (EVA + Bouw7)' : 'Verzonden (alleen EVA)'
+  const res = await updateDossierSubstatus(dossierId, 'verzonden', {
+    schrijfBouw7: true,
+    forceerBouw7: true,
+  })
+  if (!res.ok) return { ok: false, tekst: res.error }
+  if (res.bouw7 && !res.bouw7.ok) return { ok: false, tekst: `Verzonden in EVA · Bouw7 mislukt: ${res.bouw7.error}` }
+  return { ok: true, tekst: d.bouw7_id ? 'Verzonden (EVA + Bouw7)' : 'Verzonden (alleen EVA)' }
 }
 
 /**
@@ -182,7 +202,10 @@ async function zetDossierOpVerzonden(dossierId: string): Promise<string> {
 export async function verstuurOfferte(
   quoteId: string,
   input: { to: string; cc?: string; subject: string; bodyHtml: string },
-): Promise<{ ok: true; sharepoint: string; status: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; sharepoint: string; status: string; statusOk: boolean }
+  | { ok: false; error: string }
+> {
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd.' }
 
@@ -267,13 +290,17 @@ export async function verstuurOfferte(
   // Er wordt bewust géén offerte in Bouw7 aangemaakt; alleen de status volgt mee. Best-effort:
   // faalt nooit de verzending, het resultaat gaat mee terug voor een toast.
   let status = 'geen dossier gekoppeld'
+  let statusOk = true
   if (quote.type === 'interne_calculatie') {
     status = 'interne calculatie, status ongewijzigd'
   } else if (dossierId) {
     try {
-      status = await zetDossierOpVerzonden(dossierId)
+      const res = await zetDossierOpVerzonden(dossierId)
+      status = res.tekst
+      statusOk = res.ok
     } catch (e) {
       status = e instanceof Error ? e.message : 'status bijwerken mislukt'
+      statusOk = false
     }
   }
 
@@ -295,5 +322,6 @@ export async function verstuurOfferte(
 
   revalidatePath(`/quotes/${quoteId}`)
   revalidatePath(`/everts-calc/quotes/${quoteId}`)
-  return { ok: true, sharepoint, status }
+  // De aanvraag-/offertelijsten worden al door `updateDossierSubstatus` gerevalideerd.
+  return { ok: true, sharepoint, status, statusOk }
 }
