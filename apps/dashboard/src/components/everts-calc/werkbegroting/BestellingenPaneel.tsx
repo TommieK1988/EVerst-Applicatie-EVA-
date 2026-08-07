@@ -23,7 +23,7 @@ import {
   type BestellingVoorstel,
 } from '@/app/(platform)/everts-calc/actions/bestellingen'
 import {
-  getInkoopSjablonen, type SjabloonKeuze,
+  getInkoopSjablonen, bewaarBestellingSjabloon, type SjabloonKeuze,
 } from '@/app/(platform)/everts-calc/actions/bestelling-document'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
@@ -152,7 +152,11 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       getInkoopSjablonen('oa_contract', dossierId),
     ])
       .then(([inkooporder, oa_contract]) => { if (actief) setSjablonen({ inkooporder, oa_contract }) })
-      .catch(() => { /* zonder sjablonen blijft de keuzelijst leeg met uitleg */ })
+      .catch(() => {
+        // Anders leest een mislukte oproep als "er zijn geen sjablonen", en gaat iemand
+        // er onnodig een aanmaken.
+        if (actief) toast.error('De documentsjablonen konden niet worden opgehaald.')
+      })
     return () => { actief = false }
   }, [dossierId])
 
@@ -325,6 +329,31 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   }
 
   /**
+   * De opmaak van een al klaargezette inkoop wijzigen. De keuze hoort bij de bestelling
+   * (niet bij het verzendmoment), zodat wie hem later verstuurt hetzelfde document krijgt
+   * als wie hem koos. Optimistisch in de lokale store, bij een serverfout teruggedraaid.
+   */
+  async function kiesSjabloon(b: WerkbegrotingBestelling, sjabloonId: string) {
+    const vorige = b.sjabloon_id ?? null
+    const nieuweKeuze = sjabloonId || null
+    if (nieuweKeuze === vorige) return
+    slaBestellingOp({ ...b, sjabloon_id: nieuweKeuze })
+    setTick(t => t + 1)
+    let fout: string | null = null
+    try {
+      const res = await bewaarBestellingSjabloon(b.id, nieuweKeuze)
+      if (!res.ok) fout = res.error ?? 'De opmaak kon niet worden opgeslagen.'
+    } catch {
+      fout = 'De opmaak kon niet worden opgeslagen.'
+    }
+    if (fout) {
+      slaBestellingOp({ ...b, sjabloon_id: vorige })
+      setTick(t => t + 1)
+      toast.error(fout)
+    }
+  }
+
+  /**
    * Open het verzendvenster met een voorgevuld mailconcept. Onderwerp en tekst horen
    * bij het sjabloon, dus die worden opnieuw opgehaald als de gebruiker wisselt.
    */
@@ -336,7 +365,11 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       setMail(m => ({ to: m.to || concept.to, cc: m.cc, onderwerp: concept.onderwerp, bericht: concept.bericht }))
       setVerstuurSjabloon(concept.sjabloonId)
       setVerstuurSjablonen(concept.sjablonen)
-    } catch { /* laat leeg */ } finally { setMailLaden(false) }
+    } catch {
+      // Zonder concept blijft de keuzelijst leeg; dat mag geen raadsel zijn, want dan lijkt
+      // het alsof er geen sjablonen zijn terwijl het ophalen misging.
+      toast.error('Het mailconcept kon niet worden opgehaald — probeer het venster opnieuw te openen.')
+    } finally { setMailLaden(false) }
   }
 
   async function openVerstuur(b: WerkbegrotingBestelling) {
@@ -598,6 +631,10 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
               const isLegacyVerzonden = !inBouw7 && !wegInBouw7 && b.status !== 'concept'
               const soort = (b.soort ?? null) as Soort | null
               const bezig = bezigId === b.id
+              // Opmaak: oude inkopen zonder soort tellen als inkooporder, net als bij het versturen.
+              const docSoort: Soort = soort ?? 'inkooporder'
+              const sjabloonLijst = sjablonen[docSoort]
+              const gekozenSjabloon = b.sjabloon_id ?? standaardSjabloon(docSoort)
               return (
                 <div key={b.id} className={`rounded-lg border border-slate-200 px-4 py-3 ${wegInBouw7 ? 'bg-slate-50' : ''}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -664,6 +701,43 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       )}
                     </div>
                   </div>
+                  {/* Opmaak van het document dat de partij krijgt — ook ná het aanmaken nog te
+                      wisselen; anders zit je vast aan de keuze uit het voorstel. Alleen bij een
+                      inkoop die in Bouw7 staat: die krijgt de Versturen-knop met document. */}
+                  {inBouw7 && !isVerstuurd && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-500">Opmaak</span>
+                      {sjabloonLijst.length === 0 ? (
+                        <span className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                          Nog geen sjabloon voor {docSoort === 'oa_contract' ? 'een opdracht' : 'een inkooporder'} —
+                          maak er een aan bij Instellingen → Documentsjablonen.
+                        </span>
+                      ) : (
+                        <>
+                          <select
+                            value={gekozenSjabloon}
+                            onChange={e => kiesSjabloon(b, e.target.value)}
+                            className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-everts/40"
+                          >
+                            {sjabloonLijst.map(s => (
+                              <option key={s.id} value={s.id} disabled={!s.heeftTemplate}>
+                                {s.naam}{s.heeftTemplate ? '' : ' (geen Word-template)'}
+                              </option>
+                            ))}
+                          </select>
+                          {dossierId && gekozenSjabloon && (
+                            <a
+                              href={`/api/documenten/preview?sjabloon_id=${gekozenSjabloon}&dossier_id=${dossierId}&bestelling_id=${b.id}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[11px] text-everts hover:underline"
+                            >
+                              Voorbeeld bekijken →
+                            </a>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   {wegInBouw7 && (
                     <p className="mt-2 text-xs text-slate-500 bg-white border border-slate-200 rounded px-2 py-1.5">
                       Dit document bestaat niet meer in Bouw7. De regels tellen niet meer als besteld en

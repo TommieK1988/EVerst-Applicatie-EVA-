@@ -174,8 +174,13 @@ export async function bestellingOrdernummer(
  *
  * De bestelling-id komt uit de client (preview-URL, PDF-body). Zonder deze check
  * kan iemand met leesrecht op één dossier de regels en leveranciersprijzen van een
- * ander dossier in een document laten renderen. De keten is
- * bestelling → werkbegroting → calc-project → dossiers.everts_calc_project_id.
+ * ander dossier in een document laten renderen.
+ *
+ * Het anker is `werkbegrotingen.dossier_id` — dat is wat `syncWerkbegrotingNaarSupabase`
+ * altijd vult. `project_id` blijft leeg zodra de calculatie een synthetisch project-id
+ * heeft ("wb-direct-…"), en dat is bij verreweg de meeste werkbegrotingen zo; die keten
+ * alleen volgen keurde elke inkoop af. Voor oude rijen zonder dossier_id blijft de
+ * calc-project-keten (`dossiers.everts_calc_project_id`) als terugval staan.
  */
 export async function bestellingHoortBijDossier(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -193,10 +198,13 @@ export async function bestellingHoortBijDossier(
 
     const { data: wb } = await supabase
       .from('werkbegrotingen')
-      .select('project_id')
+      .select('dossier_id, project_id')
       .eq('id', bestelling.werkbegroting_id)
       .maybeSingle()
-    if (!wb?.project_id) return false
+    if (!wb) return false
+
+    if (wb.dossier_id) return wb.dossier_id === dossierId
+    if (!wb.project_id) return false
 
     const { data: dossier } = await supabase
       .from('dossiers')
