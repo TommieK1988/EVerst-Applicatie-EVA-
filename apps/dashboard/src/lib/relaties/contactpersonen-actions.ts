@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { Contactpersoon, ContactpersoonOrganisatie, Relatie } from '@everts/database'
+import { BOUW7_CONTACTPERSOON_VELDEN, beschermdeVelden } from './sync-velden'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -159,9 +160,25 @@ export async function updateContactpersoon(
   }
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
+
+  // Handmatig gewijzigde velden vastleggen; anders zet de Bouw7-sync ze terug.
+  const gewijzigd = beschermdeVelden(patch, BOUW7_CONTACTPERSOON_VELDEN)
+  let volledigePatch: Record<string, unknown> = patch
+  if (gewijzigd.length > 0) {
+    const { data } = await supabase
+      .from('contactpersonen')
+      .select('handmatige_velden')
+      .eq('id', id)
+      .single()
+    volledigePatch = {
+      ...patch,
+      handmatige_velden: [...new Set([...(data?.handmatige_velden ?? []), ...gewijzigd])],
+    }
+  }
+
   const { error } = await supabase
     .from('contactpersonen')
-    .update(patch)
+    .update(volledigePatch)
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }

@@ -14,8 +14,30 @@ import type {
   RelatieInkoopPrijsafspraak,
   OmzetData,
 } from '@everts/database'
+import { BOUW7_RELATIE_VELDEN, beschermdeVelden } from './sync-velden'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Voegt kolomnamen toe aan `handmatige_velden`, zodat de Bouw7-lees-sync ze niet
+ * meer overschrijft. Geeft de samengevoegde lijst terug zodat de aanroeper hem in
+ * dezelfde update kan meenemen.
+ */
+async function metHandmatigeVelden(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  tabel: 'relaties' | 'contactpersonen',
+  id: string,
+  velden: string[],
+): Promise<string[] | null> {
+  if (velden.length === 0) return null
+  const { data } = await supabase
+    .from(tabel)
+    .select('handmatige_velden')
+    .eq('id', id)
+    .single()
+  return [...new Set([...(data?.handmatige_velden ?? []), ...velden])]
+}
 
 /* ─── Organisaties ─────────────────────────────────────────────────── */
 
@@ -102,9 +124,31 @@ export async function updateOrganisatieGegevens(
   }
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
+
+  // Handmatig gewijzigde velden vastleggen; anders zet de Bouw7-sync ze terug.
+  const handmatig = await metHandmatigeVelden(
+    supabase, 'relaties', id, beschermdeVelden(patch, BOUW7_RELATIE_VELDEN),
+  )
+
   const { error } = await supabase
     .from('relaties')
-    .update(patch)
+    .update(handmatig ? { ...patch, handmatige_velden: handmatig } : patch)
+    .eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/relaties/${id}`)
+  return { ok: true }
+}
+
+/**
+ * Laat de gemarkeerde velden weer meelopen met de Bouw7-sync. De eerstvolgende
+ * volledige sync zet ze terug op de waarden uit Bouw7.
+ */
+export async function herstelBouw7Velden(id: string): Promise<ActionResult> {
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('relaties')
+    .update({ handmatige_velden: [] })
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
@@ -133,9 +177,10 @@ export async function toggleOrganisatieActief(
   actief: boolean
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
+  const handmatig = await metHandmatigeVelden(supabase, 'relaties', id, ['actief'])
   const { error } = await supabase
     .from('relaties')
-    .update({ actief })
+    .update({ actief, handmatige_velden: handmatig ?? ['actief'] })
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }

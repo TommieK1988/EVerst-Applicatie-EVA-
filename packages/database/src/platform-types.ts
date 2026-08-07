@@ -104,6 +104,10 @@ export type Relatie = {
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null
   sync_vergrendeld: boolean
+  /** Laatst uit Bouw7 afgeleide type; de overige types zijn in EVA toegevoegd. */
+  bouw7_type: OrganisatieType | null
+  /** Kolommen die in EVA handmatig zijn aangepast en die de Bouw7-sync niet meer overschrijft. */
+  handmatige_velden: string[]
   created_at: string
   updated_at: string
   created_by: string | null
@@ -151,6 +155,8 @@ export type Contactpersoon = {
   bouw7_laatst_sync: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   sync_vergrendeld: boolean
+  /** Kolommen die in EVA handmatig zijn aangepast en die de Bouw7-sync niet meer overschrijft. */
+  handmatige_velden: string[]
   created_at: string
   updated_at: string
   created_by: string | null

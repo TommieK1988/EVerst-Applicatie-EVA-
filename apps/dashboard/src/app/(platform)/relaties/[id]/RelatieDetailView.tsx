@@ -26,6 +26,7 @@ import {
 import {
   updateOrganisatieGegevens,
   updateOrganisatieTypes,
+  herstelBouw7Velden,
   upsertFactuuradres,
   deleteFactuuradres,
   upsertBankgegevens,
@@ -89,7 +90,12 @@ function TypeBadgeRij({ types }: { types: OrganisatieType[] }) {
 
 /* ─── Types bewerken blok ────────────────────────────────────────────── */
 
-function TypesBlok({ relatieId, initial }: { relatieId: string; initial: OrganisatieType[] }) {
+function TypesBlok({ relatieId, initial, bouw7Type }: {
+  relatieId: string
+  initial: OrganisatieType[]
+  /** Type dat uit Bouw7 komt; dat blijft staan, de rest beheert EVA zelf. */
+  bouw7Type: OrganisatieType | null
+}) {
   const [types, setTypes] = useState<OrganisatieType[]>(initial)
   const [bezig, setBezig] = useState(false)
   const router = useRouter()
@@ -114,33 +120,94 @@ function TypesBlok({ relatieId, initial }: { relatieId: string; initial: Organis
   }
 
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      {ALLE_TYPES.map(t => {
-        const actief = types.includes(t)
-        return (
-          <button
-            key={t}
-            onClick={() => !bezig && toggle(t)}
-            disabled={bezig || (actief && types.length === 1)}
-            style={{
-              padding: '4px 12px', borderRadius: 20, border: 'none', cursor: bezig ? 'wait' : 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600,
-              transition: 'all 0.15s',
-              opacity: bezig ? 0.6 : 1,
-              background: actief
-                ? (t === 'opdrachtgever' ? '#ecfaf0' : t === 'leverancier' ? '#eff8ff' : '#fff6ec')
-                : 'var(--bg-subtle)',
-              color: actief
-                ? (t === 'opdrachtgever' ? '#0a5e28' : t === 'leverancier' ? '#175cd3' : '#b85a00')
-                : 'var(--fg-muted)',
-              outline: actief ? '2px solid currentColor' : '1px solid var(--border)',
-              outlineOffset: actief ? -1 : 0,
-            }}
-          >
-            {organisatieTypeLabels[t]}
-          </button>
-        )
-      })}
+    <div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {ALLE_TYPES.map(t => {
+          const actief = types.includes(t)
+          // Het Bouw7-type is niet uit te zetten: de sync zet het bij de volgende run terug.
+          const vast = t === bouw7Type
+          return (
+            <button
+              key={t}
+              onClick={() => !bezig && !vast && toggle(t)}
+              disabled={bezig || vast || (actief && types.length === 1)}
+              title={vast ? 'Dit type komt uit Bouw7 en kan alleen daar gewijzigd worden.' : undefined}
+              style={{
+                padding: '4px 12px', borderRadius: 20, border: 'none',
+                cursor: bezig ? 'wait' : vast ? 'default' : 'pointer',
+                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600,
+                transition: 'all 0.15s',
+                opacity: bezig ? 0.6 : 1,
+                background: actief
+                  ? (t === 'opdrachtgever' ? '#ecfaf0' : t === 'leverancier' ? '#eff8ff' : '#fff6ec')
+                  : 'var(--bg-subtle)',
+                color: actief
+                  ? (t === 'opdrachtgever' ? '#0a5e28' : t === 'leverancier' ? '#175cd3' : '#b85a00')
+                  : 'var(--fg-muted)',
+                outline: actief ? '2px solid currentColor' : '1px solid var(--border)',
+                outlineOffset: actief ? -1 : 0,
+              }}
+            >
+              {organisatieTypeLabels[t]}
+            </button>
+          )
+        })}
+      </div>
+      {bouw7Type && (
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+          {organisatieTypeLabels[bouw7Type]} komt uit Bouw7. Zet je er zelf een type bij, dan blijft dat in EVA staan.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ─── Handmatig aangepaste velden ────────────────────────────────────── */
+
+const HANDMATIG_VELD_LABELS: Record<string, string> = {
+  naam: 'naam', kvk_nummer: 'KvK-nummer', btw_nummer: 'BTW-nummer', email: 'e-mailadres',
+  telefoon: 'telefoon', mobiel: 'mobiel', opmerkingen: 'opmerkingen',
+  adres_straat: 'straat', adres_postcode: 'postcode', adres_plaats: 'plaats',
+  adres_land: 'land', actief: 'actief',
+}
+
+/**
+ * Toont welke velden in EVA zijn aangepast en dus niet meer uit Bouw7 bijgewerkt
+ * worden, met de mogelijkheid ze weer te laten meelopen met de sync.
+ */
+function HandmatigeVeldenNotitie({ relatie }: { relatie: Relatie }) {
+  const [bezig, setBezig] = useState(false)
+  const router = useRouter()
+  const { bevestig } = useDialogen()
+
+  const velden = (relatie.handmatige_velden ?? []).filter(v => v in HANDMATIG_VELD_LABELS)
+  if (velden.length === 0 || !relatie.bouw7_id) return null
+
+  async function herstel() {
+    if (!await bevestig({
+      titel: 'Weer bijwerken vanuit Bouw7?',
+      omschrijving: 'De eerstvolgende synchronisatie zet deze velden terug op de waarden uit Bouw7. Je aanpassingen in EVA gaan daarbij verloren.',
+      bevestigLabel: 'Weer laten bijwerken',
+    })) return
+    setBezig(true)
+    const res = await herstelBouw7Velden(relatie.id)
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    router.refresh()
+    toast.success('Velden volgen weer Bouw7')
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 flex items-start justify-between gap-3">
+      <p className="text-[11.5px] text-neutral-500 leading-snug">
+        In EVA aangepast en niet meer bijgewerkt vanuit Bouw7:{' '}
+        <span className="font-semibold text-neutral-700">
+          {velden.map(v => HANDMATIG_VELD_LABELS[v]).join(', ')}
+        </span>
+      </p>
+      <Button variant="ghost" size="sm" onClick={herstel} disabled={bezig}>
+        {bezig ? 'Bezig…' : 'Weer uit Bouw7'}
+      </Button>
     </div>
   )
 }
@@ -258,6 +325,7 @@ function BasisgegevensBlok({ relatie }: { relatie: Relatie }) {
             relatie.adres_land !== 'Nederland' ? relatie.adres_land : null,
           ].filter(Boolean).join(', ') || null} />
           <Rij label="Betalingstermijn" waarde={relatie.betalingstermijn_dagen != null ? `${relatie.betalingstermijn_dagen} dagen` : null} />
+          <HandmatigeVeldenNotitie relatie={relatie} />
         </div>
       )}
     </Blok>
@@ -1265,7 +1333,7 @@ export default function RelatieDetailView({
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--fg)', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
             {relatie.naam}
           </h1>
-          <TypesBlok relatieId={relatie.id} initial={relatie.types} />
+          <TypesBlok relatieId={relatie.id} initial={relatie.types} bouw7Type={relatie.bouw7_type ?? null} />
           {!relatie.actief && (
             <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>Inactief</span>
           )}

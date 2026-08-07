@@ -9,6 +9,7 @@ import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
+import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
 
 export type SyncResult = {
   nieuw: number
@@ -179,7 +180,12 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // 3. Pre-fetch bestaande relaties (één DB-query i.p.v. N)
     const { data: dbRelaties, error: selectErr } = await supabase
       .from('relaties')
-      .select('id, bouw7_id, sync_vergrendeld, bouw7_sync_hash')
+      // De inhoudelijke kolommen komen mee zodat handmatig aangepaste velden
+      // ongewijzigd teruggeschreven kunnen worden (zie metBehoudVanHandmatigeVelden).
+      .select(
+        'id, bouw7_id, sync_vergrendeld, bouw7_sync_hash, types, bouw7_type, handmatige_velden, '
+        + BOUW7_RELATIE_VELDEN.join(', ')
+      )
       .not('bouw7_id', 'is', null)
     if (selectErr) throw new Error(`Schema cache fout bij ophalen relaties: ${selectErr.message}`)
 
@@ -219,6 +225,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         adres_land:        c.countryCode ?? 'Nederland',
         actief:            c.isActive !== false,
         bouw7_id:          bouw7IdStr,
+        bouw7_type:        orgType,
         bouw7_sync_hash:   hash,
         bouw7_laatst_sync: new Date().toISOString(),
         bouw7_sync_status: 'synced',
@@ -237,7 +244,16 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const nieuweRelaties = changedRelatieRows.filter(r => !relatieMap.has(r.bouw7_id as string))
     const bestaandeRelaties = changedRelatieRows
       .filter(r => relatieMap.has(r.bouw7_id as string))
-      .map(r => ({ ...r, id: relatieMap.get(r.bouw7_id as string)?.id as string }))
+      .map(r => {
+        const bestaand = relatieMap.get(r.bouw7_id as string)
+        const rij = metBehoudVanHandmatigeVelden(r, bestaand, BOUW7_RELATIE_VELDEN)
+        return {
+          ...rij,
+          // Bouw7 levert het hoofdtype; in EVA toegevoegde types blijven ernaast staan.
+          types: voegTypesSamen(r.bouw7_type as OrganisatieType, bestaand?.types, bestaand?.bouw7_type),
+          id: bestaand?.id as string,
+        }
+      })
 
     orgResult.nieuw = nieuweRelaties.length
     orgResult.bijgewerkt = bestaandeRelaties.length
@@ -325,7 +341,10 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N)
     const { data: dbCps } = await supabase
       .from('contactpersonen')
-      .select('id, bouw7_id, sync_vergrendeld, bouw7_sync_hash')
+      .select(
+        'id, bouw7_id, sync_vergrendeld, bouw7_sync_hash, handmatige_velden, '
+        + BOUW7_CONTACTPERSOON_VELDEN.join(', ')
+      )
       .not('bouw7_id', 'is', null)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -372,7 +391,13 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const nieuweCps = changedCpRows.filter(r => !cpMap.has(r.bouw7_id as string))
     const bestaandeCps = changedCpRows
       .filter(r => cpMap.has(r.bouw7_id as string))
-      .map(r => ({ ...r, id: cpMap.get(r.bouw7_id as string)?.id as string }))
+      .map(r => {
+        const bestaand = cpMap.get(r.bouw7_id as string)
+        return {
+          ...metBehoudVanHandmatigeVelden(r, bestaand, BOUW7_CONTACTPERSOON_VELDEN),
+          id: bestaand?.id as string,
+        }
+      })
 
     cpResult.nieuw = nieuweCps.length
     cpResult.bijgewerkt = bestaandeCps.length
@@ -420,10 +445,12 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       }
     }
 
-    // 14. Soft-delete: markeer organisaties die niet meer in Bouw7 staan als inactief
+    // 14. Soft-delete: markeer organisaties die niet meer in Bouw7 staan als inactief.
+    //     Wie de actief-vlag in EVA zelf heeft gezet, houdt zijn eigen waarde.
     const toDeactivate = (dbRelaties ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((r: any) => !bouw7IdsInResponse.has(r.bouw7_id) && !r.sync_vergrendeld)
+      .filter((r: any) => !bouw7IdsInResponse.has(r.bouw7_id) && !r.sync_vergrendeld
+        && !(r.handmatige_velden ?? []).includes('actief'))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((r: any) => r.id)
 
@@ -442,6 +469,52 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
   await logSync('relaties', 'in', orgResult, Date.now() - start)
   await logSync('contactpersonen', 'in', cpResult, Date.now() - start)
   return { organisaties: orgResult, contactpersonen: cpResult }
+}
+
+/**
+ * Voegt het type uit Bouw7 samen met de types die in EVA zijn toegevoegd.
+ *
+ * Bouw7 kent één contacttype per relatie, EVA staat er meerdere toe (een leverancier
+ * die óók onderaannemer is). Bouw7 blijft leidend voor het hoofdtype; wat een
+ * gebruiker daarnaast aanvinkte blijft staan.
+ *
+ * `vorigBouw7Type` maakt duidelijk welk type van Bouw7 kwam: verandert het contacttype
+ * daar, dan verdwijnt het oude en blijven alleen de EVA-toevoegingen over. Is het nog
+ * niet vastgelegd (relaties van vóór deze wijziging), dan blijven alle bestaande types
+ * behouden — liever een type te veel dan een handmatige aanmerking kwijt.
+ */
+function voegTypesSamen(
+  bouw7Type: OrganisatieType,
+  bestaandeTypes: OrganisatieType[] | null | undefined,
+  vorigBouw7Type: OrganisatieType | null | undefined,
+): OrganisatieType[] {
+  const extras = (bestaandeTypes ?? []).filter(
+    t => t !== bouw7Type && (vorigBouw7Type == null || t !== vorigBouw7Type)
+  )
+  return [bouw7Type, ...extras]
+}
+
+/**
+ * Beschermt de in EVA handmatig aangepaste velden tegen de sync-payload.
+ *
+ * De EVA-waarde wordt teruggeschreven in plaats van de sleutel weggelaten: een
+ * bulk-upsert eist dat alle rijen precies dezelfde kolommen hebben. `toegestaan`
+ * begrenst dit tot inhoudelijke kolommen — de bouw7_*-administratie (hash,
+ * sync-status) blijft altijd meelopen.
+ */
+function metBehoudVanHandmatigeVelden(
+  row: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  bestaand: any,
+  toegestaan: readonly string[],
+): Record<string, unknown> {
+  const velden = bestaand?.handmatige_velden as string[] | undefined
+  if (!velden?.length) return row
+  const uit = { ...row }
+  for (const veld of velden) {
+    if (toegestaan.includes(veld)) uit[veld] = bestaand[veld]
+  }
+  return uit
 }
 
 /** Splits "Voornaam [tussenvoegsel] Achternaam" in twee delen. */
