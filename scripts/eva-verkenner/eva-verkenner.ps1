@@ -36,6 +36,26 @@ $ToegestaneHosts = @(
   'evertsgroep-my.sharepoint.com'
 )
 
+# Elke aanroep wordt gelogd. Zonder logboek is niet vast te stellen of een klik
+# in EVA de pc überhaupt bereikt — de handler draait onzichtbaar, dus "er gebeurt
+# niets" kan net zo goed betekenen dat de browser hem nooit heeft gestart.
+# Altijd naar LOCALAPPDATA: bij een machine-installatie staat het script in
+# Program Files en is dat niet schrijfbaar voor de gebruiker.
+$LogBestand = Join-Path $env:LOCALAPPDATA 'EVA\eva-verkenner.log'
+
+function Schrijf-Log([string]$Tekst) {
+  try {
+    $map = Split-Path $LogBestand -Parent
+    if (-not (Test-Path -LiteralPath $map)) { New-Item -ItemType Directory -Path $map -Force | Out-Null }
+    Add-Content -LiteralPath $LogBestand -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  ' + $Tekst) -Encoding UTF8
+    # Niet laten aangroeien: alleen de laatste 200 regels bewaren.
+    $regels = @(Get-Content -LiteralPath $LogBestand -ErrorAction SilentlyContinue)
+    if ($regels.Count -gt 200) {
+      Set-Content -LiteralPath $LogBestand -Value ($regels | Select-Object -Last 200) -Encoding UTF8
+    }
+  } catch { }
+}
+
 function Toon-Fout([string]$Tekst) {
   try {
     Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
@@ -163,6 +183,8 @@ function Get-WebDavPad([System.Uri]$Doel, [string[]]$Segmenten) {
 }
 
 try {
+  if (-not $Controleer) { Schrijf-Log ("aangeroepen  <- " + $Uri) }
+
   Add-Type -AssemblyName System.Web -ErrorAction Stop
 
   $doelInfo = Get-Doel $Uri
@@ -179,9 +201,12 @@ try {
     return
   }
 
+  Schrijf-Log ("openen [$bron] $pad")
   Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$pad`""
+  Schrijf-Log 'Verkenner gestart'
 } catch {
   if ($Controleer) { throw }
+  Schrijf-Log ('FOUT: ' + $_.Exception.Message)
   Toon-Fout "De map kon niet in Verkenner geopend worden.`n`n$($_.Exception.Message)"
   exit 1
 }
