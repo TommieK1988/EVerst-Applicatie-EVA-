@@ -1,8 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { hashWerkbegrotingRegel } from '@/lib/everts-calc/goedkeuring-hash'
+import { hashWerkbegrotingRegelInhoud, kostenInCenten } from '@/lib/everts-calc/goedkeuring-hash'
 import type { WerkbegrotingComponent, WerkbegrotingRegel } from '@/lib/everts-calc/types'
-import type { GoedkeuringRegelSnapshot } from './types'
+import { naarRegelSnapshot, type GoedkeuringRegelSnapshot } from './types'
 
 export type WerkbegrotingServerStatus = {
   werkbegrotingId: string
@@ -40,9 +40,9 @@ export async function berekenWerkbegrotingStatus(werkbegrotingId: string): Promi
   if (goedkeuring) {
     const { data: rows } = await db
       .from('werkbegroting_goedkeuring_regels')
-      .select('regel_id, regel_hash')
+      .select('regel_id, regel_hash, kosten_centen')
       .eq('goedkeuring_id', goedkeuring.id)
-    snapshot = (rows ?? []) as GoedkeuringRegelSnapshot[]
+    snapshot = (rows ?? []).map(naarRegelSnapshot)
   }
 
   // 2. Actuele actieve regels + componenten.
@@ -63,7 +63,50 @@ export async function berekenWerkbegrotingStatus(werkbegrotingId: string): Promi
     componenten = (compRows ?? []) as WerkbegrotingComponent[]
   }
 
-  return berekenStatusUitData(werkbegrotingId, goedkeuring?.id ?? null, snapshot, regels, componenten)
+  const status = await berekenStatusUitData(werkbegrotingId, goedkeuring?.id ?? null, snapshot, regels, componenten)
+  if (goedkeuring) await vulOntbrekendeKosten(db, goedkeuring.id, status, regels, componenten)
+  return status
+}
+
+/**
+ * Vult `kosten_centen` alsnog voor snapshots van vóór die kolom — maar alleen waar
+ * dat aantoonbaar veilig is: als de regel nu nog exact gelijk is aan het geaccordeerde
+ * origineel (de inhoudshash matcht), dan is de huidige kostprijs ook de geaccordeerde
+ * kostprijs.
+ *
+ * Zonder dit zouden opdrachten die al geaccordeerd waren tot hun volgende
+ * goedkeuringsronde de oude, strenge regel houden: een leverancierswissel zou daar
+ * alsnog om een nieuw akkoord vragen. `regel_hash` blijft ongemoeid, zodat een
+ * oudere deploy op dezelfde database niets merkt. Best effort — mislukt de update,
+ * dan gebeurt het de volgende keer.
+ */
+async function vulOntbrekendeKosten(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  goedkeuringId: string,
+  status: WerkbegrotingServerStatus,
+  regels: WerkbegrotingRegel[],
+  componenten: WerkbegrotingComponent[],
+): Promise<void> {
+  const zonderBedrag = status.snapshot.filter(s => s.kosten_centen == null)
+  if (zonderBedrag.length === 0) return
+
+  const goedgekeurd = new Set(status.regels.filter(r => r.goedgekeurd).map(r => r.regel_id))
+  const regelById = new Map(regels.map(r => [r.id, r]))
+
+  for (const rij of zonderBedrag) {
+    if (!goedgekeurd.has(rij.regel_id)) continue
+    const regel = regelById.get(rij.regel_id)
+    if (!regel) continue
+    const centen = kostenInCenten(regel, componenten.filter(c => c.werkbegroting_regel_id === regel.id))
+    try {
+      await db.from('werkbegroting_goedkeuring_regels')
+        .update({ kosten_centen: centen })
+        .eq('goedkeuring_id', goedkeuringId)
+        .eq('regel_id', rij.regel_id)
+      rij.kosten_centen = centen
+    } catch { /* stil — volgende keer opnieuw */ }
+  }
 }
 
 /** Pure variant: status berekenen uit al opgehaalde data (hergebruik in gates). */
@@ -74,7 +117,7 @@ export async function berekenStatusUitData(
   actieveRegels: WerkbegrotingRegel[],
   actieveComponenten: WerkbegrotingComponent[],
 ): Promise<WerkbegrotingServerStatus> {
-  const snapshotMap = new Map(snapshot.map(s => [s.regel_id, s.regel_hash]))
+  const snapshotMap = new Map(snapshot.map(s => [s.regel_id, s]))
   const compsPerRegel = new Map<string, WerkbegrotingComponent[]>()
   for (const c of actieveComponenten) {
     const arr = compsPerRegel.get(c.werkbegroting_regel_id) ?? []
@@ -88,8 +131,14 @@ export async function berekenStatusUitData(
     const verwacht = snapshotMap.get(regel.id)
     let goedgekeurd = false
     if (verwacht != null) {
-      const actueel = await hashWerkbegrotingRegel(regel, compsPerRegel.get(regel.id) ?? [])
-      goedgekeurd = actueel === verwacht
+      const comps = compsPerRegel.get(regel.id) ?? []
+      // Het akkoord gaat over geld: zolang de kostprijs gelijk blijft, valt de regel
+      // eronder — ook na een andere leverancier, omschrijving of bewakingscode.
+      // Snapshots van vóór de kostenkolom hebben dat bedrag nog niet; die vallen terug
+      // op de inhoudshash (zie vulOntbrekendeKosten, dat vult ze alsnog aan).
+      goedgekeurd = verwacht.kosten_centen != null
+        ? kostenInCenten(regel, comps) === verwacht.kosten_centen
+        : (await hashWerkbegrotingRegelInhoud(regel, comps)) === verwacht.regel_hash
     }
     if (!goedgekeurd) alleGoedgekeurd = false
     regels.push({ regel_id: regel.id, goedgekeurd })

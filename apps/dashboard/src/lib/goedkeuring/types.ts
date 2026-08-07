@@ -78,7 +78,27 @@ export type GoedkeuringMetDetails = Goedkeuring & {
 /** Snapshot-rij: welke regel (met welke inhoud) dekte de laatste goedkeuring. */
 export type GoedkeuringRegelSnapshot = {
   regel_id: string
+  /** Hash over de volledige regelinhoud — terugval + compatibiliteit met oudere deploys. */
   regel_hash: string
+  /** Geaccordeerde kostprijs in centen; de maatstaf voor "moet dit opnieuw langs de controller?". */
+  kosten_centen: number | null
+}
+
+/**
+ * Snapshotrij uit Supabase normaliseren. `kosten_centen` is een bigint en die komt
+ * er soms als string uit; zonder deze omzetting zou de bedragvergelijking altijd
+ * ongelijk zijn en dus elke geaccordeerde regel als gewijzigd markeren.
+ */
+export function naarRegelSnapshot(rij: {
+  regel_id: string
+  regel_hash: string
+  kosten_centen: number | string | null
+}): GoedkeuringRegelSnapshot {
+  return {
+    regel_id: rij.regel_id,
+    regel_hash: rij.regel_hash,
+    kosten_centen: rij.kosten_centen == null ? null : Number(rij.kosten_centen),
+  }
 }
 
 /** Taken-titels per objecttype ('Werkbegroting controleren' bestond al — niet wijzigen i.v.m. dedup). */

@@ -444,10 +444,11 @@ export async function maakWerkbegrotingControleTaak(dossierId: string): Promise<
 // ─── Goedkeuring: accorderen met regel-snapshot + gates ───────────────────────
 //
 // De goedkeuringsstatus wordt op regelniveau bijgehouden: bij accorderen wordt per
-// actieve regel een hash (regelvelden + actieve componenten) vastgelegd in
-// werkbegroting_goedkeuring_regels. Een regel is "geaccordeerd" zolang zijn actuele
-// hash matcht met dat snapshot. Alle gates syncen eerst de client-payload en
-// rekenen daarna server-side — de client kan niets forceren.
+// actieve regel zijn kostprijs vastgelegd in werkbegroting_goedkeuring_regels. Een
+// regel is "geaccordeerd" zolang dat bedrag ongewijzigd is; leverancier, omschrijving
+// en bewakingscode mogen daarna vrij bewegen (zie kostenInCenten). Alle gates
+// syncen eerst de client-payload en rekenen daarna server-side — de client kan niets
+// forceren.
 
 export type WerkbegrotingGoedkeuringStatusResultaat = {
   laatsteGoedkeuringId: string | null
@@ -455,7 +456,7 @@ export type WerkbegrotingGoedkeuringStatusResultaat = {
   regels: { regel_id: string; goedgekeurd: boolean }[]
   volledigGoedgekeurd: boolean
   /** Snapshot van de laatste goedgekeurde ronde — voor client-side badges. */
-  snapshot: { regel_id: string; regel_hash: string }[]
+  snapshot: { regel_id: string; regel_hash: string; kosten_centen: number | null }[]
 }
 
 /** Regel-goedkeuringsstatus voor de UI (badges + headerteller). */
@@ -493,7 +494,7 @@ export async function accordeerWerkbegroting(
 ): Promise<AccordeerResultaat> {
   const { bepaalBeoordeelContext } = await import('@/lib/goedkeuring/autorisatie')
   const { keurGoed, refreshDossierWbVlag } = await import('@/lib/goedkeuring/actions')
-  const { hashWerkbegrotingRegel } = await import('@/lib/everts-calc/goedkeuring-hash')
+  const { hashWerkbegrotingRegelInhoud, kostenInCenten } = await import('@/lib/everts-calc/goedkeuring-hash')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
@@ -522,11 +523,14 @@ export async function accordeerWerkbegroting(
     arr.push(c)
     compsPerRegel.set(c.werkbegroting_regel_id, arr)
   }
+  // Het bedrag (kosten_centen) is waar de goedkeuring op bewaakt wordt; de inhoudshash
+  // gaat mee zodat een deploy met de oude vergelijking op dezelfde database blijft werken.
   const snapshotRijen = await Promise.all(
     actieveRegels.map(async r => ({
       goedkeuring_id: goedkeuringId,
       regel_id: r.id,
-      regel_hash: await hashWerkbegrotingRegel(r, compsPerRegel.get(r.id) ?? []),
+      regel_hash: await hashWerkbegrotingRegelInhoud(r, compsPerRegel.get(r.id) ?? []),
+      kosten_centen: kostenInCenten(r, compsPerRegel.get(r.id) ?? []),
     })),
   )
   await db.from('werkbegroting_goedkeuring_regels').delete().eq('goedkeuring_id', goedkeuringId)

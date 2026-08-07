@@ -1399,7 +1399,7 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
         [
           { title: 'Regels & componenten', body: 'Werk per regel met normhoeveelheden, tarieven en uurtypes. Bij de overgang offerte → opdracht wordt de calculatie automatisch overgenomen als startpunt van de werkbegroting.' },
           { title: 'Bestellen via Bouw7', body: 'Vanuit de regels maak je bestelregels aan in Bouw7. Bestelde codes worden vergrendeld in het grid; wijzigen loopt per regel (aanmaken/bijwerken) zonder de rest te verstoren.' },
-          { title: 'Goedkeuring & prognose', body: 'De werkbegroting moet op regelniveau geaccordeerd worden (door controller of directie) voordat er besteld of geprognosticeerd kan worden. Een WB!-badge geeft aan dat er ná akkoord nog wijzigingen zijn. De prognose is voorbehouden aan controller/directie.' },
+          { title: 'Goedkeuring & prognose', body: 'De werkbegroting moet op regelniveau geaccordeerd worden (door controller of directie) voordat er besteld of geprognosticeerd kan worden. Het akkoord gaat over het geld: alleen als het bedrag van een regel verandert (hoeveelheid, norm, tarief, een component erbij of eraf, of een regel toegevoegd of verwijderd) vervalt de goedkeuring en verschijnt de WB!-badge. Een andere leverancier kiezen, een omschrijving bijwerken of een regel naar een andere bewakingscode slepen kan dus zonder nieuw akkoord. De prognose is voorbehouden aan controller/directie.' },
         ])
 
     case 'planning':

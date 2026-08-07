@@ -7,7 +7,7 @@ import { bepaalBeoordelingsRoute, haalBeoordelaar, magBeoordelaarZijn } from './
 import { maakBeoordeelTaak, sluitBeoordeelTaken, type BeoordeelTaakResultaat } from './taken'
 import { berekenWerkbegrotingStatus } from './werkbegroting-status'
 import {
-  AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL,
+  AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL, naarRegelSnapshot,
   type BeoordelaarRef, type BeoordelingsRoute,
   type Goedkeuring, type GoedkeuringGebeurtenis, type GoedkeuringMetDetails,
   type GoedkeuringObjectType, type GoedkeuringOpmerking, type GoedkeuringRegelSnapshot, type GoedkeuringRol,
@@ -122,9 +122,9 @@ export async function getGoedkeuring(
     if (goedgekeurd) {
       const { data: rows } = await db
         .from('werkbegroting_goedkeuring_regels')
-        .select('regel_id, regel_hash')
+        .select('regel_id, regel_hash, kosten_centen')
         .eq('goedkeuring_id', goedgekeurd.id)
-      regelSnapshot = (rows ?? []) as GoedkeuringRegelSnapshot[]
+      regelSnapshot = (rows ?? []).map(naarRegelSnapshot)
     }
   }
 
