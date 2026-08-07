@@ -21,6 +21,7 @@ import type {
 } from '@/lib/everts-calc/types'
 import RelatieZoekveld from './RelatieZoekveld'
 import MateriaalZoekveld from './MateriaalZoekveld'
+import KostengroepKiezer from './KostengroepKiezer'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
 
 interface Props {
@@ -77,6 +78,46 @@ function leverancierVelden(
   return type === 'onderaanneming'
     ? { aannemersnaam: n, leverancier_naam: undefined }
     : { leverancier_naam: n, aannemersnaam: undefined }
+}
+
+/**
+ * Laat een scroll-container meebewegen zolang er gesleept wordt en de muis in de
+ * boven- of onderrand van die container zit. Zonder dit kun je een regel niet naar
+ * een kostengroep slepen die buiten beeld staat: HTML5-drag scrollt zelf niet.
+ */
+function useSleepAutoScroll(
+  ref: React.RefObject<HTMLElement | null>,
+  actief: boolean,
+) {
+  useEffect(() => {
+    if (!actief) return
+    const el = ref.current
+    if (!el) return
+
+    const ZONE = 90   // px vanaf de rand waarbinnen gescrold wordt
+    const MAX  = 22   // px per frame, op de rand zelf
+
+    let muisY: number | null = null
+    let frame = 0
+
+    const onDragOver = (e: DragEvent) => { muisY = e.clientY }
+    const stap = () => {
+      frame = requestAnimationFrame(stap)
+      if (muisY === null) return
+      const r = el.getBoundingClientRect()
+      let delta = 0
+      if (muisY < r.top + ZONE)         delta = -MAX * Math.min(1, (r.top + ZONE - muisY) / ZONE)
+      else if (muisY > r.bottom - ZONE) delta =  MAX * Math.min(1, (muisY - (r.bottom - ZONE)) / ZONE)
+      if (delta !== 0) el.scrollTop += delta
+    }
+
+    window.addEventListener('dragover', onDragOver)
+    frame = requestAnimationFrame(stap)
+    return () => {
+      window.removeEventListener('dragover', onDragOver)
+      cancelAnimationFrame(frame)
+    }
+  }, [ref, actief])
 }
 
 // ─── Kolom definities ──────────────────────────────────────────────────────────
@@ -498,6 +539,10 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const [dragCompId,  setDragCompId]  = useState<string | null>(null)
   const [dragOverSep, setDragOverSep] = useState<string | null>(null)
 
+  // Scroll-container van de tabel — nodig voor auto-scroll tijdens slepen
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useSleepAutoScroll(scrollRef, dragCompId !== null)
+
   // Instellingen (standaard kostengroepen) — geabonneerd op de hydratie uit Supabase
   const instellingen = useInstellingen()
 
@@ -588,9 +633,10 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   }
   const onColDragEnd = () => { setDragCol(null); setDragOverCol(null) }
 
-  // ─── Kostengroep datalist ──────────────────────────────────────────────────
+  // ─── Kostengroep-lijst ─────────────────────────────────────────────────────
   // Bij een Bouw7-gekoppeld project: de projectbewakingscodes (kostengroep === bewakingscode).
   // Anders (EVA-origine): de eerder gebruikte kostengroepen + de standaardlijst.
+  const heeftBewakingscodes = !!bewakingscodes && bewakingscodes.length > 0
   const alleKostengroepen = useMemo((): { value: string; label: string | null }[] => {
     if (bewakingscodes && bewakingscodes.length > 0) {
       // Waarde = "CODE — Naam" zodat gelijk-genummerde codes apart kiesbaar zijn en de
@@ -781,6 +827,30 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     setRegels(prev => prev.map(r => r.id === regelId ? bij : r))
     onWijziging()
   }, [regels, onWijziging, regelVergrendeld, meldVergrendeld])
+
+  /**
+   * Gesleepte regel(s) in een kostengroep zetten. Sleep je een regel die in de
+   * selectie zit, dan verhuist de hele selectie mee — anders alleen die ene regel.
+   */
+  const verplaatsNaarKostengroep = useCallback((label: string) => {
+    if (!dragCompId) return
+    const doel = label === 'Geen kostengroep' ? undefined : label
+    if (doel && regelVergrendeld(doel)) { meldVergrendeld(); setDragCompId(null); setDragOverSep(null); return }
+
+    const compIds  = selectie.has(dragCompId) ? [...selectie] : [dragCompId]
+    const regelIds = new Set<string>()
+    for (const id of compIds) {
+      const comp = componenten.find(c => c.id === id)
+      if (comp) regelIds.add(comp.werkbegroting_regel_id)
+    }
+    for (const regelId of regelIds) {
+      // Al in de doelgroep → niets schrijven (anders wordt de begroting onnodig 'gewijzigd').
+      if (regels.find(r => r.id === regelId)?.kostengroep === doel) continue
+      onRegelWijzig(regelId, { kostengroep: doel })
+    }
+
+    setDragCompId(null); setDragOverSep(null)
+  }, [dragCompId, selectie, componenten, regels, regelVergrendeld, meldVergrendeld, onRegelWijzig])
 
   // Type wijzigen → eenheid auto-instellen bij arbeid
   const onTypeWijzig = useCallback((compId: string, type: WerkbegrotingComponent['type']) => {
@@ -1116,15 +1186,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
               {kgVergrendeld && (
                 <Lock className="w-3 h-3 shrink-0 text-slate-400" aria-label="Besteld in Bouw7 — vergrendeld" />
               )}
-              <input
-                list="kg-datalist"
-                value={regel.kostengroep ?? ''}
-                onChange={e => onRegelWijzig(regel.id, { kostengroep: e.target.value })}
-                readOnly={kgVergrendeld}
-                placeholder="—"
-                title={kgVergrendeld ? 'Besteld in Bouw7 — vergrendeld' : (regel.kostengroep ?? (bewakingscodes ? 'Kies een bewakingscode' : 'Kostengroep'))}
-                className={`w-full text-xs px-1 py-0.5 bg-transparent border border-transparent rounded truncate
-                  ${kgVergrendeld ? 'text-slate-400 cursor-not-allowed' : 'text-slate-600 hover:border-slate-200 focus:border-everts focus:bg-white focus:outline-none'}`}
+              <KostengroepKiezer
+                waarde={regel.kostengroep}
+                opties={alleKostengroepen}
+                vrijeTekst={!heeftBewakingscodes}
+                vergrendeld={kgVergrendeld}
+                onKies={v => onRegelWijzig(regel.id, { kostengroep: v })}
+                title={kgVergrendeld
+                  ? 'Besteld in Bouw7 — vergrendeld'
+                  : (regel.kostengroep ?? (heeftBewakingscodes ? 'Kies een bewakingscode' : 'Kies een kostengroep'))}
               />
             </div>
           </td>
@@ -1476,13 +1546,13 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           </div>
         )}
 
-        {/* Datalist kostengroepen / bewakingscodes */}
+        {/* Datalist — alleen nog voor het 'nieuwe kostengroep'-invoerveld hierboven */}
         <datalist id="kg-datalist">
           {alleKostengroepen.map(kg => <option key={kg.value} value={kg.value}>{kg.label ?? undefined}</option>)}
         </datalist>
 
-        {/* Scroll-container */}
-        <div className="flex-1 overflow-auto min-h-0">
+        {/* Scroll-container — scrollt tijdens slepen automatisch mee (useSleepAutoScroll) */}
+        <div ref={scrollRef} className="flex-1 overflow-auto min-h-0">
           <table className="border-collapse text-xs w-full" style={{ tableLayout: 'fixed', minWidth: `${totalW}px` }}>
             <colgroup>{colOrder.map(id => <col key={id} style={{ width: colWidths[id] }} />)}</colgroup>
 
@@ -1514,14 +1584,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                           : 'bg-slate-100/80 border-slate-200',
                       ].join(' ')}
                       onDragOver={e => { if (isDropTarget) { e.preventDefault(); setDragOverSep(rij.label) } }}
-                      onDragLeave={() => setDragOverSep(null)}
-                      onDrop={() => {
-                        if (!dragCompId || !isDropTarget) return
-                        const comp  = componenten.find(c => c.id === dragCompId)
-                        const regel = comp ? regels.find(r => r.id === comp.werkbegroting_regel_id) : null
-                        if (regel) onRegelWijzig(regel.id, { kostengroep: rij.label === 'Geen kostengroep' ? undefined : rij.label })
-                        setDragCompId(null); setDragOverSep(null)
-                      }}
+                      onDrop={e => { if (!isDropTarget) return; e.preventDefault(); verplaatsNaarKostengroep(rij.label) }}
                     >
                       <td colSpan={colOrder.length} className="py-1 px-3">
                         <div className="flex items-center justify-between gap-4">
@@ -1561,15 +1624,22 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                   )
                 }
 
+                // Elke regel is óók een drop-zone voor zijn eigen kostengroep: je hoeft
+                // dus niet exact op het smalle groepskopje te mikken.
+                const rijLabel     = rij.regel.kostengroep ?? 'Geen kostengroep'
+                const isDropTarget = sortering === 'kostengroep' && dragCompId !== null
                 return (
                   <tr key={`${rij.comp.id}-${rij.isSamengevoed ? 'm' : 's'}`}
                     draggable={sortering === 'kostengroep'}
                     onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragCompId(rij.comp.id) }}
                     onDragEnd={() => { setDragCompId(null); setDragOverSep(null) }}
+                    onDragOver={e => { if (isDropTarget) { e.preventDefault(); setDragOverSep(rijLabel) } }}
+                    onDrop={e => { if (!isDropTarget) return; e.preventDefault(); verplaatsNaarKostengroep(rijLabel) }}
                     className={[
                       'border-b border-slate-100 hover:bg-slate-50/50 group',
                       sortering === 'kostengroep' ? 'cursor-grab active:cursor-grabbing' : '',
                       dragCompId === rij.comp.id ? 'opacity-40' : '',
+                      isDropTarget && dragOverSep === rijLabel ? 'bg-everts/5' : '',
                       selectie.has(rij.comp.id) ? 'bg-everts-50/30' : '',
                       rij.comp.type === 'arbeid' ? 'bg-blue-50/10' : '',
                       rij.comp.type === 'onderaanneming' ? 'bg-purple-50/10' : '',
