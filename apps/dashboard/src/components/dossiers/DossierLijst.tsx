@@ -29,14 +29,6 @@ const HOOFDSTATUS_LABEL: Record<string, string> = {
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
-/** Compacte euro-weergave (afgekort) — voor smalle bedrag-kolommen. */
-function formatBedrag(bedrag: number | null): string {
-  if (bedrag == null) return '—'
-  if (bedrag >= 1_000_000) return `€ ${(bedrag / 1_000_000).toFixed(1)}M`
-  if (bedrag >= 1_000)     return `€ ${Math.round(bedrag / 1_000)}K`
-  return `€ ${bedrag}`
-}
-
 /** Volledige euro-weergave met duizendtal-scheiding. */
 function formatEuro(bedrag: number | null): string {
   if (bedrag == null) return '—'
@@ -269,13 +261,13 @@ export function DossierLijst({
     {
       key: 'bedrag',
       label: 'Bedrag',
-      breedte: 100,
+      breedte: 120,
       // Zelfde rekenregel als de kanban-kaart en het Informatie-tab, anders tonen bord en lijst
       // verschillende bedragen voor hetzelfde dossier. Zie ./kaart-bedrag.
       sorteerWaarde: d => berekenKaartBedrag(d, sectie).totaalExclBtw ?? 0,
       render: d => (
-        <span style={{ fontSize: 12.5, color: 'var(--neutral-700)', fontWeight: 500 }}>
-          {formatBedrag(berekenKaartBedrag(d, sectie).totaalExclBtw)}
+        <span style={{ fontSize: 12.5, color: 'var(--neutral-700)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+          {formatEuro(berekenKaartBedrag(d, sectie).totaalExclBtw)}
         </span>
       ),
     },
