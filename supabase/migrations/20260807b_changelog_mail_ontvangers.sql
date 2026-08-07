@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-07','verbeterd','Algemeen','Ontvangers kiezen bij het mailen',
+   'Bij het mailen vanuit EVA kies je de ontvanger nu uit een lijst in plaats van het adres over te typen. Je ziet de contactpersoon van het dossier, het contact op het werkadres, de collega''s die aan het dossier gekoppeld zijn en bij een bestelling ook de contactpersonen van de leverancier. Dit werkt bij het verzenden van een offerte, een bestelling of opdracht, een opgesteld document en de opleverrapportage — zowel bij Aan als CC. Een adres dat niet in EVA staat kun je nog gewoon zelf typen.');
