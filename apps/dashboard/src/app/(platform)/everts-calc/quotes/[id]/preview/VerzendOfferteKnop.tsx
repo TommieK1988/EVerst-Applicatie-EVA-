@@ -48,7 +48,17 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Pro
         to, cc, subject, bodyHtml: body.replace(/\n/g, '<br>'),
       })
       if (res.ok) {
-        toast.success(`Offerte verzonden · Status: ${res.status} · SharePoint: ${res.sharepoint}`)
+        // De mail is weg — het venster mag altijd dicht. Maar als de statusstap faalde moet dat
+        // een fóútmelding zijn: die stond eerder verstopt in een groene toast, waardoor een
+        // dossier dat níét op Verzonden kwam er precies zo uitzag als een dossier dat dat wél deed.
+        if (res.statusOk) {
+          toast.success(`Offerte verzonden · Status: ${res.status} · SharePoint: ${res.sharepoint}`)
+        } else {
+          toast.error(
+            `Offerte is verzonden, maar de status is niet bijgewerkt: ${res.status}. Zet de substatus handmatig op Verzonden.`,
+            { duration: 10000 },
+          )
+        }
         setOpen(false)
         onDone?.()
       } else {

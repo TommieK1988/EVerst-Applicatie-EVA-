@@ -197,6 +197,12 @@ Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, 
 > naar het maatwerkveld *Offerte Sub-status* op het Bouw7-project wordt geschreven.
 > Een eerdere poging tot `POST /quotation` liep vast op de regelvalidatie (`QuotationLine::$subtotal`,
 > `$vatTariffPercentage` en `$sortIndex` mogen niet null zijn) en is verwijderd.
+>
+> Die write gaat met `forceerBouw7: true`, dus **zonder** de conflictcheck van `substatus-attr.ts`.
+> De mail is op dat moment al verstuurd — "Verzonden" is een feit, geen voorstel, en mag niet
+> stranden op drift tussen EVA en het gedeelde maatwerkveld. Handmatige wijzigingen (statuskiezer,
+> kanban) hóuden de check wél en leggen bij een botsing de keuze voor: Bouw7 volgen of overschrijven
+> (`components/dossiers/substatus-wijzigen.ts`).
 
 ### `POST /project/delivery-ticket` — bon/leverbon
 Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `ticketDate`, `purchaseType` (int), `processed` (bool). Optioneel `cost`, `description`, `file`.

@@ -10,7 +10,8 @@ import {
 import { DossierKaart } from './DossierKaart'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
-import { updateDossierSubstatus } from '@/lib/dossiers/actions'
+import { wijzigSubstatusMetConflict } from './substatus-wijzigen'
+import { useDialogen } from '@/components/ui/dialogen'
 import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
 import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
@@ -57,6 +58,7 @@ export function DossierKanban<K extends string>({
   kolomKeyModus = 'auto', onStatusChange,
 }: Props<K>) {
   const router    = useRouter()
+  const { bevestig } = useDialogen()
 
   const [dossiers,    setDossiers]    = React.useState<DossierRij[]>(initieel)
   const [draggingId,  setDraggingId]  = React.useState<string | null>(null)
@@ -101,18 +103,16 @@ export function DossierKanban<K extends string>({
       })
     )
     // Two-way: schrijf de statuswijziging direct terug naar Bouw7 — opdracht naar de projectstatus,
-    // aanvraag/offerte naar het gedeelde maatwerkveld "Offerte Sub-status".
-    const res = await updateDossierSubstatus(dossierId, targetStatus as DossierSubstatus, { schrijfBouw7: true })
-    if (!res.ok) {
-      // O.a. een conflict: de andere Bouw7-app heeft deze substatus intussen omgezet. De
-      // EVA-wijziging is niet doorgevoerd — haal de echte stand terug op.
-      toast.error(res.error)
-      router.refresh()
-    } else if (res.bouw7 && !res.bouw7.ok) {
-      toast.error(`Bijgewerkt in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
-    } else {
-      router.refresh()
-    }
+    // aanvraag/offerte naar het gedeelde maatwerkveld "Offerte Sub-status". Bij een botsing met de
+    // tweede Bouw7-app legt de gedeelde helper de keuze voor (Bouw7 volgen of tóch overschrijven);
+    // hoe dat afloopt, de kaart moet daarna hoe dan ook de echte stand tonen.
+    await wijzigSubstatusMetConflict({
+      dossierId,
+      substatus: targetStatus as DossierSubstatus,
+      sectie,
+      bevestig,
+    })
+    router.refresh()
   }
 
   async function handleDrop(targetStatus: K) {

@@ -91,6 +91,12 @@ export type SubstatusWriteResult =
  * aanroeper laat de EVA-wijziging vervallen en haalt de Bouw7-stand op. Zo overschrijft een late
  * klik in EVA nooit stilzwijgend een verse wijziging van de ander.
  *
+ * `opts.forceer` zet die check uit. Bedoeld voor wijzigingen die géén voorstel zijn maar een
+ * **feit**: de offerte is gemaild, dus "07. Verzonden" is waar — ongeacht wat de ander intussen
+ * invulde. Ook de handmatige "toch overschrijven"-keuze in de UI komt hier binnen. Zonder deze
+ * uitweg is elke drift tussen EVA en Bouw7 een permanente blokkade: de check kan niet zien of de
+ * ander zojuist wijzigde of dat EVA ooit vooruitliep zonder write-through.
+ *
  * Faalt verder nooit hard: bij ontbrekende config/koppeling/mapping → `{ ok:false }` met melding,
  * zodat de UI een toast kan tonen zonder de EVA-update terug te draaien (de sync haalt de drift op).
  */
@@ -100,6 +106,7 @@ export async function schrijfBouw7Substatus(
   nieuweSubstatus: string,
   /** De sectie + substatus die EVA vóór deze wijziging had — basis voor de conflictcheck. */
   vorige?: { sectie: SubstatusSectie; substatus: string | null } | null,
+  opts?: { forceer?: boolean },
 ): Promise<SubstatusWriteResult> {
   const nieuwLabel = evaSubstatusNaarBouw7(sectie, nieuweSubstatus)
   if (!nieuwLabel) return { ok: false, error: `Geen Bouw7-substatus bekend voor "${nieuweSubstatus}".` }
@@ -126,7 +133,7 @@ export async function schrijfBouw7Substatus(
     if (attrId == null) return { ok: false, error: 'Maatwerkveld "Offerte Sub-status" niet gevonden in Bouw7.' }
 
     const huidigLabel = (bestaand.find((v) => v.customAttribute?.id === attrId)?.value ?? '').trim()
-    if (huidigLabel && huidigLabel !== nieuwLabel && bouw7SubstatusNaarEva(huidigLabel)) {
+    if (!opts?.forceer && huidigLabel && huidigLabel !== nieuwLabel && bouw7SubstatusNaarEva(huidigLabel)) {
       // Wat verwachtte EVA daar te vinden? Alleen als Bouw7 daarvan afwijkt is er een echte botsing.
       // Bij een leeg/onbekend Bouw7-label is er niets om te overschrijven → gewoon schrijven.
       const verwachtLabel =
@@ -235,7 +242,8 @@ export async function ververseSubstatussen(
         })
         .eq('id', d.id)
 
-      if (!updError) bijgewerkt++
+      if (updError) console.error(`[substatus-ververs] dossier ${d.id} niet bijgewerkt:`, updError.message)
+      else bijgewerkt++
     }
 
     return { ok: true, bijgewerkt }
