@@ -27,26 +27,51 @@ een bovenliggende map te openen.
 
 ## Installeren
 
-Geen beheerdersrechten nodig; alles gaat per gebruiker.
+### Eén pc, alleen jezelf
+
+Geen beheerdersrechten nodig.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\installeer.ps1
 ```
 
 Dit kopieert `eva-verkenner.ps1` naar `%LOCALAPPDATA%\EVA` en registreert het
-`eva://`-protocol onder `HKEY_CURRENT_USER`. Start daarna de browser opnieuw.
+`eva://`-protocol onder `HKEY_CURRENT_USER`.
 
-Verwijderen:
+### Iedereen op kantoor
+
+Machine-breed, dus voor elke gebruiker van de pc. Vereist beheerdersrechten:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\installeer.ps1 -Machine
+```
+
+Dit zet het script in `%ProgramFiles%\EVA` en registreert het protocol onder
+`HKEY_LOCAL_MACHINE`. Rol het uit via Intune of GPO als **machine-script**;
+beide bestanden (`installeer.ps1` en `eva-verkenner.ps1`) moeten samen in één
+map staan.
+
+Program Files is bewust gekozen: daar kan een gewone gebruiker het script niet
+wijzigen. Zou het ergens staan waar dat wel kan, dan kon iemand code laten
+uitvoeren bij elke andere gebruiker van die pc.
+
+De handler zelf draait gewoon in de context van de aangemelde gebruiker, en
+leest diens eigen OneDrive-koppelingen. Eén machine-brede installatie werkt dus
+voor iedereen, met voor elke gebruiker het juiste lokale pad.
+
+**Start na installatie de browser volledig opnieuw** — een venster sluiten is
+niet genoeg; Chrome blijft standaard in de achtergrond draaien en kent het
+nieuwe protocol dan nog niet. Afdwingen kan met `taskkill /IM chrome.exe /F`.
+
+### Verwijderen
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\installeer.ps1 -Verwijderen
+powershell -ExecutionPolicy Bypass -File .\installeer.ps1 -Machine -Verwijderen
 ```
 
-### Uitrollen over meerdere pc's
-
-Beide bestanden horen bij elkaar en moeten samen in één map staan. Via Intune of
-GPO als **gebruikersscript** uitrollen (niet als machine-script — de registratie
-staat in HKCU en het OneDrive-register is per gebruiker).
+Staat er zowel een gebruikers- als een machine-installatie, dan wint die van de
+gebruiker. De installer waarschuwt daarvoor.
 
 ## Controleren zonder Verkenner te openen
 
