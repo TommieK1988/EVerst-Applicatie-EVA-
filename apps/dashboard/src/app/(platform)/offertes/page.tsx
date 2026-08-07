@@ -38,6 +38,7 @@ export default async function OffertesPage() {
         dossiers={dossiers}
         layouts={layouts}
         user_id={user_id}
+        toonSoortSlicer
         extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="offerte" />}
       />
     </>

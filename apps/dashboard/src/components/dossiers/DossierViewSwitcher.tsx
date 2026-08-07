@@ -6,6 +6,7 @@ import { DossierLijst } from './DossierLijst'
 import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { InternDossiersKnop } from './InternDossiersKnop'
 import { IconGrid, IconList } from '@/components/eva/Icons'
+import { isServicedeskDossier } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
@@ -26,9 +27,18 @@ type Props = {
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
   /** Naam van de ingelogde medewerker — wordt voorgeselecteerd in de personen-slicer (bv. via ?mijn=1). */
   mijnNaam?: string | null
+  /** Toon de soort-slicer (Servicedesk / Projecten) links in de slicerbalk. */
+  toonSoortSlicer?: boolean
 }
 
-export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam }: Props) {
+type SoortFilter = 'alles' | 'servicedesk' | 'project'
+
+const SOORT_KLEUR: Record<Exclude<SoortFilter, 'alles'>, string> = {
+  servicedesk: '#0891b2',
+  project:     '#3b82f6',
+}
+
+export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam, toonSoortSlicer }: Props) {
   const storageKey = `dossier-view-${sectie}`
 
   const [view, setView] = React.useState<ViewMode>(() => {
@@ -43,6 +53,8 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   const [alleenNietToegewezen, setAlleenNietToegewezen] = React.useState(false)
   // Tweede, onafhankelijke slicer: filtert op controller (staat rechts in dezelfde balk).
   const [geselecteerdeControllers, setGeselecteerdeControllers] = React.useState<string[]>([])
+  // Derde slicer (alleen aanvragen/offertes): servicedesk-dossiers vs. reguliere projecten.
+  const [soort, setSoort] = React.useState<SoortFilter>('alles')
 
   function switchView(v: ViewMode) {
     setView(v)
@@ -62,6 +74,10 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       if (next) setGeselecteerdeLeiders([]) // sluit personen-selectie uit
       return next
     })
+  }
+
+  function toggleSoort(keuze: Exclude<SoortFilter, 'alles'>) {
+    setSoort(prev => (prev === keuze ? 'alles' : keuze))
   }
 
   function toggleController(naam: string) {
@@ -127,9 +143,22 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     return map
   }, [dossiers])
 
-  // Gefilterde dossiers: personen-slicer (of "Niet toegewezen") én controller-slicer.
+  // Aantallen per soort (interne dossiers tellen niet mee — die staan al in de Intern-popup).
+  const soortAantallen = React.useMemo(() => {
+    let servicedesk = 0
+    let project = 0
+    for (const d of dossiers) {
+      if (d.intern) continue
+      if (isServicedeskDossier(d)) servicedesk += 1
+      else project += 1
+    }
+    return { servicedesk, project }
+  }, [dossiers])
+
+  // Gefilterde dossiers: soort-slicer, personen-slicer (of "Niet toegewezen") én controller-slicer.
   const gefilterdeDossiers = React.useMemo(() => {
     return dossiers.filter(d => {
+      if (soort !== 'alles' && (soort === 'servicedesk') !== isServicedeskDossier(d)) return false
       if (alleenNietToegewezen) {
         if (persoonsNaamVoorFilter(d) != null) return false
       } else if (geselecteerdeLeiders.length > 0
@@ -143,7 +172,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, sectie])
+  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, soort, sectie])
 
   // Interne dossiers (Intern-toggle aan) worden verborgen op het bord/lijst en
   // alleen via de Intern-popup getoond.
@@ -191,14 +220,65 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   // niet-toegewezen dossiers zijn (dan tonen we de "Niet toegewezen"-knop).
   const toontPersonen = uniekePLs.length >= 2 || geselecteerdeLeiders.length > 0 || heeftNietToegewezen || alleenNietToegewezen
   const toontControllers = uniekeControllers.length >= 1
+  // Soort-slicer alleen tonen als er daadwerkelijk iets te scheiden valt (beide soorten aanwezig),
+  // of als er al op soort gefilterd wordt (zodat je de keuze kunt terugdraaien).
+  const toontSoort = !!toonSoortSlicer
+    && (soort !== 'alles' || (soortAantallen.servicedesk > 0 && soortAantallen.project > 0))
 
-  const slicerBalk = (toontPersonen || toontControllers) ? (
+  const soortChip = (keuze: Exclude<SoortFilter, 'alles'>, label: string, aantal: number) => {
+    const actief = soort === 'alles' || soort === keuze
+    const kleur = SOORT_KLEUR[keuze]
+    return (
+      <button
+        key={keuze}
+        onClick={() => toggleSoort(keuze)}
+        title={soort === keuze ? `Toon weer alle dossiers` : `Toon alleen ${label.toLowerCase()}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '3px 10px',
+          borderRadius: 99,
+          border: `1.5px solid ${actief ? kleur : 'var(--border)'}`,
+          background: actief ? `${kleur}18` : 'transparent',
+          cursor: 'pointer', fontSize: 12, fontWeight: 500,
+          color: actief ? 'var(--neutral-900)' : 'var(--neutral-400)',
+          transition: 'all 0.12s',
+        }}
+      >
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: actief ? kleur : 'var(--neutral-300)',
+        }} />
+        {label}
+        <span style={{ fontSize: 11, fontWeight: 600, color: actief ? kleur : 'var(--neutral-400)' }}>
+          {aantal}
+        </span>
+      </button>
+    )
+  }
+
+  const slicerBalk = (toontSoort || toontPersonen || toontControllers) ? (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '8px 16px',
       borderBottom: '1px solid var(--border)',
       flexShrink: 0,
     }}>
+      {toontSoort && (
+        <div style={{
+          display: 'flex', gap: 6, alignItems: 'center',
+          paddingRight: 16, borderRight: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            textTransform: 'uppercase', color: 'var(--neutral-400)',
+          }}>
+            Soort
+          </span>
+          {soortChip('project', 'Projecten', soortAantallen.project)}
+          {soortChip('servicedesk', 'Servicedesk', soortAantallen.servicedesk)}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       {toontPersonen && uniekePLs.map(naam => {
         const actief = !alleenNietToegewezen && (geselecteerdeLeiders.length === 0 || geselecteerdeLeiders.includes(naam))
@@ -258,12 +338,13 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           Niet toegewezen
         </button>
       )}
-      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen || geselecteerdeControllers.length > 0) && (
+      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen || geselecteerdeControllers.length > 0 || soort !== 'alles') && (
         <button
           onClick={() => {
             setGeselecteerdeLeiders([])
             setAlleenNietToegewezen(false)
             setGeselecteerdeControllers([])
+            setSoort('alles')
           }}
           style={{
             padding: '3px 9px',

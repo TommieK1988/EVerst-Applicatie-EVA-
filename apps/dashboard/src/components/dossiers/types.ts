@@ -102,6 +102,20 @@ export function isDossierAfgesloten(dossier: {
   }
 }
 
+/**
+ * True als een dossier tot de servicedesk hoort. Zelfde afbakening als de servicedesk-query
+ * in `lib/dossiers/actions.ts` en de sectie-bepaling in de Bouw7-sync: Bouw7-projectstatus
+ * "LB.*" of Bouw7-categorie "Dagelijks onderhoud"/"Mutatie".
+ */
+export function isServicedeskDossier(dossier: {
+  bouw7_projectstatus_naam?: string | null
+  bouw7_categorie_naam?: string | null
+}): boolean {
+  if ((dossier.bouw7_projectstatus_naam ?? '').trim().toUpperCase().startsWith('LB.')) return true
+  const categorie = dossier.bouw7_categorie_naam?.trim()
+  return categorie === 'Dagelijks onderhoud' || categorie === 'Mutatie'
+}
+
 export const AANVRAAG_STATUSSEN: StatusDef<AanvraagSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'               },
   { key: 'inlezen_aanvraag',    label: 'Inlezen aanvraag'    },

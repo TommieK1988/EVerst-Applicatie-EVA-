@@ -54,6 +54,7 @@ export default async function AanvragenPage({
         user_id={user_id}
         mijnNaam={mijnNaam}
         kanNieuwAanmaken
+        toonSoortSlicer
         werkmaatschappijen={werkmaatschappijen}
         extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
       />
