@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Button, Input, Badge } from '@/components/ui'
+import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
+import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 import {
   getOpleverMailWachtrij, verstuurOpleverMailWachtrij, annuleerOpleverMail, queueRapportageMail,
   type OpleverMailItem,
@@ -35,6 +36,7 @@ export default function OpleveringMailBlok({
   const [momentId, setMomentId] = useState('')
   const [aan, setAan] = useState('')
   const [cc, setCc] = useState('')
+  const { ontvangers, laden: ontvangersLaden } = useMailOntvangers(formOpen && !readOnly, { dossierId })
 
   function herlaad() {
     getOpleverMailWachtrij(dossierId).then(setWachtrij).catch(() => setWachtrij([]))
@@ -114,14 +116,18 @@ export default function OpleveringMailBlok({
                   {momenten.map(m => <option key={m.id} value={m.id}>{m.titel}</option>)}
                 </select>
               </label>
-              <label className="text-[12px] font-medium text-neutral-700">
+              <div className="text-[12px] font-medium text-neutral-700">
                 Aan (opdrachtgever)
-                <Input value={aan} onChange={e => setAan(e.target.value)} placeholder="naam@bedrijf.nl; tweede@bedrijf.nl" />
-              </label>
-              <label className="text-[12px] font-medium text-neutral-700">
+                <OntvangerVeld className="mt-1" waarde={aan} onChange={setAan}
+                  ontvangers={ontvangers} laden={ontvangersLaden}
+                  placeholder="Adres typen of contactpersoon kiezen…" />
+              </div>
+              <div className="text-[12px] font-medium text-neutral-700">
                 CC — overige betrokkenen
-                <Input value={cc} onChange={e => setCc(e.target.value)} placeholder="optioneel" />
-              </label>
+                <OntvangerVeld className="mt-1" waarde={cc} onChange={setCc}
+                  ontvangers={ontvangers} laden={ontvangersLaden}
+                  placeholder="Bijvoorbeeld een collega…" />
+              </div>
             </div>
             <div className="flex items-center justify-between gap-2">
               {momentId ? (

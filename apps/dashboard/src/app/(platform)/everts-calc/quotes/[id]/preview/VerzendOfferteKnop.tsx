@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { Send, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getOfferteMailConcept, verstuurOfferte } from '@/app/(platform)/everts-calc/actions/offerte-verzenden'
+import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 
 interface Props {
   quoteId: string
@@ -22,6 +23,8 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Pro
   const [cc, setCc] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('') // platte tekst; \n → <br> bij verzenden
+  const [dossierId, setDossierId] = useState<string | null>(null)
+  const { ontvangers, laden: ontvangersLaden } = useMailOntvangers(open, { dossierId })
 
   async function openen() {
     setOpen(true)
@@ -29,6 +32,7 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Pro
     try {
       const concept = await getOfferteMailConcept(quoteId)
       setTo(concept.to)
+      setDossierId(concept.dossierId)
       setSubject(concept.subject)
       setBody(concept.bodyHtml.replace(/<br\s*\/?>/gi, '\n'))
     } catch (e) {
@@ -86,16 +90,18 @@ export default function VerzendOfferteKnop({ quoteId, verzendbaar, onDone }: Pro
                 <p className="text-sm text-slate-500 py-6 text-center">Mailconcept laden…</p>
               ) : (
                 <>
-                  <label className="block">
+                  <div>
                     <span className="text-xs font-medium text-slate-500">Aan</span>
-                    <input value={to} onChange={e => setTo(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-everts/30" />
-                  </label>
-                  <label className="block">
+                    <OntvangerVeld className="mt-1" waarde={to} onChange={setTo}
+                      ontvangers={ontvangers} laden={ontvangersLaden}
+                      placeholder="Adres typen of contactpersoon kiezen…" />
+                  </div>
+                  <div>
                     <span className="text-xs font-medium text-slate-500">CC (optioneel)</span>
-                    <input value={cc} onChange={e => setCc(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-everts/30" />
-                  </label>
+                    <OntvangerVeld className="mt-1" waarde={cc} onChange={setCc}
+                      ontvangers={ontvangers} laden={ontvangersLaden}
+                      placeholder="Bijvoorbeeld een collega…" />
+                  </div>
                   <label className="block">
                     <span className="text-xs font-medium text-slate-500">Onderwerp</span>
                     <input value={subject} onChange={e => setSubject(e.target.value)}

@@ -26,6 +26,7 @@ import {
   getInkoopSjablonen, type SjabloonKeuze,
 } from '@/app/(platform)/everts-calc/actions/bestelling-document'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
+import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 
 interface Props {
   wb: Werkbegroting
@@ -96,6 +97,10 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   /** Sjabloon dat de opmaak van het te versturen document levert, plus de keuzelijst. */
   const [verstuurSjabloon, setVerstuurSjabloon] = useState<string | null>(null)
   const [verstuurSjablonen, setVerstuurSjablonen] = useState<{ id: string; naam: string }[]>([])
+  /** Kandidaat-ontvangers: contactpersonen van deze leverancier plus die van het dossier. */
+  const { ontvangers, laden: ontvangersLaden } = useMailOntvangers(verstuurB != null, {
+    dossierId, relatieId: verstuurB?.relatie_id ?? null,
+  })
 
   /** Beschikbare opmaak-sjablonen per soort (beheerd in Instellingen → Documentsjablonen). */
   const [sjablonen, setSjablonen] = useState<Record<Soort, SjabloonKeuze[]>>({
@@ -776,17 +781,20 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       </>
                     )}
                   </label>
-                  <label className="block text-xs text-slate-500">
+                  <div className="text-xs text-slate-500">
                     Aan
-                    <input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))}
-                      placeholder="leverancier@voorbeeld.nl"
-                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
-                  </label>
-                  <label className="block text-xs text-slate-500">
+                    <OntvangerVeld className="mt-1" waarde={mail.to}
+                      onChange={v => setMail(m => ({ ...m, to: v }))}
+                      ontvangers={ontvangers} laden={ontvangersLaden}
+                      placeholder="Adres typen of contactpersoon kiezen…" />
+                  </div>
+                  <div className="text-xs text-slate-500">
                     CC (optioneel)
-                    <input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))}
-                      className="mt-1 w-full text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40" />
-                  </label>
+                    <OntvangerVeld className="mt-1" waarde={mail.cc}
+                      onChange={v => setMail(m => ({ ...m, cc: v }))}
+                      ontvangers={ontvangers} laden={ontvangersLaden}
+                      placeholder="Bijvoorbeeld een collega…" />
+                  </div>
                   <label className="block text-xs text-slate-500">
                     Onderwerp
                     <input value={mail.onderwerp} onChange={e => setMail(m => ({ ...m, onderwerp: e.target.value }))}

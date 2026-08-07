@@ -13,6 +13,8 @@ export interface MailConcept {
   to: string
   subject: string
   bodyHtml: string
+  /** Dossier achter deze offerte — voedt de ontvangerkiezer in het verzendvenster. */
+  dossierId: string | null
 }
 
 export interface OfferteDetailStatus {
@@ -122,7 +124,18 @@ export async function getOfferteMailConcept(quoteId: string): Promise<MailConcep
   const subject = renderMailTekst(sjabloon.onderwerp, vars)
   const bodyHtml = renderMailTekst(sjabloon.tekst, vars).replace(/\n/g, '<br>')
   const to = ctx.dossier.contactpersoon_email || ctx.klant.email || ''
-  return { to, subject, bodyHtml }
+
+  // Het dossier hangt aan de offerte zelf, of — bij oudere offertes — via het calc-project.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data: q } = await admin.from('quotes').select('dossier_id, project_id').eq('id', quoteId).maybeSingle()
+  let dossierId: string | null = q?.dossier_id ?? null
+  if (!dossierId && q?.project_id) {
+    const { data: d } = await admin.from('dossiers').select('id').eq('everts_calc_project_id', q.project_id).maybeSingle()
+    dossierId = d?.id ?? null
+  }
+
+  return { to, subject, bodyHtml, dossierId }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

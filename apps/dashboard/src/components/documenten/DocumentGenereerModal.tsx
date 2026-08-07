@@ -18,6 +18,7 @@ import {
 } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 import HoutrotOptiesVeld from './HoutrotOptiesVeld'
+import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 
 interface Props {
   dossierId: string
@@ -45,6 +46,7 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
   const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bodyHtml: '' })
   const [bezig, startT] = useTransition()
   const [download, setDownload] = useState<'pdf' | 'docx' | null>(null)
+  const { ontvangers, laden: ontvangersLaden } = useMailOntvangers(mailOpen, { dossierId })
 
   const previewUrl = useMemo(() => {
     const p = new URLSearchParams({
@@ -217,11 +219,13 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
         {mailOpen && (
           <div className="flex-shrink-0 space-y-2 border-t border-neutral-200 bg-neutral-50 px-5 py-3">
             <div className="flex gap-2">
-              <input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))}
-                placeholder="Aan (meerdere adressen met ; scheiden)"
-                className="flex-1 rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px]" />
-              <input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))}
-                placeholder="Cc" className="w-56 rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px]" />
+              <OntvangerVeld className="flex-1" waarde={mail.to}
+                onChange={v => setMail(m => ({ ...m, to: v }))}
+                ontvangers={ontvangers} laden={ontvangersLaden}
+                placeholder="Aan — adres typen of kiezen…" />
+              <OntvangerVeld className="w-72" waarde={mail.cc}
+                onChange={v => setMail(m => ({ ...m, cc: v }))}
+                ontvangers={ontvangers} laden={ontvangersLaden} placeholder="Cc" />
             </div>
             <input value={mail.onderwerp} onChange={e => setMail(m => ({ ...m, onderwerp: e.target.value }))}
               placeholder="Onderwerp" className="w-full rounded border border-neutral-300 px-2.5 py-1.5 text-[12.5px]" />
