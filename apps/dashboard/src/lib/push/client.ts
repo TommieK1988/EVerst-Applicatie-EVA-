@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * Pushmeldingen aan- en uitzetten in de browser.
@@ -85,6 +85,7 @@ export function usePush() {
   const [status, setStatus] = useState<PushStatus>('laden')
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+  const sleutelRef = useRef<{ beschikbaar?: boolean; publicKey?: string; reden?: string } | null>(null)
 
   /**
    * Bepaalt de huidige stand. De volgorde is niet vrijblijvend: de iOS-controle
@@ -118,6 +119,11 @@ export function usePush() {
     bepaalStand()
       .then(s => { if (!afgebroken) setStatus(s) })
       .catch(() => { if (!afgebroken) setStatus('uit') })
+    // Sleutel vast klaarzetten (zie `aanzetten`).
+    fetch('/api/push/sleutel')
+      .then(r => r.json())
+      .then(s => { if (!afgebroken) sleutelRef.current = s })
+      .catch(() => { /* dan haalt aanzetten() hem alsnog op */ })
     return () => { afgebroken = true }
   }, [bepaalStand])
 
@@ -143,15 +149,26 @@ export function usePush() {
     setFout(null)
     setBezig(true)
     try {
-      const registratie = await navigator.serviceWorker.getRegistration()
-      if (!registratie) { setStatus('geen-sw'); return }
+      if (!('Notification' in window)) { setStatus('niet-ondersteund'); return }
 
-      // Moet binnen de klik van de gebruiker blijven, anders weigert Safari.
+      // MOET de eerste await van deze functie zijn. Safari (iOS) accepteert
+      // requestPermission alleen als de aanroep nog binnen de klik van de
+      // gebruiker valt; staat er één await vóór — al is het maar het opvragen
+      // van de service worker — dan is die klik "op" en wijst Safari het verzoek
+      // af zonder iets te vragen. De schakelaar sprong dan meteen op "geweigerd"
+      // terwijl de gebruiker nooit iets te zien had gekregen. Chrome is hier
+      // soepeler, vandaar dat het op de desktop wél werkte.
       const toestemming = await Notification.requestPermission()
       if (toestemming === 'denied') { setStatus('geweigerd'); return }
       if (toestemming !== 'granted') { setStatus('uit'); return }
 
-      const sleutel = await fetch('/api/push/sleutel').then(r => r.json())
+      const registratie = await navigator.serviceWorker.getRegistration()
+      if (!registratie) { setStatus('geen-sw'); return }
+
+      // Bij voorkeur de sleutel die bij het laden al is opgehaald: hoe minder er
+      // tussen de klik en subscribe() zit, hoe kleiner de kans dat Safari de
+      // aanroep als "niet meer bij de klik horend" beschouwt.
+      const sleutel = sleutelRef.current ?? await fetch('/api/push/sleutel').then(r => r.json())
       if (!sleutel?.beschikbaar) {
         setFout(
           sleutel?.reden === 'ongeldig'
