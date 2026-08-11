@@ -23,6 +23,14 @@ export type PushStatus =
   | 'niet-ondersteund'
   /** Geen service worker actief — in de dev-omgeving is dat normaal. */
   | 'geen-sw'
+  /**
+   * iPhone/iPad in de browser i.p.v. de geïnstalleerde app. Bewust een eigen stand
+   * en niet 'geweigerd': Safari zet `Notification.permission` daar uit zichzelf op
+   * `denied` zonder dat de gebruiker ooit iets is gevraagd. Dat als "geweigerd"
+   * tonen stuurt iemand de telefooninstellingen in op zoek naar een schakelaar die
+   * er niet is, terwijl de echte oplossing "zet EVA op je beginscherm" is.
+   */
+  | 'installeren'
   /** Kan aangezet worden. */
   | 'uit'
   /** Staat aan op dit apparaat. */
@@ -78,40 +86,58 @@ export function usePush() {
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
-  // Beginstand bepalen (en meteen hersynchroniseren als alles al aan staat).
+  /**
+   * Bepaalt de huidige stand. De volgorde is niet vrijblijvend: de iOS-controle
+   * staat vóór de ondersteuningscontrole, omdat Safari op de iPhone buiten de
+   * geïnstalleerde app óf `PushManager` verzwijgt óf de toestemming meteen op
+   * `denied` zet. Allebei zouden hier als een onoplosbaar probleem landen,
+   * terwijl het gewoon "nog niet op het beginscherm gezet" is.
+   */
+  const bepaalStand = useCallback(async (): Promise<PushStatus> => {
+    if (isIOS() && !isGeinstalleerd()) return 'installeren'
+    if (!ondersteund()) return 'niet-ondersteund'
+
+    // Bewust getRegistration() en niet .ready: zonder service worker (dev)
+    // blijft .ready eeuwig hangen en blijft de knop op "laden" staan.
+    const registratie = await navigator.serviceWorker.getRegistration()
+    if (!registratie) return 'geen-sw'
+    if (Notification.permission === 'denied') return 'geweigerd'
+
+    const abonnement = await registratie.pushManager.getSubscription()
+    if (abonnement && Notification.permission === 'granted') {
+      // Hersynchroniseren: het abonnement kan bij EVA zijn opgeruimd (dood
+      // endpoint) terwijl de telefoon het nog heeft. Upsert, dus gratis.
+      await bewaarBijEva(abonnement).catch(() => false)
+      return 'aan'
+    }
+    return 'uit'
+  }, [])
+
   useEffect(() => {
     let afgebroken = false
-
-    ;(async () => {
-      if (!ondersteund()) {
-        if (!afgebroken) setStatus('niet-ondersteund')
-        return
-      }
-      // Bewust getRegistration() en niet .ready: zonder service worker (dev)
-      // blijft .ready eeuwig hangen en blijft de knop op "laden" staan.
-      const registratie = await navigator.serviceWorker.getRegistration()
-      if (!registratie) {
-        if (!afgebroken) setStatus('geen-sw')
-        return
-      }
-      if (Notification.permission === 'denied') {
-        if (!afgebroken) setStatus('geweigerd')
-        return
-      }
-
-      const abonnement = await registratie.pushManager.getSubscription()
-      if (abonnement && Notification.permission === 'granted') {
-        await bewaarBijEva(abonnement).catch(() => false)
-        if (!afgebroken) setStatus('aan')
-      } else if (!afgebroken) {
-        setStatus('uit')
-      }
-    })().catch(() => {
-      if (!afgebroken) setStatus('uit')
-    })
-
+    bepaalStand()
+      .then(s => { if (!afgebroken) setStatus(s) })
+      .catch(() => { if (!afgebroken) setStatus('uit') })
     return () => { afgebroken = true }
-  }, [])
+  }, [bepaalStand])
+
+  /**
+   * Opnieuw kijken na een wijziging buiten EVA om — toestemming teruggezet in de
+   * telefooninstellingen, of EVA alsnog op het beginscherm gezet. De browser
+   * vertelt zoiets niet uit zichzelf, dus zonder deze knop is de enige uitweg
+   * "app helemaal afsluiten en opnieuw openen".
+   */
+  const hercontroleer = useCallback(async () => {
+    setFout(null)
+    setBezig(true)
+    try {
+      setStatus(await bepaalStand())
+    } catch {
+      setStatus('uit')
+    } finally {
+      setBezig(false)
+    }
+  }, [bepaalStand])
 
   const aanzetten = useCallback(async () => {
     setFout(null)
@@ -198,5 +224,5 @@ export function usePush() {
     }
   }, [])
 
-  return { status, bezig, fout, aanzetten, uitzetten, testen }
+  return { status, bezig, fout, aanzetten, uitzetten, testen, hercontroleer }
 }

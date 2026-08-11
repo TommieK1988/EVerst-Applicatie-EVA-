@@ -16,32 +16,41 @@ import { usePush, isIOS, isGeinstalleerd } from '@/lib/push/client'
  * moment dat je een melding mist.
  */
 export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mobiel' | 'desktop' }) {
-  const { status, bezig, fout, aanzetten, uitzetten, testen } = usePush()
-  const [iosTip, setIosTip] = useState(false)
+  const { status, bezig, fout, aanzetten, uitzetten, testen, hercontroleer } = usePush()
+  const [apparaat, setApparaat] = useState<'ios' | 'anders'>('anders')
 
   useEffect(() => {
-    setIosTip(isIOS() && !isGeinstalleerd())
+    setApparaat(isIOS() ? 'ios' : 'anders')
   }, [])
 
   const aan = status === 'aan'
   const schakelbaar = status === 'uit' || status === 'aan'
+  // Standen die de gebruiker buiten EVA om kan oplossen; dan hoort er een knop
+  // bij om opnieuw te kijken, want de browser meldt zo'n wijziging niet.
+  const opTeLossen = status === 'geweigerd' || status === 'installeren'
 
   const statusTekst =
     status === 'laden'            ? 'Controleren…'
     : status === 'aan'            ? 'Aan op dit apparaat'
     : status === 'uit'            ? 'Uit'
-    : status === 'geweigerd'      ? 'Geweigerd'
+    : status === 'installeren'    ? 'App nog niet geïnstalleerd'
+    : status === 'geweigerd'      ? 'Geblokkeerd'
     : status === 'geen-sw'        ? 'Nog niet beschikbaar'
     : 'Niet ondersteund'
 
   const statusKleur =
-    status === 'aan'         ? '#067647'
-    : status === 'geweigerd' ? '#b42318'
+    status === 'aan'                                ? '#067647'
+    : status === 'geweigerd'                        ? '#b42318'
+    : status === 'installeren'                      ? '#b54708'
     : '#6b757c'
 
   const uitleg =
-    status === 'geweigerd'
-      ? 'Meldingen zijn voor EVA geblokkeerd. Dat kan EVA niet zelf terugzetten — zet ze weer aan bij de instellingen van je telefoon of browser (Meldingen → EVA) en kom hier terug.'
+    status === 'installeren'
+      ? 'Op de iPhone kan alleen de geïnstalleerde app meldingen geven. Tik onderin op de deelknop en kies "Zet op beginscherm"; open EVA daarna via dat icoon en zet deze schakelaar aan.'
+    : status === 'geweigerd'
+      ? apparaat === 'ios'
+        ? 'Meldingen zijn voor EVA geblokkeerd. iOS onthoudt een weigering en vraagt het niet nog een keer: zet het aan via Instellingen → EVA → Berichtgeving. Staat EVA daar niet tussen, verwijder het icoon dan van je beginscherm en zet het er opnieuw op — daarna mag EVA het opnieuw vragen.'
+        : 'Meldingen zijn voor EVA geblokkeerd. Dat kan EVA niet zelf terugzetten. In Chrome: tik op het slotje of de instellingen naast het webadres → Meldingen → Toestaan. In de geïnstalleerde app: Instellingen → Apps → EVA → Meldingen.'
     : status === 'geen-sw'
       ? 'Pushmeldingen werken in de gepubliceerde app. In een testomgeving op je eigen pc draait de achtergronddienst niet.'
     : status === 'niet-ondersteund'
@@ -131,11 +140,24 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
         </button>
       )}
 
-      {iosTip && status !== 'aan' && (
-        <p style={{ fontSize: 12.5, color: '#6b757c', margin: 0, lineHeight: 1.5 }}>
-          Op de iPhone werkt dit alleen in de geïnstalleerde app: deelknop →
-          &quot;Zet op beginscherm&quot;, en zet het daar aan.
-        </p>
+      {opTeLossen && (
+        <button
+          type="button"
+          disabled={bezig}
+          onClick={hercontroleer}
+          style={{
+            alignSelf: mobiel ? 'stretch' : 'flex-start',
+            padding: mobiel ? '13px 16px' : '8px 14px',
+            borderRadius: mobiel ? 12 : 8,
+            background: 'transparent', color: 'var(--fg)',
+            border: '1px solid var(--border)',
+            fontSize: mobiel ? 15 : 13, fontWeight: 600,
+            cursor: 'pointer', opacity: bezig ? 0.6 : 1,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {bezig ? 'Bezig…' : 'Opnieuw controleren'}
+        </button>
       )}
 
       {fout && (
