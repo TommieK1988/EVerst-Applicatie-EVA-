@@ -22,11 +22,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       endpoint?: unknown
       keys?: { p256dh?: unknown; auth?: unknown }
+      mobiel?: unknown
     }
 
     const endpoint = typeof body.endpoint === 'string' ? body.endpoint : ''
     const p256dh   = typeof body.keys?.p256dh === 'string' ? body.keys.p256dh : ''
     const auth     = typeof body.keys?.auth === 'string' ? body.keys.auth : ''
+    // De browser weet beter dan de user-agent of dit een telefoon is; zie
+    // isMobielApparaat() in lib/push/client.ts.
+    const mobiel   = typeof body.mobiel === 'boolean' ? body.mobiel : null
 
     if (!endpoint || !p256dh || !auth) {
       return NextResponse.json({ error: 'Onvolledig abonnement' }, { status: 400 })
@@ -40,6 +44,7 @@ export async function POST(req: NextRequest) {
         endpoint,
         p256dh,
         auth,
+        mobiel,
         user_agent: req.headers.get('user-agent')?.slice(0, 300) ?? null,
       }, { onConflict: 'endpoint' })
 

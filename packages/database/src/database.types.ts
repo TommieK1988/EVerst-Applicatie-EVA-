@@ -3595,6 +3595,7 @@ export type Database = {
           endpoint: string
           id: string
           laatst_gebruikt: string | null
+          mobiel: boolean | null
           p256dh: string
           user_agent: string | null
           user_id: string
@@ -3605,6 +3606,7 @@ export type Database = {
           endpoint: string
           id?: string
           laatst_gebruikt?: string | null
+          mobiel?: boolean | null
           p256dh: string
           user_agent?: string | null
           user_id: string
@@ -3615,6 +3617,7 @@ export type Database = {
           endpoint?: string
           id?: string
           laatst_gebruikt?: string | null
+          mobiel?: boolean | null
           p256dh?: string
           user_agent?: string | null
           user_id?: string

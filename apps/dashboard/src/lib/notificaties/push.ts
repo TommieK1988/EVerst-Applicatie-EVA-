@@ -37,6 +37,7 @@ type Abonnement = {
   p256dh: string
   auth: string
   user_agent: string | null
+  mobiel: boolean | null
 }
 
 /** Dossier-secties op de desktop; op mobiel is er één dossierscherm. */
@@ -141,7 +142,7 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
     const admin = createAdminClient()
     const { data } = await admin
       .from('push_abonnementen')
-      .select('id, endpoint, p256dh, auth, user_agent')
+      .select('id, endpoint, p256dh, auth, user_agent, mobiel')
       .eq('user_id', userId)
 
     const abonnementen = (data ?? []) as Abonnement[]
@@ -154,10 +155,14 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
     await Promise.all(
       abonnementen.map(async (ab) => {
         // Per apparaat: een telefoon krijgt het mobiele pad mee, de rest het gewone.
+        // De vlag van de browser gaat vóór de user-agent — die liegt op iOS (zie
+        // isMobielApparaat in lib/push/client.ts). Alleen bij oudere abonnementen
+        // zonder vlag valt hij terug op de user-agent.
+        const naarMobiel = ab.mobiel ?? isMobileUA(ab.user_agent)
         const bericht = JSON.stringify({
           titel: payload.titel,
           body: payload.body ?? '',
-          url: isMobileUA(ab.user_agent) ? naarMobielPad(doel) : doel,
+          url: naarMobiel ? naarMobielPad(doel) : doel,
           type: payload.type ?? 'algemeen',
           id: payload.id ?? null,
         })
