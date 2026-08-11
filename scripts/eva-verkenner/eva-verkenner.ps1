@@ -182,6 +182,52 @@ function Get-WebDavPad([System.Uri]$Doel, [string[]]$Segmenten) {
   return '\\' + $Doel.Host + '@SSL\DavWWWRoot\' + ($Segmenten -join '\')
 }
 
+<#
+  Haalt het zojuist geopende mapvenster naar de voorgrond.
+
+  Explorer maakt dat venster in zijn eigen, al draaiende proces. Windows staat
+  alleen het proces dat op dat moment invoer krijgt toe om de voorgrond te
+  pakken — dat is de browser. Het mapvenster belandt daardoor áchter de browser
+  en de gebruiker ziet niets gebeuren, terwijl het wel degelijk openstaat.
+
+  De ALT-tik is de gangbare manier om die blokkade te ontgrendelen: hij maakt
+  van dit proces kortstondig de invoerontvanger, waarna SetForegroundWindow wel
+  mag. Lukt het niet, dan is dat geen ramp — het venster staat er, alleen niet
+  vooraan — dus alles is fail-soft.
+#>
+function Breng-NaarVoren([string]$Pad) {
+  try {
+    Add-Type -Namespace EvaWin -Name Api -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, IntPtr e);
+'@ -ErrorAction Stop
+
+    $shell = New-Object -ComObject Shell.Application
+    $venster = $null
+    # Explorer heeft even nodig voordat het venster bestaat.
+    foreach ($poging in 1..25) {
+      foreach ($w in @($shell.Windows())) {
+        try {
+          if ($w.Document.Folder.Self.Path -eq $Pad) { $venster = $w; break }
+        } catch { }
+      }
+      if ($venster) { break }
+      Start-Sleep -Milliseconds 200
+    }
+    if (-not $venster) { Schrijf-Log 'venster niet gevonden om naar voren te halen'; return }
+
+    $hwnd = [IntPtr]$venster.HWND
+    [EvaWin.Api]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE
+    [EvaWin.Api]::keybd_event(0x12, 0, 0, [IntPtr]::Zero)          # ALT omlaag
+    [EvaWin.Api]::keybd_event(0x12, 0, 2, [IntPtr]::Zero)          # ALT omhoog
+    [EvaWin.Api]::SetForegroundWindow($hwnd) | Out-Null
+    Schrijf-Log 'venster naar voren gehaald'
+  } catch {
+    Schrijf-Log ('naar voren halen mislukt: ' + $_.Exception.Message)
+  }
+}
+
 try {
   if (-not $Controleer) { Schrijf-Log ("aangeroepen  <- " + $Uri) }
 
@@ -204,6 +250,7 @@ try {
   Schrijf-Log ("openen [$bron] $pad")
   Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$pad`""
   Schrijf-Log 'Verkenner gestart'
+  Breng-NaarVoren $pad
 } catch {
   if ($Controleer) { throw }
   Schrijf-Log ('FOUT: ' + $_.Exception.Message)
