@@ -5,7 +5,7 @@ import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
 import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { InternDossiersKnop } from './InternDossiersKnop'
-import { IconGrid, IconList } from '@/components/eva/Icons'
+import { IconGrid, IconList, IconCheck } from '@/components/eva/Icons'
 import { isServicedeskDossier } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -27,15 +27,78 @@ type Props = {
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
   /** Naam van de ingelogde medewerker — wordt voorgeselecteerd in de personen-slicer (bv. via ?mijn=1). */
   mijnNaam?: string | null
-  /** Toon de soort-slicer (Servicedesk / Projecten) links in de slicerbalk. */
+  /** Toon het soort-filter (Servicedesk / Projecten) in het filtermenu rechtsboven. */
   toonSoortSlicer?: boolean
 }
 
-type SoortFilter = 'alles' | 'servicedesk' | 'project'
+type SoortKeuze = 'servicedesk' | 'project'
 
-const SOORT_KLEUR: Record<Exclude<SoortFilter, 'alles'>, string> = {
+const SOORT_KLEUR: Record<SoortKeuze, string> = {
   servicedesk: '#0891b2',
   project:     '#3b82f6',
+}
+
+const SOORT_LABEL: Record<SoortKeuze, string> = {
+  servicedesk: 'Servicedesk',
+  project:     'Projecten',
+}
+
+function IconTrechter({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 5h17l-6.5 7.6V19l-4 2v-8.4z" />
+    </svg>
+  )
+}
+
+/** Eén aanvinkbare regel in het filtermenu. */
+function FilterRij({ actief, kleur, label, aantal, initialen, onClick }: {
+  actief: boolean
+  kleur: string
+  label: string
+  aantal: number
+  /** Gevuld voor personen (toont een gekleurde avatar), leeg voor soorten (toont een stip). */
+  initialen?: string
+  onClick: () => void
+}) {
+  const [hover, setHover] = React.useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+        padding: '5px 8px', borderRadius: 6, border: 'none',
+        background: hover ? 'var(--neutral-100)' : 'transparent',
+        cursor: 'pointer', fontSize: 12.5, fontWeight: actief ? 600 : 500,
+        color: 'var(--neutral-900)', textAlign: 'left',
+      }}
+    >
+      <span style={{
+        width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+        display: 'grid', placeItems: 'center',
+        border: `1.5px solid ${actief ? kleur : 'var(--border)'}`,
+        background: actief ? kleur : 'transparent',
+        color: '#fff',
+      }}>
+        {actief && <IconCheck size={10} />}
+      </span>
+      {initialen ? (
+        <span style={{
+          width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+          display: 'inline-grid', placeItems: 'center',
+          background: `linear-gradient(135deg, ${kleur}, ${kleur}cc)`,
+          color: '#fff', fontSize: 8, fontWeight: 700,
+        }}>{initialen}</span>
+      ) : (
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: kleur, flexShrink: 0 }} />
+      )}
+      <span style={{ flex: 1, whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--neutral-400)' }}>{aantal}</span>
+    </button>
+  )
 }
 
 export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam, toonSoortSlicer }: Props) {
@@ -51,10 +114,29 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   )
   // "Niet toegewezen": toon alleen dossiers zonder gekoppelde persoon (sectie-afhankelijk).
   const [alleenNietToegewezen, setAlleenNietToegewezen] = React.useState(false)
-  // Tweede, onafhankelijke slicer: filtert op controller (staat rechts in dezelfde balk).
+  // Tweede en derde slicer staan samen in het filtermenu rechtsboven (multiselect,
+  // leeg = geen filter): controller, en — alleen op aanvragen/offertes — de soort
+  // (servicedesk-dossiers vs. reguliere projecten).
   const [geselecteerdeControllers, setGeselecteerdeControllers] = React.useState<string[]>([])
-  // Derde slicer (alleen aanvragen/offertes): servicedesk-dossiers vs. reguliere projecten.
-  const [soort, setSoort] = React.useState<SoortFilter>('alles')
+  const [soorten, setSoorten] = React.useState<SoortKeuze[]>([])
+  const [filterOpen, setFilterOpen] = React.useState(false)
+  const filterRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!filterOpen) return
+    function bijKlik(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false)
+    }
+    function bijToets(e: KeyboardEvent) {
+      if (e.key === 'Escape') setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', bijKlik)
+    document.addEventListener('keydown', bijToets)
+    return () => {
+      document.removeEventListener('mousedown', bijKlik)
+      document.removeEventListener('keydown', bijToets)
+    }
+  }, [filterOpen])
 
   function switchView(v: ViewMode) {
     setView(v)
@@ -76,8 +158,10 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     })
   }
 
-  function toggleSoort(keuze: Exclude<SoortFilter, 'alles'>) {
-    setSoort(prev => (prev === keuze ? 'alles' : keuze))
+  function toggleSoort(keuze: SoortKeuze) {
+    setSoorten(prev =>
+      prev.includes(keuze) ? prev.filter(s => s !== keuze) : [...prev, keuze]
+    )
   }
 
   function toggleController(naam: string) {
@@ -143,6 +227,15 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     return map
   }, [dossiers])
 
+  const aantalPerController = React.useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dossiers) {
+      if (d.intern || !d.controller_naam) continue
+      map[d.controller_naam] = (map[d.controller_naam] ?? 0) + 1
+    }
+    return map
+  }, [dossiers])
+
   // Aantallen per soort (interne dossiers tellen niet mee — die staan al in de Intern-popup).
   const soortAantallen = React.useMemo(() => {
     let servicedesk = 0
@@ -155,10 +248,13 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     return { servicedesk, project }
   }, [dossiers])
 
-  // Gefilterde dossiers: soort-slicer, personen-slicer (of "Niet toegewezen") én controller-slicer.
+  // Gefilterde dossiers: soort, personen-slicer (of "Niet toegewezen") én controller.
   const gefilterdeDossiers = React.useMemo(() => {
     return dossiers.filter(d => {
-      if (soort !== 'alles' && (soort === 'servicedesk') !== isServicedeskDossier(d)) return false
+      if (soorten.length > 0
+        && !soorten.includes(isServicedeskDossier(d) ? 'servicedesk' : 'project')) {
+        return false
+      }
       if (alleenNietToegewezen) {
         if (persoonsNaamVoorFilter(d) != null) return false
       } else if (geselecteerdeLeiders.length > 0
@@ -172,7 +268,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, soort, sectie])
+  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, soorten, sectie])
 
   // Interne dossiers (Intern-toggle aan) worden verborgen op het bord/lijst en
   // alleen via de Intern-popup getoond.
@@ -220,65 +316,131 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   // niet-toegewezen dossiers zijn (dan tonen we de "Niet toegewezen"-knop).
   const toontPersonen = uniekePLs.length >= 2 || geselecteerdeLeiders.length > 0 || heeftNietToegewezen || alleenNietToegewezen
   const toontControllers = uniekeControllers.length >= 1
-  // Soort-slicer alleen tonen als er daadwerkelijk iets te scheiden valt (beide soorten aanwezig),
+  // Soort-filter alleen tonen als er daadwerkelijk iets te scheiden valt (beide soorten aanwezig),
   // of als er al op soort gefilterd wordt (zodat je de keuze kunt terugdraaien).
   const toontSoort = !!toonSoortSlicer
-    && (soort !== 'alles' || (soortAantallen.servicedesk > 0 && soortAantallen.project > 0))
+    && (soorten.length > 0 || (soortAantallen.servicedesk > 0 && soortAantallen.project > 0))
 
-  const soortChip = (keuze: Exclude<SoortFilter, 'alles'>, label: string, aantal: number) => {
-    const actief = soort === 'alles' || soort === keuze
-    const kleur = SOORT_KLEUR[keuze]
-    return (
+  // Soort + controller zitten samen onder één knop rechtsboven; de personen-chips
+  // blijven links staan omdat je daar het vaakst op wisselt.
+  const aantalActieveFilters = soorten.length + geselecteerdeControllers.length
+  const toontFilterMenu = toontSoort || toontControllers
+
+  const filterMenu = toontFilterMenu ? (
+    <div ref={filterRef} style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
       <button
-        key={keuze}
-        onClick={() => toggleSoort(keuze)}
-        title={soort === keuze ? `Toon weer alle dossiers` : `Toon alleen ${label.toLowerCase()}`}
+        onClick={() => setFilterOpen(o => !o)}
+        title="Filter op soort en controller"
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px',
+          padding: '4px 10px',
           borderRadius: 99,
-          border: `1.5px solid ${actief ? kleur : 'var(--border)'}`,
-          background: actief ? `${kleur}18` : 'transparent',
+          border: `1.5px solid ${aantalActieveFilters > 0 ? 'var(--brand-600)' : 'var(--border)'}`,
+          background: aantalActieveFilters > 0 ? 'var(--brand-50)' : 'transparent',
           cursor: 'pointer', fontSize: 12, fontWeight: 500,
-          color: actief ? 'var(--neutral-900)' : 'var(--neutral-400)',
+          color: aantalActieveFilters > 0 ? 'var(--brand-600)' : 'var(--neutral-500)',
           transition: 'all 0.12s',
         }}
       >
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-          background: actief ? kleur : 'var(--neutral-300)',
-        }} />
-        {label}
-        <span style={{ fontSize: 11, fontWeight: 600, color: actief ? kleur : 'var(--neutral-400)' }}>
-          {aantal}
-        </span>
+        <IconTrechter />
+        Filteren
+        {aantalActieveFilters > 0 && (
+          <span style={{
+            minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99,
+            display: 'inline-grid', placeItems: 'center',
+            background: 'var(--brand-600)', color: '#fff',
+            fontSize: 10, fontWeight: 700, lineHeight: 1,
+          }}>
+            {aantalActieveFilters}
+          </span>
+        )}
       </button>
-    )
-  }
 
-  const slicerBalk = (toontSoort || toontPersonen || toontControllers) ? (
+      {filterOpen && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+          minWidth: 230, maxHeight: 360, overflowY: 'auto',
+          background: 'var(--bg-elev, white)',
+          border: '1px solid var(--border)', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+          padding: 6, zIndex: 500,
+        }}>
+          {toontSoort && (
+            <>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+                textTransform: 'uppercase', color: 'var(--neutral-400)',
+                padding: '4px 8px 2px',
+              }}>
+                Soort
+              </div>
+              {(['project', 'servicedesk'] as SoortKeuze[]).map(keuze => (
+                <FilterRij
+                  key={keuze}
+                  actief={soorten.includes(keuze)}
+                  kleur={SOORT_KLEUR[keuze]}
+                  label={SOORT_LABEL[keuze]}
+                  aantal={soortAantallen[keuze]}
+                  onClick={() => toggleSoort(keuze)}
+                />
+              ))}
+            </>
+          )}
+
+          {toontSoort && toontControllers && (
+            <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
+          )}
+
+          {toontControllers && (
+            <>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+                textTransform: 'uppercase', color: 'var(--neutral-400)',
+                padding: '4px 8px 2px',
+              }}>
+                Controller
+              </div>
+              {uniekeControllers.map(naam => (
+                <FilterRij
+                  key={naam}
+                  actief={geselecteerdeControllers.includes(naam)}
+                  kleur={kleurPerController[naam] ?? crewKleur(crewInitialen(naam))}
+                  label={naam}
+                  aantal={aantalPerController[naam] ?? 0}
+                  initialen={crewInitialen(naam)}
+                  onClick={() => toggleController(naam)}
+                />
+              ))}
+            </>
+          )}
+
+          {aantalActieveFilters > 0 && (
+            <>
+              <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
+              <button
+                onClick={() => { setSoorten([]); setGeselecteerdeControllers([]) }}
+                style={{
+                  width: '100%', padding: '5px 8px', borderRadius: 6,
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 12, fontWeight: 500, color: 'var(--neutral-500)', textAlign: 'left',
+                }}
+              >
+                Filters wissen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null
+
+  const slicerBalk = (toontFilterMenu || toontPersonen) ? (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '8px 16px',
       borderBottom: '1px solid var(--border)',
       flexShrink: 0,
     }}>
-      {toontSoort && (
-        <div style={{
-          display: 'flex', gap: 6, alignItems: 'center',
-          paddingRight: 16, borderRight: '1px solid var(--border)', flexShrink: 0,
-        }}>
-          <span style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
-            textTransform: 'uppercase', color: 'var(--neutral-400)',
-          }}>
-            Soort
-          </span>
-          {soortChip('project', 'Projecten', soortAantallen.project)}
-          {soortChip('servicedesk', 'Servicedesk', soortAantallen.servicedesk)}
-        </div>
-      )}
-
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       {toontPersonen && uniekePLs.map(naam => {
         const actief = !alleenNietToegewezen && (geselecteerdeLeiders.length === 0 || geselecteerdeLeiders.includes(naam))
@@ -338,13 +500,13 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           Niet toegewezen
         </button>
       )}
-      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen || geselecteerdeControllers.length > 0 || soort !== 'alles') && (
+      {(geselecteerdeLeiders.length > 0 || alleenNietToegewezen || aantalActieveFilters > 0) && (
         <button
           onClick={() => {
             setGeselecteerdeLeiders([])
             setAlleenNietToegewezen(false)
             setGeselecteerdeControllers([])
-            setSoort('alles')
+            setSoorten([])
           }}
           style={{
             padding: '3px 9px',
@@ -361,53 +523,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       )}
       </div>
 
-      {toontControllers && (
-        <div style={{
-          display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
-          marginLeft: 'auto',
-        }}>
-          <span style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
-            textTransform: 'uppercase', color: 'var(--neutral-400)',
-          }}>
-            Controller
-          </span>
-          {uniekeControllers.map(naam => {
-            const actief = geselecteerdeControllers.length === 0 || geselecteerdeControllers.includes(naam)
-            const kleur  = kleurPerController[naam] ?? crewKleur(crewInitialen(naam))
-            return (
-              <button
-                key={naam}
-                onClick={() => toggleController(naam)}
-                title={`Filter op controller ${naam}`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '3px 9px 3px 4px',
-                  borderRadius: 99,
-                  border: `1.5px solid ${actief ? kleur : 'var(--border)'}`,
-                  background: actief ? `${kleur}18` : 'transparent',
-                  cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                  color: actief ? 'var(--neutral-900)' : 'var(--neutral-400)',
-                  transition: 'all 0.12s',
-                }}
-              >
-                <span style={{
-                  width: 18, height: 18, borderRadius: '50%',
-                  display: 'inline-grid', placeItems: 'center',
-                  background: actief
-                    ? `linear-gradient(135deg, ${kleur}, ${kleur}cc)`
-                    : 'var(--neutral-200)',
-                  color: actief ? '#fff' : 'var(--neutral-500)',
-                  fontSize: 8, fontWeight: 700, flexShrink: 0,
-                }}>
-                  {crewInitialen(naam)}
-                </span>
-                {naam}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {filterMenu}
     </div>
   ) : null
 

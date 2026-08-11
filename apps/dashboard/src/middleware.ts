@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server'
 import { alsSessieCookie, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobileUA } from '@/lib/isMobileUA'
 import { COOKIE_SESSIE_VERLOOPT, volgendeUitlogTijd, mobieleVervalTijd } from '@/lib/sessie'
+import { nextParameter, veiligNextPad } from '@/lib/auth/next-pad'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -58,9 +59,15 @@ export async function middleware(request: NextRequest) {
   const isWachtwoordRoute = pathname === '/wachtwoord-instellen'
   const isOpMobiel = pathname === '/m' || pathname.startsWith('/m/')
 
+  // Waar wilde deze request naartoe? Gaat als ?next= mee naar het inlogscherm,
+  // zodat een aangetikte pushmelding of een link uit een mail ná het inloggen
+  // alsnog op de juiste plek uitkomt in plaats van op de startpagina. Alleen voor
+  // paginarequests: een achtergrond-fetch is geen bestemming.
+  const bestemming = isApiRoute ? '' : nextParameter(pathname + request.nextUrl.search)
+
   // Niet ingelogd → doorsturen naar login (behalve login-pagina, auth-callbacks, cron- en portaalroutes)
   if (!user && !isLoginPage && !isAuthRoute && !isCronRoute && !isPubliekPortaal) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL(`/login${bestemming}`, request.url))
   }
 
   if (user) {
@@ -75,7 +82,9 @@ export async function middleware(request: NextRequest) {
         // Vervalmoment voorbij (desktop: einde werkdag; mobiel: 3 dagen na login)
         // → sessie beëindigen en naar login. Dit dekt ook het geval "app heropenen".
         await supabase.auth.signOut()
-        const uit = NextResponse.redirect(new URL('/login', request.url))
+        // Ook hier de bestemming meegeven: dit is juist het geval waarin iemand
+        // een melding aantikt terwijl zijn sessie net verlopen is.
+        const uit = NextResponse.redirect(new URL(`/login${bestemming}`, request.url))
         // Door signOut gewiste Supabase-cookies meenemen op de redirect …
         response.cookies.getAll().forEach((c) => uit.cookies.set(c))
         // … en de verval- + markercookie opruimen, anders logt de volgende login direct weer uit.
@@ -108,10 +117,12 @@ export async function middleware(request: NextRequest) {
       })
     }
 
-    // Al ingelogd en op login → meteen naar de juiste home (mobiel: /m).
+    // Al ingelogd en op login → meteen naar de juiste home (mobiel: /m), of naar
+    // de bestemming die in ?next= is meegegeven.
     // Server-side beslist zodat de desktop-app niet kort in beeld flitst.
     if (isLoginPage) {
-      return NextResponse.redirect(new URL(mobiel ? '/m' : '/', request.url))
+      const gevraagd = veiligNextPad(request.nextUrl.searchParams.get('next'))
+      return NextResponse.redirect(new URL(gevraagd ?? (mobiel ? '/m' : '/'), request.url))
     }
 
     // Telefoon op een desktop-route → server-side naar de mobiele omgeving.
