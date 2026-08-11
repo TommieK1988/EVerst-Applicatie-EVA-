@@ -1,19 +1,39 @@
-import { createClient } from '@everts/database/server'
+import { createClient, createAdminClient } from '@everts/database/server'
 import { telMijnOpenTaken } from '@/lib/taken/services/taken'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import MobielHome from '@/components/mobiel/MobielHome'
 
 export const metadata = { title: 'EVA Mobiel' }
 
+/** Alleen tellen, geen rijen: dit is het eerste scherm dat laadt. */
+async function telOngelezenMeldingen(userId: string): Promise<number> {
+  try {
+    const { count } = await createAdminClient()
+      .from('notificaties')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('gelezen', false)
+    return count ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export default async function MobielHomePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Alleen een teller ophalen, geen taakrijen — dit is het eerste scherm dat laadt.
-  const [openTaken, medewerker] = await Promise.all([
+  const [openTaken, medewerker, ongelezenMeldingen] = await Promise.all([
     user ? telMijnOpenTaken(user.id).catch(() => 0) : Promise.resolve(0),
     getCurrentMedewerker().catch(() => null),
+    user ? telOngelezenMeldingen(user.id) : Promise.resolve(0),
   ])
 
-  return <MobielHome naam={medewerker?.voornaam ?? null} openTaken={openTaken} />
+  return (
+    <MobielHome
+      naam={medewerker?.voornaam ?? null}
+      openTaken={openTaken}
+      ongelezenMeldingen={ongelezenMeldingen}
+    />
+  )
 }

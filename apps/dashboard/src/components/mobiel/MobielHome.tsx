@@ -10,14 +10,19 @@ import LocatieAutoOpen from './LocatieAutoOpen'
  * bottom-nav). Elk sub-scherm heeft een terug-link naar `/m` via `AppHeader`.
  */
 export default function MobielHome({
-  naam, openTaken,
+  naam, openTaken, ongelezenMeldingen = 0,
 }: {
   naam?: string | null
   openTaken?: number
+  ongelezenMeldingen?: number
 }) {
   return (
     <>
-      <AppHeader title="EVA" sub={naam ? `Welkom, ${naam}` : 'Buitendienst'} />
+      <AppHeader
+        title="EVA"
+        sub={naam ? `Welkom, ${naam}` : 'Buitendienst'}
+        ongelezenMeldingen={ongelezenMeldingen}
+      />
       <div
         style={{
           padding: 16,

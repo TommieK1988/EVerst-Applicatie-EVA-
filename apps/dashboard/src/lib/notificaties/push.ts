@@ -2,6 +2,7 @@ import 'server-only'
 import webpush from 'web-push'
 import { createAdminClient } from '@everts/database/server'
 import { logFout } from '@/lib/fouten/log'
+import { isMobileUA } from '@/lib/isMobileUA'
 
 /**
  * Pushmeldingen (Web Push / VAPID).
@@ -35,19 +36,59 @@ type Abonnement = {
   endpoint: string
   p256dh: string
   auth: string
+  user_agent: string | null
 }
 
-let ingesteld: boolean | null = null
+/** Dossier-secties op de desktop; op mobiel is er één dossierscherm. */
+const DOSSIER_SECTIES = ['aanvragen', 'offertes', 'opdrachten', 'servicedesk']
 
-/** Zet de VAPID-gegevens één keer per proces. Geeft false als er geen sleutels zijn. */
-function vapidGereed(): boolean {
-  if (ingesteld !== null) return ingesteld
+/**
+ * Vertaalt een desktop-pad naar het mobiele equivalent.
+ *
+ * Nodig omdat de middleware een telefoon vanaf elke desktop-route naar `/m` stuurt.
+ * Zonder deze vertaling landt élke aangetikte pushmelding op het startscherm in
+ * plaats van bij de melding — de melding zegt dan wel wát er is, maar brengt je er
+ * niet heen. De user-agent staat per abonnement vast, dus dit kan per apparaat.
+ *
+ * Alleen paden waarvan een mobiel scherm bestaat worden omgezet; de rest gaat naar
+ * het meldingenscherm, want daar staat de melding in elk geval nog een keer.
+ */
+export function naarMobielPad(pad: string): string {
+  if (!pad || pad.startsWith('/m/') || pad === '/m') return pad || '/m'
+
+  const [zonderQuery] = pad.split(/[?#]/)
+  const delen = zonderQuery.split('/').filter(Boolean)
+
+  if (delen.length >= 2 && DOSSIER_SECTIES.includes(delen[0])) {
+    return `/m/dossiers/${delen[1]}`
+  }
+  if (delen[0] === 'taken') return '/m/taken'
+  if (delen[0] === 'uren') return '/m/uren'
+  if (delen[0] === 'planning') return '/m/planning'
+
+  return '/m/notificaties'
+}
+
+/**
+ * Waarom push niet werkt, als het niet werkt. Wordt tot in het scherm doorgegeven:
+ * "staat niet ingesteld" is als melding waardeloos wanneer je niet weet óf de
+ * sleutels ontbreken óf ze worden afgewezen.
+ */
+export type VapidStand =
+  | { ok: true }
+  | { ok: false; reden: 'geen-sleutels' | 'ongeldig' }
+
+let stand: VapidStand | null = null
+
+/** Zet de VAPID-gegevens één keer per proces. */
+function vapidStand(): VapidStand {
+  if (stand !== null) return stand
 
   const publiek = process.env.VAPID_PUBLIC_KEY
   const prive = process.env.VAPID_PRIVATE_KEY
   if (!publiek || !prive) {
-    ingesteld = false
-    return false
+    stand = { ok: false, reden: 'geen-sleutels' }
+    return stand
   }
 
   // Het subject is verplicht in de VAPID-spec: een mailto: of https: waarmee de
@@ -57,18 +98,32 @@ function vapidGereed(): boolean {
   const subject =
     process.env.VAPID_SUBJECT ||
     (app?.startsWith('https://') ? app.replace(/\/+$/, '') : 'https://eva.everts.chat')
+
   try {
     webpush.setVapidDetails(subject, publiek, prive)
-    ingesteld = true
-  } catch {
-    ingesteld = false
+    stand = { ok: true }
+  } catch (fout) {
+    stand = { ok: false, reden: 'ongeldig' }
+    // Naar het foutenlogboek: dit is de enige plek waar staat wat er precies mis
+    // is met de sleutels, en zonder dit zoek je het in de omgeving in plaats van
+    // in de waarde. Sleutels zelf gaan er niet in, alleen hun vorm.
+    void logFout({
+      omgeving: 'server',
+      bron: 'lib/notificaties/push',
+      melding: `VAPID-instelling geweigerd: ${(fout as Error)?.message ?? 'onbekend'}`,
+      extra: {
+        subject,
+        publiekeSleutelLengte: publiek.length,
+        priveSleutelLengte: prive.length,
+      },
+    })
   }
-  return ingesteld
+  return stand
 }
 
 /** Is push op deze omgeving geconfigureerd? Gebruikt door /api/push/sleutel. */
-export function pushBeschikbaar(): boolean {
-  return vapidGereed()
+export function pushBeschikbaar(): VapidStand {
+  return vapidStand()
 }
 
 /**
@@ -80,31 +135,33 @@ export function pushBeschikbaar(): boolean {
  * endpoint sturen.
  */
 export async function stuurPush(userId: string, payload: PushPayload): Promise<number> {
-  if (!userId || !vapidGereed()) return 0
+  if (!userId || !vapidStand().ok) return 0
 
   try {
     const admin = createAdminClient()
     const { data } = await admin
       .from('push_abonnementen')
-      .select('id, endpoint, p256dh, auth')
+      .select('id, endpoint, p256dh, auth, user_agent')
       .eq('user_id', userId)
 
     const abonnementen = (data ?? []) as Abonnement[]
     if (abonnementen.length === 0) return 0
 
-    const bericht = JSON.stringify({
-      titel: payload.titel,
-      body: payload.body ?? '',
-      url: payload.url ?? '/',
-      type: payload.type ?? 'algemeen',
-      id: payload.id ?? null,
-    })
-
+    const doel = payload.url ?? '/'
     const verlopen: string[] = []
     let gelukt = 0
 
     await Promise.all(
       abonnementen.map(async (ab) => {
+        // Per apparaat: een telefoon krijgt het mobiele pad mee, de rest het gewone.
+        const bericht = JSON.stringify({
+          titel: payload.titel,
+          body: payload.body ?? '',
+          url: isMobileUA(ab.user_agent) ? naarMobielPad(doel) : doel,
+          type: payload.type ?? 'algemeen',
+          id: payload.id ?? null,
+        })
+
         try {
           await webpush.sendNotification(
             { endpoint: ab.endpoint, keys: { p256dh: ab.p256dh, auth: ab.auth } },

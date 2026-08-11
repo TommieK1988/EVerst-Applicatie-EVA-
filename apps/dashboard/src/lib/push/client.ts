@@ -127,7 +127,11 @@ export function usePush() {
 
       const sleutel = await fetch('/api/push/sleutel').then(r => r.json())
       if (!sleutel?.beschikbaar) {
-        setFout('Pushmeldingen zijn op deze omgeving nog niet ingesteld.')
+        setFout(
+          sleutel?.reden === 'ongeldig'
+            ? 'De sleutels voor pushmeldingen worden niet geaccepteerd. Controleer VAPID_SUBJECT (moet met mailto: of https:// beginnen) en of het sleutelpaar bij elkaar hoort — de details staan in het foutenlogboek.'
+            : 'Pushmeldingen zijn op deze omgeving nog niet ingesteld: VAPID_PUBLIC_KEY en VAPID_PRIVATE_KEY ontbreken in deze deploy. Nieuwe omgevingsvariabelen komen pas mee in een deploy die ná het instellen is gemaakt.',
+        )
         setStatus('uit')
         return
       }

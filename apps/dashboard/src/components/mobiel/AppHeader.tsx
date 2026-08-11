@@ -11,11 +11,17 @@ import Link from 'next/link'
  * die die waarde niet leveren.
  */
 export default function AppHeader({
-  title, sub, backHref,
+  title, sub, backHref, ongelezenMeldingen,
 }: {
   title: string
   sub?: string
   backHref?: string
+  /**
+   * Aantal ongelezen meldingen. Geef dit mee om het belletje te tonen; `undefined`
+   * laat het weg. Nul is een geldige waarde: het belletje blijft dan staan, zonder
+   * stip — anders verspringt de balk zodra je alles gelezen hebt.
+   */
+  ongelezenMeldingen?: number
 }) {
   return (
     <div
@@ -71,6 +77,42 @@ export default function AppHeader({
             </div>
           )}
         </div>
+
+        {ongelezenMeldingen !== undefined && (
+          <Link
+            href="/m/notificaties"
+            aria-label={ongelezenMeldingen > 0 ? `Meldingen (${ongelezenMeldingen} ongelezen)` : 'Meldingen'}
+            style={{
+              flexShrink: 0, position: 'relative',
+              width: 48, height: 48, borderRadius: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(255,255,255,.18)',
+              border: '1px solid rgba(255,255,255,.28)',
+              color: '#fff', textDecoration: 'none',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9.6a6 6 0 0 1 12 0v4.8l1.8 3H4.2l1.8-3V9.6ZM9.6 19.2a2.4 2.4 0 0 0 4.8 0" />
+            </svg>
+            {ongelezenMeldingen > 0 && (
+              <span
+                style={{
+                  position: 'absolute', top: 6, right: 6,
+                  minWidth: 18, height: 18, padding: '0 5px',
+                  borderRadius: 9, background: '#ef4444', color: '#fff',
+                  fontSize: 11, fontWeight: 700, lineHeight: '18px',
+                  textAlign: 'center',
+                  // Randje in de headerkleur: zonder scheiding loopt rood weg in
+                  // de donkere polygon-achtergrond.
+                  boxShadow: '0 0 0 2px rgba(1,42,21,.85)',
+                }}
+              >
+                {ongelezenMeldingen > 9 ? '9+' : ongelezenMeldingen}
+              </span>
+            )}
+          </Link>
+        )}
 
         {backHref && (
           <Link
