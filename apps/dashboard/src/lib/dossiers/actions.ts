@@ -12,7 +12,7 @@ import { assertDossierBewerkbaar } from './guards'
 import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
 import {
-  Bouw7Client,
+  type Bouw7Client,
   type Bouw7ProjectFinancial,
   type Bouw7ControlResponse,
   type Bouw7ControlEntry,
@@ -30,6 +30,7 @@ import {
   type Bouw7SalesInvoice,
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
+import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
 import { laadKaartBedragen } from './kaart-bedragen'
 
@@ -1394,18 +1395,8 @@ export async function getDossierFinancieel(dossierId: string): Promise<DossierFi
 
 async function fetchBouw7Financial(bouw7Id: string): Promise<Bouw7ProjectFinancial | null> {
   try {
-    const supabase = createAdminClient() as any
-    const { data } = await supabase
-      .from('integraties')
-      .select('config')
-      .eq('naam', 'bouw7')
-      .maybeSingle()
-
-    if (!data) return null
-    const config = data.config as Record<string, string>
-    if (!config.api_key || !config.app_name) return null
-
-    const client = new Bouw7Client(config.api_key, config.app_name)
+    const client = await getBouw7ClientOfNull()
+    if (!client) return null
     return await client.getAthena<Bouw7ProjectFinancial>(`/project-financial/${bouw7Id}`)
   } catch {
     return null
@@ -1538,17 +1529,10 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
 
   if (!dossier?.bouw7_id) return leeg
 
-  const { data: integratie } = await supabase
-    .from('integraties')
-    .select('config')
-    .eq('naam', 'bouw7')
-    .maybeSingle()
-
-  const config = integratie?.config as Record<string, string> | undefined
-  if (!config?.api_key || !config?.app_name) return leeg
+  const client = await getBouw7ClientOfNull()
+  if (!client) return leeg
 
   try {
-    const client = new Bouw7Client(config.api_key, config.app_name)
     const bouw7Id = dossier.bouw7_id
 
     // Drie bronnen parallel: projectbewaking per kostensoort, gefactureerde inkoop, en bestelregels.
@@ -1837,10 +1821,9 @@ export async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bou
   const supabase = createAdminClient() as any
   const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).single()
   if (!dossier?.bouw7_id) return null
-  const { data: integratie } = await supabase.from('integraties').select('config').eq('naam', 'bouw7').maybeSingle()
-  const config = integratie?.config as Record<string, string> | undefined
-  if (!config?.api_key || !config?.app_name) return null
-  return { client: new Bouw7Client(config.api_key, config.app_name), bouw7Id: String(dossier.bouw7_id) }
+  const client = await getBouw7ClientOfNull()
+  if (!client) return null
+  return { client, bouw7Id: String(dossier.bouw7_id) }
 }
 
 /* — Inkoop — */

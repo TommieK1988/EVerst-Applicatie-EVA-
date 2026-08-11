@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo, type Bouw7AdditionalWorkLine } from './client'
 import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
+import { getBouw7RawConfig } from './config'
 import { fingerprint } from './fingerprint'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
@@ -42,19 +43,11 @@ function toDate(dt?: string | null): string | null {
   return dt.slice(0, 10)
 }
 
-/** Haal de Bouw7 API key op uit de integraties-tabel. */
+/** Haal de Bouw7 API key op uit de integraties-tabel (via de gedeelde config-cache). */
 export async function getBouw7Client(): Promise<Bouw7Client> {
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('integraties')
-    .select('config')
-    .eq('naam', 'bouw7')
-    .maybeSingle()
+  const config = await getBouw7RawConfig()
+  if (!config) throw new Error('Bouw7 integratie niet geconfigureerd. Ga naar Instellingen → Integraties.')
 
-  if (error) throw new Error(`Kan integratie-config niet laden: ${error.message}`)
-  if (!data) throw new Error('Bouw7 integratie niet geconfigureerd. Ga naar Instellingen → Integraties.')
-
-  const config = data.config as Record<string, string>
   const apiKey = config.api_key
   if (!apiKey) throw new Error('Bouw7 API key ontbreekt in de integratie-config.')
   const appName = config.app_name

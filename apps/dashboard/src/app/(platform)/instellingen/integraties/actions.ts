@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, syncMeerwerk, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
+import { vergeetBouw7Config } from '@/lib/bouw7/config'
 
 type Integratie = {
   id: string
@@ -58,6 +59,9 @@ export async function saveBouw7Config(formData: FormData): Promise<SaveResult> {
   const { error } = await query
   if (error) return { ok: false, error: error.message }
 
+  // De config wordt per serverinstantie kort gecachet; na een wijziging meteen laten vallen zodat
+  // een nieuwe sleutel niet pas na de TTL in gebruik wordt genomen.
+  vergeetBouw7Config()
   revalidatePath('/instellingen/integraties')
   return { ok: true }
 }

@@ -82,57 +82,76 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   )
 }
 
+/**
+ * Data-laadwerk van het Informatie-tab, apart zodat het achter een <Suspense> kan.
+ *
+ * Het meerwerkbedrag is de enige post die van Bouw7 kan komen. EVA-native meerwerkregels zijn
+ * leidend zodra ze er zijn; pas als die ontbreken valt het terug op het losse Bouw7-aggregaat
+ * (`additionalWork.prognosis == .expected`). Beslissend is het AANTAL goedgekeurde regels, niet het
+ * bedrag: bij per saldo minderwerk is de som negatief, en dat hoort het contracttotaal te verlagen
+ * in plaats van naar Bouw7 terug te vallen. Zijn er EVA-regels, dan wordt de Bouw7-waarde toch
+ * weggegooid — die call slaan we dan over.
+ */
+async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossier: DossierRij; sectie: DossierSectie }) {
+  const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums, opdrachtOverzicht] = await Promise.all([
+    getMedewerkers(),
+    dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
+    dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
+    getSjablonen('dossier'),
+    getUrgenteTakenVoorDossier(id),
+    getUniekeBouw7Categorieen(),
+    // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
+    getGoedgekeurdMeerwerk(id).catch(() => ({ excl: 0, aantal: 0 })),
+    getDossierNotities(id).catch(() => []),
+    getCurrentMedewerker().catch(() => null),
+    getWerkmaatschappijen().catch(() => []),
+    // Procesdatums (aanvraag → financieel gereed) voor het Projectinformatie-blok.
+    getDossierDatums(id).catch(() => LEGE_DOSSIER_DATUMS),
+    // Opdracht-samenstelling (stelposten/opties + bewaking) — alleen voor opdracht-dossiers.
+    sectie === 'opdracht' ? getOpdrachtOverzicht(id).catch(() => null) : Promise.resolve(null),
+  ])
+
+  let meerwerk = meerwerkEva.excl
+  if (meerwerkEva.aantal === 0) {
+    // Geen EVA-regels → terugvallen op Bouw7, en alleen dan die call doen.
+    const financieel = dossier.bouw7_id ? await getDossierFinancieel(id).catch(() => null) : null
+    const aw = financieel?.bouw7Financial?.additionalWork
+    meerwerk = Number(aw?.prognosis ?? aw?.expected) || 0
+  }
+
+  return (
+    <InformatieTab
+      dossier={dossier}
+      sectie={sectie}
+      medewerkers={medewerkers}
+      factuuradressen={factuuradressen}
+      relatie={relatie}
+      sjablonen={sjablonen}
+      urgenteTaken={urgenteTaken}
+      categorieen={categorieen}
+      meerwerk={meerwerk}
+      notities={notities}
+      currentMedewerkerId={currentMedewerker?.id ?? null}
+      werkmaatschappijen={werkmaatschappijen}
+      datums={datums}
+      opdrachtOverzicht={opdrachtOverzicht}
+    />
+  )
+}
+
 async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij | null) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
-    const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, financieel, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums, opdrachtOverzicht] = await Promise.all([
-      getMedewerkers(),
-      dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
-      dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
-      getSjablonen('dossier'),
-      getUrgenteTakenVoorDossier(id),
-      getUniekeBouw7Categorieen(),
-      // Goedgekeurd meerwerk komt live uit Bouw7; alleen ophalen bij gekoppeld dossier.
-      dossier.bouw7_id ? getDossierFinancieel(id).catch(() => null) : Promise.resolve(null),
-      // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
-      getGoedgekeurdMeerwerk(id).catch(() => ({ excl: 0, aantal: 0 })),
-      getDossierNotities(id).catch(() => []),
-      getCurrentMedewerker().catch(() => null),
-      getWerkmaatschappijen().catch(() => []),
-      // Procesdatums (aanvraag → financieel gereed) voor het Projectinformatie-blok.
-      getDossierDatums(id).catch(() => LEGE_DOSSIER_DATUMS),
-      // Opdracht-samenstelling (stelposten/opties + bewaking) — alleen voor opdracht-dossiers.
-      sectie === 'opdracht' ? getOpdrachtOverzicht(id).catch(() => null) : Promise.resolve(null),
-    ])
-
-    // EVA-regels zijn leidend voor het meerwerk in het contracttotaal; bij afwezigheid van EVA-regels
-    // valt het terug op het losse Bouw7-aggregaat (additionalWork.prognosis == .expected).
-    // Beslissend is het AANTAL goedgekeurde regels, niet het bedrag: bij per saldo minderwerk is de
-    // som negatief, en dat hoort het contracttotaal te verlagen in plaats van naar Bouw7 terug te vallen.
-    const aw = financieel?.bouw7Financial?.additionalWork
-    const meerwerkBouw7 = Number(aw?.prognosis ?? aw?.expected) || 0
-    const meerwerk = meerwerkEva.aantal > 0 ? meerwerkEva.excl : meerwerkBouw7
-
+    // Ook dit tab kan op Bouw7 wachten (het meerwerk-aggregaat), dus net als de tabs hieronder
+    // achter een <Suspense>: de sidebar met de tabbalk blijft klikbaar terwijl de inhoud instreamt,
+    // in plaats van dat de hele pagina achter het laadscherm blijft hangen.
     return (
       <>
         {titleInjector}
-        <InformatieTab
-          dossier={dossier}
-          sectie={sectie}
-          medewerkers={medewerkers}
-          factuuradressen={factuuradressen}
-          relatie={relatie}
-          sjablonen={sjablonen}
-          urgenteTaken={urgenteTaken}
-          categorieen={categorieen}
-          meerwerk={meerwerk}
-          notities={notities}
-          currentMedewerkerId={currentMedewerker?.id ?? null}
-          werkmaatschappijen={werkmaatschappijen}
-          datums={datums}
-          opdrachtOverzicht={opdrachtOverzicht}
-        />
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <InformatieTabInhoud id={id} dossier={dossier} sectie={sectie} />
+        </Suspense>
       </>
     )
   }
