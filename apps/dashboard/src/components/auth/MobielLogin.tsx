@@ -21,7 +21,7 @@ const veldStyle: React.CSSProperties = {
  * medewerkers zonder Microsoft-account (app-gebruikers). Desktop kent alleen
  * Microsoft — platformgebruikers hebben altijd een @everts.chat-account.
  */
-export default function MobielLogin({ fout }: { fout?: string }) {
+export default function MobielLogin({ fout, next }: { fout?: string; next?: string }) {
   const [loading, setLoading] = React.useState(false)
   const [email, setEmail] = React.useState('')
   const [wachtwoord, setWachtwoord] = React.useState('')
@@ -29,13 +29,18 @@ export default function MobielLogin({ fout }: { fout?: string }) {
   const [wwFout, setWwFout] = React.useState<string | null>(null)
   const [melding, setMelding] = React.useState<string | null>(null)
 
+  // Bestemming meenemen door de hele inlogronde heen; `next` is server-side al
+  // gevalideerd (lib/auth/next-pad.ts).
+  const callbackUrl = (origin: string) =>
+    next ? `${origin}/auth/callback?next=${encodeURIComponent(next)}` : `${origin}/auth/callback`
+
   async function loginMetMicrosoft() {
     setLoading(true)
     const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'azure',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl(window.location.origin),
         scopes: 'openid email profile',
       },
     })
@@ -46,7 +51,7 @@ export default function MobielLogin({ fout }: { fout?: string }) {
     setWwFout(null); setMelding(null); setBezig(true)
     const res = await wachtwoordLogin({ email, wachtwoord })
     if (!res.ok) { setWwFout(res.error); setBezig(false); return }
-    window.location.assign('/m')
+    window.location.assign(next ?? '/m')
   }
 
   async function wachtwoordVergeten() {

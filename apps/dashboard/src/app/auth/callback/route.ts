@@ -3,13 +3,17 @@ import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobileUA } from '@/lib/isMobileUA'
+import { veiligNextPad } from '@/lib/auth/next-pad'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const mobiel = isMobileUA(request.headers.get('user-agent'))
-  // Telefoon → direct naar de mobiele omgeving (geen desktop-flits na inloggen).
-  const next = searchParams.get('next') ?? (mobiel ? '/m' : '/')
+  // Telefoon → direct naar de mobiele omgeving (geen desktop-flits na inloggen),
+  // tenzij er een bestemming is meegegeven (aangetikte melding, link uit een mail).
+  // Valideren is hier niet optioneel: `next` staat in de URL en zonder controle is
+  // dit een open redirect. Zie lib/auth/next-pad.ts.
+  const next = veiligNextPad(searchParams.get('next')) ?? (mobiel ? '/m' : '/')
 
   if (code) {
     // Mobiele login → auth-cookies meteen persistent schrijven (de markercookie

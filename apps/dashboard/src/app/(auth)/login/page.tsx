@@ -1,5 +1,6 @@
 import { headers } from 'next/headers'
 import { isMobileUA } from '@/lib/isMobileUA'
+import { veiligNextPad } from '@/lib/auth/next-pad'
 import DesktopLogin from '@/components/auth/DesktopLogin'
 import MobielLogin from '@/components/auth/MobielLogin'
 
@@ -13,10 +14,16 @@ export const metadata = { title: 'Inloggen · EVA' }
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fout?: string }>
+  searchParams: Promise<{ fout?: string; next?: string }>
 }) {
-  const { fout } = await searchParams
+  const { fout, next } = await searchParams
   const mobiel = isMobileUA((await headers()).get('user-agent'))
 
-  return mobiel ? <MobielLogin fout={fout} /> : <DesktopLogin fout={fout} />
+  // Bestemming waar de bezoeker naartoe wilde (zie lib/auth/next-pad.ts). Hier al
+  // gevalideerd, zodat de client-componenten er blind op kunnen vertrouwen.
+  const bestemming = veiligNextPad(next) ?? undefined
+
+  return mobiel
+    ? <MobielLogin fout={fout} next={bestemming} />
+    : <DesktopLogin fout={fout} next={bestemming} />
 }

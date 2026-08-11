@@ -5,16 +5,21 @@ import { createClient } from '@everts/database/client'
 const HERO_BG =
   "url(\"/polygon-bg.png\"), linear-gradient(160deg, #009439 0%, #054f2e 100%)"
 
-export default function DesktopLogin({ fout }: { fout?: string }) {
+export default function DesktopLogin({ fout, next }: { fout?: string; next?: string }) {
   const [loading, setLoading] = React.useState(false)
 
   async function loginMetMicrosoft() {
     setLoading(true)
     const supabase = createClient()
+    const origin = window.location.origin
     await supabase.auth.signInWithOAuth({
       provider: 'azure',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        // Bestemming meenemen door de inlogronde heen; `next` is server-side al
+        // gevalideerd (lib/auth/next-pad.ts).
+        redirectTo: next
+          ? `${origin}/auth/callback?next=${encodeURIComponent(next)}`
+          : `${origin}/auth/callback`,
         scopes: 'openid email profile',
       },
     })
