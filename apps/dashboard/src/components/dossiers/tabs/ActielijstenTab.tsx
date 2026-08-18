@@ -1,6 +1,8 @@
-import { getActielijstenVoorDossier, getLosseTakenVoorDossier, getSjablonen } from '@/lib/taken/services/taken'
+import { createClient as createServerClient } from '@everts/database/server'
+import { laadLayouts } from '@/app/actions/layouts'
+import { getActieRijenVoorDossier, getActielijstenVoorDossier, getSjablonen } from '@/lib/taken/services/taken'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
-import { ActielijstenKaarten } from '../ActielijstenKaarten'
+import ActiesTabel from '../ActiesTabel'
 import DrainActiveringen from '../DrainActiveringen'
 import NieuweDossierTaakKnop from '../NieuweDossierTaakKnop'
 
@@ -10,40 +12,53 @@ interface Props {
 }
 
 export default async function ActielijstenTab({ dossier_id, dossier_titel }: Props) {
-  const [lijsten, losseTaken, sjablonen] = await Promise.all([
+  let user_id: string | null = null
+  try {
+    const sessionClient = await createServerClient()
+    const { data: { user } } = await sessionClient.auth.getUser()
+    user_id = user?.id ?? null
+  } catch {
+    // niet ingelogd of sessie niet beschikbaar
+  }
+
+  const [rijen, lijsten, sjablonen, layouts] = await Promise.all([
+    getActieRijenVoorDossier(dossier_id),
+    // Alleen voor de keuzelijst "actielijst" in het nieuwe-actie-venster.
     getActielijstenVoorDossier(dossier_id),
-    getLosseTakenVoorDossier(dossier_id),
     // Alleen dossier-sjablonen: medewerker-sjablonen horen op de medewerkerpagina.
     getSjablonen('dossier'),
+    user_id ? laadLayouts(user_id, 'dossier-acties') : [],
   ])
 
   const dossier = { id: dossier_id, titel: dossier_titel ?? 'Dit dossier' }
+  const gereed = rijen.filter(r => r.status === 'gereed').length
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 860 }}>
+    <div style={{ padding: '32px 40px' }}>
       {/* Defensief: verwerk openstaande activeringen door externe DB-writes (client, na mount). */}
       <DrainActiveringen dossier_id={dossier_id} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Acties</h2>
-          <p style={{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 4 }}>
-            {lijsten.length === 0 && losseTaken.length === 0
-              ? 'Nog geen acties aan dit dossier gekoppeld.'
-              : [
-                  lijsten.length > 0 ? `${lijsten.length} actielijst${lijsten.length !== 1 ? 'en' : ''}` : null,
-                  losseTaken.length > 0 ? `${losseTaken.length} losse ta${losseTaken.length !== 1 ? 'ken' : 'ak'}` : null,
-                ].filter(Boolean).join(' · ')}
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {sjablonen.length > 0 && (
-            <ActiveerSjabloonDialog dossier_id={dossier_id} sjablonen={sjablonen} />
-          )}
-          <NieuweDossierTaakKnop dossier={dossier} lijsten={lijsten} />
-        </div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>Acties</h2>
+        <p style={{ fontSize: 13, color: 'var(--fg-muted)', marginTop: 4 }}>
+          {rijen.length === 0
+            ? 'Nog geen acties aan dit dossier gekoppeld.'
+            : `${rijen.length} actie${rijen.length !== 1 ? 's' : ''} · ${gereed} gereed`}
+        </p>
       </div>
 
-      <ActielijstenKaarten lijsten={lijsten} losseTaken={losseTaken} dossier={dossier} />
+      <ActiesTabel
+        data={rijen}
+        layouts={layouts}
+        user_id={user_id}
+        acties={
+          <>
+            {sjablonen.length > 0 && (
+              <ActiveerSjabloonDialog dossier_id={dossier_id} sjablonen={sjablonen} />
+            )}
+            <NieuweDossierTaakKnop dossier={dossier} lijsten={lijsten} />
+          </>
+        }
+      />
     </div>
   )
 }

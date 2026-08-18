@@ -423,6 +423,113 @@ async function losseTakenVoorContext(
   })) as unknown as TaakMetDetails[]
 }
 
+/** Eén actie van een dossier, plat voor de tabel op de Acties-tab. */
+export type DossierActieRij = {
+  id: string
+  titel: string
+  status: string
+  prioriteit: string
+  deadline: string | null
+  lijst_id: string | null
+  /** Naam van de actielijst waaruit de actie komt; null bij een losse actie. */
+  lijst_naam: string | null
+  toegewezen_namen: string[]
+  toegewezen_ids: string[]
+  subtaken_totaal: number
+  subtaken_gereed: number
+  geschatte_uren: number | null
+  heeft_formulier: boolean
+  created_at: string
+}
+
+/**
+ * Alle acties van één dossier als platte rijen: de taken uit de geactiveerde
+ * actielijsten én de losse taken die direct aan het dossier hangen. Zelfde
+ * verzameling als de actielijst-kaarten, maar ontdaan van de groepering zodat de
+ * Acties-tab er één tabel op datum van kan maken.
+ * Alleen vanuit Server Components aanroepen (admin client, geen RLS).
+ */
+export async function getActieRijenVoorDossier(dossier_id: string): Promise<DossierActieRij[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: lijsten } = await supabase
+    .from('task_lists')
+    .select('id, naam')
+    .eq('dossier_id', dossier_id)
+    .eq('is_template', false)
+  const lijstNaam = new Map<string, string>(
+    ((lijsten ?? []) as { id: string; naam: string }[]).map(l => [l.id, l.naam]),
+  )
+
+  const selectie = '*, task_assignees(user_id), subtaken:tasks!parent_task_id ( id, status )'
+
+  // Twee gerichte queries in plaats van één `or`: exact dezelfde verzameling als
+  // de kaarten (lijsttaken + losse dossiertaken), zonder kans op overlap.
+  const [lijstTaken, losseTaken] = await Promise.all([
+    lijstNaam.size === 0
+      ? Promise.resolve({ data: [] })
+      : supabase
+          .from('tasks')
+          .select(selectie)
+          .in('lijst_id', [...lijstNaam.keys()])
+          .is('parent_task_id', null),
+    supabase
+      .from('tasks')
+      .select(selectie)
+      .eq('dossier_id', dossier_id)
+      .is('lijst_id', null)
+      .is('parent_task_id', null),
+  ])
+
+  const taken = [
+    ...((lijstTaken.data ?? []) as Record<string, unknown>[]),
+    ...((losseTaken.data ?? []) as Record<string, unknown>[]),
+  ]
+  if (taken.length === 0) return []
+
+  // Namen van de toegewezen medewerkers in één slag.
+  const userIds = [...new Set(
+    taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
+  )]
+  let namenMap: Record<string, string> = {}
+  if (userIds.length > 0) {
+    const { data: meds } = await supabase
+      .from('medewerkers')
+      .select('auth_user_id, voornaam, tussenvoegsel, achternaam')
+      .in('auth_user_id', userIds)
+    namenMap = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (meds ?? []).map((m: any) => [
+        m.auth_user_id,
+        [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      ]),
+    )
+  }
+
+  return taken.map(t => {
+    const toegewezen_ids = ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)
+    const subtaken = (t.subtaken as { status: string }[]) ?? []
+    const lijstId = (t.lijst_id as string | null) ?? null
+    return {
+      id: t.id as string,
+      titel: t.titel as string,
+      status: t.status as string,
+      prioriteit: t.prioriteit as string,
+      deadline: (t.deadline as string | null) ?? null,
+      lijst_id: lijstId,
+      lijst_naam: lijstId ? lijstNaam.get(lijstId) ?? null : null,
+      toegewezen_ids,
+      toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
+      subtaken_totaal: subtaken.length,
+      subtaken_gereed: subtaken.filter(s => s.status === 'gereed').length,
+      geschatte_uren: (t.geschatte_uren as number | null) ?? null,
+      heeft_formulier: !!t.formulier_template_id,
+      created_at: t.created_at as string,
+    }
+  })
+}
+
 /**
  * Alle taken (los én binnen actielijsten) van actieve dossiers, plat met dossier-context.
  * Voor het Taken-overzicht. Alleen vanuit Server Components aanroepen (admin client).
