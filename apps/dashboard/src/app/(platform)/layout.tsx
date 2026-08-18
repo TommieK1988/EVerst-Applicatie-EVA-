@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@everts/database/server'
 import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
 import MobileRedirect from '@/components/mobiel/MobileRedirect'
+import PushHersteller from '@/components/eva/PushHersteller'
 import InstellingenSync from '@/components/everts-calc/InstellingenSync'
 import LegacyDataOvername from '@/components/everts-calc/LegacyDataOvername'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
@@ -67,6 +68,8 @@ export default async function PlatformLayout({ children }: { children: React.Rea
       rechten={rechten}
     >
       <MobileRedirect />
+      {/* Pushabonnement stil herstellen als het buiten EVA om is weggevallen. */}
+      <PushHersteller />
       {/* Calculatie-instellingen (eenheden, categorieën) hier laden en niet in de
           everts-calc-layout: het calculatiegrid en de werkbegroting leven in de
           dossiertabs, buiten /everts-calc. */}

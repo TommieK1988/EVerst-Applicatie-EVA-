@@ -1,5 +1,6 @@
 import React from 'react'
 import SessieVerloop from '@/components/eva/SessieVerloop'
+import PushHersteller from '@/components/eva/PushHersteller'
 import GeenMobieleToegang from '@/components/auth/GeenMobieleToegang'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 
@@ -46,6 +47,8 @@ export default async function MobielLayout({ children }: { children: React.React
       {/* Uitloggen aan het eind van de werkdag; op mobiel ontbrak deze timer,
           waardoor alleen de middleware-backstop de sessie beëindigde. */}
       <SessieVerloop />
+      {/* Pushabonnement stil herstellen als het buiten EVA om is weggevallen. */}
+      <PushHersteller />
       <div data-m-scroll style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>

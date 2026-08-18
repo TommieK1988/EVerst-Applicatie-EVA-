@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Pushmeldingen aan- en uitzetten in de browser.
+ * Pushmeldingen in de browser.
  *
  * De drie lagen die alle drie moeten kloppen voordat er een melding binnenkomt:
  *   1. toestemming van de gebruiker (Notification.permission),
  *   2. een abonnement bij de pushdienst van de browser (PushManager),
  *   3. dat abonnement opgeslagen bij EVA (/api/push/aanmelden).
  *
- * Laag 2 en 3 kunnen uit de pas lopen — een gebruiker kan het abonnement in de
- * browserinstellingen weggooien, en EVA gooit dode endpoints zelf weg. Daarom
- * synchroniseert deze hook bij het laden: staat alles lokaal aan, dan wordt het
- * abonnement opnieuw naar de server gestuurd (upsert, dus dat is gratis).
+ * Laag 1 is blijvend: die geef je één keer. Laag 2 en 3 zijn dat níét — iOS ruimt
+ * een abonnement op bij langdurig niet-gebruiken, een nieuwe service worker kan het
+ * vervangen, en EVA gooit zelf endpoints weg die de pushdienst als verlopen
+ * afwijst. Dat is waarom meldingen "vanzelf uit lijken te gaan".
+ *
+ * Daarom is er geen uit-schakelaar maar een herstelweg: `herstelPushAbonnement()`
+ * draait bij elke keer dat de app opent (zie PushHersteller) en maakt laag 2 en 3
+ * stil weer in orde zolang laag 1 er is. Uitzetten doe je in de instellingen van
+ * de telefoon — daar kan EVA niet omheen, en dat hoort ook zo.
  */
 
 export type PushStatus =
@@ -93,6 +98,48 @@ async function bewaarBijEva(abonnement: PushSubscription): Promise<boolean> {
   return antwoord.ok
 }
 
+
+/**
+ * Zorgt dat een apparaat dat ooit toestemming gaf, aangemeld blijft.
+ *
+ * Waarom nodig: een abonnement kan buiten EVA om verdwijnen terwijl de
+ * toestemming gewoon blijft staan — iOS ruimt het op als de app een tijd niet
+ * gebruikt is, en ook een vernieuwde service worker of een opgeruimd dood
+ * endpoint laat het toestel zonder abonnement achter. Voor de gebruiker ziet dat
+ * eruit alsof de meldingen "vanzelf uitgaan", terwijl hij niets heeft gedaan.
+ *
+ * Deze functie draait bij elke keer dat de app opent (zie PushHersteller) en
+ * meldt stilletjes opnieuw aan. Er is geen tik van de gebruiker voor nodig: die
+ * is alleen vereist om toestemming te vrágen, niet om te abonneren als die
+ * toestemming er al is.
+ *
+ * Gooit nooit en meldt niets: dit hoort onzichtbaar te zijn.
+ */
+export async function herstelPushAbonnement(): Promise<void> {
+  try {
+    if (!ondersteund()) return
+    if (Notification.permission !== 'granted') return
+
+    const registratie = await navigator.serviceWorker.getRegistration()
+    if (!registratie) return
+
+    let abonnement = await registratie.pushManager.getSubscription()
+    if (!abonnement) {
+      const sleutel = await fetch('/api/push/sleutel').then(r => r.json())
+      if (!sleutel?.beschikbaar) return
+      abonnement = await registratie.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: sleutelNaarBytes(sleutel.publicKey),
+      })
+    }
+    // Ook als het abonnement er al was: de rij bij EVA kan zijn opgeruimd nadat
+    // de pushdienst het endpoint even als verlopen afwees. Upsert, dus gratis.
+    await bewaarBijEva(abonnement)
+  } catch {
+    /* stil — zie de kop */
+  }
+}
+
 export function usePush() {
   const [status, setStatus] = useState<PushStatus>('laden')
   const [bezig, setBezig] = useState(false)
@@ -117,11 +164,18 @@ export function usePush() {
     if (Notification.permission === 'denied') return 'geweigerd'
 
     const abonnement = await registratie.pushManager.getSubscription()
-    if (abonnement && Notification.permission === 'granted') {
-      // Hersynchroniseren: het abonnement kan bij EVA zijn opgeruimd (dood
-      // endpoint) terwijl de telefoon het nog heeft. Upsert, dus gratis.
-      await bewaarBijEva(abonnement).catch(() => false)
-      return 'aan'
+    if (Notification.permission === 'granted') {
+      if (abonnement) {
+        // Hersynchroniseren: het abonnement kan bij EVA zijn opgeruimd (dood
+        // endpoint) terwijl de telefoon het nog heeft. Upsert, dus gratis.
+        await bewaarBijEva(abonnement).catch(() => false)
+        return 'aan'
+      }
+      // Toestemming staat er nog, maar het abonnement is verdwenen — precies het
+      // geval dat voor de gebruiker aanvoelt als "het is vanzelf uitgegaan".
+      // Stil herstellen in plaats van hem opnieuw een schakelaar laten omzetten.
+      await herstelPushAbonnement()
+      if (await registratie.pushManager.getSubscription()) return 'aan'
     }
     return 'uit'
   }, [])
@@ -212,28 +266,6 @@ export function usePush() {
     }
   }, [])
 
-  const uitzetten = useCallback(async () => {
-    setFout(null)
-    setBezig(true)
-    try {
-      const registratie = await navigator.serviceWorker.getRegistration()
-      const abonnement = await registratie?.pushManager.getSubscription()
-      if (abonnement) {
-        // Eerst bij EVA afmelden: lukt het opzeggen bij de pushdienst niet, dan
-        // stuurt EVA in elk geval niets meer.
-        await fetch('/api/push/afmelden', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: abonnement.endpoint }),
-        }).catch(() => null)
-        await abonnement.unsubscribe().catch(() => null)
-      }
-      setStatus('uit')
-    } finally {
-      setBezig(false)
-    }
-  }, [])
-
   const testen = useCallback(async (): Promise<boolean> => {
     setFout(null)
     setBezig(true)
@@ -253,5 +285,5 @@ export function usePush() {
     }
   }, [])
 
-  return { status, bezig, fout, aanzetten, uitzetten, testen, hercontroleer }
+  return { status, bezig, fout, aanzetten, testen, hercontroleer }
 }
