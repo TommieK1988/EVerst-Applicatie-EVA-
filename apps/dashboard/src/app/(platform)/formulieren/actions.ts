@@ -262,6 +262,28 @@ export async function getFormInzending(id: string): Promise<ActionResult<FormInz
   return { ok: true, data: data as unknown as FormInzending }
 }
 
+/**
+ * Het dossier van een taak: de directe koppeling op de taak, anders die van de
+ * actielijst waar hij onder hangt. Formulier-taken uit een actielijst-sjabloon
+ * hebben zelf géén `dossier_id` — dat zit alleen op de lijst. Zonder deze
+ * terugval kreeg een inzending die via zo'n taak werd ingevuld geen dossier en
+ * viel hij daarna buiten het KAM/VGM-overzicht en het VCA-tab van de opdracht.
+ */
+async function resolveTaakDossierId(taskId: string): Promise<string | null> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('tasks')
+    .select('dossier_id, task_lists(dossier_id)')
+    .eq('id', taskId)
+    .maybeSingle()
+  if (!data) return null
+  const rij = data as unknown as {
+    dossier_id: string | null
+    task_lists: { dossier_id: string | null } | null
+  }
+  return rij.dossier_id ?? rij.task_lists?.dossier_id ?? null
+}
+
 export async function saveFormInzending(input: {
   template_id: string
   versie_id: string
@@ -275,11 +297,23 @@ export async function saveFormInzending(input: {
   const supabase = createAdminClient()
   const { data: { user } } = await (await createClient()).auth.getUser()
 
+  // Komt de inzending uit een taak zonder expliciet dossier, dan leiden we het
+  // dossier hier alsnog af. Zo is de koppeling niet afhankelijk van wat de
+  // aanroepende pagina in de URL meegaf.
+  const dossierId =
+    input.dossier_id ?? (input.task_id ? await resolveTaakDossierId(input.task_id) : null)
+
   if (input.inzending_id) {
-    // Bijwerken
+    // Bijwerken. Een concept dat eerder zonder dossier is ontstaan, krijgt de
+    // koppeling alsnog zodra we hem nu wél kunnen afleiden.
+    const patch: { waarden: Json; dossier_id?: string } = {
+      waarden: input.waarden as unknown as Json,
+    }
+    if (dossierId) patch.dossier_id = dossierId
+
     const { data, error } = await supabase
       .from('form_inzendingen')
-      .update({ waarden: input.waarden as unknown as Json })
+      .update(patch)
       .eq('id', input.inzending_id)
       .eq('status', 'concept')
       .select()
@@ -297,7 +331,7 @@ export async function saveFormInzending(input: {
       status: 'concept',
       waarden: input.waarden as unknown as Json,
       submission_uuid: input.submission_uuid ?? null,
-      dossier_id: input.dossier_id ?? null,
+      dossier_id: dossierId,
       task_id: input.task_id ?? null,
       project_ref: input.project_ref ?? null,
       aangemaakt_door: user?.id ?? null,

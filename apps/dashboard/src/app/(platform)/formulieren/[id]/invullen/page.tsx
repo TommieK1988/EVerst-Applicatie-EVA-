@@ -12,6 +12,7 @@ import ConceptKeuze from '@/components/formulieren/filler/ConceptKeuze'
 import type { FormInzending } from '@/components/formulieren/types'
 import { resolveDossierVariabelen } from '@/components/formulieren/dossier-variabelen'
 import { getDossierById } from '@/lib/dossiers/actions'
+import { createAdminClient } from '@everts/database/server'
 import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -28,11 +29,17 @@ export default async function FormulierInvullenPage({
   searchParams: Promise<{ task_id?: string; dossier_id?: string; inzending_id?: string; new?: string }>
 }) {
   const { id } = await params
-  const { task_id: taskId, dossier_id: dossierId, inzending_id: inzendingId, new: nieuwNonce } = await searchParams
+  const { task_id: taskId, dossier_id: urlDossierId, inzending_id: inzendingId, new: nieuwNonce } = await searchParams
   const [templateResult, versieResult] = await Promise.all([
     getFormTemplate(id),
     getLatestFormVersie(id),
   ])
+
+  // Vullen we in vanuit een taak zonder dossier in de URL, dan halen we het
+  // dossier van de taak zelf op — of van de actielijst waar hij onder hangt.
+  // Taken uit een actielijst-sjabloon hebben zelf geen `dossier_id`; zonder deze
+  // terugval bleef de inzending dossierloos en viel hij buiten het VCA-tab.
+  const dossierId = urlDossierId ?? (taskId ? await dossierVanTaak(taskId) : undefined)
 
   if (!templateResult.ok) notFound()
   if (!versieResult.ok) notFound()
@@ -99,7 +106,7 @@ export default async function FormulierInvullenPage({
         template={template}
         versie={versieResult.data}
         taskId={taskId}
-        dossierId={dossierId}
+        dossierId={effectiveDossierId}
         draftScope={draftScope}
         bestaandeInzending={bestaande}
         medewerkers={medewerkers}
@@ -107,4 +114,19 @@ export default async function FormulierInvullenPage({
       />
     </div>
   )
+}
+
+/** Dossier van een taak: eigen koppeling vóór die van de actielijst. */
+async function dossierVanTaak(taskId: string): Promise<string | undefined> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('tasks')
+    .select('dossier_id, task_lists(dossier_id)')
+    .eq('id', taskId)
+    .maybeSingle()
+  const rij = data as unknown as {
+    dossier_id: string | null
+    task_lists: { dossier_id: string | null } | null
+  } | null
+  return rij?.dossier_id ?? rij?.task_lists?.dossier_id ?? undefined
 }
