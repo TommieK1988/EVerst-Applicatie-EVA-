@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
-import { createClient } from '@everts/database/server'
+import { createClient, createAdminClient } from '@everts/database/server'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import {
   getFormTemplate,
   getLatestFormVersie,
@@ -19,15 +20,37 @@ export default async function MobielTaakFormulierPage({
 }) {
   const { taakId } = await params
 
+  // Admin-client: de RLS op `tasks` laat alleen platform_gebruikers door, dus een
+  // app_gebruiker (monteur) kreeg hier niets terug en belandde op notFound().
+  // Omdat de admin-client de RLS passeert, doen we de afscherming zelf hieronder:
+  // je mag alleen een formulier openen van een taak die aan jou is toegewezen.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = (await createClient()) as any
-  const { data: taak } = await supabase
+  const admin = createAdminClient() as any
+  const { data: taak } = await admin
     .from('tasks')
     .select('id, titel, formulier_template_id, dossier_id, task_lists(dossier_id)')
     .eq('id', taakId)
     .maybeSingle()
 
   if (!taak?.formulier_template_id) notFound()
+
+  const { data: { user } } = await (await createClient()).auth.getUser()
+  if (!user) notFound()
+
+  const [{ data: eigenToewijzing }, medewerker] = await Promise.all([
+    admin
+      .from('task_assignees')
+      .select('task_id')
+      .eq('task_id', taakId)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    getCurrentMedewerker(),
+  ])
+
+  // Platform-gebruikers hielden onder de oude RLS toegang tot elke taak; die
+  // ruimte laten we staan zodat er niets omvalt op de desktop-kant.
+  const magOpenen = !!eigenToewijzing || medewerker?.gebruiker_type === 'platform_gebruiker'
+  if (!magOpenen) notFound()
 
   // Dossier-koppeling: directe taak-koppeling vóór de koppeling via de lijst.
   const dossierId: string | null =

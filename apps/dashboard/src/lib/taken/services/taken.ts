@@ -190,7 +190,13 @@ function hoofdstatusToSectie(h?: string): string | null {
  * heeft alleen het getal nodig. Faalt stil (0) zodat de tegel altijd rendert.
  */
 export async function telMijnOpenTaken(userId: string): Promise<number> {
-  const supabase = await createClient()
+  // Admin-client: op `tasks`/`task_assignees` staat een RLS-policy die alleen
+  // platform_gebruikers doorlaat, waardoor een app_gebruiker (monteur op /m)
+  // altijd 0 terugkreeg. De query is al afgebakend op de geverifieerde
+  // sessie-gebruiker, dus scope-verlies is er niet. Zelfde keuze als
+  // getMijnTakenRijen verderop.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
 
   const { data: toewijzingen, error: tError } = await supabase
     .from('task_assignees')
@@ -199,7 +205,7 @@ export async function telMijnOpenTaken(userId: string): Promise<number> {
 
   if (tError || !toewijzingen) return 0
 
-  const taskIds = toewijzingen.map(t => t.task_id)
+  const taskIds = (toewijzingen as { task_id: string }[]).map(t => t.task_id)
   if (taskIds.length === 0) return 0
 
   const { count, error } = await supabase
@@ -215,7 +221,10 @@ export async function telMijnOpenTaken(userId: string): Promise<number> {
 }
 
 export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
-  const supabase = await createClient()
+  // Admin-client, zie telMijnOpenTaken: de RLS op tasks/task_assignees laat
+  // alleen platform_gebruikers door, dus app_gebruikers zagen een lege lijst.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
 
   const { data: toewijzingen, error: tError } = await supabase
     .from('task_assignees')
@@ -224,7 +233,7 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
 
   if (tError) throw new Error(`Fout bij ophalen toewijzingen: ${tError.message}`)
 
-  const taskIds = toewijzingen.map(t => t.task_id)
+  const taskIds = (toewijzingen as { task_id: string }[]).map(t => t.task_id)
   if (taskIds.length === 0) return []
 
   // Slanke query voor de "mijn taken"-lijst (mobiel + desktop-home-widgets):
