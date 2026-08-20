@@ -149,6 +149,17 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
     if (abonnementen.length === 0) return 0
 
     const doel = payload.url ?? '/'
+
+    // Aantal ongelezen meldingen gaat mee, zodat de service worker het tellertje
+    // op het app-icoon kan bijwerken terwijl EVA dicht staat. Op dit moment staat
+    // de zojuist aangemaakte melding er al in.
+    const { count } = await admin
+      .from('notificaties')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('gelezen', false)
+    const ongelezen = count ?? 0
+
     const verlopen: string[] = []
     let gelukt = 0
 
@@ -165,6 +176,7 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
           url: naarMobiel ? naarMobielPad(doel) : doel,
           type: payload.type ?? 'algemeen',
           id: payload.id ?? null,
+          ongelezen,
         })
 
         try {

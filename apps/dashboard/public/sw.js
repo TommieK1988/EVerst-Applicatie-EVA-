@@ -50,6 +50,15 @@ self.addEventListener('push', (event) => {
   const titel = data.titel ? `${icoon} ${data.titel}` : 'EVA'
   const url = data.url || '/'
 
+  // Tellertje op het app-icoon bijwerken. Moet hier gebeuren: staat EVA dicht,
+  // dan is dit het enige moment waarop de teller verandert tot de gebruiker de
+  // app weer opent. Het aantal komt mee in de melding (zie lib/notificaties/push.ts);
+  // de service worker kan er zelf niet bij.
+  if (typeof data.ongelezen === 'number' && self.navigator.setAppBadge) {
+    if (data.ongelezen > 0) self.navigator.setAppBadge(data.ongelezen).catch(() => {})
+    else if (self.navigator.clearAppBadge) self.navigator.clearAppBadge().catch(() => {})
+  }
+
   event.waitUntil(
     self.registration.showNotification(titel, {
       body: data.body || '',

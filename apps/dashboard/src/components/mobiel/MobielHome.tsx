@@ -3,6 +3,7 @@ import { ListChecks, FolderOpen, Clock, CalendarDays, User } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
+import AppBadge from '@/components/eva/AppBadge'
 
 /**
  * Mobiel grid-startscherm (OS-launcher). Zes grote tegels naar de buitendienst-
@@ -23,6 +24,10 @@ export default function MobielHome({
         sub={naam ? `Welkom, ${naam}` : 'Buitendienst'}
         ongelezenMeldingen={ongelezenMeldingen}
       />
+      {/* Tellertje op het app-icoon. Staat hier en niet in de mobiele layout:
+          de teller is op dit scherm toch al opgehaald, en je komt er bij elke
+          navigatie langs. Tussendoor houdt de service worker hem bij. */}
+      <AppBadge aantal={ongelezenMeldingen} />
       <div
         style={{
           padding: 16,
