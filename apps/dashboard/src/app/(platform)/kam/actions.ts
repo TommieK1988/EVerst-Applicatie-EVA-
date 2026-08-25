@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
+import { getVcaActiesPerDossier } from '@/lib/kam/vca-acties'
 
 export type KamInzending = {
   id: string
@@ -99,10 +100,12 @@ export type VcaOpdrachtRij = {
   dossiernummer: string | null
   projectleider: string | null
   teamleider: string | null
-  formulieren_totaal: number
-  formulieren_ingevuld: number   // status 'goedgekeurd'
-  taken_totaal: number
-  taken_voltooid: number         // status 'afgerond'
+  /** Aantal VCA-acties op de opdracht: taken met een KAM/VGM-formulier eraan. */
+  acties_totaal: number
+  /** Daarvan afgevinkt (status 'gereed'). */
+  acties_gereed: number
+  /** Daarvan met een ingediend of goedgekeurd formulier. */
+  formulieren_ingevuld: number
 }
 
 type MedewerkerNaam = { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null } | null
@@ -115,8 +118,10 @@ function volledigeNaam(m: MedewerkerNaam): string | null {
 
 /**
  * Alle opdrachten (dossiers met hoofdstatus 'opdracht') waarop de VCA-toggle aanstaat,
- * met per opdracht de telling van KAM/VGM-formulieren (totaal vs. goedgekeurd) en
- * formulier-taken (totaal vs. afgerond).
+ * met per opdracht de voortgang van de VCA-acties: hoeveel er afgevinkt zijn en van
+ * hoeveel het formulier daadwerkelijk is ingediend. Die twee lopen uiteen zodra
+ * iemand een actie afvinkt zonder het formulier in te vullen — juist dat wil je hier
+ * kunnen zien.
  */
 export async function getVcaOpdrachten(): Promise<VcaOpdrachtRij[]> {
   // `as any`: dossier_toggle_definities/dossier_toggles staan (nog) niet in de
@@ -140,14 +145,7 @@ export async function getVcaOpdrachten(): Promise<VcaOpdrachtRij[]> {
   const dossierIds = (toggles ?? []).map((t: { dossier_id: string }) => t.dossier_id)
   if (dossierIds.length === 0) return []
 
-  // 3. KAM/VGM-template-ids
-  const { data: templates } = await supabase
-    .from('form_templates')
-    .select('id')
-    .eq('is_kam_vgm', true)
-  const kamTemplateIds = (templates ?? []).map((t: { id: string }) => t.id)
-
-  // 4. Opdrachten (alleen hoofdstatus 'opdracht') + projectleider/teamleider
+  // 3. Opdrachten (alleen hoofdstatus 'opdracht') + projectleider/teamleider
   const { data: dossiers } = await supabase
     .from('dossiers')
     .select(`
@@ -170,57 +168,21 @@ export async function getVcaOpdrachten(): Promise<VcaOpdrachtRij[]> {
 
   const opdrachtIds = opdrachten.map(o => o.id)
 
-  // 5 & 6. Formulieren + taken in batch ophalen (alleen wanneer er KAM/VGM-templates zijn)
-  const [inzendingenResult, takenResult] = await Promise.all([
-    kamTemplateIds.length > 0
-      ? supabase
-          .from('form_inzendingen')
-          .select('dossier_id, status')
-          .in('dossier_id', opdrachtIds)
-          .in('template_id', kamTemplateIds)
-      : Promise.resolve({ data: [] as { dossier_id: string; status: string }[] }),
-    kamTemplateIds.length > 0
-      ? supabase
-          .from('form_taken')
-          .select('dossier_id, status')
-          .in('dossier_id', opdrachtIds)
-          .in('template_id', kamTemplateIds)
-      : Promise.resolve({ data: [] as { dossier_id: string; status: string }[] }),
-  ])
+  // 4. De VCA-acties van deze opdrachten in één keer ophalen.
+  const actiesPerDossier = await getVcaActiesPerDossier(opdrachtIds)
 
-  const inzendingen = (inzendingenResult.data ?? []) as { dossier_id: string; status: string }[]
-  const taken = (takenResult.data ?? []) as { dossier_id: string; status: string }[]
-
-  const formTellingen = new Map<string, { totaal: number; ingevuld: number }>()
-  for (const inz of inzendingen) {
-    const t = formTellingen.get(inz.dossier_id) ?? { totaal: 0, ingevuld: 0 }
-    t.totaal += 1
-    if (inz.status === 'goedgekeurd') t.ingevuld += 1
-    formTellingen.set(inz.dossier_id, t)
-  }
-
-  const taakTellingen = new Map<string, { totaal: number; voltooid: number }>()
-  for (const tk of taken) {
-    const t = taakTellingen.get(tk.dossier_id) ?? { totaal: 0, voltooid: 0 }
-    t.totaal += 1
-    if (tk.status === 'afgerond') t.voltooid += 1
-    taakTellingen.set(tk.dossier_id, t)
-  }
-
-  // 7. Rijen samenstellen
+  // 5. Rijen samenstellen
   return opdrachten.map(o => {
-    const f = formTellingen.get(o.id) ?? { totaal: 0, ingevuld: 0 }
-    const t = taakTellingen.get(o.id) ?? { totaal: 0, voltooid: 0 }
+    const acties = actiesPerDossier.get(o.id) ?? []
     return {
       dossier_id: o.id,
       projectnaam: o.titel ?? '—',
       dossiernummer: o.dossiernummer,
       projectleider: volledigeNaam(o.projectleider),
       teamleider: volledigeNaam(o.teamleider),
-      formulieren_totaal: f.totaal,
-      formulieren_ingevuld: f.ingevuld,
-      taken_totaal: t.totaal,
-      taken_voltooid: t.voltooid,
+      acties_totaal: acties.length,
+      acties_gereed: acties.filter(a => a.status === 'gereed').length,
+      formulieren_ingevuld: acties.filter(a => a.formulier_ingevuld).length,
     }
   })
 }

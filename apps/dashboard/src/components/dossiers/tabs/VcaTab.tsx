@@ -1,6 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { createAdminClient } from '@everts/database/server'
+import { getVcaActies, type VcaActie } from '@/lib/kam/vca-acties'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 
@@ -24,19 +25,12 @@ type VcaInzending = {
   template: { naam: string } | null
 }
 
-type VcaTaak = {
-  id: string
-  status: string
-  deadline: string | null
-  template: { naam: string } | null
-}
-
 export default async function VcaTab({ dossierId }: Props) {
   const supabase = createAdminClient()
 
   // Laad medewerkers op deze opdracht (via planning of dossier-medewerkers)
   // Haal medewerkers op die gekoppeld zijn aan het dossier
-  const [medewerkerResultaat, inzendingenResultaat, takenResultaat] = await Promise.all([
+  const [medewerkerResultaat, inzendingenResultaat, acties] = await Promise.all([
     // Medewerkers via dossier koppeling (planning_inzet tabel)
     supabase
       .from('medewerker_bestanden')
@@ -52,18 +46,14 @@ export default async function VcaTab({ dossierId }: Props) {
       .order('aangemaakt_op', { ascending: false })
       .limit(50),
 
-    // Openstaande VCA-taken
-    supabase
-      .from('form_taken')
-      .select('id, status, deadline, template:template_id(naam)')
-      .eq('dossier_id', dossierId)
-      .neq('status', 'afgerond')
-      .limit(20),
+    // De VCA-acties: taken uit de actielijst met een KAM/VGM-formulier eraan.
+    getVcaActies(dossierId),
   ])
 
   const medewerkers  = (medewerkerResultaat.data ?? []) as unknown as MedewerkerVca[]
   const inzendingen  = (inzendingenResultaat.data ?? []) as VcaInzending[]
-  const taken        = (takenResultaat.data ?? []) as VcaTaak[]
+  const ingevuld     = acties.filter(a => a.formulier_ingevuld).length
+  const openstaand   = acties.filter(a => a.status !== 'gereed').length
 
   function formatDatum(iso: string) {
     try { return format(new Date(iso), 'd MMM yyyy', { locale: nl }) } catch { return '—' }
@@ -79,6 +69,23 @@ export default async function VcaTab({ dossierId }: Props) {
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 860 }}>
       <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700 }}>VCA</h2>
+
+      {/* ── VCA-acties uit de actielijst ───────────────────────────── */}
+      <section style={{ marginBottom: 32 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          VCA-acties ({ingevuld} van {acties.length} ingevuld{openstaand > 0 ? `, ${openstaand} open` : ''})
+        </h3>
+        {acties.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Geen VCA-acties op deze opdracht. Koppel een actielijst waarin de taken een
+            KAM/VGM-formulier hebben; die verschijnen hier.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {acties.map(a => <ActieRegel key={a.id} actie={a} formatDatum={formatDatum} />)}
+          </div>
+        )}
+      </section>
 
       {/* ── Medewerkers & VCA-status ─────────────────────────────── */}
       <section style={{ marginBottom: 32 }}>
@@ -180,38 +187,67 @@ export default async function VcaTab({ dossierId }: Props) {
         )}
       </section>
 
-      {/* ── Openstaande VCA-taken ──────────────────────────────────── */}
-      {taken.length > 0 && (
-        <section>
-          <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Openstaande taken ({taken.length})
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {taken.map(t => (
-              <div key={t.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 14px', borderRadius: 8,
-                border: '1px solid var(--border)', background: 'var(--surface)',
-              }}>
-                <span style={{
-                  padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                  background: '#fef9c3', color: '#854d0e',
-                }}>
-                  {t.status}
-                </span>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>
-                  {t.template?.naam ?? 'Formulier-taak'}
-                </span>
-                {t.deadline && (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Deadline: {formatDatum(t.deadline)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+    </div>
+  )
+}
+
+const ACTIE_BADGE: Record<string, { bg: string; color: string; label: string }> = {
+  open:           { bg: '#fef9c3', color: '#854d0e', label: 'Open' },
+  in_behandeling: { bg: '#dbeafe', color: '#1d4ed8', label: 'In behandeling' },
+  wacht_op:       { bg: '#f3f4f6', color: '#6b7280', label: 'Wacht op' },
+  gereed:         { bg: '#dcfce7', color: '#16a34a', label: 'Gereed' },
+}
+
+/**
+ * Eén VCA-actie. De statusbadge zegt of de actie is afgevinkt, het label ernaast of
+ * het formulier ook echt is ingediend — een actie kan afgevinkt zijn zonder formulier,
+ * en dat is precies wat je hier wilt zien.
+ */
+function ActieRegel({
+  actie,
+  formatDatum,
+}: {
+  actie: VcaActie
+  formatDatum: (iso: string) => string
+}) {
+  const badge = ACTIE_BADGE[actie.status] ?? ACTIE_BADGE.open
+  const href = actie.formulier_ingevuld && actie.inzending_id
+    ? `/formulieren/${actie.formulier_template_id}/inzendingen/${actie.inzending_id}`
+    : `/formulieren/${actie.formulier_template_id}/invullen?task_id=${actie.id}`
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 14px', borderRadius: 8,
+      border: '1px solid var(--border)', background: 'var(--surface)',
+    }}>
+      <span style={{
+        padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+        background: badge.bg, color: badge.color, flexShrink: 0,
+      }}>
+        {badge.label}
+      </span>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500 }}>{actie.titel}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {actie.formulier_naam}
+          {' · '}
+          <span style={{ color: actie.formulier_ingevuld ? '#16a34a' : '#b45309', fontWeight: 600 }}>
+            {actie.formulier_ingevuld ? 'ingediend' : 'nog niet ingediend'}
+          </span>
+        </div>
+      </div>
+
+      {actie.deadline && (
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>
+          {formatDatum(actie.deadline)}
+        </span>
       )}
+
+      <Link href={href} style={{ color: '#009439', fontSize: 12, textDecoration: 'none', flexShrink: 0 }}>
+        {actie.formulier_ingevuld ? 'Bekijken' : 'Invullen'}
+      </Link>
     </div>
   )
 }

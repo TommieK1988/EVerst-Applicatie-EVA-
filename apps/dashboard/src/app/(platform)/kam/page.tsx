@@ -16,8 +16,8 @@ export default async function KamDashboardPage() {
           KAM / VGM — Dashboard
         </h1>
         <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)' }}>
-          De lopende opdrachten waarop de VCA-toggle aanstaat, met de voortgang van hun
-          KAM/VGM-formulieren en follow-up taken.
+          De lopende opdrachten waarop de VCA-toggle aanstaat, met per opdracht de voortgang
+          van de VCA-acties uit de actielijst en de formulieren die daarbij horen.
         </p>
       </div>
 
@@ -31,7 +31,7 @@ export default async function KamDashboardPage() {
           <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Geen opdrachten met VCA</p>
           <p style={{ fontSize: 13 }}>
             Zet op een opdracht de VCA-toggle aan; die verschijnt dan hier met de voortgang
-            van de bijbehorende formulieren.
+            van de bijbehorende acties en formulieren.
           </p>
         </div>
       ) : (

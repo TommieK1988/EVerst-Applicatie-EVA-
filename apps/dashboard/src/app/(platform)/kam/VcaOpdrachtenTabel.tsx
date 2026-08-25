@@ -25,7 +25,12 @@ const TD: React.CSSProperties = {
 }
 
 function Verhouding({ teller, noemer }: { teller: number; noemer: number }) {
-  const compleet = noemer > 0 && teller >= noemer
+  // Zonder VCA-acties valt er niets te tellen. Dat als '0 / 0' tonen leest als
+  // 'alles klaar', terwijl er in werkelijkheid nog geen actielijst hangt.
+  if (noemer === 0) {
+    return <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>geen acties</span>
+  }
+  const compleet = teller >= noemer
   return (
     <span style={{ fontVariantNumeric: 'tabular-nums', color: compleet ? 'var(--success-600, #16a34a)' : 'var(--fg)' }}>
       <strong style={{ fontWeight: 700 }}>{teller}</strong>
@@ -52,8 +57,8 @@ export function VcaOpdrachtenTabel({ rijen }: Props) {
             <th style={TH}>Projectnaam</th>
             <th style={TH}>Projectleider</th>
             <th style={TH}>Teamleider</th>
-            <th style={TH}>VCA-formulieren (ingevuld / totaal)</th>
-            <th style={TH}>Follow-up acties (voltooid / totaal)</th>
+            <th style={TH}>Formulieren ingevuld</th>
+            <th style={TH}>Acties afgevinkt</th>
           </tr>
         </thead>
         <tbody>
@@ -86,10 +91,10 @@ export function VcaOpdrachtenTabel({ rijen }: Props) {
                   {r.teamleider ?? '—'}
                 </td>
                 <td style={cel}>
-                  <Verhouding teller={r.formulieren_ingevuld} noemer={r.formulieren_totaal} />
+                  <Verhouding teller={r.formulieren_ingevuld} noemer={r.acties_totaal} />
                 </td>
                 <td style={cel}>
-                  <Verhouding teller={r.taken_voltooid} noemer={r.taken_totaal} />
+                  <Verhouding teller={r.acties_gereed} noemer={r.acties_totaal} />
                 </td>
               </tr>
             )
