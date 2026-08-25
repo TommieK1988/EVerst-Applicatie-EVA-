@@ -1620,66 +1620,6 @@ export type Database = {
           },
         ]
       }
-      form_taken: {
-        Row: {
-          aangemaakt_door: string | null
-          aangemaakt_op: string
-          bijgewerkt_op: string
-          deadline: string | null
-          dossier_id: string | null
-          id: string
-          inzending_id: string | null
-          opmerkingen: string | null
-          status: string
-          template_id: string
-          toegewezen_aan: string | null
-          vooringevuld: Json | null
-        }
-        Insert: {
-          aangemaakt_door?: string | null
-          aangemaakt_op?: string
-          bijgewerkt_op?: string
-          deadline?: string | null
-          dossier_id?: string | null
-          id?: string
-          inzending_id?: string | null
-          opmerkingen?: string | null
-          status?: string
-          template_id: string
-          toegewezen_aan?: string | null
-          vooringevuld?: Json | null
-        }
-        Update: {
-          aangemaakt_door?: string | null
-          aangemaakt_op?: string
-          bijgewerkt_op?: string
-          deadline?: string | null
-          dossier_id?: string | null
-          id?: string
-          inzending_id?: string | null
-          opmerkingen?: string | null
-          status?: string
-          template_id?: string
-          toegewezen_aan?: string | null
-          vooringevuld?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "form_taken_inzending_id_fkey"
-            columns: ["inzending_id"]
-            isOneToOne: false
-            referencedRelation: "form_inzendingen"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "form_taken_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "form_templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       form_templates: {
         Row: {
           aangemaakt_door: string | null

@@ -9,7 +9,7 @@ import type {
   FormInzending,
   FormSchema,
   FormInzendingStatus,
-  FormTaakStatus,
+  FormulierVoortgang,
 } from '@/components/formulieren/types'
 import { defaultSchema, normalizeSchemaRequired } from '@/components/formulieren/types'
 import type { Json } from '@everts/database/types'
@@ -472,7 +472,7 @@ export type FormulierTaakRij = {
   template_id: string
   formulier_naam: string
   categorie: string | null
-  status: FormTaakStatus
+  status: FormulierVoortgang
   deadline: string | null
   inzending_id: string | null
   toegewezen_aan: string | null
@@ -570,7 +570,7 @@ export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRi
  * elk een eigen status; wat de gebruiker wil weten is hoe ver het formulier is.
  * Een afgekeurd formulier weegt daarbij zwaarder dan een afgevinkte taak.
  */
-function taakWeergaveStatus(taak: FormulierTaak): FormTaakStatus {
+function taakWeergaveStatus(taak: FormulierTaak): FormulierVoortgang {
   if (taak.inzending_status === 'afgekeurd') return 'afgekeurd'
   if (taak.status === 'gereed') return 'afgerond'
   if (taak.formulier_ingevuld) return 'ingediend'

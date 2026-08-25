@@ -1,0 +1,12 @@
+-- form_taken opruimen.
+--
+-- Deze tabel is nooit gevuld geraakt: nul rijen, projectbreed. De echte
+-- formulier-taken leven in `tasks` met een `formulier_template_id`, onder de
+-- actielijst van het dossier. Drie schermen lazen hier hun taken uit en stonden
+-- daardoor altijd op nul: het KAM/VGM-dashboard, het VCA-tab van een opdracht en
+-- Formulieren - actieve dossiers. Die zijn omgezet naar `tasks`; de bijbehorende
+-- serveracties zijn verwijderd. Er verwijst niets meer naar deze tabel -- geen
+-- code, geen foreign keys van buitenaf -- dus hij kan weg.
+--
+-- Trigger, RLS-policy en indexen van de tabel verdwijnen mee.
+drop table if exists public.form_taken;

@@ -7,7 +7,7 @@ import { nl } from 'date-fns/locale'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
-import { TEMPLATE_CATEGORIE_LABELS, TAAK_STATUS_LABELS } from '@/components/formulieren/types'
+import { TEMPLATE_CATEGORIE_LABELS, VOORTGANG_LABELS } from '@/components/formulieren/types'
 import type { FormulierTaakRij } from '@/app/(platform)/formulieren/actions'
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
@@ -74,7 +74,7 @@ export default function FormulierenActieveDossiers({
       { key: 'fase', label: 'Fase', opties: fases.map(f => ({ value: f, label: f })) },
       { key: 'status', label: 'Status',
         opties: ord(statussen, ['open', 'bezig', 'ingediend', 'afgekeurd', 'afgerond'])
-          .map(s => ({ value: s, label: TAAK_STATUS_LABELS[s as keyof typeof TAAK_STATUS_LABELS] ?? s })) },
+          .map(s => ({ value: s, label: VOORTGANG_LABELS[s as keyof typeof VOORTGANG_LABELS] ?? s })) },
       { key: 'toegewezen', label: 'Toegewezen aan',
         opties: [
           ...personen.map(p => ({ value: p, label: p })),

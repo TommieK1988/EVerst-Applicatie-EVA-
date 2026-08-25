@@ -213,26 +213,12 @@ export interface FormInzending {
   ingediend_door_naam?: string
 }
 
-export type FormTaakStatus = 'open' | 'bezig' | 'ingediend' | 'afgekeurd' | 'afgerond'
-
-export interface FormTaak {
-  id: string
-  template_id: string
-  inzending_id: string | null
-  toegewezen_aan: string | null
-  deadline: string | null
-  status: FormTaakStatus
-  opmerkingen: string | null
-  vooringevuld: Record<string, unknown>
-  dossier_id: string | null
-  aangemaakt_door: string | null
-  aangemaakt_op: string
-  bijgewerkt_op: string
-  // Joined
-  template?: FormTemplate
-  inzending?: FormInzending
-  toegewezen_aan_naam?: string
-}
+/**
+ * Hoe ver een formulier-actie is, zoals het Formulieren-overzicht het toont.
+ * Afgeleid uit de taakstatus en de status van de inzending samen — er is geen
+ * kolom die dit rechtstreeks bevat.
+ */
+export type FormulierVoortgang = 'open' | 'bezig' | 'ingediend' | 'afgekeurd' | 'afgerond'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -333,7 +319,7 @@ export const INZENDING_STATUS_LABELS: Record<FormInzendingStatus, string> = {
   afgekeurd:   'Afgekeurd',
 }
 
-export const TAAK_STATUS_LABELS: Record<FormTaakStatus, string> = {
+export const VOORTGANG_LABELS: Record<FormulierVoortgang, string> = {
   open:       'Open',
   bezig:      'Bezig',
   ingediend:  'Ingediend',
