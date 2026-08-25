@@ -167,9 +167,9 @@ export default function FormulierenActieveDossiers({
     if (r.inzending_id) {
       router.push(`/formulieren/${r.template_id}/inzendingen/${r.inzending_id}`)
     } else {
-      // Dossiercontext meegeven zodat bestaande concepten herkend worden en
-      // meerdere exemplaren per dossier mogelijk zijn (keuze hervatten/nieuw).
-      router.push(`/formulieren/${r.template_id}/invullen?dossier_id=${r.dossier_id}`)
+      // Op de taak invullen: dat hervat een bestaand concept van diezelfde taak
+      // en levert de dossierkoppeling op, ook als de taak die zelf niet heeft.
+      router.push(`/formulieren/${r.template_id}/invullen?task_id=${r.id}`)
     }
   }
 

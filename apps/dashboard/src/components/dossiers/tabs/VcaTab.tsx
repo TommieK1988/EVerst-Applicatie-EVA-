@@ -2,18 +2,12 @@ import React from 'react'
 import Link from 'next/link'
 import { createAdminClient } from '@everts/database/server'
 import { getVcaActies, type VcaActie } from '@/lib/kam/vca-acties'
+import { getVcaBemensing, type VcaBemensingRij } from '@/lib/kam/vca-bemensing'
+import { VCA_SOORT_LABEL, type VcaStatus } from '@/lib/kam/vca'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 
 type Props = { dossierId: string }
-
-type MedewerkerVca = {
-  medewerker_id: string
-  naam: string
-  categorie: string
-  bestandsnaam: string
-  created_at: string
-}
 
 type VcaInzending = {
   id: string
@@ -28,15 +22,9 @@ type VcaInzending = {
 export default async function VcaTab({ dossierId }: Props) {
   const supabase = createAdminClient()
 
-  // Laad medewerkers op deze opdracht (via planning of dossier-medewerkers)
-  // Haal medewerkers op die gekoppeld zijn aan het dossier
-  const [medewerkerResultaat, inzendingenResultaat, acties] = await Promise.all([
-    // Medewerkers via dossier koppeling (planning_inzet tabel)
-    supabase
-      .from('medewerker_bestanden')
-      .select('medewerker_id, naam:medewerker_id(voornaam, tussenvoegsel, achternaam), categorie, bestandsnaam, created_at')
-      .eq('categorie', 'vca_diploma')
-      .limit(50),
+  const [bemensing, inzendingenResultaat, acties] = await Promise.all([
+    // De medewerkers op deze opdracht met hun VCA-diploma.
+    getVcaBemensing(dossierId),
 
     // Ingediende VCA-formulieren voor dit dossier
     supabase
@@ -50,8 +38,8 @@ export default async function VcaTab({ dossierId }: Props) {
     getVcaActies(dossierId),
   ])
 
-  const medewerkers  = (medewerkerResultaat.data ?? []) as unknown as MedewerkerVca[]
   const inzendingen  = (inzendingenResultaat.data ?? []) as VcaInzending[]
+  const vcaOpOrde    = bemensing.filter(b => b.status === 'geldig').length
   const ingevuld     = acties.filter(a => a.formulier_ingevuld).length
   const openstaand   = acties.filter(a => a.status !== 'gereed').length
 
@@ -87,21 +75,22 @@ export default async function VcaTab({ dossierId }: Props) {
         )}
       </section>
 
-      {/* ── Medewerkers & VCA-status ─────────────────────────────── */}
+      {/* ── VCA-diploma's van de mensen op deze opdracht ──────────── */}
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          VCA-diploma&apos;s medewerkers
+          VCA-diploma&apos;s op deze opdracht
+          {bemensing.length > 0 && ` (${vcaOpOrde} van ${bemensing.length} geldig)`}
         </h3>
-        {medewerkers.length === 0 ? (
+        {bemensing.length === 0 ? (
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Geen VCA-diploma&apos;s gevonden. Voeg ze toe via het medewerker-profiel.
+            Er staat nog niemand ingepland op deze opdracht en er zijn geen rollen toegekend.
           </p>
         ) : (
           <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-                  {['Medewerker', 'Categorie', 'Bestand', 'Upload datum'].map(h => (
+                  {['Medewerker', 'Rol', 'Diploma', 'Geldig tot', 'Status'].map(h => (
                     <th key={h} style={{ padding: '9px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
                       {h}
                     </th>
@@ -109,26 +98,21 @@ export default async function VcaTab({ dossierId }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {medewerkers.map((m, i) => {
-                  const naam = typeof m.naam === 'object' && m.naam
-                    ? [(m.naam as { voornaam?: string; tussenvoegsel?: string; achternaam?: string }).voornaam,
-                       (m.naam as { voornaam?: string; tussenvoegsel?: string; achternaam?: string }).tussenvoegsel,
-                       (m.naam as { voornaam?: string; tussenvoegsel?: string; achternaam?: string }).achternaam]
-                       .filter(Boolean).join(' ')
-                    : '—'
-                  return (
-                    <tr key={m.medewerker_id + i} style={{ borderBottom: i < medewerkers.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                      <td style={{ padding: '10px 14px', fontWeight: 500 }}>{naam}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 11, background: '#ede9fe', color: '#7c3aed', fontWeight: 600 }}>
-                          VCA diploma
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{m.bestandsnaam}</td>
-                      <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{formatDatum(m.created_at)}</td>
-                    </tr>
-                  )
-                })}
+                {bemensing.map((b, i) => (
+                  <tr key={b.medewerker_id} style={{ borderBottom: i < bemensing.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 500 }}>{b.naam}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{b.rol}</td>
+                    <td style={{ padding: '10px 14px', color: b.soort ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {b.soort ? VCA_SOORT_LABEL[b.soort] : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
+                      {b.geldig_tot ? formatDatum(b.geldig_tot) : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <DiplomaBadge rij={b} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -249,5 +233,33 @@ function ActieRegel({
         {actie.formulier_ingevuld ? 'Bekijken' : 'Invullen'}
       </Link>
     </div>
+  )
+}
+
+const DIPLOMA_BADGE: Record<VcaStatus, { bg: string; color: string; label: string }> = {
+  geldig:              { bg: '#dcfce7', color: '#16a34a', label: 'Geldig' },
+  verloopt_binnenkort: { bg: '#fef9c3', color: '#854d0e', label: 'Verloopt binnenkort' },
+  verlopen:            { bg: '#fee2e2', color: '#dc2626', label: 'Verlopen' },
+  geen:                { bg: '#fee2e2', color: '#dc2626', label: 'Geen diploma' },
+  onbekend:            { bg: '#f3f4f6', color: '#6b7280', label: 'Einddatum onbekend' },
+}
+
+/** Statuskleur van een diploma, met het aantal dagen erbij zolang dat iets zegt. */
+function DiplomaBadge({ rij }: { rij: VcaBemensingRij }) {
+  const badge = DIPLOMA_BADGE[rij.status]
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{
+        padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+        background: badge.bg, color: badge.color, whiteSpace: 'nowrap',
+      }}>
+        {badge.label}
+      </span>
+      {rij.status === 'verloopt_binnenkort' && rij.dagen_tot_verval != null && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          nog {rij.dagen_tot_verval} dagen
+        </span>
+      )}
+    </span>
   )
 }

@@ -7,7 +7,6 @@ import type {
   FormTemplate,
   FormVersie,
   FormInzending,
-  FormTaak,
   FormSchema,
   FormInzendingStatus,
   FormTaakStatus,
@@ -462,73 +461,10 @@ export async function updateInzendingStatus(
   return { ok: true, data: undefined }
 }
 
-// ── Taken ──────────────────────────────────────────────────────────────
-
-export async function getFormTaken(filters?: {
-  toegewezen_aan?: string
-  status?: FormTaakStatus
-  template_id?: string
-}): Promise<ActionResult<FormTaak[]>> {
-  const supabase = createAdminClient()
-  let query = supabase
-    .from('form_taken')
-    .select('*, template:template_id(naam, categorie, status)')
-    .order('aangemaakt_op', { ascending: false })
-
-  if (filters?.toegewezen_aan) query = query.eq('toegewezen_aan', filters.toegewezen_aan)
-  if (filters?.status)         query = query.eq('status', filters.status)
-  if (filters?.template_id)    query = query.eq('template_id', filters.template_id)
-
-  const { data, error } = await query
-  if (error) return { ok: false, error: error.message }
-  return { ok: true, data: (data ?? []) as FormTaak[] }
-}
-
-export async function createFormTaak(input: {
-  template_id: string
-  toegewezen_aan?: string
-  deadline?: string
-  opmerkingen?: string
-  vooringevuld?: Record<string, unknown>
-  dossier_id?: string
-}): Promise<ActionResult<FormTaak>> {
-  const supabase = createAdminClient()
-  const { data: { user } } = await (await createClient()).auth.getUser()
-  const { data, error } = await supabase
-    .from('form_taken')
-    .insert({
-      template_id: input.template_id,
-      toegewezen_aan: input.toegewezen_aan ?? null,
-      deadline: input.deadline ?? null,
-      opmerkingen: input.opmerkingen ?? null,
-      vooringevuld: (input.vooringevuld ?? {}) as unknown as Json,
-      dossier_id: input.dossier_id ?? null,
-      aangemaakt_door: user?.id ?? null,
-    })
-    .select()
-    .single()
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren/overzicht')
-  return { ok: true, data: data as FormTaak }
-}
-
-export async function updateFormTaakStatus(
-  id: string,
-  status: FormTaakStatus
-): Promise<ActionResult> {
-  const supabase = createAdminClient()
-  const { error } = await supabase
-    .from('form_taken')
-    .update({ status })
-    .eq('id', id)
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/formulieren/overzicht')
-  return { ok: true, data: undefined }
-}
-
 // ── Formulier-taken van actieve dossiers (Overzicht-scherm) ───────
 
 import { getActieveDossierContext, type DossierContext } from '@/lib/dossiers/actief'
+import { getFormulierTaken, type FormulierTaak } from '@/lib/formulieren/formulier-taken'
 
 /** Platte rij voor het Formulieren-overzicht: form_taak + dossier-context. */
 export type FormulierTaakRij = {
@@ -561,6 +497,9 @@ export type FormulierTaakRij = {
 /**
  * Alle in te vullen formulier-taken van actieve dossiers, plat met dossier-context.
  * Voor het Formulieren-overzicht. Alleen vanuit Server Components aanroepen.
+ *
+ * De taken komen uit `tasks` (de actielijsten), niet uit `form_taken`: die tabel
+ * is nooit gevuld geraakt, waardoor dit scherm altijd leeg bleef.
  */
 export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRij[]> {
   const supabase = createAdminClient()
@@ -568,16 +507,7 @@ export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRi
   const { ids, context } = await getActieveDossierContext()
   if (ids.length === 0) return []
 
-  const { data, error } = await supabase
-    .from('form_taken')
-    .select('*, template:template_id ( naam, categorie )')
-    .in('dossier_id', ids)
-    .order('deadline', { ascending: true, nullsFirst: false })
-
-  if (error) throw new Error(`Fout bij ophalen formulier-taken: ${error.message}`)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const taken = (data ?? []) as any[]
+  const taken = await getFormulierTaken({ dossierIds: ids })
   if (taken.length === 0) return []
 
   // Namen van toegewezen medewerkers ophalen.
@@ -601,17 +531,17 @@ export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRi
 
   const rijen: FormulierTaakRij[] = []
   for (const t of taken) {
-    const ctx = t.dossier_id ? context.get(t.dossier_id) : undefined
+    const ctx = context.get(t.dossier_id)
     if (!ctx) continue
     rijen.push({
       id: t.id,
-      template_id: t.template_id,
-      formulier_naam: t.template?.naam ?? '—',
-      categorie: t.template?.categorie ?? null,
-      status: t.status,
-      deadline: t.deadline ?? null,
-      inzending_id: t.inzending_id ?? null,
-      toegewezen_aan: t.toegewezen_aan ?? null,
+      template_id: t.formulier_template_id,
+      formulier_naam: t.formulier_naam,
+      categorie: t.formulier_categorie,
+      status: taakWeergaveStatus(t),
+      deadline: t.deadline,
+      inzending_id: t.inzending_id,
+      toegewezen_aan: t.toegewezen_aan,
       toegewezen_naam: t.toegewezen_aan ? (namenMap[t.toegewezen_aan] ?? null) : null,
       dossier_id: ctx.id,
       dossiernummer: ctx.dossiernummer,
@@ -630,7 +560,22 @@ export async function getFormTakenVoorActieveDossiers(): Promise<FormulierTaakRi
     })
   }
 
+  // Deadline eerst, taken zonder deadline achteraan.
+  rijen.sort((a, b) => (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999'))
   return rijen
+}
+
+/**
+ * De status zoals het overzicht hem toont. Een taak en zijn formulier hebben
+ * elk een eigen status; wat de gebruiker wil weten is hoe ver het formulier is.
+ * Een afgekeurd formulier weegt daarbij zwaarder dan een afgevinkte taak.
+ */
+function taakWeergaveStatus(taak: FormulierTaak): FormTaakStatus {
+  if (taak.inzending_status === 'afgekeurd') return 'afgekeurd'
+  if (taak.status === 'gereed') return 'afgerond'
+  if (taak.formulier_ingevuld) return 'ingediend'
+  if (taak.inzending_status === 'concept' || taak.status === 'in_behandeling') return 'bezig'
+  return 'open'
 }
 
 // ── Gepubliceerde formulieren voor taak-koppeling ─────────────────
