@@ -1,0 +1,5 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-25','verbeterd','Inkoop','Meer gegevens vastleggen bij een opdracht',
+   'Bij het aanmaken van een opdracht of bestelling opent nu een venster waarin je de start- en opleverdatum, het betaalschema, een inhouding, een boeteclausule en specifieke afspraken kwijt kunt. Ook kun je een afwijkend werkadres invullen, handig als een deel van het werk op één huisadres plaatsvindt. Het betaalschema kies je per opdracht uit de gangbare afspraken of stel je zelf samen; alles komt op de opdracht die de onderaannemer krijgt.'),
+  ('2026-08-25','opgelost','Inkoop','Opdracht die al in Bouw7 stond, gaf een onbegrijpelijke fout',
+   'Was een opdracht al rechtstreeks in Bouw7 aangemaakt, dan liep het aanmaken vanuit EVA stuk op een technische melding. EVA ziet nu vooraf dat het werk daar al is uitgezet, noemt het contractnummer erbij en biedt aan de inkoop daaraan te koppelen — zonder er in Bouw7 iets aan te veranderen.');
