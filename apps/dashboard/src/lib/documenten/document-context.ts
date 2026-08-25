@@ -139,6 +139,10 @@ export async function buildDocumentContext(
       throw new BestellingNietVanDossierError('Deze bestelling hoort niet bij dit dossier.')
     }
     inkoop = await laadBestellingBlokken(supabase, opties.bestellingId)
+    // Slaat deze opdracht op één adres binnen een dossier met meerdere locaties, dan hoort dát
+    // adres op het papier — niet het dossieradres. {bestelling.werkadres} blijft daarnaast leeg
+    // zolang er niets afwijkends is ingevuld, zodat een sjabloon beide kan gebruiken.
+    if (inkoop.bestelling.werkadres) dossier.werkadres = inkoop.bestelling.werkadres
   }
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)

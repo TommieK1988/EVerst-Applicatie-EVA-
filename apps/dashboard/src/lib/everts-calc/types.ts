@@ -509,7 +509,23 @@ export interface WerkbegrotingBestelling {
   /** Lever-/startdatum (ISO-datum) of vrije tekst ("week 34") — Bouw7 accepteert beide. */
   levering_datum?: string | null
   levering_tekst?: string | null
+  /** Verwachte oplevering (ISO-datum). Bij een OA-contract Bouw7's `expectedCompletionDate`. */
+  oplever_datum?: string | null
   betaalafspraak?: string | null
+  /**
+   * Betaaltermijnen van deze opdracht. Leeg/null = het standaardschema uit de overeenkomst van
+   * onderaanneming. Dit zijn nadrukkelijk GEEN Bouw7-contracttermijnen: die zijn daar bezet door
+   * de bestelregels (één regel kan maar aan één termijn hangen). Het schema komt op het document
+   * en gaat als tekst mee in de betaalafspraak.
+   */
+  termijnschema?: { omschrijving: string; pct: number }[] | null
+  /** Specifieke afspraken die de partij op de opdracht leest — anders dan `interne_notitie`. */
+  afspraken?: string | null
+  /** Inhouding op de termijnen tot de opleverpunten weg zijn (bedrijfsstandaard 5%). */
+  inhouding_pct?: number | null
+  boete_tekst?: string | null
+  /** Afwijkend werk-/afleveradres; leeg = het werkadres van het dossier. */
+  werkadres?: string | null
   interne_notitie?: string | null
   /**
    * Gekozen documentsjabloon (document_sjablonen) voor het inkoopdocument dat EVA

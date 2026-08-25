@@ -122,6 +122,9 @@ export type ContractInvoer = {
   bouw7ContractId?: number | null
   leverDatum?: string | null
   leverTekst?: string | null
+  /** Alleen OA-contracten: verwachte oplevering (`expectedCompletionDate`). */
+  opleverDatum?: string | null
+  opleverTekst?: string | null
   betaalafspraak?: string | null
   interneNotitie?: string | null
   /** Alleen voor inkooporders; default 5 (material). */
@@ -181,6 +184,9 @@ export async function schrijfBouw7Contract(invoer: ContractInvoer): Promise<Cont
       // Bouw7 heeft óf een datum óf een vrije tekst ("week 34") — beide mag ook.
       if (invoer.leverDatum) body.startDate = invoer.leverDatum
       if (invoer.leverTekst) body.startDateText = invoer.leverTekst
+      // Een OA-contract kent naast de start ook een verwachte oplevering; een inkooporder niet.
+      if (invoer.opleverDatum) body.expectedCompletionDate = invoer.opleverDatum
+      if (invoer.opleverTekst) body.expectedCompletionDateText = invoer.opleverTekst
     } else {
       body.purchaseType = invoer.purchaseType ?? PURCHASE_TYPE.materiaal
       body.deliveryAddress = invoer.afleveradres ?? ''
@@ -431,4 +437,51 @@ export async function bestaatBouw7Contract(soort: ContractSoort, contractId: num
     const msg = e instanceof Error ? e.message : ''
     return /\((404|410)\)/.test(msg) ? 'verwijderd' : 'onbekend'
   }
+}
+
+// ─── Al besteld? Bestelregels die elders aan een contract hangen ─────────────
+//
+// Een bestelregel kan in Bouw7 aan hooguit één contracttermijn hangen. Omdat EVA bestaande
+// regels koppelt in plaats van nieuwe te maken (zie de kop van dit bestand), loopt het aanmaken
+// van een order stuk zodra iemand diezelfde regels al in Bouw7 zelf onder een contract heeft
+// gehangen — Bouw7 antwoordt dan met
+//   "Contract order line with ID #… is already linked to contract term with ID #…".
+// Dat is geen storing maar een feit over het project, en hoort dus vóór de POST gezien te
+// worden: als blokkade met contractnummer erbij, niet als ruwe validatiefout achteraf.
+
+/** Het contract waaraan een bestelregel al vastzit. */
+export type BestelregelKoppeling = {
+  contractId: number
+  /** Contractnummer zoals Bouw7 het toont ("20267.00240OA005"); soms een vrije naam. */
+  nummer: string | null
+  soort: ContractSoort
+}
+
+type Bouw7KoppelRegel = {
+  id?: number
+  subcontractorContract?: { id?: number; number?: string | null } | null
+  purchaseOrderContract?: { id?: number; number?: string | null } | null
+}
+
+/**
+ * Welke bestelregels van dit project hangen al aan een inkooporder of OA-contract?
+ *
+ * Eén lijst-call voor het hele project; de aanroeper zoekt zelf zijn regels op. Regels die
+ * nergens aan hangen ontbreken in de map — afwezig betekent dus "vrij om te koppelen".
+ */
+export async function haalBestelregelKoppelingen(projectId: number): Promise<Map<number, BestelregelKoppeling>> {
+  const client = await getBouw7Client()
+  const res = await client.get<{ items?: Bouw7KoppelRegel[] }>(
+    '/list/contract-order-lines',
+    { q: `project.id = ${projectId} LIMIT 1000` },
+  )
+  const uit = new Map<number, BestelregelKoppeling>()
+  for (const regel of res?.items ?? []) {
+    if (regel.id == null) continue
+    const oa = regel.subcontractorContract
+    const io = regel.purchaseOrderContract
+    if (oa?.id != null) uit.set(Number(regel.id), { contractId: Number(oa.id), nummer: oa.number ?? null, soort: 'oa_contract' })
+    else if (io?.id != null) uit.set(Number(regel.id), { contractId: Number(io.id), nummer: io.number ?? null, soort: 'inkooporder' })
+  }
+  return uit
 }

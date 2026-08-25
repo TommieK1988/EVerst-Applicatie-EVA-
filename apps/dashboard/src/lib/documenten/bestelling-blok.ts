@@ -59,7 +59,21 @@ export interface BestellingBlok {
   levering: string
   levering_datum: string
   levering_datum_iso: string
+  /** Verwachte oplevering; leeg wanneer er niets is afgesproken. */
+  oplever_datum: string
+  oplever_datum_iso: string
   betaalafspraak: string
+  /** Specifieke afspraken voor deze opdracht — bedoeld om op het document te zetten. */
+  afspraken: string
+  /** Inhouding op de termijnen ("5%"); leeg wanneer er niets is ingehouden. */
+  inhouding: string
+  boete: string
+  /**
+   * Werkadres van déze opdracht. Gevuld wanneer het afwijkt van het dossier — bij een dossier met
+   * meerdere locaties slaat een opdracht vaak op één adres. Leeg = het werkadres van het dossier,
+   * dat dan ook in {dossier.werkadres} blijft staan.
+   */
+  werkadres: string
   interne_notitie: string
   /** Offertenummer van de leverancier ("uw offertekenmerk"), van de eerste regel die er een heeft. */
   offertenummer: string
@@ -95,7 +109,8 @@ export interface LeverancierBlok {
 
 export const LEEG_BESTELLING_BLOK: BestellingBlok = {
   heeft: false, nummer: '', bonnummer: '', soort: '', soort_label: '', omschrijving: '',
-  levering: '', levering_datum: '', levering_datum_iso: '', betaalafspraak: '', interne_notitie: '',
+  levering: '', levering_datum: '', levering_datum_iso: '', oplever_datum: '', oplever_datum_iso: '',
+  betaalafspraak: '', afspraken: '', inhouding: '', boete: '', werkadres: '', interne_notitie: '',
   offertenummer: '', aantal_regels: '0', totaal: fmtEur(0), totaal_getal: 0, regels: [],
   termijnen: [], is_oa: false, is_inkooporder: false,
 }
@@ -107,31 +122,20 @@ export const LEEG_LEVERANCIER_BLOK: LeverancierBlok = {
 }
 
 /**
- * Het standaard termijnschema uit de Everts-overeenkomst van onderaanneming:
- * 20% bij opdracht, 20% bij start, de rest naar rato, 10% na oplevering.
- *
- * Bewust hier als constante en niet per sjabloon instelbaar: het is één vaste
- * bedrijfsafspraak die op élk onderaannemerscontract hetzelfde is. Verandert die
- * afspraak, dan is dit de enige plek die mee moet.
- */
-const TERMIJN_SCHEMA: { omschrijving: string; pct: number }[] = [
-  { omschrijving: '1e termijn — bij opdracht', pct: 20 },
-  { omschrijving: '2e termijn — bij start', pct: 20 },
-  { omschrijving: 'Termijnen naar rato', pct: 50 },
-  { omschrijving: 'Oplevertermijn — na oplevering', pct: 10 },
-]
-
-/**
  * Zet het ordertotaal om in het termijnschema. De laatste termijn krijgt het
  * restant, zodat de som exact op het totaal uitkomt en er geen afrondingscent
- * blijft hangen.
+ * blijft hangen — ook wanneer de percentages niet netjes op 100 uitkomen.
  */
-function bouwTermijnen(totaal: number): BestellingTermijn[] {
-  if (!(totaal > 0)) return []
+export function bouwTermijnen(
+  totaal: number,
+  schema: { omschrijving: string; pct: number }[],
+): BestellingTermijn[] {
+  if (!(totaal > 0) || schema.length === 0) return []
+  const regels = schema
   const uit: BestellingTermijn[] = []
   let verdeeld = 0
-  TERMIJN_SCHEMA.forEach((t, i) => {
-    const laatste = i === TERMIJN_SCHEMA.length - 1
+  regels.forEach((t, i) => {
+    const laatste = i === regels.length - 1
     const bedrag = laatste ? rond(totaal - verdeeld) : rond((totaal * t.pct) / 100)
     verdeeld = rond(verdeeld + bedrag)
     uit.push({
@@ -223,6 +227,25 @@ export async function bestellingHoortBijDossier(
  * of een leesfout levert lege blokken op, zodat {#bestelling.heeft} vals blijft en
  * het sjabloon zelf kan bepalen wat het dan toont.
  */
+/**
+ * Het termijnschema dat bij deze opdracht is gekozen, of leeg.
+ *
+ * Defensief omdat het door de client is aangeleverd: alleen regels met een leesbaar percentage
+ * tellen mee. Bewust géén terugval op een standaardschema — is er niets gekozen, dan hoort er ook
+ * geen betaalstaffel op de opdracht te staan.
+ */
+function leesTermijnschema(ruw: unknown): { omschrijving: string; pct: number }[] {
+  if (!Array.isArray(ruw)) return []
+  const uit = ruw
+    .map(r => {
+      const rij = r as { omschrijving?: unknown; pct?: unknown }
+      const pct = Number(rij?.pct)
+      return Number.isFinite(pct) ? { omschrijving: String(rij?.omschrijving ?? ''), pct } : null
+    })
+    .filter((r): r is { omschrijving: string; pct: number } => r != null)
+  return uit
+}
+
 export async function laadBestellingBlokken(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -232,7 +255,7 @@ export async function laadBestellingBlokken(
   try {
     const { data: rij } = await supabase
       .from('werkbegroting_bestellingen')
-      .select('id, omschrijving, soort, relatie_id, bouw7_nummer, bouw7_bonnummer, levering_datum, levering_tekst, betaalafspraak, interne_notitie')
+      .select('id, omschrijving, soort, relatie_id, bouw7_nummer, bouw7_bonnummer, levering_datum, levering_tekst, oplever_datum, betaalafspraak, termijnschema, afspraken, inhouding_pct, boete_tekst, werkadres, interne_notitie')
       .eq('id', bestellingId)
       .maybeSingle()
     if (!rij) return leeg
@@ -257,14 +280,20 @@ export async function laadBestellingBlokken(
         levering: (rij.levering_tekst ?? '').trim() || datumNL(rij.levering_datum),
         levering_datum: datumNL(rij.levering_datum),
         levering_datum_iso: datumISO(rij.levering_datum),
+        oplever_datum: datumNL(rij.oplever_datum),
+        oplever_datum_iso: datumISO(rij.oplever_datum),
         betaalafspraak: rij.betaalafspraak ?? '',
+        afspraken: rij.afspraken ?? '',
+        inhouding: rij.inhouding_pct != null ? `${fmtGetal(Number(rij.inhouding_pct))}%` : '',
+        boete: rij.boete_tekst ?? '',
+        werkadres: rij.werkadres ?? '',
         interne_notitie: rij.interne_notitie ?? '',
         offertenummer,
         aantal_regels: String(regels.length),
         totaal: fmtEur(totaal),
         totaal_getal: totaal,
         regels,
-        termijnen: bouwTermijnen(totaal),
+        termijnen: bouwTermijnen(totaal, leesTermijnschema(rij.termijnschema)),
         is_oa: rij.soort === 'oa_contract',
         is_inkooporder: rij.soort === 'inkooporder',
       },

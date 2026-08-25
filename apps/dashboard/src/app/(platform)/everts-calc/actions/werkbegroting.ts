@@ -190,7 +190,13 @@ export async function syncBestellingenNaarSupabase(
           soort: b.soort ?? null,
           levering_datum: b.levering_datum ?? null,
           levering_tekst: b.levering_tekst ?? null,
+          oplever_datum: b.oplever_datum ?? null,
           betaalafspraak: b.betaalafspraak ?? null,
+          termijnschema: b.termijnschema ?? null,
+          afspraken: b.afspraken ?? null,
+          inhouding_pct: b.inhouding_pct ?? null,
+          boete_tekst: b.boete_tekst ?? null,
+          werkadres: b.werkadres ?? null,
           interne_notitie: b.interne_notitie ?? null,
         }, { onConflict: 'id' })
       if (bErr) throw new Error(`Bestelling sync: ${bErr.message}`)
@@ -330,7 +336,15 @@ export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<Werk
       verstuurd_op: b.verstuurd_op ?? null,
       levering_datum: b.levering_datum ?? null,
       levering_tekst: b.levering_tekst ?? null,
+      oplever_datum: b.oplever_datum ?? null,
       betaalafspraak: b.betaalafspraak ?? null,
+      // Deze velden schrijft de client wél terug (anders dan de bouw7_*-velden), dus ze moeten hier
+      // mee: hydrateert de cache zonder ze, dan wist de eerstvolgende sync de opdrachtgegevens.
+      termijnschema: b.termijnschema ?? null,
+      afspraken: b.afspraken ?? null,
+      inhouding_pct: b.inhouding_pct != null ? Number(b.inhouding_pct) : null,
+      boete_tekst: b.boete_tekst ?? null,
+      werkadres: b.werkadres ?? null,
       interne_notitie: b.interne_notitie ?? null,
       sjabloon_id: b.sjabloon_id ?? null,
       is_reservering: b.is_reservering ?? false,

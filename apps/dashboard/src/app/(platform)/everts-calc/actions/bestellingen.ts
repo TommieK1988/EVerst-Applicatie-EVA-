@@ -29,8 +29,8 @@ import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
   schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
   zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId,
-  bestaatBouw7Contract, PURCHASE_TYPE,
-  type ContractSoort, type ContractTermijn,
+  bestaatBouw7Contract, haalBestelregelKoppelingen, leesBouw7Contract, PURCHASE_TYPE,
+  type ContractSoort, type ContractTermijn, type BestelregelKoppeling,
 } from '@/lib/bouw7/contracten'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7ListResponse } from '@/lib/bouw7/client'
@@ -170,6 +170,48 @@ async function kiesInkoopSjabloon(
   return eerste ? normaliseer(eerste) : null
 }
 
+/** Tekst van de gebruiker veilig in HTML zetten; Bouw7 bewaart deze velden als HTML. */
+function alsHtml(tekst: string): string {
+  return tekst
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .split(/\n{2,}/).map(alinea => `<p>${alinea.trim().replace(/\n/g, '<br>')}</p>`).join('')
+}
+
+/**
+ * De betaalafspraak zoals Bouw7 hem toont: het termijnschema in gewone taal, daarna de inhouding
+ * en tot slot de vrije tekst van de opsteller.
+ *
+ * Waarom hier en niet als contracttermijnen: Bouw7's `contractTerms` zijn in dit ontwerp al bezet
+ * door de bestelregels (één bestelregel kan maar aan één termijn hangen — precies waar het
+ * aanmaken op stukloopt als iemand het contract in Bouw7 zelf al maakte). Het betaalschema is dus
+ * geen structuur in Bouw7 maar tekst, net zoals een uitvoerder het daar met de hand invulde.
+ */
+async function bouwBetaalafspraakHtml(
+  bestelling: WerkbegrotingBestelling,
+  soort: ContractSoort,
+  totaal: number,
+): Promise<string> {
+  const delen: string[] = []
+  if (soort === 'oa_contract') {
+    const { bouwTermijnen } = await import('@/lib/documenten/bestelling-blok')
+    const termijnen = bouwTermijnen(totaal, bestelling.termijnschema ?? [])
+    if (termijnen.length > 0) {
+      delen.push(
+        '<p>Betaling in termijnen:</p><ul>' +
+        termijnen.map(t => `<li>${alsHtml(`${t.omschrijving} — ${t.percentage} (${t.bedrag})`).replace(/<\/?p>/g, '')}</li>`).join('') +
+        '</ul>',
+      )
+    }
+    const inhouding = Number(bestelling.inhouding_pct)
+    if (Number.isFinite(inhouding) && inhouding > 0) {
+      delen.push(`<p>Inhouding ${inhouding}% tot alle opleverpunten zijn afgerond.</p>`)
+    }
+  }
+  const vrij = (bestelling.betaalafspraak ?? '').trim()
+  if (vrij) delen.push(alsHtml(vrij))
+  return delen.join('')
+}
+
 export type VoorstelRegel = {
   componentId: string
   omschrijving: string
@@ -181,6 +223,8 @@ export type VoorstelRegel = {
   pslId: number | null
   bouw7LineId: number | null
   geaccordeerd: boolean
+  /** Contractnummer wanneer deze regel in Bouw7 al onder een order/opdracht hangt. */
+  alContractNummer: string | null
 }
 
 export type BestellingVoorstel = {
@@ -201,6 +245,12 @@ export type BestellingVoorstel = {
   isReservering: boolean
   regels: VoorstelRegel[]
   totaal: number
+  /**
+   * Het Bouw7-contract waar deze regels al aan hangen — het werk is dan buiten EVA om al besteld.
+   * Een nieuw contract aanmaken kan dan niet (Bouw7 laat één termijn per bestelregel toe); wel
+   * kan de bestelling aan dit contract gekoppeld worden. Null zolang de regels vrij zijn.
+   */
+  alContract: { id: number; nummer: string | null; soort: ContractSoort } | null
   /** Redenen waarom deze bestelling (nog) niet aangemaakt kan worden. */
   blokkades: string[]
 }
@@ -240,6 +290,16 @@ export async function stelBestellingenVoor(
 
   const compById = new Map(payload.componenten.map(c => [c.id, c]))
   const planById = new Map(plan.regels.map(r => [r.componentId, r]))
+
+  // Bestelregels die in Bouw7 al onder een order/opdracht hangen. Dat gebeurt wanneer iemand het
+  // contract daar zelf heeft aangemaakt: het werk is dan besteld, alleen niet via EVA. Zonder deze
+  // controle blijft EVA die regels als "nog te bestellen" voorstellen en loopt het aanmaken stuk op
+  // een validatiefout van Bouw7. Best effort: is Bouw7 even niet bereikbaar, dan tonen we het
+  // voorstel gewoon — `maakBestellingInBouw7` doet dezelfde controle vlak voor de POST.
+  const projectIdVoorstel = Number(plan.bouw7Id)
+  const koppelingen: Map<number, BestelregelKoppeling> = Number.isFinite(projectIdVoorstel)
+    ? await haalBestelregelKoppelingen(projectIdVoorstel).catch(() => new Map())
+    : new Map()
 
   // Relatienamen + Bouw7-koppeling in één keer ophalen.
   const relatieIds = [...new Set(payload.componenten.map(c => c.relatie_id).filter((v): v is string => !!v))]
@@ -281,7 +341,7 @@ export async function stelBestellingenVoor(
         soort, soortLabel: soortLabel(soort),
         code: p.code, codeNaam: p.codeNaam ?? null,
         isReservering: !!comp.is_reservering,
-        regels: [], totaal: 0, blokkades: [],
+        regels: [], totaal: 0, alContract: null, blokkades: [],
       }
       groepen.set(sleutel, groep)
     }
@@ -292,6 +352,7 @@ export async function stelBestellingenVoor(
       aantal: p.aantal, prijs: p.prijs, bedrag: p.bedrag, eenheid: p.eenheid,
       code: p.code, pslId: p.pslId, bouw7LineId: p.bouw7LineId,
       geaccordeerd: goedgekeurd.get(comp.werkbegroting_regel_id) === true,
+      alContractNummer: p.bouw7LineId != null ? (koppelingen.get(p.bouw7LineId)?.nummer ?? null) : null,
     })
     groep.totaal += p.bedrag
     void compById
@@ -317,6 +378,28 @@ export async function stelBestellingenVoor(
     if (nietGeaccordeerd > 0) {
       groep.blokkades.push(`${nietGeaccordeerd} regel(s) zijn nog niet geaccordeerd.`)
     }
+
+    // Al besteld in Bouw7 — geen nieuw contract, maar koppelen aan wat er staat.
+    const bezet = groep.regels
+      .map(r => (r.bouw7LineId != null ? koppelingen.get(r.bouw7LineId) : undefined))
+      .filter((k): k is BestelregelKoppeling => !!k)
+    if (bezet.length > 0) {
+      const uniek = new Map(bezet.map(k => [k.contractId, k]))
+      const namen = [...uniek.values()].map(k => k.nummer ?? `#${k.contractId}`).join(', ')
+      if (uniek.size === 1) {
+        const enige = [...uniek.values()][0]
+        groep.alContract = { id: enige.contractId, nummer: enige.nummer, soort: enige.soort }
+        groep.blokkades.push(
+          bezet.length === groep.regels.length
+            ? `Deze regels staan in Bouw7 al onder ${namen}. Koppel deze inkoop daaraan in plaats van een nieuwe aan te maken.`
+            : `${bezet.length} van de ${groep.regels.length} regels staan in Bouw7 al onder ${namen}. Koppelen kan pas als de hele inkoop bij dat contract hoort.`,
+        )
+      } else {
+        groep.blokkades.push(
+          `Deze regels hangen in Bouw7 al onder meerdere contracten (${namen}) — dat is niet met één inkoop te vangen. Los dit in Bouw7 op.`,
+        )
+      }
+    }
   }
 
   const voorstellen = [...groepen.values()].sort((a, b) => b.totaal - a.totaal)
@@ -333,7 +416,14 @@ export type MaakBestellingResultaat =
       /** Alleen bij een reservering: het afroepen mislukte, het contract staat er wel. */
       bonWaarschuwing: string | null
     }
-  | { ok: false; reden: 'niet_goedgekeurd' | 'verouderd' | 'fout'; error: string; regels?: string[] }
+  | {
+      ok: false
+      reden: 'niet_goedgekeurd' | 'verouderd' | 'fout' | 'al_besteld'
+      error: string
+      regels?: string[]
+      /** Bij `al_besteld`: het contract waaraan gekoppeld kan worden (null bij meerdere). */
+      contract?: { id: number; nummer: string | null; soort: ContractSoort } | null
+    }
 
 /**
  * Maak (of werk bij) het Bouw7-document als **concept** — nog niet verstuurd, nog geen leverbon.
@@ -476,20 +566,58 @@ export async function maakBestellingInBouw7(
   const projectId = Number(plan.bouw7Id)
   if (!Number.isFinite(projectId)) return { ok: false, reden: 'fout', error: 'Dit dossier heeft geen geldig Bouw7-project.' }
 
+  // Voorcontrole: hangen deze bestelregels in Bouw7 al onder een ánder contract? Dan is het werk
+  // daar al besteld (meestal handmatig in Bouw7 zelf) en weigert Bouw7 de koppeling met
+  // "Contract order line … is already linked to contract term …". Die melding is voor niemand te
+  // plaatsen, dus vangen we het hier af — mét het contractnummer, zodat de gebruiker kan koppelen.
+  const koppelingen = await haalBestelregelKoppelingen(projectId).catch(() => null)
+  if (koppelingen) {
+    const bezet = new Map<number, BestelregelKoppeling>()
+    for (const t of termijnen) {
+      for (const lineId of t.bestelregelIds ?? []) {
+        const k = koppelingen.get(lineId)
+        if (k && k.contractId !== bestaandContractId) bezet.set(k.contractId, k)
+      }
+    }
+    if (bezet.size > 0) {
+      const alle = [...bezet.values()]
+      const namen = alle.map(k => k.nummer ?? `#${k.contractId}`).join(', ')
+      const enkel = alle.length === 1 ? alle[0] : null
+      const wat = soort === 'oa_contract' ? 'opdracht' : 'bestelling'
+      await db.from('werkbegroting_bestellingen')
+        .update({ soort, bouw7_sync_status: 'fout', bouw7_sync_fout: `Regels hangen al onder ${namen}.`, bouw7_gesynct_op: new Date().toISOString() })
+        .eq('id', bestelling.id)
+      return {
+        ok: false,
+        reden: 'al_besteld',
+        error: enkel
+          ? `Deze regels staan in Bouw7 al onder ${namen}. Een tweede ${wat} voor dezelfde regels kan niet — koppel deze inkoop aan dat contract, of verwijder het contract in Bouw7.`
+          : `Deze regels hangen in Bouw7 al onder meerdere contracten (${namen}). Los dat eerst in Bouw7 op.`,
+        contract: enkel ? { id: enkel.contractId, nummer: enkel.nummer, soort: enkel.soort } : null,
+      }
+    }
+  }
+
   const res = await schrijfBouw7Contract({
     soort,
     projectId,
     relatieBouw7Id,
     naam: bestelling.omschrijving,
-    omschrijving: bestelling.omschrijving,
+    // Specifieke afspraken horen bij de opdracht zelf, niet in een intern veld: zo staan ze ook in
+    // Bouw7 onder het contract en niet alleen op het document dat de partij krijgt.
+    omschrijving: [bestelling.omschrijving, (bestelling.afspraken ?? '').trim()].filter(Boolean).join('\n\n'),
     bedrag: totaal.toFixed(2),
     termijnen,
     bouw7ContractId: bestaandContractId,
     leverDatum: bestelling.levering_datum ?? null,
     leverTekst: bestelling.levering_tekst ?? null,
-    betaalafspraak: bestelling.betaalafspraak ?? null,
+    opleverDatum: bestelling.oplever_datum ?? null,
+    betaalafspraak: await bouwBetaalafspraakHtml(bestelling, soort, totaal),
     interneNotitie: bestelling.interne_notitie ?? null,
     purchaseType: soort === 'inkooporder' ? PURCHASE_TYPE.materiaal : undefined,
+    // Bouw7 kent een afleveradres alleen op de inkooporder; bij een OA-contract staat het
+    // afwijkende werkadres op het document (en in {dossier.werkadres}).
+    afleveradres: soort === 'inkooporder' ? (bestelling.werkadres ?? null) : null,
   })
 
   const nu = new Date().toISOString()
@@ -497,6 +625,16 @@ export async function maakBestellingInBouw7(
     await db.from('werkbegroting_bestellingen')
       .update({ soort, bouw7_sync_status: 'fout', bouw7_sync_fout: res.error, bouw7_gesynct_op: nu })
       .eq('id', bestelling.id)
+    // Kon de voorcontrole hierboven niet draaien (Bouw7 even onbereikbaar), dan komt dezelfde
+    // situatie alsnog als ruwe validatiefout terug. Zelfde uitleg, zonder API-jargon.
+    if (/already linked to contract term/i.test(res.error)) {
+      return {
+        ok: false,
+        reden: 'al_besteld',
+        error: 'Eén of meer regels hangen in Bouw7 al onder een andere order of opdracht. Ververs de lijst om te zien welke, en koppel deze inkoop daaraan.',
+        contract: null,
+      }
+    }
     return { ok: false, reden: 'fout', error: res.error }
   }
 
@@ -541,6 +679,144 @@ export async function maakBestellingInBouw7(
     bonnummer: afroep?.bonnummer ?? null,
     bonWaarschuwing: afroep?.fout ?? null,
   }
+}
+
+export type KoppelResultaat =
+  | { ok: true; contractId: number; nummer: string | null; soort: ContractSoort; heeftLeverbon: boolean }
+  | { ok: false; error: string }
+
+/**
+ * Koppel een EVA-inkoop aan een contract dat al in Bouw7 staat.
+ *
+ * Nodig omdat een order of opdracht ook buiten EVA om gemaakt kan zijn — rechtstreeks in Bouw7,
+ * met dezelfde bestelregels eronder. EVA zag dat niet en bleef die regels als "nog te bestellen"
+ * voorstellen; aanmaken liep dan stuk omdat een bestelregel maar aan één contracttermijn mag
+ * hangen. Adopteren zet het beeld recht zonder in Bouw7 iets te wijzigen: hier wordt alleen
+ * gelezen en in EVA vastgelegd.
+ *
+ * Voorwaarde is dat de héle inkoop bij hetzelfde contract hoort. Zit er een regel bij die daar
+ * niet aan hangt, dan zou die kostenpost buiten het contract vallen en als "nog te bestellen"
+ * blijven staan — dan is het contract in Bouw7 aanvullen de juiste route, niet koppelen.
+ */
+export async function koppelBestellingAanBouw7Contract(
+  dossierId: string,
+  bestelling: WerkbegrotingBestelling,
+  payload: WerkbegrotingPayload,
+): Promise<KoppelResultaat> {
+  const sync = await syncWerkbegrotingNaarSupabase(payload)
+  if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}` }
+  const bestellingSync = await syncBestellingenNaarSupabase([bestelling])
+  if (!bestellingSync.gelukt) return { ok: false, error: `Bestelling opslaan mislukt: ${bestellingSync.fout}` }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+
+  const { data: rij } = await db
+    .from('werkbegroting_bestellingen')
+    .select('bouw7_contract_id')
+    .eq('id', bestelling.id)
+    .maybeSingle()
+  if (rij?.bouw7_contract_id != null) {
+    return { ok: false, error: 'Deze inkoop is al aan een Bouw7-document gekoppeld.' }
+  }
+
+  const plan = await previewWerkbegrotingBestelregelsBouw7(dossierId, payload)
+  if (!plan.ok) return { ok: false, error: plan.error }
+  const projectId = Number(plan.bouw7Id)
+  if (!Number.isFinite(projectId)) return { ok: false, error: 'Dit dossier heeft geen geldig Bouw7-project.' }
+
+  const componentIds = new Set(bestelling.component_ids)
+  const gekozen = payload.componenten.filter(c => componentIds.has(c.id) && !c.is_verwijderd)
+  if (gekozen.length === 0) return { ok: false, error: 'Deze inkoop heeft geen regels.' }
+
+  const planById = new Map(plan.regels.map(r => [r.componentId, r]))
+  const lineIds: number[] = []
+  for (const comp of gekozen) {
+    const lineId = planById.get(comp.id)?.bouw7LineId
+    if (lineId == null) {
+      return { ok: false, error: 'Niet alle regels staan als bestelregel in Bouw7 — koppelen kan dan niet.' }
+    }
+    lineIds.push(lineId)
+  }
+
+  let koppelingen: Map<number, BestelregelKoppeling>
+  try {
+    koppelingen = await haalBestelregelKoppelingen(projectId)
+  } catch (e) {
+    return { ok: false, error: `Kon de bestelregels niet bij Bouw7 opvragen: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+  }
+
+  const gevonden = new Map<number, BestelregelKoppeling>()
+  const losse: number[] = []
+  for (const lineId of lineIds) {
+    const k = koppelingen.get(lineId)
+    if (k) gevonden.set(k.contractId, k)
+    else losse.push(lineId)
+  }
+  if (gevonden.size === 0) {
+    return { ok: false, error: 'Deze regels hangen in Bouw7 nog nergens onder — maak de inkoop gewoon aan.' }
+  }
+  if (gevonden.size > 1) {
+    const namen = [...gevonden.values()].map(k => k.nummer ?? `#${k.contractId}`).join(', ')
+    return { ok: false, error: `Deze regels hangen onder meerdere contracten (${namen}) — koppelen kan alleen aan één.` }
+  }
+  if (losse.length > 0) {
+    return {
+      ok: false,
+      error: `${losse.length} regel(s) hangen niet onder dit contract. Vink ze uit, of vul het contract in Bouw7 aan.`,
+    }
+  }
+
+  const contract = [...gevonden.values()][0]
+
+  // Soort moet kloppen met wat de componenten zijn: een onderaannemingsregel hoort niet onder een
+  // inkooporder te belanden (en andersom), anders klopt het document en de afhandeling niet.
+  const soorten = new Set(gekozen.map(c => SOORT_PER_TYPE[c.type as 'onderaanneming' | 'materieel']).filter(Boolean))
+  const eigenSoort = soorten.size === 1 ? [...soorten][0] : null
+  if (eigenSoort && eigenSoort !== contract.soort) {
+    return {
+      ok: false,
+      error: `Dit is in Bouw7 ${contract.soort === 'oa_contract' ? 'een onderaannemerscontract' : 'een inkooporder'}, terwijl deze regels het andere soort zijn.`,
+    }
+  }
+
+  // Nummer en eventuele leverbon teruglezen, zodat EVA hetzelfde beeld toont als Bouw7.
+  let nummer = contract.nummer
+  let bonId: number | null = null
+  let bonnummer: string | null = null
+  try {
+    const detail = await leesBouw7Contract(contract.soort, contract.contractId) as {
+      number?: string | null
+      contractTerms?: { deliveryTickets?: { id?: number; ticketNumber?: string }[] }[]
+    }
+    nummer = detail.number ?? nummer
+    const bonnen = (detail.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])
+    bonId = bonnen[0]?.id ?? null
+    bonnummer = bonnen[0]?.ticketNumber ?? null
+  } catch { /* nummer uit de lijst volstaat; de bon is geen voorwaarde om te koppelen */ }
+
+  const nu = new Date().toISOString()
+  await db.from('werkbegroting_bestellingen')
+    .update({
+      soort: contract.soort,
+      bouw7_contract_id: contract.contractId,
+      bouw7_nummer: nummer,
+      bouw7_leverbon_id: bonId,
+      bouw7_bonnummer: bonnummer,
+      bouw7_afroep_op: bonId != null ? nu : null,
+      // Is er al afgeroepen, dan is het werk in Bouw7 ook echt uitgezet en hoort het niet meer als
+      // concept te tonen. Zonder bon blijft het een concept dat nog verstuurd kan worden.
+      status: bonId != null ? 'verzonden' : 'concept',
+      verzonden_op: bonId != null ? nu : null,
+      bouw7_sync_status: 'ok',
+      bouw7_sync_fout: null,
+      bouw7_verwijderd_op: null,
+      bouw7_gesynct_op: nu,
+    })
+    .eq('id', bestelling.id)
+
+  revalidatePath(`/dossiers/${dossierId}`)
+  return { ok: true, contractId: contract.contractId, nummer, soort: contract.soort, heeftLeverbon: bonId != null }
 }
 
 export type TrekInResultaat = { ok: true } | { ok: false; error: string }
@@ -945,7 +1221,7 @@ export async function verstuurBestelling(
 
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('id, soort, sjabloon_id, is_reservering, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, interne_notitie')
+    .select('id, soort, sjabloon_id, is_reservering, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, bouw7_bonnummer, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, werkadres, interne_notitie')
     .eq('id', bestellingId)
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
@@ -985,10 +1261,14 @@ export async function verstuurBestelling(
 
   const { data: dossier } = await db
     .from('dossiers')
-    .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
+    // De kolom heet `werkadres_stad`; met `werkadres_plaats` faalt de hele select stilzwijgend
+    // en verdwijnen dossiernummer, titel én adres uit de mail. Zelfde valkuil als hierboven.
+    .select('dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad')
     .eq('id', dossierId)
     .maybeSingle()
-  const werkadres = [
+  // Het adres in de mail volgt hetzelfde adres als op het document: staat er een afwijkend
+  // werkadres op de opdracht (één locatie binnen een dossier met meerdere), dan wint dat.
+  const werkadres = (rij.werkadres ?? '').trim() || [
     [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
     [dossier?.werkadres_postcode, dossier?.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
@@ -1055,7 +1335,12 @@ export async function verstuurBestelling(
     })
     .eq('id', bestellingId)
 
-  const afroep = await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
+  // Hangt er al een leverbon aan (bijvoorbeeld bij een contract dat in Bouw7 zelf is afgeroepen en
+  // hier alleen gekoppeld), dan niet nog eens afroepen: dat zou de kosten dubbel op de
+  // bewakingscode zetten en het contract van status doen springen.
+  const afroep = rij.bouw7_leverbon_id != null
+    ? { bonnummer: rij.bouw7_bonnummer ?? null, bonAantal: 1, fout: null as string | null }
+    : await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
 
   // Archiveren in SharePoint én registreren bij het dossier — best-effort, mag het
   // versturen niet laten falen. Via `archiveerEnRegistreer` komt de order in dezelfde

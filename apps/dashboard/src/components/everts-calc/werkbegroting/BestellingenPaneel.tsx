@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   X, ShoppingCart, Send, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Plus, Undo2,
-  ChevronDown, ChevronRight, Mail, HardHat, Truck, Trash2,
+  ChevronDown, ChevronRight, Mail, HardHat, Truck, Trash2, Link2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -18,6 +18,7 @@ import {
 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import {
   stelBestellingenVoor, maakBestellingInBouw7, trekBestellingIn,
+  koppelBestellingAanBouw7Contract,
   getBestellingMailConcept, verstuurBestelling,
   verversBestellingenUitBouw7, verwijderBestellingUitEva,
   type BestellingVoorstel,
@@ -27,6 +28,7 @@ import {
 } from '@/app/(platform)/everts-calc/actions/bestelling-document'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
+import OpdrachtVenster, { type OpdrachtGegevens } from './OpdrachtVenster'
 
 interface Props {
   wb: Werkbegroting
@@ -108,6 +110,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   })
   /** Per voorstel: de gekozen opmaak voor het document dat de partij krijgt. */
   const [sjabloonPerVoorstel, setSjabloonPerVoorstel] = useState<Record<string, string>>({})
+
+  /**
+   * Het voorstel waarvoor het opdrachtvenster openstaat. De aanvullende gegevens (termijnschema,
+   * afspraken, adressen) worden daar ingevuld en pas bij bevestigen meegestuurd.
+   */
+  const [venster, setVenster] = useState<BestellingVoorstel | null>(null)
 
   /** Automatische voorstellen per leverancier (server-side berekend uit de werkbegroting). */
   const [voorstellen, setVoorstellen] = useState<BestellingVoorstel[] | null>(null)
@@ -285,8 +293,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     } finally { setBezigId(null) }
   }
 
-  /** Voorstel accepteren: bestelling vastleggen én het Bouw7-document (concept) aanmaken. */
-  async function maakInBouw7(v: BestellingVoorstel) {
+  /**
+   * Voorstel accepteren: bestelling vastleggen én het Bouw7-document (concept) aanmaken.
+   * `g` komt uit het opdrachtvenster; een reservering slaat dat venster over (geen document,
+   * geen partij die iets ontvangt) en gaat met de kale gegevens door.
+   */
+  async function maakInBouw7(v: BestellingVoorstel, g?: OpdrachtGegevens) {
     if (!dossierId) return
     const uitgevinkt = uit[v.sleutel] ?? new Set<string>()
     const gekozen = v.regels.filter(r => !uitgevinkt.has(r.componentId))
@@ -295,16 +307,24 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     const bestelling: WerkbegrotingBestelling = {
       id: nieuweId(),
       werkbegroting_id: wb.id,
-      omschrijving: (naam[v.sleutel] ?? v.relatieNaam).trim() || v.relatieNaam,
+      omschrijving: (g?.omschrijving ?? naam[v.sleutel] ?? v.relatieNaam).trim() || v.relatieNaam,
       status: 'concept',
       relatie_id: v.relatieId ?? undefined,
       component_ids: gekozen.map(r => r.componentId),
       soort: v.soort,
-      levering_tekst: levering[v.sleutel]?.trim() || null,
-      betaalafspraak: betaling[v.sleutel]?.trim() || null,
+      levering_datum: g?.leveringDatum?.trim() || null,
+      levering_tekst: (g?.leveringTekst ?? levering[v.sleutel])?.trim() || null,
+      oplever_datum: g?.opleverDatum?.trim() || null,
+      betaalafspraak: (g?.betaalafspraak ?? betaling[v.sleutel])?.trim() || null,
+      termijnschema: g?.termijnschema ?? null,
+      afspraken: g?.afspraken?.trim() || null,
+      inhouding_pct: g?.inhoudingPct ?? null,
+      boete_tekst: g?.boeteTekst?.trim() || null,
+      werkadres: g?.werkadres?.trim() || null,
+      interne_notitie: g?.interneNotitie?.trim() || null,
       // Opmaak van het document dat de partij krijgt; server-side gevalideerd. Een
       // reservering krijgt geen document, dus ook geen sjabloon.
-      sjabloon_id: v.isReservering ? null : (sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null),
+      sjabloon_id: v.isReservering ? null : (g?.sjabloonId || sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null),
       is_reservering: v.isReservering,
     }
     slaBestellingOp(bestelling)
@@ -334,8 +354,59 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
         }
       } else if (res.reden === 'niet_goedgekeurd') {
         toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`)
+      } else if (res.reden === 'al_besteld') {
+        // Het werk staat al in Bouw7. Geen foutmelding waar je niets mee kunt: na verversen
+        // verschijnt de koppelknop bij dit voorstel.
+        toast.error(res.error, { duration: 10000 })
       } else {
         toast.error(res.error)
+      }
+    } finally {
+      setBezigId(null)
+      setVenster(null)
+      setTick(t => t + 1)
+    }
+  }
+
+  /**
+   * Voorstel koppelen aan een contract dat al in Bouw7 staat, in plaats van er een tweede naast
+   * te zetten. Er wordt niets in Bouw7 gewijzigd — alleen de koppeling in EVA vastgelegd, zodat de
+   * regels niet als "nog te bestellen" blijven staan en de kosten niet dubbel tellen.
+   */
+  async function koppelAanBouw7(v: BestellingVoorstel) {
+    if (!dossierId || !v.alContract) return
+    const uitgevinkt = uit[v.sleutel] ?? new Set<string>()
+    const gekozen = v.regels.filter(r => !uitgevinkt.has(r.componentId))
+    if (gekozen.length === 0) { toast.error('Selecteer minstens één regel.'); return }
+
+    const bestelling: WerkbegrotingBestelling = {
+      id: nieuweId(),
+      werkbegroting_id: wb.id,
+      omschrijving: (naam[v.sleutel] ?? v.relatieNaam).trim() || v.relatieNaam,
+      status: 'concept',
+      relatie_id: v.relatieId ?? undefined,
+      component_ids: gekozen.map(r => r.componentId),
+      soort: v.alContract.soort,
+      is_reservering: v.isReservering,
+    }
+    slaBestellingOp(bestelling)
+    setBezigId(v.sleutel)
+    try {
+      const res = await koppelBestellingAanBouw7Contract(dossierId, bestelling, bouwPayload())
+      if (res.ok) {
+        slaBestellingOp({
+          ...bestelling,
+          soort: res.soort,
+          bouw7_contract_id: res.contractId,
+          bouw7_nummer: res.nummer,
+          status: res.heeftLeverbon ? 'verzonden' : 'concept',
+          bouw7_verwijderd_op: null,
+        })
+        toast.success(`Gekoppeld aan ${res.nummer ?? 'het bestaande contract'} in Bouw7`)
+      } else {
+        // Mislukt koppelen laat een lege concept-bestelling achter; die hoort niet te blijven staan.
+        verwijderBestelling(bestelling.id)
+        toast.error(res.error, { duration: 8000 })
       }
     } finally {
       setBezigId(null)
@@ -482,8 +553,19 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
               </p>
             </div>
           </button>
+          {v.alContract && (
+            <button
+              onClick={() => koppelAanBouw7(v)}
+              disabled={bezig || gekozen.length === 0}
+              title={`Deze regels staan in Bouw7 al onder ${v.alContract.nummer ?? 'een contract'}. Koppelen legt dat in EVA vast; er verandert niets in Bouw7.`}
+              className="inline-flex items-center gap-1.5 shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-everts/40 text-everts hover:bg-everts/5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+              Koppelen aan {v.alContract.nummer ?? 'Bouw7'}
+            </button>
+          )}
           <button
-            onClick={() => maakInBouw7(v)}
+            onClick={() => (v.isReservering ? maakInBouw7(v) : setVenster(v))}
             disabled={bezig || geblokkeerd || gekozen.length === 0}
             title={geblokkeerd
               ? v.blokkades.join(' ')
@@ -493,7 +575,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             className="inline-flex items-center gap-1.5 shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-everts text-white hover:bg-everts/90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            {v.isReservering ? 'Reservering vastleggen' : SOORT[soort].knop}
+            {v.isReservering ? 'Reservering vastleggen' : `${SOORT[soort].knop}…`}
           </button>
         </div>
 
@@ -944,6 +1026,41 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {venster && (
+        <OpdrachtVenster
+          soort={venster.soort as Soort}
+          relatieNaam={venster.relatieNaam}
+          aantalRegels={venster.regels.filter(r => !(uit[venster.sleutel] ?? new Set<string>()).has(r.componentId)).length}
+          totaal={venster.regels
+            .filter(r => !(uit[venster.sleutel] ?? new Set<string>()).has(r.componentId))
+            .reduce((som, r) => som + r.bedrag, 0)}
+          sjablonen={sjablonen[venster.soort as Soort].filter(x => x.heeftTemplate).map(x => ({ id: x.id, naam: x.naam }))}
+          bezig={bezigId === venster.sleutel}
+          begin={{
+            omschrijving: naam[venster.sleutel] ?? venster.relatieNaam,
+            leveringTekst: levering[venster.sleutel] ?? '',
+            leveringDatum: '',
+            opleverDatum: '',
+            werkadres: '',
+            betaalafspraak: betaling[venster.sleutel] ?? '',
+            termijnschema: null,
+            inhoudingPct: null,
+            boeteTekst: '',
+            afspraken: '',
+            interneNotitie: '',
+            sjabloonId: sjabloonPerVoorstel[venster.sleutel] || standaardSjabloon(venster.soort as Soort) || null,
+          }}
+          onSluit={() => setVenster(null)}
+          onBevestig={g => {
+            // Terugschrijven naar de kaartvelden, zodat het voorstel toont waarmee het is aangemaakt.
+            setNaam(p => ({ ...p, [venster.sleutel]: g.omschrijving }))
+            setLevering(p => ({ ...p, [venster.sleutel]: g.leveringTekst }))
+            setBetaling(p => ({ ...p, [venster.sleutel]: g.betaalafspraak }))
+            void maakInBouw7(venster, g)
+          }}
+        />
       )}
     </div>
   )
