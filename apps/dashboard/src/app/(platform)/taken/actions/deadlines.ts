@@ -102,6 +102,7 @@ async function stemHerhalingAf(
         assignee_type:          sjabloonTaak.assignee_type ?? 'direct',
         dossier_rollen:         sjabloonTaak.dossier_rollen ?? [],
         formulier_template_id:  sjabloonTaak.formulier_template_id ?? null,
+        kwaliteit_ronde:        sjabloonTaak.kwaliteit_ronde ?? false,
         herhaling_bron_taak_id: sjabloonTaak.id,
         herhaling_index:        i,
         aangemaakt_door:        null,

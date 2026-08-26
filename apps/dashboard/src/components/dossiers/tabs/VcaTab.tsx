@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getVcaActies, type VcaActie } from '@/lib/kam/vca-acties'
 import { getVcaBemensing, type VcaBemensingRij } from '@/lib/kam/vca-bemensing'
 import { VCA_SOORT_LABEL, type VcaStatus } from '@/lib/kam/vca'
+import KwaliteitBlok from './KwaliteitBlok'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 
@@ -56,7 +57,11 @@ export default async function VcaTab({ dossierId }: Props) {
 
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 860 }}>
-      <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700 }}>VCA</h2>
+      <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 700 }}>VCA &amp; Kwaliteit</h2>
+
+      {/* Kwaliteitscontrole staat bovenaan: dat is waar de projectleider tussen twee rondes door
+          naar kijkt. VCA-bemensing en -acties zijn periodieke administratie en staan eronder. */}
+      <KwaliteitBlok dossierId={dossierId} />
 
       {/* ── VCA-acties uit de actielijst ───────────────────────────── */}
       <section style={{ marginBottom: 32 }}>

@@ -72,7 +72,7 @@ const FOUT_TEKST: Record<string, string> = {
 }
 
 export default function SpraakTextarea({
-  id, value, onChange, placeholder, style, rows,
+  id, value, onChange, placeholder, style, rows, onBlur, disabled,
 }: {
   id?: string
   value: string
@@ -80,6 +80,10 @@ export default function SpraakTextarea({
   placeholder?: string
   style?: React.CSSProperties
   rows?: number
+  /** Vuurt wanneer het veld de focus verliest — voor schermen die per veld opslaan. */
+  onBlur?: () => void
+  /** Alleen-lezen weergave; de inspreekknop verdwijnt dan ook. */
+  disabled?: boolean
 }) {
   const [ondersteund, setOndersteund] = useState(false)
   const [luistert, setLuistert] = useState(false)
@@ -205,8 +209,10 @@ export default function SpraakTextarea({
           // vastgezet, en tot dat moment de tekst laten verdwijnen leest als verlies.
           value={tussentijds ? voegSamen(value, tussentijds) : value}
           onChange={e => onChange(e.target.value)}
+          onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          disabled={disabled}
           // Tijdens het inspreken is het veld het weergavevlak van wat er herkend wordt; typen
           // zou het tussentijdse resultaat meteen weer overschrijven.
           readOnly={luistert}
@@ -217,7 +223,7 @@ export default function SpraakTextarea({
           }}
         />
 
-        {ondersteund && (
+        {ondersteund && !disabled && (
           <button
             type="button"
             onClick={() => (luistert ? stop() : start())}

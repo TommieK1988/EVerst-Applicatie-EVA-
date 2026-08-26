@@ -8,7 +8,8 @@
     "./server": "./src/server.ts",
     "./cookies": "./src/cookies.ts",
     "./types": "./src/database.types.ts",
-    "./platform-types": "./src/platform-types.ts"
+    "./platform-types": "./src/platform-types.ts",
+    "./kwaliteit-types": "./src/kwaliteit-types.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

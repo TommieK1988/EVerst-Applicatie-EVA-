@@ -18,6 +18,7 @@ import {
 } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 import HoutrotOptiesVeld from './HoutrotOptiesVeld'
+import KwaliteitOptiesVeld from './KwaliteitOptiesVeld'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 
 interface Props {
@@ -287,6 +288,9 @@ function VeldInvoer({ veld, dossierId, waarde, onChange, onBlur }: {
         // Bewust géén onBlur: elke verversing rendert hier een volledig rapport met
         // foto's. De gebruiker ververst zelf met de knop boven de preview.
         <HoutrotOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
+      ) : veld.type === 'kwaliteit_opties' ? (
+        // Ook hier bewust géén onBlur: elke verversing rendert een volledig rapport met foto's.
+        <KwaliteitOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
       ) : veld.type === 'meerregelig' ? (
         <textarea value={waarde} onChange={e => onChange(e.target.value)} onBlur={onBlur} rows={4} className={cls} />
       ) : veld.type === 'keuze' ? (

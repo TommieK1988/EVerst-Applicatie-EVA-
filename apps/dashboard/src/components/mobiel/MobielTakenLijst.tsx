@@ -13,6 +13,8 @@ export type MobielTaak = {
   dossier_naam: string | null
   dossier_id: string | null
   formulier_template_id: string | null
+  /** De actie start een kwaliteitsronde (tasks.kwaliteit_ronde). */
+  kwaliteit_ronde?: boolean
   /** Gezet als de taak een openstaande toolbox is; link naar de doorloop. */
   toolbox_toewijzing_id?: string | null
   /** Platte omschrijving-tekst; null als er geen omschrijving is. */
@@ -159,6 +161,22 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                     <path d="M9 13h6m-6 4h6M9 9h1M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
                   </svg>
                   Formulier invullen
+                </Link>
+              )}
+              {taak.kwaliteit_ronde && (
+                <Link
+                  href={`/m/taken/${taak.id}/kwaliteit`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
+                    padding: '8px 12px', borderRadius: 8,
+                    background: '#ecfdf3', color: '#067647',
+                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                  }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  Kwaliteitsronde starten
                 </Link>
               )}
               {taak.toolbox_toewijzing_id && (

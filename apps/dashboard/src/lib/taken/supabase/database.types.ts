@@ -725,6 +725,11 @@ export interface DbTask {
   blocked_by_task_id: string | null
   // Formulier-koppeling
   formulier_template_id: string | null
+  /**
+   * Deze actie start een kwaliteitsronde. Zelfde mechaniek als `formulier_template_id`: de taak
+   * krijgt een startknop en gaat automatisch op gereed zodra de inspectie definitief is.
+   */
+  kwaliteit_ronde: boolean
   created_at: string
   updated_at: string
 }

@@ -155,6 +155,9 @@ const APP_SUBNAV: Record<string, {
       { href: '/kam/formulieren',   label: 'Formulieren',   icon: ICON_OVERZICHT },
       { href: '/kam/toolbox',       label: 'Toolbox',       icon: 'M2.4 16.8h19.2v1.8H2.4z M4.8 16.8v-1.2a7.2 7.2 0 0 1 4.8-6.8V6a1.2 1.2 0 0 1 1.2-1.2h2.4A1.2 1.2 0 0 1 14.4 6v2.8a7.2 7.2 0 0 1 4.8 6.8v1.2' },
       { href: '/kam/vca-diplomas',  label: "VCA-diploma's", icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+      { href: '/kam/kwaliteit',              label: 'Kwaliteitsinspecties', icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11' },
+      { href: '/kam/kwaliteit/afwijkingen',  label: 'Afwijkingen',          icon: 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z' },
+      { href: '/kam/kwaliteit/bibliotheek',  label: 'Kwaliteitsbibliotheek', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z' },
     ],
   },
   '/management': {
@@ -189,7 +192,7 @@ const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
   { slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
   { slug: 'taken',         label: 'Acties',        d:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
-  { slug: 'vca',           label: 'VCA',           d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  { slug: 'vca',           label: 'VCA & Kwaliteit', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
   // Alleen zichtbaar met de dossier-toggle `houtrot_registreren` (TAB_TOGGLE_GATES).
   { slug: 'houtrot',       label: 'Houtrot',       d: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
   { slug: 'uren',          label: 'Uren',          d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
@@ -206,7 +209,7 @@ const SERVICEDESK_TABS: DossierTab[] = [
   { slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
   { slug: 'calculatie', label: 'Calculatie', d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
   { slug: 'planning',   label: 'Planning',   d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
-  { slug: 'vca',        label: 'VCA',        d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  { slug: 'vca',        label: 'VCA & Kwaliteit', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
   { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
@@ -254,6 +257,15 @@ export default function Sidebar({
     // dieper in de module zit (elke subroute begint immers met deze href).
     href === '/materieelbeheer' ? pathname === '/materieelbeheer' :
     href === '/kam' ? pathname === '/kam' :
+    // Zelfde reden als hierboven: /kam/kwaliteit is de root van drie subpagina's en mag niet
+    // oplichten zodra je op /kam/kwaliteit/afwijkingen staat. Een inspectiedetail
+    // (/kam/kwaliteit/<id>) hoort er wél bij.
+    href === '/kam/kwaliteit'
+      ? pathname === '/kam/kwaliteit'
+        || (pathname.startsWith('/kam/kwaliteit/')
+            && !pathname.startsWith('/kam/kwaliteit/afwijkingen')
+            && !pathname.startsWith('/kam/kwaliteit/bibliotheek'))
+      :
     pathname.startsWith(href)
 
   const activeAppKey = Object.keys(APP_SUBNAV).find(key => pathname.startsWith(key)) ?? null

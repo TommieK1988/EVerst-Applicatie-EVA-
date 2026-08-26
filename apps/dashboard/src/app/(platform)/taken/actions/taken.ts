@@ -118,6 +118,8 @@ export async function maakTaak(data: {
   herhaling_interval?: HerhalingInterval
   // Formulier-koppeling
   formulier_template_id?: string
+  /** Deze actie start een kwaliteitsronde (zelfde mechaniek als de formulier-koppeling). */
+  kwaliteit_ronde?: boolean
 }): Promise<{ id: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -143,6 +145,7 @@ export async function maakTaak(data: {
       deadline_handmatig:     data.deadline               != null,
       herhaling_interval:     data.herhaling_interval     ?? 'geen',
       formulier_template_id:  data.formulier_template_id  ?? null,
+      kwaliteit_ronde:        data.kwaliteit_ronde        ?? false,
     })
     .select('id')
     .single()
@@ -324,6 +327,7 @@ export async function updateTaak(id: string, data: {
   herhaling_interval?: HerhalingInterval
   blocked_by_task_id?: string | null
   formulier_template_id?: string | null
+  kwaliteit_ronde?: boolean
 }): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -351,6 +355,7 @@ export async function updateTaak(id: string, data: {
   if (data.herhaling_interval  !== undefined) updatePayload.herhaling_interval   = data.herhaling_interval
   if (data.blocked_by_task_id      !== undefined) updatePayload.blocked_by_task_id      = data.blocked_by_task_id
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
+  if (data.kwaliteit_ronde        !== undefined) updatePayload.kwaliteit_ronde        = data.kwaliteit_ronde
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await supabase

@@ -97,6 +97,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
 
   // Formulier-koppeling
   const [formulierTemplateId, setFormulierTemplateId] = useState(taak.formulier_template_id ?? '')
+  const [kwaliteitRonde, setKwaliteitRonde] = useState(taak.kwaliteit_ronde ?? false)
   const [formulieren, setFormulieren] = useState<{ id: string; naam: string; categorie: string | null }[]>([])
 
   useEffect(() => {
@@ -221,6 +222,15 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const handleFormulierChange = (val: string) => {
     setFormulierTemplateId(val)
     startTransition(() => updateTaak(taak.id, { formulier_template_id: val || null }))
+  }
+
+  /**
+   * Zelfde mechaniek als de formulier-koppeling: de actie krijgt een startknop in Mijn acties en
+   * op de telefoon, en gaat automatisch op gereed zodra de inspectie definitief is.
+   */
+  const handleKwaliteitRondeChange = (val: boolean) => {
+    setKwaliteitRonde(val)
+    startTransition(() => updateTaak(taak.id, { kwaliteit_ronde: val }))
   }
 
   const medewerkersMap = Object.fromEntries(
@@ -406,6 +416,26 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </a>
             )}
           </div>
+        </div>
+
+        {/* Kwaliteitsronde — zelfde plek als de formulier-koppeling, want het is dezelfde soort
+            koppeling: de actie is de ingang naar een uit te voeren registratie. */}
+        <div>
+          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={kwaliteitRonde}
+              onChange={e => handleKwaliteitRondeChange(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Kwaliteitsronde</span>
+              <span className="block text-[11px] text-slate-500">
+                De uitvoerder krijgt bij deze actie de knop &ldquo;Kwaliteitsronde starten&rdquo;.
+                De actie gaat automatisch op gereed zodra de inspectie definitief is.
+              </span>
+            </span>
+          </label>
         </div>
 
         {/* Toewijzingen */}

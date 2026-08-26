@@ -38,7 +38,7 @@ const TAB_LABELS: Record<string, string> = {
   calculatie:    'Calculatie',
   werkbegroting: 'Werkbegroting',
   planning:      'Planning',
-  vca:           'VCA',
+  vca:           'VCA & Kwaliteit',
   houtrot:       'Houtrot',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',

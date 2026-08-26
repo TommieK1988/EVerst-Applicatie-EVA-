@@ -41,6 +41,7 @@ export default async function MobielTakenPage() {
       dossier_naam: (t as { dossier_naam?: string | null }).dossier_naam ?? null,
       dossier_id: t.dossier_id ?? null,
       formulier_template_id: t.formulier_template_id ?? null,
+      kwaliteit_ronde: t.kwaliteit_ronde ?? false,
       toolbox_toewijzing_id: toolboxPerTask.get(t.id) ?? null,
       omschrijving: oms || null,
     }

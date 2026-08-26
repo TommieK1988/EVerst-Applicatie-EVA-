@@ -26,6 +26,8 @@ import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken } from '@/lib/dossiers/oplevering'
 import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
 import { RAPPORT_FOTO_MAX, parseRapportOpties, HOUTROT_OPTIES_SLEUTEL } from './houtrot-opties'
+import { bouwKwaliteitBlok, LEEG_KWALITEIT_BLOK } from './kwaliteit-rapport'
+import { KWALITEIT_FOTO_MAX, KWALITEIT_FOTO_KLEIN } from './kwaliteit-opties'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -153,6 +155,11 @@ export async function buildDocumentContext(
     ? await bouwHoutrotBlok(dossierId, genormaliseerd, { preview: opties.preview })
     : LEEG_HOUTROT_BLOK
 
+  // Kwaliteitscontrole-rapport — zelfde patroon: alleen laden als het sjabloon erom vraagt.
+  const kwaliteit = sjabloon.documentsoort === 'kwaliteitsrapport'
+    ? await bouwKwaliteitBlok(dossierId, genormaliseerd, { preview: opties.preview })
+    : LEEG_KWALITEIT_BLOK
+
   // Feedback-ronde: de bewoners-feedbacklink wordt automatisch bepaald (opgehaald of
   // aangemaakt) — daaruit volgen de linktekst {feedback.url}, de QR-code {%feedback_qr}
   // en (via genereer-document) het doel van de klik-knop.
@@ -231,6 +238,7 @@ export async function buildDocumentContext(
     },
     opdracht,
     houtrot,
+    kwaliteit,
     // Platte vlag zodat {#toon_prijzen}…{/toon_prijzen} óók binnen de registratie-
     // en groeploops oplost (de dotted parser valt door naar de buitenste scope).
     toon_prijzen: houtrot.heeft
@@ -290,6 +298,11 @@ export function documentImageMax(): Record<string, { w: number; h: number }> {
     max[`foto_${type}`] = RAPPORT_FOTO_MAX
     max[`fotos.${type}`] = RAPPORT_FOTO_MAX
   }
+  // Kwaliteitsrapport: `foto` staat al in STANDAARD_IMAGE_MAX op PHOTO_MAX, maar dat kader is te
+  // groot voor drie afwijkingen op één pagina. Hier begrenst het kader de blokhoogte, net als bij
+  // de houtrot-rapportage. `foto_klein` is de strook positieve waarnemingen.
+  max['foto'] = KWALITEIT_FOTO_MAX
+  max['foto_klein'] = KWALITEIT_FOTO_KLEIN
   return max
 }
 

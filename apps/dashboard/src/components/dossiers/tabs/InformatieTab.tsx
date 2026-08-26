@@ -695,6 +695,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     herhaling_index:         null,
     blocked_by_task_id:      null,
     formulier_template_id:   null,
+    kwaliteit_ronde:         false,
     created_at:              '',
     updated_at:              '',
     assignees:               [],

@@ -12,7 +12,7 @@
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
 export const DOCUMENTSOORTEN = [
   'opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief',
-  'houtrot_rapportage', 'inkooporder', 'oa_contract', 'overig',
+  'houtrot_rapportage', 'kwaliteitsrapport', 'inkooporder', 'oa_contract', 'overig',
 ] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
@@ -22,6 +22,7 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
   garantiecertificaat:'Garantiecertificaat',
   informatiebrief:    'Tussentijdse informatiebrief',
   houtrot_rapportage: 'Houtrot-rapportage',
+  kwaliteitsrapport:  'Kwaliteitscontrole-rapport',
   inkooporder:        'Inkooporder',
   oa_contract:        'Onderaannemerscontract',
   overig:             'Overig',
@@ -41,7 +42,7 @@ export function isInkoopSoort(s: string | null | undefined): s is InkoopDocument
 }
 
 /** Veldtypen voor de per-document invoervelden. */
-export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link', 'houtrot_opties'] as const
+export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link', 'houtrot_opties', 'kwaliteit_opties'] as const
 export type VeldType = (typeof VELD_TYPES)[number]
 
 export const veldTypeLabels: Record<VeldType, string> = {
@@ -59,6 +60,10 @@ export const veldTypeLabels: Record<VeldType, string> = {
   // groeperingsniveau, de tak, het statusfilter, het aantal registraties per pagina
   // en of verkoopprijzen mee mogen. De waarde is een JSON-tekst.
   houtrot_opties:'Houtrot-rapportage (filters)',
+  // Bijzonder veld voor het kwaliteitsrapport: bij het opstellen kies je welke inspectie het
+  // betreft en of de positieve waarnemingen en de opvolging van eerdere rondes mee moeten.
+  // De waarde is een JSON-tekst.
+  kwaliteit_opties: 'Kwaliteitsrapport (inspectie kiezen)',
 }
 
 /**
