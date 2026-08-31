@@ -12,6 +12,7 @@ import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import type { Scenario } from '@/lib/everts-calc/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 
@@ -75,8 +76,16 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     setCalcTick(t => t + 1)
     if (nieuwId) { setSelectedScenarioId(nieuwId); setToonCalculatie(true) }
   }
-  // In de Opdracht-fase is reviseren niet toegestaan (Bouw7 is dan leidend);
-  // de Reviseren-knop/optie wordt hier bewust weggelaten.
+  // In de Opdracht-fase is de contractcalculatie vergrendeld: daarop is opdracht
+  // gegeven en Bouw7 is leidend. Meerwerk mag wél nog gereviseerd worden — een
+  // meerwerkofferte moet aanpasbaar blijven zolang het werk loopt.
+  const handleReviseerMeerwerk = async (sid: string) => {
+    if (!projectId) return
+    const nieuw = await reviseerCalculatie(projectId, sid)
+    if (!nieuw) { toast.error('Reviseren mislukt'); return }
+    toast.success('Nieuwe versie aangemaakt')
+    handleScenariosGewijzigd(nieuw.id)
+  }
 
   async function aanmaken() {
     setBezig(true)
@@ -139,7 +148,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
           scenarioId={selectedScenarioId ?? undefined}
           dossierContext={{ dossierId, clientNaam }}
           onScenariosGewijzigd={handleScenariosGewijzigd}
-          magReviseren={false}
+          magReviseren="meerwerk"
         />
       </div>
     )
@@ -191,6 +200,7 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
       readOnly={readOnly}
       onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
       onOpenOfferte={setOfferteId}
+      onReviseerMeerwerk={handleReviseerMeerwerk}
       headerExtra={
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>

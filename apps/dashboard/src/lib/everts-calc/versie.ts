@@ -8,6 +8,10 @@
  * kopieert **alleen de calculatie** naar een nieuwe, bewerkbare concept-versie —
  * zonder offerte. De offerte wordt later opnieuw gemaakt zodra de gereviseerde
  * begroting klaar is (zonder calculatie geen offerte).
+ *
+ * Meerwerk-calculaties reviseren op dezelfde manier: de kopie houdt zijn
+ * `meerwerk_regel_id`, zodat de nieuwe versie bij dezelfde meerwerkregel blijft
+ * horen en niet als contractversie gaat meetellen.
  */
 
 import { getScenario, getScenarios, kopieerScenario, slaScenarioOp, getInstellingen } from '@/lib/everts-calc/local-store'
@@ -72,9 +76,15 @@ export async function reviseerCalculatie(
 
 // ─── Meerwerk-calculaties (scenario in het dossier-project, apart gemarkeerd) ──
 
-/** De (bestaande) meerwerk-calculatie van een meerwerkregel binnen een project. */
+/**
+ * De actuele meerwerk-calculatie van een meerwerkregel binnen een project. Ook een
+ * meerwerk-calculatie kan gereviseerd worden; er staan dan meerdere scenario's voor
+ * dezelfde regel in het project. De hoogste versie is de actuele.
+ */
 export function vindMeerwerkScenario(projectId: string, meerwerkRegelId: string): Scenario | undefined {
-  return getScenarios(projectId).find(s => s.meerwerk_regel_id === meerwerkRegelId)
+  return getScenarios(projectId)
+    .filter(s => s.meerwerk_regel_id === meerwerkRegelId)
+    .sort((a, b) => (b.versie ?? 1) - (a.versie ?? 1))[0]
 }
 
 /**

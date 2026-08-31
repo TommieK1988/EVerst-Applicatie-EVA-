@@ -7,7 +7,8 @@
  * zonder offerte is een calculatie in bewerking ("Nog geen offerte"). Een
  * verzonden (definitieve) versie is alleen-lezen — je maakt een nieuwe versie via
  * "Reviseren" (kopieert de calculatie; de offerte maak je daarna opnieuw).
- * Meerwerk-/losse offertes staan apart onder "Overige offertes".
+ * Meerwerk-calculaties staan in een eigen blok en zijn óók te reviseren — ook ná
+ * opdracht. Losse offertes zonder versie in dit project staan onder "Overige offertes".
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -39,16 +40,20 @@ interface Props {
   readOnly?: boolean
   onOpenCalculatie: (scenarioId: string) => void
   onOpenOfferte: (quoteId: string) => void
-  /** Reviseren: maak een nieuwe versie van deze (definitieve) calculatie.
-   *  Weglaten (bijv. in de Opdracht-fase) verbergt de Reviseren-knop. */
+  /** Reviseren van een contractversie: maak een nieuwe versie van deze (definitieve)
+   *  calculatie. Weglaten (in de Opdracht-fase — daar is opdracht gegeven op de
+   *  contractcalculatie) verbergt de Reviseren-knop in het Versies-blok. */
   onReviseer?: (scenarioId: string) => void
+  /** Reviseren van een meerwerk-calculatie. Staat los van `onReviseer`: meerwerk mag
+   *  ook ná opdracht nog een nieuwe versie krijgen. */
+  onReviseerMeerwerk?: (scenarioId: string) => void
   /** Extra knoppen in de kaartkop (bijv. Verwijderen op de opdracht-tab). */
   headerExtra?: ReactNode
 }
 
 export default function CalculatiesTabel({
   projectId, scenarios, rijen, tick = 0, readOnly = false,
-  onOpenCalculatie, onOpenOfferte, onReviseer, headerExtra,
+  onOpenCalculatie, onOpenOfferte, onReviseer, onReviseerMeerwerk, headerExtra,
 }: Props) {
   // Totalen per calculatie, gerekend over de gedeelde calculatie uit Supabase
   // (één snapshot voor alle versies) — niet uit de lokale kopie van dit apparaat.
@@ -74,8 +79,14 @@ export default function CalculatiesTabel({
   const meerwerkOfferteVan = (sid: string) =>
     rijen.find(r => r.scenario_id === sid) ?? null
   // Meerwerk-scenario's staan in hetzelfde dossier-project maar apart gemarkeerd; ze
-  // tellen niet als contractversie.
-  const meerwerkScenarios = scenarios.filter(s => s.meerwerk_regel_id)
+  // tellen niet als contractversie. Revisies van hetzelfde meerwerk staan onder elkaar.
+  const meerwerkScenarios = scenarios
+    .filter(s => s.meerwerk_regel_id)
+    .sort((a, b) => {
+      const ma = a.meerwerk_regel_id ?? '', mb = b.meerwerk_regel_id ?? ''
+      if (ma !== mb) return ma < mb ? -1 : 1
+      return (a.versie ?? 1) - (b.versie ?? 1)
+    })
   // Overige offertes: alleen echt losse offertes (geen scenario in dít project). Meerwerk-
   // offertes met een scenario in dit project verschijnen in het Meerwerk-blok.
   const overigeOffertes = rijen.filter(
@@ -185,6 +196,7 @@ export default function CalculatiesTabel({
               <thead>
                 <tr>
                   <TH>Meerwerk</TH>
+                  <TH>Versie</TH>
                   <TH>Offerte</TH>
                   <TH right>Excl. BTW</TH>
                   <TH right>Incl. BTW</TH>
@@ -196,6 +208,7 @@ export default function CalculatiesTabel({
                 {meerwerkScenarios.map(s => {
                   const t = totalenPerScenario.get(s.id)
                   const offerte = meerwerkOfferteVan(s.id)
+                  const definitief = offerte?.status === 'verzonden'
                   return (
                     <tr
                       key={s.id}
@@ -204,6 +217,12 @@ export default function CalculatiesTabel({
                       title="Meerwerk-calculatie openen"
                     >
                       <TD vet>{s.naam || s.nummer || '—'}</TD>
+                      <TD>
+                        v{s.versie ?? 1}{' '}
+                        {definitief
+                          ? <Badge tone="success">Definitief</Badge>
+                          : <Badge tone="neutral">Concept</Badge>}
+                      </TD>
                       <TD>
                         {offerte ? (
                           <span
@@ -229,6 +248,11 @@ export default function CalculatiesTabel({
                           <Button variant="ghost" size="sm" onClick={() => onOpenCalculatie(s.id)}>
                             <Calculator className="h-3.5 w-3.5" /> Openen
                           </Button>
+                          {definitief && !readOnly && onReviseerMeerwerk && (
+                            <Button variant="ghost" size="sm" onClick={() => onReviseerMeerwerk(s.id)} title="Nieuwe versie van deze meerwerk-calculatie">
+                              <Copy className="h-3.5 w-3.5" /> Reviseren
+                            </Button>
+                          )}
                         </div>
                       </TD>
                     </tr>

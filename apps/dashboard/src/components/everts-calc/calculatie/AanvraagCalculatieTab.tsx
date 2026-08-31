@@ -190,6 +190,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
         onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
         onOpenOfferte={setOfferteId}
         onReviseer={handleReviseer}
+        onReviseerMeerwerk={handleReviseer}
       />
     )
   }

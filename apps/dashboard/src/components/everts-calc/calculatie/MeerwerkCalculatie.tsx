@@ -8,6 +8,8 @@
  * zoekt (of maakt) het meerwerk-scenario en opent de calculatie-omgeving erop. De offerte
  * maak je daar via de normale "Offerte aanmaken"-modal (met lay-out-keuze); die wordt
  * automatisch als meerwerk-offerte gekoppeld (op basis van scenario.meerwerk_regel_id).
+ * Een verzonden meerwerk-offerte is te reviseren: dat maakt een nieuwe versie van het
+ * meerwerk-scenario (met dezelfde meerwerk_regel_id), die hier meteen geopend wordt.
  */
 
 import { useState, useEffect } from 'react'
@@ -139,7 +141,8 @@ export default function MeerwerkCalculatie({
         readOnly={readOnly}
         scenarioId={scenarioId}
         dossierContext={{ dossierId, clientNaam }}
-        magReviseren={false}
+        magReviseren="meerwerk"
+        onScenariosGewijzigd={(nieuwId) => { if (nieuwId) setScenarioId(nieuwId) }}
       />
     </div>
   )

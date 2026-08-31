@@ -54,21 +54,30 @@ interface Props {
   /** Aangeroepen na een wijziging in de set scenario's (bijv. na kopiëren). De
    *  optionele parameter is het id van een nieuw/te-openen scenario. */
   onScenariosGewijzigd?: (nieuwScenarioId?: string) => void
-  /** Of reviseren toegestaan is. In de Opdracht-fase mag een verzonden offerte
-   *  niet meer gereviseerd worden (Bouw7 is dan leidend). */
-  magReviseren?: boolean
+  /** Welke calculaties gereviseerd mogen worden:
+   *  - `alles`    — elke definitieve calculatie (aanvraag-/offertefase);
+   *  - `meerwerk` — alléén meerwerk-calculaties. In de Opdracht-fase is de
+   *    contractcalculatie waarvoor opdracht is gegeven vergrendeld (Bouw7 is
+   *    daar leidend), maar meerwerk mag nog wel een nieuwe versie krijgen;
+   *  - `geen`     — reviseren volledig uit. */
+  magReviseren?: 'alles' | 'meerwerk' | 'geen'
 }
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
   bibliotheekItems = [], readOnly: readOnlyProp = false, scenarioId, dossierContext,
-  onScenariosGewijzigd, magReviseren = true,
+  onScenariosGewijzigd, magReviseren = 'alles',
 }: Props) {
   const pathname = usePathname()
   const [scenario, setScenario]                       = useState<Scenario | null>(null)
   // Een verzonden (definitieve) calculatie is bevroren: read-only, ook als het
   // dossier zelf bewerkbaar is. Zo kan een verzonden versie nooit wijzigen.
   const readOnly = readOnlyProp || !!scenario?.bevroren_op
+  // Meerwerk-calculaties mogen ook in de Opdracht-fase nog gereviseerd worden; de
+  // contractcalculatie waarvoor opdracht is gegeven niet.
+  const magDezeReviseren =
+    magReviseren === 'alles' ||
+    (magReviseren === 'meerwerk' && !!scenario?.meerwerk_regel_id)
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
   const [aantalEigenOpslag, setAantalEigenOpslag]     = useState(0)
@@ -357,7 +366,9 @@ export default function CalculatieHoofdscherm({
     if (!nieuw) { toast.error('Reviseren mislukt'); return }
     // Zet het gekoppelde dossier terug naar Aanvraag · Nieuw (aanvraag-fase, of een
     // EVA-gedreven offerte zonder Bouw7-koppeling). Fail-soft: revisie is al gelukt.
-    if (dossierContext) {
+    // Meerwerk staat los van de contractketen: een nieuwe meerwerkversie mag de
+    // dossierstatus nooit terugzetten.
+    if (dossierContext && !scenario.meerwerk_regel_id) {
       try {
         const res = await resetDossierNaarAanvraagBijRevisie(projectId)
         if (res.ok && res.gewijzigd) toast.success('Dossier teruggezet naar Aanvraag · Nieuw')
@@ -566,7 +577,7 @@ export default function CalculatieHoofdscherm({
                   >
                     <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
                   </DropdownMenu.Item>
-                  {scenario?.bevroren_op && magReviseren && (
+                  {scenario?.bevroren_op && magDezeReviseren && (
                     <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
                       <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
                     </DropdownMenu.Item>
