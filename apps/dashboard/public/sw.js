@@ -4,7 +4,7 @@
  * Doel in deze versie: de app installeerbaar maken (PWA vereist een
  * geregistreerde SW met een fetch-handler) en pushmeldingen ontvangen. Er is
  * BEWUST geen offline-cache: navigaties en requests gaan altijd naar het
- * netwerk. Wanneer offline-werken voor de buitendienst wordt opgepakt, is dit
+ * netwerk, en de fetch-handler laat ze ongemoeid langs (zie hieronder). Wanneer offline-werken voor de buitendienst wordt opgepakt, is dit
  * het bestand om Workbox / runtime-caching + een form-queue aan toe te voegen.
  */
 self.addEventListener('install', () => {
@@ -17,10 +17,25 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-self.addEventListener('fetch', (event) => {
-  // Network-only passthrough. De handler is nodig voor installability;
-  // we voegen (nog) geen caching toe.
-  event.respondWith(fetch(event.request))
+self.addEventListener('fetch', () => {
+  /*
+   * BEWUST LEEG — geen event.respondWith().
+   *
+   * Hier stond `event.respondWith(fetch(event.request))`: een passthrough die niets
+   * toevoegde maar wel élke request door de service worker liet lopen. Dat kost een
+   * extra hop, en staat de SW-thread stil (wat na een tijdje inactiviteit gebeurt),
+   * dan moet die eerst opstarten voordat de request überhaupt vertrekt. In het
+   * netwerkpaneel was dat te zien als elk verzoek twee keer, met sw.js als initiator;
+   * de RSC-navigatie naar /opdrachten kwam zo op ~1 seconde uit.
+   *
+   * Roep je respondWith() niet aan, dan handelt de browser de request zelf af — zonder
+   * omweg, met de eigen prioritering en streaming. De handler blijft geregistreerd,
+   * zodat de installability-eis (een SW mét fetch-handler) overeind blijft en de app
+   * op het beginscherm installeerbaar blijft; op iOS is dat de voorwaarde voor push.
+   *
+   * Wordt offline-werken opgepakt, dan is dit het punt om Workbox / runtime-caching
+   * toe te voegen — en dan pas weer met respondWith(), maar dan met een reden.
+   */
 })
 
 /* ── Pushmeldingen ──────────────────────────────────────────────────────────

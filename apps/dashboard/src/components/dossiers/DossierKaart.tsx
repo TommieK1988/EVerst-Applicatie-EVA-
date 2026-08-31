@@ -47,17 +47,34 @@ function IndicatorChip({ indicator }: { indicator: KaartIndicator }) {
   )
 }
 
-export function DossierKaart({
-  dossier, onClick, sectie, draggingActief = false,
+/**
+ * Eén kaart op het bord.
+ *
+ * `React.memo`: een bord toont makkelijk 400 kaarten, en zonder memo tekent elke
+ * statuswijziging, filterklik of sleepbeweging ze allemaal opnieuw. Dat werkt alleen
+ * als de props stabiel zijn — vandaar `onOpen(id)` in plaats van een `onClick`-closure
+ * die per render een nieuwe identiteit krijgt. Zie DossierKanban.
+ */
+export const DossierKaart = React.memo(function DossierKaart({
+  dossier, onOpen, sectie, draggingActief = false,
 }: {
   dossier: DossierRij
-  onClick?: () => void
+  /** Krijgt het dossier-id; moet stabiel zijn (useCallback) anders werkt de memo niet. */
+  onOpen?: (dossierId: string) => void
   sectie?: DossierSectie
   /** Er wordt ergens op het bord gesleept — dan mag geen enkele kaart uitklappen. */
   draggingActief?: boolean
 }) {
   const [hovered, setHovered] = React.useState(false)
   const [open,    setOpen]    = React.useState(false)
+  /**
+   * Is deze kaart ooit uitgeklapt geweest? Het detailpaneel is het duurste stuk van de kaart
+   * (notitieblok, bedragen, indicator-uitleg) en stond voorheen voor élke kaart in de DOM —
+   * alleen met CSS dichtgeklapt. Bij 400 opdrachten bouwde de browser dus 400 panelen die
+   * niemand zag. Nu komt het paneel er pas in zodra je de kaart daadwerkelijk opent, en het
+   * blijft daarna staan zodat de dichtklap-animatie nog iets heeft om te tonen.
+   */
+  const [ooitGeopend, setOoitGeopend] = React.useState(false)
 
   const kaartRef      = React.useRef<HTMLDivElement>(null)
   const openTimerRef  = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -100,7 +117,7 @@ export function DossierKaart({
     setHovered(true)
     if (!heeftDetail || draggingActief) return
     if (sluitTimerRef.current) clearTimeout(sluitTimerRef.current)
-    openTimerRef.current = setTimeout(() => setOpen(true), OPEN_VERTRAGING_MS)
+    openTimerRef.current = setTimeout(() => { setOoitGeopend(true); setOpen(true) }, OPEN_VERTRAGING_MS)
   }
 
   function handleLeave() {
@@ -138,7 +155,7 @@ export function DossierKaart({
   return (
     <div
       ref={kaartRef}
-      onClick={onClick}
+      onClick={onOpen ? () => onOpen(dossier.id) : undefined}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       onMouseDown={handleMouseDown}
@@ -250,10 +267,12 @@ export function DossierKaart({
           transition: 'grid-template-rows 180ms ease',
         }}>
           <div style={{ overflow: 'hidden', minHeight: 0 }}>
-            <DossierKaartDetail dossier={dossier} sectie={sectie} indicatoren={indicatoren} bedrag={bedrag} />
+            {ooitGeopend && (
+              <DossierKaartDetail dossier={dossier} sectie={sectie} indicatoren={indicatoren} bedrag={bedrag} />
+            )}
           </div>
         </div>
       )}
     </div>
   )
-}
+})

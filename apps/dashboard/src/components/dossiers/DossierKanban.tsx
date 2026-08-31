@@ -65,6 +65,26 @@ export function DossierKanban<K extends string>({
 
   // Sync internal state when parent passes a filtered list (e.g. slicer changes)
   React.useEffect(() => { setDossiers(initieel) }, [initieel])
+
+  /**
+   * Openen van een kaart. Eén stabiele callback voor het hele bord in plaats van een
+   * closure per kaart: DossierKaart is gememoïseerd, en een prop die elke render van
+   * identiteit wisselt zou die memo waardeloos maken.
+   *
+   * `draggingId` gaat via een ref de closure in. Zou het in de dependencies staan, dan
+   * kreeg de callback bij elke sleepbeweging een nieuwe identiteit — precies wat we
+   * willen voorkomen, want juist tijdens slepen mag het bord niet alles opnieuw tekenen.
+   */
+  const draggingRef = React.useRef<string | null>(null)
+  React.useEffect(() => { draggingRef.current = draggingId }, [draggingId])
+
+  const openKaart = React.useCallback((dossierId: string) => {
+    if (draggingRef.current) return
+    openDossierInNieuwTabblad(dossierPad(sectie, dossierId))
+  }, [sectie])
+
+  const startSlepen = React.useCallback((dossierId: string) => setDraggingId(dossierId), [])
+  const stopSlepen  = React.useCallback(() => { setDraggingId(null); setDragOverCol(null) }, [])
   const [dragOverCol, setDragOverCol] = React.useState<string | null>(null)
   const [modalOpen,   setModalOpen]   = React.useState(false)
   const [zoek,        setZoek]        = React.useState('')
@@ -289,47 +309,127 @@ export function DossierKanban<K extends string>({
                 </div>
 
                 {/* Kaarten */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {kolom.map(d => (
-                    <div
-                      key={d.id}
-                      draggable
-                      onDragStart={e => { setDraggingId(d.id); e.dataTransfer.effectAllowed = 'move' }}
-                      onDragEnd={() => { setDraggingId(null); setDragOverCol(null) }}
-                      style={{
-                        opacity: draggingId === d.id ? 0.35 : 1,
-                        cursor: draggingId ? 'grabbing' : 'grab',
-                        transition: 'opacity 0.15s', userSelect: 'none',
-                      }}
-                    >
-                      <DossierKaart
-                        dossier={d}
-                        sectie={sectie}
-                        draggingActief={draggingId != null}
-                        onClick={() => { if (draggingId) return; openDossierInNieuwTabblad(dossierPad(sectie, d.id)) }}
-                      />
-                    </div>
-                  ))}
-
-                  {kolom.length === 0 && (
-                    <div style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '32px 12px',
-                    }}>
-                      <EmptyState
-                        icon={<IconDomeinOnderhoud size={24} />}
-                        title="Leeg"
-                        size="sm"
-                        tone="neutral"
-                      />
-                    </div>
-                  )}
-                </div>
+                <KaartenKolom
+                  dossiers={kolom}
+                  sectie={sectie}
+                  draggingId={draggingId}
+                  onDragStart={startSlepen}
+                  onDragEnd={stopSlepen}
+                  onOpen={openKaart}
+                />
               </div>
             )
           })}
         </div>
       </div>
     </>
+  )
+}
+
+/** Hoeveel kaarten een kolom in één keer opbouwt, en hoeveel er per stap bij komen. */
+const KAARTEN_PER_STAP = 20
+
+/**
+ * De scrollbare kaartenlijst van één kanban-kolom.
+ *
+ * Bouwt niet de hele kolom in één keer op maar de eerste `KAARTEN_PER_STAP`, en breidt uit
+ * zodra je in de buurt van de onderkant scrollt. Een bord met 400 opdrachten begon anders met
+ * 400 kaarten tegelijk, en zolang de browser daarmee bezig is reageert de pagina nergens op.
+ *
+ * Bewust geen echte virtualisatie (kaarten die uit beeld scrollen blijven staan): kaarten
+ * hebben geen vaste hoogte — een uitgeklapt paneel verandert hem — en ze zijn `draggable`.
+ * Een kaart onder de muis weghalen tijdens het slepen breekt de sleepbewerking. Uitbreiden-
+ * zonder-opruimen heeft dat probleem niet en lost het dure eerste beeld wél op.
+ *
+ * Slepen naar een kolom die nog niet is uitgeklapt werkt gewoon: de drop-zone is de kolom,
+ * niet de kaart.
+ */
+function KaartenKolom({
+  dossiers, sectie, draggingId, onDragStart, onDragEnd, onOpen,
+}: {
+  dossiers: DossierRij[]
+  sectie?: DossierSectie
+  draggingId: string | null
+  onDragStart: (dossierId: string) => void
+  onDragEnd: () => void
+  onOpen: (dossierId: string) => void
+}) {
+  const [zichtbaar, setZichtbaar] = React.useState(KAARTEN_PER_STAP)
+  const scrollRef  = React.useRef<HTMLDivElement>(null)
+  const sentinelRef = React.useRef<HTMLDivElement>(null)
+
+  const meerTeTonen = zichtbaar < dossiers.length
+
+  /*
+   * Bewust géén reset van `zichtbaar` als de lijst verandert (zoeken, slicer): `slice` klemt
+   * vanzelf op de lengte, en resetten zou betekenen dat je na het wissen van een filter weer
+   * bovenaan begint terwijl je al verder was.
+   */
+  React.useEffect(() => {
+    if (!meerTeTonen) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setZichtbaar(n => n + KAARTEN_PER_STAP) },
+      // Ruim vóór de onderkant bijladen, zodat je de grens niet ziet.
+      { root: scrollRef.current, rootMargin: '400px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+    /*
+     * `zichtbaar` hoort in de dependencies. Een IntersectionObserver meldt alleen een
+     * verándering: blijft het trigger-element na het bijladen gewoon in beeld, dan komt er
+     * geen tweede melding en blijft de kolom hangen — precies wat er gebeurt bij een kolom
+     * die met 20 kaarten nog niet scrollbaar is, en die je dan niet verder kunt krijgen.
+     * Door na elke stap een verse observer te maken wordt de huidige stand opnieuw gemeld
+     * en laadt hij door tot de kolom vol genoeg is.
+     */
+  }, [meerTeTonen, zichtbaar])
+
+  return (
+    <div
+      ref={scrollRef}
+      style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}
+    >
+      {dossiers.slice(0, zichtbaar).map(d => (
+        <div
+          key={d.id}
+          draggable
+          onDragStart={e => { onDragStart(d.id); e.dataTransfer.effectAllowed = 'move' }}
+          onDragEnd={onDragEnd}
+          style={{
+            opacity: draggingId === d.id ? 0.35 : 1,
+            cursor: draggingId ? 'grabbing' : 'grab',
+            transition: 'opacity 0.15s', userSelect: 'none',
+          }}
+        >
+          <DossierKaart
+            dossier={d}
+            sectie={sectie}
+            draggingActief={draggingId != null}
+            onOpen={onOpen}
+          />
+        </div>
+      ))}
+
+      {/* Trigger voor de volgende stap. flexShrink 0, anders drukt de flex-kolom hem plat
+          tot 0px en raakt hij nooit in beeld. */}
+      {meerTeTonen && <div ref={sentinelRef} style={{ height: 1, flexShrink: 0 }} aria-hidden />}
+
+      {dossiers.length === 0 && (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '32px 12px',
+        }}>
+          <EmptyState
+            icon={<IconDomeinOnderhoud size={24} />}
+            title="Leeg"
+            size="sm"
+            tone="neutral"
+          />
+        </div>
+      )}
+    </div>
   )
 }
