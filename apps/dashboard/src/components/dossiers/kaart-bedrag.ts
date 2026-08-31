@@ -1,3 +1,4 @@
+import { kiesAanneemsom } from '@/lib/dossiers/aanneemsom'
 import type { DossierRij, DossierSectie } from './types'
 
 /**
@@ -8,8 +9,9 @@ import type { DossierRij, DossierSectie } from './types'
  *
  *     aanneemsom + goedgekeurd meer-/minderwerk + stelposten buiten de aanneemsom + gekozen opties
  *
- * De aanneemsom komt bij voorkeur uit de EVA-calculatie/offerte en anders uit Bouw7. Stelposten
- * ín de aanneemsom (carve-outs) tellen niet apart mee — die zitten al in de aanneemsom.
+ * Welke bron de aanneemsom levert bepaalt `kiesAanneemsom` (lib/dossiers/aanneemsom.ts): in de
+ * offertefase de EVA-calculatie, in de opdrachtfase het Bouw7-contractbedrag. Stelposten ín de
+ * aanneemsom (carve-outs) tellen niet apart mee — die zitten al in de aanneemsom.
  *
  * De losse velden worden server-side gevuld door `laadKaartBedragen` (lib/dossiers/kaart-bedragen.ts).
  */
@@ -23,6 +25,11 @@ export type KaartBedrag = {
   bron: 'eva' | 'bouw7' | 'bouw7-verstuurd' | null
   /** Kostprijs excl. btw uit diezelfde bron; null als die er niet is. */
   kostprijs: number | null
+  /**
+   * EVA-offertebedrag dat niet als aanneemsom gekozen is en er materieel van afwijkt — meestal een
+   * deel-offerte, of een achtergebleven concept bij een Bouw7-opdracht. Null als er niets afwijkt.
+   */
+  afwijkendeEvaOfferte: number | null
   meerwerk: number
   stelpostenApart: number
   gekozenOpties: number
@@ -47,24 +54,29 @@ export function berekenKaartBedrag(dossier: DossierRij, sectie?: DossierSectie):
   let aanneemsom: number | null
   let bron: KaartBedrag['bron']
   let kostprijs: number | null
+  let afwijkendeEvaOfferte: number | null = null
 
   if (meerdereVerstuurd) {
     aanneemsom = verstuurdSom
     bron       = 'bouw7-verstuurd'
     // De som loopt over meerdere offertes; de kostprijs van één ervan zegt niets over die som.
     kostprijs  = null
-  } else if (dossier.eva_offerte_excl_btw != null) {
-    aanneemsom = dossier.eva_offerte_excl_btw
-    bron       = 'eva'
-    kostprijs  = dossier.eva_kostprijs_excl_btw ?? null
-  } else if (dossier.bedrag_excl_btw != null) {
-    aanneemsom = Number(dossier.bedrag_excl_btw)
-    bron       = 'bouw7'
-    kostprijs  = dossier.kostprijs_excl_btw != null ? Number(dossier.kostprijs_excl_btw) : null
   } else {
-    aanneemsom = null
-    bron       = null
-    kostprijs  = null
+    const keuze = kiesAanneemsom({
+      hoofdstatus:       dossier.hoofdstatus,
+      bouw7ExclBtw:      dossier.bedrag_excl_btw != null ? Number(dossier.bedrag_excl_btw) : null,
+      evaOfferteExclBtw: dossier.eva_offerte_excl_btw ?? null,
+    })
+    aanneemsom = keuze.aanneemsom
+    bron       = keuze.bron
+    // De kostprijs hoort altijd bij de offerte/het project dat ook de verkoopprijs leverde; ze
+    // mengen zou een betekenisloze marge opleveren.
+    kostprijs  = keuze.bron === 'eva'
+      ? (dossier.eva_kostprijs_excl_btw ?? null)
+      : keuze.bron === 'bouw7' && dossier.kostprijs_excl_btw != null
+        ? Number(dossier.kostprijs_excl_btw)
+        : null
+    afwijkendeEvaOfferte = keuze.afwijkendeEvaOfferte
   }
 
   const extra = rond(meerwerk + stelpostenApart + gekozenOpties)
@@ -73,7 +85,7 @@ export function berekenKaartBedrag(dossier: DossierRij, sectie?: DossierSectie):
     : rond(aanneemsom + extra)
 
   return {
-    aanneemsom, bron, kostprijs,
+    aanneemsom, bron, kostprijs, afwijkendeEvaOfferte,
     meerwerk, stelpostenApart, gekozenOpties,
     totaalExclBtw,
     heeftOpbouw: extra !== 0,

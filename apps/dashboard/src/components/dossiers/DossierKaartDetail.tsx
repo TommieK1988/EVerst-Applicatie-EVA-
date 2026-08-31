@@ -214,6 +214,18 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
         </div>
       )}
 
+      {/* Er hangt een EVA-offerte aan dit dossier die de aanneemsom niet levert en er materieel van
+          afwijkt (bij een opdracht wint het Bouw7-contractbedrag). Melden in plaats van stil kiezen:
+          een deel-offerte of een achtergebleven concept bij een opdracht is meestal zelf het probleem. */}
+      {b.afwijkendeEvaOfferte != null && (
+        <div style={{
+          fontSize: 11, lineHeight: 1.35, borderRadius: 6, padding: '5px 7px',
+          background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)',
+        }}>
+          Afwijkende EVA-offerte van {formatBedrag(b.afwijkendeEvaOfferte)} — de aanneemsom hierboven komt uit Bouw7.
+        </div>
+      )}
+
       {/* Signalen: dezelfde indicatoren als de chips, nu met volledige uitleg. Indicatoren met
           een eigen blok (de notitie) staan hieronder, niet als regel. */}
       {uitlegIndicatoren.length > 0 && (

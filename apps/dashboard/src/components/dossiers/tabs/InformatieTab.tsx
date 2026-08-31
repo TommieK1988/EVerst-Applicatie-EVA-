@@ -13,6 +13,7 @@ import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, get
 import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
+import { kiesAanneemsom } from '@/lib/dossiers/aanneemsom'
 import {
   bouwDatumRegels, formatDelta, LEGE_DOSSIER_DATUMS,
   type DossierDatumRegel, type DossierDatums,
@@ -103,7 +104,6 @@ type FormValues = {
   werkadres_stad: string
   betalingstermijn: string
   factuurreferentie: string
-  aanneemsom: string
   projectleider_id: string
   teamleider_id: string
   werkvoorbereider_id: string
@@ -1017,7 +1017,6 @@ export function InformatieTab({
     werkadres_stad:          (dossier as any).werkadres_stad      ?? '',
     betalingstermijn:        '',
     factuurreferentie:       '',
-    aanneemsom:              dossier.bedrag_excl_btw != null ? String(dossier.bedrag_excl_btw) : '',
     projectleider_id:        dossier.project_manager_id  ?? '',
     teamleider_id:           dossier.teamleider_id        ?? '',
     werkvoorbereider_id:     dossier.werkvoorbereider_id  ?? '',
@@ -1144,25 +1143,40 @@ export function InformatieTab({
     && (new Date(form.deadline).getTime() - Date.now()) < 86_400_000 * 7
 
   const geselecteerdFa        = factuuradressen.find(fa => fa.id === form.factuuradres_id) ?? null
-  // Voorkeur: gegenereerde offerte (Supabase) → anders live calculatietotalen → anders Bouw7.
+  // De EVA-kant van de totalen: gegenereerde offerte (Supabase) → anders de live calculatie.
+  // Of die kant überhaupt de aanneemsom levert beslist `kiesAanneemsom` hieronder.
   const T                     = quoteTotalen ?? calcTotalen
-  const finAanneemsom         = T?.subtotaal_ex_btw ?? dossier.bedrag_excl_btw ?? null
+  /* Welke bron de aanneemsom levert is fase-afhankelijk — zie lib/dossiers/aanneemsom.ts. In de
+     opdrachtfase wint het Bouw7-contractbedrag, want dát is wat gefactureerd wordt (en wat de
+     Verkoop- en Financieel-tab al toonden). Alles wat bij de aanneemsom hoort — btw, splitsing,
+     stelpost- en optie-aggregaten — moet dan uit diezelfde bron komen; anders staan er getallen
+     uit twee verschillende offertes onder elkaar in één kolom. */
+  const aanneemsomKeuze       = kiesAanneemsom({
+    hoofdstatus:       dossier.hoofdstatus,
+    bouw7ExclBtw:      dossier.bedrag_excl_btw != null ? Number(dossier.bedrag_excl_btw) : null,
+    evaOfferteExclBtw: T?.subtotaal_ex_btw ?? null,
+  })
+  const finAanneemsom         = aanneemsomKeuze.aanneemsom
+  const finUitEva             = aanneemsomKeuze.bron === 'eva'
   // Kostprijs en marge staan bewust NIET in dit blok: het toont de opbouw van de opdracht en dus
   // alleen verkoopbedragen. De marge leeft op het Financieel-tab, bij de bewaking.
-  const finStelposten         = T?.stelposten_subtotaal ?? 0
-  const finOptioneel          = T?.opties_subtotaal     ?? 0
+  const finStelposten         = finUitEva ? (T?.stelposten_subtotaal ?? 0) : 0
+  const finOptioneel          = finUitEva ? (T?.opties_subtotaal     ?? 0) : 0
   // Totaal incl. BTW komt uit de calculatie of uit Bouw7 (bedrag_incl_btw) — nooit zelf 21% schatten,
   // want er zijn ook 9%- en BTW-verlegd-projecten. BTW = incl − excl.
-  const finTotaalIncl         = T?.totaal_incl_btw ?? dossier.bedrag_incl_btw ?? null
-  const finBtw                = T?.btw_bedrag
+  const finTotaalIncl         = (finUitEva ? T?.totaal_incl_btw ?? null : null)
+    ?? dossier.bedrag_incl_btw ?? null
+  const finBtw                = (finUitEva ? T?.btw_bedrag ?? null : null)
     ?? (finTotaalIncl != null && finAanneemsom != null
         ? Math.round((finTotaalIncl - finAanneemsom) * 100) / 100
         : null)
-  // BTW-splitsing per tarief: uit de live calculatie (per tarief) of anders uit de Bouw7-offerte.
-  const finBtwSplitsing       =
-    (!quoteTotalen && calcTotalen?.btw_groepen?.length)
-      ? calcTotalen.btw_groepen.map(g => ({ label: `BTW ${g.pct}%`, percentage: g.pct, bedrag: g.btw }))
-      : (!quoteTotalen && dossier.btw_splitsing?.length ? dossier.btw_splitsing : null)
+  // BTW-splitsing per tarief hoort bij de bron van de aanneemsom: de live calculatie (per tarief)
+  // wanneer die de som levert, anders de uit Bouw7 gesynchroniseerde splitsing.
+  const finBtwSplitsing       = finUitEva
+    ? (!quoteTotalen && calcTotalen?.btw_groepen?.length
+        ? calcTotalen.btw_groepen.map(g => ({ label: `BTW ${g.pct}%`, percentage: g.pct, bedrag: g.btw }))
+        : null)
+    : (dossier.btw_splitsing?.length ? dossier.btw_splitsing : null)
   // Goedgekeurd meerwerk verandert de opdrachtwaarde. Excl. btw rechtstreeks bijtellen; voor incl. btw
   // het effectieve btw-tarief van dit dossier hergebruiken (incl/excl-verhouding), anders 21%.
   // Een negatief bedrag (per saldo minderwerk) telt net zo goed mee en verlaagt het contracttotaal.
@@ -1916,6 +1930,20 @@ export function InformatieTab({
                 bedrag={finContractIncl != null ? fmtBedrag(finContractIncl) : '—'}
               />
             </div>
+
+            {/* Er hangt een EVA-offerte aan dit dossier die de aanneemsom niet levert en er
+                materieel van afwijkt. Stil laten liggen zou de eigenlijke vraag verbergen —
+                waarom staat hier een offerte van een heel ander bedrag dan de opdracht? */}
+            {aanneemsomKeuze.afwijkendeEvaOfferte != null && (
+              <div
+                className="mt-3 rounded-md px-2 py-1.5 text-[11px]"
+                style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
+              >
+                De EVA-offerte bij dit dossier is {fmtBedrag(aanneemsomKeuze.afwijkendeEvaOfferte)} en wijkt af van de
+                aanneemsom hierboven. De aanneemsom komt uit Bouw7 — dat is het bedrag dat gefactureerd wordt.
+                Controleer of de offerte bij deze opdracht hoort.
+              </div>
+            )}
 
             {toonOpdrachtOpbouw && opdrachtOverzicht && (
               <>

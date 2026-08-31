@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import type { OpdrachtOnderdeel, OpdrachtOnderdeelGrondslag } from '@everts/database'
 import { getDossierBewaking } from './actions'
 import { assertDossierBewerkbaar } from './guards'
+import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk } from './meerwerk'
 import { getServicedeskRegie } from './servicedesk'
 import {
@@ -64,10 +65,16 @@ export type OpdrachtMeerwerkView = {
   opdrachtOnderdeelId: string | null
 }
 export type OpdrachtOverzicht = {
-  /** Aanneemsom excl. btw: uit de hoofd-offerte als die er is, anders uit Bouw7 (dossier). */
+  /** Aanneemsom excl. btw; bron gekozen door `kiesAanneemsom` (fase-afhankelijk). */
   aanneemsom: number | null
   /** Waar de aanneemsom vandaan komt — bepaalt of stelposten handmatig aangewezen mogen worden. */
   aanneemsomBron: 'offerte' | 'bouw7' | null
+  /**
+   * Bedrag van de EVA-offerte wanneer die de aanneemsom NIET levert en er materieel van afwijkt.
+   * Zo blijft zichtbaar dat er een afwijkende offerte bij dit dossier hangt in plaats van dat het
+   * verschil stil verdwijnt. Null als er niets afwijkt.
+   */
+  afwijkendeEvaOfferte: number | null
   /**
    * Orderbasis = aanneemsom + de stelposten die buiten de aanneemsom vallen. Carve-outs zitten er
    * al in en worden hier dus NIET nog eens bij opgeteld.
@@ -119,29 +126,41 @@ async function vindHoofdOfferte(
 }
 
 /**
- * Aanneemsom van een dossier met zijn herkomst. Voorkeur: de EVA-hoofd-offerte; anders het uit
- * Bouw7 gesynchroniseerde bedrag op het dossier. Die tweede is het geval voor het overgrote deel
- * van de opdrachten (die hebben geen EVA-calculatie) en is precies waarom stelposten ook handmatig
- * aangewezen moeten kunnen worden.
+ * Aanneemsom van een dossier met zijn herkomst. De keuze tussen de EVA-hoofdofferte en het uit
+ * Bouw7 gesynchroniseerde bedrag maakt `kiesAanneemsom` (./aanneemsom): in de offertefase wint de
+ * offerte, in de opdrachtfase het Bouw7-contractbedrag. Bouw7 is sowieso de bron voor het overgrote
+ * deel van de opdrachten (die hebben geen EVA-calculatie) en is precies waarom stelposten ook
+ * handmatig aangewezen moeten kunnen worden.
+ *
+ * De offerte wordt altijd opgehaald, ook als hij de aanneemsom niet levert: het seeden van
+ * stelposten en optionele secties leest hem los daarvan uit.
  */
 async function bepaalAanneemsom(supabase: any, dossierId: string): Promise<{
   aanneemsom: number | null
   bron: 'offerte' | 'bouw7' | null
+  afwijkendeEvaOfferte: number | null
   quote: { id: string; subtotaal_ex_btw: number | null; stelposten_in_totaal: boolean | null } | null
 }> {
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('everts_calc_project_id, bedrag_excl_btw')
+    .select('everts_calc_project_id, bedrag_excl_btw, hoofdstatus')
     .eq('id', dossierId)
     .maybeSingle()
 
   const projectId: string | null = dossier?.everts_calc_project_id ?? null
   const quote = projectId ? await vindHoofdOfferte(supabase, projectId) : null
-  if (quote?.subtotaal_ex_btw != null) {
-    return { aanneemsom: num(quote.subtotaal_ex_btw), bron: 'offerte', quote }
+
+  const keuze = kiesAanneemsom({
+    hoofdstatus:       dossier?.hoofdstatus ?? null,
+    bouw7ExclBtw:      numOfNull(dossier?.bedrag_excl_btw),
+    evaOfferteExclBtw: numOfNull(quote?.subtotaal_ex_btw),
+  })
+  return {
+    aanneemsom: keuze.aanneemsom,
+    bron: keuze.bron === 'eva' ? 'offerte' : keuze.bron,
+    afwijkendeEvaOfferte: keuze.afwijkendeEvaOfferte,
+    quote,
   }
-  const uitBouw7 = numOfNull(dossier?.bedrag_excl_btw)
-  return { aanneemsom: uitBouw7, bron: uitBouw7 != null ? 'bouw7' : null, quote }
 }
 
 /**
@@ -233,7 +252,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   const supabase = createAdminClient() as any
 
   await seedOpdrachtOnderdelen(dossierId)
-  const { aanneemsom, bron: aanneemsomBron } = await bepaalAanneemsom(supabase, dossierId)
+  const { aanneemsom, bron: aanneemsomBron, afwijkendeEvaOfferte } = await bepaalAanneemsom(supabase, dossierId)
 
   const { data: onderdelen } = await supabase
     .from('opdracht_onderdelen')
@@ -356,7 +375,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   const meerwerkTotaal = rond(mw?.totalen.goedgekeurdExcl ?? 0)
 
   return {
-    aanneemsom, aanneemsomBron, aanneemsomInclStelposten, basis,
+    aanneemsom, aanneemsomBron, afwijkendeEvaOfferte, aanneemsomInclStelposten, basis,
     stelposten, opties,
     stelpostenTotaal, stelpostenInAanneemsomTotaal, stelpostenApartTotaal,
     optiesTotaal, gekozenOptiesTotaal,

@@ -1096,6 +1096,10 @@ export async function getQuoteTotalenVoorProject(projectId: string): Promise<{
   marge_euro: number
 } | null> {
   const supabase = await getDb()
+  // `meerwerk_regel_id is null` = alleen de hoofdofferte. Zonder dat filter kon een meerwerk-offerte
+  // de nieuwste rij zijn en daarmee als aanneemsom van het hele dossier gaan gelden — een leeg
+  // concept-meerwerk zette het Informatie-tab zo op € 0,00 bij een opdracht van bijna vijftig mille.
+  // Zelfde selectie als `vindHoofdOfferte` in lib/dossiers/opdracht-onderdelen.ts.
   const { data: quote } = await supabase
     .from('quotes')
     .select(`
@@ -1104,9 +1108,10 @@ export async function getQuoteTotalenVoorProject(projectId: string): Promise<{
       sections:quote_sections(id, is_optioneel)
     `)
     .eq('project_id', projectId)
+    .is('meerwerk_regel_id', null)
     .order('updated_at', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
   if (!quote) return null
 
   // Kostprijs = som van (kostprijs_pe × hoeveelheid) voor niet-optionele regels
