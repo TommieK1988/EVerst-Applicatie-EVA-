@@ -164,16 +164,20 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                 </Link>
               )}
               {taak.kwaliteit_ronde && (
+                // Bewust een volle, gevulde knop en niet het lichte pilletje van de formulier- en
+                // toolbox-links: een kwaliteitsronde is een half uur werk op een steiger, en de
+                // ingang daarnaartoe mag je niet over het hoofd zien.
                 <Link
                   href={`/m/taken/${taak.id}/kwaliteit`}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
-                    padding: '8px 12px', borderRadius: 8,
-                    background: '#ecfdf3', color: '#067647',
-                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    marginTop: 12, padding: '13px 16px', borderRadius: 10,
+                    background: '#009439', color: '#fff',
+                    fontSize: 15, fontWeight: 700, textDecoration: 'none',
+                    WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
                     <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
                   Kwaliteitsronde starten

@@ -436,6 +436,22 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </span>
             </span>
           </label>
+
+          {/* Startknop, zoals de Invullen-link bij een formulier. De ronde zelf is een mobiel
+              scherm -- op een breed venster oogt hij smal, maar hij wérkt, en dat is precies wat
+              je wilt om even mee te kijken zonder je telefoon erbij te pakken. */}
+          {kwaliteitRonde && (
+            <a
+              href={`/m/taken/${taak.id}/kwaliteit`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-everts/30 px-2 py-1.5 text-xs text-everts hover:bg-everts/5 transition-colors"
+              title="Kwaliteitsronde starten"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Ronde starten
+            </a>
+          )}
         </div>
 
         {/* Toewijzingen */}
