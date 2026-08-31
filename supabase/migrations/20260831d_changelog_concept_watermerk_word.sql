@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-08-31','opgelost','Offertes','CONCEPT-watermerk staat nu ook in de Word-offerte',
+   'Bewerkte je een offerte in Word, dan was het CONCEPT-watermerk verdwenen — in Word zelf, in de voorvertoning en in de download. Dat is opgelost: zolang de offerte niet is goedgekeurd staat het watermerk er, en haal je het in Word weg, dan komt het bij de volgende download gewoon terug. Na goedkeuring verdwijnt het vanzelf. Het Word-werkbestand van een offerte staat bovendien niet langer als los document in de bestandenlijst van het dossier.');
