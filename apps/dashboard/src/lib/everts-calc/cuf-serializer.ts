@@ -9,6 +9,7 @@
  */
 
 import type { Groep, Calculatieregel, Componentregel, Scenario } from './types'
+import { scenarioDefaultOpslag } from './calculations'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function renderRegels(
 
   if (regels.length === 0) return ''
 
-  const opslag_pct = (scenario.opslag_algemene_kosten + scenario.opslag_winst_risico + (scenario.opslag_overhead ?? 0)) / 100
+  const opslag_pct = scenarioDefaultOpslag(scenario) / 100
 
   const regelXml = regels.map(r => {
     const kp_pe = berekenKostprijs(r.id, componentregels)

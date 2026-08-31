@@ -7,6 +7,7 @@
    niets. Zuivere functie, dus ook server-side bruikbaar. */
 import {
   berekenScenarioVP, berekenScenarioKostprijs, berekenBtwBreakdown, berekenCalculatieregel,
+  scenarioDefaultOpslag,
 } from '@/lib/everts-calc/calculations'
 import type { Groep, Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
@@ -64,7 +65,7 @@ export function berekenCalcTotalen(bron: CalculatieBron | null, scenarioId?: str
   const nietOptioneel = groepen.filter(g => !optioneelIds.has(g.id))
   const nietOptioneelIds = new Set(nietOptioneel.map(g => g.id))
 
-  const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
+  const defaultOpslag = scenarioDefaultOpslag(scenario)
   const btwDefault = scenario.btw_pct_default ?? 21
 
   const subtotaal_ex_btw = berekenScenarioVP(nietOptioneel, regels, componenten, defaultOpslag)

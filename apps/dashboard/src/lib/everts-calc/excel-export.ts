@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { Groep, Calculatieregel, Componentregel, Scenario } from './types'
-import { berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP } from './calculations'
+import { berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP, scenarioDefaultOpslag } from './calculations'
 
 function euro(n: number) {
   return Math.round(n * 100) / 100
@@ -82,15 +82,14 @@ export function exportCalculatieNaarExcel(
   regels: Calculatieregel[],
   componenten: Componentregel[],
 ) {
-  const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
+  const defaultOpslag = scenarioDefaultOpslag(scenario)
   const wb = XLSX.utils.book_new()
 
   const headerMeta: Row[] = [
     ['Project:', projectNaam],
     ['Nummer:', projectNummer],
     ['Scenario:', scenario.naam],
-    ['AK%:', scenario.opslag_algemene_kosten],
-    ['W&R%:', scenario.opslag_winst_risico],
+    ['Opslag%:', defaultOpslag],
     [],
   ]
 

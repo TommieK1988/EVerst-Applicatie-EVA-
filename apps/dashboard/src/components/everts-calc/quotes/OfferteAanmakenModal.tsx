@@ -100,7 +100,7 @@ export default function OfferteAanmakenModal({
     setLoading(true)
     try {
       const { getGroepen, getCalculatieregels, getComponentregels, getScenarios, slaScenarioOp } = await import('@/lib/everts-calc/local-store')
-      const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
+      const { berekenCalculatieregel, scenarioDefaultOpslag } = await import('@/lib/everts-calc/calculations')
 
       // Filter op het gekozen (of standaard) scenario van dit project
       const scenarios = getScenarios(projectId)
@@ -133,7 +133,8 @@ export default function OfferteAanmakenModal({
       const alleComps = getComponentregels()
 
       const nummers = buildNummers(alleGroepen)
-      const DEFAULT_OPSLAG = 18
+      // Standaard-opslag van de calculatie zelf; 0% blijft 0% (= kostprijs in de offerte).
+      const defaultOpslag = scenarioDefaultOpslag(actiefScenario)
       const importRegels: Parameters<typeof maakQuoteVanuitProjectMetImport>[0]['importRegels'] = []
 
       for (const groep of alleGroepen.sort((a, b) => a.volgorde - b.volgorde)) {
@@ -145,7 +146,7 @@ export default function OfferteAanmakenModal({
 
         for (const regel of regelsBijGroep) {
           const comps = alleComps.filter((c: { calculatieregel_id: string }) => c.calculatieregel_id === regel.id)
-          const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? DEFAULT_OPSLAG)
+          const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag)
 
           importRegels.push({
             groep_id: groep.id,

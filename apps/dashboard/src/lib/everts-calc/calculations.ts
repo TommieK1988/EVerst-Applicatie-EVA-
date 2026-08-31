@@ -1,6 +1,27 @@
-import type { CalculatieLijn, Activiteit, Scenario, ProjectTotalen, BtwGroep, Groep, Calculatieregel, Componentregel, ComponentType, WerkbegrotingRegel, WerkbegrotingComponent } from './types'
+import type { CalculatieLijn, Activiteit, Scenario, BtwGroep, Groep, Calculatieregel, Componentregel, ComponentType, WerkbegrotingRegel, WerkbegrotingComponent } from './types'
 import { isTekstregel } from './types'
 import { nominaalPercentage } from '@/lib/stamdata/btw'
+
+// ─── Standaard-opslag van een calculatie ─────────────────────────────
+
+/**
+ * Het opslagpercentage dat geldt voor regels zonder eigen `opslag_pct`: de
+ * standaard-opslag van de calculatie, in te stellen in de totalenbalk.
+ * Eén definitie voor het hele traject: calculatiescherm, totalen, export en de
+ * offerte-import lezen allemaal hier. Nooit een vast getal invullen — een
+ * calculatie met 0% opslag hoort ook in de offerte op kostprijs uit te komen.
+ *
+ * Calculaties van vóór de overstap naar één opslag% hebben nog de oude driedeling
+ * AK + W&R; die telt hier op, zodat hun prijzen niet verschuiven. Nieuwe calculaties
+ * schrijven alleen `opslag_pct`.
+ */
+export function scenarioDefaultOpslag(
+  scenario: Pick<Scenario, 'opslag_pct' | 'opslag_algemene_kosten' | 'opslag_winst_risico'> | null | undefined,
+): number {
+  if (!scenario) return 0
+  if (scenario.opslag_pct != null) return scenario.opslag_pct
+  return (scenario.opslag_algemene_kosten ?? 0) + (scenario.opslag_winst_risico ?? 0)
+}
 
 // ─── Lijn berekeningen ────────────────────────────────────────────────────────
 
@@ -58,50 +79,6 @@ export function berekenBtwBreakdown(
       }
     })
     .sort((a, b) => a.pct - b.pct || (a.nominaal_pct ?? 0) - (b.nominaal_pct ?? 0))
-}
-
-export function berekenProjectTotalen(
-  kostprijs: number,
-  scenario: Scenario,
-  regels?: Calculatieregel[],
-  componenten?: Componentregel[]
-): ProjectTotalen {
-  const opslag_ak = kostprijs * (scenario.opslag_algemene_kosten / 100)
-  const na_ak = kostprijs + opslag_ak
-  const opslag_wr = na_ak * (scenario.opslag_winst_risico / 100)
-  const na_wr = na_ak + opslag_wr
-  const opslag_overhead = na_wr * (scenario.opslag_overhead / 100)
-  const verkoopprijs = na_wr + opslag_overhead
-
-  const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
-  const btwDefault = scenario.btw_pct_default ?? 0
-
-  // Bereken BTW per tarief op basis van individuele regels
-  let btw_groepen: BtwGroep[]
-  if (regels && componenten && regels.length > 0) {
-    btw_groepen = berekenBtwBreakdown(regels, componenten, defaultOpslag, btwDefault)
-  } else {
-    const btw_pct = btwDefault
-    btw_groepen = [{ pct: btw_pct, basis: verkoopprijs, btw: verkoopprijs * (btw_pct / 100) }]
-  }
-
-  const btw = btw_groepen.reduce((s, g) => s + g.btw, 0)
-  const totaal_incl = verkoopprijs + btw
-  const marge_euro = verkoopprijs - kostprijs
-  const marge_pct = verkoopprijs > 0 ? (marge_euro / verkoopprijs) * 100 : 0
-
-  return {
-    kostprijs,
-    opslag_ak,
-    opslag_wr,
-    opslag_overhead,
-    verkoopprijs,
-    btw,
-    btw_groepen,
-    totaal_incl,
-    marge_euro,
-    marge_pct,
-  }
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────

@@ -107,9 +107,18 @@ export interface Scenario {
   /** Gezet bij verzenden van de offerte: de calculatie is dan onveranderbaar. */
   bevroren_op?: string | null
   is_standaard: boolean
-  opslag_algemene_kosten: number   // percentage bijv. 8
-  opslag_winst_risico: number      // percentage bijv. 10
-  opslag_overhead: number          // percentage bijv. 0
+  /** Standaard-opslag van deze calculatie in procenten; geldt voor elke regel die
+   *  zelf geen `opslag_pct` heeft. Leeg = 0% (verkoop tegen kostprijs). Instelbaar
+   *  in de totalenbalk onder de calculatie. */
+  opslag_pct?: number
+  /** @deprecated Oude driedeling AK/W&R/overhead. Alleen nog gelezen voor calculaties
+   *  van vóór de overstap naar één opslag%; nooit meer schrijven. Zie
+   *  `scenarioDefaultOpslag()`. */
+  opslag_algemene_kosten?: number
+  /** @deprecated Zie `opslag_algemene_kosten`. */
+  opslag_winst_risico?: number
+  /** @deprecated Zie `opslag_algemene_kosten`. */
+  opslag_overhead?: number
   btw_pct_default?: number         // standaard te heffen BTW% voor nieuwe regels, bijv. 21
   btw_tarief_id_default?: string   // standaard BTW-tarief (btw_tarieven.id) voor nieuwe regels
   standaard_uurtarief?: number     // standaard uurtarief voor nieuwe arbeid-componenten
@@ -195,19 +204,6 @@ export interface BtwGroep {
   label?: string       // bijv. 'Verlegd Hoog 21%'
   verlegd?: boolean
   nominaal_pct?: number  // tarief zoals de klant het kent (21 bij verlegd hoog)
-}
-
-export interface ProjectTotalen {
-  kostprijs: number
-  opslag_ak: number
-  opslag_wr: number
-  opslag_overhead: number
-  verkoopprijs: number
-  btw: number
-  btw_groepen: BtwGroep[]
-  totaal_incl: number
-  marge_euro: number
-  marge_pct: number
 }
 
 // ─── App state helpers ────────────────────────────────────────────────────────

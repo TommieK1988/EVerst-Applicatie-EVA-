@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { berekenBtwBreakdown, formatEuro, formatPct } from '@/lib/everts-calc/calculations'
+import { berekenBtwBreakdown, formatEuro, formatGetal, formatPct, scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
+import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
@@ -13,13 +14,20 @@ interface Props {
   regels?: Calculatieregel[]
   componenten?: Componentregel[]
   onScenarioWijzig: (patch: Partial<Scenario>) => void
+  /** Zet de standaard-opslag én wist het eigen opslag% van alle regels. */
+  onOpslagToepassen: (pct: number) => void
+  /** Aantal regels dat nu een eigen opslag% heeft; die raken hun percentage kwijt. */
+  aantalEigenOpslag?: number
+  /** Bevroren of afgesloten calculatie: alles in deze balk alleen-lezen. */
+  readOnly?: boolean
 }
 
 
 export default function TotalsBar({
   scenario, kostprijs_live, verkoopprijs_live, regels, componenten, onScenarioWijzig,
+  onOpslagToepassen, aantalEigenOpslag = 0, readOnly = false,
 }: Props) {
-  const defaultOpslag = scenario.opslag_algemene_kosten + (scenario.opslag_winst_risico ?? 0)
+  const defaultOpslag = scenarioDefaultOpslag(scenario)
   const btwDefault = scenario.btw_pct_default ?? 0
 
   // Tarieven uit de stamgegevens, zodat een verlegd tarief hier als "21% verlegd" leest
@@ -53,7 +61,31 @@ export default function TotalsBar({
   const marge_pct    = verkoopprijs_live > 0 ? (marge_euro / verkoopprijs_live) * 100 : 0
   const opslag_euro  = verkoopprijs_live - kostprijs_live
   const opslag_pct   = kostprijs_live > 0 ? (opslag_euro / kostprijs_live) * 100 : 0
+  // Vrij typen zonder dat de invoer onder je handen terugspringt. De waarde gaat pas
+  // door bij verlaten van het veld of Enter, en alleen na bevestiging: hij zet álle
+  // regels om. Annuleren → het veld valt terug op de opgeslagen opslag.
+  const [opslagEdit, setOpslagEdit] = useState(String(scenarioDefaultOpslag(scenario)))
+  const [opslagFocus, setOpslagFocus] = useState(false)
+  const [teBevestigen, setTeBevestigen] = useState<number | null>(null)
+  useEffect(() => {
+    if (!opslagFocus && teBevestigen === null) setOpslagEdit(String(scenarioDefaultOpslag(scenario)))
+  }, [scenario, opslagFocus, teBevestigen])
+
+  /** Verlaten van het veld of Enter: vraag bevestiging als het percentage echt wijzigt. */
+  const commitOpslag = () => {
+    setOpslagFocus(false)
+    const v = parseFloat(opslagEdit.replace(',', '.'))
+    const nieuw = isNaN(v) ? 0 : v
+    if (Math.abs(nieuw - defaultOpslag) < 0.005) return
+    setTeBevestigen(nieuw)
+  }
+  // Regels met een eigen Opsl.% trekken het effectieve percentage weg van de standaard.
+  const afwijkendeOpslag = Math.abs(opslag_pct - defaultOpslag) > 0.005
   const margeWidth = Math.min(100, Math.max(0, (marge_pct / 30) * 100))
+
+  const eigenOpslagZin = aantalEigenOpslag > 0
+    ? ` ${aantalEigenOpslag} ${aantalEigenOpslag === 1 ? 'regel heeft' : 'regels hebben'} nu een eigen opslag%; dat percentage vervalt.`
+    : ''
 
   return (
     <div className="flex-shrink-0 bg-brand-900 border-t-2 border-brand-500 text-white">
@@ -70,6 +102,7 @@ export default function TotalsBar({
               type="number" step="0.50" min="0"
               value={scenario.standaard_uurtarief ?? ''}
               placeholder="—"
+              disabled={readOnly}
               onChange={e => {
                 const v = parseFloat(e.target.value)
                 onScenarioWijzig({ standaard_uurtarief: isNaN(v) ? undefined : v })
@@ -86,12 +119,30 @@ export default function TotalsBar({
           <div className="font-semibold  text-sm">{formatEuro(kostprijs_live)}</div>
         </div>
 
-        {/* Opslag (effectief, read-only) */}
+        {/* Standaard-opslag van de calculatie (instelbaar) + wat het effectief wordt.
+            De twee lopen uiteen zodra regels een eigen Opsl.% hebben. */}
         <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">Opslag</div>
-          <div className=" text-sm text-white/80">
-            {opslag_pct.toFixed(2)}%
-            <span className="text-white/40 text-xs ml-1">({opslag_euro >= 0 ? '+' : ''}{formatEuro(opslag_euro)})</span>
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-0.5 text-sm">
+              <input
+                type="number" step="0.5" min="0" max="100"
+                value={opslagEdit}
+                placeholder="0"
+                disabled={readOnly}
+                onFocus={() => setOpslagFocus(true)}
+                onBlur={commitOpslag}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                title="Standaard-opslag van deze calculatie; wordt op alle regels toegepast"
+                onChange={e => setOpslagEdit(e.target.value)}
+                className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
+              />
+              <span className="text-white/50 text-xs">%</span>
+            </div>
+            <span className="text-white/40 text-xs whitespace-nowrap">
+              {afwijkendeOpslag ? `→ ${formatGetal(opslag_pct, 2)}% ` : ''}
+              ({opslag_euro >= 0 ? '+' : ''}{formatEuro(opslag_euro)})
+            </span>
           </div>
         </div>
 
@@ -138,6 +189,21 @@ export default function TotalsBar({
         </div>
 
       </div>
+
+      <ConfirmDialog
+        open={teBevestigen !== null}
+        onOpenChange={open => { if (!open) setTeBevestigen(null) }}
+        title={`Opslag op ${formatGetal(teBevestigen ?? 0, 2)}% zetten?`}
+        description={
+          `Dit past de verkoopprijs van alle regels in deze calculatie aan.${eigenOpslagZin}`
+          + ' Daarna kun je per regel nog een afwijkend percentage invullen.'
+        }
+        confirmLabel="Toepassen"
+        onConfirm={() => {
+          if (teBevestigen !== null) onOpslagToepassen(teBevestigen)
+          setTeBevestigen(null)
+        }}
+      />
     </div>
   )
 }

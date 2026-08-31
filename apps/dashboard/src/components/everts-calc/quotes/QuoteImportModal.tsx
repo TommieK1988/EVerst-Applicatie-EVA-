@@ -60,7 +60,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
     async function laad() {
       const { getGroepen, getCalculatieregels, getComponentregels, getScenarios, hydrateCalculatie } =
         await import('@/lib/everts-calc/local-store')
-      const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
+      const { berekenCalculatieregel, scenarioDefaultOpslag } = await import('@/lib/everts-calc/calculations')
 
       // De calculatie uit Supabase halen; dit scherm kan geopend worden zonder dat
       // de calculatie-omgeving in deze sessie al open is geweest.
@@ -99,9 +99,7 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
 
         // Haal scenario op voor opslag
         const scenario = alleScenarios.find(s => s.id === gr.scenario_id)
-        const opslag = scenario
-          ? scenario.opslag_algemene_kosten + scenario.opslag_winst_risico + (scenario.opslag_overhead ?? 0)
-          : 18 // fallback
+        const opslag = scenarioDefaultOpslag(scenario)
 
         const importRegels: ImportRegel[] = regelsBijGroep.map(r => {
           const comps = alleComps.filter(c => c.calculatieregel_id === r.id)

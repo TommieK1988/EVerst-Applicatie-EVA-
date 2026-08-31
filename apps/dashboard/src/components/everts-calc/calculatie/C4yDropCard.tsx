@@ -80,9 +80,10 @@ export default function C4yDropCard({ dossierId, sectie, naam, projectId: gekopp
         projectId = r.projectId ?? id
       }
       // Opslag% staat niet in het .c4y-bestand (net als bij CUF is dat handmatige
-      // invoer in Calc4You) → leeg houden, in te vullen via de Opslag%-kolom.
+      // invoer in Calc4You) → op 0 houden. Per regel komt de opslag uit het bestand;
+      // een calculatiebrede opslag zet je zelf in de totalenbalk.
       const basis = maakStandaardScenario(projectId)
-      const scenario = { ...basis, opslag_algemene_kosten: 0, opslag_winst_risico: 0, opslag_overhead: 0 }
+      const scenario = { ...basis, opslag_pct: 0 }
       slaScenarioOp(scenario)
 
       // 2. Parse

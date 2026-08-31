@@ -29,7 +29,7 @@ import {
 } from '@/lib/everts-calc/local-store'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import { resetDossierNaarAanvraagBijRevisie } from '@/lib/dossiers/actions'
-import { berekenScenarioKostprijs, berekenScenarioVP } from '@/lib/everts-calc/calculations'
+import { berekenScenarioKostprijs, berekenScenarioVP, scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
 import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
@@ -71,6 +71,7 @@ export default function CalculatieHoofdscherm({
   const readOnly = readOnlyProp || !!scenario?.bevroren_op
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
+  const [aantalEigenOpslag, setAantalEigenOpslag]     = useState(0)
   const [kostprijs, setKostprijs]                     = useState(0)
   const [verkoopprijs, setVerkoopprijs]               = useState(0)
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
@@ -161,9 +162,12 @@ export default function CalculatieHoofdscherm({
     const regelIds = new Set(rs.map(r => r.id))
     const cs = getComponentregels().filter(c => regelIds.has(c.calculatieregel_id))
     setKostprijs(berekenScenarioKostprijs(gs, rs, cs))
-    setVerkoopprijs(berekenScenarioVP(gs, rs, cs, scenario.opslag_algemene_kosten + (scenario.opslag_winst_risico ?? 0)))
+    setVerkoopprijs(berekenScenarioVP(gs, rs, cs, scenarioDefaultOpslag(scenario)))
     setRegelsVoorBtw(rs)
     setComponentenVoorBtw(cs)
+    const metEigen = new Set(cs.filter(c => c.opslag_pct !== undefined).map(c => c.calculatieregel_id))
+    rs.forEach(r => { if (r.opslag_pct !== undefined) metEigen.add(r.id) })
+    setAantalEigenOpslag(metEigen.size)
   }, [refreshTotalen, scenario])
 
   /* ── Opslaan (automatisch + handmatig) ───────────────────────────── */
@@ -304,6 +308,18 @@ export default function CalculatieHoofdscherm({
     slaScenarioOp(bijgewerkt)
     setScenario(bijgewerkt)
     planAutoSave()
+  }
+
+  /** Opslagveld in de totalenbalk: zet de standaard-opslag van de calculatie en haalt
+   *  de eigen percentages van alle regels weg, zodat ze die standaard volgen. Daarna
+   *  kan elke regel weer een afwijkend percentage krijgen. Ctrl+Z zet de regels terug;
+   *  de waarde in de balk blijft staan en typ je desgewenst opnieuw. */
+  const handleOpslagToepassen = (pct: number) => {
+    if (readOnly) return
+    gridRef.current?.duwSnapshot()
+    handleScenarioWijzig({ opslag_pct: pct })
+    gridRef.current?.wisRegelOpslagen()
+    handleWijziging()
   }
 
   /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
@@ -648,6 +664,9 @@ export default function CalculatieHoofdscherm({
         regels={regelsVoorBtw}
         componenten={componentenVoorBtw}
         onScenarioWijzig={handleScenarioWijzig}
+        onOpslagToepassen={handleOpslagToepassen}
+        aantalEigenOpslag={aantalEigenOpslag}
+        readOnly={readOnly}
       />
 
       {toonCufImport && (

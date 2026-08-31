@@ -139,9 +139,7 @@ export function maakStandaardScenario(project_id: string): Scenario {
     project_id,
     naam: 'Basisvariant',
     is_standaard: true,
-    opslag_algemene_kosten: 8,
-    opslag_winst_risico: 10,
-    opslag_overhead: 0,
+    opslag_pct: 0,
     btw_pct_default: 21,
     standaard_uurtarief: favorietTarief,
   }

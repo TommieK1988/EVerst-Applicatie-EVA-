@@ -19,6 +19,7 @@ import {
   berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP,
   berekenGroepUren, berekenGroepMaterieel, berekenGroepOA,
   berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal, parseGetal,
+  scenarioDefaultOpslag,
 } from '@/lib/everts-calc/calculations'
 import { nieuweId, cn } from '@/lib/everts-calc/utils'
 import type { Groep, Calculatieregel, Componentregel, Scenario, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
@@ -67,6 +68,12 @@ export interface CalculatieGridHandle {
    * verplaatsing uit de structuurboom onzichtbaar tot je de pagina ververst.
    */
   herlaad: () => void
+  /**
+   * Wist het eigen opslag% van álle regels en componenten, zodat ze weer de
+   * standaard-opslag van de calculatie volgen. Gebruikt door het opslagveld in de
+   * totalenbalk. Daarna kan elke regel gewoon weer een eigen percentage krijgen.
+   */
+  wisRegelOpslagen: () => void
 }
 
 type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
@@ -637,7 +644,7 @@ function ComponentRegelRij({
             <input
               type="text" inputMode="decimal"
               value={comp.opslag_pct !== undefined ? +comp.opslag_pct.toFixed(2) : ''}
-              placeholder={regelOpslag.toFixed(2)}
+              placeholder={formatGetal(regelOpslag, 2)}
               onChange={e => onWijzig({ opslag_pct: e.target.value === '' ? undefined : parseGetal(e.target.value) })}
               className="w-full text-xs text-right  px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-everts/40 focus:bg-white focus:outline-none text-slate-600 placeholder-slate-300"
             />
@@ -1048,6 +1055,8 @@ function CalculatieregelRij({
   const displayOpslag = hasCompOverride && kp_pe !== 0
     ? +((vp_pe / kp_pe - 1) * 100).toFixed(2)
     : opslag
+  /** Wijkt deze regel af van de standaard-opslag? Ook 0% telt als afwijking. */
+  const heeftEigenOpslag = regel.opslag_pct !== undefined || hasCompOverride
 
   // Terugrekenen totaalprijs → eenheidsprijs
   const onBedragAb = (v: number) => {
@@ -1413,13 +1422,17 @@ function CalculatieregelRij({
           <div className="flex items-center justify-start gap-0.5">
             <input
               type="text" inputMode="decimal"
-              value={displayOpslag === 0 ? '' : +displayOpslag.toFixed(2)}
-              placeholder={defaultOpslag.toFixed(2)}
+              // Leeg = geen eigen opslag, dus de standaard van de calculatie (placeholder).
+              // Een ingevulde 0 is een échte keuze — verkoop tegen kostprijs — en moet
+              // zichtbaar blijven staan, anders lijkt het alsof de standaard geldt.
+              value={heeftEigenOpslag ? +displayOpslag.toFixed(2) : ''}
+              placeholder={formatGetal(defaultOpslag, 2)}
               className="w-12 text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent
                 hover:bg-white hover:border hover:border-slate-200
                 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
               onChange={e => {
-                const v = parseGetal(e.target.value)
+                // Veld leegmaken zet de regel terug op de standaard-opslag.
+                const v = e.target.value === '' ? undefined : parseGetal(e.target.value)
                 onWijzig(regel.id, { opslag_pct: v })
                 if (ab) onWijzigComponentExtra(ab.id, { opslag_pct: undefined })
                 if (mt) onWijzigComponentExtra(mt.id, { opslag_pct: undefined })
@@ -2335,7 +2348,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     return () => document.removeEventListener('mousedown', handler)
   }, [layoutMenuOpen])
 
-  const defaultOpslag = scenario.opslag_algemene_kosten + scenario.opslag_winst_risico
+  const defaultOpslag = scenarioDefaultOpslag(scenario)
 
   const laadAlles = useCallback(() => {
     const gs = getGroepen(scenarioId).sort((a, b) => a.volgorde - b.volgorde)
@@ -2417,8 +2430,28 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
 
   useEffect(() => { onInklapStatusChange?.(allesIngeklapt) }, [allesIngeklapt, onInklapStatusChange])
 
-  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles }),
-    [undo, zetInklap, duwSnapshot, laadAlles])
+  /** Alle eigen opslagpercentages weg; de regels vallen terug op de calculatie-opslag. */
+  const wisRegelOpslagen = useCallback(() => {
+    if (readOnly) return
+    const nieuweRegels = regels.map(r => {
+      if (r.opslag_pct === undefined) return r
+      const bijgewerkt = { ...r, opslag_pct: undefined }
+      slaCalculatieregelOp(bijgewerkt)
+      return bijgewerkt
+    })
+    const nieuweComponenten = componenten.map(c => {
+      if (c.opslag_pct === undefined) return c
+      const bijgewerkt = { ...c, opslag_pct: undefined }
+      slaComponentregelOp(bijgewerkt)
+      return bijgewerkt
+    })
+    setRegels(nieuweRegels)
+    setComponenten(nieuweComponenten)
+    onWijziging()
+  }, [readOnly, regels, componenten, onWijziging])
+
+  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen }),
+    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {

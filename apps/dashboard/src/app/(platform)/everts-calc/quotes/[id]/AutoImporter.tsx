@@ -34,7 +34,7 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
         const {
           getGroepen, getCalculatieregels, getComponentregels, getScenarios, hydrateCalculatie,
         } = await import('@/lib/everts-calc/local-store')
-        const { berekenCalculatieregel } = await import('@/lib/everts-calc/calculations')
+        const { berekenCalculatieregel, scenarioDefaultOpslag } = await import('@/lib/everts-calc/calculations')
         const { laadCalculatieSnapshot } = await import('@/app/(platform)/everts-calc/actions/sync')
 
         // De calculatie van dít project uit Supabase halen. Vroeger werd geïmporteerd
@@ -60,7 +60,8 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
         }
 
         const nummers = buildNummers(alleGroepen)
-        const DEFAULT_OPSLAG = 18
+        // Standaard-opslag van de calculatie zelf; 0% blijft 0% (= kostprijs in de offerte).
+        const defaultOpslag = scenarioDefaultOpslag(actief)
         const importRegels: Parameters<typeof importeerRegels>[1] = []
 
         for (const groep of alleGroepen) {
@@ -72,7 +73,7 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
 
           for (const regel of regelsBijGroep) {
             const comps = alleComps.filter((c: { calculatieregel_id: string }) => c.calculatieregel_id === regel.id)
-            const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? DEFAULT_OPSLAG)
+            const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag)
 
             importRegels.push({
               groep_id: groep.id,

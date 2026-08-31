@@ -14,6 +14,7 @@ import { getScenario, getScenarios, kopieerScenario, slaScenarioOp, getInstellin
 import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { nieuweId } from '@/lib/everts-calc/utils'
+import { scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
 import type { Scenario } from '@/lib/everts-calc/types'
 
 /** Familie-anker van een scenario (root = v1 in de keten). */
@@ -93,15 +94,17 @@ export async function maakMeerwerkScenario(
 
   const inst = getInstellingen()
   const favorietTarief = inst.uurtarieven?.find(t => t.is_favoriet)?.tarief
+  // Meerwerk volgt de opslag van de hoofdcalculatie; anders zou meerwerk stilzwijgend
+  // een ander percentage krijgen dan het werk waar het bij hoort.
+  const scenarios = getScenarios(projectId)
+  const hoofd = scenarios.find(s => s.is_standaard) ?? scenarios[0]
   const nieuw: Scenario = {
     id: nieuweId(),
     project_id: projectId,
     naam,
     is_standaard: false,
     meerwerk_regel_id: meerwerkRegelId,
-    opslag_algemene_kosten: 8,
-    opslag_winst_risico: 10,
-    opslag_overhead: 0,
+    opslag_pct: scenarioDefaultOpslag(hoofd),
     btw_pct_default: 21,
     standaard_uurtarief: favorietTarief,
   }
