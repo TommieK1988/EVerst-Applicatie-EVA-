@@ -13,6 +13,17 @@ const nextConfig = {
   // Zet NEXT_DIST_DIR om een tweede instantie een eigen build-map te geven.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   experimental: {
+    /* Client-side routercache. Next 15 zet `dynamic` standaard op 0: elke navigatie naar een
+       dynamische pagina haalt de volledige serverdata opnieuw op, ook als je tien seconden
+       geleden nog op dat scherm stond. Heen en weer klikken tussen Aanvragen, Offertes en
+       Opdrachten betekende dus elke keer opnieuw honderden dossiers ophalen en verrijken.
+       30 seconden hergebruik maakt terugklikken direct. Muterende server-actions roepen
+       `revalidatePath` aan en die leegt deze cache alsnog, dus na een wijziging die je zelf
+       doet zie je nooit een oude stand. */
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
     serverActions: {
       // Foto's gaan als FormData door een server-action. De standaardlimiet is 1 MB, en daar
       // past geen enkele camerafoto in — de upload faalde met een onverklaarbare fout.

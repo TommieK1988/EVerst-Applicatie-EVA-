@@ -37,17 +37,27 @@ type Invoer = { id: string; everts_calc_project_id?: string | null }
 /**
  * Een `.in()` over honderden uuid's wordt een URL van tienduizenden tekens; PostgREST kapt die af
  * of weigert hem. De borden tonen makkelijk 500+ dossiers, dus altijd in blokken opvragen.
+ * Wordt ook gebruikt door `getLijstVerrijking` in actions.ts.
  */
-const CHUNK = 150
+export const ID_BLOK = 150
 
+/**
+ * Voert `query` uit per blok van `ID_BLOK` ids en plakt de resultaten aan elkaar. De blokken gaan
+ * parallel: ze hebben niets van elkaar nodig, en achter elkaar wachten kostte bij 400+ dossiers
+ * drie volle roundtrips per tabel.
+ */
 async function inChunks<T>(
   ids: string[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: (blok: string[]) => any,
 ): Promise<T[]> {
+  const blokken: string[][] = []
+  for (let i = 0; i < ids.length; i += ID_BLOK) blokken.push(ids.slice(i, i + ID_BLOK))
+
+  const resultaten = await Promise.all(blokken.map(blok => query(blok)))
+
   const uit: T[] = []
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const { data } = await query(ids.slice(i, i + CHUNK))
+  for (const { data } of resultaten) {
     if (data) uit.push(...(data as T[]))
   }
   return uit

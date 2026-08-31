@@ -32,7 +32,7 @@ import {
 } from '@/lib/bouw7/client'
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
-import { laadKaartBedragen } from './kaart-bedragen'
+import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 
 type DossierResult =
   | { ok: true; data: DossierRij[] }
@@ -57,9 +57,9 @@ const ROL_SELECT = `
 /**
  * Slanke projectie voor lijst-weergaven (bijv. de mobiele dossierlijst): alleen
  * de kolommen die de lijst, de status-badge en de actief-check nodig hebben, plus
- * klant- en projectleidernaam. Scheelt fors t.o.v. `*, ROL_SELECT` (47 kolommen +
- * 8 joins). Gemodelleerd op getActieveDossierContext. `mapRij` vult de overige
- * rolnamen netjes met null.
+ * klant- en projectleidernaam. Scheelt nog fors t.o.v. `LIJST_SELECT` hieronder
+ * (45 kolommen + 9 joins). Gemodelleerd op getActieveDossierContext. `mapRij` vult
+ * de overige rolnamen netjes met null.
  */
 const LEAN_SELECT = `
   id, dossiernummer, titel, hoofdstatus,
@@ -68,6 +68,40 @@ const LEAN_SELECT = `
   relaties!klant_id ( naam ),
   projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam )
 `.trim()
+
+/**
+ * Kolommen die de overzichten (kanban, lijst, kolombeheer) daadwerkelijk gebruiken.
+ *
+ * `select('*')` haalde alle 84 kolommen van `dossiers` op. Bij 400+ opdrachten is dat
+ * ~1,3 MB JSON per paginabezoek, waarvan het leeuwendeel bestaat uit veldnamen die per rij
+ * worden herhaald voor kolommen die geen enkel overzicht toont (sync-hashes, SharePoint-
+ * verwijzingen, btw-splitsing, geocode-velden). Deze projectie halveert dat ruim zonder dat
+ * er een kolom verdwijnt.
+ *
+ * Voeg een kolom hier toe zodra een kaart of een lijstkolom hem gaat tonen — anders blijft
+ * hij leeg zonder foutmelding. De detailpagina gebruikt bewust `getDossierById`, die nog
+ * wél alles ophaalt.
+ *
+ * `everts_calc_project_id` staat er niet voor de weergave in maar voor `laadKaartBedragen`:
+ * die koppelt er de EVA-offerte aan.
+ */
+const LIJST_KOLOMMEN = `
+  id, dossiernummer, titel, klant_id, hoofdstatus,
+  aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus,
+  bedrag_excl_btw, bedrag_incl_btw, kostprijs_excl_btw, mandaat_bedrag,
+  verwacht_startdatum, verwacht_einddatum, aanvraagdatum, deadline, verzonden_op,
+  created_at, updated_at, gearchiveerd,
+  categorie, referentie, opdracht_referentie, opmerkingen, vve_code, facturatiemethode,
+  werkadres_naam, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad,
+  bouw7_id, bouw7_laatst_sync, bouw7_sync_status, bouw7_aanmaakdatum,
+  bouw7_categorie, bouw7_categorie_naam, bouw7_projectstatus_naam, bouw7_quotation_status,
+  bouw7_bestelregels_afwijking, bouw7_uren_overschrijding, wb_ongeaccordeerde_wijzigingen,
+  offerte_verstuurd_aantal, offerte_verstuurd_som_excl_btw,
+  everts_calc_project_id
+`.trim()
+
+/** Volledige projectie voor de overzichten: de lijstkolommen plus de rol-joins. */
+const LIJST_SELECT = `${LIJST_KOLOMMEN}, ${ROL_SELECT}`
 
 function medNaam(med: { voornaam?: string; tussenvoegsel?: string; achternaam?: string } | null): string | null {
   if (!med) return null
@@ -114,116 +148,56 @@ function mapRij(row: any): DossierRij {
 }
 
 /**
- * Geeft de set dossier-ids terug waarvoor de "Intern"-toggle (sleutel 'intern') aan staat.
- * Wordt gebruikt om interne dossiers te verbergen op de borden/lijsten.
+ * Verrijkingsgegevens per dossier: taken-tellers, de nieuwste notitie en de Intern-vlag.
+ *
+ * Dit kwam uit vier losse queries die álle taken en álle notities van de getoonde dossiers
+ * ophaalden om ze vervolgens in JavaScript te tellen. Bij 400+ opdrachten was dat honderden
+ * kilobytes per paginabezoek. De view `dossier_lijst_verrijking` telt hetzelfde in de database
+ * (migratie 20260831c) en geeft één compacte rij per dossier terug.
+ *
+ * Blokken van 150 omdat een `.in()` over 400 uuid's een URL van tienduizenden tekens wordt;
+ * PostgREST kapt die af of weigert hem. De blokken gaan parallel — ze hebben niets van elkaar
+ * nodig en achter elkaar wachten kost onnodig een paar honderd milliseconden.
  */
-async function getInternDossierIds(ids: string[]): Promise<Set<string>> {
-  if (ids.length === 0) return new Set()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('dossier_toggles')
-    .select('dossier_id, dossier_toggle_definities!inner(sleutel)')
-    .eq('aan', true)
-    .eq('dossier_toggle_definities.sleutel', 'intern')
-    .in('dossier_id', ids)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Set((data ?? []).map((d: any) => d.dossier_id as string))
+type LijstVerrijking = {
+  taken_open: number
+  taken_totaal: number
+  notitie_aantal: number
+  notitie_laatste_inhoud: string | null
+  notitie_laatste_auteur: string | null
+  notitie_laatste_op: string | null
+  intern: boolean
 }
 
-/**
- * Telt per dossier de open en totale taken. Taken hangen via twee paden aan een dossier:
- * direct (`tasks.dossier_id`, losse taken) en via een actielijst (`tasks.lijst_id` →
- * `task_lists.dossier_id`). Beide paden zijn nodig; een taak die in beide zit telt één keer.
- * Semantiek conform `lib/taken/services/taken.ts`: afgerond = 'gereed', open = alles behalve
- * 'gereed'/'vervallen', subtaken tellen niet mee.
- */
-async function getTakenTellingen(ids: string[]): Promise<Map<string, { open: number; totaal: number }>> {
-  const tellingen = new Map<string, { open: number; totaal: number }>()
-  if (ids.length === 0) return tellingen
+async function getLijstVerrijking(ids: string[]): Promise<Map<string, LijstVerrijking>> {
+  const uit = new Map<string, LijstVerrijking>()
+  if (ids.length === 0) return uit
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
+  const blokken: string[][] = []
+  for (let i = 0; i < ids.length; i += ID_BLOK) blokken.push(ids.slice(i, i + ID_BLOK))
 
-  const { data: lijsten } = await supabase
-    .from('task_lists')
-    .select('id, dossier_id')
-    .eq('is_template', false)
-    .in('dossier_id', ids)
-
-  const lijstNaarDossier = new Map<string, string>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (lijsten ?? []).map((l: any) => [l.id as string, l.dossier_id as string])
+  const resultaten = await Promise.all(
+    blokken.map(blok => supabase.from('dossier_lijst_verrijking').select('*').in('dossier_id', blok)),
   )
-  const lijstIds = [...lijstNaarDossier.keys()]
 
-  const [directRes, viaLijstRes] = await Promise.all([
-    supabase.from('tasks').select('id, status, dossier_id').is('parent_task_id', null).in('dossier_id', ids),
-    lijstIds.length
-      ? supabase.from('tasks').select('id, status, lijst_id').is('parent_task_id', null).in('lijst_id', lijstIds)
-      : Promise.resolve({ data: [] }),
-  ])
-
-  const geteld = new Set<string>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tel = (taak: any, dossierId: string | undefined) => {
-    if (!dossierId || geteld.has(taak.id)) return
-    geteld.add(taak.id)
-    if (taak.status === 'vervallen') return
-    const huidig = tellingen.get(dossierId) ?? { open: 0, totaal: 0 }
-    huidig.totaal += 1
-    if (taak.status !== 'gereed') huidig.open += 1
-    tellingen.set(dossierId, huidig)
+  for (const { data } of resultaten) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const r of (data ?? []) as any[]) {
+      uit.set(r.dossier_id as string, {
+        taken_open:             r.taken_open   ?? 0,
+        taken_totaal:           r.taken_totaal ?? 0,
+        notitie_aantal:         r.notitie_aantal ?? 0,
+        notitie_laatste_inhoud: r.notitie_laatste_inhoud ?? null,
+        notitie_laatste_auteur: r.notitie_laatste_auteur ?? null,
+        notitie_laatste_op:     r.notitie_laatste_op     ?? null,
+        intern:                 r.intern === true,
+      })
+    }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const t of (directRes.data ?? []) as any[]) tel(t, t.dossier_id)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const t of (viaLijstRes.data ?? []) as any[]) tel(t, lijstNaarDossier.get(t.lijst_id))
-
-  return tellingen
-}
-
-type NotitieSamenvatting = {
-  aantal: number
-  inhoud: string
-  auteur: string | null
-  op: string
-}
-
-/**
- * Vat de notities per dossier samen: hoeveel er zijn en welke de nieuwste is. Voedt de
- * notitie-indicator op de kanban-kaart. `dossier_notities` bevat zowel handmatige notities als de
- * uit Bouw7 gesynchroniseerde aantekeningen.
- */
-async function getNotitieSamenvattingen(ids: string[]): Promise<Map<string, NotitieSamenvatting>> {
-  const samenvattingen = new Map<string, NotitieSamenvatting>()
-  if (ids.length === 0) return samenvattingen
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  // Expliciete bovengrens: PostgREST kapt anders stilzwijgend af op de default (1000) en dan
-  // klopt de teller niet meer. Nieuwste eerst, zodat de eerste rij per dossier de laatste is.
-  const { data } = await supabase
-    .from('dossier_notities')
-    .select('dossier_id, inhoud, created_at, medewerkers(voornaam, tussenvoegsel, achternaam)')
-    .in('dossier_id', ids)
-    .order('created_at', { ascending: false })
-    .range(0, 9999)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const n of (data ?? []) as any[]) {
-    const bestaand = samenvattingen.get(n.dossier_id)
-    if (bestaand) { bestaand.aantal += 1; continue }
-    samenvattingen.set(n.dossier_id, {
-      aantal: 1,
-      inhoud: n.inhoud ?? '',
-      auteur: medNaam(n.medewerkers ?? null),
-      op:     n.created_at,
-    })
-  }
-
-  return samenvattingen
+  return uit
 }
 
 /**
@@ -231,30 +205,30 @@ async function getNotitieSamenvattingen(ids: string[]): Promise<Map<string, Noti
  * samenvatting en de EVA-eigen bedragen (calculatie-offerte, goedgekeurd meerwerk, stelposten,
  * opties). Dat laatste is nodig omdat `bedrag_excl_btw` alleen door de Bouw7-sync wordt
  * geschreven; zie kaart-bedragen.ts.
+ *
+ * Twee bronnen, parallel: de view achter `getLijstVerrijking` en de bedragen uit
+ * `laadKaartBedragen`.
  */
 async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
   const ids = rijen.map(r => r.id)
-  const [internSet, taken, notities, bedragen] = await Promise.all([
-    getInternDossierIds(ids),
-    getTakenTellingen(ids),
-    getNotitieSamenvattingen(ids),
+  const [verrijking, bedragen] = await Promise.all([
+    getLijstVerrijking(ids),
     // Best effort: zonder verrijking valt de kaart terug op het kale Bouw7-bedrag.
     laadKaartBedragen(rijen).catch(() => new Map()),
   ])
-  if (internSet.size === 0 && taken.size === 0 && notities.size === 0 && bedragen.size === 0) return rijen
+  if (verrijking.size === 0 && bedragen.size === 0) return rijen
 
   return rijen.map(r => {
-    const telling = taken.get(r.id)
-    const notitie = notities.get(r.id)
+    const v = verrijking.get(r.id)
     return {
       ...r,
-      intern: internSet.has(r.id) || r.intern,
-      taken_open:   telling?.open   ?? 0,
-      taken_totaal: telling?.totaal ?? 0,
-      notitie_aantal:         notitie?.aantal ?? 0,
-      notitie_laatste_inhoud: notitie?.inhoud ?? null,
-      notitie_laatste_auteur: notitie?.auteur ?? null,
-      notitie_laatste_op:     notitie?.op     ?? null,
+      intern: v?.intern || r.intern,
+      taken_open:   v?.taken_open   ?? 0,
+      taken_totaal: v?.taken_totaal ?? 0,
+      notitie_aantal:         v?.notitie_aantal ?? 0,
+      notitie_laatste_inhoud: v?.notitie_laatste_inhoud ?? null,
+      notitie_laatste_auteur: v?.notitie_laatste_auteur ?? null,
+      notitie_laatste_op:     v?.notitie_laatste_op     ?? null,
       ...(bedragen.get(r.id) ?? {}),
     }
   })
@@ -266,7 +240,7 @@ export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResu
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .eq('hoofdstatus', hoofdstatus)
     .order('created_at', { ascending: false })
 
@@ -297,7 +271,7 @@ export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofd
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or(orClause)
     .order('created_at', { ascending: false })
 
@@ -321,7 +295,7 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or(
       // 01-dossiers die via de Bouw7-offertestatus naar hoofdstatus 'offerte' zijn verhuisd
       // (gewonnen/mondelinge toezegging) horen op de Offertes-tab, niet hier.
@@ -350,7 +324,7 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or(
       'bouw7_projectstatus_naam.ilike.08.%,' +
       'bouw7_projectstatus_naam.ilike.09.%,' +
@@ -372,7 +346,7 @@ export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order('created_at', { ascending: false })
@@ -391,7 +365,7 @@ export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .in('bouw7_categorie_naam', ['Dagelijks onderhoud', 'Mutatie'])
     .eq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order('created_at', { ascending: false })
@@ -410,7 +384,7 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or('bouw7_projectstatus_naam.ilike.07.%,and(bouw7_projectstatus_naam.is.null,opdracht_substatus.eq.financieel_afgesloten)')
     .order('created_at', { ascending: false })
 
@@ -435,7 +409,7 @@ export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
 
   const { data, error } = await supabase
     .from('dossiers')
-    .select(`*, ${ROL_SELECT}`)
+    .select(LIJST_SELECT)
     .or(
       'and(hoofdstatus.eq.opdracht,opdracht_substatus.eq.financieel_afgesloten),' +
       'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
