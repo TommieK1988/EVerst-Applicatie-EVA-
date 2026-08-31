@@ -2,7 +2,7 @@ import 'server-only'
 import type { BedrijfContext, DossierContext, RenderContext } from './quote-renderer'
 import { renderQuoteDocx, loadQuoteTemplateBuffer } from './render-quote-docx'
 import { laadOfferteContext } from './offerte-context'
-import { haalBewerkteOfferteDocx } from './offerte-word'
+import { haalBewerkteOfferteDocxVoorUitvoer } from './offerte-word'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground } from './briefpapier'
 
@@ -35,7 +35,9 @@ export async function laadOfferteDocx(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   bronnen: { quote: any; rawLayout: any; layout: any; bedrijf: BedrijfContext; dossier?: DossierContext; is_concept?: boolean },
 ): Promise<{ docx: Buffer; bron: 'word' | 'sjabloon' }> {
-  const bewerkt = await haalBewerkteOfferteDocx(quoteId)
+  // `false`: een Word-watermerk hoort nooit in de PDF-pijplijn thuis. De PDF krijgt
+  // zijn CONCEPT-stempel van pdf-lib, en de verzend-PDF krijgt hem helemaal niet.
+  const bewerkt = await haalBewerkteOfferteDocxVoorUitvoer(quoteId, false)
   if (bewerkt) return { docx: bewerkt, bron: 'word' }
 
   const templateBuffer = await loadQuoteTemplateBuffer(bronnen.rawLayout)

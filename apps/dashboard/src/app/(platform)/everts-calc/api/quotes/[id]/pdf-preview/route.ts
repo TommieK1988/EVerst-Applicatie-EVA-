@@ -147,8 +147,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
     let docxBuffer: Buffer
     try {
+      // `false`: het Word-watermerk gaat eruit, want de voorvertoning stempelt
+      // hieronder zelf met pdf-lib (stap 6).
       const bewerkt = !isDemo && !templateOverride
-        ? await (await import('@/lib/everts-calc/offerte-word')).haalBewerkteOfferteDocx(id)
+        ? await (await import('@/lib/everts-calc/offerte-word')).haalBewerkteOfferteDocxVoorUitvoer(id, false)
         : null
 
       if (bewerkt) {

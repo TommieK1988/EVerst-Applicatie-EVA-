@@ -28,6 +28,7 @@ import { appGraphFetch, appGraphGet, appGraphGetRaw, GraphError } from '@/lib/o3
 import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 import { laadOfferteContext } from './offerte-context'
 import { renderQuoteDocx, loadQuoteTemplateBuffer } from './render-quote-docx'
+import { heeftConceptWatermerk, pasConceptWatermerkToe, zetConceptWatermerk } from './docx-watermerk'
 import { hashOfferte, type HashbareOfferteRegel } from './goedkeuring-hash'
 
 export const DOCX_MIME =
@@ -166,6 +167,25 @@ export async function haalBewerkteOfferteDocx(quoteId: string): Promise<Buffer |
   }
 }
 
+/**
+ * Hetzelfde document, maar met de CONCEPT-watermerkstaat die bij deze uitvoer hoort.
+ *
+ * Elke uitlevering dwingt de staat opnieuw af in plaats van te vertrouwen op wat er
+ * in SharePoint staat. Wie het watermerk in Word weghaalt, krijgt het daarmee bij de
+ * eerstvolgende download gewoon terug — en een goedgekeurde offerte gaat er nooit
+ * met een concept-stempel uit.
+ *
+ * De PDF-pijplijn geeft hier altijd `concept: false` mee: daar stempelt pdf-lib.
+ */
+export async function haalBewerkteOfferteDocxVoorUitvoer(
+  quoteId: string,
+  concept: boolean,
+): Promise<Buffer | null> {
+  const docx = await haalBewerkteOfferteDocx(quoteId)
+  if (!docx) return null
+  return pasConceptWatermerkToe(docx, concept)
+}
+
 // ─── Document opstellen ───────────────────────────────────────────────────────
 
 export class GeenDossierMapError extends Error {
@@ -186,6 +206,42 @@ async function resolveDossierId(
     return data?.id ?? null
   }
   return null
+}
+
+/**
+ * Zorgt dat een bestaand werkdocument het CONCEPT-watermerk draagt.
+ *
+ * Nodig voor documenten die zijn opgesteld voordat het watermerk bestond, en als
+ * vangnet voor wie het in Word weghaalt. Draait bij het openen, niet bij elke
+ * uitlevering: de uitlever-routes dwingen de staat toch al af op de bytes die zij
+ * versturen (`haalBewerkteOfferteDocxVoorUitvoer`) — hier gaat het om wat de
+ * gebruiker straks in Word Online voor zich krijgt.
+ *
+ * Alleen wanneer de offerte nog niet is goedgekeurd. Dat is bewust: het bestand
+ * herschrijven verschuift de cTag en dus de goedkeurings-hash, en juist bij een
+ * niet-goedgekeurde offerte valt er niets te verliezen. Best-effort — een storing
+ * mag het openen van het document nooit blokkeren.
+ */
+async function zorgVoorWatermerkInWerkbestand(quoteId: string): Promise<void> {
+  try {
+    const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+    if ((await assertOfferteVerzendbaar(quoteId)).ok) return
+
+    const k = await getOfferteWordKoppeling(quoteId)
+    if (!k) return
+
+    const huidig = await appGraphGetRaw(`/drives/${k.driveId}/items/${k.itemId}/content`)
+    if (await heeftConceptWatermerk(huidig)) return
+
+    const res = await appGraphFetch(`/drives/${k.driveId}/items/${k.itemId}/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': DOCX_MIME },
+      body: (await zetConceptWatermerk(huidig)) as unknown as BodyInit,
+    })
+    if (res.ok) await ververWordVersie(quoteId)
+  } catch (err) {
+    console.warn('Watermerk in bestaand Word-werkbestand zetten mislukt:', err)
+  }
 }
 
 export interface WordDocumentResultaat {
@@ -213,6 +269,7 @@ export async function maakOfferteWordDocument(
     // Controleer dat het bestand er nog is (en ververs meteen de versiemarker).
     const sync = await ververWordVersie(quoteId)
     if (sync.ok) {
+      await zorgVoorWatermerkInWerkbestand(quoteId)
       const k = await getOfferteWordKoppeling(quoteId)
       if (k?.webUrl) {
         return { webUrl: k.webUrl, bestandsnaam: k.bestandsnaam ?? '', hergebruikt: true }
@@ -232,13 +289,23 @@ export async function maakOfferteWordDocument(
   }
 
   const templateBuffer = await loadQuoteTemplateBuffer(rawLayout)
-  const docx = await renderQuoteDocx(
+  const gerenderd = await renderQuoteDocx(
     quote as Parameters<typeof renderQuoteDocx>[0],
     bedrijf,
     layout,
     templateBuffer,
-    { dossier },
+    // Bewust `false`: een `{#is_concept}`-blok uit het sjabloon belandt in de body en
+    // is daarna niet meer weg te halen zonder het handwerk van de gebruiker te raken.
+    // Het watermerk hieronder zit in de header en kan er wél weer af.
+    { dossier, is_concept: false },
   )
+
+  // Het werkdocument draagt altijd het CONCEPT-watermerk. Dat mag: het opstellen
+  // (of opnieuw opstellen) zet een nieuw bestand neer, waardoor de cTag verschuift
+  // en een eerdere goedkeuring sowieso vervalt — er ís op dit moment geen
+  // goedgekeurde versie. Bij het uitleveren van een goedgekeurde offerte gaat het
+  // watermerk er weer af; zie `haalBewerkteOfferteDocxVoorUitvoer`.
+  const docx = await zetConceptWatermerk(gerenderd)
 
   const bestandsnaam = `Offerte ${quote.quote_nummer}.docx`
   const upload = await uploadBuffersNaarDossierMap(dossierId, [
@@ -313,6 +380,40 @@ export async function getOfferteWordStatus(quoteId: string): Promise<OfferteWord
     verouderd: k.inhoudHash != null && k.inhoudHash !== actueleInhoud,
     gemaaktOp: k.gemaaktOp,
   }
+}
+
+/**
+ * De driveItem-id's van de Word-werkdocumenten die bij dit dossier horen.
+ *
+ * De bestandenlijst van het dossier verbergt deze bestanden. Ze staan wel gewoon in
+ * de dossiermap — ze horen daar ook thuis — maar als losse download horen ze niet in
+ * de lijst: dan is er een .docx te pakken die buiten de goedkeuringsgate om gaat.
+ * Wie het bestand nodig heeft, gebruikt "Bewerken in Word Online"; wie de offerte
+ * wil, gebruikt de knoppen die het watermerk afdwingen.
+ */
+export async function getWordWerkbestandItemIds(dossierId: string): Promise<Set<string>> {
+  const d = db()
+  const { data: dossier } = await d
+    .from('dossiers')
+    .select('everts_calc_project_id')
+    .eq('id', dossierId)
+    .maybeSingle()
+
+  // Een offerte hangt aan het dossier zelf, of alleen aan het calculatie-project.
+  const filters = [`dossier_id.eq.${dossierId}`]
+  if (dossier?.everts_calc_project_id) filters.push(`project_id.eq.${dossier.everts_calc_project_id}`)
+
+  const { data } = await d
+    .from('quotes')
+    .select('word_item_id')
+    .not('word_item_id', 'is', null)
+    .or(filters.join(','))
+
+  return new Set(
+    ((data ?? []) as { word_item_id: string | null }[])
+      .map((r) => r.word_item_id)
+      .filter((id): id is string => !!id),
+  )
 }
 
 /** Verwijdert het bestand uit SharePoint. Alleen voor opruimen bij een mislukte koppeling. */

@@ -145,9 +145,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Hangt er een bewerkt Word-document aan de offerte, dan is dát de voorvertoning.
     // Niet bij demo of een template-override: die previews gaan juist over het sjabloon.
     const templateOverride = !!(driveIdParam || itemIdParam || templateUrlParam)
+
+    // Zolang de controller niet akkoord is, hoort er CONCEPT op te staan — ook in de
+    // Word-weergave. Bij demo/override is er geen offerte om over te oordelen.
+    let isConcept = false
     if (!isDemo && !templateOverride) {
-      const { haalBewerkteOfferteDocx } = await import('@/lib/everts-calc/offerte-word')
-      const bewerkt = await haalBewerkteOfferteDocx(id)
+      try {
+        const { assertOfferteVerzendbaar } = await import('@/lib/goedkeuring/offerte')
+        isConcept = !(await assertOfferteVerzendbaar(id)).ok
+      } catch { /* bij twijfel geen watermerk forceren */ }
+    }
+
+    if (!isDemo && !templateOverride) {
+      const { haalBewerkteOfferteDocxVoorUitvoer } = await import('@/lib/everts-calc/offerte-word')
+      const bewerkt = await haalBewerkteOfferteDocxVoorUitvoer(id, isConcept)
       if (bewerkt) {
         return new NextResponse(bewerkt as unknown as BodyInit, {
           headers: {
@@ -182,7 +193,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     let output: Buffer
     try {
-      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier })
+      output = await renderQuoteDocx(quote as Parameters<typeof renderQuoteDocx>[0], bedrijf, layout, templateBuffer, { dossier, is_concept: isConcept })
     } catch (renderErr) {
       console.error('Docx preview render fout:', renderErr)
       // Preview van het eigen template (ingelogde beheerder): toon de tag + omringende

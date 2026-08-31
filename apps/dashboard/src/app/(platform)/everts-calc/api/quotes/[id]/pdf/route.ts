@@ -25,7 +25,7 @@ import {
   GeenTemplateError,
 } from '@/lib/everts-calc/render-quote-docx'
 import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
-import { haalBewerkteOfferteDocx, WordBronError } from '@/lib/everts-calc/offerte-word'
+import { haalBewerkteOfferteDocxVoorUitvoer, WordBronError } from '@/lib/everts-calc/offerte-word'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
@@ -125,9 +125,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // ── 4. Bron-.docx: bewerkt Word-document, anders het sjabloon vullen ─────
+    // Het Word-watermerk gaat er hier altijd uit: in een PDF komt CONCEPT van
+    // pdf-lib (stap 7). Eén stempel, en één plek die bepaalt of hij erop hoort.
     let docxBuffer: Buffer
     try {
-      const bewerkt = await haalBewerkteOfferteDocx(id)
+      const bewerkt = await haalBewerkteOfferteDocxVoorUitvoer(id, false)
       if (bewerkt) {
         docxBuffer = bewerkt
       } else {

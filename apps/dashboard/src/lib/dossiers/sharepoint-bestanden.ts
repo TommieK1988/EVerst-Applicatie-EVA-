@@ -124,6 +124,7 @@ async function wisKoppeling(dossierId: string): Promise<void> {
 
 /** Bouwt het antwoord voor een gekoppelde map: bestanden ophalen, fouten opvangen. */
 async function metBestanden(
+  dossierId: string,
   d: DossierRij,
   driveId: string,
   itemId: string,
@@ -142,9 +143,33 @@ async function metBestanden(
     fout: null,
   }
   try {
-    return { ...basis, bestanden: await listFolderChildren(driveId, itemId) }
+    const bestanden = await listFolderChildren(driveId, itemId)
+    return { ...basis, bestanden: await zonderWordWerkbestanden(dossierId, bestanden) }
   } catch (err) {
     return { ...basis, fout: netteFout(err) }
+  }
+}
+
+/**
+ * Filtert de Word-werkdocumenten van offertes uit de lijst.
+ *
+ * Die bestanden horen in de dossiermap thuis, maar niet in de bestandenlijst: als
+ * losse download omzeilen ze de goedkeuringsgate en het CONCEPT-watermerk dat EVA's
+ * eigen offerte-knoppen wél afdwingen. Faalt de lookup, dan tonen we liever te veel
+ * dan een lege lijst.
+ */
+async function zonderWordWerkbestanden(
+  dossierId: string,
+  bestanden: SharePointBestand[],
+): Promise<SharePointBestand[]> {
+  try {
+    const { getWordWerkbestandItemIds } = await import('@/lib/everts-calc/offerte-word')
+    const verbergen = await getWordWerkbestandItemIds(dossierId)
+    if (verbergen.size === 0) return bestanden
+    return bestanden.filter((b) => !verbergen.has(b.id))
+  } catch (err) {
+    console.warn('Word-werkbestanden filteren mislukt:', err)
+    return bestanden
   }
 }
 
@@ -167,7 +192,7 @@ export async function getDossierSharePointBestanden(dossierId: string): Promise<
     const gekoppeld = d.sharepoint_match_status === 'gematcht' && !!d.sharepoint_item_id && !!d.sharepoint_drive_id
 
     if (gekoppeld) {
-      return metBestanden(d, d.sharepoint_drive_id!, d.sharepoint_item_id!, d.sharepoint_web_url, handmatig)
+      return metBestanden(dossierId, d, d.sharepoint_drive_id!, d.sharepoint_item_id!, d.sharepoint_web_url, handmatig)
     }
 
     // De TTL geldt alleen voor 'niet_gevonden' — dát is het geval dat Graph zou
@@ -209,7 +234,7 @@ export async function getDossierSharePointBestanden(dossierId: string): Promise<
     })
 
     if (m.status === 'gematcht' && m.driveId && m.itemId) {
-      return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, false)
+      return metBestanden(dossierId, d, m.driveId, m.itemId, m.webUrl ?? null, false)
     }
 
     return {
@@ -296,7 +321,7 @@ export async function koppelDossierMap(dossierId: string, itemId: string): Promi
       status: 'gematcht',
       handmatig: true,
     })
-    return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, true)
+    return metBestanden(dossierId, d, m.driveId, m.itemId, m.webUrl ?? null, true)
   } catch (err) {
     return foutData(netteFout(err))
   }
@@ -333,6 +358,7 @@ export async function maakDossierMap(dossierId: string, naam?: string): Promise<
       handmatig: true,
     })
     return metBestanden(
+      dossierId,
       d,
       map.driveId,
       map.itemId,
@@ -424,7 +450,7 @@ export async function koppelDossierMapViaLink(dossierId: string, shareLink: stri
       status: 'gematcht',
       handmatig: true,
     })
-    return metBestanden(d, m.driveId, m.itemId, m.webUrl ?? null, true)
+    return metBestanden(dossierId, d, m.driveId, m.itemId, m.webUrl ?? null, true)
   } catch (err) {
     return foutData(netteFout(err))
   }
