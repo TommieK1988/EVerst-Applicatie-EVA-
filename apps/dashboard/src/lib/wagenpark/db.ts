@@ -13,7 +13,6 @@
 import { Pool, type PoolConfig } from 'pg'
 
 declare global {
-  // eslint-disable-next-line no-var
   var __wagenparkPgPool: Pool | undefined
 }
 

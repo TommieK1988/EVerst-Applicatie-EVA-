@@ -264,7 +264,6 @@ export function usePlanningLayout({
   viewStart?: Date
 }): PlanningLayout {
   const vsTime = viewStart ? startOfDay(viewStart).getTime() : null
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => {
     // Periodelengte (totalDays/ppd/totalW) blijft gekoppeld aan de peildatum-periode zodat het
     // venster een vaste breedte houdt; de venster-START is vrij verschuifbaar via viewStart.

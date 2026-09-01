@@ -47,7 +47,6 @@ export async function getIntegraties(): Promise<DicoIntegratie[]> {
     .select('*')
     .order('leverancier', { ascending: true })
   if (error) throw new Error(`DICO-integraties ophalen mislukt: ${error.message}`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data ?? []).map(naarClient)
 }
 

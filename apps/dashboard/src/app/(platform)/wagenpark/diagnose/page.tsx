@@ -45,7 +45,7 @@ export default async function DiagnosePage() {
     }
   }
 
-  let tabellenInDb: string[] = []
+  const tabellenInDb: string[] = []
   let tabellenCheckError: string | null = null
   const perTabelCheck: Record<string, { ok: boolean; error?: string }> = {}
 

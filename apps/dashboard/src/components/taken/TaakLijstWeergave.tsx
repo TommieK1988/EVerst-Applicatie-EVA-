@@ -103,7 +103,6 @@ export default function TaakLijstWeergave({ taken, toonFilters = true, isTemplat
   // dus zonder dit blijft het paneel de oude taak (incl. subtaken) tonen.
   useEffect(() => {
     setGeselecteerdeTaak(prev => (prev ? taken.find(t => t.id === prev.id) ?? null : null))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taken])
 
   const handleDragEnd = (event: DragEndEvent) => {

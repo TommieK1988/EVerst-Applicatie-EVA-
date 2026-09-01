@@ -155,7 +155,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // ── 5. .docx → PDF via Microsoft Graph ───────────────────────────────────
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let pdfBuffer: Uint8Array = await convertDocxToPdf(docxBuffer)
 
     // Briefpapier van de layout als achtergrond onder de content-pagina's.

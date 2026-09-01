@@ -1223,7 +1223,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // Haal alle offertes op en bouw een map op projectId (meest recente versie per project).
     // Dit is een goedkope lijst-call en gebeurt vóór de fingerprint-bepaling, want de offerte-velden
     // bepalen mede of een dossier is gewijzigd.
-    let quotationMap = new Map<string, Bouw7Quotation>()
+    const quotationMap = new Map<string, Bouw7Quotation>()
     // Aggregaat per project van offertes met status "Verstuurd" (aantal + som subtotaal excl. btw).
     // Een project kan meerdere verstuurde offertes hebben; de kanban-kaart toont dan een indicator
     // + het totaalbedrag i.p.v. alleen het bedrag van de laatst opgestelde offerte.

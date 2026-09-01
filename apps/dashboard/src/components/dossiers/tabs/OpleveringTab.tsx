@@ -501,7 +501,6 @@ function TriageBlok({ punten, readOnly, onChange }: {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {punt.fotos.map(f => (
                     <div key={f.id} className="h-16 w-16 overflow-hidden rounded-md border border-neutral-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <a href={f.url} target="_blank" rel="noreferrer">
                         <img src={f.url} alt="foto bij melding" className="h-full w-full object-cover" />
                       </a>
@@ -945,7 +944,6 @@ function FotoKolom({ kop, fotos, readOnly, onVerwijder }: {
         <div className="flex flex-wrap gap-2">
           {fotos.map(f => (
             <div key={f.id} className="relative h-16 w-16 overflow-hidden rounded-md border border-neutral-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <a href={f.url} target="_blank" rel="noreferrer">
                 <img src={f.url} alt={`opleverfoto ${kop.toLowerCase()}`} className="h-full w-full object-cover" />
               </a>

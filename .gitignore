@@ -3,6 +3,7 @@ node_modules/
 .next-preview/
 .next-uren/
 .next-tabellen/
+.next-build/
 out/
 build/
 dist/

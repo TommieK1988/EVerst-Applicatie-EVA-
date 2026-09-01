@@ -157,7 +157,6 @@ export async function uploadBuffersNaarDossierMap(
  * Zorgt dat er een gekoppelde map is (uit de cache of nieuw) en schrijft de
  * koppeling weg op het dossier. Gedeeld door beide upload-paden.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function zorgVoorMap(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,

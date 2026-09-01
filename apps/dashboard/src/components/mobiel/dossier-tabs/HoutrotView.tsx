@@ -146,7 +146,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   useEffect(() => {
     if (!boom || zelfGekozen) return
     setGekozen(selectieVanLocatie(boom.nodes, bewerkLocatie))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boom, zelfGekozen, bewerkLocatie])
 
   function kiesNiveau(diepte: number, nodeId: string) {

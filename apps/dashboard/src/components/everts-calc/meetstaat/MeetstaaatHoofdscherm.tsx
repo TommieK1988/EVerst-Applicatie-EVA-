@@ -297,7 +297,6 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
     }
   }, [meetstaat, scenario, bewaarNu])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const aggregaten = meetstaat ? getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0) : []
   const ongesyncCount = aggregaten.filter(a => !a.is_gesynchroniseerd).length
   void wijzigingsTeller // zorgt dat re-render triggered bij wijzigingen

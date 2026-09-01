@@ -558,7 +558,6 @@ export default function OverzichtTabel<T extends { id: string }>({
     const lokaal = leesLokaal(werkstandSleutel)
     if (lokaal) pasWerkstandToe(lokaal)
     setGehydrateerd(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Werkstand van een ander apparaat: alleen als hij nieuwer is dan wat hier ligt.
@@ -682,7 +681,6 @@ export default function OverzichtTabel<T extends { id: string }>({
         console.warn(`[OverzichtTabel:${scherm}] kolom "${k.key}": geen enkele rij matcht een van de filterOpties — filteren levert altijd 0 rijen. Voeg een filterWaarde toe die het getoonde label teruggeeft.`)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kolommen, data, scherm])
 
   // De groepeerkolom mag nooit als cel of in het kolombeheer opduiken.

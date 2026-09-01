@@ -21,7 +21,6 @@ export function evalueerFormule(formule: string, B = 0, H = 0, L = 0): number {
     if (!/^[\d+\-*/().\s]+$/.test(expr)) return 0
 
     // Evalueer via nieuwe Function (sandbox: geen globale variabelen bereikbaar)
-    // eslint-disable-next-line no-new-func
     const resultaat = new Function(`"use strict"; return (${expr})`)() as number
     return isFinite(resultaat) ? +resultaat.toFixed(6) : 0
   } catch {

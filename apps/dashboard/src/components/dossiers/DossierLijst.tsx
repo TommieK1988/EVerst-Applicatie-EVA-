@@ -735,7 +735,6 @@ export function DossierLijst({
         </span>
       ),
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [statussen, sectie])
 
   // ── Klik-handler ────────────────────────────────────────────────────────────

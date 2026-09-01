@@ -69,7 +69,6 @@ export default function CalculatiesTabel({
       })
       .catch(() => { if (actief) setTotalenPerScenario(new Map()) })
     return () => { actief = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, scenarios, tick])
 
   const scenarioIds = new Set(scenarios.map(s => s.id))

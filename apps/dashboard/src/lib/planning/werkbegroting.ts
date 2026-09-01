@@ -37,7 +37,6 @@ export async function neemWerkbegrotingOver(dossier_id: string): Promise<Werkbeg
 
   const urenPerOmschrijving: Record<string, number> = {}
   for (const comp of (componenten ?? [])) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uren = (comp.werkbegroting_regels ?? []).reduce(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (sum: number, r: any) => sum + (r.hoeveelheid * comp.norm_hoeveelheid),

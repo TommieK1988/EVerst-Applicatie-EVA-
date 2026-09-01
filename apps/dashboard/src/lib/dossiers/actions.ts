@@ -3189,7 +3189,6 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const regelKostengroep = new Map<string, string>(regels.map((r: any) => [r.id, r.kostengroep]))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: componenten } = await supabase
         .from('werkbegroting_componenten')
         .select('werkbegroting_regel_id, norm_hoeveelheid, tarief')

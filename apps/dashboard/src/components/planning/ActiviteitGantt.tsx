@@ -1436,7 +1436,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   function calcDropIdx(clientY: number): number {
     if (!rowsRef.current) return displayRows.length
     const rect = rowsRef.current.getBoundingClientRect()
-    let relY = clientY - rect.top, y = 0
+    const relY = clientY - rect.top
+    let y = 0
     for (let i = 0; i < displayRows.length; i++) {
       const h = rowHeight(displayRows[i])
       if (relY < y + h / 2) return i

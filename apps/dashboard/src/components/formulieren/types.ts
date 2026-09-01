@@ -346,7 +346,7 @@ export function labelToName(label: string): string {
 
 export function defaultField(type: FormFieldType, existingNames: string[]): FormField {
   const label = FIELD_TYPE_LABELS[type]
-  let baseName = labelToName(label)
+  const baseName = labelToName(label)
   let name = baseName
   let counter = 2
   while (existingNames.includes(name)) {

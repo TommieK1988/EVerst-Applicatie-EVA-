@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useTransition } from 'react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import type { PdfConfig } from './actions'
 import { savePdfConfig } from './actions'
@@ -84,13 +85,13 @@ export function PdfInstellingenClient({ config, logoUrl }: Props) {
             <img src={logoUrl} alt="Bedrijfslogo" style={{ maxHeight: 48, maxWidth: 160, objectFit: 'contain' }}/>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
               Logo uit huisstijl-instellingen.{' '}
-              <a href="/instellingen/bedrijfsgegevens/huisstijl" style={{ color: '#009439' }}>Aanpassen</a>
+              <Link href="/instellingen/bedrijfsgegevens/huisstijl" style={{ color: '#009439' }}>Aanpassen</Link>
             </p>
           </div>
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
             Nog geen logo ingesteld.{' '}
-            <a href="/instellingen/bedrijfsgegevens/huisstijl" style={{ color: '#009439' }}>Upload via Huisstijl</a>.
+            <Link href="/instellingen/bedrijfsgegevens/huisstijl" style={{ color: '#009439' }}>Upload via Huisstijl</Link>.
           </p>
         )}
       </div>

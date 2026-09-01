@@ -404,7 +404,6 @@ export async function updateTaak(id: string, data: {
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
   if (data.kwaliteit_ronde        !== undefined) updatePayload.kwaliteit_ronde        = data.kwaliteit_ronde
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await supabase
     .from('tasks')
     .update(updatePayload as any)

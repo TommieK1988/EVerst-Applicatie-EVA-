@@ -106,7 +106,6 @@ export async function laadKaartBedragen(rijen: Invoer[]): Promise<Map<string, Ka
   }
   const projectIds = [...projectNaarDossier.keys()]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [meerwerkRijen, onderdeelRijen, quotes] = await Promise.all([
     inChunks<any>(ids, blok => supabase.from('meerwerk_regels')
       .select('dossier_id, status, afrekenwijze, is_stelpost, stelpost_grondslag, bedrag_excl_btw, eenheidsprijs, hoeveelheid_werkelijk')
@@ -175,7 +174,6 @@ export async function laadKaartBedragen(rijen: Invoer[]): Promise<Map<string, Ka
     // Kostprijs = som van (kostprijs_pe × hoeveelheid) over niet-optionele regels — gelijk aan
     // `getQuoteTotalenVoorProject`. Verkoop en kostprijs komen zo uit dezelfde offerte; ze mengen
     // met het Bouw7-bedrag zou een betekenisloze marge opleveren.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [lines, secties] = await Promise.all([
       inChunks<any>(quoteIds, blok => supabase.from('quote_lines')
         .select('quote_id, kostprijs_pe, hoeveelheid, section_id').in('quote_id', blok)),

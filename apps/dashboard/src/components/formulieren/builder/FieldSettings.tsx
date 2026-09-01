@@ -102,37 +102,42 @@ const SUB_FIELD_TYPES: FormFieldType[] = [
 
 // ── Sub-velden editor ─────────────────────────────────────────────────
 
+/**
+ * De sub-velden heten in het formuliermodel `children`, maar als PROP heet dat hier bewust
+ * `subvelden`: een prop met de naam `children` leest als React-children terwijl het gewone data
+ * is, en React/ESLint behandelen hem ook zo (react/no-children-prop).
+ */
 function SubFieldsEditor({
-  children,
+  subvelden,
   onChange,
 }: {
-  children: FormField[]
+  subvelden: FormField[]
   onChange: (children: FormField[]) => void
 }) {
   const [addType, setAddType] = useState<FormFieldType>('text')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   function addChild() {
-    const names = children.map(c => c.name)
+    const names = subvelden.map(c => c.name)
     const child = defaultField(addType, names)
-    const next = [...children, child]
+    const next = [...subvelden, child]
     onChange(next)
     setExpandedId(child.id)
   }
 
   function removeChild(id: string) {
-    onChange(children.filter(c => c.id !== id))
+    onChange(subvelden.filter(c => c.id !== id))
     if (expandedId === id) setExpandedId(null)
   }
 
   function updateChild(updated: FormField) {
-    onChange(children.map(c => c.id === updated.id ? updated : c))
+    onChange(subvelden.map(c => c.id === updated.id ? updated : c))
   }
 
   function moveChild(id: string, dir: -1 | 1) {
-    const idx = children.findIndex(c => c.id === id)
+    const idx = subvelden.findIndex(c => c.id === id)
     if (idx < 0) return
-    const next = [...children]
+    const next = [...subvelden]
     const target = idx + dir
     if (target < 0 || target >= next.length) return
     ;[next[idx], next[target]] = [next[target], next[idx]]
@@ -147,18 +152,18 @@ function SubFieldsEditor({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <label style={sectionLabelStyle}>Sub-velden</label>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-          {children.length} veld{children.length !== 1 ? 'en' : ''}
+          {subvelden.length} veld{subvelden.length !== 1 ? 'en' : ''}
         </span>
       </div>
 
-      {children.length === 0 && (
+      {subvelden.length === 0 && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
           Nog geen sub-velden. Voeg velden toe die per herhaling worden getoond.
         </p>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
-        {children.map((child, i) => {
+        {subvelden.map((child, i) => {
           const expanded = expandedId === child.id
           return (
             <div
@@ -195,12 +200,12 @@ function SubFieldsEditor({
                   >▲</button>
                   <button
                     type="button"
-                    disabled={i === children.length - 1}
+                    disabled={i === subvelden.length - 1}
                     onClick={() => moveChild(child.id, 1)}
                     style={{
                       border: 'none', background: 'transparent',
-                      cursor: i === children.length - 1 ? 'default' : 'pointer',
-                      padding: '1px 3px', color: i === children.length - 1 ? 'var(--border)' : 'var(--text-muted)',
+                      cursor: i === subvelden.length - 1 ? 'default' : 'pointer',
+                      padding: '1px 3px', color: i === subvelden.length - 1 ? 'var(--border)' : 'var(--text-muted)',
                       fontSize: 9, lineHeight: 1,
                     }}
                   >▼</button>
@@ -902,7 +907,7 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
       {isRepeatable && (
         <div style={{ marginBottom: 16 }}>
           <SubFieldsEditor
-            children={field.children ?? []}
+            subvelden={field.children ?? []}
             onChange={children => update({ children })}
           />
         </div>

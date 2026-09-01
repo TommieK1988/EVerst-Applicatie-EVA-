@@ -138,7 +138,6 @@ export async function getOfferteMailConcept(quoteId: string): Promise<MailConcep
   return { to, subject, bodyHtml, dossierId }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function splitAdressen(v: string | undefined): string[] {
   return (v ?? '').split(/[,;]/).map(s => s.trim()).filter(Boolean)
 }

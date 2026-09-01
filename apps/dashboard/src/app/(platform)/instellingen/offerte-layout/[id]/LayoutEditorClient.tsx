@@ -684,7 +684,6 @@ function WordTemplatePaneel({
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
       // Onbekende variabelen: tags die niet in het variabelenpaneel voorkomen (soft "let op").
       const geldig = new Set(WORD_VARIABELEN.flatMap(g => g.items.map(i => i.v.replace(/^[#/^%]/, ''))))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tags: { naam: string; type: string; context: string }[] = json.tags ?? []
       const onbekendMap = new Map<string, string>()
       for (const t of tags) {

@@ -200,7 +200,6 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         setAdresStatus('niet_gevonden')
       }
     }, 500)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postcode, straatHuisnr])
 
   // Richting 2: straat + huisnummer → postcode (+ plaats) aanvullen. Alleen zolang de postcode
@@ -223,7 +222,6 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
       }
     }, 600)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [straatHuisnr, stad, postcode])
 
   function handleFiles(files: FileList | null) {

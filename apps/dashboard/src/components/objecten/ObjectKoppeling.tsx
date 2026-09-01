@@ -53,7 +53,7 @@ export default function ObjectKoppeling({ dossierId, readOnly }: { dossierId: st
     }
   }
 
-  useEffect(() => { void herlaad() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dossierId])
+  useEffect(() => { void herlaad()   }, [dossierId])
 
   function doe(actie: () => Promise<{ ok: true } | { ok: false; fout: string }>, gelukt: string) {
     start(async () => {
