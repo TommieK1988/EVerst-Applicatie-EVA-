@@ -2,6 +2,7 @@ import 'server-only'
 import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/database'
 import { getOplevermomentRapport, type OpleverPuntView } from './oplevering'
 import { splitsFotos, bewijsOntbreekt } from './oplever-fotos'
+import { veilig, wikkel, type PdfFont as Font } from '@/lib/pdf/tekst'
 
 /**
  * Opleverrapportage als PDF, opgebouwd met pdf-lib (zelfde aanpak als de briefpapier-merge).
@@ -29,51 +30,6 @@ const MAX_FOTO_BYTES = 25 * 1024 * 1024
 const FOTO_MAX_PX = 900
 const HANDTEKENING_MAX_PX = 600
 const JPEG_KWALITEIT = 72
-
-/**
- * De standaardfonts van pdf-lib kunnen alleen WinAnsi coderen; een em-dash of krul-apostrof laat
- * het tekenen crashen. Vervang de gangbare tekens en gooi de rest eruit.
- */
-function veilig(tekst: unknown): string {
-  return String(tekst ?? '')
-    .replace(/[‘’‚‹›]/g, "'")
-    .replace(/[“”„]/g, '"')
-    .replace(/[–—]/g, '-')
-    .replace(/…/g, '...')
-    .replace(/[•·]/g, '-')
-    .replace(/\u00A0/g, ' ')
-    // Alles buiten WinAnsi (en stuurtekens) eruit; anders klapt drawText.
-    .replace(/[^\x20-\xFF]/g, '')
-}
-
-type Font = Awaited<ReturnType<Awaited<ReturnType<typeof import('pdf-lib')['PDFDocument']['create']>>['embedFont']>>
-
-/** Breekt tekst af op woordgrenzen binnen `maxBreedte`. */
-function wikkel(tekst: string, font: Font, grootte: number, maxBreedte: number): string[] {
-  const woorden = veilig(tekst).split(/\s+/).filter(Boolean)
-  if (woorden.length === 0) return ['']
-  const regels: string[] = []
-  let regel = ''
-  for (const w of woorden) {
-    const kandidaat = regel ? `${regel} ${w}` : w
-    if (font.widthOfTextAtSize(kandidaat, grootte) <= maxBreedte) {
-      regel = kandidaat
-    } else {
-      if (regel) regels.push(regel)
-      // Losse woorden die zelf te breed zijn hard afkappen.
-      let rest = w
-      while (font.widthOfTextAtSize(rest, grootte) > maxBreedte && rest.length > 1) {
-        let n = rest.length
-        while (n > 1 && font.widthOfTextAtSize(rest.slice(0, n), grootte) > maxBreedte) n--
-        regels.push(rest.slice(0, n))
-        rest = rest.slice(n)
-      }
-      regel = rest
-    }
-  }
-  if (regel) regels.push(regel)
-  return regels
-}
 
 /**
  * Haalt een afbeelding op en maakt er een compacte JPEG van op maat.

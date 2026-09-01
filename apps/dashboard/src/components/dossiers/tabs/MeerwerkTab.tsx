@@ -11,10 +11,14 @@ import {
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
 import MeerwerkCalculatie from '@/components/everts-calc/calculatie/MeerwerkCalculatie'
+import { parseGetal } from '@/lib/everts-calc/calculations'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
+
+/** Handmatig getypt getal → number, of null bij een leeg veld. Accepteert komma én punt. */
+const naarGetal = (tekst: string): number | null => (tekst.trim() === '' ? null : parseGetal(tekst))
 
 const STATUS_TONE: Record<MeerwerkStatus, 'neutral' | 'info' | 'success' | 'error' | 'brand'> = {
   aangevraagd: 'neutral', offerte_verstuurd: 'info', akkoord: 'success', afgewezen: 'error', voltooid: 'brand',
@@ -34,11 +38,28 @@ const STATUS_SELECT_TONE: Record<MeerwerkStatus, string> = {
 const inlineInputCls =
   'w-full rounded border border-neutral-200 bg-white px-1.5 py-1 text-[12.5px] text-neutral-800 outline-none focus:border-brand-500'
 
+/**
+ * Voorstel voor de koptekst boven het PDF-overzicht. De gebruiker kan hem per keer aanpassen;
+ * de tekst gaat als querystring mee naar de PDF-route en wordt nergens bewaard.
+ */
+const STANDAARD_KOPTEKST =
+  'Hieronder vindt u het overzicht van het meerwerk bij dit project, gegroepeerd per status. '
+  + 'Per regel staan het bedrag exclusief btw, het btw-tarief en het bedrag inclusief btw vermeld.'
+
 const LEGE_NIEUW: NieuweMeerwerkData = {
   omschrijving: '', afrekenwijze: 'aangenomen', is_stelpost: false, stelpost_grondslag: null,
   bedrag_excl_btw: null, eenheid: null, eenheidsprijs: null, hoeveelheid_werkelijk: null,
   btw_pct: null, factuurreferentie: null,
 }
+
+/**
+ * De getypte tekst van de bedragvelden staat apart van `nieuw`: zou je elke
+ * toetsaanslag meteen door `Number()` halen en teruggeven aan het invoerveld,
+ * dan verdwijnt de komma zodra je hem typt ("12," → 12) en kun je nooit een
+ * decimaal invoeren. Pas bij Toevoegen worden deze velden omgezet naar getallen.
+ */
+type RuweBedragen = { btw_pct: string; eenheidsprijs: string; bedrag_excl_btw: string }
+const LEGE_RUW: RuweBedragen = { btw_pct: '', eenheidsprijs: '', bedrag_excl_btw: '' }
 
 type MeerwerkTabProps = {
   dossierId: string
@@ -58,6 +79,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const { bevestig, vraagTekst } = useDialogen()
   const [formOpen, setFormOpen] = useState(false)
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
+  const [ruw, setRuw] = useState<RuweBedragen>(LEGE_RUW)
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
 
   function herlaad() {
@@ -68,11 +90,35 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   async function voegToe() {
     if (!nieuw.omschrijving.trim()) { toast.error('Geef een omschrijving op.'); return }
     setBezig(true)
-    const r = await maakMeerwerkRegel(dossierId, nieuw)
+    const r = await maakMeerwerkRegel(dossierId, {
+      ...nieuw,
+      btw_pct: naarGetal(ruw.btw_pct),
+      eenheidsprijs: naarGetal(ruw.eenheidsprijs),
+      bedrag_excl_btw: naarGetal(ruw.bedrag_excl_btw),
+    })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
     toast.success('Meerwerkregel toegevoegd')
-    setNieuw(LEGE_NIEUW); setFormOpen(false); herlaad()
+    setNieuw(LEGE_NIEUW); setRuw(LEGE_RUW); setFormOpen(false); herlaad()
+  }
+
+  /**
+   * Opent het meerwerkoverzicht (PDF) in een nieuw tabblad. De koptekst vragen we vooraf: het
+   * overzicht gaat naar de opdrachtgever en verdient een eigen inleiding per project.
+   */
+  async function pdfOverzicht() {
+    const kop = await vraagTekst({
+      titel: 'Meerwerkoverzicht als PDF',
+      omschrijving: 'De koptekst komt onder de projectgegevens en boven het overzicht. Laat leeg om hem weg te laten.',
+      label: 'Koptekst',
+      meerregelig: true,
+      standaard: STANDAARD_KOPTEKST,
+      bevestigLabel: 'Overzicht openen',
+    })
+    if (kop === null) return
+    const url = `/api/dossiers/${dossierId}/meerwerk/pdf?kop=${encodeURIComponent(kop)}`
+    // Popupblokkers weren soms een window.open na een dialoog; dan maar in ditzelfde tabblad.
+    if (!window.open(url, '_blank', 'noopener')) window.location.href = url
   }
 
   async function wijzigStatus(regel: MeerwerkRegelView, status: MeerwerkStatus) {
@@ -163,11 +209,17 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
         <CardHeader>
           <div className="flex w-full items-center justify-between">
             <span>Meerwerk</span>
-            {!readOnly && (
-              <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
-                {formOpen ? 'Annuleren' : 'Nieuwe meerwerkregel'}
+            <div className="flex items-center gap-2">
+              {/* Ook op een afgesloten dossier: een overzicht opvragen is lezen, geen wijziging. */}
+              <Button variant="secondary" onClick={pdfOverzicht} disabled={bezig}>
+                Overzicht (PDF)
               </Button>
-            )}
+              {!readOnly && (
+                <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
+                  {formOpen ? 'Annuleren' : 'Nieuwe meerwerkregel'}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardBody>
@@ -188,8 +240,8 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                 </label>
                 <label className="text-[12px] font-medium text-neutral-700">
                   BTW %
-                  <Input inputMode="decimal" value={nieuw.btw_pct ?? ''} placeholder="21"
-                    onChange={e => setNieuw({ ...nieuw, btw_pct: e.target.value ? Number(e.target.value.replace(',', '.')) : null })} />
+                  <Input inputMode="decimal" value={ruw.btw_pct} placeholder="21"
+                    onChange={e => setRuw({ ...ruw, btw_pct: e.target.value })} />
                 </label>
                 <label className="col-span-2 flex items-center gap-2 text-[12px] font-medium text-neutral-700">
                   <input type="checkbox" checked={nieuw.is_stelpost ?? false}
@@ -214,15 +266,15 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                     </label>
                     <label className="text-[12px] font-medium text-neutral-700">
                       Eenheidsprijs (excl. btw)
-                      <Input inputMode="decimal" value={nieuw.eenheidsprijs ?? ''}
-                        onChange={e => setNieuw({ ...nieuw, eenheidsprijs: e.target.value ? Number(e.target.value.replace(',', '.')) : null })} />
+                      <Input inputMode="decimal" value={ruw.eenheidsprijs}
+                        onChange={e => setRuw({ ...ruw, eenheidsprijs: e.target.value })} />
                     </label>
                   </>
                 ) : (nieuw.afrekenwijze === 'aangenomen' && !nieuw.is_stelpost) ? (
                   <label className="text-[12px] font-medium text-neutral-700">
                     Bedrag (excl. btw)
-                    <Input inputMode="decimal" value={nieuw.bedrag_excl_btw ?? ''}
-                      onChange={e => setNieuw({ ...nieuw, bedrag_excl_btw: e.target.value ? Number(e.target.value.replace(',', '.')) : null })} />
+                    <Input inputMode="decimal" value={ruw.bedrag_excl_btw}
+                      onChange={e => setRuw({ ...ruw, bedrag_excl_btw: e.target.value })} />
                   </label>
                 ) : (
                   <div className="text-[11px] text-neutral-500 self-end pb-2">Bedrag wordt live berekend uit geboekte uren/kosten op de bewakingscode.</div>
@@ -338,7 +390,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                     <td className="py-2 px-2 text-right tabular-nums font-semibold text-neutral-900">
                       {bedragBewerkbaar ? (
                         <input className={`${inlineInputCls} text-right`} inputMode="decimal" defaultValue={r.bedrag_excl_btw ?? ''} disabled={bezig}
-                          onBlur={e => { const v = e.target.value ? Number(e.target.value.replace(',', '.')) : null; if (v !== oudBedrag) wijzigVeld(r.id, { bedrag_excl_btw: v }) }} />
+                          onBlur={e => { const v = naarGetal(e.target.value); if (v !== oudBedrag) wijzigVeld(r.id, { bedrag_excl_btw: v }) }} />
                       ) : (
                         fmt(r.effectiefExcl)
                       )}
