@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
+import { bepaalUitvoerActies } from '@/lib/taken/uitvoeracties'
+import TaakUitvoerKnop, { UitvoerBadge } from './TaakUitvoerKnop'
 
 export type MobielTaak = {
   id: string
@@ -69,7 +71,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
       {zichtbaar.map(taak => {
         const prio = PRIO[taak.prioriteit] ?? PRIO.normaal
         const dl = deadlineLabel(taak.deadline)
-        const isToolbox = !!taak.toolbox_toewijzing_id
+        const acties = bepaalUitvoerActies(taak)
         return (
           <div
             key={taak.id}
@@ -79,18 +81,12 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
               border: '1px solid var(--border)', borderRadius: 12,
             }}
           >
-            {isToolbox ? (
-              <div
-                aria-label="Toolbox — rond af via de doorloop"
-                title="Deze actie sluit automatisch zodra je de toolbox hebt doorlopen"
-                style={{
-                  width: 22, height: 22, flexShrink: 0, marginTop: 1,
-                  borderRadius: 6, border: '2px solid var(--border)', background: '#f7f9fa',
-                  display: 'grid', placeItems: 'center', fontSize: 12,
-                }}
-              >
-                🦺
-              </div>
+            {/* Hangt er een doorloop aan de actie, dan geen afvinkvakje: het formulier, de ronde
+                of de toolbox zet de actie zelf op gereed. Handmatig afvinken zou de registratie
+                overslaan en wordt daarom ook serverzijdig geweigerd. Bij meerdere doorlopen
+                staat het icoon van de eerste; de knoppen eronder tonen ze alle drie. */}
+            {acties.length > 0 ? (
+              <UitvoerBadge actie={acties[0]} />
             ) : (
               <button
                 onClick={() => vinkAf(taak.id)}
@@ -147,57 +143,12 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                   <span style={{ fontSize: 10, fontWeight: 700, color: dl.kleur }}>{dl.tekst}</span>
                 )}
               </div>
-              {taak.formulier_template_id && (
-                <Link
-                  href={`/m/taken/${taak.id}/formulier`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
-                    padding: '8px 12px', borderRadius: 8,
-                    background: '#eef4ff', color: '#1f6feb',
-                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                  }}
-                >
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M9 13h6m-6 4h6M9 9h1M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
-                  </svg>
-                  Formulier invullen
-                </Link>
-              )}
-              {taak.kwaliteit_ronde && (
-                // Bewust een volle, gevulde knop en niet het lichte pilletje van de formulier- en
-                // toolbox-links: een kwaliteitsronde is een half uur werk op een steiger, en de
-                // ingang daarnaartoe mag je niet over het hoofd zien.
-                <Link
-                  href={`/m/taken/${taak.id}/kwaliteit`}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    marginTop: 12, padding: '13px 16px', borderRadius: 10,
-                    background: '#009439', color: '#fff',
-                    fontSize: 15, fontWeight: 700, textDecoration: 'none',
-                    WebkitTapHighlightColor: 'transparent',
-                  }}
-                >
-                  <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
-                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  Kwaliteitsronde starten
-                </Link>
-              )}
-              {taak.toolbox_toewijzing_id && (
-                <Link
-                  href={`/m/toolbox/${taak.toolbox_toewijzing_id}`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10,
-                    padding: '8px 12px', borderRadius: 8,
-                    background: '#ecfdf3', color: '#067647',
-                    fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                  }}
-                >
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M12 2L3 7v6c0 5 3.5 8 9 9 5.5-1 9-4 9-9V7l-9-5z"/>
-                  </svg>
-                  Toolbox openen
-                </Link>
+              {acties.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                  {acties.map(actie => (
+                    <TaakUitvoerKnop key={actie.soort} actie={actie} />
+                  ))}
+                </div>
               )}
             </div>
           </div>

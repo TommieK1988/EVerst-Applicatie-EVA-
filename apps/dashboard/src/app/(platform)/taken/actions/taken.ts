@@ -49,6 +49,25 @@ export async function haalTaakVoorPaneel(id: string): Promise<TaakMetDetails | n
   return getTaak(id)
 }
 
+/**
+ * Id van de nog openstaande toolbox-toewijzing bij een taak, of null.
+ *
+ * De koppeling hangt aan `toolbox_toewijzingen`, niet aan `tasks`, dus het detailpaneel kan hem
+ * niet uit de taak zelf lezen. Losse action zodat het paneel de startlink kan tonen zoals bij een
+ * formulier en een kwaliteitsronde.
+ */
+export async function getToolboxToewijzingVoorTaak(taakId: string): Promise<string | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data } = await admin
+    .from('toolbox_toewijzingen')
+    .select('id')
+    .eq('task_id', taakId)
+    .neq('status', 'afgerond')
+    .maybeSingle()
+  return (data?.id as string | undefined) ?? null
+}
+
 export async function updateActielijst(id: string, formData: FormData): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -185,7 +204,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // Haal dossier_id op (direct of via de lijst) zodat completion-acties het kunnen gebruiken
   const { data: oud } = await supabase
     .from('tasks')
-    .select('status, lijst_id, dossier_id, blocked_by_task_id, task_lists(dossier_id)')
+    .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, kwaliteit_ronde, task_lists(dossier_id)')
     .eq('id', id)
     .single()
 
@@ -225,12 +244,18 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     }
   }
 
-  // Toolbox-afdwingen: een taak die aan een toolbox-toewijzing hangt mag niet
-  // handmatig op 'gereed'. Hij sluit automatisch zodra de medewerker de toolbox
-  // (slides + kennischeck + handtekening) op zijn telefoon heeft doorlopen.
+  // Doorloop-afdwingen: hangt er een uit te voeren registratie aan de taak, dan mag hij niet
+  // handmatig op 'gereed'. Alle drie doorlopen sluiten de taak zélf zodra ze af zijn; handmatig
+  // afvinken zou de registratie overslaan. In de mobiele actielijst is het vinkje daarom ook
+  // vervangen door een badge -- dit is de sluitende kant daarvan.
+  //
+  // Veilig t.o.v. de automatische sluitingen: die schrijven de onderliggende rij éérst definitief
+  // en roepen deze functie daarná aan (submitFormInzending zet 'ingediend', rondInspectieAf zet
+  // 'definitief', de toolbox-deelname 'afgerond'), dus ze komen hier langs.
   if (status === 'gereed') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const admin = createAdminClient() as any
+
     const { data: tb } = await admin
       .from('toolbox_toewijzingen')
       .select('status')
@@ -238,6 +263,28 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       .maybeSingle()
     if (tb && tb.status !== 'afgerond') {
       throw new Error('Deze taak wordt automatisch afgerond zodra je de toolbox op je telefoon hebt doorlopen.')
+    }
+
+    if (oud?.formulier_template_id) {
+      const { count } = await admin
+        .from('form_inzendingen')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', id)
+        .in('status', ['ingediend', 'goedgekeurd'])
+      if (!count) {
+        throw new Error('Deze taak wordt automatisch afgerond zodra je het gekoppelde formulier hebt ingediend.')
+      }
+    }
+
+    if (oud?.kwaliteit_ronde) {
+      const { count } = await admin
+        .from('kwaliteit_inspecties')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', id)
+        .eq('status', 'definitief')
+      if (!count) {
+        throw new Error('Deze taak wordt automatisch afgerond zodra de kwaliteitsronde definitief is.')
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import React from 'react';
+import toast from 'react-hot-toast';
 import {
   IconCheck, IconBuilding, IconSparkle,
   IconSun, IconPlus,
@@ -187,7 +188,14 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
       return next;
     });
     startTransition(async () => {
-      try { await updateTaakStatus(id, 'gereed'); } catch { /* optimistic — no revert needed */ }
+      try {
+        await updateTaakStatus(id, 'gereed');
+      } catch (e) {
+        // Wél terugdraaien: een actie met een doorloop (formulier, kwaliteitsronde, toolbox)
+        // wordt geweigerd, en dan mag het vinkje hier niet blijven staan.
+        setDoneIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+        toast.error(e instanceof Error ? e.message : 'Fout bij afvinken');
+      }
     });
   };
 

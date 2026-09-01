@@ -758,9 +758,11 @@ function TakenBlok({
       try {
         await updateTaakStatus(id, 'gereed')
         router.refresh()
-      } catch {
-        // optimistisch — bij fout terugdraaien
+      } catch (e) {
+        // optimistisch — bij fout terugdraaien, en zeggen waaróm: een actie met een doorloop
+        // (formulier, kwaliteitsronde, toolbox) sluit alleen via die doorloop.
         setAfgevinkt(prev => { const n = new Set(prev); n.delete(id); return n })
+        toast.error(e instanceof Error ? e.message : 'Fout bij afvinken')
       }
     })
   }

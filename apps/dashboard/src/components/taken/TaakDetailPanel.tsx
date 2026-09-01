@@ -6,7 +6,7 @@ import { cn } from '@/lib/taken/utils'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee } from '@/app/(platform)/taken/actions/taken'
+import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee, getToolboxToewijzingVoorTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import TaakCompletionActies from './TaakCompletionActies'
@@ -99,11 +99,14 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const [formulierTemplateId, setFormulierTemplateId] = useState(taak.formulier_template_id ?? '')
   const [kwaliteitRonde, setKwaliteitRonde] = useState(taak.kwaliteit_ronde ?? false)
   const [formulieren, setFormulieren] = useState<{ id: string; naam: string; categorie: string | null }[]>([])
+  /** Openstaande toolbox-toewijzing; hangt naast `tasks`, dus apart ophalen. */
+  const [toolboxId, setToolboxId] = useState<string | null>(null)
 
   useEffect(() => {
     getMedewerkersVoorToewijzing().then(setMedewerkers)
     getGepubliceerdeFormulieren().then(setFormulieren)
-  }, [])
+    getToolboxToewijzingVoorTaak(taak.id).then(setToolboxId).catch(() => setToolboxId(null))
+  }, [taak.id])
 
   const handleStatusChange = (status: TaskStatus) => {
     setStatusFout(null)
@@ -453,6 +456,31 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
             </a>
           )}
         </div>
+
+        {/* Toolbox — geen instelling maar een constatering: de toewijzing wordt vanuit de
+            toolbox-agenda klaargezet. Alleen de ingang ernaartoe hoort hier, in dezelfde vorm
+            als de twee links hierboven. */}
+        {toolboxId && (
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">
+              <FileText className="inline w-3.5 h-3.5 mr-1" />
+              Toolbox
+            </label>
+            <a
+              href={`/m/toolbox/${toolboxId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-everts/30 px-2 py-1.5 text-xs text-everts hover:bg-everts/5 transition-colors"
+              title="Toolbox openen"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Toolbox openen
+            </a>
+            <p className="mt-1 text-[11px] text-slate-500">
+              De actie gaat automatisch op gereed zodra de toolbox is doorlopen.
+            </p>
+          </div>
+        )}
 
         {/* Toewijzingen */}
         <div>

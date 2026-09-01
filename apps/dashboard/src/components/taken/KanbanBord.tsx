@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Plus } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { cn } from '@/lib/taken/utils'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import TaakKaart from './TaakKaart'
@@ -170,8 +171,19 @@ export default function KanbanBord({ taken, lijsten, isTemplate, context = 'doss
 
     // Alleen server call als status daadwerkelijk veranderd is
     if (taak.status !== nieuweStatus) {
-      startTransition(() => {
-        updateTaakStatus(active.id as string, nieuweStatus)
+      // `handleDragOver` heeft de kaart al verplaatst. Weigert de server -- een actie met een
+      // formulier, kwaliteitsronde of toolbox sluit alleen via die doorloop -- dan moet hij
+      // terugspringen, anders staat er iets op het bord wat niet in de database staat.
+      const vorigeStatus = taak.status
+      startTransition(async () => {
+        try {
+          await updateTaakStatus(active.id as string, nieuweStatus)
+        } catch (e) {
+          setLokaalTaken(prev =>
+            prev.map(t => t.id === active.id ? { ...t, status: vorigeStatus } : t)
+          )
+          toast.error(e instanceof Error ? e.message : 'Fout bij wijzigen status')
+        }
       })
     }
   }
