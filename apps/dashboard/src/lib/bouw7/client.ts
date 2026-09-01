@@ -1180,6 +1180,12 @@ export type Bouw7SalesInvoice = {
   vatTotal?: string | number
   total?: string | number
   isMailed?: boolean
+  /**
+   * Interne notitie van de factuur (rich text/HTML). Zelfde veld als `internalNote` op de
+   * `InvoiceDocument` van `GET /invoice/{id}` — de administratie noteert hier het
+   * debiteurencontact. Op de lijst heet het `note`; die naam volgen we hier.
+   */
+  note?: string | null
 }
 
 /**

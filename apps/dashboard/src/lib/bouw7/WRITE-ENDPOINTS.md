@@ -756,7 +756,7 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 | **4** | **Urenregistratie** | `POST /project/hour-log` | Hoge businesswaarde (mobiele buitendienst), maar vereist medewerker-koppeling + uursoort-mapping |
 | **5** | **Bonnen / leverbonnen** | `POST /project/delivery-ticket` | |
 | ~~**6**~~ | ~~**Offertes**~~ | ~~`POST /quotation`~~ | **Vervallen** — EVA schrijft alleen de offerte-substatus naar Bouw7, geen offertes (zie hierboven) |
-| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg |
+| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg. **Deels live:** alleen de interne factuurnotitie, zie §7a |
 
 **Per fase telkens dezelfde stappen:** (a) `Condensed*`-mapper EVA→Bouw7 schrijven, (b) `client.post/del` aanroepen, (c) resultaat (id) terugschrijven naar `bouw7_id`, (d) `logSync()`, (e) `sync_vergrendeld`/`bron`-velden respecteren om schrijf-loops te voorkomen.
 
@@ -771,6 +771,44 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 - **Idempotentie.** Upsert op `id` is veilig; create zonder `id` twee keer = dubbele records. Altijd eerst `bouw7_id` checken.
 - ~~Achterhaalde "write-API nog niet bekend"-notitie~~ — gecorrigeerd in [`ENDPOINTS.md`](./ENDPOINTS.md) (Apollo-sectie). `client.ts` heeft nu `post()/put()/del()`.
 - **Audit/fiscaal.** Verzonden facturen zijn onveranderbaar (creditnota i.p.v. wijzigen) — relevant vanaf fase 7.
+
+---
+
+## 7a. Interne factuurnotitie terugschrijven — LIVE (geverifieerd sep 2026)
+
+De interne notitie op een verkoopfactuur (`InvoiceListItem.note` = `InvoiceDocument.internalNote`) is
+het enige factuurveld dat EVA schrijft. De administratie houdt daar het debiteurencontact bij; het
+Facturen-scherm leest hem én schrijft er nieuwe logboekregels in bij.
+
+| Doel | Endpoint | Body |
+|---|---|---|
+| Huidige notitie + document lezen | `GET /invoice/{id}` | — |
+| Notitie schrijven | `POST /invoice` | het complete `InvoiceDocument` terug, met alléén `internalNote` vervangen |
+
+**Er is geen smal notitie-endpoint.** `/invoice/{id}` staat alleen `GET, DELETE` toe (een POST geeft
+"Method Not Allowed") en `/invoice/set-internal-note` bestaat niet — ondanks het wél bestaande
+`/project/set-internal-note`. Beide geverifieerd tegen de live API.
+
+**Read-modify-write met het volledige document, letterlijk zoals opgehaald** — inclusief de
+audit-velden `createdAt/createdBy/updatedAt/updatedBy` (bij to-do's strippen we die juist; hier staan
+ze in de spec als `required`). Op een factuur is elke afwijking van wat de UI stuurt er één te veel.
+
+**Gemeten:** een volledige round-trip (`GET` → `POST` met alleen `internalNote` anders) veranderde
+op een openstaande, in Exact geboekte factuur *niets* behalve `updatedAt`/`updatedBy` — alle 60+ velden
+identiek, inclusief factuurnummer, status, datums, bijlagen, verzonden e-mails, regel-id's en bedragen.
+`updatedBy` wordt wel de API-gebruiker (Beheerder EOB); de auteursnaam staat daarom in de notitietekst zelf.
+
+**Controle na de write:** de POST geeft het bijgewerkte document terug. `voegRegelToeAanInterneNotitie`
+vergelijkt daarop de fiscale kern (id, factuurnummer, status, `isCredit`, datums, aantal regels,
+regelsom) met de stand vóór de write en meldt een afwijking hard — stil falen mag hier niet.
+
+**Opmaak:** nieuwste regel bovenaan, gescheiden door `<hr>`, in de huisstijl die de administratie zelf
+gebruikt: `<p><strong>1-9-26</strong>, Naam (EVA)<br>tekst</p>`. Onderaan aanplakken zou de leesvolgorde
+omkeren. De tekst uit EVA wordt HTML-escaped.
+
+Code: [`lib/bouw7/invoice-note.ts`](./invoice-note.ts) · aanroep vanuit `addDebiteurLogboek`
+(`lib/debiteuren/actions.ts`), fail-soft: mislukt de write, dan blijft de EVA-logboekregel staan en
+krijgt de gebruiker een waarschuwing.
 
 ---
 

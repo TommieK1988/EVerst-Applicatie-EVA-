@@ -1811,6 +1811,7 @@ export async function syncDebiteuren(opts?: { mode?: SyncMode }): Promise<SyncRe
         bed:  bedrag,
         fd:   toDate(inv.date),
         vd:   toDate(inv.dueDate),
+        note: inv.note ?? null,
       })
       return {
         invoiceId,
@@ -1829,6 +1830,7 @@ export async function syncDebiteuren(opts?: { mode?: SyncMode }): Promise<SyncRe
           datum_betaald:     toDate(inv.datePaid),
           is_credit:         false,
           bouw7_status:      inv.status ?? null,
+          interne_notitie:   bouw7RichTextNaarTekst(inv.note ?? '') || null,
           bouw7_sync_hash:   hash,
           bouw7_laatst_sync: nu.toISOString(),
         },
@@ -2234,7 +2236,7 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
  * Behoudt de structuur: paragrafen en <br> worden regeleindes, lijst-items krijgen
  * een bullet. Platte tekst zonder tags passeert vrijwel ongewijzigd.
  */
-function bouw7RichTextNaarTekst(html: string): string {
+export function bouw7RichTextNaarTekst(html: string): string {
   if (!html) return ''
   let s = html
     .replace(/\r\n?/g, '\n')

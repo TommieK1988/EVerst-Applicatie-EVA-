@@ -145,6 +145,26 @@ const KOLOMMEN: KolomDefinitie<DebiteurRij>[] = [
     render: r => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{datum(r.opvolgdatum)}</span>,
   },
   {
+    key: 'interne_notitie',
+    label: 'Interne notitie (Bouw7)',
+    breedte: 280,
+    filterType: 'tekst',
+    sorteerWaarde: r => r.interne_notitie ?? '',
+    // Een notitie loopt over meerdere regels; in de tabel plakken we die op één lijn aan elkaar
+    // en zetten we de volledige tekst in de tooltip.
+    render: r => (
+      <span
+        title={r.interne_notitie ?? undefined}
+        style={{
+          display: 'block', fontSize: 12, color: 'var(--fg-soft)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >
+        {r.interne_notitie ? r.interne_notitie.replace(/\s*\n\s*/g, ' · ') : '—'}
+      </span>
+    ),
+  },
+  {
     key: 'dagen_na_factuurdatum',
     label: 'Dagen (factuur)',
     breedte: 110,

@@ -2,9 +2,10 @@
 
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { getEffectieveRechten } from '@/lib/auth/rechten'
+import { getEffectieveRechten, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
-import { syncDebiteuren } from '@/lib/bouw7/sync'
+import { syncDebiteuren, bouw7RichTextNaarTekst } from '@/lib/bouw7/sync'
+import { voegRegelToeAanInterneNotitie } from '@/lib/bouw7/invoice-note'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -39,6 +40,8 @@ export type DebiteurRij = {
   opvolgdatum: string | null
   opvolgstatus: DebiteurOpvolgstatus
   task_id: string | null
+  /** Interne notitie van de factuur in Bouw7 (platte tekst; kan meerdere regels bevatten). */
+  interne_notitie: string | null
   /** Heeft minstens één logboekregel. */
   heeft_logboek: boolean
   /** >60 dagen te laat én verplichte opvolgvelden/logboek nog niet compleet. */
@@ -78,7 +81,7 @@ export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promis
   const supabase = db()
   let q = supabase
     .from('debiteuren')
-    .select('id, factuurnummer, klant_naam, project_titel, dossier_id, bouw7_project_id, projectleider_id, bedrag, factuurdatum, vervaldatum, status, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum, opvolgstatus, task_id')
+    .select('id, factuurnummer, klant_naam, project_titel, dossier_id, bouw7_project_id, projectleider_id, bedrag, factuurdatum, vervaldatum, status, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum, opvolgstatus, task_id, interne_notitie')
   if (!opts?.includeBetaald) q = q.eq('status', 'open')
   const { data: rows } = await q
   const debiteuren: Record<string, unknown>[] = rows ?? []
@@ -143,6 +146,7 @@ export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promis
       opvolgdatum: (d.opvolgdatum as string | null) ?? null,
       opvolgstatus: (d.opvolgstatus as DebiteurOpvolgstatus) ?? 'nieuw',
       task_id: (d.task_id as string | null) ?? null,
+      interne_notitie: (d.interne_notitie as string | null) ?? null,
       heeft_logboek: heeftLogboek,
       verplicht_incompleet: verplichtPeriode && !veldenCompleet,
     }
@@ -294,8 +298,17 @@ export async function updateDebiteurEnrichment(id: string, data: EnrichmentInput
   return { ok: true }
 }
 
-/** Voeg een logboekregel toe aan een debiteur (op naam van de ingelogde gebruiker). */
-export async function addDebiteurLogboek(debiteurId: string, tekst: string): Promise<ActionResult> {
+export type LogboekResultaat = { ok: true; bouw7Waarschuwing?: string } | { ok: false; error: string }
+
+/**
+ * Voeg een logboekregel toe aan een debiteur (op naam van de ingelogde gebruiker) én schrijf
+ * hem bij in de interne notitie van de factuur in Bouw7.
+ *
+ * De EVA-regel is leidend: mislukt het terugschrijven, dan blijft de logboekregel gewoon staan
+ * en krijgt de gebruiker een waarschuwing. Een factuurnotitie is te belangrijk om stil te laten
+ * mislukken, maar niet belangrijk genoeg om het vastleggen in EVA op te blokkeren.
+ */
+export async function addDebiteurLogboek(debiteurId: string, tekst: string): Promise<LogboekResultaat> {
   if (!tekst.trim()) return { ok: false, error: 'Lege opmerking.' }
   let userId: string | null = null
   try {
@@ -306,6 +319,45 @@ export async function addDebiteurLogboek(debiteurId: string, tekst: string): Pro
   const supabase = db()
   const { error } = await supabase.from('debiteur_logboek').insert({ debiteur_id: debiteurId, user_id: userId, tekst: tekst.trim() })
   if (error) return { ok: false, error: error.message }
+
+  const waarschuwing = await spiegelLogboekNaarBouw7(debiteurId, tekst.trim())
   revalidatePath('/facturen')
-  return { ok: true }
+  return waarschuwing ? { ok: true, bouw7Waarschuwing: waarschuwing } : { ok: true }
+}
+
+/**
+ * Schrijf één logboekregel bij in de Bouw7-notitie van de factuur en houd de EVA-kopie gelijk,
+ * zodat de regel meteen zichtbaar is zonder op de volgende sync te wachten.
+ *
+ * @returns een waarschuwingstekst wanneer het terugschrijven niet lukte, anders `null`.
+ */
+async function spiegelLogboekNaarBouw7(debiteurId: string, tekst: string): Promise<string | null> {
+  const supabase = db()
+  const { data: deb } = await supabase
+    .from('debiteuren')
+    .select('bouw7_invoice_id')
+    .eq('id', debiteurId)
+    .maybeSingle()
+  if (!deb?.bouw7_invoice_id) return null
+
+  // De naam is alleen opmaak in de kopregel; kan hij niet gelezen worden, dan schrijven we de
+  // regel liever naamloos weg dan de hele opslagactie te laten klappen.
+  let auteur: string | null = null
+  try {
+    auteur = volledigeNaam(await getCurrentMedewerker())
+  } catch { /* geen sessie of medewerker-record */ }
+
+  const res = await voegRegelToeAanInterneNotitie(deb.bouw7_invoice_id as string, tekst, auteur)
+  if (!res.ok) {
+    return `De opmerking staat in EVA, maar kon niet in Bouw7 worden bijgeschreven: ${res.error}`
+  }
+  if (res.notitieHtml != null) {
+    // De hash bewust niet meeschrijven: die wijkt nu af van de bron, waardoor de eerstvolgende
+    // incrementele sync deze factuur oppakt en de notitie canoniek uit Bouw7 terugleest.
+    await supabase
+      .from('debiteuren')
+      .update({ interne_notitie: bouw7RichTextNaarTekst(res.notitieHtml) || null })
+      .eq('id', debiteurId)
+  }
+  return null
 }

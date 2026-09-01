@@ -85,6 +85,8 @@ export default function DebiteurPaneel({ rij, redencodes, medewerkers, magBewerk
       if (nieuweOpmerking.trim()) {
         const logRes = await addDebiteurLogboek(rij.id, nieuweOpmerking)
         if (!logRes.ok) { toast.error(logRes.error); return }
+        // De opmerking staat in EVA; lukte het bijschrijven in Bouw7 niet, dan moet dat blijken.
+        if (logRes.bouw7Waarschuwing) toast.error(logRes.bouw7Waarschuwing, { duration: 8000 })
       }
       toast.success('Opvolging opgeslagen')
       router.refresh()
@@ -121,6 +123,19 @@ export default function DebiteurPaneel({ rij, redencodes, medewerkers, magBewerk
                 }}>
                   Deze factuur is &gt;60 dagen te laat. Reden, actie, actiehouder, opvolgdatum én een
                   opmerking zijn verplicht — de opvolgtaak kan pas worden afgerond als alles ingevuld is.
+                </div>
+              )}
+
+              {/* Interne notitie zoals die in Bouw7 op de factuur staat. Bewust platte tekst:
+                  Bouw7 levert rich text aan en die renderen we nergens als HTML. */}
+              {rij.interne_notitie && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>Interne notitie (Bouw7)</label>
+                  <div style={{
+                    padding: '9px 11px', borderRadius: 8, background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)', fontSize: 13, color: 'var(--fg)',
+                    whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto',
+                  }}>{rij.interne_notitie}</div>
                 </div>
               )}
 
@@ -186,8 +201,13 @@ export default function DebiteurPaneel({ rij, redencodes, medewerkers, magBewerk
                     ))}
                   </div>
                   {magBewerken && (
-                    <textarea style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }} value={nieuweOpmerking}
-                      onChange={e => setNieuweOpmerking(e.target.value)} placeholder="Nieuwe opmerking toevoegen…" />
+                    <>
+                      <textarea style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }} value={nieuweOpmerking}
+                        onChange={e => setNieuweOpmerking(e.target.value)} placeholder="Nieuwe opmerking toevoegen…" />
+                      <div style={{ fontSize: 11, color: 'var(--fg-soft)', marginTop: 5 }}>
+                        Wordt ook bijgeschreven in de interne notitie van deze factuur in Bouw7.
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
