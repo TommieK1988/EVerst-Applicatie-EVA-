@@ -6,6 +6,7 @@ import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platfo
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { getBouw7RawConfig } from './config'
 import { fingerprint } from './fingerprint'
+import { bouw7RichTextNaarTekst } from './rich-text'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
@@ -2227,42 +2228,6 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
   }
   await logSync('bouw7_todos', 'in', result, Date.now() - start)
   return result
-}
-
-/**
- * Zet Bouw7 rich-text (de `note`/`information`-velden komen als HTML binnen) om naar
- * leesbare platte tekst. De notitie-weergave rendert bewust géén HTML (geen
- * dangerouslySetInnerHTML → geen XSS), dus de opmaak moet hier al platgeslagen zijn.
- * Behoudt de structuur: paragrafen en <br> worden regeleindes, lijst-items krijgen
- * een bullet. Platte tekst zonder tags passeert vrijwel ongewijzigd.
- */
-export function bouw7RichTextNaarTekst(html: string): string {
-  if (!html) return ''
-  let s = html
-    .replace(/\r\n?/g, '\n')
-    // lijst-items → bullet op eigen regel
-    .replace(/<li[^>]*>/gi, '\n• ')
-    .replace(/<\/li>/gi, '')
-    // regel- en paragraaf-scheiders
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|ul|ol|tr)>/gi, '\n')
-    // resterende tags weg
-    .replace(/<[^>]+>/g, '')
-  // veelvoorkomende HTML-entities decoderen
-  s = s
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
-  // whitespace opschonen: spaties per regel trimmen, max één lege regel
-  return s
-    .split('\n')
-    .map(r => r.replace(/[ \t]+/g, ' ').trim())
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 /**

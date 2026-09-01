@@ -4,7 +4,8 @@ import { createAdminClient, createClient as createServerClient } from '@everts/d
 import { revalidatePath } from 'next/cache'
 import { getEffectieveRechten, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
-import { syncDebiteuren, bouw7RichTextNaarTekst } from '@/lib/bouw7/sync'
+import { syncDebiteuren } from '@/lib/bouw7/sync'
+import { bouw7RichTextNaarTekst } from '@/lib/bouw7/rich-text'
 import { voegRegelToeAanInterneNotitie } from '@/lib/bouw7/invoice-note'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
