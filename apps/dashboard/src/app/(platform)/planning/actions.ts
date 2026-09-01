@@ -60,6 +60,14 @@ async function checkBudget(
 
   const supabase = db()
 
+  // De geplande uren worden server-side afgebakend op dít dossier én deze uursoort.
+  //
+  // Hiervoor haalde deze query ALLE planitems op en filterde daarna in JavaScript. Dat ging op twee
+  // manieren mis. Ten eerste kapte PostgREST de respons stil af op 1000 rijen, waardoor de telling
+  // te laag uitviel en de waarschuwing uitbleef. Ten tweede — en dat is de zwaardere fout — werd er
+  // alleen op uursoort gefilterd en niet op dossier: een begroting van één dossier werd vergeleken
+  // met de geplande uren van álle dossiers samen, dus juist te hóóg. Beide fouten verdwijnen door
+  // het filter naar de database te verplaatsen; per dossier blijft het resultaat ruim onder 1000.
   const [budgetRes, geplandeRes] = await Promise.all([
     supabase
       .from('planning_werkbegroting_regels')
@@ -68,23 +76,21 @@ async function checkBudget(
       .eq('uursoort_id', uursoort_id)
       .maybeSingle(),
 
+    // `id` staat bewust in de select: zonder dat veld was `e.id` altijd undefined en werkte
+    // exclude_item_id niet, waardoor een verplaatst item bij de controle dubbel meetelde.
     supabase
       .from('planning_items')
-      .select('uren, activiteit_id, planning_activiteiten!activiteit_id(uursoort_id)')
-      .then(async ({ data }: { data: any[] }) => {
-        if (!data) return { data: [], error: null }
-        const relevante = data.filter((e: any) => {
-          if (exclude_item_id && e.id === exclude_item_id) return false
-          return e.planning_activiteiten?.uursoort_id === uursoort_id
-        })
-        return { data: relevante, error: null }
-      }),
+      .select('id, uren, planning_activiteiten!inner(uursoort_id, dossier_id)')
+      .eq('planning_activiteiten.dossier_id', dossier_id)
+      .eq('planning_activiteiten.uursoort_id', uursoort_id),
   ])
 
   if (!budgetRes.data) return { ok: true } // geen begroting = geen check
 
   const begroteUren: number = budgetRes.data.begrote_uren
-  const gepland = (geplandeRes.data ?? []).reduce((sum: number, e: any) => sum + (e.uren ?? 0), 0)
+  const gepland = ((geplandeRes.data ?? []) as { id: string; uren: number | null }[])
+    .filter(e => !exclude_item_id || e.id !== exclude_item_id)
+    .reduce((sum, e) => sum + (e.uren ?? 0), 0)
   const beschikbaar = begroteUren - gepland
 
   if (gepland + extra_uren > begroteUren) {

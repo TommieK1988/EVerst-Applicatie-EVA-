@@ -27,7 +27,7 @@ const PAGINA = 1000
 /** Veiligheidsgrens tegen een oneindige lus als een query zich onverwacht gedraagt. */
 const MAX_PAGINAS = 100
 
-type PaginaResultaat<T> = { data: T[] | null; error: { message: string } | null }
+type PaginaResultaat<T> = { data: T[] | null; error: { message: string; code?: string } | null }
 
 export async function haalAlleRijen<T>(
   pagina: (van: number, tot: number) => PromiseLike<PaginaResultaat<T>>,
@@ -40,7 +40,12 @@ export async function haalAlleRijen<T>(
 
     // Bewust gooien en niet stil doorgaan: een halve dataset is precies de fout die deze
     // helper moet voorkomen. Beter een zichtbare fout dan een pagina die klopt-op-het-oog.
-    if (error) throw new Error(`Pagineren mislukt vanaf rij ${van}: ${error.message}`)
+    // De Postgres-foutcode gaat mee in de tekst, zodat aanroepers die op een specifieke code
+    // reageren (bv. 42P01 "tabel bestaat niet") dat na het vangen nog kunnen zien.
+    if (error) {
+      const code = error.code ? ` [${error.code}]` : ''
+      throw new Error(`Pagineren mislukt vanaf rij ${van}${code}: ${error.message}`)
+    }
 
     const rijen = data ?? []
     alles.push(...rijen)

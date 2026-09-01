@@ -6,6 +6,7 @@ import { fingerprint } from './fingerprint'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import { herberekenDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { evaEigenPlanItemIds } from './plan-item-write'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -568,16 +569,22 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
     // Afgeronde dossiers (opdracht financieel_afgesloten, servicedesk financieel_gereed, gearchiveerd)
     // filteren we hieronder met isActiefDossier — hun planning wijzigt niet meer, dus de Apollo-/detail-
     // calls zijn verspild. De statusvelden halen we mee zodat die canonieke helper kan beslissen.
-    const { data: dossiers, error: dossierErr } = await supabase
-      .from('dossiers')
-      .select('id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd')
-      .not('bouw7_id', 'is', null)
-      .or('hoofdstatus.eq.opdracht,bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
-
-    // Een query-fout mag nooit meer stil tot "0 dossiers" leiden.
-    if (dossierErr) {
+    // Gepagineerd: dit is de lijst die bepaalt WELKE dossiers gesynchroniseerd worden. Kapte
+    // PostgREST hem af op 1000 rijen, dan werden de dossiers erna stilzwijgend overgeslagen —
+    // geen fout, geen melding, alleen planning die maanden achterloopt.
+    let dossiers: (DossierActiefVelden & { id: string })[]
+    try {
+      dossiers = await haalAlleRijen<DossierActiefVelden & { id: string }>((van, tot) => supabase
+        .from('dossiers')
+        .select('id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd')
+        .not('bouw7_id', 'is', null)
+        .or('hoofdstatus.eq.opdracht,bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
+        .order('id')
+        .range(van, tot))
+    } catch (e: unknown) {
+      // Een query-fout mag nooit meer stil tot "0 dossiers" leiden.
       totaal.fouten++
-      totaal.foutMelding = `Dossier-scope query mislukt: ${dossierErr.message}`
+      totaal.foutMelding = `Dossier-scope query mislukt: ${e instanceof Error ? e.message : String(e)}`
       return totaal
     }
 
@@ -585,7 +592,7 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
     const client = await getBouw7Client()
 
     const meldingen: string[] = []
-    for (const d of (dossiers ?? []) as (DossierActiefVelden & { id: string })[]) {
+    for (const d of dossiers) {
       // Afgesloten/vervallen/gearchiveerd → planning is bevroren, sla over (geen Bouw7-calls).
       if (!isActiefDossier(d)) {
         totaal.overgeslagen = (totaal.overgeslagen ?? 0) + 1

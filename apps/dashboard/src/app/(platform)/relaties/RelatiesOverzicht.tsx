@@ -15,7 +15,7 @@ import NieuweParticulierModal from '@/components/relaties/NieuweParticulierModal
 
 /* ─── types ───────────────────────────────────────────────────────── */
 
-type Organisatie = {
+export type Organisatie = {
   id: string
   types: OrganisatieType[]
   naam: string

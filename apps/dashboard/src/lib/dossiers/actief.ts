@@ -11,6 +11,7 @@ import { createAdminClient } from '@everts/database/server'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
 } from '@/components/dossiers/types'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 /** Minimale dossier-vorm die nodig is om actief-zijn te bepalen. */
 export type DossierActiefVelden = {
@@ -148,15 +149,21 @@ export async function getActieveDossierContext(): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { data, error } = await supabase
+  // Gepagineerd: er wordt hier client-side op isActiefDossier gefilterd, dus een afkapping
+  // op 1000 rijen zou dossiers stil buiten de context houden. Zie lib/supabase/paginate.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await haalAlleRijen<any>((van, tot) => supabase
     .from('dossiers')
     .select(DOSSIER_CONTEXT_SELECT)
-
-  if (error) throw new Error(`Fout bij ophalen actieve dossiers: ${error.message}`)
+    .order('id')
+    .range(van, tot),
+  ).catch((e: unknown) => {
+    throw new Error(`Fout bij ophalen actieve dossiers: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
   const context = new Map<string, DossierContext>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (data ?? []) as any[]) {
+  for (const row of data as any[]) {
     if (!isActiefDossier(row)) continue
     context.set(row.id, toContext(row))
   }

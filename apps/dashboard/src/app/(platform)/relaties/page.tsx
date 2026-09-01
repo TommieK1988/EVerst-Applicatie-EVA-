@@ -5,6 +5,8 @@ import { getAlleContactpersonen } from '@/lib/relaties/contactpersonen-actions'
 import { getAlleParticulieren } from '@/lib/relaties/particulieren-actions'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import RelatiesOverzicht from './RelatiesOverzicht'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
+import type { Organisatie } from './RelatiesOverzicht'
 
 export const metadata: Metadata = { title: 'Relaties' }
 
@@ -22,11 +24,15 @@ export default async function RelatiesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [relatiesRes, contactpersonenRes, particulierenRes, layouts, laatsteSync] = await Promise.all([
-    supabase
+  const [relaties, contactpersonenRes, particulierenRes, layouts, laatsteSync] = await Promise.all([
+    // Gepagineerd: het relatiebestand groeit richting de 1000 en PostgREST kapt daarna stil af,
+    // waardoor organisaties zonder melding uit het overzicht vallen. Zie lib/supabase/paginate.ts.
+    haalAlleRijen<Organisatie>((van, tot) => supabase
       .from('relaties')
       .select('id, types, naam, email, telefoon, website, kvk_nummer, btw_nummer, adres_straat, adres_postcode, adres_plaats, adres_land, actief, created_at')
-      .order('naam', { ascending: true }),
+      .order('naam', { ascending: true })
+      .order('id')
+      .range(van, tot)),
     getAlleContactpersonen(),
     getAlleParticulieren(),
     user_id ? laadLayouts(user_id, 'relaties-organisaties') : [],
@@ -35,7 +41,7 @@ export default async function RelatiesPage() {
 
   return (
     <RelatiesOverzicht
-      organisaties={relatiesRes.data ?? []}
+      organisaties={relaties}
       contactpersonen={contactpersonenRes}
       particulieren={particulierenRes}
       layouts={layouts}

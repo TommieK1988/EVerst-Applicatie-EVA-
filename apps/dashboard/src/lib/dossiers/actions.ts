@@ -33,6 +33,7 @@ import {
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 type DossierResult =
   | { ok: true; data: DossierRij[] }
@@ -235,21 +236,36 @@ async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
 }
 
 /** Haal alle dossiers op voor een fase, verrijkt met klant- en rolnamen. */
-export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResult> {
+/**
+ * Eén dossierlijst ophalen: filter erop, gepagineerd uitlezen, verrijken.
+ *
+ * Gepagineerd omdat PostgREST elke respons stil afkapt op 1000 rijen — zonder error, gewoon een
+ * halve lijst. Voor een dossieroverzicht betekent dat: dossiers die de gebruiker niet ziet en
+ * niet mist. Zie lib/supabase/paginate.ts. De extra `.order('id')` maakt de sortering uniek,
+ * anders kan de paginering rijen overslaan of dubbel teruggeven.
+ */
+async function haalDossierLijst(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filter: (q: any) => any,
+): Promise<DossierResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
-    .eq('hoofdstatus', hoofdstatus)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rijen = await haalAlleRijen<any>((van, tot) =>
+      filter(supabase.from('dossiers').select(LIJST_SELECT)).order('id').range(van, tot))
+    return { ok: true, data: await verrijkDossiers(rijen.map(mapRij)) }
+  } catch (e: unknown) {
+    const bericht = e instanceof Error ? e.message : 'Ophalen dossiers mislukt'
+    const missingTable = bericht.includes('does not exist') || bericht.includes('42P01')
+    return { ok: false, error: bericht, missingTable }
   }
+}
 
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResult> {
+  return haalDossierLijst(q => q
+    .eq('hoofdstatus', hoofdstatus)
+    .order('created_at', { ascending: false }))
 }
 
 /**
@@ -258,8 +274,6 @@ export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResu
  * prefix: bijv. '01.' voor aanvragen, '09.' + '08.' voor offertes.
  */
 export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofdstatus?: Hoofdstatus): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
   const likeCondities = prefixen
     .map(p => `bouw7_projectstatus_naam.ilike.${p}%`)
     .join(',')
@@ -269,18 +283,9 @@ export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofd
     ? `${likeCondities},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.${fallbackHoofdstatus})`
     : likeCondities
 
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or(orClause)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /**
@@ -290,12 +295,9 @@ export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofd
  * - Dossiers die de afgelopen 7 dagen zijn verzonden (ook op Offertes zichtbaar)
  */
 export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or(
       // 01-dossiers die via de Bouw7-offertestatus naar hoofdstatus 'offerte' zijn verhuisd
       // (gewonnen/mondelinge toezegging) horen op de Offertes-tab, niet hier.
@@ -303,14 +305,7 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
       `and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.aanvraag),` +
       `and(offerte_substatus.eq.verzonden,verzonden_op.gte.${cutoff})`
     )
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /**
@@ -320,80 +315,36 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
  *   die via de Bouw7-offertestatus (gewonnen/mondelinge toezegging) zijn doorgeschoven.
  */
 export async function getDossiersVoorOffertes(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or(
       'bouw7_projectstatus_naam.ilike.08.%,' +
       'bouw7_projectstatus_naam.ilike.09.%,' +
       'hoofdstatus.eq.offerte'
     )
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /** Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit '08. Afgewezen' uit. */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
 export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .in('bouw7_categorie_naam', ['Dagelijks onderhoud', 'Mutatie'])
     .eq('bouw7_projectstatus_naam', '08. Afgewezen')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /** Haal financieel afgesloten dossiers op (Bouw7 status 07). */
 export async function getDossiersAfgesloten(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or('bouw7_projectstatus_naam.ilike.07.%,and(bouw7_projectstatus_naam.is.null,opdracht_substatus.eq.financieel_afgesloten)')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /**
@@ -405,25 +356,14 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
  * vals-positief oplevert.
  */
 export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
-  const supabase = createAdminClient() as any
-
-  const { data, error } = await supabase
-    .from('dossiers')
-    .select(LIJST_SELECT)
+  return haalDossierLijst(q => q
     .or(
       'and(hoofdstatus.eq.opdracht,opdracht_substatus.eq.financieel_afgesloten),' +
       'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
       'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.eq.vervallen),' +
       'bouw7_projectstatus_naam.ilike.07.%'
     )
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    const missingTable = error.message.includes('does not exist') || error.code === '42P01'
-    return { ok: false, error: error.message, missingTable }
-  }
-
-  return { ok: true, data: await verrijkDossiers((data ?? []).map(mapRij)) }
+    .order('created_at', { ascending: false }))
 }
 
 /** Update de servicedesk substatus van een dossier (voor kanban drag & drop). */
@@ -652,13 +592,16 @@ export const getUniekeBouw7Categorieen = unstable_cache(
   async (): Promise<string[]> => {
     const supabase = createAdminClient() as any
 
-    const { data } = await supabase
+    // Gepagineerd: dit vult een filterlijst met unieke categorieën. Bij afkapping ontbreken
+    // categorieën die alleen op 'late' dossiers voorkomen, en kan de gebruiker er niet op filteren.
+    const data = await haalAlleRijen<{ bouw7_categorie_naam: string }>((van, tot) => supabase
       .from('dossiers')
       .select('bouw7_categorie_naam')
       .not('bouw7_categorie_naam', 'is', null)
+      .order('bouw7_categorie_naam')
+      .range(van, tot)).catch(() => [])
 
-    if (!data) return []
-    const uniek = [...new Set((data as any[]).map(d => d.bouw7_categorie_naam as string))]
+    const uniek = [...new Set(data.map(d => d.bouw7_categorie_naam))]
     return uniek.sort()
   },
   ['unieke-bouw7-categorieen'],

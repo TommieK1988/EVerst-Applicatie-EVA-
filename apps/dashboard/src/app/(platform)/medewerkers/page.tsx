@@ -3,6 +3,7 @@ import { createAdminClient, createClient as createServerClient } from '@everts/d
 import { laadLayouts } from '@/app/actions/layouts'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
 import MedewerkersOverzicht from './MedewerkersOverzicht'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export const metadata: Metadata = { title: 'Medewerkers' }
 
@@ -40,7 +41,11 @@ export default async function MedewerkersPage() {
     supabase.from('ploegen').select('id, naam'),
     supabase.from('bedrijfsgegevens').select('id, naam').eq('type', 'werkmaatschappij'),
     supabase.from('planning_uursoorten').select('id, naam'),
-    supabase.from('relaties').select('id, naam'),
+    // Gepagineerd: alleen id+naam voor een opzoeklijst, maar bij afkapping mist een deel van
+    // de relaties en toont het scherm een lege naam. Zie lib/supabase/paginate.ts.
+    haalAlleRijen<{ id: string; naam: string }>((van, tot) =>
+      supabase.from('relaties').select('id, naam').order('id').range(van, tot))
+      .then(data => ({ data })),
     supabase.from('cao_documenten').select('id, naam'),
   ])
 

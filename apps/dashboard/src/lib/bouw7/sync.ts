@@ -13,6 +13,7 @@ import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
 import { maakNotificatie } from '@/lib/notificaties/maak'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export type SyncResult = {
   nieuw: number
@@ -173,7 +174,10 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const bulkCpsAvailable = bulkCps.length > 0 && bulkCps.some(cp => cp.contactId != null)
 
     // 3. Pre-fetch bestaande relaties (één DB-query i.p.v. N)
-    const { data: dbRelaties, error: selectErr } = await supabase
+    // Gepagineerd: bij afkapping op 1000 rijen wordt een bestaande relatie niet gevonden en
+    // als NIEUW aangemaakt — een duplicaat in de stamgegevens. Zie lib/supabase/paginate.ts.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbRelaties = await haalAlleRijen<any>((van, tot) => supabase
       .from('relaties')
       // De inhoudelijke kolommen komen mee zodat handmatig aangepaste velden
       // ongewijzigd teruggeschreven kunnen worden (zie metBehoudVanHandmatigeVelden).
@@ -182,7 +186,11 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         + BOUW7_RELATIE_VELDEN.join(', ')
       )
       .not('bouw7_id', 'is', null)
-    if (selectErr) throw new Error(`Schema cache fout bij ophalen relaties: ${selectErr.message}`)
+      .order('id')
+      .range(van, tot),
+    ).catch((e: unknown) => {
+      throw new Error(`Schema cache fout bij ophalen relaties: ${e instanceof Error ? e.message : String(e)}`)
+    })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const relatieMap = new Map<string, any>(
@@ -1135,12 +1143,16 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     const supabase = createAdminClient() as any
 
     // Pre-fetch lookup maps (3 queries i.p.v. 3N)
-    const { data: relatiesData } = await supabase
+    // Gepagineerd: deze map bepaalt of een Bouw7-relatie al bestaat. Ontbreekt een rij door
+    // afkapping, dan koppelt de sync het dossier aan niets of maakt een duplicaat aan.
+    const relatiesData = await haalAlleRijen<{ id: string; bouw7_id: string }>((van, tot) => supabase
       .from('relaties')
       .select('id, bouw7_id')
       .not('bouw7_id', 'is', null)
+      .order('id')
+      .range(van, tot))
     const relatieMap = new Map<string, string>(
-      (relatiesData ?? []).map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
+      relatiesData.map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
     )
 
     const { data: medewerkerData } = await supabase
@@ -1183,13 +1195,18 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       return null
     }
 
-    const { data: dossierData } = await supabase
+    // Gepagineerd: hierop bepaalt de sync of een Bouw7-project al een EVA-dossier heeft.
+    // Een afgekapte map betekent bestaande dossiers opnieuw aanmaken — dubbele dossiers.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dossierData = await haalAlleRijen<any>((van, tot) => supabase
       .from('dossiers')
       .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, calculator_id, bouw7_sync_hash, object_id, object_koppel_bron, object_gekoppeld_op')
       .not('bouw7_id', 'is', null)
+      .order('id')
+      .range(van, tot))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierMap = new Map<string, any>(
-      (dossierData ?? []).map((d: any) => [d.bouw7_id as string, d])
+      dossierData.map((d: any) => [d.bouw7_id as string, d])
     )
 
     // Primaire contactpersoon per organisatie (voor projectcontact op dossier).
@@ -2025,8 +2042,11 @@ export async function syncOfferteHerinneringen(opts?: { mode?: SyncMode; onlyBou
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
-    const { data: dossierData } = await supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
-    const dossierMap = new Map<string, string>((dossierData ?? []).map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
+    // Gepagineerd, zelfde reden als hierboven: een ontbrekend dossier in deze map betekent
+    // dat het Bouw7-item aan niets gekoppeld wordt.
+    const dossierData = await haalAlleRijen<{ id: string; bouw7_id: string }>((van, tot) =>
+      supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null).order('id').range(van, tot))
+    const dossierMap = new Map<string, string>(dossierData.map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
 
     const { data: mwData } = await supabase.from('medewerkers').select('id, email').not('email', 'is', null)
     const emailMap = new Map<string, string>()
