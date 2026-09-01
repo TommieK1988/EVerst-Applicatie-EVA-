@@ -69,6 +69,36 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 Gebruik altijd de `@everts/database` package voor Supabase-clients — nooit rechtstreeks `@supabase/supabase-js` importeren in apps.
 
+### Nooit een onbegrensde `.select()` — PostgREST kapt stil af op 1000 rijen
+
+**Dit is een harde regel.** PostgREST levert maximaal `max-rows` (1000) rijen per respons. Dat gebeurt
+**zonder foutmelding**: `error` is `null`, je krijgt gewoon 1000 rijen in plaats van alles. `.limit(20000)`
+helpt níet — de servergrens wint altijd.
+
+Code die dit negeert werkt zolang de tabel klein is en gaat er ongemerkt naast zodra hij groeit. Dat is
+in productie misgegaan: de Medewerkerplanning haalde alle `planning_items` op, de tabel groeide naar 1214
+rijen, en 214 planitems verdwenen uit beeld. Voor gebruikers zag dat eruit als een falende Bouw7-sync —
+een medewerker met een lege regel in EVA terwijl Bouw7 vol stond. De data klopte; het scherm loog.
+
+Elke `.select()` moet dus één van deze drie zijn:
+
+1. **Begrensd door een filter** die aantoonbaar onder de 1000 blijft (`.eq('dossier_id', …)`, `.in('activiteit_id', ids)`).
+2. **Expliciet één rij** (`.single()` / `.maybeSingle()` / `.limit(n)` met een bewuste n).
+3. **Gepagineerd** via `haalAlleRijen()` uit `@/lib/supabase/paginate` — geef altijd een stabiele
+   `.order()` mee, anders slaat de paginering rijen over of haalt ze dubbel op.
+
+```ts
+const items = await haalAlleRijen<PlanningItem>((van, tot) =>
+  supabase.from('planning_items').select('*').order('id').range(van, tot))
+```
+
+Bij twijfel: tel eerst hoeveel rijen de query oplevert (`Prefer: count=exact`) en kies dan. Filter je
+client-side ná het ophalen (`.filter(...)` op het resultaat), dan is de afkapping al gebeurd — dat is
+precies het patroon dat de bug veroorzaakte.
+
+Ditzelfde geldt bij het **analyseren** van de database met losse scripts: paginate daar ook, anders trek
+je conclusies uit een half resultaat.
+
 ## Architecture patterns
 
 ### Data flow (Next.js 15 App Router)

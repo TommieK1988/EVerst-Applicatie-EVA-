@@ -30,6 +30,24 @@ async function naPlanningWijziging(): Promise<void> {
   revalidatePath('/planning')
 }
 
+/**
+ * Spiegel een EVA-planitem naar Bouw7 (`POST /plan-item`, zie WRITE-ENDPOINTS.md §5b).
+ * Dynamisch geïmporteerd zoals de andere Bouw7-aanroepen hier, zodat de planning-acties
+ * de Bouw7-module niet in elke bundel meeslepen.
+ *
+ * Bewust fail-soft en niet-blokkerend voor de aanroeper: de write logt zelf en gooit niet.
+ * De planning staat op dat moment al in EVA — dat is de leidende administratie — en een
+ * hapering bij Bouw7 mag een planner niet tegenhouden.
+ */
+async function spiegelNaarBouw7(itemId: string): Promise<void> {
+  try {
+    const { schrijfPlanItemNaarBouw7 } = await import('@/lib/bouw7/plan-item-write')
+    await schrijfPlanItemNaarBouw7(itemId)
+  } catch (e) {
+    console.error('[planning] spiegelen naar Bouw7 mislukt:', e)
+  }
+}
+
 // ─── Budget helpers ───────────────────────────────────────────────────────────
 
 async function checkBudget(
@@ -259,6 +277,7 @@ export async function maakPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
+  await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
@@ -347,6 +366,7 @@ export async function maakSnelPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
+  await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
@@ -394,6 +414,7 @@ export async function kopieerPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
+  await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem }
 }
@@ -436,6 +457,7 @@ export async function verplaatsPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
+  await spiegelNaarBouw7(id)
   await naPlanningWijziging()
   return { ok: true }
 }
@@ -443,9 +465,11 @@ export async function verplaatsPlanningItem(
 export async function verwijderPlanningItem(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // bouw7_id mee ophalen: na de delete is hij niet meer te achterhalen en zou het
+  // gespiegelde plan-item als wees in Bouw7 achterblijven.
   const { data: bron } = await db()
     .from('planning_items')
-    .select('planning_activiteiten!activiteit_id ( dossier_id )')
+    .select('bouw7_id, bron, planning_activiteiten!activiteit_id ( dossier_id )')
     .eq('id', id)
     .maybeSingle()
   if (bron?.planning_activiteiten?.dossier_id) await assertDossierBewerkbaar(bron.planning_activiteiten.dossier_id)
@@ -456,6 +480,16 @@ export async function verwijderPlanningItem(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+
+  if (bron?.bron === 'eva' && bron?.bouw7_id) {
+    try {
+      const { verwijderPlanItemInBouw7 } = await import('@/lib/bouw7/plan-item-write')
+      await verwijderPlanItemInBouw7(bron.bouw7_id)
+    } catch (e) {
+      console.error('[planning] verwijderen in Bouw7 mislukt:', e)
+    }
+  }
+
   await naPlanningWijziging()
   return { ok: true }
 }

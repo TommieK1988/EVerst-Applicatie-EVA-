@@ -5,6 +5,7 @@ import { getBouw7Client, logSync, type SyncResult, type SyncMode } from './sync'
 import { fingerprint } from './fingerprint'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import { herberekenDeadlines } from '@/app/(platform)/taken/actions/deadlines'
+import { evaEigenPlanItemIds } from './plan-item-write'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -170,7 +171,14 @@ export async function syncDossierPlanning(
     if (!bouw7Id) return result // dossier zonder Bouw7-koppeling → niets te syncen
 
     const client = opts?.client ?? (await getBouw7Client())
-    const planItems = opts?.planItems ?? (await fetchPlanItems(String(bouw7Id), client))
+    const alleItems = opts?.planItems ?? (await fetchPlanItems(String(bouw7Id), client))
+
+    // Plan-items die EVA zélf in Bouw7 heeft gezet weer uitfilteren. Zonder dit importeert
+    // de sync ze terug als bron='bouw7'-rij náást de bron='eva'-rij waaruit ze ontstonden,
+    // en staat elke in EVA gemaakte planning dubbel op het scherm. De herbouw hieronder
+    // ruimt dat ook niet op: die raakt alleen bron='bouw7' aan.
+    const eigenIds = await evaEigenPlanItemIds(dossierId)
+    const planItems = eigenIds.size > 0 ? alleItems.filter(pi => !eigenIds.has(pi.id)) : alleItems
 
     // Planning-fingerprint uit de goedkope Apollo-lijst (id/updatedAt/uren/datums/naam/chapter/remark).
     // Is die gelijk aan de opgeslagen hash → de dure /plan-item/{id} detail-calls + rebuild overslaan.

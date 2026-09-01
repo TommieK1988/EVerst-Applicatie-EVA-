@@ -765,7 +765,7 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 ## 5. Open punten / valkuilen
 
 - **Schrijf-scope van de app-key onbekend.** Eerst fase 0 draaien; bij 403 → in Bouw7 (`start.bouw7.nl/my-account/api-access`) een key met schrijfrechten regelen.
-- **Plan-items schrijven lijkt niet te bestaan.** We lezen planning via Apollo (read-only); er is geen `plan-item`-write-endpoint. Uren schrijf je via `/project/hour-log` (≠ plan-items). Verifiëren of planning terugschrijven überhaupt kan.
+- ~~**Plan-items schrijven lijkt niet te bestaan.**~~ **Achterhaald — zie §5b.** `POST /plan-item` bestaat gewoon op Heimdall en werkt met onze API-key (geverifieerd sep 2026). De aanname kwam voort uit één en dezelfde denkfout als bij de to-do's: nooit een POST geprobeerd op de route waarvan we alleen de GET kenden. Uren blijven een aparte stroom (`/project/hour-log`, ≠ plan-items).
 - **Gegokte URL's bewijzen niets.** Een 404 op `/todo/{id}` betekende níét dat to-do-detail/-write niet bestaan: ze zitten onder `/project/timeline/…` (zie §5a). Ook de Swagger-spec is incompleet (`/list/todos` ontbreekt erin). Bij "bestaat niet"-conclusies: eerst de UI-call capturen.
 - **Loop-preventie.** Lees-sync en schrijf-sync mogen elkaar niet triggeren. Hergebruik `bron` + `sync_vergrendeld` (al aanwezig in het datamodel) zodat door EVA gewijzigde velden niet door de lees-sync overschreven worden en vice versa.
 - **Idempotentie.** Upsert op `id` is veilig; create zonder `id` twee keer = dubbele records. Altijd eerst `bouw7_id` checken.
@@ -864,3 +864,74 @@ gecapturede call te bevestigen — maar het orakel kan een endpoint niet *vinden
 (`/todo`, `/todos`, `/todo/{id}`, `/list/todos/{id}`, `/project/{id}/todo`, `/task(s)`, `/action(s)`
 geven allemaal 404, op Heimdall én Athena én Apollo). Alleen de UI-capture wees de echte prefix aan.
 Afwezigheid in de Swagger-spec bewijst niets: ook het werkende `/list/todos` staat er niet in.
+
+---
+
+## 5b. Plan-items schrijven — LIVE op Heimdall (geverifieerd sep 2026)
+
+**Dit corrigeert §5, punt 2** ("Plan-items schrijven lijkt niet te bestaan"). Die aanname was fout, en
+op dezelfde manier fout als destijds bij de to-do's: er was nooit een POST geprobeerd op de route
+waarvan we alleen de GET kenden. `POST /plan-item` bestaat gewoon op Heimdall en accepteert onze
+**eigen API-key** — er is geen sessiecookie en geen `start.bouw7.nl` voor nodig.
+
+| Doel | Endpoint | Body |
+|---|---|---|
+| **Lezen (detail)** | `GET /plan-item/{id}` | — |
+| **Aanmaken** | `POST /plan-item` | object zónder `id` → 201 met `id` |
+| **Wijzigen** | `POST /plan-item` | zelfde object **mét** `id` → 200 (upsert) |
+| **Verwijderen** | `DELETE /plan-item` | `{ "id": 8019818 }` → 204 |
+
+Let op: `DELETE`/`PUT`/`POST` op `/plan-item/{id}` bestaan **niet** (`Allow: GET`). Het id gaat bij
+verwijderen in de **body** van een DELETE op het collectie-pad, niet in de URL.
+
+### Verplichte velden
+
+Uitgevraagd door de validator te laten klagen (lege body → 400 met de ontbrekende property):
+
+```
+name        string    niet leeg
+project     object    { id }  — een kaal integer geeft "expects PlanItemProject, got integer"
+startDate   string    ISO8601 MÉT tijdzone: "2026-09-10T07:00:00+02:00" of "...Z"
+endDate     string    idem
+hours       number
+```
+
+Optioneel en geverifieerd werkend: `requisite`, `isAllDay`, `isProcessed`, `notes`, `color`,
+`department {id}`, `securityPlanningLink {id}`, `employees [{id}]`, `contacts`, `equipment`.
+
+**Datumformaat is een valkuil.** `"2026-09-10 07:00:00"` (de vorm die de UI-endpoints op
+`start.bouw7.nl` gebruiken, en die de Apollo-search teruggeeft) wordt hier geweigerd met "not a valid
+datetime". Heimdall eist een expliciete offset. Epoch-seconden worden ook geweigerd.
+
+### Medewerkers
+
+`employees: [{ id }]` werkt en komt bij teruglezen terug als `[{id, firstName, lastName}]`. De id is de
+Bouw7-medewerker-id (`medewerkers.bouw7_id` in EVA), niet de `plan_item_per_employee`-koppel-id die het
+UI-endpoint `/planning/employee/generic-move` verlangt. Die koppel-id is via de API niet op te vragen —
+en is ook niet nodig, want verplaatsen is gewoon een upsert met andere datums.
+
+**Weglaten ≠ leegmaken.** Bij een upsert zonder `employees`-veld bleef de toewijzing staan. Of
+`employees: []` de toewijzing daadwerkelijk leegt is **niet getest**; ga daar niet blind vanuit
+(zelfde reden als bij de to-do's hierboven: een verkeerde gok wist stilletjes toewijzingen).
+
+### Auteur is niet stuurbaar
+
+`createdBy`/`updatedBy` komen bij lezen terug als string (`"Chris Glas <chris@everts.chat>"`), maar zijn
+bij schrijven **read-only**: meegestuurd worden ze genegeerd en Bouw7 logt altijd de eigenaar van de
+API-key (`"Beheerder EOB <abonnementen@everts.chat>"`). Wie de wijziging deed is in Bouw7 dus niet te
+herleiden tot de EVA-gebruiker; wil je dat, dan moet het in EVA zelf worden vastgelegd. De *toegewezen*
+medewerker is wél stuurbaar — dat is `employees`, een andere vraag dan de audittrail.
+
+### Afgeleid uit de leeskant
+
+Elk veld dat de write nodig heeft, komt uit data die we al synchroniseren — geverifieerd op plan-item
+7182158: `security_code_planning_id` 416299 = `securityPlanningLink.id`, `department_id` 57159 =
+`department.id`. Er zijn dus geen verborgen id's.
+
+### De UI-endpoints (niet gebruiken)
+
+Ter documentatie, gecaptured uit `start.bouw7.nl`: `POST /api/plan-item/create`, `POST
+/api/plan-item/update?id=`, `POST /api/plan-item/delete`, `POST /planning/employee/generic-move`,
+`POST /planning/employee/get-calendar-data`. Die draaien op sessiecookie + `x-csrf-token`, hanteren
+snake_case én drie verschillende datumnotaties door elkaar, en zijn ongedocumenteerd intern. Ze waren
+nuttig om te bewijzen dát planning schrijfbaar is; voor EVA is `POST /plan-item` op Heimdall de weg.
