@@ -36,7 +36,7 @@ export default function PeriodeNav({
   const vandaag  = onVandaag ?? (() => onPeildatum(new Date()))
 
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex flex-wrap items-center gap-2 mb-2">
       <Button variant="ghost" size="sm" onClick={vorige}>‹</Button>
       <span style={{
         fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600,
@@ -61,7 +61,7 @@ export default function PeriodeNav({
         ))}
       </div>
 
-      {rightSlot && <div className="ml-auto">{rightSlot}</div>}
+      {rightSlot && <div className="ml-auto flex flex-wrap items-center gap-2">{rightSlot}</div>}
     </div>
   )
 }

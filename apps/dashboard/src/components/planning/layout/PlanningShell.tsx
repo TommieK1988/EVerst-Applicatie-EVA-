@@ -29,14 +29,15 @@ export type PlanningShellProps = {
   labelHeader?:     ReactNode
   /** Custom width voor de label-kolom (default: LABEL_W). */
   labelW?:          number
-  /** Max-hoogte van het scrollgebied. Zet dit om verticaal binnen de shell te scrollen
-   *  met de datumbalk sticky in beeld (bv. 'calc(100dvh - 150px)'). */
-  maxHoogte?:       number | string
+  /** Vulmodus: de shell vult de beschikbare hoogte en het roostergebied is het enige
+   *  scrollvlak (beide assen), met de datumbalk sticky in beeld. Vereist dat de pagina
+   *  eromheen zelf niet scrollt — zie `.eva-page-vol` in globals.css. */
+  vulHoogte?:       boolean
 }
 
 export default function PlanningShell({
   layout, scrollRef, toolbar, scrubber, preHeaderStrip,
-  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W, maxHoogte,
+  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W, vulHoogte,
 }: PlanningShellProps) {
   const { spans, cols, gridUnits, totalW } = layout
 
@@ -47,21 +48,31 @@ export default function PlanningShell({
   const today0 = startOfDay(new Date())
   const toonVandaag = today0 >= startOfDay(layout.vs) && today0 <= startOfDay(layout.ve)
 
+  // In vulmodus is de shell een flex-kolom: alles behalve de scroller houdt zijn
+  // eigen hoogte, de scroller krijgt de rest.
+  const vast = vulHoogte ? { flexShrink: 0 } : undefined
+
   return (
-    <div>
-      {toolbar}
+    <div style={vulHoogte
+      ? { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }
+      : undefined}>
+      {toolbar && <div style={vast}>{toolbar}</div>}
       <div style={{
         border: `1px solid ${KLEUR.border}`,
         borderRadius: 10,
         overflow: 'hidden',
         background: KLEUR.bgElev,
+        ...(vulHoogte ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}),
       }}>
-        {scrubber}
-        {preHeaderStrip}
+        {scrubber && <div style={vast}>{scrubber}</div>}
+        {preHeaderStrip && <div style={vast}>{preHeaderStrip}</div>}
 
         {/* Eén scroller voor beide assen: datumbalk sticky top, labelkolom sticky left.
-            Zonder maxHoogte scrollt alleen de horizontale as (gedrag als voorheen). */}
-        <div ref={scrollRef} style={{ overflow: 'auto', maxHeight: maxHoogte }}>
+            Zonder vulHoogte scrollt alleen de horizontale as (gedrag als voorheen). */}
+        <div ref={scrollRef} style={{
+          overflow: 'auto',
+          ...(vulHoogte ? { flex: 1, minHeight: 0 } : {}),
+        }}>
           <div style={{ width: labelW + totalW, minWidth: labelW + totalW, position: 'relative' }}>
 
             {/* Header-rij — blijft in beeld bij verticaal scrollen */}
@@ -209,7 +220,7 @@ export default function PlanningShell({
           </div>
         </div>
       </div>
-      {legenda}
+      {legenda && <div style={vast}>{legenda}</div>}
     </div>
   )
 }

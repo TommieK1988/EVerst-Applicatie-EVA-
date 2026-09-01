@@ -1486,8 +1486,10 @@ export default function MedewerkerTimeline({
     )),
   )
 
-  const slicerBalk = (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+  // Filters staan in de rightSlot van de PeriodeNav: scheelt een hele rij hoogte,
+  // zodat er meer medewerkers in beeld passen.
+  const filterControls = (
+    <>
       {afdelingOpties.length >= 2 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Afdeling</span>
@@ -1516,11 +1518,11 @@ export default function MedewerkerTimeline({
           )}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sorteer</span>
         {sortControl}
       </div>
-    </div>
+    </>
   )
 
   return (
@@ -1534,8 +1536,7 @@ export default function MedewerkerTimeline({
       onDragEnd={onDragEnd}
       onDragCancel={() => { setActiveItem(null); setOverCellId(null) }}
     >
-      <div ref={wrapRef}>
-        {slicerBalk}
+      <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
         <PlanningShell
           layout={layout}
           scrollRef={scrollRef}
@@ -1547,13 +1548,16 @@ export default function MedewerkerTimeline({
               onView={handleView}
               onVandaag={handleVandaag}
               rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setVerlofModalOpen(true)}
-                  className="eva-btn-ghost"
-                >
-                  + Verlof
-                </button>
+                <>
+                  {filterControls}
+                  <button
+                    type="button"
+                    onClick={() => setVerlofModalOpen(true)}
+                    className="eva-btn-ghost"
+                  >
+                    + Verlof
+                  </button>
+                </>
               }
             />
           }
@@ -1563,7 +1567,7 @@ export default function MedewerkerTimeline({
           body={body}
           bodyHoogte={bodyHoogte}
           legenda={legenda}
-          maxHoogte="calc(100dvh - 150px)"
+          vulHoogte
         />
       </div>
 

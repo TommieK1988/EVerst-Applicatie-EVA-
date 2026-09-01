@@ -253,7 +253,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
   )
 
   const slicerRij = (titel: string, children: React.ReactNode) => (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
       <span style={{
         fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)',
         textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2,
@@ -303,12 +303,15 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
     : null
 
   return (
-    <div ref={wrapRef}>
+    <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {balkStijl}
-      {statusSlicer}
-      {categorieSlicer}
+      {/* Status- en categoriefilter naast elkaar: scheelt een rij hoogte. */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
+        {statusSlicer}
+        {categorieSlicer}
+      </div>
       {gesorteerd.length === 0 ? (
-        <>
+        <div style={{ flexShrink: 0 }}>
           <PeriodeNav
             peildatum={peildatum}
             view={view}
@@ -324,7 +327,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
             Geen opdrachten gevonden binnen de gekozen status en categorie.
             Pas de filters aan, of stel start- en einddatum in op de opdracht om ze hier te tonen.
           </div>
-        </>
+        </div>
       ) : (
         <PlanningShell
           layout={layout}
@@ -345,6 +348,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
           body={body}
           bodyHoogte={bodyHoogte}
           legenda={legenda}
+          vulHoogte
         />
       )}
     </div>

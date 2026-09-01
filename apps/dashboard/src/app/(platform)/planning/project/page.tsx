@@ -60,15 +60,13 @@ export default async function ProjectplanningPage() {
   })
 
   return (
-    <div className="eva-page-full">
+    <div className="eva-page-vol">
+      {/* Toelichting staat in de HELP-tekst van de topbar (lib/page-help.ts). */}
       <PageHeader
         eyebrow="Planning"
         title="Projectplanning"
-        className="mb-2"
+        className="mb-3"
       />
-      <p className="mb-[22px] text-sm text-neutral-500">
-        Overzicht van alle lopende opdrachten op een tijdlijn.
-      </p>
 
       <GanttBord opdrachten={opdrachten} />
     </div>
