@@ -70,6 +70,8 @@ type ItemContext = {
   endDate:        string
   hours:          number
   securityCodeId: number | null
+  /** Naam van de projectleider van het dossier — bepaalt de kleur van de balk in Bouw7. */
+  projectleider:  { voornaam: string | null; volledigeNaam: string } | null
 }
 
 /**
@@ -86,7 +88,10 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
       medewerkers!medewerker_id ( bouw7_id ),
       planning_activiteiten!activiteit_id (
         titel, omschrijving, bouw7_security_code_id,
-        dossiers!dossier_id ( bouw7_id )
+        dossiers!dossier_id (
+          bouw7_id,
+          projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam )
+        )
       )
     `)
     .eq('id', itemId)
@@ -95,6 +100,7 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
   if (!data || data.bron !== 'eva') return null
 
   const act = data.planning_activiteiten
+  const pl = act?.dossiers?.projectleider ?? null
   const projectId  = Number(act?.dossiers?.bouw7_id)
   const employeeId = Number(data.medewerkers?.bouw7_id)
   if (!projectId || !employeeId) return null
@@ -110,6 +116,10 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
     endDate:        naarBouw7Datum(data.eind_dt),
     hours:          Number(data.uren) || 0,
     securityCodeId: act?.bouw7_security_code_id ?? null,
+    projectleider:  pl ? {
+      voornaam:      (pl.voornaam ?? '').trim() || null,
+      volledigeNaam: [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ').trim(),
+    } : null,
   }
 }
 
@@ -143,6 +153,87 @@ async function zoekPlanningLink(
   return null
 }
 
+
+/* ── Balkkleur = projectleider ─────────────────────────────────────────────
+ * Bouw7 kent één globale kleurenlegenda voor de planning (`GET /plan-item-colors`),
+ * en bij Everts staat in elk label de **voornaam van een projectleider**: Marco, Chris,
+ * Tom, Marga, Richard, Justin. De planborden worden daarop gelezen — aan de kleur van
+ * een balk zie je van wie het werk is. Een EVA-planitem dat zonder kleur binnenkomt valt
+ * daarom visueel buiten die indeling.
+ *
+ * We schrijven dus de hex uit de legenda die hoort bij de projectleider van het dossier.
+ * De legenda is Bouw7's eigen waarheid en niet `medewerkers.kleur` in EVA: die twee zijn
+ * naar het oog op elkaar afgestemd maar wijken per kanaal af (#2478ff tegenover #2E9AFE),
+ * en een net-niet-gelijke hex zet de balk buiten de legenda in plaats van erin.
+ *
+ * Geen legenda-regel voor deze projectleider (niet elke projectleider heeft er een), geen
+ * projectleider op het dossier, of de lijst niet op te halen → dan gaat `color` **niet**
+ * mee in de body. Weglaten is bij deze upsert geen leegmaken: een bestaande kleur blijft
+ * staan. Dat is bewust — een handmatig in Bouw7 gezette kleur wissen is schadelijker dan
+ * hem laten staan.
+ */
+
+type Bouw7PlanItemKleur = { id: number; color?: string | null; label?: string | null }
+
+const KLEUREN_TTL_MS = 10 * 60_000
+
+let kleurenCache: { lijst: Bouw7PlanItemKleur[]; opgehaaldOp: number } | null = null
+/** Lopende ophaal, zodat gelijktijdige writes er een delen i.p.v. er N afvuren. */
+let kleurenInFlight: Promise<Bouw7PlanItemKleur[]> | null = null
+
+/**
+ * De kleurenlegenda van Bouw7, kort gecachet. Het is stamdata die hooguit een paar keer
+ * per jaar verandert, terwijl een planner in één sleepbeweging tientallen items wegschrijft.
+ */
+async function haalKleuren(client: Bouw7Client): Promise<Bouw7PlanItemKleur[]> {
+  if (kleurenCache && Date.now() - kleurenCache.opgehaaldOp < KLEUREN_TTL_MS) return kleurenCache.lijst
+  if (!kleurenInFlight) {
+    kleurenInFlight = client
+      .get<Bouw7PlanItemKleur[]>('/plan-item-colors')
+      .then(lijst => {
+        const veilig = Array.isArray(lijst) ? lijst : []
+        kleurenCache = { lijst: veilig, opgehaaldOp: Date.now() }
+        return veilig
+      })
+      .catch(e => {
+        console.error('[plan-item-write] kleurenlegenda ophalen mislukt:', e)
+        return []
+      })
+      .finally(() => { kleurenInFlight = null })
+  }
+  return kleurenInFlight
+}
+
+const normaliseer = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim()
+
+/**
+ * De hex uit de legenda voor deze projectleider, of `null`.
+ *
+ * De labels zijn voornamen ("Chris"), maar dat is een gewoonte en geen garantie — daarom
+ * eerst op voornaam, dan op volledige naam, en als laatste op een label dat als heel woord
+ * in de volledige naam voorkomt (zodat een later toegevoegd "Chris Glas" ook raak is).
+ * Nooit op deel-van-een-woord: "Mar" zou dan zowel Marco als Marga treffen.
+ */
+function kiesKleur(
+  kleuren: Bouw7PlanItemKleur[],
+  projectleider: { voornaam: string | null; volledigeNaam: string } | null,
+): string | null {
+  if (!projectleider) return null
+  const voornaam = projectleider.voornaam ? normaliseer(projectleider.voornaam) : null
+  const volledig = normaliseer(projectleider.volledigeNaam)
+  if (!voornaam && !volledig) return null
+
+  const bruikbaar = kleuren.filter(k => k.color && k.label)
+  const woorden = new Set(volledig.split(' '))
+
+  const treffer =
+    (voornaam ? bruikbaar.find(k => normaliseer(k.label!) === voornaam) : undefined) ??
+    bruikbaar.find(k => normaliseer(k.label!) === volledig) ??
+    bruikbaar.find(k => woorden.has(normaliseer(k.label!)))
+
+  return treffer?.color ?? null
+}
+
 /**
  * Schrijf één EVA-planitem naar Bouw7 (aanmaken of bijwerken) en bewaar de Bouw7-id.
  *
@@ -160,6 +251,7 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
     if (!client) return
 
     const linkId = await zoekPlanningLink(client, ctx.projectId, ctx.securityCodeId)
+    const kleur  = kiesKleur(await haalKleuren(client), ctx.projectleider)
 
     const body: Record<string, unknown> = {
       ...(ctx.bouw7Id ? { id: ctx.bouw7Id } : {}),
@@ -171,6 +263,7 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
       requisite: 1,
       employees: [{ id: ctx.employeeId }],
       ...(ctx.omschrijving ? { notes: ctx.omschrijving } : {}),
+      ...(kleur ? { color: kleur } : {}),
       ...(linkId ? { securityPlanningLink: { id: linkId } } : {}),
     }
 
@@ -184,6 +277,91 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
       .eq('id', itemId)
   } catch (e) {
     console.error('[plan-item-write] wegschrijven planitem mislukt:', e)
+  }
+}
+
+
+/**
+ * Herkleur de hele planning van één dossier in Bouw7 naar de kleur van zijn (nieuwe)
+ * projectleider. Aanroepen na een rolwissel op het dossier.
+ *
+ * WAAROM ALLE PLAN-ITEMS EN NIET ALLEEN DE EVA-EIGEN: van de planning staat het overgrote
+ * deel in Bouw7 zelf (bij het schrijven hiervan 1210 van de 1230 planitems). Zou de herkleuring
+ * zich tot de EVA-items beperken, dan bleef een project na een rolwissel in Bouw7 vrijwel
+ * volledig in de oude kleur staan — precies het beeld dat de planners op kleur lezen. De kleur
+ * is bij Everts geen vrije opmaakkeuze maar de aanduiding van de projectleider, dus die hoort
+ * over het hele project mee te bewegen.
+ *
+ * De write is een **partiële upsert**: `POST /plan-item` met alleen `{ id, color }`. Getest op
+ * een tijdelijk item met notities, medewerker, afdeling, bewakingscode-link, `isAllDay` en uren:
+ * na de call was álles onveranderd behalve de kleur (zie WRITE-ENDPOINTS.md §5b). Er is dus geen
+ * read-modify-write nodig, en daarmee ook geen risico dat we een veld dat we niet begrijpen
+ * terugschrijven.
+ *
+ * FAIL-SOFT en niet-blokkerend voor de rolwissel zelf: mislukt een item, dan blijft die balk in
+ * de oude kleur staan en gaat de rest gewoon door.
+ */
+export async function herkleurPlanningInBouw7(dossierId: string): Promise<{
+  /** Aantal plan-items dat een nieuwe kleur kreeg. */
+  bijgewerkt: number
+  /** Al de goede kleur — niet aangeraakt. */
+  ongewijzigd: number
+  mislukt: number
+  /** De doelkleur, of null wanneer er niets te herkleuren viel (geen legenda-regel/PL/koppeling). */
+  kleur: string | null
+}> {
+  const leeg = { bijgewerkt: 0, ongewijzigd: 0, mislukt: 0, kleur: null }
+  try {
+    const { data: dossier } = await db()
+      .from('dossiers')
+      .select('bouw7_id, projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam )')
+      .eq('id', dossierId)
+      .maybeSingle()
+
+    const projectId = Number(dossier?.bouw7_id)
+    if (!projectId) return leeg
+
+    const client = await getBouw7ClientOfNull()
+    if (!client) return leeg
+
+    const pl = dossier?.projectleider ?? null
+    const kleur = kiesKleur(await haalKleuren(client), pl ? {
+      voornaam:      (pl.voornaam ?? '').trim() || null,
+      volledigeNaam: [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ').trim(),
+    } : null)
+    // Geen kleur bekend → niets doen. Bewust niet leegmaken: de oude kleur laten staan is minder
+    // schadelijk dan een project kleurloos maken omdat de nieuwe projectleider geen legenda-regel heeft.
+    if (!kleur) return leeg
+
+    const items = await client.getApolloAll<{ id: number; color?: string | null }>(
+      '/search/plan-items', `project.id = ${projectId}`,
+    )
+    const teDoen = items.filter(i => (i.color ?? '').toUpperCase() !== kleur.toUpperCase())
+
+    let mislukt = 0
+    // In kleine parallelle groepen: een groot project heeft al gauw tachtig balken, en die
+    // stuk voor stuk achter elkaar wegschrijven maakt het opslaan van een rol onnodig traag.
+    const GROEP = 5
+    for (let i = 0; i < teDoen.length; i += GROEP) {
+      await Promise.all(teDoen.slice(i, i + GROEP).map(async it => {
+        try {
+          await client.post('/plan-item', { id: it.id, color: kleur })
+        } catch (e) {
+          mislukt++
+          console.error('[plan-item-write] herkleuren planitem mislukt:', it.id, e)
+        }
+      }))
+    }
+
+    return {
+      bijgewerkt:  teDoen.length - mislukt,
+      ongewijzigd: items.length - teDoen.length,
+      mislukt,
+      kleur,
+    }
+  } catch (e) {
+    console.error('[plan-item-write] herkleuren planning mislukt:', e)
+    return leeg
   }
 }
 

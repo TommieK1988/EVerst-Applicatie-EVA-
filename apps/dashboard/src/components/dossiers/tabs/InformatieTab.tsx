@@ -1102,6 +1102,11 @@ export function InformatieTab({
         if (res.ok && res.bouw7 && !res.bouw7.ok) {
           toast.error(`Rollen opgeslagen in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
         }
+        // Bij een wissel van projectleider krijgen de planbalken in Bouw7 diens kleur; meld dat,
+        // want het is een wijziging buiten dit scherm die de planners meteen zien.
+        if (res.ok && res.herkleurd) {
+          toast.success(`Planning in Bouw7 omgekleurd naar de nieuwe projectleider (${res.herkleurd} ${res.herkleurd === 1 ? 'item' : 'items'}).`)
+        }
       })
       .catch(() => {})
     // Inhoudsvelden: EVA-eigen velden altijd; Bouw7-bron-velden alleen voor niet-Bouw7-dossiers.
