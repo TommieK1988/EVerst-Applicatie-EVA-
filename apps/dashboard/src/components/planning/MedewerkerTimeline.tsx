@@ -21,7 +21,10 @@ import type {
   PlanningItemVerrijkt, PlanningUursoort,
   BedrijfsagendaItemMetDoelgroep, BedrijfsagendaType, BedrijfsagendaVirtueel,
 } from '@everts/database/platform-types'
-import { bedrijfsagendaTypeKleur, medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
+import {
+  bedrijfsagendaTypeKleur, medewerkerAfwezigheidLabels,
+  medewerkerAfwezigheidKleur as AFWEZIGHEID_KLEUR,
+} from '@everts/database/platform-types'
 import {
   kopieerPlanningItem, maakSnelPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
 } from '@/app/(platform)/planning/actions'
@@ -50,13 +53,6 @@ const RIJ_VAST = ROW_PAD * 2 + ITEM_H
 const GROEP_H = 24
 
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
-
-const AFWEZIGHEID_KLEUR: Record<MedewerkerAfwezigheidType, string> = {
-  verlof:   '#f87171',
-  ziek:     '#dc2626',
-  training: '#10b981',
-  overig:   '#6b7280',
-}
 
 /** Dag-achtergrond per afwezigheidstype. Verlof = duidelijk licht rood — bewust een
  *  lichte achtergrond-tint zodat het niet verward wordt met verzadigde (rode) PL-balkkleuren. */

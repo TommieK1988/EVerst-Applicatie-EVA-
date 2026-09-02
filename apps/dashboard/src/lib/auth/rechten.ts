@@ -8,6 +8,8 @@ export { isBeheerder, heeftModuleToegang, magOnderdeelZien, AFGEDWONGEN_MODULES 
 
 export type CurrentMedewerker = {
   id: string
+  /** Auth-user-id. Nodig omdat taken op `task_assignees.user_id` filteren en niet op medewerker-id. */
+  auth_user_id: string | null
   voornaam: string | null
   tussenvoegsel: string | null
   achternaam: string | null
@@ -32,7 +34,7 @@ export async function getCurrentMedewerker(): Promise<CurrentMedewerker | null> 
   const admin = createAdminClient() as any
   const { data } = await admin
     .from('medewerkers')
-    .select('id, voornaam, tussenvoegsel, achternaam, functie, afdeling, foto_url, gebruiker_type, rechten_override')
+    .select('id, auth_user_id, voornaam, tussenvoegsel, achternaam, functie, afdeling, foto_url, gebruiker_type, rechten_override')
     .eq('auth_user_id', user.id)
     .eq('actief', true)
     .maybeSingle()
