@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { leesGoedkeuringTerug, stuurUrenWeekNaarBouw7 } from '@/lib/uren/bouw7'
+import { schrijfVerlofNaarBouw7 } from '@/lib/uren/verlof'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,10 @@ const db = () => createAdminClient() as any
  *     de regels bij Bouw7 struikelde (netwerk, een ontbrekende koppeling). Die staan op 'fout' en
  *     krijgen hier een nieuwe kans. Dat is veilig: `bouw7_hour_log_id` maakt van een tweede poging
  *     een update in plaats van een duplicaat.
+ *
+ *  3. Hetzelfde voor goedgekeurd verlof dat niet als day-off in Bouw7 aankwam. Het verlof geldt in
+ *     EVA al -- de goedkeuring is fail-soft -- maar Bouw7 moet het uiteindelijk ook weten, anders
+ *     staat de monteur daar nog als beschikbaar.
  *
  * Beveiliging: Authorization: Bearer <CRON_SECRET>.
  */
@@ -57,6 +62,21 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       mislukt += res.mislukt
     }
 
+    // Goedgekeurd verlof dat Bouw7 niet accepteerde. Begrensd, net als hierboven.
+    const { data: hangendVerlof } = await supabase
+      .from('verlof_aanvragen')
+      .select('id')
+      .eq('status', 'goedgekeurd')
+      .in('bouw7_status', ['fout', 'niet_verzonden'])
+      .limit(50)
+
+    let verlofVerzonden = 0
+    let verlofMislukt = 0
+    for (const v of ((hangendVerlof ?? []) as Array<{ id: string }>)) {
+      if (await schrijfVerlofNaarBouw7(v.id)) verlofVerzonden++
+      else verlofMislukt++
+    }
+
     return NextResponse.json({
       ok: true,
       duurMs: Date.now() - startedAt,
@@ -64,6 +84,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       herverzonden,
       mislukt,
       wekenOpnieuwGeprobeerd: weekIds.length,
+      verlofVerzonden,
+      verlofMislukt,
     })
   } catch (e) {
     return NextResponse.json(
