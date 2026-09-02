@@ -922,6 +922,51 @@ API-key (`"Beheerder EOB <abonnementen@everts.chat>"`). Wie de wijziging deed is
 herleiden tot de EVA-gebruiker; wil je dat, dan moet het in EVA zelf worden vastgelegd. De *toegewezen*
 medewerker is wél stuurbaar — dat is `employees`, een andere vraag dan de audittrail.
 
+### Balkkleur = projectleider (`GET /plan-item-colors`)
+
+De planning heeft één globale kleurenlegenda, en bij Everts staat in elk label de **voornaam van een
+projectleider**:
+
+| id | hex | label |
+|---|---|---|
+| 98071 | `#FF0000` | Marco |
+| 98072 | `#2E9AFE` | Chris |
+| 98074 | `#1E6B03` | Tom |
+| 100631 | `#E908F1` | Marga |
+| 104451 | `#33E50D` | Richard |
+| 104452 | `#03EDF8` | Justin |
+
+Het endpoint is `GET /plan-item-colors` op Heimdall — **meervoud**; `/plan-item-color` geeft
+"No route found" en `/plan-item-color/{id}` een 403. Het staat niet in de Swagger-spec.
+
+Op het plan-item zelf is `color` gewoon een **hex-string**, geen `{ id }`-referentie naar de legenda.
+Bouw7 dwingt ook niet af dát het een legenda-kleur is: er staan historische items met vrije hexen
+(`#FE2E64`). Wij schrijven daarom exact de hex uit de legenda — een net-niet-gelijke waarde
+(`medewerkers.kleur` in EVA is `#2478ff` waar de legenda `#2E9AFE` zegt) zet de balk buiten de indeling.
+
+Geverifieerd op een tijdelijk plan-item (aangemaakt en direct weer verwijderd, sep 2026):
+
+| Handeling | Resultaat |
+|---|---|
+| create mét `color` | 201, kleur staat erop |
+| upsert met andere `color` | 200, kleur gewijzigd |
+| upsert **zonder** `color`-veld | 200, **bestaande kleur blijft staan** |
+| upsert met **alleen** `{ id, color }` | 200 — naam, datums, `isAllDay`, uren, `requisite`, notities, afdeling, `securityPlanningLink`, medewerkers en contacten **allemaal onveranderd** |
+
+Die laatste is de belangrijkste: `POST /plan-item` gedraagt zich bij een bestaande `id` als een
+**partiële update**, niet als een vervanging. Herkleuren kan dus met een body van twee velden — geen
+read-modify-write, en daarmee geen risico dat we een veld dat we niet begrijpen terugschrijven. (De
+verplichte velden uit de tabel hierboven gelden alleen bij *aanmaken*.)
+
+`herkleurPlanningInBouw7()` gebruikt dat na een rolwissel op het dossier: alle plan-items van het
+project krijgen de kleur van de nieuwe projectleider. Bewust **alle** items en niet alleen de door EVA
+aangemaakte — het overgrote deel van de planning (1210 van 1230 planitems) staat in Bouw7 zelf, dus
+anders bleef een project na een rolwissel vrijwel volledig in de oude kleur staan.
+
+Dat laatste is de reden dat `plan-item-write.ts` het veld weglaat zodra er geen legenda-regel bij de
+projectleider hoort: weglaten is hier geen leegmaken, en een handmatig in Bouw7 gezette kleur wissen is
+schadelijker dan hem laten staan.
+
 ### Afgeleid uit de leeskant
 
 Elk veld dat de write nodig heeft, komt uit data die we al synchroniseren — geverifieerd op plan-item

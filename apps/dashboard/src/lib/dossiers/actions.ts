@@ -1095,7 +1095,7 @@ export async function updateDossierRollen(
     controller_id?: string | null
   },
   opts?: { schrijfBouw7?: boolean }
-): Promise<{ ok: true; bouw7?: Bouw7WriteResult } | { ok: false; error: string }> {
+): Promise<{ ok: true; bouw7?: Bouw7WriteResult; herkleurd?: number } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
 
@@ -1109,6 +1109,19 @@ export async function updateDossierRollen(
   // Bouw7-round-trip (workPlanner) consistent blijven.
   if ('calculator_id' in payload && !('werkvoorbereider_id' in rollen)) {
     payload.werkvoorbereider_id = payload.calculator_id
+  }
+
+  // De projectleider bepaalt de kleur van de planbalken in Bouw7 (zie `herkleurPlanningInBouw7`).
+  // Onthoud de oude waarde vóór de update, zodat we straks weten óf hij echt wisselde — anders zou
+  // elke keer Opslaan de complete planning van het project opnieuw wegschrijven.
+  let oudeProjectleider: string | null | undefined
+  if ('project_manager_id' in payload) {
+    const { data: voor } = await supabase
+      .from('dossiers')
+      .select('project_manager_id')
+      .eq('id', id)
+      .maybeSingle()
+    oudeProjectleider = voor?.project_manager_id ?? null
   }
 
   const { error } = await supabase
@@ -1130,10 +1143,24 @@ export async function updateDossierRollen(
       .catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
   }
 
+  // Wisselde de projectleider, dan verkleuren de planbalken van dit project in Bouw7 mee: daar is
+  // de kleur de aanduiding van de projectleider, niet vrije opmaak. Best-effort en na de rol-write,
+  // zodat een hapering in de planning de rolwissel zelf niet raakt.
+  let herkleurd: number | undefined
+  if (opts?.schrijfBouw7 && oudeProjectleider !== undefined && oudeProjectleider !== payload.project_manager_id) {
+    try {
+      const { herkleurPlanningInBouw7 } = await import('@/lib/bouw7/plan-item-write')
+      const res = await herkleurPlanningInBouw7(id)
+      herkleurd = res.bijgewerkt
+    } catch (e) {
+      console.error('[dossiers] herkleuren planning na rolwissel mislukt:', e)
+    }
+  }
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
-  return { ok: true, bouw7 }
+  return { ok: true, bouw7, herkleurd }
 }
 
 /**
