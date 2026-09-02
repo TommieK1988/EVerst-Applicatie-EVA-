@@ -9,7 +9,7 @@ import {
   setPuntStatus, updateOpleverpunt, uploadOpleverFoto, verwijderOpleverFoto, voegPuntReactieToe,
   type OpleverPuntView, type OpleverToewijsbaar,
 } from '@/lib/dossiers/oplevering'
-import { PUNT_TRANSITIES, TRIAGE_STATUSSEN } from '@/lib/dossiers/oplever-status'
+import { PUNT_STATUSSEN, REDEN_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, OPPERVLAK, PUNT_KLEUR, veld, secundaireKnop } from './stijl'
@@ -59,14 +59,14 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
   const { voor, na } = splitsFotos(punt.fotos)
   const mist = bewijsOntbreekt(punt.status, punt.fotos)
 
-  // Alleen overgangen die de server ook accepteert; triage-statussen horen hier niet tussen.
-  const mogelijk = (PUNT_TRANSITIES[punt.status] ?? []).filter(s => !TRIAGE_STATUSSEN.includes(s))
+  // Elke andere stand is te kiezen: er is geen vaste volgorde meer.
+  const mogelijk = PUNT_STATUSSEN.filter(s => s !== punt.status)
 
   async function wijzigStatus(status: OpleverPuntStatus) {
     let reden: string | null = null
-    if (status === 'geweigerd') {
+    if (REDEN_STATUSSEN.includes(status)) {
       const antwoord = await vraagTekst({
-        titel: 'Opleverpunt afwijzen',
+        titel: status === 'afgewezen' ? 'Melding afwijzen' : 'Opleverpunt afwijzen',
         label: 'Reden van afwijzing (optioneel)',
         meerregelig: true,
         bevestigLabel: 'Afwijzen',

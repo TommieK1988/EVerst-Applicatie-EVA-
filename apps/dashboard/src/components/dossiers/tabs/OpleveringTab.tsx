@@ -22,6 +22,7 @@ import {
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
 import OpleveringMailBlok from './OpleveringMailBlok'
+import { PUNT_STATUSSEN, REDEN_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import type { OpleverFotoSoort } from '@everts/database'
@@ -33,9 +34,6 @@ const PUNT_TONE: Record<OpleverPuntStatus, 'neutral' | 'info' | 'warning' | 'suc
   nieuw: 'warning', open: 'neutral', in_behandeling: 'info', opgelost: 'warning',
   geaccepteerd: 'success', geweigerd: 'error', afgewezen: 'neutral',
 }
-
-/** Statussen die alleen via triage worden gezet en dus niet in de handmatige status-select horen. */
-const TRIAGE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
 
 const LEGE_OPLEVERING: DossierOpleveringData = { momenten: [], triage: [], lossePunten: [], afgewezen: [] }
 const MOMENT_TONE: Record<OpleverMomentStatus, 'neutral' | 'info' | 'warning' | 'success' | 'brand'> = {
@@ -979,9 +977,9 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
 
   async function wijzigStatus(status: OpleverPuntStatus) {
     let reden: string | null = null
-    if (status === 'geweigerd') {
+    if (REDEN_STATUSSEN.includes(status)) {
       const antwoord = await vraagTekst({
-        titel: 'Opleverpunt afwijzen',
+        titel: status === 'afgewezen' ? 'Melding afwijzen' : 'Opleverpunt afwijzen',
         label: 'Reden van afwijzing (optioneel)',
         meerregelig: true,
         bevestigLabel: 'Afwijzen',
@@ -1084,12 +1082,10 @@ function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
           {!readOnly && (
             <select className={selectCls} value={punt.status} disabled={bezig}
               onChange={e => { if (e.target.value !== punt.status) wijzigStatus(e.target.value as OpleverPuntStatus) }}>
-              {/* Triage-statussen horen hier niet: die zet je bij "Nieuwe meldingen", niet halverwege het werk. */}
-              {(Object.keys(opleverPuntStatusLabels) as OpleverPuntStatus[])
-                .filter(s => !TRIAGE_STATUSSEN.includes(s))
-                .map(s => (
-                  <option key={s} value={s}>{opleverPuntStatusLabels[s]}</option>
-                ))}
+              {/* Alle statussen, ook terug naar nieuw of afgewezen: elke stand is vanaf elke stand te zetten. */}
+              {PUNT_STATUSSEN.map(s => (
+                <option key={s} value={s}>{opleverPuntStatusLabels[s]}</option>
+              ))}
             </select>
           )}
           <button className="text-[11px] text-neutral-500 hover:underline" onClick={() => setOpen(o => !o)}>

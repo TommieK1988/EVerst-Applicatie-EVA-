@@ -17,7 +17,7 @@ import type {
   OpleverTokenScope,
 } from '@everts/database'
 import { assertDossierBewerkbaar, isDossierBewerkbaar } from './guards'
-import { PUNT_TRANSITIES, NIET_ACTIEVE_STATUSSEN } from './oplever-status'
+import { NIET_ACTIEVE_STATUSSEN } from './oplever-status'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { maakMeerwerkRegel } from './meerwerk'
 import { formatVeldwaardeTekst } from '@/components/formulieren/format'
@@ -457,7 +457,8 @@ export async function updateOpleverpunt(
 }
 
 /**
- * Statusovergang met transitie-guard. Zet automatisch afgemeld_op (bij 'opgelost'),
+ * Statuswijziging. Elke status mag naar elke andere — zie `oplever-status.ts` voor waarom er geen
+ * volgorde meer wordt afgedwongen. Zet automatisch afgemeld_op (bij 'opgelost'),
  * geaccepteerd_op (bij 'geaccepteerd') en de reden (bij 'geweigerd' en 'afgewezen').
  */
 export async function setPuntStatus(
@@ -466,23 +467,20 @@ export async function setPuntStatus(
   opts?: { reden?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = db()
-  const { data: row } = await supabase.from('oplever_punten').select('dossier_id, status').eq('id', id).single()
+  const { data: row } = await supabase
+    .from('oplever_punten').select('dossier_id, status, afgemeld_op, geaccepteerd_op').eq('id', id).single()
   if (!row) return { ok: false, error: 'Opleverpunt niet gevonden' }
   await assertDossierBewerkbaar(row.dossier_id)
 
-  const huidige = row.status as OpleverPuntStatus
-  // Defensief: een status die de machine niet kent levert `undefined` op en zou hier throwen —
-  // deze module geeft altijd een resultaatobject terug, nooit een exceptie.
-  const toegestaan = PUNT_TRANSITIES[huidige] ?? []
-  if (huidige !== status && !toegestaan.includes(status)) {
-    return { ok: false, error: `Ongeldige statusovergang: ${huidige} → ${status}` }
-  }
-
   const now = new Date().toISOString()
   const velden: Record<string, unknown> = { status, updated_at: now }
-  if (status === 'opgelost') velden.afgemeld_op = now
-  if (status === 'geaccepteerd') velden.geaccepteerd_op = now
-  if (status === 'geweigerd' || status === 'afgewezen') velden.geweigerd_reden = opts?.reden ?? null
+  // Stempels volgen de nieuwe stand, ook terugwaarts: nu een punt vrij terug mag naar 'open',
+  // zou een blijvende geaccepteerd-datum een punt tonen als afgehandeld terwijl het weer loopt.
+  velden.afgemeld_op = status === 'opgelost' || status === 'geaccepteerd'
+    ? (row.afgemeld_op ?? now)
+    : null
+  velden.geaccepteerd_op = status === 'geaccepteerd' ? (row.geaccepteerd_op ?? now) : null
+  velden.geweigerd_reden = status === 'geweigerd' || status === 'afgewezen' ? opts?.reden ?? null : null
 
   const { data: bijgewerkt, error } = await supabase
     .from('oplever_punten').update(velden).eq('id', id).select('moment_id').single()

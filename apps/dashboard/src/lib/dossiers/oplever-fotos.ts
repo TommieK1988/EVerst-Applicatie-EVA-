@@ -36,8 +36,8 @@ const AFGEROND: OpleverPuntStatus[] = ['opgelost', 'geaccepteerd']
  * Is dit punt afgemeld zonder bewijs dat het verholpen is?
  *
  * Levert alleen een signaal op — nergens een blokkade. Er zijn punten waar een foto niets
- * toevoegt (een administratieve correctie, een afspraak die is nagekomen), en de statusmachine
- * in `PUNT_TRANSITIES` blijft zo de enige plek die bepaalt wat mag.
+ * toevoegt (een administratieve correctie, een afspraak die is nagekomen); de status blijft
+ * daarmee vrij te zetten.
  */
 export function bewijsOntbreekt(status: OpleverPuntStatus, fotos: OpleverFoto[]): boolean {
   return AFGEROND.includes(status) && !fotos.some(f => f.soort === 'na')

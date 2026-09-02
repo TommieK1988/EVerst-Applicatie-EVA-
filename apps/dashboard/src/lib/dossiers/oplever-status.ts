@@ -1,35 +1,23 @@
 import type { OpleverPuntStatus } from '@everts/database'
 
 /**
- * Statusmachine van een opleverpunt.
+ * Statussen van een opleverpunt/aandachtspunt, in de volgorde waarin ze in keuzelijsten horen.
  *
  * Staat bewust in een gewone module en niet in `oplevering.ts`: die is `'use server'`, en de
- * mobiele schermen hebben deze tabel client-side nodig om alléén de knoppen te tonen die vanuit
- * de huidige status zijn toegestaan. Zonder gedeelde tabel zou de UI een tweede, stilletjes
- * afwijkende kopie krijgen — en dan tik je op een knop die de server vervolgens weigert.
- */
-
-/**
- * Toegestane transities (domein: Open → In behandeling → Opgelost → Geaccepteerd | Geweigerd).
+ * mobiele schermen hebben deze lijst client-side nodig om de statusknoppen te tonen. Zonder
+ * gedeelde lijst zou de UI een tweede, stilletjes afwijkende kopie krijgen.
  *
- * `nieuw` is de triage-ingang voor punten uit een formulier: de projectleider zet ze op de lijst
- * (`open`) of wijst ze af. `afgewezen` is terminaal, op ongedaan maken na.
+ * Er is bewust géén statusmachine meer: elke status mag naar elke andere. Een vaste volgorde
+ * afdwingen ("eerst in behandeling, dan opgelost") botste in de praktijk te vaak — een punt dat
+ * per ongeluk op geaccepteerd stond kon niet meer terug naar open, en een afgewezen melding niet
+ * rechtstreeks op de lijst. De projectleider bepaalt zelf wat de juiste stand is.
  */
-export const PUNT_TRANSITIES: Record<OpleverPuntStatus, OpleverPuntStatus[]> = {
-  nieuw:          ['open', 'afgewezen'],
-  open:           ['in_behandeling', 'opgelost', 'geaccepteerd'],
-  in_behandeling: ['open', 'opgelost', 'geaccepteerd'],
-  opgelost:       ['geaccepteerd', 'geweigerd', 'in_behandeling'],
-  geaccepteerd:   ['in_behandeling'],
-  geweigerd:      ['open', 'in_behandeling', 'opgelost'],
-  afgewezen:      ['nieuw', 'open'],
-}
+export const PUNT_STATUSSEN: OpleverPuntStatus[] = [
+  'nieuw', 'open', 'in_behandeling', 'opgelost', 'geaccepteerd', 'geweigerd', 'afgewezen',
+]
 
 /** Statussen die niet meetellen als werk: nog te beoordelen, of beoordeeld en afgevallen. */
 export const NIET_ACTIEVE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
 
-/**
- * Statussen die alleen via triage worden gezet. Ze horen niet tussen de gewone statusknoppen:
- * een punt "terug naar nieuw" zetten halverwege het werk is geen bedoelde handeling.
- */
-export const TRIAGE_STATUSSEN: OpleverPuntStatus[] = ['nieuw', 'afgewezen']
+/** Statussen waarbij een reden hoort — die vragen we uit vóór de wijziging. */
+export const REDEN_STATUSSEN: OpleverPuntStatus[] = ['geweigerd', 'afgewezen']
