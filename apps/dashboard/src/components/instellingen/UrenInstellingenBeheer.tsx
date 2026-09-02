@@ -8,6 +8,7 @@ import {
   setUrenInstellingen,
   setUursoortCategorie,
   setIndirectDossier,
+  setPloegModus,
   herlaadUursoorten,
   type UrenCategorie,
 } from '@/app/(platform)/instellingen/uren/actions'
@@ -19,6 +20,7 @@ type Instellingen = {
   indien_deadline_tijd: string
   goedkeur_deadline_dag: number
   goedkeur_deadline_tijd: string
+  goedkeuring_modus: 'eva' | 'bouw7'
 } | null
 
 type Uursoort = {
@@ -31,6 +33,7 @@ type Uursoort = {
 }
 
 type Werkmaatschappij = { id: string; naam: string; indirect_uren_dossier_id: string | null }
+type Ploeg = { id: string; naam: string; goedkeuring_modus: 'eva' | 'bouw7' | null }
 type Medewerker = { id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }
 type Dossier = { id: string; dossiernummer: string; titel: string }
 
@@ -66,13 +69,14 @@ function volledigeNaam(m: Medewerker) {
 }
 
 export default function UrenInstellingenBeheer({
-  instellingen, uursoorten, werkmaatschappijen, medewerkers, indirectDossiers,
+  instellingen, uursoorten, werkmaatschappijen, medewerkers, indirectDossiers, ploegen,
 }: {
   instellingen: Instellingen
   uursoorten: Uursoort[]
   werkmaatschappijen: Werkmaatschappij[]
   medewerkers: Medewerker[]
   indirectDossiers: Dossier[]
+  ploegen: Ploeg[]
 }) {
   const router = useRouter()
   const [, startT] = useTransition()
@@ -85,6 +89,7 @@ export default function UrenInstellingenBeheer({
     indien_deadline_tijd: (instellingen?.indien_deadline_tijd ?? '17:00').slice(0, 5),
     goedkeur_deadline_dag: instellingen?.goedkeur_deadline_dag ?? 1,
     goedkeur_deadline_tijd: (instellingen?.goedkeur_deadline_tijd ?? '12:00').slice(0, 5),
+    goedkeuring_modus: instellingen?.goedkeuring_modus ?? 'bouw7',
   })
   const [busy, setBusy] = useState(false)
   const [herladen, setHerladen] = useState(false)
@@ -98,6 +103,7 @@ export default function UrenInstellingenBeheer({
       indien_deadline_tijd: `${form.indien_deadline_tijd}:00`,
       goedkeur_deadline_dag: form.goedkeur_deadline_dag,
       goedkeur_deadline_tijd: `${form.goedkeur_deadline_tijd}:00`,
+      goedkeuring_modus: form.goedkeuring_modus,
     })
     setBusy(false)
     if (!r.ok) { toast.error(r.error); return }
@@ -108,6 +114,13 @@ export default function UrenInstellingenBeheer({
   async function wijzigCategorie(id: string, waarde: string) {
     const r = await setUursoortCategorie(id, (waarde || null) as UrenCategorie | null)
     if (!r.ok) { toast.error(r.error); return }
+    ververs()
+  }
+
+  async function wijzigPloegModus(ploegId: string, waarde: string) {
+    const r = await setPloegModus(ploegId, (waarde || null) as 'eva' | 'bouw7' | null)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Opgeslagen')
     ververs()
   }
 
@@ -137,7 +150,58 @@ export default function UrenInstellingenBeheer({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* ── Deadlines en goedkeuring ─────────────────────────────── */}
+      {/* ── Waar wordt geaccordeerd ──────────────────────────────── */}
+      <Card>
+        <CardBody>
+          <h2 style={kopStijl}>Waar worden uren goedgekeurd?</h2>
+          <p style={uitlegStijl}>
+            Accorderen gebeurt vandaag in Bouw7. Die route blijft gewoon werken: weken die in EVA
+            worden ingediend gaan daar meteen naartoe en EVA leest terug of ze zijn goedgekeurd.
+            Zet je de route op EVA, dan accordeert eerst de teamleider de hele week en daarna elke
+            projectleider de uren op zijn eigen dossiers — pas dan gaan de uren naar Bouw7.
+          </p>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 460 }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+              Route voor het hele bedrijf
+            </span>
+            <select value={form.goedkeuring_modus} style={veldStijl}
+              onChange={e => setForm(f => ({ ...f, goedkeuring_modus: e.target.value as 'eva' | 'bouw7' }))}>
+              <option value="bouw7">In Bouw7 — zoals het nu gaat</option>
+              <option value="eva">In EVA — teamleider, daarna de projectleiders</option>
+            </select>
+          </label>
+
+          {ploegen.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+                Afwijkend per ploeg
+              </span>
+              <p style={{ ...uitlegStijl, margin: '4px 0 10px' }}>
+                Handig om met één team proef te draaien op de EVA-keten terwijl de rest in Bouw7
+                blijft accorderen.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {ploegen.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1, color: 'var(--fg)' }}>
+                      {p.naam}
+                    </span>
+                    <select value={p.goedkeuring_modus ?? ''} style={{ ...veldStijl, minWidth: 300 }}
+                      onChange={e => wijzigPloegModus(p.id, e.target.value)}>
+                      <option value="">Volg de bedrijfsinstelling</option>
+                      <option value="bouw7">In Bouw7</option>
+                      <option value="eva">In EVA</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* ── Deadlines ────────────────────────────────────────────── */}
       <Card>
         <CardBody>
           <h2 style={kopStijl}>Deadlines en goedkeuring</h2>
