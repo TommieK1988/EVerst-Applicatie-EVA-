@@ -180,7 +180,11 @@ const APP_SUBNAV: Record<string, {
   },
 }
 
-type DossierTab = { slug: string; label: string; d: string }
+type DossierTab = {
+  slug: string; label: string; d: string
+  /** Alleen tonen met minimaal leesrecht op deze module. */
+  recht?: RechtenModule
+}
 
 const AANVRAAG_TABS: DossierTab[] = [
   { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
@@ -206,6 +210,9 @@ const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'oplevering',    label: 'Oplevering',    d: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'financieel',    label: 'Financieel',    d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'formulieren',   label: 'Formulieren',   d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
+  // Wat de opdrachtgever van dit dossier te zien krijgt. Geen toggle-gate:
+  // de tab is altijd zichtbaar (met het recht) en heeft zelf een aan/uit-schakelaar.
+  { slug: 'portaal',       label: 'Klantportaal',  recht: 'klantportaal', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18' },
 ]
 
 const SERVICEDESK_TABS: DossierTab[] = [
@@ -317,6 +324,8 @@ export default function Sidebar({
   const zichtbareTabs = dossierTabs.filter(t => {
     const vereisteSleutel = TAB_TOGGLE_GATES[t.slug]
     if (vereisteSleutel && !aanSleutels.has(vereisteSleutel)) return false
+    // Tabs met een modulerecht (Klantportaal) alleen voor wie dat recht heeft.
+    if (t.recht && !heeftModuleToegang(rechten ?? {}, t.recht, 'lezen')) return false
     // Calculatie-tab is in servicedesk gegated op een gekoppelde calculatie/offerte.
     if (dossierSectie === 'servicedesk' && t.slug === 'calculatie' && !heeftCalc) return false
     return true

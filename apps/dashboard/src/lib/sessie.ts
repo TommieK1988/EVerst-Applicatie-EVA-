@@ -12,7 +12,9 @@
  * kunnen lopen.
  */
 
-import { MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
+import {
+  MOBIEL_SESSIE_MAXAGE, PORTAAL_MARKER_COOKIE, PORTAAL_SESSIE_MAXAGE,
+} from '@everts/database/cookies'
 
 /** Klokuur (lokale tijd) waarop elke sessie vervalt — eind van de werkdag. */
 export const UITLOG_UUR = 18
@@ -63,4 +65,25 @@ export function volgendeUitlogTijd(nu: Date = new Date()): number {
  */
 export function mobieleVervalTijd(nu: Date = new Date()): number {
   return nu.getTime() + MOBIEL_SESSIE_MAXAGE * 1000
+}
+
+/**
+ * Markercookie: deze browser gebruikt het klantportaal.
+ *
+ * Puur voor routering en cookielevensduur — hij bepaalt waar iemand na het
+ * inloggen heen gaat, meer niet. Wie hem zelf zet, komt hooguit op /portaal uit
+ * en wordt daar door `vereisPortaalPagina` alsnog weggestuurd. Nooit als gate
+ * gebruiken.
+ */
+export const COOKIE_PORTAAL = PORTAAL_MARKER_COOKIE
+
+export { PORTAAL_SESSIE_MAXAGE }
+
+/**
+ * Vervalmoment voor een portaalsessie: absoluut 14 dagen na login. Bewust niet
+ * gekoppeld aan het uitlogmoment van EVA — een opdrachtgever heeft geen
+ * werkdag die om 18:00 eindigt.
+ */
+export function portaalVervalTijd(nu: Date = new Date()): number {
+  return nu.getTime() + PORTAAL_SESSIE_MAXAGE * 1000
 }

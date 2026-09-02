@@ -31,6 +31,7 @@ import {
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
+import { PortaalChatBlok } from './PortaalChatBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import FinancieelGereedDialog from '../FinancieelGereedDialog'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
@@ -1634,6 +1635,11 @@ export function InformatieTab({
             currentMedewerkerId={currentMedewerkerId}
             className="min-h-[220px] flex-1"
           />
+          {/* Klantchat direct onder de interne notities. Bewust in dezelfde kolom:
+              wie hier iets typt moet in één oogopslag zien welk vak intern is en
+              welk vak de opdrachtgever meeleest. Het blok haalt zijn eigen data op
+              en verbergt zich als er geen klantportaal-recht is. */}
+          <PortaalChatBlok dossierId={dossier.id} />
         </div>
 
         {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): rollen worden bij opslaan

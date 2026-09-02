@@ -247,7 +247,18 @@ function Lightbox({ fotos, index, onIndex, onClose }: {
 
 /* ─── Galerij ─────────────────────────────────────────────────────────────── */
 
-export default function Fotogalerij({ fotos }: { fotos: BestandRij[] }) {
+export default function Fotogalerij({
+  fotos, inPortaal, onTogglePortaal,
+}: {
+  fotos: BestandRij[]
+  /**
+   * Sleutels van foto's die in het klantportaal staan (opt-in). Ontbreekt de
+   * prop, dan verschijnen de vinkjes niet — bijvoorbeeld voor wie geen recht op
+   * het klantportaal heeft.
+   */
+  inPortaal?: Set<string>
+  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void
+}) {
   const [huidige, setHuidige] = useState(0)
   const [vergroot, setVergroot] = useState(false)
 
@@ -299,6 +310,7 @@ export default function Fotogalerij({ fotos }: { fotos: BestandRij[] }) {
           <span>Foto&apos;s</span>
           <span className="text-[11px] font-normal text-neutral-400">
             {fotos.length} afbeelding{fotos.length === 1 ? '' : 'en'}
+            {inPortaal && inPortaal.size > 0 && ` · ${inPortaal.size} in het portaal`}
           </span>
         </div>
       </CardHeader>
@@ -316,20 +328,34 @@ export default function Fotogalerij({ fotos }: { fotos: BestandRij[] }) {
         <div className="mt-3 border-t border-neutral-100 pt-2">
           <div className="max-h-[196px] overflow-y-auto">
             {fotos.map((f, i) => (
-              <button
+              <div
                 key={f.sleutel}
-                onClick={() => setHuidige(i)}
-                onDoubleClick={() => { setHuidige(i); setVergroot(true) }}
-                title={f.naam}
-                className={`flex w-full items-center gap-2 rounded px-1.5 py-[3px] text-left text-[11.5px] ${
+                className={`flex w-full items-center gap-2 rounded px-1.5 py-[3px] text-[11.5px] ${
                   i === index ? 'bg-brand-50 font-medium text-brand-700' : 'text-neutral-700 hover:bg-neutral-50'
                 }`}
               >
-                <span className="min-w-0 flex-1 truncate">{f.naam}</span>
-                <span className="shrink-0 text-[10px] text-neutral-400">{f.bron}</span>
-                <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{f.datum ?? ''}</span>
-                <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{formatteerGrootte(f.grootte)}</span>
-              </button>
+                <button
+                  onClick={() => setHuidige(i)}
+                  onDoubleClick={() => { setHuidige(i); setVergroot(true) }}
+                  title={f.naam}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <span className="min-w-0 flex-1 truncate">{f.naam}</span>
+                  <span className="shrink-0 text-[10px] text-neutral-400">{f.bron}</span>
+                  <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{f.datum ?? ''}</span>
+                  <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{formatteerGrootte(f.grootte)}</span>
+                </button>
+                {inPortaal && onTogglePortaal && (
+                  <input
+                    type="checkbox"
+                    checked={inPortaal.has(f.sleutel)}
+                    onChange={e => onTogglePortaal(f, e.target.checked)}
+                    title="Zichtbaar voor de opdrachtgever in het klantportaal"
+                    aria-label={`${f.naam} zichtbaar in het klantportaal`}
+                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand-600"
+                  />
+                )}
+              </div>
             ))}
           </div>
         </div>

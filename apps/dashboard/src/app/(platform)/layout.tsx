@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@everts/database/server'
 import PlatformShell from '@/components/eva/PlatformShell'
 import ToastProvider from '@/components/taken/shared/ToastProvider'
@@ -39,6 +40,11 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     telOngelezenUpdates(),
     getOngelezenUpdates(5),
   ])
+  /* Ingelogd maar geen medewerker? Dan is dit een klant met een portaalsessie.
+     Die hoort niet in EVA rond te lopen: hij krijgt hier toch overal nul rijen,
+     maar wel een reeks lege schermen. Stuur hem naar zijn eigen omgeving. */
+  if (user && !medewerker) redirect('/portaal')
+
   const rechten = await getEffectieveRechten(medewerker)
 
   /* Naam: medewerker-record heeft prioriteit boven auth metadata */

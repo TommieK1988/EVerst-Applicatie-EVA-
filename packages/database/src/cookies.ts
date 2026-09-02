@@ -24,18 +24,38 @@ export const MOBIEL_SESSIE_MAXAGE = 60 * 60 * 24 * 3
 export const MOBIEL_MARKER_COOKIE = 'eva_mobiel'
 
 /**
+ * Levensduur van een klantportaal-sessie: 14 dagen. Een opdrachtgever komt niet
+ * elke ochtend binnen en zou anders bijna elk bezoek een nieuwe inloglink moeten
+ * aanvragen.
+ */
+export const PORTAAL_SESSIE_MAXAGE = 60 * 60 * 24 * 14
+
+/**
+ * Markercookie voor het klantportaal — zelfde rol als {@link MOBIEL_MARKER_COOKIE}:
+ * de cookie-schrijvers lezen hem om te bepalen of de auth-cookies persistent
+ * moeten zijn. Puur routering en levensduur, nooit autorisatie.
+ */
+export const PORTAAL_MARKER_COOKIE = 'eva_portaal'
+
+/**
  * Bepaalt de levensduur van een auth-cookie:
  * - `persistent = false` (desktop): sessie-cookie, sterft bij het sluiten van de
  *   browser/app — elke opstart loopt via het inlogscherm.
  * - `persistent = true` (mobiel): vaste Max-Age van {@link MOBIEL_SESSIE_MAXAGE},
  *   zodat de sessie een app-herstart overleeft.
+ * Geef `maxAge` mee om een andere levensduur te kiezen (het klantportaal gebruikt
+ * {@link PORTAAL_SESSIE_MAXAGE}).
  * Verwijderingen (maxAge 0) blijven altijd intact, anders raak je cookies nooit kwijt.
  */
-export function alsSessieCookie(options?: CookieOptions, persistent = false): CookieOptions {
+export function alsSessieCookie(
+  options?: CookieOptions,
+  persistent = false,
+  maxAge: number = MOBIEL_SESSIE_MAXAGE,
+): CookieOptions {
   const opts: CookieOptions = { ...(options ?? {}) }
   if (opts.maxAge === 0) return opts
   if (persistent) {
-    opts.maxAge = MOBIEL_SESSIE_MAXAGE
+    opts.maxAge = maxAge
     delete opts.expires
     return opts
   }
@@ -75,13 +95,16 @@ export const browserSessieCookies = {
   },
   setAll(cookiesToSet: CookieToSet[]) {
     if (typeof document === 'undefined') return
-    // Mobiele sessie? Dan de auth-cookies persistent schrijven (Max-Age), zodat
-    // ze een app-herstart overleven. De marker wordt bij de mobiele login gezet.
-    const persistent = document.cookie
-      .split(/; */)
-      .some((deel) => deel.startsWith(`${MOBIEL_MARKER_COOKIE}=`))
+    // Mobiele sessie of klantportaal? Dan de auth-cookies persistent schrijven
+    // (Max-Age), zodat ze een herstart overleven. De markers worden bij de
+    // betreffende login gezet.
+    const delen = document.cookie.split(/; */)
+    const mobiel = delen.some((deel) => deel.startsWith(`${MOBIEL_MARKER_COOKIE}=`))
+    const portaal = delen.some((deel) => deel.startsWith(`${PORTAAL_MARKER_COOKIE}=`))
+    const persistent = mobiel || portaal
+    const levensduur = portaal ? PORTAAL_SESSIE_MAXAGE : MOBIEL_SESSIE_MAXAGE
     for (const { name, value, options } of cookiesToSet) {
-      const opts = alsSessieCookie(options, persistent)
+      const opts = alsSessieCookie(options, persistent, levensduur)
       let cookie = `${name}=${encodeURIComponent(value)}`
       cookie += `; Path=${opts.path ?? '/'}`
       if (opts.domain) cookie += `; Domain=${opts.domain}`

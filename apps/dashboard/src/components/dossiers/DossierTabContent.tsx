@@ -27,6 +27,7 @@ import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
 import OpleveringTab from './tabs/OpleveringTab'
 import BestandenTab from './tabs/BestandenTab'
+import PortaalTab from './tabs/PortaalTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
@@ -47,6 +48,7 @@ const TAB_LABELS: Record<string, string> = {
   oplevering:    'Oplevering',
   financieel:    'Financieel',
   formulieren:   'Formulieren',
+  portaal:       'Klantportaal',
 }
 
 type Props = { id: string; tab: string; sectie: DossierSectie }
@@ -325,6 +327,17 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
       <>
         {titleInjector}
         <OpleveringTab dossierId={id} />
+      </>
+    )
+  }
+
+  if (tab === 'portaal') {
+    return (
+      <>
+        {titleInjector}
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <PortaalTab dossierId={id} />
+        </Suspense>
       </>
     )
   }

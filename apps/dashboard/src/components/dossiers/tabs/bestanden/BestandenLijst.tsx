@@ -85,7 +85,10 @@ const BRON_STIJL: Record<BestandRij['bron'], string> = {
   SharePoint: 'bg-neutral-100 text-neutral-600',
 }
 
-export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, voettekst, legeTekst }: {
+export default function BestandenLijst({
+  rijen, inApp, onToggleApp, onOpenMail, voettekst, legeTekst,
+  inPortaal, onTogglePortaal,
+}: {
   rijen: BestandRij[]
   /** Bouw7-bestanden die de buitendienst in de mobiele app ziet (opt-in). */
   inApp: Set<number>
@@ -94,6 +97,14 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
   voettekst: React.ReactNode
   /** Tekst als er niets te tonen valt — zoeken levert iets anders op dan een lege lijst. */
   legeTekst?: string
+  /**
+   * Sleutels van bestanden die in het klantportaal staan (opt-in). Anders dan de
+   * app-kolom werkt dit óók voor SharePoint: de sleutel is bronoverstijgend.
+   * Ontbreekt de prop, dan is de kolom er niet — bijvoorbeeld voor wie geen
+   * recht op het klantportaal heeft.
+   */
+  inPortaal?: Set<string>
+  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void
 }) {
   const [zoek, setZoek] = useState('')
   const [bronFilter, setBronFilter] = useState<'alle' | BestandRij['bron']>('alle')
@@ -140,6 +151,7 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
   }
 
   const toonAppKolom = rijen.some(r => r.bouw7Id != null)
+  const toonPortaalKolom = !!inPortaal && !!onTogglePortaal
 
   return (
     <>
@@ -204,6 +216,11 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
                   In app
                 </th>
               )}
+              {toonPortaalKolom && (
+                <th className={`${KOP} text-center`} title="Zichtbaar voor de opdrachtgever in het klantportaal">
+                  In portaal
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -244,11 +261,22 @@ export default function BestandenLijst({ rijen, inApp, onToggleApp, onOpenMail, 
                     )}
                   </td>
                 )}
+                {toonPortaalKolom && (
+                  <td className={`${CEL} text-center`}>
+                    <input
+                      type="checkbox"
+                      checked={inPortaal!.has(r.sleutel)}
+                      onChange={e => onTogglePortaal!(r, e.target.checked)}
+                      aria-label={`${r.naam} zichtbaar in het klantportaal`}
+                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                    />
+                  </td>
+                )}
               </tr>
             ))}
             {zichtbaar.length === 0 && (
               <tr>
-                <td colSpan={KOLOMMEN.length + (toonAppKolom ? 1 : 0)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
+                <td colSpan={KOLOMMEN.length + (toonAppKolom ? 1 : 0) + (toonPortaalKolom ? 1 : 0)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
                   {rijen.length === 0 ? (legeTekst ?? 'Geen bestanden.') : 'Geen bestanden gevonden.'}
                 </td>
               </tr>

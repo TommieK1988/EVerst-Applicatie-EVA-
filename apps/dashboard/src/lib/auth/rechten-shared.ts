@@ -13,6 +13,10 @@ const NIVEAU_RANG: Record<ModuleRechten, number> = { lezen: 1, schrijven: 2, beh
 export const AFGEDWONGEN_MODULES: RechtenModule[] = [
   'management', 'mijn_taken', 'wagenpark', 'materieelbeheer', 'taken', 'formulieren', 'toolbox',
   'objectenbeheer',
+  // Klantportaal is nieuw en meteen afgedwongen: er is geen bestaande gebruiker
+  // die er toegang toe had, dus niemand raakt iets kwijt. Wie bepaalt wat een
+  // opdrachtgever te zien krijgt, is een bewuste keuze — geen standaardrecht.
+  'klantportaal',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */

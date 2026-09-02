@@ -18,6 +18,14 @@ type SettingsItem = {
 
 const platformItems: SettingsItem[] = [
   {
+    href: '/instellingen/klantportaal',
+    title: 'Klantportaal',
+    description: 'Wie van onze opdrachtgevers toegang heeft tot zijn projectomgeving, en wanneer zij voor het laatst inlogden.',
+    ready: true,
+    kicker: 'Klantportaal',
+    module: 'klantportaal',
+  },
+  {
     href: '/instellingen/functies-afdelingen',
     title: 'Functies & Afdelingen',
     description: 'Beheer de beschikbare functies en afdelingen die als keuze verschijnen bij medewerkerprofielen.',

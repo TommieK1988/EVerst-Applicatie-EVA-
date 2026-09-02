@@ -762,6 +762,11 @@ export const RECHTEN_MODULES = [
   // acties van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
   { key: 'alle_taken',     label: 'Alle acties' },
   { key: 'financieel',     label: 'Financieel' },
+  // Klantportaal: wie mag zien wat er met een opdrachtgever gedeeld is.
+  //  - lezen    → de Portaal-tab en de klantchat inzien
+  //  - schrijven → onderdelen en bestanden vrijgeven, terugschrijven in de chat
+  //  - beheren  → contactpersonen uitnodigen, hun scope zetten, toegang intrekken
+  { key: 'klantportaal',   label: 'Klantportaal' },
   { key: 'instellingen',   label: 'Instellingen' },
 ] as const
 
@@ -1563,3 +1568,108 @@ export type OpleverToegangToken = {
   created_at: string
   created_by: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Klantportaal
+// ---------------------------------------------------------------------------
+
+/**
+ * Welke dossiers een portaalgebruiker ziet.
+ *  - eigen_dossiers → alleen waar deze contactpersoon aan hangt (standaard)
+ *  - organisatie    → alle dossiers van zijn relatie
+ * Extra losse dossiers komen daar altijd bovenop via portaal_gebruiker_dossiers.
+ */
+export type PortaalScope = 'eigen_dossiers' | 'organisatie'
+
+export type PortaalGebruiker = {
+  id: string
+  auth_user_id: string | null
+  email: string
+  contactpersoon_id: string | null
+  particulier_id: string | null
+  relatie_id: string | null
+  scope: PortaalScope
+  actief: boolean
+  uitgenodigd_op: string | null
+  uitgenodigd_door: string | null
+  laatste_link_op: string | null
+  laatst_ingelogd_op: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * De onderdelen die per dossier los aan of uit staan. De sleutel is bewust
+ * gelijk aan het achtervoegsel van de kolom in portaal_dossier_instellingen
+ * (toon_bestanden → 'bestanden'), zodat de guard de vlag rechtstreeks kan
+ * opzoeken zonder vertaaltabel.
+ */
+export type PortaalOnderdeel =
+  | 'bestanden'
+  | 'fotos'
+  | 'facturen'
+  | 'formulieren'
+  | 'aandachtspunten'
+  | 'planning'
+  | 'chat'
+  | 'afspraken'
+
+export type PortaalDossierInstellingen = {
+  dossier_id: string
+  actief: boolean
+  toon_bestanden: boolean
+  toon_fotos: boolean
+  toon_facturen: boolean
+  toon_formulieren: boolean
+  toon_aandachtspunten: boolean
+  toon_planning: boolean
+  /** false = alleen fases; true = ook de losse activiteiten. Nooit medewerkers. */
+  planning_detail: boolean
+  toon_chat: boolean
+  toon_afspraken: boolean
+  gewijzigd_op: string
+  gewijzigd_door: string | null
+}
+
+export type PortaalBestandBron = 'bouw7' | 'sharepoint' | 'storage'
+export type PortaalBestandSoort = 'document' | 'afbeelding'
+
+export type PortaalBestand = {
+  dossier_id: string
+  /** 'bouw7:<id>' | 'sharepoint:<itemId>' | 'storage:<bucket>/<pad>' */
+  sleutel: string
+  bron: PortaalBestandBron
+  /** Bevroren BestandRij.bronQuery — de enige bron die de proxy vertrouwt. */
+  bron_query: string
+  naam: string | null
+  extensie: string | null
+  soort: PortaalBestandSoort
+  grootte: number | null
+  datum: string | null
+  zichtbaar: boolean
+  gewijzigd_op: string
+  gewijzigd_door: string | null
+}
+
+export type PortaalBerichtBijlage = {
+  pad: string
+  naam: string
+  content_type: string | null
+  grootte: number | null
+}
+
+export type PortaalBericht = {
+  id: string
+  dossier_id: string
+  auteur_type: 'klant' | 'medewerker'
+  portaal_gebruiker_id: string | null
+  medewerker_id: string | null
+  bericht: string
+  bijlagen: PortaalBerichtBijlage[]
+  /** Interne kanttekening: staat in dezelfde draad, gaat nooit naar het portaal. */
+  intern: boolean
+  created_at: string
+}
+
+export type PortaalMailSoort = 'uitnodiging' | 'nieuw_bericht' | 'herinnering'
+export type PortaalMailStatus = 'wachtend' | 'verzonden' | 'mislukt' | 'geannuleerd'

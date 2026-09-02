@@ -1,8 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { bronUitQuery, haalBestandBytes, BestandFoutError } from '@/lib/dossiers/bestand-bytes'
+import { vereisPortaalOnderdeel, logPortaalToegang } from '@/lib/portaal/auth'
+import { bronUitQuery, haalBestandBytes, BestandFoutError, type BestandBron } from '@/lib/dossiers/bestand-bytes'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Bepaalt de bron voor een klantverzoek uit het klantportaal.
+ *
+ * Het verschil met de medewerkerstak is de kern van de beveiliging: hier worden
+ * `bron`, `hash`, `id`, `driveId`, `itemId` en `naam` uit de querystring
+ * VOLLEDIG GENEGEERD. De klant stuurt alleen een dossier en een sleutel mee; wat
+ * daarachter zit, komt uit portaal_bestanden — de tabel waarin een collega het
+ * bestand expliciet heeft vrijgegeven. Zo kan een geknutselde URL nooit een
+ * ander bestand aanwijzen dan wat er is gedeeld.
+ *
+ * Levert null als er niets is vrijgegeven onder die sleutel; de aanroeper maakt
+ * daar een 403 van (geen 404 — dat zou verklappen of een sleutel bestaat).
+ */
+async function portaalBron(
+  dossierId: string,
+  sleutel: string,
+  ip: string | null,
+): Promise<{ bron: BestandBron; naam: string } | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createAdminClient() as any
+  const { data } = await db
+    .from('portaal_bestanden')
+    .select('bron_query, naam, soort')
+    .eq('dossier_id', dossierId)
+    .eq('sleutel', sleutel)
+    .eq('zichtbaar', true)
+    .maybeSingle()
+  if (!data) return null
+
+  // Staat het onderdeel uit, dan bestaat ook een eerder gedeeld bestand niet meer.
+  const { gebruiker } = await vereisPortaalOnderdeel(
+    dossierId, data.soort === 'afbeelding' ? 'fotos' : 'bestanden',
+  )
+
+  const bron = bronUitQuery(new URLSearchParams(String(data.bron_query)))
+  if (!bron) return null
+
+  // Vastleggen wie welk bestand ophaalde. Dit is het enige moment waarop er
+  // daadwerkelijk inhoud het pand verlaat; een AVG-inzagevraag gaat hierover.
+  await logPortaalToegang({
+    portaalGebruikerId: gebruiker.id,
+    dossierId,
+    onderdeel: data.soort === 'afbeelding' ? 'fotos' : 'bestanden',
+    sleutel,
+    ip,
+  })
+
+  return { bron, naam: (data.naam as string | null) || 'bestand' }
+}
 
 /**
  * GET /api/dossier-bestand?bron=bouw7&hash=…&id=…
@@ -19,18 +71,40 @@ export const dynamic = 'force-dynamic'
  * - `download=1` forceert opslaan i.p.v. openen in het tabblad
  */
 export async function GET(req: NextRequest) {
-  try {
-    // Object-level authz: bestanden horen bij dossiers, dus lees-recht op die module
-    // is de ondergrens. Zonder deze check kan elke ingelogde gebruiker willekeurige
-    // project- of SharePoint-bestanden ophalen.
-    await vereisRecht('dossiers', 'lezen')
-  } catch (e) {
-    if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
-    throw e
+  const params = req.nextUrl.searchParams
+  const isPortaal = params.get('portaal') === '1'
+
+  let bron: BestandBron | null
+  let vasteNaam: string | null = null
+
+  if (isPortaal) {
+    const dossierId = params.get('dossier') ?? ''
+    const sleutel = params.get('sleutel') ?? ''
+    if (!dossierId || !sleutel) return new NextResponse('Geen geldig bestand opgegeven', { status: 400 })
+    try {
+      // Vercel zet het echte adres in x-forwarded-for; de eerste is de bezoeker.
+      const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || null
+      const gevonden = await portaalBron(dossierId, sleutel, ip)
+      if (!gevonden) return new NextResponse('Geen toegang', { status: 403 })
+      bron = gevonden.bron
+      vasteNaam = gevonden.naam
+    } catch (e) {
+      if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
+      throw e
+    }
+  } else {
+    try {
+      // Object-level authz: bestanden horen bij dossiers, dus lees-recht op die module
+      // is de ondergrens. Zonder deze check kan elke ingelogde gebruiker willekeurige
+      // project- of SharePoint-bestanden ophalen.
+      await vereisRecht('dossiers', 'lezen')
+    } catch (e) {
+      if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
+      throw e
+    }
+    bron = bronUitQuery(params)
   }
 
-  const params = req.nextUrl.searchParams
-  const bron = bronUitQuery(params)
   if (!bron) return new NextResponse('Geen geldig bestand opgegeven', { status: 400 })
 
   let bestand
@@ -41,7 +115,9 @@ export async function GET(req: NextRequest) {
     return new NextResponse('Ophalen mislukt', { status: 502 })
   }
 
-  const naam = (params.get('naam') || bestand.fileName || 'bestand').replace(/["\r\n]/g, '')
+  // In de portaaltak komt de naam uit de database, niet uit het verzoek — anders
+  // bepaalt de bezoeker zelf onder welke bestandsnaam iets wordt opgeslagen.
+  const naam = (vasteNaam ?? params.get('naam') ?? bestand.fileName ?? 'bestand').replace(/["\r\n]/g, '')
   const dispositie = params.get('download') === '1' ? 'attachment' : 'inline'
 
   let data = bestand.data

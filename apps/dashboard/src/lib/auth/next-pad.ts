@@ -42,3 +42,18 @@ export function nextParameter(pad: string): string {
   if (pad === '/' || pad === '/m' || pad.startsWith('/login')) return ''
   return `?next=${encodeURIComponent(pad)}`
 }
+
+/**
+ * Portaalvariant: een klant mag na het inloggen alleen binnen /portaal uitkomen.
+ *
+ * `veiligNextPad` houdt alleen andere hosts buiten de deur; hier is dat niet
+ * genoeg. Zonder deze extra grens kan een `?next=/opdrachten` een klant na het
+ * inloggen de EVA-kant in duwen. Dat levert geen data op — de guards daar laten
+ * hem niet toe — maar wel een verwarrend foutscherm bij zijn eerste bezoek.
+ */
+export function veiligPortaalPad(waarde: string | null | undefined): string | null {
+  const pad = veiligNextPad(waarde)
+  if (!pad) return null
+  if (pad !== '/portaal' && !pad.startsWith('/portaal/')) return null
+  return pad
+}

@@ -350,6 +350,17 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Geavanceerde instellingen voor de managementmodule: KPI-drempelwaarden, rapportageperioden en koppeling met externe managementrapportage.',
   }],
 
+  // ── Klantportaal ───────────────────────────────────────────────────────
+  [/^\/instellingen\/klantportaal$/, {
+    title: 'Klantportaal',
+    description: 'Alle opdrachtgevers met toegang tot hun eigen projectomgeving op /portaal. Uitnodigen doe je per dossier, op de tab Klantportaal; dit scherm is het overzicht daarvan.',
+    sections: [
+      { title: 'Nooit ingelogd', body: 'Staat er "nooit" bij Laatst ingelogd, dan is de uitnodiging waarschijnlijk niet aangekomen. Het e-mailadres komt uit de Bouw7-sync en is vaak jaren oud — controleer het bij de contactpersoon en nodig opnieuw uit.' },
+      { title: 'Ziet', body: 'Standaard ziet een contactpersoon alleen de projecten waar hij zelf aan gekoppeld is. Bij corporaties en VvE-beheerders wil je hem vaak alle projecten van zijn organisatie laten zien; dat zet je per persoon om in het dossier.' },
+      { title: 'Toegang intrekken', body: 'Een ingetrokken account kan niet meer inloggen, maar de berichtgeschiedenis blijft bewaard. Voor een echt verwijderverzoek (AVG) is een aparte handeling nodig.' },
+    ],
+  }],
+
   // ── Platform instellingen ──────────────────────────────────────────────
   [/^\/instellingen$/, {
     title: 'Instellingen',

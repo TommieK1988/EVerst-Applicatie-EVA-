@@ -30,6 +30,7 @@ import { bouw7Rij, sharePointRij, type BestandRij } from '@/lib/dossiers/bestand
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import DocumentenKaart from '@/components/documenten/DocumentenKaart'
 import SharePointMapPicker from './SharePointMapPicker'
+import { getPortaalBestandSleutels, setPortaalBestandZichtbaar } from '@/lib/portaal/beheer-actions'
 import BestandenLijst from './bestanden/BestandenLijst'
 import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
@@ -78,6 +79,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   const [bouw7, setBouw7] = useState<DossierBestandenData | null>(null)
   const [sharepoint, setSharepoint] = useState<DossierSharePointData | null>(null)
   const [inApp, setInApp] = useState<Set<number>>(new Set())
+  // null = deze gebruiker heeft geen recht op het klantportaal; dan verdwijnt
+  // de kolom in plaats van uitgegrijsd te blijven staan.
+  const [inPortaal, setInPortaal] = useState<Set<string> | null>(null)
   const [mail, setMail] = useState<BestandRij | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [bezig, start] = useTransition()
@@ -89,6 +93,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
     getAppZichtbareBestandIds(dossierId)
       .then(ids => setInApp(new Set(ids)))
       .catch(() => setInApp(new Set()))
+    getPortaalBestandSleutels(dossierId)
+      .then(sleutels => setInPortaal(sleutels ? new Set(sleutels) : null))
+      .catch(() => setInPortaal(null))
     getDossierSharePointBestanden(dossierId)
       .then(setSharepoint)
       .catch(e => setSharepoint(fallbackFout(e)))
@@ -107,6 +114,44 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
         setInApp(vorig => {
           const terug = new Set(vorig)
           if (zichtbaar) terug.delete(bestandId); else terug.add(bestandId)
+          return terug
+        })
+      }
+    })
+  }
+
+  /**
+   * Zelfde optimistische aanpak als het app-vinkje. Wat hier extra meegaat is de
+   * bevroren `bronQuery`: die bepaalt later welk bestand de klant precies krijgt,
+   * en wordt daarom bij het aanvinken vastgelegd in plaats van bij het opvragen.
+   */
+  function togglePortaal(rij: BestandRij, zichtbaar: boolean) {
+    setInPortaal(vorig => {
+      if (!vorig) return vorig
+      const nieuw = new Set(vorig)
+      if (zichtbaar) nieuw.add(rij.sleutel); else nieuw.delete(rij.sleutel)
+      return nieuw
+    })
+    setPortaalBestandZichtbaar(
+      dossierId,
+      {
+        sleutel: rij.sleutel,
+        bron: rij.bron === 'Bouw7' ? 'bouw7' : 'sharepoint',
+        bronQuery: rij.bronQuery,
+        naam: rij.naam,
+        extensie: rij.extensie,
+        // Mails horen bij de documenten: de klant heeft geen leesvenster voor .msg.
+        soort: rij.soort === 'afbeelding' ? 'afbeelding' : 'document',
+        grootte: rij.grootte,
+        datum: rij.datum,
+      },
+      zichtbaar,
+    ).then(res => {
+      if (!res.ok) {
+        setInPortaal(vorig => {
+          if (!vorig) return vorig
+          const terug = new Set(vorig)
+          if (zichtbaar) terug.delete(rij.sleutel); else terug.add(rij.sleutel)
           return terug
         })
       }
@@ -274,7 +319,10 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
             <div className="flex items-center justify-between">
               <span>Bestanden</span>
               <span className="text-[11px] font-normal text-neutral-400">
-                {inApp.size > 0 && `${inApp.size} in de app`}
+                {[
+                  inApp.size > 0 ? `${inApp.size} in de app` : null,
+                  inPortaal && inPortaal.size > 0 ? `${inPortaal.size} in het portaal` : null,
+                ].filter(Boolean).join(' · ')}
               </span>
             </div>
           </CardHeader>
@@ -295,6 +343,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 rijen={documenten}
                 inApp={inApp}
                 onToggleApp={toggleApp}
+                inPortaal={inPortaal ?? undefined}
+                onTogglePortaal={inPortaal ? togglePortaal : undefined}
                 onOpenMail={setMail}
                 legeTekst="Alle bestanden bij dit dossier zijn afbeeldingen — die staan in de fotogalerij."
                 voettekst={
@@ -316,7 +366,11 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           </CardBody>
         </Card>
 
-        <Fotogalerij fotos={fotos} />
+        <Fotogalerij
+          fotos={fotos}
+          inPortaal={inPortaal ?? undefined}
+          onTogglePortaal={inPortaal ? togglePortaal : undefined}
+        />
       </div>
 
       <MailVenster rij={mail} onClose={() => setMail(null)} />
