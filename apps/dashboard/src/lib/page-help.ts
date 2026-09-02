@@ -362,6 +362,19 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/uren\/goedkeuren$/, {
+    title: 'Uren goedkeuren',
+    description: 'Hier accordeer je de uren die anderen hebben ingediend. Twee lijsten: onder Mijn team staan de weken van de medewerkers waarvan jij teamleider bent, onder Mijn projecten de uren die anderen op jouw dossiers hebben geboekt. Je ziet alleen wat van jou is; de rest blijft buiten beeld.',
+    sections: [
+      { title: 'Waar wordt eigenlijk goedgekeurd?', body: 'Zolang de route op Bouw7 staat, accordeer je daar en niet hier. Weken die in EVA worden ingediend gaan meteen naar Bouw7 en wachten daar op je akkoord; EVA leest terug wanneer dat gebeurd is en toont ze hier alleen ter informatie, zonder knoppen. Staat de route op EVA, dan verschijnen de knoppen wel.' },
+      { title: 'Eerst de week, dan de projecten', body: 'De teamleider kijkt naar de hele week van een medewerker: kloppen de dagen, is het totaal aannemelijk. Keurt hij goed, dan gaan de regels die op een project staan door naar de projectleiders van die projecten. Pas als iedereen akkoord is, gaat de week naar Bouw7.' },
+      { title: 'Uren zonder projectleider', body: 'Verlof, ziekte en werk op een dossier zonder projectleider hebben geen tweede beoordelaar. Die weken zijn dus meteen rond zodra de teamleider akkoord geeft.' },
+      { title: 'Afkeuren', body: 'Bij afkeuren geef je een reden op. De medewerker ziet die bij zijn weekstaat, kan zijn uren aanpassen en opnieuw indienen. De hele week gaat terug, ook als er maar een regel niet klopte -- losse regels repareren zou een halfgekeurde week opleveren.' },
+      { title: 'Afgeweken van Bouw7', body: 'Staat er bij een regel dat er is afgeweken, dan heeft de medewerker een dag aangepast die automatisch was ingevuld vanuit een verlofregistratie of feestdag in Bouw7. Even nakijken dus.' },
+      { title: 'Verlof', body: 'Het derde tabblad zijn de verlofaanvragen van je team. Het aantal uren is al voor je uitgerekend volgens het rooster: weekenden tellen niet mee en feestdagen vallen eruit. Keur je goed, dan staat het verlof meteen in de planning en gaat het door naar Bouw7; lukt dat laatste niet, dan probeert EVA het vanzelf opnieuw.' },
+    ],
+  }],
+
   [/^\/instellingen\/uren$/, {
     title: 'Instellingen — Urenverantwoording',
     description: 'Bepaalt hoe de weekstaat rekent en waar de uren terechtkomen. Medewerkers vullen hun uren per dag in op hun telefoon en dienen ze per week in; daarna accordeert eerst de teamleider de hele week en daarna elke projectleider de uren op zijn eigen dossiers. Pas een volledig goedgekeurde week gaat door naar Bouw7.',

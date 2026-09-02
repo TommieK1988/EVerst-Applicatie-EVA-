@@ -68,6 +68,10 @@ const PLANNING_INKOOP: NavEntry[] = [
   { href: '/planning/project',         label: 'Projectplanning',    Icon: IconProjectplanning, module: 'planning' },
   { href: '/planning/medewerker',      label: 'Medewerkerplanning', Icon: IconCrewplanning,    module: 'planning' },
   { href: '/planning/bedrijfsagenda',  label: 'Bedrijfsagenda',     Icon: IconAgenda,          module: 'planning' },
+  // Bewust zonder module-recht: een teamleider of projectleider moet hier bij kunnen zonder dat hij
+  // de planning of de financien mag zien. Het scherm is zelfbeperkend -- je ziet alleen de weken
+  // waarvan je goedkeurder bent en de uren op je eigen dossiers.
+  { href: '/uren/goedkeuren', label: 'Uren goedkeuren', Icon: IconUren },
 ]
 
 const FINANCIEEL: NavEntry[] = [

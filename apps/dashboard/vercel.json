@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/toolbox-momenten",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/uren",
+      "schedule": "0 7-19/2 * * 1-5"
     }
   ]
 }
