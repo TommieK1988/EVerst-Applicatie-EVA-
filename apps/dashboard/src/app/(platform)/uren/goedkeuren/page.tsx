@@ -2,6 +2,7 @@ import { PageHeader } from '@/components/ui'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getTeamWeken, getProjectRegels } from '@/lib/uren/goedkeuring'
 import { getUrenInstellingen } from '@/lib/uren/instellingen'
+import { getTeBeoordelenVerlof } from '@/lib/uren/verlof'
 import GoedkeurenClient from '@/components/uren/GoedkeurenClient'
 
 export const metadata = { title: 'Uren goedkeuren' }
@@ -18,9 +19,10 @@ export const dynamic = 'force-dynamic'
 export default async function UrenGoedkeurenPage() {
   await vereisSessie()
 
-  const [weken, regels, instellingen] = await Promise.all([
+  const [weken, regels, verlof, instellingen] = await Promise.all([
     getTeamWeken(),
     getProjectRegels(),
+    getTeBeoordelenVerlof(),
     getUrenInstellingen(),
   ])
 
@@ -30,6 +32,7 @@ export default async function UrenGoedkeurenPage() {
       <GoedkeurenClient
         weken={weken}
         regels={regels}
+        verlof={verlof}
         bedrijfsModus={instellingen.goedkeuring_modus}
       />
     </div>

@@ -1,13 +1,13 @@
 import React from 'react'
-import { ListChecks, FolderOpen, Clock, CalendarDays, User } from 'lucide-react'
+import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
 import AppBadge from '@/components/eva/AppBadge'
 
 /**
- * Mobiel grid-startscherm (OS-launcher). Zes grote tegels naar de buitendienst-
- * onderdelen; géén onderbalk (bewuste keuze — zes items passen niet netjes in een
+ * Mobiel grid-startscherm (OS-launcher). Grote tegels naar de buitendienst-
+ * onderdelen; géén onderbalk (bewuste keuze — ze passen niet netjes in een
  * bottom-nav). Elk sub-scherm heeft een terug-link naar `/m` via `AppHeader`.
  */
 export default function MobielHome({
@@ -40,6 +40,7 @@ export default function MobielHome({
         <MobielTegel href="/m/dossiers" label="Dossiers" Icon={FolderOpen} />
         <MobielTegel href="/m/uren" label="Uren" Icon={Clock} />
         <MobielTegel href="/m/planning" label="Planning" Icon={CalendarDays} />
+        <MobielTegel href="/m/verlof" label="Verlof" Icon={Palmtree} />
         {/* Houtrot heeft bewust géén eigen tegel: registraties horen bij een dossier
             en verschijnen als tab zodra de toggle `houtrot_registreren` aanstaat. */}
         <MobielTegel href="/m/profiel" label="Mijn gegevens" Icon={User} />

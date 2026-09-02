@@ -30,10 +30,12 @@ import BestandenBeheer from '@/components/medewerkers/BestandenBeheer'
 import HandtekeningBeheer from '@/components/medewerkers/HandtekeningBeheer'
 import GebruikerToegangBeheer from '@/components/medewerkers/GebruikerToegangBeheer'
 import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
+import SaldoBeheer from '@/components/medewerkers/SaldoBeheer'
 import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { vereisModuleToegang } from '@/lib/auth/rechten'
+import { vereisModuleToegang, getEffectieveRechten } from '@/lib/auth/rechten'
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -54,6 +56,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   // Salaris/BSN/persoonsgegevens: alleen met medewerkers-recht (beheerders altijd).
   await vereisModuleToegang('medewerkers')
   const params = await props.params;
+  // Het saldo van een collega bijstellen is beheerwerk; lezen mag iedereen met medewerkers-recht.
+  const magMedewerkersBeheren = heeftModuleToegang(await getEffectieveRechten(), 'medewerkers', 'beheren')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -76,6 +80,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     uursoortenRes,
     afwezigheidRes,
     vrijeDagenRes,
+    saldoRes,
+    saldoCorrectiesRes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('id', params.id).maybeSingle(),
     supabase
@@ -140,6 +146,17 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       .from('bouw7_vrije_dagen')
       .select('*')
       .order('start_datum', { ascending: false }),
+    // Tijd-voor-tijdsaldo: de view telt de goedgekeurde weken op, de correcties staan los.
+    supabase
+      .from('uren_saldo_per_medewerker')
+      .select('saldo_uren')
+      .eq('medewerker_id', params.id)
+      .maybeSingle(),
+    supabase
+      .from('uren_saldo_correcties')
+      .select('id, datum, uren, reden, medewerkers!uren_saldo_correcties_door_fkey(voornaam, achternaam)')
+      .eq('medewerker_id', params.id)
+      .order('datum', { ascending: false })
   ])
 
   if (!medewerkerRes.data) notFound()
@@ -154,6 +171,18 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   const relaties = (relatiesRes.data ?? []) as Pick<Relatie, 'id' | 'naam' | 'types'>[]
   const functies = (functiesRes.data ?? []) as MedewerkerFunctie[]
   const afdelingen = (afdelingenRes.data ?? []) as MedewerkerAfdeling[]
+
+  const saldoRij = saldoRes?.data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const saldoCorrecties = ((saldoCorrectiesRes?.data ?? []) as any[]).map(c => ({
+    id: c.id,
+    datum: c.datum,
+    uren: Number(c.uren),
+    reden: c.reden,
+    doorNaam: c.medewerkers
+      ? [c.medewerkers.voornaam, c.medewerkers.achternaam].filter(Boolean).join(' ')
+      : null,
+  }))
 
   // Afdeling-standaard rechten voor deze medewerker (basis voor override-weergave)
   const afdelingStandaardRechten =
@@ -269,6 +298,18 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
               <VerlofOverzicht
                 afwezigheid={afwezigheid}
                 vrijeDagen={vrijeDagen}
+              />
+            </CardBody>
+          </Card>
+
+          {/* Tijd-voor-tijdsaldo uit de goedgekeurde weekstaten, plus handmatige correcties */}
+          <Card>
+            <CardBody>
+              <SaldoBeheer
+                medewerkerId={params.id}
+                saldo={Number(saldoRij?.saldo_uren ?? 0)}
+                correcties={saldoCorrecties}
+                magCorrigeren={magMedewerkersBeheren}
               />
             </CardBody>
           </Card>
