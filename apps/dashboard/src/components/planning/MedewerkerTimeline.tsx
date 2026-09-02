@@ -12,7 +12,7 @@ import { nl } from 'date-fns/locale'
 import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 
@@ -45,6 +45,9 @@ const ITEM_H  = 28
 const ROW_PAD = 6
 /** Vaste rijhoogte — taken worden niet meer gestapeld in lanes (één strook). */
 const RIJ_VAST = ROW_PAD * 2 + ITEM_H
+/** Tussenbalk met de groepsnaam boven het eerste lid van een groep
+ *  (sorteren op ploeg, afdeling of functie). */
+const GROEP_H = 24
 
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
 
@@ -1215,6 +1218,22 @@ export default function MedewerkerTimeline({
   const medewerkerLayout = useMemo(() => {
     const vsMs = vs.getTime()
     const veMs = ve.getTime() + DAG_MS
+    // Alleen conflicten die vandaag nog spelen of nog moeten komen verdienen een
+    // waarschuwingsdriehoek — aan een dubbele planning van vorige maand valt niets meer te
+    // herplannen. De rode gloed op de balken blijft wél voor alle conflicten staan, zodat
+    // de historie in de rij zichtbaar blijft. Grens is het begin van vandaag, niet het
+    // huidige tijdstip: een conflict dat vanochtend eindigde staat nog op het bord van vandaag.
+    const vanafMs = startOfDay(new Date()).getTime()
+    // Sorteren op ploeg, afdeling of functie zet een tussenbalk met de groepsnaam boven het
+    // eerste lid van elke groep. De lijst is dan al op die waarde gesorteerd, dus één
+    // wisseldetectie volstaat. Bij sorteren op voornaam is er niets te groeperen.
+    const GROEP_VAN: Partial<Record<SortKey, (m: Medewerker) => string>> = {
+      ploeg:    m => ploegNamen[m.ploeg_id ?? ''] || 'Zonder ploeg',
+      afdeling: m => m.afdeling || 'Zonder afdeling',
+      functie:  m => m.functie  || 'Zonder functie',
+    }
+    const groepVan = GROEP_VAN[sortBy] ?? null
+    let vorigeGroep: string | null = null
     let accTop = heeftAgendaRij ? RIJ_HOOGTE : 0
     return zichtbareMedewerkers.map(m => {
       const alle    = entriesPerMedewerker[m.id] ?? []
@@ -1232,13 +1251,34 @@ export default function MedewerkerTimeline({
         ...myAfw.map(a => ({ ...afwezigheidInterval(a), label: medewerkerAfwezigheidLabels[a.type].toLowerCase() })),
       ]
       const conflicten = berekenConflicten(work, blokken)
-      const row = { medewerker: m, top: accTop, entries: myEntries, conflicten, blokken, heeftConflict: conflicten.length > 0 }
+      const openConflicten = conflicten.filter(c => c.e > vanafMs)
+
+      const groep = groepVan?.(m) ?? null
+      let groepLabel: string | null = null
+      let groepTop:   number | null = null
+      if (groep !== null && groep !== vorigeGroep) {
+        vorigeGroep = groep
+        groepLabel  = groep
+        groepTop    = accTop
+        accTop     += GROEP_H
+      }
+
+      const row = {
+        medewerker: m, top: accTop, entries: myEntries,
+        conflicten, openConflicten, blokken,
+        heeftConflict: openConflicten.length > 0,
+        groepLabel, groepTop,
+      }
       accTop += RIJ_VAST
       return row
     })
-  }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, heeftAgendaRij])
+  }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, heeftAgendaRij, sortBy, ploegNamen])
 
-  const bodyHoogte = (heeftAgendaRij ? RIJ_HOOGTE : 0) + zichtbareMedewerkers.length * RIJ_VAST
+  // Uit de layout afgeleid, want de tussenbalken tellen mee in de hoogte.
+  const laatsteRij = medewerkerLayout[medewerkerLayout.length - 1]
+  const bodyHoogte = laatsteRij
+    ? laatsteRij.top + RIJ_VAST
+    : (heeftAgendaRij ? RIJ_HOOGTE : 0)
 
   /** Nieuwe start/eind voor een entry op een doel-dag: tijdstip + duur blijven gelijk. */
   function verplaatsNaarDag(entry: PlanningItemVerrijkt, datum: string): { start: Date; eind: Date } {
@@ -1352,8 +1392,22 @@ export default function MedewerkerTimeline({
           }}>Bedrijfsagenda</span>
         </div>
       )}
-      {medewerkerLayout.map(({ medewerker: m, heeftConflict, conflicten }) => (
-        <Link key={m.id} href={`/medewerkers/${m.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+      {medewerkerLayout.map(({ medewerker: m, heeftConflict, openConflicten, groepLabel }) => (
+        <Fragment key={m.id}>
+        {groepLabel && (
+          <div style={{
+            height: GROEP_H, display: 'flex', alignItems: 'center',
+            paddingLeft: 12, paddingRight: 8,
+            background: KLEUR.bg,
+            borderBottom: `1px solid ${KLEUR.border}`,
+            fontFamily: 'var(--font-ui)', fontSize: 9, fontWeight: 700,
+            color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.1em',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {groepLabel}
+          </div>
+        )}
+        <Link href={`/medewerkers/${m.id}`} style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{
             height: RIJ_VAST, display: 'flex', alignItems: 'center',
             paddingLeft: 12, paddingRight: 8, gap: 8, borderBottom: `1px solid ${KLEUR.border}`,
@@ -1385,11 +1439,11 @@ export default function MedewerkerTimeline({
             {heeftConflict && (
               <button
                 type="button"
-                title="Dubbel ingepland / conflict — klik voor details"
+                title="Dubbel ingepland / conflict vanaf vandaag — klik voor details"
                 onClick={e => {
                   e.preventDefault()
                   e.stopPropagation()
-                  setConflictInfo({ medewerker: m, conflicten })
+                  setConflictInfo({ medewerker: m, conflicten: openConflicten })
                 }}
                 style={{
                   display: 'inline-flex', color: '#ef4444', flexShrink: 0,
@@ -1401,6 +1455,7 @@ export default function MedewerkerTimeline({
             )}
           </div>
         </Link>
+        </Fragment>
       ))}
     </div>
   )
@@ -1415,9 +1470,17 @@ export default function MedewerkerTimeline({
           dagen={dagen}
         />
       )}
-      {medewerkerLayout.map(({ medewerker: m, top, entries: rijEntries, conflicten }) => (
+      {medewerkerLayout.map(({ medewerker: m, top, entries: rijEntries, conflicten, groepLabel, groepTop }) => (
+        <Fragment key={m.id}>
+        {groepLabel && (
+          <div style={{
+            position: 'absolute', left: 0, right: 0, top: groepTop ?? 0, height: GROEP_H,
+            background: KLEUR.bg,
+            borderBottom: `1px solid ${KLEUR.border}`,
+            zIndex: 6, pointerEvents: 'none',
+          }} />
+        )}
         <TimelineRij
-          key={m.id}
           medewerker={m}
           top={top}
           dagen={dagen}
@@ -1440,6 +1503,7 @@ export default function MedewerkerTimeline({
           onConflictKlik={conflict => setOplosConflict({ medewerkerId: m.id, conflict })}
           kopieerModus={!!kopieerBron}
         />
+        </Fragment>
       ))}
     </>
   )
