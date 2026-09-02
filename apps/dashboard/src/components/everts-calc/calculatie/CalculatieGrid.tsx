@@ -415,14 +415,13 @@ function OmschrijvingVeld({
 // ─── ComponentRegelRij ───────────────────────────────────────────────────────
 
 function ComponentRegelRij({
-  comp, uurtarieven, eenheden, colOrder, indent, regelHoeveelheid, regelOmschrijving, regelOpslag, onWijzig, onVerwijder,
+  comp, uurtarieven, eenheden, colOrder, indent, regelOmschrijving, regelOpslag, onWijzig, onVerwijder,
 }: {
   comp: Componentregel
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
   colOrder: ColId[]
   indent: number
-  regelHoeveelheid: number
   regelOmschrijving: string
   regelOpslag: number
   onWijzig: (patch: Partial<Componentregel>) => void
@@ -452,12 +451,16 @@ function ComponentRegelRij({
 
   const tariefInLijst = uurtarieven.some(t => t.tarief === tariefEdit)
 
-  // Bedragen + VP (gebruik lokale edit-staat voor live feedback)
-  const compBedrag      = normEdit * tariefEdit * regelHoeveelheid
-  const compKpPe        = regelHoeveelheid !== 0 ? compBedrag / regelHoeveelheid : 0
+  // Bedragen + VP (gebruik lokale edit-staat voor live feedback).
+  // Een detailregel rekent altijd per 1 hoeveelheid van de begrotingsregel: norm x tarief.
+  // Vermenigvuldigen met het aantal gebeurt precies één keer, in de begrotingsregel zelf.
+  // Deed de detailregel dat ook, dan stond hetzelfde aantal twee keer in de keten en week
+  // de detailregel af van de rij eronder waar hij bij hoort.
+  const compBedrag      = normEdit * tariefEdit
+  const compKpPe        = compBedrag
   const effectiefOpslag = comp.opslag_pct ?? regelOpslag
   const compVpTotaal    = compBedrag * (1 + effectiefOpslag / 100)
-  const compVpPe        = regelHoeveelheid !== 0 ? compVpTotaal / regelHoeveelheid : 0
+  const compVpPe        = compVpTotaal
 
   const niComp = (val: number, onChange: (v: number) => void, decimalen = 2, cls = '') => (
     <GetalInput
@@ -623,8 +626,8 @@ function ComponentRegelRij({
       )
       case 'tot_uren': return (
         <td key={id} className={tdBase} style={tdSt}>
-          {comp.type === 'arbeid' && normEdit !== 0 && regelHoeveelheid !== 0 && (
-            <span className=" text-xs text-blue-600">{formatGetal(normEdit * regelHoeveelheid, 2)}</span>
+          {comp.type === 'arbeid' && normEdit !== 0 && (
+            <span className=" text-xs text-blue-600">{formatGetal(normEdit, 2)}</span>
           )}
         </td>
       )
@@ -1039,14 +1042,22 @@ function CalculatieregelRij({
     setAbTarief(v); deb('abt', () => onWijzigComponent(regel.id, 'arbeid', abUren, v))
   }
 
+  // Hoeveelheid van het enkele materiaal- of OA-component. De snelinvoerkolom in deze
+  // rij bewerkt alleen de prijs; de hoeveelheid komt van de detailregel eronder en mag
+  // hier nooit op 1 worden vastgezet — dan telt de rij een detailregel met hoeveelheid 2
+  // maar één keer mee, terwijl het groepstotaal (dat met de opgeslagen componenten
+  // rekent) wél klopt. Zonder component nog: 1, zoals een nieuw component krijgt.
+  const mtNorm = mt?.norm_hoeveelheid ?? 1
+  const oaNorm = oa?.norm_hoeveelheid ?? 1
+
   // Berekende waarden (op basis van lokale state)
   // `!== 0` en niet `> 0`: een minderwerkregel heeft een negatieve prijs en moet
   // net zo goed uit de lokale edit-staat komen, anders zie je tijdens het typen
   // nog de opgeslagen (of lege) waarde in plaats van je eigen invoer.
   const tmpComps = [
     ...(!multiAb && (abUren !== 0 || abTarief !== 0) ? [{ id: 'ab', calculatieregel_id: regel.id, type: 'arbeid'         as const, norm_hoeveelheid: abUren, tarief: abTarief, opslag_pct: ab?.opslag_pct }] : allAb),
-    ...(!multiMt && mtPrijs !== 0                     ? [{ id: 'mt', calculatieregel_id: regel.id, type: 'materieel'      as const, norm_hoeveelheid: 1,      tarief: mtPrijs,  opslag_pct: mt?.opslag_pct }] : allMt),
-    ...(!multiOa && oaPrijs !== 0                     ? [{ id: 'oa', calculatieregel_id: regel.id, type: 'onderaanneming' as const, norm_hoeveelheid: 1,      tarief: oaPrijs,  opslag_pct: oa?.opslag_pct }] : allOa),
+    ...(!multiMt && mtPrijs !== 0                     ? [{ id: 'mt', calculatieregel_id: regel.id, type: 'materieel'      as const, norm_hoeveelheid: mtNorm, tarief: mtPrijs,  opslag_pct: mt?.opslag_pct }] : allMt),
+    ...(!multiOa && oaPrijs !== 0                     ? [{ id: 'oa', calculatieregel_id: regel.id, type: 'onderaanneming' as const, norm_hoeveelheid: oaNorm, tarief: oaPrijs,  opslag_pct: oa?.opslag_pct }] : allOa),
   ]
   const { arbeid_totaal, materieel_totaal, oa_totaal, kp_pe, kp_totaal, uren_pe, uren_totaal, vp_pe, vp_totaal } =
     berekenCalculatieregel(regel, tmpComps, opslag)
@@ -1066,15 +1077,15 @@ function CalculatieregelRij({
     }
   }
   const onBedragMt = (v: number) => {
-    if (regel.hoeveelheid !== 0) {
-      const t = +(v / regel.hoeveelheid).toFixed(4)
-      setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, t))
+    if (v !== 0 && mtNorm !== 0 && regel.hoeveelheid !== 0) {
+      const t = +(v / (mtNorm * regel.hoeveelheid)).toFixed(4)
+      setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', mtNorm, t))
     }
   }
   const onBedragOa = (v: number) => {
-    if (regel.hoeveelheid !== 0) {
-      const t = +(v / regel.hoeveelheid).toFixed(4)
-      setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, t))
+    if (v !== 0 && oaNorm !== 0 && regel.hoeveelheid !== 0) {
+      const t = +(v / (oaNorm * regel.hoeveelheid)).toFixed(4)
+      setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', oaNorm, t))
     }
   }
 
@@ -1363,7 +1374,7 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiMt
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
-            : ni(mtPrijs, v => { setMtPrijs(v); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, v)) }, 2)}
+            : ni(mtPrijs, v => { setMtPrijs(v); deb('mt', () => onWijzigComponent(regel.id, 'materieel', mtNorm, v)) }, 2)}
         </td>
       )
       case 'bedrag_mt': return (
@@ -1372,14 +1383,7 @@ function CalculatieregelRij({
             type="text" inputMode="decimal"
             value={mtBedragEdit !== null ? mtBedragEdit : (materieel_totaal === 0 ? '' : formatGetal(materieel_totaal, 2))}
             onFocus={() => setMtBedragEdit(materieel_totaal === 0 ? '' : String(+materieel_totaal.toFixed(2)))}
-            onChange={e => {
-              setMtBedragEdit(e.target.value)
-              const v = parseGetal(e.target.value)
-              if (v !== 0 && regel.hoeveelheid !== 0) {
-                const t = +(v / regel.hoeveelheid).toFixed(4)
-                setMtPrijs(t); deb('mt', () => onWijzigComponent(regel.id, 'materieel', 1, t))
-              }
-            }}
+            onChange={e => { setMtBedragEdit(e.target.value); onBedragMt(parseGetal(e.target.value)) }}
             onBlur={() => setMtBedragEdit(null)}
             className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
           />
@@ -1389,7 +1393,7 @@ function CalculatieregelRij({
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {multiOa
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
-            : ni(oaPrijs, v => { setOaPrijs(v); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, v)) }, 2)}
+            : ni(oaPrijs, v => { setOaPrijs(v); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', oaNorm, v)) }, 2)}
         </td>
       )
       case 'bedrag_oa': return (
@@ -1398,14 +1402,7 @@ function CalculatieregelRij({
             type="text" inputMode="decimal"
             value={oaBedragEdit !== null ? oaBedragEdit : (oa_totaal === 0 ? '' : formatGetal(oa_totaal, 2))}
             onFocus={() => setOaBedragEdit(oa_totaal === 0 ? '' : String(+oa_totaal.toFixed(2)))}
-            onChange={e => {
-              setOaBedragEdit(e.target.value)
-              const v = parseGetal(e.target.value)
-              if (v !== 0 && regel.hoeveelheid !== 0) {
-                const t = +(v / regel.hoeveelheid).toFixed(4)
-                setOaPrijs(t); deb('oa', () => onWijzigComponent(regel.id, 'onderaanneming', 1, t))
-              }
-            }}
+            onChange={e => { setOaBedragEdit(e.target.value); onBedragOa(parseGetal(e.target.value)) }}
             onBlur={() => setOaBedragEdit(null)}
             className="w-full text-xs text-right  px-1 py-0.5 rounded border-0 bg-transparent hover:bg-slate-50 hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-700"
           />
@@ -1659,7 +1656,6 @@ function CalculatieregelRij({
               eenheden={eenheden}
               colOrder={colOrder}
               indent={indent}
-              regelHoeveelheid={regel.hoeveelheid}
               regelOmschrijving={regel.omschrijving}
               regelOpslag={opslag}
               onWijzig={patch => onWijzigComponentExtra(comp.id, patch)}

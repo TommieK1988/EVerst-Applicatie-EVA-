@@ -346,7 +346,12 @@ export function upsertComponentregel(
   tarief: number
 ): void {
   const bestaand = getComponentregels(calculatieregel_id).find(c => c.type === type)
+  // Patchen, niet opnieuw opbouwen: de snelinvoerkolommen in het rekenblad kennen alleen
+  // norm en tarief. Bouwde je het component hier van nul op, dan wiste één tik in de
+  // prijskolom stilzwijgend de eenheid, omschrijving, leverancier, aannemersnaam,
+  // offertenummer en de eigen opslag van de detailregel eronder.
   const comp: Componentregel = {
+    ...bestaand,
     id: bestaand?.id ?? nieuweId(),
     calculatieregel_id,
     type,
