@@ -185,6 +185,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
             afwezigheid={afwezigheid}
             dossierMap={dossierMap}
             uursoorten={uursoorten}
+            alleenGeplandeMedewerkers
           />
         }
       />

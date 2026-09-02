@@ -203,6 +203,88 @@ export async function verwijderPlanItemInBouw7(bouw7Id: string | null): Promise<
 }
 
 /**
+ * Verwijder de Bouw7 plan-items van één fase (bewakingscode-hoofdstuk) of van één activiteit
+ * binnen een project.
+ *
+ * Waarom niet gewoon de ids uit de EVA-planitems? Omdat die niet compleet zijn. De lees-sync
+ * maakt per plan-item één EVA-planitem **per toegewezen medewerker**; een Bouw7 plan-item
+ * zonder toegewezen medewerker levert dus géén EVA-rij op en zijn id staat nergens in EVA.
+ * Zulke items zouden na het verwijderen van de fase in Bouw7 achterblijven en de fase bij de
+ * eerstvolgende sync gewoon terugbouwen. Daarom halen we de plan-items van het project op en
+ * snoeien we op hoofdstuk — dezelfde sleutel (`chapter:<id>`) waarmee de sync de fase maakt.
+ *
+ * Wat níet gebeurt: de bewakingscode en het hoofdstuk zelf blijven staan, net als de koppeling
+ * van die code aan het project. Hoofdstukken zijn globale Bouw7-stamdata; alleen de *planning*
+ * eronder wordt opgeruimd.
+ *
+ * `beschermdeIds` zijn plan-items die aan een andere EVA-activiteit hangen. Een in EVA gemaakte
+ * activiteit kan in fase B staan terwijl haar Bouw7-item de bewakingscode van fase A draagt;
+ * die mag de snoei niet meenemen.
+ *
+ * De Apollo-call staat hier bewust inline in plaats van via `fetchPlanItems` uit sync-planning:
+ * die module importeert op haar beurt uit dit bestand, en een importcyclus is het niet waard
+ * voor drie regels.
+ */
+export async function verwijderPlanningInBouw7(opts: {
+  projectBouw7Id: string | number | null
+  /** `chapter:<id>` / `chapter:algemeen` — snoeit alles onder dat hoofdstuk (fase). */
+  faseKey?:       string | null
+  /** `group:<faseKey>:<titel>` — snoeit alleen de plan-items van één activiteit. */
+  activiteitKey?: string | null
+  planItemIds:    string[]
+  beschermdeIds:  string[]
+}): Promise<{ verwijderd: number; mislukt: number }> {
+  const beschermd = new Set(opts.beschermdeIds)
+  const teVerwijderen = new Set(opts.planItemIds.filter(id => !beschermd.has(id)))
+  let mislukt = 0
+
+  try {
+    const client = await getBouw7ClientOfNull()
+    if (!client) return { verwijderd: 0, mislukt: 0 }
+
+    if (opts.projectBouw7Id && (opts.faseKey || opts.activiteitKey)) {
+      const items = await client.getApolloAll<{
+        id: number
+        name?: string | null
+        department?: { name?: string | null } | null
+        securityPlanningLink?: { securityCode?: { chapter?: { id: number } | null } | null } | null
+      }>('/search/plan-items', `project.id = ${Number(opts.projectBouw7Id)}`)
+
+      for (const pi of items) {
+        // Zelfde sleutels als sync-planning ze maakt; wijkt dat af, dan snoeit dit niets in
+        // plaats van het verkeerde — de sleutels moeten dus samen wijzigen.
+        const chap    = pi.securityPlanningLink?.securityCode?.chapter?.id
+        const faseKey = chap ? `chapter:${chap}` : 'chapter:algemeen'
+        // Zonder hoofdstuk is het een crewblok; die krijgen de afdelingsnaam als titel.
+        const titel = chap
+          ? (pi.name?.trim() || 'Taak')
+          : (pi.department?.name?.trim() || pi.name?.trim() || 'Planning')
+        const activiteitKey = `group:${faseKey}:${titel.toLowerCase()}`
+
+        const raak = opts.faseKey ? faseKey === opts.faseKey : activiteitKey === opts.activiteitKey
+        if (!raak) continue
+        const id = String(pi.id)
+        if (!beschermd.has(id)) teVerwijderen.add(id)
+      }
+    }
+
+    for (const id of teVerwijderen) {
+      try {
+        await client.del('/plan-item', { id: Number(id) })
+      } catch (e) {
+        mislukt++
+        console.error('[plan-item-write] verwijderen fase-planitem mislukt:', id, e)
+      }
+    }
+  } catch (e) {
+    console.error('[plan-item-write] fase-planning opruimen in Bouw7 mislukt:', e)
+    return { verwijderd: 0, mislukt: teVerwijderen.size }
+  }
+
+  return { verwijderd: teVerwijderen.size - mislukt, mislukt }
+}
+
+/**
  * De Bouw7 plan-item-ids die door EVA zijn aangemaakt, voor één dossier.
  *
  * De lees-sync moet deze overslaan. Zonder die filter komt elk door EVA aangemaakt item

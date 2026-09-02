@@ -1070,6 +1070,13 @@ type Props = {
   uursoorten?:  PlanningUursoort[]
   agendaItems?: BedrijfsagendaItemMetDoelgroep[]
   feestdagen?:  BedrijfsagendaVirtueel[]
+  /**
+   * Toon alleen medewerkers die daadwerkelijk planitems hebben. Bedoeld voor de
+   * detailplanning van één dossier: daar levert het volledige personeelsbestand vooral
+   * lege regels op. De bedrijfsbrede Medewerkerplanning laat dit uit — daar is juist de
+   * vrije capaciteit het onderwerp.
+   */
+  alleenGeplandeMedewerkers?: boolean
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -1077,6 +1084,7 @@ type Props = {
 export default function MedewerkerTimeline({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
   projectleiders = {}, ploegNamen = {}, uursoorten = [], agendaItems = [], feestdagen = [],
+  alleenGeplandeMedewerkers = false,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -1124,13 +1132,23 @@ export default function MedewerkerTimeline({
 
   const dagen = useMemo(() => eachDayOfInterval({ start: vs, end: ve }), [vs, ve])
 
+  // Op de client-state `entries`, niet op de props: verdwijnt het laatste planitem van iemand,
+  // dan verdwijnt zijn regel meteen mee in plaats van pas na een refresh.
+  const geplandeIds = useMemo(() => new Set(entries.map(e => e.medewerker_id)), [entries])
+
+  const basisMedewerkers = useMemo(
+    () => alleenGeplandeMedewerkers ? medewerkers.filter(m => geplandeIds.has(m.id)) : medewerkers,
+    [medewerkers, alleenGeplandeMedewerkers, geplandeIds],
+  )
+
+  // Afdelingchips volgen de zichtbare lijst: een chip die geen enkele regel oplevert is ruis.
   const afdelingOpties = useMemo(
-    () => [...new Set(medewerkers.map(m => m.afdeling).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'nl')),
-    [medewerkers],
+    () => [...new Set(basisMedewerkers.map(m => m.afdeling).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'nl')),
+    [basisMedewerkers],
   )
 
   const zichtbareMedewerkers = useMemo(() => {
-    let list = medewerkers
+    let list = basisMedewerkers
     if (selAfdelingen.length > 0) list = list.filter(m => m.afdeling && selAfdelingen.includes(m.afdeling))
     const cmp = (a: string | null, b: string | null) => (a ?? '').localeCompare(b ?? '', 'nl')
     // Lege sorteerwaarde (geen afdeling/functie/ploeg) onderaan, dan op voornaam.
@@ -1148,7 +1166,7 @@ export default function MedewerkerTimeline({
       if (sortBy === 'ploeg')    return opWaarde(a, b, m => ploegNamen[m.ploeg_id ?? ''] ?? '')
       return cmp(a.voornaam, b.voornaam) || cmp(a.achternaam, b.achternaam)
     })
-  }, [medewerkers, selAfdelingen, sortBy, ploegNamen])
+  }, [basisMedewerkers, selAfdelingen, sortBy, ploegNamen])
 
   const medewerkerKleuren = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m.kleur])), [medewerkers])
 
@@ -1550,6 +1568,20 @@ export default function MedewerkerTimeline({
     )),
   )
 
+  // Met het gefilterde overzicht kan de lijst helemaal leeg zijn; een kaal raster zonder
+  // regels ziet er dan uit als een laadfout. Eén regel uitleg voorkomt dat.
+  const legeStaat = alleenGeplandeMedewerkers && zichtbareMedewerkers.length === 0 ? (
+    <div style={{
+      padding: '18px 16px', textAlign: 'center',
+      fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)',
+      borderBottom: `1px solid ${KLEUR.border}`,
+    }}>
+      {selAfdelingen.length > 0
+        ? 'Geen ingeplande medewerkers in de gekozen afdeling(en).'
+        : 'Nog niemand ingepland op dit dossier — wijs medewerkers toe via de Activiteiten-weergave.'}
+    </div>
+  ) : null
+
   // Filters staan in de rightSlot van de PeriodeNav: scheelt een hele rij hoogte,
   // zodat er meer medewerkers in beeld passen.
   const filterControls = (
@@ -1626,6 +1658,7 @@ export default function MedewerkerTimeline({
             />
           }
           scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
+          preHeaderStrip={legeStaat}
           labelHeader="Medewerker"
           labelKolom={labelKolom}
           body={body}

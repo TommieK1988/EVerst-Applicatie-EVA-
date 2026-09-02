@@ -227,15 +227,123 @@ export async function updatePlanningActiviteit(
   return { ok: true, cascade: itemsVerschoven > 0 ? { items_verschoven: itemsVerschoven } : undefined }
 }
 
+/**
+ * De Bouw7 plan-item-ids achter de planitems van een activiteit, ontdubbeld.
+ *
+ * Twee vormen, afhankelijk van waar het planitem vandaan komt:
+ *   - bron 'eva'   → `bouw7_id` is het kale plan-item-id dat EVA zelf terugkreeg.
+ *   - bron 'bouw7' → `bouw7_id` is `"<planItemId>:<employeeId>"` (zie sync-planning): één
+ *     Bouw7 plan-item levert per toegewezen medewerker een EVA-planitem op.
+ *
+ * Ontdubbelen is dus geen optimalisatie maar noodzaak: drie collega's op hetzelfde Bouw7
+ * plan-item geven drie EVA-rijen, en één DELETE haalt ze in Bouw7 alle drie tegelijk weg.
+ *
+ * `planning_activiteiten.bouw7_id` is hier onbruikbaar: dat is een synthetische
+ * groepssleutel (`group:<fase>:<titel>`), geen Bouw7-id.
+ */
+function bouw7PlanItemIds(items: { bron?: string | null; bouw7_id?: string | null }[]): string[] {
+  const ids = new Set<string>()
+  for (const it of items) {
+    if (!it.bouw7_id) continue
+    const kaal = it.bron === 'eva' ? it.bouw7_id : it.bouw7_id.split(':')[0]
+    if (kaal) ids.add(kaal)
+  }
+  return [...ids]
+}
+
+/** Planitems (met hun Bouw7-ids) van een set activiteiten. Begrensd door de `in`-filter. */
+async function haalPlanItems(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  activiteitIds: string[],
+): Promise<{ id: string; bron?: string | null; bouw7_id?: string | null }[]> {
+  if (activiteitIds.length === 0) return []
+  const { data } = await supabase
+    .from('planning_items')
+    .select('id, bron, bouw7_id')
+    .in('activiteit_id', activiteitIds)
+  return (data ?? []) as { id: string; bron?: string | null; bouw7_id?: string | null }[]
+}
+
+/**
+ * Verwijderfouten van Postgres naar iets wat een planner begrijpt.
+ *
+ * `werkbonnen.planning_item_id` (NOT NULL) en `uren_regels.planning_item_id` verwijzen naar
+ * planning_items zónder cascade. Zodra er uren op een activiteit geschreven zijn, laat de
+ * cascade-delete van haar planitems de hele verwijdering stuklopen met SQLSTATE 23503.
+ */
+function leesbareVerwijderFout(error: { code?: string; message: string }, wat: string): string {
+  if (error.code === '23503') {
+    return `Op deze ${wat} zijn al uren of werkbonnen geregistreerd; verwijderen kan daarom niet.`
+  }
+  return error.message
+}
+
+/**
+ * Verwijder een activiteit met al haar planitems, ook in Bouw7.
+ *
+ * Volgorde is bewust: eerst de Bouw7-ids lezen (na de delete zijn ze door de cascade weg),
+ * dan EVA verwijderen, en pas bij succes Bouw7 opruimen. Andersom zou een mislukte
+ * EVA-delete — bijvoorbeeld op een activiteit met geschreven uren — de planning in Bouw7
+ * al gewist hebben terwijl in EVA alles blijft staan.
+ */
 export async function verwijderPlanningActiviteit(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { error } = await db()
+  const supabase = db()
+
+  const { data: act } = await supabase
+    .from('planning_activiteiten')
+    .select('id, dossier_id, bouw7_id, planning_items!activiteit_id ( bron, bouw7_id )')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!act) return { ok: false, error: 'Activiteit niet gevonden.' }
+  await assertDossierBewerkbaar(act.dossier_id)
+
+  const planItemIds = bouw7PlanItemIds(act.planning_items ?? [])
+
+  // Plan-items van de ándere activiteiten van dit dossier: die mag de Bouw7-snoei nooit raken.
+  const { data: andere } = await supabase
+    .from('planning_activiteiten')
+    .select('id')
+    .eq('dossier_id', act.dossier_id)
+    .neq('id', id)
+  const andereIds = ((andere ?? []) as { id: string }[]).map(a => a.id)
+  const beschermdeIds = andereIds.length > 0
+    ? bouw7PlanItemIds(await haalPlanItems(supabase, andereIds))
+    : []
+
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('bouw7_id')
+    .eq('id', act.dossier_id)
+    .maybeSingle()
+
+  const { error } = await supabase
     .from('planning_activiteiten')
     .delete()
     .eq('id', id)
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: leesbareVerwijderFout(error, 'activiteit') }
+
+  if (planItemIds.length > 0 || (dossier?.bouw7_id && act.bouw7_id)) {
+    try {
+      const { verwijderPlanningInBouw7 } = await import('@/lib/bouw7/plan-item-write')
+      const resultaat = await verwijderPlanningInBouw7({
+        projectBouw7Id: dossier?.bouw7_id ?? null,
+        activiteitKey:  act.bouw7_id ?? null,
+        planItemIds,
+        beschermdeIds,
+      })
+      if (resultaat.mislukt > 0) {
+        console.error(`[planning] ${resultaat.mislukt} plan-item(s) van activiteit ${id} niet verwijderd in Bouw7`)
+      }
+    } catch (e) {
+      console.error('[planning] verwijderen activiteit in Bouw7 mislukt:', e)
+    }
+  }
+
   await naPlanningWijziging()
   return { ok: true }
 }
@@ -629,11 +737,99 @@ export async function verschuifPlanningFase(
   return { ok: true, activiteiten_verschoven: aShift, items_verschoven: iShift }
 }
 
+/**
+ * Verwijder een fase, de activiteiten erin en hun planning — in EVA én in Bouw7.
+ *
+ * Waarom de activiteiten meegaan: een fase spiegelt een bewakingscode-hoofdstuk, en de
+ * lees-sync leidt de fasen af uit de hoofdstukken van de plan-items in het project. Zou je
+ * alleen de EVA-rij weggooien, dan bouwt de eerstvolgende sync de fase gewoon terug zolang er
+ * plan-items onder dat hoofdstuk staan. "Fase weg" betekent dus: de planning eronder weg.
+ *
+ * Wat blijft staan: de bewakingscode en het hoofdstuk zelf, en de koppeling van die code aan
+ * het project. Hoofdstukken zijn globale Bouw7-stamdata over alle projecten heen — daar raakt
+ * dit niets aan. Alleen de geplande items verdwijnen.
+ *
+ * Vooraf wordt gecontroleerd op geschreven uren. Zonder die check zou een fase met tien
+ * activiteiten halverwege kunnen stranden op een foreign key, met een deels verwijderde fase
+ * en een al leeggehaalde Bouw7-planning tot gevolg.
+ */
 export async function verwijderPlanningFase(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { error } = await db().from('planning_fasen').delete().eq('id', id)
-  if (error) return { ok: false, error: error.message }
+  const supabase = db()
+
+  const { data: fase } = await supabase
+    .from('planning_fasen')
+    .select('id, dossier_id, naam, bouw7_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!fase) return { ok: false, error: 'Fase niet gevonden.' }
+  await assertDossierBewerkbaar(fase.dossier_id)
+
+  // Activiteiten van dít dossier, gesplitst in "in deze fase" en "erbuiten". De tweede groep
+  // levert de beschermde Bouw7-ids: een in EVA gemaakte activiteit kan in een andere fase staan
+  // terwijl haar plan-item de bewakingscode van déze fase draagt.
+  const { data: activiteiten } = await supabase
+    .from('planning_activiteiten')
+    .select('id, fase_id')
+    .eq('dossier_id', fase.dossier_id)
+
+  const inFase    = (activiteiten ?? []).filter((a: { fase_id: string | null }) => a.fase_id === id).map((a: { id: string }) => a.id)
+  const buitenFase = (activiteiten ?? []).filter((a: { fase_id: string | null }) => a.fase_id !== id).map((a: { id: string }) => a.id)
+
+  const eigenItems     = await haalPlanItems(supabase, inFase)
+  const beschermdItems = await haalPlanItems(supabase, buitenFase)
+
+  // Geschreven uren blokkeren de verwijdering; liever vooraf weigeren dan halverwege stranden.
+  if (eigenItems.length > 0) {
+    const itemIds = eigenItems.map(i => i.id)
+    const [{ data: werkbonnen }, { data: urenRegels }] = await Promise.all([
+      supabase.from('werkbonnen').select('id').in('planning_item_id', itemIds).limit(1),
+      supabase.from('uren_regels').select('id').in('planning_item_id', itemIds).limit(1),
+    ])
+    if ((werkbonnen ?? []).length > 0 || (urenRegels ?? []).length > 0) {
+      return {
+        ok: false,
+        error: `Op de activiteiten in "${fase.naam}" zijn al uren of werkbonnen geregistreerd; de fase kan daarom niet worden verwijderd.`,
+      }
+    }
+  }
+
+  if (inFase.length > 0) {
+    // Planitems cascaden mee op de activiteiten.
+    const { error: actErr } = await supabase.from('planning_activiteiten').delete().in('id', inFase)
+    if (actErr) return { ok: false, error: leesbareVerwijderFout(actErr, 'fase') }
+  }
+
+  const { error } = await supabase.from('planning_fasen').delete().eq('id', id)
+  if (error) return { ok: false, error: leesbareVerwijderFout(error, 'fase') }
+
+  // Pas ná een geslaagde EVA-verwijdering naar Bouw7 — anders zou een geweigerde delete de
+  // planning daar al hebben opgeruimd.
+  const { data: dossier } = await supabase
+    .from('dossiers')
+    .select('bouw7_id')
+    .eq('id', fase.dossier_id)
+    .maybeSingle()
+
+  if (dossier?.bouw7_id || eigenItems.length > 0) {
+    try {
+      const { verwijderPlanningInBouw7 } = await import('@/lib/bouw7/plan-item-write')
+      const resultaat = await verwijderPlanningInBouw7({
+        projectBouw7Id: dossier?.bouw7_id ?? null,
+        faseKey:        fase.bouw7_id ?? null,
+        planItemIds:    bouw7PlanItemIds(eigenItems),
+        beschermdeIds:  bouw7PlanItemIds(beschermdItems),
+      })
+      if (resultaat.mislukt > 0) {
+        console.error(`[planning] ${resultaat.mislukt} plan-item(s) van fase ${id} niet verwijderd in Bouw7`)
+      }
+    } catch (e) {
+      console.error('[planning] fase-planning opruimen in Bouw7 mislukt:', e)
+    }
+  }
+
   await naPlanningWijziging()
   return { ok: true }
 }

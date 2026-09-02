@@ -28,12 +28,17 @@ export interface ComboboxProps {
   onCreate?: (query: string) => void
   createLabel?: (query: string) => string
   className?: string
+  /**
+   * Extra klassen op het popover-paneel. Nodig wanneer de combobox in een dialoog met een
+   * hogere z-index staat: PopoverContent zit standaard op z-50 en zou daar achter vallen.
+   */
+  contentClassName?: string
   disabled?: boolean
 }
 
 export function Combobox({
   options, value, onChange, placeholder = 'Selecteer…', searchPlaceholder = 'Zoeken…',
-  emptyText = 'Geen resultaten.', onSearch, onCreate, createLabel, className, disabled,
+  emptyText = 'Geen resultaten.', onSearch, onCreate, createLabel, className, contentClassName, disabled,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
@@ -76,7 +81,7 @@ export function Combobox({
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-neutral-500" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+      <PopoverContent align="start" className={cn('w-[var(--radix-popover-trigger-width)] p-0', contentClassName)}>
         <Command shouldFilter={!onSearch} className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-neutral-100 px-3">
             <Search className="h-4 w-4 shrink-0 text-neutral-400" />

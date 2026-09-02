@@ -8,7 +8,7 @@ import {
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { useDialogen } from '@/components/ui'
+import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import { useRouter } from 'next/navigation'
 import type {
   PlanningActiviteit, PlanningItemVerrijkt, Medewerker, PlanningUursoort,
@@ -16,9 +16,9 @@ import type {
   MedewerkerRooster, MedewerkerAfwezigheid, OrganisatieType,
 } from '@everts/database/platform-types'
 import {
-  maakPlanningActiviteit, updatePlanningActiviteit,
+  maakPlanningActiviteit, updatePlanningActiviteit, verwijderPlanningActiviteit,
   maakPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
-  maakPlanningFase, updatePlanningFase, verschuifPlanningFase,
+  maakPlanningFase, updatePlanningFase, verschuifPlanningFase, verwijderPlanningFase,
   maakAfhankelijkheid, verwijderAfhankelijkheid,
 } from '@/app/(platform)/planning/actions'
 import {
@@ -87,6 +87,28 @@ function medNaam(e: PlanningItemVerrijkt) {
   return [e.medewerkers?.voornaam, e.medewerkers?.achternaam].filter(Boolean).join(' ')
 }
 
+function volledigeNaam(m: Medewerker) {
+  return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
+}
+
+/**
+ * Medewerkers als combobox-opties. Een zoekveld in plaats van een <select>: de lijst bevat
+ * iedereen die actief is, en dat scrolt in een dialoog van 340px nergens naartoe.
+ */
+function medewerkerOpties(medewerkers: Medewerker[]): ComboboxOption[] {
+  return medewerkers.map(m => ({
+    value: m.id,
+    label: volledigeNaam(m),
+    sub:   m.functie ?? undefined,
+  }))
+}
+
+/**
+ * Het popover-paneel van de combobox staat standaard op z-50 en zou daarmee achter de
+ * planning-dialogen vallen (S.backdrop gebruikt z-index 200).
+ */
+const COMBO_BOVEN_MODAL = 'z-[300]'
+
 // ─── ItemEditDialog ───────────────────────────────────────────────────────────
 
 function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDelete, onCopy, onSplit, onClose }: {
@@ -120,9 +142,9 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
             <label style={S.lbl}>Medewerker</label>
-            <select className="eva-input" value={medId} onChange={e => setMedId(e.target.value)}>
-              {medewerkers.map(m => <option key={m.id} value={m.id}>{[m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')}</option>)}
-            </select>
+            <Combobox options={medewerkerOpties(medewerkers)} value={medId} onChange={setMedId}
+              placeholder="Kies medewerker…" searchPlaceholder="Naam typen…"
+              emptyText="Geen medewerkers gevonden." contentClassName={COMBO_BOVEN_MODAL} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => setStart(e.target.value)} /></div>
@@ -165,19 +187,14 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   defaultStart?: string
 }) {
   const today = format(new Date(), 'yyyy-MM-dd') // lokale datum, geen UTC-verschuiving
-  const [medId, setMedId] = useState(medewerkers[0]?.id ?? '')
+  // Bewust leeg: met een zoekveld kies je de medewerker zelf. Voorheen stond hier de eerste
+  // op achternaam voorgevuld, wat maar al te makkelijk per ongeluk werd opgeslagen.
+  const [medId, setMedId] = useState('')
   const [start, setStart] = useState(defaultStart ?? activiteit.gewenste_start ?? today)
   const [eind,  setEind]  = useState(defaultStart ?? activiteit.deadline ?? activiteit.gewenste_start ?? today)
-  const [uren,  setUren]  = useState(() => {
-    const initMed = medewerkers[0]?.id ?? ''
-    const initStart = defaultStart ?? activiteit.gewenste_start ?? today
-    const initEind  = defaultStart ?? activiteit.deadline ?? activiteit.gewenste_start ?? today
-    if (initMed && roosters.length > 0) {
-      const berekend = berekenPlanUren(initMed, `${initStart}T08:00:00`, `${initEind}T17:00:00`, roosters, afwezigheid)
-      if (berekend > 0) return String(berekend)
-    }
-    return String(activiteit.geschatte_uren ?? 8)
-  })
+  // Zonder gekozen medewerker valt de schatting terug op de activiteit; herbereken() vult de
+  // roosteruren zodra er iemand geselecteerd is.
+  const [uren,  setUren]  = useState(() => String(activiteit.geschatte_uren ?? 8))
   const [busy,  setBusy]  = useState(false)
 
   function herbereken(newMedId: string, newStart: string, newEind: string) {
@@ -204,9 +221,10 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
             <label style={S.lbl}>Medewerker</label>
-            <select className="eva-input" value={medId} onChange={e => { setMedId(e.target.value); herbereken(e.target.value, start, eind) }}>
-              {medewerkers.map(m => <option key={m.id} value={m.id}>{[m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')}</option>)}
-            </select>
+            <Combobox options={medewerkerOpties(medewerkers)} value={medId}
+              onChange={v => { setMedId(v); herbereken(v, start, eind) }}
+              placeholder="Zoek medewerker…" searchPlaceholder="Naam typen…"
+              emptyText="Geen medewerkers gevonden." contentClassName={COMBO_BOVEN_MODAL} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => { setStart(e.target.value); herbereken(medId, e.target.value, eind) }} /></div>
@@ -229,7 +247,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 
 // ─── ActiviteitEditModal ──────────────────────────────────────────────────────
 
-function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerkers, fasen, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onClose }: {
+function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerkers, fasen, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onVerwijder, onClose }: {
   activiteit: PlanningActiviteit; items: PlanningItemVerrijkt[]; uursoorten: PlanningUursoort[]
   partijen: Partij[]; medewerkers: Medewerker[]; fasen: PlanningFase[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
@@ -240,6 +258,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   onItemCreated: (e: PlanningItemVerrijkt) => void
   onItemVerwijderd: (id: string) => void
   onAfhankelijkheidChanged: () => void
+  onVerwijder: () => void
   onClose: () => void
 }) {
   const [titel,        setTitel]        = useState(activiteit.titel)
@@ -259,8 +278,16 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
 
   const metB = uursoorten.filter(u => werkbegrotingUursoortIds.includes(u.id))
   const zB   = uursoorten.filter(u => !werkbegrotingUursoortIds.includes(u.id))
-  const onderaannemers = partijen.filter(p => p.types?.includes('onderaannemer'))
-  const leveranciers   = partijen.filter(p => p.types?.includes('leverancier'))
+  // Eén regel per relatie: `partijSoort` bepaalt de groep, zodat een partij die zowel
+  // onderaannemer als leverancier is niet twee keer in de lijst opduikt.
+  const partijOpties: ComboboxOption[] = [
+    { value: '', label: '— eigen uitvoering —' },
+    ...partijen.map(p => ({
+      value: p.id,
+      label: p.naam,
+      group: PARTIJ_STIJL[partijSoort(p)].label + 's',
+    })),
+  ]
   const voorgangers = afhankelijkheden.filter(a => a.naar_activiteit_id === activiteit.id)
   const opvolgers   = afhankelijkheden.filter(a => a.van_activiteit_id  === activiteit.id)
   const andereActiviteiten = alleActiviteiten.filter(a => a.id !== activiteit.id)
@@ -327,19 +354,9 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
 
           <div>
             <label style={S.lbl}>Onderaannemer / leverancier</label>
-            <select className="eva-input" value={partijId} onChange={e => setPartijId(e.target.value)}>
-              <option value="">— eigen uitvoering —</option>
-              {onderaannemers.length > 0 && (
-                <optgroup label="Onderaannemers">
-                  {onderaannemers.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
-                </optgroup>
-              )}
-              {leveranciers.length > 0 && (
-                <optgroup label="Leveranciers">
-                  {leveranciers.map(p => <option key={p.id} value={p.id}>{p.naam}</option>)}
-                </optgroup>
-              )}
-            </select>
+            <Combobox options={partijOpties} value={partijId} onChange={setPartijId}
+              placeholder="— eigen uitvoering —" searchPlaceholder="Naam typen…"
+              emptyText="Geen partij gevonden." contentClassName={COMBO_BOVEN_MODAL} />
             {partijen.length === 0 && (
               <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
                 Geen actieve onderaannemers of leveranciers gevonden bij Relaties.
@@ -445,9 +462,14 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-          <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
-          <button className="eva-btn-primary" onClick={opslaan} disabled={busy || !titel.trim()}>{busy ? 'Opslaan…' : 'Opslaan'}</button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 20 }}>
+          {/* Sluit eerst de modal: de bevestigdialoog is een AlertDialog op z-50 en zou
+              anders achter deze backdrop (z-index 200) verdwijnen. */}
+          <button className="eva-btn-ghost" style={{ color: '#c0392b' }} onClick={() => { onClose(); onVerwijder() }}>Verwijderen</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
+            <button className="eva-btn-primary" onClick={opslaan} disabled={busy || !titel.trim()}>{busy ? 'Opslaan…' : 'Opslaan'}</button>
+          </div>
         </div>
       </div>
 
@@ -757,12 +779,13 @@ function AfhankelijkheidSVG({ afhankelijkheden, activiteitMap, activiteitRowY, v
 
 // ─── FaseRij ──────────────────────────────────────────────────────────────────
 
-function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
+function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onVerwijder, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
   fase: PlanningFase; totalW: number
   vs: Date; ppd: number; totalDays: number
   faseStart: string | null; faseEind: string | null
   ingeklapt: boolean; onToggleInklap: () => void
   onEdit: () => void; onNieuweActiviteit: () => void
+  onVerwijder: () => void
   onShift: (delta: number) => void
   dragHandleDown: (ev: React.PointerEvent) => void
   dragHandleMove: (ev: React.PointerEvent) => void
@@ -816,6 +839,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--fg-muted)', flex: 1, paddingLeft: 2 }}>{fase.naam}</span>
         <button title="Naam wijzigen" onClick={onEdit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>✎</button>
         <button title="Activiteit toevoegen" onClick={onNieuweActiviteit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 14, color: 'var(--accent)' }}>+</button>
+        <button title="Fase verwijderen" onClick={onVerwijder} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>🗑</button>
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: totalW, height: FASE_HOOGTE, opacity: 0.85, background: 'repeating-linear-gradient(90deg, transparent 0px, transparent calc(100% - 1px), var(--border) 100%)' }}>
         {heeftBereik && (
@@ -887,7 +911,7 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
 
 // ─── ActiviteitGanttRij ───────────────────────────────────────────────────────
 
-function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap, gridUnits, vs, ppd, totalDays, uursoort, partij, medewerkers, dossier_id, roosters, afwezigheid, isDragging, isDropIndicatorAbove, dragHandleDown, dragHandleMove, dragHandleUp, onEdit, onActiviteitUpdated, onItemCreated, onItemUpdated, onItemVerwijderd, onTimelineClick }: {
+function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap, gridUnits, vs, ppd, totalDays, uursoort, partij, medewerkers, dossier_id, roosters, afwezigheid, isDragging, isDropIndicatorAbove, dragHandleDown, dragHandleMove, dragHandleUp, onEdit, onVerwijder, onActiviteitUpdated, onItemCreated, onItemUpdated, onItemVerwijderd, onTimelineClick }: {
   nr: number; activiteit: PlanningActiviteit; items: PlanningItemVerrijkt[]
   uitgeklapt: boolean; onToggleUitklap: () => void
   gridUnits: GridUnit[]; vs: Date; ppd: number; totalDays: number
@@ -899,6 +923,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
   dragHandleMove: (ev: React.PointerEvent) => void
   dragHandleUp: (ev: React.PointerEvent) => void
   onEdit: () => void
+  onVerwijder: () => void
   onActiviteitUpdated: (p: Partial<PlanningActiviteit>) => void
   onItemCreated: (e: PlanningItemVerrijkt) => void
   onItemUpdated: (id: string, p: Partial<PlanningItemVerrijkt>) => void
@@ -987,6 +1012,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
             <button title="Bewerken" onClick={onEdit} style={S.iconBtn}>✎</button>
             <button title="Toewijzen" onClick={() => setToewijzenOpen(true)} style={S.iconBtn}>+</button>
+            <button title="Activiteit verwijderen" onClick={onVerwijder} style={{ ...S.iconBtn, fontSize: 12 }}>🗑</button>
           </div>
         </div>
 
@@ -1138,7 +1164,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [items,        setItems]        = useState(initI)
   const [fasen,        setFasen]        = useState(initF)
   const [afhankelijkheden, setAfhankelijkheden] = useState(initAfh)
-  const { vraagTekst } = useDialogen()
+  const { vraagTekst, bevestig } = useDialogen()
 
   // Sync vanuit server-props na router.refresh()
   useEffect(() => { setActiviteiten(initA) }, [initA])
@@ -1422,6 +1448,72 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
     else startT(() => router.refresh())
   }
 
+  async function handleVerwijderActiviteit(activiteit: PlanningActiviteit) {
+    const eigenItems = itemsPerActiviteit[activiteit.id] ?? []
+    const medewerkerAantal = new Set(eigenItems.map(i => i.medewerker_id)).size
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inBouw7 = eigenItems.some(i => (i as any).bouw7_id)
+
+    const regels = [
+      eigenItems.length > 0
+        ? `${eigenItems.length} planitem${eigenItems.length === 1 ? '' : 's'} van ${medewerkerAantal} medewerker${medewerkerAantal === 1 ? '' : 's'} ${eigenItems.length === 1 ? 'verdwijnt' : 'verdwijnen'} mee.`
+        : 'Er staan nog geen medewerkers op deze activiteit.',
+      inBouw7 ? 'De bijbehorende planning wordt ook in Bouw7 verwijderd.' : null,
+    ].filter(Boolean).join(' ')
+
+    const akkoord = await bevestig({
+      titel: `"${activiteit.titel}" verwijderen?`,
+      omschrijving: regels,
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })
+    if (!akkoord) return
+
+    const result = await verwijderPlanningActiviteit(activiteit.id)
+    if (!result.ok) { toast.error(result.error); return }
+
+    setActiviteiten(prev => prev.filter(a => a.id !== activiteit.id))
+    setItems(prev => prev.filter(i => i.activiteit_id !== activiteit.id))
+    setAfhankelijkheden(prev => prev.filter(a => a.van_activiteit_id !== activiteit.id && a.naar_activiteit_id !== activiteit.id))
+    toast.success('Activiteit verwijderd')
+    startT(() => router.refresh())
+  }
+
+  async function handleVerwijderFase(fase: PlanningFase) {
+    const eigenActiviteiten = activiteiten.filter(a => a.fase_id === fase.id)
+    const eigenItems = eigenActiviteiten.flatMap(a => itemsPerActiviteit[a.id] ?? [])
+    const n = eigenActiviteiten.length
+
+    // Een fase weggooien haalt de planning eronder weg — ook in Bouw7, want anders bouwt de
+    // sync de fase morgen gewoon terug. Dat moet de bevestigvraag onomwonden zeggen.
+    const regels = [
+      n > 0
+        ? `De ${n} activiteit${n === 1 ? '' : 'en'} in deze fase ${n === 1 ? 'wordt' : 'worden'} ook verwijderd, samen met ${eigenItems.length} planitem${eigenItems.length === 1 ? '' : 's'}.`
+        : 'Deze fase is leeg.',
+      'De planning wordt ook uit Bouw7 verwijderd; de bewakingscode zelf blijft bestaan.',
+      n > 0 ? 'Wil je activiteiten behouden, sleep ze dan eerst uit de fase.' : null,
+    ].filter(Boolean).join(' ')
+
+    const akkoord = await bevestig({
+      titel: `Fase "${fase.naam}" verwijderen?`,
+      omschrijving: regels,
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })
+    if (!akkoord) return
+
+    const result = await verwijderPlanningFase(fase.id)
+    if (!result.ok) { toast.error(result.error); return }
+
+    const weg = new Set(eigenActiviteiten.map(a => a.id))
+    setFasen(prev => prev.filter(f => f.id !== fase.id))
+    setActiviteiten(prev => prev.filter(a => !weg.has(a.id)))
+    setItems(prev => prev.filter(i => !weg.has(i.activiteit_id)))
+    setAfhankelijkheden(prev => prev.filter(a => !weg.has(a.van_activiteit_id) && !weg.has(a.naar_activiteit_id)))
+    toast.success('Fase verwijderd')
+    startT(() => router.refresh())
+  }
+
   function handleItemUpdated(id: string, patch: Partial<PlanningItemVerrijkt>) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
     startT(() => router.refresh())
@@ -1642,6 +1734,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                       }
                     }}
                     onNieuweActiviteit={() => { setNieuweFId(row.fase.id); setNieuweStart(''); setToonNieuw(true) }}
+                    onVerwijder={() => handleVerwijderFase(row.fase)}
                     onShift={(d) => handleFaseShift(row.fase.id, d)}
                     ingeklapt={ingeklapteFasen.has(row.fase.id)}
                     onToggleInklap={() => toggleFaseInklap(row.fase.id)}
@@ -1690,6 +1783,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                 dragHandleMove={onDragHandleMove}
                 dragHandleUp={onDragHandleUp}
                 onEdit={() => setEditActiviteit(row.activiteit)}
+                onVerwijder={() => handleVerwijderActiviteit(row.activiteit)}
                 onActiviteitUpdated={patch => handleActiviteitUpdate(row.activiteit.id, patch)}
                 onItemCreated={e => setItems(prev => [...prev, e])}
                 onItemUpdated={handleItemUpdated}
@@ -1759,6 +1853,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
             setAfhankelijkheden([])
             startT(() => router.refresh())
           }}
+          onVerwijder={() => handleVerwijderActiviteit(editActiviteit)}
           onClose={() => setEditActiviteit(null)}
         />
       )}
