@@ -1172,6 +1172,19 @@ export const medewerkerAfwezigheidLabels: Record<MedewerkerAfwezigheidType, stri
   overig:   'Overig',
 }
 
+/**
+ * Kleur per afwezigheidstype. Gedeeld tussen de desktop-medewerkerplanning en de
+ * mobiele agenda; stond eerder alleen in `MedewerkerTimeline` en liep zo het risico
+ * per scherm uit elkaar te lopen. De dag-achtergrondtinten (`AFWEZIGHEID_BG`) zijn
+ * bewust niet gedeeld: alleen die timeline vult hele dagcellen.
+ */
+export const medewerkerAfwezigheidKleur: Record<MedewerkerAfwezigheidType, string> = {
+  verlof:   '#f87171',
+  ziek:     '#dc2626',
+  training: '#10b981',
+  overig:   '#6b7280',
+}
+
 // ─── Functies & Afdelingen ───────────────────────────────────────────────────
 
 export type StandaardRooster = {

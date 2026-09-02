@@ -14,7 +14,7 @@ import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
 import PuntKaart from './PuntKaart'
-import BottomSheet from './BottomSheet'
+import BottomSheet from '../BottomSheet'
 import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, veld, label, primaireKnop, secundaireKnop } from './stijl'
 
 /**

@@ -16,7 +16,7 @@ import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import { GROEN, GRIJS, RAND, TEKST, ZACHT, VLAK, OPPERVLAK, veld, label, primaireKnop, secundaireKnop } from '@/components/mobiel/oplevering/stijl'
 import Sterren from '@/components/mobiel/oplevering/Sterren'
 import PuntKaart from '@/components/mobiel/oplevering/PuntKaart'
-import BottomSheet from '@/components/mobiel/oplevering/BottomSheet'
+import BottomSheet from '@/components/mobiel/BottomSheet'
 import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
 import { useDialogen } from '@/components/ui/dialogen'
 
