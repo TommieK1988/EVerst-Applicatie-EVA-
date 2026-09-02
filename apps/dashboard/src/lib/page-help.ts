@@ -362,6 +362,19 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/uren$/, {
+    title: 'Instellingen — Urenverantwoording',
+    description: 'Bepaalt hoe de weekstaat rekent en waar de uren terechtkomen. Medewerkers vullen hun uren per dag in op hun telefoon en dienen ze per week in; daarna accordeert eerst de teamleider de hele week en daarna elke projectleider de uren op zijn eigen dossiers. Pas een volledig goedgekeurde week gaat door naar Bouw7.',
+    sections: [
+      { title: 'Deadlines', body: 'De indien-deadline geldt voor de week zelf (standaard vrijdag 17:00), de goedkeur-deadline voor de week erna (standaard maandag 12:00). Wie er overheen gaat krijgt een herinnering; de deadline blokkeert niets, hij maakt alleen zichtbaar wie achterloopt.' },
+      { title: 'Terugvalgoedkeurder', body: 'Normaal beoordeelt de teamleider van de ploeg. Zit iemand in geen enkele ploeg, dan gaat zijn week naar de terugvalgoedkeurder. Laat je dit leeg, dan kunnen die medewerkers hun week nergens heen sturen — vul het dus in, of zorg dat iedereen een ploeg heeft.' },
+      { title: 'Speling op de contracturen', body: 'Een week is pas in te dienen als het totaal minstens gelijk is aan de contracturen. Meer mag altijd — dat wordt tijd voor tijd. Met speling accepteer je een klein tekort, bijvoorbeeld een kwartier. Nul betekent: de contracturen moeten helemaal rond zijn.' },
+      { title: 'Dossier voor indirecte uren', body: 'Bouw7 wil op elke urenregel een project, ook bij vakantie of ziekte. Wijs daarom per werkmaatschappij het dossier aan waar die uren op geboekt worden — bij Everts zijn dat de bestaande "Indirecte uren"-projecten. Zonder dit dossier kunnen verlof- en ziekuren niet naar Bouw7.' },
+      { title: 'Hoe uursoorten meetellen', body: 'De uursoorten zelf komen uit Bouw7 en zijn daar leidend. Hier leg je alleen vast hoe ze tellen. Werk betekent: er moet een dossier én een bewakingscode bij, en de uren bouwen het tijd-voor-tijdsaldo op. Afwezig telt als verantwoorde tijd zonder project. Tijd voor tijd is het opnemen van eerder opgebouwde uren en verlaagt het saldo. Feestdag wordt automatisch voorgevuld.' },
+      { title: 'Niet ingedeeld = niet kiesbaar', body: 'Een uursoort zonder indeling verschijnt bewust niet in de weekstaat. Dat is de veilige stand: komt er in Bouw7 een nieuwe soort bij, dan telt hij pas mee als iemand hier bepaald heeft hoe. Een verkeerde gok zou stilletjes het overurensaldo van iedereen vervuilen.' },
+    ],
+  }],
+
   [/^\/instellingen\/foutenlog$/, {
     title: 'Instellingen — Foutenlog',
     description: 'Overzicht van wat er in EVA misging: de foutmelding, wanneer hij ontstond, hoe vaak hij voorkwam en waar in de applicatie. Bedoeld om te monitoren wat er nog stukgaat naarmate meer collega\'s met EVA werken. Alleen zichtbaar voor beheerders, omdat een technisch foutspoor klantgegevens kan bevatten.',

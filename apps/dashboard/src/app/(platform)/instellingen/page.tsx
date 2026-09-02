@@ -104,6 +104,14 @@ const stamgegevensItems: SettingsItem[] = [
     module: 'planning',
   },
   {
+    href: '/instellingen/uren',
+    title: 'Urenverantwoording',
+    description: 'Deadlines, terugvalgoedkeurder, het dossier voor indirecte uren en hoe elke uursoort meetelt in de weekstaat.',
+    ready: true,
+    kicker: 'Uren',
+    module: 'planning',
+  },
+  {
     href: '/instellingen/kostensoorten',
     title: 'Kostensoorten',
     description: 'De vaste Bouw7-kostensoorten (arbeid, inkoop, onderaanneming, …). Read-only.',
