@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, cloneElement, forwardRef, useImperativeHandle, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus, Percent, Receipt } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
@@ -2137,6 +2137,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   // Move-to-group modal
   const [verplaatsModalOpen, setVerplaatsModalOpen] = useState(false)
 
+  // Bulk-wijziging opslag% / BTW van de selectie
+  const [opslagModalOpen, setOpslagModalOpen] = useState(false)
+  const [opslagInvoer,    setOpslagInvoer]    = useState('')
+  const [btwModalOpen,    setBtwModalOpen]    = useState(false)
+
   // Undo history
   const historyRef = useRef<Snapshot[]>([])
 
@@ -2667,6 +2672,57 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     toast.success(`${ids.length} regel${ids.length !== 1 ? 's' : ''} verplaatst`)
   }, [geselecteerdeRegels, regels, duwSnapshot, laadAlles, onWijziging])
 
+  /** Zet het opslagpercentage van de hele selectie. `undefined` betekent: geen eigen
+   *  opslag meer, dus terug naar de standaard-opslag van de calculatie. */
+  const handleZetOpslagGeselecteerd = useCallback((pct: number | undefined) => {
+    if (readOnly || geselecteerdeRegels.size === 0) return
+    duwSnapshot()
+    const ids = Array.from(geselecteerdeRegels)
+    ids.forEach(id => {
+      const r = regels.find(r => r.id === id)
+      if (!r) return
+      slaCalculatieregelOp({ ...r, opslag_pct: pct })
+      // Een eigen opslag per component wint van die van de regel; zonder deze wis
+      // zou er niets veranderen aan regels waar per component een opslag staat.
+      componenten
+        .filter(c => c.calculatieregel_id === id && c.opslag_pct !== undefined)
+        .forEach(c => slaComponentregelOp({ ...c, opslag_pct: undefined }))
+    })
+    laadAlles(); onWijziging()
+    setOpslagModalOpen(false)
+    const aantal = `${ids.length} regel${ids.length !== 1 ? 's' : ''}`
+    toast.success(pct === undefined
+      ? `${aantal} terug op de standaard-opslag`
+      : `Opslag ${formatGetal(pct, 2)}% op ${aantal}`)
+  }, [readOnly, geselecteerdeRegels, regels, componenten, duwSnapshot, laadAlles, onWijziging])
+
+  /** Zet het BTW-tarief van de hele selectie. Een lege keuze wist het tarief. */
+  const handleZetBtwGeselecteerd = useCallback((tariefId: string) => {
+    if (readOnly || geselecteerdeRegels.size === 0) return
+    duwSnapshot()
+    const patch = kiesBtwTarief(btwTarieven, tariefId)
+    const ids = Array.from(geselecteerdeRegels)
+    ids.forEach(id => {
+      const r = regels.find(r => r.id === id)
+      if (!r) return
+      slaCalculatieregelOp({ ...r, ...patch })
+    })
+    laadAlles(); onWijziging()
+    setBtwModalOpen(false)
+    const gekozen = vindTarief(btwTarieven, patch.btw_tarief_id, patch.btw_pct)
+    toast.success(`${gekozen ? tariefKort(gekozen) : 'Geen BTW'} op ${ids.length} regel${ids.length !== 1 ? 's' : ''}`)
+  }, [readOnly, geselecteerdeRegels, regels, btwTarieven, duwSnapshot, laadAlles, onWijziging])
+
+  /** Opent het opslagvenster met het huidige percentage als de selectie er één deelt. */
+  const opentOpslagModal = useCallback(() => {
+    const waarden = new Set(
+      Array.from(geselecteerdeRegels).map(id => regels.find(r => r.id === id)?.opslag_pct),
+    )
+    const enige = waarden.size === 1 ? Array.from(waarden)[0] : undefined
+    setOpslagInvoer(enige === undefined ? '' : String(+enige.toFixed(2)))
+    setOpslagModalOpen(true)
+  }, [geselecteerdeRegels, regels])
+
   // ─── Kolom resize ───────────────────────────────────────────────────────────
   const startResize = (col: ColId, e: React.MouseEvent) => {
     const startX = e.clientX
@@ -2961,6 +3017,20 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             title="Verplaats naar andere groep (Ctrl+M)"
           >
             <Move className="w-3 h-3" /> Verplaatsen
+          </button>
+          <button
+            onClick={opentOpslagModal}
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+            title="Opslag% van de geselecteerde regels wijzigen"
+          >
+            <Percent className="w-3 h-3" /> Opslag%
+          </button>
+          <button
+            onClick={() => setBtwModalOpen(true)}
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+            title="BTW-tarief van de geselecteerde regels wijzigen"
+          >
+            <Receipt className="w-3 h-3" /> BTW
           </button>
           <button
             onClick={handleVerwijderGeselecteerd}
@@ -3325,6 +3395,92 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   </button>
                 )
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Opslag% van de selectie ──────────────────────────────────────── */}
+      {opslagModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setOpslagModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-5 w-80" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-800 text-sm">Opslag% wijzigen</h2>
+              <button onClick={() => setOpslagModalOpen(false)} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              {geselecteerdeRegels.size} regel{geselecteerdeRegels.size !== 1 ? 's' : ''} krijgen dit opslagpercentage:
+            </p>
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                type="text" inputMode="decimal"
+                value={opslagInvoer}
+                placeholder={formatGetal(defaultOpslag, 2)}
+                onChange={e => setOpslagInvoer(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && opslagInvoer.trim() !== '') handleZetOpslagGeselecteerd(parseGetal(opslagInvoer))
+                  if (e.key === 'Escape') setOpslagModalOpen(false)
+                }}
+                className="flex-1 text-sm text-right px-2 py-1.5 rounded-lg border border-slate-200 focus:border-everts/40 focus:ring-2 focus:ring-everts/20 focus:outline-none text-slate-700"
+              />
+              <span className="text-slate-400 text-xs">%</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2">
+              Een eigen opslag per component (arbeid, materieel, onderaanneming) wordt gewist.
+            </p>
+            <div className="flex items-center justify-between gap-2 mt-4">
+              <button
+                onClick={() => handleZetOpslagGeselecteerd(undefined)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                title="Geen eigen opslag: volg de standaard van de calculatie"
+              >
+                Standaard ({formatGetal(defaultOpslag, 2)}%)
+              </button>
+              <button
+                disabled={opslagInvoer.trim() === ''}
+                onClick={() => handleZetOpslagGeselecteerd(parseGetal(opslagInvoer))}
+                className="text-xs bg-everts hover:bg-everts-dark text-white font-semibold px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Toepassen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── BTW-tarief van de selectie ───────────────────────────────────── */}
+      {btwModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setBtwModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-5 w-80 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-800 text-sm">BTW-tarief wijzigen</h2>
+              <button onClick={() => setBtwModalOpen(false)} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              {geselecteerdeRegels.size} regel{geselecteerdeRegels.size !== 1 ? 's' : ''} op dit tarief zetten:
+            </p>
+            <div className="overflow-auto flex-1 space-y-1">
+              {btwTarieven.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => handleZetBtwGeselecteerd(t.id)}
+                  className="w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-everts-50 hover:text-everts-dark transition-colors flex items-center gap-2"
+                >
+                  <span className="text-slate-400 text-[10px] w-10 shrink-0">{tariefKort(t)}</span>
+                  <span className="truncate">{t.label}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => handleZetBtwGeselecteerd('')}
+                className="w-full text-left text-xs px-3 py-2 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                — geen tarief
+              </button>
             </div>
           </div>
         </div>
