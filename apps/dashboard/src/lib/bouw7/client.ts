@@ -1126,6 +1126,21 @@ export type Bouw7EmployeeHourLogResponse = {
 }
 
 /**
+ * Uursoort (hourType) uit `GET /organization/hour-types` — de volledige stamlijst.
+ *
+ * Dit endpoint is de bron voor de weekstaat: de Bouw7-uursoorten zíjn de categorielijst
+ * (Gewerkte uren, Reisuren, Vakantie uren, Ziek, Feestdag, Tijd voor tijd, verlofsoorten).
+ * Let op de vorm: geen `/list/`-envelope maar een kale array, en het pad is *hour-types*
+ * meervoud — `/list/hour-types` en `/organization/hour-type` geven allebei 404.
+ */
+export type Bouw7HourType = {
+  id: number
+  name: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
  * Termijnstaat-kop uit GET /list/project-invoice-term-statements (Heimdall, q-DSL `project.id = {id}`).
  * Eén statement per project bundelt de losse termijnen. `fixedPrice` = totale aanneemsom.
  * De losse termijnen haal je op met `/list/project-invoice-terms` gefilterd op `statement.id`.

@@ -64,6 +64,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/instellingen\/bedrijfsgegevens\/[^/]+$/, { title: 'Instellingen › Bedrijfsgegevens › Detail', breadcrumb: 'Platform' }],
   [/^\/instellingen\/bedrijfsgegevens$/, { title: 'Instellingen › Bedrijfsgegevens', breadcrumb: 'Platform' }],
   [/^\/instellingen\/integraties$/, { title: 'Instellingen › Integraties', breadcrumb: 'Platform' }],
+  [/^\/instellingen\/uren$/, { title: 'Instellingen › Urenverantwoording', breadcrumb: 'Platform' }],
   [/^\/instellingen\/formulieren-pdf$/, { title: 'Instellingen › Formulier PDF-opmaak', breadcrumb: 'Platform' }],
   [/^\/instellingen$/, { title: 'Instellingen', breadcrumb: 'Platform' }],
   [/^\/account$/, { title: 'Mijn account', breadcrumb: 'Account' }],

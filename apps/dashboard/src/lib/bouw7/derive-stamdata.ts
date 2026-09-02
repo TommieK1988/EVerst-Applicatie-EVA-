@@ -2,15 +2,24 @@
 //   - BTW-tarieven uit offerteregels (vatTariffObject) → tabel `btw_tarieven`
 //   - Uursoorten uit uren-logs (hourType) → verrijking van `planning_uursoorten`
 //
-// Bouw7 biedt geen schone master-list-endpoints hiervoor; we dedupliceren daarom op Bouw7-id
-// (en op label/naam als id ontbreekt). De functies liften mee op calls die de sync/uren-tab
+// Voor BTW-tarieven biedt Bouw7 geen schone master-list; we dedupliceren daarom op Bouw7-id
+// (en op label/naam als id ontbreekt). Die afleiding lift mee op calls die de sync/uren-tab
 // tóch al doet, zodat er geen dure extra API-sweeps nodig zijn.
+//
+// Voor UURSOORTEN gold datzelfde uitgangspunt, maar dat was fout: `GET /organization/hour-types`
+// bestaat gewoon en geeft de volledige stamlijst (geverifieerd sep 2026). Zolang we ze uit
+// geboekte uren afleidden kende EVA er 10 van de 18 — precies de acht die je in een weekstaat
+// het hardst nodig hebt ontbraken (Ziek, Feestdag, ATV, ouderschaps- en zorgverlof). Gebruik
+// daarom `syncUursoorten()` als bron; `deriveUursoorten()` blijft als vangnet bestaan voor het
+// geval er in Bouw7 een uursoort opduikt die de stamlijst om wat voor reden dan ook niet geeft.
 
 import { createAdminClient } from '@everts/database/server'
 import type {
+  Bouw7Client,
   Bouw7QuotationDetail,
   Bouw7VatTariff,
   Bouw7EmployeeHourLog,
+  Bouw7HourType,
 } from './client'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,9 +194,34 @@ export async function upsertUursoortenVanBouw7(
   return { nieuw, bijgewerkt, gekoppeld }
 }
 
-/** Convenience: afleiden + upserten van uursoorten uit een set uren-logs. */
+/** Convenience: afleiden + upserten van uursoorten uit een set uren-logs (vangnet). */
 export async function deriveUursoorten(
   logs: Bouw7EmployeeHourLog[],
 ): Promise<{ nieuw: number; bijgewerkt: number; gekoppeld: number }> {
   return upsertUursoortenVanBouw7(collectHourTypes(logs))
+}
+
+/**
+ * Haalt de **volledige** uursoortenlijst uit Bouw7 en zet die in `planning_uursoorten`.
+ * Dit is de gezaghebbende bron, niet de afleiding uit geboekte uren.
+ *
+ * Nieuwe uursoorten komen binnen zonder `uren_categorie` en zijn daarmee nog níét kiesbaar
+ * in de weekstaat. Dat is bewust: hoe een uursoort meetelt (werk / afwezig / tijd voor tijd /
+ * feestdag) is een bedrijfskeuze die iemand in Instellingen → Uren moet maken. Een verkeerd
+ * geraden categorie zou stilletjes het overurensaldo vervuilen.
+ */
+export async function syncUursoorten(client: Bouw7Client): Promise<{
+  nieuw: number
+  bijgewerkt: number
+  gekoppeld: number
+  gevonden: number
+}> {
+  const rows = await client.get<Bouw7HourType[]>('/organization/hour-types')
+  const lijst = Array.isArray(rows) ? rows : []
+  const res = await upsertUursoortenVanBouw7(
+    lijst
+      .filter(t => t?.id != null)
+      .map(t => ({ bouw7_id: t.id, naam: (t.name ?? `Uursoort ${t.id}`).trim() })),
+  )
+  return { ...res, gevonden: lijst.length }
 }
