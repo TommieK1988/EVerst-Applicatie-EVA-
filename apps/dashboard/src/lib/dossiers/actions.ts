@@ -3179,6 +3179,10 @@ export type BewakingscodeOptie = {
   code: string
   naam: string | null
   pslId: number
+  /** Prognose-uren op deze code (0 als er niets begroot is). */
+  prognoseUren: number
+  /** Al geboekte uren op deze code. */
+  geboekteUren: number
 }
 
 export async function getDossierUrenBewaking(dossierId: string): Promise<DossierUrenBewakingData> {
@@ -3293,26 +3297,52 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
   return { beschikbaar: regels.length > 0, heeftWerkbegroting, regels, totalen }
 }
 
-export async function getBewakingscodesVoorUurlog(dossierId: string): Promise<BewakingscodeOptie[]> {
+/**
+ * Bewakingscodes (kostensoort Arbeid) waarop uren geboekt kunnen worden, met hun urenbudget.
+ *
+ * `alleenMetPrognose` beperkt de lijst tot codes waar daadwerkelijk uren op begroot zijn. Dat is
+ * de stand voor het **invoeren** van uren in de weekstaat: een monteur hoort te kiezen uit het
+ * werk dat voor dit project gepland is, niet uit de volledige codelijst — anders belandt er werk
+ * op codes zonder budget en klopt de bewaking niet meer.
+ *
+ * Zonder de optie komt de volledige lijst terug. Dat blijft de stand voor het **corrigeren** van
+ * al geboekte uren (`UrenDetailTable`): een uur dat op de verkeerde code staat moet naar elke
+ * code te verplaatsen zijn, ook naar één zonder prognose.
+ */
+export async function getBewakingscodesVoorUurlog(
+  dossierId: string,
+  opties?: { alleenMetPrognose?: boolean },
+): Promise<BewakingscodeOptie[]> {
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return []
   const { client, bouw7Id } = ctx
   try {
     const resp = await client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/1/chapters?include_subprojects=false`)
-    const opties: BewakingscodeOptie[] = []
+    const gevonden: BewakingscodeOptie[] = []
     for (const item of resp.items ?? []) {
       const ci = item.chapterInfo
       if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
       for (const sc of item.securityCodes ?? []) {
         const code = (sc.code ?? '').trim()
         if (!code) continue
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pslId = (sc as any).pslIds?.[0]
+        const pslId = sc.pslIds?.[0]
         if (pslId == null) continue
-        opties.push({ code, naam: sc.name ?? null, pslId })
+        // prognosisHours valt terug op budgetHours: een code die nog niet herzien is heeft
+        // alleen een begroting, en die telt net zo goed als "hier is werk voor ingepland".
+        const prognoseUren = sc.hourInfo?.prognosisHours ?? sc.hourInfo?.budgetHours ?? 0
+        gevonden.push({
+          code,
+          naam: sc.name ?? null,
+          pslId,
+          prognoseUren,
+          geboekteUren: sc.hourInfo?.costHours ?? 0,
+        })
       }
     }
-    return opties.sort((a, b) => a.code.localeCompare(b.code))
+    const lijst = opties?.alleenMetPrognose
+      ? gevonden.filter(o => o.prognoseUren > 0)
+      : gevonden
+    return lijst.sort((a, b) => a.code.localeCompare(b.code))
   } catch {
     return []
   }
