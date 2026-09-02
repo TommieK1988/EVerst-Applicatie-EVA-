@@ -180,7 +180,9 @@ export default function GebruikerToegangBeheer({
           ) : (
             <div>
               <div style={{ ...valueStyle, color: 'var(--fg-muted)', marginBottom: 8 }}>
-                Nog geen account aangemaakt.
+                {type === 'platform_gebruiker'
+                  ? 'Nog niet ingelogd. Het account koppelt zichzelf zodra deze medewerker één keer met Microsoft inlogt.'
+                  : 'Nog geen account aangemaakt.'}
                 {!medewerker_email && (
                   <span style={{ color: 'var(--warning, #f59e0b)', marginLeft: 6 }}>
                     Voeg eerst een e-mailadres toe.
