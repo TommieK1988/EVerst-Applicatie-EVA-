@@ -18,7 +18,10 @@ import type {
 } from '@everts/database/platform-types'
 import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { vereisRecht, vereisBeheerder, GeenToegangError } from '@/lib/auth/rechten'
+import { vereisRecht, vereisBeheerder, GeenToegangError, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { bouwUitnodigingsMail } from '@/lib/auth/uitnodiging-mail'
+import { verstuurMailNamensMedewerker } from '@/lib/o365/mail'
+import { O365TokenError } from '@/lib/o365/tokens'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 
@@ -490,36 +493,96 @@ export async function verstuurUitnodiging(
   const nope = await eisBeheer(); if (nope) return nope
   const { data: med, error: fetchErr } = await db()
     .from('medewerkers')
-    .select('email, voornaam, achternaam')
+    .select('email, voornaam, achternaam, gebruiker_type')
     .eq('id', medewerker_id)
     .maybeSingle()
 
   if (fetchErr || !med) return { ok: false, error: 'Medewerker niet gevonden' }
   if (!med.email) return { ok: false, error: 'Medewerker heeft geen e-mailadres' }
 
-  const supabase = createAdminClient()
+  // De uitnodiging wordt namens de uitnodigende beheerder gemaild (Graph), niet
+  // door de Supabase-mailer. Zonder O365-koppeling kunnen we dus niets sturen.
+  const afzender = await getCurrentMedewerker()
+  if (!afzender) return { ok: false, error: 'Geen ingelogde medewerker gevonden' }
 
-  // Bepaal redirect-URL voor de uitnodigingslink in de e-mail
-  const { headers } = await import('next/headers')
-  const headersList = await headers()
-  const host = headersList.get('host') ?? 'localhost:3000'
-  const protocol = host.startsWith('localhost') ? 'http' : 'https'
-  // Na het volgen van de link zet de callback de sessie (met medewerker-poort) en
-  // stuurt door naar de set-wachtwoord-pagina, zodat de uitgenodigde een wachtwoord
-  // kiest waarmee hij voortaan kan inloggen.
-  const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
+  const gebruikerType = (med.gebruiker_type ?? 'platform_gebruiker') as GebruikerType
+  const volledigeNaam = [med.voornaam, med.achternaam].filter(Boolean).join(' ')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: inviteData, error: inviteErr } = await (supabase as any).auth.admin.inviteUserByEmail(med.email, {
-    data: { full_name: [med.voornaam, med.achternaam].filter(Boolean).join(' ') },
-    redirectTo,
+  // Platformgebruikers loggen altijd met Microsoft in — ook op de telefoon. Voor
+  // hen maken we bewust GEEN Supabase-account aan: een e-mail/wachtwoord-account
+  // is niet alleen overbodig, het gaat ook stuk zodra het Microsoft-adres afwijkt
+  // van het mailadres (dan blijven er twee losse accounts achter). /auth/callback
+  // koppelt de medewerker bij de eerste Microsoft-login op e-mailadres.
+  // App-gebruikers hebben geen Microsoft-account en krijgen wél een activatielink.
+  let actieLink: string | null = null
+  let auth_user_id: string | null = null
+  let herhaling = false
+
+  if (gebruikerType !== 'platform_gebruiker') {
+    const supabase = createAdminClient()
+
+    // Bepaal redirect-URL voor de activatielink in de e-mail. Na het volgen van de
+    // link zet de callback de sessie (met medewerker-poort) en stuurt door naar de
+    // set-wachtwoord-pagina, zodat de uitgenodigde een wachtwoord kiest waarmee hij
+    // voortaan kan inloggen.
+    const { headers } = await import('next/headers')
+    const headersList = await headers()
+    const host = headersList.get('host') ?? 'localhost:3000'
+    const protocol = host.startsWith('localhost') ? 'http' : 'https'
+    const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
+
+    // `generateLink` maakt de gebruiker aan én levert de activatielink op, maar
+    // verstuurt zelf geen mail — precies wat we willen, want de mail gaat hieronder
+    // in EVA-huisstijl de deur uit. Bestaat het account al (type 'invite' weigert dat),
+    // dan valt hij terug op een herstel-link: dezelfde bestemming, ander token.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = (supabase as any).auth.admin
+    let { data: linkData, error: linkErr } = await admin.generateLink({
+      type: 'invite',
+      email: med.email,
+      options: { redirectTo, data: { full_name: volledigeNaam } },
+    })
+    if (linkErr && /already|exists|registered/i.test(linkErr.message ?? '')) {
+      herhaling = true
+      ;({ data: linkData, error: linkErr } = await admin.generateLink({
+        type: 'recovery',
+        email: med.email,
+        options: { redirectTo },
+      }))
+    }
+    if (linkErr) return { ok: false, error: linkErr.message }
+
+    actieLink = linkData?.properties?.action_link ?? null
+    if (!actieLink) return { ok: false, error: 'Geen activatielink ontvangen van Supabase' }
+
+    auth_user_id = linkData?.user?.id ?? null
+    if (auth_user_id) {
+      await db().from('medewerkers').update({ auth_user_id }).eq('id', medewerker_id)
+    }
+  }
+
+  const mail = bouwUitnodigingsMail({
+    voornaam: med.voornaam ?? null,
+    gebruikerType,
+    actieLink,
+    afzenderNaam: [afzender.voornaam, afzender.tussenvoegsel, afzender.achternaam].filter(Boolean).join(' ') || null,
+    herhaling,
   })
 
-  if (inviteErr) return { ok: false, error: inviteErr.message }
-
-  const auth_user_id = inviteData?.user?.id ?? null
-  if (auth_user_id) {
-    await db().from('medewerkers').update({ auth_user_id }).eq('id', medewerker_id)
+  try {
+    await verstuurMailNamensMedewerker(afzender.id, {
+      to: [med.email],
+      subject: mail.onderwerp,
+      bodyHtml: mail.bodyHtml,
+    })
+  } catch (err) {
+    // Bij een app-gebruiker staat het account er inmiddels wel; alleen de mail ging
+    // mis. Dat expliciet melden, anders lijkt het alsof er niets is gebeurd.
+    revalidatePath(`/medewerkers/${medewerker_id}`)
+    const reden = err instanceof O365TokenError
+      ? 'je Microsoft 365-koppeling ontbreekt of is verlopen — koppel je account opnieuw en probeer het nogmaals'
+      : err instanceof Error ? err.message : 'onbekende fout'
+    return { ok: false, error: `Uitnodigingsmail niet verstuurd: ${reden}` }
   }
 
   revalidatePath(`/medewerkers/${medewerker_id}`)
