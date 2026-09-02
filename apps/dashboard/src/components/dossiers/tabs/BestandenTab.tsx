@@ -31,6 +31,7 @@ import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import DocumentenKaart from '@/components/documenten/DocumentenKaart'
 import SharePointMapPicker from './SharePointMapPicker'
 import { getPortaalBestandSleutels, setPortaalBestandZichtbaar } from '@/lib/portaal/beheer-actions'
+import { useDialogen } from '@/components/ui'
 import BestandenLijst from './bestanden/BestandenLijst'
 import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
@@ -75,6 +76,7 @@ const fallbackFout = (e: unknown): DossierSharePointData => ({
 
 export default function BestandenTab({ dossierId }: { dossierId: string }) {
   const readOnly = useDossierReadOnly()
+  const { bevestig } = useDialogen()
 
   const [bouw7, setBouw7] = useState<DossierBestandenData | null>(null)
   const [sharepoint, setSharepoint] = useState<DossierSharePointData | null>(null)
@@ -125,7 +127,22 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
    * bevroren `bronQuery`: die bepaalt later welk bestand de klant precies krijgt,
    * en wordt daarom bij het aanvinken vastgelegd in plaats van bij het opvragen.
    */
-  function togglePortaal(rij: BestandRij, zichtbaar: boolean) {
+  async function togglePortaal(rij: BestandRij, zichtbaar: boolean) {
+    // Delen vraagt om een bevestiging met de bestandsnaam erin, weghalen niet.
+    // Een vinkje is een kleine beweging met een groot gevolg: het bestand staat
+    // meteen bij de opdrachtgever. De asymmetrie is bewust -- iets per ongeluk
+    // intrekken is te herstellen, iets per ongeluk delen niet.
+    if (zichtbaar) {
+      const akkoord = await bevestig({
+        titel: 'Delen met de opdrachtgever?',
+        omschrijving:
+          `"${rij.naam}" wordt zichtbaar in het klantportaal van dit dossier, ` +
+          'voor iedereen die daar toegang toe heeft.',
+        bevestigLabel: 'Ja, delen',
+      })
+      if (!akkoord) return
+    }
+
     setInPortaal(vorig => {
       if (!vorig) return vorig
       const nieuw = new Set(vorig)

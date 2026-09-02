@@ -90,7 +90,8 @@ export async function vereisPortaalPagina(): Promise<PortaalGebruiker> {
  * Drie bronnen, altijd optellend:
  *  1. scope 'organisatie' → alle dossiers van zijn relatie
  *  2. scope 'eigen_dossiers' → dossiers waar hij de contactpersoon van is
- *  3. losse toekenningen in portaal_gebruiker_dossiers
+ *  3. scope 'alleen_gekoppeld' → niets uit een regel, alleen punt 4
+ *  4. losse toekenningen in portaal_gebruiker_dossiers
  * en dan doorsneden met de dossiers die überhaupt aan het portaal zijn gegeven.
  *
  * Gepagineerd: een corporatie kan makkelijk meer dan 1000 dossiers hebben, en
@@ -99,7 +100,12 @@ export async function vereisPortaalPagina(): Promise<PortaalGebruiker> {
 export async function getPortaalDossierIds(gebruiker: PortaalGebruiker): Promise<string[]> {
   const kandidaten = new Set<string>()
 
-  if (gebruiker.scope === 'organisatie' && gebruiker.relatie_id) {
+  // Een meekijker van buiten heeft geen regel-gebaseerde toegang: alleen wat
+  // hieronder uit portaal_gebruiker_dossiers komt. Zo kan zijn blikveld nooit
+  // uitdijen doordat hij elders contactpersoon wordt.
+  if (gebruiker.scope === 'alleen_gekoppeld') {
+    // niets
+  } else if (gebruiker.scope === 'organisatie' && gebruiker.relatie_id) {
     const rijen = await haalAlleRijen<{ id: string }>((van, tot) =>
       db().from('dossiers').select('id').eq('klant_id', gebruiker.relatie_id).order('id').range(van, tot))
     rijen.forEach(r => kandidaten.add(r.id))

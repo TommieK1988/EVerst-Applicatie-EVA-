@@ -257,7 +257,7 @@ export default function Fotogalerij({
    * het klantportaal heeft.
    */
   inPortaal?: Set<string>
-  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void
+  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void | Promise<void>
 }) {
   const [huidige, setHuidige] = useState(0)
   const [vergroot, setVergroot] = useState(false)
@@ -340,7 +340,13 @@ export default function Fotogalerij({
                   title={f.naam}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
-                  <span className="min-w-0 flex-1 truncate">{f.naam}</span>
+                  {/* Vet = staat in het klantportaal, net als in de bestandenlijst. */}
+                  <span
+                    className={`min-w-0 flex-1 truncate ${inPortaal?.has(f.sleutel) ? 'font-semibold' : ''}`}
+                    title={inPortaal?.has(f.sleutel) ? 'Staat in het klantportaal' : undefined}
+                  >
+                    {f.naam}
+                  </span>
                   <span className="shrink-0 text-[10px] text-neutral-400">{f.bron}</span>
                   <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{f.datum ?? ''}</span>
                   <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{formatteerGrootte(f.grootte)}</span>

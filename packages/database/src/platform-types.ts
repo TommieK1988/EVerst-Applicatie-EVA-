@@ -1575,11 +1575,14 @@ export type OpleverToegangToken = {
 
 /**
  * Welke dossiers een portaalgebruiker ziet.
- *  - eigen_dossiers → alleen waar deze contactpersoon aan hangt (standaard)
- *  - organisatie    → alle dossiers van zijn relatie
- * Extra losse dossiers komen daar altijd bovenop via portaal_gebruiker_dossiers.
+ *  - eigen_dossiers   → alleen waar deze contactpersoon aan hangt (standaard)
+ *  - organisatie      → alle dossiers van zijn relatie
+ *  - alleen_gekoppeld → uitsluitend wat expliciet gekoppeld is; voor meekijkers
+ *    van buiten (VvE-voorzitter, adviseur van de opdrachtgever) die bij één
+ *    project horen en verder nergens bij
+ * Losse koppelingen uit portaal_gebruiker_dossiers tellen bij alle drie mee.
  */
-export type PortaalScope = 'eigen_dossiers' | 'organisatie'
+export type PortaalScope = 'eigen_dossiers' | 'organisatie' | 'alleen_gekoppeld'
 
 export type PortaalGebruiker = {
   id: string

@@ -25,6 +25,10 @@ export type PortaalToegangRij = {
   laatstIngelogdOp: string | null
   /** Heeft deze persoon ooit ingelogd? Zo niet, dan is de uitnodiging misschien nooit aangekomen. */
   heeftIngelogd: boolean
+  /** Hangt hier via een losse koppeling (meekijker) en niet via de klantregel. */
+  losGekoppeld: boolean
+  /** Waarom deze persoon meekijkt, als dat is ingevuld. Alleen intern. */
+  rol: string | null
 }
 
 export type PortaalDossierBeheer = {
@@ -40,8 +44,10 @@ export type PortaalDossierBeheer = {
     toon_chat: boolean
     toon_afspraken: boolean
   }
-  /** Wie er via de scope-regel of een losse koppeling bij dit dossier kan. */
+  /** Contactpersonen van de opdrachtgever die via de scope-regel toegang hebben. */
   toegang: PortaalToegangRij[]
+  /** Mensen van buiten die alleen aan dít dossier gekoppeld zijn. */
+  meekijkers: PortaalToegangRij[]
   /** Contactpersonen van de klant die nog géén portaaltoegang hebben. */
   uitnodigbaar: { contactpersoonId: string; naam: string; email: string; functie: string | null }[]
   klantId: string | null
@@ -84,7 +90,10 @@ export async function getPortaalDossierBeheer(dossierId: string): Promise<Portaa
 
   return {
     instellingen: (instellingen as PortaalDossierBeheer['instellingen']) ?? LEGE_INSTELLINGEN,
-    toegang,
+    // Twee lijsten, want het zijn twee soorten beslissingen: een contactpersoon
+    // van de klant volgt uit het dossier, een meekijker is een losse keuze.
+    toegang: toegang.filter(t => !t.losGekoppeld),
+    meekijkers: toegang.filter(t => t.losGekoppeld),
     // Wie al toegang heeft, hoeft niet nog eens uitgenodigd te worden.
     uitnodigbaar: uitnodigbaar.filter(u => !toegang.some(t => t.email === u.email)),
     klantId,
@@ -112,9 +121,11 @@ async function haalToegang(dossierId: string, klantId: string | null): Promise<P
 
   const { data: losse } = await db()
     .from('portaal_gebruiker_dossiers')
-    .select('portaal_gebruiker_id')
+    .select('portaal_gebruiker_id, rol')
     .eq('dossier_id', dossierId)
-  const losseIds = ((losse ?? []) as { portaal_gebruiker_id: string }[]).map(r => r.portaal_gebruiker_id)
+  const losseRijen = (losse ?? []) as { portaal_gebruiker_id: string; rol: string | null }[]
+  const losseIds = losseRijen.map(r => r.portaal_gebruiker_id)
+  const rolPerGebruiker = new Map(losseRijen.map(r => [r.portaal_gebruiker_id, r.rol]))
 
   if (losseIds.length > 0) {
     const { data } = await db()
@@ -136,6 +147,8 @@ async function haalToegang(dossierId: string, klantId: string | null): Promise<P
     uitgenodigdOp: (r.uitgenodigd_op as string | null) ?? null,
     laatstIngelogdOp: (r.laatst_ingelogd_op as string | null) ?? null,
     heeftIngelogd: !!r.laatst_ingelogd_op,
+    losGekoppeld: losseIds.includes(String(r.id)),
+    rol: rolPerGebruiker.get(String(r.id)) ?? null,
   }))
 }
 

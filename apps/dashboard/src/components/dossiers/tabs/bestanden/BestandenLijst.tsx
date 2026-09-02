@@ -104,7 +104,7 @@ export default function BestandenLijst({
    * recht op het klantportaal heeft.
    */
   inPortaal?: Set<string>
-  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void
+  onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void | Promise<void>
 }) {
   const [zoek, setZoek] = useState('')
   const [bronFilter, setBronFilter] = useState<'alle' | BestandRij['bron']>('alle')
@@ -227,7 +227,13 @@ export default function BestandenLijst({
             {zichtbaar.map(r => (
               <tr key={r.sleutel} className="border-b border-neutral-100 hover:bg-neutral-50/70">
                 <td className={`${CEL} pl-3 whitespace-normal`}>
-                  <span className="flex items-center gap-1.5">
+                  {/* Vet = staat in het klantportaal. Zo zie je bij het scrollen
+                      meteen wat er buiten de deur ligt, zonder de vinkkolom af
+                      te speuren. */}
+                  <span
+                    className={`flex items-center gap-1.5 ${inPortaal?.has(r.sleutel) ? 'font-semibold' : ''}`}
+                    title={inPortaal?.has(r.sleutel) ? 'Staat in het klantportaal' : undefined}
+                  >
                     {r.soort === 'mail' && <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
                     <span className="min-w-0">
                       <BestandsnaamActie rij={r} onOpenMail={onOpenMail} />
