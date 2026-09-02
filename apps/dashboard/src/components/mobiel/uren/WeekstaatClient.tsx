@@ -4,8 +4,9 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { Weekstaat, WeekRegel, UursoortOptie, RegelInvoer } from '@/lib/uren/weekstaat'
-import { voegRegelToe, wijzigRegel, verwijderRegel, dienWeekIn } from '@/lib/uren/weekstaat'
+import { voegRegelToe, wijzigRegel, verwijderRegel, verwijderOnkosten, dienWeekIn } from '@/lib/uren/weekstaat'
 import RegelSheet from './RegelSheet'
+import OnkostenSheet from './OnkostenSheet'
 
 /**
  * De mobiele weekstaat: per dag een kaart met regels, een voortgangskop en één knop Indienen.
@@ -25,6 +26,11 @@ function dagLabel(datum: string, vandaag: string) {
 }
 
 const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
+const euro = (n: number) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const KOSTEN_LABEL: Record<string, string> = {
+  parkeren: 'Parkeren', reiskosten: 'Reiskosten', overig: 'Overige kosten',
+}
 
 const STATUS_TEKST: Record<string, { label: string; kleur: string; achtergrond: string }> = {
   concept: { label: 'Nog niet ingediend', kleur: '#6b757c', achtergrond: '#f1f3f4' },
@@ -46,6 +52,7 @@ export default function WeekstaatClient({
   const ververs = () => startT(() => router.refresh())
 
   const [sheet, setSheet] = useState<{ datum: string; regel: WeekRegel | null } | null>(null)
+  const [kostenSheet, setKostenSheet] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
 
   const status = STATUS_TEKST[staat.status] ?? STATUS_TEKST.concept
@@ -59,6 +66,12 @@ export default function WeekstaatClient({
       : await voegRegelToe(staat.weekId, invoer)
     if (r.ok) ververs()
     return r
+  }
+
+  async function verwijderKosten(id: string) {
+    const r = await verwijderOnkosten(id)
+    if (!r.ok) { toast.error(r.error); return }
+    ververs()
   }
 
   async function verwijder(regel: WeekRegel) {
@@ -123,12 +136,13 @@ export default function WeekstaatClient({
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {staat.dagen.map(datum => {
           const regels = staat.regels.filter(r => r.datum === datum)
+          const dagKosten = staat.onkosten.filter(k => k.datum === datum)
           const dagTotaal = regels.reduce((s, r) => s + r.uren, 0)
           const isVandaag = datum === vandaag
 
           // Lege weekenddagen tonen we niet: die vullen het scherm zonder iets te zeggen.
           const isWeekend = [6, 7].includes(new Date(`${datum}T12:00:00`).getDay() || 7)
-          if (isWeekend && regels.length === 0 && !staat.bewerkbaar) return null
+          if (isWeekend && regels.length === 0 && dagKosten.length === 0 && !staat.bewerkbaar) return null
 
           return (
             <div key={datum} style={{
@@ -194,15 +208,46 @@ export default function WeekstaatClient({
                 </div>
               ))}
 
+              {dagKosten.map(k => (
+                <div key={k.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '9px 14px', borderTop: '1px solid var(--border)',
+                  background: 'rgba(0,0,0,0.015)',
+                }}>
+                  <span style={{ fontSize: 13, color: 'var(--fg)', flex: 1, minWidth: 0 }}>
+                    {KOSTEN_LABEL[k.soort]}
+                    {k.km ? ` · ${k.km.toLocaleString('nl-NL')} km` : ''}
+                    {k.omschrijving ? ` · ${k.omschrijving}` : ''}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {euro(k.bedrag)}
+                  </span>
+                  {staat.bewerkbaar && (
+                    <button type="button" onClick={() => verwijderKosten(k.id)}
+                      aria-label="Kosten verwijderen" style={{ ...rijKnop, color: '#c0392b' }}>×</button>
+                  )}
+                </div>
+              ))}
+
               {staat.bewerkbaar && (
-                <button type="button" onClick={() => setSheet({ datum, regel: null })}
-                  style={{
-                    width: '100%', padding: '11px 14px', border: 'none', background: 'transparent',
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#009439',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
-                  + Uren toevoegen
-                </button>
+                <div style={{ display: 'flex', borderTop: dagKosten.length ? '1px solid var(--border)' : 'none' }}>
+                  <button type="button" onClick={() => setSheet({ datum, regel: null })}
+                    style={{
+                      flex: 1, padding: '11px 14px', border: 'none', background: 'transparent',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#009439',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}>
+                    + Uren toevoegen
+                  </button>
+                  <button type="button" onClick={() => setKostenSheet(datum)}
+                    style={{
+                      padding: '11px 14px', border: 'none', background: 'transparent',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c',
+                      cursor: 'pointer',
+                    }}>
+                    + Kosten
+                  </button>
+                </div>
               )}
             </div>
           )
@@ -237,6 +282,15 @@ export default function WeekstaatClient({
             {bezig ? 'Bezig…' : 'Week indienen'}
           </button>
         </div>
+      )}
+
+      {kostenSheet && (
+        <OnkostenSheet
+          weekId={staat.weekId}
+          datum={kostenSheet}
+          onSluit={() => setKostenSheet(null)}
+          onKlaar={ververs}
+        />
       )}
 
       {sheet && (

@@ -9,6 +9,7 @@ import {
   keurWeekGoed, keurRegelsGoed, keurAf, getWeekRegels,
   type TeWeek, type TeRegel,
 } from '@/lib/uren/goedkeuring'
+import { keurVerlofGoed, wijsVerlofAf, type VerlofAanvraag } from '@/lib/uren/verlof'
 
 /**
  * Twee werklijsten naast elkaar: de weken waar ik teamleider van ben, en de urenregels op mijn
@@ -24,10 +25,11 @@ function datumKort(d: string) {
 }
 
 export default function GoedkeurenClient({
-  weken, regels, bedrijfsModus,
+  weken, regels, verlof, bedrijfsModus,
 }: {
   weken: TeWeek[]
   regels: TeRegel[]
+  verlof: VerlofAanvraag[]
   bedrijfsModus: 'eva' | 'bouw7'
 }) {
   const router = useRouter()
@@ -35,7 +37,9 @@ export default function GoedkeurenClient({
   const { vraagTekst } = useDialogen()
   const ververs = () => startT(() => router.refresh())
 
-  const [tab, setTab] = useState<'team' | 'projecten'>(weken.length ? 'team' : 'projecten')
+  const [tab, setTab] = useState<'team' | 'projecten' | 'verlof'>(
+    weken.length ? 'team' : regels.length ? 'projecten' : verlof.length ? 'verlof' : 'team',
+  )
   const [open, setOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Record<string, TeRegel[]>>({})
   const [gekozen, setGekozen] = useState<Set<string>>(new Set())
@@ -92,6 +96,35 @@ export default function GoedkeurenClient({
     ververs()
   }
 
+  async function verlofGoed(a: VerlofAanvraag) {
+    setBezig(true)
+    const r = await keurVerlofGoed(a.id)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success(r.bouw7
+      ? `Verlof van ${a.medewerkerNaam} goedgekeurd en doorgezet naar Bouw7.`
+      : `Verlof van ${a.medewerkerNaam} goedgekeurd. Het doorzetten naar Bouw7 lukte niet en wordt automatisch opnieuw geprobeerd.`)
+    ververs()
+  }
+
+  async function verlofAf(a: VerlofAanvraag) {
+    const reden = await vraagTekst({
+      titel: `Verlofaanvraag van ${a.medewerkerNaam} afwijzen`,
+      omschrijving: 'De medewerker ziet deze reden bij zijn aanvraag.',
+      placeholder: 'Bijvoorbeeld: die week staat de oplevering gepland',
+      meerregelig: true,
+      verplicht: true,
+      bevestigLabel: 'Afwijzen',
+    })
+    if (!reden?.trim()) return
+    setBezig(true)
+    const r = await wijsVerlofAf(a.id, reden)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Aanvraag afgewezen.')
+    ververs()
+  }
+
   // Regels gegroepeerd per dossier: een projectleider kijkt per project, niet per medewerker.
   const perDossier = new Map<string, TeRegel[]>()
   for (const r of regels) {
@@ -123,6 +156,7 @@ export default function GoedkeurenClient({
         {([
           ['team', `Mijn team (${weken.length})`],
           ['projecten', `Mijn projecten (${regels.length})`],
+          ['verlof', `Verlof (${verlof.length})`],
         ] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             style={{
@@ -219,6 +253,47 @@ export default function GoedkeurenClient({
                   })}
                 </div>
               </>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ── Verlof ──────────────────────────────────────────────── */}
+      {tab === 'verlof' && (
+        <Card>
+          <CardBody>
+            {verlof.length === 0 ? (
+              <p style={leeg}>Er staan geen verlofaanvragen op jouw akkoord te wachten.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {verlof.map(a => (
+                  <div key={a.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    border: '1px solid var(--border)', borderRadius: 10, padding: '11px 14px',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ fontFamily: 'var(--font-ui)', fontSize: 13 }}>{a.medewerkerNaam}</strong>
+                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
+                        {' '}· {a.uursoortNaam} · {datumKort(a.startDatum)} t/m {datumKort(a.eindDatum)}
+                        {' '}· {uur(a.urenTotaal)} uur
+                      </span>
+                      {a.toelichting && (
+                        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
+                          {a.toelichting}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button variant="ghost" size="sm" disabled={bezig} onClick={() => verlofAf(a)}>
+                        Afwijzen
+                      </Button>
+                      <Button variant="primary" size="sm" disabled={bezig} onClick={() => verlofGoed(a)}>
+                        Goedkeuren
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </CardBody>
         </Card>
