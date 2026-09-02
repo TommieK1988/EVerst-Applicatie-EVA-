@@ -17,6 +17,7 @@ import { vereisSessie } from '@/lib/auth/rechten'
 import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen } from './rooster'
 import { getUrenInstellingen, getIndirectDossierId } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
+import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -567,14 +568,46 @@ export async function dienWeekIn(
     }
   }
 
+  // De route wordt hier bevroren. Zet iemand de bedrijfsinstelling later om, dan blijft deze week
+  // op zijn eigen spoor -- anders zou een week die op de teamleider wacht ineens op een
+  // Bouw7-vlag gaan wachten die nooit komt, of andersom.
+  const modus = await bepaalModus(medewerker.id)
+
+  // Alleen in de EVA-route is er een teamleider nodig. Ontbreekt die, dan zou de week nergens heen
+  // kunnen; dat moet de medewerker weten in plaats van dat zijn week stilletjes blijft hangen.
+  let teamleiderId: string | null = null
+  if (modus === 'eva') {
+    teamleiderId = await bepaalTeamleider(medewerker.id)
+    if (!teamleiderId) {
+      return {
+        ok: false,
+        error: 'Er is niemand die je week kan goedkeuren. Vraag de beheerder om een teamleider of terugvalgoedkeurder in te stellen.',
+      }
+    }
+  }
+
   const { error } = await supabase.from('uren_weken').update({
     status: 'ingediend',
     ingediend_op: new Date().toISOString(),
     ingediend_door: medewerker.id,
+    tl_goedkeurder_id: teamleiderId,
+    goedkeuring_modus: modus,
     afkeur_reden: null,
   }).eq('id', weekId)
   if (error) return { ok: false, error: error.message }
 
+  // In de Bouw7-route wordt daar geaccordeerd, dus moeten de uren er meteen heen -- met
+  // approved = false. In de EVA-route gebeurt dat pas als de hele keten rond is.
+  if (modus === 'bouw7') {
+    try {
+      const { stuurUrenWeekNaarBouw7 } = await import('./bouw7')
+      await stuurUrenWeekNaarBouw7(weekId)
+    } catch (e) {
+      console.error('[uren] versturen naar Bouw7 bij indienen mislukt:', e)
+    }
+  }
+
   revalidatePath('/m/uren')
+  revalidatePath('/uren/goedkeuren')
   return { ok: true }
 }

@@ -12,7 +12,7 @@ export default async function UrenInstellingenPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const [{ data: instellingen }, { data: uursoorten }, { data: werkmaatschappijen }, { data: medewerkers }, { data: dossiers }] =
+  const [{ data: instellingen }, { data: uursoorten }, { data: werkmaatschappijen }, { data: medewerkers }, { data: dossiers }, { data: ploegen }] =
     await Promise.all([
       supabase.from('uren_instellingen').select('*').eq('id', true).maybeSingle(),
       supabase
@@ -34,6 +34,7 @@ export default async function UrenInstellingenPage() {
         .not('bouw7_id', 'is', null)
         .ilike('titel', '%indirect%')
         .order('titel'),
+      supabase.from('ploegen').select('id, naam, goedkeuring_modus').eq('actief', true).order('volgorde'),
     ])
 
   return (
@@ -50,6 +51,7 @@ export default async function UrenInstellingenPage() {
         werkmaatschappijen={werkmaatschappijen ?? []}
         medewerkers={medewerkers ?? []}
         indirectDossiers={dossiers ?? []}
+        ploegen={ploegen ?? []}
       />
     </div>
   )

@@ -21,6 +21,7 @@ export async function setUrenInstellingen(input: {
   indien_deadline_tijd: string
   goedkeur_deadline_dag: number
   goedkeur_deadline_tijd: string
+  goedkeuring_modus: 'eva' | 'bouw7'
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   await vereisBeheerder()
 
@@ -35,6 +36,9 @@ export async function setUrenInstellingen(input: {
   if (!(input.tolerantie_uren >= 0 && input.tolerantie_uren < 100)) {
     return { ok: false, error: 'De speling moet tussen 0 en 100 uur liggen.' }
   }
+  if (!['eva', 'bouw7'].includes(input.goedkeuring_modus)) {
+    return { ok: false, error: 'Onbekende goedkeuringsroute.' }
+  }
 
   const { error } = await db().from('uren_instellingen').update({
     terugval_goedkeurder_id: input.terugval_goedkeurder_id || null,
@@ -43,6 +47,7 @@ export async function setUrenInstellingen(input: {
     indien_deadline_tijd: input.indien_deadline_tijd,
     goedkeur_deadline_dag: input.goedkeur_deadline_dag,
     goedkeur_deadline_tijd: input.goedkeur_deadline_tijd,
+    goedkeuring_modus: input.goedkeuring_modus,
   }).eq('id', true)
 
   if (error) return { ok: false, error: error.message }
@@ -120,4 +125,25 @@ export async function herlaadUursoorten(): Promise<
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Ophalen uit Bouw7 mislukt.' }
   }
+}
+
+/**
+ * Overschrijft de goedkeuringsroute voor één ploeg. Bedoeld om met één team proef te draaien op de
+ * EVA-keten terwijl de rest in Bouw7 blijft accorderen. null = volg de bedrijfsinstelling.
+ */
+export async function setPloegModus(
+  ploegId: string,
+  modus: 'eva' | 'bouw7' | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisBeheerder()
+  if (modus !== null && !['eva', 'bouw7'].includes(modus)) {
+    return { ok: false, error: 'Onbekende goedkeuringsroute.' }
+  }
+  const { error } = await db()
+    .from('ploegen')
+    .update({ goedkeuring_modus: modus })
+    .eq('id', ploegId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/uren')
+  return { ok: true }
 }

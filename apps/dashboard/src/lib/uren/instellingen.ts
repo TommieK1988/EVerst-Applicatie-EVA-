@@ -14,6 +14,11 @@ export type UrenInstellingen = {
   indien_deadline_tijd: string
   goedkeur_deadline_dag: number
   goedkeur_deadline_tijd: string
+  /**
+   * Waar weekstaten geaccordeerd worden. Standaard 'bouw7' — dat is de huidige praktijk en die
+   * moet blijven werken zolang de overstap loopt. Per ploeg te overschrijven, zie `bepaalModus`.
+   */
+  goedkeuring_modus: 'eva' | 'bouw7'
 }
 
 const STANDAARD: UrenInstellingen = {
@@ -23,6 +28,7 @@ const STANDAARD: UrenInstellingen = {
   indien_deadline_tijd: '17:00:00',
   goedkeur_deadline_dag: 1,
   goedkeur_deadline_tijd: '12:00:00',
+  goedkeuring_modus: 'bouw7',
 }
 
 /** De singleton-rij. Valt terug op de standaarden als de rij (nog) ontbreekt. */
@@ -30,7 +36,7 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
   const supabase = db()
   const { data } = await supabase
     .from('uren_instellingen')
-    .select('terugval_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd')
+    .select('terugval_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus')
     .eq('id', true)
     .maybeSingle()
   if (!data) return STANDAARD
