@@ -38,6 +38,12 @@ export type PortaalBetrokkene = {
   rol: string
   naam: string
   email: string | null
+  /**
+   * Twee aparte nummers, want ze doen iets anders: een uitvoerder is doorgaans op
+   * zijn mobiel bereikbaar, het vaste nummer is wat je belt als hij niet opneemt.
+   * Stond eerder als één veld `telefoon` waar de mobiel in zat -- misleidend.
+   */
+  mobiel: string | null
   telefoon: string | null
   fotoUrl: string | null
 }
@@ -49,6 +55,7 @@ export type PortaalDossierDetail = PortaalDossierKaart & {
     bestanden: boolean
     fotos: boolean
     facturen: boolean
+    meerwerk: boolean
     formulieren: boolean
     aandachtspunten: boolean
     planning: boolean
@@ -114,6 +121,7 @@ export async function getPortaalDossier(dossierId: string): Promise<PortaalDossi
       bestanden:       instellingen.toon_bestanden,
       fotos:           instellingen.toon_fotos,
       facturen:        instellingen.toon_facturen,
+      meerwerk:        instellingen.toon_meerwerk,
       formulieren:     instellingen.toon_formulieren,
       aandachtspunten: instellingen.toon_aandachtspunten,
       planning:        instellingen.toon_planning,
@@ -142,7 +150,7 @@ async function haalBetrokkenen(rij: Record<string, unknown>): Promise<PortaalBet
 
   const { data } = await db()
     .from('medewerkers')
-    .select('id, voornaam, tussenvoegsel, achternaam, email, o365_email, mobiel, foto_url')
+    .select('id, voornaam, tussenvoegsel, achternaam, email, o365_email, mobiel, telefoon, foto_url')
     .in('id', [...rollenPerId.keys()])
     .eq('actief', true)
 
@@ -150,7 +158,8 @@ async function haalBetrokkenen(rij: Record<string, unknown>): Promise<PortaalBet
     rol: (rollenPerId.get(String(m.id)) ?? []).join(' · '),
     naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
     email: ((m.o365_email as string | null) ?? (m.email as string | null)) || null,
-    telefoon: (m.mobiel as string | null) || null,
+    mobiel: (m.mobiel as string | null) || null,
+    telefoon: (m.telefoon as string | null) || null,
     fotoUrl: (m.foto_url as string | null) || null,
   }))
   // Volgorde van PORTAAL_ROLLEN aanhouden: projectleider eerst, niet op naam.

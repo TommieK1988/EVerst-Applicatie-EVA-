@@ -354,6 +354,23 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                           ))}
                         </select>
                       )}
+                      {/* Wie keurde goed of af, en wanneer. Bij een besluit uit het
+                          klantportaal staat hier de naam van de opdrachtgever. */}
+                      {r.besluit_op && (
+                        <div className="mt-0.5 text-[10.5px] leading-tight text-neutral-400">
+                          {r.besluit_door_naam ?? 'onbekend'}
+                          <span className="block">
+                            {new Date(r.besluit_op).toLocaleString('nl-NL', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                            {r.besluit_door_soort === 'klant' && ' · via het klantportaal'}
+                          </span>
+                          {r.besluit_opmerking && (
+                            <span className="block italic">{'“'}{r.besluit_opmerking}{'”'}</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2">
                       {readOnly ? (

@@ -168,8 +168,8 @@ export async function vereisPortaalDossier(dossierId: string): Promise<PortaalDo
   const { data } = await db()
     .from('portaal_dossier_instellingen')
     .select(
-      'dossier_id, actief, toon_bestanden, toon_fotos, toon_facturen, toon_formulieren, ' +
-      'toon_aandachtspunten, toon_planning, planning_detail, toon_chat, toon_afspraken',
+      'dossier_id, actief, toon_bestanden, toon_fotos, toon_facturen, toon_meerwerk, ' +
+      'toon_formulieren, toon_aandachtspunten, toon_planning, planning_detail, toon_chat, toon_afspraken',
     )
     .eq('dossier_id', dossierId)
     .maybeSingle()

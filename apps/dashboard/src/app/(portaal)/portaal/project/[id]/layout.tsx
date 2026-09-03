@@ -4,6 +4,7 @@ import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisPortaalPagina } from '@/lib/portaal/auth'
 import { getPortaalDossier } from '@/lib/portaal/dossiers'
 import { PortaalKop } from '../../PortaalKop'
+import { Container, CONTAINER } from '../../ui'
 import { ProjectNav } from './ProjectNav'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +42,7 @@ export default async function ProjectLayout({
       <PortaalKop terug={{ href: '/portaal', label: 'Alle projecten' }} />
 
       <div className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto max-w-3xl px-5 pb-4">
+        <Container className="pb-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-lg font-bold leading-tight">{dossier.titel}</h1>
@@ -52,12 +53,12 @@ export default async function ProjectLayout({
             </span>
           </div>
           <ProjectNav dossierId={id} onderdelen={dossier.onderdelen} />
-        </div>
+        </Container>
       </div>
 
-      <main className="mx-auto max-w-3xl px-5 py-7">{children}</main>
+      <Container className="py-7">{children}</Container>
 
-      <footer className="mx-auto max-w-3xl px-5 pb-10 text-center text-[11px] text-neutral-400">
+      <footer className={`${CONTAINER} pb-10 text-center text-[11px] text-neutral-400`}>
         Vragen over deze pagina? Neem contact op met uw contactpersoon bij Everts.{' '}
         <Link href="/portaal" className="underline">Terug naar uw projecten</Link>
       </footer>

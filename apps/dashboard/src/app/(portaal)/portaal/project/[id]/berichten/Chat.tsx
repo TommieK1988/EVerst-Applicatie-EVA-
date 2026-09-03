@@ -19,7 +19,19 @@ const MAX_BIJLAGEN = 5
  * Bijlagen gaan in een eigen stap naar de server, vóór het bericht. Zo blijft
  * het versturen van de tekst snel, en zie je meteen of een foto te groot is.
  */
-export function Chat({ dossierId, berichten }: { dossierId: string; berichten: PortaalChatBericht[] }) {
+export function Chat({
+  dossierId,
+  berichten,
+  compact = false,
+}: {
+  dossierId: string
+  berichten: PortaalChatBericht[]
+  /**
+   * Zijkolom-variant: lagere draad en geen eigen omlijsting, want hij zit dan al
+   * in een Kaart. Op de eigen pagina blijft het de volle hoogte.
+   */
+  compact?: boolean
+}) {
   const router = useRouter()
   const [tekst, setTekst] = useState('')
   const [bijlagen, setBijlagen] = useState<PortaalBerichtBijlage[]>([])
@@ -64,8 +76,8 @@ export function Chat({ dossierId, berichten }: { dossierId: string; berichten: P
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white">
-      <div className="max-h-[55vh] space-y-3 overflow-y-auto px-4 py-4">
+    <div className={compact ? '' : 'rounded-xl border border-neutral-200 bg-white'}>
+      <div className={`space-y-3 overflow-y-auto ${compact ? 'max-h-[34vh]' : 'max-h-[55vh] px-4 py-4'}`}>
         {berichten.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-neutral-500">
             Nog geen berichten. Stel hier gerust uw vraag — het projectteam krijgt er een melding van.
@@ -113,7 +125,7 @@ export function Chat({ dossierId, berichten }: { dossierId: string; berichten: P
         <div ref={onderkant} />
       </div>
 
-      <form onSubmit={versturen} className="border-t border-neutral-200 px-4 py-3">
+      <form onSubmit={versturen} className={compact ? 'mt-3 border-t border-neutral-100 pt-3' : 'border-t border-neutral-200 px-4 py-3'}>
         {bijlagen.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-1.5">
             {bijlagen.map((b, i) => (

@@ -438,6 +438,16 @@ export type MeerwerkRegel = {
   created_at: string
   updated_at: string
   created_by: string | null
+  /** Wie keurde goed of af, en wanneer. Alleen gevuld bij akkoord/afgewezen. */
+  besluit_op: string | null
+  besluit_door_soort: 'medewerker' | 'klant' | null
+  /** medewerkers.id of portaal_gebruikers.id, afhankelijk van besluit_door_soort. */
+  besluit_door_id: string | null
+  /** Naam op het moment van beslissen; bevroren, want een account kan verhuizen. */
+  besluit_door_naam: string | null
+  besluit_ip: string | null
+  /** Toelichting van de besluitnemer. Niet hetzelfde als het interne afgewezen_reden. */
+  besluit_opmerking: string | null
 }
 
 /* ── Opdracht-onderdelen (samenstelling van een opdracht) ─────────── */
@@ -1643,6 +1653,7 @@ export type PortaalOnderdeel =
   | 'bestanden'
   | 'fotos'
   | 'facturen'
+  | 'meerwerk'
   | 'formulieren'
   | 'aandachtspunten'
   | 'planning'
@@ -1655,6 +1666,7 @@ export type PortaalDossierInstellingen = {
   toon_bestanden: boolean
   toon_fotos: boolean
   toon_facturen: boolean
+  toon_meerwerk: boolean
   toon_formulieren: boolean
   toon_aandachtspunten: boolean
   toon_planning: boolean

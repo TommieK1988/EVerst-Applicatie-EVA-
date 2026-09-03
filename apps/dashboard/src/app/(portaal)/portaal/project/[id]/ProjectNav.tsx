@@ -14,7 +14,7 @@ export function ProjectNav({
 }: {
   dossierId: string
   onderdelen: {
-    bestanden: boolean; fotos: boolean; facturen: boolean
+    bestanden: boolean; fotos: boolean; facturen: boolean; meerwerk: boolean
     formulieren: boolean; aandachtspunten: boolean; planning: boolean; chat: boolean
   }
 }) {
@@ -27,7 +27,9 @@ export function ProjectNav({
     { href: `${basis}/fotos`, label: "Foto's", aan: onderdelen.fotos },
     { href: `${basis}/formulieren`, label: 'Controles', aan: onderdelen.formulieren },
     { href: `${basis}/facturen`, label: 'Facturen', aan: onderdelen.facturen },
-    { href: `${basis}/berichten`, label: 'Berichten', aan: onderdelen.chat },
+    // Op breed scherm staat het gesprek al in de zijkolom van het overzicht; een
+    // tabblad ernaast zou naar dezelfde inhoud wijzen en alleen verwarren.
+    { href: `${basis}/berichten`, label: 'Berichten', aan: onderdelen.chat, alleenSmal: true },
   ].filter(t => t.aan)
 
   if (tabs.length <= 1) return null
@@ -40,7 +42,7 @@ export function ProjectNav({
         {tabs.map(t => {
           const actief = t.href === basis ? pad === basis : pad.startsWith(t.href)
           return (
-            <li key={t.href} className="shrink-0">
+            <li key={t.href} className={`shrink-0${t.alleenSmal ? ' lg:hidden' : ''}`}>
               <Link
                 href={t.href}
                 className={

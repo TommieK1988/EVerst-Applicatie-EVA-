@@ -2,10 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import type { PortaalBerichtBijlage } from '@everts/database/platform-types'
 import { vereisPortaalOnderdeel } from './auth'
-import { maakNotificatie } from '@/lib/notificaties/maak'
-import { dossierPad } from '@/components/dossiers/open-dossier'
-import type { DossierSectie } from '@/components/dossiers/types'
-import { PORTAAL_ROLLEN } from './onderdelen'
+import { meldAanRolhouders } from './meldingen'
 
 /**
  * chat.ts — het gesprek tussen de klant en ons over één project.
@@ -83,55 +80,19 @@ export async function getPortaalChat(dossierId: string): Promise<PortaalChatBeri
 /**
  * Meldt de rolhouders van het dossier dat er een klantbericht binnen is.
  *
- * `maakNotificatie` verwacht een auth.users-id, niet medewerkers.id — een fout
- * die je pas merkt doordat er stilletjes nooit een melding aankomt. Vandaar de
- * omweg via auth_user_id, en het overslaan van rolhouders die nog nooit hebben
- * ingelogd. Gooit nooit: een mislukte melding mag het bericht niet tegenhouden.
+ * De lastige details (auth_user_id in plaats van medewerkers.id, rolhouders die
+ * nog nooit inlogden, de juiste deeplink) staan in lib/portaal/meldingen.ts,
+ * zodat het meerwerkbesluit ze niet nog eens hoeft over te doen.
  */
 export async function meldKlantberichtAanTeam(input: {
   dossierId: string
   afzender: string
   fragment: string
 }): Promise<void> {
-  try {
-    const rolKolommen = PORTAAL_ROLLEN.map(r => r.kolom).join(', ')
-    const { data: dossier } = await db()
-      .from('dossiers')
-      .select(`titel, hoofdstatus, ${rolKolommen}`)
-      .eq('id', input.dossierId)
-      .maybeSingle()
-    if (!dossier) return
-
-    const ids = [...new Set(
-      PORTAAL_ROLLEN.map(r => (dossier as Record<string, unknown>)[r.kolom]).filter(Boolean),
-    )] as string[]
-    if (ids.length === 0) return
-
-    const { data: mw } = await db()
-      .from('medewerkers')
-      .select('id, auth_user_id')
-      .in('id', ids)
-      .eq('actief', true)
-
-    const titel = (dossier as Record<string, unknown>).titel as string | null
-    const sectie = ((dossier as Record<string, unknown>).hoofdstatus as DossierSectie | null) ?? 'opdracht'
-    // Naar het Informatie-tabblad: daar staat het chatblok.
-    const url = dossierPad(sectie, input.dossierId)
-
-    await Promise.all(
-      ((mw ?? []) as { auth_user_id: string | null }[])
-        .filter(m => m.auth_user_id)
-        .map(m => maakNotificatie({
-          user_id: m.auth_user_id!,
-          type: 'portaal_bericht',
-          titel: `Bericht van ${input.afzender}`,
-          body: input.fragment,
-          url,
-          dossier_id: input.dossierId,
-          dossier_naam: titel ?? undefined,
-        })),
-    )
-  } catch {
-    // bewust stil
-  }
+  await meldAanRolhouders({
+    dossierId: input.dossierId,
+    type: 'portaal_bericht',
+    titel: `Bericht van ${input.afzender}`,
+    body: input.fragment,
+  })
 }

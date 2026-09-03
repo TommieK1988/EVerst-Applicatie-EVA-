@@ -12,6 +12,7 @@ import type {
 import { getServicedeskRegie } from './servicedesk'
 import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
 import { assertDossierBewerkbaar } from './guards'
+import { vereisRecht, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
@@ -25,6 +26,20 @@ const TRANSITIES: Record<MeerwerkStatus, MeerwerkStatus[]> = {
   afgewezen:         ['aangevraagd'],
   voltooid:          [],
 }
+
+/**
+ * Wie het besluit nam. Standaard de ingelogde medewerker; het klantportaal geeft
+ * expliciet een klant mee, want daar is geen medewerkerssessie.
+ */
+export type MeerwerkBesluitActor = {
+  soort: 'medewerker' | 'klant'
+  id: string | null
+  naam: string
+  ip?: string | null
+}
+
+/** Statussen waarbij het zinvol is vast te leggen wie besliste. */
+const BESLUIT_STATUSSEN: MeerwerkStatus[] = ['akkoord', 'afgewezen']
 
 const rond = (n: number): number => Math.round(n * 100) / 100
 
@@ -140,6 +155,10 @@ export async function maakMeerwerkRegel(
   dossierId: string,
   data: NieuweMeerwerkData,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
+  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
+  // ook voor opdrachtgevers.
+  await vereisRecht('dossiers', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
@@ -180,6 +199,10 @@ export async function updateMeerwerkRegel(
   id: string,
   patch: Partial<NieuweMeerwerkData> & { termijn_wijze?: MeerwerkTermijnWijze | null },
 ): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
+  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
+  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
+  // ook voor opdrachtgevers.
+  await vereisRecht('dossiers', 'schrijven')
   const supabase = createAdminClient() as any
   const { data: bestaand } = await supabase.from('meerwerk_regels').select('*').eq('id', id).single()
   if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
@@ -214,6 +237,10 @@ export async function updateMeerwerkRegel(
 export async function verwijderMeerwerkRegel(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
+  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
+  // ook voor opdrachtgevers.
+  await vereisRecht('dossiers', 'schrijven')
   const supabase = createAdminClient() as any
   const { data: row } = await supabase.from('meerwerk_regels').select('dossier_id').eq('id', id).single()
   if (row?.dossier_id) await assertDossierBewerkbaar(row.dossier_id)
@@ -228,11 +255,40 @@ export async function verwijderMeerwerkRegel(
  * aangemaakt (best effort — een Bouw7-fout blokkeert de statuswijziging niet, maar geeft een
  * waarschuwing terug). Bij 'afgewezen' kan een reden worden vastgelegd.
  */
+/** De ingelogde medewerker als besluitnemer. Null als er (nog) geen sessie is. */
+async function medewerkerActor(): Promise<MeerwerkBesluitActor | null> {
+  const mw = await getCurrentMedewerker()
+  if (!mw) return null
+  return {
+    soort: 'medewerker',
+    id: mw.id,
+    naam: [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ') || 'Onbekend',
+  }
+}
+
 export async function setMeerwerkStatus(
   id: string,
   status: MeerwerkStatus,
-  opts?: { termijnWijze?: MeerwerkTermijnWijze | null; afgewezenReden?: string | null },
+  opts?: {
+    termijnWijze?: MeerwerkTermijnWijze | null
+    afgewezenReden?: string | null
+    /**
+     * Wie het besluit nam. Meegeven vanuit het klantportaal, waar geen
+     * medewerkerssessie is; laat hem weg en de ingelogde medewerker wordt
+     * vastgelegd. Een meegegeven actor slaat ook de rechtengate hieronder over --
+     * die aanroeper heeft zijn eigen poort al gepasseerd.
+     */
+    actor?: MeerwerkBesluitActor
+    /** Toelichting van de besluitnemer zelf; los van de interne afgewezen_reden. */
+    besluitOpmerking?: string | null
+  },
 ): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
+  // Zonder actor komt de aanroep uit EVA en moet de gebruiker schrijfrecht hebben.
+  // Het klantportaal geeft wel een actor mee en is daar al langs
+  // vereisPortaalOnderdeel gekomen; een klant heeft geen dossiers-recht en zou
+  // hier stuklopen.
+  if (!opts?.actor) await vereisRecht('dossiers', 'schrijven')
+
   const supabase = createAdminClient() as any
   const { data: regel, error: leesFout } = await supabase
     .from('meerwerk_regels')
@@ -250,6 +306,19 @@ export async function setMeerwerkStatus(
   const velden: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
   if (status === 'afgewezen') velden.afgewezen_reden = opts?.afgewezenReden ?? null
   if (opts?.termijnWijze !== undefined) velden.termijn_wijze = opts.termijnWijze
+
+  // Vastleggen wie goedkeurde of afwees. In dezelfde update als de status zelf,
+  // zodat besluit en vastlegging niet uit elkaar kunnen lopen. Alleen bij akkoord
+  // en afgewezen -- bij de andere statussen valt er niets te verantwoorden.
+  if (BESLUIT_STATUSSEN.includes(status)) {
+    const actor = opts?.actor ?? await medewerkerActor()
+    velden.besluit_op = new Date().toISOString()
+    velden.besluit_door_soort = actor?.soort ?? null
+    velden.besluit_door_id = actor?.id ?? null
+    velden.besluit_door_naam = actor?.naam ?? null
+    velden.besluit_ip = actor?.ip ?? null
+    velden.besluit_opmerking = opts?.besluitOpmerking ?? null
+  }
 
   let waarschuwing: string | undefined
 
@@ -298,6 +367,10 @@ export async function setMeerwerkStatus(
 export async function maakMeerwerkCalculatie(
   regelId: string,
 ): Promise<{ ok: true; projectId: string; dossierId: string; omschrijving: string } | { ok: false; error: string }> {
+  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
+  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
+  // ook voor opdrachtgevers.
+  await vereisRecht('dossiers', 'schrijven')
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase
     .from('meerwerk_regels')
@@ -375,6 +448,10 @@ async function bouwBouw7MeerwerkBody(regel: MeerwerkRegel): Promise<Record<strin
 export async function stuurMeerwerkNaarBouw7(
   regelId: string,
 ): Promise<{ ok: true; nummer: string | null } | { ok: false; error: string }> {
+  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
+  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
+  // ook voor opdrachtgevers.
+  await vereisRecht('dossiers', 'schrijven')
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }

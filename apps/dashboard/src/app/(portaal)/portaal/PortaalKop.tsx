@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { UitlogKnop } from './UitlogKnop'
+import { CONTAINER } from './ui'
 
 /**
  * De vaste kop boven elke ingelogde portaalpagina. Bewust minimaal: een logo,
@@ -9,7 +10,7 @@ import { UitlogKnop } from './UitlogKnop'
 export function PortaalKop({ naam, terug }: { naam?: string | null; terug?: { href: string; label: string } }) {
   return (
     <header className="border-b border-neutral-200 bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3.5">
+      <div className={`${CONTAINER} flex items-center justify-between gap-4 py-3.5`}>
         <Link href="/portaal" className="flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-beeldmerk.svg" alt="Everts" width={26} height={26} />
@@ -21,7 +22,7 @@ export function PortaalKop({ naam, terug }: { naam?: string | null; terug?: { hr
         </div>
       </div>
       {terug && (
-        <div className="mx-auto max-w-3xl px-5 pb-3">
+        <div className={`${CONTAINER} pb-3`}>
           <Link href={terug.href} className="text-xs font-semibold text-brand-600 hover:underline">
             ← {terug.label}
           </Link>

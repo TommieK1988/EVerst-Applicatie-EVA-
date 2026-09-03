@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisPortaalPagina } from '@/lib/portaal/auth'
 import { getPortaalDossiers } from '@/lib/portaal/dossiers'
 import { PortaalKop } from './PortaalKop'
+import { Container } from './ui'
 
 export const metadata: Metadata = { title: 'Uw projecten' }
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,7 @@ export default async function PortaalHome() {
   return (
     <>
       <PortaalKop naam={naam} />
-      <main className="mx-auto max-w-3xl px-5 py-8">
+      <Container className="py-8">
         <h1 className="text-xl font-bold">Uw projecten</h1>
 
         {dossiers.length === 0 ? (
@@ -38,7 +39,7 @@ export default async function PortaalHome() {
             </p>
           </div>
         ) : (
-          <ul className="mt-5 space-y-2.5">
+          <ul className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {dossiers.map(d => (
               <li key={d.id}>
                 <Link
@@ -60,7 +61,7 @@ export default async function PortaalHome() {
             ))}
           </ul>
         )}
-      </main>
+      </Container>
     </>
   )
 }

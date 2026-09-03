@@ -44,6 +44,12 @@ export const PORTAAL_ONDERDELEN: PortaalOnderdeelDefinitie[] = [
     kolom: 'toon_facturen',
   },
   {
+    key: 'meerwerk',
+    label: 'Meerwerk',
+    uitleg: 'Alle meerwerkregels met bedrag en status. Regels waarvan de offerte verstuurd is, kan de klant zelf goedkeuren of afwijzen.',
+    kolom: 'toon_meerwerk',
+  },
+  {
     key: 'formulieren',
     label: 'Formulieren en controles',
     uitleg: 'Ingediende formulieren van sjablonen die als klantwaardig zijn gemarkeerd, plus afgeronde kwaliteitscontroles.',

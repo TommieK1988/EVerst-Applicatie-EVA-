@@ -1,9 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createAdminClient } from '@everts/database/server'
 import { vereisPortaalOnderdeel } from '@/lib/portaal/auth'
 import { meldKlantberichtAanTeam } from '@/lib/portaal/chat'
+import { meldMeerwerkbesluitAanTeam } from '@/lib/portaal/meldingen'
+import { BEOORDEELBARE_STATUS } from '@/lib/portaal/meerwerk'
+import { setMeerwerkStatus } from '@/lib/dossiers/meerwerk'
 import type { PortaalBerichtBijlage } from '@everts/database/platform-types'
 
 /**
@@ -166,4 +170,74 @@ function foutTekst(e: unknown): string {
   }
   console.error('[portaal] actie mislukt', e)
   return 'Er ging iets mis. Probeer het opnieuw.'
+}
+
+/**
+ * De klant keurt een meerwerkregel goed of wijst hem af.
+ *
+ * Dit is bindend: de regel gaat meteen op `akkoord` of `afgewezen`, met alle
+ * gevolgen die dat in EVA al had — bewakingscode in Bouw7, statusmapping naar de
+ * Bouw7-regel, meetellen in het contracttotaal. Dat is ook de bedoeling: het
+ * domeinproces eist schriftelijk klantakkoord vóór uitvoering, en deze klik ís
+ * die akkoordverklaring. Daarom wordt hij vastgelegd met naam, tijdstip en IP.
+ *
+ * Alleen vanaf `offerte_verstuurd`: de klant beoordeelt nooit iets waar hij geen
+ * onderbouwing bij heeft gekregen.
+ */
+export async function portaalBeoordeelMeerwerk(
+  dossierId: string,
+  regelId: string,
+  besluit: 'akkoord' | 'afgewezen',
+  opmerking?: string,
+): Promise<PortaalActieResultaat> {
+  try {
+    const { gebruiker } = await vereisPortaalOnderdeel(dossierId, 'meerwerk')
+    if (besluit !== 'akkoord' && besluit !== 'afgewezen') {
+      return { ok: false, error: 'Onbekend besluit.' }
+    }
+
+    // Het regel-id komt van de client. Controleren dat hij bij dít dossier hoort
+    // en in de juiste stand staat -- anders kan een geprepareerd verzoek een
+    // meerwerkregel van een ander project op akkoord zetten.
+    const { data: regel } = await db()
+      .from('meerwerk_regels')
+      .select('id, dossier_id, status, omschrijving, bedrag_excl_btw')
+      .eq('id', regelId)
+      .eq('dossier_id', dossierId)
+      .maybeSingle()
+
+    if (!regel) return { ok: false, error: 'Deze post hoort niet bij dit project.' }
+    if (regel.status !== BEOORDEELBARE_STATUS) {
+      return { ok: false, error: 'Deze post staat niet (meer) open voor uw akkoord. Ververs de pagina.' }
+    }
+
+    const naam = await afzenderNaam(gebruiker.contactpersoon_id, gebruiker.particulier_id)
+    // Vercel zet het echte adres in x-forwarded-for; de eerste is de bezoeker.
+    const kop = await headers()
+    const ip = (kop.get('x-forwarded-for') ?? '').split(',')[0].trim() || null
+
+    const res = await setMeerwerkStatus(regelId, besluit, {
+      actor: { soort: 'klant', id: gebruiker.id, naam, ip },
+      besluitOpmerking: opmerking?.trim() || null,
+    })
+    if (!res.ok) return { ok: false, error: res.error }
+
+    const bedrag = Number(regel.bedrag_excl_btw)
+    await meldMeerwerkbesluitAanTeam({
+      dossierId,
+      afzender: naam,
+      besluit,
+      omschrijving: String(regel.omschrijving ?? 'Meerwerk'),
+      // Bij regie en stelposten op geboekte kosten staat hier geen vast bedrag;
+      // dan liever niets dan een misleidende nul in de melding.
+      bedrag: Number.isFinite(bedrag) && bedrag !== 0
+        ? bedrag.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' })
+        : 'bedrag volgens nacalculatie',
+    })
+
+    revalidatePath(`/portaal/project/${dossierId}`)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: foutTekst(e) }
+  }
 }
