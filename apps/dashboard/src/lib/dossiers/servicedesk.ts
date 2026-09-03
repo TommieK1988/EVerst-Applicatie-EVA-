@@ -7,6 +7,7 @@ import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
+import { getFactureerbareCodes, getCodeInstellingen } from './facturatie-codes'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
  *  ingesteld. Module-lokaal: een 'use server'-bestand mag geen non-async waarden exporteren. */
@@ -286,84 +287,257 @@ export async function updateServicedeskInstellingen(
 }
 
 /**
- * Eén factuurregel zoals de klant hem straks op de factuur ziet — samengevat, niet elke boeking
- * apart. Een factuur met honderden regels leest niemand; de onderbouwing per uur en per bon blijft
- * in EVA staan.
+ * Eén regel zoals de klant hem op de factuur ziet. Standaard één regel per bewakingscode; met
+ * `uitsplitsen` aan komen uren en kosten van die code als aparte regels.
  */
-export type RegieFactuurGroep = {
-  /** Stabiele sleutel van de groep, ook gebruikt als React-key. */
+export type FactuurRegelVoorstel = {
   sleutel: string
-  soort: 'uren' | 'kosten'
+  bewakingscode: string
   omschrijving: string
+  soort: 'uren' | 'kosten' | 'samen'
   aantal: number
   eenheid: string | null
   stukprijs: number
   bedrag: number
-  /** Hoeveel onderliggende boekingen in deze regel zijn samengevat. */
   aantalBoekingen: number
+  /** Btw-tarief voor déze regel; leeg = het tarief dat voor de hele factuur is gekozen. */
+  btwTariefBouw7Id: number | null
+}
+
+/** Eén bewakingscode met alles wat het popup-scherm nodig heeft om hem aan te passen. */
+export type CodeRegelView = {
+  bewakingscode: string
+  bron: 'stelpost' | 'meerwerk'
+  /** De tekst die op de factuur komt (aangepast, of de naam van de post). */
+  omschrijving: string
+  /** Kostprijs van wat er op deze code is geboekt. */
+  inkoop: number
+  /** Verkoopwaarde volgens de berekening: uren maal tarief, kosten maal opslag. */
+  berekend: number
+  /** Handmatig vastgezet bedrag; leeg = `berekend` telt. */
+  bedragOverride: number | null
+  /** Wat er werkelijk op de factuur komt. */
+  bedrag: number
+  /** Eigen opslag op de kosten van deze code; leeg = de bedrijfsstandaard. */
+  opslagPct: number | null
+  uitsplitsen: boolean
+  btwTariefBouw7Id: number | null
+  meefactureren: boolean
+  urenBedrag: number
+  kostenBedrag: number
+  urenAantal: number
+  /** Boekingen die nog te factureren zijn. */
+  aantalBoekingen: number
+  /** Boekingen op deze code die al op een factuur staan. */
+  aantalGefactureerd: number
+  /** Bestaat de code ook in Bouw7? Zo niet, dan kan er niets op geboekt worden. */
+  inBouw7: boolean
+  /**
+   * Alles op deze code is al gefactureerd en er is niets bijgekomen. Dan mag er niets meer aan
+   * veranderen: wat op een verstuurde factuur staat ligt vast, en een aangepast bedrag zou
+   * suggereren dat die factuur is meegewijzigd.
+   */
+  vergrendeld: boolean
 }
 
 export type RegieVoorstel = {
-  groepen: RegieFactuurGroep[]
+  regels: FactuurRegelVoorstel[]
+  /** Alle nacalculatie-codes van dit dossier, ook de uitgevinkte — het popup-scherm toont ze alle. */
+  codes: CodeRegelView[]
   totaal: number
-  /** Aantal regels dat al gefactureerd is en dus buiten het voorstel valt. */
   alGefactureerd: number
+  /** Codes die bewust buiten de factuur blijven, met de reden. Zichtbaar maken is het punt. */
+  buitenBeschouwing: { bewakingscode: string; omschrijving: string; reden: string }[]
 }
 
 /**
- * Vat de regie-regels samen tot factuurregels.
+ * Bouwt het factuurvoorstel voor het nacalculatiewerk van een dossier.
  *
- * Uren gaan altijd per uursoort samen, maar wél per tarief apart: twee tarieven binnen één uursoort
- * in één regel persen zou een stukprijs opleveren die niet klopt. Kosten worden standaard per
- * kostensoort gesplitst (materiaal, onderaanneming, inkoop…), met `kostenSamenvoegen` om er één
- * regel van te maken.
+ * Alleen bewakingscodes die op nacalculatie afrekenen komen erin (zie `getFactureerbareCodes`);
+ * al het overige werk zit in de aanneemsom en is via de termijnen al gefactureerd. Elke code wordt
+ * een eigen factuurregel, zodat op de factuur terug te zien is wat waarvoor in rekening wordt
+ * gebracht — en zodat je per post kunt corrigeren.
  */
-export async function getRegieFactuurvoorstel(
-  dossierId: string,
-  opties?: { kostenSamenvoegen?: boolean; opslagPerCode?: Record<string, number> },
-): Promise<RegieVoorstel> {
-  const regie = await getServicedeskRegie(dossierId, { opslagPerCode: opties?.opslagPerCode })
-  const mee = regie.regels.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
-  const alGefactureerd = regie.regels.filter(r => r.status === 'gefactureerd').length
+export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieVoorstel> {
+  const [codes, instellingen] = await Promise.all([
+    getFactureerbareCodes(dossierId),
+    getCodeInstellingen(dossierId),
+  ])
+  const instelling = new Map(instellingen.map(i => [i.bewakingscode, i]))
 
-  const groepen = new Map<string, RegieFactuurGroep>()
-  const voegToe = (
-    sleutel: string, soort: 'uren' | 'kosten', omschrijving: string,
-    aantal: number, eenheid: string | null, bedrag: number,
-  ) => {
-    const g = groepen.get(sleutel)
-      ?? { sleutel, soort, omschrijving, aantal: 0, eenheid, stukprijs: 0, bedrag: 0, aantalBoekingen: 0 }
-    g.aantal = rond(g.aantal + aantal)
-    g.bedrag = rond(g.bedrag + bedrag)
-    g.aantalBoekingen += 1
-    groepen.set(sleutel, g)
+  const buitenBeschouwing = codes
+    .filter(c => c.alleenVerschil)
+    .map(c => ({
+      bewakingscode: c.bewakingscode,
+      omschrijving: c.omschrijving,
+      reden: 'Zit in de aanneemsom — alleen het verschil wordt verrekend, via een meerwerkregel.',
+    }))
+
+  const teFactureren = codes.filter(c => !c.alleenVerschil)
+  if (teFactureren.length === 0) {
+    return { regels: [], codes: [], totaal: 0, alGefactureerd: 0, buitenBeschouwing }
   }
 
-  for (const r of mee) {
-    if (r.bronType === 'uur') {
-      const uursoort = r.uursoort ?? 'Uren'
-      const tarief = r.verkoopTarief ?? 0
-      voegToe(`uur:${uursoort}:${tarief}`, 'uren', uursoort, r.aantal ?? 0, 'uur', r.verkoopBedrag || 0)
+  // Eigen opslagpercentages meegeven, zodat de verkoopwaarde per code met het juiste percentage
+  // wordt gerekend. Voorrang: het popup-scherm, dan de stelpost zelf, dan de bedrijfsstandaard.
+  const opslagPerCode: Record<string, number> = {}
+  for (const c of teFactureren) {
+    const eigen = instelling.get(c.bewakingscode)?.opslag_pct ?? c.opslagPct
+    if (eigen != null) opslagPerCode[c.bewakingscode] = Number(eigen)
+  }
+
+  const regie = await getServicedeskRegie(dossierId, { opslagPerCode })
+  const relevant = new Set(teFactureren.map(c => c.bewakingscode))
+  const opCode = regie.regels.filter(r => r.bewakingscode && relevant.has(r.bewakingscode))
+  const mee = opCode.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
+  const gefactureerd = opCode.filter(r => r.status === 'gefactureerd')
+  const alGefactureerd = gefactureerd.length
+
+  const views: CodeRegelView[] = []
+  const regels: FactuurRegelVoorstel[] = []
+
+  for (const c of teFactureren) {
+    const inst = instelling.get(c.bewakingscode)
+    const eigen = mee.filter(r => r.bewakingscode === c.bewakingscode)
+    const eerderGefactureerd = gefactureerd.filter(r => r.bewakingscode === c.bewakingscode).length
+    // Niets meer open én er is al gefactureerd: deze post is klaar en gaat op slot.
+    const vergrendeld = eerderGefactureerd > 0 && eigen.length === 0
+    const uren = eigen.filter(r => r.bronType === 'uur')
+    const kosten = eigen.filter(r => r.bronType === 'kost')
+
+    const urenBedrag = rond(uren.reduce((s, r) => s + (r.verkoopBedrag || 0), 0))
+    const kostenBedrag = rond(kosten.reduce((s, r) => s + (r.verkoopBedrag || 0), 0))
+    const urenAantal = rond(uren.reduce((s, r) => s + (r.aantal ?? 0), 0))
+    const inkoop = rond(eigen.reduce((s, r) => s + (r.inkoopBedrag || 0), 0))
+    const berekend = rond(urenBedrag + kostenBedrag)
+
+    const override = inst?.bedrag_excl_btw != null ? Number(inst.bedrag_excl_btw) : null
+    const bedrag = override ?? berekend
+    const omschrijving = (inst?.omschrijving ?? '').trim() || c.omschrijving
+    const meefactureren = inst?.meefactureren ?? true
+    const uitsplitsen = inst?.uitsplitsen ?? false
+    const btwTariefBouw7Id = inst?.btw_tarief_bouw7_id ?? null
+
+    views.push({
+      bewakingscode: c.bewakingscode,
+      bron: c.bron,
+      omschrijving,
+      inkoop,
+      berekend,
+      bedragOverride: override,
+      bedrag,
+      opslagPct: inst?.opslag_pct != null ? Number(inst.opslag_pct) : c.opslagPct,
+      uitsplitsen,
+      btwTariefBouw7Id,
+      meefactureren,
+      urenBedrag,
+      kostenBedrag,
+      urenAantal,
+      aantalBoekingen: eigen.length,
+      aantalGefactureerd: eerderGefactureerd,
+      inBouw7: c.inBouw7,
+      vergrendeld,
+    })
+
+    // Geen openstaande boekingen = niets te factureren, ook niet als er een handmatig bedrag staat.
+    // Zonder deze regel zou een vastgezet bedrag bij elke volgende factuur opnieuw meegaan.
+    if (eigen.length === 0) continue
+    if (!meefactureren || bedrag === 0) continue
+
+    if (uitsplitsen && override == null && urenBedrag !== 0 && kostenBedrag !== 0) {
+      // Uitsplitsen kan alleen zinnig als het bedrag niet handmatig is vastgezet: een vast bedrag
+      // valt niet over twee regels te verdelen zonder te gaan gokken.
+      regels.push({
+        sleutel: c.bewakingscode + ':uren', bewakingscode: c.bewakingscode,
+        omschrijving: omschrijving + ' — arbeid', soort: 'uren',
+        aantal: urenAantal || 1, eenheid: urenAantal ? 'uur' : null,
+        stukprijs: urenAantal ? rond(urenBedrag / urenAantal) : urenBedrag,
+        bedrag: urenBedrag, aantalBoekingen: uren.length, btwTariefBouw7Id,
+      })
+      regels.push({
+        sleutel: c.bewakingscode + ':kosten', bewakingscode: c.bewakingscode,
+        omschrijving: omschrijving + ' — materiaal en overige kosten', soort: 'kosten',
+        aantal: 1, eenheid: 'post', stukprijs: kostenBedrag,
+        bedrag: kostenBedrag, aantalBoekingen: kosten.length, btwTariefBouw7Id,
+      })
     } else {
-      const soort = r.kostensoort ?? 'Overige kosten'
-      const sleutel = opties?.kostenSamenvoegen ? 'kost:alles' : `kost:${soort}`
-      const label = opties?.kostenSamenvoegen ? 'Materiaal, onderaanneming en overige kosten' : soort
-      voegToe(sleutel, 'kosten', label, 1, 'post', r.verkoopBedrag || 0)
+      regels.push({
+        sleutel: c.bewakingscode, bewakingscode: c.bewakingscode,
+        omschrijving, soort: 'samen',
+        aantal: 1, eenheid: 'post', stukprijs: bedrag,
+        bedrag, aantalBoekingen: eigen.length, btwTariefBouw7Id,
+      })
     }
   }
 
-  const lijst = [...groepen.values()].map(g => ({
-    ...g,
-    // Bij kosten is "aantal" het aantal samengevatte posten; de factuur toont er één post van.
-    aantal: g.soort === 'uren' ? g.aantal : 1,
-    stukprijs: g.soort === 'uren' && g.aantal > 0 ? rond(g.bedrag / g.aantal) : g.bedrag,
-  }))
-  // Uren eerst, dan kosten; binnen een soort alfabetisch, zodat de factuur elke keer gelijk oogt.
-  lijst.sort((a, b) => a.soort === b.soort
-    ? a.omschrijving.localeCompare(b.omschrijving, 'nl')
-    : (a.soort === 'uren' ? -1 : 1))
+  return {
+    regels,
+    codes: views,
+    totaal: rond(regels.reduce((s, r) => s + r.bedrag, 0)),
+    alGefactureerd,
+    buitenBeschouwing,
+  }
+}
 
-  return { groepen: lijst, totaal: rond(lijst.reduce((s, g) => s + g.bedrag, 0)), alGefactureerd }
+/** Slaat de aanpassingen van één bewakingscode uit het popup-scherm op. */
+export async function bewaarCodeInstelling(
+  dossierId: string,
+  bewakingscode: string,
+  patch: {
+    omschrijving?: string | null
+    opslag_pct?: number | null
+    bedrag_excl_btw?: number | null
+    uitsplitsen?: boolean
+    btw_tarief_bouw7_id?: number | null
+    meefactureren?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisRecht('financieel', 'schrijven')
+  await assertDossierBewerkbaar(dossierId)
+
+  // Wat al gefactureerd is ligt vast. De controle staat hier en niet alleen in het scherm: een
+  // verouderd geopend tabblad mag een verstuurde factuur niet alsnog van omschrijving of bedrag
+  // kunnen laten veranderen.
+  const huidig = await getRegieFactuurvoorstel(dossierId)
+  const code = huidig.codes.find(c => c.bewakingscode === bewakingscode)
+  if (code?.vergrendeld) {
+    return {
+      ok: false,
+      error: `"${code.omschrijving}" is al volledig gefactureerd en kan niet meer worden gewijzigd. `
+        + 'Corrigeren gaat via een creditnota in Bouw7.',
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: bestaand } = await supabase
+    .from('factuur_regelinstellingen')
+    .select('*')
+    .eq('dossier_id', dossierId)
+    .eq('bewakingscode', bewakingscode)
+    .maybeSingle()
+
+  const rij = {
+    dossier_id: dossierId,
+    bewakingscode,
+    omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
+    opslag_pct: patch.opslag_pct !== undefined ? patch.opslag_pct : bestaand?.opslag_pct ?? null,
+    bedrag_excl_btw: patch.bedrag_excl_btw !== undefined ? patch.bedrag_excl_btw : bestaand?.bedrag_excl_btw ?? null,
+    uitsplitsen: patch.uitsplitsen !== undefined ? patch.uitsplitsen : bestaand?.uitsplitsen ?? false,
+    btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
+    meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase
+    .from('factuur_regelinstellingen')
+    .upsert(rij, { onConflict: 'dossier_id,bewakingscode' })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/opdrachten/' + dossierId + '/verkoop')
+  revalidatePath('/servicedesk/' + dossierId + '/financieel')
+  return { ok: true }
 }
 
 /**
@@ -384,7 +558,7 @@ export async function getRegieFactuurvoorstel(
  */
 export async function maakRegieFactuurInBouw7(
   dossierId: string,
-  opties: { btwTariefBouw7Id: number; kostenSamenvoegen?: boolean },
+  opties: { btwTariefBouw7Id: number },
 ): Promise<{ ok: true; invoiceId: number; aantal: number; totaal: number } | { ok: false; error: string; invoiceId?: number }> {
   await vereisRecht('financieel', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
@@ -396,35 +570,42 @@ export async function maakRegieFactuurInBouw7(
     return { ok: false, error: 'Kies eerst een btw-tarief voor deze factuur.' }
   }
 
-  const voorstel = await getRegieFactuurvoorstel(dossierId, { kostenSamenvoegen: opties.kostenSamenvoegen })
-  if (voorstel.groepen.length === 0) return { ok: false, error: 'Er is niets te factureren.' }
+  // Het voorstel wordt hier server-side opnieuw opgebouwd; wat de client meestuurde is alleen de
+  // btw-keuze. Zo kan een verouderd scherm nooit iets factureren wat inmiddels anders ligt.
+  const voorstel = await getRegieFactuurvoorstel(dossierId)
+  if (voorstel.regels.length === 0) return { ok: false, error: 'Er is niets te factureren.' }
 
   // Sleutel over de inhoud: dezelfde regels met dezelfde bedragen leveren dezelfde sleutel op, dus
   // een tweede klik vindt de bestaande conceptfactuur terug in plaats van een duplicaat te maken.
-  const basis = `${dossierId}|regie|` + voorstel.groepen
-    .map(g => `${g.sleutel}:${Math.round(g.bedrag * 100)}`).join(',')
+  const basis = dossierId + '|regie|' + voorstel.regels
+    .map(r => r.sleutel + ':' + Math.round(r.bedrag * 100)).join(',')
   const sleutel = createHash('sha1').update(basis).digest('hex').slice(0, 16)
 
   const res = await maakConceptVerkoopfactuur({
     projectId: Number(ctx.bouw7Id),
     idempotentieSleutel: sleutel,
-    omschrijving: 'Regiewerk',
-    regels: voorstel.groepen.map(g => ({
-      omschrijving: g.omschrijving,
-      aantal: g.aantal,
-      eenheid: g.eenheid,
-      stukprijs: g.stukprijs,
-      vatTariffId: opties.btwTariefBouw7Id,
+    omschrijving: 'Nacalculatie regiewerk en stelposten',
+    regels: voorstel.regels.map(r => ({
+      omschrijving: r.omschrijving,
+      aantal: r.aantal,
+      eenheid: r.eenheid,
+      stukprijs: r.stukprijs,
+      // Btw per regel wint van de factuurbrede keuze; zo kan arbeid op 9% en materiaal op 21%.
+      vatTariffId: r.btwTariefBouw7Id ?? opties.btwTariefBouw7Id,
     })),
   })
   if (!res.ok) return res
 
-  // Pas nu de onderliggende regels afboeken — niet ervoor. Een mislukte push mag geen regels
-  // wegstrepen die nog gefactureerd moeten worden.
+  // Pas nu afboeken, en alleen de boekingen die daadwerkelijk op deze factuur staan. Alles
+  // wegstrepen zou kosten op codes die in de aanneemsom zitten als gefactureerd markeren, terwijl
+  // die hier nooit op een factuur komen.
+  const gefactureerdeCodes = new Set(voorstel.regels.map(r => r.bewakingscode))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const regie = await getServicedeskRegie(dossierId)
-  const mee = regie.regels.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
+  const mee = regie.regels.filter(r =>
+    !r.uitgesloten && r.status !== 'gefactureerd'
+    && r.bewakingscode && gefactureerdeCodes.has(r.bewakingscode))
   for (const r of mee) {
     await supabase.from('regie_factuurregels').upsert({
       dossier_id: dossierId,
@@ -444,9 +625,9 @@ export async function maakRegieFactuurInBouw7(
     }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
   }
 
-  revalidatePath(`/servicedesk/${dossierId}/financieel`)
-  revalidatePath(`/opdrachten/${dossierId}/verkoop`)
-  return { ok: true, invoiceId: res.invoiceId, aantal: voorstel.groepen.length, totaal: res.totaalExclBtw }
+  revalidatePath('/servicedesk/' + dossierId + '/financieel')
+  revalidatePath('/opdrachten/' + dossierId + '/verkoop')
+  return { ok: true, invoiceId: res.invoiceId, aantal: voorstel.regels.length, totaal: res.totaalExclBtw }
 }
 
 export type SubstatusFase = { substatus: string; van: string; tot: string | null; dagen: number }
