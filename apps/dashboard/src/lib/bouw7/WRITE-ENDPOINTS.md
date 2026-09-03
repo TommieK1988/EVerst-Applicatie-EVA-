@@ -211,6 +211,9 @@ Body: `DeliveryTicket`. REQ: `contact{id}`, `project{id}`, `ticketNumber`, `tick
 - `POST /project/{project}/invoice-term-statement` — termijnstaat (`InvoiceTermStatement`)
 - `POST /project/{statement}/invoice-term` — losse termijn (`ProjectInvoiceTerm`)
 
+> Velden, de koppeling termijn ↔ factuurregel en het skelet-endpoint voor een conceptfactuur staan
+> in **§7b**. Lees die sectie voordat je hier iets bouwt.
+
 ---
 
 ## 2b. Bestelregels & prognose — EVA-specifiek (geverifieerd jun 2026)
@@ -756,7 +759,7 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 | **4** | **Urenregistratie** | `POST /project/hour-log` | Hoge businesswaarde (mobiele buitendienst), maar vereist medewerker-koppeling + uursoort-mapping |
 | **5** | **Bonnen / leverbonnen** | `POST /project/delivery-ticket` | |
 | ~~**6**~~ | ~~**Offertes**~~ | ~~`POST /quotation`~~ | **Vervallen** — EVA schrijft alleen de offerte-substatus naar Bouw7, geen offertes (zie hierboven) |
-| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg. **Deels live:** alleen de interne factuurnotitie, zie §7a |
+| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg. **Deels live:** alleen de interne factuurnotitie, zie §7a. Schema voor termijnen en conceptfacturen is vastgesteld (§7b), schrijven nog niet gebouwd |
 
 **Per fase telkens dezelfde stappen:** (a) `Condensed*`-mapper EVA→Bouw7 schrijven, (b) `client.post/del` aanroepen, (c) resultaat (id) terugschrijven naar `bouw7_id`, (d) `logSync()`, (e) `sync_vergrendeld`/`bron`-velden respecteren om schrijf-loops te voorkomen.
 
@@ -980,3 +983,109 @@ Ter documentatie, gecaptured uit `start.bouw7.nl`: `POST /api/plan-item/create`,
 `POST /planning/employee/get-calendar-data`. Die draaien op sessiecookie + `x-csrf-token`, hanteren
 snake_case én drie verschillende datumnotaties door elkaar, en zijn ongedocumenteerd intern. Ze waren
 nuttig om te bewijzen dát planning schrijfbaar is; voor EVA is `POST /plan-item` op Heimdall de weg.
+
+---
+
+## 7b. Verkooptermijnen & conceptfacturen — schema vastgesteld (sep 2026, nog niet geschreven)
+
+Het onderzoek dat aan deze sectie voorafging is read-only gedaan met
+[`scripts/onderzoek-bouw7-facturatie.mjs`](../../../../../scripts/onderzoek-bouw7-facturatie.mjs).
+Er is nog **niets** naar Bouw7 geschreven; hieronder staat wat er nodig is om dat veilig te doen.
+
+### De koppeling termijn ↔ factuurregel loopt vanaf de factuur
+
+Een `InvoiceDocumentLine` draagt **`projectInvoiceTermIds: number[]`**. Bouw7 vult daarna zelf de
+`invoiceLine` op de termijn — dat veld is in de spec `readOnly` en is dus géén schrijfweg. Op factuur
+3890197 (vier termijnen van één termijnstaat) staat het één-op-één:
+
+| regel-id | `projectInvoiceTermIds` | omschrijving | subTotal |
+|---|---|---|---|
+| 12970198 | `[1261857]` | 1e termijn: 30% bij opdracht | 5599.88 |
+| 12970199 | `[1261858]` | 2e termijn: 30% bij start van de werkzaamheden | 5599.88 |
+| 12970200 | `[1261859]` | 3e termijn: 30% bij 50% gereed | 5599.88 |
+| 12970201 | `[1261860]` | 4e termijn: 10% bij oplevering | 1866.63 |
+
+Let op wat dit betekent: **meerdere termijnen op één factuur is precies wat Bouw7 zelf doet**, met
+één regel per termijn. Het veld is een array, maar gebruik dat niet — één regel per termijn houdt
+het bedrag per termijn traceerbaar en maakt de terugleescontrole per termijn mogelijk.
+
+### Concept = status 3, en dat komt gratis uit het skelet
+
+**`GET /project/{projectId}/invoice/new`** (en `GET /invoice/new` zonder project) geeft een compleet,
+leeg `InvoiceDocument` terug — hetzelfde skelet dat de Bouw7-UI gebruikt bij "nieuwe factuur".
+Geverifieerd op project 3869371:
+
+```
+id: null · invoiceNumber: null · status: 3 · date: null · dueDate: null
+isMailed: false · isBooked: false · isCredit: false · language: "nl-NL"
+project: {id, name, workAddress, fullProjectNumber, reference, customAttributeValues}
+contact: {id: 3752713, name: "OPOZ"}  ·  branch: {id: 5249, division: {...}}
+chapters: [{ id: null, sortIndex: 0, isRoot: true, name: "Root", lines: [] }]
+```
+
+Daarmee is een conceptfactuur maken hetzelfde read-modify-write-patroon als de interne notitie in
+§7a: **skelet ophalen → alleen `chapters[0].lines[]` vullen → `POST /invoice`**. Geen enkel veld
+hoeft geraden te worden, en de `status: 3` komt van Bouw7 zelf in plaats van uit een aanname.
+
+De factuurstatus is een vaste enum — `0 = Open, 1 = Verlopen, 2 = Betaald, 3 = Concept` — en er is
+**geen** `/invoice/statuses` (404, net als `/list/invoice-statuses` en
+`/organization/invoice-statuses`). Dit is dus de uitzondering op "enum-id's live ophalen": neem de
+status over uit het skelet in plaats van 3 te hardcoden. Gemeten op 544 facturen: alleen `status: 3`
+komt voor zonder `invoiceNumber`, en die zijn ook altijd `isMailed: false` en `isBooked: false`.
+
+### Regelvelden
+
+Zoals Bouw7 ze zelf zet (regel uit een termijnfactuur):
+
+```json
+{ "id": 12970198, "projectId": null, "sortIndex": 0, "linkedBookingItems": [],
+  "projectInvoiceTermIds": [1261857], "description": "1e termijn: 30% bij opdracht ",
+  "quantity": "1", "unitName": null, "unitPrice": "5599.88", "subTotal": "5599.88",
+  "surchargePercentage": "0", "vatTariffPercentage": "9", "vatTariffId": 82627,
+  "vatTariffLegalText": null, "ledger": null, "costCenter": null, "reference": null, "priceCode": null }
+```
+
+- `vatTariffPercentage` is **readOnly**: stuur `vatTariffId`, Bouw7 vult het percentage.
+  Tarief-id's uit `GET /list/vat-tariffs` — 82626 = Hoog 21% (`isDefault`), 82627 = Laag 9%.
+- **Een verkoopfactuurregel heeft géén `projectSecurityLink`.** De bewakingscode hangt in Bouw7 aan
+  het geboekte item, niet aan de verkoopregel; daarvoor is `linkedBookingItems` (`{id, type}` met
+  type `hours` / `employeeHours` / `contactHours` / `deliveryTickets` / `purchaseInvoiceLines` /
+  `material` / `equipment` / `garbage`). Dit is precies waar de oude `maakRegieFactuurInBouw7`
+  op stukliep.
+- `ledger` en `costCenter` mogen `null` zijn — Bouw7 zet ze zelf zo.
+
+### Termijnstaat
+
+`GET /list/project-invoice-term-statements` (`q: project.id = {id}`) geeft de kop:
+`{id, project{…}, contact{id,name}, fixedPrice}`. De termijnen eronder via
+`GET /list/project-invoice-terms` (`q: statement.id = {sid}` — filteren op `statement.project.id`
+geeft 400). Een termijn:
+
+```json
+{ "id": 1261857, "description": "1e termijn: 30% bij opdracht ", "percentage": "30.0000",
+  "subtotal": "5599.8800", "invoiceableAt": null, "vatTariffPercentage": "9.0000",
+  "vatTariff": { "id": 82627, "label": "Laag 9%", "percentage": "9.0000", "isShifted": false },
+  "invoiceLine": { "id": 12970198, "invoiceId": 3890197, "invoiceStatusId": 2 } }
+```
+
+`invoiceLine.id` is gelijk aan de factuurregel-id. `invoiceStatusId` volgt de factuurstatus en is
+onbruikbaar om concept van verzonden te onderscheiden (zie `termijnStatus` in `lib/dossiers/actions.ts`).
+
+Schrijven gaat via `POST /project/{project}/invoice-term-statement` en
+`POST /project/{statement}/invoice-term`. `ProjectInvoiceTerm` vereist
+`{id, description, percentage, subtotal, vatTariffObject}`; `vatTariffPercentage` is ook daar
+readOnly, dus stuur `vatTariffObject: { id }`.
+
+### Wat nog niet vaststaat — alleen met een schrijftest te bewijzen
+
+1. Of `POST /invoice` zonder `id` met `status: 3` het factuurnummer echt leeg laat. Dit is de
+   enige echt riskante aanname; nummert Bouw7 direct, dan kan de feature niet zoals bedoeld.
+2. Of het zetten van `projectInvoiceTermIds` op de regel de `invoiceLine` op de termijn vult.
+3. Of `invoiceTerms[]` inline mee mag in de statement-POST, of dat elke termijn een eigen call
+   nodig heeft. Geen enkele GET geeft de geneste vorm terug.
+4. Of `POST /project/{stmt}/invoice-term` mét `id` bijwerkt of dupliceert.
+5. Of Bouw7 een termijn weigert die al een `invoiceLine` heeft, of hem stilzwijgend herkoppelt —
+   fiscaal het gevaarlijkst, en de reden om zulke termijnen aan EVA-kant hard over te slaan.
+
+`DELETE /project/term-statement` wist de **hele** termijnstaat en is daarmee te grof voor EVA.
+Opruimen van een testfactuur kan wel met `DELETE /invoice/{id}`.

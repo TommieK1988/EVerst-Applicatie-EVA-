@@ -26,8 +26,9 @@ import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/syn
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import {
   zetOptieInOpdracht, wijsStelpostBewakingscodesToe,
-  maakStelpost, verwijderStelpost, verrekenStelpost,
+  maakStelpost, updateStelpost, verwijderStelpost, verrekenStelpost,
 } from '@/lib/dossiers/opdracht-onderdelen'
+import type { OpdrachtOnderdeelGrondslag as StelpostGrondslag } from '@everts/database'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
@@ -159,6 +160,122 @@ function InfoVeld({
   )
 }
 
+/* ─── afrekening van een stelpost ───────────────────────────────────────
+   Hoe een stelpost afrekent is een uitvoeringsbeslissing, geen offerte-afspraak:
+   ook een stelpost die uit de calculatie komt mag hier op eenheidsprijzen of
+   geboekte kosten worden gezet. De velden die daarbij horen verschijnen alleen
+   bij de gekozen grondslag, zodat de regel smal blijft. Getypte tekst blijft
+   apart van het getal, anders kun je geen komma intypen. */
+function GetalVeld({ waarde, breedte, plaatshouder, label, pending, onCommit }: {
+  waarde: number | null
+  breedte: string
+  plaatshouder: string
+  label: string
+  pending: boolean
+  onCommit: (v: number | null) => void
+}) {
+  const alsTekst = (v: number | null) => (v != null ? String(v).replace('.', ',') : '')
+  const [tekst, setTekst] = React.useState(alsTekst(waarde))
+  React.useEffect(() => { setTekst(alsTekst(waarde)) }, [waarde])
+
+  function commit() {
+    const schoon = tekst.trim()
+    if (schoon === '') { if (waarde != null) onCommit(null); return }
+    const n = parseFloat(schoon.replace(/\./g, '').replace(',', '.'))
+    if (!Number.isFinite(n)) { setTekst(alsTekst(waarde)); return }
+    if (n === waarde) return
+    onCommit(n)
+  }
+
+  return (
+    <input
+      value={tekst}
+      onChange={e => setTekst(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      disabled={pending}
+      inputMode="decimal"
+      placeholder={plaatshouder}
+      aria-label={label}
+      className={`${breedte} rounded border border-neutral-200 bg-white px-1 py-px text-right text-[10.5px] tabular-nums text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50`}
+    />
+  )
+}
+
+function StelpostAfrekening({ stelpost, pending, onZet }: {
+  stelpost: {
+    grondslag: StelpostGrondslag | null
+    eenheid: string | null
+    eenheidsprijs: number | null
+    hoeveelheid_werkelijk: number | null
+    opslag_pct: number | null
+  }
+  pending: boolean
+  onZet: (patch: {
+    grondslag?: StelpostGrondslag; eenheid?: string | null; eenheidsprijs?: number | null
+    hoeveelheid_werkelijk?: number | null; opslag_pct?: number | null
+  }) => void
+}) {
+  const grondslag = stelpost.grondslag ?? 'vast'
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+      <span className="text-[10.5px] text-neutral-400">rekent af op</span>
+      <select
+        value={grondslag}
+        disabled={pending}
+        onChange={e => onZet({ grondslag: e.target.value as StelpostGrondslag })}
+        aria-label="Afrekenwijze van deze stelpost"
+        className="rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50"
+      >
+        <option value="geboekte_kosten">geboekte kosten</option>
+        <option value="eenheidsprijzen">eenheidsprijs</option>
+        <option value="vast">vast bedrag</option>
+      </select>
+
+      {grondslag === 'eenheidsprijzen' && (
+        <>
+          <input
+            defaultValue={stelpost.eenheid ?? ''}
+            key={`eenheid-${stelpost.eenheid ?? ''}`}
+            onBlur={e => {
+              const v = e.target.value.trim() || null
+              if (v !== stelpost.eenheid) onZet({ eenheid: v })
+            }}
+            disabled={pending}
+            placeholder="eenheid"
+            aria-label="Eenheid"
+            className="w-16 rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50"
+          />
+          <GetalVeld
+            waarde={stelpost.eenheidsprijs} breedte="w-16" plaatshouder="prijs"
+            label="Prijs per eenheid" pending={pending}
+            onCommit={v => onZet({ eenheidsprijs: v })}
+          />
+          <span className="text-[10.5px] text-neutral-400">×</span>
+          <GetalVeld
+            waarde={stelpost.hoeveelheid_werkelijk} breedte="w-14" plaatshouder="aantal"
+            label="Werkelijk uitgevoerde hoeveelheid" pending={pending}
+            onCommit={v => onZet({ hoeveelheid_werkelijk: v })}
+          />
+        </>
+      )}
+
+      {grondslag === 'geboekte_kosten' && (
+        <>
+          <GetalVeld
+            waarde={stelpost.opslag_pct} breedte="w-12" plaatshouder="std"
+            label="Opslag in procenten op de geboekte kosten" pending={pending}
+            onCommit={v => onZet({ opslag_pct: v })}
+          />
+          <span className="text-[10.5px] text-neutral-400" title="Leeg = de bedrijfsstandaard uit Instellingen > Facturatie">
+            % opslag
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ─── nieuwe-stelpost-formulier ─────────────────────────────────────────
    Wijs een deel van de aanneemsom aan als stelpost. "In de aanneemsom" is de
    normale keuze: dan herclassificeer je een deel van de bestaande som en gaat
@@ -166,7 +283,8 @@ function InfoVeld({
 function NieuweStelpostRegel({ onOpslaan, pending }: {
   onOpslaan: (invoer: {
     omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
-    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+    begroot_excl_btw: number | null; grondslag: StelpostGrondslag
+    eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) => void
   pending: boolean
 }) {
@@ -175,7 +293,10 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
   const [bedrag, setBedrag]     = React.useState('')
   const [inSom, setInSom]       = React.useState(true)
   const [begroot, setBegroot]   = React.useState('')
-  const [grondslag, setGrondslag] = React.useState<'vast' | 'geboekte_kosten'>('geboekte_kosten')
+  const [grondslag, setGrondslag] = React.useState<StelpostGrondslag>('geboekte_kosten')
+  const [eenheid, setEenheid]   = React.useState('')
+  const [prijs, setPrijs]       = React.useState('')
+  const [opslag, setOpslag]     = React.useState('')
 
   const getal = (s: string): number | null => {
     const n = parseFloat(s.replace(/\./g, '').replace(',', '.'))
@@ -224,13 +345,42 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
           <select
             className={inputCls}
             value={grondslag}
-            onChange={e => setGrondslag(e.target.value as 'vast' | 'geboekte_kosten')}
+            onChange={e => setGrondslag(e.target.value as StelpostGrondslag)}
           >
             <option value="geboekte_kosten">Geboekte kosten (verrekenen)</option>
+            <option value="eenheidsprijzen">Eenheidsprijs x hoeveelheid</option>
             <option value="vast">Vast bedrag</option>
           </select>
         </label>
+        {grondslag === 'eenheidsprijzen' && (
+          <>
+            <label className="block">
+              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Eenheid</span>
+              <input className={inputCls} value={eenheid} onChange={e => setEenheid(e.target.value)} placeholder="m², stuks, woning" />
+            </label>
+            <label className="block">
+              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Prijs per eenheid</span>
+              <input className={inputCls} value={prijs} onChange={e => setPrijs(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </label>
+          </>
+        )}
+        {grondslag === 'geboekte_kosten' && (
+          <label className="block">
+            <span
+              className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400"
+              title="Opslag op de geboekte kosten van deze stelpost. Leeg = de bedrijfsstandaard."
+            >
+              Opslag %
+            </span>
+            <input className={inputCls} value={opslag} onChange={e => setOpslag(e.target.value)} placeholder="standaard" inputMode="decimal" />
+          </label>
+        )}
       </div>
+      {grondslag === 'eenheidsprijzen' && (
+        <p className="mt-1.5 text-[10.5px] leading-snug text-neutral-500">
+          De werkelijk uitgevoerde hoeveelheid vul je later in, bij het verrekenen.
+        </p>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
@@ -242,8 +392,12 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
               in_aanneemsom: inSom,
               begroot_excl_btw: getal(begroot),
               grondslag,
+              eenheid: grondslag === 'eenheidsprijzen' ? (eenheid.trim() || null) : null,
+              eenheidsprijs: grondslag === 'eenheidsprijzen' ? getal(prijs) : null,
+              opslag_pct: grondslag === 'geboekte_kosten' ? getal(opslag) : null,
             })
             setOms(''); setBedrag(''); setBegroot(''); setInSom(true); setOpen(false)
+            setEenheid(''); setPrijs(''); setOpslag('')
           }}
           className="rounded-md bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
         >
@@ -348,7 +502,7 @@ type OpdrachtDetailSoort = 'stelposten' | 'meerwerk' | 'opties'
    Read-only respecteert afgesloten dossiers. */
 function OpdrachtDetailDialog({
   soort, onClose, overzicht, readOnly, onToggleOptie, onWijsCodes, onNieuweStelpost,
-  onVerwijderStelpost, onVerreken, pending,
+  onVerwijderStelpost, onVerreken, onZetAfrekening, pending,
 }: {
   soort: OpdrachtDetailSoort | null
   onClose: () => void
@@ -358,10 +512,15 @@ function OpdrachtDetailDialog({
   onWijsCodes: () => void
   onNieuweStelpost: (invoer: {
     omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
-    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+    begroot_excl_btw: number | null; grondslag: StelpostGrondslag
+    eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) => void
   onVerwijderStelpost: (id: string) => void
   onVerreken: (id: string) => void
+  onZetAfrekening: (id: string, patch: {
+    grondslag?: StelpostGrondslag; eenheid?: string | null; eenheidsprijs?: number | null
+    hoeveelheid_werkelijk?: number | null; opslag_pct?: number | null
+  }) => void
   pending: boolean
 }) {
   const { stelposten, opties, meerwerken } = overzicht
@@ -461,7 +620,22 @@ function OpdrachtDetailDialog({
                         {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
                       </span>
                     )}
+                    {sp.grondslag === 'eenheidsprijzen' && sp.eenheidsprijs != null && (
+                      <span className="text-[10px] tabular-nums text-neutral-400" title="Afgesproken prijs per eenheid">
+                        {fmtBedrag(sp.eenheidsprijs)}{sp.eenheid ? ` / ${sp.eenheid}` : ' p.e.'}
+                      </span>
+                    )}
+                    {sp.grondslag === 'geboekte_kosten' && sp.opslag_pct != null && (
+                      <span className="text-[10px] tabular-nums text-neutral-400" title="Eigen opslag op de geboekte kosten van deze stelpost">
+                        opslag {sp.opslag_pct}%
+                      </span>
+                    )}
                   </div>
+                  {/* Eenheidsprijs-stelpost: de werkelijke hoeveelheid is handmatige invoer en
+                      bepaalt het afrekenbedrag. Zolang hij leeg is valt er niets te verrekenen. */}
+                  {!sp.verrekendMeerwerkId && !readOnly && (
+                    <StelpostAfrekening stelpost={sp} pending={pending} onZet={p => onZetAfrekening(sp.id, p)} />
+                  )}
                   {/* Verrekening: werkelijk vs. stelpost. Het verschil landt als één meer-/minderwerkregel. */}
                   {sp.verrekenSaldo != null && (
                     <div className="mt-0.5 flex items-baseline justify-between gap-2">
@@ -1234,12 +1408,26 @@ export function InformatieTab({
   }
   function nieuweStelpost(invoer: {
     omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
-    begroot_excl_btw: number | null; grondslag: 'vast' | 'geboekte_kosten'
+    begroot_excl_btw: number | null; grondslag: StelpostGrondslag
+    eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) {
     startOptieTransition(async () => {
       const res = await maakStelpost(dossier.id, invoer)
       if (!res.ok) { toast.error(res.error); return }
       toast.success('Stelpost aangewezen')
+      router.refresh()
+    })
+  }
+  function zetStelpostAfrekening(id: string, patch: {
+    grondslag?: StelpostGrondslag
+    eenheid?: string | null
+    eenheidsprijs?: number | null
+    hoeveelheid_werkelijk?: number | null
+    opslag_pct?: number | null
+  }) {
+    startOptieTransition(async () => {
+      const res = await updateStelpost(id, patch)
+      if (!res.ok) { toast.error(res.error); return }
       router.refresh()
     })
   }
@@ -1953,6 +2141,7 @@ export function InformatieTab({
                   onNieuweStelpost={nieuweStelpost}
                   onVerwijderStelpost={verwijderStelpostRegel}
                   onVerreken={verrekenStelpostRegel}
+                  onZetAfrekening={zetStelpostAfrekening}
                   pending={optiePending}
                 />
               </>

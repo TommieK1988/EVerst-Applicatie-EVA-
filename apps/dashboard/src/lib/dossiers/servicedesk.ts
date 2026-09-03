@@ -2,11 +2,36 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { createHash } from 'node:crypto'
 import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
+import { assertDossierBewerkbaar } from './guards'
+import { vereisRecht } from '@/lib/auth/rechten'
+import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 
-/** Standaardopslag op overige (niet-uren) kosten bij regie-facturatie.
- *  Module-lokaal: een 'use server'-bestand mag geen non-async waarden exporteren. */
-const REGIE_OPSLAG_PCT = 25
+/** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
+ *  ingesteld. Module-lokaal: een 'use server'-bestand mag geen non-async waarden exporteren. */
+const REGIE_OPSLAG_STANDAARD = 25
+
+const rond = (n: number): number => Math.round(n * 100) / 100
+
+/**
+ * Bedrijfsbrede opslag op geboekte kosten, uit `bedrijfsinstellingen.overige.regie_opslag_pct`.
+ * Stond eerder als constante in de code, waardoor 25% overal impliciet meerekende — óók in elk
+ * stelpost-verrekensaldo — zonder dat iemand hem kon aanpassen.
+ */
+async function standaardOpslagPct(supabase: any): Promise<number> {
+  const { data } = await supabase.from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
+  const v = (data?.overige as Record<string, unknown> | null)?.regie_opslag_pct
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? n : REGIE_OPSLAG_STANDAARD
+}
+
+/**
+ * Opties voor `getServicedeskRegie`. `opslagPerCode` laat een afwijkende opslag toe voor de
+ * kosten op één bewakingscode — dat is hoe een stelpost met een eigen opslagpercentage afrekent
+ * zonder dat de rest van het dossier meebeweegt.
+ */
+export type RegieOpties = { opslagPerCode?: Record<string, number> }
 
 export type RegieFactuurRegel = {
   /** Stabiele sleutel: bron_type + bron_bouw7_id. */
@@ -25,6 +50,10 @@ export type RegieFactuurRegel = {
   verkoopBedrag: number
   btwPct: number | null
   bewakingscode: string | null
+  /** Uursoort bij een uur-regel ('Gewerkte uren', 'Reisuren'…); bepaalt de groepering. */
+  uursoort: string | null
+  /** Kostensoort bij een kost-regel ('Materiaal', 'Onderaanneming', 'Inkoop'…). */
+  kostensoort: string | null
   uitgesloten: boolean
   status: 'concept' | 'gefactureerd'
   bouw7InvoiceId: string | null
@@ -69,10 +98,13 @@ async function verkooptarievenVoorRelatie(klantId: string | null): Promise<Map<s
 
 /**
  * Bouwt de regie-factuurregels op uit de geboekte uren en kosten (live uit Bouw7),
- * met defaults: uren → afgesproken verkooptarief per uursoort (relatie), overige
- * kosten → +25% opslag. Eerder opgeslagen overrides (regie_factuurregels) winnen.
+ * met defaults: uren → afgesproken verkooptarief per uursoort (relatie), overige kosten → de
+ * ingestelde opslag. Eerder opgeslagen overrides (regie_factuurregels) winnen altijd.
  */
-export async function getServicedeskRegie(dossierId: string): Promise<ServicedeskRegieData> {
+export async function getServicedeskRegie(
+  dossierId: string,
+  opties?: RegieOpties,
+): Promise<ServicedeskRegieData> {
   const supabase = createAdminClient() as any
   const { data: dossier } = await supabase
     .from('dossiers')
@@ -80,11 +112,12 @@ export async function getServicedeskRegie(dossierId: string): Promise<Servicedes
     .eq('id', dossierId)
     .single()
 
-  const [uren, inkoop, tarieven, opgeslagenRes] = await Promise.all([
+  const [uren, inkoop, tarieven, opgeslagenRes, standaardOpslag] = await Promise.all([
     getDossierUren(dossierId),
     getDossierInkoop(dossierId),
     verkooptarievenVoorRelatie(dossier?.klant_id ?? null),
     supabase.from('regie_factuurregels').select('*').eq('dossier_id', dossierId),
+    standaardOpslagPct(supabase),
   ])
 
   const opgeslagen = new Map<string, OpgeslagenRegel>()
@@ -115,6 +148,8 @@ export async function getServicedeskRegie(dossierId: string): Promise<Servicedes
       verkoopBedrag,
       btwPct: null,
       bewakingscode: u.code,
+      uursoort: u.uursoort ?? null,
+      kostensoort: null,
       uitgesloten: opgesl?.uitgesloten ?? false,
       status: (opgesl?.status as 'concept' | 'gefactureerd') ?? 'concept',
       bouw7InvoiceId: opgesl?.bouw7_invoice_id ?? null,
@@ -122,11 +157,13 @@ export async function getServicedeskRegie(dossierId: string): Promise<Servicedes
     })
   }
 
-  // Overige geboekte kosten → +25% opslag.
+  // Overige geboekte kosten → opslag. Voorrang: handmatige override per regel, dan een opslag die
+  // bij de bewakingscode hoort (stelpost met eigen percentage), dan de bedrijfsstandaard.
   for (const k of inkoop.geboekteKosten) {
     const sleutel = `kost:${k.bronId}`
     const opgesl = opgeslagen.get(sleutel)
-    const opslagPct = opgesl?.opslag_pct ?? REGIE_OPSLAG_PCT
+    const codeOpslag = k.code ? opties?.opslagPerCode?.[k.code] : undefined
+    const opslagPct = opgesl?.opslag_pct ?? codeOpslag ?? standaardOpslag
     const verkoopBedrag = opgesl?.verkoop_bedrag ?? Math.round(k.bedrag * (1 + opslagPct / 100) * 100) / 100
     regels.push({
       bronType: 'kost',
@@ -140,6 +177,8 @@ export async function getServicedeskRegie(dossierId: string): Promise<Servicedes
       verkoopBedrag,
       btwPct: null,
       bewakingscode: k.code,
+      uursoort: null,
+      kostensoort: k.typeKosten ?? 'Overige kosten',
       uitgesloten: opgesl?.uitgesloten ?? false,
       status: (opgesl?.status as 'concept' | 'gefactureerd') ?? 'concept',
       bouw7InvoiceId: opgesl?.bouw7_invoice_id ?? null,
@@ -180,7 +219,8 @@ export async function getServicedeskMandaat(dossierId: string): Promise<MandaatS
   const geboekteVerkoop = regie.totalen.verkoop
   // Uitgezette opdrachten: bestelde inkooporders + onderaannemerscontracten, met opslag.
   const uitgezetBasis = (inkoop.totalen.besteld || 0) + (inkoop.totalen.onderaanneming || 0)
-  const uitgezetteOpdrachten = Math.round(uitgezetBasis * (1 + REGIE_OPSLAG_PCT / 100) * 100) / 100
+  const opslag = await standaardOpslagPct(supabase)
+  const uitgezetteOpdrachten = Math.round(uitgezetBasis * (1 + opslag / 100) * 100) / 100
   const totaal = Math.round((geboekteVerkoop + uitgezetteOpdrachten) * 100) / 100
   const overschreden = mandaat != null && totaal > mandaat
 
@@ -246,56 +286,146 @@ export async function updateServicedeskInstellingen(
 }
 
 /**
- * Pusht de niet-uitgesloten, nog niet gefactureerde regie-regels als CONCEPT-verkoopfactuur
- * naar Bouw7 (POST /invoice). Fiscaal gevoelig (oplopende factuurnummers) — eerst op een
- * proefproject testen. Het exacte Invoice-body-schema moet tegen de live API bevestigd worden;
- * de payload hieronder is conservatief opgezet en faalt netjes (geen status-update bij fout).
+ * Eén factuurregel zoals de klant hem straks op de factuur ziet — samengevat, niet elke boeking
+ * apart. Een factuur met honderden regels leest niemand; de onderbouwing per uur en per bon blijft
+ * in EVA staan.
+ */
+export type RegieFactuurGroep = {
+  /** Stabiele sleutel van de groep, ook gebruikt als React-key. */
+  sleutel: string
+  soort: 'uren' | 'kosten'
+  omschrijving: string
+  aantal: number
+  eenheid: string | null
+  stukprijs: number
+  bedrag: number
+  /** Hoeveel onderliggende boekingen in deze regel zijn samengevat. */
+  aantalBoekingen: number
+}
+
+export type RegieVoorstel = {
+  groepen: RegieFactuurGroep[]
+  totaal: number
+  /** Aantal regels dat al gefactureerd is en dus buiten het voorstel valt. */
+  alGefactureerd: number
+}
+
+/**
+ * Vat de regie-regels samen tot factuurregels.
+ *
+ * Uren gaan altijd per uursoort samen, maar wél per tarief apart: twee tarieven binnen één uursoort
+ * in één regel persen zou een stukprijs opleveren die niet klopt. Kosten worden standaard per
+ * kostensoort gesplitst (materiaal, onderaanneming, inkoop…), met `kostenSamenvoegen` om er één
+ * regel van te maken.
+ */
+export async function getRegieFactuurvoorstel(
+  dossierId: string,
+  opties?: { kostenSamenvoegen?: boolean; opslagPerCode?: Record<string, number> },
+): Promise<RegieVoorstel> {
+  const regie = await getServicedeskRegie(dossierId, { opslagPerCode: opties?.opslagPerCode })
+  const mee = regie.regels.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
+  const alGefactureerd = regie.regels.filter(r => r.status === 'gefactureerd').length
+
+  const groepen = new Map<string, RegieFactuurGroep>()
+  const voegToe = (
+    sleutel: string, soort: 'uren' | 'kosten', omschrijving: string,
+    aantal: number, eenheid: string | null, bedrag: number,
+  ) => {
+    const g = groepen.get(sleutel)
+      ?? { sleutel, soort, omschrijving, aantal: 0, eenheid, stukprijs: 0, bedrag: 0, aantalBoekingen: 0 }
+    g.aantal = rond(g.aantal + aantal)
+    g.bedrag = rond(g.bedrag + bedrag)
+    g.aantalBoekingen += 1
+    groepen.set(sleutel, g)
+  }
+
+  for (const r of mee) {
+    if (r.bronType === 'uur') {
+      const uursoort = r.uursoort ?? 'Uren'
+      const tarief = r.verkoopTarief ?? 0
+      voegToe(`uur:${uursoort}:${tarief}`, 'uren', uursoort, r.aantal ?? 0, 'uur', r.verkoopBedrag || 0)
+    } else {
+      const soort = r.kostensoort ?? 'Overige kosten'
+      const sleutel = opties?.kostenSamenvoegen ? 'kost:alles' : `kost:${soort}`
+      const label = opties?.kostenSamenvoegen ? 'Materiaal, onderaanneming en overige kosten' : soort
+      voegToe(sleutel, 'kosten', label, 1, 'post', r.verkoopBedrag || 0)
+    }
+  }
+
+  const lijst = [...groepen.values()].map(g => ({
+    ...g,
+    // Bij kosten is "aantal" het aantal samengevatte posten; de factuur toont er één post van.
+    aantal: g.soort === 'uren' ? g.aantal : 1,
+    stukprijs: g.soort === 'uren' && g.aantal > 0 ? rond(g.bedrag / g.aantal) : g.bedrag,
+  }))
+  // Uren eerst, dan kosten; binnen een soort alfabetisch, zodat de factuur elke keer gelijk oogt.
+  lijst.sort((a, b) => a.soort === b.soort
+    ? a.omschrijving.localeCompare(b.omschrijving, 'nl')
+    : (a.soort === 'uren' ? -1 : 1))
+
+  return { groepen: lijst, totaal: rond(lijst.reduce((s, g) => s + g.bedrag, 0)), alGefactureerd }
+}
+
+/**
+ * Zet het regiewerk als één conceptfactuur klaar in Bouw7.
+ *
+ * De vorige implementatie is in september 2026 vervangen. Die bouwde een `POST /invoice`-body die
+ * nooit tegen de live API was bevestigd en aantoonbaar fout was — een `InvoiceDocument` heeft
+ * `chapters[].lines[]`, geen platte `lines`, het datumveld heet `date`, en een verkoopfactuurregel
+ * kent geen `projectSecurityLink`. Het gevaar zat niet in het falen maar in het slagen: zonder
+ * `status` in de body kan Bouw7 een factuur met status 0 (Open) maken, dus mét factuurnummer.
+ * Bovendien zette de oude versie álle regels hard op `gefactureerd`, ook zonder bevestiging.
+ *
+ * Nu loopt alles via `maakConceptVerkoopfactuur`, dat op het skelet uit
+ * `GET /project/{id}/invoice/new` bouwt. Regels gaan pas op `gefactureerd` ná de acceptatiecontrole.
+ *
+ * De selectie wordt hier server-side opnieuw bepaald; wat de client meestuurde is alleen de
+ * groeperingskeuze en het btw-tarief.
  */
 export async function maakRegieFactuurInBouw7(
   dossierId: string,
-): Promise<{ ok: true; invoiceId: string; aantal: number } | { ok: false; error: string }> {
+  opties: { btwTariefBouw7Id: number; kostenSamenvoegen?: boolean },
+): Promise<{ ok: true; invoiceId: number; aantal: number; totaal: number } | { ok: false; error: string; invoiceId?: number }> {
+  await vereisRecht('financieel', 'schrijven')
+  await assertDossierBewerkbaar(dossierId)
+
   const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return { ok: false, error: 'Dossier niet aan Bouw7 gekoppeld.' }
-  const { client, bouw7Id } = ctx
+  if (!ctx) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld.' }
 
-  const supabase = createAdminClient() as any
-  const { data: dossier } = await supabase
-    .from('dossiers')
-    .select('klant:relaties(bouw7_id)')
-    .eq('id', dossierId)
-    .single()
-  const contactBouw7Id = dossier?.klant?.bouw7_id
-  if (!contactBouw7Id) return { ok: false, error: 'Geen Bouw7-relatie aan dossier gekoppeld.' }
+  if (!Number.isFinite(opties.btwTariefBouw7Id)) {
+    return { ok: false, error: 'Kies eerst een btw-tarief voor deze factuur.' }
+  }
 
-  const regie = await getServicedeskRegie(dossierId)
-  const teFactureren = regie.regels.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
-  if (teFactureren.length === 0) return { ok: false, error: 'Geen te factureren regels.' }
+  const voorstel = await getRegieFactuurvoorstel(dossierId, { kostenSamenvoegen: opties.kostenSamenvoegen })
+  if (voorstel.groepen.length === 0) return { ok: false, error: 'Er is niets te factureren.' }
 
-  const vandaag = new Date().toISOString().slice(0, 10)
-  const body = {
-    contact: { id: Number(contactBouw7Id) },
-    project: { id: Number(bouw7Id) },
-    invoiceDate: vandaag,
-    // Concept: geen status meegeven, of de Bouw7-default. Regels per geboekte post.
-    lines: teFactureren.map(r => ({
-      description: r.omschrijving ?? '',
-      quantity: r.aantal ?? 1,
-      unitPrice: r.aantal ? Math.round((r.verkoopBedrag / r.aantal) * 100) / 100 : r.verkoopBedrag,
-      ...(r.bewakingscode ? { projectSecurityLink: { code: r.bewakingscode } } : {}),
+  // Sleutel over de inhoud: dezelfde regels met dezelfde bedragen leveren dezelfde sleutel op, dus
+  // een tweede klik vindt de bestaande conceptfactuur terug in plaats van een duplicaat te maken.
+  const basis = `${dossierId}|regie|` + voorstel.groepen
+    .map(g => `${g.sleutel}:${Math.round(g.bedrag * 100)}`).join(',')
+  const sleutel = createHash('sha1').update(basis).digest('hex').slice(0, 16)
+
+  const res = await maakConceptVerkoopfactuur({
+    projectId: Number(ctx.bouw7Id),
+    idempotentieSleutel: sleutel,
+    omschrijving: 'Regiewerk',
+    regels: voorstel.groepen.map(g => ({
+      omschrijving: g.omschrijving,
+      aantal: g.aantal,
+      eenheid: g.eenheid,
+      stukprijs: g.stukprijs,
+      vatTariffId: opties.btwTariefBouw7Id,
     })),
-  }
+  })
+  if (!res.ok) return res
 
-  let invoiceId: string
-  try {
-    const res = await client.post<{ id?: number | string }>('/invoice', body)
-    invoiceId = String(res?.id ?? '')
-    if (!invoiceId) return { ok: false, error: 'Bouw7 gaf geen factuur-id terug.' }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Push naar Bouw7 mislukt.' }
-  }
-
-  // Markeer de meegestuurde regels als gefactureerd (upsert per bron-sleutel).
-  for (const r of teFactureren) {
+  // Pas nu de onderliggende regels afboeken — niet ervoor. Een mislukte push mag geen regels
+  // wegstrepen die nog gefactureerd moeten worden.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const regie = await getServicedeskRegie(dossierId)
+  const mee = regie.regels.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')
+  for (const r of mee) {
     await supabase.from('regie_factuurregels').upsert({
       dossier_id: dossierId,
       bron_type: r.bronType,
@@ -309,13 +439,14 @@ export async function maakRegieFactuurInBouw7(
       verkoop_bedrag: r.verkoopBedrag,
       bewakingscode: r.bewakingscode,
       status: 'gefactureerd',
-      bouw7_invoice_id: invoiceId,
+      bouw7_invoice_id: String(res.invoiceId),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
   }
 
   revalidatePath(`/servicedesk/${dossierId}/financieel`)
-  return { ok: true, invoiceId, aantal: teFactureren.length }
+  revalidatePath(`/opdrachten/${dossierId}/verkoop`)
+  return { ok: true, invoiceId: res.invoiceId, aantal: voorstel.groepen.length, totaal: res.totaalExclBtw }
 }
 
 export type SubstatusFase = { substatus: string; van: string; tot: string | null; dagen: number }

@@ -446,8 +446,12 @@ export type OpdrachtOnderdeelSoort = 'basis' | 'stelpost' | 'optie'
 export type OpdrachtOnderdeelStatus = 'in_opdracht' | 'uitgesloten' | 'afgerond'
 /** Herkomst: geseed uit een EVA-offerte of handmatig aangewezen (Bouw7-dossier zonder offerte). */
 export type OpdrachtOnderdeelBron = 'offerte' | 'handmatig'
-/** Hoe de stelpost afrekent: vast bedrag, of op de geboekte kosten van zijn bewakingscode. */
-export type OpdrachtOnderdeelGrondslag = 'vast' | 'geboekte_kosten'
+/**
+ * Hoe de stelpost afrekent: een vast bedrag (niets te verrekenen), op de geboekte kosten van zijn
+ * bewakingscode, of op een afgesproken eenheidsprijs maal de werkelijk uitgevoerde hoeveelheid.
+ * Dezelfde drie vormen als bij een stelpost die als meerwerk is vastgelegd.
+ */
+export type OpdrachtOnderdeelGrondslag = 'vast' | 'geboekte_kosten' | 'eenheidsprijzen'
 
 /**
  * Eén stelpost of optie in een opdracht, met de vastlegging of hij in opdracht is en (voor
@@ -480,6 +484,14 @@ export type OpdrachtOnderdeel = {
   /** Kostprijs-budget voor de bewakingscode. Nooit afgeleid uit bedrag_excl_btw (= omzet). */
   begroot_excl_btw: number | null
   grondslag: OpdrachtOnderdeelGrondslag | null
+  /** Label bij een eenheidsprijs ('m²', 'stuks', 'woning'); heeft geen rekenwaarde. */
+  eenheid: string | null
+  /** Afgesproken verkoopprijs per eenheid, excl. btw. Alleen bij grondslag 'eenheidsprijzen'. */
+  eenheidsprijs: number | null
+  /** Werkelijk uitgevoerde hoeveelheid, handmatig vastgelegd (Bouw7 kent die niet). */
+  hoeveelheid_werkelijk: number | null
+  /** Opslag op de geboekte kosten van deze stelpost; leeg = de bedrijfsstandaard. */
+  opslag_pct: number | null
   bouw7_security_code_id: number | null
   created_at: string
   updated_at: string

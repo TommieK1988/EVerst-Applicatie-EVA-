@@ -361,6 +361,16 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/facturatie$/, {
+    title: 'Facturatie',
+    description: 'Hoe geboekte kosten worden doorbelast bij regiewerk en bij het verrekenen van stelposten.',
+    sections: [
+      { title: 'Waar dit meetelt', body: 'De opslag komt terug op elke regie-factuurregel voor materiaal-, onderaannemers- en inkoopkosten, én in het saldo dat je ziet bij het verrekenen van een stelpost op geboekte kosten. Uren rekenen niet met deze opslag maar met het afgesproken verkooptarief per uursoort.' },
+      { title: 'Volgorde', body: 'Een handmatig aangepaste regel wint altijd. Daarna telt een eigen opslagpercentage op de stelpost. Pas als beide leeg zijn geldt deze standaard.' },
+      { title: 'Met terugwerkende kracht', body: 'De opslag wordt bij elke weergave opnieuw gerekend. Wijzig je hem, dan veranderen ook de saldi van nog niet verrekende stelposten. Al verrekende stelposten en al klaargezette factuurregels blijven staan zoals ze waren.' },
+    ],
+  }],
+
   // ── Platform instellingen ──────────────────────────────────────────────
   [/^\/instellingen$/, {
     title: 'Instellingen',

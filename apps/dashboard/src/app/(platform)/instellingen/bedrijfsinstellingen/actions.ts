@@ -52,6 +52,30 @@ export async function getGoedkeuringDrempelOfferte(): Promise<number> {
   return Number.isFinite(n) && n >= 0 ? n : 1000
 }
 
+/**
+ * Opslag (in procenten) op geboekte kosten bij regie-facturatie en bij het verrekenen van een
+ * stelpost op geboekte kosten. Stond eerder als constante 25 in `lib/dossiers/servicedesk.ts`,
+ * waar hij ongemerkt in elk verrekensaldo meerekende.
+ */
+export async function getRegieOpslagPct(): Promise<number> {
+  const inst = await getBedrijfsinstellingen()
+  const v = (inst.overige as any)?.regie_opslag_pct
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? n : 25
+}
+
+export async function setRegieOpslagPct(
+  pct: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isFinite(pct) || pct < 0) return { ok: false, error: 'Vul een percentage van 0 of hoger in.' }
+  const inst = await getBedrijfsinstellingen()
+  const res = await updateBedrijfsinstellingen({
+    overige: { ...(inst.overige as any), regie_opslag_pct: pct },
+  })
+  if (res.ok) revalidatePath('/instellingen/facturatie')
+  return res
+}
+
 export async function setGoedkeuringDrempelOfferte(
   bedrag: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

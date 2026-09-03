@@ -155,6 +155,14 @@ const calcOfferteItems: SettingsItem[] = [
     module: 'dossiers',
   },
   {
+    href: '/instellingen/facturatie',
+    title: 'Facturatie',
+    description: 'Opslag op geboekte kosten bij regiewerk en bij het verrekenen van stelposten.',
+    ready: true,
+    kicker: 'Financieel',
+    module: 'financieel',
+  },
+  {
     href: '/instellingen/debiteur-redencodes',
     title: 'Debiteuren — redencodes',
     description: 'Beheer de redenen "niet betaald" die op het Facturen-scherm gekozen kunnen worden.',

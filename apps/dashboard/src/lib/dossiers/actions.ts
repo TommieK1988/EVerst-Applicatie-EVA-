@@ -2772,6 +2772,10 @@ export type VerkoopTermijn = {
   gefactureerd: boolean    // er bestaat een factuurregel (invoiceLine != null)
   status: VerkoopTermijnStatus
   invoiceableAt: string | null
+  /** Bouw7-btw-tarief-id; nodig om deze termijn als factuurregel klaar te zetten. */
+  vatTariffId: number | null
+  /** Bouw7-id van de statement waar deze termijn onder hangt. */
+  statementId: number | null
 }
 export type VerkoopFactuur = {
   factuurnummer: string | null
@@ -2905,6 +2909,8 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
         gefactureerd: t.invoiceLine != null,
         status: termijnStatus(t, factuurPerId),
         invoiceableAt: t.invoiceableAt ? t.invoiceableAt.slice(0, 10) : null,
+        vatTariffId: t.vatTariff?.id ?? null,
+        statementId: t.statement?.id ?? null,
       }
     })
   } catch {

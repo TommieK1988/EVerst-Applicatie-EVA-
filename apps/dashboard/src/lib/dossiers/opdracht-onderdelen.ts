@@ -22,6 +22,49 @@ const num = (v: unknown): number => {
 }
 const numOfNull = (v: unknown): number | null => (v == null ? null : num(v))
 
+/**
+ * Het werkelijke bedrag (in verkoopwaarde, excl. btw) waartegen een stelpost afrekent.
+ *
+ * Eén rekenregel voor twee aanroepers — het overzicht dat het saldo toont en de verrekening die het
+ * boekt. Liepen die uiteen, dan zou de gebruiker een ander saldo zien dan er geboekt wordt.
+ *
+ *   • 'geboekte_kosten'  → de verkoopwaarde van de uren en kosten op de eigen bewakingscode.
+ *   • 'eenheidsprijzen'  → de afgesproken eenheidsprijs maal de werkelijk uitgevoerde hoeveelheid.
+ *   • 'vast' (of leeg)   → null; een vast bedrag valt per definitie niets te verrekenen.
+ *
+ * Bij 'eenheidsprijzen' telt een ingevulde hoeveelheid van 0 als een echt antwoord ("er is niets
+ * uitgevoerd", saldo = −stelpostbedrag = minderwerk). Alleen een lege prijs óf lege hoeveelheid
+ * geeft null: dan is de afrekening simpelweg nog niet ingevuld.
+ */
+function werkelijkBedrag(
+  r: Pick<OpdrachtOnderdeel, 'grondslag' | 'bewakingscode' | 'eenheidsprijs' | 'hoeveelheid_werkelijk'>,
+  verkoopOpCode: (code: string) => number,
+): number | null {
+  if (r.grondslag === 'geboekte_kosten') {
+    return r.bewakingscode ? rond(verkoopOpCode(r.bewakingscode)) : null
+  }
+  if (r.grondslag === 'eenheidsprijzen') {
+    if (r.eenheidsprijs == null || r.hoeveelheid_werkelijk == null) return null
+    return rond(num(r.eenheidsprijs) * num(r.hoeveelheid_werkelijk))
+  }
+  return null
+}
+
+/**
+ * Afwijkende opslagpercentages per bewakingscode, afgeleid uit de stelposten die er een hebben.
+ * Zo rekent een stelpost met een eigen opslag af tegen dát percentage, terwijl de rest van het
+ * dossier de bedrijfsstandaard houdt.
+ */
+function opslagPerCode(rows: Pick<OpdrachtOnderdeel, 'soort' | 'grondslag' | 'bewakingscode' | 'opslag_pct'>[]): Record<string, number> {
+  const uit: Record<string, number> = {}
+  for (const r of rows) {
+    if (r.soort !== 'stelpost' || r.grondslag !== 'geboekte_kosten') continue
+    if (!r.bewakingscode || r.opslag_pct == null) continue
+    uit[r.bewakingscode] = num(r.opslag_pct)
+  }
+  return uit
+}
+
 /* ─── views ───────────────────────────────────────────────────────── */
 export type OpdrachtStelpostView = {
   id: string
@@ -36,14 +79,22 @@ export type OpdrachtStelpostView = {
   /** Kostprijs-budget dat naar de bewakingscode is geschreven (handmatig ingevuld). */
   begroot_excl_btw: number | null
   grondslag: OpdrachtOnderdeelGrondslag | null
+  /** Eenheid, prijs per eenheid en werkelijke hoeveelheid bij grondslag 'eenheidsprijzen'. */
+  eenheid: string | null
+  eenheidsprijs: number | null
+  hoeveelheid_werkelijk: number | null
+  /** Opslag op geboekte kosten voor deze stelpost; null = de bedrijfsstandaard is gebruikt. */
+  opslag_pct: number | null
   /** Live bewaking (alleen gevuld zodra er een bewakingscode is toegekend). */
   begroot: number | null
   prognose: number | null
   geboekt: number | null
   progress: number | null
   /**
-   * Werkelijke verkoopwaarde uit de geboekte uren/kosten op de eigen bewakingscode. Alleen bepaald
-   * bij grondslag 'geboekte_kosten' — anders is er niets te verrekenen.
+   * Het werkelijke bedrag waartegen de stelpost afrekent, in verkoopwaarde. Bij grondslag
+   * 'geboekte_kosten' is dat de verkoopwaarde van de uren/kosten op de eigen bewakingscode; bij
+   * 'eenheidsprijzen' is het eenheidsprijs x hoeveelheid_werkelijk. Bij 'vast' blijft het null —
+   * dan valt er niets te verrekenen.
    */
   werkelijkVerkoop: number | null
   /** werkelijkVerkoop − stelpostbedrag. Positief = meerwerk, negatief = minderwerk. */
@@ -277,12 +328,13 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   }
 
   // Verkoopwaarde van het werkelijk geboekte werk per bewakingscode — alleen nodig voor stelposten
-  // die op geboekte kosten afrekenen (zelfde patroon als het meerwerk-tab).
+  // die op geboekte kosten afrekenen (zelfde patroon als het meerwerk-tab). Eenheidsprijs-stelposten
+  // rekenen op hun eigen velden en hebben deze dure Bouw7-call niet nodig.
   const heeftTeVerrekenen = rows.some(r =>
     r.soort === 'stelpost' && r.grondslag === 'geboekte_kosten' && !!r.bewakingscode)
   const verkoopPerCode = new Map<string, number>()
   if (heeftTeVerrekenen) {
-    const regie = await getServicedeskRegie(dossierId).catch(() => null)
+    const regie = await getServicedeskRegie(dossierId, { opslagPerCode: opslagPerCode(rows) }).catch(() => null)
     for (const r of regie?.regels ?? []) {
       if (r.uitgesloten || !r.bewakingscode) continue
       verkoopPerCode.set(r.bewakingscode, (verkoopPerCode.get(r.bewakingscode) ?? 0) + (r.verkoopBedrag || 0))
@@ -304,9 +356,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
     .map(r => {
       const bw = r.bewakingscode ? perCode.get(r.bewakingscode) : undefined
       const bedrag = numOfNull(r.bedrag_excl_btw)
-      const werkelijkVerkoop = (r.grondslag === 'geboekte_kosten' && r.bewakingscode)
-        ? rond(verkoopPerCode.get(r.bewakingscode) ?? 0)
-        : null
+      const werkelijkVerkoop = werkelijkBedrag(r, code => verkoopPerCode.get(code) ?? 0)
       return {
         id: r.id, omschrijving: r.omschrijving,
         bedrag_excl_btw: bedrag,
@@ -315,6 +365,10 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
         in_aanneemsom: r.in_aanneemsom ?? true,
         begroot_excl_btw: numOfNull(r.begroot_excl_btw),
         grondslag: r.grondslag ?? null,
+        eenheid: r.eenheid ?? null,
+        eenheidsprijs: numOfNull(r.eenheidsprijs),
+        hoeveelheid_werkelijk: numOfNull(r.hoeveelheid_werkelijk),
+        opslag_pct: numOfNull(r.opslag_pct),
         begroot: bw?.begroot ?? null, prognose: bw?.prognose ?? null,
         geboekt: bw?.geboekt ?? null, progress: bw?.progress ?? null,
         werkelijkVerkoop,
@@ -420,6 +474,12 @@ export type StelpostInvoer = {
   /** Kostprijs-budget voor de bewakingscode. Nooit gelijkstellen aan bedrag_excl_btw. */
   begroot_excl_btw?: number | null
   grondslag?: OpdrachtOnderdeelGrondslag
+  /** Alleen bij grondslag 'eenheidsprijzen'. */
+  eenheid?: string | null
+  eenheidsprijs?: number | null
+  hoeveelheid_werkelijk?: number | null
+  /** Alleen bij grondslag 'geboekte_kosten'; leeg = de bedrijfsstandaard. */
+  opslag_pct?: number | null
 }
 
 /**
@@ -512,6 +572,10 @@ export async function maakStelpost(
       aanneemsom_snapshot: rond(aanneemsom),
       begroot_excl_btw: invoer.begroot_excl_btw != null ? rond(num(invoer.begroot_excl_btw)) : null,
       grondslag: invoer.grondslag ?? 'vast',
+      eenheid: invoer.eenheid?.trim() || null,
+      eenheidsprijs: invoer.eenheidsprijs != null ? num(invoer.eenheidsprijs) : null,
+      hoeveelheid_werkelijk: invoer.hoeveelheid_werkelijk != null ? num(invoer.hoeveelheid_werkelijk) : null,
+      opslag_pct: invoer.opslag_pct != null ? num(invoer.opslag_pct) : null,
     })
     .select('id')
     .single()
@@ -534,10 +598,20 @@ export async function updateStelpost(
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Stelpost niet gevonden.' }
   if (rij.soort !== 'stelpost') return { ok: false, error: 'Dit onderdeel is geen stelpost.' }
-  if (rij.bron !== 'handmatig') {
-    return { ok: false, error: 'Deze stelpost komt uit de offerte; wijzig hem in de calculatie.' }
-  }
   await assertDossierBewerkbaar(rij.dossier_id)
+
+  // Wat er in de offerte is afgesproken hoort in de calculatie thuis, niet hier: omschrijving,
+  // bedrag en de vraag of de stelpost in de aanneemsom zit zijn bij een geseede stelpost
+  // vergrendeld. Hóe hij afrekent is daarentegen een uitvoeringsbeslissing die pas tijdens het werk
+  // valt — de grondslag en zijn parameters mogen daarom op élke stelpost gezet worden. Zonder dat
+  // onderscheid zou een stelpost uit de offerte nooit op eenheidsprijzen kunnen afrekenen.
+  if (rij.bron !== 'handmatig') {
+    const uitOfferte: (keyof StelpostInvoer)[] = ['omschrijving', 'bedrag_excl_btw', 'in_aanneemsom']
+    const geblokkeerd = uitOfferte.filter(v => patch[v] !== undefined)
+    if (geblokkeerd.length > 0) {
+      return { ok: false, error: 'Omschrijving, bedrag en aanneemsom-keuze van deze stelpost komen uit de offerte; wijzig ze in de calculatie.' }
+    }
+  }
 
   const velden: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch.omschrijving !== undefined) {
@@ -549,6 +623,16 @@ export async function updateStelpost(
     velden.begroot_excl_btw = patch.begroot_excl_btw != null ? rond(num(patch.begroot_excl_btw)) : null
   }
   if (patch.grondslag !== undefined) velden.grondslag = patch.grondslag
+  if (patch.eenheid !== undefined) velden.eenheid = patch.eenheid?.trim() || null
+  if (patch.eenheidsprijs !== undefined) {
+    velden.eenheidsprijs = patch.eenheidsprijs != null ? num(patch.eenheidsprijs) : null
+  }
+  if (patch.hoeveelheid_werkelijk !== undefined) {
+    velden.hoeveelheid_werkelijk = patch.hoeveelheid_werkelijk != null ? num(patch.hoeveelheid_werkelijk) : null
+  }
+  if (patch.opslag_pct !== undefined) {
+    velden.opslag_pct = patch.opslag_pct != null ? num(patch.opslag_pct) : null
+  }
 
   // Bedrag en carve-out-vlag samen valideren: beide bepalen of de som nog binnen de aanneemsom past.
   const nieuwBedrag = patch.bedrag_excl_btw !== undefined ? rond(num(patch.bedrag_excl_btw)) : num(rij.bedrag_excl_btw)
@@ -691,9 +775,11 @@ export async function zetStelpostBewakingscode(
 }
 
 /**
- * Verrekent een stelpost: het verschil tussen het werkelijk geboekte werk (verkoopwaarde op de
- * eigen bewakingscode) en het stelpostbedrag wordt één meer- of minderwerkregel, gekoppeld aan
- * deze stelpost.
+ * Verrekent een stelpost: het verschil tussen het werkelijke bedrag en het stelpostbedrag wordt
+ * één meer- of minderwerkregel, gekoppeld aan deze stelpost. Wat "werkelijk" is, hangt aan de
+ * grondslag — de verkoopwaarde op de eigen bewakingscode, of eenheidsprijs maal werkelijke
+ * hoeveelheid. Zie `werkelijkBedrag`, dat dezelfde regel toepast als het overzicht: wat de
+ * gebruiker als saldo ziet, is exact wat hier geboekt wordt.
  *
  * Waarom zo, en niet door het stelpostbedrag zelf te wijzigen:
  *   • het stelpostbedrag blijft de contractuele waarde die in de aanneemsom is meegenomen;
@@ -720,11 +806,14 @@ export async function verrekenStelpost(
   if (rij.soort !== 'stelpost') return { ok: false, error: 'Alleen een stelpost is te verrekenen.' }
   await assertDossierBewerkbaar(rij.dossier_id)
 
-  if (rij.grondslag !== 'geboekte_kosten') {
-    return { ok: false, error: 'Deze stelpost rekent op een vast bedrag af; er is niets te verrekenen. Zet de grondslag op geboekte kosten.' }
+  if (rij.grondslag !== 'geboekte_kosten' && rij.grondslag !== 'eenheidsprijzen') {
+    return { ok: false, error: 'Deze stelpost rekent op een vast bedrag af; er is niets te verrekenen. Zet de grondslag op geboekte kosten of eenheidsprijzen.' }
   }
-  if (!rij.bewakingscode) {
+  if (rij.grondslag === 'geboekte_kosten' && !rij.bewakingscode) {
     return { ok: false, error: 'Deze stelpost heeft nog geen bewakingscode, dus er zijn geen geboekte kosten aan toe te rekenen.' }
+  }
+  if (rij.grondslag === 'eenheidsprijzen' && (rij.eenheidsprijs == null || rij.hoeveelheid_werkelijk == null)) {
+    return { ok: false, error: 'Vul eerst de eenheidsprijs en de werkelijk uitgevoerde hoeveelheid in.' }
   }
 
   const { data: bestaand } = await supabase
@@ -734,14 +823,24 @@ export async function verrekenStelpost(
     .maybeSingle()
   if (bestaand) return { ok: false, error: 'Deze stelpost is al verrekend.' }
 
-  // Werkelijke verkoopwaarde op de eigen bewakingscode.
-  const regie = await getServicedeskRegie(rij.dossier_id).catch(() => null)
-  if (!regie?.beschikbaar) {
-    return { ok: false, error: 'De geboekte uren en kosten zijn nu niet op te halen uit Bouw7. Probeer het later opnieuw.' }
+  // Het werkelijke bedrag. Bij geboekte kosten komt dat live uit Bouw7; bij eenheidsprijzen uit de
+  // stelpost zelf, en dan is de Bouw7-call niet nodig (en mag een Bouw7-storing niet blokkeren).
+  const verkoopPerCode = new Map<string, number>()
+  if (rij.grondslag === 'geboekte_kosten') {
+    const regie = await getServicedeskRegie(rij.dossier_id, { opslagPerCode: opslagPerCode([rij]) })
+      .catch(() => null)
+    if (!regie?.beschikbaar) {
+      return { ok: false, error: 'De geboekte uren en kosten zijn nu niet op te halen uit Bouw7. Probeer het later opnieuw.' }
+    }
+    for (const r of regie.regels ?? []) {
+      if (r.uitgesloten || !r.bewakingscode) continue
+      verkoopPerCode.set(r.bewakingscode, (verkoopPerCode.get(r.bewakingscode) ?? 0) + (r.verkoopBedrag || 0))
+    }
   }
-  const werkelijk = rond((regie.regels ?? [])
-    .filter(r => !r.uitgesloten && r.bewakingscode === rij.bewakingscode)
-    .reduce((s, r) => s + (r.verkoopBedrag || 0), 0))
+  const werkelijk = werkelijkBedrag(rij, code => verkoopPerCode.get(code) ?? 0)
+  if (werkelijk == null) {
+    return { ok: false, error: 'Het werkelijke bedrag van deze stelpost is niet te bepalen.' }
+  }
 
   const stelpostBedrag = rond(num(rij.bedrag_excl_btw))
   const saldo = rond(werkelijk - stelpostBedrag)

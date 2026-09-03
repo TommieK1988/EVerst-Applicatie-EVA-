@@ -3,6 +3,9 @@ import { getDossierVerkoop, type VerkoopTermijnStatus } from '@/lib/dossiers/act
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtPct, fmtDatum, TH, TD, LegeStaat } from './tab-ui'
+import TermijnenBlok from './TermijnenBlok'
+import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
+import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -60,7 +63,11 @@ function groepeerBtw(rijen: { pct: number | null; excl: number; btw: number }[])
 }
 
 async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
-  const data = await getDossierVerkoop(dossierId)
+  const [data, schemaAfwijking] = await Promise.all([
+    getDossierVerkoop(dossierId),
+    // Faalt dit (geen offerte, geen betalingsconditie), dan blijft de banner gewoon weg.
+    getTermijnAfwijking(dossierId).catch(() => null),
+  ])
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
 
@@ -262,62 +269,39 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
             </div>
           )}
 
+          {/* Wijkt wat er in Bouw7 staat af van de betalingsconditie op de offerte, dan is dat
+              een echte fout in wording: je factureert dan een ander schema dan de klant heeft
+              geaccepteerd. Daarom zichtbaar in plaats van stil. */}
+          {schemaAfwijking?.afwijking && (
+            <div style={{
+              display: 'flex', gap: 8, padding: '8px 12px', fontSize: 12.5,
+              borderBottom: '1px solid var(--neutral-100)',
+              color: 'var(--orange-700, #c2410c)',
+            }}>
+              <span>⚠</span>
+              <span>
+                {schemaAfwijking.afwijking}
+                {schemaAfwijking.conditieNaam ? ` (offerte: ${schemaAfwijking.conditieNaam})` : ''}
+                {' '}Controleer wat er met de klant is afgesproken voordat je een termijn klaarzet.
+              </span>
+            </div>
+          )}
+
           {!data.termijnenBeschikbaar ? (
             <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
-          ) : data.termijnen.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Geen termijnen ingesteld.</div>
           ) : (
-            <table style={{ ...tabel, minWidth: 860 }}>
-              {/* Automatische kolombreedtes: de bedragkolommen krijgen precies de ruimte die hun
-                  inhoud nodig heeft (nooit afgekapt), de omschrijving slokt de rest op en breekt af. */}
-              <thead>
-                <tr>
-                  <TH>#</TH>
-                  <TH breedte="35%">Omschrijving</TH>
-                  <TH right>%</TH>
-                  <TH right>Excl. BTW</TH>
-                  <TH right>BTW%</TH>
-                  <TH right>BTW</TH>
-                  <TH right>Incl. BTW</TH>
-                  <TH>Factureerbaar</TH>
-                  <TH>Status</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {data.termijnen.map((tm) => (
-                  <tr key={tm.bouw7TermId}>
-                    <TD>{tm.nummer}</TD>
-                    <TD wrap>{tm.omschrijving ?? '—'}</TD>
-                    <TD right>{fmtPct(tm.percentage)}</TD>
-                    <TD right>{fmt(tm.bedrag)}</TD>
-                    <TD right kleur="var(--neutral-500)">{fmtPct(tm.btwPercentage)}</TD>
-                    <TD right>{tm.btwBedrag > 0 ? fmt(tm.btwBedrag) : '—'}</TD>
-                    <TD right vet>{fmt(tm.bedragIncl)}</TD>
-                    <TD>{fmtDatum(tm.invoiceableAt)}</TD>
-                    <TD kleur={TERMIJN_STATUS[tm.status].kleur}>{TERMIJN_STATUS[tm.status].label}</TD>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
-                  <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.termijnen.reduce((s, tm) => s + tm.bedrag, 0))}
-                  </td>
-                  <td style={{ padding: '6px 12px' }} />
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.termijnen.reduce((s, tm) => s + tm.btwBedrag, 0))}
-                  </td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.termijnen.reduce((s, tm) => s + tm.bedragIncl, 0))}
-                  </td>
-                  <td colSpan={2} style={{ padding: '6px 12px' }} />
-                </tr>
-              </tfoot>
-            </table>
+            <TermijnenBlok
+              dossierId={dossierId}
+              termijnen={data.termijnen}
+              offerteTermijnen={schemaAfwijking?.offerte.length ?? 0}
+            />
           )}
         </CardBody>
       </Card>
+
+      {/* Regiewerk. Op een opdracht is dat de uitzondering, dus het blok verschijnt alleen als er
+          daadwerkelijk uren of kosten op het dossier staan. */}
+      <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg />
 
       {/* Meerwerk in de termijnstaat (EVA-weergave; nog niet naar Bouw7 geschreven) */}
       {goedgekeurdeRegels.length > 0 && (
