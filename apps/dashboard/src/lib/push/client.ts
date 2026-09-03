@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isMobielApparaat } from '@/lib/mobiel-apparaat'
 
 /**
  * Pushmeldingen in de browser.
@@ -77,22 +78,13 @@ export function isIOS(): boolean {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent)
 }
 
-/**
- * Zit dit apparaat in de mobiele omgeving? Zelfde maatstaf als `MobileRedirect`
- * (viewport < 768px), en bewust niet de user-agent: Safari meldt zich in een
- * geïnstalleerde web-app op de iPhone als "Macintosh". Op de user-agent afgaan
- * betekent dat de pushmelding een desktop-pad meekrijgt en je na het aantikken
- * op het startscherm belandt in plaats van bij het dossier.
- */
-function isMobielApparaat(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia?.('(max-width: 767px)').matches ?? false
-}
-
 async function bewaarBijEva(abonnement: PushSubscription): Promise<boolean> {
   const antwoord = await fetch('/api/push/aanmelden', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    // Apparaatsoort, niet vensterbreedte: dit abonnement blijft maanden staan en
+    // bepaalt of een melding naar `/m` of naar de platformweergave wijst. Een
+    // iPad in liggende stand is nog steeds een mobiel apparaat.
     body: JSON.stringify({ ...abonnement.toJSON(), mobiel: isMobielApparaat() }),
   })
   return antwoord.ok
