@@ -358,7 +358,9 @@ async function bouwBouw7MeerwerkBody(regel: MeerwerkRegel): Promise<Record<strin
     cost: String(verkoop),
     budgetAmount: String(begroot),
     date: (regel.created_at ? String(regel.created_at) : new Date().toISOString()).slice(0, 10),
-    note: regel.factuurreferentie ?? '',
+    // Bouw7 valideert `note` als NotBlank (leeg/ontbrekend => 400). Zonder factuurreferentie
+    // vullen we daarom de omschrijving in.
+    note: regel.factuurreferentie?.trim() || regel.omschrijving?.trim() || 'Meerwerk',
     status: EVA_STATUS_NAAR_BOUW7[regel.status] ?? 0,
     isProvisional: !!regel.is_stelpost,
   }
