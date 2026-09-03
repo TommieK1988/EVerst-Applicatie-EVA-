@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-03','verbeterd','Mobiel','Acties afvinken en starten vanuit het dossier',
+   'De acties in een dossier waren op je telefoon alleen een lijstje om naar te kijken: je kon ze niet openen, niet starten en niet afvinken. Dat kan nu wel. Tik op een actie voor de omschrijving, vink hem af zodra hij klaar is, of geef aan dat je ermee bezig bent. Hangt er een formulier, kwaliteitsronde, opname of toolbox aan, dan staat de startknop er nu ook — je hoeft dus niet meer eerst terug naar Mijn taken. Voor collega''s met alleen de app bleef een vinkje bovendien niet staan; dat is ook opgelost.');
