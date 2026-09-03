@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Switch } from '@/components/ui'
+import { InklapbareCard, Switch } from '@/components/ui'
 import { getDossierToggles, setDossierToggle, type DossierToggle } from '@/lib/dossiers/actions'
 import { useDossierReadOnly } from './DossierReadOnlyContext'
 
@@ -12,7 +12,11 @@ import { useDossierReadOnly } from './DossierReadOnlyContext'
  * de stand opgeslagen en worden trigger-evaluaties uitgevoerd (via setDossierToggle);
  * een refresh toont eventueel automatisch geactiveerde actielijsten.
  */
-export default function DossierTogglesPaneel({ dossierId }: { dossierId: string }) {
+export default function DossierTogglesPaneel({ dossierId, hoogte }: {
+  dossierId: string
+  /** Ingeklapte hoogte; meegegeven door de kaartengrid zodat alle blokken gelijk staan. */
+  hoogte?: number
+}) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [toggles, setToggles] = useState<DossierToggle[] | null>(null)
@@ -39,9 +43,7 @@ export default function DossierTogglesPaneel({ dossierId }: { dossierId: string 
   }
 
   return (
-    <Card>
-      <CardHeader>Toggles</CardHeader>
-      <CardBody>
+    <InklapbareCard titel="Toggles" hoogte={hoogte}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {toggles.map(t => (
             <label key={t.definitie_id} style={{
@@ -57,7 +59,6 @@ export default function DossierTogglesPaneel({ dossierId }: { dossierId: string 
             </label>
           ))}
         </div>
-      </CardBody>
-    </Card>
+    </InklapbareCard>
   )
 }

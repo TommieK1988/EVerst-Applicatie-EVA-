@@ -189,6 +189,19 @@ export async function buildDocumentContext(
   const startdatum = dossierRow?.verwacht_startdatum ?? null
   const einddatum = dossierRow?.verwacht_einddatum ?? null
 
+  /* Voorlopige planning: de indicatieve periode die vóór de detailplanning met de
+     opdrachtgever wordt afgesproken (dossiers.voorlopige_start/-eind, handmatig in EVA).
+     Bewust naast startdatum/einddatum en niet als fallback daarvan: die twee komen uit
+     Bouw7 en staan al in bestaande opdrachtbevestigingen — er stilzwijgend iets anders
+     in laten vallen verandert documenten zonder dat iemand het merkt. */
+  const voorlopigStart = dossierRow?.voorlopige_start ?? null
+  const voorlopigEind = dossierRow?.voorlopige_eind ?? null
+  const voorlopigePeriode =
+    voorlopigStart && voorlopigEind ? `${datumNL(voorlopigStart)} t/m ${datumNL(voorlopigEind)}`
+    : voorlopigStart                ? `vanaf ${datumNL(voorlopigStart)}`
+    : voorlopigEind                 ? `tot ${datumNL(voorlopigEind)}`
+    : ''
+
   const ctx: DocumentRenderContext = {
     bedrijf,
     dossier,
@@ -222,6 +235,12 @@ export async function buildDocumentContext(
       startdatum_iso: datumISO(startdatum),
       einddatum: datumNL(einddatum),
       einddatum_iso: datumISO(einddatum),
+      heeft_voorlopig: !!(voorlopigStart || voorlopigEind),
+      voorlopige_startdatum: datumNL(voorlopigStart),
+      voorlopige_startdatum_iso: datumISO(voorlopigStart),
+      voorlopige_einddatum: datumNL(voorlopigEind),
+      voorlopige_einddatum_iso: datumISO(voorlopigEind),
+      voorlopige_periode: voorlopigePeriode,
       werkzaamheden: genormaliseerd.werkzaamheden ?? '',
     },
     oplevering: {

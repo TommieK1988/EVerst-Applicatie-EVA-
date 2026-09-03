@@ -35,6 +35,7 @@ export * from './chart'
 export * from './werkbon-kaart'
 // Overlays & containers
 export * from './card'
+export * from './inklapbare-card'
 export * from './dialog'
 export * from './drawer'
 export * from './popover'

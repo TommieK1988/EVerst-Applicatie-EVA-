@@ -35,7 +35,7 @@ const ROL_VELDEN = 'voornaam, tussenvoegsel, achternaam, functie, email, o365_em
 
 const DOSSIER_SELECT = `
   id, dossiernummer, titel, referentie, opdracht_referentie, bouw7_filiaal, werkmaatschappij_id, klant_id,
-  vve_code, verwacht_startdatum, verwacht_einddatum,
+  vve_code, verwacht_startdatum, verwacht_einddatum, voorlopige_start, voorlopige_eind,
   werkadres_naam, werkadres_straat, werkadres_postcode, werkadres_stad,
   werkadres_telefoon, werkadres_email,
   calculator:medewerkers!calculator_id ( ${ROL_VELDEN} ),

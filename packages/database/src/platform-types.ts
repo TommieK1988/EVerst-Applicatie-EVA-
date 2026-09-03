@@ -576,6 +576,13 @@ export type Dossier = {
   opdrachtdatum: string | null
   /** Moment dat de opdracht-substatus financieel_gereed werd. Gezet door dezelfde DB-trigger. */
   financieel_gereed_op: string | null
+  /**
+   * Voorlopige (indicatieve) start van de uitvoering — handmatig, EVA-eigen. Bewust niet
+   * `verwacht_startdatum`: die wordt bij elke Bouw7-sync overschreven.
+   */
+  voorlopige_start: string | null
+  /** Voorlopig (indicatief) einde van de uitvoering. Zie `voorlopige_start`. */
+  voorlopige_eind: string | null
   /** Werkmaatschappij (bedrijfsgegevens.type=werkmaatschappij); zie migratie 20260706_dossier_werkmaatschappij. */
   werkmaatschappij_id: string | null
   created_at: string

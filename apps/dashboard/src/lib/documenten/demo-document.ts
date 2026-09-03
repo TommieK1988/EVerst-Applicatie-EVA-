@@ -23,6 +23,8 @@ export type DemoRenderContext = Record<string, unknown>
 const DEMO_START = '2026-09-07'
 const DEMO_EIND = '2026-10-02'
 const DEMO_OPLEVER = '2026-10-02'
+const DEMO_VOORLOPIG_START = '2026-08-24'
+const DEMO_VOORLOPIG_EIND = '2026-09-18'
 
 /** Voorbeeld-feedbacklink voor de preview. */
 const DEMO_FEEDBACK_URL = 'https://eva.everts.nl/p/feedback/VOORBEELD'
@@ -145,6 +147,12 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       startdatum_iso: datumISO(DEMO_START),
       einddatum: datumNL(DEMO_EIND),
       einddatum_iso: datumISO(DEMO_EIND),
+      heeft_voorlopig: true,
+      voorlopige_startdatum: datumNL(DEMO_VOORLOPIG_START),
+      voorlopige_startdatum_iso: datumISO(DEMO_VOORLOPIG_START),
+      voorlopige_einddatum: datumNL(DEMO_VOORLOPIG_EIND),
+      voorlopige_einddatum_iso: datumISO(DEMO_VOORLOPIG_EIND),
+      voorlopige_periode: `${datumNL(DEMO_VOORLOPIG_START)} t/m ${datumNL(DEMO_VOORLOPIG_EIND)}`,
       werkzaamheden: invoer.werkzaamheden || 'Schilderwerk buitenzijde, houtrotherstel en vervangen van kitvoegen.',
     },
     oplevering: {

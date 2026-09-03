@@ -736,6 +736,12 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   .print-break { page-break-before: always; }
   aside, nav, header { display: none !important; }
   main { padding: 0 !important; }
+
+  /* Inklapbare kaarten (InklapbareCard) drukken altijd volledig af — op papier is
+     een "Meer tonen"-knop nutteloos en zou de afgekapte inhoud gewoon wegvallen. */
+  [data-inklapbaar] { height: auto !important; }
+  [data-inklapbaar] > button { display: none !important; }
+  [data-inklapbaar] > div { overflow: visible !important; }
 }
 
 /* ── Data-tabel (wagenpark / houtrotherstel) ──────────────────────────── */

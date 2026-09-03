@@ -98,6 +98,36 @@ export function bouwDatumRegels(datums: DossierDatums): DossierDatumRegel[] {
   })
 }
 
+/**
+ * ISO-waarde → '14 juli 2026'.
+ *
+ * `timeZone` expliciet: de procesdatums zijn deels timestamptz (opdrachtdatum,
+ * verzonden_op, planning-blokken). Zonder dit valt een mutatie van 23:00 NL op de
+ * vorige dag. Een kale date-kolom ('YYYY-MM-DD') wordt bewust als lokale middag
+ * geparsed: `new Date('2026-07-01')` is UTC-middernacht, en dat kan in een westelijke
+ * zone op 30 juni uitkomen.
+ */
+export function formatDatumNL(iso: string): string {
+  const kaal = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+  const d = kaal ? new Date(`${iso}T12:00:00`) : new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('nl-NL', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Amsterdam',
+  })
+}
+
+/**
+ * DatePicker-waarde → 'YYYY-MM-DD' voor een date-kolom, in lokale tijd.
+ * Bewust niet `toISOString().slice(0,10)`: die rekent naar UTC, waardoor een in
+ * de zomertijd gekozen 1 juli (00:00 CEST = 30 juni 22:00 UTC) als 30 juni opslaat.
+ */
+export function datumNaarISO(d: Date | undefined | null): string {
+  if (!d) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 /** '+12 dagen' / '−3 dagen' / 'zelfde dag'. Echte min-tekens (−), geen hyphen. */
 export function formatDelta(delta: number | null): string | null {
   if (delta == null) return null

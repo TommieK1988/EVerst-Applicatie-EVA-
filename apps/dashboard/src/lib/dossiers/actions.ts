@@ -3026,6 +3026,8 @@ export async function updateDossierInfo(
     werkmaatschappij_id?: string | null
     aanvraagdatum?: string | null
     deadline?: string | null
+    voorlopige_start?: string | null
+    voorlopige_eind?: string | null
     vve_code?: string | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {

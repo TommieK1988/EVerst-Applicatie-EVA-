@@ -182,10 +182,14 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   {
     groep: 'Planning',
     items: [
-      { v: '{planning.startdatum}',    label: 'Startdatum (14 juli 2026)' },
-      { v: '{planning.einddatum}',     label: 'Einddatum' },
+      { v: '{planning.startdatum}',    label: 'Startdatum uit Bouw7 (14 juli 2026)' },
+      { v: '{planning.einddatum}',     label: 'Einddatum uit Bouw7' },
+      { v: '{planning.voorlopige_startdatum}', label: 'Voorlopige startdatum (handmatig op het dossier)' },
+      { v: '{planning.voorlopige_einddatum}',  label: 'Voorlopige einddatum' },
+      { v: '{planning.voorlopige_periode}',    label: 'Voorlopige periode ("14 juli 2026 t/m 8 augustus 2026")' },
       { v: '{planning.werkzaamheden}', label: 'Werkzaamheden (invoerveld "werkzaamheden")' },
       { v: '{#planning.heeft}…{/planning.heeft}', label: 'Alleen tonen als er datums bekend zijn' },
+      { v: '{#planning.heeft_voorlopig}…{/planning.heeft_voorlopig}', label: 'Alleen tonen als er een voorlopige planning is' },
     ],
   },
   {

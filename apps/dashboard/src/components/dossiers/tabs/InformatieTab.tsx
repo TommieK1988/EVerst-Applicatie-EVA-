@@ -15,8 +15,8 @@ import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import { kiesAanneemsom } from '@/lib/dossiers/aanneemsom'
 import {
-  bouwDatumRegels, formatDelta, LEGE_DOSSIER_DATUMS,
-  type DossierDatumRegel, type DossierDatums,
+  bouwDatumRegels, nlKalenderdatum, LEGE_DOSSIER_DATUMS,
+  type DossierDatums,
 } from '@/lib/dossiers/datum-regels'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
@@ -32,6 +32,7 @@ import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import { PortaalChatBlok } from './PortaalChatBlok'
+import DatumsBlok, { type DatumVeld } from './DatumsBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import FinancieelGereedDialog from '../FinancieelGereedDialog'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
@@ -46,11 +47,10 @@ import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
 import {
-  Button, Card, CardHeader, CardBody,
+  Button, Card, CardHeader, CardBody, InklapbareCard,
   Input,
   FormField, FormRow, FormSection,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-  DatePicker,
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverItem,
   Separator,
   AlertDialog, AlertDialogContent,
@@ -71,24 +71,15 @@ const statusKleur = (s: string) =>
 
 const fmtBedrag = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
-// timeZone expliciet: de procesdatums zijn deels timestamptz (opdrachtdatum,
-// verzonden_op, planning-blokken). Zonder dit valt een mutatie van 23:00 NL op de vorige dag.
-const fmtDatum = (iso: string) =>
-  new Date(iso).toLocaleDateString('nl-NL', {
-    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Amsterdam',
-  })
 
 /**
- * DatePicker-waarde → 'YYYY-MM-DD' voor een date-kolom, in lokale tijd.
- * Bewust niet `toISOString().slice(0,10)`: die rekent naar UTC, waardoor een in
- * de zomertijd gekozen 1 juli (00:00 CEST = 30 juni 22:00 UTC) als 30 juni opslaat.
+ * Ingeklapte hoogte van elk blok in de kaartengrid.
+ *
+ * Vaste hoogte in plaats van de stretch die de grid vanzelf doet: anders is elke rij
+ * zo hoog als het langste blok erin en staat dezelfde informatie per dossier op een
+ * andere plek. Wat niet past zit achter "Meer tonen" (zie InklapbareCard).
  */
-const datumNaarISO = (d: Date | undefined | null): string => {
-  if (!d) return ''
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mm}-${dd}`
-}
+const BLOK_HOOGTE = 320
 
 /* ─── form state ──────────────────────────────────────────────────── */
 type FormValues = {
@@ -115,6 +106,8 @@ type FormValues = {
   werkmaatschappij_id: string
   aanvraagdatum: string
   deadline: string
+  voorlopige_start: string
+  voorlopige_eind: string
   vve_code: string
 }
 
@@ -161,46 +154,6 @@ function InfoVeld({
             )
             : waarde
           : '—'}
-      </div>
-    </div>
-  )
-}
-
-/* ─── datumlijst ──────────────────────────────────────────────────────
-   De acht procesdatums onder elkaar in vaste procesvolgorde, met per regel
-   het aantal dagen sinds de vorige gevulde datum. Lege datums blijven als
-   streepje staan: dat een opdrachtdatum ontbreekt is zelf ook informatie. */
-function DatumLijst({ regels, deadlineUrgent }: {
-  regels: DossierDatumRegel[]
-  deadlineUrgent: boolean
-}) {
-  return (
-    <div className="mt-4 border-t border-neutral-100 pt-3">
-      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
-        Datums
-      </div>
-      <div className="divide-y divide-neutral-100">
-        {regels.map(regel => {
-          const heeftWaarde = regel.waarde != null
-          const delta       = formatDelta(regel.delta)
-          const urgent      = regel.sleutel === 'deadline' && deadlineUrgent && heeftWaarde
-          return (
-            <div key={regel.sleutel} className="flex items-baseline justify-between gap-3 py-[5px]">
-              <span className="text-[11px] text-neutral-500">{regel.label}</span>
-              <span className="flex items-baseline gap-2 text-right">
-                {delta && (
-                  <span className="text-[10px] tabular-nums text-neutral-400">{delta}</span>
-                )}
-                <span className={cn(
-                  'text-[13px] font-medium tabular-nums',
-                  !heeftWaarde ? 'text-neutral-400' : urgent ? 'text-warning-700' : 'text-neutral-800',
-                )}>
-                  {heeftWaarde ? fmtDatum(regel.waarde!) : '—'}
-                </span>
-              </span>
-            </div>
-          )
-        })}
       </div>
     </div>
   )
@@ -1031,8 +984,16 @@ export function InformatieTab({
     // Handmatige keuze wint; anders afgeleid uit dossiernummer/bouw7_filiaal.
     werkmaatschappij_id:     (dossier as any).werkmaatschappij_id
                                ?? leidWerkmaatschappijAf(dossier.dossiernummer, (dossier as any).bouw7_filiaal, werkmaatschappijen),
-    aanvraagdatum:           (dossier as any).aanvraagdatum ?? '',
-    deadline:                (dossier as any).deadline      ?? '',
+    // Voorvullen met de afgeleide waarde (bouw7_aanmaakdatum → created_at): zonder dit
+    // toont de lijst wél een aanvraagdatum en staat de picker leeg, wat leest als
+    // "onbekend". Let op: bij Opslaan wordt die afgeleide datum daarmee vastgelegd in
+    // dossiers.aanvraagdatum en volgt hij een latere correctie van bouw7_aanmaakdatum niet meer.
+    aanvraagdatum:           (dossier as any).aanvraagdatum
+                               ?? (datums.aanvraagdatum ? nlKalenderdatum(datums.aanvraagdatum) : null)
+                               ?? '',
+    deadline:                (dossier as any).deadline         ?? '',
+    voorlopige_start:        (dossier as any).voorlopige_start ?? '',
+    voorlopige_eind:         (dossier as any).voorlopige_eind  ?? '',
     vve_code:                (dossier as any).vve_code      ?? '',
   })
   const [opgeslagen, setOpgeslagen] = React.useState<FormValues>(form)
@@ -1075,6 +1036,9 @@ export function InformatieTab({
   const set = (key: keyof FormValues) => (v: string) => setForm(p => ({ ...p, [key]: v }))
 
   function opslaan() {
+    // Vóór setEditMode(false): anders klapt de bewerkmodus dicht met een niet-opgeslagen
+    // fout en ziet de gebruiker alleen een toast bij een scherm dat er correct uitziet.
+    if (periodeFout) { toast.error(periodeFout); return }
     setOpgeslagen(form)
     setEditMode(false)
     // Fase wegschrijven — altijd langs `voerSubstatusUit`, dus mét terugschrijven naar Bouw7. Deze
@@ -1123,6 +1087,8 @@ export function InformatieTab({
       // Aanvraagdatum, deadline en VvE-code zijn EVA-eigen velden → altijd bewerkbaar.
       aanvraagdatum:        form.aanvraagdatum        || null,
       deadline:             form.deadline             || null,
+      voorlopige_start:     form.voorlopige_start     || null,
+      voorlopige_eind:      form.voorlopige_eind      || null,
       vve_code:             form.vve_code             || null,
       ...(bouw7Vergrendeld ? {} : {
         categorie:            form.categorie            || null,
@@ -1144,6 +1110,14 @@ export function InformatieTab({
     aanvraagdatum: form.aanvraagdatum || datums.aanvraagdatum,
     deadline:      form.deadline      || null,
   }), [datums, form.aanvraagdatum, form.deadline])
+
+  /* Stringvergelijking op 'YYYY-MM-DD' is lexicografisch correct — geen Date nodig.
+     De DB-constraint dossiers_voorlopige_periode_chk is het vangnet daaronder, maar die
+     levert een rauwe PostgREST-melding; dit is de leesbare variant. */
+  const periodeFout = form.voorlopige_start && form.voorlopige_eind
+    && form.voorlopige_eind < form.voorlopige_start
+    ? 'De voorlopige einddatum ligt vóór de startdatum.'
+    : null
 
   // De deadline is het moment waarop de offerte verzonden had moeten zijn; zodra
   // die eruit is, valt er niets meer te halen en kleurt hij dus niet meer.
@@ -1508,7 +1482,14 @@ export function InformatieTab({
       )}
 
       {/* ── Kaarten grid ── */}
-      <div className="grid grid-cols-2 gap-3.5">
+      {/* Elke rij is precies BLOK_HOOGTE hoog zolang alles ingeklapt is, en groeit alleen
+          mee met de kaart die de gebruiker openzet — de buurcel blijft dan staan. Zonder
+          `auto-rows` stretcht de grid elke cel naar de hoogste kaart in de rij en staat
+          dezelfde informatie per dossier op een andere plek. */}
+      <div
+        className="grid grid-cols-2 gap-3.5 auto-rows-[minmax(var(--blok-h),auto)]"
+        style={{ '--blok-h': `${BLOK_HOOGTE}px` } as React.CSSProperties}
+      >
 
         {/* Servicedesk-paneel: mandaat, facturatiemethode, doorlooptijd, offerte-acties */}
         {sectie === 'servicedesk' && (
@@ -1523,9 +1504,7 @@ export function InformatieTab({
         )}
 
         {/* Projectinformatie */}
-        <Card>
-          <CardHeader>Projectinformatie</CardHeader>
-          <CardBody>
+        <InklapbareCard titel="Projectinformatie" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <InfoVeld label="Dossiernummer"  waarde={dossier.dossiernummer} mono />
               <InfoVeld
@@ -1545,8 +1524,6 @@ export function InformatieTab({
                 <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
               )}
             </div>
-
-            <DatumLijst regels={datumRegels} deadlineUrgent={deadlineUrgent} />
 
             {editMode && (
               <div className="mt-4">
@@ -1599,42 +1576,21 @@ export function InformatieTab({
                     )}
                   </FormRow>
                 </FormSection>
-
-                <FormSection title="Datums">
-                  <p className="mb-3 text-[11px] leading-snug text-neutral-500">
-                    De overige datums houdt EVA zelf bij: de offertedatum volgt uit het verzenden
-                    van de offerte, start- en einddatum uit de planning, de opleverdatum uit de
-                    oplevering, en opdracht- en financieel-gereed-datum uit de fasewissel.
-                  </p>
-                  <FormRow cols="2">
-                    <FormField upper label="Aanvraagdatum">
-                      <DatePicker
-                        value={form.aanvraagdatum ? new Date(form.aanvraagdatum) : undefined}
-                        onChange={d => set('aanvraagdatum')(datumNaarISO(d))}
-                      />
-                    </FormField>
-                    <FormField upper label="Deadline">
-                      <DatePicker
-                        value={form.deadline ? new Date(form.deadline) : undefined}
-                        onChange={d => set('deadline')(datumNaarISO(d))}
-                      />
-                    </FormField>
-                  </FormRow>
-                </FormSection>
               </div>
             )}
-          </CardBody>
-        </Card>
+        </InklapbareCard>
 
-        {/* Rechterkolom: Taken + Notities. De cel stretcht naar de hoogte van Projectinformatie;
-            het Notities-blok vult met flex-1 de resterende ruimte (interne scroll). */}
-        <div className="flex flex-col gap-3.5">
+        {/* Rechterkolom: Taken + Notities. Beslaat twee rijen (Projectinformatie + Datums);
+            het Notities-blok vult met flex-1 de resterende ruimte (interne scroll). Bewust
+            géén InklapbareCard eromheen: dat blok scrollt al zelf, en twee clip-lagen over
+            elkaar geven twee scrollbakken. */}
+        <div className="row-span-2 flex h-full flex-col gap-3.5">
           <TakenBlok dossierId={dossier.id} dossierTitel={dossier.titel} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
           <DossierNotitiesBlok
             dossierId={dossier.id}
             notities={notities}
             currentMedewerkerId={currentMedewerkerId}
-            className="min-h-[220px] flex-1"
+            className="min-h-0 flex-1"
           />
           {/* Klantchat direct onder de interne notities. Bewust in dezelfde kolom:
               wie hier iets typt moet in één oogopslag zien welk vak intern is en
@@ -1643,12 +1599,27 @@ export function InformatieTab({
           <PortaalChatBlok dossierId={dossier.id} />
         </div>
 
+        {/* Datums — eigen blok, direct onder Projectinformatie. Zat eerder als lijstje
+            onderin Projectinformatie, tussen velden waar het niets mee te maken heeft. */}
+        <DatumsBlok
+          regels={datumRegels}
+          deadlineUrgent={deadlineUrgent}
+          hoogte={BLOK_HOOGTE}
+          editMode={editMode}
+          form={{
+            aanvraagdatum:    form.aanvraagdatum,
+            deadline:         form.deadline,
+            voorlopige_start: form.voorlopige_start,
+            voorlopige_eind:  form.voorlopige_eind,
+          }}
+          onSet={(veld: DatumVeld) => set(veld)}
+          periodeFout={periodeFout}
+        />
+
         {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): rollen worden bij opslaan
             direct naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider" (workPlanner),
             Controller → custom attribute "Eindverantwoordelijke offerte". */}
-        <Card>
-          <CardHeader>Rollen</CardHeader>
-          <CardBody>
+        <InklapbareCard titel="Rollen" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
             {editMode ? (
               <FormRow cols="2">
                 <FormField upper label="Projectleider">
@@ -1676,13 +1647,10 @@ export function InformatieTab({
                 <InfoVeld label="Controller"    waarde={dossier.controller_naam} />
               </div>
             )}
-          </CardBody>
-        </Card>
+        </InklapbareCard>
 
         {/* Werkadres — eigen blok, alle velden zichtbaar. */}
-        <Card>
-          <CardHeader>Werkadres</CardHeader>
-          <CardBody>
+        <InklapbareCard titel="Werkadres" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
             {/* Objectkoppeling (VvE/complex). Vult zichzelf; staat los van het formulier omdat
                 koppelen meteen wegschrijft en niet op "Opslaan" hoort te wachten. */}
             <div className="mb-4 border-b border-[var(--border)] pb-3">
@@ -1729,13 +1697,15 @@ export function InformatieTab({
                 <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
               </div>
             )}
-          </CardBody>
-        </Card>
+        </InklapbareCard>
 
         {/* Opdrachtgever */}
-        <Card>
-          <CardHeader>Opdrachtgever</CardHeader>
-          <CardBody className="flex flex-col gap-3.5">
+        <InklapbareCard
+          titel="Opdrachtgever"
+          hoogte={BLOK_HOOGTE}
+          altijdOpen={editMode}
+          bodyClassName="flex flex-col gap-3.5"
+        >
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               {relatie ? (
                 <>
@@ -1843,17 +1813,14 @@ export function InformatieTab({
                 )}
               </div>
             )}
-          </CardBody>
-        </Card>
+        </InklapbareCard>
 
         {/* Dossier-toggles */}
-        <DossierTogglesPaneel dossierId={dossier.id} />
+        <DossierTogglesPaneel dossierId={dossier.id} hoogte={BLOK_HOOGTE} />
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (
-        <Card>
-          <CardHeader>Financiële totalen</CardHeader>
-          <CardBody>
+        <InklapbareCard titel="Financiële totalen" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
             {/* Opbouw van de opdracht — alleen verkoopbedragen, van boven naar beneden optellend.
                 Klikken op stelposten/meerwerk/opties opent de specificatie in een venster. */}
             <div>
@@ -1999,8 +1966,7 @@ export function InformatieTab({
                 <InfoVeld label="Factuurreferentie" waarde={form.factuurreferentie || null} />
               </div>
             )}
-          </CardBody>
-        </Card>
+        </InklapbareCard>
         )}
 
         {/* Calculatie importeren (.c4y) — niet voor servicedesk, niet bij alleen-lezen */}
