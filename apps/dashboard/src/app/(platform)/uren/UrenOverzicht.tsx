@@ -311,7 +311,7 @@ export default function UrenOverzicht({
           />
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — alle geboekte uren van interne en externe medewerkers van {datum(data.van)} t/m {datum(data.tot)}.
-            Accorderen zelf gebeurt in Bouw7; hier zie je de stand.
+            Accorderen kan in Bouw7 of in EVA onder Uren goedkeuren; hier zie je de stand.
           </div>
         </div>
       )}

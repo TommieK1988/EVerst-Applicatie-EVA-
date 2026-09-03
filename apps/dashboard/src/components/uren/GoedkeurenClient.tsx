@@ -10,6 +10,8 @@ import {
   type TeWeek, type TeRegel,
 } from '@/lib/uren/goedkeuring'
 import { keurVerlofGoed, wijsVerlofAf, type VerlofAanvraag } from '@/lib/uren/verlof'
+import Bouw7UrenClient from './Bouw7UrenClient'
+import type { GebruikerLayout } from '@everts/database/platform-types'
 
 /**
  * Twee werklijsten naast elkaar: de weken waar ik teamleider van ben, en de urenregels op mijn
@@ -25,20 +27,24 @@ function datumKort(d: string) {
 }
 
 export default function GoedkeurenClient({
-  weken, regels, verlof, bedrijfsModus,
+  weken, regels, verlof, bedrijfsModus, layouts, userId,
 }: {
   weken: TeWeek[]
   regels: TeRegel[]
   verlof: VerlofAanvraag[]
   bedrijfsModus: 'eva' | 'bouw7'
+  layouts: GebruikerLayout[]
+  userId: string | null
 }) {
   const router = useRouter()
   const [, startT] = useTransition()
   const { vraagTekst } = useDialogen()
   const ververs = () => startT(() => router.refresh())
 
-  const [tab, setTab] = useState<'team' | 'projecten' | 'verlof'>(
-    weken.length ? 'team' : regels.length ? 'projecten' : verlof.length ? 'verlof' : 'team',
+  // Uit Bouw7 is de standaard zolang daar nog geaccordeerd wordt: dat is waar de uren nu staan.
+  const [tab, setTab] = useState<'team' | 'projecten' | 'verlof' | 'bouw7'>(
+    bedrijfsModus === 'bouw7' ? 'bouw7'
+    : weken.length ? 'team' : regels.length ? 'projecten' : verlof.length ? 'verlof' : 'team',
   )
   const [open, setOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Record<string, TeRegel[]>>({})
@@ -157,6 +163,7 @@ export default function GoedkeurenClient({
           ['team', `Mijn team (${weken.length})`],
           ['projecten', `Mijn projecten (${regels.length})`],
           ['verlof', `Verlof (${verlof.length})`],
+          ['bouw7', 'Uit Bouw7'],
         ] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             style={{
@@ -254,6 +261,15 @@ export default function GoedkeurenClient({
                 </div>
               </>
             )}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ── Uren die in Bouw7 zijn ingevoerd ────────────────────── */}
+      {tab === 'bouw7' && (
+        <Card>
+          <CardBody>
+            <Bouw7UrenClient layouts={layouts} userId={userId} />
           </CardBody>
         </Card>
       )}

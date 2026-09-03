@@ -27,6 +27,10 @@ const db = () => createAdminClient() as any
  *     EVA al -- de goedkeuring is fail-soft -- maar Bouw7 moet het uiteindelijk ook weten, anders
  *     staat de monteur daar nog als beschikbaar.
  *
+ *  4. Tussenstanden opruimen. Wordt een uurregel buiten EVA om in Bouw7 goedgekeurd, dan hoeft de
+ *     halve beoordeling die hier nog staat nergens meer voor te dienen. Zonder dit opruimen zou
+ *     een goedkeurder regels blijven zien die allang rond zijn.
+ *
  * Beveiliging: Authorization: Bearer <CRON_SECRET>.
  */
 async function handle(req: NextRequest): Promise<NextResponse> {
@@ -77,9 +81,33 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       else verlofMislukt++
     }
 
+    // Beoordelingen van uren die inmiddels in Bouw7 goedgekeurd zijn, kunnen weg. We vragen Bouw7
+    // welke van onze bijgehouden regels nog openstaan; de rest is afgehandeld.
+    let opgeruimd = 0
+    const { data: lopend } = await supabase
+      .from('uren_bouw7_beoordeling')
+      .select('bouw7_hour_log_id')
+      .is('pl_akkoord_op', null)
+      .limit(1000)
+    const ids = ((lopend ?? []) as Array<{ bouw7_hour_log_id: number }>).map(r => Number(r.bouw7_hour_log_id))
+    if (ids.length) {
+      const { getBouw7Client } = await import('@/lib/bouw7/sync')
+      const client = await getBouw7Client()
+      const res = await client.get<{ items?: Array<{ id: number }> }>('/list/hour-logs/employee', {
+        q: `isApproved = false AND id IN (${ids.join(',')}) LIMIT 1000`,
+      })
+      const nogOpen = new Set((res?.items ?? []).map(i => i.id))
+      const klaar = ids.filter(id => !nogOpen.has(id))
+      if (klaar.length) {
+        await supabase.from('uren_bouw7_beoordeling').delete().in('bouw7_hour_log_id', klaar)
+        opgeruimd = klaar.length
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       duurMs: Date.now() - startedAt,
+      beoordelingenOpgeruimd: opgeruimd,
       goedkeuring: terug,
       herverzonden,
       mislukt,

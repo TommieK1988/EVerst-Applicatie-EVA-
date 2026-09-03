@@ -1116,6 +1116,12 @@ export type Bouw7EmployeeHourLog = {
   /** Ingehuurde kracht (ZZP/uitzend) i.p.v. eigen dienst. */
   isExternal?: boolean
   bookingStatus?: number
+  /**
+   * Of Bouw7 deze regel nog laat wijzigen. Een regel die daar vergrendeld is (bv. doorgeboekt naar
+   * de salarisadministratie) weigert elke upsert; controleer dit vóór je schrijft, anders krijgt de
+   * gebruiker een rauwe API-fout te zien.
+   */
+  isMutable?: boolean
 }
 
 export type Bouw7EmployeeHourLogResponse = {
