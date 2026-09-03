@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-03','verbeterd','Planning','Planning op je telefoon is nu een agenda',
+   'Het Planning-scherm op je telefoon werkt voortaan als de Agenda-app: bovenaan een maandoverzicht met een stip op elke dag waar iets staat, eronder de afspraken van de dag die je aantikt. Vegen of de pijltjes brengen je naar een andere maand, en met Vandaag spring je terug. Naast je eigen werk zie je nu ook je verlof en ziekmeldingen, de bedrijfsagenda met feestdagen, en je taken met een deadline. Tik een afspraak aan voor de details, het adres in Maps en de link naar het dossier.');
