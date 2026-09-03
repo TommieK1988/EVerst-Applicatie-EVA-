@@ -199,6 +199,22 @@ export async function vereisPortaalOnderdeel(
 }
 
 /**
+ * De naam achter een portaalaccount, voor vastlegging en meldingen. Valt terug
+ * op het e-mailadres: een besluit zonder naam is onbruikbaar als bewijs.
+ */
+export async function portaalGebruikerNaam(gebruiker: PortaalGebruiker): Promise<string> {
+  const tabel = gebruiker.contactpersoon_id ? 'contactpersonen'
+    : gebruiker.particulier_id ? 'particulieren' : null
+  const id = gebruiker.contactpersoon_id ?? gebruiker.particulier_id
+  if (!tabel || !id) return gebruiker.email
+
+  const { data } = await db().from(tabel)
+    .select('voornaam, tussenvoegsel, achternaam').eq('id', id).maybeSingle()
+  if (!data) return gebruiker.email
+  return [data.voornaam, data.tussenvoegsel, data.achternaam].filter(Boolean).join(' ') || gebruiker.email
+}
+
+/**
  * Vastleggen wat iemand opvroeg. Gooit nooit: een mislukt logregeltje mag een
  * pagina niet omleggen. Alleen aanroepen voor echte inhoud (een bestand, een
  * dossier), niet voor elke navigatie — anders is het log niet meer te lezen.

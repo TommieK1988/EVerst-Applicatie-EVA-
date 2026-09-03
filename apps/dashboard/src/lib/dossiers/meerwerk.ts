@@ -13,6 +13,8 @@ import { getServicedeskRegie } from './servicedesk'
 import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth'
+import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
@@ -255,14 +257,35 @@ export async function verwijderMeerwerkRegel(
  * aangemaakt (best effort — een Bouw7-fout blokkeert de statuswijziging niet, maar geeft een
  * waarschuwing terug). Bij 'afgewezen' kan een reden worden vastgelegd.
  */
-/** De ingelogde medewerker als besluitnemer. Null als er (nog) geen sessie is. */
-async function medewerkerActor(): Promise<MeerwerkBesluitActor | null> {
+/**
+ * Wie mag hier een besluit nemen, en onder welke naam.
+ *
+ * Bepaalt de identiteit aan de hand van de sessie en dwingt meteen de bijbehorende
+ * rechten af. Gooit als de aanroeper geen van beide is -- dat is de enige gate op
+ * deze statuswijziging.
+ */
+async function bepaalBesluitActor(dossierId: string): Promise<MeerwerkBesluitActor> {
   const mw = await getCurrentMedewerker()
-  if (!mw) return null
+  if (mw) {
+    await vereisRecht('dossiers', 'schrijven')
+    return {
+      soort: 'medewerker',
+      id: mw.id,
+      naam: [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ') || 'Onbekend',
+    }
+  }
+
+  // Geen medewerker: dan moet dit een opdrachtgever zijn die dit dossier in zijn
+  // portaal heeft, met meerwerk aangezet. vereisPortaalOnderdeel controleert
+  // sessie, eigendom en de vlag in een keer.
+  const { gebruiker } = await vereisPortaalOnderdeel(dossierId, 'meerwerk')
+  const kop = await headers()
   return {
-    soort: 'medewerker',
-    id: mw.id,
-    naam: [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ') || 'Onbekend',
+    soort: 'klant',
+    id: gebruiker.id,
+    naam: await portaalGebruikerNaam(gebruiker),
+    // Vercel zet het echte adres in x-forwarded-for; de eerste is de bezoeker.
+    ip: (kop.get('x-forwarded-for') ?? '').split(',')[0].trim() || null,
   }
 }
 
@@ -272,23 +295,10 @@ export async function setMeerwerkStatus(
   opts?: {
     termijnWijze?: MeerwerkTermijnWijze | null
     afgewezenReden?: string | null
-    /**
-     * Wie het besluit nam. Meegeven vanuit het klantportaal, waar geen
-     * medewerkerssessie is; laat hem weg en de ingelogde medewerker wordt
-     * vastgelegd. Een meegegeven actor slaat ook de rechtengate hieronder over --
-     * die aanroeper heeft zijn eigen poort al gepasseerd.
-     */
-    actor?: MeerwerkBesluitActor
     /** Toelichting van de besluitnemer zelf; los van de interne afgewezen_reden. */
     besluitOpmerking?: string | null
   },
 ): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
-  // Zonder actor komt de aanroep uit EVA en moet de gebruiker schrijfrecht hebben.
-  // Het klantportaal geeft wel een actor mee en is daar al langs
-  // vereisPortaalOnderdeel gekomen; een klant heeft geen dossiers-recht en zou
-  // hier stuklopen.
-  if (!opts?.actor) await vereisRecht('dossiers', 'schrijven')
-
   const supabase = createAdminClient() as any
   const { data: regel, error: leesFout } = await supabase
     .from('meerwerk_regels')
@@ -298,6 +308,15 @@ export async function setMeerwerkStatus(
   if (leesFout || !regel) return { ok: false, error: leesFout?.message ?? 'Meerwerkregel niet gevonden.' }
   const r = regel as MeerwerkRegel
   await assertDossierBewerkbaar(r.dossier_id)
+
+  // Wie is dit? Uit de sessie, nooit uit de aanroep. Een meegegeven actor zou
+  // deze functie -- een publiek aanroepbare server-action -- veranderen in een
+  // sleutel die iedereen kan omdraaien door zelf een naam mee te sturen.
+  //
+  // Twee legitieme aanroepers: een medewerker met schrijfrecht op dossiers, of
+  // een opdrachtgever die dit dossier in zijn portaal heeft staan met meerwerk
+  // aan. Wie geen van beide is, komt hier niet voorbij.
+  const actor = await bepaalBesluitActor(r.dossier_id)
 
   if (r.status !== status && !TRANSITIES[r.status].includes(status)) {
     return { ok: false, error: `Ongeldige statusovergang: ${r.status} → ${status}.` }
@@ -311,12 +330,11 @@ export async function setMeerwerkStatus(
   // zodat besluit en vastlegging niet uit elkaar kunnen lopen. Alleen bij akkoord
   // en afgewezen -- bij de andere statussen valt er niets te verantwoorden.
   if (BESLUIT_STATUSSEN.includes(status)) {
-    const actor = opts?.actor ?? await medewerkerActor()
     velden.besluit_op = new Date().toISOString()
-    velden.besluit_door_soort = actor?.soort ?? null
-    velden.besluit_door_id = actor?.id ?? null
-    velden.besluit_door_naam = actor?.naam ?? null
-    velden.besluit_ip = actor?.ip ?? null
+    velden.besluit_door_soort = actor.soort
+    velden.besluit_door_id = actor.id
+    velden.besluit_door_naam = actor.naam
+    velden.besluit_ip = actor.ip ?? null
     velden.besluit_opmerking = opts?.besluitOpmerking ?? null
   }
 

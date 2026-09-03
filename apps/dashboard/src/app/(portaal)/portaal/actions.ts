@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { createAdminClient } from '@everts/database/server'
 import { vereisPortaalOnderdeel } from '@/lib/portaal/auth'
 import { meldKlantberichtAanTeam } from '@/lib/portaal/chat'
@@ -212,12 +211,10 @@ export async function portaalBeoordeelMeerwerk(
     }
 
     const naam = await afzenderNaam(gebruiker.contactpersoon_id, gebruiker.particulier_id)
-    // Vercel zet het echte adres in x-forwarded-for; de eerste is de bezoeker.
-    const kop = await headers()
-    const ip = (kop.get('x-forwarded-for') ?? '').split(',')[0].trim() || null
 
+    // setMeerwerkStatus bepaalt zelf uit de sessie wie dit besluit neemt en legt
+    // dat vast; hier alleen de toelichting meegeven.
     const res = await setMeerwerkStatus(regelId, besluit, {
-      actor: { soort: 'klant', id: gebruiker.id, naam, ip },
       besluitOpmerking: opmerking?.trim() || null,
     })
     if (!res.ok) return { ok: false, error: res.error }
