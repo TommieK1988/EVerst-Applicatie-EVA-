@@ -657,7 +657,7 @@ export default function FunctiesAfdelingenBeheer({
   medewerkers: MedewerkerOptie[]
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 32 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, alignItems: 'start' }}>
       <FunctieLijstBeheer functies={functies} afdelingen={afdelingen} />
       <LijstBeheer
         titel="Afdelingen"
