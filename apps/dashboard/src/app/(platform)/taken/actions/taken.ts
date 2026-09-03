@@ -7,6 +7,7 @@ import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { spiegelTaakstatusNaarBouw7 } from '@/lib/bouw7/todo-write'
 import { activeerSjabloon } from './sjablonen'
 import { getTaak } from '@/lib/taken/services/taken'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
@@ -204,17 +205,41 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Niet ingelogd')
 
+  // Lezen én schrijven via de admin-client. Op `tasks` laat de RLS alleen platform-gebruikers
+  // door, dus voor een app_gebruiker (de monteur op /m) kwam hier `null` terug: de controles
+  // hieronder sloegen stil over en de update raakte nul rijen, zónder foutmelding. Het vinkje
+  // leek te werken en de actie stond na een verversing gewoon weer open.
+  //
+  // Omdat we de RLS zo passeren, doen we de afscherming hieronder zelf — dezelfde regel als op
+  // de doorloop-schermen: platform-gebruikers mogen elke actie bijwerken, een app_gebruiker
+  // alleen een actie die aan hem is toegewezen.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+
   // Haal dossier_id op (direct of via de lijst) zodat completion-acties het kunnen gebruiken
-  const { data: oud } = await supabase
+  const { data: oud } = await admin
     .from('tasks')
     .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, kwaliteit_ronde, opname_ronde, task_lists(dossier_id)')
     .eq('id', id)
-    .single()
+    .maybeSingle()
+  if (!oud) throw new Error('Actie niet gevonden')
+
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) throw new Error('Geen actief medewerker-account')
+  if (medewerker.gebruiker_type !== 'platform_gebruiker') {
+    const { data: eigenToewijzing } = await admin
+      .from('task_assignees')
+      .select('task_id')
+      .eq('task_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!eigenToewijzing) throw new Error('Deze actie staat niet op jouw naam.')
+  }
 
   // Blokkering valideren bij activering
   if (['in_behandeling', 'gereed'].includes(status) && oud?.blocked_by_task_id) {
-    const { data: blocker } = await supabase
-      .from('tasks').select('status').eq('id', oud.blocked_by_task_id).single()
+    const { data: blocker } = await admin
+      .from('tasks').select('status').eq('id', oud.blocked_by_task_id).maybeSingle()
     if (blocker?.status !== 'gereed')
       throw new Error('Deze taak is geblokkeerd door een nog niet afgeronde taak.')
   }
@@ -222,8 +247,6 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // Debiteuren-afdwingen: een >60-dagen debiteurentaak mag pas 'gereed' wanneer de verplichte
   // opvolging compleet is (reden, actie, actiehouder, verwachte betaaldatum, opvolgdatum + logboek).
   if (status === 'gereed') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const admin = createAdminClient() as any
     const { data: deb } = await admin
       .from('debiteuren')
       .select('id, status, vervaldatum, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum')
@@ -256,9 +279,6 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // en roepen deze functie daarná aan (submitFormInzending zet 'ingediend', rondInspectieAf zet
   // 'definitief', de toolbox-deelname 'afgerond'), dus ze komen hier langs.
   if (status === 'gereed') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const admin = createAdminClient() as any
-
     const { data: tb } = await admin
       .from('toolbox_toewijzingen')
       .select('status')
@@ -302,14 +322,14 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     }
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('tasks')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', id)
 
   if (error) throw new Error(`Fout bij bijwerken status: ${error.message}`)
 
-  await supabase.from('task_audit_log').insert({
+  await admin.from('task_audit_log').insert({
     task_id:      id,
     user_id:      user.id,
     actie:        'status_gewijzigd',

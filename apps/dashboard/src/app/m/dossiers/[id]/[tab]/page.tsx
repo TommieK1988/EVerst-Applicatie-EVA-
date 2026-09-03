@@ -7,6 +7,8 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import DossierInfoView, { type DossierInfo } from '@/components/mobiel/DossierInfoView'
 import DossierActiesBlok from '@/components/mobiel/DossierActiesBlok'
 import { getTakenVoorDossier } from '@/lib/taken/services/taken'
+import { createClient } from '@everts/database/server'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
 import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
 import DetailplanningView from '@/components/mobiel/dossier-tabs/DetailplanningView'
@@ -93,7 +95,19 @@ export default async function MobielDossierTabPage(
 }
 
 async function ActiesBlok({ dossierId }: { dossierId: string }) {
-  const taken = await getTakenVoorDossier(dossierId).catch(() => [])
+  // Wie kijkt er mee? Bepaalt of een actie een startknop krijgt: de doorloop-schermen laten
+  // alleen de toegewezen uitvoerder of een platform-gebruiker toe, dus een knop die daarop
+  // stukloopt tonen we hier niet.
+  const [{ data: { user } }, medewerker] = await Promise.all([
+    (await createClient()).auth.getUser(),
+    getCurrentMedewerker().catch(() => null),
+  ])
+
+  const taken = await getTakenVoorDossier(dossierId, {
+    userId: user?.id ?? null,
+    magAllesUitvoeren: medewerker?.gebruiker_type === 'platform_gebruiker',
+  }).catch(() => [])
+
   return (
     <div style={{ padding: '0 16px 16px' }}>
       <DossierActiesBlok taken={taken} />

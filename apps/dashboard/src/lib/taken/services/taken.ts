@@ -10,6 +10,7 @@ import type {
 import {
   getActieveDossierContext, getDossierContextVoorIds, type DossierContext,
 } from '@/lib/dossiers/actief'
+import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 
 export type { UrgenteTaak }
 
@@ -905,6 +906,19 @@ export type DossierTaakRegel = {
   assignee_naam: string | null
   /** Gereed of vervallen — die horen onder de uitklap, niet in de top vijf. */
   afgerond: boolean
+  /** Platte omschrijving-tekst; null als er geen omschrijving is. */
+  omschrijving: string | null
+  formulier_template_id: string | null
+  kwaliteit_ronde: boolean
+  opname_ronde: boolean
+  /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
+  toolbox_toewijzing_id: string | null
+  /**
+   * Mag de huidige gebruiker de doorloop van deze actie openen? Spiegelt de check in
+   * `/m/taken/[taakId]/{formulier,kwaliteit,opname}`: toegewezen aan jou, of platform-gebruiker.
+   * Zonder deze vlag zou de startknop naar een notFound() leiden.
+   */
+  mag_uitvoeren: boolean
 }
 
 /**
@@ -912,8 +926,14 @@ export type DossierTaakRegel = {
  * Pakt zowel taken uit de actielijsten van het dossier als losse taken die
  * rechtstreeks aan het dossier hangen — dezelfde twee bronnen als
  * {@link getUrgenteTakenVoorDossier}, maar zonder limiet en mét afgeronde taken.
+ *
+ * `opties` bepaalt of de mobiele lijst een startknop mag tonen; laat je ze weg, dan blijft
+ * `mag_uitvoeren` false en is de lijst alleen-lezen.
  */
-export async function getTakenVoorDossier(dossier_id: string): Promise<DossierTaakRegel[]> {
+export async function getTakenVoorDossier(
+  dossier_id: string,
+  opties: { userId?: string | null; magAllesUitvoeren?: boolean } = {},
+): Promise<DossierTaakRegel[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -932,7 +952,10 @@ export async function getTakenVoorDossier(dossier_id: string): Promise<DossierTa
 
   const { data: taken } = await supabase
     .from('tasks')
-    .select('id, titel, status, prioriteit, deadline, lijst_id, volgorde, task_assignees(user_id)')
+    .select(
+      'id, titel, status, prioriteit, deadline, lijst_id, volgorde, omschrijving, ' +
+      'formulier_template_id, kwaliteit_ronde, opname_ronde, task_assignees(user_id)'
+    )
     .or(orFilters.join(','))
     .order('deadline', { ascending: true, nullsFirst: false })
     .order('volgorde', { ascending: true })
@@ -961,16 +984,41 @@ export async function getTakenVoorDossier(dossier_id: string): Promise<DossierTa
     )
   }
 
-  return rijen.map(t => ({
-    id:            t.id,
-    titel:         t.titel,
-    status:        t.status,
-    prioriteit:    t.prioriteit,
-    deadline:      t.deadline ?? null,
-    lijst_naam:    t.lijst_id ? lijstNamen.get(t.lijst_id) ?? null : null,
-    assignee_naam: namen[t.task_assignees?.[0]?.user_id] ?? null,
-    afgerond:      t.status === 'gereed' || t.status === 'vervallen',
-  }))
+  // Toolbox-acties herkennen, net als op /m/taken: die hangen niet op `tasks` maar ernaast,
+  // en linken naar de doorloop in plaats van een vinkje te tonen.
+  const toolboxPerTaak = new Map<string, string>()
+  const { data: toew } = await supabase
+    .from('toolbox_toewijzingen')
+    .select('id, task_id')
+    .in('task_id', rijen.map(t => t.id))
+    .neq('status', 'afgerond')
+  for (const r of (toew ?? []) as { id: string; task_id: string | null }[]) {
+    if (r.task_id) toolboxPerTaak.set(r.task_id, r.id)
+  }
+
+  return rijen.map(t => {
+    const toegewezenAanMij = !!opties.userId
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      && (t.task_assignees ?? []).some((a: any) => a.user_id === opties.userId)
+    const tekst = omschrijvingNaarTekst(t.omschrijving).trim()
+
+    return {
+      id:            t.id,
+      titel:         t.titel,
+      status:        t.status,
+      prioriteit:    t.prioriteit,
+      deadline:      t.deadline ?? null,
+      lijst_naam:    t.lijst_id ? lijstNamen.get(t.lijst_id) ?? null : null,
+      assignee_naam: namen[t.task_assignees?.[0]?.user_id] ?? null,
+      afgerond:      t.status === 'gereed' || t.status === 'vervallen',
+      omschrijving:  tekst || null,
+      formulier_template_id: t.formulier_template_id ?? null,
+      kwaliteit_ronde:       !!t.kwaliteit_ronde,
+      opname_ronde:          !!t.opname_ronde,
+      toolbox_toewijzing_id: toolboxPerTaak.get(t.id) ?? null,
+      mag_uitvoeren:         !!opties.magAllesUitvoeren || toegewezenAanMij,
+    }
+  })
 }
 
 export async function getDossierRedirectUrlVoorLijst(lijstId: string): Promise<string | null> {
