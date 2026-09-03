@@ -40,6 +40,11 @@ async function planningVensters(sb: any): Promise<Map<string, PlanningVenster>> 
  * een week op, dan houdt "keer 3" dezelfde taak — met zijn opmerkingen en toewijzingen —
  * en krijgt hij alleen een nieuwe deadline. Krimpt het venster, dan verdwijnen alleen de
  * overtollige keren die nog op 'open' staan; waar al aan gewerkt is blijft staan.
+ *
+ * Zonder uitvoeringsvenster valt er niets te dateren, maar dan toch één keer aanmaken:
+ * anders bestaat de taak — en het formulier dat eraan hangt — helemaal niet in het
+ * dossier, en is er niets dat verraadt dat er iets ontbreekt. Zodra er planning komt
+ * krijgt die ene keer alsnog zijn datum en, bij meer keren, zijn (1/n) in de titel.
  */
 async function stemHerhalingAf(
   sb: any,
@@ -49,9 +54,10 @@ async function stemHerhalingAf(
   venster: PlanningVenster,
 ): Promise<void> {
   const datums = herhalingsDatums(sjabloonTaak.herhaling_interval, venster.start, venster.eind)
-  const n = datums.length
+  // Geen venster → één keer zonder deadline, zodat de taak zichtbaar is.
+  const n = Math.max(datums.length, 1)
 
-  if (n === MAX_HERHALINGEN) {
+  if (datums.length === MAX_HERHALINGEN) {
     console.warn(
       `[deadlines] Herhaling "${sjabloonTaak.titel}" afgekapt op ${MAX_HERHALINGEN} keer ` +
       `(venster ${venster.start} t/m ${venster.eind}, interval ${sjabloonTaak.herhaling_interval}).`,
@@ -60,7 +66,10 @@ async function stemHerhalingAf(
 
   const { data: bestaand } = await sb
     .from('tasks')
-    .select('id, herhaling_index, status, titel, deadline, deadline_handmatig')
+    .select(
+      'id, herhaling_index, status, titel, deadline, deadline_handmatig, ' +
+      'formulier_template_id, kwaliteit_ronde, opname_ronde',
+    )
     .eq('lijst_id', lijst_id)
     .eq('herhaling_bron_taak_id', sjabloonTaak.id)
     .order('herhaling_index')
@@ -80,7 +89,19 @@ async function stemHerhalingAf(
 
       const patch: Record<string, unknown> = {}
       if (bestaande.titel !== titel) patch.titel = titel
-      if (!bestaande.deadline_handmatig && bestaande.deadline !== datums[i]) patch.deadline = datums[i]
+      const nieuweDeadline = datums[i] ?? null
+      if (!bestaande.deadline_handmatig && bestaande.deadline !== nieuweDeadline) patch.deadline = nieuweDeadline
+
+      // Uitvoeracties volgen het sjabloon. Zet iemand later een formulier of een
+      // kwaliteitsronde op de sjabloontaak, dan hoort dat ook te gelden voor de keren
+      // die al klaarstaan — anders draagt alleen wat na die wijziging is aangemaakt
+      // het formulier, en is er in de taak zelf niets dat verraadt dat het ontbreekt.
+      const sjabloonForm = sjabloonTaak.formulier_template_id ?? null
+      const sjabloonKwal = sjabloonTaak.kwaliteit_ronde ?? false
+      const sjabloonOpn  = sjabloonTaak.opname_ronde ?? false
+      if ((bestaande.formulier_template_id ?? null) !== sjabloonForm) patch.formulier_template_id = sjabloonForm
+      if ((bestaande.kwaliteit_ronde ?? false) !== sjabloonKwal) patch.kwaliteit_ronde = sjabloonKwal
+      if ((bestaande.opname_ronde ?? false) !== sjabloonOpn) patch.opname_ronde = sjabloonOpn
       if (Object.keys(patch).length > 0) {
         await sb.from('tasks').update(patch).eq('id', bestaande.id)
       }
@@ -95,7 +116,7 @@ async function stemHerhalingAf(
         omschrijving:           sjabloonTaak.omschrijving,
         status:                 'open',
         prioriteit:             sjabloonTaak.prioriteit,
-        deadline:               datums[i],
+        deadline:               datums[i] ?? null,
         deadline_basis:         'geen',
         geschatte_uren:         sjabloonTaak.geschatte_uren,
         volgorde:               sjabloonTaak.volgorde,
@@ -143,6 +164,15 @@ async function verwerkDossier(sb: any, dossier_id: string, venster: PlanningVens
 
   const vandaag = new Date().toISOString().split('T')[0]
 
+  // Voor het uitrollen van herhalingen is de detailplanning de eerste bron, maar die
+  // is er lang niet altijd. De verwachte start/eind van het dossier is dan de beste
+  // benadering — beter een reeks op globale datums dan helemaal geen taken.
+  // Per kant terugvallen: een half gevuld venster is nog steeds bruikbaar.
+  const uitvoerVenster: PlanningVenster = {
+    start: venster.start ?? dossier.verwacht_startdatum ?? null,
+    eind:  venster.eind  ?? dossier.verwacht_einddatum  ?? null,
+  }
+
   for (const lijst of (lijsten ?? []) as any[]) {
     const ctx = {
       activatiedatum: vandaag,
@@ -182,7 +212,7 @@ async function verwerkDossier(sb: any, dossier_id: string, venster: PlanningVens
       .order('volgorde')
 
     for (const sjabloonTaak of (herhalers ?? []) as any[]) {
-      await stemHerhalingAf(sb, dossier, lijst.id, sjabloonTaak, venster)
+      await stemHerhalingAf(sb, dossier, lijst.id, sjabloonTaak, uitvoerVenster)
     }
   }
 }
