@@ -138,6 +138,13 @@ export function PortaalTabClient({ dossierId, data }: { dossierId: string; data:
                       {data.aantalBestanden.fotos} foto&apos;s vrijgegeven — aanvinken doe je op de tab Bestanden.
                     </p>
                   )}
+                  {o.key === 'meerwerk' && (
+                    <p className="mt-1 text-xs text-neutral-500">
+                      {inst.toon_meerwerk_handmatig
+                        ? 'Je hebt deze schakelaar zelf gezet; hij blijft staan zoals hij staat.'
+                        : 'Gaat vanzelf aan zodra er meerwerk op dit dossier komt. Zet je hem zelf om, dan blijft die keuze staan.'}
+                    </p>
+                  )}
                   {o.key === 'planning' && vlag('toon_planning') && (
                     <label className="mt-1.5 flex items-center gap-2 text-xs text-neutral-600">
                       <input

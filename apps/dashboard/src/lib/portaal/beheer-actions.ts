@@ -64,6 +64,11 @@ export async function setPortaalOnderdeel(
       {
         dossier_id: dossierId,
         [kolom]: aan,
+        // Meerwerk gaat vanzelf aan zodra er een meerwerkregel bij komt. Zet
+        // iemand die schakelaar zelf, dan onthouden we dat en laat de trigger
+        // hem met rust -- anders zou de Bouw7-sync een bewust "uit" bij de
+        // eerstvolgende meerwerkregel stilletjes terugdraaien.
+        ...(onderdeel === 'meerwerk' ? { toon_meerwerk_handmatig: true } : {}),
         gewijzigd_op: new Date().toISOString(),
         gewijzigd_door: medewerker.id,
       },

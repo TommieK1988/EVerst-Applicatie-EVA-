@@ -1667,6 +1667,11 @@ export type PortaalDossierInstellingen = {
   toon_fotos: boolean
   toon_facturen: boolean
   toon_meerwerk: boolean
+  /**
+   * Iemand heeft toon_meerwerk zelf gezet. Zolang dit false is, zet een
+   * DB-trigger het onderdeel aan zodra er een meerwerkregel bij komt.
+   */
+  toon_meerwerk_handmatig: boolean
   toon_formulieren: boolean
   toon_aandachtspunten: boolean
   toon_planning: boolean

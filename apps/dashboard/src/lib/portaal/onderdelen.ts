@@ -46,7 +46,7 @@ export const PORTAAL_ONDERDELEN: PortaalOnderdeelDefinitie[] = [
   {
     key: 'meerwerk',
     label: 'Meerwerk',
-    uitleg: 'Alle meerwerkregels met bedrag en status. Regels waarvan de offerte verstuurd is, kan de klant zelf goedkeuren of afwijzen.',
+    uitleg: 'Alle meerwerkregels met bedrag en status. Regels waarvan de offerte verstuurd is, kan de klant zelf goedkeuren of afwijzen. Dit onderdeel gaat vanzelf aan zodra er meerwerk is.',
     kolom: 'toon_meerwerk',
   },
   {

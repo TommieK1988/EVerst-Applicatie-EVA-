@@ -38,6 +38,7 @@ export type PortaalDossierBeheer = {
     toon_fotos: boolean
     toon_facturen: boolean
     toon_meerwerk: boolean
+    toon_meerwerk_handmatig: boolean
     toon_formulieren: boolean
     toon_aandachtspunten: boolean
     toon_planning: boolean
@@ -60,6 +61,7 @@ export type PortaalDossierBeheer = {
 const LEGE_INSTELLINGEN = {
   actief: false,
   toon_bestanden: false, toon_fotos: false, toon_facturen: false, toon_meerwerk: false,
+  toon_meerwerk_handmatig: false,
   toon_formulieren: false, toon_aandachtspunten: false, toon_planning: false,
   planning_detail: false, toon_chat: false, toon_afspraken: false,
 }
@@ -73,7 +75,7 @@ export async function getPortaalDossierBeheer(dossierId: string): Promise<Portaa
 
   const [{ data: instellingen }, { data: dossier }] = await Promise.all([
     db().from('portaal_dossier_instellingen')
-      .select('actief, toon_bestanden, toon_fotos, toon_facturen, toon_meerwerk, toon_formulieren, toon_aandachtspunten, toon_planning, planning_detail, toon_chat, toon_afspraken')
+      .select('actief, toon_bestanden, toon_fotos, toon_facturen, toon_meerwerk, toon_meerwerk_handmatig, toon_formulieren, toon_aandachtspunten, toon_planning, planning_detail, toon_chat, toon_afspraken')
       .eq('dossier_id', dossierId).maybeSingle(),
     db().from('dossiers')
       .select('klant_id, contactpersoon_id, relaties!klant_id(naam)')
