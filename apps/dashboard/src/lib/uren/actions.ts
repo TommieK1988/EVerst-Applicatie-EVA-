@@ -38,7 +38,11 @@ const num = (v: unknown): number => {
   return Number.isNaN(n) ? 0 : n
 }
 
-type DossierRef = { id: string; dossiernummer: string | null; titel: string | null; hoofdstatus: string | null }
+type DossierRef = {
+  id: string; dossiernummer: string | null; titel: string | null; hoofdstatus: string | null
+  /** Projectrollen; bepalen wie de uren op dit dossier mag goedkeuren. */
+  project_manager_id: string | null; teamleider_id: string | null
+}
 
 /**
  * Alle urenboekingen binnen een periode, verrijkt met het EVA-dossier achter het Bouw7-project.
@@ -71,7 +75,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     const supabase = createAdminClient() as any
     const { data } = await supabase
       .from('dossiers')
-      .select('id, bouw7_id, dossiernummer, titel, hoofdstatus')
+      .select('id, bouw7_id, dossiernummer, titel, hoofdstatus, project_manager_id, teamleider_id')
       .in('bouw7_id', projectIds.map(String))
     for (const d of (data ?? []) as (DossierRef & { bouw7_id: string })[]) {
       const pid = Number(d.bouw7_id)
@@ -109,6 +113,8 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       projectNummer: h.project?.number ?? null,
       projectNaam: h.project?.name ?? null,
       projectleider: h.project?.projectLeaderName ?? null,
+      teamleiderId: dossier?.teamleider_id ?? null,
+      projectleiderId: dossier?.project_manager_id ?? null,
       geaccordeerd: h.isApproved === true,
       geaccordeerdDoor: h.approvedBy?.username ?? null,
       geaccordeerdOp: h.approvedAt ? h.approvedAt.slice(0, 10) : null,

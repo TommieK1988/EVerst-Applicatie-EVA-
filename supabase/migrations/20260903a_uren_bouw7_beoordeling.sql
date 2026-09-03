@@ -14,12 +14,20 @@
 -- Eén rij per uurregel die iemand heeft aangeraakt -- geen rij betekent "nog niemand heeft
 -- ernaar gekeken", de normale begintoestand. Dat scheelt honderden lege rijen.
 --
--- De regel, zoals afgesproken:
---   teamleider akkoord + project heeft een projectleider  -> nog niets naar Bouw7, wacht op hem
---   teamleider akkoord + geen projectleider               -> approved = true
---   projectleider akkoord                                 -> approved = true, ook zonder teamleider
---   projectleider trekt terug                             -> approved = false, teamleider vervalt
--- De projectleider overruled de teamleider dus altijd, in beide richtingen.
+-- Wie mag beoordelen volgt uit de PROJECTROLLEN OP HET DOSSIER (dossiers.teamleider_id en
+-- dossiers.project_manager_id), niet uit de ploeg van de medewerker: het hangt af van het werk,
+-- niet van waar iemand organisatorisch hangt.
+--
+--   dossier heeft een teamleider            -> eerst hij, daarna de projectleider
+--   dossier heeft geen teamleider           -> meteen naar de projectleider, zonder tussenstop
+--   teamleider akkoord + geen projectleider -> approved = true (hij is dan eindstation)
+--   projectleider akkoord                   -> approved = true, ook zonder teamleider
+--   projectleider trekt terug               -> approved = false, teamleider vervalt
+--
+-- De projectleider overruled de teamleider dus altijd, in beide richtingen. Er is bewust geen
+-- terugval op een ploegteamleider of op Directie: staat er niemand op het dossier, dan hoort de
+-- regel bij "niet toe te wijzen" in plaats van op het bureau van iemand die er niets mee te maken
+-- heeft.
 
 create table if not exists public.uren_bouw7_beoordeling (
   -- Bouw7's eigen hour-log-id is de sleutel. Geen eigen uuid: de regel bestaat daar, niet hier,
