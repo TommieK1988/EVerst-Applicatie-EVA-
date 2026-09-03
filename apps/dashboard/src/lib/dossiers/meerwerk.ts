@@ -12,7 +12,7 @@ import type {
 import { getServicedeskRegie } from './servicedesk'
 import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
 import { assertDossierBewerkbaar } from './guards'
-import { vereisRecht, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { vereisSessie, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth'
 import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
@@ -159,8 +159,11 @@ export async function maakMeerwerkRegel(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers.
-  await vereisRecht('dossiers', 'schrijven')
+  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
+  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
+  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
+  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+  await vereisSessie()
   await assertDossierBewerkbaar(dossierId)
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
@@ -203,8 +206,11 @@ export async function updateMeerwerkRegel(
 ): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers.
-  await vereisRecht('dossiers', 'schrijven')
+  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
+  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
+  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
+  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+  await vereisSessie()
   const supabase = createAdminClient() as any
   const { data: bestaand } = await supabase.from('meerwerk_regels').select('*').eq('id', id).single()
   if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
@@ -241,8 +247,11 @@ export async function verwijderMeerwerkRegel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers.
-  await vereisRecht('dossiers', 'schrijven')
+  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
+  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
+  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
+  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+  await vereisSessie()
   const supabase = createAdminClient() as any
   const { data: row } = await supabase.from('meerwerk_regels').select('dossier_id').eq('id', id).single()
   if (row?.dossier_id) await assertDossierBewerkbaar(row.dossier_id)
@@ -267,7 +276,7 @@ export async function verwijderMeerwerkRegel(
 async function bepaalBesluitActor(dossierId: string): Promise<MeerwerkBesluitActor> {
   const mw = await getCurrentMedewerker()
   if (mw) {
-    await vereisRecht('dossiers', 'schrijven')
+    // Een medewerkerssessie volstaat; zie de toelichting bij de andere gates.
     return {
       soort: 'medewerker',
       id: mw.id,
@@ -387,8 +396,11 @@ export async function maakMeerwerkCalculatie(
 ): Promise<{ ok: true; projectId: string; dossierId: string; omschrijving: string } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers.
-  await vereisRecht('dossiers', 'schrijven')
+  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
+  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
+  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
+  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+  await vereisSessie()
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase
     .from('meerwerk_regels')
@@ -468,8 +480,11 @@ export async function stuurMeerwerkNaarBouw7(
 ): Promise<{ ok: true; nummer: string | null } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers.
-  await vereisRecht('dossiers', 'schrijven')
+  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
+  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
+  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
+  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+  await vereisSessie()
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
