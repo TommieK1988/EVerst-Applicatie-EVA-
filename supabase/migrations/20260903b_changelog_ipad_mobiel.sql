@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-03','opgelost','Mobiel','EVA blijft op de iPad in de mobiele app',
+   'Op een iPad wisselde EVA steeds tussen de mobiele app en de gewone platformweergave: inloggen bracht je in de ene, het icoon op je beginscherm in de andere, en een aangetikte melding weer ergens anders. EVA herkent nu dat een iPad een tablet is en houdt je voortaan overal in de mobiele app — ook als je hem in de breedte gebruikt of een melding aantikt. Op een computer verandert er niets; maak je daar je venster smal, dan wijkt EVA nog steeds tijdelijk uit naar de mobiele weergave en springt hij terug zodra je het venster weer breed maakt.');
