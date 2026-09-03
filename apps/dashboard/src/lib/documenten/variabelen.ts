@@ -26,6 +26,13 @@ export interface VariabeleGroep {
    * gelden, anders meldt "Template controleren" ze allemaal als onbekende variabele.
    */
   binnenLoop?: string[]
+  /**
+   * Varianten die wél bestaan maar niet als los item in de lijst horen, omdat ze de
+   * lijst zouden verdubbelen zonder iets toe te voegen: de `_iso`-vormen en de
+   * per-datum-schakelaars. Ze moeten hier staan, anders meldt "Template controleren"
+   * ze als onbekende variabele terwijl ze gewoon werken.
+   */
+  extraNamen?: string[]
 }
 
 const ROL_LABELS: Record<string, string> = {
@@ -191,6 +198,29 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{#planning.heeft}…{/planning.heeft}', label: 'Alleen tonen als er datums bekend zijn' },
       { v: '{#planning.heeft_voorlopig}…{/planning.heeft_voorlopig}', label: 'Alleen tonen als er een voorlopige planning is' },
     ],
+    extraNamen: [
+      'planning.startdatum_iso', 'planning.einddatum_iso',
+      'planning.voorlopige_startdatum_iso', 'planning.voorlopige_einddatum_iso',
+    ],
+  },
+  {
+    groep: 'Datums van het dossier',
+    uitleg: 'De acht procesdatums uit het Datums-blok op de dossierpagina. Elke datum heeft ook een schakelaar, bijvoorbeeld {#datums.heeft_opdrachtdatum}…{/datums.heeft_opdrachtdatum}, zodat een regel wegvalt in plaats van leeg af te drukken. Let op: {datums.startdatum} komt uit de EVA-planning, {planning.startdatum} uit Bouw7.',
+    items: [
+      { v: '{datums.aanvraagdatum}',     label: 'Aanvraagdatum (valt terug op de aanmaakdatum)' },
+      { v: '{datums.deadline}',          label: 'Deadline (offerte verzenden)' },
+      { v: '{datums.offertedatum}',      label: 'Offertedatum (moment van verzenden)' },
+      { v: '{datums.opdrachtdatum}',     label: 'Opdrachtdatum' },
+      { v: '{datums.startdatum}',        label: 'Startdatum uit de planning' },
+      { v: '{datums.einddatum}',         label: 'Einddatum uit de planning' },
+      { v: '{datums.opleverdatum}',      label: 'Opleverdatum (eindoplevering)' },
+      { v: '{datums.financieel_gereed}', label: 'Datum financieel gereed' },
+      { v: '{#datums.heeft}…{/datums.heeft}', label: 'Alleen tonen als er minstens één datum bekend is' },
+    ],
+    extraNamen: [
+      'aanvraagdatum', 'deadline', 'offertedatum', 'opdrachtdatum',
+      'startdatum', 'einddatum', 'opleverdatum', 'financieel_gereed',
+    ].flatMap(s => [`datums.${s}_iso`, `datums.heeft_${s}`]),
   },
   {
     groep: 'Oplevering & garantie',
@@ -203,6 +233,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{#oplevering.heeft}…{/oplevering.heeft}', label: 'Alleen tonen als er is opgeleverd' },
       { v: '{#garantie.heeft}…{/garantie.heeft}',     label: 'Alleen tonen als de garantie berekend kon worden' },
     ],
+    extraNamen: ['oplevering.datum_iso', 'garantie.tot_datum_iso'],
   },
   {
     groep: 'Opdrachtgever',
@@ -355,6 +386,7 @@ export function bekendeVariabelen(): Set<string> {
       if (lus) set.add(lus[1])
     }
     for (const naam of groep.binnenLoop ?? []) set.add(naam)
+    for (const naam of groep.extraNamen ?? []) set.add(naam)
   }
   return set
 }

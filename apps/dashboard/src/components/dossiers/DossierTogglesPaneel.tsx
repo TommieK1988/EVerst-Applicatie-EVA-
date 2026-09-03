@@ -12,11 +12,7 @@ import { useDossierReadOnly } from './DossierReadOnlyContext'
  * de stand opgeslagen en worden trigger-evaluaties uitgevoerd (via setDossierToggle);
  * een refresh toont eventueel automatisch geactiveerde actielijsten.
  */
-export default function DossierTogglesPaneel({ dossierId, hoogte }: {
-  dossierId: string
-  /** Ingeklapte hoogte; meegegeven door de kaartengrid zodat alle blokken gelijk staan. */
-  hoogte?: number
-}) {
+export default function DossierTogglesPaneel({ dossierId }: { dossierId: string }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [toggles, setToggles] = useState<DossierToggle[] | null>(null)
@@ -43,7 +39,7 @@ export default function DossierTogglesPaneel({ dossierId, hoogte }: {
   }
 
   return (
-    <InklapbareCard titel="Toggles" hoogte={hoogte}>
+    <InklapbareCard titel="Toggles">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {toggles.map(t => (
             <label key={t.definitie_id} style={{

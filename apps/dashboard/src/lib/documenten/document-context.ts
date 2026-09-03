@@ -23,6 +23,7 @@ import {
   LEEG_BESTELLING_BLOK, LEEG_LEVERANCIER_BLOK,
 } from './bestelling-blok'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
+import { getDossierDatums } from '@/lib/dossiers/datums'
 import { getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken } from '@/lib/dossiers/oplevering'
 import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
 import { RAPPORT_FOTO_MAX, parseRapportOpties, HOUTROT_OPTIES_SLEUTEL } from './houtrot-opties'
@@ -123,6 +124,12 @@ export async function buildDocumentContext(
 
   // Oplevering — laatste opgeleverde moment van dit dossier (voor het garantiecertificaat).
   const opleverDatum = await laadOpleverdatum(supabase, dossierId)
+
+  // De acht procesdatums van het Datums-blok, één op één beschikbaar als {datums.*}.
+  // Zelfde bron als het scherm (getDossierDatums), dus wat in het dossier staat komt
+  // ook in het document — inclusief de afleidingen: de aanvraagdatum valt terug op de
+  // aanmaakdatum, start/eind komen uit de detailplanning en niet uit Bouw7.
+  const procesdatums = await getDossierDatums(dossierId).catch(() => null)
 
   // Opdracht-samenstelling — alleen voor de opdrachtbevestiging (opsomming van in-opdracht-onderdelen).
   const opdracht = sjabloon.documentsoort === 'opdrachtbevestiging'
@@ -243,6 +250,7 @@ export async function buildDocumentContext(
       voorlopige_periode: voorlopigePeriode,
       werkzaamheden: genormaliseerd.werkzaamheden ?? '',
     },
+    datums: bouwDatumBlok(procesdatums),
     oplevering: {
       heeft: !!opleverDatum,
       datum: datumNL(opleverDatum),
@@ -525,4 +533,35 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
   } catch {
     return LEEG_OPDRACHT_BLOK
   }
+}
+
+/* ─── procesdatums ────────────────────────────────────────────────────
+   De acht datums van het Datums-blok op de dossierpagina, één op één als
+   {datums.<sleutel>} plus een _iso-variant. Zelfde bron als het scherm, dus
+   wat een medewerker daar ziet staat ook in het document.
+
+   Let op de overlap met twee bestaande blokken, die bewust blijven bestaan
+   omdat sjablonen ze al gebruiken:
+     - {planning.startdatum}/{einddatum} komen uit Bouw7 (verwacht_start/eind);
+       {datums.startdatum}/{einddatum} komen uit de detailplanning van EVA.
+     - {oplevering.datum} en {datums.opleverdatum} zijn dezelfde datum. */
+type DatumBlok = Record<string, string | boolean>
+
+function bouwDatumBlok(datums: Awaited<ReturnType<typeof getDossierDatums>> | null): DatumBlok {
+  const sleutels = [
+    'aanvraagdatum', 'deadline', 'offertedatum', 'opdrachtdatum',
+    'startdatum', 'einddatum', 'opleverdatum', 'financieel_gereed',
+  ] as const
+
+  const blok: DatumBlok = { heeft: false }
+  for (const sleutel of sleutels) {
+    const waarde = datums?.[sleutel] ?? null
+    blok[sleutel] = datumNL(waarde)
+    blok[`${sleutel}_iso`] = datumISO(waarde)
+    // Per datum een eigen schakelaar, zodat een sjabloon een regel kan weglaten
+    // in plaats van een lege waarde af te drukken: {#datums.heeft_opdrachtdatum}…
+    blok[`heeft_${sleutel}`] = !!waarde
+    if (waarde) blok.heeft = true
+  }
+  return blok
 }

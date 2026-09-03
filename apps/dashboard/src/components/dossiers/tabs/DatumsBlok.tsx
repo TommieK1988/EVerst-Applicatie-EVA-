@@ -75,11 +75,10 @@ function VoorlopigeRegel({ start, eind }: { start: string; eind: string }) {
 
 /* ─── het blok ────────────────────────────────────────────────────── */
 export default function DatumsBlok({
-  regels, deadlineUrgent, hoogte, editMode, form, onSet, periodeFout,
+  regels, deadlineUrgent, editMode, form, onSet, periodeFout,
 }: {
   regels: DossierDatumRegel[]
   deadlineUrgent: boolean
-  hoogte: number
   editMode: boolean
   form: Record<DatumVeld, string>
   onSet: (veld: DatumVeld) => (waarde: string) => void
@@ -113,7 +112,7 @@ export default function DatumsBlok({
   )
 
   return (
-    <InklapbareCard titel="Datums" hoogte={hoogte} altijdOpen={editMode}>
+    <InklapbareCard titel="Datums" altijdOpen={editMode}>
       <div className="divide-y divide-neutral-100">
         {voor.map(datumRegel)}
         <VoorlopigeRegel start={form.voorlopige_start} eind={form.voorlopige_eind} />

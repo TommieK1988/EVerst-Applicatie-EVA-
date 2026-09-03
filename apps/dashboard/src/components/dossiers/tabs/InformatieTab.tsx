@@ -724,8 +724,12 @@ function TakenBlok({
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      {/* `flex-1` + een scrollende body: zonder dat groeide dit blok bij tien open acties
+          door tot ~490px en trok het de héle gridrij mee omhoog, met een wit gat onder
+          Projectinformatie tot gevolg. Bewust `flex-1` en niet `h-full` — dat laatste is
+          100% van de kolom en drukt Notities en Klantchat eruit. */}
+      <Card className="flex min-h-0 flex-1 flex-col">
+        <CardHeader className="shrink-0">
           <span>Acties · {openTaken.length} open</span>
           {!readOnly && (
             <div className="flex items-center gap-1.5">
@@ -750,7 +754,7 @@ function TakenBlok({
             </div>
           )}
         </CardHeader>
-        <CardBody className="py-3">
+        <CardBody className="min-h-0 flex-1 overflow-y-auto py-3">
           {openTaken.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-4 text-center">
               <span className="text-[22px] opacity-35">☑</span>
@@ -1504,7 +1508,7 @@ export function InformatieTab({
         )}
 
         {/* Projectinformatie */}
-        <InklapbareCard titel="Projectinformatie" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
+        <InklapbareCard titel="Projectinformatie" altijdOpen={editMode}>
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <InfoVeld label="Dossiernummer"  waarde={dossier.dossiernummer} mono />
               <InfoVeld
@@ -1580,11 +1584,14 @@ export function InformatieTab({
             )}
         </InklapbareCard>
 
-        {/* Rechterkolom: Taken + Notities. Beslaat twee rijen (Projectinformatie + Datums);
-            het Notities-blok vult met flex-1 de resterende ruimte (interne scroll). Bewust
-            géén InklapbareCard eromheen: dat blok scrollt al zelf, en twee clip-lagen over
-            elkaar geven twee scrollbakken. */}
-        <div className="row-span-2 flex h-full flex-col gap-3.5">
+        {/* Rechterkolom: Acties, Notities en Klantchat. Beslaat drie rijen, zodat elk van
+            de drie ongeveer dezelfde hoogte krijgt als een blok in de linkerkolom.
+            `h-full` + `overflow-hidden` is hier het sluitstuk: zonder die begrenzing
+            bepaalt de langste van de drie de hoogte van drie gridrijen tegelijk, en dan
+            staan de linkerblokken met een gat eronder. Bewust géén InklapbareCard
+            eromheen — deze blokken scrollen zelf, en twee clip-lagen over elkaar geven
+            twee scrollbalken. */}
+        <div className="row-span-3 flex h-full min-h-0 flex-col gap-3.5 overflow-hidden">
           <TakenBlok dossierId={dossier.id} dossierTitel={dossier.titel} sectie={sectie} sjablonen={sjablonen} urgenteTaken={urgenteTaken} />
           <DossierNotitiesBlok
             dossierId={dossier.id}
@@ -1592,6 +1599,8 @@ export function InformatieTab({
             currentMedewerkerId={currentMedewerkerId}
             className="min-h-0 flex-1"
           />
+          {/* Klantchat houdt zijn eigen hoogte (hij heeft een invoerveld onderaan dat
+              altijd zichtbaar moet blijven) en krimpt niet mee. */}
           {/* Klantchat direct onder de interne notities. Bewust in dezelfde kolom:
               wie hier iets typt moet in één oogopslag zien welk vak intern is en
               welk vak de opdrachtgever meeleest. Het blok haalt zijn eigen data op
@@ -1604,7 +1613,6 @@ export function InformatieTab({
         <DatumsBlok
           regels={datumRegels}
           deadlineUrgent={deadlineUrgent}
-          hoogte={BLOK_HOOGTE}
           editMode={editMode}
           form={{
             aanvraagdatum:    form.aanvraagdatum,
@@ -1619,7 +1627,7 @@ export function InformatieTab({
         {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): rollen worden bij opslaan
             direct naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider" (workPlanner),
             Controller → custom attribute "Eindverantwoordelijke offerte". */}
-        <InklapbareCard titel="Rollen" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
+        <InklapbareCard titel="Rollen" altijdOpen={editMode}>
             {editMode ? (
               <FormRow cols="2">
                 <FormField upper label="Projectleider">
@@ -1650,7 +1658,7 @@ export function InformatieTab({
         </InklapbareCard>
 
         {/* Werkadres — eigen blok, alle velden zichtbaar. */}
-        <InklapbareCard titel="Werkadres" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
+        <InklapbareCard titel="Werkadres" altijdOpen={editMode}>
             {/* Objectkoppeling (VvE/complex). Vult zichzelf; staat los van het formulier omdat
                 koppelen meteen wegschrijft en niet op "Opslaan" hoort te wachten. */}
             <div className="mb-4 border-b border-[var(--border)] pb-3">
@@ -1702,7 +1710,6 @@ export function InformatieTab({
         {/* Opdrachtgever */}
         <InklapbareCard
           titel="Opdrachtgever"
-          hoogte={BLOK_HOOGTE}
           altijdOpen={editMode}
           bodyClassName="flex flex-col gap-3.5"
         >
@@ -1816,11 +1823,11 @@ export function InformatieTab({
         </InklapbareCard>
 
         {/* Dossier-toggles */}
-        <DossierTogglesPaneel dossierId={dossier.id} hoogte={BLOK_HOOGTE} />
+        <DossierTogglesPaneel dossierId={dossier.id} />
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (
-        <InklapbareCard titel="Financiële totalen" hoogte={BLOK_HOOGTE} altijdOpen={editMode}>
+        <InklapbareCard titel="Financiële totalen" altijdOpen={editMode}>
             {/* Opbouw van de opdracht — alleen verkoopbedragen, van boven naar beneden optellend.
                 Klikken op stelposten/meerwerk/opties opent de specificatie in een venster. */}
             <div>

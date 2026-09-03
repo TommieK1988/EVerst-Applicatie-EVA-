@@ -23,6 +23,10 @@ export type DemoRenderContext = Record<string, unknown>
 const DEMO_START = '2026-09-07'
 const DEMO_EIND = '2026-10-02'
 const DEMO_OPLEVER = '2026-10-02'
+const DEMO_AANVRAAG = '2026-04-02'
+const DEMO_DEADLINE = '2026-04-20'
+const DEMO_OFFERTE = '2026-04-18'
+const DEMO_OPDRACHT = '2026-05-11'
 const DEMO_VOORLOPIG_START = '2026-08-24'
 const DEMO_VOORLOPIG_EIND = '2026-09-18'
 
@@ -154,6 +158,20 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       voorlopige_einddatum_iso: datumISO(DEMO_VOORLOPIG_EIND),
       voorlopige_periode: `${datumNL(DEMO_VOORLOPIG_START)} t/m ${datumNL(DEMO_VOORLOPIG_EIND)}`,
       werkzaamheden: invoer.werkzaamheden || 'Schilderwerk buitenzijde, houtrotherstel en vervangen van kitvoegen.',
+    },
+    // De acht procesdatums. Vaste waarden, net als hierboven: een preview moet
+    // reproduceerbaar zijn. `financieel_gereed` blijft bewust leeg, zodat de
+    // beheerder in de preview ziet wat {#datums.heeft_financieel_gereed} doet.
+    datums: {
+      heeft: true,
+      aanvraagdatum: datumNL(DEMO_AANVRAAG),      aanvraagdatum_iso: datumISO(DEMO_AANVRAAG),      heeft_aanvraagdatum: true,
+      deadline: datumNL(DEMO_DEADLINE),           deadline_iso: datumISO(DEMO_DEADLINE),           heeft_deadline: true,
+      offertedatum: datumNL(DEMO_OFFERTE),        offertedatum_iso: datumISO(DEMO_OFFERTE),        heeft_offertedatum: true,
+      opdrachtdatum: datumNL(DEMO_OPDRACHT),      opdrachtdatum_iso: datumISO(DEMO_OPDRACHT),      heeft_opdrachtdatum: true,
+      startdatum: datumNL(DEMO_START),            startdatum_iso: datumISO(DEMO_START),            heeft_startdatum: true,
+      einddatum: datumNL(DEMO_EIND),              einddatum_iso: datumISO(DEMO_EIND),              heeft_einddatum: true,
+      opleverdatum: datumNL(DEMO_OPLEVER),        opleverdatum_iso: datumISO(DEMO_OPLEVER),        heeft_opleverdatum: true,
+      financieel_gereed: '',                      financieel_gereed_iso: '',                       heeft_financieel_gereed: false,
     },
     oplevering: {
       heeft: true,
