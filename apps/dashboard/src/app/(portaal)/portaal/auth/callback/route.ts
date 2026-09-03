@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { PORTAAL_MARKER_COOKIE, PORTAAL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { veiligPortaalPad } from '@/lib/auth/next-pad'
+import { getPortaalGebruiker } from '@/lib/portaal/auth'
 
 /**
  * GET /portaal/auth/callback — de klantpoort.
@@ -71,6 +72,17 @@ export async function GET(request: Request) {
       }
     }
 
+    // Mislukt. Maar: een inloglink werkt maar één keer, en er zijn genoeg manieren
+    // om hem een tweede keer te openen — de pagina verversen, terugknop, of een
+    // mailprogramma dat de link vooraf ophaalt om er een preview van te maken.
+    // Wie op dat moment gewoon is ingelogd, hoort niet met "link verlopen" te
+    // worden weggestuurd, en zeker niet uitgelogd te worden. Daarom eerst kijken
+    // of er al een geldige portaalsessie is.
+    const bestaande = await getPortaalGebruiker()
+    if (bestaande) return NextResponse.redirect(`${origin}${next}`)
+
+    // Geen bruikbare sessie: dan wél opruimen, zodat er geen half account
+    // achterblijft dat nergens toegang toe heeft.
     await supabase.auth.signOut()
     // Onderscheid maken tussen "link verlopen" en "adres onbekend" helpt de klant
     // en verklapt niets: hij heeft de link zelf in handen.
@@ -78,5 +90,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/portaal/login?fout=${reden}`)
   }
 
+  // Zonder token op de callback belanden gebeurt vooral bij een tweede bezoek uit
+  // de geschiedenis. Ben je al ingelogd, stuur dan gewoon door.
+  if (await getPortaalGebruiker()) return NextResponse.redirect(`${origin}${next}`)
   return NextResponse.redirect(`${origin}/portaal/login?fout=verlopen`)
 }
