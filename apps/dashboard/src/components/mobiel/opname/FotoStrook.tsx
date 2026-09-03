@@ -34,6 +34,7 @@ export default function FotoStrook({
   onVeranderd,
   verplicht = false,
   bewerkbaar = true,
+  voorbereiden,
 }: {
   opnameId: string
   regelId: string
@@ -42,6 +43,12 @@ export default function FotoStrook({
   /** Toont een rode melding zolang er geen foto is. */
   verplicht?: boolean
   bewerkbaar?: boolean
+  /**
+   * Draait vóór de eerste upload en moet true opleveren. Bedoeld voor een punt dat nog niet
+   * bewaard is: `opname_fotos.regel_id` heeft een foreign key, dus de regel moet er eerst zijn.
+   * Levert dit false op, dan gaat de foto niet door.
+   */
+  voorbereiden?: () => Promise<boolean>
 }) {
   const cameraRef = React.useRef<HTMLInputElement>(null)
   const bibliotheekRef = React.useRef<HTMLInputElement>(null)
@@ -59,6 +66,12 @@ export default function FotoStrook({
     if (!bestanden || bestanden.length === 0) return
     setBezig(true)
     setFout(null)
+
+    if (voorbereiden && !(await voorbereiden())) {
+      // De aanroeper toont zelf waaróm het niet lukte (meestal een ontbrekende omschrijving).
+      setBezig(false)
+      return
+    }
     const nieuwe: StrookFoto[] = []
     let volgendeIsHoofd = fotos.length === 0
 

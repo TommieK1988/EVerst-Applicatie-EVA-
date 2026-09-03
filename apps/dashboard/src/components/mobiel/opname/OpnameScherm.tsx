@@ -145,6 +145,9 @@ export default function OpnameScherm({
   }, [])
 
   const totaal = regels.reduce((som, r) => som + (r.regel_verkoop_totaal ?? 0), 0)
+  // Losse punten dragen geen prijs; die worden op kantoor afgeprijsd. Apart tellen, zodat het
+  // totaal niet suggereert dat de opname compleet geprijsd is.
+  const teePrijzen = regels.filter(r => r.verkoop_pe == null).length
   const groepen = groepeerPerRuimte(regels)
 
   const ruimteNamen = React.useMemo(() => {
@@ -197,18 +200,29 @@ export default function OpnameScherm({
     setStap('regel')
   }
 
-  async function bewaarConcept() {
-    if (!concept) return
-    const aantal = Number(concept.aantal.replace(',', '.'))
-    if (!(aantal > 0)) {
-      setFout('Vul een aantal groter dan 0 in')
-      return
+  /**
+   * Bewaart het punt waar de opnemer mee bezig is.
+   *
+   * Alleen de omschrijving is verplicht — bij een los punt is dat de enige harde eis. Locatie mag
+   * leeg, en een niet-ingevulde hoeveelheid telt als 1: iemand die voor een deur staat hoort niet
+   * te hoeven rekenen.
+   *
+   * `blijfStaan` bewaart zonder het formulier te verlaten. Dat is nodig zodra er een foto bij komt:
+   * `opname_fotos.regel_id` heeft een foreign key, dus de regel moet er eerst zijn.
+   */
+  async function bewaarConcept(opties: { blijfStaan?: boolean } = {}): Promise<boolean> {
+    if (!concept) return false
+
+    const ingevuldAantal = Number(concept.aantal.replace(',', '.'))
+    const aantal = Number.isFinite(ingevuldAantal) && ingevuldAantal > 0 ? ingevuldAantal : 1
+
+    if (!concept.onderdeel && !concept.vrijeOmschrijving.trim()) {
+      setFout('Vul een omschrijving in')
+      return false
     }
+
+    // Locatie is optioneel; leeg betekent dat het punt onder "Overig" komt te staan.
     const gekozenRuimte = (eigenRuimte.trim() || ruimte).trim()
-    if (!gekozenRuimte) {
-      setFout('Kies eerst een ruimte')
-      return
-    }
 
     const volgorde = concept.bestaand
       ? regels.find(r => r.id === concept.regelId)?.volgorde ?? regels.length + 1
@@ -219,7 +233,7 @@ export default function OpnameScherm({
       opname_id: opname.id,
       onderdeel_id: concept.onderdeel?.id ?? null,
       omschrijving: concept.onderdeel ? undefined : concept.vrijeOmschrijving,
-      ruimte: gekozenRuimte,
+      ruimte: gekozenRuimte || null,
       ruimte_id: ruimtes.find(r => r.naam === gekozenRuimte)?.id ?? null,
       aantal,
       toelichting_opnemer: concept.toelichting.trim() || null,
@@ -230,7 +244,8 @@ export default function OpnameScherm({
     // server terug zodra de mutatie is geland — die bevat ook de kostprijs, de uren en de normen,
     // en die kan de telefoon niet zelf uitrekenen (het recept staat er niet op).
     const bestaandeRegel = regels.find(r => r.id === concept.regelId)
-    const verkoopPe = concept.onderdeel?.verkoop_pe ?? bestaandeRegel?.verkoop_pe ?? 0
+    // Los punt: geen prijs (null, niet 0). 0 leest als gratis; null als "nog te prijzen".
+    const verkoopPe = concept.onderdeel?.verkoop_pe ?? bestaandeRegel?.verkoop_pe ?? null
     const nu = new Date().toISOString()
     const optimistisch: OpnameRegel = {
       ...(bestaandeRegel ?? {
@@ -250,7 +265,7 @@ export default function OpnameScherm({
       id: concept.regelId,
       opname_id: opname.id,
       onderdeel_id: invoer.onderdeel_id,
-      ruimte: gekozenRuimte,
+      ruimte: gekozenRuimte || null,
       ruimte_id: invoer.ruimte_id,
       volgorde,
       aantal,
@@ -275,7 +290,7 @@ export default function OpnameScherm({
     } catch (err) {
       setBezig(false)
       setFout(err instanceof Error ? err.message : 'Opslaan mislukt')
-      return
+      return false
     }
     setBezig(false)
 
@@ -286,10 +301,20 @@ export default function OpnameScherm({
       setRuimte(eigenRuimte.trim())
       setEigenRuimte('')
     }
-    // Terug naar het kiesscherm, niet naar het overzicht: in één ruimte volgen meestal meer
-    // onderdelen achter elkaar.
+
+    if (opties.blijfStaan) {
+      // Het punt bestaat nu, dus foto's kunnen eraan gehangen worden en een volgende opslag is
+      // een bijwerking in plaats van een nieuwe regel.
+      setConcept(huidig => (huidig ? { ...huidig, bestaand: true } : huidig))
+      return true
+    }
+
+    // Na een NIEUW punt terug naar het kiesscherm — in één ruimte volgen er meestal meer achter
+    // elkaar. Is er geen bibliotheek, dan is er niets te kiezen en gaat hij naar het overzicht.
+    const bestond = concept.bestaand
     setConcept(null)
-    setStap(concept.bestaand ? 'overzicht' : 'kiezen')
+    setStap(bestond || onderdelen.length === 0 ? 'overzicht' : 'kiezen')
+    return true
   }
 
   async function regelWeg(regelId: string) {
@@ -362,7 +387,7 @@ export default function OpnameScherm({
             style={{ ...secundaireKnop, flex: 1 }}
             onClick={() => startNieuweRegel(null)}
           >
-            Vrije regel
+            + Los punt
           </button>
         </MobielStickyFooter>
       </div>
@@ -393,23 +418,25 @@ export default function OpnameScherm({
               </>
             ) : (
               <>
-                <span style={label}>Wat moet er gebeuren?</span>
+                <span style={label}>Wat moet er gebeuren? (verplicht)</span>
                 <input
                   type="text"
                   value={concept.vrijeOmschrijving}
                   onChange={e => setConcept({ ...concept, vrijeOmschrijving: e.target.value })}
                   placeholder="Bijv. plint vervangen achter radiator"
                   style={veld}
+                  autoFocus={!concept.bestaand}
                 />
                 <p style={{ margin: '6px 0 0', fontSize: 11, color: ZACHT }}>
-                  Vrije regel: hier hoort geen prijs bij, de calculator vult die later aan.
+                  Los punt. Locatie, aantal en foto mag je leeg laten; de prijs wordt op kantoor
+                  in de calculatie bepaald.
                 </p>
               </>
             )}
           </div>
 
           <div style={kaart}>
-            <span style={label}>Ruimte</span>
+            <span style={label}>Locatie{onderdeel ? '' : ' (optioneel)'}</span>
             <RuimteStrook
               namen={ruimteNamen}
               actief={ruimte}
@@ -421,7 +448,9 @@ export default function OpnameScherm({
           </div>
 
           <div style={kaart}>
-            <span style={label}>Aantal{onderdeel ? ` (${onderdeel.eenheid})` : ''}</span>
+            <span style={label}>
+              Aantal{onderdeel ? ` (${onderdeel.eenheid})` : ' (optioneel, leeg telt als 1)'}
+            </span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button
                 type="button"
@@ -478,12 +507,16 @@ export default function OpnameScherm({
 
           <div style={kaart}>
             <span style={label}>Foto&apos;s</span>
-            {concept.bestaand ? (
-              <FotoStrook
+            <FotoStrook
                 opnameId={opname.id}
                 regelId={concept.regelId}
                 fotos={regelFotos}
                 verplicht={!!onderdeel?.foto_verplicht}
+                // `opname_fotos.regel_id` heeft een foreign key, dus het punt moet bestaan vóór de
+                // foto de wachtrij in gaat. In plaats van de opnemer daarmee lastig te vallen
+                // ("bewaar eerst") bewaren we het punt hier zelf. Lukt dat niet — meestal een lege
+                // omschrijving — dan gaat de foto niet door en staat de reden in beeld.
+                voorbereiden={concept.bestaand ? undefined : () => bewaarConcept({ blijfStaan: true })}
                 onVeranderd={nieuwe => {
                   setWachtendeFotos(huidig => {
                     const bij = new Set(huidig)
@@ -513,11 +546,6 @@ export default function OpnameScherm({
                   ])
                 }}
               />
-            ) : (
-              <p style={{ margin: 0, fontSize: 12.5, color: GRIJS }}>
-                Bewaar de regel eerst; daarna kun je er foto&apos;s bij maken.
-              </p>
-            )}
           </div>
 
           {fout && (
@@ -550,7 +578,7 @@ export default function OpnameScherm({
           <button
             type="button"
             style={{ ...primaireKnop, flex: 2 }}
-            onClick={bewaarConcept}
+            onClick={() => void bewaarConcept()}
             disabled={bezig}
           >
             {bezig ? 'Bezig…' : concept.bestaand ? 'Opslaan' : 'Toevoegen'}
@@ -571,7 +599,9 @@ export default function OpnameScherm({
               Nog niets opgenomen
             </p>
             <p style={{ margin: 0, fontSize: 13, color: GRIJS }}>
-              Kies een ruimte en voeg de eerste werkzaamheid toe.
+              {onderdelen.length > 0
+                ? 'Kies een locatie en voeg de eerste werkzaamheid toe.'
+                : 'Voeg je eerste punt toe. Een omschrijving is genoeg; de prijs komt later.'}
             </p>
           </div>
         ) : (
@@ -584,7 +614,9 @@ export default function OpnameScherm({
                 }}
               >
                 <span style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>{groep.ruimte}</span>
-                <span style={{ fontSize: 13, color: GRIJS }}>{euro(groep.verkoop_totaal)}</span>
+                {groep.verkoop_totaal > 0 && (
+                  <span style={{ fontSize: 13, color: GRIJS }}>{euro(groep.verkoop_totaal)}</span>
+                )}
               </div>
               {groep.regels.map(regel => {
                 const regelFotos = fotos.filter(f => f.regel_id === regel.id)
@@ -607,7 +639,7 @@ export default function OpnameScherm({
                         <div style={{ fontSize: 15, fontWeight: 600, color: TEKST }}>{regel.omschrijving}</div>
                         <div style={{ fontSize: 12, color: GRIJS, marginTop: 2 }}>
                           {regel.aantal} {regel.eenheid}
-                          {regel.verkoop_pe ? ` × ${euro(regel.verkoop_pe)}` : ''}
+                          {regel.verkoop_pe != null ? ` × ${euro(regel.verkoop_pe)}` : ''}
                           {regelFotos.length > 0 ? ` · ${regelFotos.length} foto${regelFotos.length > 1 ? "'s" : ''}` : ''}
                         </div>
                         {regel.toelichting_opnemer && (
@@ -616,8 +648,15 @@ export default function OpnameScherm({
                           </div>
                         )}
                       </div>
-                      <div style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: TEKST }}>
-                        {euro(regel.regel_verkoop_totaal)}
+                      <div
+                        style={{
+                          flexShrink: 0, fontSize: regel.verkoop_pe == null ? 11 : 14,
+                          fontWeight: regel.verkoop_pe == null ? 600 : 700,
+                          color: regel.verkoop_pe == null ? ZACHT : TEKST,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {regel.verkoop_pe == null ? 'nog te prijzen' : euro(regel.regel_verkoop_totaal)}
                       </div>
                     </div>
                     {mistFoto && (
@@ -645,18 +684,27 @@ export default function OpnameScherm({
           }}
         >
           <span>
-            {regels.length} regel{regels.length !== 1 ? 's' : ''} · {groepen.length} ruimte
+            {regels.length} punt{regels.length !== 1 ? 'en' : ''} · {groepen.length} locatie
             {groepen.length !== 1 ? 's' : ''}
+            {teePrijzen > 0 && (
+              <span style={{ color: GRIJS }}> · {teePrijzen} nog te prijzen</span>
+            )}
             {wachtend > 0 && (
               <span style={{ color: AMBER, fontWeight: 700 }}> · {wachtend} wacht op verbinding</span>
             )}
           </span>
-          <strong style={{ fontSize: 17, color: TEKST }}>{euro(totaal)}</strong>
+          {totaal > 0 && <strong style={{ fontSize: 17, color: TEKST }}>{euro(totaal)}</strong>}
         </div>
         {bewerkbaar ? (
           <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-            <button type="button" style={{ ...primaireKnop, flex: 2 }} onClick={() => setStap('kiezen')}>
-              + Toevoegen
+            <button
+              type="button"
+              style={{ ...primaireKnop, flex: 2 }}
+              // Zonder bibliotheek valt er niets te kiezen: dan meteen het formulier voor een los
+              // punt, in plaats van een lege kieslijst.
+              onClick={() => (onderdelen.length > 0 ? setStap('kiezen') : startNieuweRegel(null))}
+            >
+              {onderdelen.length > 0 ? '+ Toevoegen' : '+ Punt toevoegen'}
             </button>
             <button
               type="button"

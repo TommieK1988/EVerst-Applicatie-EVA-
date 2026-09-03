@@ -192,6 +192,7 @@ export default function OpnameTab({
             const verkoop = dit ? dit.regels.reduce((s, r) => s + (r.regel_verkoop_totaal ?? 0), 0) : 0
             const kostprijs = dit ? dit.regels.reduce((s, r) => s + (r.regel_kostprijs_totaal ?? 0), 0) : 0
             const marge = verkoop > 0 ? ((verkoop - kostprijs) / verkoop) * 100 : 0
+            const teePrijzen = dit ? dit.regels.filter(r => r.verkoop_pe == null).length : 0
 
             return (
               <Card key={opname.id}>
@@ -259,11 +260,21 @@ export default function OpnameTab({
                                       <td className="py-1.5 text-right tabular-nums">
                                         {regel.aantal} {regel.eenheid}
                                       </td>
+                                      {/* Een los punt heeft geen prijs. Bewust "nog te prijzen" en
+                                          geen € 0,00 — dat laatste leest als gratis. */}
                                       <td className="py-1.5 text-right tabular-nums text-neutral-600">
-                                        {formatEuro(regel.verkoop_pe ?? 0)}
+                                        {regel.verkoop_pe == null ? '—' : formatEuro(regel.verkoop_pe)}
                                       </td>
-                                      <td className="py-1.5 text-right tabular-nums font-medium">
-                                        {formatEuro(regel.regel_verkoop_totaal ?? 0)}
+                                      <td className="py-1.5 text-right font-medium">
+                                        {regel.verkoop_pe == null ? (
+                                          <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                                            nog te prijzen
+                                          </span>
+                                        ) : (
+                                          <span className="tabular-nums">
+                                            {formatEuro(regel.regel_verkoop_totaal ?? 0)}
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="py-1.5">
                                         {fotos.length === 0 ? (
@@ -314,6 +325,12 @@ export default function OpnameTab({
                         ))}
 
                         <div className="flex flex-wrap items-center justify-end gap-6 border-t border-neutral-200 pt-3 text-[13px]">
+                          {teePrijzen > 0 && (
+                            <span className="mr-auto text-amber-700">
+                              {teePrijzen} {teePrijzen === 1 ? 'punt' : 'punten'} zonder prijs — die
+                              prijs je af in de calculatie
+                            </span>
+                          )}
                           <span className="text-neutral-500">
                             Kostprijs <span className="tabular-nums text-neutral-700">{formatEuro(kostprijs)}</span>
                           </span>

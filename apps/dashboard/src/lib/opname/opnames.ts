@@ -76,9 +76,11 @@ export async function magOpnameOpenen(
 /**
  * Start een opname op een dossier.
  *
- * De prijslijst volgt uit de opdrachtgever van het dossier (`dossiers.klant_id`). Heeft die geen
- * actieve prijslijst, dan stopt het hier met een leesbare melding: een opname zonder afgesproken
- * onderdelen is zinloos, en stil terugvallen op de lijst van een andere corporatie is gevaarlijk.
+ * De prijslijst volgt uit de opdrachtgever van het dossier (`dossiers.klant_id`), maar is niet
+ * verplicht. Is er geen actieve lijst, dan bestaat de opname uit LOSSE PUNTEN — omschrijving,
+ * locatie, hoeveelheid, foto — die op kantoor in de calculatie worden afgeprijsd. Een opname
+ * weigeren omdat er geen lijst is, is precies het verkeerde moment: de opnemer staat dan al voor
+ * de deur.
  */
 export async function startOpname(
   dossierId: string,
@@ -95,19 +97,14 @@ export async function startOpname(
     .maybeSingle()
   if (!dossier) return { ok: false, error: 'Dossier niet gevonden' }
 
-  let prijslijstId = opties.prijslijstId
-  if (!prijslijstId) {
-    if (!dossier.klant_id) {
-      return { ok: false, error: 'Dit dossier heeft geen opdrachtgever, dus geen prijslijst' }
-    }
+  // Een prijslijst is een gemak, geen voorwaarde. Is er geen actieve lijst voor deze
+  // opdrachtgever, dan start de opname gewoon en bestaat hij uit losse punten die op kantoor
+  // worden afgeprijsd. Eerder blokkeerde dit de hele opname, en dat is precies het moment waarop
+  // de opnemer al voor de deur staat.
+  let prijslijstId = opties.prijslijstId ?? null
+  if (!prijslijstId && dossier.klant_id) {
     const lijst = await getActievePrijslijst(dossier.klant_id)
-    if (!lijst) {
-      return {
-        ok: false,
-        error: 'Deze opdrachtgever heeft nog geen actieve opnameprijslijst. Richt die eerst in bij de relatie.',
-      }
-    }
-    prijslijstId = lijst.id
+    prijslijstId = lijst?.id ?? null
   }
 
   const adres = [
@@ -221,12 +218,14 @@ export type RegelInvoer = {
   id: string
   opname_id: string
   onderdeel_id: string | null
-  /** Vrije regel (geen bibliotheek-onderdeel) vult dit zelf in. */
+  /** Los punt (geen bibliotheek-onderdeel) vult dit zelf in; dan is het het enige verplichte veld. */
   omschrijving?: string
   eenheid?: string
+  /** De locatie; vrije tekst, mag leeg blijven. */
   ruimte: string | null
   ruimte_id: string | null
-  aantal: number
+  /** Leeg of 0 telt als 1 — de opnemer hoeft niet te rekenen. */
+  aantal?: number | null
   toelichting_opnemer: string | null
   volgorde?: number
 }
@@ -250,15 +249,21 @@ export async function slaRegelOp(
   }
   await assertDossierBewerkbaar(toegang.opname.dossier_id)
 
-  if (!(invoer.aantal > 0)) return { ok: false, error: 'Vul een aantal groter dan 0 in' }
+  // Alleen de omschrijving is verplicht bij een los punt. Een hoeveelheid die de opnemer niet
+  // invult telt als 1 — hij staat voor een deur en hoeft niet te rekenen. Negatief weigeren we
+  // wel: dat is bij een opname altijd een typefout.
+  if (invoer.aantal != null && invoer.aantal < 0) {
+    return { ok: false, error: 'Een aantal kan niet negatief zijn' }
+  }
+  const aantal = invoer.aantal && invoer.aantal > 0 ? invoer.aantal : 1
 
   const rij: Record<string, unknown> = {
     id: invoer.id,
     opname_id: invoer.opname_id,
     onderdeel_id: invoer.onderdeel_id,
-    ruimte: invoer.ruimte,
+    ruimte: invoer.ruimte?.trim() || null,
     ruimte_id: invoer.ruimte_id,
-    aantal: invoer.aantal,
+    aantal,
     toelichting_opnemer: invoer.toelichting_opnemer,
     volgorde: invoer.volgorde ?? 0,
     client_bijgewerkt_op: new Date().toISOString(),
@@ -273,11 +278,16 @@ export async function slaRegelOp(
       .maybeSingle()
     if (!onderdeel) return { ok: false, error: 'Onderdeel niet gevonden' }
 
-    const { data: prijslijst } = await supabase
-      .from('opname_prijslijsten')
-      .select('standaard_opslag_pct, uurtarief_kostprijs, btw_tarief_id')
-      .eq('id', toegang.opname.prijslijst_id)
-      .maybeSingle()
+    // De opname hoeft geen prijslijst te hebben; een onderdeel hangt er altijd wél aan, dus
+    // pakken we die van het onderdeel als de opname zelf er geen draagt.
+    const prijslijstId = toegang.opname.prijslijst_id ?? onderdeel.prijslijst_id
+    const { data: prijslijst } = prijslijstId
+      ? await supabase
+          .from('opname_prijslijsten')
+          .select('standaard_opslag_pct, uurtarief_kostprijs, btw_tarief_id')
+          .eq('id', prijslijstId)
+          .maybeSingle()
+      : { data: null }
 
     const normen = onderdeel.paint_item_id ? await bevriesNormen(onderdeel.paint_item_id) : []
     const prijs = bepaalRegelPrijs(onderdeel, normen, {
@@ -295,8 +305,9 @@ export async function slaRegelOp(
       ...prijs,
     })
   } else {
-    // Vrije regel: de opnemer beschrijft iets waar geen onderdeel voor bestaat. Geen bedrag — de
-    // calculator prijst hem later. Bewust toegestaan, want een lijst is nooit compleet.
+    // LOS PUNT: de opnemer beschrijft iets waar geen onderdeel voor bestaat — of er is helemaal
+    // geen prijslijst. Alleen de omschrijving is verplicht; locatie, hoeveelheid en foto mogen
+    // ontbreken. Het afprijzen gebeurt op kantoor in de calculatie.
     if (!invoer.omschrijving?.trim()) {
       return { ok: false, error: 'Vul een omschrijving in' }
     }
@@ -304,10 +315,14 @@ export async function slaRegelOp(
       omschrijving: invoer.omschrijving.trim(),
       eenheid: invoer.eenheid?.trim() || 'st',
       prijs_soort: 'vast',
-      verkoop_pe: 0,
-      kostprijs_pe: 0,
-      uren_pe: 0,
-      opslag_pct: 0,
+      // NULL en niet 0: 0 leest als "gratis", NULL als "nog te prijzen". De generated totalen
+      // rekenen met coalesce, dus de som blijft kloppen.
+      verkoop_pe: null,
+      kostprijs_pe: null,
+      uren_pe: null,
+      opslag_pct: null,
+      onderdeel_code: null,
+      kostengroep: null,
       normen: [],
     })
   }

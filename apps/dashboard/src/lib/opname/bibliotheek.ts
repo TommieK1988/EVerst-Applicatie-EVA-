@@ -113,8 +113,13 @@ export async function getOnderdelen(
  * Deze lijst gaat in zijn geheel naar de telefoon en wordt daar lokaal gefilterd, dus elke kolom
  * die je hier toevoegt reist mee over 4G.
  */
-export async function getBibliotheek(prijslijstId: string): Promise<OpnameBibliotheek | null> {
+export async function getBibliotheek(
+  prijslijstId: string | null,
+): Promise<OpnameBibliotheek | null> {
   await vereisSessie()
+  // Geen prijslijst is een geldige toestand: de opname bestaat dan uit losse punten. De aanroeper
+  // krijgt null en toont gewoon het formulier voor een los punt.
+  if (!prijslijstId) return null
   const supabase = db()
 
   const { data: prijslijst, error } = await supabase
@@ -160,8 +165,12 @@ export async function getRuimtes(prijslijstId: string): Promise<OpnameRuimte[]> 
  * helft van de regels uit dezelfde twintig onderdelen. Bewust begrensd op de eigen prijslijst zodat
  * er nooit een onderdeel van een andere corporatie tussen staat.
  */
-export async function getVaakGebruikt(prijslijstId: string, limiet = 12): Promise<string[]> {
+export async function getVaakGebruikt(
+  prijslijstId: string | null,
+  limiet = 12,
+): Promise<string[]> {
   await vereisSessie()
+  if (!prijslijstId) return []
   const grens = new Date()
   grens.setMonth(grens.getMonth() - 12)
 

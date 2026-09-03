@@ -132,7 +132,7 @@ export default function OnderdeelKiezer({
 
       {getoond.length === 0 ? (
         <p style={{ padding: '18px 4px', fontSize: 14, color: GRIJS }}>
-          Niets gevonden. Voeg het toe als vrije regel, dan prijst de calculator het later.
+          Niets gevonden. Voeg het toe als los punt, dan prijst de calculator het later.
         </p>
       ) : (
         getoond.map(o => (

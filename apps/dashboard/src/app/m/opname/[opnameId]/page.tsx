@@ -34,8 +34,9 @@ export default async function MobielOpnamePage({
   const opname = await getOpnameMetRegels(opnameId)
   if (!opname) notFound()
 
+  // Zonder prijslijst is er geen bibliotheek. Dat is geen fout: de opname bestaat dan uit losse
+  // punten en het scherm gaat meteen naar het invoerformulier.
   const bibliotheek = await getBibliotheek(opname.prijslijst_id)
-  if (!bibliotheek) notFound()
 
   // Suggestielijstje; mag falen zonder het scherm te blokkeren.
   const vaakGebruikt = await getVaakGebruikt(opname.prijslijst_id).catch(() => [])
@@ -49,8 +50,8 @@ export default async function MobielOpnamePage({
       />
       <OpnameScherm
         opname={opname}
-        onderdelen={bibliotheek.onderdelen}
-        ruimtes={bibliotheek.ruimtes}
+        onderdelen={bibliotheek?.onderdelen ?? []}
+        ruimtes={bibliotheek?.ruimtes ?? []}
         vaakGebruiktIds={vaakGebruikt}
       />
     </>
