@@ -13,7 +13,7 @@
 
 import { useState, useRef, useTransition, useMemo } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Save, RefreshCw, Check, ChevronDown, ChevronRight, FileText, Upload, X, Pencil } from 'lucide-react'
+import { ArrowLeft, Save, RefreshCw, Check, ChevronDown, ChevronRight, FileText, Upload, X, Pencil, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateSjabloon } from '../actions'
 import VeldenBuilder from './VeldenBuilder'
@@ -221,6 +221,7 @@ function WordTemplatePaneel({
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [openGroep, setOpenGroep] = useState<string | null>('Document')
+  const [zoek, setZoek] = useState('')
   const [shareLink, setShareLink] = useState('')
   const [linking, setLinking] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -233,6 +234,38 @@ function WordTemplatePaneel({
   const bpRef = useRef<HTMLInputElement>(null)
 
   const isGraph = bron === 'sharepoint' || bron === 'onedrive'
+
+  /* Zoeken in de variabelenlijst. Zonder dit moet je vijftien dichtgeklapte groepen
+     langs om één tag te vinden, en staat de tag die je zoekt per definitie in de
+     groep die dicht is (er kan er maar één tegelijk open).
+
+     De vergelijking negeert de opmaak van een tag: {, }, #, /, %, @ en punten gaan
+     eruit, zodat "opdrachtdatum", "{datums.opdrachtdatum}" en "datums opdrachtdatum"
+     alle drie hetzelfde vinden. Het label doet mee, want dáár staan de woorden die
+     iemand intikt ("voorlopig", "garantie") vaker in dan in de tagnaam zelf. */
+  const zoekTermen = useMemo(
+    () => zoek.toLowerCase().split(/[\s{}#\/%@.]+/).filter(Boolean),
+    [zoek],
+  )
+
+  const zichtbareGroepen = useMemo(() => {
+    if (zoekTermen.length === 0) return DOCUMENT_VARIABELEN
+    const raakt = (tekst: string) => {
+      const t = tekst.toLowerCase()
+      return zoekTermen.every(term => t.includes(term))
+    }
+    return DOCUMENT_VARIABELEN
+      .map(groep => {
+        // Matcht de groepsnaam zelf, dan blijft de hele groep staan: wie "planning"
+        // typt wil de planning-variabelen zien, niet alleen die met dat woord erin.
+        if (raakt(groep.groep)) return groep
+        const items = groep.items.filter(i => raakt(`${i.v} ${i.label}`))
+        return items.length > 0 ? { ...groep, items } : null
+      })
+      .filter((g): g is typeof DOCUMENT_VARIABELEN[number] => g !== null)
+  }, [zoekTermen])
+
+  const aantalTreffers = zichtbareGroepen.reduce((n, g) => n + g.items.length, 0)
   const heeftTemplate = (isGraph && driveId && itemId) || !!docxTemplateUrl
 
   async function controleerTemplate() {
@@ -489,15 +522,51 @@ function WordTemplatePaneel({
       {/* Variabelen */}
       <div>
         <div className="p-2 space-y-1">
-          <p className="text-xs text-slate-400 px-1 pb-1">Klik op een variabele om te kopiëren.</p>
-          {DOCUMENT_VARIABELEN.map(({ groep, uitleg, items }) => (
+          <div className="relative px-1 pb-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 w-3.5 h-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              // Bewust `text` en niet `search`: die laatste krijgt in Chrome een eigen
+              // kruisje, en dan staan er twee naast elkaar.
+              type="text"
+              value={zoek}
+              onChange={e => setZoek(e.target.value)}
+              placeholder="Zoek een variabele…"
+              className="w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-7 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+            />
+            {zoek && (
+              <button
+                type="button"
+                onClick={() => setZoek('')}
+                aria-label="Zoekopdracht wissen"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-slate-400 px-1 pb-1">
+            {zoek
+              ? `${aantalTreffers} ${aantalTreffers === 1 ? 'variabele' : 'variabelen'} gevonden — klik om te kopiëren.`
+              : 'Klik op een variabele om te kopiëren.'}
+          </p>
+          {zoek && aantalTreffers === 0 && (
+            <p className="px-1 py-3 text-xs text-slate-500">
+              Niets gevonden voor “{zoek}”. Zoek op een deel van de naam, bijvoorbeeld{' '}
+              <button type="button" onClick={() => setZoek('datum')} className="underline hover:text-slate-700">datum</button>{' '}
+              of{' '}
+              <button type="button" onClick={() => setZoek('klant')} className="underline hover:text-slate-700">klant</button>.
+            </p>
+          )}
+          {zichtbareGroepen.map(({ groep, uitleg, items }) => (
             <div key={groep} className="border border-slate-200 rounded-lg overflow-hidden">
               <button onClick={() => setOpenGroep(v => v === groep ? null : groep)}
                 className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100">
                 <span>{groep}</span>
-                {openGroep === groep ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {/* Tijdens het zoeken staat alles open: de accordeon dichthouden zou de
+                    treffers verbergen die je net hebt gezocht. */}
+                {zoek || openGroep === groep ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               </button>
-              {openGroep === groep && (
+              {(zoek || openGroep === groep) && (
                 <div>
                   {uitleg && <p className="px-3 py-1.5 text-[11px] text-slate-500 bg-slate-50/60 border-b border-slate-100 leading-snug">{uitleg}</p>}
                   <div className="divide-y divide-slate-100">
