@@ -24,6 +24,28 @@ export const MOBIEL_SESSIE_MAXAGE = 60 * 60 * 24 * 3
 export const MOBIEL_MARKER_COOKIE = 'eva_mobiel'
 
 /**
+ * Levensduur van het apparaat-cookie: een jaar. Het soort apparaat verandert
+ * niet, dus dit hoeft niet elke sessie opnieuw vastgesteld te worden.
+ */
+export const APPARAAT_COOKIE_MAXAGE = 60 * 60 * 24 * 365
+
+/**
+ * Niet-httpOnly cookie met het soort apparaat: `mobiel` voor telefoons en
+ * tablets, afwezig voor desktops.
+ *
+ * Nodig omdat een iPad zich sinds iPadOS 13 als Macintosh voorstelt: server-side
+ * is hij niet van een MacBook te onderscheiden. De browser stelt het eenmalig
+ * vast (touch + schermformaat, zie `lib/mobiel-apparaat.ts`) en legt het hier
+ * vast, zodat de middleware er bij elk volgend verzoek al vóór het renderen op
+ * kan beslissen -- en de gebruiker dus niet meer heen en weer springt tussen de
+ * mobiele en de platformweergave.
+ *
+ * Alleen routering en cookielevensduur; nooit als autorisatie gebruiken. Wie hem
+ * zelf zet krijgt hooguit de mobiele weergave te zien.
+ */
+export const APPARAAT_COOKIE = 'eva_apparaat'
+
+/**
  * Levensduur van een klantportaal-sessie: 14 dagen. Een opdrachtgever komt niet
  * elke ochtend binnen en zou anders bijna elk bezoek een nieuwe inloglink moeten
  * aanvragen.

@@ -165,10 +165,11 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
 
     await Promise.all(
       abonnementen.map(async (ab) => {
-        // Per apparaat: een telefoon krijgt het mobiele pad mee, de rest het gewone.
-        // De vlag van de browser gaat vóór de user-agent — die liegt op iOS (zie
-        // isMobielApparaat in lib/push/client.ts). Alleen bij oudere abonnementen
-        // zonder vlag valt hij terug op de user-agent.
+        // Per apparaat: telefoons en tablets krijgen het mobiele pad mee, de rest
+        // het gewone. De vlag van de browser gaat vóór de user-agent — die liegt op
+        // iOS en iPadOS (zie isMobielApparaat in lib/mobiel-apparaat.ts). Alleen bij
+        // oudere abonnementen zonder vlag valt hij terug op de user-agent; die komen
+        // via de middleware alsnog goed uit, want die kent het apparaat-cookie.
         const naarMobiel = ab.mobiel ?? isMobileUA(ab.user_agent)
         const bericht = JSON.stringify({
           titel: payload.titel,

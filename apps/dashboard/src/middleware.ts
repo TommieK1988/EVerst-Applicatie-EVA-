@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { alsSessieCookie, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
-import { isMobileUA } from '@/lib/isMobileUA'
+import { alsSessieCookie, APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
+import { isMobielVerzoek } from '@/lib/isMobileUA'
 import {
   COOKIE_SESSIE_VERLOOPT, COOKIE_PORTAAL, PORTAAL_SESSIE_MAXAGE,
   volgendeUitlogTijd, mobieleVervalTijd, portaalVervalTijd,
@@ -17,7 +17,14 @@ export async function middleware(request: NextRequest) {
   // Mobiel? Dan krijgt de sessie een persistente 3-daagse levensduur (overleeft
   // een app-herstart); desktop houdt de sessie-cookie die bij het sluiten vervalt.
   // Vroeg bepalen zodat de cookie-schrijver hieronder het al weet.
-  const mobiel = isMobileUA(request.headers.get('user-agent'))
+  //
+  // Telefoons en tablets blijken uit de User-Agent; een iPad in de standaardstand
+  // niet (die stelt zich voor als Macintosh) en komt uit het apparaat-cookie dat
+  // de browser zelf heeft gezet. Zie lib/isMobileUA.ts.
+  const mobiel = isMobielVerzoek(
+    request.headers.get('user-agent'),
+    request.cookies.get(APPARAAT_COOKIE)?.value,
+  )
 
   // Klantportaal-sessie? Die is persistent met een eigen levensduur (14 dagen),
   // ook op de desktop: een opdrachtgever heeft geen werkdag die om 18:00 eindigt
@@ -178,7 +185,9 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL(gevraagd ?? standaard, request.url))
     }
 
-    // Telefoon op een desktop-route → server-side naar de mobiele omgeving.
+    // Mobiel apparaat op een desktop-route → server-side naar de mobiele omgeving.
+    // Dit vangt ook het aantikken van een pushmelding af: die valt in sw.js terug
+    // op '/' en zou anders midden in de platformweergave uitkomen.
     // (Vervangt de client-side flash; MobileRedirect blijft als viewport-fallback.)
     //
     // Het portaal is hiervan uitgezonderd: /m is de monteursapp en heeft voor een

@@ -1,11 +1,11 @@
 'use server'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { cookies, headers } from 'next/headers'
-import { MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
+import { APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { COOKIE_SESSIE_VERLOOPT } from '@/lib/sessie'
-import { isMobileUA } from '@/lib/isMobileUA'
+import { isMobielVerzoek } from '@/lib/isMobileUA'
 
 const loginSchema = z.object({
   email: z.string().email('Ongeldig e-mailadres'),
@@ -25,8 +25,12 @@ export async function wachtwoordLogin(
   const parsed = loginSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
-  // Wachtwoord-login is een mobiel-pad; UA bepaalt de persistente 3-daagse sessie.
-  const mobiel = isMobileUA((await headers()).get('user-agent'))
+  // Wachtwoord-login is een mobiel-pad; het apparaat bepaalt de persistente
+  // 3-daagse sessie.
+  const mobiel = isMobielVerzoek(
+    (await headers()).get('user-agent'),
+    (await cookies()).get(APPARAAT_COOKIE)?.value,
+  )
   const supabase = await createClient({ persistentSessie: mobiel })
 
   const { data, error } = await supabase.auth.signInWithPassword({
