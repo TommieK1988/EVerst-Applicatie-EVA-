@@ -62,6 +62,13 @@ export type UrenExtraVelden = {
   projectNummer: string | null
   projectNaam: string | null
   projectleider: string | null
+  /**
+   * De projectrollen op het dossier, als EVA-medewerker-id. Hiermee bepaalt het scherm welke uren
+   * de ingelogde gebruiker mag goedkeuren — dat volgt uit het dossier waarop de uren staan, niet
+   * uit de ploeg waar de medewerker in zit.
+   */
+  teamleiderId: string | null
+  projectleiderId: string | null
   geaccordeerd: boolean
   geaccordeerdDoor: string | null
   geaccordeerdOp: string | null

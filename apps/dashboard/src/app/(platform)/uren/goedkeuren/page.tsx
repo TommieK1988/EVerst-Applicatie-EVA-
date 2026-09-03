@@ -1,6 +1,4 @@
 import { PageHeader } from '@/components/ui'
-import { createClient } from '@everts/database/server'
-import { laadLayouts } from '@/app/actions/layouts'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getTeamWeken, getProjectRegels } from '@/lib/uren/goedkeuring'
 import { getUrenInstellingen } from '@/lib/uren/instellingen'
@@ -21,17 +19,11 @@ export const dynamic = 'force-dynamic'
 export default async function UrenGoedkeurenPage() {
   await vereisSessie()
 
-  // Layouts van de Bouw7-tabel horen bij de gebruiker, niet bij het scherm.
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const userId = user?.id ?? null
-
-  const [weken, regels, verlof, instellingen, layouts] = await Promise.all([
+  const [weken, regels, verlof, instellingen] = await Promise.all([
     getTeamWeken(),
     getProjectRegels(),
     getTeBeoordelenVerlof(),
     getUrenInstellingen(),
-    userId ? laadLayouts(userId, 'uren-bouw7') : Promise.resolve([]),
   ])
 
   return (
@@ -42,8 +34,6 @@ export default async function UrenGoedkeurenPage() {
         regels={regels}
         verlof={verlof}
         bedrijfsModus={instellingen.goedkeuring_modus}
-        layouts={layouts}
-        userId={userId}
       />
     </div>
   )

@@ -8,14 +8,21 @@
 //
 // WIE MAG WAT. Bouw7 legt niet vast wie moet goedkeuren -- het kent alleen de vlag `isApproved`, en
 // achteraf wie hem omzette. Er zijn ook geen goedkeuring-endpoints voor uren (/list/approvals geeft
-// 404; die bestaan alleen voor contracten en inkoopfacturen). EVA bepaalt de routering dus zelf:
+// 404; die bestaan alleen voor contracten en inkoopfacturen). EVA bepaalt de routering dus zelf,
+// en wel uit de PROJECTROLLEN OP HET DOSSIER waarop de uren geboekt zijn -- `dossiers.teamleider_id`
+// en `dossiers.project_manager_id`. Dus niet uit de ploeg van de medewerker: wie de uren kan
+// beoordelen hangt af van het werk, niet van waar iemand organisatorisch hangt.
 //
-//   teamleider akkoord + het project heeft een projectleider  -> nog niets naar Bouw7
-//   teamleider akkoord + geen projectleider (indirect, verlof) -> approved = true
-//   projectleider akkoord                                      -> approved = true, ook zonder teamleider
-//   projectleider trekt in                                     -> approved = false
+//   dossier heeft een teamleider    -> eerst hij, daarna de projectleider
+//   dossier heeft geen teamleider   -> meteen naar de projectleider, zonder tussenstop
+//   teamleider akkoord + geen projectleider -> approved = true (hij is dan eindstation)
+//   projectleider akkoord           -> approved = true, ook zonder teamleider
+//   projectleider trekt in          -> approved = false
 //
-// De projectleider overruled de teamleider dus altijd, in beide richtingen.
+// De projectleider overruled de teamleider dus altijd, in beide richtingen. Er is bewust GEEN
+// terugval op een ploegteamleider of op Directie: staat er niemand op het dossier, dan is het de
+// projectleider, en staat ook die er niet dan hoort de regel bij "niet toe te wijzen" in plaats van
+// op het bureau van iemand die er niets mee te maken heeft.
 //
 // VOLLEDIGE BODY BIJ ELKE SCHRIJFACTIE. `POST /project/hour-log` is een upsert, en het is niet
 // gedocumenteerd of niet-meegestuurde velden blijven staan of leeggemaakt worden. De bestaande
@@ -30,7 +37,6 @@ import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7Client, Bouw7EmployeeHourLog, Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
-import { bepaalTeamleider } from './goedkeuring'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -58,6 +64,9 @@ export type OpenUurRegel = {
   bouw7ProjectId: number | null
   /** Null als EVA dit Bouw7-project niet kent. */
   dossierId: string | null
+  /** Projectrol op het dossier -- niet de teamleider van de ploeg van de medewerker. */
+  teamleiderId: string | null
+  teamleiderNaam: string | null
   projectleiderId: string | null
   projectleiderNaam: string | null
   bewakingscode: string | null
@@ -110,7 +119,7 @@ export async function getOpenstaandeUren(van: string, tot: string): Promise<Open
     supabase.from('medewerkers').select('id, bouw7_id').in('bouw7_id', employeeIds),
     supabase
       .from('dossiers')
-      .select('id, bouw7_id, dossiernummer, titel, project_manager_id, medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam)')
+      .select('id, bouw7_id, dossiernummer, titel, project_manager_id, teamleider_id, projectleider:medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam), teamleider:medewerkers!dossiers_teamleider_id_fkey(voornaam, tussenvoegsel, achternaam)')
       .in('bouw7_id', projectIds),
     supabase
       .from('uren_bouw7_beoordeling')
@@ -132,16 +141,20 @@ export async function getOpenstaandeUren(van: string, tot: string): Promise<Open
     const b = beoMap.get(l.id)
     const uren = num(l.hours)
     const tarief = l.hourlyRate != null ? num(l.hourlyRate) : null
-    const pl = dossier?.medewerkers
+    const pl = dossier?.projectleider
+    const tl = dossier?.teamleider
+    const teamleiderId = dossier?.teamleider_id ?? null
+    const projectleiderId = dossier?.project_manager_id ?? null
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
-    // Een regel die EVA niet kan thuisbrengen belandt niet stilletjes in de prullenbak: hij komt
-    // apart in beeld, zodat iemand hem kan repareren of alsnog in Bouw7 kan afhandelen.
+    // Staat er niemand op het dossier, dan kan EVA de regel nergens heen sturen. Die verdwijnt niet
+    // stilletijk maar komt apart in beeld, zodat iemand de rollen kan invullen of hem alsnog in
+    // Bouw7 kan afhandelen.
     const status: OpenUurRegel['status'] =
-      !medewerkerId && !dossier ? 'niet_toe_te_wijzen'
-      : tlAkkoord || !medewerkerId ? 'wacht_op_projectleider'
-      : 'wacht_op_teamleider'
+      !teamleiderId && !projectleiderId ? 'niet_toe_te_wijzen'
+      : teamleiderId && !tlAkkoord ? 'wacht_op_teamleider'
+      : 'wacht_op_projectleider'
 
     return {
       id: l.id,
@@ -159,7 +172,9 @@ export async function getOpenstaandeUren(van: string, tot: string): Promise<Open
       projectNaam: l.project?.name ?? null,
       bouw7ProjectId: l.project?.id ?? null,
       dossierId: dossier?.id ?? null,
-      projectleiderId: dossier?.project_manager_id ?? null,
+      teamleiderId,
+      teamleiderNaam: tl ? [tl.voornaam, tl.tussenvoegsel, tl.achternaam].filter(Boolean).join(' ') : null,
+      projectleiderId,
       projectleiderNaam: pl
         ? [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ')
         : (l.project?.projectLeaderName ?? null),
@@ -197,8 +212,12 @@ async function haalAlleOpenUren(
 }
 
 /**
- * Wat er voor mij te doen is: regels waarvan ik teamleider ben en die nog niet door de teamleider
- * zijn geaccordeerd, plus alle regels op dossiers waar ik projectleider van ben.
+ * Wat er voor mij te doen is, bepaald door de projectrollen op het dossier: de regels waarop ik
+ * teamleider ben en waar de teamleider nog niet naar gekeken heeft, plus alle regels op dossiers
+ * waar ik projectleider van ben.
+ *
+ * Staat er geen teamleider op het dossier, dan slaat de regel die stap gewoon over en wacht hij
+ * meteen op de projectleider -- er is bewust geen terugval naar een ploegteamleider of Directie.
  */
 export async function getMijnTeKeurenUren(van: string, tot: string): Promise<{
   alsTeamleider: OpenUurRegel[]
@@ -210,12 +229,6 @@ export async function getMijnTeKeurenUren(van: string, tot: string): Promise<{
   const res = await getOpenstaandeUren(van, tot)
   if (res.fout) return { alsTeamleider: [], alsProjectleider: [], nietToeTeWijzen: [], fout: res.fout }
 
-  // Teamleider bepalen we per medewerker, niet per regel: bepaalTeamleider doet database-werk en
-  // een medewerker heeft doorgaans tientallen regels.
-  const medewerkerIds = [...new Set(res.regels.map(r => r.medewerkerId).filter(Boolean))] as string[]
-  const teamleiders = new Map<string, string | null>()
-  for (const id of medewerkerIds) teamleiders.set(id, await bepaalTeamleider(id))
-
   const alsTeamleider: OpenUurRegel[] = []
   const alsProjectleider: OpenUurRegel[] = []
   const nietToeTeWijzen: OpenUurRegel[] = []
@@ -224,9 +237,7 @@ export async function getMijnTeKeurenUren(van: string, tot: string): Promise<{
     if (r.status === 'niet_toe_te_wijzen') { nietToeTeWijzen.push(r); continue }
     // De projectleider mag altijd, ook voordat de teamleider heeft gekeken -- hij overruled.
     if (r.projectleiderId === ik.id && !r.plAkkoord) alsProjectleider.push(r)
-    if (r.medewerkerId && teamleiders.get(r.medewerkerId) === ik.id && !r.tlAkkoord && !r.plAkkoord) {
-      alsTeamleider.push(r)
-    }
+    if (r.teamleiderId === ik.id && !r.tlAkkoord && !r.plAkkoord) alsTeamleider.push(r)
   }
   return { alsTeamleider, alsProjectleider, nietToeTeWijzen, fout: null }
 }
@@ -293,106 +304,79 @@ async function bewaarBeoordeling(
   }, { onConflict: 'bouw7_hour_log_id' })
 }
 
-/** Haalt de regels op en controleert of ik ze in deze rol mag beoordelen. */
-async function mijnRegels(
-  hourLogIds: number[], rol: 'teamleider' | 'projectleider',
-): Promise<{ ok: true; regels: OpenUurRegel[] } | { ok: false; error: string }> {
-  if (!hourLogIds.length) return { ok: false, error: 'Geen regels geselecteerd.' }
-  // Ruim venster: de achterstand loopt terug tot januari en de UI mag ver terugkijken.
+export type KeurResultaat =
+  | { ok: true; verwerkt: number; naarBouw7: number; wachtOpProjectleider: number; mislukt: number; fouten: string[] }
+  | { ok: false; error: string }
+
+/**
+ * Keurt uren goed in de rol die je op het betreffende dossier hebt.
+ *
+ * Bewust geen rolkeuze in de interface: welke pet je op hebt volgt uit het dossier, niet uit iets
+ * wat de gebruiker moet aanvinken. Per regel:
+ *
+ *   ik ben teamleider  -> akkoord; naar Bouw7 alleen als er geen projectleider is
+ *   ik ben projectleider -> akkoord en naar Bouw7, ook zonder teamleider (hij overruled)
+ *
+ * Regels waar ik geen van beide ben worden overgeslagen -- de autorisatie zit hier, niet in het
+ * scherm, want een meegestuurde lijst id's zegt niets over wie ze mag beoordelen.
+ */
+export async function keurUrenGoed(hourLogIds: number[]): Promise<KeurResultaat> {
+  const ik = await vereisSessie()
+  if (!hourLogIds.length) return { ok: false, error: 'Geen uren geselecteerd.' }
+
   const jaar = new Date().getFullYear()
   const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`)
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
-  const bron = rol === 'teamleider' ? mijn.alsTeamleider : mijn.alsProjectleider
   const gevraagd = new Set(hourLogIds)
-  const regels = bron.filter(r => gevraagd.has(r.id))
-  if (!regels.length) {
-    return { ok: false, error: `Geen van deze uren staat op jouw akkoord als ${rol}.` }
+  const alsPl = mijn.alsProjectleider.filter(r => gevraagd.has(r.id))
+  const plIds = new Set(alsPl.map(r => r.id))
+  // Ben ik toevallig allebei, dan telt de projectleider-rol: die is beslissend.
+  const alsTl = mijn.alsTeamleider.filter(r => gevraagd.has(r.id) && !plIds.has(r.id))
+  if (!alsPl.length && !alsTl.length) {
+    return { ok: false, error: 'Geen van deze uren staat op jouw akkoord.' }
   }
-  return { ok: true, regels }
-}
-
-export type KeurResultaat =
-  | { ok: true; verwerkt: number; naarBouw7: number; mislukt: number; fouten: string[] }
-  | { ok: false; error: string }
-
-/**
- * Teamleider accordeert. Heeft het project een projectleider, dan blijft de vlag in Bouw7 nog uit
- * -- die kijkt er daarna nog naar. Is er geen projectleider (indirecte uren, verlof), dan is de
- * teamleider het eindstation en gaat de vlag meteen om.
- */
-export async function keurAlsTeamleider(hourLogIds: number[]): Promise<KeurResultaat> {
-  const ik = await vereisSessie()
-  const gevonden = await mijnRegels(hourLogIds, 'teamleider')
-  if (!gevonden.ok) return gevonden
 
   const client = await getBouw7Client()
   const nu = new Date().toISOString()
-  let naarBouw7 = 0, mislukt = 0
+  let naarBouw7 = 0, wachtOpProjectleider = 0, mislukt = 0
   const fouten: string[] = []
 
-  for (const r of gevonden.regels) {
-    const eindstation = !r.projectleiderId
-    if (eindstation) {
-      const res = await schrijfHourLog(client, r.id, { approved: true }).catch(e => ({
-        ok: false as const, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.',
-      }))
-      if (!res.ok) {
-        mislukt++
-        fouten.push(`${r.datum} ${r.medewerkerNaam}: ${res.error}`)
-        await bewaarBeoordeling(r.id, r, {
-          tl_akkoord_op: nu, tl_akkoord_door: ik.id, bouw7_status: 'fout', bouw7_fout: res.error,
-        })
-        continue
-      }
-      naarBouw7++
-    }
-    await bewaarBeoordeling(r.id, r, {
-      tl_akkoord_op: nu,
-      tl_akkoord_door: ik.id,
-      bouw7_status: eindstation ? 'verzonden' : 'niet_verzonden',
-      bouw7_fout: null,
-    })
-  }
-
-  revalidatePath('/uren/goedkeuren')
-  return { ok: true, verwerkt: gevonden.regels.length, naarBouw7, mislukt, fouten }
-}
-
-/**
- * Projectleider accordeert. Zijn akkoord is eindoordeel: de vlag gaat om, ook als de teamleider er
- * nog niet naar gekeken heeft.
- */
-export async function keurAlsProjectleider(hourLogIds: number[]): Promise<KeurResultaat> {
-  const ik = await vereisSessie()
-  const gevonden = await mijnRegels(hourLogIds, 'projectleider')
-  if (!gevonden.ok) return gevonden
-
-  const client = await getBouw7Client()
-  const nu = new Date().toISOString()
-  let naarBouw7 = 0, mislukt = 0
-  const fouten: string[] = []
-
-  for (const r of gevonden.regels) {
+  const stuur = async (r: OpenUurRegel) => {
     const res = await schrijfHourLog(client, r.id, { approved: true }).catch(e => ({
       ok: false as const, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.',
     }))
     if (!res.ok) {
       mislukt++
       fouten.push(`${r.datum} ${r.medewerkerNaam}: ${res.error}`)
-      await bewaarBeoordeling(r.id, r, { bouw7_status: 'fout', bouw7_fout: res.error })
-      continue
-    }
-    naarBouw7++
-    await bewaarBeoordeling(r.id, r, {
+    } else naarBouw7++
+    return res.ok
+  }
+
+  for (const r of alsPl) {
+    const gelukt = await stuur(r)
+    await bewaarBeoordeling(r.id, r, gelukt ? {
       pl_akkoord_op: nu, pl_akkoord_door: ik.id,
       ingetrokken_op: null, ingetrokken_door: null, ingetrokken_reden: null,
       bouw7_status: 'verzonden', bouw7_fout: null,
+    } : { bouw7_status: 'fout', bouw7_fout: fouten[fouten.length - 1] ?? null })
+  }
+
+  for (const r of alsTl) {
+    // Zonder projectleider is de teamleider het eindstation; anders wacht de regel nog op hem.
+    const eindstation = !r.projectleiderId
+    const gelukt = eindstation ? await stuur(r) : true
+    if (!eindstation) wachtOpProjectleider++
+    await bewaarBeoordeling(r.id, r, {
+      tl_akkoord_op: nu, tl_akkoord_door: ik.id,
+      bouw7_status: eindstation ? (gelukt ? 'verzonden' : 'fout') : 'niet_verzonden',
+      bouw7_fout: eindstation && !gelukt ? (fouten[fouten.length - 1] ?? null) : null,
     })
   }
 
+  revalidatePath('/uren')
   revalidatePath('/uren/goedkeuren')
-  return { ok: true, verwerkt: gevonden.regels.length, naarBouw7, mislukt, fouten }
+  return { ok: true, verwerkt: alsPl.length + alsTl.length, naarBouw7, wachtOpProjectleider, mislukt, fouten }
 }
 
 /**
