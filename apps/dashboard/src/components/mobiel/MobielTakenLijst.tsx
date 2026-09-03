@@ -17,6 +17,8 @@ export type MobielTaak = {
   formulier_template_id: string | null
   /** De actie start een kwaliteitsronde (tasks.kwaliteit_ronde). */
   kwaliteit_ronde?: boolean
+  /** De actie start een opname (tasks.opname_ronde). */
+  opname_ronde?: boolean
   /** Gezet als de taak een openstaande toolbox is; link naar de doorloop. */
   toolbox_toewijzing_id?: string | null
   /** Platte omschrijving-tekst; null als er geen omschrijving is. */

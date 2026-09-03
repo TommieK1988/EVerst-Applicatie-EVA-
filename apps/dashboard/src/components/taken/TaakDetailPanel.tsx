@@ -98,6 +98,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   // Formulier-koppeling
   const [formulierTemplateId, setFormulierTemplateId] = useState(taak.formulier_template_id ?? '')
   const [kwaliteitRonde, setKwaliteitRonde] = useState(taak.kwaliteit_ronde ?? false)
+  const [opnameRonde, setOpnameRonde] = useState(taak.opname_ronde ?? false)
   const [formulieren, setFormulieren] = useState<{ id: string; naam: string; categorie: string | null }[]>([])
   /** Openstaande toolbox-toewijzing; hangt naast `tasks`, dus apart ophalen. */
   const [toolboxId, setToolboxId] = useState<string | null>(null)
@@ -234,6 +235,12 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const handleKwaliteitRondeChange = (val: boolean) => {
     setKwaliteitRonde(val)
     startTransition(() => updateTaak(taak.id, { kwaliteit_ronde: val }))
+  }
+
+  /** Zelfde mechaniek als de kwaliteitsronde, maar dan voor een mutatie-opname. */
+  const handleOpnameRondeChange = (val: boolean) => {
+    setOpnameRonde(val)
+    startTransition(() => updateTaak(taak.id, { opname_ronde: val }))
   }
 
   const medewerkersMap = Object.fromEntries(
@@ -453,6 +460,38 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
             >
               <ExternalLink className="w-3 h-3" />
               Ronde starten
+            </a>
+          )}
+        </div>
+
+        {/* Opname — derde koppeling van dezelfde soort. */}
+        <div>
+          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={opnameRonde}
+              onChange={e => handleOpnameRondeChange(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Opname</span>
+              <span className="block text-[11px] text-slate-500">
+                De opnemer krijgt bij deze actie de knop &ldquo;Opname starten&rdquo;.
+                De actie gaat automatisch op gereed zodra de opname is afgerond.
+              </span>
+            </span>
+          </label>
+
+          {opnameRonde && (
+            <a
+              href={`/m/taken/${taak.id}/opname`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-everts/30 px-2 py-1.5 text-xs text-everts hover:bg-everts/5 transition-colors"
+              title="Opname starten"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Opname starten
             </a>
           )}
         </div>

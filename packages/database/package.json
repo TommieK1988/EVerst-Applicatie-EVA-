@@ -9,7 +9,8 @@
     "./cookies": "./src/cookies.ts",
     "./types": "./src/database.types.ts",
     "./platform-types": "./src/platform-types.ts",
-    "./kwaliteit-types": "./src/kwaliteit-types.ts"
+    "./kwaliteit-types": "./src/kwaliteit-types.ts",
+    "./opname-types": "./src/opname-types.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

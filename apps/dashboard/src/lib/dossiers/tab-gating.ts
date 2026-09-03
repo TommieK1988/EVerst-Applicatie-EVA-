@@ -4,4 +4,5 @@
 export const TAB_TOGGLE_GATES: Record<string, string> = {
   vca: 'vca',
   houtrot: 'houtrot_registreren',
+  opname: 'mutatie_opname',
 }

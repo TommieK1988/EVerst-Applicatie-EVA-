@@ -186,9 +186,16 @@ type DossierTab = {
   recht?: RechtenModule
 }
 
+/** Klembord met regels: de opnamelijst. Los gezet omdat hij in twee tab-arrays staat. */
+const OPNAME_ICOON =
+  'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2M8.5 11h7M8.5 14.5h7M8.5 18h4'
+
 const AANVRAAG_TABS: DossierTab[] = [
   { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+  // Alleen zichtbaar met de dossier-toggle `mutatie_opname` (TAB_TOGGLE_GATES). Staat vóór
+  // Calculatie omdat de opname die calculatie voedt.
+  { slug: 'opname',     label: 'Opname',     d: OPNAME_ICOON },
   { slug: 'calculatie', label: 'Calculatie', d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
   { slug: 'taken',      label: 'Acties',     d:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
 ]
@@ -196,6 +203,8 @@ const AANVRAAG_TABS: DossierTab[] = [
 const OPDRACHT_TABS: DossierTab[] = [
   { slug: 'informatie',    label: 'Informatie',    d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'bestanden',     label: 'Bestanden',     d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+  // Ook op de opdracht: een naopname of een tweede mutatieronde hangt aan het opdracht-dossier.
+  { slug: 'opname',        label: 'Opname',        d: OPNAME_ICOON },
   { slug: 'calculatie',    label: 'Calculatie',    d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
   { slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
   { slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },

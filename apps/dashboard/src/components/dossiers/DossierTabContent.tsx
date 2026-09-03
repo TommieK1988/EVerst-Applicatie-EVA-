@@ -20,6 +20,7 @@ import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import VcaTab from './tabs/VcaTab'
 import HoutrotTab from './tabs/HoutrotTab'
+import OpnameTab from './tabs/OpnameTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
 import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
@@ -32,6 +33,7 @@ import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
 import { isDossierAfgesloten } from './types'
+import { SECTIE_ROUTE } from './open-dossier'
 import type { DossierSectie, DossierRij } from './types'
 
 const TAB_LABELS: Record<string, string> = {
@@ -41,6 +43,7 @@ const TAB_LABELS: Record<string, string> = {
   planning:      'Planning',
   vca:           'VCA & Kwaliteit',
   houtrot:       'Houtrot',
+  opname:        'Opname',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
   uren:          'Uren',
@@ -238,6 +241,27 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
         <>
           {titleInjector}
           <HoutrotTab dossierId={id} />
+        </>
+      )
+    }
+  }
+
+  if (tab === 'opname') {
+    // Alleen wanneer de toggle `mutatie_opname` aanstaat; anders valt de render door naar de
+    // generieke "niet beschikbaar"-weergave hieronder. Zowel op de aanvraag (de opname vóór de
+    // offerte) als op de opdracht (naopname, tweede mutatieronde).
+    const toggles = await getDossierToggles(id)
+    const opnameAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.opname && t.aan)
+    if (opnameAan) {
+      return (
+        <>
+          {titleInjector}
+          <OpnameTab
+            dossierId={id}
+            gekoppeldProjectId={(dossier as any)?.everts_calc_project_id ?? null}
+            dossierNaam={dossier?.titel ?? 'Opname'}
+            calculatieHref={`/${SECTIE_ROUTE[sectie]}/${id}/calculatie`}
+          />
         </>
       )
     }

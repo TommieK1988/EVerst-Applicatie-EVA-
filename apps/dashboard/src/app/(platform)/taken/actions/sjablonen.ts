@@ -162,6 +162,7 @@ export async function activeerSjabloon(input: {
         dossier_rollen:        taak.dossier_rollen ?? [],
         formulier_template_id: taak.formulier_template_id ?? null,
         kwaliteit_ronde:       taak.kwaliteit_ronde ?? false,
+        opname_ronde:          taak.opname_ronde ?? false,
         aangemaakt_door:       null,
       })
       .select('id')
@@ -278,6 +279,7 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
         herhaling_interval:     taak.herhaling_interval ?? 'geen',
         formulier_template_id:  taak.formulier_template_id ?? null,
         kwaliteit_ronde:        taak.kwaliteit_ronde ?? false,
+        opname_ronde:           taak.opname_ronde ?? false,
         aangemaakt_door:        user.id,
       })
       .select('id')

@@ -139,6 +139,8 @@ export async function maakTaak(data: {
   formulier_template_id?: string
   /** Deze actie start een kwaliteitsronde (zelfde mechaniek als de formulier-koppeling). */
   kwaliteit_ronde?: boolean
+  /** Deze actie start een opname (mutatiewerk); zelfde mechaniek als de kwaliteitsronde. */
+  opname_ronde?: boolean
 }): Promise<{ id: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -165,6 +167,7 @@ export async function maakTaak(data: {
       herhaling_interval:     data.herhaling_interval     ?? 'geen',
       formulier_template_id:  data.formulier_template_id  ?? null,
       kwaliteit_ronde:        data.kwaliteit_ronde        ?? false,
+      opname_ronde:           data.opname_ronde           ?? false,
     })
     .select('id')
     .single()
@@ -204,7 +207,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // Haal dossier_id op (direct of via de lijst) zodat completion-acties het kunnen gebruiken
   const { data: oud } = await supabase
     .from('tasks')
-    .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, kwaliteit_ronde, task_lists(dossier_id)')
+    .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, kwaliteit_ronde, opname_ronde, task_lists(dossier_id)')
     .eq('id', id)
     .single()
 
@@ -284,6 +287,17 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
         .eq('status', 'definitief')
       if (!count) {
         throw new Error('Deze taak wordt automatisch afgerond zodra de kwaliteitsronde definitief is.')
+      }
+    }
+
+    if (oud?.opname_ronde) {
+      const { count } = await admin
+        .from('opnames')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', id)
+        .in('status', ['gereed', 'omgezet'])
+      if (!count) {
+        throw new Error('Deze taak wordt automatisch afgerond zodra de opname is afgerond.')
       }
     }
   }
@@ -375,6 +389,7 @@ export async function updateTaak(id: string, data: {
   blocked_by_task_id?: string | null
   formulier_template_id?: string | null
   kwaliteit_ronde?: boolean
+  opname_ronde?: boolean
 }): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -403,6 +418,7 @@ export async function updateTaak(id: string, data: {
   if (data.blocked_by_task_id      !== undefined) updatePayload.blocked_by_task_id      = data.blocked_by_task_id
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
   if (data.kwaliteit_ronde        !== undefined) updatePayload.kwaliteit_ronde        = data.kwaliteit_ronde
+  if (data.opname_ronde           !== undefined) updatePayload.opname_ronde           = data.opname_ronde
 
   const { error } = await supabase
     .from('tasks')

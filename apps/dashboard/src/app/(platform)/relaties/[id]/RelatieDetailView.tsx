@@ -43,6 +43,7 @@ import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactper
 import { dossierHref } from '@/lib/dossiers/href'
 import type { RelatieObject } from '@/lib/objecten/types'
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
+import OpnamePrijslijstBeheer from '@/components/relaties/OpnamePrijslijstBeheer'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
 
@@ -1368,6 +1369,11 @@ export default function RelatieDetailView({
                 <PlaceholderBlok titel="Acquisitie" />
                 <div style={{ gridColumn: '1 / -1' }}>
                   <VerkoopPrijsafsprakenBlok relatieId={relatie.id} initial={verkoopPrijsafspraken} />
+                </div>
+                {/* Opnameprijslijsten: de mutatie-onderdelen die de opnemer op zijn telefoon kiest.
+                    Hoort hier omdat het een afspraak met deze opdrachtgever is, geen stamdata. */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <OpnamePrijslijstBeheer relatieId={relatie.id} />
                 </div>
                 <PlaceholderBlok titel="Gekoppelde dossiers" />
                 <OmzetBlok omzet={omzet} />

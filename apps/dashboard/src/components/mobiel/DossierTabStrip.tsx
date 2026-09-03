@@ -13,6 +13,9 @@ export const DOSSIER_TABS = [
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
   // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
   { key: 'houtrot', label: 'Houtrot' },
+  // Opname verschijnt alleen met de dossier-toggle `mutatie_opname`. Anders dan Houtrot óók bij
+  // een aanvraag: de mutatie-opname gaat juist vooraf aan de offerte.
+  { key: 'opname', label: 'Opname' },
   // Oplevering is Fase 9 en hoort dus bij een opdracht; op de desktop staat hij daarom in
   // OPDRACHT_TABS en niet bij aanvragen of servicedesk. Zelfde regel hier.
   { key: 'oplevering', label: 'Oplevering' },
@@ -23,15 +26,17 @@ export const DOSSIER_TABS = [
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
 export default function DossierTabStrip({
-  id, active, houtrotAan = false, isOpdracht = false,
+  id, active, houtrotAan = false, opnameAan = false, isOpdracht = false,
 }: {
   id: string
   active: DossierTabKey
   houtrotAan?: boolean
+  opnameAan?: boolean
   isOpdracht?: boolean
 }) {
   const tabs = DOSSIER_TABS
     .filter(t => t.key !== 'houtrot' || houtrotAan)
+    .filter(t => t.key !== 'opname' || opnameAan)
     .filter(t => t.key !== 'oplevering' || isOpdracht)
 
   return (

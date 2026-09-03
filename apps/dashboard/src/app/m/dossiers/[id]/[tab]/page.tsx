@@ -14,6 +14,7 @@ import VoortgangView from '@/components/mobiel/dossier-tabs/VoortgangView'
 import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 import OpleveringView from '@/components/mobiel/dossier-tabs/OpleveringView'
+import OpnameView from '@/components/mobiel/dossier-tabs/OpnameView'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
@@ -46,6 +47,10 @@ export default async function MobielDossierTabPage(
     isOpdracht && toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
   if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
 
+  // Opname verschijnt ook bij een aanvraag: de mutatie-opname gaat juist vooraf aan de offerte.
+  const opnameAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.opname && t.aan)
+  if (actief === 'opname' && !opnameAan) redirect(`/m/dossiers/${id}/informatie`)
+
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = res.data as Record<string, any>
@@ -55,7 +60,7 @@ export default async function MobielDossierTabPage(
   return (
     <>
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref="/m/dossiers" />
-      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} isOpdracht={isOpdracht} />
+      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} opnameAan={opnameAan} isOpdracht={isOpdracht} />
 
       {actief === 'informatie' && (
         <>
@@ -65,6 +70,9 @@ export default async function MobielDossierTabPage(
         </>
       )}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
+      {actief === 'opname' && (
+        <Suspense fallback={<TabLaden />}><OpnameView dossierId={id} /></Suspense>
+      )}
       {/* Ook planning in Suspense: zonder dat blokkeert de query de hele render,
           waardoor kopbalk én tabstrip pas verschijnen als de data binnen is. */}
       {actief === 'planning' && (

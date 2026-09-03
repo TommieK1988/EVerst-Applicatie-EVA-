@@ -9,7 +9,7 @@
  * importeren dit alle drie.
  */
 
-export type UitvoerActieSoort = 'formulier' | 'kwaliteit' | 'toolbox'
+export type UitvoerActieSoort = 'formulier' | 'kwaliteit' | 'toolbox' | 'opname'
 
 export type UitvoerActie = {
   soort: UitvoerActieSoort
@@ -26,6 +26,7 @@ export type TaakMetUitvoer = {
   id: string
   formulier_template_id?: string | null
   kwaliteit_ronde?: boolean | null
+  opname_ronde?: boolean | null
   /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
   toolbox_toewijzing_id?: string | null
 }
@@ -54,6 +55,15 @@ export function bepaalUitvoerActies(taak: TaakMetUitvoer): UitvoerActie[] {
       label: 'Kwaliteitsronde starten',
       href: `/m/taken/${taak.id}/kwaliteit`,
       badgeUitleg: 'Deze actie sluit automatisch zodra de kwaliteitsronde definitief is',
+    })
+  }
+
+  if (taak.opname_ronde) {
+    acties.push({
+      soort: 'opname',
+      label: 'Opname starten',
+      href: `/m/taken/${taak.id}/opname`,
+      badgeUitleg: 'Deze actie sluit automatisch zodra de opname is afgerond',
     })
   }
 
