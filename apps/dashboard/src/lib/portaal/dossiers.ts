@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import type { PortaalGebruiker } from '@everts/database/platform-types'
-import { getPortaalDossierIds, vereisPortaalDossier } from './auth'
+import { getPortaalDossierIds, vereisPortaalWeergave } from './auth'
 import { PORTAAL_ROLLEN, portaalStatusLabel } from './onderdelen'
 
 /**
@@ -50,6 +50,13 @@ export type PortaalBetrokkene = {
 
 export type PortaalDossierDetail = PortaalDossierKaart & {
   betrokkenen: PortaalBetrokkene[]
+  /**
+   * Een collega kijkt mee in plaats van de klant. Alleen dán zegt `portaalActief`
+   * iets: een klant komt nooit op een dossier dat dichtstaat.
+   */
+  voorbeeld: boolean
+  /** Staat het portaal voor dit dossier open — kan de klant hier al komen? */
+  portaalActief: boolean
   /** Welke onderdelen deze klant bij dit dossier open kan klappen. */
   onderdelen: {
     bestanden: boolean
@@ -103,7 +110,7 @@ export async function getPortaalDossiers(gebruiker: PortaalGebruiker): Promise<P
  * aanroeper die dat vergeet nog steeds niets krijgt.
  */
 export async function getPortaalDossier(dossierId: string): Promise<PortaalDossierDetail> {
-  const { instellingen } = await vereisPortaalDossier(dossierId)
+  const { instellingen, voorbeeld } = await vereisPortaalWeergave(dossierId)
 
   const rolKolommen = PORTAAL_ROLLEN.map(r => r.kolom).join(', ')
   const { data: rij } = await db()
@@ -117,6 +124,8 @@ export async function getPortaalDossier(dossierId: string): Promise<PortaalDossi
   return {
     ...naarKaart(rij),
     betrokkenen: await haalBetrokkenen(rij),
+    voorbeeld,
+    portaalActief: instellingen.actief,
     onderdelen: {
       bestanden:       instellingen.toon_bestanden,
       fotos:           instellingen.toon_fotos,

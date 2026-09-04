@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { NIET_ACTIEVE_STATUSSEN } from '@/lib/dossiers/oplever-status'
 
 /**
@@ -42,7 +42,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export async function getPortaalAandachtspunten(dossierId: string): Promise<PortaalPunt[]> {
-  await vereisPortaalOnderdeel(dossierId, 'aandachtspunten')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'aandachtspunten')
 
   const { data: punten } = await db()
     .from('oplever_punten')

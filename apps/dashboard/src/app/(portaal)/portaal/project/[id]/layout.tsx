@@ -1,9 +1,11 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { GeenToegangError } from '@/lib/auth/rechten'
-import { vereisPortaalPagina } from '@/lib/portaal/auth'
+import { vereisPortaalWeergavePagina } from '@/lib/portaal/auth'
 import { getPortaalDossier } from '@/lib/portaal/dossiers'
 import { PortaalKop } from '../../PortaalKop'
+import { VoorbeeldBalk } from '../../VoorbeeldBalk'
 import { Container, CONTAINER } from '../../ui'
 import { ProjectNav } from './ProjectNav'
 
@@ -24,7 +26,7 @@ export default async function ProjectLayout({
   children: React.ReactNode
   params: Promise<{ id: string }>
 }) {
-  await vereisPortaalPagina()
+  await vereisPortaalWeergavePagina()
   const { id } = await params
 
   let dossier
@@ -37,9 +39,22 @@ export default async function ProjectLayout({
     throw e
   }
 
+  const voorbeeld = dossier.voorbeeld
+
   return (
     <>
-      <PortaalKop terug={{ href: '/portaal', label: 'Alle projecten' }} />
+      <PortaalKop
+        voorbeeld={voorbeeld}
+        terug={voorbeeld ? undefined : { href: '/portaal', label: 'Alle projecten' }}
+      />
+
+      {/* useSearchParams wil een Suspense-grens om zich heen; die staat hier en
+          niet in de balk zelf, zodat de rest van de kop niet meewacht. */}
+      {voorbeeld && (
+        <Suspense fallback={null}>
+          <VoorbeeldBalk portaalActief={dossier.portaalActief} />
+        </Suspense>
+      )}
 
       <div className="border-b border-neutral-200 bg-white">
         <Container className="pb-4">
@@ -59,8 +74,14 @@ export default async function ProjectLayout({
       <Container className="py-7">{children}</Container>
 
       <footer className={`${CONTAINER} pb-10 text-center text-[11px] text-neutral-400`}>
-        Vragen over deze pagina? Neem contact op met uw contactpersoon bij Everts.{' '}
-        <Link href="/portaal" className="underline">Terug naar uw projecten</Link>
+        {voorbeeld ? (
+          'Voorbeeldweergave voor medewerkers — de klant ziet hier een verwijzing naar zijn contactpersoon.'
+        ) : (
+          <>
+            Vragen over deze pagina? Neem contact op met uw contactpersoon bij Everts.{' '}
+            <Link href="/portaal" className="underline">Terug naar uw projecten</Link>
+          </>
+        )}
       </footer>
     </>
   )

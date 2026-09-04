@@ -56,7 +56,7 @@ export default async function ProjectOverzicht({ params }: { params: Promise<{ i
 
           {onderdelen.meerwerk && (
             <Suspense fallback={<Kaart titel="Meerwerk"><Laden /></Kaart>}>
-              <MeerwerkBlok dossierId={id} />
+              <MeerwerkBlok dossierId={id} voorbeeld={dossier.voorbeeld} />
             </Suspense>
           )}
 
@@ -84,7 +84,7 @@ export default async function ProjectOverzicht({ params }: { params: Promise<{ i
           {onderdelen.chat && (
             <div className="hidden lg:block">
               <Suspense fallback={<Kaart titel="Berichten"><Laden /></Kaart>}>
-                <ChatBlok dossierId={id} />
+                <ChatBlok dossierId={id} voorbeeld={dossier.voorbeeld} />
               </Suspense>
             </div>
           )}
@@ -148,11 +148,11 @@ function ContactBlok({ betrokkenen }: { betrokkenen: PortaalBetrokkene[] }) {
   )
 }
 
-async function ChatBlok({ dossierId }: { dossierId: string }) {
+async function ChatBlok({ dossierId, voorbeeld }: { dossierId: string; voorbeeld: boolean }) {
   const berichten = await getPortaalChat(dossierId)
   return (
     <Kaart titel="Berichten" subtitel="Uw vraag komt bij het projectteam terecht">
-      <Chat dossierId={dossierId} berichten={berichten} compact />
+      <Chat dossierId={dossierId} berichten={berichten} compact voorbeeld={voorbeeld} />
     </Kaart>
   )
 }
@@ -195,7 +195,7 @@ async function PlanningBlok({ dossierId }: { dossierId: string }) {
   )
 }
 
-async function MeerwerkBlok({ dossierId }: { dossierId: string }) {
+async function MeerwerkBlok({ dossierId, voorbeeld }: { dossierId: string; voorbeeld: boolean }) {
   const data = await getPortaalMeerwerk(dossierId)
 
   return (
@@ -212,7 +212,7 @@ async function MeerwerkBlok({ dossierId }: { dossierId: string }) {
       {data.regels.length === 0 ? (
         <Leeg>Er is voor dit project nog geen meerwerk vastgelegd.</Leeg>
       ) : (
-        <MeerwerkLijst dossierId={dossierId} regels={data.regels} />
+        <MeerwerkLijst dossierId={dossierId} regels={data.regels} voorbeeld={voorbeeld} />
       )}
     </Kaart>
   )

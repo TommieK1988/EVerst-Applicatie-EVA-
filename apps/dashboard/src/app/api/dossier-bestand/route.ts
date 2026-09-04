@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { vereisPortaalOnderdeel, logPortaalToegang } from '@/lib/portaal/auth'
+import { vereisPortaalOnderdeelWeergave, logPortaalToegang } from '@/lib/portaal/auth'
 import { bronUitQuery, haalBestandBytes, BestandFoutError, type BestandBron } from '@/lib/dossiers/bestand-bytes'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +36,7 @@ async function portaalBron(
   if (!data) return null
 
   // Staat het onderdeel uit, dan bestaat ook een eerder gedeeld bestand niet meer.
-  const { gebruiker } = await vereisPortaalOnderdeel(
+  const { bezoeker } = await vereisPortaalOnderdeelWeergave(
     dossierId, data.soort === 'afbeelding' ? 'fotos' : 'bestanden',
   )
 
@@ -45,13 +45,19 @@ async function portaalBron(
 
   // Vastleggen wie welk bestand ophaalde. Dit is het enige moment waarop er
   // daadwerkelijk inhoud het pand verlaat; een AVG-inzagevraag gaat hierover.
-  await logPortaalToegang({
-    portaalGebruikerId: gebruiker.id,
-    dossierId,
-    onderdeel: data.soort === 'afbeelding' ? 'fotos' : 'bestanden',
-    sleutel,
-    ip,
-  })
+  //
+  // Alleen voor de klant: een collega die het portaal even bekijkt is geen
+  // portaalgebruiker (de kolom verwijst naar portaal_gebruikers) en zou het log
+  // bovendien vervuilen met verkeer dat niets over de klant zegt.
+  if (bezoeker.soort === 'klant') {
+    await logPortaalToegang({
+      portaalGebruikerId: bezoeker.gebruiker.id,
+      dossierId,
+      onderdeel: data.soort === 'afbeelding' ? 'fotos' : 'bestanden',
+      sleutel,
+      ip,
+    })
+  }
 
   return { bron, naam: (data.naam as string | null) || 'bestand' }
 }

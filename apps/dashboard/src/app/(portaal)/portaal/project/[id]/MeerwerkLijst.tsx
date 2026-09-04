@@ -20,9 +20,16 @@ import { portaalBeoordeelMeerwerk } from '../../actions'
 export function MeerwerkLijst({
   dossierId,
   regels,
+  voorbeeld = false,
 }: {
   dossierId: string
   regels: PortaalMeerwerkRegel[]
+  /**
+   * Een collega kijkt mee. Dan geen knoppen: het akkoord van de klant is de hele
+   * waarde van dit blok en dat kan een ander niet namens hem geven. De server
+   * weigert het ook — `portaalBeoordeelMeerwerk` laat alleen een klantaccount toe.
+   */
+  voorbeeld?: boolean
 }) {
   const router = useRouter()
   const [bezig, start] = useTransition()
@@ -91,7 +98,13 @@ export function MeerwerkLijst({
               </p>
             )}
 
-            {r.teBeoordelen && vraag?.regel.id !== r.id && (
+            {r.teBeoordelen && voorbeeld && (
+              <p className="mt-1 text-[11px] font-medium text-warning-700">
+                Hier kiest de klant Akkoord of Afwijzen.
+              </p>
+            )}
+
+            {r.teBeoordelen && !voorbeeld && vraag?.regel.id !== r.id && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"

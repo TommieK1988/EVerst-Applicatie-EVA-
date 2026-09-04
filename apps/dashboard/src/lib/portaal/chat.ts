@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import type { PortaalBerichtBijlage } from '@everts/database/platform-types'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { meldAanRolhouders } from './meldingen'
 
 /**
@@ -38,7 +38,7 @@ function bijlageUrl(dossierId: string, pad: string): string {
 
 /** Het gesprek zoals de klant het ziet: zonder interne kanttekeningen. */
 export async function getPortaalChat(dossierId: string): Promise<PortaalChatBericht[]> {
-  await vereisPortaalOnderdeel(dossierId, 'chat')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'chat')
 
   const { data } = await db()
     .from('portaal_berichten')

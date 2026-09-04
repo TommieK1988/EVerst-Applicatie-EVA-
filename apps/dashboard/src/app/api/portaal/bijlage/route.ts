@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
-import { vereisPortaalOnderdeel } from '@/lib/portaal/auth'
+import { vereisPortaalOnderdeelWeergave } from '@/lib/portaal/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    await vereisPortaalOnderdeel(dossierId, 'chat')
+    await vereisPortaalOnderdeelWeergave(dossierId, 'chat')
   } catch (e) {
     if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
     throw e

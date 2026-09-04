@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 /**
@@ -39,7 +39,7 @@ export type PortaalFase = {
 }
 
 export async function getPortaalPlanning(dossierId: string): Promise<PortaalFase[]> {
-  const { instellingen } = await vereisPortaalOnderdeel(dossierId, 'planning')
+  const { instellingen } = await vereisPortaalOnderdeelWeergave(dossierId, 'planning')
 
   const { data: activiteitenRaw } = await db()
     .from('planning_activiteiten')

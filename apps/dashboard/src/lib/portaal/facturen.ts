@@ -1,5 +1,5 @@
 import 'server-only'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { getDossierVerkoop } from '@/lib/dossiers/actions'
 
 /**
@@ -41,7 +41,7 @@ function statusVan(f: { betaald: boolean; isCredit: boolean; vervaldatum: string
 }
 
 export async function getPortaalFacturen(dossierId: string): Promise<PortaalFacturenData> {
-  await vereisPortaalOnderdeel(dossierId, 'facturen')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'facturen')
 
   const verkoop = await getDossierVerkoop(dossierId)
 

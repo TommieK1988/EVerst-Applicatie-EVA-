@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import type { PortaalBestandSoort } from '@everts/database/platform-types'
 
@@ -65,12 +65,12 @@ async function haalVrijgegeven(dossierId: string, soort: PortaalBestandSoort): P
 }
 
 export async function getPortaalDocumenten(dossierId: string): Promise<PortaalBestandRij[]> {
-  await vereisPortaalOnderdeel(dossierId, 'bestanden')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'bestanden')
   return haalVrijgegeven(dossierId, 'document')
 }
 
 export async function getPortaalFotos(dossierId: string): Promise<PortaalBestandRij[]> {
-  await vereisPortaalOnderdeel(dossierId, 'fotos')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'fotos')
   return haalVrijgegeven(dossierId, 'afbeelding')
 }
 

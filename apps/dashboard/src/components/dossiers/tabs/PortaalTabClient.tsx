@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Card, CardHeader, CardBody, Button, Badge, useDialogen } from '@/components/ui'
 import { PORTAAL_ONDERDELEN_ACTIEF } from '@/lib/portaal/onderdelen'
 import type { PortaalDossierBeheer } from '@/lib/portaal/beheer'
@@ -25,6 +25,10 @@ import {
  */
 export function PortaalTabClient({ dossierId, data }: { dossierId: string; data: PortaalDossierBeheer }) {
   const router = useRouter()
+  // Waar de voorbeeldweergave naartoe moet terugwijzen. Het dossier zit onder
+  // /aanvragen, /offertes, /opdrachten of /servicedesk -- welke van de vier weet
+  // alleen de huidige URL.
+  const pad = usePathname()
   const { bevestig, meld } = useDialogen()
   const [bezig, start] = useTransition()
   const [fout, setFout] = useState<string | null>(null)
@@ -103,12 +107,26 @@ export function PortaalTabClient({ dossierId, data }: { dossierId: string; data:
             </Button>
           </div>
 
-          {inst.actief && (
-            <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
+          {/* Meekijken kan altijd, ook als het portaal nog dichtstaat: juist dán
+              wil je zien wat er straks te zien is voordat je hem openzet. De
+              voorbeeldpagina zegt er zelf bij dat de klant er nog niet bij kan.
+              In een nieuw tabblad, zodat het dossier openblijft — en met ?terug=
+              zodat de weg terug er ook is als dat tabblad de plek van dit scherm
+              inneemt. */}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-3">
+            <p className="text-xs text-neutral-500">
               De klant vindt dit project op{' '}
               <span className="font-mono text-[11px] text-neutral-700">{data.portaalUrl}</span>
             </p>
-          )}
+            <a
+              href={`${data.portaalUrl}?terug=${encodeURIComponent(pad)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+            >
+              Bekijken zoals de klant het ziet ↗
+            </a>
+          </div>
         </CardBody>
       </Card>
 

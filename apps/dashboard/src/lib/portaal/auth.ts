@@ -28,7 +28,9 @@ import { PORTAAL_ONDERDEEL_KOLOM } from './onderdelen'
 
 /** Zelfde foutsoort als de medewerkerskant, zodat aanroepers één catch hebben. */
 export { GeenToegangError } from '@/lib/auth/rechten'
-import { GeenToegangError } from '@/lib/auth/rechten'
+import {
+  GeenToegangError, getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang,
+} from '@/lib/auth/rechten'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -196,6 +198,150 @@ export async function vereisPortaalOnderdeel(
     throw new GeenToegangError(`Onderdeel ${onderdeel} staat uit voor dit dossier`)
   }
   return context
+}
+
+/* ── Meekijken door een collega ──────────────────────────────────────────────
+ *
+ * Een projectleider moet kunnen zien wát zijn opdrachtgever ziet, zonder in te
+ * loggen als die opdrachtgever. Daarom mag een medewerker met leesrecht op de
+ * module `klantportaal` de portaalpagina's openen — als VOORBEELD.
+ *
+ * Dat voorbeeld is alleen-lezen, en dat is hier geen belofte maar een gevolg van
+ * waar deze functies wél en niet gebruikt worden. Alleen de lézende kant kreeg
+ * een weergave-variant; elke muterende actie (een bericht plaatsen, meerwerk
+ * goedkeuren, een bijlage uploaden) blijft op `vereisPortaalOnderdeel`, en dat
+ * laat uitsluitend een klantaccount door. Een collega kan dus niet namens de
+ * klant iets versturen of goedkeuren, ook niet met een geprepareerd verzoek.
+ *
+ * Bewust géén eis dat het portaal openstaat: juist vóórdat je het openzet wil je
+ * zien wat er dan te zien is. Het scherm zegt er zelf bij of de klant hier al
+ * kan komen. De onderdelen-gate geldt onverkort — de collega ziet daardoor
+ * precies wat de klant ziet, niet meer.
+ */
+
+export type PortaalBezoeker =
+  | { soort: 'klant'; gebruiker: PortaalGebruiker }
+  | { soort: 'medewerker'; medewerkerId: string; naam: string }
+
+export type PortaalWeergave = {
+  bezoeker: PortaalBezoeker
+  dossierId: string
+  instellingen: PortaalDossierInstellingen
+  /** Een collega kijkt mee. Het scherm hoort dat te zeggen en niets aan te bieden. */
+  voorbeeld: boolean
+}
+
+const INSTELLINGEN_KOLOMMEN =
+  'dossier_id, actief, toon_bestanden, toon_fotos, toon_facturen, toon_meerwerk, ' +
+  'toon_formulieren, toon_aandachtspunten, toon_planning, planning_detail, toon_chat, toon_afspraken'
+
+/** Een dossier dat nog nooit voor het portaal is ingericht: alles dicht. */
+function legeInstellingen(dossierId: string): PortaalDossierInstellingen {
+  return {
+    dossier_id: dossierId,
+    actief: false,
+    toon_bestanden: false, toon_fotos: false, toon_facturen: false, toon_meerwerk: false,
+    toon_meerwerk_handmatig: false, toon_formulieren: false, toon_aandachtspunten: false,
+    toon_planning: false, planning_detail: false, toon_chat: false, toon_afspraken: false,
+    gewijzigd_op: new Date(0).toISOString(),
+    gewijzigd_door: null,
+  }
+}
+
+/**
+ * De medewerker die meekijkt, of null. Leesrecht op `klantportaal` volstaat:
+ * wie in EVA de Portaal-tab van dit dossier mag openen, mag ook zien wat daar
+ * het resultaat van is.
+ */
+export async function getPortaalVoorbeeldMedewerker(): Promise<{ id: string; naam: string } | null> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) return null
+
+  const rechten = await getEffectieveRechten(medewerker)
+  if (!heeftModuleToegang(rechten, 'klantportaal', 'lezen')) return null
+
+  return {
+    id: medewerker.id,
+    naam: [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam]
+      .filter(Boolean).join(' ') || 'Collega',
+  }
+}
+
+/** Wie is dit — een klant, een meekijkende collega, of niemand? */
+export async function getPortaalBezoeker(): Promise<PortaalBezoeker | null> {
+  const gebruiker = await getPortaalGebruiker()
+  if (gebruiker) return { soort: 'klant', gebruiker }
+
+  const medewerker = await getPortaalVoorbeeldMedewerker()
+  return medewerker
+    ? { soort: 'medewerker', medewerkerId: medewerker.id, naam: medewerker.naam }
+    : null
+}
+
+/** Als `vereisPortaalPagina`, maar laat een meekijkende collega ook toe. */
+export async function vereisPortaalWeergavePagina(): Promise<PortaalBezoeker> {
+  const bezoeker = await getPortaalBezoeker()
+  if (bezoeker) return bezoeker
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  redirect(user ? '/portaal/geen-toegang' : '/portaal/login')
+}
+
+/**
+ * Leesgate voor één dossier: de klant van dat dossier, of een meekijkende
+ * collega. Gebruik dit in élke lezende functie; voor alles wat schrijft blijft
+ * `vereisPortaalOnderdeel` gelden.
+ */
+export async function vereisPortaalWeergave(dossierId: string): Promise<PortaalWeergave> {
+  if (!dossierId) throw new GeenToegangError('Geen dossier')
+
+  // De klantkant eerst en ongewijzigd: één versie van die controle, geen tweede
+  // die er net iets naast zit.
+  if (await getPortaalGebruiker()) {
+    const context = await vereisPortaalDossier(dossierId)
+    return {
+      bezoeker: { soort: 'klant', gebruiker: context.gebruiker },
+      dossierId,
+      instellingen: context.instellingen,
+      voorbeeld: false,
+    }
+  }
+
+  const medewerker = await getPortaalVoorbeeldMedewerker()
+  if (!medewerker) throw new GeenToegangError('Geen portaaltoegang')
+
+  // Bestaat het dossier eigenlijk wel? Zonder deze controle loopt een vertypt id
+  // verderop stuk op een gewone Error, en dat wordt een foutscherm in plaats van
+  // een 404.
+  const { data: dossier } = await db().from('dossiers').select('id').eq('id', dossierId).maybeSingle()
+  if (!dossier) throw new GeenToegangError('Dossier bestaat niet')
+
+  const { data } = await db()
+    .from('portaal_dossier_instellingen')
+    .select(INSTELLINGEN_KOLOMMEN)
+    .eq('dossier_id', dossierId)
+    .maybeSingle()
+
+  return {
+    bezoeker: { soort: 'medewerker', medewerkerId: medewerker.id, naam: medewerker.naam },
+    dossierId,
+    instellingen: (data as PortaalDossierInstellingen | null) ?? legeInstellingen(dossierId),
+    voorbeeld: true,
+  }
+}
+
+/** Als `vereisPortaalOnderdeel`, maar lezend — dus ook voor een meekijker. */
+export async function vereisPortaalOnderdeelWeergave(
+  dossierId: string,
+  onderdeel: PortaalOnderdeel,
+): Promise<PortaalWeergave> {
+  const weergave = await vereisPortaalWeergave(dossierId)
+  const kolom = PORTAAL_ONDERDEEL_KOLOM[onderdeel]
+  if (!(weergave.instellingen as unknown as Record<string, boolean>)[kolom]) {
+    throw new GeenToegangError(`Onderdeel ${onderdeel} staat uit voor dit dossier`)
+  }
+  return weergave
 }
 
 /**
