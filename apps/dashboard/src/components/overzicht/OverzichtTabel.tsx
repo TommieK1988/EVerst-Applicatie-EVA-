@@ -123,6 +123,11 @@ type Props<T extends { id: string }> = {
    */
   onGefilterd?: (rijen: T[]) => void
   /**
+   * Meldt welke rijen zijn aangevinkt. Zonder dit is de selectie alleen intern zichtbaar (de
+   * teller onderin) en kan een scherm er geen actie op uitvoeren.
+   */
+  onSelectie?: (rijen: T[]) => void
+  /**
    * Optioneel: regels die ná de gegevens onder aan het Excel-bestand komen,
    * gescheiden door een lege regel. Bedoeld voor totalen en omrekeningen die je
    * niet per rij kunt uitdrukken.
@@ -377,7 +382,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, exportExtraRijen,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, onSelectie, exportExtraRijen,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -810,6 +815,14 @@ export default function OverzichtTabel<T extends { id: string }>({
   useEffect(() => {
     onGefilterdRef.current?.(gefilterdeRijen.map(r => r.original))
   }, [gefilterdeRijen])
+
+  // Idem voor de selectie: in een ref, zodat een niet-gememoïseerde callback geen lus veroorzaakt.
+  const onSelectieRef = useRef(onSelectie)
+  onSelectieRef.current = onSelectie
+  const geselecteerdeRijen = table.getFilteredSelectedRowModel().rows
+  useEffect(() => {
+    onSelectieRef.current?.(geselecteerdeRijen.map(r => r.original))
+  }, [geselecteerdeRijen])
 
   const hasFilters = kolommen.some(k => k.filterType)
   const activeFilters = columnFilters.filter(f =>
