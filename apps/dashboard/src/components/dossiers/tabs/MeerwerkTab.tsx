@@ -8,6 +8,7 @@ import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, t
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
   verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
+  herstelMeerwerkBewakingscode,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
 import MeerwerkCalculatie from '@/components/everts-calc/calculatie/MeerwerkCalculatie'
@@ -155,6 +156,18 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     setBezig(false)
     if (!res.ok) { toast.error(res.error); return }
     toast.success(res.nummer ? `Aangemaakt in Bouw7 (${res.nummer})` : 'Aangemaakt in Bouw7'); herlaad(); router.refresh()
+  }
+
+  // Maakt of vult de bewakingscode van deze regel aan in Bouw7 — nodig om er in de werkbegroting op
+  // te kunnen begroten en er uren op te kunnen boeken. Idempotent, dus ook het herstelpad.
+  async function bewakingscode(regel: MeerwerkRegelView) {
+    setBezig(true)
+    const res = await herstelMeerwerkBewakingscode(regel.id)
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    if (res.waarschuwing) toast(res.waarschuwing, { icon: '⚠️', duration: 6000 })
+    else toast.success(`Bewakingscode ${res.code} staat in Bouw7`)
+    herlaad(); router.refresh()
   }
 
   // Opent (of maakt) de eigen calculatie van dit meerwerk en toont de calculatie-omgeving inline.
@@ -405,6 +418,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                             <>
                               <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                                 onClick={() => naarBouw7(r)}>Naar Bouw7</button>
+                              <span className="mx-1 text-neutral-300">·</span>
+                            </>
+                          )}
+                          {!uitBouw7 && (
+                            <>
+                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                                title="Maakt de bewakingscode in Bouw7 aan (arbeid, onderaanneming én materiaal), zodat je er kunt begroten en uren op kunt boeken"
+                                onClick={() => bewakingscode(r)}>
+                                {r.bouw7_security_code_id == null ? 'Bewakingscode aanmaken' : 'Bewakingscode bijwerken'}
+                              </button>
                               <span className="mx-1 text-neutral-300">·</span>
                             </>
                           )}

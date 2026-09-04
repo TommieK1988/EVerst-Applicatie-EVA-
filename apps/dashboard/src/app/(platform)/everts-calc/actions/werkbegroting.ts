@@ -1068,6 +1068,16 @@ export type MeerwerkBewakingscodeResultaat =
  *
  * NB: welk Bouw7-veld het meerwerk-*bedrag* idealiter voedt is nog te bevestigen op een testproject
  * (zie WRITE-ENDPOINTS.md); daarom is de prognose-write best-effort en blokkeert hij de EVA-flow niet.
+ *
+ * De code krijgt een PSL op **alle drie de kostensoorten** (1 Arbeid, 3 Onderaanneming, 5 Materiaal),
+ * niet alleen op de prognose-kostensoort. Een PSL bepaalt namelijk waar de code überhaupt te kiezen
+ * is: zonder arbeid-PSL staat een meerwerkcode niet in de urenpicker (`getBewakingscodesVoorUurlog`
+ * leest `cost-type/1`) en kun je er in de werkbegroting geen arbeid op begroten. Extra PSL's met
+ * begroot 0 zijn verder onzichtbaar in de bewaking, dus dit kost niets.
+ *
+ * Idempotent: bestaat de code (of een van de PSL's) al, dan laat `zorgVoorOntbrekendePsls` die met
+ * rust en vult hij alleen aan wat ontbreekt — de functie is dus ook het herstelpad voor een regel
+ * die eerder maar half is aangemaakt.
  */
 export async function maakMeerwerkBewakingscodeBouw7(
   dossierId: string,
@@ -1078,7 +1088,10 @@ export async function maakMeerwerkBewakingscodeBouw7(
   const { client, bouw7Id } = ctx
   const code = opts.code.trim()
   if (!code) return { ok: false, error: 'Lege bewakingscode.' }
-  const ct = opts.kostensoort ?? 5 // Materiaal als neutrale default-kostensoort.
+  const ct = opts.kostensoort ?? 5 // Materiaal als neutrale default voor de prognose-write.
+  // Prognose-kostensoort eerst: `zorgVoorOntbrekendePsls` maakt de code één keer aan, de volgorde
+  // van de kostensoorten daarna doet er niet toe.
+  const alleCts = [ct, ...PROGNOSE_KOSTENSOORTEN.filter(c => c !== ct)]
 
   // 1. Doelhoofdstuk: expliciet meegegeven → anders een hoofdstuk dat op 'meerwerk'/'MW' lijkt →
   //    anders het eerste. Levert dat niets op (project zónder hoofdstukken), dan blijft het null
@@ -1095,7 +1108,7 @@ export async function maakMeerwerkBewakingscodeBouw7(
   // 2. Code + PSL aanmaken (begroot 0) — read-modify-write op de structuur.
   let maakRes: { aangemaakt: number; fouten: string[] }
   try {
-    maakRes = await zorgVoorOntbrekendePsls(client, bouw7Id, [{ code, naam: opts.naam, ct }], chapterId)
+    maakRes = await zorgVoorOntbrekendePsls(client, bouw7Id, alleCts.map(c => ({ code, naam: opts.naam, ct: c })), chapterId)
   } catch (e) {
     return { ok: false, error: `Bewakingscode aanmaken mislukt: ${e instanceof Error ? e.message : ''}` }
   }

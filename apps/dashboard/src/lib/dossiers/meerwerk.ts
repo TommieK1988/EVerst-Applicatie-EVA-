@@ -223,6 +223,62 @@ export async function verwijderMeerwerkRegel(
   return { ok: true }
 }
 
+/** Vaste code van een meerwerkregel: MW + volgnummer. */
+const meerwerkCode = (volgnummer: number): string => `MW${String(volgnummer).padStart(2, '0')}`
+
+/**
+ * Maakt (of vult aan) de bewakingscode van één meerwerkregel in Bouw7 en geeft de velden terug die
+ * op de regel bewaard moeten worden. Best effort: mislukt de Bouw7-write, dan wordt de code alsnog
+ * lokaal vastgelegd zodat EVA hem toont, met een waarschuwing voor de aanroeper.
+ *
+ * Niet zelf schrijvend — de aanroeper voegt de velden bij zijn eigen update, zodat er één DB-write
+ * overblijft.
+ */
+async function zorgVoorBewakingscode(
+  r: MeerwerkRegel,
+): Promise<{ velden: Record<string, unknown>; waarschuwing?: string }> {
+  const code = r.bewakingscode?.trim() || meerwerkCode(r.volgnummer)
+  // Seed-bedrag: alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
+  const bedrag = r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null
+  const res = await maakMeerwerkBewakingscodeBouw7(r.dossier_id, { code, naam: r.omschrijving, bedrag })
+  if (!res.ok) {
+    return { velden: { bewakingscode: code }, waarschuwing: `bewakingscode in Bouw7 aanmaken mislukt: ${res.error}` }
+  }
+  return {
+    velden: { bewakingscode: code, bouw7_chapter_id: res.chapterId, bouw7_security_code_id: res.pslId },
+    waarschuwing: res.waarschuwing,
+  }
+}
+
+/**
+ * Losse herstel-/aanvulactie voor de bewakingscode van een meerwerkregel — de knop "Bewakingscode"
+ * in de Meerwerk-tab. Nodig omdat de automatische aanmaak bij akkoord alleen op dát moment loopt:
+ * regels die eerder zonder code zijn blijven staan, of die alleen een materiaal-PSL kregen, hebben
+ * anders geen weg terug. De onderliggende Bouw7-write is idempotent en vult alleen aan wat ontbreekt.
+ */
+export async function herstelMeerwerkBewakingscode(
+  regelId: string,
+): Promise<{ ok: true; code: string; waarschuwing?: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
+  if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
+  const r = regel as MeerwerkRegel
+  await assertDossierBewerkbaar(r.dossier_id)
+  if (r.bron !== 'eva') {
+    return { ok: false, error: 'Deze regel komt uit Bouw7; daar is Bouw7 leidend voor de bewakingscode.' }
+  }
+
+  const res = await zorgVoorBewakingscode(r)
+  const { error } = await supabase
+    .from('meerwerk_regels')
+    .update({ ...res.velden, updated_at: new Date().toISOString() })
+    .eq('id', regelId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
+  return { ok: true, code: String(res.velden.bewakingscode), waarschuwing: res.waarschuwing }
+}
+
 /**
  * Statusovergang met validatie. Bij 'akkoord' wordt automatisch een eigen bewakingscode in Bouw7
  * aangemaakt (best effort — een Bouw7-fout blokkeert de statuswijziging niet, maar geeft een
@@ -253,24 +309,19 @@ export async function setMeerwerkStatus(
 
   let waarschuwing: string | undefined
 
-  // Fallback/retry bij akkoord: normaal is de bewakingscode al bij het aanmaken van de regel gezet.
-  // De guard bouw7_chapter_id == null voorkomt dubbel aanmaken; alleen voor EVA-native regels zonder
-  // Bouw7-koppeling (geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
-  if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_line_id == null && r.bouw7_chapter_id == null) {
-    const code = `MW${String(r.volgnummer).padStart(2, '0')}`
-    // Seed-bedrag: alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
-    const bedrag = r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null
-    const res = await maakMeerwerkBewakingscodeBouw7(r.dossier_id, { code, naam: r.omschrijving, bedrag })
-    if (res.ok) {
-      velden.bewakingscode = code
-      velden.bouw7_chapter_id = res.chapterId
-      velden.bouw7_security_code_id = res.pslId
-      if (res.waarschuwing) waarschuwing = res.waarschuwing
-    } else {
-      // Bouw7-write mislukt → statuswijziging gaat door; code lokaal vastleggen zodat EVA hem toont.
-      velden.bewakingscode = code
-      waarschuwing = `Status op Akkoord gezet, maar bewakingscode in Bouw7 aanmaken mislukt: ${res.error}`
-    }
+  // Bij akkoord krijgt een EVA-native meerwerkregel zijn eigen bewakingscode in Bouw7, zodat je er
+  // in de werkbegroting op kunt begroten en er uren op kunt boeken.
+  //
+  // De guard kijkt naar `bouw7_security_code_id`: dát is het bewijs dat de code écht in Bouw7 staat.
+  // Eerder stond hier ook `bouw7_line_id == null`, maar dat sloeg de code over zodra de regel al als
+  // Bouw7-meerwerkregel was aangemeld ("Naar Bouw7"). Een meerwerkregel en een bewakingscode zijn
+  // twee verschillende dingen; wie eerst pushte en daarna akkoord gaf, hield een regel zonder code
+  // over. `bouw7_chapter_id` deugt evenmin als guard: die blijft null op projecten waar EVA zelf het
+  // hoofdstuk "Totaal" aanlegt.
+  if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_security_code_id == null) {
+    const res = await zorgVoorBewakingscode(r)
+    Object.assign(velden, res.velden)
+    if (res.waarschuwing) waarschuwing = `Status op Akkoord gezet, maar ${res.waarschuwing}`
   }
 
   const { error } = await supabase.from('meerwerk_regels').update(velden).eq('id', id)
