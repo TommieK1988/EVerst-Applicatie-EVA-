@@ -7,7 +7,7 @@ import { PORTAAL_ONDERDELEN_ACTIEF } from '@/lib/portaal/onderdelen'
 import type { PortaalDossierBeheer } from '@/lib/portaal/beheer'
 import type { PortaalOnderdeel, PortaalScope } from '@everts/database/platform-types'
 import {
-  setPortaalDossierActief, setPortaalOnderdeel, setPortaalPlanningDetail,
+  setPortaalDossierActief, setPortaalOnderdeel,
   nodigPortaalGebruikerUit, setPortaalGebruikerScope, setPortaalGebruikerActief,
 } from '@/lib/portaal/beheer-actions'
 import {
@@ -164,15 +164,10 @@ export function PortaalTabClient({ dossierId, data }: { dossierId: string; data:
                     </p>
                   )}
                   {o.key === 'planning' && vlag('toon_planning') && (
-                    <label className="mt-1.5 flex items-center gap-2 text-xs text-neutral-600">
-                      <input
-                        type="checkbox"
-                        checked={inst.planning_detail}
-                        disabled={bezig}
-                        onChange={e => verwerk(() => setPortaalPlanningDetail(dossierId, e.target.checked))}
-                      />
-                      Ook de losse activiteiten tonen (anders alleen de fases)
-                    </label>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      De klant ziet de fases met daaronder de activiteiten, in dezelfde
+                      volgorde als in de detailplanning.
+                    </p>
                   )}
                 </div>
 
@@ -186,7 +181,7 @@ export function PortaalTabClient({ dossierId, data }: { dossierId: string; data:
           </ul>
 
           <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
-            In de planning zijn <strong>nooit</strong> namen van medewerkers zichtbaar, in geen van beide standen.
+            In de planning zijn <strong>nooit</strong> namen van medewerkers zichtbaar.
           </p>
         </CardBody>
       </Card>

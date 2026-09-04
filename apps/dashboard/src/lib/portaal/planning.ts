@@ -16,9 +16,14 @@ import { haalAlleRijen } from '@/lib/supabase/paginate'
  * `geschatte_uren`, `benodigde_skills` en `uursoort_id` buiten beeld: samen
  * vertellen die precies hoe wij het werk hebben ingekocht.
  *
- * Twee detailniveaus, per dossier in te stellen:
- *  - planning_detail = false → alleen de fases met hun periode
- *  - planning_detail = true  → ook de losse activiteiten binnen elke fase
+ * Onder elke fase hangen de activiteiten die erbij horen. Dat was ooit een
+ * keuze per dossier (`planning_detail`), maar alleen fasebalken zeggen een
+ * opdrachtgever te weinig: "WERKZAAMHEDEN, 4 mei — 12 juni" is geen planning.
+ * De kolom staat nog in de database; er wordt niet meer op gelezen.
+ *
+ * De volgorde is die van de detailplanning: eerst de activiteiten zonder fase,
+ * daarna de fases op hun eigen volgorde, en binnen een fase de activiteiten op
+ * `volgorde`. Zo leest de klant dezelfde lijst als de werkvoorbereider.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,7 +44,7 @@ export type PortaalFase = {
 }
 
 export async function getPortaalPlanning(dossierId: string): Promise<PortaalFase[]> {
-  const { instellingen } = await vereisPortaalOnderdeelWeergave(dossierId, 'planning')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'planning')
 
   const { data: activiteitenRaw } = await db()
     .from('planning_activiteiten')
@@ -90,7 +95,10 @@ export async function getPortaalPlanning(dossierId: string): Promise<PortaalFase
     if (!perFase.has(faseId)) {
       perFase.set(faseId, {
         naam: fase?.naam ?? 'Werkzaamheden',
-        volgorde: fase?.volgorde ?? 999,
+        // Activiteiten zonder fase staan in de detailplanning bóven de eerste
+        // fase. Niet 999 als terugval: een echte fase mag die volgorde hebben
+        // (en heeft die in de praktijk ook), en dan zouden de twee gaan wisselen.
+        volgorde: a.fase_id ? (fase?.volgorde ?? Number.MAX_SAFE_INTEGER) : -1,
         start: null, eind: null, activiteiten: [],
       })
     }
@@ -105,9 +113,7 @@ export async function getPortaalPlanning(dossierId: string): Promise<PortaalFase
     if (start && (!bucket.start || start < bucket.start)) bucket.start = start
     if (eind && (!bucket.eind || eind > bucket.eind)) bucket.eind = eind
 
-    if (instellingen.planning_detail) {
-      bucket.activiteiten.push({ id: String(a.id), titel: String(a.titel ?? ''), start, eind })
-    }
+    bucket.activiteiten.push({ id: String(a.id), titel: String(a.titel ?? ''), start, eind })
   }
 
   return [...perFase.values()]
