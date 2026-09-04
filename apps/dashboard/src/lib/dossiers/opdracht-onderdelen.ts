@@ -8,6 +8,7 @@ import { assertDossierBewerkbaar } from './guards'
 import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk } from './meerwerk'
 import { getServicedeskRegie } from './servicedesk'
+import { isDossierAfgesloten } from '@/components/dossiers/types'
 import {
   maakStelpostBewakingscodeBouw7,
   vindVrijeBewakingscode,
@@ -772,6 +773,98 @@ export async function zetStelpostBewakingscode(
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/opdrachten/${rij.dossier_id}/informatie`)
   return { ok: true }
+}
+
+/**
+ * Zorgt dat élke stelpost van een opdracht een eigen bewakingscode heeft, ook een stelpost die uit
+ * de calculatie komt.
+ *
+ * Waarom dit automatisch moet en niet aan een knop kan hangen: zonder bewakingscode kan er in Bouw7
+ * niets op een stelpost geboekt worden. De kosten belanden dan op een andere code — meestal ergens
+ * in de aanneemsom — en daarmee is de stelpost niet meer af te rekenen. Dat merk je pas bij het
+ * factureren, als het werk al gedaan is.
+ *
+ * Waarom in de sync en niet in het scherm: een dossier wordt geen opdracht door een handeling in
+ * EVA maar doordat de Bouw7-projectstatus verandert (zie `syncProjects`). Er ís dus geen
+ * "opdracht aanmaken"-moment in de app om aan te haken. En een Bouw7-write op een renderpad zou bij
+ * elke paginaweergave kunnen vuren en bij twee tabbladen tegelijk twee codes uitdelen.
+ *
+ * Twee stappen per dossier:
+ *   1. `seedOpdrachtOnderdelen` — stelposten uit de geaccepteerde offerte als rij vastleggen;
+ *      zonder deze stap bestaan calculatie-stelposten nog nergens.
+ *   2. `wijsStelpostBewakingscodesToe` — codes uitdelen en in Bouw7 aanmaken. Idempotent: een
+ *      stelpost die al een code heeft wordt overgeslagen.
+ *
+ * Fouten per dossier worden geteld en niet doorgegooid: één dossier zonder Bouw7-hoofdstuk mag de
+ * hele sync niet stilzetten.
+ */
+export async function zorgVoorStelpostBewakingscodes(
+  opties?: { dossierId?: string },
+): Promise<{ nieuw: number; bijgewerkt: number; fouten: number; foutMelding?: string }> {
+  const supabase = createAdminClient() as any
+  const uit = { nieuw: 0, bijgewerkt: 0, fouten: 0 }
+  const meldingen: string[] = []
+
+  // Alleen opdrachten: in de offertefase staat nog niet vast of het werk doorgaat, en dan zijn
+  // codes in Bouw7 alleen maar ruis.
+  // Afgesloten dossiers overslaan. Er is geen `afgesloten_op`-kolom; of een dossier dicht is blijkt
+  // uit de statuscombinatie — dezelfde bron als `isDossierBewerkbaar` gebruikt.
+  let query = supabase
+    .from('dossiers')
+    .select('id, everts_calc_project_id, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, bouw7_projectstatus_naam')
+    .eq('hoofdstatus', 'opdracht')
+    .not('bouw7_id', 'is', null)
+  if (opties?.dossierId) query = query.eq('id', opties.dossierId)
+  const { data: dossiers, error: dossierFout } = await query
+  if (dossierFout) {
+    return { ...uit, fouten: 1, foutMelding: `dossiers ophalen mislukt: ${dossierFout.message}` }
+  }
+  const rijen = ((dossiers ?? []) as any[])
+    .filter(d => !isDossierAfgesloten(d))
+    .map(d => ({ id: String(d.id), everts_calc_project_id: d.everts_calc_project_id ?? null }))
+  if (rijen.length === 0) return uit
+
+  // Stap 1 — stelposten uit de calculatie als rij vastleggen. Alleen zinvol bij een calculatie;
+  // de seed doet zelf niets zonder hoofd-offerte.
+  for (const d of rijen) {
+    if (!d.everts_calc_project_id) continue
+    try {
+      await seedOpdrachtOnderdelen(d.id)
+    } catch (e) {
+      uit.fouten++
+      meldingen.push(`seed ${d.id}: ${e instanceof Error ? e.message : 'onbekende fout'}`)
+    }
+  }
+
+  // Stap 2 — alleen dossiers die daadwerkelijk een stelpost zónder code hebben. Zo blijft het
+  // aantal Bouw7-calls beperkt tot wat er echt te doen valt.
+  const { data: zonderCode } = await supabase
+    .from('opdracht_onderdelen')
+    .select('dossier_id')
+    .eq('soort', 'stelpost')
+    .eq('in_opdracht', true)
+    .is('bewakingscode', null)
+  const bewerkbaar = new Set(rijen.map(d => d.id))
+  const teDoen = [...new Set(((zonderCode ?? []) as { dossier_id: string }[])
+    .map(r => String(r.dossier_id)))].filter(id => bewerkbaar.has(id))
+
+  for (const dossierId of teDoen) {
+    try {
+      const res = await wijsStelpostBewakingscodesToe(dossierId)
+      if (res.ok) {
+        uit.nieuw += res.aantal
+        if (res.waarschuwing) meldingen.push(`${dossierId}: ${res.waarschuwing}`)
+      } else {
+        uit.fouten++
+        meldingen.push(`${dossierId}: ${res.error}`)
+      }
+    } catch (e) {
+      uit.fouten++
+      meldingen.push(`${dossierId}: ${e instanceof Error ? e.message : 'onbekende fout'}`)
+    }
+  }
+
+  return { ...uit, foutMelding: meldingen.length ? meldingen.join(' · ').slice(0, 900) : undefined }
 }
 
 /**

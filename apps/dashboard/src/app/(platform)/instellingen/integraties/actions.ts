@@ -6,6 +6,7 @@ import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren,
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 import { vergeetBouw7Config } from '@/lib/bouw7/config'
+import { zorgVoorStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
 
 type Integratie = {
   id: string
@@ -98,7 +99,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult; stelpostCodes: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -119,6 +120,10 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     const todos = await syncBouw7Todos({ mode })
     const notities = await syncDossierNotities({ mode })
     const meerwerk = await syncMeerwerk({ mode })
+    // Elke stelpost van een opdracht een eigen bewakingscode geven. Moet ná syncProjects, want die
+    // bepaalt welke dossiers opdracht zijn. Zonder code kan er in Bouw7 niets op een stelpost
+    // geboekt worden en is hij achteraf niet af te rekenen.
+    const stelpostCodes = await zorgVoorStelpostBewakingscodes()
 
     const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
     const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
@@ -133,7 +138,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities, meerwerk }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities, meerwerk, stelpostCodes }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }
@@ -168,6 +173,7 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     await syncBouw7Todos({ onlyBouw7Ids: ids })
     await syncDossierNotities({ onlyBouw7Ids: ids })
     await syncMeerwerk({ onlyBouw7Ids: ids })
+    await zorgVoorStelpostBewakingscodes({ dossierId })
 
     revalidatePath(`/dossiers/${dossierId}`)
     return { ok: true, projects, planning }
