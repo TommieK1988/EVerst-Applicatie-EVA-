@@ -106,6 +106,27 @@ function bewerkbaar(status: WeekStatus) {
 /* ── Opbouw ───────────────────────────────────────────────────────── */
 
 /**
+ * Trekt de bevroren norm bij zolang de week nog van de medewerker zelf is.
+ *
+ * De norm is bewust een momentopname op de weekrij: zodra een week is ingediend hangt het
+ * tijd-voor-tijdsaldo eraan, en mag een latere roosterwijziging die niet met terugwerkende kracht
+ * verschuiven. Maar zolang de week concept (of afgekeurd) is, hoort hij het rooster gewoon te
+ * volgen. Zonder dit bleef een week die werd geopend vóórdat het rooster bestond op nul staan --
+ * en daarmee onindienbaar, met de melding "Er staan geen contracturen voor je ingesteld" terwijl
+ * het rooster er allang was.
+ */
+async function actualiseerNorm(
+  medewerkerId: string,
+  weekStart: string,
+  week: { id: string; status: WeekStatus; contracturen: number | string | null },
+) {
+  if (!bewerkbaar(week.status)) return
+  const { uren } = await getContracturen(medewerkerId, weekStart)
+  if (rondUren(uren) === rondUren(Number(week.contracturen ?? 0))) return
+  await db().from('uren_weken').update({ contracturen: uren }).eq('id', week.id)
+}
+
+/**
  * Zorgt dat de week bestaat en vult hem bij aanmaak met de regels die al vaststaan
  * (feestdagen en geregistreerd verlof). Voorvullen gebeurt alleen bij het aanmaken: daarna is de
  * weekstaat van de medewerker, en zou opnieuw voorvullen zijn correcties terugdraaien.
@@ -116,12 +137,15 @@ async function zorgVoorWeek(medewerkerId: string, weekStart: string) {
 
   const { data: bestaand } = await supabase
     .from('uren_weken')
-    .select('id')
+    .select('id, status, contracturen')
     .eq('medewerker_id', medewerkerId)
     .eq('jaar', jaar)
     .eq('week_nr', week)
     .maybeSingle()
-  if (bestaand) return bestaand.id as string
+  if (bestaand) {
+    await actualiseerNorm(medewerkerId, weekStart, bestaand)
+    return bestaand.id as string
+  }
 
   const { uren } = await getContracturen(medewerkerId, weekStart)
   const { data: nieuw, error } = await supabase
