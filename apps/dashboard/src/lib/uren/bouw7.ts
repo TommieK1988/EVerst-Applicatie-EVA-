@@ -136,7 +136,6 @@ export async function stuurUrenWeekNaarBouw7(weekId: string): Promise<VerstuurRe
   } as any, Date.now() - start)
 
   revalidatePath('/m/uren')
-  revalidatePath('/uren/goedkeuren')
   return { ok: mislukt === 0, verzonden, mislukt, fouten }
 }
 
@@ -251,6 +250,5 @@ export async function leesGoedkeuringTerug(dagen = 60): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any, Date.now() - start)
 
-  revalidatePath('/uren/goedkeuren')
   return { gecontroleerd, bijgewerkt, weken: weekWissels }
 }

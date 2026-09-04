@@ -138,6 +138,12 @@ type Props<T extends { id: string }> = {
   afvinkKolom?: {
     status: (item: T) => 'open' | 'af' | 'verborgen'
     onKlik: (item: T) => void
+    /**
+     * 'rondje' (standaard) = leeg rondje dat een groen bolletje wordt — voor afvinken van acties.
+     * 'kruis' = rood kruisje dat een groen vinkje wordt — voor goedkeuren, waar "nog niet gedaan"
+     * geen neutrale maar een opvallende toestand is.
+     */
+    stijl?: 'rondje' | 'kruis'
     /** Bezig-indicator: rij-id waarvoor een wijziging loopt (knop tijdelijk uit). */
     bezigId?: string | null
   }
@@ -1333,28 +1339,35 @@ export default function OverzichtTabel<T extends { id: string }>({
                           const bezig = afvinkKolom.bezigId != null && afvinkKolom.bezigId === row.original.id
                           return (
                             <td style={{ ...tdStyle, width: 40, padding: dicht ? '5px 10px' : '10px 12px' }}>
-                              {st !== 'verborgen' && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); if (!bezig) afvinkKolom.onKlik(row.original) }}
-                                  title={st === 'af' ? 'Heropenen' : 'Afvinken'}
-                                  aria-label={st === 'af' ? 'Actie heropenen' : 'Actie afvinken'}
-                                  disabled={bezig}
-                                  style={{
-                                    width: 18, height: 18, borderRadius: '50%', padding: 0,
-                                    border: `1.5px solid ${st === 'af' ? '#16a34a' : 'var(--border)'}`,
-                                    background: st === 'af' ? '#16a34a' : 'white',
-                                    display: 'grid', placeItems: 'center',
-                                    cursor: bezig ? 'wait' : 'pointer',
-                                    opacity: bezig ? 0.5 : 1,
-                                    transition: 'background 100ms, border-color 100ms',
-                                  }}
-                                  className="tbl-afvink"
-                                >
-                                  {st === 'af' && (
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                  )}
-                                </button>
-                              )}
+                              {st !== 'verborgen' && (() => {
+                                const kruis = afvinkKolom.stijl === 'kruis'
+                                const groen = '#16a34a'
+                                const rood = '#dc2626'
+                                return (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); if (!bezig) afvinkKolom.onKlik(row.original) }}
+                                    title={st === 'af' ? 'Heropenen' : kruis ? 'Goedkeuren' : 'Afvinken'}
+                                    aria-label={st === 'af' ? 'Heropenen' : kruis ? 'Goedkeuren' : 'Actie afvinken'}
+                                    disabled={bezig}
+                                    style={{
+                                      width: 18, height: 18, borderRadius: '50%', padding: 0,
+                                      border: `1.5px solid ${st === 'af' ? groen : kruis ? rood : 'var(--border)'}`,
+                                      background: st === 'af' ? groen : 'white',
+                                      display: 'grid', placeItems: 'center',
+                                      cursor: bezig ? 'wait' : 'pointer',
+                                      opacity: bezig ? 0.5 : 1,
+                                      transition: 'background 100ms, border-color 100ms',
+                                    }}
+                                    className="tbl-afvink"
+                                  >
+                                    {st === 'af' ? (
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    ) : kruis ? (
+                                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={rood} strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    ) : null}
+                                  </button>
+                                )
+                              })()}
                             </td>
                           )
                         })()}

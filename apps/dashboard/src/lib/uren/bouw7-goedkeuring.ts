@@ -375,7 +375,6 @@ export async function keurUrenGoed(hourLogIds: number[]): Promise<KeurResultaat>
   }
 
   revalidatePath('/uren')
-  revalidatePath('/uren/goedkeuren')
   return { ok: true, verwerkt: alsPl.length + alsTl.length, naarBouw7, wachtOpProjectleider, mislukt, fouten }
 }
 
@@ -433,7 +432,6 @@ export async function trekGoedkeuringIn(
     }).catch(() => { /* melding is bijzaak */ })
   }
 
-  revalidatePath('/uren/goedkeuren')
   return { ok: true }
 }
 
@@ -497,6 +495,5 @@ export async function corrigeerUurregel(
     }
   }
 
-  revalidatePath('/uren/goedkeuren')
   return { ok: true }
 }
