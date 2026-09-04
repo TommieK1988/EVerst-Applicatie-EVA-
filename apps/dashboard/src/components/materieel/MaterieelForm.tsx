@@ -56,6 +56,9 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
       categorie: bestaand?.categorie ?? 'gereedschap',
       status: bestaand?.status ?? 'beschikbaar',
       inventarisnummer: bestaand?.inventarisnummer ?? '',
+      // Zonder gekochte sticker staat hier de id (dat zet een database-trigger).
+      // Die tonen we niet: een uuid in een veld "Stickercode" leest als rommel.
+      qr_code: bestaand && bestaand.qr_code !== bestaand.id ? bestaand.qr_code ?? '' : '',
       merk: bestaand?.merk ?? '',
       type: bestaand?.type ?? '',
       serienummer: bestaand?.serienummer ?? '',
@@ -132,6 +135,10 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
 
           <Veld label="Inventarisnummer" fout={errors.inventarisnummer?.message}>
             <input {...register('inventarisnummer')} style={inputStyle} placeholder="Optioneel" />
+          </Veld>
+
+          <Veld label="Stickercode" fout={errors.qr_code?.message}>
+            <input {...register('qr_code')} style={inputStyle} placeholder="Code van de gekochte sticker" />
           </Veld>
 
           <Veld label="Serienummer" fout={errors.serienummer?.message}>

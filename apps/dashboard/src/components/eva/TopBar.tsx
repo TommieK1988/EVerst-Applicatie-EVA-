@@ -83,14 +83,14 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/kam\/formulieren$/, { title: 'KAM/VGM › Formulieren', breadcrumb: 'Beheer' }],
   [/^\/kam$/, { title: 'KAM/VGM › Dashboard', breadcrumb: 'Beheer' }],
 
-  // Materieelbeheer (sub-app, in ontwikkeling)
-  [/^\/materieelbeheer\/dashboard$/, { title: 'Materieelbeheer › Dashboard', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer\/controle$/, { title: 'Materieelbeheer › Controle', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer\/instellingen$/, { title: 'Materieelbeheer › Instellingen', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer\/nieuw$/, { title: 'Materieelbeheer › Nieuw materieel', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer\/[^/]+\/bewerken$/, { title: 'Materieelbeheer › Bewerken', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer\/[^/]+$/, { title: 'Materieelbeheer › Paspoort', breadcrumb: 'Apps' }],
-  [/^\/materieelbeheer$/, { title: 'Materieelbeheer', breadcrumb: 'Apps' }],
+  // Materieel (beheer-onderdeel, in ontwikkeling)
+  [/^\/materieelbeheer\/dashboard$/, { title: 'Materieel › Dashboard', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer\/controle$/, { title: 'Materieel › Controle', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer\/instellingen$/, { title: 'Materieel › Instellingen', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer\/nieuw$/, { title: 'Materieel › Nieuw materieel', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer\/[^/]+\/bewerken$/, { title: 'Materieel › Bewerken', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer\/[^/]+$/, { title: 'Materieel › Paspoort', breadcrumb: 'Beheer' }],
+  [/^\/materieelbeheer$/, { title: 'Materieel', breadcrumb: 'Beheer' }],
 
   // Wagenpark (sub-app)
   [/^\/wagenpark\/voertuigen\/nieuw$/, { title: 'Wagenpark › Voertuigen › Nieuw', breadcrumb: 'Apps' }],
@@ -171,7 +171,7 @@ const SLUG_LABELS: Record<string, string> = {
   'vraag-eva': 'Vraag EVA', 'bronnen': 'Bronnen', 'bibliotheek': 'Bibliotheek',
   'mijn-taken': 'Mijn acties', 'account': 'Mijn account',
   // Apps
-  'materieelbeheer': 'Materieelbeheer',
+  'materieelbeheer': 'Materieel',
   'everts-calc': 'EvertsCalc', 'calculaties': 'Calculaties', 'quotes': 'Offertes',
   'sjablonen': 'Sjablonen', 'overzicht': 'Overzicht',
   // Instellingen

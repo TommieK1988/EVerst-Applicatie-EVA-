@@ -22,6 +22,7 @@ import {
   type ToewijzingNiveau, type Optie, type KeuringSoort, type MaterieelStatus, type DetailVeld,
   type HistorieItem, type KeuringUitkomst, type MaterieelDocumentRij,
 } from '@/lib/materieel/types'
+import { codeLabel } from '@/lib/materieel/qr'
 
 function euro(v: number | null): string {
   if (v === null || v === undefined) return '—'
@@ -144,6 +145,12 @@ export default function Paspoort({
           <section>
             <h3 style={kop}>Identificatie</h3>
             <Rij label="Inventarisnummer" waarde={object.inventarisnummer ?? '—'} />
+            {/* Alleen een échte sticker tonen: zonder gekochte sticker staat in
+                qr_code de id, en die zegt de gebruiker niets. */}
+            <Rij
+              label="Stickercode"
+              waarde={object.qr_code && object.qr_code !== object.id ? codeLabel(object.qr_code) : '—'}
+            />
             <Rij label="Merk / Type" waarde={[object.merk, object.type].filter(Boolean).join(' · ') || '—'} />
             <Rij label="Serienummer" waarde={object.serienummer ?? '—'} />
             <Rij label="Categorie" waarde={CATEGORIE_LABELS[object.categorie]} />

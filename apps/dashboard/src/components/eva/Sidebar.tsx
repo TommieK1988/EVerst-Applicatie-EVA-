@@ -61,6 +61,12 @@ const BEHEER: NavEntry[] = [
   { href: '/objecten',    label: 'Objecten',    Icon: IconObjecten,    module: 'objectenbeheer' },
   { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers, module: 'medewerkers' },
   { href: '/wagenpark',   label: 'Wagenpark',   Icon: IconWagenpark,   module: 'wagenpark'   },
+  // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).
+  // Staat bij Beheer en niet bij Apps: materieel is stamdata die je onderhoudt,
+  // net als Relaties, Objecten en Wagenpark.
+  ...(FEATURES.materieelbeheer
+    ? [{ href: '/materieelbeheer', label: 'Materieel', Icon: IconMaterieel, module: 'materieelbeheer' as RechtenModule }]
+    : []),
   { href: '/kam', label: 'KAM/VGM', Icon: IconKam, module: 'kam' },
 ]
 
@@ -81,10 +87,6 @@ const APPS: NavEntry[] = [
   { href: '/formulieren',    label: 'Formulieren',     Icon: IconFormulieren,    module: 'formulieren'   },
   { href: '/taken',          label: 'Actielijsten',    Icon: IconSjablonen,      module: 'taken'         },
   { href: '/everts-calc',    label: 'EvertsCalc',      Icon: IconEvertsCalc,     module: 'everts_calc'   },
-  // In ontwikkeling — alleen zichtbaar waar de feature-flag aan staat (preview/lokaal).
-  ...(FEATURES.materieelbeheer
-    ? [{ href: '/materieelbeheer', label: 'Materieelbeheer', Icon: IconMaterieel, module: 'materieelbeheer' as RechtenModule }]
-    : []),
 ]
 
 const ICON_OVERZICHT = 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
@@ -137,7 +139,7 @@ const APP_SUBNAV: Record<string, {
     ],
   },
   '/materieelbeheer': {
-    label: 'Materieelbeheer',
+    label: 'Materieel',
     Icon: IconMaterieel,
     items: [
       { href: '/materieelbeheer/dashboard',    label: 'Dashboard',       icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },

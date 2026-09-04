@@ -21,8 +21,17 @@ import type { ModuleRechten } from '@everts/database/platform-types'
  * controleren, maar horen geen facturen of keuringsdocumenten te kunnen wissen.
  */
 
-/** Route-guard voor pagina's. Onvoldoende recht → terug naar de startpagina. */
-export async function vereisMaterieelToegang(min: ModuleRechten = 'lezen'): Promise<CurrentMedewerker> {
+/**
+ * Route-guard voor pagina's. Onvoldoende recht → terug naar de startpagina.
+ *
+ * `terug` bestaat voor de mobiele schermen: wie op `/m` zonder recht een
+ * materieel-scherm opent, hoort terug naar het mobiele startscherm — niet naar
+ * de desktopweergave, waar een monteur niets te zoeken heeft.
+ */
+export async function vereisMaterieelToegang(
+  min: ModuleRechten = 'lezen',
+  terug = '/',
+): Promise<CurrentMedewerker> {
   // Flag uit (productie vóór go-live) → de module bestaat hier simpelweg niet.
   if (!FEATURES.materieelbeheer) notFound()
   try {
@@ -30,7 +39,7 @@ export async function vereisMaterieelToegang(min: ModuleRechten = 'lezen'): Prom
     return medewerker
   } catch (e) {
     // redirect() gooit zelf een Next-signaal; dat mag hier gewoon doorlopen.
-    if (e instanceof GeenToegangError) redirect('/')
+    if (e instanceof GeenToegangError) redirect(terug)
     throw e
   }
 }

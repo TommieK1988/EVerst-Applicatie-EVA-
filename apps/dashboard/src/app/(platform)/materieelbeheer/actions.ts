@@ -36,6 +36,20 @@ function herlaad(id?: string) {
   if (id) revalidatePath(`/materieelbeheer/${id}`)
 }
 
+/**
+ * Postgres-fouten die een gebruiker kan veroorzaken, in gewone taal.
+ *
+ * Alleen 23505 (unieke sleutel) komt in de praktijk voor: twee objecten met
+ * hetzelfde inventarisnummer of dezelfde stickercode. Zonder deze vertaling
+ * krijgt een monteur op de steiger de kale Postgres-melding te zien.
+ */
+function leesbaarDbFout(error: { code?: string; message: string }): string {
+  if (error.code !== '23505') return error.message
+  if (error.message.includes('qr_code')) return 'Deze sticker hangt al op een ander stuk materieel'
+  if (error.message.includes('inventarisnummer')) return 'Dit inventarisnummer bestaat al'
+  return 'Deze waarde bestaat al'
+}
+
 /* ── Object CRUD ──────────────────────────────────────────────────── */
 
 export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<{ id: string }>> {
@@ -59,7 +73,7 @@ export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<
     })
     .select('id').single()
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: leesbaarDbFout(error) }
   const id = data.id as string
 
   // Historie vastleggen zodat de uitgifte later herleidbaar is.
@@ -80,7 +94,7 @@ export async function updateMaterieelObject(id: string, raw: unknown): Promise<A
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldige invoer' }
 
   const { error } = await db().from('materieel_objecten').update(parsed.data).eq('id', id)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: leesbaarDbFout(error) }
   herlaad(id)
   return { ok: true, data: { id } }
 }

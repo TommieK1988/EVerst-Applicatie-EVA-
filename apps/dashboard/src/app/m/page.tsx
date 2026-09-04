@@ -1,6 +1,8 @@
 import { createClient, createAdminClient } from '@everts/database/server'
 import { telMijnOpenTaken } from '@/lib/taken/services/taken'
-import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
+import { FEATURES } from '@/lib/features'
 import MobielHome from '@/components/mobiel/MobielHome'
 
 export const metadata = { title: 'EVA Mobiel' }
@@ -29,11 +31,19 @@ export default async function MobielHomePage() {
     user ? telOngelezenMeldingen(user.id) : Promise.resolve(0),
   ])
 
+  // Wie de Materieel-tegel ziet, bepaalt het recht `materieelbeheer` (niveau
+  // 'lezen'). Toevoegen vraagt 'schrijven'; dat checkt het scherm zelf, zodat
+  // iemand die alleen mag kijken de tegel wél houdt.
+  const rechten = medewerker ? await getEffectieveRechten(medewerker) : {}
+  const magMaterieel =
+    FEATURES.materieelbeheer && heeftModuleToegang(rechten, 'materieelbeheer', 'lezen')
+
   return (
     <MobielHome
       naam={medewerker?.voornaam ?? null}
       openTaken={openTaken}
       ongelezenMeldingen={ongelezenMeldingen}
+      magMaterieel={magMaterieel}
     />
   )
 }

@@ -29,6 +29,13 @@ export const materieelObjectSchema = z.object({
   categorie: z.enum(MATERIEEL_CATEGORIEEN),
   status: z.enum(MATERIEEL_STATUSSEN).default('beschikbaar'),
   inventarisnummer: optioneleTekst,
+  /**
+   * De code van de sticker op het object. Voorbedrukte stickers hebben elk hun
+   * eigen unieke code; die bewaren we ruw zoals de scanner hem leest (zie
+   * `lib/materieel/qr.ts`). Leeg laten mag: dan houdt de trigger in de database
+   * de id aan, en print het paspoort een eigen QR.
+   */
+  qr_code: optioneleTekst,
   merk: optioneleTekst,
   type: optioneleTekst,
   serienummer: optioneleTekst,

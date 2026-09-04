@@ -142,7 +142,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
   [/^\/materieelbeheer$/, {
-    title: 'Materieelbeheer',
+    title: 'Materieel',
     description: 'De centrale materieeldatabase. Elk stuk gereedschap, elke machine, aanhanger en keet heeft een eigen digitaal paspoort met QR-code, status en toewijzing. Doel: minder zoekgeraakt gereedschap, minder onnodige aankopen en aantoonbaar veilig materieel.',
     sections: [
       { title: 'Overzicht', body: 'De tabel toont al het actieve materieel. Klik op een rij om het paspoort te openen. Kolommen zijn aan/uit te zetten en te sorteren via het kolommenmenu.' },
