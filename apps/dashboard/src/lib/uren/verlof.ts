@@ -173,10 +173,9 @@ export async function vraagVerlofAan(invoer: {
 
   await meld(goedkeurder, 'Verlofaanvraag',
     `${medewerker.voornaam ?? 'Een collega'} vraagt ${uren.toLocaleString('nl-NL')} uur ${soort.naam.toLowerCase()} aan.`,
-    '/uren/goedkeuren')
+    '/planning/medewerker')
 
   revalidatePath('/m/verlof')
-  revalidatePath('/uren/goedkeuren')
   return { ok: true, id: data.id }
 }
 
@@ -198,7 +197,6 @@ export async function trekVerlofIn(
     .from('verlof_aanvragen').update({ status: 'ingetrokken' }).eq('id', aanvraagId)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/m/verlof')
-  revalidatePath('/uren/goedkeuren')
   return { ok: true }
 }
 
@@ -310,7 +308,6 @@ export async function keurVerlofGoed(
   }
 
   revalidatePath('/m/verlof')
-  revalidatePath('/uren/goedkeuren')
   revalidatePath('/planning/medewerker')
   return { ok: true, bouw7 }
 }
@@ -352,7 +349,7 @@ export async function wijsVerlofAf(
   }
 
   revalidatePath('/m/verlof')
-  revalidatePath('/uren/goedkeuren')
+  revalidatePath('/planning/medewerker')
   return { ok: true }
 }
 

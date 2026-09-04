@@ -608,6 +608,5 @@ export async function dienWeekIn(
   }
 
   revalidatePath('/m/uren')
-  revalidatePath('/uren/goedkeuren')
   return { ok: true }
 }

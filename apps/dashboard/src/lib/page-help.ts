@@ -383,19 +383,14 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/uren\/goedkeuren$/, {
-    title: 'Uren goedkeuren',
-    description: 'Hier accordeer je de uren die anderen hebben ingediend. Twee lijsten: onder Mijn team staan de weken van de medewerkers waarvan jij teamleider bent, onder Mijn projecten de uren die anderen op jouw dossiers hebben geboekt. Je ziet alleen wat van jou is; de rest blijft buiten beeld.',
+  [/^\/uren$/, {
+    title: 'Uren',
+    description: 'Alle uren die in Bouw7 geboekt zijn, live opgehaald. Naast bekijken kun je hier ook goedkeuren: de knop Te keuren door mij laat alleen de uren zien die op jouw akkoord wachten.',
     sections: [
-      { title: 'Waar wordt eigenlijk goedgekeurd?', body: 'Zolang de route op Bouw7 staat, accordeer je daar en niet hier. Weken die in EVA worden ingediend gaan meteen naar Bouw7 en wachten daar op je akkoord; EVA leest terug wanneer dat gebeurd is en toont ze hier alleen ter informatie, zonder knoppen. Staat de route op EVA, dan verschijnen de knoppen wel.' },
-      { title: 'Eerst de week, dan de projecten', body: 'De teamleider kijkt naar de hele week van een medewerker: kloppen de dagen, is het totaal aannemelijk. Keurt hij goed, dan gaan de regels die op een project staan door naar de projectleiders van die projecten. Pas als iedereen akkoord is, gaat de week naar Bouw7.' },
-      { title: 'Uren zonder projectleider', body: 'Verlof, ziekte en werk op een dossier zonder projectleider hebben geen tweede beoordelaar. Die weken zijn dus meteen rond zodra de teamleider akkoord geeft.' },
-      { title: 'Afkeuren', body: 'Bij afkeuren geef je een reden op. De medewerker ziet die bij zijn weekstaat, kan zijn uren aanpassen en opnieuw indienen. De hele week gaat terug, ook als er maar een regel niet klopte -- losse regels repareren zou een halfgekeurde week opleveren.' },
-      { title: 'Afgeweken van Bouw7', body: 'Staat er bij een regel dat er is afgeweken, dan heeft de medewerker een dag aangepast die automatisch was ingevuld vanuit een verlofregistratie of feestdag in Bouw7. Even nakijken dus.' },
-      { title: 'Verlof', body: 'Het derde tabblad zijn de verlofaanvragen van je team. Het aantal uren is al voor je uitgerekend volgens het rooster: weekenden tellen niet mee en feestdagen vallen eruit. Keur je goed, dan staat het verlof meteen in de planning en gaat het door naar Bouw7; lukt dat laatste niet, dan probeert EVA het vanzelf opnieuw.' },
-      { title: 'Uit Bouw7', body: 'Het vierde tabblad zijn de uren die in Bouw7 zelf zijn ingevoerd en daar nog op akkoord wachten. Bouw7 legt niet vast wie moet goedkeuren, dus EVA leidt dat af uit de rollen op het dossier waarop de uren staan: de teamleider en de projectleider van dat dossier, niet de ploeg waar de medewerker in zit. Staat er geen teamleider op het dossier, dan gaat de regel meteen naar de projectleider. Goedkeuren doe je op het Uren-overzicht met de knop Te keuren door mij.' },
-      { title: 'Snel een stapel wegwerken', body: 'Filter eerst op een medewerker, een week of een project en gebruik dan Alles zichtbaar goedkeuren. Dat werkt sneller dan regel voor regel aanvinken, en je ziet vooraf om hoeveel uur het gaat. Een losse regel keur je goed met het rondje links.' },
-      { title: 'Iets klopt niet', body: 'Klik de regel aan en pas de uren aan. De medewerker krijgt daar automatisch bericht van, en EVA onthoudt wat de oude waarde was. Afkeuren bestaat niet: Bouw7 kent alleen goedgekeurd of niet, en heen-en-weer sturen kost alleen tijd.' },
+      { title: 'Wie mag wat goedkeuren', body: 'Bouw7 legt niet vast wie moet accorderen, dus EVA leidt dat af uit de rollen op het dossier waarop de uren staan: eerst de teamleider van dat dossier, daarna de projectleider. Staat er geen teamleider op, dan gaat de regel meteen naar de projectleider. De projectleider mag de teamleider altijd overrulen, ook een goedkeuring terugdraaien.' },
+      { title: 'Goedkeuren', body: 'Zet de knop Te keuren door mij aan. Links bij elke regel staat een rood kruisje; klik erop en het wordt een groen vinkje. Gaat het om een stapel, filter dan eerst op een medewerker, week of project en gebruik Alles zichtbaar goedkeuren.' },
+      { title: 'Iets klopt niet', body: 'Klik de regel aan en pas de uren, de bewakingscode of de opmerking aan. De medewerker krijgt daar automatisch bericht van, en EVA onthoudt wat er stond. Afkeuren bestaat niet: Bouw7 kent alleen goedgekeurd of niet, en heen-en-weer sturen kost alleen tijd.' },
+      { title: 'Wat je te zien krijgt', body: 'Met het financieel-recht zie je alle geboekte uren van het hele bedrijf. Zonder dat recht -- de meeste projectleiders hebben het niet -- zie je alleen de uren die je zelf moet goedkeuren.' },
     ],
   }],
 

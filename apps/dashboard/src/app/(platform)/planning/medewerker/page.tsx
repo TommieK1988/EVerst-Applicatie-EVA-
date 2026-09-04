@@ -5,6 +5,7 @@ import MedewerkerTimeline from '@/components/planning/MedewerkerTimeline'
 import { haalPlanningItemsMetExpansie } from '../bedrijfsagenda/actions'
 import { berekenFeestdagen } from '@/lib/agenda/feestdagen'
 import { PageHeader } from '@/components/ui'
+import VerlofGoedkeurenKnop from '@/components/planning/VerlofGoedkeurenKnop'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
@@ -93,7 +94,13 @@ export default async function MedewerkerplanningPage() {
   return (
     <div className="eva-page-vol">
       {/* Toelichting op de bediening staat in de HELP-tekst van de topbar (lib/page-help.ts). */}
-      <PageHeader eyebrow="Planning" title="Medewerkerplanning" className="mb-3" />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <PageHeader eyebrow="Planning" title="Medewerkerplanning" className="mb-3" />
+        {/* Verlof beoordelen hoort hier: je ziet meteen wie er die week al vrij is en wat er staat. */}
+        <div style={{ marginLeft: 'auto', paddingTop: 6 }}>
+          <VerlofGoedkeurenKnop />
+        </div>
+      </div>
 
       <MedewerkerTimeline
         medewerkers={medewerkers}

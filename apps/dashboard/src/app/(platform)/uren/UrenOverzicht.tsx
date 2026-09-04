@@ -12,6 +12,7 @@ import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
+import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
 
 /* ─── Opmaak ────────────────────────────────────────────────────────────────── */
 
@@ -208,6 +209,7 @@ export default function UrenOverzicht({
   const [alleenMijn, setAlleenMijn] = useState(!magAlles)
   const [keurBezig, setKeurBezig] = useState(false)
   const [keurId, setKeurId] = useState<string | null>(null)
+  const [bewerken, setBewerken] = useState<TeBewerkenRegel | null>(null)
 
   // De tabel meldt terug welke rijen door de zoekbalk en de kolomfilters komen, zodat
   // de kaarten bovenin hetzelfde tellen als wat je op je scherm ziet staan.
@@ -380,7 +382,22 @@ export default function UrenOverzicht({
             eenregelig
             groepering={groepering}
             onGefilterd={meldTotalen}
+            onRijKlik={(r) => {
+              if (!magIkKeuren(r) || r.bouw7Id == null) return
+              setBewerken({
+                hourLogId: r.bouw7Id,
+                medewerkerNaam: r.medewerker ?? '—',
+                datum: r.datum ?? '',
+                uren: r.uren,
+                uursoort: r.uursoort,
+                dossierId: r.dossierId,
+                dossierLabel: r.dossierNummer ? `${r.dossierNummer} · ${r.dossierTitel ?? ''}` : null,
+                bewakingscode: r.code,
+                opmerking: r.opmerking,
+              })
+            }}
             afvinkKolom={alleenMijn ? {
+              stijl: 'kruis',
               status: (r) => magIkKeuren(r) ? 'open' : 'verborgen',
               bezigId: keurId,
               onKlik: (r) => { setKeurId(r.id); keur([r.bouw7Id!]) },
@@ -409,6 +426,14 @@ export default function UrenOverzicht({
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>
+      )}
+
+      {bewerken && (
+        <UurregelBewerken
+          regel={bewerken}
+          onSluit={() => setBewerken(null)}
+          onKlaar={() => start(() => router.refresh())}
+        />
       )}
     </div>
   )
