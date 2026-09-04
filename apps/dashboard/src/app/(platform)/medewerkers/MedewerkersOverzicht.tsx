@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import NieuweMedewerkerModal from '@/components/medewerkers/NieuweMedewerkerModal'
-import { PageHeader, Button, Badge } from '@/components/ui'
+import { PageHeader, Button, Badge, Switch } from '@/components/ui'
 import { IconPlus } from '@/components/eva/Icons'
 
 type Medewerker = {
@@ -427,7 +427,17 @@ type Props = {
 export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, functies, lookups }: Props) {
   const router = useRouter()
   const [showNieuw, setShowNieuw] = useState(false)
-  const kolommen = useMemo(() => maakKolommen(lookups, medewerkers), [lookups, medewerkers])
+  // Uit dienst blijft overal buiten beeld; dit scherm is de enige plek waar je ze
+  // er bewust bij kunt zetten. Bewust géén kolomfilter: een bewaarde werkstand van
+  // vóór deze regel zou die stilletjes weer uitzetten.
+  const [toonInactief, setToonInactief] = useState(false)
+
+  const zichtbaar = useMemo(
+    () => toonInactief ? medewerkers : medewerkers.filter(m => m.actief),
+    [medewerkers, toonInactief],
+  )
+  const aantalInactief = useMemo(() => medewerkers.filter(m => !m.actief).length, [medewerkers])
+  const kolommen = useMemo(() => maakKolommen(lookups, zichtbaar), [lookups, zichtbaar])
 
   return (
     <div className="eva-page-full">
@@ -437,16 +447,24 @@ export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, fu
       {/* Tabel */}
       <OverzichtTabel
         scherm="medewerkers"
-        data={medewerkers}
+        data={zichtbaar}
         kolommen={kolommen}
         layouts={layouts}
         user_id={user_id}
         onRijKlik={m => router.push(`/medewerkers/${m.id}`)}
         acties={
-          <Button variant="primary" onClick={() => setShowNieuw(true)}>
-            <IconPlus size={14} />
-            Nieuwe medewerker
-          </Button>
+          <>
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg-muted)', cursor: 'pointer' }}
+            >
+              <Switch size="sm" checked={toonInactief} onCheckedChange={setToonInactief} />
+              Uit dienst tonen{aantalInactief > 0 ? ` (${aantalInactief})` : ''}
+            </label>
+            <Button variant="primary" onClick={() => setShowNieuw(true)}>
+              <IconPlus size={14} />
+              Nieuwe medewerker
+            </Button>
+          </>
         }
       />
 

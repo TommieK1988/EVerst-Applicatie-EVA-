@@ -570,8 +570,15 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
       // Verkoop = sellingHourlyRate, kostprijs = hourlyRate (komen als string binnen).
       const uurtariefVerkoop   = e.sellingHourlyRate != null ? Number(e.sellingHourlyRate) : null
       const uurtariefKostprijs = e.hourlyRate != null ? Number(e.hourlyRate) : null
-      // Geen top-level isActive in de API: "uit dienst"-datum gevuld → niet meer actief.
-      const actief = !e.dateOfResignation
+      // Geen top-level isActive in de API: de "uit dienst"-datum bepaalt het. Die datum
+      // wordt ook vooruit ingevuld (opzegging die later ingaat), dus vergelijken met
+      // vandaag — anders staat iemand die pas over een jaar vertrekt nu al buiten beeld.
+      // De fingerprint bevat `act`, dus de dag dat de datum verstrijkt schrijft de sync
+      // hem vanzelf op inactief.
+      const uitDienst = toDate(e.dateOfResignation)
+      // Nederlandse kalenderdag: toISOString() is UTC en zou 's avonds een dag te vroeg draaien.
+      const vandaag = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Amsterdam' })
+      const actief = !uitDienst || uitDienst > vandaag
       // `functie` én `afdeling` zijn EVA-beheerd (de indeling wijkt af van Bouw7) en
       // worden bewust NIET meer vanuit de sync geschreven — zo overschrijft Bouw7 de
       // EVA-indeling nooit. Ze staan daarom ook niet in de fingerprint.
