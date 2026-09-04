@@ -55,9 +55,15 @@ export interface DatePickerProps {
   placeholder?: string
   disabled?: boolean
   className?: string
+  /**
+   * 'kort' toont "1 sep 2026" in plaats van "1 september 2026". Voor plekken waar de
+   * datum tussen andere gegevens in een smalle kolom staat en de volledige maandnaam
+   * de regel laat omslaan.
+   */
+  weergave?: 'lang' | 'kort'
 }
 
-export function DatePicker({ value, onChange, placeholder = 'Kies een datum', disabled, className }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = 'Kies een datum', disabled, className, weergave = 'lang' }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -73,7 +79,7 @@ export function DatePicker({ value, onChange, placeholder = 'Kies een datum', di
         >
           <CalendarIcon className="h-4 w-4 shrink-0 text-neutral-500" />
           <span className={value ? 'text-neutral-900' : 'text-neutral-400'}>
-            {value ? format(value, 'd MMMM yyyy', { locale: nl }) : placeholder}
+            {value ? format(value, weergave === 'kort' ? 'd MMM yyyy' : 'd MMMM yyyy', { locale: nl }) : placeholder}
           </span>
         </button>
       </PopoverTrigger>

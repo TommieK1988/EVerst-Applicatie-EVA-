@@ -3030,6 +3030,7 @@ export async function updateDossierInfo(
     werkadres_stad?: string | null
     opdracht_referentie?: string | null
     werkmaatschappij_id?: string | null
+    factuuradres_id?: string | null
     aanvraagdatum?: string | null
     deadline?: string | null
     voorlopige_start?: string | null

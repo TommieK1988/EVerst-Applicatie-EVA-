@@ -49,8 +49,6 @@ import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
 import {
   Button, Card, CardHeader, CardBody, InklapbareCard,
-  Input,
-  FormField, FormRow, FormSection,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverItem,
   Separator,
@@ -95,8 +93,6 @@ type FormValues = {
   werkadres_straat: string
   werkadres_postcode: string
   werkadres_stad: string
-  betalingstermijn: string
-  factuurreferentie: string
   projectleider_id: string
   teamleider_id: string
   werkvoorbereider_id: string
@@ -112,11 +108,14 @@ type FormValues = {
   vve_code: string
 }
 
+/** De vijf rolvelden op dit tabblad; `projectleider_id` heet in de database `project_manager_id`. */
+type RolVeldNaam = 'projectleider_id' | 'calculator_id' | 'uitvoerder_id' | 'teamleider_id' | 'controller_id'
+
 const DEFAULT_CATEGORIEEN = ['Schilderwerk', 'Houtrotherstel', 'Stukadoorwerk', 'Gevelrenovatie', 'Binnenwerk', 'Overig']
 
 /* ─── read-only veld ──────────────────────────────────────────────── */
 function InfoVeld({
-  label, waarde, mono, numeric, urgentie, href, hrefTitel,
+  label, waarde, mono, numeric, urgentie, href, hrefTitel, className,
 }: {
   label: string
   waarde?: string | null
@@ -126,15 +125,16 @@ function InfoVeld({
   /** Maakt de waarde klikbaar, bv. naar de relatie- of contactpersoonpagina. */
   href?: string | null
   hrefTitel?: string
+  className?: string
 }) {
   const heeftWaarde = waarde != null && waarde !== ''
   return (
-    <div>
-      <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
-        {label}
-      </div>
+    <div className={className}>
+      <VeldLabel>{label}</VeldLabel>
+      {/* Zelfde randloze doos als een bewerkbaar veld ernaast, zodat de waarden in
+          een gemengde kolom (lezen naast invoeren) op dezelfde regel staan. */}
       <div className={cn(
-        'text-[13px]',
+        '-mx-1.5 border border-transparent px-1.5 py-[3px] text-[13px]',
         mono    ? ' font-medium'         : null,
         numeric ? 'tabular-nums font-bold'        : null,
         !mono && !numeric ? 'font-medium'         : null,
@@ -272,6 +272,160 @@ function StelpostAfrekening({ stelpost, pending, onZet }: {
           </span>
         </>
       )}
+    </div>
+  )
+}
+
+/* ─── direct bewerkbare velden ───────────────────────────────────────────
+   Dit tabblad kent geen bewerkmodus: elk veld dat je mag wijzigen is meteen een
+   invoerveld en schrijft zichzelf weg — tekst zodra je het veld verlaat (of op
+   Enter), keuzelijsten en datums zodra je kiest. In rust zien ze eruit als de
+   leesregel ernaast; de rand komt pas bij hover of focus, zodat een dossier vol
+   gegevens niet verandert in een muur van invoervakken. */
+const VELD_STIL = cn(
+  '-mx-1.5 w-[calc(100%+0.75rem)] rounded-md border border-transparent bg-transparent px-1.5 py-[3px] text-[13px]',
+  'font-medium text-neutral-800 outline-none transition-[border-color,box-shadow] [transition-duration:120ms]',
+  'hover:border-neutral-300 hover:bg-white focus:border-brand-500 focus:bg-white focus:ring-[3px] focus:ring-brand-100',
+  'placeholder:font-normal placeholder:text-neutral-400',
+)
+
+function VeldLabel({ children, href, hrefTitel }: {
+  children: React.ReactNode
+  /** Kleine doorklik naast het label — het bewerkbare veld zelf is de keuzelijst. */
+  href?: string | null
+  hrefTitel?: string
+}) {
+  return (
+    <div className="mb-[3px] flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+      {children}
+      {href && (
+        <Link href={href} title={hrefTitel} className="text-brand-600 no-underline hover:text-brand-700">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </Link>
+      )}
+    </div>
+  )
+}
+
+/** Tekstveld dat bij het verlaten opslaat. Esc zet de vorige waarde terug. */
+function TekstVeld({
+  label, waarde, onBewaar, placeholder, type = 'text', className, readOnly, mono,
+}: {
+  label: string
+  waarde: string
+  onBewaar: (waarde: string) => void
+  placeholder?: string
+  type?: 'text' | 'email' | 'tel'
+  className?: string
+  readOnly?: boolean
+  mono?: boolean
+}) {
+  const [tekst, setTekst] = React.useState(waarde)
+  const inBewerking = React.useRef(false)
+  const negeerBlur  = React.useRef(false)
+  // Een nieuwe waarde van buitenaf (mislukte opslag, verse serverdata) overschrijft
+  // het veld alleen als de gebruiker er niet in staat te typen.
+  React.useEffect(() => { if (!inBewerking.current) setTekst(waarde) }, [waarde])
+
+  if (readOnly) return <InfoVeld label={label} waarde={waarde || null} className={className} mono={mono} />
+  return (
+    <div className={className}>
+      <VeldLabel>{label}</VeldLabel>
+      <input
+        type={type}
+        value={tekst}
+        placeholder={placeholder}
+        onFocus={() => { inBewerking.current = true }}
+        onChange={e => setTekst(e.target.value)}
+        onBlur={() => {
+          inBewerking.current = false
+          if (negeerBlur.current) { negeerBlur.current = false; return }
+          if (tekst.trim() !== waarde) onBewaar(tekst.trim())
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') { negeerBlur.current = true; setTekst(waarde); e.currentTarget.blur() }
+        }}
+        className={VELD_STIL}
+      />
+    </div>
+  )
+}
+
+/** Keuzelijst die bij het kiezen opslaat. */
+function KeuzeVeld({
+  label, waarde, opties, onBewaar, placeholder, className, readOnly, href, hrefTitel,
+}: {
+  label: string
+  waarde: string
+  opties: { value: string; label: string }[]
+  onBewaar: (waarde: string) => void
+  placeholder?: string
+  className?: string
+  readOnly?: boolean
+  href?: string | null
+  hrefTitel?: string
+}) {
+  if (readOnly) {
+    return (
+      <InfoVeld
+        label={label}
+        waarde={opties.find(o => o.value === waarde)?.label ?? null}
+        className={className}
+        href={href}
+        hrefTitel={hrefTitel}
+      />
+    )
+  }
+  return (
+    <div className={className}>
+      <VeldLabel href={href} hrefTitel={hrefTitel}>{label}</VeldLabel>
+      <Select
+        value={waarde || '__none__'}
+        onValueChange={v => onBewaar(v === '__none__' ? '' : v)}
+      >
+        <SelectTrigger className={cn(VELD_STIL, 'h-auto justify-between gap-1 pr-1 data-[placeholder]:font-normal')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">{placeholder ?? '— Selecteer —'}</SelectItem>
+          {opties.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/** Zoekbare medewerkerskeuze die bij het kiezen opslaat. */
+function RolVeld({
+  label, waarde, naam, opties, onBewaar, placeholder, readOnly,
+}: {
+  label: string
+  waarde: string
+  /** Naam uit de dossierweergave — vangt een rolhouder op die niet in de lijst staat. */
+  naam: string | null
+  opties: { value: string; label: string }[]
+  onBewaar: (waarde: string) => void
+  placeholder?: string
+  readOnly?: boolean
+}) {
+  if (readOnly) return <InfoVeld label={label} waarde={naam} />
+  return (
+    <div>
+      <VeldLabel>{label}</VeldLabel>
+      <Combobox
+        options={[{ value: '', label: '— Geen —' }, ...opties]}
+        value={waarde}
+        onChange={onBewaar}
+        placeholder={placeholder ?? '— Selecteer —'}
+        searchPlaceholder="Zoek medewerker…"
+        emptyText="Geen medewerker gevonden."
+        className={cn(VELD_STIL, 'h-auto pr-1')}
+      />
     </div>
   )
 }
@@ -756,47 +910,6 @@ function OpdrachtDetailDialog({
   )
 }
 
-/* ─── DS select helper ────────────────────────────────────────────── */
-function DsSelect({
-  value, onChange, options, placeholder,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-  placeholder?: string
-}) {
-  return (
-    <Select value={value || '__none__'} onValueChange={v => onChange(v === '__none__' ? '' : v)}>
-      <SelectTrigger><SelectValue /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">{placeholder ?? '— Selecteer —'}</SelectItem>
-        {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  )
-}
-
-/* ─── Rol-select (zoekbare single-select) ─────────────────────────── */
-function RolSelect({
-  value, onChange, options, placeholder,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-  placeholder?: string
-}) {
-  return (
-    <Combobox
-      options={[{ value: '', label: '— Geen —' }, ...options]}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder ?? '— Selecteer —'}
-      searchPlaceholder="Zoek medewerker…"
-      emptyText="Geen medewerker gevonden."
-    />
-  )
-}
-
 /* ─── taken blok ──────────────────────────────────────────────────── */
 function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
   return {
@@ -1045,9 +1158,16 @@ export function InformatieTab({
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const { bevestig } = useDialogen()
-  const [editModeRaw, setEditMode]  = React.useState(false)
-  // Bij een afgesloten (alleen-lezen) dossier kan de bewerkmodus nooit actief zijn.
-  const editMode = editModeRaw && !readOnly
+  /* Statusregel rechtsboven. Er is geen Opslaan-knop meer, dus moet ergens te zien
+     zijn dát er iets is weggeschreven — anders type je in het luchtledige. */
+  const [opslagStatus, setOpslagStatus] = React.useState<'rust' | 'bezig' | 'klaar' | 'fout'>('rust')
+  const opslagTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  React.useEffect(() => () => { if (opslagTimer.current) clearTimeout(opslagTimer.current) }, [])
+  const meldOpslag = React.useCallback((status: 'bezig' | 'klaar' | 'fout') => {
+    if (opslagTimer.current) { clearTimeout(opslagTimer.current); opslagTimer.current = null }
+    setOpslagStatus(status)
+    if (status !== 'bezig') opslagTimer.current = setTimeout(() => setOpslagStatus('rust'), 2500)
+  }, [])
   const [substatus, setSubstatus]   = React.useState<string>(
     // Servicedesk gebruikt servicedesk_substatus; getDossierSubstatus kent alleen aanvraag/offerte/opdracht
     // en zou anders terugvallen op aanvraag_substatus ('nieuw').
@@ -1150,8 +1270,6 @@ export function InformatieTab({
     werkadres_straat:        (dossier as any).werkadres_straat    ?? '',
     werkadres_postcode:      (dossier as any).werkadres_postcode  ?? '',
     werkadres_stad:          (dossier as any).werkadres_stad      ?? '',
-    betalingstermijn:        '',
-    factuurreferentie:       '',
     projectleider_id:        dossier.project_manager_id  ?? '',
     teamleider_id:           dossier.teamleider_id        ?? '',
     werkvoorbereider_id:     dossier.werkvoorbereider_id  ?? '',
@@ -1174,7 +1292,6 @@ export function InformatieTab({
     voorlopige_eind:         (dossier as any).voorlopige_eind  ?? '',
     vve_code:                (dossier as any).vve_code      ?? '',
   })
-  const [opgeslagen, setOpgeslagen] = React.useState<FormValues>(form)
 
   const [projectId,    setProjectId]    = useState<string | null>(null)
   const [quoteTotalen, setQuoteTotalen] = useState<{
@@ -1211,91 +1328,90 @@ export function InformatieTab({
     return () => { actief = false }
   }, [projectId, importTick])
 
-  const set = (key: keyof FormValues) => (v: string) => setForm(p => ({ ...p, [key]: v }))
+  /* Velden waarvan Bouw7 de bron is, blijven hier alleen-lezen: EVA schrijft ze niet terug
+     en zou anders bij de volgende sync stilzwijgend overschreven worden. */
+  const magBouw7Veld = !readOnly && !bouw7Vergrendeld
 
-  function opslaan() {
-    // Vóór setEditMode(false): anders klapt de bewerkmodus dicht met een niet-opgeslagen
-    // fout en ziet de gebruiker alleen een toast bij een scherm dat er correct uitziet.
-    if (periodeFout) { toast.error(periodeFout); return }
-    setOpgeslagen(form)
-    setEditMode(false)
-    // Fase wegschrijven — altijd langs `voerSubstatusUit`, dus mét terugschrijven naar Bouw7. Deze
-    // tak schreef voor aanvraag/offerte alleen in EVA: daardoor liep EVA vooruit op het gedeelde
-    // maatwerkveld en strandde elke vólgende wijziging op een conflict dat niet meer op te lossen was.
-    // Voor aanvraag/offerte alleen wanneer de substatus EVA-stuurbaar is (Bouw7-eigen statussen
-    // blijven daar alleen-lezen).
-    if (sectie === 'servicedesk') {
-      updateServicedeskSubstatus(dossier.id, substatus).catch(() => {})
-    } else if (sectie === 'opdracht' || !bouw7Vergrendeld || !isBouw7Substatus(sectie, substatus)) {
-      // Direct wegschrijven, niet via `zetSubstatus`: Opslaan bevestigt de al gekozen status en
-      // mag niet opnieuw de gereedmeld-dialoog openen bij een dossier dat al financieel gereed is.
-      voerSubstatusUit(substatus).catch(() => toast.error('Substatus opslaan mislukt'))
-    }
-    // Rollen zijn nu volledig bewerkbaar en worden bij Bouw7-dossiers direct teruggeschreven naar Bouw7
-    // (projectleider→projectLeader, calculator→workPlanner, uitvoerder→executor, controller→custom attr
-    // "Eindverantwoordelijke offerte"). Teamleider is EVA-eigen. `calculator_id` wordt server-side naar
-    // `werkvoorbereider_id` gemirrord (Calculator ≡ Werkvoorbereider / Bouw7 workPlanner).
-    updateDossierRollen(dossier.id, {
-      project_manager_id:  form.projectleider_id  || null,
-      calculator_id:       form.calculator_id     || null,
-      uitvoerder_id:       form.uitvoerder_id     || null,
-      teamleider_id:       form.teamleider_id     || null,
-      controller_id:       form.controller_id     || null,
-    }, { schrijfBouw7: bouw7Vergrendeld })
-      .then(res => {
-        if (res.ok && res.bouw7 && !res.bouw7.ok) {
-          toast.error(`Rollen opgeslagen in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
-        }
-        // Bij een wissel van projectleider krijgen de planbalken in Bouw7 diens kleur; meld dat,
-        // want het is een wijziging buiten dit scherm die de planners meteen zien.
-        if (res.ok && res.herkleurd) {
-          toast.success(`Planning in Bouw7 omgekleurd naar de nieuwe projectleider (${res.herkleurd} ${res.herkleurd === 1 ? 'item' : 'items'}).`)
-        }
+  /* ─── direct opslaan ────────────────────────────────────────────────
+     Elk veld schrijft zichzelf weg zodra het klaar is. De UI toont de nieuwe
+     waarde meteen; mislukt het opslaan, dan draaien alléén de betrokken velden
+     terug naar hun vorige waarde en zegt een toast wat er misging. */
+  async function bewaarInfo(patch: Partial<FormValues>) {
+    const sleutels = Object.keys(patch) as (keyof FormValues)[]
+    if (sleutels.every(k => (patch[k] ?? '') === form[k])) return
+    const vorige = form
+    setForm(p => ({ ...p, ...patch }))
+    meldOpslag('bezig')
+    const kolommen: Record<string, string | null> = {}
+    for (const k of sleutels) kolommen[k] = (patch[k] as string) || null
+    const res = await updateDossierInfo(dossier.id, kolommen as Parameters<typeof updateDossierInfo>[1])
+    if (!res.ok) {
+      setForm(p => {
+        const terug = { ...p }
+        for (const k of sleutels) terug[k] = vorige[k]
+        return terug
       })
-      .catch(() => {})
-    // Inhoudsvelden: EVA-eigen velden altijd; Bouw7-bron-velden alleen voor niet-Bouw7-dossiers.
-    updateDossierInfo(dossier.id, {
-      referentie:           form.referentie           || null,
-      opdracht_referentie:  form.opdracht_referentie  || null,
-      werkadres_naam:       form.werkadres_naam       || null,
-      werkadres_telefoon:   form.werkadres_telefoon   || null,
-      werkadres_email:      form.werkadres_email      || null,
-      // Werkmaatschappij is een EVA-eigen classificatie → altijd bewerkbaar.
-      werkmaatschappij_id:  form.werkmaatschappij_id  || null,
-      // Aanvraagdatum, deadline en VvE-code zijn EVA-eigen velden → altijd bewerkbaar.
-      aanvraagdatum:        form.aanvraagdatum        || null,
-      deadline:             form.deadline             || null,
-      voorlopige_start:     form.voorlopige_start     || null,
-      voorlopige_eind:      form.voorlopige_eind      || null,
-      vve_code:             form.vve_code             || null,
-      ...(bouw7Vergrendeld ? {} : {
-        categorie:            form.categorie            || null,
-        contactpersoon_id:    form.contactpersoon_id    || null,
-        werkadres_straat:     form.werkadres_straat     || null,
-        werkadres_postcode:   form.werkadres_postcode   || null,
-        werkadres_stad:       form.werkadres_stad       || null,
-      }),
-    }).catch(() => {})
+      meldOpslag('fout')
+      toast.error(`Opslaan mislukt: ${res.error}`)
+      return
+    }
+    meldOpslag('klaar')
   }
-  function annuleer() { setForm(opgeslagen); setEditMode(false) }
+
+  /* De DB-constraint dossiers_voorlopige_periode_chk is het vangnet, maar die levert
+     een rauwe PostgREST-melding. Weiger de keuze hier al, met een leesbare reden. */
+  function bewaarDatum(veld: DatumVeld, waarde: string) {
+    const straks = { ...form, [veld]: waarde }
+    if (straks.voorlopige_start && straks.voorlopige_eind
+        && straks.voorlopige_eind < straks.voorlopige_start) {
+      toast.error('De voorlopige einddatum ligt vóór de startdatum.')
+      return
+    }
+    bewaarInfo({ [veld]: waarde })
+  }
+
+  /* Rollen gaan bij Bouw7-dossiers direct mee naar Bouw7 (projectleider→projectLeader,
+     calculator→workPlanner, uitvoerder→executor, controller→custom attr "Eindverantwoordelijke
+     offerte"). Teamleider is EVA-eigen. `calculator_id` wordt server-side naar
+     `werkvoorbereider_id` gemirrord (Calculator ≡ Werkvoorbereider / Bouw7 workPlanner). */
+  async function bewaarRol(veld: RolVeldNaam, waarde: string) {
+    const vorige = form[veld]
+    if (waarde === vorige) return
+    setForm(p => ({ ...p, [veld]: waarde }))
+    meldOpslag('bezig')
+    const kolom = veld === 'projectleider_id' ? 'project_manager_id' : veld
+    const res = await updateDossierRollen(
+      dossier.id,
+      { [kolom]: waarde || null },
+      { schrijfBouw7: bouw7Vergrendeld },
+    )
+    if (!res.ok) {
+      setForm(p => ({ ...p, [veld]: vorige }))
+      meldOpslag('fout')
+      toast.error(`Rol opslaan mislukt: ${res.error}`)
+      return
+    }
+    meldOpslag('klaar')
+    if (res.bouw7 && !res.bouw7.ok) {
+      toast.error(`Rol opgeslagen in EVA, maar terugschrijven naar Bouw7 mislukt: ${res.bouw7.error}`)
+    }
+    // Bij een wissel van projectleider krijgen de planbalken in Bouw7 diens kleur; meld dat,
+    // want het is een wijziging buiten dit scherm die de planners meteen zien.
+    if (res.herkleurd) {
+      toast.success(`Planning in Bouw7 omgekleurd naar de nieuwe projectleider (${res.herkleurd} ${res.herkleurd === 1 ? 'item' : 'items'}).`)
+    }
+    router.refresh()
+  }
 
   /* ─── procesdatums ───────────────────────────────────────────────────
      De server levert de acht datums; aanvraagdatum en deadline komen uit het
-     formulier zodat de lijst in de bewerkmodus meteen meebeweegt. Een lege
+     formulier zodat de lijst meteen meebeweegt met wat je kiest. Een lege
      aanvraagdatum valt terug op de serverwaarde (= created_at). */
   const datumRegels = React.useMemo(() => bouwDatumRegels({
     ...datums,
     aanvraagdatum: form.aanvraagdatum || datums.aanvraagdatum,
     deadline:      form.deadline      || null,
   }), [datums, form.aanvraagdatum, form.deadline])
-
-  /* Stringvergelijking op 'YYYY-MM-DD' is lexicografisch correct — geen Date nodig.
-     De DB-constraint dossiers_voorlopige_periode_chk is het vangnet daaronder, maar die
-     levert een rauwe PostgREST-melding; dit is de leesbare variant. */
-  const periodeFout = form.voorlopige_start && form.voorlopige_eind
-    && form.voorlopige_eind < form.voorlopige_start
-    ? 'De voorlopige einddatum ligt vóór de startdatum.'
-    : null
 
   // De deadline is het moment waarop de offerte verzonden had moeten zijn; zodra
   // die eruit is, valt er niets meer te halen en kleurt hij dus niet meer.
@@ -1452,7 +1568,6 @@ export function InformatieTab({
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
   const werkmaatschappijOpties = werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))
-  const werkmaatschappijNaam   = werkmaatschappijen.find(w => w.id === form.werkmaatschappij_id)?.naam ?? null
   const categorieOpties    = (categorieen?.length ? categorieen : DEFAULT_CATEGORIEEN).map(c => ({ value: c, label: c }))
   const factuuradresOpties = factuuradressen.map(fa => ({
     value: fa.id,
@@ -1612,19 +1727,27 @@ export function InformatieTab({
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}
-          {editMode ? (
-            <div className="flex gap-2">
-              <Button variant="primary" onClick={opslaan}>Opslaan</Button>
-              <Button variant="ghost" onClick={annuleer}>Annuleer</Button>
-            </div>
-          ) : !readOnly ? (
-            <Button variant="primary" onClick={() => setEditMode(true)}>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.5 2.5a2.121 2.121 0 0 1 3 3L6 17l-4 1 1-4L14.5 2.5z" />
-              </svg>
-              Bewerken
-            </Button>
-          ) : null}
+          {!readOnly && (
+            <span
+              title="Elk veld op dit tabblad slaat zichzelf op: tekst zodra je het veld verlaat, keuzelijsten en datums meteen."
+              className={cn(
+                'inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium',
+                opslagStatus === 'fout' ? 'text-error-700'
+                : opslagStatus === 'klaar' ? 'text-[#009439]'
+                : 'text-neutral-400',
+              )}
+            >
+              {opslagStatus === 'klaar' && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 6l3 3 5-5" />
+                </svg>
+              )}
+              {opslagStatus === 'bezig' ? 'Opslaan…'
+                : opslagStatus === 'klaar' ? 'Opgeslagen'
+                : opslagStatus === 'fout' ? 'Opslaan mislukt'
+                : 'Wijzigingen worden direct opgeslagen'}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1696,7 +1819,7 @@ export function InformatieTab({
         )}
 
         {/* Projectinformatie */}
-        <InklapbareCard titel="Projectinformatie" altijdOpen={editMode}>
+        <InklapbareCard titel="Projectinformatie">
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
               <InfoVeld label="Dossiernummer"  waarde={dossier.dossiernummer} mono />
               <InfoVeld
@@ -1706,69 +1829,58 @@ export function InformatieTab({
                 hrefTitel="Open de relatiegegevens"
               />
               <InfoVeld label="Projectnaam"    waarde={dossier.titel} />
+              {/* De fase wijzig je via de statuskeuze in de kop: die bewaakt de
+                  bevestiging bij afsluiten en de controle bij financieel gereed. */}
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
               <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
-              <InfoVeld label="Categorie" waarde={form.categorie || null} />
-              <InfoVeld label="Referentie" waarde={form.referentie || null} />
-              <InfoVeld label="VvE-code" waarde={form.vve_code || null} />
-              <InfoVeld label="Werkmaatschappij" waarde={werkmaatschappijNaam} />
+              <KeuzeVeld
+                label="Categorie"
+                waarde={form.categorie}
+                opties={categorieOpties}
+                placeholder="bijv. Schilderwerk"
+                readOnly={!magBouw7Veld}
+                onBewaar={v => bewaarInfo({ categorie: v })}
+              />
+              <TekstVeld
+                label="Referentie"
+                waarde={form.referentie}
+                placeholder="kenmerk van opdrachtgever"
+                readOnly={!magBouw7Veld}
+                onBewaar={v => bewaarInfo({ referentie: v })}
+              />
+              <TekstVeld
+                label="VvE-code"
+                waarde={form.vve_code}
+                placeholder="bijv. VVE-1234"
+                readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ vve_code: v })}
+              />
+              <KeuzeVeld
+                label="Werkmaatschappij"
+                waarde={form.werkmaatschappij_id}
+                opties={werkmaatschappijOpties}
+                placeholder="— Kies werkmaatschappij —"
+                readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ werkmaatschappij_id: v })}
+              />
               {sectie === 'opdracht' && (
-                <InfoVeld label="Opdracht referentie" waarde={form.opdracht_referentie || null} />
+                <TekstVeld
+                  label="Opdracht referentie"
+                  waarde={form.opdracht_referentie}
+                  placeholder="Referentie opdrachtgever"
+                  readOnly={readOnly}
+                  onBewaar={v => bewaarInfo({ opdracht_referentie: v })}
+                />
               )}
             </div>
 
-            {editMode && (
-              <div className="mt-4">
-                {bouw7Vergrendeld && (
-                  <p className="mb-3 rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
-                    Overige velden uit Bouw7 zijn alleen-lezen en worden in Bouw7 beheerd. Rollen worden
-                    bij opslaan direct in Bouw7 bijgewerkt; EVA-eigen velden (referenties, datums,
-                    werkadres-contact, interne opmerkingen) blijven bewerkbaar.
-                  </p>
-                )}
-                <FormSection title="Identificatie">
-                  <FormRow cols="2">
-                    <FormField upper label="Fase">
-                      <DsSelect
-                        value={substatus}
-                        onChange={v => setSubstatus(v)}
-                        options={kiesbareStatussen.map(s => ({ value: s.key, label: s.label }))}
-                        placeholder="Selecteer fase"
-                      />
-                    </FormField>
-                    {bouw7Vergrendeld
-                      ? <InfoVeld label="Categorie" waarde={form.categorie || null} />
-                      : (
-                        <FormField upper label="Categorie">
-                          <DsSelect value={form.categorie} onChange={set('categorie')} options={categorieOpties} placeholder="bijv. Schilderwerk" />
-                        </FormField>
-                      )}
-                    {bouw7Vergrendeld
-                      ? <InfoVeld label="Referentie" waarde={form.referentie || null} />
-                      : (
-                        <FormField upper label="Referentie">
-                          <Input value={form.referentie} onChange={e => set('referentie')(e.target.value)} placeholder="kenmerk van opdrachtgever" />
-                        </FormField>
-                      )}
-                    <FormField upper label="Werkmaatschappij">
-                      <DsSelect
-                        value={form.werkmaatschappij_id}
-                        onChange={set('werkmaatschappij_id')}
-                        options={werkmaatschappijOpties}
-                        placeholder="— Kies werkmaatschappij —"
-                      />
-                    </FormField>
-                    <FormField upper label="VvE-code">
-                      <Input value={form.vve_code} onChange={e => set('vve_code')(e.target.value)} placeholder="bijv. VVE-1234" />
-                    </FormField>
-                    {sectie === 'opdracht' && (
-                      <FormField upper label="Opdracht referentie">
-                        <Input value={form.opdracht_referentie} onChange={e => set('opdracht_referentie')(e.target.value)} placeholder="Referentie opdrachtgever" />
-                      </FormField>
-                    )}
-                  </FormRow>
-                </FormSection>
-              </div>
+            {bouw7Vergrendeld && !readOnly && (
+              <p className="mt-4 rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
+                Dit dossier komt uit Bouw7. Categorie, referentie, werkadres en contactpersoon worden
+                daar beheerd en staan hier alleen-lezen; rollen worden bij het kiezen meteen in Bouw7
+                bijgewerkt. EVA-eigen velden (VvE-code, werkmaatschappij, opdrachtreferentie, datums,
+                werkadres-contact, interne opmerkingen) blijven gewoon bewerkbaar.
+              </p>
             )}
         </InklapbareCard>
 
@@ -1801,104 +1913,89 @@ export function InformatieTab({
         <DatumsBlok
           regels={datumRegels}
           deadlineUrgent={deadlineUrgent}
-          editMode={editMode}
+         
+          bewerkbaar={!readOnly}
           form={{
             aanvraagdatum:    form.aanvraagdatum,
             deadline:         form.deadline,
             voorlopige_start: form.voorlopige_start,
             voorlopige_eind:  form.voorlopige_eind,
           }}
-          onSet={(veld: DatumVeld) => set(veld)}
-          periodeFout={periodeFout}
+          onBewaar={bewaarDatum}
         />
 
-        {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): rollen worden bij opslaan
-            direct naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider" (workPlanner),
-            Controller → custom attribute "Eindverantwoordelijke offerte". */}
-        <InklapbareCard titel="Rollen" altijdOpen={editMode}>
-            {editMode ? (
-              <FormRow cols="2">
-                <FormField upper label="Projectleider">
-                  <RolSelect value={form.projectleider_id} onChange={set('projectleider_id')} options={medewerkersOpties} placeholder="Selecteer projectleider" />
-                </FormField>
-                <FormField upper label="Calculator">
-                  <RolSelect value={form.calculator_id} onChange={set('calculator_id')} options={medewerkersOpties} placeholder="Selecteer calculator" />
-                </FormField>
-                <FormField upper label="Uitvoerder">
-                  <RolSelect value={form.uitvoerder_id} onChange={set('uitvoerder_id')} options={medewerkersOpties} placeholder="Selecteer uitvoerder" />
-                </FormField>
-                <FormField upper label="Teamleider">
-                  <RolSelect value={form.teamleider_id} onChange={set('teamleider_id')} options={medewerkersOpties} placeholder="Selecteer teamleider" />
-                </FormField>
-                <FormField upper label="Controller">
-                  <RolSelect value={form.controller_id} onChange={set('controller_id')} options={medewerkersOpties} placeholder="Selecteer controller" />
-                </FormField>
-              </FormRow>
-            ) : (
-              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <InfoVeld label="Projectleider" waarde={dossier.projectleider_naam} />
-                <InfoVeld label="Calculator"    waarde={dossier.calculator_naam} />
-                <InfoVeld label="Uitvoerder"    waarde={dossier.uitvoerder_naam} />
-                <InfoVeld label="Teamleider"    waarde={dossier.teamleider_naam} />
-                <InfoVeld label="Controller"    waarde={dossier.controller_naam} />
-              </div>
-            )}
+        {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): een rolwissel
+            wordt meteen naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider"
+            (workPlanner), Controller → custom attribute "Eindverantwoordelijke offerte". */}
+        <InklapbareCard titel="Rollen">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+              <RolVeld
+                label="Projectleider" waarde={form.projectleider_id} naam={dossier.projectleider_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer projectleider"
+                onBewaar={v => bewaarRol('projectleider_id', v)}
+              />
+              <RolVeld
+                label="Calculator" waarde={form.calculator_id} naam={dossier.calculator_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer calculator"
+                onBewaar={v => bewaarRol('calculator_id', v)}
+              />
+              <RolVeld
+                label="Uitvoerder" waarde={form.uitvoerder_id} naam={dossier.uitvoerder_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer uitvoerder"
+                onBewaar={v => bewaarRol('uitvoerder_id', v)}
+              />
+              <RolVeld
+                label="Teamleider" waarde={form.teamleider_id} naam={dossier.teamleider_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer teamleider"
+                onBewaar={v => bewaarRol('teamleider_id', v)}
+              />
+              <RolVeld
+                label="Controller" waarde={form.controller_id} naam={dossier.controller_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer controller"
+                onBewaar={v => bewaarRol('controller_id', v)}
+              />
+            </div>
         </InklapbareCard>
 
         {/* Werkadres — eigen blok, alle velden zichtbaar. */}
-        <InklapbareCard titel="Werkadres" altijdOpen={editMode}>
-            {/* Objectkoppeling (VvE/complex). Vult zichzelf; staat los van het formulier omdat
-                koppelen meteen wegschrijft en niet op "Opslaan" hoort te wachten. */}
+        <InklapbareCard titel="Werkadres">
+            {/* Objectkoppeling (VvE/complex). Vult zichzelf en staat los van de velden eronder. */}
             <div className="mb-4 border-b border-[var(--border)] pb-3">
               <ObjectKoppeling dossierId={dossier.id} readOnly={readOnly} />
             </div>
-            {editMode ? (
-              <FormRow cols="2">
-                <FormField upper label="Naam" className="col-span-2">
-                  <Input value={form.werkadres_naam} onChange={e => set('werkadres_naam')(e.target.value)} />
-                </FormField>
-                <FormField upper label="Telefoon">
-                  <Input value={form.werkadres_telefoon} onChange={e => set('werkadres_telefoon')(e.target.value)} />
-                </FormField>
-                <FormField upper label="E-mail">
-                  <Input type="email" value={form.werkadres_email} onChange={e => set('werkadres_email')(e.target.value)} />
-                </FormField>
-                {bouw7Vergrendeld ? (
-                  <>
-                    <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
-                    <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
-                    <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
-                  </>
-                ) : (
-                  <>
-                    <FormField upper label="Straat + nummer" className="col-span-2">
-                      <Input value={form.werkadres_straat} onChange={e => set('werkadres_straat')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="Postcode">
-                      <Input value={form.werkadres_postcode} onChange={e => set('werkadres_postcode')(e.target.value)} />
-                    </FormField>
-                    <FormField upper label="Stad">
-                      <Input value={form.werkadres_stad} onChange={e => set('werkadres_stad')(e.target.value)} />
-                    </FormField>
-                  </>
-                )}
-              </FormRow>
-            ) : (
-              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <div className="col-span-2"><InfoVeld label="Naam" waarde={form.werkadres_naam || null} /></div>
-                <InfoVeld label="Telefoon" waarde={form.werkadres_telefoon || null} mono />
-                <InfoVeld label="E-mail"   waarde={form.werkadres_email    || null} />
-                <div className="col-span-2"><InfoVeld label="Straat + nummer" waarde={form.werkadres_straat || null} /></div>
-                <InfoVeld label="Postcode" waarde={form.werkadres_postcode || null} />
-                <InfoVeld label="Stad"     waarde={form.werkadres_stad     || null} />
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+              <TekstVeld
+                className="col-span-2" label="Naam" waarde={form.werkadres_naam} readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ werkadres_naam: v })}
+              />
+              <TekstVeld
+                label="Telefoon" type="tel" mono waarde={form.werkadres_telefoon} readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ werkadres_telefoon: v })}
+              />
+              <TekstVeld
+                label="E-mail" type="email" waarde={form.werkadres_email} readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ werkadres_email: v })}
+              />
+              <TekstVeld
+                className="col-span-2" label="Straat + nummer" waarde={form.werkadres_straat}
+                readOnly={!magBouw7Veld}
+                onBewaar={v => bewaarInfo({ werkadres_straat: v })}
+              />
+              <TekstVeld
+                label="Postcode" waarde={form.werkadres_postcode} readOnly={!magBouw7Veld}
+                onBewaar={v => bewaarInfo({ werkadres_postcode: v })}
+              />
+              <TekstVeld
+                label="Stad" waarde={form.werkadres_stad} readOnly={!magBouw7Veld}
+                onBewaar={v => bewaarInfo({ werkadres_stad: v })}
+              />
+            </div>
         </InklapbareCard>
 
         {/* Opdrachtgever */}
         <InklapbareCard
           titel="Opdrachtgever"
-          altijdOpen={editMode}
+         
           bodyClassName="flex flex-col gap-3.5"
         >
             <div className="grid grid-cols-2 gap-x-5 gap-y-3">
@@ -1937,32 +2034,36 @@ export function InformatieTab({
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
               Contactpersoon
             </p>
-            {editMode && !bouw7Vergrendeld ? (
-              <FormField upper label="Contactpersoon">
-                <DsSelect
-                  value={form.contactpersoon_id}
-                  onChange={set('contactpersoon_id')}
-                  options={contactpersoonOpties.map(cp => ({ value: cp.id, label: cp.naam }))}
-                  placeholder="Selecteer contactpersoon"
-                />
-              </FormField>
-            ) : (() => {
+            {(() => {
               const geselecteerd = contactpersoonOpties.find(cp => cp.id === form.contactpersoon_id)
               const naam     = geselecteerd?.naam     ?? (dossier as any).contactpersoon_naam     ?? null
               const telefoon = geselecteerd?.telefoon ?? (dossier as any).contactpersoon_telefoon ?? null
               const email    = geselecteerd?.email    ?? (dossier as any).contactpersoon_email    ?? null
+              const href     = form.contactpersoon_id ? `/relaties/contactpersonen/${form.contactpersoon_id}` : null
               return (
                 <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <InfoVeld
-                    label="Naam"
-                    waarde={naam}
-                    href={form.contactpersoon_id ? `/relaties/contactpersonen/${form.contactpersoon_id}` : null}
-                    hrefTitel="Open de contactpersoongegevens"
-                  />
+                  {magBouw7Veld ? (
+                    <KeuzeVeld
+                      className="col-span-2"
+                      label="Naam"
+                      waarde={form.contactpersoon_id}
+                      opties={contactpersoonOpties.map(cp => ({ value: cp.id, label: cp.naam }))}
+                      placeholder="Selecteer contactpersoon"
+                      href={href}
+                      hrefTitel="Open de contactpersoongegevens"
+                      onBewaar={v => bewaarInfo({ contactpersoon_id: v })}
+                    />
+                  ) : (
+                    <InfoVeld
+                      className="col-span-2"
+                      label="Naam"
+                      waarde={naam}
+                      href={href}
+                      hrefTitel="Open de contactpersoongegevens"
+                    />
+                  )}
                   <InfoVeld label="Telefoon" waarde={telefoon} mono />
-                  <div className="col-span-2">
-                    <InfoVeld label="E-mail" waarde={email} />
-                  </div>
+                  <InfoVeld className="col-span-2" label="E-mail" waarde={email} />
                 </div>
               )
             })()}
@@ -1971,43 +2072,34 @@ export function InformatieTab({
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
               Afwijkend factuuradres
             </p>
-            {editMode ? (
-              <FormField upper label="Factuuradres">
-                <DsSelect
-                  value={form.factuuradres_id}
-                  onChange={set('factuuradres_id')}
-                  options={factuuradresOpties}
-                  placeholder="Zelfde als werkadres"
-                />
-              </FormField>
-            ) : (
-              <div>
-                <InfoVeld
-                  label="Factuuradres"
-                  waarde={geselecteerdFa
-                    ? `${geselecteerdFa.label}${geselecteerdFa.plaats ? ` — ${geselecteerdFa.plaats}` : ''}`
-                    : null}
-                />
-                {geselecteerdFa && (
-                  <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-neutral-500">
-                    {[
-                      geselecteerdFa.straat,
-                      [geselecteerdFa.postcode, geselecteerdFa.plaats].filter(Boolean).join('  '),
-                      geselecteerdFa.land !== 'Nederland' ? geselecteerdFa.land : null,
-                    ].filter(Boolean).join('\n')}
-                  </p>
-                )}
-                {!geselecteerdFa && factuuradressen.length === 0 && (
-                  <p className="mt-1 text-[12px] italic text-neutral-400">
-                    Geen factuuradressen beschikbaar.{' '}
-                    {dossier.klant_naam
-                      ? <Link href="/relaties" className="text-brand-600 no-underline">Voeg toe in Relatiebeheer</Link>
-                      : 'Voeg toe via Relatiebeheer'
-                    }.
-                  </p>
-                )}
-              </div>
-            )}
+            <div>
+              <KeuzeVeld
+                label="Factuuradres"
+                waarde={form.factuuradres_id}
+                opties={factuuradresOpties}
+                placeholder="Zelfde als werkadres"
+                readOnly={readOnly}
+                onBewaar={v => bewaarInfo({ factuuradres_id: v })}
+              />
+              {geselecteerdFa && (
+                <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-neutral-500">
+                  {[
+                    geselecteerdFa.straat,
+                    [geselecteerdFa.postcode, geselecteerdFa.plaats].filter(Boolean).join('  '),
+                    geselecteerdFa.land !== 'Nederland' ? geselecteerdFa.land : null,
+                  ].filter(Boolean).join('\n')}
+                </p>
+              )}
+              {!geselecteerdFa && factuuradressen.length === 0 && (
+                <p className="mt-1 text-[12px] italic text-neutral-400">
+                  Geen factuuradressen beschikbaar.{' '}
+                  {dossier.klant_naam
+                    ? <Link href="/relaties" className="text-brand-600 no-underline">Voeg toe in Relatiebeheer</Link>
+                    : 'Voeg toe via Relatiebeheer'
+                  }.
+                </p>
+              )}
+            </div>
         </InklapbareCard>
 
         {/* Dossier-toggles */}
@@ -2015,7 +2107,7 @@ export function InformatieTab({
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (
-        <InklapbareCard titel="Financiële totalen" altijdOpen={editMode}>
+        <InklapbareCard titel="Financiële totalen">
             {/* Opbouw van de opdracht — alleen verkoopbedragen, van boven naar beneden optellend.
                 Klikken op stelposten/meerwerk/opties opent de specificatie in een venster. */}
             <div>
@@ -2145,22 +2237,6 @@ export function InformatieTab({
                   pending={optiePending}
                 />
               </>
-            )}
-            <Separator className="my-3" />
-            {editMode ? (
-              <FormRow cols="2">
-                <FormField upper label="Betalingstermijn">
-                  <Input value={form.betalingstermijn} onChange={e => set('betalingstermijn')(e.target.value)} placeholder="bijv. 30 dagen" />
-                </FormField>
-                <FormField upper label="Factuurreferentie">
-                  <Input value={form.factuurreferentie} onChange={e => set('factuurreferentie')(e.target.value)} />
-                </FormField>
-              </FormRow>
-            ) : (
-              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <InfoVeld label="Betalingstermijn"  waarde={form.betalingstermijn  || null} />
-                <InfoVeld label="Factuurreferentie" waarde={form.factuurreferentie || null} />
-              </div>
             )}
         </InklapbareCard>
         )}
