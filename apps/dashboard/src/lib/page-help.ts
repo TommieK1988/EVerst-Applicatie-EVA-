@@ -388,7 +388,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Alle uren die in Bouw7 geboekt zijn, live opgehaald. Naast bekijken kun je hier ook goedkeuren: de knop Te keuren door mij laat alleen de uren zien die op jouw akkoord wachten.',
     sections: [
       { title: 'Wie mag wat goedkeuren', body: 'Bouw7 legt niet vast wie moet accorderen, dus EVA leidt dat af uit de rollen op het dossier waarop de uren staan: eerst de teamleider van dat dossier, daarna de projectleider. Staat er geen teamleider op, dan gaat de regel meteen naar de projectleider. De projectleider mag de teamleider altijd overrulen, ook een goedkeuring terugdraaien.' },
-      { title: 'Goedkeuren', body: 'Zet de knop Te keuren door mij aan. Links bij elke regel staat een rood kruisje; klik erop en het wordt een groen vinkje. Gaat het om een stapel, filter dan eerst op een medewerker, week of project en gebruik Alles zichtbaar goedkeuren.' },
+      { title: 'Goedkeuren', body: 'Zet de knop Te keuren door mij aan. Links bij elke regel staat een rood kruisje; klik erop en het wordt een groen vinkje. Gaat het om een stapel, vink dan links de regels aan die je in één keer wilt afhandelen en gebruik de goedkeurknop boven de tabel.' },
       { title: 'Iets klopt niet', body: 'Klik de regel aan en pas de uren, de bewakingscode of de opmerking aan. De medewerker krijgt daar automatisch bericht van, en EVA onthoudt wat er stond. Afkeuren bestaat niet: Bouw7 kent alleen goedgekeurd of niet, en heen-en-weer sturen kost alleen tijd.' },
       { title: 'Wat je te zien krijgt', body: 'Met het financieel-recht zie je alle geboekte uren van het hele bedrijf. Zonder dat recht -- de meeste projectleiders hebben het niet -- zie je alleen de uren die je zelf moet goedkeuren.' },
     ],

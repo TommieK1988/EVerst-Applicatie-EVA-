@@ -11,7 +11,6 @@ import type { UrenOverzichtData, UrenOverzichtRegel } from '@/lib/uren/actions'
 import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
-import { useDialogen } from '@/components/ui/dialogen'
 import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
 
 /* ─── Opmaak ────────────────────────────────────────────────────────────────── */
@@ -226,8 +225,6 @@ export default function UrenOverzicht({
   const [zichtbaar, setZichtbaar] = useState<UrenOverzichtRegel[] | null>(null)
   const meldTotalen = useCallback((rijen: UrenOverzichtRegel[]) => setZichtbaar(rijen), [])
 
-  const { bevestig } = useDialogen()
-
   /**
    * Keurt uren goed in de rol die je op het betreffende dossier hebt — de server bepaalt dat, niet
    * dit scherm. Wat er in Bouw7 gebeurt hangt daarvan af: als projectleider gaat de vlag meteen om,
@@ -337,31 +334,6 @@ export default function UrenOverzicht({
           </button>
         )}
 
-        {alleenMijn && (
-          <button
-            type="button"
-            disabled={keurBezig || (zichtbaar ?? teKeuren).length === 0}
-            onClick={async () => {
-              const rijen = (zichtbaar ?? teKeuren).filter(magIkKeuren)
-              if (!rijen.length) return
-              const ok = await bevestig({
-                titel: `${rijen.length} uurregels goedkeuren?`,
-                omschrijving: `Samen ${uur(rijen.reduce((s, r) => s + r.uren, 0))} uur. Dit betreft alles wat nu zichtbaar is na filteren.`,
-                bevestigLabel: 'Goedkeuren',
-              })
-              if (ok) keur(rijen.map(r => r.bouw7Id!).filter(Boolean))
-            }}
-            style={{
-              padding: '7px 13px', borderRadius: 8, border: 'none',
-              cursor: keurBezig ? 'progress' : 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
-              background: '#009439', color: '#fff', opacity: keurBezig ? 0.6 : 1,
-            }}
-          >
-            {keurBezig ? 'Bezig…' : `Alles zichtbaar goedkeuren`}
-          </button>
-        )}
-
         <Stat label={telling.gefilterd ? 'Regels (gefilterd)' : 'Regels'} value={String(telling.regels)} />
         <Stat label="Uren" value={uur(telling.uren)} />
         <Stat label="Arbeidskosten" value={euro(telling.bedrag)} />
@@ -455,7 +427,7 @@ export default function UrenOverzicht({
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
-              ? ' Vink een regel af om hem goed te keuren, of keur in één keer alles goed wat er na filteren nog staat. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier.'
+              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>
