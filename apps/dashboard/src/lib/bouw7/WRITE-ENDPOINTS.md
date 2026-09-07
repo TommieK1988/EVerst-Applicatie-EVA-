@@ -759,7 +759,7 @@ Volgorde gekozen op **risico (laag→hoog)** en **afhankelijkheid van bestaande 
 | **4** | **Urenregistratie** | `POST /project/hour-log` | Hoge businesswaarde (mobiele buitendienst), maar vereist medewerker-koppeling + uursoort-mapping |
 | **5** | **Bonnen / leverbonnen** | `POST /project/delivery-ticket` | |
 | ~~**6**~~ | ~~**Offertes**~~ | ~~`POST /quotation`~~ | **Vervallen** — EVA schrijft alleen de offerte-substatus naar Bouw7, geen offertes (zie hierboven) |
-| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term*` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg. **Deels live:** alleen de interne factuurnotitie, zie §7a. Schema voor termijnen en conceptfacturen is vastgesteld (§7b), schrijven nog niet gebouwd |
+| **7** | **Facturatie & termijnen** | `/invoice`, `/project/.../invoice-term-statement` | Raakt fiscale integriteit (factuurnummers) — uiterste zorg. **Live en met een schrijftest bewezen** (§7b): termijnstaat schrijven en conceptfacturen klaarzetten. Interne factuurnotitie in §7a |
 
 **Per fase telkens dezelfde stappen:** (a) `Condensed*`-mapper EVA→Bouw7 schrijven, (b) `client.post/del` aanroepen, (c) resultaat (id) terugschrijven naar `bouw7_id`, (d) `logSync()`, (e) `sync_vergrendeld`/`bron`-velden respecteren om schrijf-loops te voorkomen.
 
@@ -1071,21 +1071,39 @@ geeft 400). Een termijn:
 `invoiceLine.id` is gelijk aan de factuurregel-id. `invoiceStatusId` volgt de factuurstatus en is
 onbruikbaar om concept van verzonden te onderscheiden (zie `termijnStatus` in `lib/dossiers/actions.ts`).
 
-Schrijven gaat via `POST /project/{project}/invoice-term-statement` en
-`POST /project/{statement}/invoice-term`. `ProjectInvoiceTerm` vereist
-`{id, description, percentage, subtotal, vatTariffObject}`; `vatTariffPercentage` is ook daar
-readOnly, dus stuur `vatTariffObject: { id }`.
+Schrijven gaat via **`POST /project/{project}/invoice-term-statement` met de termijnen inline** in
+`invoiceTerms[]` (zie hieronder — het losse termijn-endpoint werkt niet als toevoegroute). Per
+termijn: `{ id?, description, percentage, subtotal, vatTariffObject: { id }, invoiceableAt? }`;
+`vatTariffPercentage` is ook daar readOnly, dus stuur `vatTariffObject`. Zonder `id` = nieuw.
 
-### Wat nog niet vaststaat — alleen met een schrijftest te bewijzen
+### Bewezen met een schrijftest (project 4202130, sep 2026 — alles weer opgeruimd)
 
-1. Of `POST /invoice` zonder `id` met `status: 3` het factuurnummer echt leeg laat. Dit is de
-   enige echt riskante aanname; nummert Bouw7 direct, dan kan de feature niet zoals bedoeld.
-2. Of het zetten van `projectInvoiceTermIds` op de regel de `invoiceLine` op de termijn vult.
-3. Of `invoiceTerms[]` inline mee mag in de statement-POST, of dat elke termijn een eigen call
-   nodig heeft. Geen enkele GET geeft de geneste vorm terug.
-4. Of `POST /project/{stmt}/invoice-term` mét `id` bijwerkt of dupliceert.
-5. Of Bouw7 een termijn weigert die al een `invoiceLine` heeft, of hem stilzwijgend herkoppelt —
-   fiscaal het gevaarlijkst, en de reden om zulke termijnen aan EVA-kant hard over te slaan.
+De vijf openstaande aannames zijn in één test beslecht. Statement 602274 met twee termijnen
+(1591891, 1591892), conceptfactuur 4533540, daarna alles verwijderd; het project stond erna weer op
+nul termijnstaten en nul facturen.
+
+1. ✅ **`POST /invoice` op basis van het skelet laat het factuurnummer leeg.** Teruggekregen:
+   `status: 3`, `invoiceNumber: null`, `isMailed: false`, `isBooked: false`, `date: null`.
+   Dit was de aanname waar de hele opzet op stond of viel.
+2. ✅ **`projectInvoiceTermIds` op de factuurregel legt de koppeling.** Bouw7 vulde daarna zelf
+   `invoiceLine: { id: 15095736, invoiceId: 4533540, invoiceStatusId: 3 }` op de termijn. De tweede
+   termijn bleef ongemoeid.
+3. ⚠️ **`invoiceTerms[]` MOET inline mee in de statement-POST.** Een statement zonder termijnen wordt
+   geweigerd: `InvoiceTermStatement::$invoiceTerms failed. "This collection should contain 1 element
+   or more."` Het losse `POST /project/{statement}/invoice-term` is dus géén route om termijnen toe
+   te voegen — de eerste implementatie deed dat wel en kwam niet door de validatie heen.
+
+   **Gevolg voor de aanroeper:** de POST zet de héle collectie. Élke termijn moet dus mee, ook de
+   termijnen die je niet wijzigt — laat je er een weg, dan verdwijnt hij. Stuur termijnen die je met
+   rust wilt laten terug zoals ze uit Bouw7 kwamen.
+4. ✅ **`id` meesturen werkt als bijwerken, niet als dupliceren.** Twee termijnen bleven twee
+   termijnen; alleen de omschrijving veranderde.
+5. ✅ **Een termijn met een `invoiceLine` blijft ongemoeid** doordat EVA hem overslaat en ongewijzigd
+   terugstuurt. Bouw7 weigert zo'n wijziging niet uit zichzelf, dus die bescherming moet aan
+   EVA-kant blijven staan.
+
+`DELETE /invoice/{id}` verwijdert een conceptfactuur zonder morren (alleen toegestaan zolang er geen
+factuurnummer is — die controle staat in `verwijderConceptFactuur`).
 
 `DELETE /project/term-statement` wist de **hele** termijnstaat en is daarmee te grof voor EVA.
 Opruimen van een testfactuur kan wel met `DELETE /invoice/{id}`.

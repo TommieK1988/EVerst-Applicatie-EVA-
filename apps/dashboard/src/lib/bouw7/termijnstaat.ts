@@ -112,49 +112,75 @@ export async function schrijfBouw7Termijnstaat(
     .filter(t => !evaIds.has(t.id))
     .map(t => t.description ?? String(t.id))
 
-  // Termijnstaat aanmaken of bijwerken.
+  // De termijnen gaan INLINE mee in de statement-POST. Bouw7 weigert een statement zonder
+  // termijnen ("This collection should contain 1 element or more", geverifieerd sep 2026), en het
+  // losse `/project/{stmt}/invoice-term`-endpoint is dus geen route om ze toe te voegen.
+  //
+  // Omdat de POST de hele collectie zet, moet élke termijn mee — ook de termijnen die EVA niet
+  // wijzigt. Laat je er een weg, dan verdwijnt hij. Termijnen mét een factuur worden daarom
+  // teruggestuurd zoals ze uit Bouw7 kwamen, niet zoals EVA ze zou willen hebben.
+  const perId = new Map(bestaand.termijnen.map(t => [t.id, t]))
+  const gewijzigd = new Map(teSchrijven.filter(t => t.bouw7TermId != null).map(t => [t.bouw7TermId!, t]))
+
+  const alsBody = (t: TermijnInvoer, id?: number | null) => ({
+    ...(id != null ? { id } : {}),
+    description: t.omschrijving,
+    percentage: String(t.percentage),
+    subtotal: bedrag(t.bedragExclBtw),
+    vatTariffObject: { id: t.vatTariffId },
+    ...(t.factureerbaarOp ? { invoiceableAt: t.factureerbaarOp } : {}),
+  })
+
+  const invoiceTerms: Record<string, unknown>[] = []
+  let aangemaakt = 0
+  let bijgewerkt = 0
+
+  // 1. Bestaande termijnen, in hun eigen volgorde.
+  for (const oud of bestaand.termijnen) {
+    const nieuw = gewijzigd.get(oud.id)
+    if (nieuw && !gefactureerd.has(oud.id)) {
+      invoiceTerms.push(alsBody(nieuw, oud.id))
+      bijgewerkt++
+    } else {
+      // Ongemoeid laten: terugsturen zoals Bouw7 hem gaf.
+      invoiceTerms.push({
+        id: oud.id,
+        description: oud.description ?? '',
+        percentage: String(oud.percentage ?? '0'),
+        subtotal: String(oud.subtotal ?? '0'),
+        ...(oud.vatTariff?.id != null ? { vatTariffObject: { id: oud.vatTariff.id } } : {}),
+        ...(oud.invoiceableAt ? { invoiceableAt: oud.invoiceableAt } : {}),
+      })
+    }
+  }
+
+  // 2. Nieuwe termijnen erachteraan.
+  for (const t of teSchrijven) {
+    if (t.bouw7TermId != null && perId.has(t.bouw7TermId)) continue
+    invoiceTerms.push(alsBody(t))
+    aangemaakt++
+  }
+
+  if (invoiceTerms.length === 0) {
+    return { ok: false, error: 'Er blijft geen enkele termijn over om weg te schrijven.' }
+  }
+
   let statementId = bestaand.statementId
   try {
-    const body: Record<string, unknown> = {
-      ...(statementId != null ? { id: statementId } : { id: null }),
-      contact: { id: invoer.contactId },
-      fixedPrice: bedrag(invoer.aanneemsom),
-    }
     const res = await client.post<{ id?: number }>(
-      `/project/${invoer.projectId}/invoice-term-statement`, body,
+      `/project/${invoer.projectId}/invoice-term-statement`,
+      {
+        ...(statementId != null ? { id: statementId } : {}),
+        contact: { id: invoer.contactId },
+        fixedPrice: bedrag(invoer.aanneemsom),
+        invoiceTerms,
+      },
     )
     statementId = res?.id ?? statementId
   } catch (e) {
     return { ok: false, error: `Bouw7 weigerde de termijnstaat: ${foutTekst(e)}` }
   }
   if (statementId == null) return { ok: false, error: 'Bouw7 gaf geen termijnstaat-id terug.' }
-
-  let aangemaakt = 0
-  let bijgewerkt = 0
-  const mislukt: string[] = []
-  for (const t of teSchrijven) {
-    try {
-      await client.post(`/project/${statementId}/invoice-term`, {
-        id: t.bouw7TermId ?? null,
-        description: t.omschrijving,
-        percentage: String(t.percentage),
-        subtotal: bedrag(t.bedragExclBtw),
-        vatTariffObject: { id: t.vatTariffId },
-        ...(t.factureerbaarOp ? { invoiceableAt: t.factureerbaarOp } : {}),
-      })
-      if (t.bouw7TermId == null) aangemaakt++; else bijgewerkt++
-    } catch (e) {
-      mislukt.push(`${t.omschrijving} (${foutTekst(e)})`)
-    }
-  }
-
-  if (mislukt.length > 0) {
-    return {
-      ok: false,
-      error: `De termijnstaat staat in Bouw7, maar ${mislukt.length} termijn(en) zijn niet geschreven: `
-        + `${mislukt.join('; ')}. Controleer de staat in Bouw7 voordat je het opnieuw probeert.`,
-    }
-  }
 
   // Terugleescontrole: staat er nu wat we bedoelden?
   try {
