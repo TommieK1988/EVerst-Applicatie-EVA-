@@ -10,8 +10,13 @@
  * niet per ongeluk afwijken van wat er is afgesproken, en zit je toch niet vast op dossiers zonder
  * EVA-offerte (storingswerk, kleine opdrachten).
  *
+ * **Btw splitst het schema.** Een Bouw7-termijn draagt precies één tarief. Kent de opdracht er
+ * meer — 9% over arbeid, 21% over materiaal — dan wordt elke termijn opgesplitst in een termijn
+ * per tarief, in de verhouding die in de offerte staat. Eén tarief over de hele staat zetten zou
+ * btw opleveren die niemand zo heeft geoffreerd, en dat rolt door naar de factuur.
+ *
  * De bedragen worden hier op dezelfde manier gerekend als op de server: percentage van de
- * grondslag, en het laatste termijn krijgt het afrondingsverschil zodat de som exact klopt. De
+ * grondslag, en de laatste termijn krijgt het afrondingsverschil zodat de som exact klopt. De
  * server rekent ze opnieuw — dit is voorbeeld, geen invoer.
  */
 
@@ -23,10 +28,8 @@ import {
 } from '@/components/ui'
 import {
   getTermijnschemaBron, maakTermijnschema,
-  type TermijnschemaBron, type TermijnschemaRegel, type TermijnGrondslag,
+  type TermijnschemaBron, type TermijnschemaRegel, type TermijnGrondslag, type BtwAandeel,
 } from '@/lib/dossiers/termijnen'
-import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
-import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -37,15 +40,56 @@ const pct = (s: string): number => {
   return Number.isFinite(n) ? n : 0
 }
 
+/** Compacte weergave van een percentage: 30, 12,5 — geen sleep van nullen. */
+const pctTekst = (n: number): string =>
+  new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 4 }).format(Math.round(n * 10000) / 10000)
+
+/** Eén termijn zoals hij in Bouw7 komt te staan: eigen bedrag, eigen btw-tarief. */
+type Rij = TermijnschemaRegel & { btwTariefBouw7Id: number | null }
+
 /**
- * Verdeelt de grondslag over de termijnen. Het laatste termijn absorbeert het afrondingsverschil —
+ * Zet een termijnschema om in de termijnen die Bouw7 krijgt.
+ *
+ * Kent de offerte meerdere btw-tarieven, dan valt elke schema-regel uiteen in een regel per
+ * tarief: "Aanbetaling" met 30% wordt bij een verdeling 40/60 een regel van 12% tegen het ene
+ * tarief en 18% tegen het andere. De laatste regel neemt het afrondingsverschil op, zodat het
+ * totaal exact 100% blijft.
+ */
+function bouwRijen(schema: TermijnschemaRegel[], verdeling: BtwAandeel[], standaard: number | null): Rij[] {
+  if (schema.length === 0) return []
+
+  const groepen = verdeling.length > 0
+    ? verdeling
+    : [{ bouw7TariefId: standaard, label: '', pct: 0, aandeel: 1 } as BtwAandeel]
+
+  const rijen: Rij[] = []
+  for (const regel of schema) {
+    for (const groep of groepen) {
+      rijen.push({
+        omschrijving: groepen.length > 1 && groep.label
+          ? `${regel.omschrijving || 'Termijn'} (${groep.label})`
+          : regel.omschrijving,
+        percentage: Math.round(regel.percentage * groep.aandeel * 10000) / 10000,
+        btwTariefBouw7Id: groep.bouw7TariefId,
+      })
+    }
+  }
+
+  const somOpEen = rijen.slice(0, -1).reduce((s, r) => s + r.percentage, 0)
+  const laatste = rijen[rijen.length - 1]
+  laatste.percentage = Math.round((100 - somOpEen) * 10000) / 10000
+  return rijen
+}
+
+/**
+ * Verdeelt de grondslag over de termijnen. De laatste termijn absorbeert het afrondingsverschil —
  * anders blijft er een cent over die op geen enkele factuur terechtkomt.
  */
-function bedragen(regels: TermijnschemaRegel[], grondslag: number): number[] {
+function bedragen(rijen: Rij[], grondslag: number): number[] {
   const centen = Math.round(grondslag * 100)
   let verdeeld = 0
-  return regels.map((r, i) => {
-    const eigen = i === regels.length - 1 ? centen - verdeeld : Math.round(centen * r.percentage / 100)
+  return rijen.map((r, i) => {
+    const eigen = i === rijen.length - 1 ? centen - verdeeld : Math.round(centen * r.percentage / 100)
     verdeeld += eigen
     return eigen / 100
   })
@@ -64,36 +108,37 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
   onKlaar: () => void
 }) {
   const [bron, setBron] = useState<TermijnschemaBron | null>(null)
-  const [tarieven, setTarieven] = useState<BtwTariefKeuze[]>([])
   const [laadfout, setLaadfout] = useState<string | null>(null)
   const [bezig, start] = useTransition()
 
   const [keuze, setKeuze] = useState('')
   const [afwijken, setAfwijken] = useState(false)
-  const [regels, setRegels] = useState<TermijnschemaRegel[]>([])
+  const [rijen, setRijen] = useState<Rij[]>([])
   const [grondslag, setGrondslag] = useState<TermijnGrondslag>('aanneemsom')
-  const [tariefId, setTariefId] = useState<number | null>(null)
+
+  /** Terugval als de offerte geen btw-verdeling oplevert: het gewone hoge tarief. */
+  const standaardTarief = (b: TermijnschemaBron): number | null => {
+    const t = b.tarieven.find(x => !x.verlegd && Math.abs(x.percentage - 21) < 0.01) ?? b.tarieven[0]
+    return t?.bouw7_id ?? null
+  }
 
   // Alles wordt pas bij openen geladen; de Verkoop-tab hoeft er niet op te wachten.
   useEffect(() => {
     if (!open) return
     let levend = true
     setBron(null); setLaadfout(null)
-    Promise.all([getTermijnschemaBron(dossierId), laadBtwTarieven()])
-      .then(([b, t]) => {
+    getTermijnschemaBron(dossierId)
+      .then(b => {
         if (!levend) return
         setBron(b)
-        setTarieven(t)
-        const standaard = t.find(x => !x.verlegd && Math.abs(x.percentage - 21) < 0.01) ?? t[0]
-        setTariefId(standaard?.bouw7_id ?? null)
         setAfwijken(false)
         setGrondslag('aanneemsom')
         if (b.uitCalculatie) {
           setKeuze(b.uitCalculatie.conditieId)
-          setRegels(b.uitCalculatie.termijnen)
+          setRijen(bouwRijen(b.uitCalculatie.termijnen, b.btwVerdeling, standaardTarief(b)))
         } else {
           setKeuze('')
-          setRegels([])
+          setRijen([])
         }
       })
       .catch((e: unknown) => {
@@ -104,9 +149,11 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
 
   const kiesSchema = useCallback((waarde: string) => {
     setKeuze(waarde)
-    if (waarde === KEUZE_EIGEN) { setRegels([{ omschrijving: '', percentage: 100 }]); return }
-    const conditie = bron?.condities.find(c => c.id === waarde)
-    setRegels(conditie ? conditie.termijnen.map(t => ({ ...t })) : [])
+    if (!bron) return
+    const schema = waarde === KEUZE_EIGEN
+      ? [{ omschrijving: '', percentage: 100 }]
+      : (bron.condities.find(c => c.id === waarde)?.termijnen.map(t => ({ ...t })) ?? [])
+    setRijen(bouwRijen(schema, bron.btwVerdeling, standaardTarief(bron)))
   }, [bron])
 
   if (!open) return null
@@ -114,24 +161,29 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
   const uitCalculatie = bron?.uitCalculatie ?? null
   // Zolang het schema uit de calculatie geldt staan de regels vast: dat is wat is afgesproken.
   const opSlot = !!uitCalculatie && !afwijken
+  const gesplitst = (bron?.btwVerdeling.length ?? 0) > 1
   const basis = grondslag === 'contracttotaal'
     ? (bron?.aanneemsom ?? 0) + (bron?.meerwerk ?? 0)
     : (bron?.aanneemsom ?? 0)
-  const somPct = regels.reduce((s, r) => s + r.percentage, 0)
+  const somPct = rijen.reduce((s, r) => s + r.percentage, 0)
   const kloptSom = Math.abs(somPct - 100) <= 0.01
-  const rijBedragen = bedragen(regels, basis)
-  const kanAanmaken = !bezig && regels.length > 0 && kloptSom && tariefId != null && basis > 0
+  const tariefOveral = rijen.every(r => r.btwTariefBouw7Id != null)
+  const rijBedragen = bedragen(rijen, basis)
+  const kanAanmaken = !bezig && rijen.length > 0 && kloptSom && tariefOveral && basis > 0
     && (bron?.bestaandeTermijnen ?? 0) === 0
 
-  function wijzig(i: number, patch: Partial<TermijnschemaRegel>) {
-    setRegels(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  function wijzig(i: number, patch: Partial<Rij>) {
+    setRijen(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
   }
 
   function aanmaken() {
     start(async () => {
       const r = await maakTermijnschema(dossierId, {
-        termijnen: regels,
-        btwTariefBouw7Id: tariefId!,
+        termijnen: rijen.map(x => ({
+          omschrijving: x.omschrijving,
+          percentage: x.percentage,
+          btwTariefBouw7Id: x.btwTariefBouw7Id!,
+        })),
         grondslag,
       })
       if (!r.ok) { toast.error(r.error, { duration: 9000 }); return }
@@ -146,7 +198,7 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
 
   return (
     <Dialog open onOpenChange={v => { if (!v && !bezig) onSluit() }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Termijnen aanmaken</DialogTitle>
           <DialogDescription>
@@ -248,21 +300,31 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                 </p>
               )}
 
-              {/* — De termijnen zelf — */}
-              {regels.length > 0 && (
-                <div className="overflow-hidden rounded-md border border-neutral-200">
+              {/* — Btw-splitsing. Alleen melden als er iets te melden valt. — */}
+              {gesplitst && (
+                <p className="rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-[12px] leading-relaxed text-neutral-600">
+                  De offerte kent {bron.btwVerdeling.length} btw-tarieven
+                  {' '}({bron.btwVerdeling.map(v => `${v.label} over ${Math.round(v.aandeel * 100)}%`).join(', ')}).
+                  Een Bouw7-termijn draagt er maar één, dus elke termijn is naar die verhouding gesplitst.
+                </p>
+              )}
+
+              {/* — De termijnen zoals ze in Bouw7 komen te staan — */}
+              {rijen.length > 0 && (
+                <div className="overflow-x-auto rounded-md border border-neutral-200">
                   <table className="w-full border-collapse text-[13px]">
                     <thead>
                       <tr className="bg-neutral-50 text-[11px] uppercase tracking-wide text-neutral-500">
                         <th className="w-8 px-2 py-1.5 text-left font-semibold">#</th>
                         <th className="px-2 py-1.5 text-left font-semibold">Omschrijving</th>
-                        <th className="w-24 px-2 py-1.5 text-right font-semibold">%</th>
+                        <th className="w-20 px-2 py-1.5 text-right font-semibold">%</th>
                         <th className="w-32 px-2 py-1.5 text-right font-semibold">Excl. btw</th>
+                        <th className="w-40 px-2 py-1.5 text-left font-semibold">Btw</th>
                         {!opSlot && <th className="w-8 px-2 py-1.5" />}
                       </tr>
                     </thead>
                     <tbody>
-                      {regels.map((r, i) => (
+                      {rijen.map((r, i) => (
                         <tr key={i} className="border-t border-neutral-100">
                           <td className="px-2 py-1 text-neutral-500">{i + 1}</td>
                           <td className="px-2 py-1">
@@ -278,9 +340,9 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                             )}
                           </td>
                           <td className="px-2 py-1 text-right tabular-nums">
-                            {opSlot ? `${r.percentage} %` : (
+                            {opSlot ? `${pctTekst(r.percentage)} %` : (
                               <Input
-                                value={String(r.percentage)} inputMode="decimal" disabled={bezig}
+                                value={pctTekst(r.percentage)} inputMode="decimal" disabled={bezig}
                                 aria-label={`Percentage termijn ${i + 1}`}
                                 className="text-right"
                                 onChange={e => wijzig(i, { percentage: pct(e.target.value) })}
@@ -290,11 +352,28 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                           <td className="px-2 py-1 text-right tabular-nums text-neutral-800">
                             {fmt(rijBedragen[i] ?? 0)}
                           </td>
+                          <td className="px-2 py-1">
+                            {/* Het btw-tarief blijft altijd te kiezen, ook bij een schema uit de
+                                calculatie: de betalingsconditie zegt niets over btw. */}
+                            <select
+                              className={selectKlasse} disabled={bezig}
+                              value={r.btwTariefBouw7Id ?? ''}
+                              aria-label={`Btw-tarief termijn ${i + 1}`}
+                              onChange={e => wijzig(i, {
+                                btwTariefBouw7Id: e.target.value ? Number(e.target.value) : null,
+                              })}
+                            >
+                              <option value="">Kies een tarief…</option>
+                              {bron.tarieven.map(t => (
+                                <option key={t.bouw7_id ?? t.label} value={t.bouw7_id ?? ''}>{t.label}</option>
+                              ))}
+                            </select>
+                          </td>
                           {!opSlot && (
                             <td className="px-2 py-1 text-right">
                               <Button
                                 variant="ghost" size="icon-sm" disabled={bezig} title="Termijn verwijderen"
-                                onClick={() => setRegels(prev => prev.filter((_, idx) => idx !== i))}
+                                onClick={() => setRijen(prev => prev.filter((_, idx) => idx !== i))}
                               >×</Button>
                             </td>
                           )}
@@ -306,11 +385,12 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                         <td className="px-2 py-1.5" />
                         <td className="px-2 py-1.5 text-neutral-600">Totaal</td>
                         <td className={`px-2 py-1.5 text-right tabular-nums ${kloptSom ? 'text-neutral-800' : 'text-red-700'}`}>
-                          {Math.round(somPct * 100) / 100} %
+                          {pctTekst(somPct)} %
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-neutral-800">
                           {fmt(rijBedragen.reduce((s, b) => s + b, 0))}
                         </td>
+                        <td className="px-2 py-1.5" />
                         {!opSlot && <td className="px-2 py-1.5" />}
                       </tr>
                     </tfoot>
@@ -321,14 +401,21 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
               {!opSlot && keuze !== '' && (
                 <Button
                   variant="ghost" size="sm" disabled={bezig}
-                  onClick={() => setRegels(prev => [...prev, { omschrijving: '', percentage: 0 }])}
+                  onClick={() => setRijen(prev => [...prev, {
+                    omschrijving: '', percentage: 0, btwTariefBouw7Id: standaardTarief(bron),
+                  }])}
                 >+ Termijn toevoegen</Button>
               )}
 
-              {regels.length > 0 && !kloptSom && (
+              {rijen.length > 0 && !kloptSom && (
                 <p className="text-[12px] text-red-700">
-                  De percentages tellen op tot {Math.round(somPct * 100) / 100}% — dat moet 100% zijn
-                  voordat het schema naar Bouw7 kan.
+                  De percentages tellen op tot {pctTekst(somPct)}% — dat moet 100% zijn voordat het
+                  schema naar Bouw7 kan.
+                </p>
+              )}
+              {rijen.length > 0 && !tariefOveral && (
+                <p className="text-[12px] text-red-700">
+                  Niet elke termijn heeft een btw-tarief. Bouw7 accepteert een termijn zonder tarief niet.
                 </p>
               )}
               {basis <= 0 && (
@@ -336,23 +423,6 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                   Dit dossier heeft nog geen aanneemsom; zonder bedrag zijn er geen termijnen te berekenen.
                 </p>
               )}
-
-              {/* — Btw — */}
-              <div>
-                <span className={labelKlasse}>Btw op de termijnen</span>
-                <select
-                  className={selectKlasse} value={tariefId ?? ''} disabled={bezig}
-                  aria-label="Btw-tarief voor de termijnen"
-                  onChange={e => setTariefId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  {tarieven.map(t => (
-                    <option key={t.bouw7_id ?? t.label} value={t.bouw7_id ?? ''}>{t.label}</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[11.5px] leading-snug text-neutral-500">
-                  Eén tarief voor alle termijnen. Wijkt een termijn af, pas hem dan in Bouw7 aan.
-                </p>
-              </div>
             </div>
           )}
         </DialogBody>
@@ -360,7 +430,7 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
         <DialogFooter>
           <Button variant="ghost" onClick={onSluit} disabled={bezig}>Annuleren</Button>
           <Button variant="primary" onClick={aanmaken} disabled={!kanAanmaken}>
-            {bezig ? 'Bezig…' : `Aanmaken in Bouw7${regels.length > 0 ? ` (${regels.length})` : ''}`}
+            {bezig ? 'Bezig…' : `Aanmaken in Bouw7${rijen.length > 0 ? ` (${rijen.length})` : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>
