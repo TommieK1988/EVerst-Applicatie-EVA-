@@ -114,13 +114,19 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
   return uit.sort((a, b) => a.bewakingscode.localeCompare(b.bewakingscode, 'nl'))
 }
 
-/** Opgeslagen aanpassingen per bewakingscode (uit het popup-scherm). */
+/**
+ * Opgeslagen aanpassingen per bewakingscode.
+ *
+ * `bedrag_excl_btw` en `uitsplitsen` staan hier niet meer bij: een vast bedrag hoort sinds
+ * september 2026 bij een factuurregel (`factuur_regelgroepen`) en uitsplitsen is opgegaan in
+ * `groepering`. De kolommen bestaan nog als migratiebron, maar worden niet meer gelezen.
+ */
 export type CodeInstelling = {
   bewakingscode: string
   omschrijving: string | null
   opslag_pct: number | null
-  bedrag_excl_btw: number | null
-  uitsplitsen: boolean
+  /** Hoe boekingen zonder handmatige toewijzing tot factuurregels worden gebundeld. */
+  groepering: 'per_soort' | 'samen' | 'per_boeking'
   btw_tarief_bouw7_id: number | null
   meefactureren: boolean
 }
@@ -130,7 +136,29 @@ export async function getCodeInstellingen(dossierId: string): Promise<CodeInstel
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('factuur_regelinstellingen')
-    .select('bewakingscode, omschrijving, opslag_pct, bedrag_excl_btw, uitsplitsen, btw_tarief_bouw7_id, meefactureren')
+    .select('bewakingscode, omschrijving, opslag_pct, groepering, btw_tarief_bouw7_id, meefactureren')
     .eq('dossier_id', dossierId)
   return (data ?? []) as CodeInstelling[]
+}
+
+/** Eén opgeslagen factuurregel. Bestaat alleen zodra er iets van de afleiding afwijkt. */
+export type RegelGroep = {
+  bewakingscode: string
+  groep_sleutel: string
+  omschrijving: string | null
+  bedrag_excl_btw: number | null
+  btw_tarief_bouw7_id: number | null
+  meefactureren: boolean
+  volgorde: number
+}
+
+export async function getRegelGroepen(dossierId: string): Promise<RegelGroep[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('factuur_regelgroepen')
+    .select('bewakingscode, groep_sleutel, omschrijving, bedrag_excl_btw, btw_tarief_bouw7_id, meefactureren, volgorde')
+    .eq('dossier_id', dossierId)
+    .order('volgorde')
+  return (data ?? []) as RegelGroep[]
 }

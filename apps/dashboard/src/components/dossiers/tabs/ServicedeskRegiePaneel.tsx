@@ -17,7 +17,7 @@ import { Card, CardHeader, CardBody, Button, useDialogen } from '@/components/ui
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import {
   getRegieFactuurvoorstel, maakRegieFactuurInBouw7,
-  type RegieVoorstel, type CodeRegelView,
+  type RegieVoorstel,
 } from '@/lib/dossiers/servicedesk'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
@@ -37,7 +37,9 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg }: {
   const [voorstel, setVoorstel] = useState<RegieVoorstel | null>(null)
   const [tarieven, setTarieven] = useState<BtwTariefKeuze[]>([])
   const [tariefId, setTariefId] = useState<number | null>(null)
-  const [open, setOpen] = useState<CodeRegelView | null>(null)
+  // Alleen de code onthouden, niet de hele regel: het venster slaat per handeling op en haalt
+  // daarna opnieuw op. Met een bevroren kopie zou het scherm zijn eigen wijziging niet zien.
+  const [openCode, setOpenCode] = useState<string | null>(null)
   const [bezig, start] = useTransition()
 
   function herlaad() {
@@ -122,14 +124,17 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg }: {
                         <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(c.berekend)}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-neutral-900">
                           {c.vergrendeld || !c.meefactureren ? '—' : fmt(c.bedrag)}
-                          {c.bedragOverride != null && !c.vergrendeld && (
-                            <span className="ml-1 text-[9.5px] font-normal uppercase text-neutral-400">vast</span>
+                          {!c.vergrendeld && c.meefactureren && c.groepen.length > 0 && (
+                            <span className="ml-1 text-[9.5px] font-normal uppercase text-neutral-400">
+                              {c.groepen.length === 1 ? '1 regel' : `${c.groepen.length} regels`}
+                              {c.groepen.some(g => g.bedragOverride != null) ? ' · vast' : ''}
+                            </span>
                           )}
                         </td>
                         <td className="py-1.5 pl-2 text-right">
                           <button
                             type="button"
-                            onClick={() => setOpen(c)}
+                            onClick={() => setOpenCode(c.bewakingscode)}
                             className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
                           >
                             {c.vergrendeld || readOnly ? 'Bekijken' : 'Aanpassen'}
@@ -205,10 +210,10 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg }: {
 
       <FactuurRegelVenster
         dossierId={dossierId}
-        code={open}
+        code={voorstel.codes.find(c => c.bewakingscode === openCode) ?? null}
         tarieven={tarieven}
         readOnly={readOnly}
-        onSluit={() => setOpen(null)}
+        onSluit={() => setOpenCode(null)}
         onBewaard={herlaad}
       />
     </div>

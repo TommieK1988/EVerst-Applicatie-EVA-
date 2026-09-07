@@ -7,7 +7,11 @@ import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
-import { getFactureerbareCodes, getCodeInstellingen } from './facturatie-codes'
+import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
+import {
+  aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
+  nieuweHandmatigeSleutel, soortVan, type Groepering,
+} from './factuurregel-groepen'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
  *  ingesteld. Module-lokaal: een 'use server'-bestand mag geen non-async waarden exporteren. */
@@ -39,6 +43,12 @@ export type RegieFactuurRegel = {
   bronType: 'uur' | 'kost'
   bronBouw7Id: string
   omschrijving: string | null
+  /** Boekingsdatum: het uurlog of de inkoopfactuur. Alleen ter herkenning in het scherm. */
+  datum: string | null
+  /** Medewerker (uren) of leverancier (kosten) — waar de boeking vandaan komt. */
+  herkomst: string | null
+  /** Handmatige toewijzing aan een factuurregel; leeg = volg de groepering van de code. */
+  groepSleutel: string | null
   aantal: number | null
   eenheid: string | null
   /** Kostprijs/inkoopwaarde excl. btw. */
@@ -77,6 +87,7 @@ type OpgeslagenRegel = {
   uitgesloten: boolean
   status: string
   bouw7_invoice_id: string | null
+  groep_sleutel: string | null
 }
 
 /** Verkoop-uurtarief per Bouw7 hourType-id voor een relatie (uit relatie_uurtarieven). */
@@ -141,6 +152,9 @@ export async function getServicedeskRegie(
       bronType: 'uur',
       bronBouw7Id: String(u.bouw7Id),
       omschrijving: [u.uursoort, u.medewerker].filter(Boolean).join(' — ') || 'Uren',
+      datum: u.datum,
+      herkomst: u.medewerker,
+      groepSleutel: opgesl?.groep_sleutel ?? null,
       aantal: u.uren,
       eenheid: 'uur',
       inkoopBedrag: u.uren * (u.uurtarief ?? 0),
@@ -170,6 +184,9 @@ export async function getServicedeskRegie(
       bronType: 'kost',
       bronBouw7Id: String(k.bronId),
       omschrijving: k.omschrijving ?? k.leverancier ?? 'Kosten',
+      datum: k.datum,
+      herkomst: k.leverancier,
+      groepSleutel: opgesl?.groep_sleutel ?? null,
       aantal: 1,
       eenheid: 'post',
       inkoopBedrag: k.bedrag,
@@ -228,44 +245,6 @@ export async function getServicedeskMandaat(dossierId: string): Promise<MandaatS
   return { mandaat, geboekteVerkoop, uitgezetteOpdrachten, totaal, overschreden }
 }
 
-/** Slaat een handmatige override (opslag/verkoopprijs/uitsluiten) op één regie-regel op. */
-export async function bewaarRegieRegel(
-  dossierId: string,
-  regel: {
-    bronType: 'uur' | 'kost'
-    bronBouw7Id: string
-    omschrijving: string | null
-    aantal: number | null
-    eenheid: string | null
-    inkoopBedrag: number
-    opslagPct: number | null
-    verkoopTarief: number | null
-    verkoopBedrag: number
-    bewakingscode: string | null
-    uitgesloten: boolean
-  },
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = createAdminClient() as any
-  const { error } = await supabase.from('regie_factuurregels').upsert({
-    dossier_id: dossierId,
-    bron_type: regel.bronType,
-    bron_bouw7_id: regel.bronBouw7Id,
-    omschrijving: regel.omschrijving,
-    aantal: regel.aantal,
-    eenheid: regel.eenheid,
-    inkoop_bedrag: regel.inkoopBedrag,
-    opslag_pct: regel.opslagPct,
-    verkoop_tarief: regel.verkoopTarief,
-    verkoop_bedrag: regel.verkoopBedrag,
-    bewakingscode: regel.bewakingscode,
-    uitgesloten: regel.uitgesloten,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
-  if (error) return { ok: false, error: error.message }
-  revalidatePath(`/servicedesk/${dossierId}/financieel`)
-  return { ok: true }
-}
-
 /** Werkt de servicedesk-instellingen (mandaat / facturatiemethode) bij. */
 export async function updateServicedeskInstellingen(
   dossierId: string,
@@ -286,15 +265,12 @@ export async function updateServicedeskInstellingen(
   return { ok: true }
 }
 
-/**
- * Eén regel zoals de klant hem op de factuur ziet. Standaard één regel per bewakingscode; met
- * `uitsplitsen` aan komen uren en kosten van die code als aparte regels.
- */
+/** Eén regel zoals de klant hem op de factuur ziet: een groep boekingen van één bewakingscode. */
 export type FactuurRegelVoorstel = {
   sleutel: string
   bewakingscode: string
+  groepSleutel: string
   omschrijving: string
-  soort: 'uren' | 'kosten' | 'samen'
   aantal: number
   eenheid: string | null
   stukprijs: number
@@ -304,25 +280,81 @@ export type FactuurRegelVoorstel = {
   btwTariefBouw7Id: number | null
 }
 
-/** Eén bewakingscode met alles wat het popup-scherm nodig heeft om hem aan te passen. */
-export type CodeRegelView = {
-  bewakingscode: string
-  bron: 'stelpost' | 'meerwerk'
-  /** De tekst die op de factuur komt (aangepast, of de naam van de post). */
+/** Eén geboekte uren- of kostenregel, zoals de tabel in het scherm hem toont. */
+export type BoekingView = {
+  /** `bronType:bronBouw7Id` — stabiel over herladen heen. */
+  sleutel: string
+  bronType: 'uur' | 'kost'
+  bronBouw7Id: string
+  datum: string | null
   omschrijving: string
-  /** Kostprijs van wat er op deze code is geboekt. */
-  inkoop: number
-  /** Verkoopwaarde volgens de berekening: uren maal tarief, kosten maal opslag. */
+  herkomst: string | null
+  /** Uursoort of kostensoort; hierop bundelt de standaardgroepering. */
+  soort: string
+  aantal: number | null
+  eenheid: string | null
+  /** Kostprijs excl. btw. */
+  inkoopBedrag: number
+  /** Opslag op de kostprijs (kosten); leeg bij uren, die rekenen via een tarief. */
+  opslagPct: number | null
+  /** Verkooptarief per uur. */
+  verkoopTarief: number | null
+  /** Wat deze boeking bijdraagt aan de factuur. */
+  verkoopBedrag: number
+  uitgesloten: boolean
+  /** Staat al op een verstuurde factuur: alleen ter informatie, niet meer te wijzigen. */
+  gefactureerd: boolean
+  /** De factuurregel waar hij nu in valt. */
+  groepSleutel: string
+  /** Handmatig toegewezen (true) of gevolgd uit de groepering (false). */
+  handmatigToegewezen: boolean
+}
+
+/** Eén factuurregel in wording, met de boekingen die erin vallen. */
+export type GroepView = {
+  groepSleutel: string
+  /** De tekst zoals hij op de factuur komt. */
+  omschrijving: string
+  /** Zelf ingevulde tekst; leeg = afgeleid van de code en het soort werk. */
+  eigenOmschrijving: string | null
+  /** Som van de boekingen in deze regel. */
   berekend: number
   /** Handmatig vastgezet bedrag; leeg = `berekend` telt. */
   bedragOverride: number | null
   /** Wat er werkelijk op de factuur komt. */
   bedrag: number
-  /** Eigen opslag op de kosten van deze code; leeg = de bedrijfsstandaard. */
-  opslagPct: number | null
-  uitsplitsen: boolean
+  aantal: number
+  eenheid: string | null
   btwTariefBouw7Id: number | null
   meefactureren: boolean
+  aantalBoekingen: number
+  /** Handmatig samengevoegd — die regel blijft staan los van de groeperingskeuze. */
+  handmatig: boolean
+}
+
+/** Eén bewakingscode met alles wat het scherm nodig heeft om zijn factuurregels samen te stellen. */
+export type CodeRegelView = {
+  bewakingscode: string
+  bron: 'stelpost' | 'meerwerk'
+  /** De naam van de post; basis voor de tekst van elke factuurregel eronder. */
+  omschrijving: string
+  /** Kostprijs van wat er op deze code is geboekt. */
+  inkoop: number
+  /** Verkoopwaarde volgens de berekening: uren maal tarief, kosten maal opslag. */
+  berekend: number
+  /** Wat er werkelijk op de factuur komt (na vaste bedragen en uitgezette regels). */
+  bedrag: number
+  /** Eigen opslag op de kosten van deze code; leeg = de bedrijfsstandaard. */
+  opslagPct: number | null
+  /** Hoe boekingen zonder handmatige toewijzing worden gebundeld. */
+  groepering: Groepering
+  /** Btw voor de hele code; een factuurregel mag er alsnog van afwijken. */
+  btwTariefBouw7Id: number | null
+  meefactureren: boolean
+  /** De factuurregels die deze code oplevert, in factuurvolgorde. */
+  groepen: GroepView[]
+  /** Alle nog te factureren boekingen, plus de al gefactureerde ter informatie. */
+  boekingen: BoekingView[]
   urenBedrag: number
   kostenBedrag: number
   urenAantal: number
@@ -359,11 +391,13 @@ export type RegieVoorstel = {
  * gebracht — en zodat je per post kunt corrigeren.
  */
 export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieVoorstel> {
-  const [codes, instellingen] = await Promise.all([
+  const [codes, instellingen, groepen] = await Promise.all([
     getFactureerbareCodes(dossierId),
     getCodeInstellingen(dossierId),
+    getRegelGroepen(dossierId),
   ])
   const instelling = new Map(instellingen.map(i => [i.bewakingscode, i]))
+  const groep = new Map(groepen.map(g => [`${g.bewakingscode}|${g.groep_sleutel}`, g]))
 
   const buitenBeschouwing = codes
     .filter(c => c.alleenVerschil)
@@ -399,9 +433,9 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   for (const c of teFactureren) {
     const inst = instelling.get(c.bewakingscode)
     const eigen = mee.filter(r => r.bewakingscode === c.bewakingscode)
-    const eerderGefactureerd = gefactureerd.filter(r => r.bewakingscode === c.bewakingscode).length
+    const eerderGefactureerd = gefactureerd.filter(r => r.bewakingscode === c.bewakingscode)
     // Niets meer open én er is al gefactureerd: deze post is klaar en gaat op slot.
-    const vergrendeld = eerderGefactureerd > 0 && eigen.length === 0
+    const vergrendeld = eerderGefactureerd.length > 0 && eigen.length === 0
     const uren = eigen.filter(r => r.bronType === 'uur')
     const kosten = eigen.filter(r => r.bronType === 'kost')
 
@@ -411,61 +445,112 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     const inkoop = rond(eigen.reduce((s, r) => s + (r.inkoopBedrag || 0), 0))
     const berekend = rond(urenBedrag + kostenBedrag)
 
-    const override = inst?.bedrag_excl_btw != null ? Number(inst.bedrag_excl_btw) : null
-    const bedrag = override ?? berekend
-    const omschrijving = (inst?.omschrijving ?? '').trim() || c.omschrijving
+    const codeOmschrijving = (inst?.omschrijving ?? '').trim() || c.omschrijving
     const meefactureren = inst?.meefactureren ?? true
-    const uitsplitsen = inst?.uitsplitsen ?? false
-    const btwTariefBouw7Id = inst?.btw_tarief_bouw7_id ?? null
+    const groepering: Groepering = inst?.groepering ?? 'per_soort'
+    const codeBtw = inst?.btw_tarief_bouw7_id ?? null
+
+    // Groeperen gebeurt met dezelfde functie als het scherm gebruikt, zodat wat er op het scherm
+    // staat en wat er naar Bouw7 gaat niet uit elkaar kunnen lopen.
+    const gegroepeerd = groepeer(eigen, groepering)
+    const enkeleRegel = gegroepeerd.length === 1
+
+    const groepen: GroepView[] = gegroepeerd.map(g => {
+      const opgeslagenGroep = groep.get(`${c.bewakingscode}|${g.groepSleutel}`)
+      const eigenOms = (opgeslagenGroep?.omschrijving ?? '').trim() || null
+      const override = opgeslagenGroep?.bedrag_excl_btw != null
+        ? Number(opgeslagenGroep.bedrag_excl_btw)
+        : null
+      const { aantal, eenheid } = aantalEnEenheid(g.boekingen)
+      return {
+        groepSleutel: g.groepSleutel,
+        omschrijving: eigenOms ?? afgeleideOmschrijving(g.groepSleutel, codeOmschrijving, {
+          alleenRegel: enkeleRegel,
+          boekingOmschrijving: g.boekingen[0]?.omschrijving,
+        }),
+        eigenOmschrijving: eigenOms,
+        berekend: g.berekend,
+        bedragOverride: override,
+        bedrag: override ?? g.berekend,
+        aantal,
+        eenheid,
+        btwTariefBouw7Id: opgeslagenGroep?.btw_tarief_bouw7_id ?? codeBtw,
+        meefactureren: opgeslagenGroep?.meefactureren ?? true,
+        aantalBoekingen: g.boekingen.length,
+        handmatig: isHandmatigeGroep(g.groepSleutel),
+      }
+    })
+
+    const naarView = (r: RegieFactuurRegel, isGefactureerd: boolean): BoekingView => ({
+      sleutel: `${r.bronType}:${r.bronBouw7Id}`,
+      bronType: r.bronType,
+      bronBouw7Id: r.bronBouw7Id,
+      datum: r.datum,
+      omschrijving: r.omschrijving ?? (r.bronType === 'uur' ? 'Uren' : 'Kosten'),
+      herkomst: r.herkomst,
+      soort: soortVan(r),
+      aantal: r.aantal,
+      eenheid: r.eenheid,
+      inkoopBedrag: r.inkoopBedrag,
+      opslagPct: r.opslagPct,
+      verkoopTarief: r.verkoopTarief,
+      verkoopBedrag: r.verkoopBedrag,
+      uitgesloten: r.uitgesloten,
+      gefactureerd: isGefactureerd,
+      groepSleutel: groepSleutelVoor(r, groepering),
+      handmatigToegewezen: r.groepSleutel != null,
+    })
+
+    // Uitgesloten boekingen horen in de tabel thuis: uitzetten is een keuze die je terug moet zien
+    // en moet kunnen herroepen. Ze tellen alleen niet mee in een groep.
+    const uitgeslotenEigen = opCode.filter(r =>
+      r.bewakingscode === c.bewakingscode && r.uitgesloten && r.status !== 'gefactureerd')
 
     views.push({
       bewakingscode: c.bewakingscode,
       bron: c.bron,
-      omschrijving,
+      omschrijving: codeOmschrijving,
       inkoop,
       berekend,
-      bedragOverride: override,
-      bedrag,
+      bedrag: rond(groepen.filter(g => g.meefactureren).reduce((s, g) => s + g.bedrag, 0)),
       opslagPct: inst?.opslag_pct != null ? Number(inst.opslag_pct) : c.opslagPct,
-      uitsplitsen,
-      btwTariefBouw7Id,
+      groepering,
+      btwTariefBouw7Id: codeBtw,
       meefactureren,
+      groepen,
+      boekingen: [
+        ...eigen.map(r => naarView(r, false)),
+        ...uitgeslotenEigen.map(r => naarView(r, false)),
+        ...eerderGefactureerd.map(r => naarView(r, true)),
+      ],
       urenBedrag,
       kostenBedrag,
       urenAantal,
       aantalBoekingen: eigen.length,
-      aantalGefactureerd: eerderGefactureerd,
+      aantalGefactureerd: eerderGefactureerd.length,
       inBouw7: c.inBouw7,
       vergrendeld,
     })
 
     // Geen openstaande boekingen = niets te factureren, ook niet als er een handmatig bedrag staat.
     // Zonder deze regel zou een vastgezet bedrag bij elke volgende factuur opnieuw meegaan.
-    if (eigen.length === 0) continue
-    if (!meefactureren || bedrag === 0) continue
+    if (eigen.length === 0 || !meefactureren) continue
 
-    if (uitsplitsen && override == null && urenBedrag !== 0 && kostenBedrag !== 0) {
-      // Uitsplitsen kan alleen zinnig als het bedrag niet handmatig is vastgezet: een vast bedrag
-      // valt niet over twee regels te verdelen zonder te gaan gokken.
+    for (const g of groepen) {
+      if (!g.meefactureren || g.bedrag === 0) continue
       regels.push({
-        sleutel: c.bewakingscode + ':uren', bewakingscode: c.bewakingscode,
-        omschrijving: omschrijving + ' — arbeid', soort: 'uren',
-        aantal: urenAantal || 1, eenheid: urenAantal ? 'uur' : null,
-        stukprijs: urenAantal ? rond(urenBedrag / urenAantal) : urenBedrag,
-        bedrag: urenBedrag, aantalBoekingen: uren.length, btwTariefBouw7Id,
-      })
-      regels.push({
-        sleutel: c.bewakingscode + ':kosten', bewakingscode: c.bewakingscode,
-        omschrijving: omschrijving + ' — materiaal en overige kosten', soort: 'kosten',
-        aantal: 1, eenheid: 'post', stukprijs: kostenBedrag,
-        bedrag: kostenBedrag, aantalBoekingen: kosten.length, btwTariefBouw7Id,
-      })
-    } else {
-      regels.push({
-        sleutel: c.bewakingscode, bewakingscode: c.bewakingscode,
-        omschrijving, soort: 'samen',
-        aantal: 1, eenheid: 'post', stukprijs: bedrag,
-        bedrag, aantalBoekingen: eigen.length, btwTariefBouw7Id,
+        sleutel: `${c.bewakingscode}|${g.groepSleutel}`,
+        bewakingscode: c.bewakingscode,
+        groepSleutel: g.groepSleutel,
+        omschrijving: g.omschrijving,
+        aantal: g.aantal,
+        eenheid: g.eenheid,
+        // Stukprijs volgt uit het bedrag, ook als dat handmatig is vastgezet: anders zou de factuur
+        // een aantal maal een prijs tonen die niet op het regeltotaal uitkomt.
+        stukprijs: g.aantal ? rond(g.bedrag / g.aantal) : g.bedrag,
+        bedrag: g.bedrag,
+        aantalBoekingen: g.aantalBoekingen,
+        btwTariefBouw7Id: g.btwTariefBouw7Id,
       })
     }
   }
@@ -479,25 +564,21 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   }
 }
 
-/** Slaat de aanpassingen van één bewakingscode uit het popup-scherm op. */
-export async function bewaarCodeInstelling(
+/**
+ * Poortwachter voor elke wijziging aan de factuuropbouw van één code.
+ *
+ * De controle staat hier en niet alleen in het scherm: een verouderd geopend tabblad mag een
+ * verstuurde factuur niet alsnog van omschrijving of bedrag kunnen laten veranderen.
+ */
+async function vereisBewerkbareCode(
   dossierId: string,
   bewakingscode: string,
-  patch: {
-    omschrijving?: string | null
-    opslag_pct?: number | null
-    bedrag_excl_btw?: number | null
-    uitsplitsen?: boolean
-    btw_tarief_bouw7_id?: number | null
-    meefactureren?: boolean
-  },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; code: CodeRegelView | undefined } | { ok: false; error: string }> {
   await vereisRecht('financieel', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
-
-  // Wat al gefactureerd is ligt vast. De controle staat hier en niet alleen in het scherm: een
-  // verouderd geopend tabblad mag een verstuurde factuur niet alsnog van omschrijving of bedrag
-  // kunnen laten veranderen.
+  // Het voorstel gaat mee terug naar de aanroeper. Het opbouwen ervan haalt uren en kosten live uit
+  // Bouw7; dat twee keer doen per opgeslagen veld maakt een tabel waarin je regel voor regel werkt
+  // merkbaar traag.
   const huidig = await getRegieFactuurvoorstel(dossierId)
   const code = huidig.codes.find(c => c.bewakingscode === bewakingscode)
   if (code?.vergrendeld) {
@@ -507,6 +588,28 @@ export async function bewaarCodeInstelling(
         + 'Corrigeren gaat via een creditnota in Bouw7.',
     }
   }
+  return { ok: true, code }
+}
+
+function herlaadFacturatie(dossierId: string) {
+  revalidatePath('/opdrachten/' + dossierId + '/verkoop')
+  revalidatePath('/servicedesk/' + dossierId + '/financieel')
+}
+
+/** Slaat de instellingen van één bewakingscode op: naam, opslag, groepering, btw, wel/niet mee. */
+export async function bewaarCodeInstelling(
+  dossierId: string,
+  bewakingscode: string,
+  patch: {
+    omschrijving?: string | null
+    opslag_pct?: number | null
+    groepering?: Groepering
+    btw_tarief_bouw7_id?: number | null
+    meefactureren?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
@@ -523,8 +626,7 @@ export async function bewaarCodeInstelling(
     bewakingscode,
     omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
     opslag_pct: patch.opslag_pct !== undefined ? patch.opslag_pct : bestaand?.opslag_pct ?? null,
-    bedrag_excl_btw: patch.bedrag_excl_btw !== undefined ? patch.bedrag_excl_btw : bestaand?.bedrag_excl_btw ?? null,
-    uitsplitsen: patch.uitsplitsen !== undefined ? patch.uitsplitsen : bestaand?.uitsplitsen ?? false,
+    groepering: patch.groepering !== undefined ? patch.groepering : bestaand?.groepering ?? 'per_soort',
     btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
     meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
     updated_at: new Date().toISOString(),
@@ -535,8 +637,197 @@ export async function bewaarCodeInstelling(
     .upsert(rij, { onConflict: 'dossier_id,bewakingscode' })
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/opdrachten/' + dossierId + '/verkoop')
-  revalidatePath('/servicedesk/' + dossierId + '/financieel')
+  herlaadFacturatie(dossierId)
+  return { ok: true }
+}
+
+/**
+ * Slaat een aanpassing van één factuurregel op: eigen tekst, vast bedrag, eigen btw, of uitzetten.
+ *
+ * Een rij ontstaat pas bij de eerste afwijking. Zolang er niets van gezegd is blijft de regel
+ * volledig afgeleid uit de boekingen, en beweegt hij dus mee als er werk bij komt.
+ */
+export async function bewaarFactuurGroep(
+  dossierId: string,
+  bewakingscode: string,
+  groepSleutel: string,
+  patch: {
+    omschrijving?: string | null
+    bedrag_excl_btw?: number | null
+    btw_tarief_bouw7_id?: number | null
+    meefactureren?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data: bestaand } = await supabase
+    .from('factuur_regelgroepen')
+    .select('*')
+    .eq('dossier_id', dossierId)
+    .eq('bewakingscode', bewakingscode)
+    .eq('groep_sleutel', groepSleutel)
+    .maybeSingle()
+
+  const rij = {
+    dossier_id: dossierId,
+    bewakingscode,
+    groep_sleutel: groepSleutel,
+    omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
+    bedrag_excl_btw: patch.bedrag_excl_btw !== undefined ? patch.bedrag_excl_btw : bestaand?.bedrag_excl_btw ?? null,
+    btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
+    meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
+    volgorde: bestaand?.volgorde ?? 0,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase
+    .from('factuur_regelgroepen')
+    .upsert(rij, { onConflict: 'dossier_id,bewakingscode,groep_sleutel' })
+  if (error) return { ok: false, error: error.message }
+
+  herlaadFacturatie(dossierId)
+  return { ok: true }
+}
+
+/**
+ * Voegt de opgegeven boekingen samen tot één factuurregel, of haalt ze juist uit hun handmatige
+ * regel (`groepSleutel: null`) zodat ze de groepering van de code weer volgen.
+ *
+ * De sleutel wordt hier bepaald en niet in het scherm: twee mensen die tegelijk samenvoegen mogen
+ * elkaars regel niet overschrijven.
+ */
+export async function zetBoekingGroep(
+  dossierId: string,
+  bewakingscode: string,
+  boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  doel: { groepSleutel: string | null; omschrijving?: string | null } | 'nieuw',
+): Promise<{ ok: true; groepSleutel: string | null } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  if (boekingen.length === 0) return { ok: false, error: 'Kies eerst welke boekingen bij elkaar horen.' }
+
+  const sleutel = doel === 'nieuw' ? nieuweHandmatigeSleutel() : doel.groepSleutel
+  const omschrijving = doel === 'nieuw' ? null : (doel.omschrijving ?? undefined)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  // De boekingen zelf zijn Bouw7-data; EVA bewaart alleen de afwijking. Bestaat er nog geen rij,
+  // dan moet de bekende verkoopwaarde mee — anders zou de regel bij het volgende laden terugvallen
+  // op de standaardberekening en stilletjes van bedrag veranderen.
+  const bekend = new Map((toegang.code?.boekingen ?? []).map(b => [b.sleutel, b]))
+
+  for (const b of boekingen) {
+    const bron = bekend.get(`${b.bronType}:${b.bronBouw7Id}`)
+    if (!bron) continue
+    if (bron.gefactureerd) {
+      return { ok: false, error: 'Een boeking die al op een factuur staat kan niet worden verplaatst.' }
+    }
+    const { error } = await supabase.from('regie_factuurregels').upsert({
+      dossier_id: dossierId,
+      bron_type: b.bronType,
+      bron_bouw7_id: b.bronBouw7Id,
+      omschrijving: bron.omschrijving,
+      aantal: bron.aantal,
+      eenheid: bron.eenheid,
+      inkoop_bedrag: bron.inkoopBedrag,
+      opslag_pct: bron.opslagPct,
+      verkoop_tarief: bron.verkoopTarief,
+      verkoop_bedrag: bron.verkoopBedrag,
+      bewakingscode,
+      uitgesloten: bron.uitgesloten,
+      groep_sleutel: sleutel,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  if (sleutel && omschrijving !== undefined) {
+    const r = await bewaarFactuurGroep(dossierId, bewakingscode, sleutel, { omschrijving })
+    if (!r.ok) return r
+  }
+
+  herlaadFacturatie(dossierId)
+  return { ok: true, groepSleutel: sleutel }
+}
+
+/**
+ * Zet de verkoopprijs van één of meer boekingen: via een opslag op de kostprijs, via een uurtarief,
+ * of als hard bedrag. Wat leeg blijft valt terug op de berekening.
+ *
+ * Meerdere boekingen tegelijk kunnen is geen luxe: het voorstel opbouwen haalt uren en kosten live
+ * uit Bouw7, dus een selectie van tien regels stuk voor stuk opslaan zou tien keer dat werk doen.
+ */
+export async function bewaarBoekingen(
+  dossierId: string,
+  bewakingscode: string,
+  boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  patch: {
+    opslagPct?: number | null
+    verkoopTarief?: number | null
+    verkoopBedrag?: number | null
+    uitgesloten?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  if (boekingen.length === 0) return { ok: true }
+
+  const bekend = new Map((toegang.code?.boekingen ?? []).map(b => [b.sleutel, b]))
+  const rijen = []
+
+  for (const boeking of boekingen) {
+    const bron = bekend.get(`${boeking.bronType}:${boeking.bronBouw7Id}`)
+    if (!bron) return { ok: false, error: 'Deze boeking hoort niet (meer) bij deze bewakingscode.' }
+    if (bron.gefactureerd) {
+      return { ok: false, error: 'Een boeking die al op een factuur staat ligt vast en kan niet worden gewijzigd.' }
+    }
+
+    const opslagPct = patch.opslagPct !== undefined ? patch.opslagPct : bron.opslagPct
+    const verkoopTarief = patch.verkoopTarief !== undefined ? patch.verkoopTarief : bron.verkoopTarief
+
+    // Volgorde van winnen: een hard bedrag, anders tarief maal aantal (uren), anders kostprijs plus
+    // opslag. Zo blijft zichtbaar waar een bedrag vandaan komt in plaats van dat alles één getal wordt.
+    let verkoopBedrag: number
+    if (patch.verkoopBedrag !== undefined && patch.verkoopBedrag !== null) {
+      verkoopBedrag = patch.verkoopBedrag
+    } else if (bron.bronType === 'uur') {
+      verkoopBedrag = verkoopTarief != null ? rond((bron.aantal ?? 0) * verkoopTarief) : bron.verkoopBedrag
+    } else {
+      verkoopBedrag = opslagPct != null
+        ? rond(bron.inkoopBedrag * (1 + opslagPct / 100))
+        : bron.verkoopBedrag
+    }
+
+    rijen.push({
+      dossier_id: dossierId,
+      bron_type: boeking.bronType,
+      bron_bouw7_id: boeking.bronBouw7Id,
+      omschrijving: bron.omschrijving,
+      aantal: bron.aantal,
+      eenheid: bron.eenheid,
+      inkoop_bedrag: bron.inkoopBedrag,
+      opslag_pct: opslagPct,
+      verkoop_tarief: verkoopTarief,
+      verkoop_bedrag: verkoopBedrag,
+      bewakingscode,
+      uitgesloten: patch.uitgesloten !== undefined ? patch.uitgesloten : bron.uitgesloten,
+      groep_sleutel: bron.handmatigToegewezen ? bron.groepSleutel : null,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('regie_factuurregels')
+    .upsert(rijen, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
+  if (error) return { ok: false, error: error.message }
+
+  herlaadFacturatie(dossierId)
   return { ok: true }
 }
 
@@ -596,29 +887,32 @@ export async function maakRegieFactuurInBouw7(
   })
   if (!res.ok) return res
 
-  // Pas nu afboeken, en alleen de boekingen die daadwerkelijk op deze factuur staan. Alles
-  // wegstrepen zou kosten op codes die in de aanneemsom zitten als gefactureerd markeren, terwijl
-  // die hier nooit op een factuur komen.
-  const gefactureerdeCodes = new Set(voorstel.regels.map(r => r.bewakingscode))
+  // Pas nu afboeken, en alleen de boekingen die daadwerkelijk op deze factuur staan. Dat is nu
+  // preciezer dan "alle boekingen van een gefactureerde code": een factuurregel die uitstond, of
+  // een post die op nul uitkwam, ging niet mee en mag dus ook niet als gefactureerd gelden — anders
+  // verdwijnt hij stilzwijgend van de volgende factuur.
+  const opFactuur = new Set(voorstel.regels.map(r => `${r.bewakingscode}|${r.groepSleutel}`))
+  const mee = voorstel.codes.flatMap(c =>
+    c.boekingen
+      .filter(b => !b.uitgesloten && !b.gefactureerd && opFactuur.has(`${c.bewakingscode}|${b.groepSleutel}`))
+      .map(b => ({ boeking: b, bewakingscode: c.bewakingscode })))
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-  const regie = await getServicedeskRegie(dossierId)
-  const mee = regie.regels.filter(r =>
-    !r.uitgesloten && r.status !== 'gefactureerd'
-    && r.bewakingscode && gefactureerdeCodes.has(r.bewakingscode))
-  for (const r of mee) {
+  for (const { boeking, bewakingscode } of mee) {
     await supabase.from('regie_factuurregels').upsert({
       dossier_id: dossierId,
-      bron_type: r.bronType,
-      bron_bouw7_id: r.bronBouw7Id,
-      omschrijving: r.omschrijving,
-      aantal: r.aantal,
-      eenheid: r.eenheid,
-      inkoop_bedrag: r.inkoopBedrag,
-      opslag_pct: r.opslagPct,
-      verkoop_tarief: r.verkoopTarief,
-      verkoop_bedrag: r.verkoopBedrag,
-      bewakingscode: r.bewakingscode,
+      bron_type: boeking.bronType,
+      bron_bouw7_id: boeking.bronBouw7Id,
+      omschrijving: boeking.omschrijving,
+      aantal: boeking.aantal,
+      eenheid: boeking.eenheid,
+      inkoop_bedrag: boeking.inkoopBedrag,
+      opslag_pct: boeking.opslagPct,
+      verkoop_tarief: boeking.verkoopTarief,
+      verkoop_bedrag: boeking.verkoopBedrag,
+      bewakingscode,
+      groep_sleutel: boeking.handmatigToegewezen ? boeking.groepSleutel : null,
       status: 'gefactureerd',
       bouw7_invoice_id: String(res.invoiceId),
       updated_at: new Date().toISOString(),
