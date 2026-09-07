@@ -7,17 +7,20 @@
  * factuur aan hangt is de termijn uit handen. De knop maakt van de hele selectie één
  * conceptfactuur — dat is ook precies hoe Bouw7 het zelf doet als je daar meerdere termijnen
  * tegelijk factureert: één regel per termijn.
+ *
+ * Staat er nog geen enkele termijn, dan is er niets te factureren maar wél iets aan te maken: het
+ * termijnschema. Dat gaat via `TermijnschemaVenster`, dat zelf uitzoekt of de calculatie een
+ * betalingsconditie kent.
  */
 
-import React, { useEffect, useState, useTransition } from 'react'
+import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button, useDialogen } from '@/components/ui'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-import { zetTermijnenKlaar, maakTermijnschemaInBouw7 } from '@/lib/dossiers/termijnen'
-import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
-import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
+import { zetTermijnenKlaar } from '@/lib/dossiers/termijnen'
 import type { VerkoopTermijn, VerkoopTermijnStatus } from '@/lib/dossiers/actions'
+import TermijnschemaVenster from './TermijnschemaVenster'
 import { fmt, fmtPct, fmtDatum, TH, TD } from './tab-ui'
 
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -28,48 +31,20 @@ const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: strin
   gefactureerd: { label: 'Gefactureerd', kleur: 'var(--accent)' },
 }
 
-export default function TermijnenBlok({ dossierId, termijnen, offerteTermijnen }: {
+export default function TermijnenBlok({ dossierId, termijnen }: {
   dossierId: string
   termijnen: VerkoopTermijn[]
-  /** Aantal termijnen dat de betalingsconditie op de offerte kent; 0 = geen schema beschikbaar. */
-  offerteTermijnen: number
 }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const { bevestig } = useDialogen()
   const [gekozen, setGekozen] = useState<Set<number>>(new Set())
   const [bezig, start] = useTransition()
-  const [tarieven, setTarieven] = useState<BtwTariefKeuze[]>([])
-  const [tariefId, setTariefId] = useState<number | null>(null)
+  const [schemaOpen, setSchemaOpen] = useState(false)
 
-  const kanSchemaMaken = !readOnly && termijnen.length === 0 && offerteTermijnen > 0
-  useEffect(() => {
-    if (!kanSchemaMaken) return
-    laadBtwTarieven().then(t => {
-      setTarieven(t)
-      const standaard = t.find(x => !x.verlegd && Math.abs(x.percentage - 21) < 0.01) ?? t[0]
-      if (standaard) setTariefId(standaard.bouw7_id ?? null)
-    }).catch(() => setTarieven([]))
-  }, [kanSchemaMaken])
-
-  async function schemaAanmaken() {
-    if (tariefId == null) return
-    const ja = await bevestig({
-      titel: 'Termijnschema aanmaken in Bouw7?',
-      omschrijving: `De ${offerteTermijnen} termijnen van de betalingsconditie op de offerte worden op de `
-        + 'aanneemsom omgerekend en als termijnstaat in Bouw7 gezet. Er wordt nog niets gefactureerd.',
-      bevestigLabel: 'Aanmaken',
-    })
-    if (!ja) return
-    start(async () => {
-      const r = await maakTermijnschemaInBouw7(dossierId, tariefId)
-      if (!r.ok) { toast.error(r.error, { duration: 9000 }); router.refresh(); return }
-      const extra = r.overgeslagen.length > 0
-        ? ` ${r.overgeslagen.length} termijn(en) overgeslagen omdat er al een factuur aan hangt.` : ''
-      toast.success(`Termijnschema in Bouw7 gezet — ${r.aangemaakt} nieuw, ${r.bijgewerkt} bijgewerkt.${extra}`)
-      router.refresh()
-    })
-  }
+  // Aanmaken kan alleen op een leeg project; een bestaande termijnstaat is in Bouw7 gezet en blijft
+  // daar het werk van de administratie.
+  const kanSchemaMaken = !readOnly && termijnen.length === 0
 
   const selecteerbaar = termijnen.filter(t => !t.gefactureerd)
   const kanKiezen = !readOnly && selecteerbaar.length > 0
@@ -112,29 +87,16 @@ export default function TermijnenBlok({ dossierId, termijnen, offerteTermijnen }
       <div style={{ padding: '12px', fontSize: 13, color: 'var(--neutral-500)' }}>
         <p style={{ margin: 0 }}>Geen termijnen ingesteld in Bouw7.</p>
         {kanSchemaMaken && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-              <span>Btw</span>
-              <select
-                value={tariefId ?? ''}
-                onChange={e => setTariefId(e.target.value ? Number(e.target.value) : null)}
-                disabled={bezig}
-                aria-label="Btw-tarief voor de termijnen"
-                style={{
-                  border: '1px solid var(--neutral-200)', borderRadius: 4,
-                  padding: '2px 6px', fontSize: 12.5, background: 'white',
-                }}
-              >
-                {tarieven.map(t => (
-                  <option key={t.bouw7_id ?? t.label} value={t.bouw7_id ?? ''}>{t.label}</option>
-                ))}
-              </select>
-            </label>
-            <Button variant="primary" onClick={schemaAanmaken} disabled={bezig || tariefId == null}>
-              {bezig ? 'Bezig…' : `Termijnschema uit de offerte aanmaken (${offerteTermijnen})`}
-            </Button>
+          <div style={{ marginTop: 10 }}>
+            <Button variant="primary" onClick={() => setSchemaOpen(true)}>Termijnen aanmaken</Button>
           </div>
         )}
+        <TermijnschemaVenster
+          dossierId={dossierId}
+          open={schemaOpen}
+          onSluit={() => setSchemaOpen(false)}
+          onKlaar={() => router.refresh()}
+        />
       </div>
     )
   }

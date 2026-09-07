@@ -19,10 +19,11 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { createHash } from 'node:crypto'
 import { getDossierVerkoop, bouw7VoorDossier } from './actions'
+import { getDossierMeerwerk } from './meerwerk'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
-import { schrijfBouw7Termijnstaat, leesBouw7Termijnstaat } from '@/lib/bouw7/termijnstaat'
+import { schrijfBouw7Termijnstaat } from '@/lib/bouw7/termijnstaat'
 import type { Bouw7ListResponse, Bouw7ProjectInvoiceTerm } from '@/lib/bouw7/client'
 
 export type KlaarzetResultaat =
@@ -157,27 +158,57 @@ export async function zetTermijnenKlaar(
   return { ok: true, invoiceId: res.invoiceId, aantal: gekozen.length, totaalExclBtw: res.totaalExclBtw }
 }
 
-/**
- * Vergelijkt het termijnschema in Bouw7 met de betalingsconditie uit de EVA-offerte, zodat een
- * afwijking zichtbaar wordt in plaats van stil te blijven.
+/* ------------------------------------------------------------------------------------------ *
+ * Termijnschema aanmaken
  *
- * De offerte kent haar termijnen via `quotes.betalingsconditie_id` → `betalingscondities.termijnen`
- * (`[{ omschrijving, percentage }]`). Dat is puur documenttekst; er is geen garantie dat wat in
- * Bouw7 staat daarmee overeenkomt. Juist die stille afwijking is duur: dan factureer je een ander
- * schema dan de klant heeft geaccepteerd.
- */
-export type TermijnAfwijking = {
-  /** Percentages uit de offerte-betalingsconditie, in volgorde. */
-  offerte: { omschrijving: string; percentage: number }[]
-  /** Percentages zoals ze nu in Bouw7 staan. */
-  bouw7: { omschrijving: string; percentage: number | null }[]
-  /** Naam van de betalingsconditie op de offerte. */
-  conditieNaam: string | null
-  /** Gezet zodra offerte en Bouw7 niet op elkaar aansluiten. */
-  afwijking: string | null
+ * De calculatie is leidend: staat er een betalingsconditie op de offerte, dan is dát het schema
+ * dat met de klant is afgesproken en wordt het voorgesteld. Kent de calculatie er geen — kleine
+ * opdrachten, storingswerk, dossiers zonder EVA-offerte — dan kies je er zelf een uit de
+ * stamgegevens of stel je hem ter plekke samen. Zonder die tweede route zou de knop precies daar
+ * ontbreken waar hij het meeste werk scheelt.
+ * ------------------------------------------------------------------------------------------ */
+
+/** Eén regel van een termijnschema: wat er verschuldigd is, en welk deel van de grondslag. */
+export type TermijnschemaRegel = { omschrijving: string; percentage: number }
+
+/** Waar de bedragen op gerekend worden. Meerwerk telt alleen mee als de gebruiker dat kiest. */
+export type TermijnGrondslag = 'aanneemsom' | 'contracttotaal'
+
+export type TermijnschemaBron = {
+  /** Het schema van de betalingsconditie op de offerte; null als de calculatie er geen kent. */
+  uitCalculatie: { conditieId: string; naam: string; termijnen: TermijnschemaRegel[] } | null
+  /** Alle betalingscondities uit de stamgegevens, om handmatig uit te kiezen. */
+  condities: { id: string; naam: string; termijnen: TermijnschemaRegel[] }[]
+  aanneemsom: number
+  /** Goedgekeurd meerwerk (EVA-regels waar die er zijn, anders het Bouw7-aggregaat). */
+  meerwerk: number
+  /** Aantal termijnen dat nu in Bouw7 staat. Boven 0 valt er niets meer aan te maken. */
+  bestaandeTermijnen: number
 }
 
-export async function getTermijnAfwijking(dossierId: string): Promise<TermijnAfwijking | null> {
+/** Leest de termijnen van een betalingsconditie-rij uit; ongeldige regels vallen af. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function leesTermijnen(ruw: any): TermijnschemaRegel[] {
+  if (!Array.isArray(ruw)) return []
+  return ruw
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((t: any) => ({
+      omschrijving: String(t?.omschrijving ?? '').trim(),
+      percentage: Number(t?.percentage ?? 0),
+    }))
+    .filter((t: TermijnschemaRegel) => Number.isFinite(t.percentage))
+}
+
+/**
+ * De betalingsconditie die aan de hoofdofferte van dit dossier hangt.
+ *
+ * De offerte kent haar termijnen via `quotes.betalingsconditie_id` → `betalingscondities.termijnen`
+ * (`[{ omschrijving, percentage }]`). Meerwerkoffertes blijven buiten beeld: die dragen hun eigen
+ * regel en zeggen niets over het schema van de aanneemsom.
+ */
+async function offerteBetalingsconditie(
+  dossierId: string,
+): Promise<{ conditieId: string; naam: string; termijnen: TermijnschemaRegel[] } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -197,11 +228,92 @@ export async function getTermijnAfwijking(dossierId: string): Promise<TermijnAfw
 
   const { data: conditie } = await supabase
     .from('betalingscondities').select('naam, termijnen').eq('id', quote.betalingsconditie_id).maybeSingle()
-  const ruw = Array.isArray(conditie?.termijnen) ? conditie.termijnen : []
-  const offerte = ruw
-    .map((t: any) => ({ omschrijving: String(t?.omschrijving ?? ''), percentage: Number(t?.percentage ?? 0) }))
-    .filter((t: { percentage: number }) => Number.isFinite(t.percentage))
-  if (offerte.length === 0) return null
+  const termijnen = leesTermijnen(conditie?.termijnen)
+  if (termijnen.length === 0) return null
+
+  return {
+    conditieId: quote.betalingsconditie_id as string,
+    naam: (conditie?.naam as string) ?? 'Betalingsconditie',
+    termijnen,
+  }
+}
+
+/**
+ * De bedragen waarover een termijnschema gerekend kan worden.
+ *
+ * Meerwerk komt uit de EVA-meerwerkregels zodra die er zijn, en anders uit het Bouw7-aggregaat —
+ * dezelfde regel die de Verkoop-tab zelf hanteert. Zou het venster een ander meerwerkbedrag
+ * gebruiken dan het scherm eromheen toont, dan factureer je straks over een grondslag die niemand
+ * heeft zien staan. De vergelijking kijkt naar het AANTAL goedgekeurde regels en niet naar het
+ * bedrag: bij per saldo minderwerk is de som negatief.
+ */
+async function termijnGrondslagen(dossierId: string): Promise<{
+  aanneemsom: number
+  meerwerk: number
+  bestaandeTermijnen: number
+}> {
+  const [verkoop, meerwerk] = await Promise.all([
+    getDossierVerkoop(dossierId),
+    getDossierMeerwerk(dossierId).catch(() => null),
+  ])
+  const goedgekeurd = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
+  const meerwerkBedrag = goedgekeurd.length > 0
+    ? (meerwerk?.totalen.goedgekeurdExcl ?? 0)
+    : verkoop.totalen.meerwerk
+  return {
+    aanneemsom: verkoop.totalen.aanneemsom,
+    meerwerk: meerwerkBedrag,
+    bestaandeTermijnen: verkoop.termijnen.length,
+  }
+}
+
+/**
+ * Alles wat het termijnschema-venster nodig heeft om een voorstel te doen: het schema uit de
+ * calculatie (indien aanwezig), de schema's om handmatig uit te kiezen, en de bedragen waarop
+ * gerekend wordt.
+ */
+export async function getTermijnschemaBron(dossierId: string): Promise<TermijnschemaBron> {
+  await vereisRecht('financieel', 'lezen')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const [uitCalculatie, conditieRes, grondslagen] = await Promise.all([
+    offerteBetalingsconditie(dossierId).catch(() => null),
+    // Stamgegevens: tientallen rijen, geen duizenden. Eén lezing volstaat.
+    supabase.from('betalingscondities').select('id, naam, termijnen').order('volgorde').order('naam'),
+    termijnGrondslagen(dossierId),
+  ])
+
+  const rijen = (conditieRes?.data ?? []) as { id: string; naam: string; termijnen: unknown }[]
+  const condities = rijen
+    .map(r => ({ id: r.id, naam: r.naam, termijnen: leesTermijnen(r.termijnen) }))
+    .filter(c => c.termijnen.length > 0)
+
+  return { uitCalculatie, condities, ...grondslagen }
+}
+
+/**
+ * Vergelijkt het termijnschema in Bouw7 met de betalingsconditie uit de EVA-offerte, zodat een
+ * afwijking zichtbaar wordt in plaats van stil te blijven.
+ *
+ * Er is geen garantie dat wat in Bouw7 staat overeenkomt met wat de klant heeft geaccepteerd.
+ * Juist die stille afwijking is duur: dan factureer je een ander schema dan is afgesproken.
+ */
+export type TermijnAfwijking = {
+  /** Percentages uit de offerte-betalingsconditie, in volgorde. */
+  offerte: { omschrijving: string; percentage: number }[]
+  /** Percentages zoals ze nu in Bouw7 staan. */
+  bouw7: { omschrijving: string; percentage: number | null }[]
+  /** Naam van de betalingsconditie op de offerte. */
+  conditieNaam: string | null
+  /** Gezet zodra offerte en Bouw7 niet op elkaar aansluiten. */
+  afwijking: string | null
+}
+
+export async function getTermijnAfwijking(dossierId: string): Promise<TermijnAfwijking | null> {
+  const conditie = await offerteBetalingsconditie(dossierId)
+  if (!conditie) return null
+  const offerte = conditie.termijnen
 
   const verkoop = await getDossierVerkoop(dossierId)
   if (!verkoop.termijnenBeschikbaar) return null
@@ -209,12 +321,12 @@ export async function getTermijnAfwijking(dossierId: string): Promise<TermijnAfw
 
   let afwijking: string | null = null
   if (bouw7.length === 0) {
-    afwijking = `De offerte gaat uit van ${offerte.length} termijnen (${conditie?.naam ?? 'betalingsconditie'}), `
+    afwijking = `De offerte gaat uit van ${offerte.length} termijnen (${conditie.naam}), `
       + 'maar in Bouw7 staat nog geen termijnstaat.'
   } else if (bouw7.length !== offerte.length) {
     afwijking = `De offerte gaat uit van ${offerte.length} termijnen, in Bouw7 staan er ${bouw7.length}.`
   } else {
-    const verschillend = offerte.findIndex((o: { percentage: number }, i: number) =>
+    const verschillend = offerte.findIndex((o, i) =>
       bouw7[i].percentage != null && Math.abs(bouw7[i].percentage! - o.percentage) > 0.01)
     if (verschillend >= 0) {
       afwijking = `Termijn ${verschillend + 1} is in de offerte ${offerte[verschillend].percentage}% `
@@ -222,25 +334,33 @@ export async function getTermijnAfwijking(dossierId: string): Promise<TermijnAfw
     }
   }
 
-  return { offerte, bouw7, conditieNaam: conditie?.naam ?? null, afwijking }
+  return { offerte, bouw7, conditieNaam: conditie.naam, afwijking }
 }
 
+export type TermijnschemaInvoer = {
+  termijnen: TermijnschemaRegel[]
+  /** Bouw7-id van het btw-tarief (`btw_tarieven.bouw7_id`) dat op elke termijn komt. */
+  btwTariefBouw7Id: number
+  grondslag: TermijnGrondslag
+}
 
 /**
- * Maakt het termijnschema uit de offerte aan in Bouw7.
+ * Maakt het termijnschema aan in Bouw7.
  *
- * De percentages komen uit de betalingsconditie op de hoofdofferte; de bedragen worden op de
- * actuele aanneemsom gerekend. Het laatste termijn krijgt het afrondingsverschil, zodat de som
- * exact op de aanneemsom uitkomt — anders blijft er een cent over die niemand kan factureren.
+ * De percentages worden op de gekozen grondslag omgerekend. Het laatste termijn krijgt het
+ * afrondingsverschil, zodat de som exact op de grondslag uitkomt — anders blijft er een cent over
+ * die niemand kan factureren.
  *
- * Staat er al een termijnstaat, dan wordt die hergebruikt; termijnen waar al een factuur aan hangt
- * blijven ongemoeid en worden teruggemeld.
+ * Er wordt alleen aangemaakt, nooit overschreven: staat er in Bouw7 al een termijnstaat, dan is
+ * die daar bewust gezet en is bijwerken werk voor de administratie. EVA een bestaande staat laten
+ * herschrijven op basis van een schema dat de gebruiker net in een venster heeft samengesteld is
+ * hoe je stilletjes een afgesproken termijnindeling kwijtraakt.
  */
-export async function maakTermijnschemaInBouw7(
+export async function maakTermijnschema(
   dossierId: string,
-  btwTariefBouw7Id: number,
+  invoer: TermijnschemaInvoer,
 ): Promise<
-  | { ok: true; aangemaakt: number; bijgewerkt: number; overgeslagen: string[]; onbekendInEva: string[] }
+  | { ok: true; aangemaakt: number; grondslag: number }
   | { ok: false; error: string }
 > {
   await vereisRecht('financieel', 'schrijven')
@@ -249,56 +369,69 @@ export async function maakTermijnschemaInBouw7(
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld.' }
 
-  const afwijking = await getTermijnAfwijking(dossierId)
-  if (!afwijking || afwijking.offerte.length === 0) {
-    return {
-      ok: false,
-      error: 'Er is geen betalingsconditie met termijnen op de offerte van dit dossier. '
-        + 'Kies er een in de calculatie, of maak de termijnen in Bouw7 zelf aan.',
-    }
+  // --- Het schema zelf. Wat de client stuurt wordt hier opnieuw gewogen; een knop die uit staat
+  //     in het venster is geen controle.
+  const termijnen = invoer.termijnen
+    .map(t => ({
+      omschrijving: String(t?.omschrijving ?? '').trim().slice(0, 200),
+      percentage: Number(t?.percentage),
+    }))
+    .filter(t => Number.isFinite(t.percentage))
+  if (termijnen.length === 0) return { ok: false, error: 'Er zijn geen termijnen opgegeven.' }
+  if (termijnen.length > 50) {
+    return { ok: false, error: 'Een termijnschema van meer dan 50 termijnen wordt niet verwerkt.' }
   }
-
-  const verkoop = await getDossierVerkoop(dossierId)
-  const aanneemsom = verkoop.totalen.aanneemsom
-  if (!(aanneemsom > 0)) {
-    return { ok: false, error: 'Dit dossier heeft nog geen aanneemsom; zonder bedrag zijn er geen termijnen te berekenen.' }
+  if (termijnen.some(t => t.percentage <= 0)) {
+    return { ok: false, error: 'Elke termijn moet een percentage boven 0 hebben.' }
   }
-
-  const somPct = afwijking.offerte.reduce((s, t) => s + t.percentage, 0)
+  const somPct = termijnen.reduce((s, t) => s + t.percentage, 0)
   if (Math.abs(somPct - 100) > 0.01) {
     return {
       ok: false,
-      error: `De termijnen van de betalingsconditie tellen op tot ${somPct}% in plaats van 100%. `
-        + 'Corrigeer de betalingsconditie voordat je hem naar Bouw7 schrijft.',
+      error: `De termijnen tellen op tot ${Math.round(somPct * 100) / 100}% in plaats van 100%. `
+        + 'Corrigeer het schema voordat je het naar Bouw7 schrijft.',
+    }
+  }
+  if (!Number.isFinite(invoer.btwTariefBouw7Id)) {
+    return { ok: false, error: 'Kies eerst een btw-tarief voor de termijnen.' }
+  }
+
+  // --- De grondslag. Meerwerk telt alleen mee als daar bewust voor gekozen is.
+  const bedragen = await termijnGrondslagen(dossierId)
+  if (bedragen.bestaandeTermijnen > 0) {
+    return {
+      ok: false,
+      error: `Dit project heeft in Bouw7 al ${bedragen.bestaandeTermijnen} termijn(en). `
+        + 'Pas die daar aan; EVA overschrijft een bestaande termijnstaat niet.',
+    }
+  }
+  const grondslag = invoer.grondslag === 'contracttotaal'
+    ? bedragen.aanneemsom + bedragen.meerwerk
+    : bedragen.aanneemsom
+  if (!(grondslag > 0)) {
+    return {
+      ok: false,
+      error: 'Dit dossier heeft nog geen aanneemsom; zonder bedrag zijn er geen termijnen te berekenen.',
     }
   }
 
-  // Bestaande termijnen op volgorde matchen, zodat een tweede keer schrijven bijwerkt in plaats
-  // van dupliceert.
-  let bestaand: Awaited<ReturnType<typeof leesBouw7Termijnstaat>>
-  try {
-    bestaand = await leesBouw7Termijnstaat(Number(ctx.bouw7Id))
-  } catch (e) {
-    return { ok: false, error: `De huidige termijnstaat is niet op te halen: ${e instanceof Error ? e.message : 'onbekende fout'}.` }
-  }
-
-  const centen = Math.round(aanneemsom * 100)
+  const centen = Math.round(grondslag * 100)
   let verdeeld = 0
-  const termijnen = afwijking.offerte.map((t, i) => {
-    const laatste = i === afwijking.offerte.length - 1
+  const teSchrijven = termijnen.map((t, i) => {
+    const laatste = i === termijnen.length - 1
     const eigenCenten = laatste ? centen - verdeeld : Math.round(centen * t.percentage / 100)
     verdeeld += eigenCenten
     return {
-      bouw7TermId: bestaand.termijnen[i]?.id ?? null,
+      bouw7TermId: null,
       omschrijving: t.omschrijving || `Termijn ${i + 1}`,
       percentage: t.percentage,
       bedragExclBtw: eigenCenten / 100,
-      vatTariffId: btwTariefBouw7Id,
+      vatTariffId: invoer.btwTariefBouw7Id,
     }
   })
 
-  // De debiteur: uit de bestaande staat, anders uit het skelet dat Bouw7 voor een nieuwe factuur
-  // teruggeeft — dat draagt het project-contact.
+  // De debiteur: uit het skelet dat Bouw7 voor een nieuwe factuur teruggeeft — dat draagt het
+  // project-contact.
   let contactId: number | null = null
   try {
     const skelet = await ctx.client.get<{ contact?: { id?: number } }>(`/project/${ctx.bouw7Id}/invoice/new`)
@@ -311,17 +444,12 @@ export async function maakTermijnschemaInBouw7(
   const res = await schrijfBouw7Termijnstaat({
     projectId: Number(ctx.bouw7Id),
     contactId,
-    aanneemsom,
-    termijnen,
+    aanneemsom: grondslag,
+    termijnen: teSchrijven,
   })
   if (!res.ok) return res
 
   revalidatePath(`/opdrachten/${dossierId}/verkoop`)
-  return {
-    ok: true,
-    aangemaakt: res.aangemaakt,
-    bijgewerkt: res.bijgewerkt,
-    overgeslagen: res.overgeslagen,
-    onbekendInEva: res.onbekendInEva,
-  }
+  revalidatePath(`/servicedesk/${dossierId}/financieel`)
+  return { ok: true, aangemaakt: res.aangemaakt, grondslag }
 }

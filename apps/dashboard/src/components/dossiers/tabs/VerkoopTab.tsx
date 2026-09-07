@@ -305,11 +305,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           {!data.termijnenBeschikbaar ? (
             <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
           ) : (
-            <TermijnenBlok
-              dossierId={dossierId}
-              termijnen={data.termijnen}
-              offerteTermijnen={schemaAfwijking?.offerte.length ?? 0}
-            />
+            <TermijnenBlok dossierId={dossierId} termijnen={data.termijnen} />
           )}
         </CardBody>
       </Card>
