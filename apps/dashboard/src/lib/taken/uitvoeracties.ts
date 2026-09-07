@@ -41,6 +41,17 @@ export type TaakMetUitvoer = {
 export function bepaalUitvoerActies(taak: TaakMetUitvoer): UitvoerActie[] {
   const acties: UitvoerActie[] = []
 
+  // Vóór de losse rondes: een projectbezoek is de brede ingang waar een kwaliteitsronde
+  // desgewenst binnen valt, dus die hoort bovenaan te staan.
+  if (taak.bezoek_ronde) {
+    acties.push({
+      soort: 'bezoek',
+      label: 'Projectbezoek starten',
+      href: `/m/taken/${taak.id}/bezoek`,
+      badgeUitleg: 'Deze actie sluit automatisch zodra het bezoek is afgerond',
+    })
+  }
+
   if (taak.formulier_template_id) {
     acties.push({
       soort: 'formulier',
@@ -56,17 +67,6 @@ export function bepaalUitvoerActies(taak: TaakMetUitvoer): UitvoerActie[] {
       label: 'Kwaliteitsronde starten',
       href: `/m/taken/${taak.id}/kwaliteit`,
       badgeUitleg: 'Deze actie sluit automatisch zodra de kwaliteitsronde definitief is',
-    })
-  }
-
-  // Vóór de losse rondes: een projectbezoek is de brede ingang waar een kwaliteitsronde
-  // desgewenst binnen valt, dus die hoort bovenaan te staan.
-  if (taak.bezoek_ronde) {
-    acties.push({
-      soort: 'bezoek',
-      label: 'Projectbezoek starten',
-      href: `/m/taken/${taak.id}/bezoek`,
-      badgeUitleg: 'Deze actie sluit automatisch zodra het bezoek is afgerond',
     })
   }
 
