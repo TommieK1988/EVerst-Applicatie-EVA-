@@ -3,12 +3,18 @@
 /**
  * De factuurregels van één bewakingscode samenstellen uit de boekingen die eronder hangen.
  *
- * Twee lagen, en dat onderscheid is het hele punt van dit scherm:
- *  • boven staan de regels zoals de klant ze op zijn factuur ziet — tekst, bedrag, btw;
- *  • onder staan de geboekte uren en kosten waaruit die regels zijn opgeteld.
- * Wie een prijs aanpast doet dat op het niveau waar de afspraak zit: een opslag of tarief per
- * boeking als het werk gewoon doorgerekend wordt, een vast bedrag op de factuurregel als er iets
- * anders is afgesproken. Beide door één veld halen maakt achteraf onnavolgbaar of een bedrag
+ * Twee panelen naast elkaar, en die indeling is het hele punt: links staat wat er geboekt is,
+ * rechts wat de klant straks op zijn factuur leest. Het verband tussen die twee is waar het bij
+ * nacalculatie om draait, en dat verband is alleen te zien als je ze naast elkaar zet — onder
+ * elkaar moet je twee tabellen uit je hoofd vergelijken.
+ *
+ * Het nummer voor een factuurregel komt terug in de kolom Regel links, zodat van elke boeking af te
+ * lezen is waar hij terechtkomt. Wijs je met de muis een factuurregel aan, dan lichten zijn
+ * boekingen op.
+ *
+ * Prijzen zijn op twee plekken te sturen, en dat onderscheid is bewust: een tarief of opslag per
+ * boeking rekent door met wat er nog geboekt wordt, een bedrag op de factuurregel zet dat juist
+ * stil omdat er iets anders is afgesproken. In één veld is achteraf niet meer te zien of een bedrag
  * berekend was of afgesproken.
  *
  * Elke handeling slaat meteen op. Een tabel met een losse Opslaan-knop nodigt uit tot half werk:
@@ -19,7 +25,7 @@
 
 import React, { useEffect, useId, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, Merge, Eye, EyeOff } from 'lucide-react'
+import { Lock, Merge, Unlink } from 'lucide-react'
 import {
   Button, Input, Checkbox, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
@@ -93,8 +99,8 @@ function BewaarVeld({ waarde, opslaan, disabled, placeholder, uitlijnen, titel, 
     />
   )
   if (!eenheid) return veld
-  // De eenheid staat in het veld en niet in de kolomkop: bij twee getalvelden naast elkaar is de
-  // kop te ver weg om nog te vertellen of je naar een bedrag of een percentage kijkt.
+  // De eenheid staat in het veld en niet in de kolomkop: bij getalvelden naast elkaar is de kop te
+  // ver weg om nog te vertellen of je naar een bedrag of een percentage kijkt.
   return (
     <div className="relative">
       {veld}
@@ -133,6 +139,19 @@ function BtwKeuze({ waarde, tarieven, disabled, opslaan, leegLabel }: {
   )
 }
 
+/** Het nummer dat een factuurregel rechts verbindt met zijn boekingen links. */
+function Nummer({ n, gemarkeerd }: { n: number; gemarkeerd?: boolean }) {
+  return (
+    <span
+      className={`grid h-5 w-5 shrink-0 place-items-center rounded text-[11px] font-bold tabular-nums ${
+        gemarkeerd ? 'bg-brand-500 text-white' : 'bg-neutral-200 text-neutral-700'
+      }`}
+    >
+      {n}
+    </span>
+  )
+}
+
 export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnly, onSluit, onBewaard }: {
   dossierId: string
   code: CodeRegelView | null
@@ -145,6 +164,8 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
   const veld = useId()
   const { vraagTekst, bevestig } = useDialogen()
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
+  /** Factuurregel die de muis aanwijst; zijn boekingen lichten links op. */
+  const [gemarkeerd, setGemarkeerd] = useState<string | null>(null)
   const [bezig, start] = useTransition()
   const [geopendVoor, setGeopendVoor] = useState<string | null>(null)
 
@@ -180,7 +201,7 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
 
   const teKiezen = code.boekingen.filter(b => !b.gefactureerd)
   const gekozen = teKiezen.filter(b => selectie.has(b.sleutel))
-  const alles = gekozen.length > 0 && gekozen.length === teKiezen.length
+  const nummerVan = new Map(code.groepen.map((g, i) => [g.groepSleutel, i + 1]))
 
   function wissel(sleutel: string) {
     setSelectie(vorig => {
@@ -214,10 +235,10 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
     })
   }
 
-  function zetUit(uit: boolean) {
+  function losmaken() {
     const bronnen = gekozen.map(b => ({ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }))
     start(async () => {
-      const r = await bewaarBoekingen(dossierId, post.bewakingscode, bronnen, { uitgesloten: uit })
+      const r = await zetBoekingGroep(dossierId, post.bewakingscode, bronnen, { groepSleutel: null })
       if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
       setSelectie(new Set())
       onBewaard()
@@ -271,12 +292,14 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
     ...(code.inBouw7 ? [] : ['nog niet in Bouw7']),
   ].join(' · ')
 
-  const kop = 'px-2 py-2 text-[11px] font-bold uppercase tracking-[0.04em] text-neutral-500'
+  const kop = 'px-1.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500'
   const labelStijl = 'mb-1.5 block text-[13px] font-semibold text-neutral-700'
 
   return (
     <Dialog open={code != null} onOpenChange={o => { if (!o) onSluit() }}>
-      <DialogContent size="xl">
+      {/* Breder dan de DS-maten: twee panelen naast elkaar met een bewerkbare tabel links passen
+          niet in 920px, en onder elkaar zetten is precies wat dit scherm níét moest worden. */}
+      <DialogContent size="xl" className="max-w-[1320px]">
         <DialogHeader>
           <div className="pr-8">
             <DialogTitle>Factuurregels — {code.bewakingscode}</DialogTitle>
@@ -284,7 +307,7 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
           </div>
         </DialogHeader>
 
-        <DialogBody className="space-y-7">
+        <DialogBody className="space-y-6">
           {opslot && (
             <div className="flex gap-3 rounded-lg border border-warning-300 bg-warning-50 px-4 py-3.5 text-[13px] leading-relaxed text-warning-900">
               <Lock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -309,7 +332,6 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                   if (e.target.value.trim() !== code.omschrijving) codePatch({ omschrijving: e.target.value })
                 }}
               />
-              <p className="mt-1.5 text-[12.5px] text-neutral-500">Basis voor de tekst van elke regel hieronder.</p>
             </div>
             <div>
               <label htmlFor={`${veld}-opslag`} className={labelStijl}>Opslag %</label>
@@ -326,7 +348,6 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                   if (v !== code.opslagPct) codePatch({ opslag_pct: v })
                 }}
               />
-              <p className="mt-1.5 text-[12.5px] text-neutral-500">Op nieuwe kosten.</p>
             </div>
             <div>
               <label htmlFor={`${veld}-groep`} className={labelStijl}>Indeling van de factuurregels</label>
@@ -339,61 +360,226 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
               >
                 {GROEPERINGEN.map(g => <option key={g.waarde} value={g.waarde}>{g.label}</option>)}
               </select>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500">
-                {GROEPERINGEN.find(g => g.waarde === code.groepering)?.uitleg}
-              </p>
             </div>
           </section>
 
-          {/* ── Wat er op de factuur komt ───────────────────────────────────── */}
-          <section>
-            <h3 className="mb-2 text-[13px] font-semibold text-neutral-800">Op de factuur</h3>
-            {code.groepen.length === 0 ? (
-              <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3.5 text-[13px] text-neutral-500">
-                Er staan geen openstaande boekingen op deze code, dus er valt niets te factureren.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-neutral-200">
-                <table className="w-full border-collapse">
-                  <thead className="bg-neutral-50">
-                    <tr className="border-b border-neutral-200 text-left">
-                      <th className={`${kop} w-9`} />
-                      <th className={kop}>Omschrijving op de factuur</th>
-                      <th className={`${kop} w-24 text-right`}>Aantal</th>
-                      <th className={`${kop} w-32 text-right`}>Bedrag excl.</th>
-                      <th className={`${kop} w-44`}>Btw</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {code.groepen.map((g: GroepView) => (
-                      <tr key={g.groepSleutel}
-                          className="border-b border-neutral-100 last:border-0"
-                          style={{ opacity: g.meefactureren ? 1 : 0.5 }}>
-                        <td className="px-2 py-2 align-middle">
-                          <Checkbox
-                            checked={g.meefactureren}
-                            disabled={opslot || bezig}
-                            aria-label="Deze regel meenemen op de factuur"
-                            onCheckedChange={v => groepPatch(g.groepSleutel, { meefactureren: v === true })}
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <BewaarVeld
-                            waarde={g.eigenOmschrijving ?? ''}
-                            placeholder={g.omschrijving}
-                            disabled={opslot || bezig}
-                            opslaan={t => groepPatch(g.groepSleutel, { omschrijving: t })}
-                          />
-                          <div className="mt-1 px-0.5 text-[11.5px] text-neutral-500">
-                            {g.aantalBoekingen} boeking{g.aantalBoekingen === 1 ? '' : 'en'}
-                            {' · berekend '}{fmt(g.berekend)}
-                            {g.handmatig ? ' · handmatig samengevoegd' : ''}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2 text-right text-[13px] tabular-nums text-neutral-600">
+          {/* ── Links de boekingen, rechts de factuur ───────────────────────── */}
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+
+            {/* Links: hoe het geboekt is */}
+            <section className="min-w-0">
+              <div className="mb-2 flex min-h-8 flex-wrap items-center gap-2">
+                <h3 className="text-[13px] font-semibold text-neutral-800">Geboekte uren en kosten</h3>
+                <span className="flex-1" />
+                {gekozen.length > 0 && !opslot && (
+                  <>
+                    <span className="text-[12.5px] text-neutral-500">{gekozen.length} geselecteerd</span>
+                    <Button variant="outline" size="sm" disabled={bezig || gekozen.length < 2} onClick={samenvoegen}>
+                      <Merge className="h-3.5 w-3.5" /> Samenvoegen
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={bezig} onClick={losmaken}>
+                      <Unlink className="h-3.5 w-3.5" /> Losmaken
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {code.boekingen.length === 0 ? (
+                <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3.5 text-[13px] text-neutral-500">
+                  Er is nog niets op deze bewakingscode geboekt.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                  <table className="w-full min-w-[720px] border-collapse">
+                    <thead className="bg-neutral-50">
+                      <tr className="border-b border-neutral-200 text-left">
+                        <th className={`${kop} w-8`} title="Staat op de factuur">Op</th>
+                        <th className={`${kop} w-16`}>Datum</th>
+                        <th className={kop}>Geboekt als</th>
+                        <th className={`${kop} w-16 text-right`}>Aantal</th>
+                        <th className={`${kop} w-20 text-right`}>Kostprijs</th>
+                        <th className={`${kop} w-[86px] text-right`}>Tarief</th>
+                        <th className={`${kop} w-[74px] text-right`}>Opslag</th>
+                        <th className={`${kop} w-[92px] text-right`}>Verkoop</th>
+                        <th className={`${kop} w-[74px]`}>Regel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {code.boekingen.map(b => {
+                        const vast = opslot || b.gefactureerd || bezig
+                        const isGekozen = selectie.has(b.sleutel)
+                        const licht = gemarkeerd != null && b.groepSleutel === gemarkeerd && !b.uitgesloten
+                        return (
+                          <tr
+                            key={b.sleutel}
+                            // De rij aanklikken selecteert hem. Het vinkje vooraan is bezet: dat zegt
+                            // of de boeking op de factuur komt, en dat is een andere vraag.
+                            onClick={() => { if (!opslot && !b.gefactureerd) wissel(b.sleutel) }}
+                            className={`border-b border-neutral-100 align-middle last:border-0 ${
+                              opslot || b.gefactureerd ? '' : 'cursor-pointer'
+                            } ${isGekozen ? 'bg-brand-50' : licht ? 'bg-neutral-100' : 'hover:bg-neutral-50'}`}
+                            style={{ opacity: b.gefactureerd || b.uitgesloten ? 0.5 : 1 }}
+                          >
+                            <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                              <Checkbox
+                                checked={!b.uitgesloten}
+                                disabled={vast}
+                                aria-label="Deze boeking op de factuur zetten"
+                                title={b.gefactureerd ? 'Staat al op een verstuurde factuur' : 'Op de factuur'}
+                                onCheckedChange={v => boekingPatch(b, { uitgesloten: v !== true })}
+                              />
+                            </td>
+                            <td className="px-1.5 py-2 text-[12.5px] tabular-nums text-neutral-500">
+                              {datumKort(b.datum)}
+                            </td>
+                            <td className="px-1.5 py-2">
+                              <div className="truncate text-[13px] text-neutral-800" title={b.omschrijving}>
+                                {b.omschrijving}
+                              </div>
+                              <div className="truncate text-[11.5px] text-neutral-500">
+                                {b.soort}
+                                {b.herkomst ? ` · ${b.herkomst}` : ''}
+                                {b.gefactureerd ? ' · gefactureerd' : b.uitgesloten ? ' · niet op de factuur' : ''}
+                              </div>
+                            </td>
+                            <td className="px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
+                              {b.bronType === 'uur' ? `${b.aantal ?? 0} u` : '1'}
+                            </td>
+                            <td className="px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-500">
+                              {fmt(b.inkoopBedrag)}
+                            </td>
+                            <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                              {/* Prijs per eenheid. Een kostenpost telt als één post en heeft er dus
+                                  geen; daar ís het verkoopbedrag de prijs. */}
+                              {b.aantal && b.aantal !== 0 ? (
+                                <BewaarVeld
+                                  waarde={alsTekst(b.verkoopTarief)}
+                                  uitlijnen="rechts"
+                                  eenheid={b.eenheid === 'uur' ? '/u' : ''}
+                                  titel={`Verkoopprijs per ${b.eenheid ?? 'eenheid'} — past het verkoopbedrag en de opslag aan`}
+                                  disabled={vast}
+                                  opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
+                                />
+                              ) : (
+                                <div className="px-1 text-right text-[13px] text-neutral-400">—</div>
+                              )}
+                            </td>
+                            <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                              {b.inkoopBedrag > 0 ? (
+                                <BewaarVeld
+                                  waarde={alsTekst(b.opslagPct)}
+                                  uitlijnen="rechts"
+                                  eenheid="%"
+                                  titel="Opslag op de kostprijs — past het verkoopbedrag en het tarief aan"
+                                  disabled={vast}
+                                  opslaan={t => boekingPatch(b, { opslagPct: getal(t) })}
+                                />
+                              ) : (
+                                <div className="px-1 text-right text-[13px] text-neutral-400"
+                                     title="Zonder kostprijs valt er geen opslag op te rekenen">—</div>
+                              )}
+                            </td>
+                            <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                              <BewaarVeld
+                                waarde={fmtGetal(b.verkoopBedrag)}
+                                uitlijnen="rechts"
+                                eenheid="€"
+                                eenheidVoor
+                                titel="Verkoopbedrag excl. btw — past het tarief en de opslag aan"
+                                disabled={vast}
+                                opslaan={t => boekingPatch(b, { verkoopBedrag: getal(t) })}
+                              />
+                            </td>
+                            <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                              <select
+                                value={b.handmatigToegewezen ? b.groepSleutel : ''}
+                                disabled={vast || b.uitgesloten}
+                                onChange={e => verplaats(b, e.target.value)}
+                                className={veldKlasse}
+                                title="Bij welke factuurregel hoort deze boeking"
+                                aria-label="Factuurregel"
+                              >
+                                <option value="">
+                                  {b.uitgesloten ? '—' : `${nummerVan.get(b.groepSleutel) ?? '?'} (auto)`}
+                                </option>
+                                {code.groepen.map(g => (
+                                  <option key={g.groepSleutel} value={g.groepSleutel}>
+                                    {nummerVan.get(g.groepSleutel)}
+                                  </option>
+                                ))}
+                                {/* Een uitgezette boeking telt in geen enkele groep mee, maar houdt
+                                    wel zijn toewijzing. Zonder deze optie zou de lijst leeg lijken en
+                                    bij de eerste aanraking stilletjes iets anders kiezen. */}
+                                {b.handmatigToegewezen
+                                  && !code.groepen.some(g => g.groepSleutel === b.groepSleutel) && (
+                                  <option value={b.groepSleutel}>eigen</option>
+                                )}
+                                <option value="__nieuw">nieuw…</option>
+                              </select>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!opslot && code.boekingen.length > 0 && (
+                <p className="mt-2 text-[12.5px] leading-relaxed text-neutral-500">
+                  Het vinkje zet een boeking op de factuur. Klik op een rij om hem te selecteren en
+                  meerdere boekingen tot één factuurregel samen te voegen.
+                </p>
+              )}
+            </section>
+
+            {/* Rechts: wat de klant leest */}
+            <section className="min-w-0">
+              <h3 className="mb-2 flex min-h-8 items-center text-[13px] font-semibold text-neutral-800">
+                Op de factuur
+              </h3>
+
+              {code.groepen.length === 0 ? (
+                <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3.5 text-[13px] text-neutral-500">
+                  Er staan geen boekingen op de factuur, dus er valt niets te factureren.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {code.groepen.map((g: GroepView, i) => (
+                    <div
+                      key={g.groepSleutel}
+                      onMouseEnter={() => setGemarkeerd(g.groepSleutel)}
+                      onMouseLeave={() => setGemarkeerd(null)}
+                      className={`rounded-lg border px-3.5 py-3 transition-colors ${
+                        gemarkeerd === g.groepSleutel ? 'border-brand-300 bg-brand-50/40' : 'border-neutral-200'
+                      }`}
+                      style={{ opacity: g.meefactureren ? 1 : 0.55 }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Nummer n={i + 1} gemarkeerd={gemarkeerd === g.groepSleutel} />
+                        <BewaarVeld
+                          waarde={g.eigenOmschrijving ?? ''}
+                          placeholder={g.omschrijving}
+                          disabled={opslot || bezig}
+                          titel="Omschrijving op de factuur"
+                          opslaan={t => groepPatch(g.groepSleutel, { omschrijving: t })}
+                        />
+                        <Checkbox
+                          checked={g.meefactureren}
+                          disabled={opslot || bezig}
+                          aria-label="Deze regel meenemen op de factuur"
+                          title="Deze regel meenemen op de factuur"
+                          onCheckedChange={v => groepPatch(g.groepSleutel, { meefactureren: v === true })}
+                        />
+                      </div>
+
+                      <div className="mt-2.5 flex items-center gap-2.5">
+                        <span className="min-w-0 flex-1 truncate text-[11.5px] text-neutral-500">
                           {g.eenheid === 'uur' ? `${g.aantal} uur` : '1 post'}
-                        </td>
-                        <td className="px-2 py-2">
+                          {' · '}{g.aantalBoekingen} boeking{g.aantalBoekingen === 1 ? '' : 'en'}
+                          {g.bedragOverride != null ? ` · berekend ${fmt(g.berekend)}` : ''}
+                          {g.handmatig ? ' · samengevoegd' : ''}
+                        </span>
+                        <div className="w-[110px] shrink-0">
                           <BewaarVeld
                             waarde={alsTekst(g.bedragOverride)}
                             placeholder={fmtGetal(g.berekend)}
@@ -404,193 +590,29 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             disabled={opslot || bezig}
                             opslaan={t => groepPatch(g.groepSleutel, { bedrag_excl_btw: getal(t) })}
                           />
-                        </td>
-                        <td className="px-2 py-2">
-                          <BtwKeuze
-                            waarde={g.btwTariefBouw7Id}
-                            tarieven={tarieven}
-                            disabled={opslot || bezig}
-                            leegLabel="Volg de factuur"
-                            opslaan={v => groepPatch(g.groepSleutel, { btw_tarief_bouw7_id: v })}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-neutral-200 bg-neutral-50 text-[14px] font-semibold text-neutral-900">
-                      <td />
-                      <td className="px-2 py-2.5">Samen op de factuur</td>
-                      <td />
-                      <td className="px-2 py-2.5 text-right tabular-nums">{fmt(code.bedrag)}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </section>
+                        </div>
+                      </div>
 
-          {/* ── De boekingen eronder ────────────────────────────────────────── */}
-          <section>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h3 className="text-[13px] font-semibold text-neutral-800">Geboekte uren en kosten</h3>
-              <span className="flex-1" />
-              {gekozen.length > 0 && !opslot && (
-                <>
-                  <span className="text-[12.5px] text-neutral-500">{gekozen.length} geselecteerd</span>
-                  <Button variant="outline" size="sm" disabled={bezig || gekozen.length < 2} onClick={samenvoegen}>
-                    <Merge className="h-3.5 w-3.5" /> Samenvoegen
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={bezig} onClick={() => zetUit(true)}>
-                    <EyeOff className="h-3.5 w-3.5" /> Uitzetten
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={bezig} onClick={() => zetUit(false)}>
-                    <Eye className="h-3.5 w-3.5" /> Aanzetten
-                  </Button>
-                </>
-              )}
-            </div>
-
-            {code.boekingen.length === 0 ? (
-              <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3.5 text-[13px] text-neutral-500">
-                Er is nog niets op deze bewakingscode geboekt.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-neutral-200">
-                <table className="w-full min-w-[860px] border-collapse">
-                  <thead className="bg-neutral-50">
-                    <tr className="border-b border-neutral-200 text-left">
-                      <th className={`${kop} w-9`}>
-                        <Checkbox
-                          checked={alles}
-                          disabled={opslot || teKiezen.length === 0}
-                          aria-label="Alles selecteren"
-                          onCheckedChange={v =>
-                            setSelectie(v === true ? new Set(teKiezen.map(b => b.sleutel)) : new Set())}
+                      <div className="mt-2">
+                        <BtwKeuze
+                          waarde={g.btwTariefBouw7Id}
+                          tarieven={tarieven}
+                          disabled={opslot || bezig}
+                          leegLabel="Btw: volg de factuur"
+                          opslaan={v => groepPatch(g.groepSleutel, { btw_tarief_bouw7_id: v })}
                         />
-                      </th>
-                      <th className={`${kop} w-20`}>Datum</th>
-                      <th className={kop}>Omschrijving</th>
-                      <th className={`${kop} w-20 text-right`}>Aantal</th>
-                      <th className={`${kop} w-24 text-right`}>Kostprijs</th>
-                      <th className={`${kop} w-28 text-right`}>Tarief</th>
-                      <th className={`${kop} w-24 text-right`}>Opslag</th>
-                      <th className={`${kop} w-28 text-right`}>Verkoop</th>
-                      <th className={`${kop} w-40`}>Factuurregel</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {code.boekingen.map(b => {
-                      const dood = b.gefactureerd || b.uitgesloten
-                      const vast = opslot || b.gefactureerd || bezig
-                      return (
-                        <tr key={b.sleutel}
-                            className="border-b border-neutral-100 align-middle last:border-0"
-                            style={{ opacity: dood ? 0.45 : 1 }}>
-                          <td className="px-2 py-2">
-                            <Checkbox
-                              checked={selectie.has(b.sleutel)}
-                              disabled={opslot || b.gefactureerd}
-                              aria-label="Deze boeking selecteren"
-                              onCheckedChange={() => wissel(b.sleutel)}
-                            />
-                          </td>
-                          <td className="px-2 py-2 text-[12.5px] tabular-nums text-neutral-500">
-                            {datumKort(b.datum)}
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="text-[13px] text-neutral-800">{b.omschrijving}</div>
-                            <div className="text-[11.5px] text-neutral-500">
-                              {b.soort}
-                              {b.herkomst ? ` · ${b.herkomst}` : ''}
-                              {b.gefactureerd ? ' · staat op een factuur' : b.uitgesloten ? ' · uitgezet' : ''}
-                            </div>
-                          </td>
-                          <td className="px-2 py-2 text-right text-[13px] tabular-nums text-neutral-600">
-                            {b.bronType === 'uur' ? `${b.aantal ?? 0} uur` : '1 post'}
-                          </td>
-                          <td className="px-2 py-2 text-right text-[13px] tabular-nums text-neutral-500">
-                            {fmt(b.inkoopBedrag)}
-                          </td>
-                          <td className="px-2 py-2">
-                            {/* Prijs per eenheid. Een kostenpost telt als één post en heeft er dus
-                                geen; daar ís het verkoopbedrag de prijs. */}
-                            {b.aantal && b.aantal !== 0 ? (
-                              <BewaarVeld
-                                waarde={alsTekst(b.verkoopTarief)}
-                                uitlijnen="rechts"
-                                eenheid={b.eenheid === 'uur' ? '/u' : ''}
-                                titel={`Verkoopprijs per ${b.eenheid ?? 'eenheid'} — past het verkoopbedrag en de opslag aan`}
-                                disabled={vast}
-                                opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
-                              />
-                            ) : (
-                              <div className="px-1 text-right text-[13px] text-neutral-400">—</div>
-                            )}
-                          </td>
-                          <td className="px-2 py-2">
-                            {b.inkoopBedrag > 0 ? (
-                              <BewaarVeld
-                                waarde={alsTekst(b.opslagPct)}
-                                uitlijnen="rechts"
-                                eenheid="%"
-                                titel="Opslag op de kostprijs — past het verkoopbedrag en het tarief aan"
-                                disabled={vast}
-                                opslaan={t => boekingPatch(b, { opslagPct: getal(t) })}
-                              />
-                            ) : (
-                              <div className="px-1 text-right text-[13px] text-neutral-400"
-                                   title="Zonder kostprijs valt er geen opslag op te rekenen">—</div>
-                            )}
-                          </td>
-                          <td className="px-2 py-2">
-                            <BewaarVeld
-                              waarde={fmtGetal(b.verkoopBedrag)}
-                              uitlijnen="rechts"
-                              eenheid="€"
-                              eenheidVoor
-                              titel="Verkoopbedrag excl. btw — past het tarief en de opslag aan"
-                              disabled={vast}
-                              opslaan={t => boekingPatch(b, { verkoopBedrag: getal(t) })}
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <select
-                              value={b.handmatigToegewezen ? b.groepSleutel : ''}
-                              disabled={vast}
-                              onChange={e => verplaats(b, e.target.value)}
-                              className={veldKlasse}
-                              aria-label="Bij welke factuurregel hoort deze boeking"
-                            >
-                              <option value="">Volg de indeling</option>
-                              {code.groepen.map(g => (
-                                <option key={g.groepSleutel} value={g.groepSleutel}>{g.omschrijving}</option>
-                              ))}
-                              {/* Een uitgezette boeking telt in geen enkele groep mee, maar houdt wel
-                                  zijn toewijzing. Zonder deze optie zou de keuzelijst leeg lijken en
-                                  bij de eerste aanraking stilletjes iets anders kiezen. */}
-                              {b.handmatigToegewezen
-                                && !code.groepen.some(g => g.groepSleutel === b.groepSleutel) && (
-                                <option value={b.groepSleutel}>Eigen regel (nu uitgezet)</option>
-                              )}
-                              <option value="__nieuw">Nieuwe regel…</option>
-                            </select>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {!opslot && (
-              <p className="mt-2 text-[12.5px] leading-relaxed text-neutral-500">
-                Een tarief of opslag rekent mee met wat er nog geboekt wordt; een verkoopbedrag zet die
-                regel vast. Uitgezette boekingen blijven staan voor een volgende factuur.
-              </p>
-            )}
-          </section>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex items-baseline justify-between gap-3 rounded-lg bg-neutral-100 px-3.5 py-3 text-[14px] font-semibold text-neutral-900">
+                    <span>Samen excl. btw</span>
+                    <span className="tabular-nums">{fmt(code.bedrag)}</span>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
         </DialogBody>
 
         <DialogFooter split>
