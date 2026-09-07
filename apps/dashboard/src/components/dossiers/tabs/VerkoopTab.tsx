@@ -6,6 +6,7 @@ import { fmt, fmtPct, fmtDatum, TH, TD, LegeStaat } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
+import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -63,31 +64,41 @@ function groepeerBtw(rijen: { pct: number | null; excl: number; btw: number }[])
 }
 
 async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
-  const [data, schemaAfwijking] = await Promise.all([
+  // Alles wat bepaalt óf er iets te tonen valt, wordt vóór de lege staat opgehaald. Stond het
+  // meerwerk daar eerst achter, dan bleef de tab leeg op een dossier met goedgekeurd meerwerk maar
+  // zonder aanneemsom of termijnen — precies het geval waarin je juist iets wilt zien.
+  const [data, schemaAfwijking, meerwerk, nacalculatieCodes] = await Promise.all([
     getDossierVerkoop(dossierId),
     // Faalt dit (geen offerte, geen betalingsconditie), dan blijft de banner gewoon weg.
     getTermijnAfwijking(dossierId).catch(() => null),
+    getDossierMeerwerk(dossierId).catch(() => null),
+    // Goedkope DB-lezing; het paneel zelf haalt zijn eigen (zwaardere) cijfers op.
+    getFactureerbareCodes(dossierId).catch(() => []),
   ])
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
 
-  if (!data.beschikbaar && !bg) {
+  const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
+  const heeftNacalculatie = nacalculatieCodes.length > 0
+
+  if (!data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie) {
     return (
       <LegeStaat
         titel="Geen verkoopgegevens"
-        tekst="Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen termijnen, facturen of betaalgegevens."
+        tekst="Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen termijnen, facturen, goedgekeurd meerwerk of betaalgegevens."
       />
     )
   }
 
   // EVA-native meerwerkregels zijn leidend voor het meerwerk in het contracttotaal; valt terug op het
-  // Bouw7-aggregaat uit getDossierVerkoop wanneer er nog geen goedgekeurde EVA-regels zijn.
-  const meerwerk = await getDossierMeerwerk(dossierId).catch(() => null)
+  // Bouw7-aggregaat uit getDossierVerkoop wanneer er geen goedgekeurde EVA-regels zijn.
+  //
+  // De voorwaarde kijkt naar het AANTAL regels, niet naar het bedrag. Bij per saldo minderwerk is de
+  // som negatief, en dan zou "bedrag > 0" het Bouw7-getal laten staan terwijl EVA de waarheid heeft.
   const meerwerkEva = meerwerk?.totalen.goedgekeurdExcl ?? 0
-  const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
   let t = data.totalen
   let dk = data.termijnenDekking
-  if (meerwerkEva > 0 && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
+  if (goedgekeurdeRegels.length > 0 && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
     const contractTotaal = t.aanneemsom + meerwerkEva
     t = { ...t, meerwerk: meerwerkEva, contractTotaal, openstaand: Math.max(0, contractTotaal - t.gefactureerd) }
     if (dk) {
