@@ -24,6 +24,7 @@ import RoosterBeheer from '@/components/planning/RoosterBeheer'
 import SkillBeheer from '@/components/planning/SkillBeheer'
 import { PageHeader, Card, CardBody, Avatar } from '@/components/ui'
 import MedewerkerGegevensForm from '@/components/medewerkers/MedewerkerGegevensForm'
+import Bouw7VeldenNotitie from '@/components/medewerkers/Bouw7VeldenNotitie'
 import BedrijfsmiddelenBeheer from '@/components/medewerkers/BedrijfsmiddelenBeheer'
 import CustomAttributenBeheer from '@/components/medewerkers/CustomAttributenBeheer'
 import BestandenBeheer from '@/components/medewerkers/BestandenBeheer'
@@ -278,6 +279,11 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
           {/* Gegevens (persoonlijk + organisatie + tarieven) */}
           <Card>
             <CardBody>
+              <Bouw7VeldenNotitie
+                medewerkerId={medewerker.id}
+                bouw7Id={medewerker.bouw7_id}
+                handmatigeVelden={medewerker.handmatige_velden}
+              />
               <MedewerkerGegevensForm
                 medewerker={medewerker}
                 werkmaatschappijen={werkmaatschappijen}

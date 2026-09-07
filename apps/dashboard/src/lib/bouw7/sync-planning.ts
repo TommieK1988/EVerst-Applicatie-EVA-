@@ -171,6 +171,21 @@ export async function syncDossierPlanning(
     const bouw7Id = dossier?.bouw7_id
     if (!bouw7Id) return result // dossier zonder Bouw7-koppeling → niets te syncen
 
+    // Wacht een EVA-wijziging op een Bouw7-planitem nog op de write-back (`bouw7_write_pending`),
+    // dan herbouwen we dit dossier niet: de rebuild zou die wijziging wissen. De herkansing in
+    // runFullSync draait hiervóór; slaagt die, dan is de vlag weg en loopt dit gewoon door.
+    const { data: wachtend } = await supabase
+      .from('planning_items')
+      .select('id, planning_activiteiten!inner ( dossier_id )')
+      .eq('bouw7_write_pending', true)
+      .eq('planning_activiteiten.dossier_id', dossierId)
+      .limit(1)
+    if ((wachtend ?? []).length > 0) {
+      result.overgeslagen = 1
+      result.foutMelding = 'EVA-wijziging wacht nog op Bouw7; planning niet herbouwd'
+      return result
+    }
+
     const client = opts?.client ?? (await getBouw7Client())
     const alleItems = opts?.planItems ?? (await fetchPlanItems(String(bouw7Id), client))
 
@@ -314,13 +329,32 @@ export async function syncDossierPlanning(
       return { start: actief?.dagstart ?? DEFAULT_DAGSTART, eind: actief?.dageind ?? DEFAULT_DAGEIND }
     }
 
-    // ── 3. Activiteiten (Taken) volledig herbouwen ────────────────────
-    // Bestaande Bouw7-activiteiten verwijderen → planning_items cascaden mee.
-    await supabase
+    // ── 3. Activiteiten (Taken) reconciliëren ─────────────────────────
+    // Tot sep 2026 werden alle Bouw7-activiteiten verwijderd en opnieuw ingevoegd (planitems
+    // cascadeerden mee). Dat wiste wat EVA eraan had toegevoegd: de status, de volgorde én
+    // EVA-planitems die onder een Bouw7-activiteit hingen. Nu blijft een bestaande activiteit
+    // (zelfde groepssleutel) staan en worden alleen de uit Bouw7 afgeleide velden bijgewerkt.
+    // De Bouw7-planitems eronder worden wél opnieuw opgebouwd — dat is de eigenlijke sync.
+    const { data: bestaandeActs } = await supabase
       .from('planning_activiteiten')
-      .delete()
+      .select('id, bouw7_id')
       .eq('dossier_id', dossierId)
       .eq('bron', 'bouw7')
+    const actMap = new Map<string, string>() // groepssleutel (bouw7_id) → uuid
+    for (const a of (bestaandeActs ?? []) as { id: string; bouw7_id: string | null }[]) {
+      if (a.bouw7_id) actMap.set(a.bouw7_id, a.id)
+    }
+    if (actMap.size > 0) {
+      const ids = [...actMap.values()]
+      for (let i = 0; i < ids.length; i += 200) {
+        await supabase
+          .from('planning_items')
+          .delete()
+          .eq('bron', 'bouw7')
+          .in('activiteit_id', ids.slice(i, i + 200))
+      }
+    }
+    const gezieneGroepen = new Set<string>()
 
     // Titel van een plan-item bepalen (crewblok → afdeling, anders naam).
     const titelVan = (pi: Bouw7PlanItem): string =>
@@ -371,32 +405,54 @@ export async function syncDossierPlanning(
       // Bewakingscode uit het eerste plan-item (groep zit binnen één fase).
       const secCode = eerste.securityPlanningLink?.securityCode ?? null
 
-      const { data: act, error: actErr } = await supabase
-        .from('planning_activiteiten')
-        .insert({
-          dossier_id: dossierId,
-          fase_id: faseMap.get(faseKey) ?? null,
-          titel,
-          omschrijving,
-          bewakingscode: secCode?.code?.trim() || null,
-          bouw7_security_code_id: secCode?.id ?? null,
-          geschatte_uren: urenTotaal || null,
-          gewenste_start: toDate(gewensteStart),
-          deadline: toDate(deadline),
-          status: 'gepland',
-          volgorde: activiteitVolg++,
-          bron: 'bouw7',
-          bouw7_id: `group:${faseKey}:${titel.toLowerCase()}`,
-          bouw7_laatst_sync: nu,
-        })
-        .select('id')
-        .single()
+      const groepSleutel = `group:${faseKey}:${titel.toLowerCase()}`
+      gezieneGroepen.add(groepSleutel)
+      const afgeleid = {
+        fase_id: faseMap.get(faseKey) ?? null,
+        titel,
+        omschrijving,
+        bewakingscode: secCode?.code?.trim() || null,
+        bouw7_security_code_id: secCode?.id ?? null,
+        geschatte_uren: urenTotaal || null,
+        gewenste_start: toDate(gewensteStart),
+        deadline: toDate(deadline),
+        bouw7_laatst_sync: nu,
+      }
+      const bestaandeActId = actMap.get(groepSleutel)
+      let act: { id: string } | null = null
+      let actErr: { message: string } | null = null
+      if (bestaandeActId) {
+        // Bestaande activiteit: status en volgorde zijn EVA-eigen en blijven staan.
+        const r = await supabase
+          .from('planning_activiteiten')
+          .update(afgeleid)
+          .eq('id', bestaandeActId)
+          .select('id')
+          .single()
+        act = r.data; actErr = r.error
+        activiteitVolg++
+      } else {
+        const r = await supabase
+          .from('planning_activiteiten')
+          .insert({
+            dossier_id: dossierId,
+            ...afgeleid,
+            status: 'gepland',
+            volgorde: activiteitVolg++,
+            bron: 'bouw7',
+            bouw7_id: groepSleutel,
+          })
+          .select('id')
+          .single()
+        act = r.data; actErr = r.error
+      }
 
       if (actErr || !act) {
         result.fouten++
         continue
       }
-      result.nieuw++
+      if (bestaandeActId) result.bijgewerkt++
+      else result.nieuw++
 
       // ── 4. Planitems per plan-item × toegewezen medewerker ──────────
       // Elk planitem behoudt de eigen datums/uren van zijn plan-item.
@@ -452,6 +508,29 @@ export async function syncDossierPlanning(
           result.fouten++
           result.foutMelding = itemErr.message
         }
+      }
+    }
+
+    // Bouw7-activiteiten die niet meer voorkomen: weg — tenzij er EVA-planitems onder hangen.
+    // Die activiteit wordt dan van EVA (bron='eva'), zodat die planning niet stilletjes verdwijnt.
+    const stale = [...actMap.entries()].filter(([key]) => !gezieneGroepen.has(key)).map(([, id]) => id)
+    if (stale.length > 0) {
+      const { data: metEva } = await supabase
+        .from('planning_items')
+        .select('activiteit_id')
+        .eq('bron', 'eva')
+        .in('activiteit_id', stale)
+      const behouden = new Set<string>((metEva ?? []).map((r: { activiteit_id: string }) => r.activiteit_id))
+      const weg = stale.filter(id => !behouden.has(id))
+      if (weg.length > 0) {
+        const { error: staleErr } = await supabase.from('planning_activiteiten').delete().in('id', weg)
+        if (staleErr) { result.fouten++; result.foutMelding = staleErr.message }
+      }
+      if (behouden.size > 0) {
+        await supabase
+          .from('planning_activiteiten')
+          .update({ bron: 'eva', bouw7_id: null })
+          .in('id', [...behouden])
       }
     }
 
@@ -537,8 +616,9 @@ async function resolveMedewerkers(
       }
     })
   if (stubs.length > 0) {
-    // medewerkers heeft een volledige unique constraint op bouw7_id → upsert mag.
-    await supabase.from('medewerkers').upsert(stubs, { onConflict: 'bouw7_id' })
+    // medewerkers heeft een volledige unique constraint op bouw7_id → upsert mag. Alleen
+    // aanmaken wat ontbreekt: een stub mag een bestaande rij nooit overschrijven.
+    await supabase.from('medewerkers').upsert(stubs, { onConflict: 'bouw7_id', ignoreDuplicates: true })
     const { data: med2 } = await supabase
       .from('medewerkers')
       .select('id, bouw7_id')

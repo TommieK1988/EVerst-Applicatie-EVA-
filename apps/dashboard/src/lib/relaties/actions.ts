@@ -15,13 +15,15 @@ import type {
   OmzetData,
 } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, beschermdeVelden } from './sync-velden'
+import { markeerHandmatig, BOUW7_BANK_VELDEN } from '@/lib/bouw7/handmatige-velden'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
 /**
  * Voegt kolomnamen toe aan `handmatige_velden`, zodat de Bouw7-lees-sync ze niet
  * meer overschrijft. Geeft de samengevoegde lijst terug zodat de aanroeper hem in
- * dezelfde update kan meenemen.
+ * dezelfde update kan meenemen. Dunne wrapper om de generieke helper, met het
+ * tabel-type als typebeveiliging.
  */
 async function metHandmatigeVelden(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,13 +32,7 @@ async function metHandmatigeVelden(
   id: string,
   velden: string[],
 ): Promise<string[] | null> {
-  if (velden.length === 0) return null
-  const { data } = await supabase
-    .from(tabel)
-    .select('handmatige_velden')
-    .eq('id', id)
-    .single()
-  return [...new Set([...(data?.handmatige_velden ?? []), ...velden])]
+  return markeerHandmatig(supabase, tabel, id, velden)
 }
 
 /* ─── Organisaties ─────────────────────────────────────────────────── */
@@ -152,6 +148,11 @@ export async function herstelBouw7Velden(id: string): Promise<ActionResult> {
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+  // De bankgegevens (IBAN) volgen dezelfde keuze: ook die weer uit Bouw7 laten komen.
+  await supabase
+    .from('relatie_bankgegevens')
+    .update({ handmatige_velden: [] })
+    .eq('relatie_id', id)
   revalidatePath(`/relaties/${id}`)
   return { ok: true }
 }
@@ -238,9 +239,26 @@ export async function upsertBankgegevens(
   data: Pick<RelatieBankgegevens, 'iban' | 'bic' | 'tenaamstelling' | 'opmerkingen'>
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
+
+  // Het IBAN komt ook uit Bouw7; een in EVA gecorrigeerd nummer mag de sync niet terugzetten.
+  // De rij is 1:1 op relatie_id, dus de bestaande markering lezen we op die sleutel.
+  const gewijzigd = beschermdeVelden(data, BOUW7_BANK_VELDEN)
+  let handmatig: string[] | undefined
+  if (gewijzigd.length > 0) {
+    const { data: bestaand } = await supabase
+      .from('relatie_bankgegevens')
+      .select('handmatige_velden')
+      .eq('relatie_id', relatie_id)
+      .maybeSingle()
+    handmatig = [...new Set([...((bestaand?.handmatige_velden as string[] | null) ?? []), ...gewijzigd])]
+  }
+
   const { error } = await supabase
     .from('relatie_bankgegevens')
-    .upsert({ relatie_id, ...data }, { onConflict: 'relatie_id' })
+    .upsert(
+      { relatie_id, ...data, ...(handmatig ? { handmatige_velden: handmatig } : {}) },
+      { onConflict: 'relatie_id' },
+    )
 
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/relaties/${relatie_id}`)

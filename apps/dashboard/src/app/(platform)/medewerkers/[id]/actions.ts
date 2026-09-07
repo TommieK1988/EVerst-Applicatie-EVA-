@@ -24,6 +24,7 @@ import { verstuurMailNamensMedewerker } from '@/lib/o365/mail'
 import { O365TokenError } from '@/lib/o365/tokens'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
+import { markeerHandmatig, beschermdeVelden, BOUW7_MEDEWERKER_VELDEN } from '@/lib/bouw7/handmatige-velden'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -230,7 +231,27 @@ export async function updateMedewerkerGegevens(
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
 
   const supabase = db()
-  const { error } = await supabase.from('medewerkers').update(parsed.data).eq('id', id)
+
+  // Velden die ook uit Bouw7 komen: alleen markeren wat écht verandert, zodat het opslaan van
+  // een ongewijzigd formulier de medewerker niet losknipt van de Bouw7-sync.
+  const { data: huidig } = await supabase
+    .from('medewerkers')
+    .select('bouw7_id, ' + BOUW7_MEDEWERKER_VELDEN.join(', '))
+    .eq('id', id)
+    .maybeSingle()
+  const gewijzigd = huidig?.bouw7_id
+    ? beschermdeVelden(parsed.data, BOUW7_MEDEWERKER_VELDEN).filter(k => {
+        const oud = huidig[k]
+        const nieuw = (parsed.data as Record<string, unknown>)[k]
+        return (oud ?? null) !== (nieuw ?? null)
+      })
+    : []
+  const handmatig = await markeerHandmatig(supabase, 'medewerkers', id, gewijzigd)
+
+  const { error } = await supabase
+    .from('medewerkers')
+    .update(handmatig ? { ...parsed.data, handmatige_velden: handmatig } : parsed.data)
+    .eq('id', id)
   if (error) return { ok: false, error: error.message }
 
   // Als een functie is ingesteld, controleer of er al een actief rooster bestaat.
@@ -649,5 +670,17 @@ export async function ontkoppelOffice365(medewerker_id: string): Promise<ActionR
 
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
+  return { ok: true }
+}
+
+/**
+ * Laat de in EVA aangepaste Bouw7-velden van een medewerker weer meelopen met de sync.
+ * De eerstvolgende volledige sync zet ze terug op de waarden uit Bouw7.
+ */
+export async function herstelMedewerkerBouw7Velden(id: string): Promise<ActionResult> {
+  const nope = await eisMedewerkers('schrijven'); if (nope) return nope
+  const { error } = await db().from('medewerkers').update({ handmatige_velden: [] }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(`/medewerkers/${id}`)
   return { ok: true }
 }

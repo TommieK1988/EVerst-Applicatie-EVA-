@@ -167,6 +167,8 @@ export type ContactpersoonOrganisatie = {
   contactpersoon_id: string
   organisatie_id: string
   functie: string | null
+  /** True als de functie in EVA is gezet; de Bouw7-sync laat hem dan staan. */
+  functie_handmatig: boolean
   is_primair: boolean
   opmerkingen: string | null
   created_at: string
@@ -205,6 +207,8 @@ export type RelatieBankgegevens = {
   bic: string | null
   tenaamstelling: string | null
   opmerkingen: string | null
+  /** Kolommen die in EVA zijn bewerkt en die de Bouw7-sync niet meer overschrijft (alleen `iban` komt uit Bouw7). */
+  handmatige_velden: string[]
   created_at: string
   updated_at: string
 }
@@ -553,6 +557,11 @@ export type Dossier = {
   bouw7_aanmaakdatum: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null
+  /**
+   * Kolommen die in EVA zijn bewerkt en die de Bouw7-sync niet meer overschrijft. Voor
+   * rollen en statussen alleen gevuld zolang de write-back naar Bouw7 nog niet is gelukt.
+   */
+  handmatige_velden: string[]
   /** Cache van de gekoppelde SharePoint-dossiermap (driveItem binnen O365_DOSSIER_DRIVE_ID). */
   sharepoint_drive_id: string | null
   sharepoint_item_id: string | null
@@ -826,6 +835,8 @@ export type Medewerker = {
   bouw7_laatst_sync: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   bouw7_sync_fout: string | null
+  /** Kolommen die in EVA zijn bewerkt en die de Bouw7-sync niet meer overschrijft. */
+  handmatige_velden: string[]
   // Uitgebreide persoonsgegevens
   adres_straat: string | null
   adres_postcode: string | null
@@ -1132,6 +1143,8 @@ export type PlanningItem = {
   /** Externe sleutel bij bron='bouw7' ({planItemId}:{employeeId}) */
   bouw7_id: string | null
   bouw7_laatst_sync: string | null
+  /** True zolang een EVA-wijziging op dit planitem nog niet naar Bouw7 is weggeschreven. */
+  bouw7_write_pending: boolean
   created_at: string
   updated_at: string
 }

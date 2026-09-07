@@ -7,6 +7,8 @@ import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 import { vergeetBouw7Config } from '@/lib/bouw7/config'
 import { zorgVoorStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
+import { herhaalUitgesteldeDossierWrites } from '@/lib/dossiers/bouw7-retry'
+import { herhaalUitgesteldePlanningWrites } from '@/lib/bouw7/plan-item-write'
 
 type Integratie = {
   id: string
@@ -111,6 +113,11 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     const contacts = await syncContacts({ mode })
     const employees = await syncEmployees({ mode })
     const daysOff = await syncDaysOff({ mode })
+    // Eerst de write-backs die eerder mislukten (rollen, statussen, verplaatste planitems)
+    // opnieuw proberen. Zolang die openstaan beschermt EVA die velden tegen de lees-sync
+    // hieronder; slagen ze, dan mag Bouw7 weer leidend zijn. Zie lib/bouw7/handmatige-velden.ts.
+    await herhaalUitgesteldeDossierWrites().catch(() => {})
+    await herhaalUitgesteldePlanningWrites().catch(() => {})
     const projects = await syncProjects({ mode })
     const planning = await syncAllPlanning({ mode })
     const debiteuren = await syncDebiteuren({ mode })
@@ -166,6 +173,9 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     if (!bouw7Id) return { ok: false, error: 'Dit dossier heeft geen Bouw7-koppeling.' }
 
     const ids = [String(bouw7Id)]
+    // Openstaande write-backs van dit dossier eerst, om dezelfde reden als in runFullSync.
+    await herhaalUitgesteldeDossierWrites({ dossierId }).catch(() => {})
+    await herhaalUitgesteldePlanningWrites({ dossierId }).catch(() => {})
     const projects = await syncProjects({ onlyBouw7Ids: ids })
     const planning = await syncDossierPlanning(dossierId, { mode: 'full' })
     // Bouw7-aantekeningen op dit dossier meepakken (scoped op dit ene bouw7_id).

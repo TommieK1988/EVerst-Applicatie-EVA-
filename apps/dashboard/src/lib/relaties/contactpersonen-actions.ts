@@ -225,9 +225,11 @@ export async function updateContactpersoonLink(
   patch: { functie?: string | null; is_primair?: boolean }
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
+  // De functie komt ook uit Bouw7 (jobTitle); zodra hij hier is gezet laat de sync hem staan.
+  const update = patch.functie !== undefined ? { ...patch, functie_handmatig: true } : patch
   const { error } = await supabase
     .from('contactpersoon_organisaties')
-    .update(patch)
+    .update(update)
     .eq('id', link_id)
 
   if (error) return { ok: false, error: error.message }

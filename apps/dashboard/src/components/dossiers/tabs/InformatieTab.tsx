@@ -9,7 +9,7 @@ import {
   getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie } from '@/lib/dossiers/actions'
+import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden } from '@/lib/dossiers/actions'
 import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
@@ -1884,6 +1884,12 @@ export function InformatieTab({
                 werkadres-contact, interne opmerkingen) blijven gewoon bewerkbaar.
               </p>
             )}
+            {bouw7Vergrendeld && !readOnly && (
+              <DossierBouw7VeldenNotitie
+                dossierId={dossier.id}
+                handmatigeVelden={(dossier as { handmatige_velden?: string[] | null }).handmatige_velden}
+              />
+            )}
         </InklapbareCard>
 
         {/* Rechterkolom: Acties, Notities en Klantchat. Beslaat drie rijen, zodat elk van
@@ -2279,4 +2285,63 @@ export function InformatieTab({
   }
 
   return inhoud
+}
+
+/* ─── In EVA aangepaste Bouw7-velden ────────────────────────────────── */
+
+const DOSSIER_HANDMATIG_LABELS: Record<string, string> = {
+  titel: 'projectnaam', klant_id: 'opdrachtgever', contactpersoon_id: 'contactpersoon',
+  categorie: 'categorie', referentie: 'referentie', opmerkingen: 'opmerkingen',
+  werkadres_straat: 'werkadres', werkadres_postcode: 'werkadres', werkadres_stad: 'werkadres',
+  verwacht_startdatum: 'verwachte start', verwacht_einddatum: 'verwachte einddatum',
+  object_id: 'object', servicedesk_substatus: 'servicedesk-kolom',
+  project_manager_id: 'rollen (wacht op Bouw7)', uitvoerder_id: 'rollen (wacht op Bouw7)',
+  calculator_id: 'rollen (wacht op Bouw7)', werkvoorbereider_id: 'rollen (wacht op Bouw7)',
+  controller_id: 'rollen (wacht op Bouw7)',
+  hoofdstatus: 'status (wacht op Bouw7)', aanvraag_substatus: 'status (wacht op Bouw7)',
+  offerte_substatus: 'status (wacht op Bouw7)', opdracht_substatus: 'status (wacht op Bouw7)',
+}
+
+/**
+ * Toont welke dossiervelden in EVA zijn aangepast en daardoor niet meer uit Bouw7 worden
+ * bijgewerkt, met de knop om ze weer te laten meelopen. Rollen en statussen staan er alleen
+ * bij zolang de write-back naar Bouw7 nog niet is gelukt (de cron probeert dat opnieuw).
+ * Zelfde patroon als op de relatiepagina.
+ */
+function DossierBouw7VeldenNotitie({ dossierId, handmatigeVelden }: {
+  dossierId: string
+  handmatigeVelden: string[] | null | undefined
+}) {
+  const [bezig, setBezig] = useState(false)
+  const router = useRouter()
+  const { bevestig } = useDialogen()
+
+  const labels = [...new Set((handmatigeVelden ?? []).map(v => DOSSIER_HANDMATIG_LABELS[v]).filter(Boolean))]
+  if (labels.length === 0) return null
+
+  async function herstel() {
+    if (!await bevestig({
+      titel: 'Weer bijwerken vanuit Bouw7?',
+      omschrijving: 'De eerstvolgende synchronisatie zet deze velden terug op de waarden uit Bouw7. Je aanpassingen in EVA gaan daarbij verloren.',
+      bevestigLabel: 'Weer laten bijwerken',
+    })) return
+    setBezig(true)
+    const res = await herstelDossierBouw7Velden(dossierId)
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    router.refresh()
+    toast.success('Velden volgen weer Bouw7')
+  }
+
+  return (
+    <div className="mt-2 flex items-start justify-between gap-3 rounded-md bg-neutral-50 px-3 py-2">
+      <p className="text-[11px] leading-snug text-neutral-500">
+        In EVA aangepast en niet meer bijgewerkt vanuit Bouw7:{' '}
+        <span className="font-semibold text-neutral-700">{labels.join(', ')}</span>
+      </p>
+      <Button variant="ghost" size="sm" onClick={herstel} disabled={bezig}>
+        {bezig ? 'Bezig…' : 'Weer uit Bouw7'}
+      </Button>
+    </div>
+  )
 }

@@ -169,7 +169,7 @@ const HANDMATIG_VELD_LABELS: Record<string, string> = {
   naam: 'naam', kvk_nummer: 'KvK-nummer', btw_nummer: 'BTW-nummer', email: 'e-mailadres',
   telefoon: 'telefoon', mobiel: 'mobiel', opmerkingen: 'opmerkingen',
   adres_straat: 'straat', adres_postcode: 'postcode', adres_plaats: 'plaats',
-  adres_land: 'land', actief: 'actief',
+  adres_land: 'land', actief: 'actief', betalingstermijn_dagen: 'betalingstermijn',
 }
 
 /**

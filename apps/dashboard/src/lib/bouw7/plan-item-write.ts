@@ -61,13 +61,22 @@ function naarBouw7Datum(ts: string): string {
 /** Het EVA-planitem met alles wat de Bouw7-body nodig heeft. */
 type ItemContext = {
   itemId:         string
+  /** 'eva' = door EVA aangemaakt; 'bouw7' = uit Bouw7 geïmporteerd en in EVA gewijzigd. */
+  bron:           'eva' | 'bouw7'
+  /** Bouw7 plan-item-id. Bij bron='bouw7' het kale id vóór de dubbele punt in `bouw7_id`. */
   bouw7Id:        number | null
+  /** Bij bron='bouw7': de medewerker waarmee de rij is geïmporteerd (suffix van `bouw7_id`). */
+  vorigeEmployeeId: number | null
+  activiteitId:   string
   projectId:      number
   employeeId:     number
   titel:          string
   omschrijving:   string | null
   startDate:      string
   endDate:        string
+  /** De ruwe EVA-timestamps, om zusterrijen mee te schuiven. */
+  startDt:        string
+  eindDt:         string
   hours:          number
   securityCodeId: number | null
   /** Naam van de projectleider van het dossier — bepaalt de kleur van de balk in Bouw7. */
@@ -76,15 +85,21 @@ type ItemContext = {
 
 /**
  * Haal één planitem op met dossier-, medewerker- en activiteitgegevens. Geeft `null` als
- * het item niet terugschrijfbaar is: geen Bouw7-dossier, geen Bouw7-medewerker, of een rij
- * die uit Bouw7 zelf komt (`bron='bouw7'` schrijven we nooit terug — dan zouden lees- en
- * schrijfsync elkaar aan het werk houden).
+ * het item niet terugschrijfbaar is: geen Bouw7-dossier, geen Bouw7-medewerker, of een
+ * Bouw7-rij zonder herleidbaar plan-item-id.
+ *
+ * Rijen met bron='bouw7' worden sinds sep 2026 wél teruggeschreven. Daarvóór niet — "dan
+ * zouden lees- en schrijfsync elkaar aan het werk houden" — maar het gevolg was dat een
+ * planner een Bouw7-balk in EVA kon verslepen en de rebuild die verplaatsing de volgende
+ * ochtend stil terugdraaide. De lees-sync is daar niet op gebouwd om iets terug te schrijven,
+ * dus een lus ontstaat niet: zij importeert alleen wat er in Bouw7 staat, en dat is na deze
+ * write precies de EVA-stand.
  */
 async function laadContext(itemId: string): Promise<ItemContext | null> {
   const { data } = await db()
     .from('planning_items')
     .select(`
-      id, bouw7_id, bron, start_dt, eind_dt, uren,
+      id, bouw7_id, bron, start_dt, eind_dt, uren, activiteit_id,
       medewerkers!medewerker_id ( bouw7_id ),
       planning_activiteiten!activiteit_id (
         titel, omschrijving, bouw7_security_code_id,
@@ -97,7 +112,7 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
     .eq('id', itemId)
     .maybeSingle()
 
-  if (!data || data.bron !== 'eva') return null
+  if (!data || (data.bron !== 'eva' && data.bron !== 'bouw7')) return null
 
   const act = data.planning_activiteiten
   const pl = act?.dossiers?.projectleider ?? null
@@ -105,15 +120,26 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
   const employeeId = Number(data.medewerkers?.bouw7_id)
   if (!projectId || !employeeId) return null
 
+  // bron='eva': `bouw7_id` is het kale plan-item-id. bron='bouw7': "<planItemId>:<employeeId>".
+  const delen = typeof data.bouw7_id === 'string' ? data.bouw7_id.split(':') : []
+  const bouw7Id = data.bouw7_id ? Number(delen[0]) : null
+  const vorigeEmployeeId = data.bron === 'bouw7' && delen[1] ? Number(delen[1]) : null
+  if (data.bron === 'bouw7' && !bouw7Id) return null
+
   return {
     itemId:         data.id,
-    bouw7Id:        data.bouw7_id ? Number(data.bouw7_id) : null,
+    bron:           data.bron,
+    bouw7Id:        bouw7Id && Number.isFinite(bouw7Id) ? bouw7Id : null,
+    vorigeEmployeeId: vorigeEmployeeId && Number.isFinite(vorigeEmployeeId) ? vorigeEmployeeId : null,
+    activiteitId:   data.activiteit_id,
     projectId,
     employeeId,
     titel:          (act?.titel ?? '').trim() || 'Planning',
     omschrijving:   act?.omschrijving ?? null,
     startDate:      naarBouw7Datum(data.start_dt),
     endDate:        naarBouw7Datum(data.eind_dt),
+    startDt:        data.start_dt,
+    eindDt:         data.eind_dt,
     hours:          Number(data.uren) || 0,
     securityCodeId: act?.bouw7_security_code_id ?? null,
     projectleider:  pl ? {
@@ -243,12 +269,18 @@ function kiesKleur(
  * geïmporteerd moet worden (zie `evaEigenPlanItemIds`).
  */
 export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
+  let ctx: ItemContext | null = null
   try {
-    const ctx = await laadContext(itemId)
+    ctx = await laadContext(itemId)
     if (!ctx) return
 
     const client = await getBouw7ClientOfNull()
     if (!client) return
+
+    if (ctx.bron === 'bouw7') {
+      await schrijfBouw7ItemWijziging(client, ctx)
+      return
+    }
 
     const linkId = await zoekPlanningLink(client, ctx.projectId, ctx.securityCodeId)
     const kleur  = kiesKleur(await haalKleuren(client), ctx.projectleider)
@@ -277,7 +309,114 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
       .eq('id', itemId)
   } catch (e) {
     console.error('[plan-item-write] wegschrijven planitem mislukt:', e)
+    // Een Bouw7-rij die niet is weggeschreven moet de rebuild overleven: vlag zetten, de
+    // planning-sync slaat het dossier dan over en de cron probeert het opnieuw.
+    if (ctx?.bron === 'bouw7') {
+      await db().from('planning_items').update({ bouw7_write_pending: true }).eq('id', itemId).then(() => {}, () => {})
+    }
   }
+}
+
+/** Het deel van `GET /plan-item/{id}` dat we hier nodig hebben. */
+type Bouw7PlanItemStand = { id: number; employees?: { id: number }[] | null }
+
+/**
+ * Wijziging op een uit Bouw7 geïmporteerd planitem terugschrijven: datums, uren en — bij een
+ * medewerkerwissel — de toewijzing. Partiële upsert met `id` (zie WRITE-ENDPOINTS.md §5b), dus
+ * naam, notities, kleur en bewakingscode-link blijven ongemoeid.
+ *
+ * Eén Bouw7 plan-item kan meerdere medewerkers hebben; EVA heeft per medewerker een rij.
+ * Verplaatsen van één rij verplaatst dus het hele item — Bouw7 kent maar één datumbereik per
+ * item. Daarom schuiven de zusterrijen (zelfde plan-item, andere medewerker) in EVA mee, zodat
+ * scherm en Bouw7 gelijk blijven.
+ *
+ * De toewijzing wordt uit Bouw7 gelezen en niet uit EVA opgebouwd: Bouw7 kan medewerkers op het
+ * item hebben die EVA niet kent (die krijgen bij de import geen rij) en die mogen we niet
+ * wegschrijven. Alleen de medewerker waarmee deze rij is geïmporteerd wordt vervangen door de
+ * huidige. Er gaat nooit een lege lijst mee: wat `employees: []` doet is niet getest.
+ */
+async function schrijfBouw7ItemWijziging(client: Bouw7Client, ctx: ItemContext): Promise<void> {
+  if (!ctx.bouw7Id) return
+  const stand = await client.get<Bouw7PlanItemStand>(`/plan-item/${ctx.bouw7Id}`)
+  const huidig = (stand?.employees ?? []).map(e => e.id).filter(id => Number.isFinite(id))
+  const employees = new Set<number>(huidig)
+  if (ctx.vorigeEmployeeId != null && ctx.vorigeEmployeeId !== ctx.employeeId) employees.delete(ctx.vorigeEmployeeId)
+  employees.add(ctx.employeeId)
+
+  await client.post('/plan-item', {
+    id:        ctx.bouw7Id,
+    startDate: ctx.startDate,
+    endDate:   ctx.endDate,
+    hours:     ctx.hours,
+    employees: [...employees].map(id => ({ id })),
+  })
+
+  const nu = new Date().toISOString()
+  await db()
+    .from('planning_items')
+    .update({
+      // Na een medewerkerwissel de sleutel bijwerken: zo herkent de lees-sync de rij weer.
+      bouw7_id: `${ctx.bouw7Id}:${ctx.employeeId}`,
+      bouw7_write_pending: false,
+      bouw7_laatst_sync: nu,
+    })
+    .eq('id', ctx.itemId)
+
+  // Zusterrijen meeschuiven (zelfde plan-item onder dezelfde activiteit).
+  const { data: zusters } = await db()
+    .from('planning_items')
+    .select('id')
+    .eq('activiteit_id', ctx.activiteitId)
+    .eq('bron', 'bouw7')
+    .like('bouw7_id', `${ctx.bouw7Id}:%`)
+    .neq('id', ctx.itemId)
+  const zusterIds = ((zusters ?? []) as { id: string }[]).map(z => z.id)
+  if (zusterIds.length > 0) {
+    await db()
+      .from('planning_items')
+      .update({ start_dt: ctx.startDt, eind_dt: ctx.eindDt, uren: ctx.hours, bouw7_laatst_sync: nu })
+      .in('id', zusterIds)
+  }
+}
+
+/**
+ * Haal één medewerker van een Bouw7 plan-item af, of verwijder het item als dat de laatste was.
+ * Voor het verwijderen van een uit Bouw7 geïmporteerde rij in EVA. Gooit bij een Bouw7-fout,
+ * zodat de aanroeper de EVA-verwijdering kan weigeren — anders zet de rebuild de rij terug.
+ */
+export async function verwijderMedewerkerVanBouw7PlanItem(planItemId: number, employeeId: number): Promise<void> {
+  const client = await getBouw7ClientOfNull()
+  if (!client) return
+  const stand = await client.get<Bouw7PlanItemStand>(`/plan-item/${planItemId}`)
+  const overig = (stand?.employees ?? []).map(e => e.id).filter(id => Number.isFinite(id) && id !== employeeId)
+  if (overig.length === 0) {
+    await client.del('/plan-item', { id: planItemId })
+  } else {
+    await client.post('/plan-item', { id: planItemId, employees: overig.map(id => ({ id })) })
+  }
+}
+
+/**
+ * Herkansing voor Bouw7-planitems waarvan de EVA-wijziging nog niet is weggeschreven
+ * (`bouw7_write_pending`). Aangeroepen door de cron vóór de planning-sync; zolang een item
+ * openstaat slaat de sync de herbouw van dat dossier over.
+ */
+export async function herhaalUitgesteldePlanningWrites(opts?: { dossierId?: string }): Promise<{ geprobeerd: number; geslaagd: number }> {
+  let q = db()
+    .from('planning_items')
+    .select('id, planning_activiteiten!inner ( dossier_id )')
+    .eq('bouw7_write_pending', true)
+    .limit(500)
+  if (opts?.dossierId) q = q.eq('planning_activiteiten.dossier_id', opts.dossierId)
+  const { data } = await q
+  const ids = ((data ?? []) as { id: string }[]).map(r => r.id)
+  let geslaagd = 0
+  for (const id of ids) {
+    await schrijfPlanItemNaarBouw7(id)
+    const { data: na } = await db().from('planning_items').select('bouw7_write_pending').eq('id', id).maybeSingle()
+    if (na && !na.bouw7_write_pending) geslaagd++
+  }
+  return { geprobeerd: ids.length, geslaagd }
 }
 
 

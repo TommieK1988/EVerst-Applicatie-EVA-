@@ -13,6 +13,9 @@ import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
+import {
+  metBehoudVanHandmatigeVelden, BOUW7_DOSSIER_VELDEN, BOUW7_MEDEWERKER_VELDEN, BOUW7_BANK_VELDEN,
+} from './handmatige-velden'
 import { geslachtUitAanhef, geslachtUitVoornaam } from '@/lib/relaties/geslacht'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
@@ -324,12 +327,27 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       (relatiesNaUpsert ?? []).map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
     )
 
-    // 8. IBAN batch upsert
-    const ibanRows: { relatie_id: string; iban: string }[] = []
+    // 8. IBAN batch upsert — met behoud van een in EVA gecorrigeerd nummer.
+    //    De bestaande bankrijen komen mee zodat `metBehoudVanHandmatigeVelden` de EVA-waarde
+    //    kan terugschrijven; de rij is 1:1 op relatie_id, dus die is hier de sleutel.
+    const bankBestaand = await haalAlleRijen<{ relatie_id: string; iban: string | null; handmatige_velden: string[] | null }>(
+      (van, tot) => supabase
+        .from('relatie_bankgegevens')
+        .select('relatie_id, iban, handmatige_velden')
+        .order('relatie_id')
+        .range(van, tot),
+    ).catch(() => [] as { relatie_id: string; iban: string | null; handmatige_velden: string[] | null }[])
+    const bankByRelatie = new Map(bankBestaand.map(b => [b.relatie_id, b]))
+    const ibanRows: Record<string, unknown>[] = []
     for (const c of allContacts) {
       if (!c.iban) continue
       const relatieId = relatieIdMap.get(String(c.id))
-      if (relatieId) ibanRows.push({ relatie_id: relatieId, iban: c.iban })
+      if (!relatieId) continue
+      ibanRows.push(metBehoudVanHandmatigeVelden(
+        { relatie_id: relatieId, iban: c.iban },
+        bankByRelatie.get(relatieId),
+        BOUW7_BANK_VELDEN,
+      ))
     }
     for (let i = 0; i < ibanRows.length; i += 500) {
       await supabase
@@ -483,6 +501,22 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         (cpIds ?? []).map((cp: { id: string; bouw7_id: string }) => [cp.bouw7_id, cp.id])
       )
 
+      // Een functie die in EVA is gezet (`functie_handmatig`) mag de sync niet terugzetten:
+      // die koppels krijgen hun eigen functie terug in de payload. Zonder deze stap zette de
+      // volledige upsert elke ochtend de EVA-invoer terug op Bouw7's jobTitle.
+      const cpIdsVoorKoppels = [...cpIdMap.values()]
+      const handmatigeFuncties = new Map<string, string | null>()
+      for (let i = 0; i < cpIdsVoorKoppels.length; i += 500) {
+        const { data: links } = await supabase
+          .from('contactpersoon_organisaties')
+          .select('contactpersoon_id, organisatie_id, functie')
+          .eq('functie_handmatig', true)
+          .in('contactpersoon_id', cpIdsVoorKoppels.slice(i, i + 500))
+        for (const l of (links ?? []) as { contactpersoon_id: string; organisatie_id: string; functie: string | null }[]) {
+          handmatigeFuncties.set(`${l.contactpersoon_id}|${l.organisatie_id}`, l.functie)
+        }
+      }
+
       const koppelRows = cpOrgKoppels
         .map(k => ({
           contactpersoon_id: cpIdMap.get(k.cpBouw7Id),
@@ -492,6 +526,10 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         .filter((k): k is { contactpersoon_id: string; organisatie_id: string; functie: string | null } =>
           k.contactpersoon_id != null && k.organisatie_id != null
         )
+        .map(k => {
+          const sleutel = `${k.contactpersoon_id}|${k.organisatie_id}`
+          return handmatigeFuncties.has(sleutel) ? { ...k, functie: handmatigeFuncties.get(sleutel) ?? null } : k
+        })
 
       for (let i = 0; i < koppelRows.length; i += 500) {
         await supabase
@@ -549,28 +587,8 @@ function voegTypesSamen(
   return [bouw7Type, ...extras]
 }
 
-/**
- * Beschermt de in EVA handmatig aangepaste velden tegen de sync-payload.
- *
- * De EVA-waarde wordt teruggeschreven in plaats van de sleutel weggelaten: een
- * bulk-upsert eist dat alle rijen precies dezelfde kolommen hebben. `toegestaan`
- * begrenst dit tot inhoudelijke kolommen — de bouw7_*-administratie (hash,
- * sync-status) blijft altijd meelopen.
- */
-function metBehoudVanHandmatigeVelden(
-  row: Record<string, unknown>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  bestaand: any,
-  toegestaan: readonly string[],
-): Record<string, unknown> {
-  const velden = bestaand?.handmatige_velden as string[] | undefined
-  if (!velden?.length) return row
-  const uit = { ...row }
-  for (const veld of velden) {
-    if (toegestaan.includes(veld)) uit[veld] = bestaand[veld]
-  }
-  return uit
-}
+// `metBehoudVanHandmatigeVelden` (bescherming van in EVA bewerkte velden) staat sinds de
+// uitrol naar dossiers en medewerkers in ./handmatige-velden.ts.
 
 /** Splits "Voornaam [tussenvoegsel] Achternaam" in twee delen. */
 function mapContactType(typeName?: string): OrganisatieType {
@@ -606,11 +624,21 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
-    // Pre-fetch bestaande bouw7_ids + hashes (één query) voor telling en change-detectie.
-    const { data: bestaand } = await supabase
+    // Pre-fetch bestaande rijen: de hash voor change-detectie, plus de in EVA bewerkte
+    // velden zodat die ongewijzigd teruggeschreven kunnen worden (metBehoudVanHandmatigeVelden).
+    // Tot sep 2026 ontbrak dat hier: elke wijziging op het medewerkerscherm (adres, e-mail,
+    // uit-dienst-datum, tarieven) werd door de ochtendsync teruggezet op de Bouw7-waarde.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bestaand = await haalAlleRijen<any>((van, tot) => supabase
       .from('medewerkers')
-      .select('bouw7_id, bouw7_sync_hash')
+      .select('bouw7_id, bouw7_sync_hash, handmatige_velden, ' + BOUW7_MEDEWERKER_VELDEN.join(', '))
       .not('bouw7_id', 'is', null)
+      .order('bouw7_id')
+      .range(van, tot))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bestaandByBouw7Id = new Map<string, any>(
+      (bestaand ?? []).map((m: { bouw7_id: string }) => [m.bouw7_id, m])
+    )
     const hashByBouw7Id = new Map<string, string | null>(
       (bestaand ?? [])
         .filter((m: { bouw7_id: string | null }) => m.bouw7_id != null)
@@ -665,9 +693,11 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
     })
 
     // Incrementeel: alleen nieuwe/gewijzigde rijen schrijven (gelijke hash → overslaan).
-    const rows = mode === 'full'
+    // Daarna de in EVA bewerkte kolommen terugzetten op de EVA-waarde.
+    const rows = (mode === 'full'
       ? allRows
-      : allRows.filter(r => hashByBouw7Id.get(r.bouw7_id) !== r.bouw7_sync_hash)
+      : allRows.filter(r => hashByBouw7Id.get(r.bouw7_id) !== r.bouw7_sync_hash))
+      .map(r => metBehoudVanHandmatigeVelden(r, bestaandByBouw7Id.get(r.bouw7_id), BOUW7_MEDEWERKER_VELDEN) as typeof r)
 
     result.nieuw = rows.filter(r => !hashByBouw7Id.has(r.bouw7_id)).length
     result.bijgewerkt = rows.filter(r => hashByBouw7Id.has(r.bouw7_id)).length
@@ -734,6 +764,17 @@ export async function syncDaysOff(_opts?: { mode?: SyncMode }): Promise<SyncResu
       .not('bouw7_id', 'is', null)
     const bestaandeAfwIds = new Set<string>((bestaandeAfw ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
 
+    // Verlof dat in EVA is goedgekeurd en door EVA zélf naar Bouw7 is geschreven, staat hier
+    // al als bron='eva' mét het Bouw7-id (zie lib/uren/verlof.ts). Die day-offs slaan we bij
+    // het importeren over — anders komt hetzelfde verlof als tweede rij (bron='bouw7') terug
+    // en telt het dubbel in planning en capaciteit.
+    const { data: evaEigenAfw } = await supabase
+      .from('medewerker_afwezigheid')
+      .select('bouw7_id')
+      .eq('bron', 'eva')
+      .not('bouw7_id', 'is', null)
+    const evaEigenAfwIds = new Set<string>((evaEigenAfw ?? []).map((r: { bouw7_id: string }) => r.bouw7_id))
+
     const afwRows: Record<string, unknown>[] = []
     const afwIds = new Set<string>()
     for (const d of perEmp) {
@@ -745,6 +786,7 @@ export async function syncDaysOff(_opts?: { mode?: SyncMode }): Promise<SyncResu
       const eindDatum = toDate(d.endDate) ?? startDatum
       if (eindDatum < jaarStart) continue // geen oude historie importeren
       const bId = String(d.id)
+      if (evaEigenAfwIds.has(bId)) continue // door EVA zelf in Bouw7 gezet — EVA-rij is leidend
       afwIds.add(bId)
       afwRows.push({
         medewerker_id: medId,
@@ -768,9 +810,15 @@ export async function syncDaysOff(_opts?: { mode?: SyncMode }): Promise<SyncResu
     for (const id of afwIds) (bestaandeAfwIds.has(id) ? (result.bijgewerkt++) : (result.nieuw++))
 
     // Prune: bron='bouw7'-rijen die niet meer in Bouw7 staan (ingetrokken verlof).
+    // De bron-filter staat óók op de delete zelf: een EVA-rij met hetzelfde Bouw7-id mag
+    // hier nooit in meegaan, wat de selectie hierboven ook oplevert.
     const staleAfw = [...bestaandeAfwIds].filter(id => !afwIds.has(id))
     for (let i = 0; i < staleAfw.length; i += 500) {
-      await supabase.from('medewerker_afwezigheid').delete().in('bouw7_id', staleAfw.slice(i, i + 500))
+      await supabase
+        .from('medewerker_afwezigheid')
+        .delete()
+        .eq('bron', 'bouw7')
+        .in('bouw7_id', staleAfw.slice(i, i + 500))
     }
 
     // ── b) Organisatiebrede vrije dagen → bouw7_vrije_dagen ──
@@ -1252,7 +1300,11 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dossierData = await haalAlleRijen<any>((van, tot) => supabase
       .from('dossiers')
-      .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, servicedesk_substatus, verzonden_op, controller_id, calculator_id, bouw7_sync_hash, object_id, object_koppel_bron, object_gekoppeld_op')
+      // De BOUW7_DOSSIER_VELDEN komen mee zodat in EVA bewerkte kolommen ongewijzigd
+      // teruggeschreven kunnen worden (metBehoudVanHandmatigeVelden); `bouw7_projectstatus_naam`
+      // om een echte statuswissel in Bouw7 te herkennen voor de servicedesk-kolom.
+      .select('id, bouw7_id, verzonden_op, bouw7_sync_hash, object_koppel_bron, object_gekoppeld_op, bouw7_projectstatus_naam, handmatige_velden, '
+        + BOUW7_DOSSIER_VELDEN.join(', '))
       .not('bouw7_id', 'is', null)
       .order('id')
       .range(van, tot))
@@ -1508,9 +1560,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     }
     if (medStubs.size > 0) {
       const stubRows = [...medStubs.values()]
-      // medewerkers heeft een volledige unique constraint op bouw7_id → upsert mag
+      // medewerkers heeft een volledige unique constraint op bouw7_id → upsert mag. Alleen
+      // aanmaken wat ontbreekt: een stub mag een bestaande rij (naam, actief) nooit overschrijven.
       for (let i = 0; i < stubRows.length; i += 500) {
-        await supabase.from('medewerkers').upsert(stubRows.slice(i, i + 500), { onConflict: 'bouw7_id' })
+        await supabase.from('medewerkers').upsert(stubRows.slice(i, i + 500), { onConflict: 'bouw7_id', ignoreDuplicates: true })
       }
       const { data: med2 } = await supabase
         .from('medewerkers')
@@ -1600,6 +1653,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // Dossiers die in deze sync offerte → gewonnen/opdracht gingen: everts-calc werkbegroting
     // automatisch overnemen als planningsbudget (na de upsert).
     const werkbegrotingKandidaten: string[] = []
+    // Dossiers waarvan de servicedesk-markering vervalt omdat Bouw7 de projectstatus écht
+    // wijzigde (aparte update na de bulk-upsert, zodat de rijen gelijke kolommen houden).
+    const servicedeskOntmarkeren: string[] = []
 
     for (const p of changedProjects) {
       const bouw7IdStr = String(p.id)
@@ -1618,11 +1674,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         p.caOfferteSubstatus ?? null,
       )
 
-      // Servicedesk: log een substatuswijziging (basis voor doorlooptijd-per-fase).
-      if (evaStatus.servicedesk_substatus
-          && existing?.servicedesk_substatus !== evaStatus.servicedesk_substatus) {
-        substatusWijzigingen.push({ bouw7_id: bouw7IdStr, substatus: evaStatus.servicedesk_substatus })
-      }
+      // (De servicedesk-substatushistorie wordt ná de veldbescherming gelogd, zie onder.)
 
       // Offerte → gewonnen of → opdracht: kandidaat voor automatische werkbegroting-overname.
       if (existing && (
@@ -1674,17 +1726,20 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       // dus een voorwaardelijke spread zou de overige rijen op null zetten.
       const objectNieuwGekoppeld = !!bouw7ObjectId && bouw7ObjectId !== existing?.object_id
 
-      rows.push({
+      const rij: Record<string, unknown> = {
         object_id:                objectId,
         object_koppel_bron:       objectNieuwGekoppeld ? 'bouw7' : (existing?.object_koppel_bron ?? null),
         object_gekoppeld_op:      objectNieuwGekoppeld ? new Date().toISOString() : (existing?.object_gekoppeld_op ?? null),
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
         titel:                    p.name,
         klant_id:                 p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
-        project_manager_id:       p.projectLeader?.id ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null) : null,
-        uitvoerder_id:            p.executor?.id
-                                    ? (medewerkerMap.get(String(p.executor.id)) ?? null)
-                                    : null,
+        // Rollen: Bouw7 wint zodra het project er een noemt; noemt het er geen, dan blijft de
+        // in EVA gezette rol staan (zelfde regel als calculator/controller hieronder). Een
+        // Bouw7-project zonder projectleider mag een EVA-toewijzing niet wissen.
+        project_manager_id:       (p.projectLeader?.id ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null) : null)
+                                    ?? existing?.project_manager_id ?? null,
+        uitvoerder_id:            (p.executor?.id ? (medewerkerMap.get(String(p.executor.id)) ?? null) : null)
+                                    ?? existing?.uitvoerder_id ?? null,
         calculator_id:            calculatorId,
         // Spiegelkolom: EVA kent alleen nog de rol Calculator, maar taak-triggers draaien deels nog
         // op `werkvoorbereider`. Houd hem gelijk aan calculator_id (zoals updateDossierRollen doet).
@@ -1718,9 +1773,11 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         werkadres_postcode:       p.zipCode ?? null,
         werkadres_stad:           p.city ?? null,
         // Bouw7-`reference` hoort in het EVA-veld `referentie` (kenmerk opdrachtgever), niet als
-        // opmerking. `notes` is in de praktijk altijd leeg maar blijft gemapt voor de toekomst.
+        // opmerking. `notes` is in de praktijk altijd leeg — en dat wiste tot sep 2026 bij elke
+        // sync de opmerkingen van een in EVA aangemaakte aanvraag (die gaan als `information`
+        // naar Bouw7). Ontbreekt de Bouw7-tekst, dan blijft de EVA-tekst staan.
         referentie:               p.reference ?? existing?.referentie ?? null,
-        opmerkingen:              p.notes ?? null,
+        opmerkingen:              p.notes ?? existing?.opmerkingen ?? null,
         bouw7_projectstatus_id:   p.status?.id ?? null,
         bouw7_projectstatus_naam: p.status?.name ?? null,
         bouw7_quotation_status:   quote?.quotationStatus?.name ?? null,
@@ -1735,7 +1792,29 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         bouw7_sync_status:        'synced',
         bouw7_sync_fout:          null,
         ...evaStatus,
-      })
+      }
+
+      // In EVA bewerkte velden behouden (zie lib/bouw7/handmatige-velden.ts). Eén uitzondering:
+      // een in EVA versleepte servicedesk-kolom geldt tot Bouw7 de projectstatus écht wijzigt —
+      // dan wint Bouw7 weer en vervalt die markering.
+      let behoudBron = existing
+      if (existing?.handmatige_velden?.includes('servicedesk_substatus')
+          && (existing.bouw7_projectstatus_naam ?? null) !== (p.status?.name ?? null)) {
+        behoudBron = {
+          ...existing,
+          handmatige_velden: (existing.handmatige_velden as string[]).filter(v => v !== 'servicedesk_substatus'),
+        }
+        servicedeskOntmarkeren.push(existing.id)
+      }
+      const beschermd = metBehoudVanHandmatigeVelden(rij, behoudBron, BOUW7_DOSSIER_VELDEN)
+      rows.push(beschermd)
+
+      // Servicedesk: log een substatuswijziging (basis voor doorlooptijd-per-fase) — op basis van
+      // wat er straks écht in de rij komt, anders logt een beschermde kolom elke sync een wissel.
+      const nieuweServicedeskSub = beschermd.servicedesk_substatus as string | null | undefined
+      if (nieuweServicedeskSub && existing?.servicedesk_substatus !== nieuweServicedeskSub) {
+        substatusWijzigingen.push({ bouw7_id: bouw7IdStr, substatus: nieuweServicedeskSub })
+      }
     }
 
     result.nieuw = rows.filter(r => !dossierMap.has(r.bouw7_id as string)).length
@@ -1747,6 +1826,16 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         .from('dossiers')
         .upsert(rows.slice(i, i + 500), { onConflict: 'bouw7_id' })
       if (error) { result.fouten++; result.foutMelding = error.message }
+    }
+
+    // Servicedesk-markeringen die door een echte Bouw7-statuswissel zijn vervallen.
+    for (let i = 0; i < servicedeskOntmarkeren.length; i += 500) {
+      const ids = servicedeskOntmarkeren.slice(i, i + 500)
+      const { data: huidige } = await supabase.from('dossiers').select('id, handmatige_velden').in('id', ids)
+      for (const d of (huidige ?? []) as { id: string; handmatige_velden: string[] | null }[]) {
+        const nieuw = (d.handmatige_velden ?? []).filter(v => v !== 'servicedesk_substatus')
+        await supabase.from('dossiers').update({ handmatige_velden: nieuw }).eq('id', d.id)
+      }
     }
 
     // Doorlooptijd-historie: schrijf de servicedesk-substatuswijzigingen weg (bron='sync').
@@ -2225,14 +2314,15 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
     })
 
     let tq = supabase.from('tasks')
-      .select('id, dossier_id, bouw7_todo_id, status, deadline, bouw7_todo_done').not('bouw7_todo_id', 'is', null)
+      .select('id, dossier_id, bouw7_todo_id, status, deadline, deadline_handmatig, bouw7_todo_done').not('bouw7_todo_id', 'is', null)
     const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
     if (scopeDossierIds) {
       tq = scopeDossierIds.length ? tq.in('dossier_id', scopeDossierIds) : tq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
     }
     const { data: bestaandeTaken } = await tq
-    const taakByTodoId = new Map<string, { id: string; status: string; deadline: string | null; bouw7_todo_done: boolean }>(
-      (bestaandeTaken ?? []).map((t: { id: string; bouw7_todo_id: number; status: string; deadline: string | null; bouw7_todo_done: boolean }) => [String(t.bouw7_todo_id), t])
+    type TaakStand = { id: string; status: string; deadline: string | null; deadline_handmatig: boolean | null; bouw7_todo_done: boolean }
+    const taakByTodoId = new Map<string, TaakStand>(
+      (bestaandeTaken ?? []).map((t: TaakStand & { bouw7_todo_id: number }) => [String(t.bouw7_todo_id), t])
     )
 
     for (const t of relevant) {
@@ -2257,7 +2347,9 @@ export async function syncBouw7Todos(opts?: { mode?: SyncMode; onlyBouw7Ids?: st
       if (cur) {
         taakByTodoId.delete(String(t.id))
         const patch: Record<string, unknown> = {}
-        if ((cur.deadline ?? null) !== deadline) patch.deadline = deadline
+        // Een in EVA handmatig gezette deadline (`deadline_handmatig`, zie updateTaak) blijft
+        // staan; de deadline-herberekening respecteert die vlag al, de sync deed dat niet.
+        if (!cur.deadline_handmatig && (cur.deadline ?? null) !== deadline) patch.deadline = deadline
         // Alleen een échte heropening in Bouw7 (afgevinkt → open) zet de taak terug op open.
         // Stond de to-do al open, dan is een dichte EVA-status een bewuste keuze van de
         // gebruiker en blijft die staan.

@@ -1107,3 +1107,42 @@ factuurnummer is — die controle staat in `verwijderConceptFactuur`).
 
 `DELETE /project/term-statement` wist de **hele** termijnstaat en is daarmee te grof voor EVA.
 Opruimen van een testfactuur kan wel met `DELETE /invoice/{id}`.
+
+---
+
+## 8. EVA-invoer beschermen tegen de lees-sync (sep 2026)
+
+De lees-sync (cron 06:30 full / 12:45 incremental, plus de Ververs-knoppen) schreef tot sep 2026
+op een aantal tabellen elke Bouw7-waarde terug, ook over velden die in EVA waren bewerkt. Het
+patroon `handmatige_velden text[]` (aug 2026, relaties/contactpersonen) is daarom uitgerold naar
+`dossiers`, `medewerkers` en `relatie_bankgegevens`; `contactpersoon_organisaties` kreeg
+`functie_handmatig`, `planning_items` kreeg `bouw7_write_pending`. Helpers + veldlijsten:
+`lib/bouw7/handmatige-velden.ts`.
+
+**Twee spelregels.**
+1. *Eenrichtingsvelden* (EVA schrijft ze niet naar Bouw7 — werkadres, categorie, referentie,
+   contactpersoon, opmerkingen, object, servicedesk-kolom, medewerkergegevens, IBAN, functie op
+   een contactpersoon): bij bewerken markeren; de sync laat ze staan tot "Weer uit Bouw7".
+   De servicedesk-kolom is de uitzondering: die markering vervalt vanzelf zodra Bouw7 de
+   projectstatus écht wijzigt.
+2. *Tweerichtingsvelden* (rollen, statussen): alleen gemarkeerd zolang de write-back naar
+   Bouw7 niet is gelukt; `lib/dossiers/bouw7-retry.ts` probeert die writes opnieuw vóór de
+   lees-sync (`runFullSync`, `syncEnkelDossier`) en ontmarkeert bij succes. Zo overleeft een
+   EVA-wijziging een Bouw7-storing, en blijft Bouw7 leidend zodra beide gelijk lopen.
+
+**Planning.** Een uit Bouw7 geïmporteerd planitem dat in EVA wordt verplaatst gaat nu wél terug
+naar Bouw7: partiële `POST /plan-item {id, startDate, endDate, hours, employees}`. De toewijzing
+wordt uit `GET /plan-item/{id}` gelezen en alleen de medewerker van deze rij wordt vervangen —
+Bouw7 kan medewerkers op het item hebben die EVA niet kent. Zusterrijen (zelfde plan-item, andere
+medewerker) schuiven in EVA mee. Verwijderen haalt de medewerker van het item (`employees` zonder
+hem) of verwijdert het item als hij de laatste was; lukt dat niet, dan wordt de EVA-verwijdering
+geweigerd. Mislukt een write, dan staat `bouw7_write_pending` en slaat `syncDossierPlanning` de
+herbouw van dat dossier over tot de herkansing slaagt. De herbouw zelf is een reconcile geworden:
+bestaande Bouw7-activiteiten blijven staan (status/volgorde/EVA-planitems eronder overleven),
+alleen de Bouw7-planitems worden opnieuw opgebouwd.
+
+**Overige lekken gedicht:** `opmerkingen` van een EVA-aanvraag werd bij elke sync op leeg gezet
+(`information` geschreven, `notes` teruggelezen); rollen zonder Bouw7-waarde wisten de EVA-rol;
+`tasks.deadline` negeerde `deadline_handmatig`; goedgekeurd EVA-verlof kwam als tweede rij terug
+(nu `bouw7_id` op de afwezigheidsrij, import slaat die over); de werkbegroting-overname bij
+"gewonnen" zette een bijgestelde begroting terug (nu alleen bij een lege begroting).

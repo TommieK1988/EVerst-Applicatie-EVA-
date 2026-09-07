@@ -23,6 +23,10 @@ import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
+import {
+  markeerHandmatig, markeerHandmatigEnBewaar, ontmarkeerHandmatig, beschermdeVelden,
+  BOUW7_DOSSIER_VELDEN, BOUW7_DOSSIER_ROL_VELDEN, BOUW7_DOSSIER_STATUS_VELDEN,
+} from '@/lib/bouw7/handmatige-velden'
 import { assertDossierBewerkbaar } from './guards'
 import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
@@ -396,9 +400,12 @@ export async function updateServicedeskSubstatus(
     .eq('id', id)
     .single()
 
+  // De servicedesk-kolommen hebben geen Bouw7-tegenhanger; wat hier wordt versleept moet de
+  // lees-sync laten staan tot Bouw7 de projectstatus écht wijzigt (zie syncProjects).
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', id, ['servicedesk_substatus'])
   const { error } = await supabase
     .from('dossiers')
-    .update({ servicedesk_substatus: nieuweSubstatus })
+    .update({ servicedesk_substatus: nieuweSubstatus, ...(handmatig ? { handmatige_velden: handmatig } : {}) })
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
@@ -1022,6 +1029,10 @@ export async function updateDossierSubstatus(
     ).eq('id', id)
   }
 
+  // Statusvelden: gemarkeerd zolang de write-back naar Bouw7 niet is gelukt (of niet is
+  // gedaan), zodat de lees-sync de EVA-status niet terugzet; de cron probeert het opnieuw.
+  await registreerWriteBack(supabase, id, Object.keys(update), BOUW7_DOSSIER_STATUS_VELDEN, bouw7)
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
@@ -1156,6 +1167,9 @@ export async function updateDossierRollen(
     bouw7 = await schrijfDossierRollenNaarBouw7(supabase, id, payload)
       .catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
   }
+  // Is de rol niet (goed) in Bouw7 geland, dan markeren zodat de lees-sync de EVA-keuze niet
+  // terugzet; slaagt de write-back, dan mag Bouw7 weer leidend zijn. Zie handmatige-velden.ts.
+  await registreerWriteBack(supabase, id, Object.keys(payload), BOUW7_DOSSIER_ROL_VELDEN, bouw7)
 
   // Wisselde de projectleider, dan verkleuren de planbalken van dit project in Bouw7 mee: daar is
   // de kleur de aanduiding van de projectleider, niet vrije opmaak. Best-effort en na de rol-write,
@@ -1260,6 +1274,108 @@ async function schrijfDossierRollenNaarBouw7(
   }
 
   return schrijfBouw7Rollen(dossier.bouw7_id, rollen)
+}
+
+/**
+ * Legt de uitkomst van een write-back naar Bouw7 vast in `handmatige_velden`.
+ *
+ * Tweerichtingsvelden (rollen, statussen) worden niet blijvend beschermd: dan zou een latere
+ * wijziging in Bouw7 nooit meer doorkomen. In plaats daarvan markeren we ze zolang de
+ * Bouw7-write niet is gelukt (of niet is gedaan), en ontmarkeren we zodra een write slaagt.
+ * De cron (`lib/dossiers/bouw7-retry.ts`) probeert gemarkeerde writes opnieuw. Dossiers zonder
+ * Bouw7-koppeling hebben hier niets te beschermen.
+ */
+async function registreerWriteBack(
+  supabase: any,
+  dossierId: string,
+  gewijzigd: string[],
+  bereik: readonly string[],
+  bouw7: Bouw7WriteResult | undefined,
+): Promise<void> {
+  const velden = gewijzigd.filter(k => bereik.includes(k))
+  if (velden.length === 0) return
+  const { data } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).maybeSingle()
+  if (!data?.bouw7_id) return
+  try {
+    if (bouw7?.ok) await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, velden)
+    else await markeerHandmatigEnBewaar(supabase, 'dossiers', dossierId, velden)
+  } catch (e) {
+    console.error('[dossiers] write-back registreren mislukt:', e)
+  }
+}
+
+/**
+ * Herkansing voor rollen die nog niet in Bouw7 zijn geland (gemarkeerd in `handmatige_velden`).
+ * Schrijft de huidige EVA-rollen opnieuw en ontmarkeert bij succes. Aangeroepen door de cron
+ * vóór de lees-sync, zodat de sync daarna weer op Bouw7 mag vertrouwen.
+ */
+export async function herhaalDossierRollenWriteBack(dossierId: string): Promise<Bouw7WriteResult> {
+  const supabase = createAdminClient() as any
+  const { data: d } = await supabase
+    .from('dossiers')
+    .select('bouw7_id, handmatige_velden, project_manager_id, calculator_id, uitvoerder_id, controller_id')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!d?.bouw7_id) return { ok: false, error: 'Geen Bouw7-koppeling.' }
+  const open = ((d.handmatige_velden as string[] | null) ?? []).filter(v => (BOUW7_DOSSIER_ROL_VELDEN as readonly string[]).includes(v))
+  if (open.length === 0) return { ok: true }
+  const payload: Record<string, string | null> = {}
+  for (const k of ['project_manager_id', 'calculator_id', 'uitvoerder_id', 'controller_id']) {
+    if (open.includes(k) || (k === 'calculator_id' && open.includes('werkvoorbereider_id'))) payload[k] = d[k] ?? null
+  }
+  const res = await schrijfDossierRollenNaarBouw7(supabase, dossierId, payload)
+    .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
+  if (res.ok) await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, BOUW7_DOSSIER_ROL_VELDEN)
+  return res
+}
+
+/**
+ * Herkansing voor een status die nog niet in Bouw7 is geland. Schrijft de huidige EVA-status
+ * opnieuw (opdracht → projectstatus; aanvraag/offerte → maatwerkveld, geforceerd: EVA heeft
+ * deze keuze al gemaakt) en ontmarkeert bij succes. Servicedesk-dossiers hebben geen
+ * Bouw7-tegenhanger en blijven beschermd.
+ */
+export async function herhaalDossierStatusWriteBack(dossierId: string): Promise<Bouw7WriteResult> {
+  const supabase = createAdminClient() as any
+  const { data: d } = await supabase
+    .from('dossiers')
+    .select('bouw7_id, handmatige_velden, hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!d?.bouw7_id) return { ok: false, error: 'Geen Bouw7-koppeling.' }
+  const open = ((d.handmatige_velden as string[] | null) ?? []).filter(v => (BOUW7_DOSSIER_STATUS_VELDEN as readonly string[]).includes(v))
+  if (open.length === 0) return { ok: true }
+  if (d.servicedesk_substatus != null) return { ok: true } // geen Bouw7-tegenhanger; blijft beschermd
+
+  let res: Bouw7WriteResult
+  if (d.hoofdstatus === 'opdracht') {
+    if (!d.opdracht_substatus) return { ok: false, error: 'Opdracht zonder substatus.' }
+    res = await schrijfBouw7Projectstatus(d.bouw7_id, d.opdracht_substatus, 'opdracht')
+  } else if (d.hoofdstatus === 'aanvraag' || d.hoofdstatus === 'offerte') {
+    const sub = d.hoofdstatus === 'aanvraag' ? d.aanvraag_substatus : d.offerte_substatus
+    if (!sub) return { ok: false, error: 'Dossier zonder substatus.' }
+    const r = await schrijfBouw7Substatus(d.bouw7_id, d.hoofdstatus, sub, null, { forceer: true })
+    res = r.ok ? { ok: true } : { ok: false, error: r.error }
+  } else {
+    return { ok: false, error: `Onbekende hoofdstatus ${d.hoofdstatus}.` }
+  }
+  if (res.ok) await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, BOUW7_DOSSIER_STATUS_VELDEN)
+  return res
+}
+
+/**
+ * Laat de in EVA aangepaste Bouw7-velden van een dossier weer meelopen met de sync. De
+ * eerstvolgende sync zet ze terug op de waarden uit Bouw7 — de knop "Weer uit Bouw7".
+ */
+export async function herstelDossierBouw7Velden(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertDossierBewerkbaar(id)
+  const supabase = createAdminClient() as any
+  const { error } = await supabase.from('dossiers').update({ handmatige_velden: [] }).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/aanvragen')
+  revalidatePath('/offertes')
+  revalidatePath('/opdrachten')
+  return { ok: true }
 }
 
 /** Haal factuuradressen op voor een specifieke relatie (opdrachtgever). */
@@ -3039,9 +3155,11 @@ export async function updateDossierInfo(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
+  // Velden die ook uit Bouw7 komen markeren, zodat de lees-sync de EVA-invoer laat staan.
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', id, beschermdeVelden(velden, BOUW7_DOSSIER_VELDEN))
   const { error } = await supabase
     .from('dossiers')
-    .update(velden)
+    .update(handmatig ? { ...velden, handmatige_velden: handmatig } : velden)
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
 

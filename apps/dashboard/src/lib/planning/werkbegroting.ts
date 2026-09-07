@@ -87,6 +87,16 @@ export async function neemWerkbegrotingOver(dossier_id: string): Promise<Werkbeg
  */
 export async function neemWerkbegrotingOverStil(dossier_id: string): Promise<void> {
   try {
+    // Alleen seeden zolang er nog geen planning-werkbegroting is. Bestaan er al regels, dan
+    // zijn die mogelijk in EVA bijgesteld; de automatische overname (die bij elke fase-
+    // overgang opnieuw kan vuren, ook door statusgeflipflop in Bouw7) mag die niet
+    // terugzetten. Opnieuw overnemen blijft mogelijk via de sync-knop op de Planning-tab.
+    const { data: bestaand } = await db()
+      .from('planning_werkbegroting_regels')
+      .select('id')
+      .eq('dossier_id', dossier_id)
+      .limit(1)
+    if ((bestaand ?? []).length > 0) return
     await neemWerkbegrotingOver(dossier_id)
   } catch {
     /* nooit de statuswijziging of sync laten falen op de werkbegroting-overname */

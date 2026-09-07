@@ -150,12 +150,33 @@ export async function updatePlanningActiviteit(
   // Lees huidige waarden om cascade-type te bepalen
   const { data: huidig } = await supabase
     .from('planning_activiteiten')
-    .select('gewenste_start, deadline')
+    .select('*')
     .eq('id', id)
     .single()
+  if (!huidig) return { ok: false, error: 'Activiteit niet gevonden.' }
+
+  // Een uit Bouw7 geïmporteerde activiteit is een afgeleide van de plan-items eronder: titel,
+  // bewakingscode, uren, omschrijving en fase komen bij elke sync opnieuw uit Bouw7, dus die
+  // in EVA wijzigen zou de volgende ochtend stil verdwijnen. Verplaatsen (datums → de items,
+  // die wél worden teruggeschreven) en de EVA-eigen velden status/volgorde mogen wel.
+  if (huidig.bron === 'bouw7') {
+    const toegestaan = new Set(['status', 'volgorde', 'gewenste_start', 'deadline'])
+    const patch = input as Record<string, unknown>
+    const geblokkeerd = Object.keys(patch).filter(k =>
+      !toegestaan.has(k) && patch[k] !== undefined
+      && JSON.stringify(patch[k] ?? null) !== JSON.stringify((huidig as Record<string, unknown>)[k] ?? null))
+    if (geblokkeerd.length > 0) {
+      return {
+        ok: false,
+        error: 'Deze taak komt uit Bouw7: titel, bewakingscode, uren, omschrijving en fase volgen de planning daar. '
+          + 'Verplaats de balken zelf om de planning te wijzigen.',
+      }
+    }
+  }
 
   const huidigeStart    = huidig?.gewenste_start ?? null
   const huidigeDeadline = huidig?.deadline ?? null
+  const isBouw7 = huidig.bron === 'bouw7'
 
   const { error } = await supabase
     .from('planning_activiteiten')
@@ -186,6 +207,7 @@ export async function updatePlanningActiviteit(
         const ns = new Date(new Date(item.start_dt).getTime() + deltaMs).toISOString()
         const ne = new Date(new Date(item.eind_dt).getTime()  + deltaMs).toISOString()
         await supabase.from('planning_items').update({ start_dt: ns, eind_dt: ne }).eq('id', item.id)
+        await spiegelNaarBouw7(item.id)
         itemsVerschoven++
       }
     }
@@ -193,14 +215,18 @@ export async function updatePlanningActiviteit(
     // Left-resize: alleen start gewijzigd — crop items die vóór nieuwe start beginnen
     const newStartMs = new Date(nieuweStart!).getTime()
     if (new Date(nieuweStart!).getTime() > new Date(huidigeStart).getTime()) {
-      // Inkorten: start later → crop of verwijder items
+      // Inkorten: start later → crop of verwijder items. Bouw7-items die er helemaal buiten
+      // vallen blijven staan (de rebuild zou ze anders terugzetten); de taakdatums volgen
+      // bij de volgende sync de items.
       for (const item of items) {
         const itemStartMs = new Date(item.start_dt).getTime()
         const itemEindMs  = new Date(item.eind_dt).getTime()
         if (itemEindMs <= newStartMs) {
+          if (isBouw7) continue
           await supabase.from('planning_items').delete().eq('id', item.id)
         } else if (itemStartMs < newStartMs) {
           await supabase.from('planning_items').update({ start_dt: new Date(newStartMs).toISOString() }).eq('id', item.id)
+          await spiegelNaarBouw7(item.id)
           itemsVerschoven++
         }
       }
@@ -208,15 +234,17 @@ export async function updatePlanningActiviteit(
   } else if (deadlineGewijzigd && !startGewijzigd && huidigeDeadline) {
     // Right-resize: alleen deadline gewijzigd — crop items die na nieuwe deadline eindigen
     if (nieuweDeadline && nieuweDeadline < huidigeDeadline) {
-      // Inkorten: deadline eerder → crop of verwijder items
+      // Inkorten: deadline eerder → crop of verwijder items (zie hierboven voor Bouw7-items).
       const newDeadlineEodMs = new Date(nieuweDeadline + 'T23:59:59').getTime()
       for (const item of items) {
         const itemStartMs = new Date(item.start_dt).getTime()
         const itemEindMs  = new Date(item.eind_dt).getTime()
         if (itemStartMs > newDeadlineEodMs) {
+          if (isBouw7) continue
           await supabase.from('planning_items').delete().eq('id', item.id)
         } else if (itemEindMs > newDeadlineEodMs) {
           await supabase.from('planning_items').update({ eind_dt: new Date(newDeadlineEodMs).toISOString() }).eq('id', item.id)
+          await spiegelNaarBouw7(item.id)
           itemsVerschoven++
         }
       }
@@ -583,17 +611,42 @@ export async function verwijderPlanningItem(
   // gespiegelde plan-item als wees in Bouw7 achterblijven.
   const { data: bron } = await db()
     .from('planning_items')
-    .select('bouw7_id, bron, planning_activiteiten!activiteit_id ( dossier_id )')
+    .select('bouw7_id, bron, medewerkers!medewerker_id ( bouw7_id ), planning_activiteiten!activiteit_id ( dossier_id )')
     .eq('id', id)
     .maybeSingle()
   if (bron?.planning_activiteiten?.dossier_id) await assertDossierBewerkbaar(bron.planning_activiteiten.dossier_id)
+
+  // Uit Bouw7 geïmporteerd: eerst dáár de medewerker van het plan-item halen (of het item weg
+  // als dit de laatste was), en pas daarna in EVA. Lukt Bouw7 niet, dan weigeren we: anders
+  // zet de rebuild de rij de volgende ochtend gewoon terug en is er niets gebeurd. Geschreven
+  // uren blokkeren de verwijdering sowieso — dat controleren we vóór we Bouw7 aanraken.
+  if (bron?.bron === 'bouw7' && bron.bouw7_id) {
+    const [{ data: werkbonnen }, { data: urenRegels }] = await Promise.all([
+      db().from('werkbonnen').select('id').eq('planning_item_id', id).limit(1),
+      db().from('uren_regels').select('id').eq('planning_item_id', id).limit(1),
+    ])
+    if ((werkbonnen ?? []).length > 0 || (urenRegels ?? []).length > 0) {
+      return { ok: false, error: 'Op dit planitem zijn al uren of werkbonnen geregistreerd; verwijderen kan daarom niet.' }
+    }
+    const planItemId = Number(String(bron.bouw7_id).split(':')[0])
+    const employeeId = Number(bron.medewerkers?.bouw7_id)
+    if (planItemId && employeeId) {
+      try {
+        const { verwijderMedewerkerVanBouw7PlanItem } = await import('@/lib/bouw7/plan-item-write')
+        await verwijderMedewerkerVanBouw7PlanItem(planItemId, employeeId)
+      } catch (e) {
+        console.error('[planning] verwijderen Bouw7-planitem mislukt:', e)
+        return { ok: false, error: 'Verwijderen in Bouw7 is niet gelukt; de planning is niet gewijzigd. Probeer het straks opnieuw.' }
+      }
+    }
+  }
 
   const { error } = await db()
     .from('planning_items')
     .delete()
     .eq('id', id)
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: leesbareVerwijderFout(error, 'planning') }
 
   if (bron?.bron === 'eva' && bron?.bouw7_id) {
     try {

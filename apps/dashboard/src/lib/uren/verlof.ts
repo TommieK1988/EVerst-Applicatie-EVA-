@@ -367,7 +367,7 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
   const supabase = db()
   const { data: a } = await supabase
     .from('verlof_aanvragen')
-    .select('id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, bouw7_day_off_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
+    .select('id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, bouw7_day_off_id, afwezigheid_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
     .eq('id', aanvraagId)
     .maybeSingle()
   if (!a) return false
@@ -392,11 +392,21 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
       hours: String(a.uren_totaal),
       remark: a.toelichting || a.planning_uursoorten?.naam || 'Verlof via EVA',
     })
+    const dayOffId = res?.id != null ? String(res.id) : a.bouw7_day_off_id
     await supabase.from('verlof_aanvragen').update({
-      bouw7_day_off_id: res?.id != null ? String(res.id) : a.bouw7_day_off_id,
+      bouw7_day_off_id: dayOffId,
       bouw7_status: 'verzonden',
       bouw7_fout: null,
     }).eq('id', aanvraagId)
+    // Het Bouw7-id óók op de afwezigheidsrij: daaraan herkent `syncDaysOff` dat deze day-off
+    // van EVA komt en slaat hem bij het importeren over. Zonder dit kwam hetzelfde verlof de
+    // volgende ochtend als tweede rij (bron='bouw7') terug en telde het dubbel.
+    if (dayOffId && a.afwezigheid_id) {
+      await supabase.from('medewerker_afwezigheid')
+        .update({ bouw7_id: dayOffId })
+        .eq('id', a.afwezigheid_id)
+        .eq('bron', 'eva')
+    }
     return true
   } catch (e) {
     await supabase.from('verlof_aanvragen').update({

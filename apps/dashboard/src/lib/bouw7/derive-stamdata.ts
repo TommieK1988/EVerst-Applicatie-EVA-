@@ -78,12 +78,14 @@ export async function upsertBtwTarieven(
 
   const { data: bestaand } = await supabase
     .from('btw_tarieven')
-    .select('id, bouw7_id, label, percentage, verlegd')
+    .select('id, bouw7_id, label, percentage, verlegd, bron')
   const opId = new Map<number, string>()
   const opLabel = new Map<string, string>()
-  for (const r of (bestaand ?? []) as Array<{ id: string; bouw7_id: number | null; label: string; percentage: number; verlegd: boolean }>) {
+  const bronVan = new Map<string, string | null>()
+  for (const r of (bestaand ?? []) as Array<{ id: string; bouw7_id: number | null; label: string; percentage: number; verlegd: boolean; bron: string | null }>) {
     if (r.bouw7_id != null) opId.set(r.bouw7_id, r.id)
     opLabel.set(`${r.label.toLowerCase()}|${Number(r.percentage)}|${r.verlegd}`, r.id)
+    bronVan.set(r.id, r.bron)
   }
 
   let nieuw = 0
@@ -93,11 +95,16 @@ export async function upsertBtwTarieven(
     const idByLabel = opLabel.get(`${r.label.toLowerCase()}|${r.percentage}|${r.verlegd}`)
     const bestaandeId = id ?? idByLabel
     if (bestaandeId) {
-      await supabase.from('btw_tarieven').update({
-        label: r.label, percentage: r.percentage, verlegd: r.verlegd,
-        bouw7_id: r.bouw7_id, actief: true, bron: 'bouw7',
-        bouw7_laatst_sync: now, updated_at: now,
-      }).eq('id', bestaandeId)
+      // Een handmatig in EVA aangemaakt tarief dat toevallig op label matcht wordt alleen
+      // gekoppeld (bouw7_id + sync-stempel); label, actief en bron blijven van EVA.
+      const isEvaRij = bronVan.get(bestaandeId) === 'eva'
+      await supabase.from('btw_tarieven').update(isEvaRij
+        ? { bouw7_id: r.bouw7_id, bouw7_laatst_sync: now, updated_at: now }
+        : {
+          label: r.label, percentage: r.percentage, verlegd: r.verlegd,
+          bouw7_id: r.bouw7_id, actief: true, bron: 'bouw7',
+          bouw7_laatst_sync: now, updated_at: now,
+        }).eq('id', bestaandeId)
       bijgewerkt++
     } else {
       await supabase.from('btw_tarieven').insert({

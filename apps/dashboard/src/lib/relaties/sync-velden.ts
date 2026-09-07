@@ -36,10 +36,6 @@ export const BOUW7_CONTACTPERSOON_VELDEN = [
   'geslacht',
 ] as const
 
-/** Kolomnamen uit een patch die door de sync overschreven zouden worden. */
-export function beschermdeVelden(
-  patch: Record<string, unknown>,
-  toegestaan: readonly string[],
-): string[] {
-  return Object.keys(patch).filter(k => patch[k] !== undefined && toegestaan.includes(k))
-}
+// De generieke helpers staan sinds de uitrol naar dossiers/medewerkers in lib/bouw7;
+// hier opnieuw geëxporteerd zodat de bestaande relatie-imports blijven werken.
+export { beschermdeVelden } from '@/lib/bouw7/handmatige-velden'

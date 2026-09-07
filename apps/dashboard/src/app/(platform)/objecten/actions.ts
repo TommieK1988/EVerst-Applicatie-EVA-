@@ -15,6 +15,7 @@ import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { schrijfPropertyAssetNaarBouw7, syncPropertyAssets } from '@/lib/bouw7/property-assets'
 import { objectSchema, type ObjectInvoer, type OvernemenKeuze } from '@/lib/objecten/validations'
 import { adresWijktAf, objectAdresRegel } from '@/lib/objecten/adres'
+import { markeerHandmatig, BOUW7_DOSSIER_VELDEN, beschermdeVelden } from '@/lib/bouw7/handmatige-velden'
 import type { VastgoedObjectRol } from '@everts/database'
 
 export type ActieResultaat<T = undefined> =
@@ -250,6 +251,12 @@ export async function koppelDossierAanObject(
     wijziging.werkadres_email    = object.contact_email
   }
 
+  // Werkadres, opdrachtgever en contactpersoon komen bij een Bouw7-dossier normaal uit de
+  // sync. Wat hier bewust vanuit het object wordt overgenomen, moet de volgende sync laten
+  // staan — anders is de koppeling de volgende ochtend teruggedraaid.
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', dossierId, beschermdeVelden(wijziging, BOUW7_DOSSIER_VELDEN))
+  if (handmatig) wijziging.handmatige_velden = handmatig
+
   const { error } = await supabase.from('dossiers').update(wijziging).eq('id', dossierId)
   if (error) return { ok: false, fout: `Koppelen mislukt: ${error.message}` }
 
@@ -265,8 +272,13 @@ export async function ontkoppelDossierVanObject(dossierId: string): Promise<Acti
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   // Het werkadres blijft staan: het dossier is er niet minder concreet op geworden.
+  // De ontkoppeling zelf is een EVA-keuze; de sync mag het object niet terugzetten.
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', dossierId, ['object_id'])
   const { error } = await supabase.from('dossiers')
-    .update({ object_id: null, object_gekoppeld_op: null, object_koppel_bron: null })
+    .update({
+      object_id: null, object_gekoppeld_op: null, object_koppel_bron: null,
+      ...(handmatig ? { handmatige_velden: handmatig } : {}),
+    })
     .eq('id', dossierId)
   if (error) return { ok: false, fout: error.message }
 
