@@ -24,10 +24,12 @@ export default async function MobielTaakKwaliteitPage({
   const admin = createAdminClient() as any
   const { data: taak } = await admin
     .from('tasks')
-    .select('id, kwaliteit_ronde')
+    .select('id, kwaliteit_ronde, bezoek_ronde')
     .eq('id', taakId)
     .maybeSingle()
-  if (!taak?.kwaliteit_ronde) notFound()
+  // Ook een projectbezoek mag hier binnenkomen: acties die van kwaliteitsronde naar
+  // projectbezoek zijn omgezet houden zo hun bestaande link naar de lopende inspectie.
+  if (!taak?.kwaliteit_ronde && !taak?.bezoek_ronde) notFound()
 
   const { data: { user } } = await (await createClient()).auth.getUser()
   if (!user) notFound()

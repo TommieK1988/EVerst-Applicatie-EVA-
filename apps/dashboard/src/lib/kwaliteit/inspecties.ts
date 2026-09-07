@@ -69,11 +69,17 @@ export async function startInspectieVoorTaak(
   // dossier_id, alleen hun lijst.
   const { data: taak } = await supabase
     .from('tasks')
-    .select('id, dossier_id, kwaliteit_ronde, task_lists(dossier_id)')
+    .select('id, dossier_id, kwaliteit_ronde, bezoek_ronde, task_lists(dossier_id)')
     .eq('id', taskId)
     .maybeSingle()
   if (!taak) return { ok: false, error: 'Actie niet gevonden' }
-  if (!taak.kwaliteit_ronde) return { ok: false, error: 'Deze actie is geen kwaliteitsronde' }
+  // Een projectbezoek is de tweede geldige aanleiding: vinkt de projectleider daar Kwaliteit
+  // aan, dan start het bezoek deze inspectie. Zonder die tak zou een actie die van
+  // kwaliteitsronde naar projectbezoek is omgezet zijn lopende inspectie niet meer kunnen
+  // hervatten — die wordt hierboven immers op task_id teruggevonden.
+  if (!taak.kwaliteit_ronde && !taak.bezoek_ronde) {
+    return { ok: false, error: 'Deze actie is geen kwaliteitsronde of projectbezoek' }
+  }
 
   const dossierId: string | null = taak.dossier_id ?? taak.task_lists?.dossier_id ?? null
   if (!dossierId) return { ok: false, error: 'Deze actie hangt niet aan een opdracht' }
