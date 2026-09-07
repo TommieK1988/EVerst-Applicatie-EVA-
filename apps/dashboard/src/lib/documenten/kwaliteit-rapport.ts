@@ -36,7 +36,11 @@ import {
   kwaliteitResultaatStatusLabels,
 } from '@everts/database/kwaliteit-types'
 import { eenheidLabel, eisOmschrijving, getalNL, samenvatting } from '@/lib/kwaliteit/regels'
-import { bufferNaarDataUrl } from './render-docx'
+import {
+  FOTO_GRENZEN, mapMetLimiet, haalRapportFoto, pasFotoBudgetToe, veiligeFotoUrl,
+} from './rapport-fotos'
+import { knipInPaginas } from './rapport-paginas'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { datumNL, afkappen, volledigeNaam } from './format'
 import {
   parseKwaliteitOpties, KWALITEIT_OPTIES_SLEUTEL, MAX_AFWIJKINGEN,
@@ -44,16 +48,6 @@ import {
 } from './kwaliteit-opties'
 
 // ── Grenzen ───────────────────────────────────────────────────────────────
-
-/** Bronfoto's groter dan dit worden overgeslagen (kapotte upload / rauw bestand). */
-const MAX_BRON_BYTES = 12 * 1024 * 1024
-/** JPEG's comprimeren nauwelijks in een zip; boven deze som loopt de Graph-conversie vast. */
-const MAX_FOTO_BYTES_TOTAAL = 35 * 1024 * 1024
-/** Gelijktijdig opgehaalde foto's. Niet Promise.all over honderden: dat trekt sharp leeg. */
-const FOTO_PARALLEL = 6
-/** Ingesloten fotobreedte in px. Getoond op ~180 px → ±200 dpi op papier. */
-const FOTO_PX = 380
-const FOTO_JPEG_KWALITEIT = 70
 
 const TE_VEEL = (n: number) =>
   `Dit rapport bevat ${n} afwijkingen; het maximum is ${MAX_AFWIJKINGEN}. ` +
@@ -139,49 +133,6 @@ function DISCLAIMER(): string {
 }
 
 // ── Hulpjes ───────────────────────────────────────────────────────────────
-
-async function mapMetLimiet<T, R>(items: T[], limiet: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const uit = new Array<R>(items.length)
-  let volgende = 0
-  const werker = async () => {
-    for (;;) {
-      const i = volgende++
-      if (i >= items.length) return
-      uit[i] = await fn(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limiet, items.length) }, werker))
-  return uit
-}
-
-/**
- * Haalt een foto op en maakt er een compacte JPEG-data-URL van.
- *
- * Sharp doet drie dingen die geen van alle optioneel zijn: verkleinen, EXIF-rotatie toepassen
- * (telefoonfoto's staan anders op hun kant) en transparantie op wit zetten. De uitkomst gaat door
- * `bufferNaarDataUrl`: de image-module ziet een kale Buffer aan voor een al-verwerkte afbeelding
- * en crasht dan — alleen een base64-string doorloopt het echte insluit-pad.
- */
-async function haalFoto(url: string): Promise<{ dataUrl: string; bytes: number }> {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return { dataUrl: '', bytes: 0 }
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength === 0 || buf.byteLength > MAX_BRON_BYTES) return { dataUrl: '', bytes: 0 }
-
-    const sharp = (await import('sharp')).default
-    const jpeg = await sharp(buf)
-      .rotate()
-      .resize({ width: FOTO_PX, height: FOTO_PX, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: FOTO_JPEG_KWALITEIT, mozjpeg: true })
-      .toBuffer()
-    return { dataUrl: bufferNaarDataUrl(jpeg), bytes: jpeg.byteLength }
-  } catch {
-    // Onleesbaar of niet-ondersteund formaat → geen foto; de afwijking blijft gewoon staan.
-    return { dataUrl: '', bytes: 0 }
-  }
-}
 
 // ── Contextbouw ───────────────────────────────────────────────────────────
 
@@ -274,16 +225,14 @@ export async function bouwKwaliteitBlok(
     ...afwijkingen.map(a => eersteFotoPerAfwijking.get(a.id) ?? ''),
     ...(keuze.toon_waarnemingen ? positief.map(w => fotoPerWaarneming.get(w.id) ?? '') : []),
   ]
-  const opgehaald = await mapMetLimiet(teHalen, FOTO_PARALLEL, url => url ? haalFoto(url) : Promise.resolve({ dataUrl: '', bytes: 0 }))
-
-  // Boven de bytelimiet vallen de resterende foto's weg in plaats van dat de hele conversie klapt.
-  let som = 0
-  const dataUrls = opgehaald.map(f => {
-    if (!f.dataUrl) return ''
-    if (som + f.bytes > MAX_FOTO_BYTES_TOTAAL) return ''
-    som += f.bytes
-    return f.dataUrl
-  })
+  // `veiligeFotoUrl` weert alles buiten onze eigen publieke bucket: deze URL's komen uit een
+  // vrije tekstkolom en worden hieronder server-side opgehaald.
+  const opgehaald = await mapMetLimiet(
+    teHalen, FOTO_GRENZEN.PARALLEL, url => haalRapportFoto(veiligeFotoUrl(url)),
+  )
+  // 'laat_vallen': boven de bytelimiet vallen de resterende foto's weg in plaats van dat de
+  // hele conversie klapt.
+  const dataUrls = pasFotoBudgetToe(opgehaald, 'laat_vallen')
   const fotoVanAfwijking = (i: number) => dataUrls[i] ?? ''
   const fotoVanWaarneming = (i: number) => dataUrls[afwijkingen.length + i] ?? ''
 
@@ -363,23 +312,9 @@ export async function bouwKwaliteitBlok(
   // XML-string in een gewone tag zou als zichtbare tekst worden weggeschreven. Zelfde oplossing
   // als in het houtrot-sjabloon. De andere helft van "een afwijking nooit over twee pagina's"
   // zit in het sjabloon (exacte rijhoogte + begrensd fotokader + cantSplit).
-  const paginas: Rij[] = []
-  const aantalPaginas = Math.max(1, Math.ceil(afwRijen.length / keuze.per_pagina))
-  for (let i = 0; i < afwRijen.length; i += keuze.per_pagina) {
-    const nummer = Math.floor(i / keuze.per_pagina) + 1
-    const laatste = nummer === aantalPaginas
-    paginas.push({
-      regels: afwRijen.slice(i, i + keuze.per_pagina),
-      pagina_nummer: nummer,
-      aantal_paginas: aantalPaginas,
-      eerste: nummer === 1,
-      laatste,
-      niet_laatste: !laatste,
-      // Terugval voor wie liever één tag gebruikt: alleen bruikbaar zodra er een rawxml-module
-      // is geregistreerd. Nu bewust leeg gelaten.
-      paginabreuk: '',
-    })
-  }
+  // paginabreukXml blijft leeg: die tag is pas bruikbaar zodra er een rawxml-module is
+  // geregistreerd in render-docx.
+  const paginas: Rij[] = knipInPaginas(afwRijen, { perPagina: keuze.per_pagina, itemVeld: 'regels' })
 
   // ── Positieve waarnemingen ─────────────────────────────────────────────
   const waarnemingRijen: Rij[] = keuze.toon_waarnemingen
@@ -400,13 +335,17 @@ export async function bouwKwaliteitBlok(
   let opvolging: Rij[] = []
   let opvolgingRegel = ''
   if (keuze.toon_opvolging) {
-    const { data: eerder } = await supabase
-      .from('kwaliteit_afwijkingen')
-      .select('afwijkingsnummer, discipline_code, locatie, omschrijving, status, ernst, hercontrole_datum')
-      .eq('dossier_id', dossierId)
-      .neq('inspectie_id', inspectie.id)
-      .order('datum_constatering')
-    const rijenEerder = (eerder ?? []) as KwaliteitAfwijking[]
+    // Gepagineerd: een dossier met veel rondes komt boven de PostgREST-grens van 1000 rijen
+    // uit, en die afkapping is stil — `error` blijft null. `afwijkingsnummer` is de stabiele
+    // ordening die de paginering nodig heeft.
+    const rijenEerder = await haalAlleRijen<KwaliteitAfwijking>((van, tot) =>
+      supabase
+        .from('kwaliteit_afwijkingen')
+        .select('afwijkingsnummer, discipline_code, locatie, omschrijving, status, ernst, hercontrole_datum')
+        .eq('dossier_id', dossierId)
+        .neq('inspectie_id', inspectie.id)
+        .order('afwijkingsnummer')
+        .range(van, tot))
     opvolging = rijenEerder.map(a => ({
       nummer: a.afwijkingsnummer,
       discipline: a.discipline_code ? (disciplineNaam.get(a.discipline_code) ?? a.discipline_code) : '',

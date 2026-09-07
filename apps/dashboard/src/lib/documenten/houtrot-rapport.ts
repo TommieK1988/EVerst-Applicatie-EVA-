@@ -26,7 +26,8 @@ import {
   REGISTRATIE_STATUSSEN, CONTROL_STATUSSEN, SCHADE_SEVERITY,
   type LocatieBoom, type RepairRegistration, type RepairPhoto,
 } from '@/lib/houtrotherstel/types'
-import { bufferNaarDataUrl } from './render-docx'
+import { FOTO_GRENZEN, mapMetLimiet, haalRapportFoto, pasFotoBudgetToe } from './rapport-fotos'
+import { knipInPaginas } from './rapport-paginas'
 import { datumNL, datumISO, euroNL, getalNL, afkappen, volledigeNaam } from './format'
 import {
   parseRapportOpties, HOUTROT_OPTIES_SLEUTEL, MAX_REGISTRATIES, PAGINABREUK_XML,
@@ -34,20 +35,6 @@ import {
 } from './houtrot-opties'
 
 // ── Grenzen ───────────────────────────────────────────────────────────────
-
-/** Bronfoto's groter dan dit worden overgeslagen (kapotte upload / rauw bestand). */
-const MAX_BRON_BYTES = 12 * 1024 * 1024
-/**
- * JPEG's comprimeren in een zip vrijwel niet, dus de .docx wordt ongeveer zo groot
- * als de som van de fotobytes. Boven deze grens loopt de Graph-conversie vast.
- */
-const MAX_FOTO_BYTES_TOTAAL = 35 * 1024 * 1024
-/** Gelijktijdig opgehaalde foto's. Niet Promise.all over honderden: dat trekt sharp leeg. */
-const FOTO_PARALLEL = 6
-
-/** Ingesloten fotobreedte in px. Getoond op ~180 px → ±200 dpi op papier. */
-const FOTO_PX = 380
-const FOTO_JPEG_KWALITEIT = 70
 
 const TE_VEEL = (n: number) =>
   `Deze rapportage bevat ${n} registraties; het maximum is ${MAX_REGISTRATIES}. ` +
@@ -87,52 +74,6 @@ export const LEEG_HOUTROT_BLOK: HoutrotBlok = {
 }
 
 // ── Hulpjes ───────────────────────────────────────────────────────────────
-
-/** Voert `fn` uit over `items` met maximaal `limiet` gelijktijdig. */
-async function mapMetLimiet<T, R>(items: T[], limiet: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const uit = new Array<R>(items.length)
-  let volgende = 0
-  const werker = async () => {
-    for (;;) {
-      const i = volgende++
-      if (i >= items.length) return
-      uit[i] = await fn(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limiet, items.length) }, werker))
-  return uit
-}
-
-/**
- * Haalt een foto op en maakt er een compacte JPEG-data-URL van.
- *
- * Sharp doet drie dingen die geen van alle optioneel zijn: verkleinen (scheelt
- * megabytes per foto), EXIF-rotatie toepassen (telefoonfoto's staan anders op hun
- * kant) en transparantie op wit zetten. De uitkomst gaat door `bufferNaarDataUrl`:
- * de image-module ziet een kale Buffer aan voor een al-verwerkte afbeelding en
- * crasht dan — alleen een base64-string doorloopt het echte insluit-pad.
- */
-async function haalFoto(pad: string): Promise<{ dataUrl: string; bytes: number }> {
-  try {
-    const res = await fetch(fotoPubliekeUrl(pad))
-    if (!res.ok) return { dataUrl: '', bytes: 0 }
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength === 0 || buf.byteLength > MAX_BRON_BYTES) return { dataUrl: '', bytes: 0 }
-
-    const sharp = (await import('sharp')).default
-    const jpeg = await sharp(buf)
-      .rotate()
-      .resize({ width: FOTO_PX, height: FOTO_PX, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: FOTO_JPEG_KWALITEIT, mozjpeg: true })
-      .toBuffer()
-    return { dataUrl: bufferNaarDataUrl(jpeg), bytes: jpeg.byteLength }
-  } catch {
-    // Onleesbaar of niet-ondersteund formaat (bv. HEIC zonder libheif) → geen foto.
-    // Een lege string activeert de LEGE_PIXEL-tak; de registratie blijft gewoon staan.
-    return { dataUrl: '', bytes: 0 }
-  }
-}
 
 /** Locatiepad met terugval op de vaste velden van vóór de locatieboom. */
 function locatieDelen(r: RepairRegistration): string[] {
@@ -211,16 +152,18 @@ export async function bouwHoutrotBlok(
       if (foto) fotoOpdrachten.push({ rij: i, type, pad: foto.storage_path })
     }
   }
-  const fotoResultaten = await mapMetLimiet(fotoOpdrachten, FOTO_PARALLEL, o => haalFoto(o.pad))
-  const totaalBytes = fotoResultaten.reduce((s, f) => s + f.bytes, 0)
-  if (!opties.preview && totaalBytes > MAX_FOTO_BYTES_TOTAAL) {
-    throw new Error(
-      `De foto's in deze rapportage zijn samen ${Math.round(totaalBytes / 1024 / 1024)} MB; ` +
+  const fotoResultaten = await mapMetLimiet(
+    fotoOpdrachten, FOTO_GRENZEN.PARALLEL, o => haalRapportFoto(fotoPubliekeUrl(o.pad)),
+  )
+  // 'weiger': een houtrotrapportage met de helft van de foto's is geen rapportage.
+  const dataUrls = pasFotoBudgetToe(fotoResultaten, 'weiger', {
+    actief: !opties.preview,
+    melding: mb =>
+      `De foto's in deze rapportage zijn samen ${mb} MB; ` +
       'dat is te groot om om te zetten naar PDF. Scherp het filter aan of maak meerdere rapportages.',
-    )
-  }
+  })
   const fotoPerRij = new Map<string, string>()
-  fotoOpdrachten.forEach((o, i) => fotoPerRij.set(`${o.rij}|${o.type}`, fotoResultaten[i].dataUrl))
+  fotoOpdrachten.forEach((o, i) => fotoPerRij.set(`${o.rij}|${o.type}`, dataUrls[i]))
 
   // ── Registratie-objecten ──────────────────────────────────────────────
   const registraties: RegistratieCtx[] = rijen.map((x, i) =>
@@ -492,38 +435,17 @@ function bouwPaginas(
   groepen: GroepCtx[],
   keuze: HoutrotRapportOpties,
 ): PaginaCtx[] {
-  const n = Math.max(1, keuze.per_pagina)
-  const brokken: { registraties: RegistratieCtx[]; groep_naam: string; eerste_van_groep: boolean }[] = []
-
-  if (keuze.pagina_per_groep) {
-    for (const g of groepen) {
-      const lijst = (g.registraties as RegistratieCtx[]) ?? []
-      for (let i = 0; i < lijst.length; i += n) {
-        brokken.push({
-          registraties: lijst.slice(i, i + n),
-          groep_naam: String(g.naam ?? ''),
-          eerste_van_groep: i === 0,
-        })
-      }
-    }
-  } else {
-    for (let i = 0; i < registraties.length; i += n) {
-      brokken.push({ registraties: registraties.slice(i, i + n), groep_naam: '', eerste_van_groep: false })
-    }
-  }
-
-  return brokken.map((brok, i) => {
-    const laatste = i === brokken.length - 1
-    return {
-      ...brok,
-      pagina_nummer: i + 1,
-      aantal_paginas: brokken.length,
-      eerste: i === 0,
-      laatste,
-      niet_laatste: !laatste,
-      // Terugval voor wie liever één tag gebruikt dan een conditie met een
-      // handmatige breuk erin. Moet in Word de enige tekst in zijn alinea zijn.
-      paginabreuk: laatste ? '' : PAGINABREUK_XML,
-    }
+  return knipInPaginas(registraties, {
+    perPagina: keuze.per_pagina,
+    itemVeld: 'registraties',
+    // Terugval voor wie liever één tag gebruikt dan een conditie met een handmatige breuk
+    // erin. Moet in Word de enige tekst in zijn alinea zijn.
+    paginabreukXml: PAGINABREUK_XML,
+    groepen: keuze.pagina_per_groep
+      ? groepen.map(g => ({
+          naam: String(g.naam ?? ''),
+          items: (g.registraties as RegistratieCtx[]) ?? [],
+        }))
+      : undefined,
   })
 }
