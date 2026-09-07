@@ -1,7 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
-import { Bouw7Client, type Bouw7Contact, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo, type Bouw7AdditionalWorkLine } from './client'
+import { Bouw7Client, type Bouw7Contact, type Bouw7ContactDetail, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo, type Bouw7AdditionalWorkLine } from './client'
 import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { getBouw7RawConfig } from './config'
@@ -12,6 +12,7 @@ import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
+import { geslachtUitAanhef, geslachtUitVoornaam } from '@/lib/relaties/geslacht'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
@@ -112,27 +113,24 @@ export async function fetchAllPages<T>(
 }
 
 /**
- * Fallback: haal contactpersonen op voor één Bouw7-contact.
- * Wordt alleen gebruikt als de bulk-call (/list/contactpersons zonder filter) niet beschikbaar is.
+ * Betalingsconditie uit Bouw7 → aantal dagen tot betaling.
+ *
+ * Bouw7 zet de conditie per administratie onder `contactDivisions[]` en het is een vrij
+ * tekstveld: meestal een dagental ("14", "30", "60"), soms een code die géén termijn is
+ * ("IN" = ineens, "00"). Alleen een getal levert een termijn op; een code → null, want een
+ * verzonnen dagental op een factuur is erger dan een leeg veld.
+ *
+ * Everts voert vier administraties, en in de praktijk staat overal dezelfde waarde (nul
+ * relaties met afwijkende waarden per administratie, gemeten september 2026). Zou dat toch
+ * ooit uiteenlopen, dan wint de laagste — de scherpste termijn, dus nooit te laat gefactureerd.
  */
-async function fetchContactpersonenVoorContact(
-  bouw7: Bouw7Client,
-  contactId: number,
-): Promise<Bouw7ContactPerson[]> {
-  try {
-    const result = await bouw7.get<Bouw7ListResponse<Bouw7ContactPerson>>(
-      '/list/contactpersons',
-      { contactId: String(contactId) },
-    )
-    if (result.items?.length) return result.items
-  } catch { /* endpoint bestaat niet of retourneert fout */ }
-
-  try {
-    const detail = await bouw7.get<{ contactPersons?: Bouw7ContactPerson[] }>(
-      `/contacts/${contactId}`,
-    )
-    return detail.contactPersons ?? []
-  } catch { return [] }
+function betaaltermijnUitDivisions(detail: Bouw7ContactDetail | undefined): number | null {
+  const dagen = (detail?.contactDivisions ?? [])
+    .map(d => (d.paymentConditionSales ?? '').trim())
+    .filter(v => /^\d+$/.test(v))
+    .map(Number)
+    .filter(n => n > 0)
+  return dagen.length ? Math.min(...dagen) : null
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -159,19 +157,17 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const allContacts = await fetchAllPages<Bouw7Contact>(bouw7, '/list/contacts')
     const bouw7IdsInResponse = new Set(allContacts.map(c => String(c.id)))
 
-    // 2. Probeer alle contactpersonen in één bulk-call op te halen (vermijdt N API-calls)
-    let bulkCps: Bouw7ContactPerson[] = []
-    try {
-      bulkCps = await fetchAllPages<Bouw7ContactPerson>(bouw7, '/list/contactpersons')
-    } catch { /* bulk endpoint niet beschikbaar; fallback naar per-contact */ }
+    // 2. Alle contactpersonen in één bulk-call. Let op het koppelteken in `contact-persons`:
+    //    `/list/contactpersons` bestaat niet (404) en liet deze sync stilzwijgend leeglopen.
+    const alleCps = await fetchAllPages<Bouw7ContactPerson>(bouw7, '/list/contact-persons')
 
     const cpByContactId = new Map<number, Bouw7ContactPerson[]>()
-    for (const cp of bulkCps) {
-      if (cp.contactId == null) continue
-      if (!cpByContactId.has(cp.contactId)) cpByContactId.set(cp.contactId, [])
-      cpByContactId.get(cp.contactId)!.push(cp)
+    for (const cp of alleCps) {
+      const orgId = cp.contact?.id
+      if (orgId == null) continue
+      if (!cpByContactId.has(orgId)) cpByContactId.set(orgId, [])
+      cpByContactId.get(orgId)!.push(cp)
     }
-    const bulkCpsAvailable = bulkCps.length > 0 && bulkCps.some(cp => cp.contactId != null)
 
     // 3. Pre-fetch bestaande relaties (één DB-query i.p.v. N)
     // Gepagineerd: bij afkapping op 1000 rijen wordt een bestaande relatie niet gevonden en
@@ -197,23 +193,65 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       (dbRelaties ?? []).map((r: any) => [r.bouw7_id as string, r])
     )
 
+    // 3b. Fingerprint per contact, nu al — die bepaalt welke contacten hun detailrecord nodig
+    //     hebben. `updatedAt` zit erin omdat de betalingsconditie niet op het lijstrecord staat:
+    //     zonder die stempel zou een gewijzigde termijn incrementeel onzichtbaar blijven.
+    const hashPerContact = new Map<string, string>()
+    for (const c of allContacts) {
+      hashPerContact.set(String(c.id), fingerprint({
+        naam: c.name ?? null, type: mapContactType(c.type?.name), kvk: c.cocNumber ?? null,
+        btw: c.vatNumber ?? null, em: c.emailAddress ?? null, tel: c.phoneNumber ?? null,
+        mob: c.mobilePhoneNumber ?? null, opm: c.information ?? null,
+        str: [c.streetName, c.houseNumber].filter(Boolean).join(' ') || null,
+        pc: c.zipCode ?? null, pl: c.city ?? null, land: c.countryCode ?? 'Nederland',
+        act: c.isActive !== false, iban: c.iban ?? null,
+        // Uurtarieven per uurtype in de fingerprint zodat tariefwijzigingen incrementeel meegaan.
+        htp: c.hourTypePrices?.length ? JSON.stringify(c.hourTypePrices) : null,
+        upd: c.updatedAt ?? null,
+      }))
+    }
+
+    // 3c. Betalingstermijn zit alleen op het detailrecord (`GET /contact/{id}`, enkelvoud), dus
+    //     één call per relatie. Incrementeel halen we alleen de gewijzigde contacten op; bij een
+    //     volledige run alle ~600, wat met deze concurrency ruim binnen de cron-limiet blijft.
+    const contactenVoorDetail = mode === 'full'
+      ? allContacts
+      : allContacts.filter(c => relatieMap.get(String(c.id))?.bouw7_sync_hash !== hashPerContact.get(String(c.id)))
+
+    const detailPerContact = new Map<string, Bouw7ContactDetail>()
+    {
+      const DETAIL_CONCURRENCY = 10
+      let volgende = 0
+      await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, async () => {
+        while (volgende < contactenVoorDetail.length) {
+          const c = contactenVoorDetail[volgende++]
+          try {
+            detailPerContact.set(String(c.id), await bouw7.get<Bouw7ContactDetail>(`/contact/${c.id}`))
+          } catch {
+            /* Eén onbereikbaar detail mag de hele relatie-sync niet omgooien; die relatie
+               houdt dan simpelweg zijn bestaande betalingstermijn. */
+          }
+        }
+      }))
+    }
+
     // 4. Bouw relaties-rows (skip vergrendelde)
     const relatieRows: Record<string, unknown>[] = []
     for (const c of allContacts) {
       const bouw7IdStr = String(c.id)
-      if (relatieMap.get(bouw7IdStr)?.sync_vergrendeld) continue
+      const bestaandeRelatie = relatieMap.get(bouw7IdStr)
+      if (bestaandeRelatie?.sync_vergrendeld) continue
 
       const orgType = mapContactType(c.type?.name)
       const straat = [c.streetName, c.houseNumber].filter(Boolean).join(' ') || null
-      const hash = fingerprint({
-        naam: c.name ?? null, type: orgType, kvk: c.cocNumber ?? null, btw: c.vatNumber ?? null,
-        em: c.emailAddress ?? null, tel: c.phoneNumber ?? null, mob: c.mobilePhoneNumber ?? null,
-        opm: c.information ?? null, str: straat, pc: c.zipCode ?? null, pl: c.city ?? null,
-        land: c.countryCode ?? 'Nederland', act: c.isActive !== false, iban: c.iban ?? null,
-        // Uurtarieven per uurtype in de fingerprint zodat tariefwijzigingen incrementeel meegaan.
-        htp: c.hourTypePrices?.length ? JSON.stringify(c.hourTypePrices) : null,
-      })
+      const hash = hashPerContact.get(bouw7IdStr)!
+      // Bouw7 heeft lang niet overal een betalingsconditie staan. Ontbreekt hij, dan blijft
+      // staan wat er in EVA stond — de sync mag een handmatig ingevulde termijn niet wissen.
+      const betaaltermijn = betaaltermijnUitDivisions(detailPerContact.get(bouw7IdStr))
+        ?? (bestaandeRelatie?.betalingstermijn_dagen as number | null | undefined)
+        ?? null
       relatieRows.push({
+        betalingstermijn_dagen: betaaltermijn,
         naam:              c.name,
         types:             [orgType],
         kvk_nummer:        c.cocNumber ?? null,
@@ -341,46 +379,59 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       }
     } catch { /* tarief-sync is best-effort; faalt nooit de hele contact-sync */ }
 
-    // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N)
-    const { data: dbCps } = await supabase
+    // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N).
+    //    Gepagineerd om dezelfde reden als bij de relaties hierboven: bij afkapping op 1000
+    //    rijen wordt een bestaande contactpersoon niet gevonden en als nieuw aangemaakt.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbCps = await haalAlleRijen<any>((van, tot) => supabase
       .from('contactpersonen')
       .select(
         'id, bouw7_id, sync_vergrendeld, bouw7_sync_hash, handmatige_velden, '
         + BOUW7_CONTACTPERSOON_VELDEN.join(', ')
       )
       .not('bouw7_id', 'is', null)
+      .order('id')
+      .range(van, tot),
+    )
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cpMap = new Map<string, any>(
       (dbCps ?? []).map((cp: any) => [cp.bouw7_id as string, cp])
     )
 
-    // 10. Bouw contactpersonen-rows (bulk API of N+1 fallback)
+    // 10. Bouw contactpersonen-rows
     const cpRows: Record<string, unknown>[] = []
     const cpOrgKoppels: { cpBouw7Id: string; orgBouw7Id: string; functie: string | null }[] = []
 
     for (const c of allContacts) {
-      const contactpersonen = bulkCpsAvailable
-        ? (cpByContactId.get(c.id) ?? [])
-        : await fetchContactpersonenVoorContact(bouw7, c.id)
-
-      for (const cp of contactpersonen) {
+      for (const cp of cpByContactId.get(c.id) ?? []) {
         const cpBouw7Id = String(cp.id)
-        if (cpMap.get(cpBouw7Id)?.sync_vergrendeld) continue
+        const bestaandeCp = cpMap.get(cpBouw7Id)
+        if (bestaandeCp?.sync_vergrendeld) continue
+
+        // Aanhef eerst — dat is wat er in Bouw7 is ingevuld. Staat die er niet, dan de
+        // voornaam als terugval. Levert ook dat niets op, dan blijft staan wat er in EVA
+        // stond: de sync mag een handmatig gezet geslacht nooit wissen.
+        const geslacht = geslachtUitAanhef(cp.salutation)
+          ?? geslachtUitVoornaam(cp.firstName)
+          ?? bestaandeCp?.geslacht
+          ?? null
 
         cpRows.push({
           voornaam:          cp.firstName ?? '',
           achternaam:        cp.lastName ?? '',
-          email:             cp.email ?? null,
-          telefoon:          cp.phone ?? null,
+          email:             cp.emailAddress ?? null,
+          telefoon:          cp.phoneNumber ?? null,
+          geslacht,
           bouw7_id:          cpBouw7Id,
           bouw7_sync_hash:   fingerprint({
-            v: cp.firstName ?? '', a: cp.lastName ?? '', em: cp.email ?? null, tel: cp.phone ?? null,
+            v: cp.firstName ?? '', a: cp.lastName ?? '', em: cp.emailAddress ?? null,
+            tel: cp.phoneNumber ?? null, aanhef: cp.salutation ?? null,
           }),
           bouw7_laatst_sync: new Date().toISOString(),
           bouw7_sync_status: 'synced',
         })
-        cpOrgKoppels.push({ cpBouw7Id, orgBouw7Id: String(c.id), functie: cp.function ?? null })
+        cpOrgKoppels.push({ cpBouw7Id, orgBouw7Id: String(c.id), functie: cp.jobTitle || null })
       }
     }
 

@@ -23,6 +23,8 @@ export const BOUW7_RELATIE_VELDEN = [
   'adres_plaats',
   'adres_land',
   'actief',
+  // Komt uit `contactDivisions[].paymentConditionSales` op het Bouw7-detailrecord.
+  'betalingstermijn_dagen',
 ] as const
 
 export const BOUW7_CONTACTPERSOON_VELDEN = [
@@ -30,6 +32,8 @@ export const BOUW7_CONTACTPERSOON_VELDEN = [
   'achternaam',
   'email',
   'telefoon',
+  // Afgeleid uit de Bouw7-aanhef (`salutation`); zie `geslachtUitAanhef` in lib/bouw7/sync.ts.
+  'geslacht',
 ] as const
 
 /** Kolomnamen uit een patch die door de sync overschreven zouden worden. */

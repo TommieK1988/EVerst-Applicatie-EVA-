@@ -124,18 +124,49 @@ profitAndRisk           — W&R-percentage over de regelsom (bv. "5"), met profi
 | Endpoint | Methode | Paginatie | Gebruik |
 |---|---|---|---|
 | `/list/contacts` | GET | ✓ | Alle klanten, leveranciers, onderaannemers |
-| `/list/contactpersons` | GET | ✓ | Contactpersonen bulk (sneller dan per contact) |
-| `/contacts/{id}` | GET | — | Contactpersonen per contact (fallback) |
+| `/contact/{id}` | GET | — | Detailrecord — **enkelvoud**. Nodig voor de betalingsconditie |
+| `/list/contact-persons` | GET | ✓ | Contactpersonen bulk — **mét koppelteken** |
+| `/list/divisions` | GET | — | De vier administraties; `exactPaymentConditionSales` is de standaardtermijn |
 
-**Velden op `Bouw7Contact`:**
+> **Let op de padnamen.** `/list/contactpersons` (aaneen) en `/contacts/{id}` (meervoud)
+> bestaan niet en geven 404. De sync gebruikte ze allebei — bulk én fallback — en liep
+> daardoor stil leeg: geen enkele contactpersoon werd nog bijgewerkt, en 71 in Bouw7
+> aangemaakte contactpersonen waren nooit in EVA aangekomen.
+
+**Velden op `Bouw7Contact`** (`/list/contacts`)**:**
 ```
 id, name
 type { id, name }      ← 'supplier' → leverancier, 'subcontractor' → onderaannemer
-contactPersons[]
 streetName, houseNumber, zipCode, city, countryCode
 emailAddress, phoneNumber, mobilePhoneNumber
 cocNumber (KvK), vatNumber (BTW), iban
-information, isActive
+information, isActive, updatedAt
+```
+
+**Betalingstermijn — alleen op het detailrecord.** `/list/contacts` heeft geen
+betalingsconditie. Die hangt op `GET /contact/{id}` onder `contactDivisions[]`, per
+administratie, als vrij tekstveld:
+
+```
+contactDivisions[] { divisionId, paymentConditionSales, paymentConditionPurchase, code }
+```
+
+`paymentConditionSales` is meestal een dagental als string ("14", "30", "60"), maar soms
+een code die geen termijn is ("IN" = ineens, "00"). Alleen een getal wordt overgenomen naar
+`relaties.betalingstermijn_dagen`; een code levert bewust null op. Gemeten september 2026:
+152 van de 607 relaties hebben een verkoopconditie en geen enkele relatie heeft afwijkende
+waarden tussen administraties.
+
+Omdat de conditie niet op het lijstrecord staat, zit `updatedAt` in de sync-fingerprint:
+zonder die stempel zou een gewijzigde termijn bij een incrementele run onzichtbaar blijven.
+
+**Velden op `Bouw7ContactPerson`** (`/list/contact-persons`)**:**
+```
+id, firstName, lastName
+emailAddress, phoneNumber     ← niet `email`/`phone`
+jobTitle                      ← niet `function`
+salutation                    ← vrije aanhef, bron voor contactpersonen.geslacht
+contact { id, name, type }    ← de organisatie, genest (niet `contactId`)
 ```
 
 **Type-mapping Bouw7 → EVA:**

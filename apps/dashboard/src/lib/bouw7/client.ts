@@ -368,7 +368,6 @@ export type Bouw7Contact = {
   name: string
   type?: { id: number; name: string }
   contactPersonName?: string | null
-  contactPersons?: Bouw7ContactPerson[]
   streetName?: string
   houseNumber?: string
   zipCode?: string
@@ -383,6 +382,12 @@ export type Bouw7Contact = {
   information?: string
   isActive?: boolean
   /**
+   * Laatste wijziging in Bouw7. Zit in de sync-fingerprint zodat ook wijzigingen in
+   * velden die alléén op het detailrecord staan (zoals de betalingsconditie) een
+   * incrementele run doen afdalen naar `GET /contact/{id}`.
+   */
+  updatedAt?: string
+  /**
    * "Uurtarief per uurtype" — afgesproken verkoop-/kostprijstarief per uursoort voor deze relatie.
    * Veldnaam/shape defensief getypeerd: nog te bevestigen tegen de live API (mogelijk alleen op
    * het detail-endpoint `/contacts/{id}`). Wordt gesynct naar `relatie_uurtarieven`.
@@ -396,14 +401,50 @@ export type Bouw7Contact = {
   }>
 }
 
+/**
+ * Detailrecord van een relatie: `GET /contact/{id}` — enkelvoud, let op.
+ *
+ * Levert velden die `/list/contacts` niet meegeeft. De betalingsconditie is er daar één van:
+ * die hangt per administratie onder `contactDivisions`, niet op het contact zelf.
+ */
+export type Bouw7ContactDetail = {
+  id: number
+  contactDivisions?: Array<{
+    id?: number
+    divisionId?: number
+    /**
+     * Betalingsconditie verkoop. Vrij tekstveld in Bouw7: meestal een aantal dagen als
+     * string ("14", "30", "60"), soms een code zonder dagental ("IN", "00").
+     */
+    paymentConditionSales?: string | null
+    /** Zelfde veld aan de inkoopkant. Nog niet gesynct. */
+    paymentConditionPurchase?: string | null
+    code?: string | null
+  }>
+}
+
+/**
+ * Contactpersoon uit `GET /list/contact-persons` — mét koppelteken.
+ *
+ * Veldnamen zijn afgeleid van de *werkelijke* respons, niet van de documentatie: de API
+ * levert `emailAddress`/`phoneNumber`/`jobTitle` (niet `email`/`phone`/`function`) en hangt
+ * de organisatie als genest `contact`-object aan de contactpersoon.
+ */
 export type Bouw7ContactPerson = {
   id: number
-  contactId?: number  // aanwezig bij bulk /list/contactpersons zonder filter
+  /** De organisatie waar deze contactpersoon onder hangt. */
+  contact?: { id: number; name?: string; type?: string; typeId?: number }
   firstName?: string
   lastName?: string
-  email?: string
-  phone?: string
-  function?: string
+  emailAddress?: string
+  phoneNumber?: string
+  jobTitle?: string
+  /**
+   * Aanhef zoals in Bouw7 ingetypt — vrij tekstveld, dus de spelling varieert
+   * ("De heer", "heer", "Mevrouw", "mevrouw ", "Geachte heer/mevrouw"). Bron voor
+   * `contactpersonen.geslacht`; zie `geslachtUitAanhef` in sync.ts.
+   */
+  salutation?: string | null
 }
 
 // Let op: veldnamen hieronder zijn afgeleid van de *werkelijke* /list/employees-respons,
