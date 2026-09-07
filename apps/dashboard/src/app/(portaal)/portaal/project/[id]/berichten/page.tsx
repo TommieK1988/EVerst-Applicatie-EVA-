@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { GeenToegangError } from '@/lib/auth/rechten'
+import { getPortaalBezoeker } from '@/lib/portaal/auth'
 import { getPortaalChat } from '@/lib/portaal/chat'
 import { Chat } from './Chat'
 
@@ -15,12 +16,14 @@ export default async function BerichtenPagina({ params }: { params: Promise<{ id
   const { id } = await params
 
   let berichten
+  let voorbeeld = false
   try {
     berichten = await getPortaalChat(id)
+    voorbeeld = (await getPortaalBezoeker())?.soort === 'medewerker'
   } catch (e) {
     if (e instanceof GeenToegangError) notFound()
     throw e
   }
 
-  return <Chat dossierId={id} berichten={berichten} />
+  return <Chat dossierId={id} berichten={berichten} voorbeeld={voorbeeld} />
 }

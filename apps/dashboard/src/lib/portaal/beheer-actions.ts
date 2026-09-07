@@ -78,21 +78,6 @@ export async function setPortaalOnderdeel(
   } catch (e) { return fout(e) }
 }
 
-/** Fases-only of ook de activiteiten tonen. */
-export async function setPortaalPlanningDetail(dossierId: string, detail: boolean): Promise<BeheerResultaat> {
-  try {
-    const { medewerker } = await vereisRecht('klantportaal', 'schrijven')
-    await db().from('portaal_dossier_instellingen').upsert(
-      {
-        dossier_id: dossierId, planning_detail: detail,
-        gewijzigd_op: new Date().toISOString(), gewijzigd_door: medewerker.id,
-      },
-      { onConflict: 'dossier_id' },
-    )
-    return { ok: true }
-  } catch (e) { return fout(e) }
-}
-
 /* ── Bestanden vrijgeven ──────────────────────────────────────────────────── */
 
 export type VrijTeGevenBestand = {

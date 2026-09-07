@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
-import { vereisPortaalOnderdeel } from '@/lib/portaal/auth'
+import { vereisPortaalOnderdeelWeergave } from '@/lib/portaal/auth'
 import { bouwInzendingPdf } from '@/lib/formulieren/inzending-pdf'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (!dossierId || !inzendingId) return new NextResponse('Onvolledig verzoek', { status: 400 })
 
   try {
-    await vereisPortaalOnderdeel(dossierId, 'formulieren')
+    await vereisPortaalOnderdeelWeergave(dossierId, 'formulieren')
   } catch (e) {
     if (e instanceof GeenToegangError) return new NextResponse('Geen toegang', { status: 403 })
     throw e

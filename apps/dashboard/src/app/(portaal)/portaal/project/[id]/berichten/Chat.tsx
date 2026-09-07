@@ -23,6 +23,7 @@ export function Chat({
   dossierId,
   berichten,
   compact = false,
+  voorbeeld = false,
 }: {
   dossierId: string
   berichten: PortaalChatBericht[]
@@ -31,6 +32,13 @@ export function Chat({
    * in een Kaart. Op de eigen pagina blijft het de volle hoogte.
    */
   compact?: boolean
+  /**
+   * Een collega kijkt mee. Dan geen invoerveld: de server weigert zo'n bericht
+   * toch — alleen een klantaccount komt langs `vereisPortaalOnderdeel` — en een
+   * knop die altijd een foutmelding oplevert is erger dan geen knop. Antwoorden
+   * doet een collega in het chatblok op de Informatie-tab van het dossier.
+   */
+  voorbeeld?: boolean
 }) {
   const router = useRouter()
   const [tekst, setTekst] = useState('')
@@ -43,8 +51,10 @@ export function Chat({
 
   useEffect(() => {
     onderkant.current?.scrollIntoView({ block: 'end' })
-    void portaalMarkeerBerichtenGelezen(dossierId)
-  }, [dossierId, berichten.length])
+    // Niet in het voorbeeld: dat de klant zijn eigen berichten gelezen heeft, is
+    // iets anders dan dat een collega ze bekeken heeft.
+    if (!voorbeeld) void portaalMarkeerBerichtenGelezen(dossierId)
+  }, [dossierId, berichten.length, voorbeeld])
 
   async function kiesBestand(e: React.ChangeEvent<HTMLInputElement>) {
     const bestand = e.target.files?.[0]
@@ -125,6 +135,16 @@ export function Chat({
         <div ref={onderkant} />
       </div>
 
+      {voorbeeld ? (
+        <p className={
+          compact
+            ? 'mt-3 border-t border-neutral-100 pt-3 text-[13px] text-neutral-500'
+            : 'border-t border-neutral-200 px-4 py-3 text-[13px] text-neutral-500'
+        }>
+          Hier typt de klant zijn bericht. Antwoorden doe je in het chatblok op de
+          Informatie-tab van het dossier.
+        </p>
+      ) : (
       <form onSubmit={versturen} className={compact ? 'mt-3 border-t border-neutral-100 pt-3' : 'border-t border-neutral-200 px-4 py-3'}>
         {bijlagen.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-1.5">
@@ -179,6 +199,7 @@ export function Chat({
           </button>
         </div>
       </form>
+      )}
     </div>
   )
 }

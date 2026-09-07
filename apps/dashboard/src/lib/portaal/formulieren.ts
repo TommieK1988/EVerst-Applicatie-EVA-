@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 
 /**
  * formulieren.ts — ingevulde formulieren en uitgevoerde controles.
@@ -45,7 +45,7 @@ export async function getPortaalFormulieren(dossierId: string): Promise<{
   formulieren: PortaalFormulier[]
   controles: PortaalControle[]
 }> {
-  await vereisPortaalOnderdeel(dossierId, 'formulieren')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'formulieren')
 
   // Eerst de vrijgegeven sjablonen; zonder die lijst hoeven we de inzendingen
   // niet eens op te halen.

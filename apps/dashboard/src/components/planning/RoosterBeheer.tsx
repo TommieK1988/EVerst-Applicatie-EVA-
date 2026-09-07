@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { MedewerkerRooster, MedewerkerRoosterPauze } from '@everts/database/platform-types'
 import { upsertRooster, verwijderRooster } from '@/app/(platform)/medewerkers/[id]/actions'
@@ -71,6 +72,7 @@ function RoosterForm({
 }) {
   const [state, setState] = useState<RoosterInput>(initial)
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   const set = <K extends keyof RoosterInput>(k: K, v: RoosterInput[K]) =>
     setState(prev => {
@@ -105,6 +107,10 @@ function RoosterForm({
       const result = await upsertRooster(medewerker_id, state, existing_id)
       if (!result.ok) { toast.error(result.error); return }
       toast.success(existing_id ? 'Rooster bijgewerkt' : 'Rooster toegevoegd')
+      // Zonder refresh blijft de lijst hangen op de roosters van de laatste
+      // paginalading: een net toegevoegd rooster is dan onzichtbaar, en een
+      // tweede poging strandt op "overlapt met een bestaand rooster".
+      router.refresh()
       onDone()
     })
   }
@@ -256,6 +262,10 @@ export default function RoosterBeheer({
   initial: RoosterMetPauzes[]
 }) {
   const [roosters, setRoosters] = useState<RoosterMetPauzes[]>(initial)
+  // De serveractie draait revalidatePath, dus na opslaan/verwijderen komt er een
+  // verse `initial` binnen. useState negeert latere props — daarom hier expliciet
+  // meelopen, anders toont de kaart verouderde (of lege) roosters.
+  useEffect(() => { setRoosters(initial) }, [initial])
   const [showNieuw, setShowNieuw] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()

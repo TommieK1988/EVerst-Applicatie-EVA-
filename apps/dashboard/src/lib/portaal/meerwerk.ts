@@ -1,5 +1,5 @@
 import 'server-only'
-import { vereisPortaalOnderdeel } from './auth'
+import { vereisPortaalOnderdeelWeergave } from './auth'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 
 /**
@@ -63,7 +63,7 @@ export type PortaalMeerwerkData = {
 export const BEOORDEELBARE_STATUS = 'offerte_verstuurd'
 
 export async function getPortaalMeerwerk(dossierId: string): Promise<PortaalMeerwerkData> {
-  await vereisPortaalOnderdeel(dossierId, 'meerwerk')
+  await vereisPortaalOnderdeelWeergave(dossierId, 'meerwerk')
 
   const data = await getDossierMeerwerk(dossierId)
 

@@ -11,7 +11,6 @@ import type { UrenOverzichtData, UrenOverzichtRegel } from '@/lib/uren/actions'
 import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
-import { useDialogen } from '@/components/ui/dialogen'
 import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
 
 /* ─── Opmaak ────────────────────────────────────────────────────────────────── */
@@ -210,13 +209,21 @@ export default function UrenOverzicht({
   const [keurBezig, setKeurBezig] = useState(false)
   const [keurId, setKeurId] = useState<string | null>(null)
   const [bewerken, setBewerken] = useState<TeBewerkenRegel | null>(null)
+  const [gekozen, setGekozen] = useState<UrenOverzichtRegel[]>([])
+  // Regels die zojuist zijn goedgekeurd. Het kruisje wordt daarmee meteen een vinkje, in plaats
+  // van rood te blijven tot de lijst opnieuw uit Bouw7 is opgehaald -- dat duurt seconden.
+  const [netGoedgekeurd, setNetGoedgekeurd] = useState<Set<number>>(new Set())
+
+  // Uit de selectie alleen wat ik werkelijk mag goedkeuren en nog niet net heb afgevinkt.
+  const teKeurenGekozen = useMemo(
+    () => gekozen.filter(r => magIkKeuren(r) && r.bouw7Id != null && !netGoedgekeurd.has(r.bouw7Id)),
+    [gekozen, magIkKeuren, netGoedgekeurd],
+  )
 
   // De tabel meldt terug welke rijen door de zoekbalk en de kolomfilters komen, zodat
   // de kaarten bovenin hetzelfde tellen als wat je op je scherm ziet staan.
   const [zichtbaar, setZichtbaar] = useState<UrenOverzichtRegel[] | null>(null)
   const meldTotalen = useCallback((rijen: UrenOverzichtRegel[]) => setZichtbaar(rijen), [])
-
-  const { bevestig } = useDialogen()
 
   /**
    * Keurt uren goed in de rol die je op het betreffende dossier hebt — de server bepaalt dat, niet
@@ -226,17 +233,19 @@ export default function UrenOverzicht({
    */
   const keur = useCallback(async (ids: number[]) => {
     if (!ids.length) return
+    // Meteen omzetten naar een vinkje; blijkt het toch mis te gaan, dan draaien we het terug.
+    setNetGoedgekeurd(prev => new Set([...prev, ...ids]))
     setKeurBezig(true)
     const r = await keurUrenGoed(ids)
     setKeurBezig(false)
     setKeurId(null)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success(
-      r.naarBouw7 > 0 && r.wachtOpProjectleider > 0
-        ? `${r.naarBouw7} goedgekeurd, ${r.wachtOpProjectleider} wacht nog op de projectleider.`
-      : r.naarBouw7 > 0 ? `${r.naarBouw7} uurregel${r.naarBouw7 === 1 ? '' : 's'} goedgekeurd.`
-      : `${r.verwerkt} akkoord — wacht nu op de projectleider.`,
-    )
+    if (!r.ok) {
+      setNetGoedgekeurd(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+      toast.error(r.error)
+      return
+    }
+    // Alleen fouten melden. Een geslaagde goedkeuring zie je aan het vinkje zelf; een melding
+    // rechtsboven voegt daar niets aan toe en zit in de weg als je er tientallen wegwerkt.
     if (r.mislukt > 0) toast.error(`${r.mislukt} niet gelukt: ${r.fouten[0] ?? ''}`)
     start(() => router.refresh())
   }, [router])
@@ -325,31 +334,6 @@ export default function UrenOverzicht({
           </button>
         )}
 
-        {alleenMijn && (
-          <button
-            type="button"
-            disabled={keurBezig || (zichtbaar ?? teKeuren).length === 0}
-            onClick={async () => {
-              const rijen = (zichtbaar ?? teKeuren).filter(magIkKeuren)
-              if (!rijen.length) return
-              const ok = await bevestig({
-                titel: `${rijen.length} uurregels goedkeuren?`,
-                omschrijving: `Samen ${uur(rijen.reduce((s, r) => s + r.uren, 0))} uur. Dit betreft alles wat nu zichtbaar is na filteren.`,
-                bevestigLabel: 'Goedkeuren',
-              })
-              if (ok) keur(rijen.map(r => r.bouw7Id!).filter(Boolean))
-            }}
-            style={{
-              padding: '7px 13px', borderRadius: 8, border: 'none',
-              cursor: keurBezig ? 'progress' : 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
-              background: '#009439', color: '#fff', opacity: keurBezig ? 0.6 : 1,
-            }}
-          >
-            {keurBezig ? 'Bezig…' : `Alles zichtbaar goedkeuren`}
-          </button>
-        )}
-
         <Stat label={telling.gefilterd ? 'Regels (gefilterd)' : 'Regels'} value={String(telling.regels)} />
         <Stat label="Uren" value={uur(telling.uren)} />
         <Stat label="Arbeidskosten" value={euro(telling.bedrag)} />
@@ -376,7 +360,8 @@ export default function UrenOverzicht({
             layouts={layouts}
             user_id={user_id}
             beginSortering={[{ id: 'datum', desc: true }]}
-            selecteerbaar={false}
+            selecteerbaar={alleenMijn}
+            onSelectie={setGekozen}
             toonRijActie={false}
             dicht
             eenregelig
@@ -398,11 +383,30 @@ export default function UrenOverzicht({
             }}
             afvinkKolom={alleenMijn ? {
               stijl: 'kruis',
-              status: (r) => magIkKeuren(r) ? 'open' : 'verborgen',
+              status: (r) => (r.bouw7Id != null && netGoedgekeurd.has(r.bouw7Id)) ? 'af'
+                : magIkKeuren(r) ? 'open' : 'verborgen',
               bezigId: keurId,
               onKlik: (r) => { setKeurId(r.id); keur([r.bouw7Id!]) },
             } : undefined}
             acties={
+              <>
+                {alleenMijn && teKeurenGekozen.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={keurBezig}
+                    onClick={() => keur(teKeurenGekozen.map(r => r.bouw7Id!).filter(Boolean))}
+                    style={{
+                      padding: '6px 12px', borderRadius: 7, border: 'none', marginRight: 10,
+                      cursor: keurBezig ? 'progress' : 'pointer',
+                      fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
+                      background: '#009439', color: '#fff', opacity: keurBezig ? 0.6 : 1,
+                    }}
+                  >
+                    {keurBezig
+                      ? 'Bezig…'
+                      : `${teKeurenGekozen.length} goedkeuren · ${uur(teKeurenGekozen.reduce((s, r) => s + r.uren, 0))} uur`}
+                  </button>
+                )}
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-muted)' }}>
                 Groeperen
                 <select
@@ -417,12 +421,13 @@ export default function UrenOverzicht({
                   {GROEPEN.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
                 </select>
               </label>
+              </>
             }
           />
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
-              ? ' Vink een regel af om hem goed te keuren, of keur in één keer alles goed wat er na filteren nog staat. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier.'
+              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>
