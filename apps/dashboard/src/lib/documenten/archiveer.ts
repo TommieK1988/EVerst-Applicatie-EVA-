@@ -35,6 +35,13 @@ export interface ArchiveerResultaat {
   fout?: string
   documentId?: string
   webUrl?: string | null
+  /**
+   * SharePoint-verwijzing van het geplaatste bestand. Nodig om het document daarna in het
+   * klantportaal vrij te kunnen geven: de portaalsleutel is `sharepoint:<itemId>`, gelijk aan
+   * wat de Bestanden-tab gebruikt.
+   */
+  driveId?: string | null
+  itemId?: string | null
 }
 
 export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<ArchiveerResultaat> {
@@ -86,7 +93,7 @@ export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<Archiv
     console.warn('Document registreren mislukt:', e)
   }
 
-  return { ok: !fout, fout, documentId, webUrl }
+  return { ok: !fout, fout, documentId, webUrl, driveId, itemId }
 }
 
 /** Markeert een geregistreerd document als gemaild. Best-effort. */

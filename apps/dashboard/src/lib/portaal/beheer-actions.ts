@@ -136,6 +136,46 @@ export async function setPortaalBestandZichtbaar(
   } catch (e) { return fout(e) }
 }
 
+/**
+ * Een zojuist opgesteld bezoekrapport meteen vrijgeven in het klantportaal.
+ *
+ * Roept intern gewoon `setPortaalBestandZichtbaar` aan, met **exact dezelfde sleutel en
+ * bronQuery als `sharePointRij()`** in `lib/dossiers/bestand-rijen.ts`. Dat is de hele truc:
+ * daardoor is er één administratie. Het rapport verschijnt meteen als aangevinkt in de kolom
+ * "In portaal" op de Bestanden-tab, en uitvinken daar trekt het weer in. Een tweede
+ * boekhouding zou vroeg of laat uit de pas gaan lopen met de eerste.
+ *
+ * Rechtencontrole en de bevroren bronQuery komen van `setPortaalBestandZichtbaar`; hier komt
+ * niets bij.
+ */
+export async function geefRapportVrijInPortaal(input: {
+  dossierId: string
+  driveId: string
+  itemId: string
+  naam: string
+  grootte?: number | null
+}): Promise<BeheerResultaat> {
+  const query = new URLSearchParams({ bron: 'sharepoint' })
+  query.set('driveId', input.driveId)
+  query.set('itemId', input.itemId)
+  query.set('naam', input.naam)
+
+  return setPortaalBestandZichtbaar(
+    input.dossierId,
+    {
+      sleutel: `sharepoint:${input.itemId}`,
+      bron: 'sharepoint',
+      bronQuery: query.toString(),
+      naam: input.naam,
+      extensie: 'pdf',
+      soort: 'document',
+      grootte: input.grootte ?? null,
+      datum: new Date().toISOString(),
+    },
+    true,
+  )
+}
+
 /* ── Toegang ──────────────────────────────────────────────────────────────── */
 
 /**

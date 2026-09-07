@@ -21,6 +21,7 @@ import {
 } from '@/lib/dossiers/oplevering'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
+import BezoekRapportageKnop from '@/components/documenten/BezoekRapportageKnop'
 import OpleveringMailBlok from './OpleveringMailBlok'
 import { PUNT_STATUSSEN, REDEN_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
@@ -801,10 +802,18 @@ function DeelLinks({ moment, dossierId }: { moment: OpleverMomentView; dossierId
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2">
       <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Deel-links</span>
+      {/* Het interne werkdocument: alle punten met hun statuskleuren, ook de openstaande. */}
       <a href={`/api/oplevering/rapport/${moment.id}`} target="_blank" rel="noreferrer"
         className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:border-brand-400">
-        📄 Rapportage (print/PDF)
+        📄 Werklijst (print/PDF)
       </a>
+      {/* Het klantdocument: op briefpapier, in dezelfde vorm als elk ander bezoekrapport. */}
+      <BezoekRapportageKnop
+        dossierId={dossierId}
+        bron={{ soort: 'oplevering', id: moment.id }}
+        compact
+        label="Bezoekrapport opstellen"
+      />
       {[...relaties.entries()].map(([id, naam]) => (
         <button key={id} disabled={bezig} onClick={() => afmeldLink(id, naam)}
           className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:border-brand-400">

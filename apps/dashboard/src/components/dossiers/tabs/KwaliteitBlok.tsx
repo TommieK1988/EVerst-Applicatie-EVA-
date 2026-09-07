@@ -4,6 +4,7 @@ import { getDossierKwaliteit, getOpenAfwijkingen } from '@/lib/kwaliteit/afwijki
 import { getInspecties } from '@/lib/kwaliteit/inspecties'
 import { kwaliteitAfwijkingStatusLabels, kwaliteitErnstLabels } from '@everts/database/kwaliteit-types'
 import KwaliteitRapportageKnop from '@/components/documenten/KwaliteitRapportageKnop'
+import BezoekRapportageKnop from '@/components/documenten/BezoekRapportageKnop'
 
 /**
  * Het kwaliteitsblok op de dossiertab (§54).
@@ -44,11 +45,20 @@ export default async function KwaliteitBlok({ dossierId }: { dossierId: string }
     <section style={{ marginBottom: 32 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <h3 style={{ ...kop, margin: 0 }}>Kwaliteitscontrole</h3>
-        <KwaliteitRapportageKnop
-          dossierId={dossierId}
-          inspectieId={samenvatting.laatsteInspectie?.id}
-          compact
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <BezoekRapportageKnop
+            dossierId={dossierId}
+            bron={samenvatting.laatsteInspectie
+              ? { soort: 'kwaliteit', id: samenvatting.laatsteInspectie.id }
+              : undefined}
+            compact
+          />
+          <KwaliteitRapportageKnop
+            dossierId={dossierId}
+            inspectieId={samenvatting.laatsteInspectie?.id}
+            compact
+          />
+        </div>
       </div>
 
       {/* Laatste ronde + verkeerslicht op hoe lang geleden dat was. */}

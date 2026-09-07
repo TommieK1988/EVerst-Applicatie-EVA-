@@ -17,6 +17,7 @@ import { eenheidLabel, eisOmschrijving, getalNL, samenvatting, steekproefSignaal
 import { PageHeader, Badge, Card, CardHeader, CardBody } from '@/components/ui'
 import { useDialogen } from '@/components/ui/dialogen'
 import KwaliteitRapportageKnop from '@/components/documenten/KwaliteitRapportageKnop'
+import BezoekRapportageKnop from '@/components/documenten/BezoekRapportageKnop'
 
 const STATUS_TONE: Record<KwaliteitResultaatStatus, 'success' | 'error' | 'warning' | 'neutral'> = {
   voldoet: 'success',
@@ -99,6 +100,10 @@ export default function InspectieDetail({
         status={definitief ? { label: 'Definitief', tone: 'success' } : { label: 'Concept', tone: 'neutral' }}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <BezoekRapportageKnop
+              dossierId={context.dossier.id}
+              bron={{ soort: 'kwaliteit', id: context.inspectie.id }}
+            />
             <KwaliteitRapportageKnop dossierId={context.dossier.id} inspectieId={context.inspectie.id} />
             {definitief && (
               <button

@@ -69,18 +69,51 @@ export default async function FormulierenPagina({ params }: { params: Promise<{ 
                       {[c.nummer, datumKort(c.datum)].filter(Boolean).join(' · ')}
                     </p>
                   </div>
-                  {c.bekeken != null && (
-                    <span className="shrink-0 text-xs text-neutral-500">
-                      {c.bekeken} bekeken
-                      {c.afwijkend != null && c.afwijkend > 0 && ` · ${c.afwijkend} afwijkend`}
-                    </span>
-                  )}
+                  <div className="flex shrink-0 items-center gap-3">
+                    {c.bekeken != null && (
+                      <span className="text-xs text-neutral-500">
+                        {c.bekeken} bekeken
+                        {c.afwijkend != null && c.afwijkend > 0 && ` · ${c.afwijkend} afwijkend`}
+                      </span>
+                    )}
+                    {/* Tot nu toe stond hier alleen een samenvattingsregel zonder iets om te
+                        openen; het rapport verschijnt zodra het is vrijgegeven. */}
+                    {c.rapportUrl && (
+                      <a href={c.rapportUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-xs font-semibold text-brand-600">
+                        Rapport
+                      </a>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
           </ul>
         )}
       </Kaart>
+
+      {data.bezoekrapporten.length > 0 && (
+        <Kaart titel="Rapporten van bezoeken">
+          <ul className="divide-y divide-neutral-100">
+            {data.bezoekrapporten.map(r => (
+              <li key={r.id}>
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-3 py-2.5 transition hover:bg-neutral-50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{r.titel}</span>
+                    <span className="block text-xs text-neutral-500">{datumKort(r.datum)}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-brand-600">Openen</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Kaart>
+      )}
     </div>
   )
 }

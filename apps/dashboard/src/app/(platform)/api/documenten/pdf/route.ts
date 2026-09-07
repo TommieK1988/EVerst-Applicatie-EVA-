@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   let body: {
     sjabloon_id?: string; dossier_id?: string; invoer?: Record<string, unknown>
-    archiveren?: boolean; bestelling_id?: string | null
+    archiveren?: boolean; bestelling_id?: string | null; portaal?: boolean
   }
   try {
     body = await request.json()
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   const {
-    sjabloon_id: sjabloonId, dossier_id: dossierId, invoer = {}, archiveren = true,
+    sjabloon_id: sjabloonId, dossier_id: dossierId, invoer = {}, archiveren = true, portaal = false,
     bestelling_id: bestellingId = null,
   } = body
   if (!sjabloonId || !dossierId) {
@@ -89,6 +89,25 @@ export async function POST(request: NextRequest) {
       bestellingId,
     })
 
+    // Vrijgeven in het klantportaal kan alleen als het bestand ook echt in SharePoint staat:
+    // de portaal-downloadproxy leest de bron uit de bevroren rij, niet uit de querystring.
+    // Mislukt de vrijgave (bijvoorbeeld doordat de opsteller geen portaalrecht heeft), dan is
+    // het document wél gearchiveerd; dat is een aparte kop zodat de client het kan melden.
+    let portaalStatus = 'nvt'
+    if (portaal && archief.ok && archief.driveId && archief.itemId) {
+      const { geefRapportVrijInPortaal } = await import('@/lib/portaal/beheer-actions')
+      const r = await geefRapportVrijInPortaal({
+        dossierId,
+        driveId: archief.driveId,
+        itemId: archief.itemId,
+        naam: `${naam}.pdf`,
+        grootte: pdf.byteLength,
+      })
+      portaalStatus = r.ok ? 'ok' : 'mislukt'
+    } else if (portaal) {
+      portaalStatus = 'mislukt'
+    }
+
     return new NextResponse(pdf.buffer as ArrayBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
@@ -96,6 +115,7 @@ export async function POST(request: NextRequest) {
         'Cache-Control': 'no-store',
         // De client toont hiermee "gearchiveerd" of juist de reden waarom niet.
         'X-Archief-Status': archief.ok ? 'ok' : 'mislukt',
+        'X-Portaal-Status': portaalStatus,
       },
     })
   } catch (err) {

@@ -18,6 +18,7 @@ import {
 } from '@/lib/documenten/genereer-document'
 import { archiveerEnRegistreer, markeerGemaild } from '@/lib/documenten/archiveer'
 import type { DocumentSjabloon, DossierDocument } from '@/lib/documenten/types'
+import type { BezoekKeuze } from '@/lib/documenten/bezoek'
 import {
   getOpleverTokenLinks, getOpleverFeedbackTemplates, maakToegangToken,
   type OpleverTokenLink,
@@ -64,6 +65,18 @@ export async function getSjablonenVoorDossier(dossierId: string): Promise<Docume
     if (s.werkmaatschappij_id && dossier.werkmaatschappij_id && s.werkmaatschappij_id !== dossier.werkmaatschappij_id) return false
     return true
   })
+}
+
+/**
+ * Alle bezoeken van een dossier voor de bronkiezer van het bezoekrapport: kwaliteitsrondes,
+ * oplevermomenten, veiligheidsrondes en ingediende formulieren, chronologisch door elkaar.
+ *
+ * Bewust één lijst en niet vier: de opsteller kiest een bezoek, niet een module.
+ */
+export async function getBezoeken(dossierId: string): Promise<BezoekKeuze[]> {
+  await vereisRecht('dossiers', 'lezen')
+  const { getBezoekenVoorDossier } = await import('@/lib/documenten/bezoek')
+  return getBezoekenVoorDossier(dossierId)
 }
 
 /** Eerder opgestelde documenten van dit dossier, nieuwste eerst. */

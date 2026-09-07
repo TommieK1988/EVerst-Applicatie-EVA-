@@ -19,6 +19,9 @@ import {
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 import HoutrotOptiesVeld from './HoutrotOptiesVeld'
 import KwaliteitOptiesVeld from './KwaliteitOptiesVeld'
+import BezoekOptiesVeld from './BezoekOptiesVeld'
+import { useDialogen } from '@/components/ui/dialogen'
+import { isBezoekSoort } from '@/lib/documenten/types'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 
 interface Props {
@@ -43,6 +46,9 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
   const [previewInvoer, setPreviewInvoer] = useState(invoer)
   const [previewKey, setPreviewKey] = useState(0)
   const [archiveren, setArchiveren] = useState(true)
+  // Vrijgeven in het portaal staat standaard UIT: per ongeluk delen herstel je niet.
+  const [portaal, setPortaal] = useState(false)
+  const { bevestig } = useDialogen()
   const [mailOpen, setMailOpen] = useState(false)
   const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bodyHtml: '' })
   const [bezig, startT] = useTransition()
@@ -83,7 +89,7 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
       const res = await fetch('/api/documenten/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sjabloon_id: sjabloon.id, dossier_id: dossierId, invoer, archiveren }),
+        body: JSON.stringify({ sjabloon_id: sjabloon.id, dossier_id: dossierId, invoer, archiveren, portaal }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
@@ -93,9 +99,17 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
       triggerDownload(blob, bestandsnaamUitHeader(res.headers.get('Content-Disposition')) ?? 'document.pdf')
 
       const gearchiveerd = res.headers.get('X-Archief-Status') === 'ok'
+      const portaalStatus = res.headers.get('X-Portaal-Status')
       toast.success(archiveren && gearchiveerd
-        ? 'Document opgesteld en in SharePoint gezet'
+        ? (portaalStatus === 'ok'
+            ? 'Document opgesteld, in SharePoint gezet en vrijgegeven in het klantportaal'
+            : 'Document opgesteld en in SharePoint gezet')
         : 'Document opgesteld')
+      if (portaalStatus === 'mislukt') {
+        // Het document is er wél; alleen de vrijgave lukte niet. Dat mag niet stil blijven,
+        // anders denkt de opsteller dat de klant het kan zien.
+        toast.error('Vrijgeven in het klantportaal is niet gelukt. Doe het via de Bestanden-tab.')
+      }
       onKlaar()
     } catch (err) {
       toast.error(String(err instanceof Error ? err.message : err))
@@ -201,6 +215,39 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
               <input type="checkbox" checked={archiveren} onChange={e => setArchiveren(e.target.checked)} />
               Opslaan in de SharePoint-dossiermap
             </label>
+
+            {/* Alleen bij een bezoekrapport: dat is het enige document dat bedoeld is om
+                als rapportage bij de opdrachtgever terecht te komen. */}
+            {isBezoekSoort(sjabloon.documentsoort) && (
+              <>
+                <label className="mt-2 flex items-center gap-2 text-[12px] text-neutral-600">
+                  <input
+                    type="checkbox"
+                    checked={portaal}
+                    disabled={!archiveren}
+                    onChange={async e => {
+                      // Aanvinken vraagt om bevestiging, uitvinken bewust niet: per ongeluk
+                      // intrekken herstel je, per ongeluk delen niet. Zelfde regel als op de
+                      // Bestanden-tab.
+                      if (!e.target.checked) { setPortaal(false); return }
+                      const ok = await bevestig({
+                        titel: 'Vrijgeven in het klantportaal?',
+                        omschrijving: 'De opdrachtgever kan dit rapport dan zelf openen en downloaden. '
+                          + 'Je kunt het later intrekken via de Bestanden-tab.',
+                        bevestigLabel: 'Vrijgeven',
+                      })
+                      setPortaal(ok)
+                    }}
+                  />
+                  Vrijgeven in het klantportaal
+                </label>
+                {!archiveren && (
+                  <p className="ml-6 mt-1 text-[11px] text-neutral-500">
+                    Kan alleen als het rapport ook in de dossiermap wordt opgeslagen.
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           {/* Preview */}
@@ -291,6 +338,9 @@ function VeldInvoer({ veld, dossierId, waarde, onChange, onBlur }: {
       ) : veld.type === 'kwaliteit_opties' ? (
         // Ook hier bewust géén onBlur: elke verversing rendert een volledig rapport met foto's.
         <KwaliteitOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
+      ) : veld.type === 'bezoek_opties' ? (
+        // Ook hier bewust geen onBlur: elke verversing rendert een volledig rapport met foto's.
+        <BezoekOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
       ) : veld.type === 'meerregelig' ? (
         <textarea value={waarde} onChange={e => onChange(e.target.value)} onBlur={onBlur} rows={4} className={cls} />
       ) : veld.type === 'keuze' ? (
