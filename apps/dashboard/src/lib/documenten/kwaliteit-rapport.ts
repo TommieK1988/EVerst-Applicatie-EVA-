@@ -224,6 +224,9 @@ export async function bouwKwaliteitBlok(
   const teHalen = [
     ...afwijkingen.map(a => eersteFotoPerAfwijking.get(a.id) ?? ''),
     ...(keuze.toon_waarnemingen ? positief.map(w => fotoPerWaarneming.get(w.id) ?? '') : []),
+    // De herstelfoto werd hierboven al bepaald maar landde nergens; als na-foto hoort hij in
+    // het bezoekrapport thuis (voor/na naast elkaar).
+    ...afwijkingen.map(a => herstelFotoPerAfwijking.get(a.id) ?? ''),
   ]
   // `veiligeFotoUrl` weert alles buiten onze eigen publieke bucket: deze URL's komen uit een
   // vrije tekstkolom en worden hieronder server-side opgehaald.
@@ -233,8 +236,11 @@ export async function bouwKwaliteitBlok(
   // 'laat_vallen': boven de bytelimiet vallen de resterende foto's weg in plaats van dat de
   // hele conversie klapt.
   const dataUrls = pasFotoBudgetToe(opgehaald, 'laat_vallen')
+  const aantalWaarnemingFotos = keuze.toon_waarnemingen ? positief.length : 0
   const fotoVanAfwijking = (i: number) => dataUrls[i] ?? ''
   const fotoVanWaarneming = (i: number) => dataUrls[afwijkingen.length + i] ?? ''
+  const herstelFotoVanAfwijking = (i: number) =>
+    dataUrls[afwijkingen.length + aantalWaarnemingFotos + i] ?? ''
 
   // ── Tellingen ──────────────────────────────────────────────────────────
   const telling = samenvatting(rijen, afwijkingen)
@@ -305,6 +311,9 @@ export async function bouwKwaliteitBlok(
     datum: datumNL(a.datum_constatering),
     foto: fotoVanAfwijking(i),
     heeft_foto: !!fotoVanAfwijking(i),
+    foto_na: herstelFotoVanAfwijking(i),
+    heeft_foto_na: !!herstelFotoVanAfwijking(i),
+    hersteld: a.status === 'hersteld_akkoord',
   }))
 
   // In pagina's knippen. De paginabreuk zelf staat in het Word-sjabloon, binnen een

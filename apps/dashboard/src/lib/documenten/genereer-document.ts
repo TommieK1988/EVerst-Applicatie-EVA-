@@ -93,7 +93,7 @@ export async function genereerDocumentDocx(
     ? { [FEEDBACK_LINK_PLACEHOLDER]: feedbackUrl, '{feedback.url}': feedbackUrl }
     : undefined
 
-  return renderDocx(templateBuffer, ctx, { imageMax: documentImageMax(), hyperlinks })
+  return renderDocx(templateBuffer, ctx, { imageMax: documentImageMax(sjabloon.documentsoort), hyperlinks })
 }
 
 /**

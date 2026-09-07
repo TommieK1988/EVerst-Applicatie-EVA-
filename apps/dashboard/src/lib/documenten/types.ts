@@ -12,7 +12,7 @@
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
 export const DOCUMENTSOORTEN = [
   'opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief',
-  'houtrot_rapportage', 'kwaliteitsrapport', 'inkooporder', 'oa_contract', 'overig',
+  'houtrot_rapportage', 'kwaliteitsrapport', 'bezoekrapport', 'inkooporder', 'oa_contract', 'overig',
 ] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
@@ -23,6 +23,7 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
   informatiebrief:    'Tussentijdse informatiebrief',
   houtrot_rapportage: 'Houtrot-rapportage',
   kwaliteitsrapport:  'Kwaliteitscontrole-rapport',
+  bezoekrapport:      'Bezoekrapport',
   inkooporder:        'Inkooporder',
   oa_contract:        'Onderaannemerscontract',
   overig:             'Overig',
@@ -34,6 +35,17 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
  * De sleutels zijn gelijk aan `ContractSoort` in `lib/bouw7/contracten`, zodat de
  * soort van een bestelling rechtstreeks de documentsoort selecteert.
  */
+/**
+ * De documentsoort van het gedeelde bezoekrapport. Eén soort voor alle controles op locatie;
+ * `kwaliteitsrapport` blijft daarnaast bestaan zodat bestaande sjabloonrijen blijven werken,
+ * maar krijgt geen doorontwikkeling meer.
+ */
+export const BEZOEK_DOCUMENTSOORT = 'bezoekrapport'
+
+export function isBezoekSoort(s: string | null | undefined): boolean {
+  return s === BEZOEK_DOCUMENTSOORT
+}
+
 export const INKOOP_DOCUMENTSOORTEN = ['inkooporder', 'oa_contract'] as const
 export type InkoopDocumentsoort = (typeof INKOOP_DOCUMENTSOORTEN)[number]
 
@@ -42,7 +54,7 @@ export function isInkoopSoort(s: string | null | undefined): s is InkoopDocument
 }
 
 /** Veldtypen voor de per-document invoervelden. */
-export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link', 'houtrot_opties', 'kwaliteit_opties'] as const
+export const VELD_TYPES = ['tekst', 'meerregelig', 'datum', 'getal', 'keuze', 'checkbox', 'feedback_link', 'houtrot_opties', 'kwaliteit_opties', 'bezoek_opties'] as const
 export type VeldType = (typeof VELD_TYPES)[number]
 
 export const veldTypeLabels: Record<VeldType, string> = {
@@ -64,6 +76,10 @@ export const veldTypeLabels: Record<VeldType, string> = {
   // betreft en of de positieve waarnemingen en de opvolging van eerdere rondes mee moeten.
   // De waarde is een JSON-tekst.
   kwaliteit_opties: 'Kwaliteitsrapport (inspectie kiezen)',
+  // Bijzonder veld voor het bezoekrapport: bij het opstellen kies je wélk bezoek het betreft
+  // (kwaliteitsronde, oplevering, veiligheidsronde of formulier) en wat er mee mag. De waarde
+  // is een JSON-tekst.
+  bezoek_opties: 'Bezoekrapport (bezoek kiezen)',
 }
 
 /**

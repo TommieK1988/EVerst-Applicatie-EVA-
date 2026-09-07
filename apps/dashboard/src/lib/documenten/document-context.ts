@@ -29,6 +29,9 @@ import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
 import { RAPPORT_FOTO_MAX, parseRapportOpties, HOUTROT_OPTIES_SLEUTEL } from './houtrot-opties'
 import { bouwKwaliteitBlok, LEEG_KWALITEIT_BLOK } from './kwaliteit-rapport'
 import { KWALITEIT_FOTO_MAX, KWALITEIT_FOTO_KLEIN } from './kwaliteit-opties'
+import { BEZOEK_FOTO_MAX, BEZOEK_FOTO_KLEIN } from './bezoek-opties'
+import { LEEG_BEZOEK_BLOK } from './bezoek/contract'
+import { isBezoekSoort } from './types'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -163,9 +166,18 @@ export async function buildDocumentContext(
     : LEEG_HOUTROT_BLOK
 
   // Kwaliteitscontrole-rapport — zelfde patroon: alleen laden als het sjabloon erom vraagt.
-  const kwaliteit = sjabloon.documentsoort === 'kwaliteitsrapport'
+  // Ook het bezoekrapport heeft dit blok nodig zodra de gekozen bron een kwaliteitsronde is;
+  // dat scheelt een tweede keer laden.
+  const isBezoek = isBezoekSoort(sjabloon.documentsoort)
+  const kwaliteit = sjabloon.documentsoort === 'kwaliteitsrapport' || isBezoek
     ? await bouwKwaliteitBlok(dossierId, genormaliseerd, { preview: opties.preview })
     : LEEG_KWALITEIT_BLOK
+
+  // Bezoekrapport — één rapportage voor elke controle op locatie. De gekozen bron bepaalt
+  // welke hoofdstukken gevuld worden; de rest klapt in het sjabloon vanzelf dicht.
+  const bezoek = isBezoek
+    ? await (await import('./bezoek')).bouwBezoekBlok(dossierId, genormaliseerd, kwaliteit, { preview: opties.preview })
+    : LEEG_BEZOEK_BLOK
 
   // Feedback-ronde: de bewoners-feedbacklink wordt automatisch bepaald (opgehaald of
   // aangemaakt) — daaruit volgen de linktekst {feedback.url}, de QR-code {%feedback_qr}
@@ -266,6 +278,7 @@ export async function buildDocumentContext(
     opdracht,
     houtrot,
     kwaliteit,
+    bezoek,
     // Platte vlag zodat {#toon_prijzen}…{/toon_prijzen} óók binnen de registratie-
     // en groeploops oplost (de dotted parser valt door naar de buitenste scope).
     toon_prijzen: houtrot.heeft
@@ -306,7 +319,7 @@ export async function buildDocumentContext(
 }
 
 /** Max-kaders voor de image-tags van een document (naast de engine-standaarden). */
-export function documentImageMax(): Record<string, { w: number; h: number }> {
+export function documentImageMax(documentsoort?: string): Record<string, { w: number; h: number }> {
   const PASFOTO = { w: 160, h: 200 }
   const QR = { w: 190, h: 190 }
   const max: Record<string, { w: number; h: number }> = {
@@ -325,11 +338,23 @@ export function documentImageMax(): Record<string, { w: number; h: number }> {
     max[`foto_${type}`] = RAPPORT_FOTO_MAX
     max[`fotos.${type}`] = RAPPORT_FOTO_MAX
   }
+  // Bezoekrapport: eigen tagnamen, zodat het kader van dit rapport niet dat van een ander
+  // document overschrijft. De image-module kiest het max-kader op TAGNAAM.
+  max['bevinding_foto'] = BEZOEK_FOTO_MAX
+  max['bevinding_foto_na'] = BEZOEK_FOTO_MAX
+  max['waarneming_foto'] = BEZOEK_FOTO_KLEIN
+  max['beeld'] = BEZOEK_FOTO_KLEIN
+
   // Kwaliteitsrapport: `foto` staat al in STANDAARD_IMAGE_MAX op PHOTO_MAX, maar dat kader is te
   // groot voor drie afwijkingen op één pagina. Hier begrenst het kader de blokhoogte, net als bij
   // de houtrot-rapportage. `foto_klein` is de strook positieve waarnemingen.
-  max['foto'] = KWALITEIT_FOTO_MAX
-  max['foto_klein'] = KWALITEIT_FOTO_KLEIN
+  //
+  // Alleen voor dát rapport: `foto` is een algemene tagnaam die ook in een brief of
+  // garantiecertificaat kan staan, en die kreeg hier stilzwijgend een kader van 180x135.
+  if (!documentsoort || documentsoort === 'kwaliteitsrapport') {
+    max['foto'] = KWALITEIT_FOTO_MAX
+    max['foto_klein'] = KWALITEIT_FOTO_KLEIN
+  }
   return max
 }
 

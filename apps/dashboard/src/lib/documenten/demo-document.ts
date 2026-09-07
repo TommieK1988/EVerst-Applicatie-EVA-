@@ -13,6 +13,13 @@
 import { normaliseerInvoer, datumNL, datumISO, nJaarLater, euroNL, getalNL, afkappen } from './format'
 import { ROLLEN, rolLabels } from './rollen'
 import { parseRapportOpties, HOUTROT_OPTIES_SLEUTEL, PAGINABREUK_XML } from './houtrot-opties'
+import { parseBezoekOpties, BEZOEK_OPTIES_SLEUTEL, type BezoekOpties } from './bezoek-opties'
+import { isBezoekSoort } from './types'
+import { knipInPaginas } from './rapport-paginas'
+import {
+  LEEG_BEZOEK_BLOK, LEGE_BEVINDING, bezoekDisclaimer,
+  type BezoekBlok, type BezoekBevinding,
+} from './bezoek/contract'
 import { isInkoopSoort } from './types'
 import type { DocumentSjabloon } from './types'
 
@@ -216,8 +223,110 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
     ctx.toon_prijzen = false
   }
 
+  // Bezoekrapport: zelfde reden als hierboven — de editor-preview draait op dossier_id=demo,
+  // dus zonder demo-blok kan de beheerder de opmaak niet beoordelen.
+  if (isBezoekSoort(sjabloon.documentsoort)) {
+    ctx.bezoek = demoBezoekBlok(parseBezoekOpties(invoer[BEZOEK_OPTIES_SLEUTEL]))
+  } else {
+    ctx.bezoek = LEEG_BEZOEK_BLOK
+  }
+
   for (const rol of ROLLEN) ctx[`foto_${rol}`] = ''
   return ctx
+}
+
+// ── Demo-bezoekrapport ────────────────────────────────────────────────────
+
+/**
+ * Toont bewust een kwaliteitsronde: dat is de bron die de meeste hoofdstukken vult, dus de
+ * beheerder ziet in één preview het hele sjabloon. Bij een oplevering vallen Metingen en
+ * Opvolging weg en komt Ondertekening erbij.
+ */
+function demoBezoekBlok(keuze: BezoekOpties): BezoekBlok {
+  const bevinding = (n: number, o: Partial<BezoekBevinding>): BezoekBevinding => ({
+    ...LEGE_BEVINDING,
+    nummer: `KA-2026-${String(n).padStart(3, '0')}`,
+    volgnummer: n,
+    status: 'open', status_label: 'Open', is_open: true,
+    datum: '07-09-2026', hersteldatum: '21-09-2026',
+    ...o,
+  })
+
+  const bevindingen = [
+    bevinding(31, {
+      titel: 'SCH-03', groep: 'Schilderwerk', locatie: 'Noordgevel, kozijn 2.14',
+      omschrijving_kort: 'Op drie kozijnen is de aflaag te dun aangebracht; de laagdikte blijft onder de eis.',
+      ernst_label: 'Technisch', eis_kort: 'Droge laagdikte aflak ≥ 80 µm', meting: '62 µm',
+      actie_kort: 'Extra aflaag aanbrengen en opnieuw meten',
+    }),
+    bevinding(32, {
+      titel: 'KIT-01', groep: 'Kitwerk', locatie: 'Voorgevel, 2e verdieping',
+      omschrijving_kort: 'De kitvoeg tussen kozijn en metselwerk laat los over circa 40 cm.',
+      ernst_label: 'Kritiek', is_kritiek: true, status_label: 'In behandeling',
+      eis_kort: 'Aansluitend, geen open naden',
+      actie_kort: 'Voeg uitsnijden en opnieuw afkitten',
+    }),
+    bevinding(33, {
+      titel: 'HOU-02', groep: 'Houtrotherstel', locatie: 'Achtergevel, kozijn 0.04',
+      omschrijving_kort: 'Bij de onderdorpel is aangetast hout blijven zitten onder de plamuurlaag.',
+      ernst_label: 'Technisch', status_label: 'Opgelost', is_open: false, is_opgelost: true,
+      eis_kort: 'Aantasting verwijderd tot gezond hout',
+      actie_kort: 'Hersteld en opnieuw beoordeeld',
+    }),
+  ]
+
+  return {
+    ...LEEG_BEZOEK_BLOK,
+    aanwezig: true,
+    soort: 'kwaliteit',
+    soort_label: 'Kwaliteitsronde',
+    titel: 'Kwaliteitsronde KC-2026-014',
+    kenmerk: 'KC-2026-014',
+    datum: '7 september 2026', tijd: '09:30',
+    uitvoerder: 'Jan de Vries', locatie: 'Blok A — noord- en oostgevel',
+    omstandigheden: 'Droog, 18 °C', werkzaamheden: 'Buitenschilderwerk en houtrotherstel',
+    inleiding: keuze.inleiding
+      || 'Tijdens deze periodieke ronde zijn de op dat moment zichtbare, bereikbare en '
+      + 'beoordeelbare werkzaamheden steekproefsgewijs gecontroleerd.',
+    samenvatting_regel: 'Van de 24 beoordeelde controlepunten voldoen er 21. Er zijn 3 punten vastgelegd.',
+    kengetallen: [
+      { label: 'Beoordeelde controlepunten', waarde: 24 },
+      { label: 'Voldoet aan de eis', waarde: 21 },
+      { label: 'Vastgelegde punten', waarde: 3, is_negatief: true },
+    ],
+    heeft_kengetallen: true,
+    alle_bevindingen: bevindingen,
+    paginas: knipInPaginas(bevindingen, { perPagina: keuze.per_pagina, itemVeld: 'bevindingen' }),
+    heeft_bevindingen: true,
+    aantal_bevindingen: bevindingen.length,
+    aantal_open: 2,
+    metingen: [
+      { code: 'SCH-03', onderdeel: 'Droge laagdikte aflak', locatie: 'Kozijn 2.14', meting: '62 µm',
+        eis: '≥ 80 µm', meetmiddel: 'Laagdiktemeter', resultaat: 'Voldoet niet' },
+      { code: 'HOU-01', onderdeel: 'Houtvochtgehalte', locatie: 'Kozijn 0.04', meting: '14 %',
+        eis: '≤ 18 %', meetmiddel: 'Vochtmeter', resultaat: 'Voldoet' },
+    ],
+    heeft_metingen: true,
+    punten: [
+      { code: 'SCH-01', groep: 'Schilderwerk', onderdeel: 'Hechting grondlaag', resultaat: 'Voldoet', opmerking: '' },
+      { code: 'SCH-03', groep: 'Schilderwerk', onderdeel: 'Droge laagdikte aflak', resultaat: 'Voldoet niet', opmerking: 'Zie KA-2026-031' },
+      { code: 'STE-01', groep: 'Bereikbaarheid', onderdeel: 'Steiger gekeurd', resultaat: 'Voldoet', opmerking: 'Keuring 01-09-2026' },
+    ],
+    heeft_punten: true,
+    waarnemingen: keuze.toon_waarnemingen
+      ? [{ omschrijving: 'Strak afgewerkte kozijnaansluitingen', locatie: 'Zuidgevel', groep: 'Schilderwerk', foto: '', heeft_foto: false }]
+      : [],
+    heeft_waarnemingen: keuze.toon_waarnemingen,
+    opvolging: [
+      { nummer: 'KA-2026-021', omschrijving: 'Roestvorming op balkonhekwerk', locatie: 'Balkon 3.02',
+        status_label: 'Opgelost', hercontrole: 'Ja' },
+    ],
+    heeft_opvolging: true,
+    opvolging_regel: 'Van de vorige ronde stonden 3 punten open. Daarvan zijn er 2 afgehandeld.',
+    opmerkingen: 'Het werk ligt op schema.',
+    disclaimer: bezoekDisclaimer('kwaliteit'),
+    per_pagina: keuze.per_pagina,
+  }
 }
 
 // ── Demo-houtrotrapportage ────────────────────────────────────────────────
