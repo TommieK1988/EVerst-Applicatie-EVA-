@@ -17,6 +17,7 @@ import { bouwBezoekUitOplevering } from './uit-oplevering'
 import { bouwBezoekUitFormulier } from './uit-formulier'
 import { bouwBezoekUitVeiligheid } from './uit-veiligheid'
 import { kwaliteitNaarBezoek } from './uit-kwaliteit'
+import { bouwBezoekUitProjectbezoek } from './uit-projectbezoek'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -40,7 +41,11 @@ export interface BezoekKeuze {
  */
 export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekKeuze[]> {
   const supabase = db()
-  const [inspecties, momenten, inzendingen] = await Promise.all([
+  const [bezoeken, inspecties, momenten, inzendingen] = await Promise.all([
+    supabase.from('projectbezoeken')
+      .select('id, volgnummer, datum, locatie, doet_kwaliteit, doet_veiligheid, doet_algemeen, doet_voortgang')
+      .eq('dossier_id', dossierId).eq('status', 'definitief')
+      .order('datum', { ascending: false }).limit(50),
     supabase.from('kwaliteit_inspecties')
       .select('id, inspectienummer, datum, werkzaamheden_omschrijving')
       .eq('dossier_id', dossierId).order('datum', { ascending: false }).limit(50),
@@ -54,6 +59,23 @@ export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekK
   ])
 
   const uit: BezoekKeuze[] = []
+
+  // Een projectbezoek is de brede ingang: het kan meerdere onderdelen tegelijk bevatten en is
+  // daarom vrijwel altijd de bron die de opsteller bedoelt.
+  for (const r of (bezoeken.data ?? []) as Record<string, unknown>[]) {
+    const onderdelen = [
+      r.doet_kwaliteit && 'kwaliteit',
+      r.doet_veiligheid && 'veiligheid',
+      r.doet_algemeen && 'algemeen',
+      r.doet_voortgang && 'voortgang',
+    ].filter(Boolean) as string[]
+    uit.push({
+      soort: 'projectbezoek', id: String(r.id),
+      label: [`PB-${String(r.volgnummer).padStart(2, '0')}`, r.locatie, onderdelen.join(', ')]
+        .filter(Boolean).join(' · '),
+      datum: (r.datum as string | null) ?? null,
+    })
+  }
 
   for (const r of (inspecties.data ?? []) as Record<string, unknown>[]) {
     uit.push({
@@ -134,6 +156,8 @@ async function bouwVoorBron(
   opties: { preview?: boolean },
 ): Promise<BezoekBlok> {
   switch (soort) {
+    case 'projectbezoek':
+      return bouwBezoekUitProjectbezoek(id, keuze, kwaliteitBlok, opties)
     case 'kwaliteit':
       // Het rekenwerk zit al in bouwKwaliteitBlok; dit is alleen de remap.
       return kwaliteitNaarBezoek(kwaliteitBlok, keuze)

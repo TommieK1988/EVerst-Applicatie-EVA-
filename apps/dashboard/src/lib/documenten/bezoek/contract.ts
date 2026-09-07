@@ -16,9 +16,10 @@
 export interface Rij { [k: string]: unknown }
 
 /** Waar het rapport over gaat. Bepaalt de titel op het voorblad en de disclaimer. */
-export type BezoekSoort = 'kwaliteit' | 'oplevering' | 'veiligheid' | 'formulier'
+export type BezoekSoort = 'projectbezoek' | 'kwaliteit' | 'oplevering' | 'veiligheid' | 'formulier'
 
 export const BEZOEK_SOORT_LABELS: Record<BezoekSoort, string> = {
+  projectbezoek: 'Projectbezoek',
   kwaliteit:  'Kwaliteitsronde',
   oplevering: 'Oplevering',
   veiligheid: 'Veiligheidsronde',
@@ -150,6 +151,10 @@ export const LEGE_BEVINDING: BezoekBevinding = {
  */
 export function bezoekDisclaimer(soort: BezoekSoort | ''): string {
   switch (soort) {
+    case 'projectbezoek':
+      return 'Dit rapport betreft een bezoek aan het werk op de genoemde datum en beschrijft de op '
+        + 'dat moment zichtbare, bereikbare en beoordeelbare onderdelen. Wat niet is beoordeeld, '
+        + 'wordt daarmee niet als goedgekeurd beschouwd.'
     case 'kwaliteit':
       return 'Deze kwaliteitscontrole betreft een periodieke steekproef van de op het moment van '
         + 'inspectie zichtbare, bereikbare en beoordeelbare werkzaamheden. De beoordeling vindt plaats '

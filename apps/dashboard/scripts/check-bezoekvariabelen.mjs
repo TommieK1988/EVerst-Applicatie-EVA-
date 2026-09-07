@@ -60,7 +60,14 @@ for (const sleutel of Object.keys(contract.LEGE_BEVINDING)) {
 // ── 3. Elke tag in het gegenereerde sjabloon moet bekend zijn ───────────────
 const sjabloon = path.join(repo, 'docs/document-sjablonen/Bezoekrapport.docx')
 const onbekendInSjabloon = []
-if (fs.existsSync(sjabloon)) {
+// Ontbreekt het sjabloon, dan is dat een FOUT en geen reden om die controle over te slaan:
+// een stille pass verbergt precies het geval waarin het bestand per ongeluk is verdwenen.
+if (!fs.existsSync(sjabloon)) {
+  console.log('ONTBREEKT: docs/document-sjablonen/Bezoekrapport.docx')
+  console.log('  Genereer hem opnieuw: node apps/dashboard/scripts/maak-bezoeksjabloon.mjs')
+  process.exit(1)
+}
+{
   const xml = new PizZip(fs.readFileSync(sjabloon)).file('word/document.xml').asText()
   const tags = new Set([...xml.matchAll(/\{([#/^%@]?)([^}]{1,60})\}/g)].map(m => m[2].trim()))
   for (const tag of tags) {

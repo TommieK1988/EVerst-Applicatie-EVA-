@@ -68,7 +68,7 @@ async function stemHerhalingAf(
     .from('tasks')
     .select(
       'id, herhaling_index, status, titel, deadline, deadline_handmatig, ' +
-      'formulier_template_id, kwaliteit_ronde, opname_ronde',
+      'formulier_template_id, kwaliteit_ronde, opname_ronde, bezoek_ronde',
     )
     .eq('lijst_id', lijst_id)
     .eq('herhaling_bron_taak_id', sjabloonTaak.id)
@@ -98,9 +98,11 @@ async function stemHerhalingAf(
       // het formulier, en is er in de taak zelf niets dat verraadt dat het ontbreekt.
       const sjabloonForm = sjabloonTaak.formulier_template_id ?? null
       const sjabloonKwal = sjabloonTaak.kwaliteit_ronde ?? false
+      const sjabloonBezoek = sjabloonTaak.bezoek_ronde ?? false
       const sjabloonOpn  = sjabloonTaak.opname_ronde ?? false
       if ((bestaande.formulier_template_id ?? null) !== sjabloonForm) patch.formulier_template_id = sjabloonForm
       if ((bestaande.kwaliteit_ronde ?? false) !== sjabloonKwal) patch.kwaliteit_ronde = sjabloonKwal
+      if ((bestaande.bezoek_ronde ?? false) !== sjabloonBezoek) patch.bezoek_ronde = sjabloonBezoek
       if ((bestaande.opname_ronde ?? false) !== sjabloonOpn) patch.opname_ronde = sjabloonOpn
       if (Object.keys(patch).length > 0) {
         await sb.from('tasks').update(patch).eq('id', bestaande.id)
@@ -124,6 +126,7 @@ async function stemHerhalingAf(
         dossier_rollen:         sjabloonTaak.dossier_rollen ?? [],
         formulier_template_id:  sjabloonTaak.formulier_template_id ?? null,
         kwaliteit_ronde:        sjabloonTaak.kwaliteit_ronde ?? false,
+        bezoek_ronde:           sjabloonTaak.bezoek_ronde ?? false,
         opname_ronde:           sjabloonTaak.opname_ronde ?? false,
         herhaling_bron_taak_id: sjabloonTaak.id,
         herhaling_index:        i,

@@ -911,6 +911,7 @@ export type DossierTaakRegel = {
   formulier_template_id: string | null
   kwaliteit_ronde: boolean
   opname_ronde: boolean
+  bezoek_ronde: boolean
   /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
   toolbox_toewijzing_id: string | null
   /**
@@ -954,7 +955,7 @@ export async function getTakenVoorDossier(
     .from('tasks')
     .select(
       'id, titel, status, prioriteit, deadline, lijst_id, volgorde, omschrijving, ' +
-      'formulier_template_id, kwaliteit_ronde, opname_ronde, task_assignees(user_id)'
+      'formulier_template_id, kwaliteit_ronde, opname_ronde, bezoek_ronde, task_assignees(user_id)'
     )
     .or(orFilters.join(','))
     .order('deadline', { ascending: true, nullsFirst: false })
@@ -1015,6 +1016,7 @@ export async function getTakenVoorDossier(
       formulier_template_id: t.formulier_template_id ?? null,
       kwaliteit_ronde:       !!t.kwaliteit_ronde,
       opname_ronde:          !!t.opname_ronde,
+      bezoek_ronde:          !!t.bezoek_ronde,
       toolbox_toewijzing_id: toolboxPerTaak.get(t.id) ?? null,
       mag_uitvoeren:         !!opties.magAllesUitvoeren || toegewezenAanMij,
     }

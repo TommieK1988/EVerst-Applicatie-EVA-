@@ -6,6 +6,7 @@ import HoutrotView from '@/components/mobiel/dossier-tabs/HoutrotView'
 import AppHeader from '@/components/mobiel/AppHeader'
 import DossierInfoView, { type DossierInfo } from '@/components/mobiel/DossierInfoView'
 import DossierActiesBlok from '@/components/mobiel/DossierActiesBlok'
+import BezoekStartKnop from '@/components/mobiel/BezoekStartKnop'
 import { getTakenVoorDossier } from '@/lib/taken/services/taken'
 import { createClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
@@ -108,8 +109,12 @@ async function ActiesBlok({ dossierId }: { dossierId: string }) {
     magAllesUitvoeren: medewerker?.gebruiker_type === 'platform_gebruiker',
   }).catch(() => [])
 
+  // Alleen wie het werk ook mag uitvoeren krijgt de startknop; de doorloop weert de rest toch.
+  const magStarten = medewerker?.gebruiker_type === 'platform_gebruiker'
+
   return (
     <div style={{ padding: '0 16px 16px' }}>
+      {magStarten && <BezoekStartKnop dossierId={dossierId} />}
       <DossierActiesBlok taken={taken} />
     </div>
   )

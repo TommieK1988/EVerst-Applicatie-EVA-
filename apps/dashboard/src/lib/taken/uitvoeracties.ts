@@ -1,7 +1,7 @@
 /**
  * Acties waarbij de uitvoerder op zijn telefoon méér doet dan afvinken.
  *
- * Drie doorlopen delen dezelfde vorm: de actie is de ingang naar werk dat elders wordt
+ * Vier doorlopen delen dezelfde vorm: de actie is de ingang naar werk dat elders wordt
  * geregistreerd, en die registratie zet de actie zélf op gereed. Ze horen daarom ook hetzelfde
  * te ogen — één groene startknop, en geen los vinkje dat de doorloop kan overslaan.
  *
@@ -9,7 +9,7 @@
  * importeren dit alle drie.
  */
 
-export type UitvoerActieSoort = 'formulier' | 'kwaliteit' | 'toolbox' | 'opname'
+export type UitvoerActieSoort = 'formulier' | 'kwaliteit' | 'toolbox' | 'opname' | 'bezoek'
 
 export type UitvoerActie = {
   soort: UitvoerActieSoort
@@ -27,6 +27,7 @@ export type TaakMetUitvoer = {
   formulier_template_id?: string | null
   kwaliteit_ronde?: boolean | null
   opname_ronde?: boolean | null
+  bezoek_ronde?: boolean | null
   /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
   toolbox_toewijzing_id?: string | null
 }
@@ -55,6 +56,17 @@ export function bepaalUitvoerActies(taak: TaakMetUitvoer): UitvoerActie[] {
       label: 'Kwaliteitsronde starten',
       href: `/m/taken/${taak.id}/kwaliteit`,
       badgeUitleg: 'Deze actie sluit automatisch zodra de kwaliteitsronde definitief is',
+    })
+  }
+
+  // Vóór de losse rondes: een projectbezoek is de brede ingang waar een kwaliteitsronde
+  // desgewenst binnen valt, dus die hoort bovenaan te staan.
+  if (taak.bezoek_ronde) {
+    acties.push({
+      soort: 'bezoek',
+      label: 'Projectbezoek starten',
+      href: `/m/taken/${taak.id}/bezoek`,
+      badgeUitleg: 'Deze actie sluit automatisch zodra het bezoek is afgerond',
     })
   }
 

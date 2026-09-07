@@ -98,6 +98,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   // Formulier-koppeling
   const [formulierTemplateId, setFormulierTemplateId] = useState(taak.formulier_template_id ?? '')
   const [kwaliteitRonde, setKwaliteitRonde] = useState(taak.kwaliteit_ronde ?? false)
+  const [bezoekRonde, setBezoekRonde] = useState(taak.bezoek_ronde ?? false)
   const [opnameRonde, setOpnameRonde] = useState(taak.opname_ronde ?? false)
   const [formulieren, setFormulieren] = useState<{ id: string; naam: string; categorie: string | null }[]>([])
   /** Openstaande toolbox-toewijzing; hangt naast `tasks`, dus apart ophalen. */
@@ -235,6 +236,15 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const handleKwaliteitRondeChange = (val: boolean) => {
     setKwaliteitRonde(val)
     startTransition(() => updateTaak(taak.id, { kwaliteit_ronde: val }))
+  }
+
+  /**
+   * Projectbezoek: de brede ingang waarin een kwaliteitsronde desgewenst valt. De projectleider
+   * kiest bij het bezoek zelf welke onderdelen hij doet.
+   */
+  const handleBezoekRondeChange = (val: boolean) => {
+    setBezoekRonde(val)
+    startTransition(() => updateTaak(taak.id, { bezoek_ronde: val }))
   }
 
   /** Zelfde mechaniek als de kwaliteitsronde, maar dan voor een mutatie-opname. */
@@ -426,6 +436,40 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </a>
             )}
           </div>
+        </div>
+
+        {/* Projectbezoek — de breedste van de koppelingen: de projectleider vinkt ter plekke aan
+            wat hij doet (kwaliteit, veiligheid, algemeen, voortgang) en daar komt één rapport uit. */}
+        <div>
+          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={bezoekRonde}
+              onChange={e => handleBezoekRondeChange(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Projectbezoek</span>
+              <span className="block text-[11px] text-slate-500">
+                De uitvoerder krijgt bij deze actie de knop &ldquo;Projectbezoek starten&rdquo; en
+                kiest daar zelf wat hij vastlegt. De actie gaat automatisch op gereed zodra het
+                bezoek is afgerond.
+              </span>
+            </span>
+          </label>
+
+          {bezoekRonde && (
+            <a
+              href={`/m/taken/${taak.id}/bezoek`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-everts/30 px-2 py-1.5 text-xs text-everts hover:bg-everts/5 transition-colors"
+              title="Projectbezoek starten"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Bezoek starten
+            </a>
+          )}
         </div>
 
         {/* Kwaliteitsronde — zelfde plek als de formulier-koppeling, want het is dezelfde soort

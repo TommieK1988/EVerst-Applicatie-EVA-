@@ -937,6 +937,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     blocked_by_task_id:      null,
     formulier_template_id:   null,
     kwaliteit_ronde:         false,
+    bezoek_ronde:            false,
     opname_ronde:            false,
     created_at:              '',
     updated_at:              '',

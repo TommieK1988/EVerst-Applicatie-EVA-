@@ -16,6 +16,8 @@ const ICOON_PAD: Record<UitvoerActieSoort, string> = {
   formulier: 'M9 13h6m-6 4h6M9 9h1M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z',
   kwaliteit: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
   toolbox:   'M12 2L3 7v6c0 5 3.5 8 9 9 5.5-1 9-4 9-9V7l-9-5z',
+  // Kaartspeld: het projectbezoek is het enige onderdeel dat over de plek zelf gaat.
+  bezoek:    'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z M12 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z',
   opname:    'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2M8.5 11h7M8.5 14.5h7M8.5 18h4',
 }
 
