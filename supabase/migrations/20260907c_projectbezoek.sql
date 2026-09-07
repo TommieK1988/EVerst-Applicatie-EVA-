@@ -77,7 +77,8 @@ create table if not exists public.projectbezoeken (
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  created_by uuid references auth.users(id)
+  -- Let op: dit is een MEDEWERKER-id, niet een auth-user. Zie 20260907f.
+  created_by uuid references public.medewerkers(id) on delete set null
 );
 
 -- Volgnummer is uniek binnen een dossier; dat is wat PB-xx betekent.
@@ -122,7 +123,7 @@ create table if not exists public.projectbezoek_fotos (
   toelichting text,
   volgorde int not null default 0,
   created_at timestamptz not null default now(),
-  created_by uuid references auth.users(id)
+  created_by uuid references public.medewerkers(id) on delete set null
 );
 
 create index if not exists ix_projectbezoek_fotos_bezoek
