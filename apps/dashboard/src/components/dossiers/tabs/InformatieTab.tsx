@@ -38,6 +38,7 @@ import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import FinancieelGereedDialog from '../FinancieelGereedDialog'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
 import DossierTogglesPaneel from '../DossierTogglesPaneel'
+import { KlantportaalBlok } from './KlantportaalBlok'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import ObjectKoppeling from '@/components/objecten/ObjectKoppeling'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
@@ -2105,6 +2106,12 @@ export function InformatieTab({
 
         {/* Dossier-toggles */}
         <DossierTogglesPaneel dossierId={dossier.id} />
+
+        {/* Klantportaal — stand van zaken hier, instellen achter de knop. Stond eerder op
+            een eigen tab; die is opgeheven om de sidebar korter te maken. Naast de toggles
+            omdat het allebei beheer van dit dossier is. Het blok verbergt zichzelf als je
+            geen klantportaal-recht hebt. */}
+        <KlantportaalBlok dossierId={dossier.id} />
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (

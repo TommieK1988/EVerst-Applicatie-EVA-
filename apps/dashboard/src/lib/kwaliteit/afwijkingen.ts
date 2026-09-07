@@ -157,7 +157,7 @@ export async function setAfwijkingStatus(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/kam/kwaliteit/afwijkingen')
-  revalidatePath(`/opdrachten/${huidig.dossier_id}/vca`)
+  revalidatePath(`/opdrachten/${huidig.dossier_id}/kam`)
   return { ok: true }
 }
 
@@ -174,7 +174,7 @@ export async function updateAfwijking(
   const { error } = await supabase.from('kwaliteit_afwijkingen').update(patch).eq('id', afwijkingId)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/kam/kwaliteit/afwijkingen')
-  if (rij) revalidatePath(`/opdrachten/${rij.dossier_id}/vca`)
+  if (rij) revalidatePath(`/opdrachten/${rij.dossier_id}/kam`)
   return { ok: true }
 }
 
@@ -243,7 +243,7 @@ export async function registreerHercontrole(
 
   revalidatePath('/kam/kwaliteit/afwijkingen')
   revalidatePath(`/kam/kwaliteit/${inspectieId}`)
-  revalidatePath(`/opdrachten/${huidig.dossier_id}/vca`)
+  revalidatePath(`/opdrachten/${huidig.dossier_id}/kam`)
   return { ok: true }
 }
 

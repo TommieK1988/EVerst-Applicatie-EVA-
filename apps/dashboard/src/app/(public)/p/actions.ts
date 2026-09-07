@@ -166,7 +166,7 @@ export async function portaalAfmeldenPunt(
     .eq('id', puntId)
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath(`/opdrachten/${token.dossier_id}/oplevering`)
+  revalidatePath(`/opdrachten/${token.dossier_id}/kam`)
   return { ok: true }
 }
 
@@ -224,7 +224,7 @@ export async function portaalAkkoord(
   await supabase.from('oplever_momenten').update({ status: 'ondertekend', updated_at: now }).eq('id', token.moment_id)
   await supabase.from('oplever_toegang_tokens').update({ gebruikt_op: now }).eq('id', token.id)
 
-  revalidatePath(`/opdrachten/${token.dossier_id}/oplevering`)
+  revalidatePath(`/opdrachten/${token.dossier_id}/kam`)
   return { ok: true }
 }
 
@@ -355,6 +355,6 @@ export async function portaalFeedbackSubmit(
   // van de bewoner is binnen, ook als dit misgaat.
   try { await materialiseerAandachtspunten(ins.id) } catch { /* niet-blokkerend */ }
 
-  revalidatePath(`/opdrachten/${token.dossier_id}/oplevering`)
+  revalidatePath(`/opdrachten/${token.dossier_id}/kam`)
   return { ok: true }
 }

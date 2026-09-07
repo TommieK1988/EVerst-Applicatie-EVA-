@@ -182,6 +182,13 @@ type DossierTab = {
   slug: string; label: string; d: string
   /** Alleen tonen met minimaal leesrecht op deze module. */
   recht?: RechtenModule
+  /** Kop waaronder deze tab in de sidebar valt. Tabs met dezelfde `groep` staan
+   *  aaneengesloten in de array; een groep zonder zichtbare tabs vervalt. */
+  groep?: string
+  /** Alleen tonen wanneer deze dossier-toggle aanstaat. Naast TAB_TOGGLE_GATES, dat de
+   *  toggle aan de slug hangt en dus voor elke sectie geldt; dit veld staat per lijst,
+   *  zodat KAM/VGM op een opdracht altijd zichtbaar is en op servicedesk niet. */
+  toggle?: string
 }
 
 /** Klembord met regels: de opnamelijst. Los gezet omdat hij in twee tab-arrays staat. */
@@ -199,27 +206,29 @@ const AANVRAAG_TABS: DossierTab[] = [
 ]
 
 const OPDRACHT_TABS: DossierTab[] = [
-  { slug: 'informatie',    label: 'Informatie',    d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { slug: 'bestanden',     label: 'Bestanden',     d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+  { groep: 'Dossier', slug: 'informatie',    label: 'Informatie',    d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { groep: 'Dossier', slug: 'bestanden',     label: 'Bestanden',     d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+
   // Ook op de opdracht: een naopname of een tweede mutatieronde hangt aan het opdracht-dossier.
-  { slug: 'opname',        label: 'Opname',        d: OPNAME_ICOON },
-  { slug: 'calculatie',    label: 'Calculatie',    d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
-  { slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
-  { slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
-  { slug: 'taken',         label: 'Acties',        d:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
-  { slug: 'vca',           label: 'VCA & Kwaliteit', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  // Alleen zichtbaar met de dossier-toggle `mutatie_opname` (TAB_TOGGLE_GATES).
+  { groep: 'Voorbereiding', slug: 'opname',        label: 'Opname',        d: OPNAME_ICOON },
+  { groep: 'Voorbereiding', slug: 'calculatie',    label: 'Calculatie',    d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
+  { groep: 'Voorbereiding', slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
+  { groep: 'Voorbereiding', slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
+
+  { groep: 'Uitvoering', slug: 'taken',   label: 'Acties',  d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
   // Alleen zichtbaar met de dossier-toggle `houtrot_registreren` (TAB_TOGGLE_GATES).
-  { slug: 'houtrot',       label: 'Houtrot',       d: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
-  { slug: 'uren',          label: 'Uren',          d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { slug: 'inkoop',        label: 'Inkoop',        d: 'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z' },
-  { slug: 'verkoop',       label: 'Verkoop',       d: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5' },
-  { slug: 'meerwerk',      label: 'Meerwerk',      d: 'M12 4.8v14.4M4.8 12h14.4' },
-  { slug: 'oplevering',    label: 'Oplevering',    d: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { slug: 'financieel',    label: 'Financieel',    d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { slug: 'formulieren',   label: 'Formulieren',   d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
-  // Wat de opdrachtgever van dit dossier te zien krijgt. Geen toggle-gate:
-  // de tab is altijd zichtbaar (met het recht) en heeft zelf een aan/uit-schakelaar.
-  { slug: 'portaal',       label: 'Klantportaal',  recht: 'klantportaal', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18' },
+  { groep: 'Uitvoering', slug: 'houtrot', label: 'Houtrot', d: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },
+  { groep: 'Uitvoering', slug: 'uren',    label: 'Uren',    d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  // KAM/VGM bundelt kwaliteitscontrole, VCA en de oplevering. Bewust geen toggle-gate op de
+  // opdracht: oplevering en formulieren horen er ook in en die staan los van de VCA-toggle.
+  // De VCA-secties binnen de tab verschijnen wel alleen met die toggle aan.
+  { groep: 'Uitvoering', slug: 'kam',     label: 'KAM/VGM', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+
+  { groep: 'Financieel', slug: 'inkoop',     label: 'Inkoop',     d: 'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z' },
+  { groep: 'Financieel', slug: 'verkoop',    label: 'Verkoop',    d: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5' },
+  { groep: 'Financieel', slug: 'meerwerk',   label: 'Meerwerk',   d: 'M12 4.8v14.4M4.8 12h14.4' },
+  { groep: 'Financieel', slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
 const SERVICEDESK_TABS: DossierTab[] = [
@@ -227,7 +236,8 @@ const SERVICEDESK_TABS: DossierTab[] = [
   { slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
   { slug: 'calculatie', label: 'Calculatie', d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
   { slug: 'planning',   label: 'Planning',   d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
-  { slug: 'vca',        label: 'VCA & Kwaliteit', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+  // Servicedesk heeft geen oplevering; hier blijft de tab dus wel aan de VCA-toggle hangen.
+  { slug: 'kam',        label: 'KAM/VGM', toggle: 'vca', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
   { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
@@ -329,7 +339,7 @@ export default function Sidebar({
   }, [isDossierDetail, dossierId, dossierSectie])
 
   const zichtbareTabs = dossierTabs.filter(t => {
-    const vereisteSleutel = TAB_TOGGLE_GATES[t.slug]
+    const vereisteSleutel = TAB_TOGGLE_GATES[t.slug] ?? t.toggle
     if (vereisteSleutel && !aanSleutels.has(vereisteSleutel)) return false
     // Tabs met een modulerecht (Klantportaal) alleen voor wie dat recht heeft.
     if (t.recht && !heeftModuleToegang(rechten ?? {}, t.recht, 'lezen')) return false
@@ -337,6 +347,17 @@ export default function Sidebar({
     if (dossierSectie === 'servicedesk' && t.slug === 'calculatie' && !heeftCalc) return false
     return true
   })
+
+  // Groepeer ná het filteren: een groep waarvan alle tabs zijn weggevallen (toggle uit,
+  // recht ontbreekt) mag geen lege kop achterlaten. Tabs zonder `groep` komen in één
+  // naamloze groep vooraan, en die wordt onder de sectiekop zelf gerenderd.
+  const tabGroepen = zichtbareTabs.reduce<Array<{ label: string | null; tabs: DossierTab[] }>>((groepen, t) => {
+    const label = t.groep ?? null
+    const laatste = groepen[groepen.length - 1]
+    if (laatste && laatste.label === label) laatste.tabs.push(t)
+    else groepen.push({ label, tabs: [t] })
+    return groepen
+  }, [])
 
   // Shared fade style for labels and decorations that hide when collapsed
   const labelFade: React.CSSProperties = {
@@ -427,6 +448,17 @@ export default function Sidebar({
     )
   }
 
+  /** Eén dossier-tab. Los gezet omdat de tabs nu over meerdere NavSections verdeeld staan. */
+  const dossierTabItem = (t: DossierTab) => (
+    <NavItem
+      key={t.slug}
+      href={`/${dossierSectie}/${dossierId}/${t.slug}`}
+      icon={<SubIcon d={t.d} size={16}/>}
+      label={t.label}
+      active={isActive(`/${dossierSectie}/${dossierId}/${t.slug}`)}
+    />
+  )
+
   return (
     <aside
       onMouseLeave={onMouseLeave}
@@ -509,29 +541,34 @@ export default function Sidebar({
 
       {/* ── Navigation ── */}
       {isDossierDetail ? (
-        <NavSection
-          label={SECTIE_LABELS[dossierSectie!] ?? ''}
-          collapsed={collapsed}
-        >
-          {/* Terug naar lijst */}
-          <NavItem
-            href={`/${dossierSectie}`}
-            icon={<IconBase size={16}><path d="M15 19l-7-7 7-7"/></IconBase>}
-            label="Terug naar overzicht"
-            active={false}
-          />
-          <div style={{ height: 1, background: 'var(--border)', margin: '4px 13px 2px' }}/>
-          {/* Dossier tabs */}
-          {zichtbareTabs.map(t => (
+        <>
+          <NavSection
+            label={SECTIE_LABELS[dossierSectie!] ?? ''}
+            collapsed={collapsed}
+          >
+            {/* Terug naar lijst */}
             <NavItem
-              key={t.slug}
-              href={`/${dossierSectie}/${dossierId}/${t.slug}`}
-              icon={<SubIcon d={t.d} size={16}/>}
-              label={t.label}
-              active={isActive(`/${dossierSectie}/${dossierId}/${t.slug}`)}
+              href={`/${dossierSectie}`}
+              icon={<IconBase size={16}><path d="M15 19l-7-7 7-7"/></IconBase>}
+              label="Terug naar overzicht"
+              active={false}
             />
-          ))}
-        </NavSection>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 13px 2px' }}/>
+            {/* De tabs zonder groep (aanvraag/offerte/servicedesk) staan direct onder de
+                sectiekop — die lijsten zijn kort genoeg om niet te hoeven groeperen. */}
+            {tabGroepen.length > 0 && tabGroepen[0].label === null && tabGroepen[0].tabs.map(dossierTabItem)}
+          </NavSection>
+          {/* Opdrachten hebben te veel tabs voor één lijst; die staan onder een eigen kop
+              per fase. Groepen zonder zichtbare tabs zijn er al uit gefilterd, zodat een
+              uitgezette toggle geen lege kop achterlaat. */}
+          {tabGroepen
+            .filter(g => g.label !== null)
+            .map(g => (
+              <NavSection key={g.label} label={g.label ?? ''} collapsed={collapsed}>
+                {g.tabs.map(dossierTabItem)}
+              </NavSection>
+            ))}
+        </>
       ) : activeApp ? (
         <NavSection label={activeApp.label} collapsed={collapsed}>
           {activeApp.items

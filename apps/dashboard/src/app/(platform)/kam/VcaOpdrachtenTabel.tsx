@@ -72,7 +72,7 @@ export function VcaOpdrachtenTabel({ rijen }: Props) {
               <tr key={r.dossier_id} className="vca-opdr-rij">
                 <td style={cel}>
                   <Link
-                    href={`/opdrachten/${r.dossier_id}/vca`}
+                    href={`/opdrachten/${r.dossier_id}/kam`}
                     {...NAAR_NIEUW_TABBLAD}
                     style={{ display: 'block', textDecoration: 'none' }}
                   >

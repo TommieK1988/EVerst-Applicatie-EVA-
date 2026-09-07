@@ -18,7 +18,6 @@ import { OpdrachtCalculatieTab } from '@/components/everts-calc/calculatie/Opdra
 import { getQuotesVoorDossier } from '@/lib/everts-calc/services/quotes'
 import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting/OpdrachtWerkbegrotingTab'
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
-import VcaTab from './tabs/VcaTab'
 import HoutrotTab from './tabs/HoutrotTab'
 import OpnameTab from './tabs/OpnameTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
@@ -26,9 +25,8 @@ import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
-import OpleveringTab from './tabs/OpleveringTab'
 import BestandenTab from './tabs/BestandenTab'
-import PortaalTab from './tabs/PortaalTab'
+import KamTab, { KAM_DELEN, standaardKamDeel, type KamDeel } from './tabs/KamTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
@@ -41,20 +39,17 @@ const TAB_LABELS: Record<string, string> = {
   calculatie:    'Calculatie',
   werkbegroting: 'Werkbegroting',
   planning:      'Planning',
-  vca:           'VCA & Kwaliteit',
+  kam:           'KAM/VGM',
   houtrot:       'Houtrot',
   opname:        'Opname',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
   uren:          'Uren',
   meerwerk:      'Meerwerk',
-  oplevering:    'Oplevering',
   financieel:    'Financieel',
-  formulieren:   'Formulieren',
-  portaal:       'Klantportaal',
 }
 
-type Props = { id: string; tab: string; sectie: DossierSectie }
+type Props = { id: string; tab: string; sectie: DossierSectie; deel?: string }
 
 /** Alleen-lezen banner voor afgesloten/vervallen/verloren dossiers. */
 function AfgeslotenBanner() {
@@ -74,7 +69,7 @@ function AfgeslotenBanner() {
   )
 }
 
-export async function DossierTabContent({ id, tab, sectie }: Props) {
+export async function DossierTabContent({ id, tab, sectie, deel }: Props) {
   const result = await getDossierById(id)
   const dossier = result.ok ? result.data : null
   const readOnly = dossier ? isDossierAfgesloten(dossier) : false
@@ -82,7 +77,7 @@ export async function DossierTabContent({ id, tab, sectie }: Props) {
   return (
     <DossierReadOnlyProvider value={readOnly}>
       {readOnly && <AfgeslotenBanner />}
-      {await renderTabContent({ id, tab, sectie }, dossier)}
+      {await renderTabContent({ id, tab, sectie, deel }, dossier)}
     </DossierReadOnlyProvider>
   )
 }
@@ -144,7 +139,7 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
   )
 }
 
-async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij | null) {
+async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: DossierRij | null) {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
@@ -267,16 +262,22 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
     }
   }
 
-  if (tab === 'vca') {
-    // Alleen tonen wanneer de VCA-toggle voor dit dossier aanstaat; anders valt
-    // de render door naar de generieke "niet beschikbaar"-weergave hieronder.
+  if (tab === 'kam') {
+    // Op een opdracht altijd toegankelijk: de tab bundelt ook de oplevering en de
+    // formulieren, en die staan los van de VCA-toggle. Op servicedesk is er geen
+    // oplevering, dus daar blijft de VCA-toggle de poort.
     const toggles = await getDossierToggles(id)
-    const vcaAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.vca && t.aan)
-    if (vcaAan) {
+    const vcaAan = toggles.some(t => t.sleutel === 'vca' && t.aan)
+    if (sectie === 'opdracht' || vcaAan) {
+      const gekozen = (KAM_DELEN as readonly string[]).includes(deel ?? '')
+        ? (deel as KamDeel)
+        : standaardKamDeel()
       return (
         <>
           {titleInjector}
-          <VcaTab dossierId={id} />
+          <Suspense fallback={<DossierTabSkeleton />}>
+            <KamTab dossierId={id} sectie={sectie} deel={gekozen} vcaAan={vcaAan} />
+          </Suspense>
         </>
       )
     }
@@ -341,26 +342,6 @@ async function renderTabContent({ id, tab, sectie }: Props, dossier: DossierRij 
             nummer={dossier?.dossiernummer ?? ''}
             clientNaam={dossier?.klant_naam ?? ''}
           />
-        </Suspense>
-      </>
-    )
-  }
-
-  if (tab === 'oplevering' && sectie === 'opdracht') {
-    return (
-      <>
-        {titleInjector}
-        <OpleveringTab dossierId={id} />
-      </>
-    )
-  }
-
-  if (tab === 'portaal') {
-    return (
-      <>
-        {titleInjector}
-        <Suspense fallback={<DossierTabSkeleton />}>
-          <PortaalTab dossierId={id} />
         </Suspense>
       </>
     )

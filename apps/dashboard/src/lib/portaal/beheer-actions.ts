@@ -8,6 +8,8 @@ import type {
   PortaalOnderdeel, PortaalScope, PortaalBerichtBijlage,
 } from '@everts/database/platform-types'
 import { PORTAAL_ONDERDEEL_KOLOM } from './onderdelen'
+import { appBaseUrl } from '@/lib/app-url'
+import { getPortaalDossierBeheer, type PortaalDossierBeheer } from './beheer'
 
 /**
  * beheer-actions.ts — de EVA-kant van het klantportaal.
@@ -32,6 +34,111 @@ function fout(e: unknown): BeheerResultaat {
   if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt hier geen rechten voor.' }
   console.error('[portaal-beheer]', e)
   return { ok: false, error: e instanceof Error ? e.message : 'Er ging iets mis.' }
+}
+
+/* ── Beheergegevens ophalen ────────────────────────────────────────────────── */
+
+/** De samenvatting in het Klantportaal-blok op de Informatie-tab. */
+export type PortaalBlokSamenvatting = {
+  actief: boolean
+  /** Kolomnamen (`toon_…`) die aanstaan; het blok vertaalt ze naar labels. */
+  aanOnderdelen: string[]
+  aantalMeekijkers: number
+  eersteMeekijkerNaam: string | null
+  portaalUrl: string
+}
+
+/**
+ * Wat het Klantportaal-blok op de Informatie-tab toont.
+ *
+ * Bewust níet `getPortaalDossierBeheer`: die haalt er ook alle uitnodigbare
+ * contactpersonen, hun namen en de bestandstellingen bij. Dat is prima op een scherm dat
+ * je bewust opent, maar dit blok draait mee op de drukste tab van het dossier — dan wil je
+ * er drie lichte queries van maken. De volledige set komt pas als de dialog opengaat.
+ *
+ * `null` betekent: geen leesrecht op de module. Het blok verdwijnt dan helemaal; een leeg
+ * blok zou suggereren dat er niets is in plaats van dat je niet mag kijken.
+ */
+export async function getPortaalBlokSamenvatting(dossierId: string): Promise<PortaalBlokSamenvatting | null> {
+  try {
+    await vereisRecht('klantportaal', 'lezen')
+  } catch {
+    return null
+  }
+
+  const kolommen = Object.values(PORTAAL_ONDERDEEL_KOLOM)
+
+  const [{ data: instellingen }, { data: dossier }] = await Promise.all([
+    db().from('portaal_dossier_instellingen')
+      .select(['actief', ...kolommen].join(', '))
+      .eq('dossier_id', dossierId).maybeSingle(),
+    db().from('dossiers').select('klant_id').eq('id', dossierId).maybeSingle(),
+  ])
+
+  const inst = (instellingen ?? {}) as Record<string, boolean>
+  const klantId = (dossier?.klant_id as string | null) ?? null
+
+  // Wie kijkt er mee: de portaalgebruikers van de klant plus wie los aan dit dossier hangt.
+  // Beide lijsten zijn per dossier/relatie begrensd en blijven dus ruim onder de PostgREST-grens.
+  const [{ data: viaKlant }, { data: los }] = await Promise.all([
+    klantId
+      ? db().from('portaal_gebruikers').select('id, email, contactpersoon_id, particulier_id')
+          .eq('relatie_id', klantId).eq('actief', true)
+      : Promise.resolve({ data: [] }),
+    db().from('portaal_gebruiker_dossiers').select('portaal_gebruiker_id').eq('dossier_id', dossierId),
+  ])
+
+  const ids = new Set<string>((((viaKlant ?? []) as Record<string, unknown>[]).map(r => String(r.id))))
+  const losseIds = ((los ?? []) as { portaal_gebruiker_id: string }[]).map(r => r.portaal_gebruiker_id)
+  let losseRijen: Record<string, unknown>[] = []
+  if (losseIds.length > 0) {
+    const { data } = await db().from('portaal_gebruikers')
+      .select('id, email, contactpersoon_id, particulier_id')
+      .in('id', losseIds).eq('actief', true)
+    losseRijen = (data ?? []) as Record<string, unknown>[]
+    losseRijen.forEach(r => ids.add(String(r.id)))
+  }
+
+  // Alleen een naam ophalen wanneer we er ook één tonen (bij precies één meekijker).
+  let eersteNaam: string | null = null
+  if (ids.size === 1) {
+    const rij = [...((viaKlant ?? []) as Record<string, unknown>[]), ...losseRijen][0]
+    eersteNaam = rij ? await naamVanGebruiker(rij) : null
+  }
+
+  return {
+    actief: !!inst.actief,
+    aanOnderdelen: kolommen.filter(k => !!inst[k]),
+    aantalMeekijkers: ids.size,
+    eersteMeekijkerNaam: eersteNaam,
+    portaalUrl: `${appBaseUrl()}/portaal/project/${dossierId}`,
+  }
+}
+
+/** Naam van één portaalgebruiker; valt terug op het e-mailadres. */
+async function naamVanGebruiker(rij: Record<string, unknown>): Promise<string> {
+  const tabel = rij.contactpersoon_id ? 'contactpersonen' : rij.particulier_id ? 'particulieren' : null
+  const id = (rij.contactpersoon_id ?? rij.particulier_id) as string | null
+  if (!tabel || !id) return String(rij.email)
+  const { data } = await db().from(tabel)
+    .select('voornaam, tussenvoegsel, achternaam').eq('id', id).maybeSingle()
+  if (!data) return String(rij.email)
+  const naam = [data.voornaam, data.tussenvoegsel, data.achternaam].filter(Boolean).join(' ')
+  return naam || String(rij.email)
+}
+
+/**
+ * De volledige beheergegevens, voor de dialog achter "Instellingen…".
+ *
+ * Dunne wikkel om `getPortaalDossierBeheer` zodat een client component het kan opvragen.
+ */
+export async function getPortaalBeheerVoorBlok(dossierId: string): Promise<PortaalDossierBeheer | null> {
+  try {
+    await vereisRecht('klantportaal', 'lezen')
+  } catch {
+    return null
+  }
+  return getPortaalDossierBeheer(dossierId)
 }
 
 /* ── Zichtbaarheid per dossier ─────────────────────────────────────────────── */

@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { IconMoon, IconSun, IconQuestion, IconSparkle } from './Icons';
 import { TopbarZoek } from './GlobalSearch';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
@@ -16,13 +16,13 @@ const TAB_LABELS: Record<string, string> = {
   calculatie:    'Calculatie',
   werkbegroting: 'Werkbegroting',
   planning:      'Planning',
-  vca:           'VCA',
+  kam:           'KAM/VGM',
   houtrot:       'Houtrot',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
   meerwerk:      'Meerwerk',
   financieel:    'Financieel',
-  formulieren:   'Formulieren',
+  uren:          'Uren',
 }
 
 /* ── Pad → paginatitel ── */
@@ -259,10 +259,13 @@ type TopBarProps = {
 
 export default function TopBar({ dark, setDark, aantalOngelezen = 0, aantalNieuweUpdates = 0 }: TopBarProps) {
   const pathname = usePathname()
+  // Een tab met eigen onderdelen (KAM/VGM) zet die in `?deel=`; de hulp hoort dan bij
+  // het onderdeel dat open staat, niet bij de tab als geheel.
+  const deel = useSearchParams().get('deel') ?? undefined
   const { title, breadcrumb, withTabs } = resolveLabel(pathname)
   const breadcrumbCtx = useBreadcrumb()
   const [helpOpen, setHelpOpen] = useState(false)
-  const helpContent = getPageHelp(pathname)
+  const helpContent = getPageHelp(pathname, deel)
 
   let displayTitle = title
   if (withTabs && breadcrumbCtx?.recordName) {

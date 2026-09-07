@@ -165,7 +165,7 @@ export async function queueOpleverMail(input: QueueInput): Promise<{ ok: true; i
   // 23505 = unieke index (er staat al een identiek bericht te wachten) → stil overslaan.
   if (error && (error as any).code === '23505') return { ok: true, id: null }
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${input.dossierId}/oplevering`)
+  revalidatePath(`/opdrachten/${input.dossierId}/kam`)
   return { ok: true, id: data?.id ?? null }
 }
 
@@ -190,7 +190,7 @@ export async function annuleerOpleverMail(id: string): Promise<{ ok: true } | { 
     .select('dossier_id')
     .maybeSingle()
   if (error) return { ok: false, error: error.message }
-  if (data?.dossier_id) revalidatePath(`/opdrachten/${data.dossier_id}/oplevering`)
+  if (data?.dossier_id) revalidatePath(`/opdrachten/${data.dossier_id}/kam`)
   return { ok: true }
 }
 
@@ -265,7 +265,7 @@ export async function verstuurOpleverMailWachtrij(
     }
   }
 
-  revalidatePath(`/opdrachten/${dossierId}/oplevering`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   return { ok: true, verzonden, mislukt }
 }
 

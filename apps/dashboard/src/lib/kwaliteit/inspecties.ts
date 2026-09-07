@@ -36,7 +36,7 @@ const db = () => createAdminClient() as any
 const BUCKET = 'kwaliteit-fotos'
 
 function revalidate(dossierId: string, inspectieId?: string) {
-  revalidatePath(`/opdrachten/${dossierId}/vca`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   revalidatePath('/kam/kwaliteit')
   if (inspectieId) revalidatePath(`/kam/kwaliteit/${inspectieId}`)
 }

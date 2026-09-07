@@ -239,12 +239,14 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   [/^\/opdrachten\/[^/]+\/[^/]+$/, {
     title: 'Opdracht — detail',
-    description: 'Detailpagina van een opdracht met tabbladen voor informatie, planning, uitvoering, meerwerk en financiën. Hier wordt alle activiteit rondom de uitvoering vastgelegd.',
+    description: 'Detailpagina van een opdracht. De tabbladen staan in de zijbalk gegroepeerd per fase: Dossier, Voorbereiding, Uitvoering en Financieel. Hier wordt alle activiteit rondom de uitvoering vastgelegd.',
     sections: [
       { title: 'Tabblad Planning', body: 'Stel de startdatum, eindatum en verantwoordelijke uitvoerder in. Koppel onderaannemers via de subproject-kaarten. De planning synchroniseert met de centrale planningsmodule.' },
       { title: 'Tabblad Meerwerk', body: 'Registreer wijzigingen ten opzichte van de offerte als meer- of minderwerk. Klantakkoord vastleggen is verplicht vóór uitvoering bij bedragen boven de drempel.' },
       { title: 'Tabblad Financieel', body: 'Hier stel je termijnfacturen en de eindfactuur op. De eindfactuur is pas beschikbaar nadat de oplevering is goedgekeurd. Bij openstaande opleverpunten wordt een inhouding van 5% automatisch berekend.' },
       { title: 'Urenregistratie', body: 'Medewerkers schrijven uren via de werkbon. Uren zijn alleen in te voeren op opdrachten met status "In uitvoering" of "Opgeleverd onder voorbehoud". Bij ZZP/uitzend worden uren later gematcht met de inkoopfactuur.' },
+      { title: 'Tabblad KAM/VGM', body: 'Kwaliteit, VCA, de oplevering en de ingevulde formulieren staan samen onder KAM/VGM, elk op een eigen knop bovenin het tabblad. Oplevering en formulieren zijn er altijd; de VCA-administratie verschijnt zodra de VCA-toggle op de Informatie-tab aanstaat.' },
+      { title: 'Klantportaal', body: 'Het klantportaal heeft geen eigen tabblad meer: op de Informatie-tab staat het blok Klantportaal met de stand van zaken, en achter "Instellingen" bepaal je wat de opdrachtgever ziet en wie er mag meekijken.' },
     ],
   }],
 
@@ -353,7 +355,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Klantportaal ───────────────────────────────────────────────────────
   [/^\/instellingen\/klantportaal$/, {
     title: 'Klantportaal',
-    description: 'Alle opdrachtgevers met toegang tot hun eigen projectomgeving op /portaal. Uitnodigen doe je per dossier, op de tab Klantportaal; dit scherm is het overzicht daarvan.',
+    description: 'Alle opdrachtgevers met toegang tot hun eigen projectomgeving op /portaal. Uitnodigen doe je per dossier, in het blok Klantportaal op de Informatie-tab; dit scherm is het overzicht daarvan.',
     sections: [
       { title: 'Nooit ingelogd', body: 'Staat er "nooit" bij Laatst ingelogd, dan is de uitnodiging waarschijnlijk niet aangekomen. Het e-mailadres komt uit de Bouw7-sync en is vaak jaren oud — controleer het bij de contactpersoon en nodig opnieuw uit.' },
       { title: 'Ziet', body: 'Standaard ziet een contactpersoon alleen de projecten waar hij zelf aan gekoppeld is. Bij corporaties en VvE-beheerders wil je hem vaak alle projecten van zijn organisatie laten zien; dat zet je per persoon om in het dossier.' },
@@ -934,7 +936,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'KAM-formulieren aanmaken', body: 'Ga naar Formulieren, open de form builder en klik op "Instellingen" in de toolbar. Zet het vinkje "KAM/VGM-formulier" aan. Alle inzendingen van dit formulier verschijnen automatisch in dit overzicht.' },
       { title: 'Filteren en zoeken', body: 'Filter op status (concept, ingediend, goedgekeurd, afgekeurd), op formulier-type of op datum-range. Gebruik de zoekbalk voor een project­referentie of formulier-naam.' },
       { title: 'Exporteren', body: 'Klik op "Exporteer Excel" om alle gefilterde inzendingen als .xlsx-bestand te downloaden. Handig voor audits, rapportages of archivering.' },
-      { title: 'VCA-tab op opdrachten', body: 'Op de detailpagina van een opdracht, tabblad VCA, zie je welke KAM-formulieren zijn ingediend voor die specifieke opdracht en de VCA-status van de betrokken medewerkers.' },
+      { title: 'KAM/VGM-tab op opdrachten', body: 'Op de detailpagina van een opdracht, tabblad KAM/VGM, zie je de kwaliteitscontrole, de VCA-status van de betrokken medewerkers, de oplevering en alle formulieren die op die opdracht zijn ingevuld.' },
     ],
   }],
 
@@ -1384,8 +1386,10 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // (sectie, tab) i.p.v. één generieke tekst voor de hele detailpagina. Welke tabs
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
 //   aanvragen & offertes → informatie · bestanden · calculatie · acties
-//   opdrachten           → + werkbegroting · planning · vca · uren · inkoop · verkoop · meerwerk · oplevering · financieel · formulieren
-//   servicedesk          → informatie · bestanden · calculatie · planning · vca · financieel
+//   opdrachten           → + werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
+//   servicedesk          → informatie · bestanden · calculatie · planning · financieel · kam
+// De KAM/VGM-tab heeft zelf drie onderdelen (?deel=kwaliteit|oplevering|formulieren);
+// die krijgen elk hun eigen hulp, want het zijn drie losse werkschermen.
 const DOSSIER_ROOT_LABELS: Record<string, string> = {
   aanvragen:   'Aanvraag',
   offertes:    'Offerte',
@@ -1393,7 +1397,33 @@ const DOSSIER_ROOT_LABELS: Record<string, string> = {
   servicedesk: 'Servicedesk',
 }
 
-function dossierTabHelp(root: string, tab: string): PageHelp | null {
+/** Hulp per onderdeel van de KAM/VGM-tab. Los gezet omdat ze achter `?deel=` zitten
+ *  en niet achter een eigen tab-slug. */
+type TabHelpBouwer = (tabLabel: string, description: string, sections?: HelpSection[]) => PageHelp
+
+function opleveringHelp(T: TabHelpBouwer): PageHelp {
+  return T('Oplevering',
+    'De oplevering van de opdracht. Belangrijk: de oplevering zélf is géén formulier — je bouwt hem hier op met oplevermomenten en opleverpunten. Alleen de bewonersfeedback is een los formulier, en dat is optioneel. Je hoeft dus maar één formulier te maken, niet twee.',
+    [
+      { title: 'Zo werkt het (in het kort)', body: 'Maak eerst een Oplevermoment aan (bijv. "Eindoplevering blok A"). Voeg daaronder Opleverpunten toe: de restpunten. Zodra alle punten geaccepteerd zijn, springt het moment naar "gereed voor ondertekening" en kun je laten tekenen. Dit alles doe je in deze tab, niet via de Formulieren-module.' },
+      { title: 'Opleverpunten', body: 'Leg per restpunt de omschrijving, ruimte/locatie, deadline en foto\'s vast, en wijs het toe aan een eigen medewerker of aan een onderaannemer/leverancier. De status loopt van open → in behandeling → opgelost → geaccepteerd (of geweigerd). Vink "Extra werk" aan om er automatisch een meerwerkregel (regie) van te maken. Openstaande punten kunnen een inhouding (standaard 5%) op de eindfactuur veroorzaken.' },
+      { title: 'Op locatie opleveren + foto\'s', body: 'De tab is mobiel-first: op je telefoon in de browser maak je punten aan, en bij "Foto toevoegen" opent direct de camera. Ter plekke laten ondertekenen kan met het handtekening-vlak op het scherm. Er is geen aparte app nodig — het werkt via de browser op je telefoon.' },
+      { title: 'Onderaannemers: afmeldlink', body: 'Wijs eerst één of meer opleverpunten toe aan een onderaannemer. Daarna verschijnt bij "Deel-links" een knop "Afmeldlink: [naam]". Kopieer die link en stuur hem (nu handmatig) naar de onderaannemer. Hij ziet alleen zijn eigen punten, voegt foto + toelichting toe en meldt het punt af als opgelost — zonder EVA-account. Geen toewijzing = geen afmeldlink.' },
+      { title: 'Opdrachtgever-akkoord', body: 'Naast ondertekenen ter plekke kun je met "Akkoordlink opdrachtgever" een publieke link maken waarmee de opdrachtgever op afstand akkoord geeft op de oplevering.' },
+      { title: 'Bewonersfeedback (optioneel)', body: 'Maak in de Formulieren-module één feedbackformulier aan (categorie "Oplevering", bijv. met cijfer/rating-velden). Klik hier op "Feedback-link maken & kopiëren" en deel die met bewoners. Zij vullen de vragenlijst in zonder in te loggen; meerdere bewoners kunnen dezelfde link gebruiken. De ingevulde reacties worden bij het dossier bewaard en samengevat in het blok "Feedback-ronde bewoners" — met het aantal reacties en het gemiddelde per cijfer.' },
+      { title: 'Rapportage', body: 'Via "Rapportage (print/PDF)" open je een opleverrapport met de punten en foto\'s; opslaan als PDF gaat via Printen → Opslaan als PDF. Automatisch mailen van de rapportage en herinneringsmails naar onderaannemers zijn nog niet actief (wacht op de mailconfiguratie); links deel je voorlopig handmatig.' },
+    ])
+}
+
+function formulierenHelp(T: TabHelpBouwer): PageHelp {
+  return T('Formulieren',
+    'De formulier-inzendingen die aan deze opdracht hangen: werkbonnen, inspecties, opleveringen en checklists. Volg welke nog open staan en welke al zijn ingediend.',
+    [
+      { title: 'Inzendingen', body: 'Concepten en ingediende formulieren staan hier bij elkaar met status en datum. Klik door om een concept verder in te vullen of een inzending te bekijken en als PDF te downloaden.' },
+    ])
+}
+
+function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | null {
   const rootLabel = DOSSIER_ROOT_LABELS[root]
   if (!rootLabel) return null
   const isOpdracht = root === 'opdrachten'
@@ -1464,12 +1494,17 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
           { title: 'Acties afwerken', body: 'Vink acties af als ze klaar zijn en wijs een verantwoordelijke en deadline toe. Openstaande acties verschijnen ook bij de betrokkene onder "Mijn acties".' },
         ])
 
-    case 'vca':
-      return T('VCA',
-        'Kwaliteit, Arbo en Milieu voor dit dossier: de ingediende VCA-/KAM-formulieren en de openstaande VCA-acties. Dit tabblad verschijnt alleen als de VCA-toggle voor het dossier aanstaat.',
+    // KAM/VGM heeft drie onderdelen achter ?deel=; elk krijgt zijn eigen hulp.
+    case 'kam':
+      if (deel === 'oplevering') return opleveringHelp(T)
+      if (deel === 'formulieren') return formulierenHelp(T)
+      return T('KAM/VGM — Kwaliteit & VCA',
+        'Kwaliteit, Arbo en Milieu voor dit dossier. Op dit onderdeel staan de kwaliteitscontrole en de VCA-administratie; via de knoppen bovenin kom je bij de oplevering en bij alle ingevulde formulieren.',
         [
-          { title: 'Ingediende formulieren', body: 'De VCA-/KAM-formulieren (toolbox, inspectie, LMRA) die voor dit dossier zijn ingediend staan hier bij elkaar. Klik door naar de inzending voor de volledige inhoud en de PDF.' },
-          { title: 'Openstaande acties', body: 'Nog uit te voeren VCA-acties worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat.' },
+          { title: 'Kwaliteitscontrole', body: 'De controlerondes op dit dossier met hun bevindingen. Deze staat bovenaan omdat het is waar de projectleider tussen twee rondes door naar kijkt.' },
+          { title: 'VCA-acties', body: 'Nog uit te voeren VCA-acties worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat. Ze komen uit de actielijst: taken met een KAM/VGM-formulier eraan.' },
+          { title: "VCA-diploma's", body: "De medewerkers die op deze opdracht staan ingepland of er een rol op hebben, met de status van hun VCA-diploma. Verlopen of bijna verlopen diploma's springen eruit." },
+          { title: 'VCA-toggle', body: "De VCA-acties en -diploma's verschijnen alleen als de VCA-toggle op de Informatie-tab aanstaat. Het tabblad zelf blijft altijd bereikbaar — oplevering en formulieren staan los van VCA." },
         ])
 
     case 'uren':
@@ -1503,19 +1538,6 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
           { title: 'Doorzetten naar Bouw7', body: 'Bij akkoord wordt een bewakingscode voor het meerwerk in Bouw7 aangemaakt. Het goedgekeurde bedrag telt automatisch mee in het contracttotaal en de financiële overzichten.' },
         ])
 
-    case 'oplevering':
-      return T('Oplevering',
-        'De oplevering van de opdracht. Belangrijk: de oplevering zélf is géén formulier — je bouwt hem hier op met oplevermomenten en opleverpunten. Alleen de bewonersfeedback is een los formulier, en dat is optioneel. Je hoeft dus maar één formulier te maken, niet twee.',
-        [
-          { title: 'Zo werkt het (in het kort)', body: 'Maak eerst een Oplevermoment aan (bijv. "Eindoplevering blok A"). Voeg daaronder Opleverpunten toe: de restpunten. Zodra alle punten geaccepteerd zijn, springt het moment naar "gereed voor ondertekening" en kun je laten tekenen. Dit alles doe je in deze tab, niet via de Formulieren-module.' },
-          { title: 'Opleverpunten', body: 'Leg per restpunt de omschrijving, ruimte/locatie, deadline en foto\'s vast, en wijs het toe aan een eigen medewerker of aan een onderaannemer/leverancier. De status loopt van open → in behandeling → opgelost → geaccepteerd (of geweigerd). Vink "Extra werk" aan om er automatisch een meerwerkregel (regie) van te maken. Openstaande punten kunnen een inhouding (standaard 5%) op de eindfactuur veroorzaken.' },
-          { title: 'Op locatie opleveren + foto\'s', body: 'De tab is mobiel-first: op je telefoon in de browser maak je punten aan, en bij "Foto toevoegen" opent direct de camera. Ter plekke laten ondertekenen kan met het handtekening-vlak op het scherm. Er is geen aparte app nodig — het werkt via de browser op je telefoon.' },
-          { title: 'Onderaannemers: afmeldlink', body: 'Wijs eerst één of meer opleverpunten toe aan een onderaannemer. Daarna verschijnt bij "Deel-links" een knop "Afmeldlink: [naam]". Kopieer die link en stuur hem (nu handmatig) naar de onderaannemer. Hij ziet alleen zijn eigen punten, voegt foto + toelichting toe en meldt het punt af als opgelost — zonder EVA-account. Geen toewijzing = geen afmeldlink.' },
-          { title: 'Opdrachtgever-akkoord', body: 'Naast ondertekenen ter plekke kun je met "Akkoordlink opdrachtgever" een publieke link maken waarmee de opdrachtgever op afstand akkoord geeft op de oplevering.' },
-          { title: 'Bewonersfeedback (optioneel)', body: 'Maak in de Formulieren-module één feedbackformulier aan (categorie "Oplevering", bijv. met cijfer/rating-velden). Klik hier op "Feedback-link maken & kopiëren" en deel die met bewoners. Zij vullen de vragenlijst in zonder in te loggen; meerdere bewoners kunnen dezelfde link gebruiken. De ingevulde reacties worden bij het dossier bewaard en samengevat in het blok "Feedback-ronde bewoners" — met het aantal reacties en het gemiddelde per cijfer.' },
-          { title: 'Rapportage', body: 'Via "Rapportage (print/PDF)" open je een opleverrapport met de punten en foto\'s; opslaan als PDF gaat via Printen → Opslaan als PDF. Automatisch mailen van de rapportage en herinneringsmails naar onderaannemers zijn nog niet actief (wacht op de mailconfiguratie); links deel je voorlopig handmatig.' },
-        ])
-
     case 'financieel':
       if (isServicedesk) {
         return T('Financieel',
@@ -1532,23 +1554,16 @@ function dossierTabHelp(root: string, tab: string): PageHelp | null {
           { title: 'Facturatie', body: 'Stel termijnfacturen op tijdens de uitvoering en de eindfactuur ná goedgekeurde oplevering. Goedgekeurd meerwerk telt mee; bij openstaande opleverpunten wordt een inhouding van 5% aangehouden.' },
         ])
 
-    case 'formulieren':
-      return T('Formulieren',
-        'De formulier-inzendingen die aan deze opdracht hangen: werkbonnen, inspecties, opleveringen en checklists. Volg welke nog open staan en welke al zijn ingediend.',
-        [
-          { title: 'Inzendingen', body: 'Concepten en ingediende formulieren staan hier bij elkaar met status en datum. Klik door om een concept verder in te vullen of een inzending te bekijken en als PDF te downloaden.' },
-        ])
-
     default:
       return null
   }
 }
 
-export function getPageHelp(pathname: string): PageHelp | null {
+export function getPageHelp(pathname: string, deel?: string): PageHelp | null {
   // Dossier-detailpagina's krijgen tab-specifieke hulp (op basis van sectie + laatste segment).
   const dossierMatch = pathname.match(/^\/(aanvragen|offertes|opdrachten|servicedesk)\/[^/]+\/([^/]+)$/)
   if (dossierMatch) {
-    const tabHelp = dossierTabHelp(dossierMatch[1], dossierMatch[2])
+    const tabHelp = dossierTabHelp(dossierMatch[1], dossierMatch[2], deel)
     if (tabHelp) return tabHelp
   }
   for (const [pattern, help] of PAGE_HELP) {

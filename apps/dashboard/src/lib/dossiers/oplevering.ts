@@ -34,7 +34,7 @@ async function huidigeMedewerkerId(): Promise<string | null> {
 }
 
 function revalidate(dossierId: string) {
-  revalidatePath(`/opdrachten/${dossierId}/oplevering`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
 }
 
 /* ─────────────────────────────── Views ───────────────────────────────────── */

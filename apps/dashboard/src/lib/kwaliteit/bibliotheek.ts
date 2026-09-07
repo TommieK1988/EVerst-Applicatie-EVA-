@@ -183,7 +183,7 @@ export async function bewaarProjectEis(
     .from('kwaliteit_project_eisen')
     .upsert({ ...eis, dossier_id: dossierId }, { onConflict: 'dossier_id,sleutel' })
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${dossierId}/vca`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   return { ok: true }
 }
 
@@ -191,7 +191,7 @@ export async function verwijderProjectEis(id: string, dossierId: string): Promis
   await vereisSessie()
   const { error } = await db().from('kwaliteit_project_eisen').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${dossierId}/vca`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   return { ok: true }
 }
 
@@ -218,7 +218,7 @@ export async function maakReferentievlak(
     .select('id')
     .single()
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${dossierId}/vca`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   return { ok: true, id: data.id }
 }
 
@@ -229,6 +229,6 @@ export async function verwijderReferentievlak(
   await vereisSessie()
   const { error } = await db().from('kwaliteit_referentievlakken').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath(`/opdrachten/${dossierId}/vca`)
+  revalidatePath(`/opdrachten/${dossierId}/kam`)
   return { ok: true }
 }

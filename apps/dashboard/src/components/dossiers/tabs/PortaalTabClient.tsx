@@ -23,7 +23,16 @@ import {
  * zeggen steeds wat de klant ziet, niet wat de kolom heet — dat is precies het
  * verschil tussen een instelling die je durft aan te zetten en eentje niet.
  */
-export function PortaalTabClient({ dossierId, data }: { dossierId: string; data: PortaalDossierBeheer }) {
+export function PortaalTabClient({
+  dossierId,
+  data,
+  ingebed = false,
+}: {
+  dossierId: string
+  data: PortaalDossierBeheer
+  /** In een dialog: geen eigen paginamarge, de dialog levert die zelf. */
+  ingebed?: boolean
+}) {
   const router = useRouter()
   // Waar de voorbeeldweergave naartoe moet terugwijzen. Het dossier zit onder
   // /aanvragen, /offertes, /opdrachten of /servicedesk -- welke van de vier weet
@@ -80,7 +89,7 @@ export function PortaalTabClient({ dossierId, data }: { dossierId: string; data:
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6 sm:p-8">
+    <div className={ingebed ? 'space-y-4' : 'mx-auto max-w-3xl space-y-4 p-6 sm:p-8'}>
       {fout && (
         <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2.5 text-sm text-error-700">
           {fout}
