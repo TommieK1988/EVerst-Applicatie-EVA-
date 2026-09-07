@@ -45,6 +45,20 @@ const BESLUIT_STATUSSEN: MeerwerkStatus[] = ['akkoord', 'afgewezen']
 
 const rond = (n: number): number => Math.round(n * 100) / 100
 
+/**
+ * Rekent deze regel op werkelijke kosten af? Dan wordt hij via het nacalculatie-blok gefactureerd
+ * en hoort hij nooit in een termijnstaat — een termijn veronderstelt een bedrag dat vooraf vaststaat.
+ *
+ * Zelfde criterium als `getFactureerbareCodes`, zodat een regel niet op twee plekken tegelijk kan
+ * opduiken of juist nergens.
+ */
+function rekentOpNacalculatie(r: MeerwerkRegel): boolean {
+  if (!r.bewakingscode) return false
+  // Een verrekenregel van een stelpost draagt geen eigen code en telt hier niet mee.
+  if (r.opdracht_onderdeel_id != null) return false
+  return r.afrekenwijze === 'regie' || r.is_stelpost === true
+}
+
 /** Effectief bedrag (excl. btw) per regel, afhankelijk van afrekenwijze/stelpost. */
 function effectiefExcl(regel: MeerwerkRegel, regiePerCode: Map<string, number>): number {
   if (regel.is_stelpost && regel.stelpost_grondslag === 'eenheidsprijzen') {
@@ -64,6 +78,11 @@ export type MeerwerkRegelView = MeerwerkRegel & {
   effectiefExcl: number
   effectiefIncl: number
   btwEffectief: number
+  /**
+   * Rekent op werkelijke kosten af en loopt dus via de nacalculatie. Zo'n regel krijgt nooit een
+   * termijn: het bedrag staat pas vast als het werk geboekt is.
+   */
+  opNacalculatie: boolean
 }
 
 export type DossierMeerwerkData = {
@@ -112,7 +131,10 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
     const btwPct = r.btw_pct != null ? Number(r.btw_pct) : 21
     const incl = rond(excl * (1 + btwPct / 100))
     if (GOEDGEKEURD.includes(r.status)) { goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++ }
-    return { ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct }
+    return {
+      ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct,
+      opNacalculatie: rekentOpNacalculatie(r),
+    }
   })
 
   return {

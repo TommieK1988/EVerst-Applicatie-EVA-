@@ -140,3 +140,34 @@ export function aantalEnEenheid<T extends GroepeerbareBoeking & { aantal: number
   }
   return { aantal: 1, eenheid: 'post' }
 }
+
+/**
+ * Herleidt tarief en opslag uit een verkoopbedrag. Twee vensters op hetzelfde getal: een tarief
+ * zegt wat één eenheid kost, een opslag wat er bovenop de kostprijs zit.
+ *
+ * Ze worden altijd samen uit hetzelfde bedrag berekend en nooit los opgeslagen getoond. Anders komt
+ * er een tarief naast een opslag te staan die bij een ander bedrag hoort, en lees je een uurtarief
+ * van 75 als 75% marge — het verschil tussen een prijs en een percentage.
+ */
+export function tariefEnOpslag(
+  verkoopBedrag: number,
+  aantal: number | null,
+  inkoopBedrag: number,
+): { verkoopTarief: number | null; opslagPct: number | null } {
+  return {
+    verkoopTarief: aantal && aantal !== 0 ? rond(verkoopBedrag / aantal) : null,
+    // Zonder kostprijs is er geen percentage dat naar dit bedrag leidt; dan liever leeg dan een
+    // getal dat toevallig op oneindig uitkomt.
+    opslagPct: inkoopBedrag > 0 ? rond((verkoopBedrag / inkoopBedrag - 1) * 100) : null,
+  }
+}
+
+/** Verkoopbedrag uit een opslag op de kostprijs. Tegenhanger van `tariefEnOpslag`. */
+export function bedragUitOpslag(inkoopBedrag: number, opslagPct: number): number {
+  return rond(inkoopBedrag * (1 + opslagPct / 100))
+}
+
+/** Verkoopbedrag uit een prijs per eenheid. Een post zonder aantal telt als één. */
+export function bedragUitTarief(tarief: number, aantal: number | null): number {
+  return rond(tarief * (aantal || 1))
+}

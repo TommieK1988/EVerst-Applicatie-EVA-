@@ -79,6 +79,10 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   const bg = data.betaalgegevens
 
   const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
+  // Regie en stelposten rekenen op werkelijke kosten af; hun bedrag staat pas vast als het werk
+  // geboekt is. Ze krijgen dus nooit een termijn en horen in het nacalculatie-blok, niet hier.
+  const termijnMeerwerk = goedgekeurdeRegels.filter(r => !r.opNacalculatie)
+  const nacalculatieMeerwerk = goedgekeurdeRegels.length - termijnMeerwerk.length
   const heeftNacalculatie = nacalculatieCodes.length > 0
 
   if (!data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie) {
@@ -315,7 +319,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
       <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg />
 
       {/* Meerwerk in de termijnstaat (EVA-weergave; nog niet naar Bouw7 geschreven) */}
-      {goedgekeurdeRegels.length > 0 && (
+      {termijnMeerwerk.length > 0 && (
         <Card>
           <CardHeader>Meerwerk in termijnstaat</CardHeader>
           <CardBody style={{ padding: 0, overflowX: 'auto' }}>
@@ -330,7 +334,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {goedgekeurdeRegels.map((r) => (
+                {termijnMeerwerk.map((r) => (
                   <tr key={r.id}>
                     <TD>MW{String(r.volgnummer).padStart(2, '0')}</TD>
                     <TD wrap>{r.omschrijving}</TD>
@@ -347,6 +351,8 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
             </table>
             <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px' }}>
               EVA-weergave op basis van de meerwerkregels. Het daadwerkelijk wegschrijven van termijnen naar Bouw7 volgt in een latere fase.
+              {nacalculatieMeerwerk > 0 && ` ${nacalculatieMeerwerk} regel${nacalculatieMeerwerk === 1 ? '' : 's'} `
+                + `rekent op werkelijke kosten af en staat hierboven bij de nacalculatie.`}
             </div>
           </CardBody>
         </Card>

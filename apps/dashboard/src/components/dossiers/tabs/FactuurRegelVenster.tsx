@@ -19,7 +19,7 @@
 
 import React, { useEffect, useId, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, Merge, Plus, Eye, EyeOff } from 'lucide-react'
+import { Lock, Merge, Eye, EyeOff } from 'lucide-react'
 import {
   Button, Input, Checkbox, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
@@ -61,18 +61,22 @@ const veldKlasse =
  * server een andere waarde teruggeeft. Zonder die synchronisatie blijft een afgewezen of afgeronde
  * waarde in beeld staan alsof hij bewaard is.
  */
-function BewaarVeld({ waarde, opslaan, disabled, placeholder, uitlijnen, titel }: {
+function BewaarVeld({ waarde, opslaan, disabled, placeholder, uitlijnen, titel, eenheid, eenheidVoor }: {
   waarde: string
   opslaan: (tekst: string) => void
   disabled?: boolean
   placeholder?: string
   uitlijnen?: 'rechts'
   titel?: string
+  /** Teken in het veld dat zegt wát het getal is — €, % of /u. */
+  eenheid?: string
+  /** Eenheid vóór het getal in plaats van erachter (bedragen). */
+  eenheidVoor?: boolean
 }) {
   const [tekst, setTekst] = useState(waarde)
   useEffect(() => { setTekst(waarde) }, [waarde])
   const bewaar = () => { if (tekst !== waarde) opslaan(tekst) }
-  return (
+  const veld = (
     <input
       value={tekst}
       title={titel}
@@ -84,8 +88,24 @@ function BewaarVeld({ waarde, opslaan, disabled, placeholder, uitlijnen, titel }
         if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
         if (e.key === 'Escape') setTekst(waarde)
       }}
-      className={`${veldKlasse} ${uitlijnen === 'rechts' ? 'text-right tabular-nums' : ''}`}
+      className={`${veldKlasse} ${uitlijnen === 'rechts' ? 'text-right tabular-nums' : ''} `
+        + `${eenheid ? (eenheidVoor ? 'pl-5' : 'pr-6') : ''}`}
     />
+  )
+  if (!eenheid) return veld
+  // De eenheid staat in het veld en niet in de kolomkop: bij twee getalvelden naast elkaar is de
+  // kop te ver weg om nog te vertellen of je naar een bedrag of een percentage kijkt.
+  return (
+    <div className="relative">
+      {veld}
+      <span
+        className={`pointer-events-none absolute top-0 grid h-8 place-items-center text-[12px] text-neutral-400 `
+          + `${eenheidVoor ? 'left-2' : 'right-2'}`}
+        aria-hidden
+      >
+        {eenheid}
+      </span>
+    </div>
   )
 }
 
@@ -378,6 +398,8 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             waarde={alsTekst(g.bedragOverride)}
                             placeholder={fmtGetal(g.berekend)}
                             uitlijnen="rechts"
+                            eenheid="€"
+                            eenheidVoor
                             titel="Vast bedrag; laat leeg om de optelling van de boekingen te volgen"
                             disabled={opslot || bezig}
                             opslaan={t => groepPatch(g.groepSleutel, { bedrag_excl_btw: getal(t) })}
@@ -452,7 +474,8 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                       <th className={kop}>Omschrijving</th>
                       <th className={`${kop} w-20 text-right`}>Aantal</th>
                       <th className={`${kop} w-24 text-right`}>Kostprijs</th>
-                      <th className={`${kop} w-28 text-right`}>Tarief / opslag</th>
+                      <th className={`${kop} w-28 text-right`}>Tarief</th>
+                      <th className={`${kop} w-24 text-right`}>Opslag</th>
                       <th className={`${kop} w-28 text-right`}>Verkoop</th>
                       <th className={`${kop} w-40`}>Factuurregel</th>
                     </tr>
@@ -491,36 +514,45 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             {fmt(b.inkoopBedrag)}
                           </td>
                           <td className="px-2 py-2">
-                            {b.bronType === 'uur' ? (
+                            {/* Prijs per eenheid. Een kostenpost telt als één post en heeft er dus
+                                geen; daar ís het verkoopbedrag de prijs. */}
+                            {b.aantal && b.aantal !== 0 ? (
                               <BewaarVeld
                                 waarde={alsTekst(b.verkoopTarief)}
-                                placeholder="tarief"
                                 uitlijnen="rechts"
-                                titel="Verkooptarief per uur"
+                                eenheid={b.eenheid === 'uur' ? '/u' : ''}
+                                titel={`Verkoopprijs per ${b.eenheid ?? 'eenheid'} — past het verkoopbedrag en de opslag aan`}
                                 disabled={vast}
-                                opslaan={t => boekingPatch(b, { verkoopTarief: getal(t), verkoopBedrag: null })}
+                                opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
                               />
                             ) : (
+                              <div className="px-1 text-right text-[13px] text-neutral-400">—</div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            {b.inkoopBedrag > 0 ? (
                               <BewaarVeld
                                 waarde={alsTekst(b.opslagPct)}
-                                placeholder="opslag %"
                                 uitlijnen="rechts"
-                                titel="Opslag op de kostprijs, in procenten"
+                                eenheid="%"
+                                titel="Opslag op de kostprijs — past het verkoopbedrag en het tarief aan"
                                 disabled={vast}
-                                opslaan={t => boekingPatch(b, { opslagPct: getal(t), verkoopBedrag: null })}
+                                opslaan={t => boekingPatch(b, { opslagPct: getal(t) })}
                               />
+                            ) : (
+                              <div className="px-1 text-right text-[13px] text-neutral-400"
+                                   title="Zonder kostprijs valt er geen opslag op te rekenen">—</div>
                             )}
                           </td>
                           <td className="px-2 py-2">
                             <BewaarVeld
                               waarde={fmtGetal(b.verkoopBedrag)}
                               uitlijnen="rechts"
-                              titel="Verkoopbedrag excl. btw"
+                              eenheid="€"
+                              eenheidVoor
+                              titel="Verkoopbedrag excl. btw — past het tarief en de opslag aan"
                               disabled={vast}
-                              opslaan={t => {
-                                const v = getal(t)
-                                if (v != null) boekingPatch(b, { verkoopBedrag: v })
-                              }}
+                              opslaan={t => boekingPatch(b, { verkoopBedrag: getal(t) })}
                             />
                           </td>
                           <td className="px-2 py-2">

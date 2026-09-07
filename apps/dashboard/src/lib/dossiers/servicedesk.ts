@@ -10,7 +10,8 @@ import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
-  nieuweHandmatigeSleutel, soortVan, type Groepering,
+  bedragUitOpslag, bedragUitTarief, nieuweHandmatigeSleutel, soortVan, tariefEnOpslag,
+  type Groepering,
 } from './factuurregel-groepen'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
@@ -59,6 +60,8 @@ export type RegieFactuurRegel = {
   verkoopTarief: number | null
   /** Verkoopwaarde excl. btw. */
   verkoopBedrag: number
+  /** Prijs is handmatig vastgezet; leeg = hij volgt nog de standaardberekening. */
+  handmatigePrijs: boolean
   btwPct: number | null
   bewakingscode: string | null
   /** Uursoort bij een uur-regel ('Gewerkte uren', 'Reisuren'…); bepaalt de groepering. */
@@ -161,6 +164,7 @@ export async function getServicedeskRegie(
       opslagPct: opgesl?.opslag_pct ?? null,
       verkoopTarief,
       verkoopBedrag,
+      handmatigePrijs: opgesl?.verkoop_bedrag != null,
       btwPct: null,
       bewakingscode: u.code,
       uursoort: u.uursoort ?? null,
@@ -193,6 +197,7 @@ export async function getServicedeskRegie(
       opslagPct,
       verkoopTarief: null,
       verkoopBedrag,
+      handmatigePrijs: opgesl?.verkoop_bedrag != null,
       btwPct: null,
       bewakingscode: k.code,
       uursoort: null,
@@ -295,12 +300,25 @@ export type BoekingView = {
   eenheid: string | null
   /** Kostprijs excl. btw. */
   inkoopBedrag: number
-  /** Opslag op de kostprijs (kosten); leeg bij uren, die rekenen via een tarief. */
-  opslagPct: number | null
-  /** Verkooptarief per uur. */
+  /**
+   * Verkooptarief per eenheid, afgeleid uit het verkoopbedrag. Leeg als er geen aantal is om door
+   * te delen (kostenposten tellen als één post; dan ís het verkoopbedrag de prijs).
+   */
   verkoopTarief: number | null
-  /** Wat deze boeking bijdraagt aan de factuur. */
+  /**
+   * Opslag op de kostprijs in procenten, óók afgeleid uit het verkoopbedrag. Leeg als de kostprijs
+   * nul is: dan bestaat er geen percentage dat naar het verkoopbedrag leidt.
+   *
+   * Tarief en opslag zijn bewust twee vensters op hetzelfde bedrag en worden altijd samen herleid.
+   * Zou er één opgeslagen waarde worden getoond naast een bedrag dat inmiddels ergens anders vandaan
+   * komt, dan lees je een tarief van 75 als 75% opslag — en dat is precies het verschil tussen
+   * marge en uurprijs.
+   */
+  opslagPct: number | null
+  /** Wat deze boeking bijdraagt aan de factuur; de bron waar tarief en opslag uit volgen. */
   verkoopBedrag: number
+  /** Prijs is hier handmatig vastgezet; leeg = hij volgt nog het relatietarief of de bedrijfsopslag. */
+  handmatigePrijs: boolean
   uitgesloten: boolean
   /** Staat al op een verstuurde factuur: alleen ter informatie, niet meer te wijzigen. */
   gefactureerd: boolean
@@ -492,9 +510,9 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       aantal: r.aantal,
       eenheid: r.eenheid,
       inkoopBedrag: r.inkoopBedrag,
-      opslagPct: r.opslagPct,
-      verkoopTarief: r.verkoopTarief,
+      ...tariefEnOpslag(r.verkoopBedrag, r.aantal, r.inkoopBedrag),
       verkoopBedrag: r.verkoopBedrag,
+      handmatigePrijs: r.handmatigePrijs,
       uitgesloten: r.uitgesloten,
       gefactureerd: isGefactureerd,
       groepSleutel: groepSleutelVoor(r, groepering),
@@ -765,9 +783,17 @@ export async function bewaarBoekingen(
   dossierId: string,
   bewakingscode: string,
   boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  /**
+   * Geef hoogstens één prijsveld mee — welk venster op de prijs de gebruiker ook gebruikte, de
+   * andere twee worden hier herleid. `null` wist de handmatige prijs en laat de boeking terugvallen
+   * op de standaardberekening (relatietarief of bedrijfsopslag).
+   */
   patch: {
-    opslagPct?: number | null
+    /** Verkoopprijs per eenheid; bedrag = tarief × aantal. */
     verkoopTarief?: number | null
+    /** Opslag op de kostprijs in procenten; bedrag = kostprijs × (1 + pct/100). */
+    opslagPct?: number | null
+    /** Het verkoopbedrag zelf. */
     verkoopBedrag?: number | null
     uitgesloten?: boolean
   },
@@ -786,21 +812,33 @@ export async function bewaarBoekingen(
       return { ok: false, error: 'Een boeking die al op een factuur staat ligt vast en kan niet worden gewijzigd.' }
     }
 
-    const opslagPct = patch.opslagPct !== undefined ? patch.opslagPct : bron.opslagPct
-    const verkoopTarief = patch.verkoopTarief !== undefined ? patch.verkoopTarief : bron.verkoopTarief
-
-    // Volgorde van winnen: een hard bedrag, anders tarief maal aantal (uren), anders kostprijs plus
-    // opslag. Zo blijft zichtbaar waar een bedrag vandaan komt in plaats van dat alles één getal wordt.
-    let verkoopBedrag: number
-    if (patch.verkoopBedrag !== undefined && patch.verkoopBedrag !== null) {
+    // Welk venster op de prijs de gebruiker ook gebruikte, er komt één bedrag uit; tarief en opslag
+    // worden daarna uit dát bedrag herleid. Zo kan er nooit een tarief naast een opslag komen te
+    // staan die bij een ander bedrag hoort.
+    const wist = patch.verkoopBedrag === null || patch.verkoopTarief === null || patch.opslagPct === null
+    let verkoopBedrag: number | null
+    if (wist) {
+      verkoopBedrag = null
+    } else if (patch.verkoopBedrag != null) {
       verkoopBedrag = patch.verkoopBedrag
-    } else if (bron.bronType === 'uur') {
-      verkoopBedrag = verkoopTarief != null ? rond((bron.aantal ?? 0) * verkoopTarief) : bron.verkoopBedrag
+    } else if (patch.verkoopTarief != null) {
+      verkoopBedrag = bedragUitTarief(patch.verkoopTarief, bron.aantal)
+    } else if (patch.opslagPct != null) {
+      if (bron.inkoopBedrag <= 0) {
+        return {
+          ok: false,
+          error: 'Zonder kostprijs valt er geen opslag op te rekenen. Vul een tarief of een verkoopbedrag in.',
+        }
+      }
+      verkoopBedrag = bedragUitOpslag(bron.inkoopBedrag, patch.opslagPct)
     } else {
-      verkoopBedrag = opslagPct != null
-        ? rond(bron.inkoopBedrag * (1 + opslagPct / 100))
-        : bron.verkoopBedrag
+      // Alleen aan/uit gezet: laat de prijs staan zoals hij was, inclusief een eerdere terugval.
+      verkoopBedrag = bron.handmatigePrijs ? bron.verkoopBedrag : null
     }
+
+    const herleid = verkoopBedrag != null
+      ? tariefEnOpslag(verkoopBedrag, bron.aantal, bron.inkoopBedrag)
+      : { verkoopTarief: null, opslagPct: null }
 
     rijen.push({
       dossier_id: dossierId,
@@ -810,8 +848,8 @@ export async function bewaarBoekingen(
       aantal: bron.aantal,
       eenheid: bron.eenheid,
       inkoop_bedrag: bron.inkoopBedrag,
-      opslag_pct: opslagPct,
-      verkoop_tarief: verkoopTarief,
+      opslag_pct: herleid.opslagPct,
+      verkoop_tarief: herleid.verkoopTarief,
       verkoop_bedrag: verkoopBedrag,
       bewakingscode,
       uitgesloten: patch.uitgesloten !== undefined ? patch.uitgesloten : bron.uitgesloten,
