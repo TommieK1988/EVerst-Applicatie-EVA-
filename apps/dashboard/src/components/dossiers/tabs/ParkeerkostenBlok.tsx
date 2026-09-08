@@ -15,6 +15,12 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
   const data = await getDossierParkeerkosten(dossierId)
   if (data.regels.length === 0) return null
 
+  // Alleen bevestigde regels in de tabel. Voorstellen zijn nog geen kosten en
+  // staan hierboven al als één samenvattingsregel met een link naar de
+  // werkvoorraad; ze er ook los bij zetten maakt het blok lang en wekt de indruk
+  // dat de bedragen al vaststaan.
+  const bevestigd = data.regels.filter((r) => r.status === 'bevestigd')
+
   return (
     <Card>
       <CardHeader>
@@ -45,6 +51,7 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
           )}
         </div>
 
+        {bevestigd.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -56,18 +63,13 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
             </tr>
           </thead>
           <tbody>
-            {data.regels.map((r) => (
-              <tr key={r.id} style={{ opacity: r.status === 'voorstel' ? 0.55 : 1 }}>
+            {bevestigd.map((r) => (
+              <tr key={r.id}>
                 <TD>
                   {new Date(r.starttijd).toLocaleString('nl-NL', {
                     dateStyle: 'short',
                     timeStyle: 'short',
                   })}
-                  {r.status === 'voorstel' && (
-                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--warning-800, #7a5a17)' }}>
-                      voorstel
-                    </span>
-                  )}
                 </TD>
                 <TD>{r.kenteken}</TD>
                 <TD>{r.bestuurder ?? '—'}</TD>
@@ -84,6 +86,7 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
             ))}
           </tbody>
         </table>
+        )}
       </CardBody>
     </Card>
   )
