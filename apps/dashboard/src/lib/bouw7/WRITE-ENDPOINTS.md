@@ -986,7 +986,7 @@ nuttig om te bewijzen dát planning schrijfbaar is; voor EVA is `POST /plan-item
 
 ---
 
-## 7c. Inkoopfactuur accorderen — route bevestigd, body nog onbekend (sep 2026)
+## 7c. Inkoopfactuur accorderen — ⛔ KAN NIET met onze app-sleutel (uitgezocht sep 2026)
 
 **Status: half.** Het endpoint bestaat en zit op Heimdall (dus bereikbaar met onze app-key), maar
 de body-vorm is nog niet gecaptured. Er is dus nog **niets geschreven**.
@@ -1050,19 +1050,57 @@ Belangrijk: de route zit op **`heimdall.bouw7.nl`**, niet op `start.bouw7.nl`. O
 dus bij — dat was de grootste twijfel. Er is géén OpenAPI-spec om de body uit af te leiden
 (`/doc`, `/doc.json`, `/api/doc`, `/swagger(.json)`, `/openapi.json` → allemaal 404).
 
-**Wat nog ontbreekt:** de body. De openstaande vraag is of die een expliciete
-`approverId`/`employeeId`/`index` bevat, of dat Bouw7 de stemmer uit de sessie afleidt — in dat
-tweede geval kan onze servicesleutel niet namens een medewerker stemmen en valt de hele
-schrijfkant om. `canApprove: false` op élke onderzochte factuur wijst die kant op, maar bewijst
-het niet: die vlag gaat over de aanroeper, en een expliciete `approverId` in de body zou hem
-irrelevant maken.
+### De capture (Chrome DevTools, 8 sep 2026) — en waarom het hierop stukloopt
 
-**Volgende stap = UI-capture.** Iemand die in Bouw7 goedkeurder is opent een openstaande factuur,
-drukt op Akkoord/Bezwaar mét opmerking, en legt in DevTools → Network de volledige request vast
-(URL + host + body + response). Daarna één replay met de servicesleutel op een afgesproken
-testfactuur, met een terugleescontrole dat de stem op de **juiste medewerker** landt inclusief de
-opmerking. Landt hij op de servicesleutel of zonder opmerking → **niet bouwen**: een audit trail
-die liegt over wie accordeerde is erger dan geen write.
+```
+POST https://heimdall.bouw7.nl/approval/5653325/vote-on-purchase-invoice
+Content-Type: application/json
+Authorization: Bearer <token van de ingelogde medewerker>
+
+{"approve":true,"comment":""}
+```
+
+De body bevat **geen goedkeurder**. Geen `approverId`, geen `employeeId`, geen `index`. Bouw7
+leidt de stemmer dus volledig af uit het token — en dáár zit het verschil:
+
+| | token van een medewerker | onze app-sleutel |
+|---|---|---|
+| `sub.type` | 3 | 1 |
+| `sub.user` | tom@everts.chat | abonnementen@everts.chat |
+| **`sub.employee`** | **`{ id: 195078, … }`** | **`null`** |
+
+Onze sleutel hoort bij een Bouw7-*gebruiker* zonder gekoppeld *medewerker*-record. Er is dus
+niemand om een stem aan toe te schrijven, en dat is precies wat `canApprove: false` op élke
+factuur al liet zien.
+
+Er is ook geen uitweg in de API: `/auth/impersonate`, `/auth/employee`, `/auth/switch-employee`,
+`/auth/login`, `/me` en `/current-user` geven allemaal 404 op Heimdall. Een per-gebruiker-token
+is met de app-key-login (`/auth/login/{appName}/apiKey`) niet te krijgen — die is per app, niet
+per persoon.
+
+### Waarom we het dan ook niet half doen
+
+De verleiding is om `abonnementen@everts.chat` in Bouw7 aan een medewerker te koppelen. Dan
+krijgt onze sleutel wél een `employee`-claim en kan hij stemmen — maar elke goedkeuring uit EVA
+komt dan in Bouw7 te staan op naam van díé medewerker, niet op naam van wie in EVA op de knop
+drukte. Een goedkeuringsspoor dat liegt over wie akkoord gaf is erger dan geen goedkeuring
+kunnen geven; bij een inkoopfactuur is dat precies het stuk dat moet kloppen. **Niet doen.**
+
+### Wat er wél moet gebeuren als dit ooit moet werken
+
+Eén vraag aan Bouw7: **kan een API-sleutel aan een medewerker worden gekoppeld, of ondersteunt
+de API het stemmen namens een medewerker (delegatie)?** Is het antwoord ja — een sleutel per
+goedkeurder, of een `employeeId` die de vote accepteert — dan is de rest van deze paragraaf
+meteen bruikbaar en is het een halve dag werk. Is het antwoord nee, dan blijft accorderen in
+Bouw7 en is EVA het overzicht met een doorklik.
+
+### Stand van zaken in EVA
+
+`/inkoop/facturen` toont de hele keten (wie moet accorderen, wie gaf akkoord, met welke
+toelichting) en zet bij "jij bent aan zet" een knop naar
+`https://start.bouw7.nl/purchase-invoice#/view/{id}`. Er is bewust géén accordeerknop in EVA:
+liever een eerlijke doorverwijzing dan een knop die stilletjes de verkeerde naam onder het
+akkoord zet.
 
 ---
 
