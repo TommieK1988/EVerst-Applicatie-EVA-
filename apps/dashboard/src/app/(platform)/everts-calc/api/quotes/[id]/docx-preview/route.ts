@@ -27,6 +27,7 @@ import { laadBedrijfEnDossier } from '@/lib/everts-calc/offerte-bronnen'
 import { appGraphGetRaw } from '@/lib/o365/graph'
 import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { haalOp } from '@/lib/net/deadline'
 
 export const dynamic = 'force-dynamic'
 
@@ -176,7 +177,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (driveIdParam && itemIdParam) {
         templateBuffer = await appGraphGetRaw(`/drives/${driveIdParam}/items/${itemIdParam}/content`)
       } else if (templateUrlParam) {
-        const res = await fetch(templateUrlParam)
+        const res = await haalOp(templateUrlParam, { dienst: 'Sjabloonbestand', timeoutMs: 30_000 })
         if (!res.ok) return htmlMelding('<p>Template ophalen mislukt</p>', 502)
         templateBuffer = Buffer.from(await res.arrayBuffer())
       } else {

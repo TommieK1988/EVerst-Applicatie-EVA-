@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { zetToolboxKlaar, doelgroepMedewerkers } from '@/lib/toolbox/klaarzetten'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const log = cronLogboek('toolbox-momenten')
   const startedAt = Date.now()
   const supabase = db()
   const vandaag = new Date().toISOString().slice(0, 10)
@@ -72,6 +74,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       klaargezet++
     }
 
+    log.klaar()
+
     return NextResponse.json({
       ok: true,
       klaargezette_momenten: klaargezet,
@@ -79,6 +83,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       duur_ms: Date.now() - startedAt,
     })
   } catch (err) {
+    log.mislukt(err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err), duur_ms: Date.now() - startedAt },
       { status: 500 },

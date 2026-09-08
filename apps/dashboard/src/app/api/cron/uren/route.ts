@@ -4,6 +4,7 @@ import { leesGoedkeuringTerug, stuurUrenWeekNaarBouw7 } from '@/lib/uren/bouw7'
 import { schrijfVerlofNaarBouw7 } from '@/lib/uren/verlof'
 import { binnenLokaalUur } from '@/lib/cron/lokaal-venster'
 import { ververseGlobaleBron } from '@/lib/bouw7/snapshot'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -51,13 +52,16 @@ async function handle(req: NextRequest, enforceLocalWindow = false): Promise<Nex
 
   if (enforceLocalWindow && !binnenLokaalUur(DOEL_LOKALE_UREN)) {
     // 200 zodat Vercel deze bedoelde no-op niet als mislukte cron markeert.
+    console.log('[cron uren] overgeslagen — buiten lokaal venster')
     return NextResponse.json({ ok: true, skipped: true, reason: 'buiten lokaal venster' }, { status: 200 })
   }
 
+  const log = cronLogboek('uren')
   const startedAt = Date.now()
   const supabase = db()
 
   try {
+    log.stap('goedkeuring teruglezen uit Bouw7')
     const terug = await leesGoedkeuringTerug(60)
 
     // Goedgekeurde weken waarvan nog regels openstaan bij Bouw7. Begrensd op 50 zodat één slechte
@@ -75,6 +79,7 @@ async function handle(req: NextRequest, enforceLocalWindow = false): Promise<Nex
     let herverzonden = 0
     let mislukt = 0
     for (const weekId of weekIds) {
+      log.stap('urenweek naar Bouw7', { weekId })
       const res = await stuurUrenWeekNaarBouw7(weekId as string)
       herverzonden += res.verzonden
       mislukt += res.mislukt
@@ -91,6 +96,7 @@ async function handle(req: NextRequest, enforceLocalWindow = false): Promise<Nex
     let verlofVerzonden = 0
     let verlofMislukt = 0
     for (const v of ((hangendVerlof ?? []) as Array<{ id: string }>)) {
+      log.stap('verlof naar Bouw7', { id: v.id })
       if (await schrijfVerlofNaarBouw7(v.id)) verlofVerzonden++
       else verlofMislukt++
     }
@@ -120,7 +126,10 @@ async function handle(req: NextRequest, enforceLocalWindow = false): Promise<Nex
 
     // /uren leest uit de snapshot, dus de zojuist teruggelezen goedkeurvlaggen moeten daar ook
     // in terechtkomen -- anders zie je tot de volgende warmronde nog de oude stand.
+    log.stap('snapshot uren_venster verversen')
     const vensterBijgewerkt = (await ververseGlobaleBron('uren_venster').catch(() => ({ ok: false }))).ok
+
+    log.klaar({ vensterBijgewerkt })
 
     return NextResponse.json({
       ok: true,
@@ -135,6 +144,7 @@ async function handle(req: NextRequest, enforceLocalWindow = false): Promise<Nex
       verlofMislukt,
     })
   } catch (e) {
+    log.mislukt(e)
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout', duurMs: Date.now() - startedAt },
       { status: 500 },

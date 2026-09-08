@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const log = cronLogboek('fouten-opruimen')
   const startedAt = Date.now()
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +51,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       .select('id')
     if (fout2) throw new Error(fout2.message)
 
+    log.klaar({ opgelost: opgeloste?.length ?? 0, verlopen: oude?.length ?? 0 })
     return NextResponse.json({
       ok: true,
       verwijderd_opgelost: opgeloste?.length ?? 0,
@@ -56,6 +59,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       duur_ms: Date.now() - startedAt,
     })
   } catch (err) {
+    log.mislukt(err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err), duur_ms: Date.now() - startedAt },
       { status: 500 },

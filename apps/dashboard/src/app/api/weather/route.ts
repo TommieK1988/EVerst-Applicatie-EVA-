@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
+import { fetchMetDeadline } from '@/lib/net/deadline'
 
 export const revalidate = 1800
 
@@ -55,7 +56,8 @@ async function getCompanyLocation(): Promise<{ lat: number; lon: number; stad: s
     geoUrl.searchParams.set('language', 'nl')
     geoUrl.searchParams.set('countryCode', 'NL')
 
-    const geoRes = await fetch(geoUrl.toString(), { next: { revalidate: 86400 } })
+    const geoRes = await fetchMetDeadline(geoUrl.toString(), { next: { revalidate: 86400 } },
+      { dienst: 'Open-Meteo (geocodering)', timeoutMs: 10_000 })
     if (!geoRes.ok) return FALLBACK
 
     const geo = await geoRes.json()
@@ -84,7 +86,8 @@ export async function GET() {
     url.searchParams.set('timezone', 'Europe/Amsterdam')
     url.searchParams.set('wind_speed_unit', 'kmh')
 
-    const res = await fetch(url.toString(), { next: { revalidate: 1800 } })
+    const res = await fetchMetDeadline(url.toString(), { next: { revalidate: 1800 } },
+      { dienst: 'Open-Meteo', timeoutMs: 10_000 })
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}`)
 
     const raw = await res.json()

@@ -15,6 +15,8 @@
 
 import { createAdminClient } from '@everts/database/server'
 
+import { fetchMetDeadline } from '@/lib/net/deadline'
+
 export type O365TokenFout = 'geen_koppeling' | 'refresh_mislukt'
 
 export class O365TokenError extends Error {
@@ -33,6 +35,9 @@ interface TokenRij {
 
 /** Marge waarmee we een token als "bijna verlopen" beschouwen. */
 const EXPIRY_BUFFER_MS = 60_000
+
+/** Een tokenendpoint hoort binnen seconden te antwoorden. Zie lib/net/deadline.ts. */
+const TOKEN_TIMEOUT_MS = 15_000
 
 function tenantFor(o365TenantId?: string | null): string {
   return o365TenantId || process.env.O365_TENANT_ID || 'common'
@@ -111,7 +116,7 @@ async function refreshAccessToken(refreshToken: string, tenant: string): Promise
     throw new O365TokenError('refresh_mislukt', 'O365 client-config ontbreekt.')
   }
 
-  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+  const res = await fetchMetDeadline(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -120,7 +125,7 @@ async function refreshAccessToken(refreshToken: string, tenant: string): Promise
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),
-  })
+  }, { dienst: 'Microsoft (token)', timeoutMs: TOKEN_TIMEOUT_MS })
 
   if (!res.ok) {
     // invalid_grant = refresh-token verlopen/ingetrokken → re-consent nodig
@@ -156,7 +161,7 @@ export async function getAppAccessToken(): Promise<string> {
     throw new O365TokenError('refresh_mislukt', 'O365 app-only config ontbreekt (client/secret/tenant).')
   }
 
-  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+  const res = await fetchMetDeadline(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -165,7 +170,7 @@ export async function getAppAccessToken(): Promise<string> {
       grant_type: 'client_credentials',
       scope: 'https://graph.microsoft.com/.default',
     }),
-  })
+  }, { dienst: 'Microsoft (app-token)', timeoutMs: TOKEN_TIMEOUT_MS })
 
   if (!res.ok) {
     let detail = ''

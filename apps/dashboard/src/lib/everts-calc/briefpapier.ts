@@ -11,11 +11,12 @@
  * overeenkomstige briefpapier-pagina gebruikt; is die er niet, dan de laatste.
  */
 
+import { haalOp } from '@/lib/net/deadline'
 /** Haalt een briefpapier-PDF op als Buffer (best-effort; null bij fout/ontbreken). */
 export async function fetchBriefpapier(url?: string | null): Promise<Buffer | null> {
   if (!url) return null
   try {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Briefpapier', timeoutMs: 20_000 })
     if (!res.ok) return null
     const ct = res.headers.get('content-type') ?? ''
     if (ct && !ct.includes('pdf') && !ct.includes('octet-stream')) return null

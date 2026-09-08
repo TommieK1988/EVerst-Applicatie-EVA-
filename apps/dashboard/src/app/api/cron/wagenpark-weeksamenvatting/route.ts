@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stuurWagenparkWeeksamenvatting } from '@/lib/wagenpark/weeksamenvatting'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 // Aggregatie over veel bestuurders + inserts — ruim timeout-budget.
 export const maxDuration = 120
@@ -22,11 +23,14 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const log = cronLogboek('wagenpark-weeksamenvatting')
   const startedAt = Date.now()
   try {
     const result = await stuurWagenparkWeeksamenvatting()
+    log.klaar()
     return NextResponse.json({ ok: true, ...result, duur_ms: Date.now() - startedAt }, { status: 200 })
   } catch (err) {
+    log.mislukt(err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err), duur_ms: Date.now() - startedAt },
       { status: 500 },

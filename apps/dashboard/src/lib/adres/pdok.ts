@@ -9,6 +9,7 @@
  * huisnummers (bv. "12-16") of een pandnaam wordt begrepen via de vrije-tekst-query.
  */
 
+import { haalOp } from '@/lib/net/deadline'
 const PDOK_FREE = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1/free'
 
 export type AdresResultaat = {
@@ -95,7 +96,10 @@ export async function zoekAdres(opts: {
   const fqParams = fq.map((f) => `fq=${encodeURIComponent(f)}`).join('&')
   const url = `${PDOK_FREE}?q=${encodeURIComponent(q)}&${fqParams}&rows=${rows}`
   try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } })
+    const res = await haalOp(url, {
+      dienst: 'PDOK-adresservice', timeoutMs: 10_000,
+      init: { headers: { Accept: 'application/json' } },
+    })
     if (!res.ok) return []
     const json = (await res.json()) as { response?: { docs?: PdokDoc[] } }
     return (json.response?.docs ?? []).map(mapDoc).filter((a) => a.straat && a.stad)

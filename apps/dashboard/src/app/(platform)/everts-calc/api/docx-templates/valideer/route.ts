@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { appGraphGetRaw } from '@/lib/o365/graph'
 import { analyseerTemplate } from '@/lib/everts-calc/docx-utils'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { haalOp } from '@/lib/net/deadline'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     if (body.drive_id && body.item_id) {
       buffer = await appGraphGetRaw(`/drives/${body.drive_id}/items/${body.item_id}/content`)
     } else if (body.template_url) {
-      const res = await fetch(body.template_url)
+      const res = await haalOp(body.template_url, { dienst: 'Sjabloonbestand', timeoutMs: 30_000 })
       if (!res.ok) {
         return NextResponse.json({ error: `Template ophalen mislukt: HTTP ${res.status}` }, { status: 502 })
       }

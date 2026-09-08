@@ -21,6 +21,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { appGraphFetch, appGraphGet, appGraphGetRaw, GraphError } from '@/lib/o365/graph'
 import { saneerMapNaam } from '@/lib/o365/sharepoint'
+import { fetchMetDeadline } from '@/lib/net/deadline'
 
 const BUCKET = 'docx-templates'
 const DOCX_CONTENT_TYPE =
@@ -225,14 +226,14 @@ async function uploadViaSessie(pad: string, bytes: Buffer): Promise<DriveItem> {
   if (!uploadUrl) throw new Error('Graph gaf geen uploadUrl terug')
 
   // uploadUrl is pre-authenticated: géén Authorization-header meesturen.
-  const res = await fetch(uploadUrl, {
+  const res = await fetchMetDeadline(uploadUrl, {
     method: 'PUT',
     headers: {
       'Content-Length': String(bytes.length),
       'Content-Range': `bytes 0-${bytes.length - 1}/${bytes.length}`,
     },
     body: new Uint8Array(bytes),
-  })
+  }, { dienst: 'SharePoint (upload)', timeoutMs: 60_000 })
   if (!res.ok) throw new GraphError(res.status, `Kopie uploaden mislukt: HTTP ${res.status}`)
   return (await res.json()) as DriveItem
 }

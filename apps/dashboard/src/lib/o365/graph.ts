@@ -8,7 +8,13 @@
 
 import { getValidAccessToken, getAppAccessToken } from './tokens'
 
+import { fetchMetDeadline } from '@/lib/net/deadline'
+
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
+
+/* Ruim, want hier zit ook de PDF-conversie van een groot Word-document onder —
+   maar niet oneindig. Zie lib/net/deadline.ts. */
+const GRAPH_TIMEOUT_MS = 60_000
 
 function buildUrl(path: string): string {
   if (path.startsWith('http')) return path
@@ -46,13 +52,13 @@ export async function graphFetch(
 ): Promise<Response> {
   const doFetch = async () => {
     const token = await getValidAccessToken(medewerkerId)
-    return fetch(buildUrl(path), {
+    return fetchMetDeadline(buildUrl(path), {
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
         ...(init.headers ?? {}),
       },
-    })
+    }, { dienst: 'Microsoft Graph', timeoutMs: GRAPH_TIMEOUT_MS })
   }
 
   let res = await doFetch()
@@ -78,13 +84,13 @@ export async function graphGetRaw(medewerkerId: string, path: string): Promise<B
 
 export async function appGraphFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await getAppAccessToken()
-  return fetch(buildUrl(path), {
+  return fetchMetDeadline(buildUrl(path), {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(init.headers ?? {}),
     },
-  })
+  }, { dienst: 'Microsoft Graph', timeoutMs: GRAPH_TIMEOUT_MS })
 }
 
 export async function appGraphGet<T>(path: string): Promise<T> {

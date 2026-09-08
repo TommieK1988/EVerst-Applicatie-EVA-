@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cronLogboek } from '@/lib/cron/logboek'
 import { runFullSync } from '@/app/(platform)/instellingen/integraties/actions'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
 import { geocodeDossiers } from '@/lib/dossiers/geocode'
@@ -46,6 +47,7 @@ export async function runCronSync(
     const uur = amsterdamUur(new Date())
     if (uur !== DOEL_LOKAAL_UUR[mode]) {
       // 200 zodat Vercel deze (bedoelde) no-op niet als mislukte cron markeert.
+      console.log(`[cron bouw7-sync/${mode}] overgeslagen — buiten lokaal venster (${uur}:xx)`)
       return NextResponse.json(
         { ok: true, skipped: true, mode, reason: `buiten lokaal venster (${uur}:xx ≠ ${DOEL_LOKAAL_UUR[mode]}:xx Amsterdam)` },
         { status: 200 },
@@ -53,16 +55,20 @@ export async function runCronSync(
     }
   }
 
+  const log = cronLogboek(`bouw7-sync/${mode}`)
   const startedAt = Date.now()
 
+  log.stap('runFullSync')
   const full = await runFullSync(mode)
   if (!full.ok) {
+    log.mislukt(full.error)
     return NextResponse.json(
       { ok: false, fase: 'runFullSync', error: full.error, duur_ms: Date.now() - startedAt },
       { status: 500 },
     )
   }
 
+  log.stap('syncManagementProjecten')
   const management = await syncManagementProjecten(mode)
 
   // Werkadres-coördinaten bijwerken voor "dossier openen op locatie" (mobiel).
@@ -70,11 +76,14 @@ export async function runCronSync(
   // gesynchte dossiers stromen zo over meerdere cron-rondes vol. Een fout hier
   // (bijv. Nominatim onbereikbaar) mag de sync niet laten mislukken.
   let geocode: unknown
+  log.stap('geocodeDossiers')
   try {
     geocode = await geocodeDossiers({ max: 40 })
   } catch (e) {
     geocode = { error: e instanceof Error ? e.message : String(e) }
   }
+
+  log.klaar({ mode, projecten: full.projects })
 
   return NextResponse.json(
     {

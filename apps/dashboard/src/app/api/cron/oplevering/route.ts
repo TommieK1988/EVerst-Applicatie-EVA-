@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { maakToegangToken } from '@/lib/dossiers/oplevering'
 import { queueOpleverMail, bouwHerinneringMail, bouwFeedbackUitnodigingMail } from '@/lib/dossiers/oplevering-mail'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const log = cronLogboek('oplevering')
   const startedAt = Date.now()
   const supabase = db()
   let herinneringen = 0
@@ -142,6 +144,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       }
     }
 
+    log.klaar()
+
     return NextResponse.json({
       ok: true,
       klaargezet: { herinneringen, feedback_uitnodigingen: feedback },
@@ -149,6 +153,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       duur_ms: Date.now() - startedAt,
     })
   } catch (err) {
+    log.mislukt(err)
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err), duur_ms: Date.now() - startedAt },
       { status: 500 },

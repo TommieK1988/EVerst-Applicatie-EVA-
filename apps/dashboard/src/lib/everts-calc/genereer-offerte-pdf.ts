@@ -5,6 +5,7 @@ import { laadOfferteContext } from './offerte-context'
 import { haalBewerkteOfferteDocxVoorUitvoer } from './offerte-word'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground } from './briefpapier'
+import { haalOp } from '@/lib/net/deadline'
 
 // `laadOfferteContext` woont in offerte-context.ts (gedeeld met de Word Online-module);
 // deze re-export houdt de bestaande import-paden werkend.
@@ -73,7 +74,7 @@ export async function genereerOffertePdfMetBijlagen(quoteId: string): Promise<Of
   const av = quote.algemene_voorwaarden
   if (av?.bestand_url) {
     try {
-      const r = await fetch(av.bestand_url)
+      const r = await haalOp(av.bestand_url, { dienst: 'Voorwaarden-PDF', timeoutMs: 20_000 })
       if (r.ok) voorwaardenPdf = new Uint8Array(await r.arrayBuffer())
     } catch (e) { console.warn('Voorwaarden ophalen mislukt:', e) }
   }

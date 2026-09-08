@@ -23,6 +23,7 @@ import type { Opname, OpnameRegel } from '@everts/database/opname-types'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import type { ImportRegel } from './naar-calculatie'
+import { haalOp } from '@/lib/net/deadline'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -46,7 +47,7 @@ export type ImportPayload = {
 
 async function fotoNaarDataUrl(url: string): Promise<{ dataUrl: string; bytes: number }> {
   try {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
     if (!res.ok) return { dataUrl: '', bytes: 0 }
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.byteLength === 0 || buf.byteLength > MAX_BRON_BYTES) return { dataUrl: '', bytes: 0 }

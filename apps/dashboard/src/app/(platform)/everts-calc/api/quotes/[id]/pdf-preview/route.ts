@@ -34,6 +34,7 @@ import { appGraphGetRaw } from '@/lib/o365/graph'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
+import { haalOp } from '@/lib/net/deadline'
 
 export const dynamic = 'force-dynamic'
 
@@ -159,7 +160,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const templateBuffer = await appGraphGetRaw(`/drives/${driveIdParam}/items/${itemIdParam}/content`)
         docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })
       } else if (templateUrlParam) {
-        const res = await fetch(templateUrlParam)
+        const res = await haalOp(templateUrlParam, { dienst: 'Sjabloonbestand', timeoutMs: 30_000 })
         if (!res.ok) return foutHtml('Template ophalen mislukt', `HTTP ${res.status}`, 502)
         const templateBuffer = Buffer.from(await res.arrayBuffer())
         docxBuffer = await renderQuoteDocx(quote, bedrijf, layout, templateBuffer, { dossier })

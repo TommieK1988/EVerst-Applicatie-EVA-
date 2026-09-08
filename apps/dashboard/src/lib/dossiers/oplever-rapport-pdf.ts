@@ -3,6 +3,7 @@ import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/databas
 import { getOplevermomentRapport, type OpleverPuntView } from './oplevering'
 import { splitsFotos, bewijsOntbreekt } from './oplever-fotos'
 import { veilig, wikkel, type PdfFont as Font } from '@/lib/pdf/tekst'
+import { haalOp } from '@/lib/net/deadline'
 
 /**
  * Opleverrapportage als PDF, opgebouwd met pdf-lib (zelfde aanpak als de briefpapier-merge).
@@ -41,7 +42,7 @@ const JPEG_KWALITEIT = 72
  */
 async function haalAfbeelding(url: string, maxPx: number): Promise<{ bytes: Uint8Array } | null> {
   try {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
     if (!res.ok) return null
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.byteLength === 0 || buf.byteLength > MAX_FOTO_BYTES) return null

@@ -29,6 +29,7 @@ import { haalBewerkteOfferteDocxVoorUitvoer, WordBronError } from '@/lib/everts-
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { haalOp } from '@/lib/net/deadline'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,7 +178,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (avBestand?.bestand_url) {
       try {
         const { PDFDocument } = await import('pdf-lib')
-        const avRes = await fetch(avBestand.bestand_url)
+        const avRes = await haalOp(avBestand.bestand_url, { dienst: 'Voorwaarden-PDF', timeoutMs: 20_000 })
         if (avRes.ok) {
           const avBytes = await avRes.arrayBuffer()
           const mainDoc = await PDFDocument.load(pdfBuffer)

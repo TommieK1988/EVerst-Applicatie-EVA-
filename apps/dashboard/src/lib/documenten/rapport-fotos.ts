@@ -20,6 +20,7 @@
 
 import 'server-only'
 import { bufferNaarDataUrl } from './render-docx'
+import { haalOp } from '@/lib/net/deadline'
 
 /**
  * Grenzen aan het fotogebruik in een rapportage. Verplaatst, niet gewijzigd: deze waarden
@@ -98,7 +99,7 @@ export function veiligeFotoUrl(url: string | null | undefined): string {
 export async function haalRapportFoto(url: string): Promise<FotoResultaat> {
   if (!url) return GEEN_FOTO
   try {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
     if (!res.ok) return GEEN_FOTO
     const buf = Buffer.from(await res.arrayBuffer())
     if (buf.byteLength === 0 || buf.byteLength > FOTO_GRENZEN.MAX_BRON_BYTES) return GEEN_FOTO

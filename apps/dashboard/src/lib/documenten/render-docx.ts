@@ -19,6 +19,7 @@
 
 import { fixSplitDocxTags, splitOnderstreepteTags, type OnderstreeptSplitsing } from '../everts-calc/docx-utils'
 import { appGraphGetRaw } from '../o365/graph'
+import { haalOp } from '@/lib/net/deadline'
 
 /** Gegooid wanneer een layout/sjabloon (nog) geen Word-template heeft gekoppeld. */
 export class GeenTemplateError extends Error {
@@ -49,7 +50,7 @@ export async function loadTemplateBuffer(rij: any): Promise<Buffer> {
 
   const url: string | null = rij?.docx_template_url ?? null
   if (url) {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Sjabloonbestand', timeoutMs: 30_000 })
     if (!res.ok) throw new Error(`Template ophalen mislukt: HTTP ${res.status}`)
     return Buffer.from(await res.arrayBuffer())
   }
@@ -310,7 +311,7 @@ export function fitSize(w: number, h: number, max: { w: number; h: number }): [n
 export async function fetchImage(url?: string | null): Promise<Buffer | null> {
   if (!url) return null
   try {
-    const res = await fetch(url)
+    const res = await haalOp(url, { dienst: 'Sjabloonbestand', timeoutMs: 30_000 })
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   } catch {

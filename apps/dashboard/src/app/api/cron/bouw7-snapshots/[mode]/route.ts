@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { warmSnapshots, type WarmModus } from '@/lib/bouw7/warm-snapshots'
 import { binnenLokaalUur } from '@/lib/cron/lokaal-venster'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 // Warmen doet honderden Bouw7-calls; de warmer bewaakt zelf een budget van 240 s.
 export const maxDuration = 300
@@ -46,16 +47,23 @@ async function handle(
 
   if (enforceLocalWindow && !binnenLokaalUur(DOEL_LOKALE_UREN)) {
     // 200 zodat Vercel deze bedoelde no-op niet als mislukte cron markeert.
+    console.log(`[cron bouw7-snapshots/${modus}] overgeslagen — buiten lokaal venster`)
     return NextResponse.json(
       { ok: true, skipped: true, modus, reason: 'buiten lokaal venster' },
       { status: 200 },
     )
   }
 
+  // Honderden Bouw7-calls: juist hier wil je in de log terugzien hoever hij kwam
+  // als het platform de functie afkapt. Zie lib/cron/logboek.ts.
+  const log = cronLogboek(`bouw7-snapshots/${modus}`)
   try {
+    log.stap('warmSnapshots')
     const resultaat = await warmSnapshots(modus)
+    log.klaar()
     return NextResponse.json({ ok: true, ...resultaat }, { status: 200 })
   } catch (e) {
+    log.mislukt(e)
     return NextResponse.json(
       { ok: false, modus, error: e instanceof Error ? e.message : 'Onbekende fout' },
       { status: 500 },

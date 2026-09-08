@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { parseDicoArtikelen } from '@/lib/everts-calc/dico/parse'
 import { importMaterialen, type ImportResultaat } from './materialen'
+import { fetchMetDeadline } from '@/lib/net/deadline'
 
 // dico_integraties bevat credentials → uitsluitend server-/service-role-toegang.
 function db() {
@@ -127,11 +128,11 @@ export async function syncIntegratie(id: string): Promise<SyncResultaat> {
   }
 
   try {
-    const res = await fetch(r.endpoint_url, {
+    const res = await fetchMetDeadline(r.endpoint_url, {
       headers: { Accept: 'application/xml, text/xml, */*', ...bouwAuthHeaders(r) },
       // catalogus-syncs kunnen groot/traag zijn
       cache: 'no-store',
-    })
+    }, { dienst: 'DICO-catalogus', timeoutMs: 90_000 })
     if (!res.ok) {
       const status = `HTTP ${res.status} bij ophalen catalogus`
       await noteer(status)

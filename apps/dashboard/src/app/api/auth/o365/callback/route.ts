@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, isBeheerder, getEffectieveRechten } from '@/lib/auth/rechten'
+import { fetchMetDeadline } from '@/lib/net/deadline'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
   const redirectUri  = process.env.O365_REDIRECT_URI ?? `${origin}/api/auth/o365/callback`
 
   // Token exchange
-  const tokenRes = await fetch(
+  const tokenRes = await fetchMetDeadline(
     `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
     {
       method: 'POST',
@@ -50,7 +51,8 @@ export async function GET(request: NextRequest) {
         redirect_uri:  redirectUri,
         grant_type:    'authorization_code',
       }),
-    }
+    },
+    { dienst: 'Microsoft (token)', timeoutMs: 15_000 },
   )
 
   if (!tokenRes.ok) {
@@ -65,9 +67,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Fetch user info
-  const meRes = await fetch('https://graph.microsoft.com/v1.0/me', {
+  const meRes = await fetchMetDeadline('https://graph.microsoft.com/v1.0/me', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
-  })
+  }, { dienst: 'Microsoft Graph', timeoutMs: 15_000 })
 
   if (!meRes.ok) {
     return NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?fout=o365_profiel`)

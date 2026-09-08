@@ -7,6 +7,13 @@
  * Auth: POST /auth/login/{appName}/apiKey → Bearer token (geldt voor beide APIs)
  */
 
+import { fetchMetDeadline } from '@/lib/net/deadline'
+
+/* Bouw7 kan traag zijn maar niet oneindig; zonder grens wacht de aanroeper zijn
+   hele functiebudget uit. Zie lib/net/deadline.ts. */
+const LOGIN_TIMEOUT_MS = 20_000
+const CALL_TIMEOUT_MS = 30_000
+
 const HEIMDALL_URL = 'https://heimdall.bouw7.nl'
 const ATHENA_URL   = 'https://athena.bouw7.nl'
 const APOLLO_URL   = 'https://apollo.bouw7.nl'
@@ -96,11 +103,11 @@ export class Bouw7Client {
 
   /** De feitelijke login-call. Vult de gedeelde cache en geeft het token terug. */
   private async doeLogin(): Promise<string> {
-    const res = await fetch(`${HEIMDALL_URL}/auth/login/${this.appName}/apiKey`, {
+    const res = await fetchMetDeadline(`${HEIMDALL_URL}/auth/login/${this.appName}/apiKey`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `apiKey=${encodeURIComponent(this.apiKey)}`,
-    })
+    }, { dienst: 'Bouw7 (login)', timeoutMs: LOGIN_TIMEOUT_MS })
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -265,7 +272,11 @@ export class Bouw7Client {
     const { headers, ...rest } = opties
     telCall(opties.method ?? 'GET', url)
     // Token per poging opnieuw uitlezen: na de herlogin hieronder is dat een ander token.
-    const doeCall = () => fetch(url, { ...rest, headers: { ...headers, Authorization: `Bearer ${this.token}` } })
+    const doeCall = () => fetchMetDeadline(
+      url,
+      { ...rest, headers: { ...headers, Authorization: `Bearer ${this.token}` } },
+      { dienst: 'Bouw7', timeoutMs: CALL_TIMEOUT_MS },
+    )
 
     const res = await doeCall()
     if (res.status !== 401) return res

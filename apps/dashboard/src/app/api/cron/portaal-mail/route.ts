@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { verstuurMailViaGedeeldePostbus } from '@/lib/o365/mail'
 import { LINK_PLAATSHOUDER, maakInloglink } from '@/lib/portaal/mail'
 import { appBaseUrl } from '@/lib/app-url'
+import { cronLogboek } from '@/lib/cron/logboek'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const log = cronLogboek('portaal-mail')
   const supabase = db()
   const gestart = Date.now()
   let verzonden = 0
@@ -49,8 +51,11 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     .limit(BATCH)
 
   if (error) {
+    log.mislukt(error.message)
     return NextResponse.json({ error: `Wachtrij lezen mislukt: ${error.message}` }, { status: 500 })
   }
+
+  log.stap('wachtrij gelezen', { rijen: rijen?.length ?? 0 })
 
   for (const rij of (rijen ?? []) as {
     id: string; soort: string; ontvangers: string[]; cc: string[] | null
@@ -64,6 +69,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
         // één persoon. Staan er meer adressen op, dan krijgen die alleen de
         // algemene portaallink — inloggen doen ze met hun eigen aanvraag.
         const [eerste, ...rest] = rij.ontvangers
+        log.stap('inloglink maken', { id: rij.id })
         const link = await maakInloglink(eerste)
         body = body.split(LINK_PLAATSHOUDER).join(link)
         if (rest.length > 0) {
@@ -71,6 +77,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
           await supabase.from('portaal_mail_wachtrij')
             .update({ ontvangers: [eerste] }).eq('id', rij.id)
         }
+        log.stap('mail versturen', { id: rij.id })
         await verstuurMailViaGedeeldePostbus({
           to: [eerste],
           cc: rij.cc ?? [],
@@ -78,6 +85,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
           bodyHtml: body,
         })
       } else {
+        log.stap('mail versturen', { id: rij.id })
         await verstuurMailViaGedeeldePostbus({
           to: rij.ontvangers,
           cc: rij.cc ?? [],
@@ -105,6 +113,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  log.klaar({ verzonden, mislukt })
   return NextResponse.json({
     ok: true, verzonden, mislukt, duurMs: Date.now() - gestart,
   })

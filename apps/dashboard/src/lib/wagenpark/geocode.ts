@@ -1,5 +1,6 @@
 import 'server-only'
 import { pgQuery } from './db'
+import { haalOp } from '@/lib/net/deadline'
 
 /**
  * Geocoding voor de wagenpark-module.
@@ -87,8 +88,9 @@ export async function geocodeQuery(query: string): Promise<GeoPunt | null> {
     url.searchParams.set('format', 'jsonv2')
     url.searchParams.set('limit', '1')
     url.searchParams.set('countrycodes', 'nl,de,be')
-    const res = await fetch(url.toString(), {
-      headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'nl' },
+    const res = await haalOp(url.toString(), {
+      dienst: 'Geocodering', timeoutMs: 10_000,
+      init: { headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'nl' } },
     })
     if (!res.ok) return null // transient — niet cachen
 

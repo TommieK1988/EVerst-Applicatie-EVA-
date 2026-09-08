@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { fetchMetDeadline } from '@/lib/net/deadline'
 
 export const revalidate = 1800
 
@@ -39,10 +40,10 @@ function parseRSS(xml: string, source: string, tag: string): NewsItem[] {
 }
 
 async function fetchFeed(feed: typeof FEEDS[0]): Promise<NewsItem[]> {
-  const res = await fetch(feed.url, {
+  const res = await fetchMetDeadline(feed.url, {
     next: { revalidate: 1800 },
     headers: { 'User-Agent': 'EVA-Platform/1.0 (RSS reader; contact tom@everts.chat)' },
-  })
+  }, { dienst: `Nieuwsfeed ${feed.source}`, timeoutMs: 10_000 })
   if (!res.ok) return []
   const xml = await res.text()
   return parseRSS(xml, feed.source, feed.tag)
