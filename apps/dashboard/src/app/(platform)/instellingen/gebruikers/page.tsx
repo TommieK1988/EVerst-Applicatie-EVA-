@@ -3,6 +3,7 @@ import type { MedewerkerAfdeling, GebruikerType, RechtenSet } from '@everts/data
 import { PageHeader, Card, Badge, EmptyState } from '@/components/ui'
 import AfdelingRechtenBeheer from './AfdelingRechtenBeheer'
 import Link from 'next/link'
+import { vereisModuleToegang } from '@/lib/auth/rechten'
 
 export const metadata = { title: 'Gebruikers & rechten' }
 
@@ -32,6 +33,10 @@ type Gebruiker = {
 }
 
 export default async function GebruikersPage() {
+  // Dit scherm toont van iedere collega het gebruikerstype en zijn rechten, en de
+  // afdelingsstandaarden zijn hier te wijzigen. Alleen beheerders (`instellingen:
+  // beheren`) mogen dat zien; de actions erachter eisen dezelfde gate.
+  await vereisModuleToegang('instellingen', 'beheren')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 

@@ -35,8 +35,8 @@ import SaldoBeheer from '@/components/medewerkers/SaldoBeheer'
 import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { vereisModuleToegang, getEffectieveRechten } from '@/lib/auth/rechten'
-import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
+import { vereisModuleToegang, getEffectieveRechten, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -57,8 +57,18 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   // Salaris/BSN/persoonsgegevens: alleen met medewerkers-recht (beheerders altijd).
   await vereisModuleToegang('medewerkers')
   const params = await props.params;
+  const ingelogde = await getCurrentMedewerker()
+  const eigenRechten = await getEffectieveRechten(ingelogde)
   // Het saldo van een collega bijstellen is beheerwerk; lezen mag iedereen met medewerkers-recht.
-  const magMedewerkersBeheren = heeftModuleToegang(await getEffectieveRechten(), 'medewerkers', 'beheren')
+  const magMedewerkersBeheren = heeftModuleToegang(eigenRechten, 'medewerkers', 'beheren')
+  // Wie welke rechten heeft, is beheerdersinformatie: gebruikertype, platformaccount en
+  // de rechtenmatrix zijn alleen voor beheerders. De server-actions erachter eisen sowieso
+  // `vereisBeheerder()`, dus dit sluit het gat in beeld — een niet-beheerder zag de knoppen
+  // wel en kreeg pas bij opslaan een foutmelding.
+  const isRechtenBeheerder = isBeheerder(eigenRechten)
+  // De Office 365-koppeling blijft wél zichtbaar op je eigen kaart: /api/auth/o365 staat
+  // zelf-koppelen bewust toe, en dit is de enige plek in EVA waar dat kan.
+  const isEigenKaart = ingelogde?.id === params.id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -327,20 +337,26 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
         {/* Rechterkolom */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
 
-          {/* Toegang & gebruiker */}
-          <Card>
-            <CardBody>
-              <GebruikerToegangBeheer
-                medewerker_id={params.id}
-                medewerker_email={medewerker.email}
-                gebruiker_type={medewerker.gebruiker_type}
-                auth_user_id={medewerker.auth_user_id}
-                o365_email={medewerker.o365_email}
-                rechten_override={medewerker.rechten_override}
-                afdeling_standaard_rechten={afdelingStandaardRechten}
-              />
-            </CardBody>
-          </Card>
+          {/* Toegang & gebruiker — beheerders zien alles, anderen hooguit hun eigen O365-koppeling */}
+          {(isRechtenBeheerder || isEigenKaart) && (
+            <Card>
+              <CardBody>
+                {/* Zonder beheerdersrecht gaan gebruikertype en rechten niet mee in de
+                    RSC-payload: verbergen in de UI is niet hetzelfde als niet versturen. */}
+                <GebruikerToegangBeheer
+                  magToegangBeheren={isRechtenBeheerder}
+                  magOntkoppelenO365={heeftModuleToegang(eigenRechten, 'medewerkers', 'schrijven')}
+                  medewerker_id={params.id}
+                  o365_email={medewerker.o365_email}
+                  medewerker_email={isRechtenBeheerder ? medewerker.email : null}
+                  gebruiker_type={isRechtenBeheerder ? medewerker.gebruiker_type : 'geen'}
+                  auth_user_id={isRechtenBeheerder ? medewerker.auth_user_id : null}
+                  rechten_override={isRechtenBeheerder ? medewerker.rechten_override : {}}
+                  afdeling_standaard_rechten={isRechtenBeheerder ? afdelingStandaardRechten : {}}
+                />
+              </CardBody>
+            </Card>
+          )}
 
           {/* Wagenpark-bestuurder */}
           <Card>

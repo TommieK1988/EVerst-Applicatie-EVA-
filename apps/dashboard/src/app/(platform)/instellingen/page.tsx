@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { PageHeader, Badge } from '@/components/ui'
 import type { RechtenModule } from '@everts/database/platform-types'
 import { getEffectieveRechten, magOnderdeelZien } from '@/lib/auth/rechten'
+import { isBeheerder } from '@/lib/auth/rechten-shared'
 
 export const metadata = { title: 'Instellingen' }
 
@@ -14,6 +15,12 @@ type SettingsItem = {
   kicker: string
   /** Onderdeel waarvan dit een beheer-scherm is; vereist 'beheren' om te tonen. */
   module: RechtenModule
+  /**
+   * Scherm dat alléén voor beheerders is, ook als de module zelf nog niet wordt
+   * afgedwongen. Nodig omdat `magOnderdeelZien` alles buiten AFGEDWONGEN_MODULES
+   * doorlaat — zonder deze vlag zag iedere platformgebruiker de rechtenoverzichten.
+   */
+  alleenBeheerder?: boolean
 }
 
 const platformItems: SettingsItem[] = [
@@ -63,6 +70,7 @@ const platformItems: SettingsItem[] = [
     description: 'Wie heeft toegang tot het platform, welk type gebruiker ze zijn en rechten per afdeling.',
     ready: true,
     kicker: 'Team',
+    alleenBeheerder: true,
     module: 'instellingen',
   },
   {
@@ -297,7 +305,9 @@ export default async function Page() {
   const rechten = await getEffectieveRechten()
   // Een beheer-scherm tonen we alleen als het onderdeel wordt afgedwongen én de
   // gebruiker geen 'beheren'-recht heeft (nu enkel Management; rest is altijd zichtbaar).
-  const zichtbaar = (item: SettingsItem) => magOnderdeelZien(rechten, item.module, 'beheren')
+  const beheerder = isBeheerder(rechten)
+  const zichtbaar = (item: SettingsItem) =>
+    (!item.alleenBeheerder || beheerder) && magOnderdeelZien(rechten, item.module, 'beheren')
 
   return (
     <div className="eva-page">

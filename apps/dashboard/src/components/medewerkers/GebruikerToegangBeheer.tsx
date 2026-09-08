@@ -38,6 +38,8 @@ const valueStyle: React.CSSProperties = {
 }
 
 export default function GebruikerToegangBeheer({
+  magToegangBeheren,
+  magOntkoppelenO365,
   medewerker_id,
   medewerker_email,
   gebruiker_type: initial_type,
@@ -46,6 +48,14 @@ export default function GebruikerToegangBeheer({
   rechten_override: initial_rechten,
   afdeling_standaard_rechten,
 }: {
+  /**
+   * Gebruikertype, platformaccount en de rechtenmatrix zijn beheerdersinformatie
+   * (`instellingen: beheren`). Staat dit uit, dan blijft alleen de Office 365-koppeling
+   * over — die mag je op je eigen kaart zelf leggen, zie /api/auth/o365.
+   */
+  magToegangBeheren: boolean
+  /** Ontkoppelen loopt via een action die `medewerkers: schrijven` eist. */
+  magOntkoppelenO365: boolean
   medewerker_id: string
   medewerker_email: string | null
   gebruiker_type: GebruikerType
@@ -142,10 +152,11 @@ export default function GebruikerToegangBeheer({
   return (
     <div>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--fg)', margin: '0 0 16px' }}>
-        Toegang & gebruiker
+        {magToegangBeheren ? 'Toegang & gebruiker' : 'Office 365'}
       </h3>
 
       {/* Gebruiker type */}
+      {magToegangBeheren && (
       <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Gebruikertype</label>
         <select
@@ -165,9 +176,10 @@ export default function GebruikerToegangBeheer({
           {type === 'platform_gebruiker' && 'Volledige toegang tot het EVA-platform (web).'}
         </p>
       </div>
+      )}
 
       {/* Platformaccount — alleen zichtbaar als type != geen */}
-      {type !== 'geen' && (
+      {magToegangBeheren && type !== 'geen' && (
         <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
           <label style={labelStyle}>Platformaccount</label>
           {authUserId ? (
@@ -205,7 +217,7 @@ export default function GebruikerToegangBeheer({
       )}
 
       {/* Rechten override — alleen zichtbaar als type = platform_gebruiker */}
-      {type === 'platform_gebruiker' && (
+      {magToegangBeheren && type === 'platform_gebruiker' && (
         <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Rechten (override op afdeling-standaard)</label>
@@ -296,14 +308,16 @@ export default function GebruikerToegangBeheer({
                 {initial_o365_email}
               </span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={disconnectO365}
-              disabled={isPending}
-            >
-              Ontkoppelen
-            </Button>
+            {magOntkoppelenO365 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={disconnectO365}
+                disabled={isPending}
+              >
+                Ontkoppelen
+              </Button>
+            )}
           </div>
         ) : o365Configured ? (
           <Button asChild variant="primary" size="sm">
