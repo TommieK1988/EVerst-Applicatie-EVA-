@@ -6,12 +6,15 @@ import { fmt, TH, TD } from './tab-ui'
 /**
  * Parkeerkosten die bij dit project horen — puur ter informatie.
  *
- * Dit is nadrukkelijk GEEN boeking en GEEN factuurregel. De bedragen staan in
- * Bouw7 onder de algemene kosten van de parkeerfactuur en blijven daar; ze
- * tellen niet mee in de bewakingscijfers hierboven, en ze komen ook niet
- * vanzelf op een regiefactuur terecht. Wie ze wil doorbelasten, zet ze zelf op
- * de factuur. Dat is een bewuste keuze: eerst zien of de toewijzing klopt,
- * daarna pas automatiseren.
+ * Staat bovenaan het Financieel-tab, bewust bóven de bewakingstabel en niet
+ * erin: die telt per rij exact op tot Geboekte kosten, en deze bedragen staan
+ * niet in Bouw7 — daar vallen ze onder de algemene kosten van de
+ * parkeerfactuur.
+ *
+ * Dit is nadrukkelijk GEEN boeking en GEEN factuurregel. Ze tellen niet mee in
+ * de cijfers eronder en komen ook niet vanzelf op een regiefactuur terecht. Wie
+ * ze wil doorbelasten, zet ze zelf op de factuur. Bewuste keuze: eerst zien of
+ * de toewijzing klopt, daarna pas automatiseren.
  *
  * Rendert niets als er geen toewijzingen zijn — een leeg blok op elk dossier is ruis.
  */
@@ -26,6 +29,7 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
   const bevestigd = data.regels.filter((r) => r.status === 'bevestigd')
 
   return (
+    <div style={{ marginBottom: 16 }}>
     <Card>
       <CardHeader>
         <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
@@ -43,7 +47,7 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
           Toegewezen op basis van de rit, de planning en de afstand tot het werkadres.
           Deze bedragen zijn <strong>niet geboekt op dit project</strong> — in Bouw7 vallen ze
           onder de algemene kosten van de parkeerfactuur. Ze tellen dus niet mee in de cijfers
-          hierboven en komen niet vanzelf op een factuur: wil je ze doorbelasten, zet ze er dan
+          hieronder en komen niet vanzelf op een factuur: wil je ze doorbelasten, zet ze er dan
           zelf op.
           {data.openVoorstellen > 0 && (
             <>
@@ -100,5 +104,6 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
         )}
       </CardBody>
     </Card>
+    </div>
   )
 }

@@ -8,6 +8,7 @@ import { UrenTab } from './UrenTab'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
+import ParkeerkostenBlok from './ParkeerkostenBlok'
 import type { DossierSectie } from '../types'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -599,6 +600,15 @@ export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie
 
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
+      {/* Parkeerkosten — puur informatief en bewust bovenaan, los van de
+          bewakingstabel: die telt per rij exact op tot Geboekte kosten en deze
+          bedragen staan niet in Bouw7. Rendert niets zonder toewijzingen. */}
+      <div style={{ maxWidth: 960 }}>
+        <Suspense fallback={null}>
+          <ParkeerkostenBlok dossierId={dossierId} />
+        </Suspense>
+      </div>
+
       {/* Project-brede % gereed (bewerkbaar) */}
       <div style={{ maxWidth: 960 }}>
         <Suspense fallback={null}>
@@ -629,9 +639,12 @@ async function ServicedeskFinancieel({ dossierId }: { dossierId: string }) {
 
   return (
     <>
-      {/* Project-brede % gereed (bewerkbaar) — boven beide weergaven */}
+      {/* Parkeerkosten en % gereed — boven beide weergaven */}
       <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
         <div style={{ maxWidth: 960 }}>
+          <Suspense fallback={null}>
+            <ParkeerkostenBlok dossierId={dossierId} />
+          </Suspense>
           <Suspense fallback={null}>
             <ProjectVoortgangBlok dossierId={dossierId} />
           </Suspense>
