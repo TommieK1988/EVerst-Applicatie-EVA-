@@ -325,6 +325,24 @@ export default async function BestuurderDetailPage(
   const bevPersoonlijk = bevindingen.filter((b) => signaalSoort(b.regel_code) === 'persoonlijk')
   const bevRitten = bevindingen.filter((b) => signaalSoort(b.regel_code) === 'rit')
 
+  /**
+   * Adres van deze pagina met een ander rit-typefilter, mét behoud van de
+   * gekozen periode. Zonder dat laatste zet een klik op "Alleen zakelijk" het
+   * werktijden-blok eronder stilletjes terug op het lopende kwartaal.
+   */
+  const typeHref = (type?: 'zakelijk' | 'prive') => {
+    const p = new URLSearchParams()
+    if (type) p.set('type', type)
+    if (periode.preset === 'aangepast') {
+      p.set('van', periode.van)
+      p.set('tot', periode.tot)
+    } else if (periode.preset !== 'dit-kwartaal') {
+      p.set('periode', periode.preset)
+    }
+    const qs = p.toString()
+    return `/wagenpark/bestuurders/${userId}${qs ? '?' + qs : ''}`
+  }
+
   const factor = 365 / tot.dagen_in_periode
   const prognoseZakelijk = Math.round(tot.km_zakelijk * factor)
   const prognosePrive = Math.round(tot.km_prive * factor)
@@ -421,7 +439,7 @@ export default async function BestuurderDetailPage(
                 {koppelingen.map((k) => (
                   <tr key={k.id}>
                     <td>
-                      <Link href={`/voertuigen/${k.voertuig_id}`} className=" hover:underline">
+                      <Link href={`/wagenpark/voertuigen/${k.voertuig_id}`} className=" hover:underline">
                         {k.kenteken}
                       </Link>
                     </td>
@@ -516,7 +534,7 @@ export default async function BestuurderDetailPage(
             </h2>
             <div className="flex gap-2 text-xs">
               <a
-                href={`/bestuurders/${userId}`}
+                href={typeHref()}
                 className={typeFilter === 'alle'
                   ? 'px-3 py-1 rounded-full bg-slate-900 text-white'
                   : 'px-3 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200'}
@@ -524,7 +542,7 @@ export default async function BestuurderDetailPage(
                 Alle
               </a>
               <a
-                href={`/bestuurders/${userId}?type=zakelijk`}
+                href={typeHref('zakelijk')}
                 className={typeFilter === 'zakelijk'
                   ? 'px-3 py-1 rounded-full bg-green-600 text-white'
                   : 'px-3 py-1 rounded-full bg-green-50 text-green-700 hover:bg-green-100'}
@@ -533,7 +551,7 @@ export default async function BestuurderDetailPage(
               </a>
               {magPrive && (
                 <a
-                  href={`/bestuurders/${userId}?type=prive`}
+                  href={typeHref('prive')}
                   className={typeFilter === 'prive'
                     ? 'px-3 py-1 rounded-full bg-slate-900 text-white'
                     : 'px-3 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200'}

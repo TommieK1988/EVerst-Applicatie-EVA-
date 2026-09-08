@@ -183,7 +183,7 @@ export default async function BestuurdersPage(
                 return (
                   <tr key={b.user_id} className={!b.actief ? 'opacity-50' : ''}>
                     <td className="font-medium">
-                      <Link href={`/bestuurders/${b.user_id}`} className="hover:underline">
+                      <Link href={`/wagenpark/bestuurders/${b.user_id}`} className="hover:underline">
                         {b.volledige_naam ?? `ULU #${b.user_id}`}
                       </Link>
                     </td>
@@ -250,7 +250,7 @@ export default async function BestuurdersPage(
                       )}
                     </td>
                     <td className="text-right">
-                      <Link href={`/bestuurders/${b.user_id}`} className="text-sm text-green-700 hover:underline">
+                      <Link href={`/wagenpark/bestuurders/${b.user_id}`} className="text-sm text-green-700 hover:underline">
                         Details
                       </Link>
                     </td>

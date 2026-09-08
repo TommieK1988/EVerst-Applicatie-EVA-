@@ -225,7 +225,7 @@ export default async function ParkeerZonesPage(
                           <tr key={z.zone}>
                             <td className="pl-8">
                               <Link
-                                href={`/parkeren/zones?zone=${encodeURIComponent(z.zone)}`}
+                                href={`/wagenpark/parkeren/zones?zone=${encodeURIComponent(z.zone)}`}
                                 className="hover:underline"
                               >
                                 {z.zone}
@@ -272,7 +272,7 @@ export default async function ParkeerZonesPage(
                   <tr key={z.stad + '|' + z.zone}>
                     <td>
                       <Link
-                        href={`/parkeren/zones?zone=${encodeURIComponent(z.zone)}`}
+                        href={`/wagenpark/parkeren/zones?zone=${encodeURIComponent(z.zone)}`}
                         className="hover:underline"
                       >
                         {z.zone}
@@ -312,7 +312,7 @@ export default async function ParkeerZonesPage(
                   <tr key={v.kenteken}>
                     <td>
                       <Link
-                        href={`/parkeren/zones?kenteken=${encodeURIComponent(v.kenteken)}`}
+                        href={`/wagenpark/parkeren/zones?kenteken=${encodeURIComponent(v.kenteken)}`}
                         className=" hover:underline"
                       >
                         {v.kenteken}

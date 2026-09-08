@@ -151,7 +151,7 @@ export default async function VoertuigenPage(
                   </td>
                   <td className="text-right">
                     <Link
-                      href={`/voertuigen/${v.id}`}
+                      href={`/wagenpark/voertuigen/${v.id}`}
                       className="text-sm text-green-700 hover:underline"
                     >
                       Details
