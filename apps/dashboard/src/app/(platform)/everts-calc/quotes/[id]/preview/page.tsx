@@ -27,8 +27,11 @@ export default async function QuotePreviewPage({ params }: Props) {
   const isIntern = quote.type === 'interne_calculatie'
   const verzendbaar = !isIntern && (await assertOfferteVerzendbaar(id)).ok
 
+  /* Vaste schermhoogte: 60px = TopBar-hoogte. Een percentage-hoogte (h-full)
+     klapte hier af en toe dicht, omdat de <main> van de shell zijn hoogte pas
+     uit de flexlayout krijgt en dus geen vaste hoogte heeft om tegen te rekenen. */
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-100">
+    <div className="flex flex-col h-[calc(100dvh-60px)] print:h-auto overflow-hidden bg-slate-100">
       {/* Toolbar - verbergen bij printen */}
       <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-white flex items-center gap-3 print:hidden">
         <Link
@@ -56,7 +59,7 @@ export default async function QuotePreviewPage({ params }: Props) {
       </div>
 
       {/* Preview */}
-      <div className="flex-1 overflow-hidden print:overflow-visible">
+      <div className="flex-1 min-h-0 overflow-hidden print:overflow-visible">
         <BedrijfLoader quoteId={quote.id} />
       </div>
     </div>

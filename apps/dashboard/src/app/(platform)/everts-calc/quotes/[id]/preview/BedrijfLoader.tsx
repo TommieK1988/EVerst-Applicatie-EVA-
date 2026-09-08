@@ -39,7 +39,7 @@ export default function BedrijfLoader({ quoteId }: { quoteId: string }) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {modus === 'pdf' ? (
           <iframe src={pdfSrc} className="w-full h-full border-0" title="Offerte PDF-voorvertoning" />
         ) : (
