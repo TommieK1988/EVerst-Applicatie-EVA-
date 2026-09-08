@@ -4,8 +4,34 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { Contactpersoon, ContactpersoonOrganisatie, Relatie } from '@everts/database'
 import { BOUW7_CONTACTPERSOON_VELDEN, beschermdeVelden } from './sync-velden'
+import { ontmarkeerHandmatig } from '@/lib/bouw7/handmatige-velden'
+import { schrijfBouw7Contactpersoon, schrijfBouw7ContactpersoonFunctie } from '@/lib/bouw7/contact-write'
 
-type ActionResult = { ok: true } | { ok: false; error: string }
+type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
+
+/** Kolommen die naar de Bouw7-contactpersoon gaan (`geslacht` is een EVA-afleiding en gaat niet mee). */
+const CP_SCHRIJFVELDEN = ['voornaam', 'achternaam', 'email', 'telefoon', 'aanhef']
+
+/**
+ * Write-back van contactpersoonvelden naar Bouw7. Wat aankomt wordt ontmarkeerd; wat niet aankomt
+ * blijft beschermd en krijgt via de cron een herkansing.
+ */
+export async function schrijfContactpersoonNaarBouw7(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contactpersoonId: string,
+  velden: string[],
+): Promise<string | undefined> {
+  const teSchrijven = velden.filter(v => CP_SCHRIJFVELDEN.includes(v))
+  if (teSchrijven.length === 0) return undefined
+  const { data } = await supabase.from('contactpersonen').select('bouw7_id').eq('id', contactpersoonId).maybeSingle()
+  if (!data?.bouw7_id) return undefined
+  const res = await schrijfBouw7Contactpersoon(contactpersoonId, teSchrijven)
+  if (res.geschreven.length > 0) await ontmarkeerHandmatig(supabase, 'contactpersonen', contactpersoonId, res.geschreven).catch(() => {})
+  if (!res.ok) return `Opgeslagen in EVA, maar niet naar Bouw7: ${res.error}`
+  if (res.nietOvergenomen.length > 0) return `Opgeslagen in EVA; Bouw7 nam niet over: ${res.nietOvergenomen.join(', ')}.`
+  return undefined
+}
 
 export type ContactpersoonMetOrganisaties = Contactpersoon & {
   koppelingen: (ContactpersoonOrganisatie & {
@@ -182,8 +208,11 @@ export async function updateContactpersoon(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+  const waarschuwing = await schrijfContactpersoonNaarBouw7(
+    supabase, id, Object.keys(patch).filter(k => (patch as Record<string, unknown>)[k] !== undefined),
+  )
   revalidatePath(`/relaties/contactpersonen/${id}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 export async function koppelContactpersoonAanOrganisatie(
@@ -233,8 +262,16 @@ export async function updateContactpersoonLink(
     .eq('id', link_id)
 
   if (error) return { ok: false, error: error.message }
+  // De functie ook naar Bouw7 (jobTitle). Lukt dat, dan zijn beide gelijk en mag de sync hem weer
+  // bijwerken; lukt het niet, dan blijft de EVA-functie beschermd.
+  let waarschuwing: string | undefined
+  if (patch.functie !== undefined) {
+    const res = await schrijfBouw7ContactpersoonFunctie(contactpersoon_id, patch.functie ?? null)
+    if (res.ok) await supabase.from('contactpersoon_organisaties').update({ functie_handmatig: false }).eq('id', link_id)
+    else if (!/staat nog niet in Bouw7|hangt niet onder/.test(res.error)) waarschuwing = `Opgeslagen in EVA, maar niet naar Bouw7: ${res.error}`
+  }
   revalidatePath(`/relaties/contactpersonen/${contactpersoon_id}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 export async function toggleContactpersoonActief(

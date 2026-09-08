@@ -254,15 +254,22 @@ export async function koppelDossierAanObject(
   // Werkadres, opdrachtgever en contactpersoon komen bij een Bouw7-dossier normaal uit de
   // sync. Wat hier bewust vanuit het object wordt overgenomen, moet de volgende sync laten
   // staan — anders is de koppeling de volgende ochtend teruggedraaid.
-  const handmatig = await markeerHandmatig(supabase, 'dossiers', dossierId, beschermdeVelden(wijziging, BOUW7_DOSSIER_VELDEN))
+  const gewijzigd = beschermdeVelden(wijziging, [...BOUW7_DOSSIER_VELDEN, 'werkadres_huisnummer', 'vve_code'])
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', dossierId, gewijzigd)
   if (handmatig) wijziging.handmatige_velden = handmatig
 
   const { error } = await supabase.from('dossiers').update(wijziging).eq('id', dossierId)
   if (error) return { ok: false, fout: `Koppelen mislukt: ${error.message}` }
 
+  // Ook naar Bouw7: object, werkadres en opdrachtgever op het project. Wat aankomt wordt
+  // ontmarkeerd; wat niet aankomt blijft in EVA beschermd en krijgt via de cron een herkansing.
+  const { schrijfDossierVeldenNaarBouw7 } = await import('@/lib/dossiers/actions')
+  const bouw7 = await schrijfDossierVeldenNaarBouw7(supabase, dossierId, gewijzigd)
+  const waarschuwing = bouw7 && !bouw7.ok ? `Gekoppeld in EVA, maar niet naar Bouw7: ${bouw7.error}` : undefined
+
   herlaad(objectId)
   revalidatePath(`/opdrachten/${dossierId}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 export async function ontkoppelDossierVanObject(dossierId: string): Promise<ActieResultaat> {
@@ -282,9 +289,13 @@ export async function ontkoppelDossierVanObject(dossierId: string): Promise<Acti
     .eq('id', dossierId)
   if (error) return { ok: false, fout: error.message }
 
+  // Ook het object van het Bouw7-project halen (`propertyAsset` leeg).
+  const { schrijfDossierVeldenNaarBouw7 } = await import('@/lib/dossiers/actions')
+  const bouw7 = await schrijfDossierVeldenNaarBouw7(supabase, dossierId, ['object_id'])
+
   herlaad()
   revalidatePath(`/opdrachten/${dossierId}`)
-  return { ok: true }
+  return { ok: true, waarschuwing: bouw7 && !bouw7.ok ? `Ontkoppeld in EVA, maar niet in Bouw7: ${bouw7.error}` : undefined }
 }
 
 /**

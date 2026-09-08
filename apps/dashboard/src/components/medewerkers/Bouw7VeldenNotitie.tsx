@@ -33,9 +33,10 @@ export default function Bouw7VeldenNotitie({ medewerkerId, bouw7Id, handmatigeVe
 
   async function herstel() {
     if (!await bevestig({
-      titel: 'Weer bijwerken vanuit Bouw7?',
-      omschrijving: 'De eerstvolgende synchronisatie zet deze velden terug op de waarden uit Bouw7. Je aanpassingen in EVA gaan daarbij verloren.',
-      bevestigLabel: 'Weer laten bijwerken',
+      titel: 'Bouw7 volgen?',
+      omschrijving: 'EVA stopt met proberen deze velden naar Bouw7 te schrijven en neemt bij de '
+        + 'eerstvolgende synchronisatie de waarden uit Bouw7 over. Je aanpassingen in EVA gaan daarbij verloren.',
+      bevestigLabel: 'Bouw7 volgen',
     })) return
     setBezig(true)
     const res = await herstelMedewerkerBouw7Velden(medewerkerId)
@@ -48,11 +49,12 @@ export default function Bouw7VeldenNotitie({ medewerkerId, bouw7Id, handmatigeVe
   return (
     <div className="mb-3 pb-3 border-b border-neutral-100 flex items-start justify-between gap-3">
       <p className="text-[11.5px] text-neutral-500 leading-snug">
-        In EVA aangepast en niet meer bijgewerkt vanuit Bouw7:{' '}
-        <span className="font-semibold text-neutral-700">{velden.map(v => LABELS[v]).join(', ')}</span>
+        Staat nog niet in Bouw7 en wordt daar automatisch opnieuw naartoe gestuurd:{' '}
+        <span className="font-semibold text-neutral-700">{velden.map(v => LABELS[v]).join(', ')}</span>.
+        Tot die tijd blijft de EVA-waarde staan. Het e-mailadres gaat nooit naar Bouw7: dat is daar de inlognaam.
       </p>
       <Button variant="ghost" size="sm" onClick={herstel} disabled={bezig}>
-        {bezig ? 'Bezig…' : 'Weer uit Bouw7'}
+        {bezig ? 'Bezig…' : 'Bouw7 volgen'}
       </Button>
     </div>
   )

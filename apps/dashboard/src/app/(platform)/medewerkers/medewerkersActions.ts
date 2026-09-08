@@ -3,6 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { z } from 'zod'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
+import { maakBouw7Medewerker } from '@/lib/bouw7/employee-write'
 
 const nieuweMedewerkerSchema = z.object({
   voornaam:      z.string().min(1),
@@ -13,7 +14,7 @@ const nieuweMedewerkerSchema = z.object({
   extern:        z.boolean().optional().default(false),
 })
 
-type MaakMedewerkerResult = { ok: true; id: string } | { ok: false; error: string }
+type MaakMedewerkerResult = { ok: true; id: string; waarschuwing?: string } | { ok: false; error: string }
 
 export async function maakMedewerker(raw: unknown): Promise<MaakMedewerkerResult> {
   const parsed = nieuweMedewerkerSchema.safeParse(raw)
@@ -37,6 +38,25 @@ export async function maakMedewerker(raw: unknown): Promise<MaakMedewerkerResult
     .single()
 
   if (error) return { ok: false, error: error.message }
+
+  // Ook in Bouw7 aanmaken: zonder Bouw7-koppeling kan deze medewerker geen uren, verlof of
+  // planning naar Bouw7 krijgen. Mislukt het, dan blijft hij EVA-only met een duidelijke melding.
+  let waarschuwing: string | undefined
+  const bouw7 = await maakBouw7Medewerker({
+    voornaam: parsed.data.voornaam,
+    tussenvoegsel: parsed.data.tussenvoegsel ?? null,
+    achternaam: parsed.data.achternaam,
+    extern: parsed.data.extern ?? false,
+  })
+  if (bouw7.ok) {
+    await supabase.from('medewerkers').update({
+      bouw7_id: String(bouw7.bouw7Id), bouw7_sync_status: 'synced', bouw7_sync_fout: null,
+      bouw7_laatst_sync: new Date().toISOString(),
+    }).eq('id', data.id)
+  } else {
+    await supabase.from('medewerkers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: bouw7.error }).eq('id', data.id)
+    waarschuwing = `Medewerker aangemaakt in EVA, maar niet in Bouw7: ${bouw7.error}`
+  }
 
   // Standaard werkrooster van de functie automatisch aanmaken
   if (parsed.data.functie) {
@@ -81,5 +101,5 @@ export async function maakMedewerker(raw: unknown): Promise<MaakMedewerkerResult
   // Onboarding-sjablonen die op "medewerker aangemaakt" triggeren meteen activeren.
   await verwerkMedewerkerTriggers(data.id).catch(() => {})
 
-  return { ok: true, id: data.id }
+  return { ok: true, id: data.id, waarschuwing }
 }

@@ -24,12 +24,13 @@ import { verstuurMailNamensMedewerker } from '@/lib/o365/mail'
 import { O365TokenError } from '@/lib/o365/tokens'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
-import { markeerHandmatig, beschermdeVelden, BOUW7_MEDEWERKER_VELDEN } from '@/lib/bouw7/handmatige-velden'
+import { markeerHandmatig, ontmarkeerHandmatig, beschermdeVelden, BOUW7_MEDEWERKER_VELDEN } from '@/lib/bouw7/handmatige-velden'
+import { schrijfBouw7Medewerker, BOUW7_MEDEWERKER_SCHRIJFVELDEN } from '@/lib/bouw7/employee-write'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-type ActionResult = { ok: true } | { ok: false; error: string }
+type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
 /**
  * Autorisatie-guards voor de medewerker-administratie. Dit bestand muteert met
@@ -254,6 +255,17 @@ export async function updateMedewerkerGegevens(
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
 
+  // Naar Bouw7 (zie lib/bouw7/employee-write.ts). Wat aankomt wordt ontmarkeerd; wat niet
+  // aankomt blijft beschermd en krijgt via de cron een herkansing. E-mail gaat bewust niet mee.
+  let waarschuwing: string | undefined
+  const teSchrijven = gewijzigd.filter(k => (BOUW7_MEDEWERKER_SCHRIJFVELDEN as readonly string[]).includes(k))
+  if (huidig?.bouw7_id && teSchrijven.length > 0) {
+    const res = await schrijfBouw7Medewerker(id, teSchrijven)
+    if (res.geschreven.length > 0) await ontmarkeerHandmatig(supabase, 'medewerkers', id, res.geschreven).catch(() => {})
+    if (!res.ok) waarschuwing = `Opgeslagen in EVA, maar niet naar Bouw7: ${res.error}`
+    else if (res.nietOvergenomen.length > 0) waarschuwing = `Opgeslagen in EVA; Bouw7 nam niet over: ${res.nietOvergenomen.join(', ')}.`
+  }
+
   // Als een functie is ingesteld, controleer of er al een actief rooster bestaat.
   // Zo niet, maak er automatisch een aan vanuit het standaard rooster van de functie.
   if (parsed.data.functie) {
@@ -310,7 +322,7 @@ export async function updateMedewerkerGegevens(
   await herberekenMedewerkerDeadlines(id).catch(() => {})
 
   revalidatePath(`/medewerkers/${id}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 // ── Bedrijfsmiddelen ──────────────────────────────────────────────────

@@ -15,9 +15,35 @@ import type {
   OmzetData,
 } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, beschermdeVelden } from './sync-velden'
-import { markeerHandmatig, BOUW7_BANK_VELDEN } from '@/lib/bouw7/handmatige-velden'
+import { markeerHandmatig, ontmarkeerHandmatig, BOUW7_BANK_VELDEN } from '@/lib/bouw7/handmatige-velden'
+import { schrijfBouw7Relatie } from '@/lib/bouw7/contact-write'
 
-type ActionResult = { ok: true } | { ok: false; error: string }
+type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
+
+/**
+ * Write-back van relatievelden naar Bouw7 na een EVA-wijziging. Wat aankomt wordt ontmarkeerd
+ * (Bouw7 en EVA zijn dan gelijk); wat niet aankomt blijft beschermd en krijgt via de cron een
+ * herkansing. Relaties zonder Bouw7-koppeling hebben niets te schrijven.
+ */
+export async function schrijfRelatieNaarBouw7(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  relatieId: string,
+  velden: string[],
+): Promise<string | undefined> {
+  if (velden.length === 0) return undefined
+  const { data } = await supabase.from('relaties').select('bouw7_id').eq('id', relatieId).maybeSingle()
+  if (!data?.bouw7_id) return undefined
+  const res = await schrijfBouw7Relatie(relatieId, velden)
+  const relatieVelden = res.geschreven.filter(v => v !== 'iban')
+  if (relatieVelden.length > 0) await ontmarkeerHandmatig(supabase, 'relaties', relatieId, relatieVelden).catch(() => {})
+  if (res.geschreven.includes('iban')) {
+    await supabase.from('relatie_bankgegevens').update({ handmatige_velden: [] }).eq('relatie_id', relatieId)
+  }
+  if (!res.ok) return `Opgeslagen in EVA, maar niet naar Bouw7: ${res.error}`
+  if (res.nietOvergenomen.length > 0) return `Opgeslagen in EVA; Bouw7 nam niet over: ${res.nietOvergenomen.join(', ')}.`
+  return undefined
+}
 
 /**
  * Voegt kolomnamen toe aan `handmatige_velden`, zodat de Bouw7-lees-sync ze niet
@@ -132,8 +158,9 @@ export async function updateOrganisatieGegevens(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+  const waarschuwing = await schrijfRelatieNaarBouw7(supabase, id, beschermdeVelden(patch, BOUW7_RELATIE_VELDEN))
   revalidatePath(`/relaties/${id}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 /**
@@ -185,9 +212,10 @@ export async function toggleOrganisatieActief(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+  const waarschuwing = await schrijfRelatieNaarBouw7(supabase, id, ['actief'])
   revalidatePath(`/relaties/${id}`)
   revalidatePath('/relaties')
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 /* ─── Factuuradressen ─────────────────────────────────────────────── */
@@ -261,8 +289,9 @@ export async function upsertBankgegevens(
     )
 
   if (error) return { ok: false, error: error.message }
+  const waarschuwing = await schrijfRelatieNaarBouw7(supabase, relatie_id, gewijzigd)
   revalidatePath(`/relaties/${relatie_id}`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 /* ─── Facturatie-instellingen (1:1 upsert) ───────────────────────── */

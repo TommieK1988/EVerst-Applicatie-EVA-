@@ -9,7 +9,7 @@ import {
   getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
   type DossierSectie, type DossierRij,
 } from '../types'
-import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden } from '@/lib/dossiers/actions'
+import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden, stuurAanneemsomNaarBouw7 } from '@/lib/dossiers/actions'
 import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
@@ -84,6 +84,7 @@ const BLOK_HOOGTE = 320
 /* ─── form state ──────────────────────────────────────────────────── */
 type FormValues = {
   calculator_id: string
+  titel: string
   categorie: string
   referentie: string
   opmerkingen: string
@@ -1262,6 +1263,7 @@ export function InformatieTab({
 
   const [form, setForm] = React.useState<FormValues>({
     calculator_id:           (dossier as any).calculator_id      ?? '',
+    titel:                   dossier.titel                        ?? '',
     categorie:               (dossier as any).categorie           ?? '',
     referentie:              dossier.referentie           ?? '',
     opmerkingen:             (dossier as any).opmerkingen          ?? '',
@@ -1330,9 +1332,10 @@ export function InformatieTab({
     return () => { actief = false }
   }, [projectId, importTick])
 
-  /* Velden waarvan Bouw7 de bron is, blijven hier alleen-lezen: EVA schrijft ze niet terug
-     en zou anders bij de volgende sync stilzwijgend overschreven worden. */
-  const magBouw7Veld = !readOnly && !bouw7Vergrendeld
+  /* Velden die ook in Bouw7 staan zijn sinds sep 2026 gewoon bewerkbaar: EVA schrijft ze bij
+     het opslaan naar het Bouw7-project (lib/bouw7/project-velden.ts) en beschermt ze tot dat
+     gelukt is. De naam blijft staan voor de plekken die er nog aan refereren. */
+  const magBouw7Veld = !readOnly
 
   /* ─── direct opslaan ────────────────────────────────────────────────
      Elk veld schrijft zichzelf weg zodra het klaar is. De UI toont de nieuwe
@@ -1358,6 +1361,10 @@ export function InformatieTab({
       return
     }
     meldOpslag('klaar')
+    // De EVA-waarde staat; wat Bouw7 niet overnam blijft in EVA beschermd en krijgt via de
+    // cron een herkansing. Dat mag de gebruiker weten, zonder dat het opslaan "mislukt" heet.
+    if (res.bouw7 && !res.bouw7.ok) toast(`Opgeslagen in EVA, maar niet in Bouw7: ${res.bouw7.error}`, { icon: '⚠️' })
+    else if (res.bouw7?.overgeslagen?.length) toast(`Opgeslagen; niet naar Bouw7: ${res.bouw7.overgeslagen.join(', ')}.`, { icon: 'ℹ️' })
   }
 
   /* De DB-constraint dossiers_voorlopige_periode_chk is het vangnet, maar die levert
@@ -1830,7 +1837,13 @@ export function InformatieTab({
                 href={dossier.klant_id ? `/relaties/${dossier.klant_id}` : null}
                 hrefTitel="Open de relatiegegevens"
               />
-              <InfoVeld label="Projectnaam"    waarde={dossier.titel} />
+              <TekstVeld
+                label="Projectnaam"
+                waarde={form.titel}
+                placeholder="naam van het project"
+                readOnly={readOnly}
+                onBewaar={v => { if (v.trim()) bewaarInfo({ titel: v.trim() }) }}
+              />
               {/* De fase wijzig je via de statuskeuze in de kop: die bewaakt de
                   bevestiging bij afsluiten en de controle bij financieel gereed. */}
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
@@ -1878,10 +1891,10 @@ export function InformatieTab({
 
             {bouw7Vergrendeld && !readOnly && (
               <p className="mt-4 rounded-md bg-neutral-50 px-3 py-2 text-[11px] leading-snug text-neutral-500">
-                Dit dossier komt uit Bouw7. Categorie, referentie, werkadres en contactpersoon worden
-                daar beheerd en staan hier alleen-lezen; rollen worden bij het kiezen meteen in Bouw7
-                bijgewerkt. EVA-eigen velden (VvE-code, werkmaatschappij, opdrachtreferentie, datums,
-                werkadres-contact, interne opmerkingen) blijven gewoon bewerkbaar.
+                Dit dossier is gekoppeld aan Bouw7. Wat je hier wijzigt gaat meteen mee naar het
+                Bouw7-project: naam, categorie, referentie, werkadres, contactpersoon, object, rollen,
+                deadline en voorlopige planning. Alleen de werkmaatschappij verandert niet meer na het
+                aanmaken (Bouw7 hangt het projectnummer eraan).
               </p>
             )}
             {bouw7Vergrendeld && !readOnly && (
@@ -2224,6 +2237,22 @@ export function InformatieTab({
                 De EVA-offerte bij dit dossier is {fmtBedrag(aanneemsomKeuze.afwijkendeEvaOfferte)} en wijkt af van de
                 aanneemsom hierboven. De aanneemsom komt uit Bouw7 — dat is het bedrag dat gefactureerd wordt.
                 Controleer of de offerte bij deze opdracht hoort.
+                {bouw7Vergrendeld && !readOnly && (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      className="font-semibold underline"
+                      onClick={async () => {
+                        const res = await stuurAanneemsomNaarBouw7(dossier.id)
+                        if (res.ok) { toast.success(`Aanneemsom in Bouw7 gezet op ${fmtBedrag(res.bedrag ?? 0)}.`); router.refresh() }
+                        else toast.error(`Aanneemsom niet naar Bouw7: ${res.error}`)
+                      }}
+                    >
+                      Aanneemsom in Bouw7 gelijkzetten aan de EVA-offerte
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -2292,14 +2321,16 @@ export function InformatieTab({
 const DOSSIER_HANDMATIG_LABELS: Record<string, string> = {
   titel: 'projectnaam', klant_id: 'opdrachtgever', contactpersoon_id: 'contactpersoon',
   categorie: 'categorie', referentie: 'referentie', opmerkingen: 'opmerkingen',
-  werkadres_straat: 'werkadres', werkadres_postcode: 'werkadres', werkadres_stad: 'werkadres',
+  werkadres_straat: 'werkadres', werkadres_huisnummer: 'werkadres',
+  werkadres_postcode: 'werkadres', werkadres_stad: 'werkadres',
   verwacht_startdatum: 'verwachte start', verwacht_einddatum: 'verwachte einddatum',
+  deadline: 'deadline', voorlopige_start: 'voorlopige planning', voorlopige_eind: 'voorlopige planning',
+  vve_code: 'VvE-code', aanneemsom: 'aanneemsom',
   object_id: 'object', servicedesk_substatus: 'servicedesk-kolom',
-  project_manager_id: 'rollen (wacht op Bouw7)', uitvoerder_id: 'rollen (wacht op Bouw7)',
-  calculator_id: 'rollen (wacht op Bouw7)', werkvoorbereider_id: 'rollen (wacht op Bouw7)',
-  controller_id: 'rollen (wacht op Bouw7)',
-  hoofdstatus: 'status (wacht op Bouw7)', aanvraag_substatus: 'status (wacht op Bouw7)',
-  offerte_substatus: 'status (wacht op Bouw7)', opdracht_substatus: 'status (wacht op Bouw7)',
+  project_manager_id: 'rollen', uitvoerder_id: 'rollen',
+  calculator_id: 'rollen', werkvoorbereider_id: 'rollen', controller_id: 'rollen',
+  hoofdstatus: 'status', aanvraag_substatus: 'status',
+  offerte_substatus: 'status', opdracht_substatus: 'status',
 }
 
 /**
@@ -2321,9 +2352,10 @@ function DossierBouw7VeldenNotitie({ dossierId, handmatigeVelden }: {
 
   async function herstel() {
     if (!await bevestig({
-      titel: 'Weer bijwerken vanuit Bouw7?',
-      omschrijving: 'De eerstvolgende synchronisatie zet deze velden terug op de waarden uit Bouw7. Je aanpassingen in EVA gaan daarbij verloren.',
-      bevestigLabel: 'Weer laten bijwerken',
+      titel: 'Bouw7 volgen?',
+      omschrijving: 'EVA stopt met proberen deze velden naar Bouw7 te schrijven en neemt bij de '
+        + 'eerstvolgende synchronisatie de waarden uit Bouw7 over. Je aanpassingen in EVA gaan daarbij verloren.',
+      bevestigLabel: 'Bouw7 volgen',
     })) return
     setBezig(true)
     const res = await herstelDossierBouw7Velden(dossierId)
@@ -2336,11 +2368,12 @@ function DossierBouw7VeldenNotitie({ dossierId, handmatigeVelden }: {
   return (
     <div className="mt-2 flex items-start justify-between gap-3 rounded-md bg-neutral-50 px-3 py-2">
       <p className="text-[11px] leading-snug text-neutral-500">
-        In EVA aangepast en niet meer bijgewerkt vanuit Bouw7:{' '}
-        <span className="font-semibold text-neutral-700">{labels.join(', ')}</span>
+        Staat nog niet in Bouw7 en wordt daar automatisch opnieuw naartoe gestuurd:{' '}
+        <span className="font-semibold text-neutral-700">{labels.join(', ')}</span>. Tot die tijd
+        blijft de EVA-waarde staan.
       </p>
       <Button variant="ghost" size="sm" onClick={herstel} disabled={bezig}>
-        {bezig ? 'Bezig…' : 'Weer uit Bouw7'}
+        {bezig ? 'Bezig…' : 'Bouw7 volgen'}
       </Button>
     </div>
   )

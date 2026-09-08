@@ -54,6 +54,8 @@ export type TermijnstaatResultaat =
       overgeslagen: string[]
       /** Termijnen die in Bouw7 staan maar niet in het EVA-schema — met rust gelaten. */
       onbekendInEva: string[]
+      /** Bij een deelschrijving: de id's van de termijnen die deze call heeft aangemaakt. */
+      nieuweTermIds?: number[]
     }
   | { ok: false; error: string }
 
@@ -62,6 +64,9 @@ type StatementListItem = { id: number; fixedPrice?: string | number; contact?: {
 /** Leest de termijnstaat van een project met zijn termijnen. */
 export async function leesBouw7Termijnstaat(projectId: number): Promise<{
   statementId: number | null
+  /** Aanneemsom zoals die op de staat staat; null zonder staat. */
+  fixedPrice: number | null
+  contactId: number | null
   termijnen: Bouw7ProjectInvoiceTerm[]
 }> {
   const client = await getBouw7Client()
@@ -69,12 +74,18 @@ export async function leesBouw7Termijnstaat(projectId: number): Promise<{
     '/list/project-invoice-term-statements', { q: `project.id = ${projectId} LIMIT 200` },
   )
   const statement = (stmts.items ?? [])[0]
-  if (!statement) return { statementId: null, termijnen: [] }
+  if (!statement) return { statementId: null, fixedPrice: null, contactId: null, termijnen: [] }
 
   const res = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTerm>>(
     '/list/project-invoice-terms', { q: `statement.id = ${statement.id} LIMIT 500` },
   )
-  return { statementId: statement.id, termijnen: res.items ?? [] }
+  const fp = statement.fixedPrice != null ? Number(statement.fixedPrice) : NaN
+  return {
+    statementId: statement.id,
+    fixedPrice: Number.isFinite(fp) ? fp : null,
+    contactId: statement.contact?.id ?? null,
+    termijnen: res.items ?? [],
+  }
 }
 
 const bedrag = (n: number): string => (Math.round(n * 100) / 100).toFixed(2)
@@ -85,6 +96,14 @@ const bedrag = (n: number): string => (Math.round(n * 100) / 100).toFixed(2)
  */
 export async function schrijfBouw7Termijnstaat(
   invoer: TermijnstaatInvoer,
+  opts?: {
+    /**
+     * `invoer.termijnen` is niet het hele schema maar een aanvulling (bv. één meerwerktermijn).
+     * De terugleescontrole vergelijkt dan niet de totalen maar alleen of de aangeleverde
+     * termijnen er staan, en geeft de id's van de nieuw aangemaakte termijnen terug.
+     */
+    deelschrijving?: boolean
+  },
 ): Promise<TermijnstaatResultaat> {
   if (invoer.termijnen.length === 0) return { ok: false, error: 'Geen termijnen om weg te schrijven.' }
 
@@ -185,6 +204,21 @@ export async function schrijfBouw7Termijnstaat(
   // Terugleescontrole: staat er nu wat we bedoelden?
   try {
     const na = await leesBouw7Termijnstaat(invoer.projectId)
+    if (opts?.deelschrijving) {
+      // Alleen de aangeleverde termijnen toetsen; de rest van de staat is niet van ons.
+      const bestaandeIds = new Set(bestaand.termijnen.map(t => t.id))
+      const nieuweTermIds = na.termijnen.filter(t => !bestaandeIds.has(t.id)).map(t => t.id)
+      for (const t of teSchrijven) {
+        const cent = Math.round(t.bedragExclBtw * 100)
+        const gevonden = na.termijnen.some(x =>
+          (t.bouw7TermId != null ? x.id === t.bouw7TermId : nieuweTermIds.includes(x.id))
+          && Math.round(Number(x.subtotal ?? 0) * 100) === cent)
+        if (!gevonden) {
+          return { ok: false, error: `Bouw7 geeft de termijn "${t.omschrijving}" na het schrijven niet met het juiste bedrag terug. Controleer de termijnstaat in Bouw7.` }
+        }
+      }
+      return { ok: true, statementId, aangemaakt, bijgewerkt, overgeslagen, onbekendInEva, nieuweTermIds }
+    }
     const somNa = na.termijnen.reduce((s, t) => s + Math.round(Number(t.subtotal ?? 0) * 100), 0)
     const somBedoeld = invoer.termijnen.reduce((s, t) => s + Math.round(t.bedragExclBtw * 100), 0)
     if (na.termijnen.length < invoer.termijnen.length || somNa !== somBedoeld) {

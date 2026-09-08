@@ -27,6 +27,7 @@ import {
   markeerHandmatig, markeerHandmatigEnBewaar, ontmarkeerHandmatig, beschermdeVelden,
   BOUW7_DOSSIER_VELDEN, BOUW7_DOSSIER_ROL_VELDEN, BOUW7_DOSSIER_STATUS_VELDEN,
 } from '@/lib/bouw7/handmatige-velden'
+import { schrijfBouw7Projectvelden, schrijfBouw7Aanneemsom, BOUW7_PROJECT_SCHRIJFVELDEN } from '@/lib/bouw7/project-velden'
 import { assertDossierBewerkbaar } from './guards'
 import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
@@ -932,7 +933,7 @@ export async function updateDossierSubstatus(
   nieuweSubstatus: DossierSubstatus,
   opts?: { schrijfBouw7?: boolean; forceerBouw7?: boolean }
 ): Promise<
-  | { ok: true; bouw7?: Bouw7WriteResult }
+  | { ok: true; bouw7?: Bouw7WriteResult; aanneemsom?: Bouw7WriteResult & { bedrag?: number } }
   | { ok: false; error: string; conflict?: { bouw7Label: string } }
 > {
   await assertDossierBewerkbaar(id)
@@ -1013,9 +1014,17 @@ export async function updateDossierSubstatus(
 
   // Offerte gewonnen → opdracht: neem de everts-calc werkbegroting automatisch over als
   // planningsbudget. Stil vangnet — de sync-knop op de Planning-tab blijft beschikbaar.
+  let aanneemsom: (Bouw7WriteResult & { bedrag?: number }) | undefined
   if (huidig.hoofdstatus === 'offerte' && nieuweSubstatus === 'gewonnen') {
     const { neemWerkbegrotingOverStil } = await import('@/lib/planning/werkbegroting')
     await neemWerkbegrotingOverStil(id)
+    // De aanneemsom van de gewonnen EVA-offerte naar het Bouw7-project, zodat de Bouw7-
+    // projectbewaking en de termijnstaat met hetzelfde bedrag rekenen. Mislukt dat, dan
+    // blijft 'aanneemsom' gemarkeerd en probeert de cron het opnieuw.
+    if (huidig.bouw7_id != null) {
+      aanneemsom = await stuurAanneemsomNaarBouw7Intern(supabase, id)
+        .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
+    }
   }
 
   // Two-way: opdracht-substatus terugschrijven naar Bouw7 (alleen opdracht-dossiers met koppeling).
@@ -1037,7 +1046,7 @@ export async function updateDossierSubstatus(
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
   revalidatePath('/servicedesk')
-  return { ok: true, bouw7 }
+  return { ok: true, bouw7, aanneemsom }
 }
 
 /**
@@ -3132,8 +3141,11 @@ export async function zoekRelaties(
 export async function updateDossierInfo(
   id: string,
   velden: {
+    titel?: string | null
     referentie?: string | null
     categorie?: string | null
+    /** Gaat naar Bouw7 als interne projectnotitie (`POST /project/set-internal-note`). */
+    opmerkingen?: string | null
     contactpersoon_id?: string | null
     verwacht_startdatum?: string | null
     verwacht_einddatum?: string | null
@@ -3152,11 +3164,15 @@ export async function updateDossierInfo(
     voorlopige_eind?: string | null
     vve_code?: string | null
   }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; bouw7?: Bouw7WriteResult & { overgeslagen?: string[] } } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
-  // Velden die ook uit Bouw7 komen markeren, zodat de lees-sync de EVA-invoer laat staan.
-  const handmatig = await markeerHandmatig(supabase, 'dossiers', id, beschermdeVelden(velden, BOUW7_DOSSIER_VELDEN))
+  // Een lege projectnaam is in EVA en Bouw7 allebei ongeldig.
+  if (velden.titel !== undefined && !String(velden.titel ?? '').trim()) delete velden.titel
+  // Velden die ook uit/naar Bouw7 gaan markeren, zodat de lees-sync de EVA-invoer laat staan tot
+  // de write-back hieronder is gelukt.
+  const gewijzigd = beschermdeVelden(velden, [...BOUW7_DOSSIER_VELDEN, ...BOUW7_PROJECT_SCHRIJFVELDEN])
+  const handmatig = await markeerHandmatig(supabase, 'dossiers', id, gewijzigd)
   const { error } = await supabase
     .from('dossiers')
     .update(handmatig ? { ...velden, handmatige_velden: handmatig } : velden)
@@ -3166,10 +3182,85 @@ export async function updateDossierInfo(
   // categorie is een gevolgd triggerveld (veld_waarde); evalueer direct.
   await verwerkDossierTriggers(id).catch(() => {})
 
+  // Naar Bouw7. Wat daar aankomt wordt ontmarkeerd (Bouw7 en EVA zijn dan gelijk); wat niet
+  // aankomt blijft beschermd en krijgt via de cron een herkansing.
+  const bouw7 = await schrijfDossierVeldenNaarBouw7(supabase, id, gewijzigd)
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
+  return { ok: true, bouw7 }
+}
+
+/**
+ * Write-back van dossiervelden naar Bouw7 + administratie in `handmatige_velden`. Gedeeld door
+ * `updateDossierInfo`, de objectkoppeling en de herkansing in de cron. Dossiers zonder
+ * Bouw7-koppeling hebben niets te schrijven.
+ */
+export async function schrijfDossierVeldenNaarBouw7(
+  supabase: any,
+  dossierId: string,
+  velden: readonly string[],
+): Promise<Bouw7WriteResult & { overgeslagen?: string[] } | undefined> {
+  const teSchrijven = velden.filter(v => (BOUW7_PROJECT_SCHRIJFVELDEN as readonly string[]).includes(v))
+  if (teSchrijven.length === 0) return undefined
+  const { data } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).maybeSingle()
+  if (!data?.bouw7_id) return undefined
+  const res = await schrijfBouw7Projectvelden(dossierId, teSchrijven)
+  if (res.geschreven.length > 0) {
+    await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, res.geschreven).catch(() => {})
+  }
+  if (!res.ok) {
+    await supabase.from('dossiers').update({ bouw7_sync_status: 'error', bouw7_sync_fout: res.error }).eq('id', dossierId)
+    return { ok: false, error: res.error }
+  }
+  return { ok: true, overgeslagen: res.overgeslagen }
+}
+
+/**
+ * Herkansing voor dossiervelden die nog niet in Bouw7 zijn geland. Schrijft de huidige
+ * EVA-waarden van de gemarkeerde velden opnieuw; wat aankomt wordt ontmarkeerd.
+ */
+export async function herhaalDossierVeldenWriteBack(dossierId: string): Promise<Bouw7WriteResult> {
+  const supabase = createAdminClient() as any
+  const { data: d } = await supabase.from('dossiers').select('bouw7_id, handmatige_velden').eq('id', dossierId).maybeSingle()
+  if (!d?.bouw7_id) return { ok: false, error: 'Geen Bouw7-koppeling.' }
+  const open = ((d.handmatige_velden as string[] | null) ?? []).filter(v => (BOUW7_PROJECT_SCHRIJFVELDEN as readonly string[]).includes(v))
+  const res = open.length > 0 ? await schrijfDossierVeldenNaarBouw7(supabase, dossierId, open) : undefined
+  if (res && !res.ok) return res
+  if (((d.handmatige_velden as string[] | null) ?? []).includes('aanneemsom')) {
+    const a = await stuurAanneemsomNaarBouw7Intern(supabase, dossierId)
+    if (!a.ok) return a
+  }
   return { ok: true }
+}
+
+/**
+ * Zet de aanneemsom van de EVA-hoofdofferte als `fixedPrice` op het Bouw7-project. Wordt
+ * automatisch gedaan zodra een offerte gewonnen is; daarnaast met de hand aan te roepen vanaf de
+ * Informatie-tab als de EVA-offerte en de Bouw7-aanneemsom uit elkaar lopen.
+ */
+export async function stuurAanneemsomNaarBouw7(dossierId: string): Promise<Bouw7WriteResult & { bedrag?: number }> {
+  await assertDossierBewerkbaar(dossierId)
+  return stuurAanneemsomNaarBouw7Intern(createAdminClient() as any, dossierId)
+}
+
+async function stuurAanneemsomNaarBouw7Intern(supabase: any, dossierId: string): Promise<Bouw7WriteResult & { bedrag?: number }> {
+  const { data: d } = await supabase.from('dossiers').select('bouw7_id, everts_calc_project_id').eq('id', dossierId).maybeSingle()
+  if (!d?.bouw7_id) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
+  if (!d.everts_calc_project_id) return { ok: false, error: 'Dossier heeft geen EVA-calculatie; er is geen aanneemsom om te schrijven.' }
+  const bedragen = await laadKaartBedragen([{ id: dossierId, everts_calc_project_id: d.everts_calc_project_id }])
+  const bedrag = bedragen.get(dossierId)?.eva_offerte_excl_btw ?? null
+  if (bedrag == null || !(bedrag > 0)) return { ok: false, error: 'De EVA-offerte heeft nog geen bedrag.' }
+  const res = await schrijfBouw7Aanneemsom(d.bouw7_id, bedrag)
+  if (res.ok) {
+    // Bouw7 en EVA zijn gelijk: `bedrag_excl_btw` mag bij de volgende sync weer uit Bouw7 komen.
+    await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, ['aanneemsom']).catch(() => {})
+    await supabase.from('dossiers').update({ bedrag_excl_btw: bedrag }).eq('id', dossierId)
+    return { ok: true, bedrag }
+  }
+  await markeerHandmatigEnBewaar(supabase, 'dossiers', dossierId, ['aanneemsom']).catch(() => {})
+  return { ok: false, error: res.error }
 }
 
 /** Werkmaatschappijen (bedrijfsgegevens type=werkmaatschappij) voor de dossier-dropdown. */

@@ -1146,3 +1146,28 @@ alleen de Bouw7-planitems worden opnieuw opgebouwd.
 `tasks.deadline` negeerde `deadline_handmatig`; goedgekeurd EVA-verlof kwam als tweede rij terug
 (nu `bouw7_id` op de afwezigheidsrij, import slaat die over); de werkbegroting-overname bij
 "gewonnen" zette een bijgestelde begroting terug (nu alleen bij een lege begroting).
+
+## 9. EVA is leidend: velden die nu wél naar Bouw7 gaan (sep 2026)
+
+Doel: Bouw7 zo min mogelijk hoeven openen. Alles wat EVA kan schrijven, schrijft het ook. Elke write
+meldt terug welke velden Bouw7 echt overnam (terugleescontrole); wat niet aankwam blijft in EVA
+beschermd (`handmatige_velden`) en krijgt via `lib/dossiers/bouw7-retry.ts` een herkansing.
+
+| Wat | Module | Endpoint | Geverifieerd |
+|---|---|---|---|
+| Dossiervelden: naam, referentie, werkadres, deadline, voorlopige start/eind, opdrachtgever, contactpersoon, categorie, object, VvE-code | `lib/bouw7/project-velden.ts` | `POST /project` (partiële upsert) + `POST /project/set-internal-note` voor opmerkingen | ja, 4202130: alle velden heen en terug |
+| Aanneemsom bij gewonnen offerte (+ knop op Informatie-tab) | idem `schrijfBouw7Aanneemsom` | `POST /project { fixedPrice }` → Athena `revenue.budgeted` volgt | ja |
+| Relatie bijwerken (naam, KvK, btw, e-mail, telefoon, mobiel, adres, opmerkingen, actief, IBAN) | `lib/bouw7/contact-write.ts` | `POST /contact { id, … }` — partieel; leeskant heet `emailAddress`/`mobilePhoneNumber`/`iban`, schrijfkant `email`/`mobileNumber`/`accountNumber` | partieel: `phoneNumber`, `city` live; overige via terugleescontrole |
+| Contactpersoon bijwerken + functie | idem | `POST /contact/{id}/contact-person { id, … }` | `jobTitle`, `phoneNumber` live |
+| Relatie aanmaken | `create-contact.ts` | `POST /contact` **vereist maatwerkveld "Soort opdrachtgever" (id 19272, keuzelijst)** — zonder dat kwam tot sep 2026 géén EVA-relatie in Bouw7 aan | ja |
+| Medewerker bijwerken (naam, telefoon, adres, datums, tarieven, extern, actief→uit-dienst-datum) | `lib/bouw7/employee-write.ts` | `POST /organization/employee { id, … }` — partieel; e-mail bewust niet (inlognaam) | `phoneNumber`, `city` live |
+| Medewerker aanmaken | idem | `POST /organization/employee` + verplichte maatwerkvelden (ownerType 3, `isRequired`) op een neutrale startwaarde | **niet** live getest |
+| Aangenomen meerwerk → termijn in de termijnstaat | `lib/dossiers/meerwerk-termijn.ts` | `POST /project/{id}/invoice-term-statement` (deelschrijving: bestaande termijnen gaan ongewijzigd mee, `fixedPrice` schuift met het verschil) | ja: termijn erbij, bedrag bijgewerkt, opgeruimd |
+
+**Datumvalkuilen op `POST /project`:** `startDate`/`endDate` willen een datetime mét offset
+(`2026-10-01T00:00:00+02:00`), `deliveryDate` een kale datum (`2026-11-15`). Fout formaat = 400 op de
+hele POST, er wijzigt dan niets. `branch` wordt bewust nooit geschreven (projectnummer hangt eraan).
+
+**Meerwerk-herkansing alleen voor `bouw7_term_pending`:** bij livegang stonden er 118 aangenomen
+regels zonder termijn-id die met de hand in Bouw7 zijn afgehandeld. Die alsnog schrijven zou dubbele
+termijnen geven.

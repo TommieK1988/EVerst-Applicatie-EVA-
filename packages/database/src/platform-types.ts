@@ -432,6 +432,10 @@ export type MeerwerkRegel = {
   bron: MeerwerkBron
   bouw7_bron_sleutel: string | null
   bouw7_line_id: number | null
+  /** Bouw7-verkooptermijn die voor dit (aangenomen) meerwerk is gezet; null zolang niet gedaan. */
+  bouw7_term_id: number | null
+  /** True zolang de termijn bij akkoord nog niet gezet kon worden (herkansing via de cron). */
+  bouw7_term_pending: boolean
   bouw7_nummer: string | null
   begroot_bedrag: number | null
   /**

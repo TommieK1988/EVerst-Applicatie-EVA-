@@ -11,6 +11,24 @@
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7Contact, Bouw7ListResponse } from '@/lib/bouw7/client'
 import type { OrganisatieType } from '@everts/database'
+import { resolveCustomAttributeId } from './custom-attributes'
+
+/**
+ * Bouw7 eist op elk contact het maatwerkveld "Soort opdrachtgever" (`caSoortOpdrachtgever`,
+ * keuzelijst). Zonder dat veld weigert `POST /contact` met een 400 — en omdat deze functie
+ * best-effort is, kwam tot sep 2026 géén enkele in EVA aangemaakte relatie in Bouw7 aan.
+ * De keuze wordt afgeleid uit het EVA-type en de naam; de administratie kan hem in Bouw7 bijstellen.
+ */
+function soortOpdrachtgever(naam: string, types: OrganisatieType[]): string {
+  if (types.includes('leverancier') && !types.includes('opdrachtgever')) return 'Leverancier'
+  if (types.includes('onderaannemer') && !types.includes('opdrachtgever')) return 'Onderaannemer'
+  const n = naam.toLowerCase()
+  if (/\bv\.?v\.?e\b|vereniging van eigena/.test(n)) return 'VvE'
+  if (/stichting|vereniging/.test(n)) return 'Stichting / Vereniging'
+  if (/beheer/.test(n)) return 'Vastgoedbeheerder'
+  if (/advies/.test(n)) return 'Adviesbureau'
+  return 'Bedrijf'
+}
 
 /** Bouw7 contactType-naam → EVA-organisatietype (spiegelt mapContactType in sync.ts). */
 function mapType(typeName?: string): OrganisatieType {
@@ -72,9 +90,20 @@ export async function maakBouw7Relatie(input: Bouw7RelatieCreateInput): Promise<
     if (input.adres_land)      body.countryCode = input.adres_land
     if (input.opmerkingen)     body.information = input.opmerkingen
 
+    // Verplicht maatwerkveld (zie `soortOpdrachtgever`). Id via de definitielijst; ontbreekt
+    // het veld in deze Bouw7-omgeving, dan gaat de create zonder.
+    const soortAttrId = await resolveCustomAttributeId(
+      client,
+      d => /soortopdrachtgever/i.test((d.propertyName ?? '').replace(/^ca/, '')) || /soort opdrachtgever/i.test(d.name ?? ''),
+    )
+    if (soortAttrId != null) {
+      body.customAttributeValues = [{ customAttribute: { id: soortAttrId }, value: soortOpdrachtgever(input.naam, input.types) }]
+    }
+
     const created = await client.post<{ id?: number }>('/contact', body)
     return created?.id ?? null
-  } catch {
+  } catch (e) {
+    console.error('[create-contact] relatie aanmaken in Bouw7 mislukt:', e)
     return null
   }
 }

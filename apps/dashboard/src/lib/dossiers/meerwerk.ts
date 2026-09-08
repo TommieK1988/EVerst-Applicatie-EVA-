@@ -17,6 +17,7 @@ import { vereisSessie, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth'
 import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt } from './meerwerk-termijn'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -261,6 +262,14 @@ export async function updateMeerwerkRegel(
     if (!res.ok) waarschuwing = `Wijziging in EVA opgeslagen, maar terugschrijven naar Bouw7 mislukt: ${res.error}`
   }
 
+  // Aangenomen meerwerk dat al als termijn in de Bouw7-termijnstaat staat: bedrag, btw of
+  // omschrijving gewijzigd → termijn bijwerken, zodat de factuur straks het juiste bedrag heeft.
+  const raaktTermijn = ['bedrag_excl_btw', 'omschrijving', 'btw_pct'].some(k => k in velden)
+  if (bestaand?.bouw7_term_id != null && raaktTermijn) {
+    const t = await zetMeerwerkAlsTermijn(id)
+    if (!t.ok) waarschuwing = [waarschuwing, `Termijn in Bouw7 niet bijgewerkt: ${t.error}`].filter(Boolean).join(' ')
+  }
+
   revalidatePath(`/opdrachten/${row.dossier_id}/meerwerk`)
   return { ok: true, waarschuwing }
 }
@@ -404,14 +413,39 @@ export async function setMeerwerkStatus(
     }
   }
 
+  // Aangenomen meerwerk (vaste prijs, geen stelpost) bij akkoord als termijn in de Bouw7-
+  // termijnstaat zetten, zodat het vanuit de Verkoop-tab te factureren is. Regie en stelposten
+  // gaan via de nacalculatie. Mislukt het, dan blijft `bouw7_term_id` leeg en probeert de cron
+  // het opnieuw.
+  const naStatus = { ...(r as Regelvelden), ...(velden as Partial<Regelvelden>), status } as Regelvelden
+  let termijnGezet = false
+  if (status === 'akkoord' && meerwerkTermijnGeschikt(naStatus).ok && r.bouw7_term_id == null) {
+    const t = await zetMeerwerkAlsTermijn(id)
+    termijnGezet = t.ok
+    if (!t.ok) {
+      waarschuwing = [waarschuwing, `Nog niet als termijn in Bouw7: ${t.error}`].filter(Boolean).join(' ')
+      // Herkansing via de cron — alleen voor déze regel, niet voor historisch meerwerk.
+      await supabase.from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', id)
+    }
+  }
+
   // Akkoord meerwerk krijgt een bewakingscode en telt mee in de projectcijfers; die kant komt
   // uit Bouw7 en moet dus opnieuw opgehaald worden. De meerwerklijst zelf is EVA-eigen en klopt al.
-  if (r.bouw7_line_id != null && r.dossier_id) {
-    await ververSnapshotsNaSchrijven(r.dossier_id, ['athena_control'], ['athena_financial', 'security_links'])
+  // Is er zojuist een termijn bijgekomen, dan moet de termijnstaat er ook meteen kloppen: daar
+  // kijkt de gebruiker op de Verkoop-tab naar en daar zet hij de factuur mee klaar.
+  if ((r.bouw7_line_id != null || termijnGezet) && r.dossier_id) {
+    await ververSnapshotsNaSchrijven(
+      r.dossier_id,
+      termijnGezet ? ['termijnen', 'athena_control'] : ['athena_control'],
+      ['athena_financial', 'security_links'],
+    )
   }
   revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
   return { ok: true, waarschuwing }
 }
+
+/** De velden die `meerwerkTermijnGeschikt` beoordeelt (subset van MeerwerkRegel + bouw7_term_id). */
+type Regelvelden = Parameters<typeof meerwerkTermijnGeschikt>[0]
 
 /**
  * Zorgt dat het **dossier-calculatieproject** bestaat en geeft het project-id terug — géén apart
