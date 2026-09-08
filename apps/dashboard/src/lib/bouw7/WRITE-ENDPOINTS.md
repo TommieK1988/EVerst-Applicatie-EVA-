@@ -1094,6 +1094,23 @@ goedkeurder, of een `employeeId` die de vote accepteert — dan is de rest van d
 meteen bruikbaar en is het een halve dag werk. Is het antwoord nee, dan blijft accorderen in
 Bouw7 en is EVA het overzicht met een doorklik.
 
+### ⛔ De status omzetten is NIET hetzelfde als fiatteren
+
+Voor de hand liggende omweg: in plaats van te stemmen gewoon
+`PUT /purchase-invoice/{id}/update-status/2` doen — van "ter accordering" naar "Open". Niet doen.
+**Status en fiattering zijn twee onafhankelijke velden.**
+
+Gemeten op 15 willekeurige status-2-facturen (sep 2026): veertien hebben een afgeronde
+fiatteringsketen met een naam en datum, één (`8702164`) staat op status 2 **zonder enig
+`approval`-object**. Status 2 volgt dus normaal gesproken uít een fiattering, maar kan er ook
+los van gezet worden — en dat is precies wat er zou gebeuren als EVA deze route neemt: elke
+factuur zou eruitzien als 8702164. Goedgekeurd op papier, niemand eronder.
+
+Dat is *slechter* dan de EVA-medewerker-route hierboven: daar staat tenminste nog "EVA, namens
+<naam>" met de echte naam in de opmerking. Hier staat er niets. Bovendien valt dit endpoint
+onder het bestaande besluit in §2c (bedrag, BTW, factuurnummer en boekstuk blijven van Bouw7) —
+de status hoort daarbij.
+
 ### Stand van zaken in EVA
 
 `/inkoop/facturen` toont de hele keten (wie moet accorderen, wie gaf akkoord, met welke
