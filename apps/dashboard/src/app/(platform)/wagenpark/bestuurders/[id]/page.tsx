@@ -10,12 +10,33 @@ import KmPrognose from '@/components/wagenpark/bestuurders/KmPrognose'
 import AllowancesPaneel, { type AllowanceRij } from '@/components/wagenpark/bestuurders/AllowancesPaneel'
 import RitTypeToggle from '@/components/wagenpark/ritten/RitTypeToggle'
 import MedewerkerKoppeling, { type MedewerkerOptie } from '@/components/wagenpark/bestuurders/MedewerkerKoppeling'
+import PeriodeKiezer from '@/components/wagenpark/werktijden/PeriodeKiezer'
+import WerktijdenBlok from '@/components/wagenpark/werktijden/WerktijdenBlok'
+import { createClient as createServerClient } from '@everts/database/server'
+import { laadLayouts } from '@/app/actions/layouts'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
+import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { signaalSoort } from '@/lib/wagenpark/signalen'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Auth-user-id van de ingelogde gebruiker, voor de kolomvoorkeuren van de
+ * tabellen. Faalt de lookup, dan krijgt de tabel gewoon de standaardkolommen —
+ * een ontbrekende voorkeur mag nooit de pagina omleggen.
+ */
+async function huidigeAuthUserId(): Promise<string | null> {
+  try {
+    const sessionClient = await createServerClient()
+    const { data: { user } } = await sessionClient.auth.getUser()
+    return user?.id ?? null
+  } catch {
+    return null
+  }
+}
 
 type UluUserDetail = {
   id: number
@@ -117,7 +138,7 @@ type BevindingRow = {
 export default async function BestuurderDetailPage(
   props: {
     params: Promise<{ id: string }>
-    searchParams: Promise<{ type?: string }>
+    searchParams: Promise<{ type?: string; periode?: string; van?: string; tot?: string }>
   }
 ) {
   const searchParams = await props.searchParams;
@@ -131,6 +152,9 @@ export default async function BestuurderDetailPage(
   // Zonder privé-recht: nooit privé tonen — forceer naar zakelijk.
   const typeFilter = !magPrive && gevraagdType !== 'zakelijk' ? 'zakelijk' : gevraagdType
   const eff = ritTypeEffectiefSql('t')
+  // Periode voor het werktijden-blok onderaan. Staat in de URL, zodat je hem
+  // kunt bewaren of doorsturen en de server meteen de juiste dagen ophaalt.
+  const periode = bepaalPeriode(searchParams)
 
   const users = await pgQuery<UluUserDetail>(
     `select id, volledige_naam, firstname, lastname, email, actief, bijtelling_betaald,
@@ -243,6 +267,15 @@ export default async function BestuurderDetailPage(
       order by regel_code, categorie nulls first`,
     [userId],
   )
+  // Werktijden: te laat aangekomen / te vroeg vertrokken in de gekozen periode.
+  // Alleen ophalen met het privé-recht — het is precies dezelfde poort als voor
+  // de privé-ritten, en zonder dat recht komt het blok niet op het scherm.
+  const authUserId = magPrive ? await huidigeAuthUserId() : null
+  const [werktijden, layoutsWerktijden] = await Promise.all([
+    magPrive ? laadWerktijdGegevens(periode.van, periode.tot, String(userId)) : Promise.resolve(null),
+    magPrive && authUserId ? laadLayouts(authUserId, 'wagenpark-werktijden') : Promise.resolve([]),
+  ])
+
   // Medewerker-koppeling (spiegelbeeld van de koppeling op de medewerker-pagina)
   let medewerkerGekoppeld: MedewerkerOptie | null = null
   let medewerkersBeschikbaar: MedewerkerOptie[] = []
@@ -408,6 +441,36 @@ export default async function BestuurderDetailPage(
           </p>
           <AllowancesPaneel allowances={allowances} />
         </section>
+
+        {/* Werktijden — het gesprek over te laat komen en te vroeg weggaan.
+            Klikken op een dag opent het zijpaneel met de ritten van die dag en
+            de knoppen om hem af te handelen. */}
+        {magPrive && (
+          <section id="werktijden" className="bg-white rounded-lg border p-5 lg:col-span-2 scroll-mt-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-slate-700">Werktijden</h2>
+              <span className="text-xs text-slate-500">
+                {periode.label} — {datumKort(periode.van)} t/m {datumKort(periode.tot)}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Te laat aangekomen en te vroeg vertrokken, gemeten aan de zakelijke ritten
+              tegen het werkrooster. Klik op een dag voor de ritten en om hem af te vinken.
+              {werktijden?.handmatigAantal ? ` ${werktijden.handmatigAantal} handmatig toegekende signalen tellen niet mee: daar is geen tijd van bekend.` : ''}
+              {werktijden?.urenFout ? ` Let op: de geboekte uren konden niet uit Bouw7 worden opgehaald (${werktijden.urenFout}).` : ''}
+            </p>
+
+            <PeriodeKiezer periode={periode} pad={`/wagenpark/bestuurders/${userId}`} />
+
+            <WerktijdenBlok
+              data={werktijden?.rijen ?? []}
+              periode={periode}
+              layouts={layoutsWerktijden}
+              user_id={authUserId}
+              pdfUrl={`/wagenpark/bestuurders/${userId}/werktijden/pdf?van=${periode.van}&tot=${periode.tot}`}
+            />
+          </section>
+        )}
 
         {/* Signalen — per soort, want ze vragen om verschillende actie */}
         <BevindingenBlok

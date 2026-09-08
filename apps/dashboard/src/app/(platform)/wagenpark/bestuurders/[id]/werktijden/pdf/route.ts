@@ -1,10 +1,10 @@
 /**
- * Werktijden van één medewerker als PDF — de uitdraai die je meeneemt naar een
+ * Werktijden van één bestuurder als PDF — de uitdraai die je meeneemt naar een
  * functionerings- of beoordelingsgesprek.
  *
- * Leest exact dezelfde rijen als het scherm (`laadWerktijdGegevens`), zodat het
- * papier en het beeldscherm nooit uiteen kunnen lopen. De opmaak zelf staat in
- * `lib/wagenpark/werktijden-pdf.ts`.
+ * Leest exact dezelfde rijen als het werktijden-blok op de bestuurderpagina
+ * (`laadWerktijdGegevens`), zodat het papier en het beeldscherm nooit uiteen
+ * kunnen lopen. De opmaak zelf staat in `lib/wagenpark/werktijden-pdf.ts`.
  */
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
@@ -15,20 +15,23 @@ import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { bepaalPeriode } from '@/lib/wagenpark/periode'
 import { bouwWerktijdenPdf, werktijdenPdfBestandsnaam } from '@/lib/wagenpark/werktijden-pdf'
 
-export async function GET(req: Request) {
-  // Zelfde poort als de pagina zelf: aankomst- en vertrektijden met een naam
-  // erbij zijn privacygevoelig. De PDF wordt met verhoogde rechten gebouwd, dus
-  // deze controle staat er niet voor de sier.
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  // Zelfde poort als het blok op de bestuurderpagina: aankomst- en
+  // vertrektijden met een naam erbij zijn privacygevoelig. De PDF wordt met
+  // verhoogde rechten gebouwd, dus deze controle staat er niet voor de sier.
   if (!(await magPriveRittenZien())) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
   }
 
-  const url = new URL(req.url)
-  const medewerker = url.searchParams.get('medewerker')?.trim()
-  if (!medewerker) {
-    return NextResponse.json({ error: 'Medewerker ontbreekt' }, { status: 400 })
+  const { id } = await params
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: 'Onbekende bestuurder' }, { status: 400 })
   }
 
+  const url = new URL(req.url)
   const periode = bepaalPeriode({
     periode: url.searchParams.get('periode') ?? undefined,
     van: url.searchParams.get('van') ?? undefined,
@@ -39,15 +42,15 @@ export async function GET(req: Request) {
   const supabase = createAdminClient() as any
 
   const [gegevens, naamRijen, bedrijfResult] = await Promise.all([
-    laadWerktijdGegevens(periode.van, periode.tot, medewerker),
+    laadWerktijdGegevens(periode.van, periode.tot, id),
     pgQuery<{ naam: string }>(
       `select volledige_naam as naam from public.ulu_users where id::text = $1`,
-      [medewerker],
+      [id],
     ),
     supabase.from('bedrijfsgegevens').select('naam, logo_primair_url, logo_url').limit(1).maybeSingle(),
   ])
 
-  const naam = naamRijen[0]?.naam ?? 'Onbekende medewerker'
+  const naam = naamRijen[0]?.naam ?? `Bestuurder #${id}`
   const bedrijf = bedrijfResult.data as
     | { naam: string | null; logo_primair_url: string | null; logo_url: string | null }
     | null

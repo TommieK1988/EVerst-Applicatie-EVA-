@@ -25,7 +25,7 @@ async function huidigeAuthUserId(): Promise<string | null> {
 }
 
 /**
- * Afhandelen van een werktijd-signaal vanaf /wagenpark/werktijden.
+ * Afhandelen van een werktijd-signaal vanaf het werktijden-blok op een bestuurder.
  *
  * Waarom een eigen action en niet die uit compliance.ts: die revalideren alleen
  * /wagenpark/ritten en /wagenpark/bestuurders, waardoor een afgehandelde dag hier
@@ -85,9 +85,9 @@ export async function handelWerktijdSignaalAf(
     toelichting: toelichting.trim(),
   })
 
-  revalidatePath('/wagenpark/werktijden')
   revalidatePath('/wagenpark/ritten')
-  revalidatePath('/wagenpark/bestuurders')
+  revalidatePath('/wagenpark/bestuurders', 'layout')
+  revalidatePath('/wagenpark/dashboard')
 
   if (feedbackFout) {
     return { ok: false, error: `Status is aangepast, maar de toelichting niet bewaard: ${feedbackFout.message}` }
@@ -117,7 +117,8 @@ export async function heropenWerktijdSignaal(
     toelichting: 'Teruggezet naar te controleren.',
   })
 
-  revalidatePath('/wagenpark/werktijden')
   revalidatePath('/wagenpark/ritten')
+  revalidatePath('/wagenpark/bestuurders', 'layout')
+  revalidatePath('/wagenpark/dashboard')
   return { ok: true }
 }

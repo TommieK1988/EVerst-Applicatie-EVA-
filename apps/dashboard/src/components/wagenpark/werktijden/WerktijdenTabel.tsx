@@ -8,7 +8,6 @@ import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
   SOORT_LABEL, type WerktijdSoort,
 } from '@/lib/wagenpark/werktijd'
-import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 import DagPaneel from '@/components/wagenpark/werktijden/DagPaneel'
 
 /**
@@ -78,41 +77,14 @@ function tijd(t: string | null): string {
   return t ? t.slice(0, 5) : '—'
 }
 
-/** "wk 29 · 13 t/m 19 jul" — leesbaar bereik bij een ISO-weeknummer. */
-function weekLabel(week: string, weekStart: string): string {
-  const maandag = new Date(weekStart + 'T12:00:00Z')
-  const zondag = new Date(maandag)
-  zondag.setUTCDate(zondag.getUTCDate() + 6)
-  const kort = (d: Date) =>
-    d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'UTC' })
-  return `wk ${week.slice(-2)} · ${kort(maandag)} t/m ${kort(zondag)}`
-}
-
 export default function WerktijdenTabel({
   data,
   layouts,
   user_id,
-  onTotalen,
-  groeperen = true,
-  scherm = 'wagenpark-werktijden',
 }: {
   data: WerktijdRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
-  /** Totalen over de rijen die de kolomfilters overleven; voedt de tel-kaarten. */
-  onTotalen?: (t: Totalen) => void
-  /**
-   * Rijen bundelen per medewerker + week. Zet dit uit voor een lijst die al over
-   * één medewerker gaat: daar is de groepsbalk alleen maar een extra klik tussen
-   * jou en de dagen die je wilt zien.
-   */
-  groeperen?: boolean
-  /**
-   * Sleutel waaronder de kolomstand wordt bewaard. De lijst van één medewerker
-   * krijgt een eigen sleutel, zodat een kolomkeuze daar niet die van het
-   * volledige overzicht overschrijft (en andersom).
-   */
-  scherm?: string
 }) {
   // Het zijpaneel houdt het id vast, niet de rij zelf: na het afvinken komt er
   // via revalidatePath verse data binnen, en een vastgehouden object zou dan de
@@ -122,27 +94,6 @@ export default function WerktijdenTabel({
     () => (geopendId ? data.find((r) => r.id === geopendId) ?? null : null),
     [data, geopendId],
   )
-  // De tabel meldt terug welke rijen door zoekbalk en kolomfilters komen, zodat
-  // de kaarten boven de pagina hetzelfde tellen als wat je op je scherm ziet.
-  const meldTotalen = useCallback(
-    (rijen: WerktijdRij[]) => {
-      const t = { dagenLaat: 0, minutenLaat: 0, dagenVroeg: 0, minutenVroeg: 0 }
-      for (const r of rijen) {
-        // Verklaarde dagen blijven in de lijst staan maar tellen niet mee.
-        if (!teltMee(r.status)) continue
-        if (r.soort === 'te_laat') {
-          t.dagenLaat += 1
-          t.minutenLaat += r.minuten
-        } else {
-          t.dagenVroeg += 1
-          t.minutenVroeg += r.minuten
-        }
-      }
-      onTotalen?.(t)
-    },
-    [onTotalen],
-  )
-
   const bestuurderOpties = useMemo(
     () => [...new Set(data.map((r) => r.bestuurder))].sort((a, b) => a.localeCompare(b, 'nl')),
     [data],
@@ -162,10 +113,10 @@ export default function WerktijdenTabel({
         key: 'bestuurder',
         label: 'Medewerker',
         breedte: 180,
-        // In de lijst van één medewerker staat zijn naam al boven de pagina; een
-        // kolom die twaalf keer hetzelfde herhaalt kost alleen ruimte. Aan te
-        // zetten via kolombeheer als iemand hem toch wil.
-        standaard_zichtbaar: groeperen,
+        // De lijst gaat altijd over één medewerker en zijn naam staat al boven
+        // het blok; een kolom die twintig keer hetzelfde herhaalt kost alleen
+        // ruimte. Aan te zetten via kolombeheer als iemand hem toch wil.
+        standaard_zichtbaar: false,
         filterType: 'select',
         filterOpties: bestuurderOpties,
         sorteerWaarde: (r) => r.bestuurder,
@@ -295,22 +246,7 @@ export default function WerktijdenTabel({
         ),
       },
     ],
-    [bestuurderOpties, data, groeperen],
-  )
-
-  // Gebundeld per medewerker per week. De sleutel wordt in een useMemo gehouden:
-  // een objectliteral in de prop geeft TanStack elke render een nieuwe referentie,
-  // waarna het grouped row model herbouwt en de tab in een update-lus vastloopt.
-  const groepering = useMemo(
-    () =>
-      groeperen
-        ? {
-            sleutel: (r: WerktijdRij) => `${r.user_id_ulu}|${r.week}`,
-            kop: (rijen: WerktijdRij[]) => <WeekKop rijen={rijen} />,
-            standaardOpen: false,
-          }
-        : undefined,
-    [groeperen],
+    [bestuurderOpties, data],
   )
 
   // Totalen onder aan het Excel-bestand. Verklaarde dagen staan er apart onder,
@@ -345,7 +281,7 @@ export default function WerktijdenTabel({
   return (
     <>
       <OverzichtTabel
-        scherm={scherm}
+        scherm="wagenpark-werktijden"
         data={data}
         kolommen={kolommen}
         layouts={layouts}
@@ -354,70 +290,11 @@ export default function WerktijdenTabel({
         selecteerbaar={false}
         toonRijActie={false}
         dicht
-        groepering={groepering}
-        onGefilterd={meldTotalen}
         exportExtraRijen={exportTotalen}
         onRijKlik={(r) => setGeopendId(r.id)}
       />
 
       <DagPaneel rij={geopend} onClose={() => setGeopendId(null)} />
     </>
-  )
-}
-
-/** Groepsbalk: medewerker + week, met het subtotaal van die week erachter. */
-function WeekKop({ rijen }: { rijen: WerktijdRij[] }) {
-  const eerste = rijen[0]
-  if (!eerste) return null
-
-  let laatDagen = 0
-  let laatMin = 0
-  let vroegDagen = 0
-  let vroegMin = 0
-  let verklaard = 0
-  for (const r of rijen) {
-    // Verklaarde dagen tellen niet mee in het weeksubtotaal, maar worden er wel
-    // apart bij vermeld — anders lijkt een week met veel weggestreepte dagen
-    // gelijk aan een week waarin niets gebeurde.
-    if (!teltMee(r.status)) {
-      verklaard += 1
-      continue
-    }
-    if (r.soort === 'te_laat') {
-      laatDagen += 1
-      laatMin += r.minuten
-    } else {
-      vroegDagen += 1
-      vroegMin += r.minuten
-    }
-  }
-
-  return (
-    <span className="flex items-center gap-3 min-w-0 flex-1">
-      <span className="font-medium text-slate-900 truncate">{eerste.bestuurder}</span>
-      <span className="text-xs text-slate-500 flex-shrink-0">
-        {weekLabel(eerste.week, eerste.week_start)}
-      </span>
-      <span className="flex items-center gap-2 text-xs flex-shrink-0 ml-auto">
-        {laatDagen > 0 && (
-          <span className="text-amber-700">
-            {laatDagen}× te laat {minutenLabel(laatMin)}
-          </span>
-        )}
-        {vroegDagen > 0 && (
-          <span className="text-violet-700">
-            {vroegDagen}× te vroeg {minutenLabel(vroegMin)}
-          </span>
-        )}
-        {verklaard > 0 && (
-          <span className="text-slate-400" title="Verklaard; telt niet mee">
-            {verklaard}× verklaard
-          </span>
-        )}
-        <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-medium">
-          {minutenLabel(laatMin + vroegMin)}
-        </span>
-      </span>
-    </span>
   )
 }

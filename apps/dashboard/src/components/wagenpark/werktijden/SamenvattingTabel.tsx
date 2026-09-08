@@ -7,7 +7,6 @@ import { minutenLabel, omrekening, UREN_PER_WERKDAG } from '@/lib/wagenpark/werk
 import { bouwSamenvatting, type SamenvattingRij } from '@/lib/wagenpark/werktijd-samenvatting'
 import { MAAND_LABEL, type Periode, maandenInPeriode } from '@/lib/wagenpark/periode'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
-import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 
 export type { SamenvattingRij }
 
@@ -16,33 +15,17 @@ export default function SamenvattingTabel({
   layouts,
   user_id,
   periode,
-  onTotalen,
   onMedewerkerKlik,
 }: {
   data: WerktijdRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
   periode: Periode
-  onTotalen?: (t: Totalen) => void
-  /** Klik op een regel opent de dagen van die medewerker. */
+  /** Klik op een regel opent de bestuurderpagina van die medewerker. */
   onMedewerkerKlik?: (rij: SamenvattingRij) => void
 }) {
   const rijen = useMemo(() => bouwSamenvatting(data), [data])
   const zichtbareMaanden = useMemo(() => maandenInPeriode(periode), [periode])
-
-  const meldTotalen = useCallback(
-    (gefilterd: SamenvattingRij[]) => {
-      const t = { dagenLaat: 0, minutenLaat: 0, dagenVroeg: 0, minutenVroeg: 0 }
-      for (const r of gefilterd) {
-        t.dagenLaat += r.dagenLaat
-        t.minutenLaat += r.minutenLaat
-        t.dagenVroeg += r.dagenVroeg
-        t.minutenVroeg += r.minutenVroeg
-      }
-      onTotalen?.(t)
-    },
-    [onTotalen],
-  )
 
   const bestuurderOpties = useMemo(
     () => [...new Set(rijen.map((r) => r.bestuurder))].sort((a, b) => a.localeCompare(b, 'nl')),
@@ -198,7 +181,6 @@ export default function SamenvattingTabel({
       selecteerbaar={false}
       toonRijActie={false}
       dicht
-      onGefilterd={meldTotalen}
       exportExtraRijen={exportTotalen}
       onRijKlik={onMedewerkerKlik}
     />

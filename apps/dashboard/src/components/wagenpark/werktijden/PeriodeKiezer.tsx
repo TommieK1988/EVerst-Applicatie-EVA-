@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { CalendarRange } from 'lucide-react'
 import { PRESET_LABELS, type Periode, type PeriodePreset } from '@/lib/wagenpark/periode'
 
@@ -12,47 +13,55 @@ const PRESETS: Exclude<PeriodePreset, 'aangepast'>[] = [
   'vorig-jaar',
 ]
 
+/** De parameters die deze kiezer zélf beheert; al het andere blijft staan. */
+const EIGEN_PARAMS = ['periode', 'van', 'tot']
+
 /**
- * Periodekeuze boven de tabel. De keuze gaat via de URL en niet via state, zodat
- * je een periode kunt bewaren of doorsturen — en zodat de server meteen de
+ * Periodekeuze boven een overzicht. De keuze gaat via de URL en niet via state,
+ * zodat je een periode kunt bewaren of doorsturen — en zodat de server meteen de
  * juiste rijen ophaalt in plaats van alles te laden en client-side te filteren.
+ *
+ * `pad` is de pagina waar de kiezer op staat: hij wordt gebruikt door het
+ * wagenpark-dashboard én door het werktijden-blok op een bestuurder.
  */
-export default function PeriodeKiezer({ periode }: { periode: Periode }) {
-  const router = useRouter()
+export default function PeriodeKiezer({
+  periode,
+  pad,
+}: {
+  periode: Periode
+  /** Route waarnaar genavigeerd wordt, bv. `/wagenpark/dashboard`. */
+  pad: string
+}) {
   const params = useSearchParams()
   const [open, setOpen] = useState(periode.preset === 'aangepast')
   const [van, setVan] = useState(periode.van)
   const [tot, setTot] = useState(periode.tot)
 
-  function ga(next: URLSearchParams) {
-    // De weergave-keuze (per dag / per medewerker) en de medewerker waarop is
-    // ingezoomd moeten de periodewissel overleven. Zonder dat laatste stuitert
-    // je bij het kiezen van een ander kwartaal terug naar het volledige
-    // overzicht — precies wat je niet wilt als je met iemand aan tafel zit.
-    for (const sleutel of ['weergave', 'medewerker']) {
-      const waarde = params.get(sleutel)
-      if (waarde) next.set(sleutel, waarde)
+  /**
+   * Adres van deze pagina met een andere periode erin.
+   *
+   * Alles wat niet over de periode gaat blijft staan — een rit-typefilter, een
+   * geopende sectie, welke tab dan ook. Anders klapt de pagina bij het kiezen
+   * van een ander kwartaal terug naar de begintoestand.
+   */
+  function href(eigen: Record<string, string>): string {
+    const next = new URLSearchParams(eigen)
+    for (const [sleutel, waarde] of params.entries()) {
+      if (!EIGEN_PARAMS.includes(sleutel)) next.set(sleutel, waarde)
     }
-    router.push(`/wagenpark/werktijden?${next.toString()}`)
-  }
-
-  function kiesPreset(preset: string) {
-    setOpen(false)
-    ga(new URLSearchParams({ periode: preset }))
-  }
-
-  function kiesEigen() {
-    if (!van || !tot) return
-    ga(new URLSearchParams({ van, tot }))
+    return `${pad}?${next.toString()}`
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">
+      {/* Echte links, geen knoppen met `router.push`: de doel-URL staat dan in de
+          statusbalk, je kunt een periode in een nieuw tabblad openen of het adres
+          kopiëren, en Next haalt de pagina alvast op zodra je erover zweeft. */}
       {PRESETS.map((p) => (
-        <button
+        <Link
           key={p}
-          type="button"
-          onClick={() => kiesPreset(p)}
+          href={href({ periode: p })}
+          onClick={() => setOpen(false)}
           className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
             periode.preset === p
               ? 'bg-slate-900 text-white border-slate-900'
@@ -60,7 +69,7 @@ export default function PeriodeKiezer({ periode }: { periode: Periode }) {
           }`}
         >
           {PRESET_LABELS[p]}
-        </button>
+        </Link>
       ))}
 
       <button
@@ -93,13 +102,15 @@ export default function PeriodeKiezer({ periode }: { periode: Periode }) {
             className="text-sm border-0 p-0 focus:ring-0 text-slate-700"
             aria-label="Tot en met datum"
           />
-          <button
-            type="button"
-            onClick={kiesEigen}
-            className="ml-1 px-2 py-0.5 rounded bg-green-600 text-white text-xs hover:bg-green-700"
+          <Link
+            href={van && tot ? href({ van, tot }) : '#'}
+            aria-disabled={!van || !tot}
+            className={`ml-1 px-2 py-0.5 rounded text-white text-xs ${
+              van && tot ? 'bg-green-600 hover:bg-green-700' : 'bg-slate-300 pointer-events-none'
+            }`}
           >
             Toon
-          </button>
+          </Link>
         </span>
       )}
     </div>

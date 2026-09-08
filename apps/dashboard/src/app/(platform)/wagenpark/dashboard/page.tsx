@@ -1,11 +1,19 @@
-import { Car, AlertTriangle, Route, Users, RefreshCw } from 'lucide-react'
+import { Car, AlertTriangle, Route, Users, RefreshCw, Clock, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import StatCard from '@/components/wagenpark/shared/StatCard'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import Livetracker from '@/components/wagenpark/shared/Livetracker'
 import RijscoreRanking from '@/components/wagenpark/dashboard/RijscoreRanking'
+import WerktijdenRanglijst from '@/components/wagenpark/dashboard/WerktijdenRanglijst'
+import PeriodeKiezer from '@/components/wagenpark/werktijden/PeriodeKiezer'
 import { createClient } from '@/lib/wagenpark/supabase/server'
+import { createClient as createServerClient } from '@everts/database/server'
 import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
+import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
+import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
+import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
+import { minutenLabel, teltMee } from '@/lib/wagenpark/werktijd'
+import { laadLayouts } from '@/app/actions/layouts'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,49 +29,96 @@ type BevindingRij = {
   voertuig_id: string | null
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ periode?: string; van?: string; tot?: string }>
+}) {
   const supabase = await createClient()
   const magPrive = await magPriveRittenZien()
 
-  // Parallel queries
-  const [voertuigenRes, bevindingenRes, rittenMaandRes, topBevindingenRes] =
-    await Promise.all([
-      supabase
-        .from('voertuigen')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'actief'),
-      supabase
-        .from('compliance_bevindingen')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'open'),
-      supabase
-        .from('ulu_trips')
-        .select('afstand_km, rit_type_berekend')
-        .gte(
-          'start_datum',
-          new Date(new Date().setDate(1)).toISOString().slice(0, 10),
-        ),
-      supabase
-        .from('compliance_bevindingen')
-        .select('id, regel_code, omschrijving, ernst, gegenereerd_op, periode_start, periode_eind, medewerker_id, voertuig_id')
-        .eq('status', 'open')
-        // Sorteer op ernst (overtreding/waarschuwing eerst), dan echte datum van de overtreding
-        .order('ernst', { ascending: true })
-        .order('periode_eind', { ascending: false, nullsFirst: false })
-        .order('periode_start', { ascending: false, nullsFirst: false })
-        .limit(5),
-    ])
+  // Eén periode voor de hele pagina. Alleen "Actieve voertuigen" staat er
+  // buiten: dat is een momentopname van het wagenpark, geen periodecijfer.
+  const periode = bepaalPeriode(await searchParams)
+
+  let user_id: string | null = null
+  try {
+    const sessionClient = await createServerClient()
+    const { data: { user } } = await sessionClient.auth.getUser()
+    user_id = user?.id ?? null
+  } catch {
+    // niet ingelogd of sessie niet beschikbaar
+  }
+
+  const [
+    voertuigenRes,
+    bevindingenRes,
+    rittenRes,
+    topBevindingenRes,
+    werktijden,
+    layoutsSamenvatting,
+  ] = await Promise.all([
+    supabase
+      .from('voertuigen')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'actief'),
+    supabase
+      .from('compliance_bevindingen')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'open')
+      .gte('periode_start', periode.van)
+      .lte('periode_start', periode.tot),
+    supabase
+      .from('ulu_trips')
+      .select('afstand_km, rit_type_berekend')
+      .gte('start_datum', periode.van)
+      .lte('start_datum', periode.tot),
+    supabase
+      .from('compliance_bevindingen')
+      .select('id, regel_code, omschrijving, ernst, gegenereerd_op, periode_start, periode_eind, medewerker_id, voertuig_id')
+      .eq('status', 'open')
+      .gte('periode_start', periode.van)
+      .lte('periode_start', periode.tot)
+      // Sorteer op ernst (overtreding/waarschuwing eerst), dan echte datum van de overtreding
+      .order('ernst', { ascending: true })
+      .order('periode_eind', { ascending: false, nullsFirst: false })
+      .order('periode_start', { ascending: false, nullsFirst: false })
+      .limit(5),
+    // Werktijden alleen ophalen als de gebruiker ze mag zien — anders is het een
+    // dure query voor gegevens die toch niet op het scherm komen.
+    magPrive
+      ? laadWerktijdGegevens(periode.van, periode.tot)
+      : Promise.resolve(null),
+    magPrive && user_id
+      ? laadLayouts(user_id, 'wagenpark-werktijden-samenvatting')
+      : Promise.resolve([]),
+  ])
 
   const aantalVoertuigen = voertuigenRes.count ?? 0
   const aantalBevindingen = bevindingenRes.count ?? 0
 
-  const ritten = rittenMaandRes.data ?? []
+  const ritten = rittenRes.data ?? []
   const kmZakelijk = ritten
     .filter((r) => r.rit_type_berekend === 'zakelijk')
     .reduce((a: number, r) => a + (r.afstand_km ?? 0), 0)
   const kmPrive = ritten
     .filter((r) => r.rit_type_berekend === 'prive')
     .reduce((a: number, r) => a + (r.afstand_km ?? 0), 0)
+
+  // Werktijd-totalen over de hele periode. Verklaarde dagen tellen niet mee —
+  // zelfde rekenregel als in de tabel eronder, zodat de tegels en de lijst niet
+  // uiteen kunnen lopen.
+  const werktijdRijen = werktijden?.rijen ?? []
+  const werktijdTotalen = bouwSamenvatting(werktijdRijen).reduce(
+    (t, r) => ({
+      minutenLaat: t.minutenLaat + r.minutenLaat,
+      dagenLaat: t.dagenLaat + r.dagenLaat,
+      minutenVroeg: t.minutenVroeg + r.minutenVroeg,
+      dagenVroeg: t.dagenVroeg + r.dagenVroeg,
+    }),
+    { minutenLaat: 0, dagenLaat: 0, minutenVroeg: 0, dagenVroeg: 0 },
+  )
+  const werktijdDagen = werktijdRijen.filter((r) => teltMee(r.status)).length
 
   const topBevindingen: BevindingRij[] = (topBevindingenRes.data ?? []) as BevindingRij[]
 
@@ -73,7 +128,10 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         titel="Wagenpark-dashboard"
-        omschrijving="Overzicht van voertuigen, rijgedrag en openstaande compliance-bevindingen."
+        omschrijving={
+          `Voertuigen, rijgedrag, werktijden en openstaande compliance-bevindingen. ` +
+          `${periode.label} — ${datumKort(periode.van)} t/m ${datumKort(periode.tot)}.`
+        }
         actions={
           <Link
             href="/wagenpark/ritten/sync"
@@ -95,32 +153,64 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      <PeriodeKiezer periode={periode} pad="/wagenpark/dashboard" />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Actieve voertuigen"
           waarde={aantalVoertuigen}
           icon={Car}
           kleur="blauw"
+          subtekst="nu in het wagenpark"
         />
         <StatCard
           label="Open bevindingen"
           waarde={aantalBevindingen}
           icon={AlertTriangle}
           kleur={aantalBevindingen > 0 ? 'oranje' : 'groen'}
+          subtekst="uit deze periode"
         />
         <StatCard
-          label="Zakelijk (maand)"
+          label="Zakelijk"
           waarde={`${Math.round(kmZakelijk).toLocaleString('nl-NL')} km`}
           icon={Route}
           kleur="groen"
+          subtekst={periode.label.split(' · ')[0].toLowerCase()}
         />
         {magPrive && (
           <StatCard
-            label="Privé (maand)"
+            label="Privé"
             waarde={`${Math.round(kmPrive).toLocaleString('nl-NL')} km`}
             icon={Users}
             kleur="grijs"
+            subtekst={periode.label.split(' · ')[0].toLowerCase()}
           />
+        )}
+
+        {magPrive && (
+          <>
+            <StatCard
+              label="Te laat"
+              waarde={minutenLabel(werktijdTotalen.minutenLaat)}
+              icon={Clock}
+              kleur="oranje"
+              subtekst={`${werktijdTotalen.dagenLaat} ${werktijdTotalen.dagenLaat === 1 ? 'dag' : 'dagen'}`}
+            />
+            <StatCard
+              label="Te vroeg weg"
+              waarde={minutenLabel(werktijdTotalen.minutenVroeg)}
+              icon={LogOut}
+              kleur="grijs"
+              subtekst={`${werktijdTotalen.dagenVroeg} ${werktijdTotalen.dagenVroeg === 1 ? 'dag' : 'dagen'}`}
+            />
+            <StatCard
+              label="Werktijd-afwijking"
+              waarde={minutenLabel(werktijdTotalen.minutenLaat + werktijdTotalen.minutenVroeg)}
+              icon={Clock}
+              kleur="grijs"
+              subtekst={`${werktijdDagen} gemarkeerde dagen`}
+            />
+          </>
         )}
       </div>
 
@@ -128,6 +218,33 @@ export default async function DashboardPage() {
       {magPrive && (
         <div className="mb-8">
           <Livetracker />
+        </div>
+      )}
+
+      {/* Werktijden per medewerker — wie springt eruit? Klik door naar de
+          bestuurder voor de dagen zelf en de uitdraai. */}
+      {magPrive && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-slate-700 mb-2">
+            Werktijden per medewerker
+          </h2>
+          {werktijden?.urenFout && (
+            <p className="text-xs text-amber-700 mb-2">
+              De geboekte uren konden niet uit Bouw7 worden opgehaald ({werktijden.urenFout}).
+            </p>
+          )}
+          {werktijdRijen.length === 0 ? (
+            <p className="text-sm text-slate-500 bg-white rounded-lg border p-5">
+              Geen te late aankomsten of vroege vertrekken in deze periode.
+            </p>
+          ) : (
+            <WerktijdenRanglijst
+              data={werktijdRijen}
+              periode={periode}
+              layouts={layoutsSamenvatting}
+              user_id={user_id}
+            />
+          )}
         </div>
       )}
 
@@ -142,7 +259,7 @@ export default async function DashboardPage() {
         </div>
         {topBevindingen.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">
-            Geen open bevindingen op dit moment.
+            Geen open bevindingen in deze periode.
           </div>
         ) : (
           <ul className="divide-y">
