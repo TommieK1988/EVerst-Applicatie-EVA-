@@ -4,7 +4,7 @@ import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import { signPad } from '@/lib/materieel/bestanden'
-import { volledigeNaam } from '@/lib/materieel/data'
+import { getMedewerkerOpties, getTeamOpties, volledigeNaam } from '@/lib/materieel/data'
 import { ALGEMEEN_GEBRUIK, type MaterieelObject } from '@/lib/materieel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
 import PaspoortMobiel from '@/components/mobiel/materieel/PaspoortMobiel'
@@ -23,6 +23,9 @@ export default async function MobielPaspoortPage({
   const medewerker = await vereisMaterieelToegang('lezen', '/m')
   const rechten = await getEffectieveRechten(medewerker)
   const magSchrijven = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
+  // Uitgeven aan een ander is kantoorwerk; alleen 'beheren' krijgt die lijsten
+  // mee, zodat we ze voor de buitendienst niet eens ophalen.
+  const magBeheren = heeftModuleToegang(rechten, 'materieelbeheer', 'beheren')
 
   const { id } = await params
   const { scan } = await searchParams
@@ -46,7 +49,11 @@ export default async function MobielPaspoortPage({
     if (team) toegewezenNaam = (team as { naam: string }).naam
   }
 
-  const fotoUrl = await signPad(object.hoofdfoto_path)
+  const [fotoUrl, medewerkers, teams] = await Promise.all([
+    signPad(object.hoofdfoto_path),
+    magBeheren ? getMedewerkerOpties() : Promise.resolve([]),
+    magBeheren ? getTeamOpties() : Promise.resolve([]),
+  ])
 
   return (
     <>
@@ -57,6 +64,9 @@ export default async function MobielPaspoortPage({
         toegewezenNaam={toegewezenNaam}
         mijnId={medewerker.id}
         magSchrijven={magSchrijven}
+        magBeheren={magBeheren}
+        medewerkers={medewerkers}
+        teams={teams}
         viaScan={scan === '1'}
       />
     </>

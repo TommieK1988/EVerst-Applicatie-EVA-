@@ -142,6 +142,20 @@ export async function zetStatus(id: string, status: MaterieelStatus): Promise<Ac
 
 /* ── Toewijzing / uitgifte ────────────────────────────────────────── */
 
+/**
+ * Materieel toewijzen.
+ *
+ * RECHTEN — twee niveaus, bewust:
+ *  - **jezelf** iets aanpakken mag met 'schrijven'. Dat is het dagelijkse gebaar
+ *    van de buitendienst: je scant een machine en zet hem op je eigen naam.
+ *  - **een ander** (of een team) iets op naam zetten vraagt 'beheren'. Anders
+ *    kan iedereen materieel op de naam van een collega schuiven en klopt de
+ *    lijst "wie heeft wat" niet meer. Uitgeven is kantoorwerk: projectbureau en
+ *    directie hebben 'beheren', de buitendienst 'schrijven'.
+ *
+ * De toets staat hier en niet in het scherm, zodat hij ook geldt voor de
+ * desktop en voor een rechtstreekse aanroep van deze action.
+ */
 export async function wijsToe(
   id: string,
   input: { niveau: ToewijzingNiveau; medewerker_id?: string | null; team_id?: string | null; opmerking?: string | null },
@@ -150,6 +164,14 @@ export async function wijsToe(
 
   if (input.niveau === 'persoonlijk' && !input.medewerker_id) return { ok: false, error: 'Kies een medewerker' }
   if (input.niveau === 'team' && !input.team_id) return { ok: false, error: 'Kies een team' }
+
+  const naarZichzelf = input.niveau === 'persoonlijk' && input.medewerker_id === g.medewerker.id
+  if (!naarZichzelf) {
+    const beheer = await gate('beheren')
+    if (!beheer.ok) {
+      return { ok: false, error: 'Alleen het projectbureau kan materieel op naam van iemand anders zetten. Je kunt het wel op je eigen naam zetten, inleveren of een storing melden.' }
+    }
+  }
 
   const client = db()
   // Lopende toewijzing afsluiten.

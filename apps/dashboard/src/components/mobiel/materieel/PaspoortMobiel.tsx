@@ -4,9 +4,12 @@ import React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { legScanVast, zetOpMijnNaam } from '@/app/m/materieel/actions'
-import { neemTerug, voegOnderhoudToe, zetStatus } from '@/app/(platform)/materieelbeheer/actions'
+import { neemTerug, voegOnderhoudToe, wijsToe, zetStatus } from '@/app/(platform)/materieelbeheer/actions'
 import { codeLabel, heeftSticker } from '@/lib/materieel/qr'
-import { CATEGORIE_LABELS, STATUS_META, type MaterieelCategorie, type MaterieelStatus } from '@/lib/materieel/types'
+import {
+  CATEGORIE_LABELS, STATUS_META,
+  type MaterieelCategorie, type MaterieelStatus, type Optie,
+} from '@/lib/materieel/types'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './stijl'
 
 /**
@@ -16,6 +19,12 @@ import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './
  *
  * Bewerken van de administratieve velden (waarde, leverancier, garantie) zit
  * hier bewust niet: dat is kantoorwerk en staat op de desktop.
+ *
+ * Uitgeven aan een cóllega staat er alleen voor wie 'beheren' heeft
+ * (projectbureau, directie). Met alleen 'schrijven' kun je materieel op je eigen
+ * naam zetten, inleveren en een storing melden — maar niet op andermans naam
+ * schuiven; dan klopt "wie heeft wat" binnen een week niet meer. De server
+ * bewaakt dat ook zelf, dit scherm laat de knop alleen niet zien.
  */
 export default function PaspoortMobiel({
   object,
@@ -23,6 +32,9 @@ export default function PaspoortMobiel({
   toegewezenNaam,
   mijnId,
   magSchrijven,
+  magBeheren,
+  medewerkers,
+  teams,
   /** Kwam de gebruiker hier via een scan? Dan die scan vastleggen. */
   viaScan,
 }: {
@@ -43,6 +55,10 @@ export default function PaspoortMobiel({
   /** Id van de ingelogde medewerker — bepaalt of dit al op jouw naam staat. */
   mijnId: string
   magSchrijven: boolean
+  /** 'beheren' — mag materieel aan een ander uitgeven. */
+  magBeheren: boolean
+  medewerkers: Optie[]
+  teams: Optie[]
   viaScan: boolean
 }) {
   const router = useRouter()
@@ -51,6 +67,9 @@ export default function PaspoortMobiel({
   const [melding, setMelding] = React.useState<string | null>(null)
   const [storingOpen, setStoringOpen] = React.useState(false)
   const [storingTekst, setStoringTekst] = React.useState('')
+  // Waarde van de uitgifte-keuzelijst: 'm:<id>' of 't:<id>' — één lijst met
+  // collega's én bussen/werkplaatsen, want dat is dezelfde vraag: waar ligt het.
+  const [uitgifte, setUitgifte] = React.useState('')
 
   // Scan éénmalig vastleggen. Zonder deze markering vuurt het in
   // ontwikkelmodus twee keer (React draait effecten dan dubbel).
@@ -140,6 +159,52 @@ export default function PaspoortMobiel({
             >
               Inleveren
             </button>
+          )}
+
+          {magBeheren && (medewerkers.length > 0 || teams.length > 0) && (
+            <div style={kaart}>
+              <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600, marginBottom: 6 }}>
+                Uitgeven aan
+              </div>
+              <select
+                value={uitgifte}
+                onChange={(e) => setUitgifte(e.target.value)}
+                style={{ ...veld, marginBottom: 8 }}
+              >
+                <option value="">Kies een collega of team…</option>
+                {medewerkers.length > 0 && (
+                  <optgroup label="Collega's">
+                    {medewerkers.map((m) => (
+                      <option key={m.id} value={`m:${m.id}`}>{m.naam}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {teams.length > 0 && (
+                  <optgroup label="Bussen en werkplaatsen">
+                    {teams.map((t) => (
+                      <option key={t.id} value={`t:${t.id}`}>{t.naam}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <button
+                type="button"
+                disabled={bezig || uitgifte === ''}
+                onClick={() => {
+                  const [soort, id] = uitgifte.split(':')
+                  return doe(
+                    () => wijsToe(object.id, soort === 't'
+                      ? { niveau: 'team', team_id: id }
+                      : { niveau: 'persoonlijk', medewerker_id: id },
+                    ),
+                    'Uitgegeven',
+                  )
+                }}
+                style={{ ...primaireKnop, width: '100%', opacity: bezig || uitgifte === '' ? 0.5 : 1 }}
+              >
+                Toewijzen
+              </button>
+            </div>
           )}
 
           {!storingOpen ? (
