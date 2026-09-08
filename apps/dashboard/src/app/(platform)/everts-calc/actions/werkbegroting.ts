@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client } from '@/lib/bouw7/client'
-import type { Bouw7ControlResponse, Bouw7ContractOrderLine } from '@/lib/bouw7/client'
+import type { Bouw7ControlResponse, Bouw7ContractOrderLine, Bouw7CostTypeId } from '@/lib/bouw7/client'
+import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
+import { dossierBouw7Id, leesDossierBron, ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
+import type { AthenaControlPayload, ContractOrderLinesPayload } from '@/lib/bouw7/snapshot-bronnen'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
 
 export interface SyncWerkbegrotingResultaat {
@@ -570,7 +573,7 @@ export async function accordeerWerkbegroting(
       // Doelhoofdstuk voor evt. nieuwe codes: meegegeven door de client → anders 'WB' → anders het eerste.
       let hoofdstuk = doelHoofdstukId ?? null
       if (hoofdstuk == null) {
-        const hs = await getProjectHoofdstukken(payload.dossierId)
+        const hs = await getProjectHoofdstukken(payload.dossierId, { live: true })
         if (hs.ok) hoofdstuk = (hs.hoofdstukken.find(h => h.naam.trim().toUpperCase() === 'WB') ?? hs.hoofdstukken[0])?.id ?? null
       }
       const bouw7 = await stuurBeideNaarBouw7Intern(payload.dossierId, payload, hoofdstuk)
@@ -792,10 +795,23 @@ export type ResolveBewakingscodesResultaat =
  * het begrote bedrag en de begrote uren. Bron: `/cost-type/{ct}/chapters` (securityCodes);
  * ontbrekende PSL-ids worden aangevuld uit de bestelregels (`/list/contract-order-lines`).
  */
-export async function resolveBewakingscodes(dossierId: string): Promise<ResolveBewakingscodesResultaat> {
-  const ctx = await bouw7Context(dossierId)
-  if (!ctx.ok) return ctx
-  const { client, bouw7Id } = ctx
+export async function resolveBewakingscodes(
+  dossierId: string,
+  /**
+   * `live: true` haalt rechtstreeks uit Bouw7 in plaats van uit de snapshot.
+   *
+   * Alleen voor schrijfpaden. Wie een PSL gaat aanmaken of een prognose gaat wegschrijven, moet
+   * op de actuele structuur werken -- schrijven op een PSL-id van vanochtend kan naast het doel
+   * landen. Alle leespaden (schermen) laten dit uit; die horen Bouw7 niet te raken.
+   */
+  opties?: { live?: boolean },
+): Promise<ResolveBewakingscodesResultaat> {
+  const live = opties?.live === true
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
+
+  const client = live ? (await getBouw7ClientOfNull()) : null
+  if (live && !client) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
 
   // Gekeyd op identiteit (code + omschrijving): gelijk-genummerde bewakingscodes met een
   // andere omschrijving blijven zo apart en vallen niet tegen elkaar weg.
@@ -814,11 +830,16 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
   }
 
   try {
-    const responses = await Promise.all(
-      PROGNOSE_KOSTENSOORTEN.map(ct =>
-        client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`).catch(() => null),
-      ),
-    )
+    const responses = client
+      ? await Promise.all(
+          PROGNOSE_KOSTENSOORTEN.map(ct =>
+            client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`).catch(() => null),
+          ),
+        )
+      : await (async () => {
+          const payload = (await leesDossierBron<AthenaControlPayload>(dossierId, 'athena_control')).data
+          return PROGNOSE_KOSTENSOORTEN.map(ct => payload?.[ct as Bouw7CostTypeId] ?? null)
+        })()
     PROGNOSE_KOSTENSOORTEN.forEach((ct, i) => {
       const resp = responses[i]
       if (!resp) return
@@ -845,10 +866,12 @@ export async function resolveBewakingscodes(dossierId: string): Promise<ResolveB
     // Fallback: ontbrekende PSL-ids aanvullen uit de bestelregels.
     const ontbreekt = [...map.values()].some(r => PROGNOSE_KOSTENSOORTEN.some(ct => r.begrootPerCt[ct] != null && r.pslPerCt[ct] == null))
     if (ontbreekt) {
-      const orderLines = await client
-        .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })
-        .then(r => r.items ?? [])
-        .catch(() => [] as Bouw7ContractOrderLine[])
+      const orderLines = client
+        ? await client
+            .get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })
+            .then(r => r.items ?? [])
+            .catch(() => [] as Bouw7ContractOrderLine[])
+        : ((await leesDossierBron<ContractOrderLinesPayload>(dossierId, 'contract_order_lines')).data?.items ?? [])
       // Map is op identiteit gekeyd; hier matchen we op code (bestelregels dragen geen
       // omschrijving) en vullen de PSL bij op de eerste ref van die code die er nog geen heeft.
       const refsByCode = new Map<string, BewakingscodeRef[]>()
@@ -1038,12 +1061,29 @@ async function zorgVoorOntbrekendePsls(
 /** Eén bestaand hoofdstuk (securityCodeChapter) op een project. */
 export type Hoofdstuk = { id: number; naam: string }
 
-/** Haalt de bestaande hoofdstukken van een Bouw7-project op (voor de doelhoofdstuk-keuze in EVA). */
-export async function getProjectHoofdstukken(dossierId: string): Promise<{ ok: true; hoofdstukken: Hoofdstuk[] } | { ok: false; error: string }> {
-  const ctx = await bouw7Context(dossierId)
-  if (!ctx.ok) return ctx
+/**
+ * Haalt de bestaande hoofdstukken van een Bouw7-project op (voor de doelhoofdstuk-keuze in EVA).
+ *
+ * `live: true` alleen vlak vóór een schrijfactie die een hoofdstuk-id nodig heeft; de keuzelijst
+ * in het scherm komt uit de snapshot.
+ */
+export async function getProjectHoofdstukken(
+  dossierId: string,
+  opties?: { live?: boolean },
+): Promise<{ ok: true; hoofdstukken: Hoofdstuk[] } | { ok: false; error: string }> {
+  const live = opties?.live === true
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
   try {
-    const struct = await ctx.client.get<SecObject[]>(`/project/${ctx.bouw7Id}/project-security-links`)
+    let struct: SecObject[] | null
+    if (live) {
+      const client = await getBouw7ClientOfNull()
+      if (!client) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+      struct = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`)
+    } else {
+      struct = (await leesDossierBron<SecObject[]>(dossierId, 'security_links')).data
+      if (!struct) return { ok: true, hoofdstukken: [] }
+    }
     const hoofdstukken = (struct[0]?.securityCodesPerChapters ?? [])
       .map(c => ({ id: c.securityCodeChapter?.id as number, naam: c.securityCodeChapter?.name ?? '' }))
       .filter(h => h.id != null)
@@ -1085,7 +1125,7 @@ export async function maakMeerwerkBewakingscodeBouw7(
   //    en legt `zorgVoorOntbrekendePsls` zelf het hoofdstuk "Totaal" aan — niet afbreken dus.
   let chapterId = opts.hoofdstukId ?? null
   if (chapterId == null) {
-    const hk = await getProjectHoofdstukken(dossierId)
+    const hk = await getProjectHoofdstukken(dossierId, { live: true })
     if (hk.ok) {
       const mw = hk.hoofdstukken.find(h => /meerwerk|^mw\b|^mw$/i.test(h.naam.trim()))
       chapterId = (mw ?? hk.hoofdstukken[0])?.id ?? null
@@ -1103,8 +1143,8 @@ export async function maakMeerwerkBewakingscodeBouw7(
     return { ok: false, error: maakRes.fouten.join(' ') }
   }
 
-  // 3. PSL-id teruglezen voor de prognose-write.
-  const resolved = await resolveBewakingscodes(dossierId)
+  // 3. PSL-id teruglezen voor de prognose-write — moet de zojuist aangemaakte PSL zien.
+  const resolved = await resolveBewakingscodes(dossierId, { live: true })
   const ref = resolved.ok ? resolved.codes.find(c => c.code === code) : undefined
   const pslId = ref?.pslPerCt[ct] ?? null
 
@@ -1144,7 +1184,7 @@ export async function vindVrijeBewakingscode(
   const gebruikt = new Set<string>(bezet.map(c => c.trim().toUpperCase()).filter(Boolean))
   // Bouw7 is gezaghebbend over wat er al op het project staat; lukt de call niet, dan blijft de
   // EVA-kant de enige bron (en geeft de codes-toewijzing hoogstens een botsing die Bouw7 weigert).
-  const resolved = await resolveBewakingscodes(dossierId)
+  const resolved = await resolveBewakingscodes(dossierId, { live: true })
   if (resolved.ok) for (const c of resolved.codes) gebruikt.add(c.code.trim().toUpperCase())
 
   for (let n = 1; n <= 99; n++) {
@@ -1168,7 +1208,7 @@ export async function maakStelpostBewakingscodeBouw7(
   dossierId: string,
   opts: { code: string; naam: string; begroot?: number | null; kostensoort?: number },
 ): Promise<MeerwerkBewakingscodeResultaat> {
-  const hk = await getProjectHoofdstukken(dossierId)
+  const hk = await getProjectHoofdstukken(dossierId, { live: true })
   if (!hk.ok) return { ok: false, error: hk.error }
   const stelpost = hk.hoofdstukken.find(h => /stelpost|^sp\b|^sp$/i.test(h.naam.trim()))
   // Geen stelpost-hoofdstuk? Neem het eerste, maar nooit een hoofdstuk dat naar meerwerk verwijst.
@@ -1218,8 +1258,8 @@ export type PrognoseResultaat =
   | { ok: false; error: string }
 
 /** Gedeelde berekening: match werkbegroting-codes op Bouw7-bewakingscodes en bepaal de verschillen. */
-async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPrognoseTotalen): Promise<PrognoseResultaat> {
-  const resolved = await resolveBewakingscodes(dossierId)
+async function berekenPrognoseRegels(dossierId: string, totalen: WerkbegrotingPrognoseTotalen, live = false): Promise<PrognoseResultaat> {
+  const resolved = await resolveBewakingscodes(dossierId, { live })
   if (!resolved.ok) return resolved
   // Match op identiteit (code + omschrijving); val terug op code alleen voor bestaande
   // kostengroepen die (nog) zonder omschrijving zijn vastgelegd.
@@ -1358,7 +1398,8 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
     }
   }
 
-  const berekend = await berekenPrognoseRegels(dossierId, totalen)
+  // Schrijfpad: op de actuele structuur werken, niet op de stand van vanochtend.
+  const berekend = await berekenPrognoseRegels(dossierId, totalen, true)
   if (!berekend.ok) return { ok: false, error: berekend.error }
 
   const ctx = await bouw7Context(dossierId)
@@ -1381,7 +1422,7 @@ export async function stuurWerkbegrotingPrognoseBouw7(dossierId: string, totalen
 
   // 2) Eén keer resolven na het aanmaken → nieuwe PSL-id's invullen + huidige "Niet/anders begroot"
   //    per code ophalen (voor de reset-sync hieronder).
-  const naResolve = await resolveBewakingscodes(dossierId)
+  const naResolve = await resolveBewakingscodes(dossierId, { live: true })
   const codeMap = naResolve.ok ? new Map(naResolve.codes.map(c => [codeIdentity(c.code, c.naam), c])) : new Map<string, BewakingscodeRef>()
   for (const r of berekend.regels) {
     if (r.actie === 'aanmaken' && r.pslId == null) {
@@ -1559,19 +1600,33 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
  */
 export async function getVergrendeldeBewakingscodes(
   dossierId: string,
+  /**
+   * `live: true` voor de fiscale controle vlak vóór een schrijfactie: een code die sinds de
+   * laatste snapshot besteld is, mag niet alsnog overschreven worden. Schermen laten dit uit.
+   */
+  opties?: { live?: boolean },
 ): Promise<{ ok: true; codes: string[] } | { ok: false; error: string }> {
-  const ctx = await bouw7Context(dossierId)
-  if (!ctx.ok) return ctx
-  const { client, bouw7Id } = ctx
+  const live = opties?.live === true
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
+  const client = live ? (await getBouw7ClientOfNull()) : null
+  if (live && !client) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+
   const codes = new Set<string>()
   try {
     type CodeLink = { projectSecurityLink?: { code?: string | null } | null }
     type ApolloInv = { deliveryTicket?: { securityLink?: { code?: { code?: string | null } | null } | null } | null }
-    const [orderResp, subResp, apolloInvoices] = await Promise.all([
-      client.get<{ items?: CodeLink[] }>('/list/purchase-order-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
-      client.get<{ items?: CodeLink[] }>('/list/subcontractor-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
-      client.getApolloAll<ApolloInv>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => [] as ApolloInv[]),
-    ])
+    const [orderResp, subResp, apolloInvoices] = client
+      ? await Promise.all([
+          client.get<{ items?: CodeLink[] }>('/list/purchase-order-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
+          client.get<{ items?: CodeLink[] }>('/list/subcontractor-contracts', { q: `project.id = ${bouw7Id} LIMIT 500` }).catch(() => ({ items: [] as CodeLink[] })),
+          client.getApolloAll<ApolloInv>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => [] as ApolloInv[]),
+        ])
+      : await Promise.all([
+          leesDossierBron<{ items?: CodeLink[] }>(dossierId, 'inkooporders').then(s => s.data ?? { items: [] as CodeLink[] }),
+          leesDossierBron<{ items?: CodeLink[] }>(dossierId, 'oa_contracten').then(s => s.data ?? { items: [] as CodeLink[] }),
+          leesDossierBron<ApolloInv[]>(dossierId, 'apollo_inkoopfacturen').then(s => s.data ?? ([] as ApolloInv[])),
+        ])
     for (const o of orderResp.items ?? []) { const c = (o.projectSecurityLink?.code ?? '').trim(); if (c) codes.add(c) }
     for (const s of subResp.items ?? []) { const c = (s.projectSecurityLink?.code ?? '').trim(); if (c) codes.add(c) }
     for (const inv of apolloInvoices) { const c = (inv.deliveryTicket?.securityLink?.code?.code ?? '').trim(); if (c) codes.add(c) }
@@ -1610,10 +1665,10 @@ export type BestelregelPreviewResultaat =
   | { ok: false; error: string }
 
 /** Gedeelde planner: bepaal per component welke actie naar Bouw7 nodig is. */
-async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayload): Promise<BestelregelPreviewResultaat> {
-  const resolved = await resolveBewakingscodes(dossierId)
+async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayload, live = false): Promise<BestelregelPreviewResultaat> {
+  const resolved = await resolveBewakingscodes(dossierId, { live })
   if (!resolved.ok) return resolved
-  const verg = await getVergrendeldeBewakingscodes(dossierId)
+  const verg = await getVergrendeldeBewakingscodes(dossierId, { live })
   const vergrendeldeCodes = verg.ok ? verg.codes : []
   const vergSet = new Set(vergrendeldeCodes)
 
@@ -1784,7 +1839,8 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
   const sync = await syncWerkbegrotingNaarSupabase(payload)
   if (!sync.gelukt) return { ok: false, error: `Synchroniseren mislukt: ${sync.fout}`, ...leeg }
 
-  const plan = await bouwBestelregelPlan(dossierId, payload)
+  // Schrijfpad: zie berekenPrognoseRegels hierboven.
+  const plan = await bouwBestelregelPlan(dossierId, payload, true)
   if (!plan.ok) return { ok: false, error: plan.error, ...leeg }
 
   const ctx = await bouw7Context(dossierId)
@@ -1800,7 +1856,7 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
     try {
       const res = await zorgVoorOntbrekendePsls(client, bouw7Id, teMaken, doelHoofdstukId)
       fouten.push(...res.fouten)
-      const naResolve = await resolveBewakingscodes(dossierId)
+      const naResolve = await resolveBewakingscodes(dossierId, { live: true })
       if (naResolve.ok) {
         const refsByCode = new Map<string, BewakingscodeRef[]>()
         for (const c of naResolve.codes) { const a = refsByCode.get(c.code) ?? []; a.push(c); refsByCode.set(c.code, a) }
@@ -1998,6 +2054,16 @@ async function stuurBeideNaarBouw7Intern(
     fouten.push(`Prognose: ${prognose.error}`)
   }
 
+  // De structuur in Bouw7 is nu gewijzigd (nieuwe PSL's, gewijzigde prognose, bestelregels).
+  // Zonder deze verversing blijven de dossiertabs de stand van vóór het versturen tonen.
+  if (bestel.ok || prognose.ok) {
+    await ververSnapshotsNaSchrijven(
+      dossierId,
+      ['athena_control', 'contract_order_lines', 'security_links'],
+      ['apollo_inkoopfacturen'],
+    )
+  }
+
   return {
     ok: bestel.ok || prognose.ok,
     melding: delen.join(' · ') || 'Niets naar Bouw7 verstuurd.',
@@ -2030,7 +2096,9 @@ export async function resetBouw7Bestelregels(
   dossierId: string,
   payload: WerkbegrotingPayload,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const verg = await getVergrendeldeBewakingscodes(dossierId)
+  // Live: dit is de laatste rem vóór een onomkeerbare delete. Een bestelling van een uur geleden
+  // staat nog niet in de snapshot, en die mag deze reset juist tegenhouden.
+  const verg = await getVergrendeldeBewakingscodes(dossierId, { live: true })
   if (verg.ok && verg.codes.length > 0) {
     return { ok: false, error: 'Er staat al inkoop op dit project — een volledige reset zou bestelde regels verwijderen. Niet toegestaan.' }
   }
@@ -2049,5 +2117,7 @@ export async function resetBouw7Bestelregels(
     // PostgREST-builder heeft geen `.catch` → await + try/catch.
     try { await db.from('werkbegroting_componenten').update({ bouw7_line_id: null }).in('id', compIds) } catch { /* best effort */ }
   }
+  // Alle bestelregels zijn weg in Bouw7; de snapshot zou ze anders nog tonen.
+  await ververSnapshotsNaSchrijven(dossierId, ['contract_order_lines'], ['athena_control'])
   return { ok: true }
 }

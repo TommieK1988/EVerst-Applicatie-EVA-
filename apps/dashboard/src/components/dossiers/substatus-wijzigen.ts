@@ -61,7 +61,8 @@ export async function wijzigSubstatusMetConflict(opties: {
   if (!overschrijven) {
     // Bouw7 volgen: de lichte verse read haalt het maatwerkveld op en zet EVA gelijk.
     if (sectie === 'aanvraag' || sectie === 'offerte') {
-      const ververs = await ververseSubstatussenActie(sectie)
+      // Alleen dít dossier: één GET /project/{id} in plaats van de hele projectlijst.
+      const ververs = await ververseSubstatussenActie(sectie, opties.dossierId)
       toast[ververs.ok ? 'success' : 'error'](
         ververs.ok ? 'Stand uit Bouw7 overgenomen.' : `Ophalen uit Bouw7 mislukt: ${ververs.error}`,
       )

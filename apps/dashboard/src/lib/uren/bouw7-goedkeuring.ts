@@ -98,14 +98,30 @@ export type OpenUrenResultaat = {
  * Pagineren met OFFSET, niet met PAGE: dat laatste geeft op dit endpoint een 400, en een genegeerde
  * 400 leverde hier eerder stilletjes nul rijen op.
  */
-export async function getOpenstaandeUren(van: string, tot: string): Promise<OpenUrenResultaat> {
+export async function getOpenstaandeUren(
+  van: string,
+  tot: string,
+  /**
+   * Alleen deze hour-log-ids ophalen. Gebruikt door de goedkeur- en correctie-acties, die niet de
+   * hele werkvoorraad nodig hebben maar alleen de regels die de gebruiker aanklikte: dat scheelt
+   * een gepagineerde ophaal van drie jaar (tot veertig calls) per klik.
+   */
+  ids?: number[],
+): Promise<OpenUrenResultaat> {
   await vereisSessie()
   const leeg: OpenUrenResultaat = { regels: [], totaalUren: 0, van, tot, fout: null }
 
   let logs: Bouw7EmployeeHourLog[] = []
   try {
     const client = await getBouw7Client()
-    logs = await haalAlleOpenUren(client, van, tot)
+    if (ids && ids.length > 0) {
+      const res = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
+        q: `isApproved = false AND id IN (${ids.join(',')}) LIMIT ${Math.max(ids.length, 1)}`,
+      })
+      logs = res?.items ?? []
+    } else {
+      logs = await haalAlleOpenUren(client, van, tot)
+    }
   } catch (e) {
     return { ...leeg, fout: e instanceof Error ? e.message : 'Bouw7 is niet bereikbaar.' }
   }
@@ -219,14 +235,14 @@ async function haalAlleOpenUren(
  * Staat er geen teamleider op het dossier, dan slaat de regel die stap gewoon over en wacht hij
  * meteen op de projectleider -- er is bewust geen terugval naar een ploegteamleider of Directie.
  */
-export async function getMijnTeKeurenUren(van: string, tot: string): Promise<{
+export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number[]): Promise<{
   alsTeamleider: OpenUurRegel[]
   alsProjectleider: OpenUurRegel[]
   nietToeTeWijzen: OpenUurRegel[]
   fout: string | null
 }> {
   const ik = await vereisSessie()
-  const res = await getOpenstaandeUren(van, tot)
+  const res = await getOpenstaandeUren(van, tot, ids)
   if (res.fout) return { alsTeamleider: [], alsProjectleider: [], nietToeTeWijzen: [], fout: res.fout }
 
   const alsTeamleider: OpenUurRegel[] = []
@@ -324,8 +340,10 @@ export async function keurUrenGoed(hourLogIds: number[]): Promise<KeurResultaat>
   const ik = await vereisSessie()
   if (!hourLogIds.length) return { ok: false, error: 'Geen uren geselecteerd.' }
 
+  // Alleen de aangeklikte regels ophalen. De autorisatie blijft hier staan (het scherm mag niet
+  // bepalen wie wat mag goedkeuren), maar daarvoor is de hele werkvoorraad niet nodig.
   const jaar = new Date().getFullYear()
-  const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`)
+  const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`, hourLogIds)
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
   const gevraagd = new Set(hourLogIds)
@@ -375,6 +393,18 @@ export async function keurUrenGoed(hourLogIds: number[]): Promise<KeurResultaat>
   }
 
   revalidatePath('/uren')
+  // De goedkeurvlaggen zijn in Bouw7 gewijzigd; /uren leest die uit het bewaarde urenvenster.
+  // Op de achtergrond, want de goedkeurder hoeft daar niet op te wachten.
+  if (naarBouw7 > 0) {
+    try {
+      const { after } = await import('next/server')
+      after(async () => {
+        const { ververseGlobaleBron } = await import('@/lib/bouw7/snapshot')
+        await ververseGlobaleBron('uren_venster').catch(() => {})
+      })
+    } catch { /* buiten een request-context bestaat `after` niet */ }
+  }
+
   return { ok: true, verwerkt: alsPl.length + alsTl.length, naarBouw7, wachtOpProjectleider, mislukt, fouten }
 }
 
@@ -447,7 +477,8 @@ export async function corrigeerUurregel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ik = await vereisSessie()
   const jaar = new Date().getFullYear()
-  const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`)
+  // Alleen deze ene regel; de autorisatiecontrole hieronder heeft niet meer nodig.
+  const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`, [hourLogId])
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
   const regel = [...mijn.alsTeamleider, ...mijn.alsProjectleider].find(r => r.id === hourLogId)

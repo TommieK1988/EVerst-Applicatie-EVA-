@@ -13,8 +13,8 @@
  * overzicht en de dossier-Urentab nooit uit elkaar lopen.
  */
 import { createAdminClient } from '@everts/database/server'
-import { getBouw7Client } from '@/lib/bouw7/sync'
-import type { Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
+import { leesGlobaleBron } from '@/lib/bouw7/snapshot'
+import type { UrenVensterPayload } from '@/lib/bouw7/snapshot-bronnen'
 import type { UrenRegel } from '@/lib/dossiers/actions'
 import { dossierHref } from '@/lib/dossiers/href'
 import { periodeBereik, type UrenPeriode, type UrenExtraVelden } from './types'
@@ -28,6 +28,8 @@ export type UrenOverzichtData = {
   totalen: { uren: number; bedrag: number }
   van: string
   tot: string
+  /** De periode valt (deels) vóór de bewaarde stand; het overzicht zou onvolledig zijn. */
+  buitenVenster?: boolean
   /** Gevuld wanneer Bouw7 niet bereikbaar/geconfigureerd is — de pagina toont dit als lege staat. */
   fout: string | null
 }
@@ -54,17 +56,23 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     beschikbaar: false, regels: [], totalen: { uren: 0, bedrag: 0 }, van, tot, fout: null,
   }
 
-  let resp: Bouw7EmployeeHourLogResponse
-  try {
-    const client = await getBouw7Client()
-    resp = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
-      q: `logDate >= "${van}" AND logDate <= "${tot}" SORT(logDate, DESC)`,
-    })
-  } catch (e: unknown) {
-    return { ...leeg, fout: e instanceof Error ? e.message : 'Bouw7 niet bereikbaar' }
+  // Uit het bewaarde urenvenster; dat beslaat het lopende jaar (en minimaal dertien weken) en
+  // wordt door de cron bijgehouden. Vroeger deed elk paginabezoek en elke periodewissel hier een
+  // bedrijfsbrede Bouw7-call van enkele seconden.
+  const venster = (await leesGlobaleBron<UrenVensterPayload>('uren_venster')).data
+  if (!venster) {
+    return { ...leeg, fout: 'De urenstand is nog niet opgehaald uit Bouw7.' }
+  }
+  // Valt de gevraagde periode (deels) vóór het venster, dan zou filteren een te laag totaal geven.
+  // Dat eerlijk melden is beter dan een onvolledig overzicht dat er compleet uitziet.
+  if (van < venster.van) {
+    return { ...leeg, buitenVenster: true, fout: `Deze periode valt vóór de bewaarde stand (vanaf ${venster.van}).` }
   }
 
-  const items = resp.items ?? []
+  const items = venster.items.filter((h) => {
+    const d = h.logDate ? h.logDate.slice(0, 10) : null
+    return d != null && d >= van && d <= tot
+  })
   if (items.length === 0) return { ...leeg, beschikbaar: true }
 
   // Dossierkoppeling in één query: alleen de projecten die in deze periode voorkomen.
@@ -126,9 +134,11 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
   return {
     beschikbaar: true,
     regels,
+    // Altijd zelf optellen: het venster beslaat meer dan de gevraagde periode, dus de totalen
+    // die Bouw7 bij de respons meestuurt gaan over een andere set regels dan hier getoond wordt.
     totalen: {
-      uren: resp.totalHours != null ? num(resp.totalHours) : regels.reduce((s, r) => s + r.uren, 0),
-      bedrag: resp.totalCost != null ? num(resp.totalCost) : regels.reduce((s, r) => s + r.bedrag, 0),
+      uren: regels.reduce((s, r) => s + r.uren, 0),
+      bedrag: regels.reduce((s, r) => s + r.bedrag, 0),
     },
     van,
     tot,

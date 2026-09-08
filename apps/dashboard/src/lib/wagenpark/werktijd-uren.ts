@@ -20,8 +20,8 @@
  * medewerker hangen.
  */
 import 'server-only'
-import { getBouw7Client } from '@/lib/bouw7/sync'
-import type { Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
+import { leesGlobaleBron } from '@/lib/bouw7/snapshot'
+import type { UrenVensterPayload } from '@/lib/bouw7/snapshot-bronnen'
 import { urenLabel } from '@/lib/wagenpark/werktijd'
 
 /** Wat er op één dag door één medewerker geboekt is. */
@@ -63,23 +63,24 @@ export const GEEN_UREN: UrenPerDag = { perDag: new Map(), fout: 'Uren niet opgeh
  * eigen `logDate`, dat ook geen tijdzone kent.
  */
 export async function getUrenPerDag(van: string, tot: string): Promise<UrenPerDag> {
-  let resp: Bouw7EmployeeHourLogResponse
-  try {
-    const client = await getBouw7Client()
-    resp = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
-      q: `logDate >= "${van}" AND logDate <= "${tot}" SORT(logDate, DESC)`,
-    })
-  } catch (e: unknown) {
-    // Fail-soft: zonder uren blijft de werktijdenlijst gewoon bruikbaar.
-    return { perDag: new Map(), fout: e instanceof Error ? e.message : 'Bouw7 niet bereikbaar' }
+  // Uit het bewaarde urenvenster in plaats van een eigen bedrijfsbrede Bouw7-call per
+  // paginabezoek. Fail-soft: zonder uren blijft de werktijdenlijst gewoon bruikbaar.
+  const venster = (await leesGlobaleBron<UrenVensterPayload>('uren_venster')).data
+  if (!venster) return { perDag: new Map(), fout: 'Urenstand nog niet opgehaald uit Bouw7' }
+  if (van < venster.van) {
+    return { perDag: new Map(), fout: `Periode valt vóór de bewaarde urenstand (vanaf ${venster.van})` }
   }
+  const items = venster.items.filter((h) => {
+    const d = h.logDate ? h.logDate.slice(0, 10) : null
+    return d != null && d >= van && d <= tot
+  })
 
   // Eerst per (medewerker, dag) de uren per soort optellen; een medewerker
   // boekt vaak meerdere regels op dezelfde dag en dezelfde uursoort, verdeeld
   // over projecten.
   const opgeteld = new Map<string, Map<string, number>>()
 
-  for (const h of resp.items ?? []) {
+  for (const h of items) {
     const employeeId = h.employee?.id
     const datum = h.logDate?.slice(0, 10)
     if (employeeId == null || !datum) continue

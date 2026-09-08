@@ -189,23 +189,39 @@ export type SubstatusVerversResult =
  */
 export async function ververseSubstatussen(
   scope?: SubstatusSectie,
+  /**
+   * Eén dossier in plaats van alle. De volledige variant haalt de héle projectlijst op (~1,3 MB);
+   * dat was verantwoord toen dit bij elk bezoek aan Aanvragen/Offertes draaide, maar nu deze functie
+   * alleen nog op de conflictknop zit ("Bouw7 volgen") is één `GET /project/{id}` genoeg.
+   */
+  dossierId?: string,
 ): Promise<SubstatusVerversResult> {
   try {
     const supabase = createAdminClient()
 
-    const { data: dossiers, error } = await supabase
+    let query = supabase
       .from('dossiers')
       .select('id, bouw7_id, hoofdstatus, aanvraag_substatus, offerte_substatus, verzonden_op')
       .not('bouw7_id', 'is', null)
       .is('servicedesk_substatus', null)
       .in('hoofdstatus', ['aanvraag', 'offerte'])
+    if (dossierId) query = query.eq('id', dossierId)
+
+    const { data: dossiers, error } = await query
 
     if (error) return { ok: false, error: error.message }
     if (!dossiers?.length) return { ok: true, bijgewerkt: 0 }
 
     const client = await getBouw7Client()
-    const projects = await fetchAllPages<Bouw7Project>(client, '/list/projects')
-    const caMap = new Map(projects.map((p) => [String(p.id), p.caOfferteSubstatus ?? null]))
+    const caMap = new Map<string, string | null>()
+    if (dossierId) {
+      const id = String(dossiers[0].bouw7_id)
+      const p = await client.get<Bouw7Project>(`/project/${id}`)
+      caMap.set(id, p.caOfferteSubstatus ?? null)
+    } else {
+      const projects = await fetchAllPages<Bouw7Project>(client, '/list/projects')
+      for (const p of projects) caMap.set(String(p.id), p.caOfferteSubstatus ?? null)
+    }
 
     let bijgewerkt = 0
     for (const d of dossiers) {

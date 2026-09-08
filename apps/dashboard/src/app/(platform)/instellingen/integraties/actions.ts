@@ -183,66 +183,20 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
 }
 
 /**
- * Ververs alleen het gedeelde substatusveld ("Offerte Sub-status") van de aanvraag-/offerte-dossiers.
- * Wordt afgevuurd bij het openen van de Aanvragen- en Offertes-pagina: de tweede Bouw7-app schrijft
- * hetzelfde veld en kan niet op de cron wachten, dus moet de lijst bij openen de verse stand tonen.
- * Eén Bouw7-call, geen detail-calls — zie `lib/bouw7/substatus-attr.ts`.
+ * Ververs het gedeelde substatusveld ("Offerte Sub-status") uit Bouw7.
+ *
+ * Zat eerder op elk bezoek aan Aanvragen/Offertes, achter een drempel van vijf minuten. Dat kostte
+ * telkens een `GET /list/projects` over álle projecten (~1,3 MB) voor een veld dat een paar keer
+ * per dag wijzigt — en het draaide ook als niemand ernaar keek. De gewone sync neemt dit veld nu
+ * twee keer per dag mee; deze actie blijft over voor de conflictknop "Bouw7 volgen", en haalt dan
+ * alleen het betrokken dossier op.
  */
-/**
- * Hoe lang een verse read uit Bouw7 meegaat voordat het openen van een lijst er weer een doet.
- * De read kost een `GET /list/projects` over álle projecten (~1,3 MB, bijna een seconde); dat bij
- * elk paginabezoek doen betekende dat wie tussen Aanvragen en Offertes heen en weer klikt Bouw7
- * blijft bevragen voor een veld dat hooguit een paar keer per dag verandert.
- */
-const AUTO_VERVERS_MARGE_MS = 5 * 60_000
-
-/** Sleutel waaronder het moment van de laatste automatische verse read in `sync_log` staat. */
-const AUTO_VERVERS_ENTITEIT = 'substatus-auto'
-
-/** Wanneer draaide de automatische verse read voor het laatst? Null = nog nooit. */
-async function laatsteAutoVervers(): Promise<Date | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('sync_log')
-    .select('uitgevoerd_op')
-    .eq('integratie', 'bouw7')
-    .eq('entiteit', AUTO_VERVERS_ENTITEIT)
-    .order('uitgevoerd_op', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const iso = data?.uitgevoerd_op
-  if (!iso) return null
-  const d = new Date(iso)
-  return isNaN(d.getTime()) ? null : d
-}
-
 export async function ververseSubstatussenActie(
   scope: 'aanvraag' | 'offerte',
-  /**
-   * Automatische verversing bij het openen van een lijst: sla over als de vorige nog vers is.
-   * De handmatige route ("Bouw7 volgen" bij een conflict) laat dit uit — daar vráágt iemand
-   * expliciet om de actuele stand en mag een marker van vier minuten geleden niets blokkeren.
-   */
-  opties: { alleenBijVerouderd?: boolean } = {},
+  /** Eén dossier verversen (de conflictknop). Zonder id gaat het over alle aanvraag-/offertedossiers. */
+  dossierId?: string,
 ): Promise<SubstatusVerversResult> {
-  if (opties.alleenBijVerouderd) {
-    const laatste = await laatsteAutoVervers()
-    if (laatste && Date.now() - laatste.getTime() < AUTO_VERVERS_MARGE_MS) {
-      return { ok: true, bijgewerkt: 0 }
-    }
-    // Marker vóór de Bouw7-call wegschrijven, niet erna: twee collega's die tegelijk de lijst
-    // openen zouden anders allebei de volledige projectlijst ophalen.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    await supabase.from('sync_log').insert({
-      integratie: 'bouw7',
-      entiteit:   AUTO_VERVERS_ENTITEIT,
-      richting:   'in',
-    })
-  }
-
-  const res = await ververseSubstatussen(scope)
+  const res = await ververseSubstatussen(scope, dossierId)
   if (res.ok && res.bijgewerkt > 0) {
     revalidatePath('/aanvragen')
     revalidatePath('/offertes')

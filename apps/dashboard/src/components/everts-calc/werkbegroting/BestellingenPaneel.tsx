@@ -176,7 +176,10 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
 
   /**
    * Haal de echte stand uit Bouw7 op: wat daar is weggegooid, mag hier niet als besteld staan.
-   * Draait bij openen en bij "Vernieuwen" — de gebruiker hoeft er niet om te vragen.
+   *
+   * Draait alleen nog op "Vernieuwen". Dit stond eerder ook op elke mount, en dat betekende twee
+   * Bouw7-calls (plus één per losgeraakte bestelling) telkens als iemand de werkbegroting opende —
+   * ook als hij alleen even kwam kijken.
    */
   const verversStand = useCallback(async () => {
     if (!dossierId) return
@@ -201,7 +204,6 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     } catch { /* stil: een storing mag het paneel niet blokkeren */ }
   }, [dossierId, wb.id])
 
-  useEffect(() => { verversStand() }, [verversStand])
 
   const verversVoorstellen = useCallback(async () => {
     if (!dossierId) { setVoorstellen([]); return }

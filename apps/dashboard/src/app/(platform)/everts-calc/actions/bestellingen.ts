@@ -33,6 +33,7 @@ import {
   type ContractSoort, type ContractTermijn, type BestelregelKoppeling,
 } from '@/lib/bouw7/contracten'
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type { Bouw7ListResponse } from '@/lib/bouw7/client'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { heeftTemplate } from '@/lib/documenten/types'
@@ -669,6 +670,12 @@ export async function maakBestellingInBouw7(
     afroep = await voerAfroepUit(db, bestelling.id, soort, Number(res.contractId), signee)
   }
 
+  // Er staat nu een contract in Bouw7; het Inkoop-tab hoort dat meteen te tonen.
+  await ververSnapshotsNaSchrijven(
+    dossierId,
+    ['inkooporders', 'oa_contracten'],
+    ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
+  )
   revalidatePath(`/dossiers/${dossierId}`)
   return {
     ok: true,
@@ -884,6 +891,12 @@ export async function trekBestellingIn(dossierId: string, bestellingId: string):
     })
     .eq('id', bestellingId)
 
+  // Het contract is in Bouw7 verwijderd; zonder verversing blijft het op het Inkoop-tab staan.
+  await ververSnapshotsNaSchrijven(
+    dossierId,
+    ['inkooporders', 'oa_contracten'],
+    ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
+  )
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true }
 }
@@ -1355,6 +1368,12 @@ export async function verstuurBestelling(
     if (archief.documentId) await markeerGemaild(db, archief.documentId, ontvangers)
   } catch { /* stil */ }
 
+  // De afroep heeft leverbonnen laten ontstaan; die tellen mee in de verplichtingen op het Inkoop-tab.
+  await ververSnapshotsNaSchrijven(
+    dossierId,
+    ['inkooporders', 'oa_contracten'],
+    ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
+  )
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
 }
