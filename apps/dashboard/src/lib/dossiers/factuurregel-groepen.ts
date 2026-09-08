@@ -33,7 +33,7 @@ export const GROEPERINGEN: { waarde: Groepering; label: string; uitleg: string }
 
 /** Het minimum dat de groepering van een boeking nodig heeft. */
 export type GroepeerbareBoeking = {
-  bronType: 'uur' | 'kost' | 'parkeren'
+  bronType: 'uur' | 'kost'
   bronBouw7Id: string
   uursoort: string | null
   kostensoort: string | null

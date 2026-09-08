@@ -4,12 +4,16 @@ import { Card, CardHeader, CardBody } from '@/components/ui'
 import { fmt, TH, TD } from './tab-ui'
 
 /**
- * Parkeerkosten die op dit project zijn geparkeerd.
+ * Parkeerkosten die bij dit project horen — puur ter informatie.
  *
- * Rendert niets als er geen toewijzingen zijn — een leeg blok op elk dossier is
- * ruis. De kop zegt expliciet dat deze kosten nog niet in Bouw7 staan, zodat
- * niemand ze optelt bij de bewakingscijfers hierboven: daar zitten ze nog in de
- * algemene kosten van de ULU-verzamelfactuur.
+ * Dit is nadrukkelijk GEEN boeking en GEEN factuurregel. De bedragen staan in
+ * Bouw7 onder de algemene kosten van de parkeerfactuur en blijven daar; ze
+ * tellen niet mee in de bewakingscijfers hierboven, en ze komen ook niet
+ * vanzelf op een regiefactuur terecht. Wie ze wil doorbelasten, zet ze zelf op
+ * de factuur. Dat is een bewuste keuze: eerst zien of de toewijzing klopt,
+ * daarna pas automatiseren.
+ *
+ * Rendert niets als er geen toewijzingen zijn — een leeg blok op elk dossier is ruis.
  */
 export default async function ParkeerkostenBlok({ dossierId }: { dossierId: string }) {
   const data = await getDossierParkeerkosten(dossierId)
@@ -25,15 +29,22 @@ export default async function ParkeerkostenBlok({ dossierId }: { dossierId: stri
     <Card>
       <CardHeader>
         <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          <span>Parkeerkosten</span>
+          <span>
+            Parkeerkosten
+            <span style={{ fontWeight: 400, color: 'var(--neutral-500)', marginLeft: 8, fontSize: 12 }}>
+              ter informatie
+            </span>
+          </span>
           <span style={{ fontWeight: 700 }}>{fmt(data.totaal, true)}</span>
         </span>
       </CardHeader>
       <CardBody>
         <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', marginBottom: 10, lineHeight: 1.5 }}>
           Toegewezen op basis van de rit, de planning en de afstand tot het werkadres.
-          Deze bedragen staan <strong>nog niet in Bouw7</strong> — daar vallen ze onder de
-          algemene kosten van de parkeerfactuur.
+          Deze bedragen zijn <strong>niet geboekt op dit project</strong> — in Bouw7 vallen ze
+          onder de algemene kosten van de parkeerfactuur. Ze tellen dus niet mee in de cijfers
+          hierboven en komen niet vanzelf op een factuur: wil je ze doorbelasten, zet ze er dan
+          zelf op.
           {data.openVoorstellen > 0 && (
             <>
               {' '}
