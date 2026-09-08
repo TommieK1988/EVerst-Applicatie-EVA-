@@ -16,6 +16,8 @@ import {
   ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
 } from '../widgets';
 import type { AgendaWidgetItem } from '../widgets';
+import GoedkeurenWidget from '../widgets/GoedkeurenWidget';
+import type { GoedkeurenData } from '@/lib/goedkeuren/widget';
 import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
 import type { DossierRij } from '@/components/dossiers/types';
 
@@ -78,16 +80,16 @@ function getWeekNumber(): number {
 
 /* ── Widget config ────────────────────────────────────────── */
 
-type WidgetId = 'tasks' | 'weather' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
+type WidgetId = 'tasks' | 'goedkeuren' | 'weather' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
 
 const DEFAULT_SPANS: Record<WidgetId, number> = {
-  tasks: 5, weather: 4,
+  tasks: 5, goedkeuren: 4, weather: 4,
   projects: 4, dossier: 4, servicedesk: 4,
   agenda: 4, news: 4, summary: 4,
 };
 
 const DEFAULT_ORDER: WidgetId[] = [
-  'tasks', 'weather',
+  'tasks', 'goedkeuren', 'weather',
   'projects', 'dossier', 'servicedesk',
   'agenda', 'news', 'summary',
 ];
@@ -287,6 +289,7 @@ export interface HomeViewProps {
   opdrachten: DossierRij[];
   servicedesk: DossierRij[];
   agendaItems: AgendaWidgetItem[];
+  goedkeuren: GoedkeurenData;
   /* Totalen achter de afgekapte lijsten hierboven; vallen terug op de lijstlengte. */
   aanvragenTotaal?: number;
   offertesTotaal?: number;
@@ -296,7 +299,7 @@ export interface HomeViewProps {
 }
 
 export default function HomeView({
-  displayName, taken, aanvragen, offertes, opdrachten, servicedesk, agendaItems,
+  displayName, taken, aanvragen, offertes, opdrachten, servicedesk, agendaItems, goedkeuren,
   aanvragenTotaal, offertesTotaal, opdrachtenTotaal, servicedeskTotaal, agendaTotaal,
 }: HomeViewProps) {
   const router = useRouter();
@@ -399,6 +402,7 @@ export default function HomeView({
   function renderWidget(id: WidgetId): React.ReactNode {
     switch (id) {
       case 'tasks':    return <TasksWidget taken={taken}/>;
+      case 'goedkeuren': return <GoedkeurenWidget data={goedkeuren}/>;
       case 'weather':  return <WeatherWidget/>;
       case 'projects': return <ProjectsWidget opdrachten={opdrachten} totaal={opdrachtenN}/>;
       case 'agenda':   return <AgendaWidget items={agendaItems} totaal={agendaTotaal}/>;

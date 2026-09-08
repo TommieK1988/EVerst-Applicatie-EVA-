@@ -6,6 +6,7 @@ import { haalAlleRegels } from '@/app/(platform)/planning/bedrijfsagenda/actions
 import { bedrijfsagendaTypeKleur } from '@everts/database/platform-types'
 import type { BedrijfsagendaType } from '@everts/database/platform-types'
 import HomeView from '@/components/eva/views/HomeView'
+import { getGoedkeurenWidget } from '@/lib/goedkeuren/widget'
 import type { AgendaWidgetItem } from '@/components/eva/widgets'
 
 export const metadata = { title: 'Overzicht' }
@@ -31,7 +32,7 @@ export default async function HomePage() {
   const jaar = new Date().getFullYear()
   const vandaag = localDateStr(0)
 
-  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels] = await Promise.all([
+  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels, goedkeuren] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
     // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
     medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
@@ -41,6 +42,11 @@ export default async function HomePage() {
     // Mijn servicedesk: dossiers waar ik projectleider of uitvoerder ben
     medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
+    // Fail-soft: een lege goedkeurwidget is beter dan een startpagina die niet laadt.
+    getGoedkeurenWidget().catch(() => ({
+      ligtBijJou: [], afgehandeld: [],
+      aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0 },
+    })),
   ])
 
   const agendaRelevant = agendaRegels
@@ -76,6 +82,7 @@ export default async function HomePage() {
       opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
       servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
       agendaItems={agendaItems}
+      goedkeuren={goedkeuren}
       // Totalen: de lijsten hierboven zijn afgekapt op 10 rijen, de tellers niet.
       aanvragenTotaal={aanvragenResult.ok   ? aanvragenResult.totaal   : undefined}
       offertesTotaal={offertesResult.ok     ? offertesResult.totaal    : undefined}
