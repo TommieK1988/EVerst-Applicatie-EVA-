@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { legScanVast, zetOpMijnNaam } from '@/app/m/materieel/actions'
 import { neemTerug, voegOnderhoudToe, zetStatus } from '@/app/(platform)/materieelbeheer/actions'
-import { codeLabel } from '@/lib/materieel/qr'
+import { codeLabel, heeftSticker } from '@/lib/materieel/qr'
 import { CATEGORIE_LABELS, STATUS_META, type MaterieelCategorie, type MaterieelStatus } from '@/lib/materieel/types'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './stijl'
 
@@ -108,7 +108,11 @@ export default function PaspoortMobiel({
         <Rij label="Van" waarde={toegewezenNaam} />
         <Rij label="Serienummer" waarde={object.serienummer ?? '—'} />
         <Rij label="Inventarisnummer" waarde={object.inventarisnummer ?? '—'} />
-        <Rij label="Sticker" waarde={codeLabel(object.qr_code)} laatste />
+        <Rij
+          label="Sticker"
+          waarde={heeftSticker(object) ? codeLabel(object.qr_code) : 'Nog geen sticker'}
+          laatste
+        />
       </div>
 
       {melding && (
@@ -180,7 +184,7 @@ export default function PaspoortMobiel({
             </div>
           )}
 
-          {!object.qr_code && (
+          {!heeftSticker(object) && (
             <Link href={`/m/materieel/scan?koppelAan=${object.id}`} style={{ ...secundaireKnop, textAlign: 'center', textDecoration: 'none' }}>
               Sticker koppelen
             </Link>

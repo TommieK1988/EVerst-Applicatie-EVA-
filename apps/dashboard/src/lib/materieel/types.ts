@@ -10,7 +10,7 @@
 
 export const MATERIEEL_CATEGORIEEN = [
   'gereedschap', 'machine', 'aanhanger', 'keet',
-  'steigeronderdeel', 'meetapparatuur', 'pbm',
+  'steigeronderdeel', 'ladder', 'meetapparatuur', 'pbm',
 ] as const
 export type MaterieelCategorie = typeof MATERIEEL_CATEGORIEEN[number]
 
@@ -20,6 +20,7 @@ export const CATEGORIE_LABELS: Record<MaterieelCategorie, string> = {
   aanhanger:        'Aanhanger',
   keet:             'Keet',
   steigeronderdeel: 'Steigeronderdeel',
+  ladder:           'Ladder of trap',
   meetapparatuur:   'Meetapparatuur',
   pbm:              'PBM',
 }
@@ -79,6 +80,8 @@ export type MaterieelObject = {
   garantie_tot: string | null
   aanschafwaarde: number | null
   boekwaarde: number | null
+  /** Wat kost het om dit object vandaag te vervangen (excl. btw). */
+  vervangingswaarde: number | null
   status: MaterieelStatus
   toewijzing_niveau: ToewijzingNiveau | null
   toegewezen_medewerker_id: string | null
@@ -311,6 +314,10 @@ export const CATEGORIE_DETAILS: Partial<Record<MaterieelCategorie, DetailVeld[]>
   ],
   meetapparatuur: [
     { key: 'kalibratie_interval', label: 'Kalibratie-interval (maanden)', type: 'nummer' },
+  ],
+  ladder: [
+    { key: 'sporten', label: 'Aantal sporten of treden', type: 'nummer' },
+    { key: 'lengte_m', label: 'Lengte (m)', type: 'tekst' },
   ],
   pbm: [
     { key: 'maat', label: 'Maat', type: 'tekst' },

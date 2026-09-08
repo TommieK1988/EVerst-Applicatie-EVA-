@@ -3,7 +3,10 @@ import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import { signPaden } from '@/lib/materieel/bestanden'
-import { getMijnMaterieel, getRecentToegevoegd, type MaterieelKort } from '@/lib/materieel/zoeken'
+import {
+  getMijnMaterieel, getRecentToegevoegd, getZonderSticker, telZonderSticker,
+  type MaterieelKort,
+} from '@/lib/materieel/zoeken'
 import { CATEGORIE_LABELS, STATUS_META } from '@/lib/materieel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
 
@@ -20,9 +23,11 @@ export default async function MobielMaterieelPage() {
   const rechten = await getEffectieveRechten(medewerker)
   const magToevoegen = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
 
-  const [mijn, recent] = await Promise.all([
+  const [mijn, recent, teStickeren, teStickerenTotaal] = await Promise.all([
     getMijnMaterieel(medewerker.id),
     magToevoegen ? getRecentToegevoegd(medewerker.id, 5) : Promise.resolve([]),
+    magToevoegen ? getZonderSticker(null, 8) : Promise.resolve([]),
+    magToevoegen ? telZonderSticker() : Promise.resolve(0),
   ])
 
   // Recent toegevoegd dat al bij "mijn materieel" staat, niet dubbel tonen.
@@ -30,7 +35,7 @@ export default async function MobielMaterieelPage() {
   const overig = recent.filter((r) => !mijnIds.has(r.id))
 
   const fotos = await signPaden(
-    [...mijn, ...overig].map((o) => o.hoofdfoto_path).filter(Boolean) as string[],
+    [...mijn, ...overig, ...teStickeren].map((o) => o.hoofdfoto_path).filter(Boolean) as string[],
   )
 
   return (
@@ -60,6 +65,18 @@ export default async function MobielMaterieelPage() {
           >
             Toevoegen zonder sticker
           </Link>
+        )}
+
+        {teStickerenTotaal > 0 && (
+          <Lijst
+            /* Werkvoorraad bij het stickeren van een bestaande inventaris: kantoor
+               voert in, de bus plakt. Open je zo'n object, dan zit de knop
+               "Sticker koppelen" op het paspoort. */
+            titel={`Nog geen sticker (${teStickerenTotaal})`}
+            items={teStickeren}
+            fotos={fotos}
+            leeg=""
+          />
         )}
 
         <Lijst titel="Op mijn naam" items={mijn} fotos={fotos} leeg="Er staat nog niets op jouw naam." />

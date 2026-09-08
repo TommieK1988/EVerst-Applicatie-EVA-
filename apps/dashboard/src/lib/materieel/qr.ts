@@ -110,6 +110,19 @@ export function zoektermen(code: string): string[] {
 }
 
 /**
+ * Hangt er een echte, fysieke sticker op dit object?
+ *
+ * `qr_code` is leeg zolang er niets op zit. Oudere rijen kunnen er nog het eigen
+ * id in hebben staan (een trigger vulde dat vroeger in); dat is géén sticker
+ * maar de scan-URL die EVA zelf print, en die wordt op `id` opgezocht. Beide
+ * gevallen betekenen dus: nog te stickeren.
+ */
+export function heeftSticker(object: { id: string; qr_code: string | null }): boolean {
+  const code = object.qr_code?.trim()
+  return !!code && code !== object.id
+}
+
+/**
  * Korte weergave van een stickercode. Een URL van 60 tekens is op een telefoon
  * onleesbaar; de staart zegt precies genoeg om te herkennen wélke sticker.
  */

@@ -66,6 +66,7 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
       aankoopdatum: bestaand?.aankoopdatum ?? '',
       garantie_tot: bestaand?.garantie_tot ?? '',
       aanschafwaarde: bestaand?.aanschafwaarde ?? ('' as unknown as number),
+      vervangingswaarde: bestaand?.vervangingswaarde ?? ('' as unknown as number),
       boekwaarde: bestaand?.boekwaarde ?? ('' as unknown as number),
       opmerkingen: bestaand?.opmerkingen ?? '',
     },
@@ -171,6 +172,13 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
 
           <Veld label="Boekwaarde (€ excl. btw)" fout={errors.boekwaarde?.message}>
             <input type="number" step="0.01" min="0" {...register('boekwaarde')} style={inputStyle} />
+          </Veld>
+
+          {/* Vervangingswaarde: wat kost het vandaag om dit terug te kopen. Dat
+              is het bedrag dat je bij verlies of diefstal nodig hebt — niet de
+              historische aanschafprijs. */}
+          <Veld label="Vervangingswaarde (€ excl. btw)" fout={errors.vervangingswaarde?.message}>
+            <input type="number" step="0.01" min="0" {...register('vervangingswaarde')} style={inputStyle} />
           </Veld>
 
           <div style={{ gridColumn: '1 / -1' }}>

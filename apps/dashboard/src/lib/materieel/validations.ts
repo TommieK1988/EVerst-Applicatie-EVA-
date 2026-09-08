@@ -44,6 +44,7 @@ export const materieelObjectSchema = z.object({
   garantie_tot: optioneleDatum,
   aanschafwaarde: optioneelBedrag,
   boekwaarde: optioneelBedrag,
+  vervangingswaarde: optioneelBedrag,
   opmerkingen: optioneleTekst,
 })
 

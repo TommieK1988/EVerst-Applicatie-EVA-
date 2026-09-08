@@ -93,6 +93,41 @@ export async function getMijnMaterieel(medewerkerId: string): Promise<MaterieelK
   return (data ?? []) as MaterieelKort[]
 }
 
+/**
+ * Materieel waar nog geen sticker op zit — de werkvoorraad bij het stickeren van
+ * een bestaande inventaris: kantoor voert de lijst in, de bus plakt de stickers.
+ *
+ * `qr_code is null` is hier de volledige toets: sinds migratie 20260908j vult
+ * niets die kolom meer automatisch, dus leeg betekent "nog niets op geplakt".
+ * Begrensd met een `limiet` (en optioneel een zoekterm) zodat er nooit een
+ * onbegrensde select naar PostgREST gaat.
+ */
+export async function getZonderSticker(zoekterm?: string | null, limiet = 200): Promise<MaterieelKort[]> {
+  let query = db()
+    .from('materieel_objecten')
+    .select(KORT)
+    .eq('actief', true)
+    .is('qr_code', null)
+    .order('omschrijving')
+    .limit(limiet)
+
+  const term = zoekterm?.trim()
+  if (term) query = query.ilike('omschrijving', `%${escapeIlike(term)}%`)
+
+  const { data } = await query
+  return (data ?? []) as MaterieelKort[]
+}
+
+/** Hoeveel stuks materieel wachten nog op een sticker? */
+export async function telZonderSticker(): Promise<number> {
+  const { count } = await db()
+    .from('materieel_objecten')
+    .select('id', { count: 'exact', head: true })
+    .eq('actief', true)
+    .is('qr_code', null)
+  return count ?? 0
+}
+
 /** De laatste stukken materieel die deze medewerker zelf heeft toegevoegd. */
 export async function getRecentToegevoegd(medewerkerId: string, aantal = 10): Promise<MaterieelKort[]> {
   const { data } = await db()

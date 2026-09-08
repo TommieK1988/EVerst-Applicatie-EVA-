@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { signPaden } from '@/lib/materieel/bestanden'
 import { ALGEMEEN_GEBRUIK, type MaterieelObject, type MaterieelObjectRij } from '@/lib/materieel/types'
 import MaterieelOverzicht from '@/components/materieel/MaterieelOverzicht'
@@ -28,12 +29,17 @@ export default async function MaterieelbeheerPage() {
     /* niet ingelogd */
   }
 
-  const [objectenRes, medewerkersRes, teamsRes, layouts] = await Promise.all([
-    supabase
-      .from('materieel_objecten')
-      .select('*')
-      .eq('actief', true)
-      .order('created_at', { ascending: false }),
+  const [objectenAlles, medewerkersRes, teamsRes, layouts] = await Promise.all([
+    // Gepagineerd: PostgREST kapt een kale select stil af op 1000 rijen, en een
+    // volledige gereedschapsinventaris zit daar zo aan.
+    haalAlleRijen<MaterieelObject>((van, tot) =>
+      supabase
+        .from('materieel_objecten')
+        .select('*')
+        .eq('actief', true)
+        .order('created_at', { ascending: false })
+        .order('id')
+        .range(van, tot)),
     supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').eq('actief', true),
     supabase.from('materieel_teams').select('id, naam').eq('actief', true),
     user_id ? laadLayouts(user_id, 'materieel-objecten') : [],
@@ -48,7 +54,7 @@ export default async function MaterieelbeheerPage() {
 
   // Hoofdfoto's staan in een private bucket: paden in één batch ondertekenen,
   // niet één call per rij.
-  const rijen = (objectenRes.data ?? []) as MaterieelObject[]
+  const rijen = objectenAlles
   const fotoUrls = await signPaden(rijen.map((o) => o.hoofdfoto_path).filter(Boolean) as string[])
 
   // Geen medewerker en geen team gekoppeld → per definitie algemeen gebruik.

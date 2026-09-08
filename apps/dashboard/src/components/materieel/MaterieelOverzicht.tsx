@@ -8,6 +8,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import { PageHeader, Button } from '@/components/ui'
 import { IconPlus } from '@/components/eva/Icons'
 import StatusBadge from './StatusBadge'
+import { codeLabel, heeftSticker } from '@/lib/materieel/qr'
 import {
   CATEGORIE_LABELS, NIVEAU_LABELS, MATERIEEL_STATUSSEN, STATUS_META,
   type MaterieelObjectRij,
@@ -117,6 +118,21 @@ const KOLOMMEN: KolomDefinitie<MaterieelObjectRij>[] = [
     standaard_zichtbaar: false,
     sorteerWaarde: (r) => r.aanschafwaarde ?? 0,
     render: (r) => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{euro(r.aanschafwaarde)}</span>,
+  },
+  {
+    key: 'vervangingswaarde',
+    label: 'Vervangingswaarde',
+    sorteerWaarde: (r) => r.vervangingswaarde ?? 0,
+    render: (r) => <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{euro(r.vervangingswaarde)}</span>,
+  },
+  {
+    key: 'sticker',
+    label: 'Sticker',
+    standaard_zichtbaar: false,
+    sorteerWaarde: (r) => (heeftSticker(r) ? codeLabel(r.qr_code) : ''),
+    render: (r) => heeftSticker(r)
+      ? <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--fg-soft)' }}>{codeLabel(r.qr_code)}</span>
+      : <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>Nog geen</span>,
   },
 ]
 

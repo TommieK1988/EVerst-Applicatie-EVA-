@@ -163,6 +163,7 @@ export default function Paspoort({
             <Rij label="Garantie tot" waarde={<GarantieWaarde datum={object.garantie_tot} />} />
             <Rij label="Aanschafwaarde" waarde={euro(object.aanschafwaarde)} />
             <Rij label="Boekwaarde" waarde={euro(object.boekwaarde)} />
+            <Rij label="Vervangingswaarde" waarde={euro(object.vervangingswaarde)} />
           </section>
 
           {/* Categorie-specifieke velden */}

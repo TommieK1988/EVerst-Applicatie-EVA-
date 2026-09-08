@@ -4,21 +4,24 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 import QrScanner from './QrScanner'
 import { koppelSticker, zoekScan } from '@/app/m/materieel/actions'
+import { codeLabel } from '@/lib/materieel/qr'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './stijl'
 
 /**
  * Scanscherm. Eén camera, drie mogelijke uitkomsten:
  *
  *  • **bekende code** → het paspoort van dat object;
- *  • **onbekende code** → het formulier "Nieuw materieel", met de sticker er al
- *    aan gekoppeld (dit is de route bij het invoeren van een nieuwe partij);
+ *  • **onbekende code** → een keuze: hoort de sticker bij materieel dat al in EVA
+ *    staat (koppelen), of is dit iets nieuws (aanmaken)? Die keuze is er bewust:
+ *    blind doorsturen naar "nieuw" leverde dubbele objecten op zodra kantoor de
+ *    inventaris al had ingevoerd;
  *  • **koppelen** (`koppelAanId` gezet) → de gescande sticker gaat aan het object
  *    waar je vandaan kwam. Voor materieel dat al in EVA staat maar nog geen
  *    sticker had.
  *
  * Wie geen 'schrijven' heeft, kan wel scannen en kijken maar krijgt bij een
- * onbekende sticker een nette melding in plaats van het formulier — anders zou
- * hij op een doodlopend scherm belanden dat de server toch weigert.
+ * onbekende sticker een nette melding in plaats van de keuze — anders zou hij op
+ * een doodlopend scherm belanden dat de server toch weigert.
  */
 export default function ScanScherm({
   magToevoegen,
@@ -33,6 +36,8 @@ export default function ScanScherm({
   const [bezig, setBezig] = React.useState(false)
   const [fout, setFout] = React.useState<string | null>(null)
   const [handmatig, setHandmatig] = React.useState('')
+  /** Gescande sticker die EVA niet kent — wacht op de keuze koppelen/nieuw. */
+  const [onbekend, setOnbekend] = React.useState<string | null>(null)
 
   const verwerk = React.useCallback(async (payload: string) => {
     setBezig(true)
@@ -59,8 +64,47 @@ export default function ScanScherm({
       setBezig(false)
       return
     }
-    router.push(`/m/materieel/nieuw?code=${encodeURIComponent(res.data.code)}`)
+    // Onbekende sticker: eerst vragen of het bij bestaand materieel hoort.
+    setOnbekend(res.data.code)
+    setBezig(false)
   }, [koppelAanId, magToevoegen, router])
+
+  // Gescand, niet gevonden: eerst kiezen. Camera weg, anders scant hij door de
+  // keuze heen.
+  if (onbekend) {
+    return (
+      <div style={{ padding: 14 }}>
+        <div style={kaart}>
+          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Onbekende sticker</div>
+          <div style={{ fontSize: 17, fontWeight: 800 }}>{codeLabel(onbekend)}</div>
+          <div style={{ fontSize: 13, color: GRIJS, marginTop: 6, lineHeight: 1.45 }}>
+            Deze code staat nog nergens in EVA. Hoort hij bij materieel dat er al in
+            staat, of is dit iets nieuws?
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => router.push(`/m/materieel/koppel?code=${encodeURIComponent(onbekend)}`)}
+            style={primaireKnop}
+          >
+            Koppelen aan bestaand materieel
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/m/materieel/nieuw?code=${encodeURIComponent(onbekend)}`)}
+            style={secundaireKnop}
+          >
+            Nieuw materieel aanmaken
+          </button>
+          <button type="button" onClick={() => setOnbekend(null)} style={secundaireKnop}>
+            Opnieuw scannen
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: 14 }}>

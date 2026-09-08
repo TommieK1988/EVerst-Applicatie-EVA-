@@ -5,7 +5,7 @@ import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import type { ScanBestemming } from '@/lib/materieel/qr'
-import { zoekOpCode } from '@/lib/materieel/zoeken'
+import { getZonderSticker, zoekOpCode, type MaterieelKort } from '@/lib/materieel/zoeken'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -47,6 +47,18 @@ export async function zoekScan(payload: string): Promise<Uitkomst<ScanBestemming
     return { ok: true, data: { soort: 'bekend', id: object.id, omschrijving: object.omschrijving } }
   }
   return { ok: true, data: { soort: 'onbekend', code } }
+}
+
+/**
+ * Materieel dat nog geen sticker heeft, om er nu een aan te hangen.
+ *
+ * Zoekt server-side i.p.v. de hele lijst naar de telefoon te sturen: bij een
+ * verse inventaris staan er honderden objecten te wachten, en dat wil je niet
+ * allemaal over een bouwverbinding trekken.
+ */
+export async function zoekTeStickeren(term: string): Promise<Uitkomst<MaterieelKort[]>> {
+  const g = await gate(); if (!g.ok) return g
+  return { ok: true, data: await getZonderSticker(term, 50) }
 }
 
 /**
