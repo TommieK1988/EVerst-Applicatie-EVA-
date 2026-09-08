@@ -4,6 +4,7 @@ import StatCard from '@/components/wagenpark/shared/StatCard'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import Livetracker from '@/components/wagenpark/shared/Livetracker'
 import RijscoreRanking from '@/components/wagenpark/dashboard/RijscoreRanking'
+import RitDekkingWaarschuwing from '@/components/wagenpark/shared/RitDekkingWaarschuwing'
 import WerktijdenRanglijst from '@/components/wagenpark/dashboard/WerktijdenRanglijst'
 import PeriodeKiezer from '@/components/wagenpark/werktijden/PeriodeKiezer'
 import { createClient } from '@/lib/wagenpark/supabase/server'
@@ -11,6 +12,7 @@ import { createClient as createServerClient } from '@everts/database/server'
 import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
 import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
+import { laadRitDekking } from '@/lib/wagenpark/rit-dekking'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
 import { minutenLabel, teltMee } from '@/lib/wagenpark/werktijd'
 import { laadLayouts } from '@/app/actions/layouts'
@@ -57,6 +59,7 @@ export default async function DashboardPage({
     topBevindingenRes,
     werktijden,
     layoutsSamenvatting,
+    dekking,
   ] = await Promise.all([
     supabase
       .from('voertuigen')
@@ -92,6 +95,9 @@ export default async function DashboardPage({
     magPrive && user_id
       ? laadLayouts(user_id, 'wagenpark-werktijden-samenvatting')
       : Promise.resolve([]),
+    // Zonder ritten is elk cijfer op deze pagina stilzwijgend nul; zie
+    // lib/wagenpark/rit-dekking.ts.
+    laadRitDekking(periode.van, periode.tot),
   ])
 
   const aantalVoertuigen = voertuigenRes.count ?? 0
@@ -154,6 +160,8 @@ export default async function DashboardPage({
       )}
 
       <PeriodeKiezer periode={periode} pad="/wagenpark/dashboard" />
+
+      <RitDekkingWaarschuwing dekking={dekking} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard

@@ -6,7 +6,7 @@ export default function TripsImportPage() {
     <>
       <PageHeader
         titel="Ritten importeren (Excel)"
-        omschrijving="Voor oudere data dan de ULU API teruggeeft (API-cap: ~75 trips per voertuig). Gebruik deze upload om historie vanaf 1 januari (of vroeger) in te laden."
+        omschrijving="Voor oudere data dan de ULU API teruggeeft. Die geeft maar ongeveer één week terug (gemeten 8 sep 2026) en negeert datumfilters, dus alles wat langer geleden is moet hier naar binnen."
       />
       <div className="bg-white rounded-lg border p-6 max-w-3xl">
         <TripsImportForm />

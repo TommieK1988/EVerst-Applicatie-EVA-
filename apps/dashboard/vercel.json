@@ -13,6 +13,14 @@
       "schedule": "45 10,11 * * *"
     },
     {
+      "path": "/api/cron/ulu-sync",
+      "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/cron/ulu-sync",
+      "schedule": "15 13 * * *"
+    },
+    {
       "path": "/api/cron/wagenpark-weeksamenvatting",
       "schedule": "0 7 * * 1"
     },

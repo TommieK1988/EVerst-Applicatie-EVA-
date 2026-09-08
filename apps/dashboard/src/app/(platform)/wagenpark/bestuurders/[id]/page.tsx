@@ -12,11 +12,13 @@ import RitTypeToggle from '@/components/wagenpark/ritten/RitTypeToggle'
 import MedewerkerKoppeling, { type MedewerkerOptie } from '@/components/wagenpark/bestuurders/MedewerkerKoppeling'
 import PeriodeKiezer from '@/components/wagenpark/werktijden/PeriodeKiezer'
 import WerktijdenBlok from '@/components/wagenpark/werktijden/WerktijdenBlok'
+import RitDekkingWaarschuwing from '@/components/wagenpark/shared/RitDekkingWaarschuwing'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
+import { laadRitDekking, VOLLEDIGE_DEKKING } from '@/lib/wagenpark/rit-dekking'
 import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { signaalSoort } from '@/lib/wagenpark/signalen'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
@@ -271,9 +273,12 @@ export default async function BestuurderDetailPage(
   // Alleen ophalen met het privé-recht — het is precies dezelfde poort als voor
   // de privé-ritten, en zonder dat recht komt het blok niet op het scherm.
   const authUserId = magPrive ? await huidigeAuthUserId() : null
-  const [werktijden, layoutsWerktijden] = await Promise.all([
+  const [werktijden, layoutsWerktijden, dekking] = await Promise.all([
     magPrive ? laadWerktijdGegevens(periode.van, periode.tot, String(userId)) : Promise.resolve(null),
     magPrive && authUserId ? laadLayouts(authUserId, 'wagenpark-werktijden') : Promise.resolve([]),
+    // Dagen zonder ritregistratie tellen hieronder als "geen afwijking" terwijl
+    // er niets gemeten is — dat moet erbij staan. Zie lib/wagenpark/rit-dekking.ts.
+    magPrive ? laadRitDekking(periode.van, periode.tot) : Promise.resolve(VOLLEDIGE_DEKKING),
   ])
 
   // Medewerker-koppeling (spiegelbeeld van de koppeling op de medewerker-pagina)
@@ -461,6 +466,8 @@ export default async function BestuurderDetailPage(
             </p>
 
             <PeriodeKiezer periode={periode} pad={`/wagenpark/bestuurders/${userId}`} />
+
+            <RitDekkingWaarschuwing dekking={dekking} compact />
 
             <WerktijdenBlok
               data={werktijden?.rijen ?? []}

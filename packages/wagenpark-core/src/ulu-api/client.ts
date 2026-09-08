@@ -141,14 +141,22 @@ export class UluClient {
   /**
    * Alle trips van een voertuig binnen een datumbereik. Paginering automatisch.
    *
-   * **HARDE RECENCY-CAP — bevestigd 17-apr én opnieuw gemeten 21-jul-2026.**
+   * **HARDE RECENCY-CAP — gemeten 17-apr, 21-jul en 8-sep-2026.**
    * De ULU API negeert date-range parameters én geeft alleen de laatst gereden
-   * **~75 trips per voertuig** terug. Doorpagineren levert niets extra's op.
-   * Meting: een sync over 1 jan – 21 jul haalde 1.297 rijen op vóór en 1.320 ná
-   * het herstellen van de paginering (zie hieronder) — nagenoeg gelijk, en de
-   * oudste opgehaalde rit was 6 juli. Oudere periodes zijn dus NIET via de API
-   * te halen; daarvoor is de xlsx-import (Wagenpark → Ritten → Importeren) de
-   * enige route.
+   * ritten terug. Doorpagineren levert niets extra's op: de envelope zegt zelf
+   * `total_pages: 1, has_more: false`, dus de server houdt geen pagina's achter —
+   * hij hééft de rest niet.
+   *
+   * Het venster is KORTER dan de "~75 trips per voertuig" die hier eerder stond.
+   * Meting 8-sep-2026: 26 en 39 trips per voertuig, oudste 1 september — ruwweg
+   * één week. `limit=500` verandert daar niets aan, en acht schrijfwijzen van een
+   * datumfilter (from/to, start_date, date_from, start_at_gteq, q[...], since,
+   * period_start, min_date) gaven allemaal exact dezelfde recente set terug.
+   * Endpoints /trips, /company_trips, /rides, /reports en /exports bestaan niet.
+   *
+   * GEVOLG: een week niet syncen is permanent dataverlies. Oudere periodes zijn
+   * NIET via de API te halen; daarvoor is de xlsx-import (Wagenpark → Ritten →
+   * Importeren) de enige route.
    *
    * De paginering zélf was wel kapot: `if (chunk.length < pageSize) break`
    * vergeleek de ontvangen paginagrootte (~75) met de gevraagde (100) en stopte
