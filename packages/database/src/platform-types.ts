@@ -436,6 +436,8 @@ export type MeerwerkRegel = {
   bouw7_term_id: number | null
   /** True zolang de termijn bij akkoord nog niet gezet kon worden (herkansing via de cron). */
   bouw7_term_pending: boolean
+  /** True als dit meerwerk al in de grondslag van de Bouw7-termijnstaat zat; dan geen eigen termijn. */
+  in_termijnstaat: boolean
   bouw7_nummer: string | null
   begroot_bedrag: number | null
   /**

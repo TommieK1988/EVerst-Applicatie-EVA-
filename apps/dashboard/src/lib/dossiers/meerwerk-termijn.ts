@@ -32,6 +32,8 @@ type Regel = {
   bouw7_nummer: string | null
   bewakingscode: string | null
   bouw7_term_id: number | null
+  /** True als dit meerwerk al in de grondslag van de termijnstaat zat (`maakTermijnschema`). */
+  in_termijnstaat: boolean | null
 }
 
 /** Komt deze regel in aanmerking voor een termijn? Zo nee, met reden. */
@@ -41,6 +43,8 @@ export function meerwerkTermijnGeschikt(r: Regel): { ok: true } | { ok: false; r
   if (!(Number(r.bedrag_excl_btw) > 0)) return { ok: false, reden: 'geen bedrag' }
   if (r.termijn_wijze === 'eigen_termijnstaat') return { ok: false, reden: 'eigen termijnstaat gekozen' }
   if (r.status !== 'akkoord' && r.status !== 'voltooid') return { ok: false, reden: 'nog niet akkoord' }
+  // Bij een termijnstaat op het contracttotaal zit dit meerwerk al in de bestaande termijnen.
+  if (r.in_termijnstaat) return { ok: false, reden: 'zit al in de termijnstaat verwerkt' }
   return { ok: true }
 }
 
@@ -53,7 +57,7 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
     const supabase = db()
     const { data: r } = await supabase
       .from('meerwerk_regels')
-      .select('id, dossier_id, volgnummer, omschrijving, bedrag_excl_btw, btw_pct, afrekenwijze, is_stelpost, status, termijn_wijze, bouw7_nummer, bewakingscode, bouw7_term_id')
+      .select('id, dossier_id, volgnummer, omschrijving, bedrag_excl_btw, btw_pct, afrekenwijze, is_stelpost, status, termijn_wijze, bouw7_nummer, bewakingscode, bouw7_term_id, in_termijnstaat')
       .eq('id', regelId)
       .maybeSingle()
     if (!r) return { ok: false, error: 'Meerwerkregel niet gevonden.' }

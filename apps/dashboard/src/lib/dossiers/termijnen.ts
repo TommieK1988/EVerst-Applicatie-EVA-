@@ -575,6 +575,20 @@ export async function maakTermijnschema(
   })
   if (!res.ok) return res
 
+  // Is er op het contracttotaal gerekend, dan zit het nu goedgekeurde meerwerk al in deze
+  // termijnen verdeeld. Die regels mogen daarna geen eigen meerwerktermijn meer krijgen
+  // (zie lib/dossiers/meerwerk-termijn.ts) — anders staat hetzelfde bedrag twee keer in de
+  // termijnstaat en kan het dubbel gefactureerd worden. Meerwerk dat ná dit moment wordt
+  // goedgekeurd zat niet in de grondslag en krijgt zijn eigen termijn gewoon.
+  if (invoer.grondslag === 'contracttotaal') {
+    await supabase
+      .from('meerwerk_regels')
+      .update({ in_termijnstaat: true, bouw7_term_pending: false })
+      .eq('dossier_id', dossierId)
+      .in('status', ['akkoord', 'voltooid'])
+      .is('bouw7_term_id', null)
+  }
+
   revalidatePath(`/opdrachten/${dossierId}/verkoop`)
   revalidatePath(`/servicedesk/${dossierId}/financieel`)
   return { ok: true, aangemaakt: res.aangemaakt, grondslag }

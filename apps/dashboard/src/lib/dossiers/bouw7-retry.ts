@@ -151,8 +151,16 @@ export async function herhaalUitgesteldeDossierWrites(opts?: { dossierId?: strin
       for (const r of (data ?? []) as { id: string; omschrijving: string | null; dossiers?: { bouw7_id: string | null } | null }[]) {
         if (!r.dossiers?.bouw7_id) continue
         const res = await zetMeerwerkAlsTermijn(r.id)
-        // "Geen termijnstaat" is geen storing maar een keuze van de gebruiker; telt niet als fout.
-        if (!res.ok && /geen termijnstaat|eigen termijnstaat/i.test(res.error)) continue
+        if (!res.ok) {
+          // Geen storing maar een keuze: er is (nog) geen termijnstaat, de gebruiker wil een
+          // eigen staat, of het meerwerk zit al in de grondslag. Bij die laatste twee heeft
+          // opnieuw proberen geen zin — vlag wissen zodat de cron er niet op blijft hangen.
+          if (/eigen termijnstaat|zit al in de termijnstaat/i.test(res.error)) {
+            await supabase.from('meerwerk_regels').update({ bouw7_term_pending: false }).eq('id', r.id)
+            continue
+          }
+          if (/geen termijnstaat/i.test(res.error)) continue
+        }
         noteer(t, res.ok, `meerwerk ${r.omschrijving ?? r.id.slice(0, 8)}`, res.ok ? undefined : res.error)
       }
     } catch (e: unknown) {
