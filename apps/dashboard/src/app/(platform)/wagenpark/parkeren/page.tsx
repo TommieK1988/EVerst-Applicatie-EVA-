@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ParkingCircle, Upload, LayoutGrid } from 'lucide-react'
+import { ParkingCircle, Upload, LayoutGrid, FolderTree } from 'lucide-react'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import { pgQuery } from '@/lib/wagenpark/db'
@@ -20,6 +20,40 @@ type ParkingRij = {
   bestuurder_naam_raw: string | null
   /** Regelcodes + ernst van de open R8-signalen op dit parkeer-record. */
   signalen: { ernst: 'info' | 'waarschuwing' | 'overtreding'; omschrijving: string }[]
+  toewijzing: { status: string; dossiernummer: string | null; titel: string | null }[] | null
+}
+
+/**
+ * Toont waar deze parkeerkost naartoe gaat. Een voorstel is nog geen feit, dus
+ * dat wordt als zodanig gelabeld; anders zou de lijst suggereren dat de kosten
+ * al verdeeld zijn.
+ */
+function ProjectCel({
+  toewijzing,
+}: {
+  toewijzing: { status: string; dossiernummer: string | null; titel: string | null }[] | null
+}) {
+  const rijen = toewijzing ?? []
+  const metDossier = rijen.filter((t) => t.dossiernummer || t.titel)
+
+  if (metDossier.length === 0) {
+    const status = rijen[0]?.status
+    if (status === 'prive') return <span className="text-slate-400">privé</span>
+    if (status === 'afgewezen') return <span className="text-slate-400">niet doorbelast</span>
+    if (status === 'geen_kandidaat') return <span className="text-slate-400">geen project</span>
+    return <span className="text-slate-300">—</span>
+  }
+
+  const eerste = metDossier[0]
+  const label = eerste.dossiernummer ?? eerste.titel ?? ''
+  const isVoorstel = rijen.some((t) => t.status === 'voorstel')
+
+  return (
+    <span title={metDossier.map((t) => [t.dossiernummer, t.titel].filter(Boolean).join(' — ')).join(', ')}>
+      {metDossier.length > 1 ? `${metDossier.length} projecten` : label}
+      {isVoorstel && <span className="ml-1 text-xs text-amber-700">voorstel</span>}
+    </span>
+  )
 }
 
 export default async function ParkerenPage(
@@ -65,7 +99,16 @@ export default async function ParkerenPage(
         where b.regel_code = 'R8'
           and b.status = 'open'
           and $2::boolean
-          and b.data->>'parking_id' = p.id::text)            as signalen
+          and b.data->>'parking_id' = p.id::text)            as signalen,
+      -- Toewijzing aan een project. Meerdere rijen alleen bij een handmatige
+      -- verdeling over twee dossiers; dan tonen we het aantal in plaats van een naam.
+      (select json_agg(json_build_object(
+                'status', tw.status,
+                'dossiernummer', d.dossiernummer,
+                'titel', d.titel))
+         from public.parkeer_toewijzingen tw
+         left join public.dossiers d on d.id = tw.dossier_id
+        where tw.parking_id = p.id)                          as toewijzing
     from public.ulu_parking p
     where ($1 = '' or p.kenteken ilike '%' || $1 || '%')
       and ($3::date is null or p.parkeer_starttijd >= $3::date)
@@ -80,13 +123,19 @@ export default async function ParkerenPage(
     totaal_kosten: number
     lang: number
     dag_duurste: number
+    te_beoordelen: number
+    toegewezen_kosten: number
   }>(
     `
     select
       count(*)::int                                    as totaal,
       coalesce(sum(parkeerkosten), 0)::float           as totaal_kosten,
       count(*) filter (where duur_seconden > 3600)::int as lang,
-      coalesce(max(parkeerkosten), 0)::float           as dag_duurste
+      coalesce(max(parkeerkosten), 0)::float           as dag_duurste,
+      (select count(*) from public.parkeer_toewijzingen where status = 'voorstel')::int
+                                                       as te_beoordelen,
+      (select coalesce(sum(bedrag), 0) from public.parkeer_toewijzingen where status = 'bevestigd')::float
+                                                       as toegewezen_kosten
     from public.ulu_parking
     where ($1::date is null or parkeer_starttijd >= $1::date)
     `,
@@ -98,9 +147,25 @@ export default async function ParkerenPage(
     <>
       <PageHeader
         titel="Parkeren"
-        omschrijving={`${stat?.totaal ?? 0} parkeer-records • totale kosten €${(stat?.totaal_kosten ?? 0).toFixed(2)} • ${stat?.lang ?? 0} langer dan 1 uur${magPrive ? '' : ` (laatste ${RITTEN_HORIZON_DAGEN} dagen)`}.`}
+        omschrijving={
+          `${stat?.totaal ?? 0} parkeer-records • totale kosten €${(stat?.totaal_kosten ?? 0).toFixed(2)} • ` +
+          `€${(stat?.toegewezen_kosten ?? 0).toFixed(2)} toegewezen aan een project • ` +
+          `${stat?.lang ?? 0} langer dan 1 uur${magPrive ? '' : ` (laatste ${RITTEN_HORIZON_DAGEN} dagen)`}.`
+        }
         actions={
           <div className="flex gap-2">
+            <Link
+              href="/wagenpark/parkeren/toewijzen"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white text-sm hover:bg-slate-50"
+            >
+              <FolderTree className="w-4 h-4" />
+              Toewijzen
+              {(stat?.te_beoordelen ?? 0) > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs">
+                  {stat!.te_beoordelen}
+                </span>
+              )}
+            </Link>
             <Link
               href="/wagenpark/parkeren/zones"
               className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md text-sm hover:bg-slate-800 transition-colors"
@@ -157,6 +222,7 @@ export default async function ParkerenPage(
                 <th>Kenteken</th>
                 <th>Bestuurder (match)</th>
                 <th>Locatie</th>
+                <th>Project</th>
                 <th className="text-right">Duur</th>
                 <th className="text-right">Kosten</th>
                 <th>Signaal</th>
@@ -182,6 +248,9 @@ export default async function ParkerenPage(
                     <td className="">{r.kenteken}</td>
                     <td className="text-slate-700">{r.bestuurder_naam_raw ?? '—'}</td>
                     <td className="max-w-[280px] truncate">{r.parkeerlocatie ?? '—'}</td>
+                    <td className="max-w-[200px] truncate">
+                      <ProjectCel toewijzing={r.toewijzing} />
+                    </td>
                     <td className={'text-right ' + (dur > 3600 ? 'text-orange-700' : '')}>
                       {durLabel}
                     </td>

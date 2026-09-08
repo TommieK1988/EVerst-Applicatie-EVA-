@@ -5,6 +5,7 @@ import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, TH, TD, LegeStaat, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
+import ParkeerkostenBlok from './ParkeerkostenBlok'
 
 /**
  * Afwijkingen die opvolging vragen: te veel gefactureerd (→ creditnota opvragen) en facturen die
@@ -258,6 +259,12 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
           )}
         </CardBody>
       </Card>
+
+      {/* EVA-eigen kosten, bewust ná de Bouw7-tabellen: ze staan daar nog niet in.
+          Rendert niets als dit dossier geen parkeerkosten heeft. */}
+      <Suspense fallback={null}>
+        <ParkeerkostenBlok dossierId={dossierId} />
+      </Suspense>
 
       <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
         Live uit Bouw7. <strong>Geboekt</strong> = echte inkoopfacturen gekoppeld via het bonnummer of een handmatige EVA-toewijzing.

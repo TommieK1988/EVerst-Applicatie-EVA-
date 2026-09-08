@@ -4,29 +4,56 @@
     {
       "name": "dashboard",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["turbo", "run", "dev", "--filter=eva"],
+      "runtimeArgs": [
+        "turbo",
+        "run",
+        "dev",
+        "--filter=eva"
+      ],
       "port": 3000,
       "autoPort": false
     },
     {
       "name": "dashboard-alt",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set NEXT_DIST_DIR=.next-preview&& npm run dev -w eva -- -p 3005"],
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_DIST_DIR=.next-preview&& npm run dev -w eva -- -p 3005"
+      ],
       "port": 3005,
       "autoPort": false
     },
     {
       "name": "dashboard-uren",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set NEXT_DIST_DIR=.next-uren&& npm run dev -w eva -- -p 3006"],
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_DIST_DIR=.next-uren&& npm run dev -w eva -- -p 3006"
+      ],
       "port": 3006,
       "autoPort": false
     },
     {
       "name": "docs",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "docs", "-l", "4000", "--no-clipboard"],
+      "runtimeArgs": [
+        "serve",
+        "docs",
+        "-l",
+        "4000",
+        "--no-clipboard"
+      ],
       "port": 4000,
+      "autoPort": false
+    },
+    {
+      "name": "dashboard-parkeren",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set NEXT_DIST_DIR=.next-parkeren&& npm run dev -w eva -- -p 3007"
+      ],
+      "port": 3007,
       "autoPort": false
     }
   ]

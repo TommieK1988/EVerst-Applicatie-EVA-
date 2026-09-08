@@ -558,6 +558,16 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
 
   // ── Wagenpark ──────────────────────────────────────────────────────────
+  [/^\/wagenpark\/parkeren\/toewijzen$/, {
+    title: 'Parkeerkosten toewijzen',
+    description: 'Parkeerkosten horen bij het project waar iemand die dag stond, niet bij de algemene kosten. EVA doet per parkeerkost een voorstel; jij bevestigt of kiest een ander project.',
+    sections: [
+      { title: 'Waar komt een voorstel vandaan?', body: 'EVA zoekt eerst de rit die vlak vóór het parkeren eindigde — daarmee is bekend wie er reed. Vervolgens kijkt hij waar die persoon die dag stond volgens de planning en de geschreven uren, en hoe ver het eindpunt van de rit van het werkadres lag. Klap een regel uit om precies te zien welke aanwijzingen er waren.' },
+      { title: 'Zeker, waarschijnlijk of onzeker', body: 'Alleen bij "zeker" boekt EVA zelf: de bestuurder komt uit een rit, de rit is zakelijk, er staat planning of uren op dat project, en geen ander project van die dag komt in de buurt. In alle andere gevallen krijg je een voorstel voorgelegd. Dat is bewust: een kost op het verkeerde project kost meer uitzoekwerk dan een regel die je even nakijkt.' },
+      { title: 'Privé of niet doorbelasten', body: 'Parkeren tijdens een privérit of op een verlofdag komt automatisch op "privé" te staan. Zakelijk parkeren dat bij geen project hoort — bijvoorbeeld bij een leverancier of op kantoor — zet je op "niet doorbelasten".' },
+      { title: 'Later alsnog toegewezen', body: 'De planning schuift en uren worden pas later in de week ingevuld. Daarom kijkt EVA elke nacht opnieuw naar alles wat nog openstaat: een regel die vandaag onzeker is, kan volgende week vanzelf een duidelijk project krijgen. Wat jij al hebt bevestigd, blijft staan.' },
+    ],
+  }],
   [/^\/wagenpark\/dashboard$/, {
     title: 'Wagenpark — Dashboard',
     description: 'Overzichtsdashboard van het volledige wagenpark. Toont actuele statistieken, ULU-rittentracking, rijscores en de vijf meest urgente compliance­bevindingen.',

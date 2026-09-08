@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { createHash } from 'node:crypto'
 import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
+import { getDossierParkeerkosten } from './parkeerkosten'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
@@ -41,8 +42,15 @@ async function standaardOpslagPct(supabase: any): Promise<number> {
 export type RegieOpties = { opslagPerCode?: Record<string, number> }
 
 export type RegieFactuurRegel = {
-  /** Stabiele sleutel: bron_type + bron_bouw7_id. */
-  bronType: 'uur' | 'kost'
+  /**
+   * Stabiele sleutel: bron_type + bron_bouw7_id.
+   *
+   * `parkeren` is een EVA-eigen bron: die kosten staan niet in Bouw7 (ze vallen
+   * daar onder de algemene kosten van de parkeerfactuur), maar horen bij regie
+   * wél doorbelast te worden. Voor de berekening gedraagt zo'n regel zich als een
+   * kostenpost met opslag; `bronBouw7Id` bevat dan het EVA-id van de toewijzing.
+   */
+  bronType: 'uur' | 'kost' | 'parkeren'
   bronBouw7Id: string
   omschrijving: string | null
   /** Boekingsdatum: het uurlog of de inkoopfactuur. Alleen ter herkenning in het scherm. */
@@ -128,12 +136,15 @@ export async function getServicedeskRegie(
     .eq('id', dossierId)
     .single()
 
-  const [uren, inkoop, tarieven, opgeslagenRes, standaardOpslag] = await Promise.all([
+  const [uren, inkoop, tarieven, opgeslagenRes, standaardOpslag, parkeren] = await Promise.all([
     getDossierUren(dossierId),
     getDossierInkoop(dossierId),
     verkooptarievenVoorRelatie(dossier?.klant_id ?? null),
     supabase.from('regie_factuurregels').select('*').eq('dossier_id', dossierId),
     standaardOpslagPct(supabase),
+    // Best-effort: de parkeerketen loopt over een eigen databaseverbinding. Valt
+    // die weg, dan mag de rest van de regiestaat niet meesneuvelen.
+    getDossierParkeerkosten(dossierId).catch(() => null),
   ])
 
   const opgeslagen = new Map<string, OpgeslagenRegel>()
@@ -203,6 +214,40 @@ export async function getServicedeskRegie(
       bewakingscode: k.code,
       uursoort: null,
       kostensoort: k.typeKosten ?? 'Overige kosten',
+      uitgesloten: opgesl?.uitgesloten ?? false,
+      status: (opgesl?.status as 'concept' | 'gefactureerd') ?? 'concept',
+      bouw7InvoiceId: opgesl?.bouw7_invoice_id ?? null,
+      tariefUitRelatie: false,
+    })
+  }
+
+  // Parkeerkosten die aan dit dossier zijn toegewezen. Alleen bevestigde regels:
+  // een voorstel is nog geen kost en hoort niet op een factuur te belanden.
+  for (const pk of parkeren?.regels ?? []) {
+    if (pk.status !== 'bevestigd') continue
+    const sleutel = `parkeren:${pk.id}`
+    const opgesl = opgeslagen.get(sleutel)
+    const opslagPct = opgesl?.opslag_pct ?? standaardOpslag
+    const verkoopBedrag =
+      opgesl?.verkoop_bedrag ?? Math.round(pk.bedrag * (1 + opslagPct / 100) * 100) / 100
+    regels.push({
+      bronType: 'parkeren',
+      bronBouw7Id: pk.id,
+      omschrijving: ['Parkeren', pk.locatie].filter(Boolean).join(' — '),
+      datum: pk.datum,
+      herkomst: pk.bestuurder,
+      groepSleutel: opgesl?.groep_sleutel ?? null,
+      aantal: 1,
+      eenheid: 'post',
+      inkoopBedrag: pk.bedrag,
+      opslagPct,
+      verkoopTarief: null,
+      verkoopBedrag,
+      handmatigePrijs: opgesl?.verkoop_bedrag != null,
+      btwPct: null,
+      bewakingscode: null,
+      uursoort: null,
+      kostensoort: 'Overige kosten',
       uitgesloten: opgesl?.uitgesloten ?? false,
       status: (opgesl?.status as 'concept' | 'gefactureerd') ?? 'concept',
       bouw7InvoiceId: opgesl?.bouw7_invoice_id ?? null,
@@ -290,7 +335,7 @@ export type FactuurRegelVoorstel = {
 export type BoekingView = {
   /** `bronType:bronBouw7Id` — stabiel over herladen heen. */
   sleutel: string
-  bronType: 'uur' | 'kost'
+  bronType: 'uur' | 'kost' | 'parkeren'
   bronBouw7Id: string
   datum: string | null
   omschrijving: string
@@ -829,7 +874,7 @@ export async function verwijderLosseRegel(
 export async function zetBoekingGroep(
   dossierId: string,
   bewakingscode: string,
-  boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  boekingen: { bronType: 'uur' | 'kost' | 'parkeren'; bronBouw7Id: string }[],
   doel: { groepSleutel: string | null; omschrijving?: string | null } | 'nieuw',
 ): Promise<{ ok: true; groepSleutel: string | null } | { ok: false; error: string }> {
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
@@ -891,7 +936,7 @@ export async function zetBoekingGroep(
 export async function bewaarBoekingen(
   dossierId: string,
   bewakingscode: string,
-  boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  boekingen: { bronType: 'uur' | 'kost' | 'parkeren'; bronBouw7Id: string }[],
   /**
    * Geef hoogstens één prijsveld mee — welk venster op de prijs de gebruiker ook gebruikte, de
    * andere twee worden hier herleid. `null` wist de handmatige prijs en laat de boeking terugvallen
