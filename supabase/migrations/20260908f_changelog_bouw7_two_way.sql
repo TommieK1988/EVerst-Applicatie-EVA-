@@ -1,0 +1,7 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-08','opgelost','Dossiers','Je wijzigingen blijven staan na de synchronisatie',
+   'Aanpassingen die je in EVA maakte konden bij de nachtelijke synchronisatie met Bouw7 stilletjes worden teruggezet. Dat gebeurde onder meer bij het werkadres, de opmerkingen op een dossier, de gegevens van een medewerker, het IBAN van een relatie en verplaatste planning. Wat je in EVA invult blijft nu staan.'),
+  ('2026-09-08','verbeterd','Dossiers','Wat je in EVA invult komt nu ook in Bouw7 terecht',
+   'Projectnaam, categorie, referentie, werkadres, contactpersoon, object, deadline en de voorlopige planning gaan bij het opslaan mee naar het Bouw7-project; die velden waren in EVA alleen-lezen. Ook gegevens van relaties, contactpersonen en medewerkers worden nu bijgewerkt in plaats van alleen bij het aanmaken doorgegeven. Wordt een offerte gewonnen, dan komt de aanneemsom in Bouw7 te staan, en meerwerk tegen een vaste prijs verschijnt als termijn in de termijnstaat. Lukt iets even niet, dan blijft je invoer in EVA staan en probeert EVA het later opnieuw.'),
+  ('2026-09-08','verbeterd','Medewerkers','Op inactief zetten verhuist de medewerker ook in Bouw7',
+   'Zet je een collega in EVA op inactief, dan krijgt hij in Bouw7 niet alleen een datum uit dienst maar gaat hij ook naar de afdeling Inactief personeel. Zo verdwijnt hij daar ook uit de planning- en personeelslijsten. Maak je hem later weer actief, dan komt hij terug op zijn oude afdeling.');
