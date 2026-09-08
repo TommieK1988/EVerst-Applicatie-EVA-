@@ -1160,7 +1160,7 @@ beschermd (`handmatige_velden`) en krijgt via `lib/dossiers/bouw7-retry.ts` een 
 | Relatie bijwerken (naam, KvK, btw, e-mail, telefoon, mobiel, adres, opmerkingen, actief, IBAN) | `lib/bouw7/contact-write.ts` | `POST /contact { id, … }` — partieel; leeskant heet `emailAddress`/`mobilePhoneNumber`/`iban`, schrijfkant `email`/`mobileNumber`/`accountNumber` | partieel: `phoneNumber`, `city` live; overige via terugleescontrole |
 | Contactpersoon bijwerken + functie | idem | `POST /contact/{id}/contact-person { id, … }` | `jobTitle`, `phoneNumber` live |
 | Relatie aanmaken | `create-contact.ts` | `POST /contact` **vereist maatwerkveld "Soort opdrachtgever" (id 19272, keuzelijst)** — zonder dat kwam tot sep 2026 géén EVA-relatie in Bouw7 aan | ja |
-| Medewerker bijwerken (naam, telefoon, adres, datums, tarieven, extern, actief→uit-dienst-datum) | `lib/bouw7/employee-write.ts` | `POST /organization/employee { id, … }` — partieel; e-mail bewust niet (inlognaam) | `phoneNumber`, `city` live |
+| Medewerker bijwerken (naam, telefoon, adres, datums, tarieven, extern, actief→uit-dienst-datum **+ afdeling**) | `lib/bouw7/employee-write.ts` | `POST /organization/employee { id, … }` — partieel; e-mail bewust niet (inlognaam) | `phoneNumber`, `city`, `department` live |
 | Medewerker aanmaken | idem | `POST /organization/employee` + verplichte maatwerkvelden (ownerType 3, `isRequired`) op een neutrale startwaarde | **niet** live getest |
 | Aangenomen meerwerk → termijn in de termijnstaat | `lib/dossiers/meerwerk-termijn.ts` | `POST /project/{id}/invoice-term-statement` (deelschrijving: bestaande termijnen gaan ongewijzigd mee, `fixedPrice` schuift met het verschil) | ja: termijn erbij, bedrag bijgewerkt, opgeruimd |
 
@@ -1171,3 +1171,21 @@ hele POST, er wijzigt dan niets. `branch` wordt bewust nooit geschreven (project
 **Meerwerk-herkansing alleen voor `bouw7_term_pending`:** bij livegang stonden er 118 aangenomen
 regels zonder termijn-id die met de hand in Bouw7 zijn afgehandeld. Die alsnog schrijven zou dubbele
 termijnen geven.
+
+### Inactief zetten verhuist naar de afdeling "Inactief personeel"
+
+Wie in EVA op inactief gaat, krijgt in Bouw7 niet alleen een uit-dienst-datum maar verhuist ook naar
+de afdeling **"Inactief personeel"** — zo valt hij daar ook uit de planning- en personeelslijsten.
+Het afdeling-id wordt op naam opgezocht via `GET /list/departments` (bij Everts 57161, `isActive:
+false`) en niet gehardcodeerd. `POST /organization/employee { id, department: { id } }` is partieel:
+geverifieerd op 195078 dat naam, adres, tarieven, uit-dienst-datum en maatwerkvelden onaangeroerd
+bleven.
+
+Terugdraaien kan doordat EVA de vórige afdeling onthoudt in
+`medewerkers.bouw7_afdeling_voor_inactief_id` (migratie `20260908d`): EVA's eigen `afdeling` is een
+andere indeling dan die van Bouw7 en kan de terugkeerafdeling niet aanwijzen. Die kolom wordt pas
+gevuld ná een geslaagde write, alleen de eerste keer (anders zou "Inactief personeel" zichzelf als
+terugkeerafdeling vastleggen), en weer geleegd zodra iemand actief wordt.
+
+Wordt iemand in **Bouw7 zelf** uit dienst gemeld, dan blijft zijn afdeling daar met rust: dat is dan
+een keuze van de administratie, en de lees-sync schrijft sowieso niets terug.

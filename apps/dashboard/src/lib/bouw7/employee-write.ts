@@ -10,6 +10,10 @@
  * gebruikersnaam voor inloggen; een tikfout in EVA zou iemand buitensluiten. Het is in EVA
  * gewoon bewerkbaar en blijft daar beschermd, maar gaat niet naar Bouw7.
  *
+ * Eén uitzondering op "afdeling niet schrijven": wie in EVA op **inactief** gaat, verhuist in
+ * Bouw7 naar de afdeling **"Inactief personeel"** — zo valt hij daar ook uit de planning- en
+ * personeelslijsten. Zie `AFDELING_INACTIEF`.
+ *
  * Aanmaken vereist de verplichte maatwerkvelden van Bouw7 (VCA-diploma, sleutel ontvangen,
  * VCA geldig t/m). Die krijgen een neutrale startwaarde ("Geen"); de administratie vult ze in
  * Bouw7 of via de VCA-module aan. Aanmaken is niet live getest — mislukt het, dan blijft de
@@ -44,6 +48,28 @@ const VELDEN: Record<string, { post: string; lees: keyof Bouw7Employee }> = {
 /** Kolommen die een write kunnen aansturen; `actief` vertaalt naar de uit-dienst-datum. */
 export const BOUW7_MEDEWERKER_SCHRIJFVELDEN = [...Object.keys(VELDEN), 'actief'] as const
 
+/** Naam van de Bouw7-afdeling waar inactieve medewerkers heen gaan. */
+const AFDELING_INACTIEF = 'Inactief personeel'
+
+type Bouw7Afdeling = { id: number; name?: string | null }
+
+/**
+ * De Bouw7-afdeling "Inactief personeel". Op naam opgezocht en niet gehardcodeerd: het id
+ * verschilt per Bouw7-omgeving. Bestaat de afdeling niet, dan `null` — de uit-dienst-datum gaat
+ * dan gewoon door en alleen de verhuizing blijft uit.
+ */
+async function afdelingInactiefId(client: Awaited<ReturnType<typeof getBouw7Client>>): Promise<number | null> {
+  try {
+    const res = await client.get<Bouw7Afdeling[] | { items?: Bouw7Afdeling[] }>('/list/departments')
+    const lijst = Array.isArray(res) ? res : (res.items ?? [])
+    const doel = AFDELING_INACTIEF.toLowerCase()
+    return lijst.find(d => (d.name ?? '').trim().toLowerCase() === doel)?.id ?? null
+  } catch (e) {
+    console.error('[employee-write] afdelingen ophalen mislukt:', e)
+    return null
+  }
+}
+
 export type EmployeeWriteResultaat =
   | { ok: true; geschreven: string[]; nietOvergenomen: string[] }
   | { ok: false; error: string; geschreven: string[] }
@@ -64,13 +90,16 @@ export async function schrijfBouw7Medewerker(medewerkerId: string, velden: reado
     const supabase = db()
     const { data: m } = await supabase
       .from('medewerkers')
-      .select('bouw7_id, actief, ' + Object.keys(VELDEN).join(', '))
+      .select('bouw7_id, actief, bouw7_afdeling_voor_inactief_id, ' + Object.keys(VELDEN).join(', '))
       .eq('id', medewerkerId)
       .maybeSingle()
     if (!m?.bouw7_id) return { ok: false, error: 'Medewerker staat nog niet in Bouw7.', geschreven }
 
+    const client = await getBouw7Client()
     const body: Record<string, unknown> = { id: Number(m.bouw7_id) }
     const verwacht = new Map<string, { lees: keyof Bouw7Employee; waarde: string; norm: (v: unknown) => string }>()
+    /** Na een geslaagde write op de medewerkerrij zetten (afdeling-onthouden). */
+    let naSchrijven: Record<string, unknown> | null = null
 
     const wil = new Set(velden)
     // Actief ⇄ uit-dienst-datum: één Bouw7-veld, twee EVA-invoeren.
@@ -80,6 +109,31 @@ export async function schrijfBouw7Medewerker(medewerkerId: string, velden: reado
       const n = (v: unknown) => datumNorm(v)
       verwacht.set(wil.has('uit_dienst_per') ? 'uit_dienst_per' : 'actief', { lees: 'dateOfResignation', waarde: n(uitDienst), norm: n })
       if (wil.has('uit_dienst_per') && wil.has('actief')) geschreven.push('actief')
+
+      // Inactief → verhuizen naar de afdeling "Inactief personeel"; weer actief → terug naar de
+      // afdeling waar hij vandaan kwam. Die onthouden we, want EVA's eigen `afdeling` is een
+      // andere indeling dan die van Bouw7 en kan hem niet aanwijzen.
+      // Alleen bij een wijziging vanuit EVA: wordt iemand in Bouw7 zelf uit dienst gemeld, dan is
+      // de afdeling daar ook een keuze van de administratie en laten we hem met rust.
+      const huidigeAfdeling = await client
+        .get<Bouw7ListResponse<Bouw7Employee>>('/list/employees', { q: `id = ${Number(m.bouw7_id)}` })
+        .then(r => r.items?.[0]?.department?.id ?? null)
+        .catch(() => null)
+      if (m.actief === false) {
+        const inactiefId = await afdelingInactiefId(client)
+        if (inactiefId != null && huidigeAfdeling !== inactiefId) {
+          body.department = { id: inactiefId }
+          // Alleen de eerste keer onthouden: een tweede write mag "Inactief personeel" niet
+          // als terugkeerafdeling vastleggen.
+          if (m.bouw7_afdeling_voor_inactief_id == null && huidigeAfdeling != null) {
+            naSchrijven = { bouw7_afdeling_voor_inactief_id: huidigeAfdeling }
+          }
+        }
+      } else if (m.bouw7_afdeling_voor_inactief_id != null) {
+        body.department = { id: Number(m.bouw7_afdeling_voor_inactief_id) }
+        naSchrijven = { bouw7_afdeling_voor_inactief_id: null }
+      }
+
       wil.delete('actief'); wil.delete('uit_dienst_per')
     }
     for (const k of wil) {
@@ -99,7 +153,6 @@ export async function schrijfBouw7Medewerker(medewerkerId: string, velden: reado
     }
     if (verwacht.size === 0) return { ok: true, geschreven, nietOvergenomen: [] }
 
-    const client = await getBouw7Client()
     await client.post('/organization/employee', body)
 
     const na = (await client.get<Bouw7ListResponse<Bouw7Employee>>('/list/employees', { q: `id = ${Number(m.bouw7_id)}` })).items?.[0]
@@ -107,6 +160,12 @@ export async function schrijfBouw7Medewerker(medewerkerId: string, velden: reado
     for (const [k, v] of verwacht) {
       if (na && v.norm(na[v.lees]) === v.waarde) geschreven.push(k)
       else nietOvergenomen.push(k)
+    }
+    // Afdeling-onthouden pas ná een geslaagde write: anders zou EVA denken dat iemand terug moet
+    // naar een afdeling waar Bouw7 hem nooit uit heeft gehaald.
+    const afdelingGewenst = (body.department as { id?: number } | undefined)?.id
+    if (naSchrijven && afdelingGewenst != null && na?.department?.id === afdelingGewenst) {
+      await supabase.from('medewerkers').update(naSchrijven).eq('id', medewerkerId)
     }
     return { ok: true, geschreven, nietOvergenomen }
   } catch (e) {

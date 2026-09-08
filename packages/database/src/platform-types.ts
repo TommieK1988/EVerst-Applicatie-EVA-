@@ -841,6 +841,8 @@ export type Medewerker = {
   bouw7_sync_fout: string | null
   /** Kolommen die in EVA zijn bewerkt en die de Bouw7-sync niet meer overschrijft. */
   handmatige_velden: string[]
+  /** Bouw7-afdeling van vóór het op inactief zetten; wordt hersteld zodra hij weer actief is. */
+  bouw7_afdeling_voor_inactief_id: number | null
   // Uitgebreide persoonsgegevens
   adres_straat: string | null
   adres_postcode: string | null
