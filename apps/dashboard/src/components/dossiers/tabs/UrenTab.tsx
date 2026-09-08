@@ -7,6 +7,7 @@ import {
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtUren, fmtTarief, fmtPct, TH, TD, LegeStaat, ROOD, GROEN } from './tab-ui'
 import UrenDetailTable from './UrenDetailTable'
+import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
 const KLEUR_SALDO = (v: number) => (v >= 0 ? GROEN : ROOD)
 
@@ -14,11 +15,25 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
   const data = await getDossierUrenBewaking(dossierId)
 
   if (!data.beschikbaar) {
+    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
     return (
-      <LegeStaat
-        titel="Geen uren per bewakingscode"
-        tekst="Dit dossier heeft geen Bouw7-koppeling of er zijn nog geen arbeidsurenboekingen."
-      />
+      <div>
+        <Bouw7StandStrip
+          dossierId={dossierId}
+          tab="uren"
+          opgehaaldOp={data.stand.opgehaaldOp}
+          ontbreekt={data.stand.ontbreekt}
+          fout={data.stand.fout}
+        />
+        <LegeStaat
+          titel={nooitOpgehaald ? 'Nog niet opgehaald uit Bouw7' : 'Geen uren per bewakingscode'}
+          tekst={
+            nooitOpgehaald
+              ? 'Deze gegevens worden twee keer per dag opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
+              : 'Dit dossier heeft geen Bouw7-koppeling of er zijn nog geen arbeidsurenboekingen.'
+          }
+        />
+      </div>
     )
   }
 
@@ -26,7 +41,15 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
 
   return (
-    <Card>
+    <div>
+      <Bouw7StandStrip
+        dossierId={dossierId}
+        tab="uren"
+        opgehaaldOp={data.stand.opgehaaldOp}
+        ontbreekt={data.stand.ontbreekt}
+        fout={data.stand.fout}
+      />
+      <Card>
       <CardHeader>Uren per bewakingscode</CardHeader>
       <CardBody style={{ padding: 0 }}>
         <div style={{ overflowX: 'auto' }}>
@@ -108,7 +131,8 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
           </div>
         )}
       </CardBody>
-    </Card>
+      </Card>
+    </div>
   )
 }
 

@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["dub1"],
+  "regions": [
+    "dub1"
+  ],
   "crons": [
     {
       "path": "/api/cron/bouw7-sync/full",
@@ -27,12 +29,24 @@
       "schedule": "0 5 * * *"
     },
     {
-      "path": "/api/cron/uren",
-      "schedule": "0 7-19/2 * * 1-5"
-    },
-    {
       "path": "/api/cron/portaal-mail",
       "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/uren",
+      "schedule": "0 6,7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/uren",
+      "schedule": "0 12,13 * * 1-5"
+    },
+    {
+      "path": "/api/cron/bouw7-snapshots/alles",
+      "schedule": "0 5,6 * * *"
+    },
+    {
+      "path": "/api/cron/bouw7-snapshots/alles",
+      "schedule": "15 11,12 * * *"
     }
   ]
 }

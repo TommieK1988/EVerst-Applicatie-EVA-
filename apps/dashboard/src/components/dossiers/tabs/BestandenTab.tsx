@@ -14,6 +14,7 @@ import React, { useEffect, useMemo, useRef, useState, useTransition } from 'reac
 import toast from 'react-hot-toast'
 import { Card, CardHeader, CardBody } from '@/components/ui'
 import { UploadCloud } from 'lucide-react'
+import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import {
   getDossierBestanden, getAppZichtbareBestandIds, setBestandAppZichtbaar,
   type DossierBestandenData,
@@ -91,7 +92,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   useEffect(() => {
     getDossierBestanden(dossierId)
       .then(setBouw7)
-      .catch(() => setBouw7({ beschikbaar: false, bestanden: [] }))
+      .catch(() => setBouw7({ beschikbaar: false, bestanden: [], opgehaaldOp: null }))
     getAppZichtbareBestandIds(dossierId)
       .then(ids => setInApp(new Set(ids)))
       .catch(() => setInApp(new Set()))
@@ -300,6 +301,14 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
   return (
     <div className="px-8 py-7 space-y-5">
+      {/* De Bouw7-helft van de lijst komt uit de snapshot; SharePoint blijft live. */}
+      <Bouw7StandStrip
+        dossierId={dossierId}
+        tab="bestanden"
+        opgehaaldOp={bouw7?.opgehaaldOp ?? null}
+        ontbreekt={bouw7?.opgehaaldOp == null ? ['project_files'] : []}
+      />
+
       {/* Opstellen bovenaan; wat je hier maakt landt in SharePoint en verschijnt
           daardoor vanzelf in de lijst hieronder. */}
       <DocumentenKaart dossierId={dossierId} />

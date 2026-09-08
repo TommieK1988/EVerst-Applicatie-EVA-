@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { leesGoedkeuringTerug, stuurUrenWeekNaarBouw7 } from '@/lib/uren/bouw7'
 import { schrijfVerlofNaarBouw7 } from '@/lib/uren/verlof'
+import { binnenLokaalUur } from '@/lib/cron/lokaal-venster'
+import { ververseGlobaleBron } from '@/lib/bouw7/snapshot'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -32,12 +34,24 @@ const db = () => createAdminClient() as any
  *     een goedkeurder regels blijven zien die allang rond zijn.
  *
  * Beveiliging: Authorization: Bearer <CRON_SECRET>.
+ *
+ * Draait twee keer per werkdag (08:00 en 14:00 lokaal), vlak na de Bouw7-syncs. Net als daar
+ * vuurt de cron op twee UTC-uren zodat er het hele jaar een op het bedoelde lokale uur valt;
+ * de tegenhanger slaat over. Alleen GET (= Vercel Cron) dwingt dat venster af.
  */
-async function handle(req: NextRequest): Promise<NextResponse> {
+/** Beoogde lokale (Europe/Amsterdam) starttijden. */
+const DOEL_LOKALE_UREN = [8, 14]
+
+async function handle(req: NextRequest, enforceLocalWindow = false): Promise<NextResponse> {
   const auth = req.headers.get('authorization')
   const secret = process.env.CRON_SECRET
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (enforceLocalWindow && !binnenLokaalUur(DOEL_LOKALE_UREN)) {
+    // 200 zodat Vercel deze bedoelde no-op niet als mislukte cron markeert.
+    return NextResponse.json({ ok: true, skipped: true, reason: 'buiten lokaal venster' }, { status: 200 })
   }
 
   const startedAt = Date.now()
@@ -104,9 +118,14 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // /uren leest uit de snapshot, dus de zojuist teruggelezen goedkeurvlaggen moeten daar ook
+    // in terechtkomen -- anders zie je tot de volgende warmronde nog de oude stand.
+    const vensterBijgewerkt = (await ververseGlobaleBron('uren_venster').catch(() => ({ ok: false }))).ok
+
     return NextResponse.json({
       ok: true,
       duurMs: Date.now() - startedAt,
+      vensterBijgewerkt,
       beoordelingenOpgeruimd: opgeruimd,
       goedkeuring: terug,
       herverzonden,
@@ -123,5 +142,5 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-export const GET = handle
-export const POST = handle
+export const GET = (req: NextRequest) => handle(req, true)
+export const POST = (req: NextRequest) => handle(req)

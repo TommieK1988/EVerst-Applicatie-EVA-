@@ -3,6 +3,7 @@ import { runFullSync } from '@/app/(platform)/instellingen/integraties/actions'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
 import { geocodeDossiers } from '@/lib/dossiers/geocode'
 import type { SyncMode } from '@/lib/bouw7/sync'
+import { amsterdamUur } from '@/lib/cron/lokaal-venster'
 
 /**
  * Beoogde lokale (Europe/Amsterdam) starttijd per mode. Vercel Cron draait alleen in
@@ -14,16 +15,6 @@ import type { SyncMode } from '@/lib/bouw7/sync'
 const DOEL_LOKAAL_UUR: Record<SyncMode, number> = {
   full: 6, // 06:30 lokaal
   incremental: 12, // 12:45 lokaal
-}
-
-/** Huidig uur in Europe/Amsterdam (0–23), DST-correct via Intl. */
-function amsterdamUur(now: Date): number {
-  const uur = new Intl.DateTimeFormat('nl-NL', {
-    timeZone: 'Europe/Amsterdam',
-    hourCycle: 'h23',
-    hour: '2-digit',
-  }).format(now)
-  return Number(uur)
 }
 
 /**

@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
+import { bewaarSnapshot, dossierSleutel } from './snapshot'
 import { Bouw7Client, type Bouw7Contact, type Bouw7ContactDetail, type Bouw7ContactPerson, type Bouw7Employee, type Bouw7Project, type Bouw7Quotation, type Bouw7QuotationDetail, type Bouw7VatTariff, type Bouw7ListResponse, type Bouw7ProjectFinancial, type Bouw7SalesInvoice, type Bouw7ControlResponse, type Bouw7DayOffPerEmployee, type Bouw7DayOff, type Bouw7QuotationReminder, type Bouw7Todo, type Bouw7AdditionalWorkLine } from './client'
 import { verwerkDossierTriggers, verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
@@ -1397,7 +1398,19 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       for (let j = 0; j < batch.length; j++) {
         const r = results[j]
         if (r.status === 'fulfilled' && r.value && typeof r.value === 'object') {
-          financialMap.set(String(batch[j].id), r.value)
+          const bouw7IdStr = String(batch[j].id)
+          financialMap.set(bouw7IdStr, r.value)
+          // Deze respons is exact wat het Financieel-/Verkoop-tab nodig heeft. Hem hier meteen
+          // als snapshot wegschrijven kost geen extra call en scheelt de warmer er een per
+          // dossier -- in `full`-modus zijn zo elke ochtend alle financiele standen vers.
+          const dossierId = dossierMap.get(bouw7IdStr)?.id
+          if (dossierId) {
+            await bewaarSnapshot(dossierSleutel(dossierId, 'athena_financial'), {
+              dossierId,
+              soort: 'athena_financial',
+              payload: r.value,
+            }).catch(() => { /* de sync mag hier nooit op stuklopen */ })
+          }
         }
       }
     }

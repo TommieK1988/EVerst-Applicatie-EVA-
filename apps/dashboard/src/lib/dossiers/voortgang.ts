@@ -16,6 +16,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { schrijfBouw7VoortgangProject, schrijfBouw7VoortgangCode } from './bouw7-voortgang'
 import { assertDossierBewerkbaar } from './guards'
+import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 
 export type VoortgangNiveau = 'project' | 'bewakingscode'
 
@@ -94,6 +95,10 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
 
   // 4. Caches verversen.
   if (dossierId) {
+    // De ingevoerde waarde staat al in `dossier_voortgang` en wordt live over de bewaking
+    // gelegd, dus de gebruiker ziet zijn eigen wijziging meteen. De doorwerking in de
+    // Bouw7-cijfers (prognose, standopname) halen we op de achtergrond na.
+    if (synced) await ververSnapshotsNaSchrijven(dossierId, [], ['athena_control'])
     revalidatePath(`/opdrachten/${dossierId}/financieel`)
     revalidatePath(`/servicedesk/${dossierId}/financieel`)
   }

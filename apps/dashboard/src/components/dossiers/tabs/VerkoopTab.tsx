@@ -7,6 +7,7 @@ import TermijnenBlok from './TermijnenBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
+import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -146,6 +147,13 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Bouw7StandStrip
+        dossierId={dossierId}
+        tab="verkoop"
+        opgehaaldOp={data.stand.opgehaaldOp}
+        ontbreekt={data.stand.ontbreekt}
+        fout={data.stand.fout}
+      />
       {/* Overzicht: contractwaarde, BTW-specificatie per tarief en facturatiestand */}
       <Card>
         <CardHeader>Overzicht</CardHeader>

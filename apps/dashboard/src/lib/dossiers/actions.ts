@@ -1,6 +1,21 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
+import {
+  dossierBouw7Id,
+  leesDossierBron,
+  leesDossierBronnen,
+  ververSnapshotsNaSchrijven,
+  LEGE_STAND,
+  type Bouw7Stand,
+} from '@/lib/bouw7/snapshot'
+import type {
+  AthenaControlPayload,
+  ContractOrderLinesPayload,
+  HourLogsPayload,
+  TermijnenPayload,
+} from '@/lib/bouw7/snapshot-bronnen'
+import { SOORTEN_PER_TAB, BEWAKING_KOSTENSOORTEN } from '@/lib/bouw7/snapshot-bronnen'
 import { revalidatePath, unstable_cache } from 'next/cache'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
@@ -31,7 +46,6 @@ import {
   type Bouw7ListResponse,
 } from '@/lib/bouw7/client'
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
-import { deriveUursoorten } from '@/lib/bouw7/derive-stamdata'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
@@ -1330,21 +1344,19 @@ export async function getDossierFinancieel(dossierId: string): Promise<DossierFi
     .single()
 
   const [bouw7Financial, relatieFacturatie] = await Promise.all([
-    dossier?.bouw7_id ? fetchBouw7Financial(dossier.bouw7_id) : Promise.resolve(null),
+    dossier?.bouw7_id ? fetchBouw7Financial(dossierId) : Promise.resolve(null),
     dossier?.klant_id ? fetchRelatieFacturatie(supabase, dossier.klant_id) : Promise.resolve(null),
   ])
 
   return { bouw7Financial, relatieFacturatie }
 }
 
-async function fetchBouw7Financial(bouw7Id: string): Promise<Bouw7ProjectFinancial | null> {
-  try {
-    const client = await getBouw7ClientOfNull()
-    if (!client) return null
-    return await client.getAthena<Bouw7ProjectFinancial>(`/project-financial/${bouw7Id}`)
-  } catch {
-    return null
-  }
+async function fetchBouw7Financial(dossierId: string): Promise<Bouw7ProjectFinancial | null> {
+  // Uit de snapshot, niet live: dit cijferblok hangt onder vrijwel elk dossiertab en deed
+  // daardoor bij iedere paginaweergave een Athena-call. De cron ververst hem 2x per dag en
+  // de sync schrijft hem zelfs bij elke run mee.
+  const stand = await leesDossierBron<Bouw7ProjectFinancial>(dossierId, 'athena_financial')
+  return stand.data
 }
 
 async function fetchRelatieFacturatie(supabase: any, relatieId: string) {
@@ -1415,6 +1427,8 @@ export type DossierBewakingData = {
   geboekteUrenProject: number | null
   /** Project-% gereed = prognose-gewogen rollup van de bewakingscodes; null als geen prognose. */
   projectProgress: number | null
+  /** Hoe vers deze cijfers zijn, en welke bronnen nog nooit zijn opgehaald. */
+  stand: Bouw7Stand
 }
 
 const toGetal = (v: unknown): number => {
@@ -1432,8 +1446,6 @@ const legeRegel = (): BewakingRegel => ({
   verwachteKosten: 0, geboekteKosten: 0, progress: null,
 })
 
-/** Kostensoorten op de Athena project-control: 1=Arbeid, 2=Inkoop, 3=OA, 4=Materieel, 5=Materiaal, 6=Afval. */
-const BEWAKING_KOSTENSOORTEN: Bouw7CostTypeId[] = [1, 2, 3, 4, 5, 6]
 const UNCODED_HOOFDSTUK_ID = -1
 
 /**
@@ -1462,6 +1474,7 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     },
     geboekteUrenProject: null,
     projectProgress: null,
+    stand: LEGE_STAND,
   }
 
   const supabase = createAdminClient() as any
@@ -1473,30 +1486,24 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
 
   if (!dossier?.bouw7_id) return leeg
 
-  const client = await getBouw7ClientOfNull()
-  if (!client) return leeg
-
   try {
     const bouw7Id = dossier.bouw7_id
 
-    // Drie bronnen parallel: projectbewaking per kostensoort, gefactureerde inkoop, en bestelregels.
-    // Ongefilterd, gelijk aan Bouw7's eigen lijsttotaal; het response-`total`-veld is het
-    // gezaghebbende projecttotaal (volledig, ook bij >LIMIT regels).
-    const orderLinesQuery = `project.id = ${bouw7Id} SORT(description, ASC) LIMIT 1000`
-    const [responses, invoices, orderLines] = await Promise.all([
-      Promise.all(
-        BEWAKING_KOSTENSOORTEN.map((ct) =>
-          client
-            .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
-            .catch(() => null),
-        ),
-      ),
-      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`).catch(() => []),
-      client
-        .get<{ items?: Bouw7ContractOrderLine[]; total?: number | string }>('/list/contract-order-lines', { q: orderLinesQuery })
-        .then((r) => ({ items: r.items ?? [], total: toGetal(r.total) }))
-        .catch(() => ({ items: [] as Bouw7ContractOrderLine[], total: 0 })),
-    ])
+    // Drie bronnen uit de snapshot: projectbewaking per kostensoort, gefactureerde inkoop en
+    // bestelregels. Vroeger stonden hier acht tot tien live calls, en dit blok wordt per
+    // dossierweergave meermaals aangeroepen (Financieel, Uren, Planning, mobiel Voortgang).
+    const { standen, stand } = await leesDossierBronnen(dossierId, SOORTEN_PER_TAB.financieel)
+
+    const controlPayload = standen.get('athena_control')?.data as AthenaControlPayload | null
+    // Terug naar de array-vorm waarop de verwerking hieronder indexeert.
+    const responses = BEWAKING_KOSTENSOORTEN.map((ct) => controlPayload?.[ct] ?? null)
+    const invoices = (standen.get('apollo_inkoopfacturen')?.data as Bouw7PurchaseInvoice[] | null) ?? []
+    const orderLinesPayload = standen.get('contract_order_lines')?.data as ContractOrderLinesPayload | null
+    const orderLines = orderLinesPayload ?? { items: [] as Bouw7ContractOrderLine[], total: 0 }
+
+    // Nooit opgehaald = niets te tonen. Bewust geen live-fallback: dan zou juist het eerste
+    // bezoek na een nieuw dossier weer de trage weg nemen.
+    if (controlPayload == null) return { ...leeg, bouw7Id, stand }
 
     const GEEN = '-' // code-sleutel voor "Kosten zonder bewaking"
     const regelMap = new Map<string, BewakingRegel>()
@@ -1749,16 +1756,18 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       totalen,
       geboekteUrenProject: totalen.geboekteUren,
       projectProgress,
+      stand,
     }
   } catch {
     return leeg
   }
 }
 
-/* ── Inkoop / Verkoop / Uren-tabs (live uit Bouw7) ─────────────────────
- * Zelfde live-ophaalpatroon als getDossierBewaking: geen opslag, alles defensief
- * met `.catch` per bron en een `beschikbaar`-flag, zodat een ontbrekend endpoint
- * of dossier zonder bouw7_id de tab niet laat crashen. */
+/* ── Inkoop / Verkoop / Uren-tabs (uit de Bouw7-snapshot) ──────────────
+ * Zelfde patroon als getDossierBewaking: lezen uit `bouw7_snapshots`, met een
+ * `beschikbaar`/`bron`-flag zodat een nog niet opgehaalde bron of een dossier
+ * zonder bouw7_id de tab niet laat crashen. Verversen doen de cron, de knop
+ * "Vernieuwen uit Bouw7" en de schrijfacties -- niet het openen van een scherm. */
 
 /** Maakt een Bouw7-client voor een dossier op basis van de integratie-config; null als ongekoppeld/onvolledig. */
 export async function bouw7VoorDossier(dossierId: string): Promise<{ client: Bouw7Client; bouw7Id: string } | null> {
@@ -1923,6 +1932,8 @@ export type DossierInkoopData = {
   /** Afwijkingen die opvolging vragen — bovenaan de tab getoond. */
   signalen: InkoopSignaal[]
   totalen: { besteld: number; onderaanneming: number; geboekt: number; toegewezen: number; nietToegewezen: number }
+  /** Hoe vers deze gegevens zijn, en welke bronnen nog nooit zijn opgehaald. */
+  stand: Bouw7Stand
 }
 
 /** EVA-correctie op een geboekte kost (rekenlaag; raakt Bouw7 niet). */
@@ -2022,15 +2033,9 @@ async function getEvaContractIds(dossierId: string): Promise<Set<number>> {
  * het aangrijpingspunt om de code van een geboekte kost in Bouw7 te verzetten. Gesleuteld op
  * hoofdstuk + code, want dezelfde codetekst kan in meerdere hoofdstukken voorkomen.
  */
-async function getProjectBewakingscodes(client: Bouw7Client, bouw7Id: string): Promise<Map<string, ProjectBewakingscode>> {
+function verwerkProjectBewakingscodes(payload: AthenaControlPayload | null): Map<string, ProjectBewakingscode> {
   const codes = new Map<string, ProjectBewakingscode>()
-  const responses = await Promise.all(
-    BEWAKING_KOSTENSOORTEN.map((ct) =>
-      client
-        .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
-        .catch(() => null),
-    ),
-  )
+  const responses = BEWAKING_KOSTENSOORTEN.map((ct) => payload?.[ct] ?? null)
   responses.forEach((resp, i) => {
     const ct = BEWAKING_KOSTENSOORTEN[i]
     for (const hoofdstuk of resp?.items ?? []) {
@@ -2065,34 +2070,31 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     beschikbaar: false, bron: 'geen_koppeling',
     inkooporders: [], onderaannemers: [], geboekteKosten: [], projectcodes: [], signalen: [],
     totalen: { besteld: 0, onderaanneming: 0, geboekt: 0, toegewezen: 0, nietToegewezen: 0 },
+    stand: LEGE_STAND,
   }
-  const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return leeg
-  const { client, bouw7Id } = ctx
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return leeg
 
-  // Elke deelcall vangt zijn eigen fout op zodat één uitvaller de tab niet leegtrekt. Daardoor
-  // ziet de buitenste catch een storing echter nooit, en zou een volledig platte Bouw7 als "geen
-  // inkooporders" doorgaan. Dat is precies het verschil waar `bron` voor bestaat, dus houden we
-  // per call bij of hij gefaald heeft.
-  let callGefaald = false
-  const gefaald = <T>(leeg: T) => (): T => { callGefaald = true; return leeg }
+  // De Bouw7-kant komt uit de snapshot; de EVA-rekenlaag (correcties, contractkoppelingen)
+  // blijft live, want die verandert hier in EVA en hoort nooit oud te zijn.
+  const { standen, stand } = await leesDossierBronnen(dossierId, SOORTEN_PER_TAB.inkoop)
+
+  // Een nooit opgehaalde bron is iets anders dan een lege: het eerste betekent "we weten het
+  // niet", het tweede "er is niets besteld". Dat verschil bewaakt `bron`.
+  const callGefaald = stand.ontbreekt.length > 0
 
   try {
-    const [orderResp, subResp, apolloInvoices, heimdallResp, correcties, bouw7Codes] = await Promise.all([
-      client.get<Bouw7ListResponse<Bouw7PurchaseOrderContract>>('/list/purchase-order-contracts', {
-        q: `project.id = ${bouw7Id} LIMIT 500`,
-      }).catch(gefaald({ items: [] as Bouw7PurchaseOrderContract[] } as Bouw7ListResponse<Bouw7PurchaseOrderContract>)),
-      client.get<Bouw7ListResponse<Bouw7SubcontractorContract>>('/list/subcontractor-contracts', {
-        q: `project.id = ${bouw7Id} LIMIT 500`,
-      }).catch(gefaald({ items: [] as Bouw7SubcontractorContract[] } as Bouw7ListResponse<Bouw7SubcontractorContract>)),
-      client.getApolloAll<Bouw7PurchaseInvoice>('/search/purchase-invoices', `project.id = ${bouw7Id}`)
-        .catch(gefaald([] as Bouw7PurchaseInvoice[])),
-      client.get<Bouw7PurchaseInvoiceListResponse>('/list/purchase-invoices', {
-        q: `project.id = ${bouw7Id} LIMIT 1000`,
-      }).catch(gefaald({ items: [] as Bouw7PurchaseInvoiceListItem[] } as Bouw7PurchaseInvoiceListResponse)),
-      getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[]),
-      getProjectBewakingscodes(client, bouw7Id).catch(() => new Map<string, ProjectBewakingscode>()),
-    ])
+    const orderResp = (standen.get('inkooporders')?.data as Bouw7ListResponse<Bouw7PurchaseOrderContract> | null)
+      ?? ({ items: [] } as unknown as Bouw7ListResponse<Bouw7PurchaseOrderContract>)
+    const subResp = (standen.get('oa_contracten')?.data as Bouw7ListResponse<Bouw7SubcontractorContract> | null)
+      ?? ({ items: [] } as unknown as Bouw7ListResponse<Bouw7SubcontractorContract>)
+    const apolloInvoices = (standen.get('apollo_inkoopfacturen')?.data as Bouw7PurchaseInvoice[] | null) ?? []
+    const heimdallResp = (standen.get('heimdall_inkoopfacturen')?.data as Bouw7PurchaseInvoiceListResponse | null)
+      ?? ({ items: [] } as unknown as Bouw7PurchaseInvoiceListResponse)
+    const bouw7Codes = verwerkProjectBewakingscodes(
+      (standen.get('athena_control')?.data as AthenaControlPayload | null) ?? null,
+    )
+    const correcties = await getInkoopCorrecties(dossierId).catch(() => [] as InkoopCorrectie[])
 
     // Welke contracten zijn vanuit een EVA-bestelling aangemaakt? Puur ter herkenning in de
     // tabel — de bedragen komen onverkort uit Bouw7.
@@ -2315,11 +2317,12 @@ export async function getDossierInkoop(dossierId: string): Promise<DossierInkoop
     return {
       beschikbaar: inkooporders.length > 0 || onderaannemers.length > 0 || geboekteKosten.length > 0,
       bron: callGefaald ? 'fout' : 'bouw7',
+      stand,
       inkooporders, onderaannemers, geboekteKosten, projectcodes, signalen,
       totalen: { besteld, onderaanneming, geboekt, toegewezen, nietToegewezen },
     }
   } catch {
-    return { ...leeg, bron: 'fout' }
+    return { ...leeg, bron: 'fout', stand }
   }
 }
 
@@ -2485,8 +2488,19 @@ async function wisCodeOverlay(dossierId: string, bronId: number): Promise<void> 
   }
 }
 
-/** Revalidatie na een hercodering: raakt zowel het Inkoop- als het Financieel-tab. */
-function revalideerInkoopEnFinancieel(dossierId: string): void {
+/**
+ * Opruimen na een hercodering: raakt zowel het Inkoop- als het Financieel-tab.
+ *
+ * Eerst de snapshots bijwerken, dan pas de paden ongeldig verklaren — anders rendert de pagina
+ * zich opnieuw op de oude stand en lijkt de hercodering niet gelukt. De facturenbronnen dragen de
+ * verplaatste code en gaan meteen mee; de doorwerking in de bewakingscijfers volgt erachteraan.
+ */
+async function naHercodering(dossierId: string): Promise<void> {
+  await ververSnapshotsNaSchrijven(
+    dossierId,
+    ['apollo_inkoopfacturen', 'heimdall_inkoopfacturen'],
+    ['athena_control'],
+  )
   for (const basis of ['/opdrachten', '/servicedesk']) {
     revalidatePath(`${basis}/${dossierId}/inkoop`)
     revalidatePath(`${basis}/${dossierId}/financieel`)
@@ -2515,7 +2529,7 @@ export async function hercodeerGeboekteKost(
   const res = await hercodeerEen(ctx.client, ctx.bouw7Id, rij, doel.doel)
   if (!res.ok) return res
   await wisCodeOverlay(dossierId, bronId)
-  revalideerInkoopEnFinancieel(dossierId)
+  await naHercodering(dossierId)
   return { ok: true }
 }
 
@@ -2595,7 +2609,7 @@ export async function hercodeerGeboekteKostenBulk(
     else fouten.push(res.error)
   }
 
-  revalideerInkoopEnFinancieel(dossierId)
+  await naHercodering(dossierId)
   if (gelukt === 0) return { ok: false, error: fouten.join(' · ') || 'Er is niets verplaatst.' }
   return {
     ok: true,
@@ -2668,16 +2682,13 @@ export type DossierUrenData = {
  */
 export async function getDossierUren(dossierId: string): Promise<DossierUrenData> {
   const leeg: DossierUrenData = { beschikbaar: false, detailNiveau: 'medewerker', regels: [], totalen: { uren: 0, bedrag: 0 } }
-  const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return leeg
-  const { client, bouw7Id } = ctx
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return leeg
 
-  // 1. Detail per medewerker.
+  // 1. Detail per medewerker, uit de snapshot.
   try {
-    const resp = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
-      q: `project.id = ${bouw7Id} SORT(logDate, DESC) LIMIT 2000`,
-    })
-    const items = resp.items ?? []
+    const resp = (await leesDossierBron<HourLogsPayload>(dossierId, 'hour_logs')).data
+    const items = resp?.items ?? []
     if (items.length > 0) {
       const regels: UrenRegel[] = items.map((h) => {
         const uren = toGetal(h.hours)
@@ -2700,17 +2711,13 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
           hourTypeId: h.type?.id ?? null,
         }
       })
-      // Uursoorten (Bouw7 leidend) opportunistisch afleiden uit deze uren-logs — liften mee
-      // op de call die de tab tóch al doet. Faalt stil zodat de urenweergave nooit breekt.
-      try { await deriveUursoorten(items) } catch { /* afleiding mag nooit de tab blokkeren */ }
-
       return {
         beschikbaar: true,
         detailNiveau: 'medewerker',
         regels,
         totalen: {
-          uren: resp.totalHours != null ? toGetal(resp.totalHours) : regels.reduce((s, r) => s + r.uren, 0),
-          bedrag: resp.totalCost != null ? toGetal(resp.totalCost) : regels.reduce((s, r) => s + r.bedrag, 0),
+          uren: resp?.totalHours != null ? toGetal(resp.totalHours) : regels.reduce((s, r) => s + r.uren, 0),
+          bedrag: resp?.totalCost != null ? toGetal(resp.totalCost) : regels.reduce((s, r) => s + r.bedrag, 0),
         },
       }
     }
@@ -2804,6 +2811,8 @@ export type DossierVerkoopData = {
   betaalgegevens: DossierFinancieelData['relatieFacturatie']
   totalen: { aanneemsom: number; meerwerk: number; contractTotaal: number; gefactureerd: number; openstaand: number }
   termijnenDekking: TermijnenDekking | null
+  /** Hoe vers deze gegevens zijn, en welke bronnen nog nooit zijn opgehaald. */
+  stand: Bouw7Stand
 }
 
 /**
@@ -2833,17 +2842,17 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     beschikbaar: false, bron: 'geen_koppeling',
     termijnenBeschikbaar: false, termijnen: [], facturen: [], betaalgegevens: null,
     totalen: { aanneemsom: 0, meerwerk: 0, contractTotaal: 0, gefactureerd: 0, openstaand: 0 }, termijnenDekking: null,
+    stand: LEGE_STAND,
   }
-  const ctx = await bouw7VoorDossier(dossierId)
+  const bouw7Id = await dossierBouw7Id(dossierId)
   // Betaalgegevens + aanneemsom komen via getDossierFinancieel (werkt ook zonder Bouw7-koppeling).
   const { bouw7Financial, relatieFacturatie } = await getDossierFinancieel(dossierId)
-  if (!ctx) {
+  if (!bouw7Id) {
     return { ...leeg, betaalgegevens: relatieFacturatie }
   }
-  const { client, bouw7Id } = ctx
-  // Er ís een koppeling, dus vanaf hier telt elke mislukte call als storing — niet als "niets gevonden".
-  // `fetchBouw7Financial` slikt zijn eigen fouten in en geeft dan null; met een geldige ctx betekent
-  // die null dus dat Athena niet antwoordde, en dat mag geen contracttotaal van 0 opleveren.
+  const { standen, stand } = await leesDossierBronnen(dossierId, SOORTEN_PER_TAB.verkoop)
+  // Er ís een koppeling, dus een ontbrekend cijfer betekent hier "nog niet opgehaald" of een
+  // storing bij het ophalen — niet "geen aanneemsom". Dat mag geen contracttotaal van 0 opleveren.
   let bron: Bouw7Bron = bouw7Financial == null ? 'fout' : 'bouw7'
 
   let termijnenBeschikbaar = false
@@ -2854,9 +2863,8 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
 
   // Facturen eerst: de termijnstatus leunt op isMailed/datePaid van de gekoppelde factuur.
   try {
-    const invResp = await client.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
-      q: `project.id = ${bouw7Id} SORT(date, DESC) LIMIT 500`,
-    })
+    const invResp = standen.get('verkoopfacturen')?.data as Bouw7ListResponse<Bouw7SalesInvoice> | null
+    if (invResp == null) throw new Error('verkoopfacturen nog niet opgehaald')
     for (const inv of invResp.items ?? []) if (inv.id != null) factuurPerId.set(inv.id, inv)
     facturen = (invResp.items ?? []).map((inv) => ({
       factuurnummer: inv.invoiceNumber ?? null,
@@ -2878,20 +2886,10 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   // op `statement.id` (geverifieerd jul 2026); zonder deze twee-traps-aanpak kwam de query altijd
   // op een 400 uit en toonde de tab dus nooit termijnen.
   try {
-    const stmtResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTermStatement>>(
-      '/list/project-invoice-term-statements',
-      { q: `project.id = ${bouw7Id} LIMIT 200` },
-    )
+    const termijnenPayload = standen.get('termijnen')?.data as TermijnenPayload | null
+    if (termijnenPayload == null) throw new Error('termijnen nog niet opgehaald')
     termijnenBeschikbaar = true
-    const statementIds = (stmtResp.items ?? []).map((s) => s.id).filter((id): id is number => id != null)
-
-    const ruweTermijnen: Bouw7ProjectInvoiceTerm[] = []
-    for (const sid of statementIds) {
-      const termResp = await client.get<Bouw7ListResponse<Bouw7ProjectInvoiceTerm>>('/list/project-invoice-terms', {
-        q: `statement.id = ${sid} LIMIT 500`,
-      })
-      ruweTermijnen.push(...(termResp.items ?? []))
-    }
+    const ruweTermijnen: Bouw7ProjectInvoiceTerm[] = termijnenPayload.termijnen
 
     termijnen = ruweTermijnen.map((t, i) => {
       const bedrag = toGetal(t.subtotal)
@@ -2949,6 +2947,7 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     betaalgegevens: relatieFacturatie,
     totalen: { aanneemsom, meerwerk, contractTotaal, gefactureerd, openstaand },
     termijnenDekking,
+    stand,
   }
 }
 
@@ -3182,6 +3181,8 @@ export type DossierUrenBewakingData = {
     uren_saldo: number
     kosten_saldo: number
   }
+  /** Hoe vers de Bouw7-cijfers achter deze tabel zijn. */
+  stand: Bouw7Stand
 }
 
 export type BewakingscodeOptie = {
@@ -3200,6 +3201,7 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     heeftWerkbegroting: false,
     regels: [],
     totalen: { prognose_uren: 0, prognose_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
+    stand: LEGE_STAND,
   }
 
   const [bewaking, wbData] = await Promise.all([
@@ -3251,7 +3253,7 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     })(),
   ])
 
-  if (!bewaking.beschikbaar) return leeg
+  if (!bewaking.beschikbaar) return { ...leeg, stand: bewaking.stand }
 
   // Inclusief codes met alleen prognoseuren (nog geen boekingen) — zodat projecten
   // die nog in voorbereiding zijn al zichtbaar zijn in de tabel.
@@ -3303,7 +3305,7 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     { prognose_uren: 0, prognose_bedrag: 0, geboekte_uren: 0, geboekte_kosten: 0, uren_saldo: 0, kosten_saldo: 0 },
   )
 
-  return { beschikbaar: regels.length > 0, heeftWerkbegroting, regels, totalen }
+  return { beschikbaar: regels.length > 0, heeftWerkbegroting, regels, totalen, stand: bewaking.stand }
 }
 
 /**
@@ -3322,11 +3324,14 @@ export async function getBewakingscodesVoorUurlog(
   dossierId: string,
   opties?: { alleenMetPrognose?: boolean },
 ): Promise<BewakingscodeOptie[]> {
-  const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return []
-  const { client, bouw7Id } = ctx
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return []
   try {
-    const resp = await client.getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/1/chapters?include_subprojects=false`)
+    // Kostensoort 1 (arbeid) uit de bewakings-snapshot; deze lijst voedt de dropdown bij het
+    // boeken van uren en werd voorheen bij elke dossierkeuze live opgehaald.
+    const controlPayload = (await leesDossierBron<AthenaControlPayload>(dossierId, 'athena_control')).data
+    const resp = controlPayload?.[1]
+    if (!resp) return []
     const gevonden: BewakingscodeOptie[] = []
     for (const item of resp.items ?? []) {
       const ci = item.chapterInfo
@@ -3375,6 +3380,9 @@ export async function updateUurlogBewakingscode(
       hourType: { id: hourLog.hourTypeId },
       projectSecurityLink: { id: nieuwePslId },
     })
+    // De verplaatste regel moet meteen onder de nieuwe code staan; de gevolgen voor de
+    // bewakingscijfers halen we op de achtergrond na.
+    await ververSnapshotsNaSchrijven(dossierId, ['hour_logs'], ['athena_control'])
     revalidatePath(`/opdrachten/${dossierId}/uren`)
     return { ok: true }
   } catch (e) {
@@ -3418,6 +3426,7 @@ export async function updateUurlogBewakingscodeBulk(
     }
   }
 
+  if (verplaatst > 0) await ververSnapshotsNaSchrijven(dossierId, ['hour_logs'], ['athena_control'])
   revalidatePath(`/opdrachten/${dossierId}/uren`)
   if (verplaatst === 0) return { ok: false, error: laatsteFout ?? 'Bouw7-update mislukt.', verplaatst, mislukt }
   return { ok: true, verplaatst, mislukt, error: mislukt > 0 ? laatsteFout : undefined }

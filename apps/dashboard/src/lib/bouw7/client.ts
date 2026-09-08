@@ -28,6 +28,26 @@ const TOKEN_MARGE_MS = 60_000
 /** Vervaltijd wanneer het token geen leesbare JWT-`exp` draagt — bewust kort gehouden. */
 const TOKEN_FALLBACK_TTL_MS = 10 * 60_000
 
+/* ── Call-teller (diagnose) ───────────────────────────────────────
+ * EVA hoort bij het openen van een scherm nul Bouw7-calls te doen — alles komt uit de snapshots.
+ * Deze teller maakt dat controleerbaar: zet BOUW7_DEBUG=1 en elke call verschijnt in de log.
+ * Staat de vlag uit (productie), dan telt hij alleen en logt hij niets.
+ */
+
+let callTeller = 0
+
+/** Aantal Bouw7-calls sinds het starten van deze serverinstantie. */
+export function leesBouw7Teller(): number {
+  return callTeller
+}
+
+function telCall(methode: string, url: string): void {
+  callTeller++
+  if (process.env.BOUW7_DEBUG === '1') {
+    console.debug(`[bouw7] ${methode} ${url}`)
+  }
+}
+
 const tokenCache = new Map<string, TokenCacheEntry>()
 /** Lopende logins per sleutel, zodat gelijktijdige calls één login delen i.p.v. er N afvuren. */
 const loginInFlight = new Map<string, Promise<string>>()
@@ -243,6 +263,7 @@ export class Bouw7Client {
     await this.ensureAuth()
 
     const { headers, ...rest } = opties
+    telCall(opties.method ?? 'GET', url)
     // Token per poging opnieuw uitlezen: na de herlogin hieronder is dat een ander token.
     const doeCall = () => fetch(url, { ...rest, headers: { ...headers, Authorization: `Bearer ${this.token}` } })
 

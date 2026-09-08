@@ -4,6 +4,7 @@ import { getOpleverBetaalsignaal } from '@/lib/dossiers/oplevering'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, TH, TD, LegeStaat, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
+import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
 /**
  * Afwijkingen die opvolging vragen: te veel gefactureerd (→ creditnota opvragen) en facturen die
@@ -115,11 +116,26 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
   const data = await getDossierInkoop(dossierId)
 
   if (!data.beschikbaar) {
+    // "Nog niet opgehaald" is iets anders dan "niets besteld"; in het eerste geval helpt de knop.
+    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
     return (
-      <LegeStaat
-        titel="Geen inkoopgegevens"
-        tekst="Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen inkooporders, onderaannemerscontracten of geboekte kosten."
-      />
+      <div>
+        <Bouw7StandStrip
+          dossierId={dossierId}
+          tab="inkoop"
+          opgehaaldOp={data.stand.opgehaaldOp}
+          ontbreekt={data.stand.ontbreekt}
+          fout={data.stand.fout}
+        />
+        <LegeStaat
+          titel={nooitOpgehaald ? 'Nog niet opgehaald uit Bouw7' : 'Geen inkoopgegevens'}
+          tekst={
+            nooitOpgehaald
+              ? 'Deze gegevens worden twee keer per dag opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
+              : 'Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen inkooporders, onderaannemerscontracten of geboekte kosten.'
+          }
+        />
+      </div>
     )
   }
 
@@ -139,6 +155,13 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Bouw7StandStrip
+        dossierId={dossierId}
+        tab="inkoop"
+        opgehaaldOp={data.stand.opgehaaldOp}
+        ontbreekt={data.stand.ontbreekt}
+        fout={data.stand.fout}
+      />
       <SignaalBlok signalen={data.signalen} />
       <BetaalSignaal dossierId={dossierId} />
 

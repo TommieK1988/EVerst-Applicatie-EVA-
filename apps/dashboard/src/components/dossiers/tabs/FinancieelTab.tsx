@@ -7,6 +7,7 @@ import { VerkoopTab } from './VerkoopTab'
 import { UrenTab } from './UrenTab'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
+import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import type { DossierSectie } from '../types'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -196,12 +197,22 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
   const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id
 
   if (!data.beschikbaar) {
+    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
     return (
       <Card style={{ marginBottom: 16 }}>
         <CardHeader>Bewaking per bewakingscode</CardHeader>
         <CardBody>
+          <Bouw7StandStrip
+            dossierId={dossierId}
+            tab="financieel"
+            opgehaaldOp={data.stand.opgehaaldOp}
+            ontbreekt={data.stand.ontbreekt}
+            fout={data.stand.fout}
+          />
           <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '8px 0' }}>
-            Geen bewakingscodes gevonden voor dit project in Bouw7.
+            {nooitOpgehaald
+              ? 'Deze cijfers zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
+              : 'Geen bewakingscodes gevonden voor dit project in Bouw7.'}
           </div>
         </CardBody>
       </Card>
@@ -215,6 +226,15 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
   return (
     <Card style={{ marginBottom: 16 }}>
       <CardHeader>Bewaking per bewakingscode</CardHeader>
+      <CardBody style={{ paddingBottom: 0 }}>
+        <Bouw7StandStrip
+          dossierId={dossierId}
+          tab="financieel"
+          opgehaaldOp={data.stand.opgehaaldOp}
+          ontbreekt={data.stand.ontbreekt}
+          fout={data.stand.fout}
+        />
+      </CardBody>
       <CardBody style={{ padding: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>

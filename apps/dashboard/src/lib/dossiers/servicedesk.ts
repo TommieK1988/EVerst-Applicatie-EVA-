@@ -7,6 +7,7 @@ import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
+import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
@@ -1085,6 +1086,8 @@ export async function maakRegieFactuurInBouw7(
     }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
   }
 
+  // Er staat nu een concept-verkoopfactuur in Bouw7; die hoort meteen op het Verkoop-tab.
+  await ververSnapshotsNaSchrijven(dossierId, ['verkoopfacturen'], ['termijnen', 'athena_financial'])
   revalidatePath('/servicedesk/' + dossierId + '/financieel')
   revalidatePath('/opdrachten/' + dossierId + '/verkoop')
   return { ok: true, invoiceId: res.invoiceId, aantal: voorstel.regels.length, totaal: res.totaalExclBtw }

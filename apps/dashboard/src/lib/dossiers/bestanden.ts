@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
-import { bouw7VoorDossier } from './actions'
+import { dossierBouw7Id, leesDossierBron } from '@/lib/bouw7/snapshot'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import type { Bouw7ProjectFile } from '@/lib/bouw7/client'
 
@@ -22,21 +22,25 @@ export type DossierBestand = {
 export type DossierBestandenData = {
   beschikbaar: boolean
   bestanden: DossierBestand[]
+  /** ISO-tijdstip van de laatste ophaal uit Bouw7; null = nog nooit opgehaald. */
+  opgehaaldOp: string | null
 }
 
 /**
- * Leest de projectbestanden van een dossier live uit Bouw7 (GET /list/project-files, Heimdall).
- * Read-only overzicht; downloaden loopt via de proxyroute /api/bouw7/bestand/{secureHash}.
+ * De projectbestanden van een dossier uit de Bouw7-snapshot (bron: GET /list/project-files).
+ *
+ * Read-only overzicht. Het downloaden van een bestand loopt nog wél live via de proxyroute
+ * /api/bouw7/bestand/{secureHash} — de bytes halen we pas op als iemand er echt op klikt.
  */
 export async function getDossierBestanden(dossierId: string): Promise<DossierBestandenData> {
-  const ctx = await bouw7VoorDossier(dossierId)
-  if (!ctx) return { beschikbaar: false, bestanden: [] }
-  const { client, bouw7Id } = ctx
+  const leeg: DossierBestandenData = { beschikbaar: false, bestanden: [], opgehaaldOp: null }
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return leeg
 
   try {
-    const resp = await client.get<{ items?: Bouw7ProjectFile[] }>('/list/project-files', {
-      q: `project.id = ${bouw7Id} LIMIT 500`,
-    })
+    const stand = await leesDossierBron<{ items?: Bouw7ProjectFile[] }>(dossierId, 'project_files')
+    const resp = stand.data
+    if (!resp) return leeg
     const bestanden: DossierBestand[] = (resp.items ?? []).map(f => ({
       id: f.id,
       naam: f.name?.trim() || f.fileName?.trim() || 'Bestand',
@@ -51,9 +55,9 @@ export async function getDossierBestanden(dossierId: string): Promise<DossierBes
     // Sorteer op categorie (a→z), binnen categorie op datum (nieuw→oud).
     bestanden.sort((a, b) =>
       (a.categorie ?? 'zzz').localeCompare(b.categorie ?? 'zzz') || (b.datum ?? '').localeCompare(a.datum ?? ''))
-    return { beschikbaar: true, bestanden }
+    return { beschikbaar: true, bestanden, opgehaaldOp: stand.opgehaaldOp }
   } catch {
-    return { beschikbaar: false, bestanden: [] }
+    return leeg
   }
 }
 

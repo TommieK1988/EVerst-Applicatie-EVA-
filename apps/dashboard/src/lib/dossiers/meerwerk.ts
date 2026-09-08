@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type {
   MeerwerkRegel,
   MeerwerkStatus,
@@ -403,6 +404,11 @@ export async function setMeerwerkStatus(
     }
   }
 
+  // Akkoord meerwerk krijgt een bewakingscode en telt mee in de projectcijfers; die kant komt
+  // uit Bouw7 en moet dus opnieuw opgehaald worden. De meerwerklijst zelf is EVA-eigen en klopt al.
+  if (r.bouw7_line_id != null && r.dossier_id) {
+    await ververSnapshotsNaSchrijven(r.dossier_id, ['athena_control'], ['athena_financial', 'security_links'])
+  }
   revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
   return { ok: true, waarschuwing }
 }
@@ -539,6 +545,10 @@ export async function stuurMeerwerkNaarBouw7(
     })
     .eq('id', regelId)
 
+  // De regel bestaat nu ook in Bouw7 en telt daar mee in de projectcijfers.
+  if (regel.dossier_id) {
+    await ververSnapshotsNaSchrijven(regel.dossier_id, ['athena_control'], ['athena_financial'])
+  }
   revalidatePath(`/opdrachten/${regel.dossier_id}/meerwerk`)
   return { ok: true, nummer: created.number ?? null }
 }
