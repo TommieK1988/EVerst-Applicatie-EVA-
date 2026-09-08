@@ -25,10 +25,14 @@ export default function PeriodeKiezer({ periode }: { periode: Periode }) {
   const [tot, setTot] = useState(periode.tot)
 
   function ga(next: URLSearchParams) {
-    // De weergave-keuze (per dag / per medewerker) moet de periodewissel
-    // overleven, dus die nemen we ongewijzigd mee.
-    const weergave = params.get('weergave')
-    if (weergave) next.set('weergave', weergave)
+    // De weergave-keuze (per dag / per medewerker) en de medewerker waarop is
+    // ingezoomd moeten de periodewissel overleven. Zonder dat laatste stuitert
+    // je bij het kiezen van een ander kwartaal terug naar het volledige
+    // overzicht — precies wat je niet wilt als je met iemand aan tafel zit.
+    for (const sleutel of ['weergave', 'medewerker']) {
+      const waarde = params.get(sleutel)
+      if (waarde) next.set(sleutel, waarde)
+    }
     router.push(`/wagenpark/werktijden?${next.toString()}`)
   }
 

@@ -93,12 +93,26 @@ export default function WerktijdenTabel({
   layouts,
   user_id,
   onTotalen,
+  groeperen = true,
+  scherm = 'wagenpark-werktijden',
 }: {
   data: WerktijdRij[]
   layouts: GebruikerLayout[]
   user_id: string | null
   /** Totalen over de rijen die de kolomfilters overleven; voedt de tel-kaarten. */
   onTotalen?: (t: Totalen) => void
+  /**
+   * Rijen bundelen per medewerker + week. Zet dit uit voor een lijst die al over
+   * één medewerker gaat: daar is de groepsbalk alleen maar een extra klik tussen
+   * jou en de dagen die je wilt zien.
+   */
+  groeperen?: boolean
+  /**
+   * Sleutel waaronder de kolomstand wordt bewaard. De lijst van één medewerker
+   * krijgt een eigen sleutel, zodat een kolomkeuze daar niet die van het
+   * volledige overzicht overschrijft (en andersom).
+   */
+  scherm?: string
 }) {
   // Het zijpaneel houdt het id vast, niet de rij zelf: na het afvinken komt er
   // via revalidatePath verse data binnen, en een vastgehouden object zou dan de
@@ -148,6 +162,10 @@ export default function WerktijdenTabel({
         key: 'bestuurder',
         label: 'Medewerker',
         breedte: 180,
+        // In de lijst van één medewerker staat zijn naam al boven de pagina; een
+        // kolom die twaalf keer hetzelfde herhaalt kost alleen ruimte. Aan te
+        // zetten via kolombeheer als iemand hem toch wil.
+        standaard_zichtbaar: groeperen,
         filterType: 'select',
         filterOpties: bestuurderOpties,
         sorteerWaarde: (r) => r.bestuurder,
@@ -277,19 +295,22 @@ export default function WerktijdenTabel({
         ),
       },
     ],
-    [bestuurderOpties, data],
+    [bestuurderOpties, data, groeperen],
   )
 
   // Gebundeld per medewerker per week. De sleutel wordt in een useMemo gehouden:
   // een objectliteral in de prop geeft TanStack elke render een nieuwe referentie,
   // waarna het grouped row model herbouwt en de tab in een update-lus vastloopt.
   const groepering = useMemo(
-    () => ({
-      sleutel: (r: WerktijdRij) => `${r.user_id_ulu}|${r.week}`,
-      kop: (rijen: WerktijdRij[]) => <WeekKop rijen={rijen} />,
-      standaardOpen: false,
-    }),
-    [],
+    () =>
+      groeperen
+        ? {
+            sleutel: (r: WerktijdRij) => `${r.user_id_ulu}|${r.week}`,
+            kop: (rijen: WerktijdRij[]) => <WeekKop rijen={rijen} />,
+            standaardOpen: false,
+          }
+        : undefined,
+    [groeperen],
   )
 
   // Totalen onder aan het Excel-bestand. Verklaarde dagen staan er apart onder,
@@ -324,7 +345,7 @@ export default function WerktijdenTabel({
   return (
     <>
       <OverzichtTabel
-        scherm="wagenpark-werktijden"
+        scherm={scherm}
         data={data}
         kolommen={kolommen}
         layouts={layouts}
@@ -386,6 +407,11 @@ function WeekKop({ rijen }: { rijen: WerktijdRij[] }) {
         {vroegDagen > 0 && (
           <span className="text-violet-700">
             {vroegDagen}× te vroeg {minutenLabel(vroegMin)}
+          </span>
+        )}
+        {verklaard > 0 && (
+          <span className="text-slate-400" title="Verklaard; telt niet mee">
+            {verklaard}× verklaard
           </span>
         )}
         <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-medium">

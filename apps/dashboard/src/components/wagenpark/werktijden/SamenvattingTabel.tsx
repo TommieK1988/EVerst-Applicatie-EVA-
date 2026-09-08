@@ -3,76 +3,13 @@
 import React, { useCallback, useMemo } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
-import { minutenLabel, teltMee, omrekening, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
+import { minutenLabel, omrekening, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
+import { bouwSamenvatting, type SamenvattingRij } from '@/lib/wagenpark/werktijd-samenvatting'
 import { MAAND_LABEL, type Periode, maandenInPeriode } from '@/lib/wagenpark/periode'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 import type { Totalen } from '@/components/wagenpark/werktijden/TelKaarten'
 
-/** Eén regel per medewerker: de totalen over de gekozen periode. */
-export type SamenvattingRij = {
-  /** OverzichtTabel eist een id; de ULU-bestuurder-id is hier de sleutel. */
-  id: string
-  bestuurder: string
-  dagenLaat: number
-  minutenLaat: number
-  dagenVroeg: number
-  minutenVroeg: number
-  totaalMinuten: number
-  /** Minuten per kalendermaand, sleutel 1..12. Alleen gevulde maanden staan erin. */
-  perMaand: Record<number, number>
-  /** Weggestreepte minuten; blijven zichtbaar maar tellen nergens in mee. */
-  verklaardMinuten: number
-  verklaardDagen: number
-}
-
-/**
- * Bouw één regel per medewerker uit de detailregels.
- *
- * De detailregels bevatten alleen anker-bevindingen (zie lib/wagenpark/werktijd.ts),
- * dus optellen mag hier zonder verdere ontdubbeling.
- */
-export function bouwSamenvatting(rijen: WerktijdRij[]): SamenvattingRij[] {
-  const perMedewerker = new Map<string, SamenvattingRij>()
-
-  for (const r of rijen) {
-    let s = perMedewerker.get(r.user_id_ulu)
-    if (!s) {
-      s = {
-        id: r.user_id_ulu,
-        bestuurder: r.bestuurder,
-        dagenLaat: 0,
-        minutenLaat: 0,
-        dagenVroeg: 0,
-        minutenVroeg: 0,
-        totaalMinuten: 0,
-        perMaand: {},
-        verklaardMinuten: 0,
-        verklaardDagen: 0,
-      }
-      perMedewerker.set(r.user_id_ulu, s)
-    }
-    // Verklaarde dagen krijgen een eigen kolom en blijven daarmee zichtbaar,
-    // maar ze tellen niet mee in het totaal of in de maandkolommen. Zo blijft
-    // een medewerker die alles netjes verklaard heeft wél in de lijst staan.
-    if (!teltMee(r.status)) {
-      s.verklaardMinuten += r.minuten
-      s.verklaardDagen += 1
-      continue
-    }
-    if (r.soort === 'te_laat') {
-      s.dagenLaat += 1
-      s.minutenLaat += r.minuten
-    } else {
-      s.dagenVroeg += 1
-      s.minutenVroeg += r.minuten
-    }
-    s.totaalMinuten += r.minuten
-    const maand = Number(r.datum.slice(5, 7))
-    s.perMaand[maand] = (s.perMaand[maand] ?? 0) + r.minuten
-  }
-
-  return [...perMedewerker.values()].sort((a, b) => b.totaalMinuten - a.totaalMinuten)
-}
+export type { SamenvattingRij }
 
 export default function SamenvattingTabel({
   data,
@@ -87,7 +24,7 @@ export default function SamenvattingTabel({
   user_id: string | null
   periode: Periode
   onTotalen?: (t: Totalen) => void
-  /** Klik op een regel opent de detailweergave, gefilterd op die medewerker. */
+  /** Klik op een regel opent de dagen van die medewerker. */
   onMedewerkerKlik?: (rij: SamenvattingRij) => void
 }) {
   const rijen = useMemo(() => bouwSamenvatting(data), [data])
@@ -116,8 +53,15 @@ export default function SamenvattingTabel({
     // De maandkolommen krijgen VASTE sleutels m01..m12 en bestaan altijd alle
     // twaalf, ook buiten de gekozen periode. Reden: een opgeslagen weergave
     // overschrijft de kolomvolgorde volledig, dus kolommen die per periode van
-    // naam wisselen zouden zo'n weergave stukmaken. Buiten de periode staan ze
-    // simpelweg standaard uit.
+    // naam wisselen zouden zo'n weergave stukmaken.
+    //
+    // Ze zijn óók `vast`, en dat is geen sierlijkheid: de werkstand bewaart per
+    // scherm welke kolommen aan stonden, en een niet-vaste kolom volgt die
+    // bewaarde stand. Dan blijf je na het kiezen van een ander kwartaal naar de
+    // maanden van het vórige kwartaal kijken — allemaal streepjes, terwijl de
+    // totalen wél meebewegen. Een vaste kolom volgt altijd de code, en de code
+    // is hier de gekozen periode. Zie werkstand.ts (`pasKolommenToe`) en de
+    // remount-sleutel in WerktijdenWeergave.
     const maandKolommen: KolomDefinitie<SamenvattingRij>[] = Array.from(
       { length: 12 },
       (_, i) => {
@@ -125,6 +69,7 @@ export default function SamenvattingTabel({
         return {
           key: `m${String(maand).padStart(2, '0')}`,
           label: MAAND_LABEL[maand],
+          vast: true,
           breedte: 80,
           standaard_zichtbaar: zichtbareMaanden.includes(maand),
           sorteerWaarde: (r: SamenvattingRij) => r.perMaand[maand] ?? 0,
