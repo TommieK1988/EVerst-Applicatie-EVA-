@@ -8,6 +8,9 @@ import {
   volgendeUitlogTijd, mobieleVervalTijd, portaalVervalTijd,
 } from '@/lib/sessie'
 import { nextParameter, veiligNextPad, veiligPortaalPad } from '@/lib/auth/next-pad'
+import {
+  begrensdeFetch, haalGebruikerBegrensd, authOnbereikbaarResponse,
+} from '@/lib/auth/auth-bereikbaarheid'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -35,6 +38,9 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Elke auth-call krijgt een harde bovengrens; zonder die grens kan één
+      // hangende verbinding de hele middleware over de 25s-limiet duwen.
+      global: { fetch: begrensdeFetch },
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -63,12 +69,17 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
   const isLoginPage = pathname === '/login'
   const isAuthRoute = pathname.startsWith('/auth/')
   const isApiRoute = pathname.startsWith('/api/')
+
+  // Auth-controle met een deadline. Is de auth-server onbereikbaar, dan tonen we
+  // meteen een storingspagina in plaats van te blijven hangen tot Vercel de
+  // request na 25 seconden afkapt. Zie lib/auth/auth-bereikbaarheid.ts.
+  const uitkomst = await haalGebruikerBegrensd(supabase)
+  if (uitkomst.soort === 'onbereikbaar') return authOnbereikbaarResponse(isApiRoute)
+  const user = uitkomst.user
   // Cron-endpoints beveiligen zichzelf met CRON_SECRET (Bearer) en hebben géén sessiecookie —
   // de cookie-auth mag ze daarom niet naar /login redirecten (anders draait de Vercel-cron nooit).
   const isCronRoute = pathname.startsWith('/api/cron/')
