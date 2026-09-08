@@ -34,16 +34,16 @@ export default async function HomePage() {
   const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
     // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
-    medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
-    medewerker ? getMijnDossiers(medewerker.id, 'offerte')  : Promise.resolve({ ok: true as const, data: [] }),
+    medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
+    medewerker ? getMijnDossiers(medewerker.id, 'offerte')  : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
     // Mijn opdrachten: alleen dossiers waar ik projectleider ben
-    medewerker ? getMijnDossiers(medewerker.id, 'opdracht', 10, { kolom: 'verwacht_startdatum', ascending: true }, ['project_manager_id']) : Promise.resolve({ ok: true as const, data: [] }),
+    medewerker ? getMijnDossiers(medewerker.id, 'opdracht', 10, { kolom: 'verwacht_startdatum', ascending: true }, ['project_manager_id']) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
     // Mijn servicedesk: dossiers waar ik projectleider of uitvoerder ben
-    medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [] }),
+    medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
   ])
 
-  const agendaItems: AgendaWidgetItem[] = agendaRegels
+  const agendaRelevant = agendaRegels
     .filter(r => {
       if (r.eind_datum < vandaag) return false
       if (r.bron === 'berekend') return true
@@ -53,6 +53,9 @@ export default async function HomePage() {
       return false
     })
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
+
+  // De widget toont er vijf; de teller in de kop moet het volledige aantal noemen.
+  const agendaItems: AgendaWidgetItem[] = agendaRelevant
     .slice(0, 5)
     .map(r => ({
       id:          r.id,
@@ -73,6 +76,12 @@ export default async function HomePage() {
       opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
       servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
       agendaItems={agendaItems}
+      // Totalen: de lijsten hierboven zijn afgekapt op 10 rijen, de tellers niet.
+      aanvragenTotaal={aanvragenResult.ok   ? aanvragenResult.totaal   : undefined}
+      offertesTotaal={offertesResult.ok     ? offertesResult.totaal    : undefined}
+      opdrachtenTotaal={opdrachtenResult.ok ? opdrachtenResult.totaal  : undefined}
+      servicedeskTotaal={servicedeskResult.ok ? servicedeskResult.totaal : undefined}
+      agendaTotaal={agendaRelevant.length}
     />
   )
 }

@@ -221,9 +221,10 @@ function SortableWidget({
 /* ── SummaryCard ──────────────────────────────────────────── */
 
 function SummaryCard({ opdrachten, aanvragen, offertes, taken, vandaagStr, onEva }: {
-  opdrachten: DossierRij[];
-  aanvragen: DossierRij[];
-  offertes: DossierRij[];
+  /** Aantallen, niet de lijsten: de widgetlijsten zijn afgekapt, deze tellers niet. */
+  opdrachten: number;
+  aanvragen: number;
+  offertes: number;
   taken: TaakMetDetails[];
   vandaagStr: string;
   onEva: () => void;
@@ -244,9 +245,9 @@ function SummaryCard({ opdrachten, aanvragen, offertes, taken, vandaagStr, onEva
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 12 }}>
           {[
-            { v: String(opdrachten.length), l: 'Mijn opdrachten' },
-            { v: String(aanvragen.length),  l: 'Open aanvragen'  },
-            { v: String(offertes.length),   l: 'Open offertes'   },
+            { v: String(opdrachten), l: 'Mijn opdrachten' },
+            { v: String(aanvragen),  l: 'Open aanvragen'  },
+            { v: String(offertes),   l: 'Open offertes'   },
             { v: String(taken.filter(t => t.deadline && t.deadline <= vandaagStr).length), l: 'Taken vandaag' },
           ].map((s, i) => (
             <div key={i}>
@@ -286,10 +287,17 @@ export interface HomeViewProps {
   opdrachten: DossierRij[];
   servicedesk: DossierRij[];
   agendaItems: AgendaWidgetItem[];
+  /* Totalen achter de afgekapte lijsten hierboven; vallen terug op de lijstlengte. */
+  aanvragenTotaal?: number;
+  offertesTotaal?: number;
+  opdrachtenTotaal?: number;
+  servicedeskTotaal?: number;
+  agendaTotaal?: number;
 }
 
 export default function HomeView({
   displayName, taken, aanvragen, offertes, opdrachten, servicedesk, agendaItems,
+  aanvragenTotaal, offertesTotaal, opdrachtenTotaal, servicedeskTotaal, agendaTotaal,
 }: HomeViewProps) {
   const router = useRouter();
   const [greeting, setGreeting] = React.useState('Goedemorgen');
@@ -373,6 +381,11 @@ export default function HomeView({
     router.push(seed ? `/vraag-eva?seed=${encodeURIComponent(seed)}` : '/vraag-eva');
   };
 
+  const aanvragenN   = aanvragenTotaal   ?? aanvragen.length;
+  const offertesN     = offertesTotaal     ?? offertes.length;
+  const opdrachtenN   = opdrachtenTotaal   ?? opdrachten.length;
+  const servicedeskN  = servicedeskTotaal  ?? servicedesk.length;
+
   const vandaagStr = new Date().toISOString().split('T')[0];
   const openActies = taken.filter(t => t.deadline && t.deadline <= vandaagStr).length;
   const actiesText = openActies === 1
@@ -387,16 +400,16 @@ export default function HomeView({
     switch (id) {
       case 'tasks':    return <TasksWidget taken={taken}/>;
       case 'weather':  return <WeatherWidget/>;
-      case 'projects': return <ProjectsWidget opdrachten={opdrachten}/>;
-      case 'agenda':   return <AgendaWidget items={agendaItems}/>;
-      case 'dossier':  return <DossierWidget aanvragen={aanvragen}/>;
-      case 'servicedesk': return <ServicedeskWidget dossiers={servicedesk}/>;
+      case 'projects': return <ProjectsWidget opdrachten={opdrachten} totaal={opdrachtenN}/>;
+      case 'agenda':   return <AgendaWidget items={agendaItems} totaal={agendaTotaal}/>;
+      case 'dossier':  return <DossierWidget aanvragen={aanvragen} totaal={aanvragenN}/>;
+      case 'servicedesk': return <ServicedeskWidget dossiers={servicedesk} totaal={servicedeskN}/>;
       case 'news':     return <NewsWidget/>;
       case 'summary':  return (
         <SummaryCard
-          opdrachten={opdrachten}
-          aanvragen={aanvragen}
-          offertes={offertes}
+          opdrachten={opdrachtenN}
+          aanvragen={aanvragenN}
+          offertes={offertesN}
           taken={taken}
           vandaagStr={vandaagStr}
           onEva={() => go('Geef een weeksamenvatting op basis van alle bronnen')}

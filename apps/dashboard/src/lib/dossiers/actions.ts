@@ -55,7 +55,8 @@ import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 type DossierResult =
-  | { ok: true; data: DossierRij[] }
+  /** `totaal` = het aantal rijen dat aan het filter voldoet, ook als `data` door een limit is ingekort. */
+  | { ok: true; data: DossierRij[]; totaal?: number }
   | { ok: false; error: string; missingTable?: boolean }
 
 type MaakResult =
@@ -655,9 +656,12 @@ export async function getMijnDossiers(
 ): Promise<DossierResult> {
   const supabase = createAdminClient() as any
 
-  const { data, error } = await supabase
+  // count: 'exact' telt álle dossiers die aan het filter voldoen, niet alleen de
+  // `limit` rijen die worden teruggegeven — anders toont de home-widget de teller
+  // van wat hij laat zien in plaats van het echte totaal.
+  const { data, error, count } = await supabase
     .from('dossiers')
-    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`)
+    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`, { count: 'exact' })
     .eq('hoofdstatus', hoofdstatus)
     .or(rolKolommen.map(kolom => `${kolom}.eq.${medewerkerID}`).join(','))
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
@@ -668,7 +672,8 @@ export async function getMijnDossiers(
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  const rijen = (data ?? []).map(mapRij)
+  return { ok: true, data: rijen, totaal: count ?? rijen.length }
 }
 
 /**
@@ -684,9 +689,9 @@ export async function getMijnServicedesk(
 ): Promise<DossierResult> {
   const supabase = createAdminClient() as any
 
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('dossiers')
-    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`)
+    .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`, { count: 'exact' })
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .or(`project_manager_id.eq.${medewerkerID},uitvoerder_id.eq.${medewerkerID}`)
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')
@@ -698,7 +703,8 @@ export async function getMijnServicedesk(
     return { ok: false, error: error.message, missingTable }
   }
 
-  return { ok: true, data: (data ?? []).map(mapRij) }
+  const rijen = (data ?? []).map(mapRij)
+  return { ok: true, data: rijen, totaal: count ?? rijen.length }
 }
 
 /** Zoek dossiers op titel (voor de dossier-picker bij taken). */

@@ -204,7 +204,9 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
     (a.deadline ?? '9999-12-31').localeCompare(b.deadline ?? '9999-12-31'),
   );
   const displayed = gesorteerd.slice(0, MAX_TAKEN);
-  const open = displayed.filter(t => !doneIds.has(t.id)).length;
+  // Tel over álle taken, niet over de zes die in beeld passen: de teller in de
+  // kop is het totaal, de lijst eronder is slechts een uitsnede.
+  const open = gesorteerd.filter(t => !doneIds.has(t.id)).length;
 
   return (
     <WidgetShell
@@ -305,9 +307,11 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
 }
 
 /* ── DossierLijstWidget (gedeeld: opdrachten + aanvragen) ── */
-function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur, labelFn }: {
+function DossierLijstWidget({ title, dossiers, totaal, sectie, Icon, dotKleur, moreHref, emptyText, countLabel, subKleur, labelFn }: {
   title: string;
   dossiers: DossierRij[];
+  /** Aantal dossiers dat aan het filter voldoet; `dossiers` is daar een uitsnede van. */
+  totaal?: number;
   sectie: 'aanvragen' | 'opdrachten' | 'servicedesk';
   Icon: React.FC<{ size?: number }>;
   dotKleur: string;
@@ -321,12 +325,13 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
 }) {
   const router = useRouter();
   const displayed = dossiers.slice(0, MAX_DOSSIERS);
+  const aantal    = totaal ?? dossiers.length;
   const toonLabel = labelFn ?? substatusLabel;
 
   return (
     <WidgetShell
       title={title}
-      subtitle={displayed.length > 0 ? `${displayed.length} ${countLabel}` : 'Geen actieve dossiers'}
+      subtitle={aantal > 0 ? `${aantal} ${countLabel}` : 'Geen actieve dossiers'}
       Icon={Icon}
       onTitleClick={() => router.push(`${moreHref}?mijn=1`)}
       titleHint={`${title} — gefilterd op mij`}
@@ -375,11 +380,12 @@ function DossierLijstWidget({ title, dossiers, sectie, Icon, dotKleur, moreHref,
 }
 
 /* ── ProjectsWidget ──────────────────────────────────────── */
-export function ProjectsWidget({ opdrachten }: { opdrachten: DossierRij[] }) {
+export function ProjectsWidget({ opdrachten, totaal }: { opdrachten: DossierRij[]; totaal?: number }) {
   return (
     <DossierLijstWidget
       title="Mijn opdrachten"
       dossiers={opdrachten}
+      totaal={totaal}
       sectie="opdrachten"
       Icon={IconOpdrachten}
       dotKleur="var(--accent)"
@@ -394,11 +400,12 @@ export function ProjectsWidget({ opdrachten }: { opdrachten: DossierRij[] }) {
 }
 
 /* ── DossierWidget ───────────────────────────────────────── */
-export function DossierWidget({ aanvragen }: { aanvragen: DossierRij[] }) {
+export function DossierWidget({ aanvragen, totaal }: { aanvragen: DossierRij[]; totaal?: number }) {
   return (
     <DossierLijstWidget
       title="Mijn aanvragen"
       dossiers={aanvragen}
+      totaal={totaal}
       sectie="aanvragen"
       Icon={IconAanvragen}
       dotKleur="#d9a036"
@@ -410,11 +417,12 @@ export function DossierWidget({ aanvragen }: { aanvragen: DossierRij[] }) {
 }
 
 /* ── ServicedeskWidget ───────────────────────────────────── */
-export function ServicedeskWidget({ dossiers }: { dossiers: DossierRij[] }) {
+export function ServicedeskWidget({ dossiers, totaal }: { dossiers: DossierRij[]; totaal?: number }) {
   return (
     <DossierLijstWidget
       title="Mijn Servicedesk"
       dossiers={dossiers}
+      totaal={totaal}
       sectie="servicedesk"
       Icon={IconServicedesk}
       dotKleur="#3a7fb8"
@@ -620,14 +628,17 @@ function datumLabel(start: string): string {
   return `${d.getDate()} ${maandNames[d.getMonth()]}`
 }
 
-export function AgendaWidget({ items = [] }: { items?: AgendaWidgetItem[] }) {
+export function AgendaWidget({ items = [], totaal }: { items?: AgendaWidgetItem[]; totaal?: number }) {
   const router = useRouter()
 
-  const subtitle = items.length === 0
+  // `items` is de uitsnede die in de widget past; `totaal` is wat er werkelijk staat.
+  const aantal = totaal ?? items.length
+
+  const subtitle = aantal === 0
     ? 'Niets gepland'
-    : items.length === 1
+    : aantal === 1
       ? '1 aankomend item'
-      : `${items.length} aankomende items`
+      : `${aantal} aankomende items`
 
   return (
     <WidgetShell
