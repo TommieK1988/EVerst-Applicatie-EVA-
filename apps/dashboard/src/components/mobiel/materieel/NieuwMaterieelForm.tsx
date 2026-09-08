@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation'
 import { maakMaterieelObject } from '@/app/(platform)/materieelbeheer/actions'
 import { uploadDocument } from '@/app/(platform)/materieelbeheer/bestand-actions'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
-import { CATEGORIE_LABELS, MATERIEEL_CATEGORIEEN, type MaterieelCategorie } from '@/lib/materieel/types'
+import {
+  CATEGORIE_LABELS, MATERIEEL_CATEGORIEEN,
+  type MaterieelCategorie, type Optie,
+} from '@/lib/materieel/types'
 import { codeLabel } from '@/lib/materieel/qr'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld, label as labelStijl } from './stijl'
@@ -22,17 +25,24 @@ import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld, label as 
  * De foto gaat pas ná het aanmaken omhoog: de upload heeft een object-id nodig.
  * Mislukt alleen de foto, dan is het materieel er wél — dat melden we, in plaats
  * van de hele registratie weg te gooien.
+ *
+ * "Op naam van" is een keuzelijst en geen vinkje: wie een partij gereedschap
+ * invoert, doet dat vaak namens een collega die op dat moment niet meekijkt.
+ * Jezelf staat bovenaan, want dat blijft het meest voorkomende geval.
  */
 export default function NieuwMaterieelForm({
   code,
   mijnId,
   mijnNaam,
+  medewerkers,
 }: {
   /** Stickercode uit de scan; leeg als er zonder sticker wordt toegevoegd. */
   code: string | null
-  /** Id van de ingelogde medewerker — voor "op mijn naam". */
+  /** Id van de ingelogde medewerker — staat bovenaan de keuzelijst. */
   mijnId: string
   mijnNaam: string
+  /** Actieve collega's om het materieel aan uit te geven. */
+  medewerkers: Optie[]
 }) {
   const router = useRouter()
   const cameraRef = React.useRef<HTMLInputElement>(null)
@@ -44,7 +54,8 @@ export default function NieuwMaterieelForm({
   const [type, setType] = React.useState('')
   const [serienummer, setSerienummer] = React.useState('')
   const [opmerkingen, setOpmerkingen] = React.useState('')
-  const [opMijnNaam, setOpMijnNaam] = React.useState(false)
+  /** Leeg = algemeen gebruik; anders het id van de collega die het krijgt. */
+  const [opNaamVan, setOpNaamVan] = React.useState('')
   const [foto, setFoto] = React.useState<File | null>(null)
   const [fotoUrl, setFotoUrl] = React.useState<string | null>(null)
 
@@ -73,7 +84,7 @@ export default function NieuwMaterieelForm({
       type,
       serienummer,
       opmerkingen,
-      toegewezen_medewerker_id: opMijnNaam ? mijnId : '',
+      toegewezen_medewerker_id: opNaamVan,
     })
 
     if (!res.ok) { setFout(res.error); setBezig(false); return }
@@ -192,15 +203,21 @@ export default function NieuwMaterieelForm({
           />
         </div>
 
-        <label style={{ ...kaart, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={opMijnNaam}
-            onChange={(e) => setOpMijnNaam(e.target.checked)}
-            style={{ width: 20, height: 20 }}
-          />
-          <span style={{ fontSize: 15, fontWeight: 600 }}>Op mijn naam ({mijnNaam})</span>
-        </label>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStijl} htmlFor="opNaamVan">Op naam van</label>
+          <select
+            id="opNaamVan"
+            value={opNaamVan}
+            onChange={(e) => setOpNaamVan(e.target.value)}
+            style={veld}
+          >
+            <option value="">Niemand — algemeen gebruik</option>
+            <option value={mijnId}>Mijzelf ({mijnNaam})</option>
+            {medewerkers
+              .filter((m) => m.id !== mijnId)
+              .map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
+          </select>
+        </div>
 
         <div style={{ marginBottom: 12 }}>
           <label style={labelStijl} htmlFor="opmerkingen">Opmerking</label>

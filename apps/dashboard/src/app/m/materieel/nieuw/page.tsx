@@ -1,4 +1,5 @@
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
+import { getMedewerkerOpties } from '@/lib/materieel/data'
 import AppHeader from '@/components/mobiel/AppHeader'
 import NieuwMaterieelForm from '@/components/mobiel/materieel/NieuwMaterieelForm'
 
@@ -15,7 +16,7 @@ export default async function NieuwMaterieelPage({
   searchParams: Promise<{ code?: string }>
 }) {
   const medewerker = await vereisMaterieelToegang('schrijven', '/m')
-  const { code } = await searchParams
+  const [{ code }, medewerkers] = await Promise.all([searchParams, getMedewerkerOpties()])
 
   const naam = [medewerker.voornaam, medewerker.achternaam].filter(Boolean).join(' ')
 
@@ -26,7 +27,12 @@ export default async function NieuwMaterieelPage({
         sub={code ? 'Sticker gescand' : 'Zonder sticker'}
         backHref="/m/materieel"
       />
-      <NieuwMaterieelForm code={code ?? null} mijnId={medewerker.id} mijnNaam={naam} />
+      <NieuwMaterieelForm
+        code={code ?? null}
+        mijnId={medewerker.id}
+        mijnNaam={naam}
+        medewerkers={medewerkers}
+      />
     </>
   )
 }
