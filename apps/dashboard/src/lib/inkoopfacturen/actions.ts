@@ -24,9 +24,8 @@ import {
   GeenToegangError, type CurrentMedewerker,
 } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
-import { isServicedeskDossier } from '@/components/dossiers/types'
 import { INKOOP_STATUS_BETAALBAAR } from '@/lib/bouw7/inkoop-status'
-import { dagenTotVervaldatum, type InkoopfactuurRij, type BetaalrondeRij } from './types'
+import { dagenTotVervaldatum, type InkoopfactuurRij } from './types'
 
 export type ActieResultaat = { ok: true } | { ok: false; error: string }
 
@@ -40,7 +39,9 @@ const LIJST_SELECT = [
   'divisie_naam', 'divisie_exact_id', 'journaalcode_inkoop', 'vestiging_naam',
   'bedrag_excl', 'btw_bedrag', 'bedrag_incl', 'factuurdatum', 'vervaldatum', 'datum_betaald',
   'bouw7_opmerking', 'ordernummer', 'bon_nummer', 'is_geboekt_in_exact', 'keten_verloopt_op',
-  'huidige_goedkeurder_naam', 'huidige_goedkeurder_id', 'bouw7_approval_id', 'betaalronde_id',
+  'bewakingscode', 'bewakingscode_naam',
+  'huidige_goedkeurder_naam', 'huidige_goedkeurder_id', 'bouw7_approval_id',
+  'markering_betalen', 'betalen_op',
 ].join(',')
 
 /** De ingelogde medewerker + of hij de volledige scope mag zien. */
@@ -112,24 +113,25 @@ export async function getInkoopfacturen(opts?: { alles?: boolean }): Promise<Ink
     return q.order('id').range(van, tot)
   })
 
-  // Dossiers erbij voor de sectie (opdracht vs servicedesk) — één query, geen N+1.
+  // Route-sectie van het dossier erbij — één query, geen N+1.
+  //
+  // Dit moet uit `hoofdstatus`/`servicedesk_substatus` komen, niet uit de Bouw7-velden: de
+  // link moet naar de route wijzen waar het dossier daadwerkelijk woont. Een aanvraag zit
+  // onder /aanvragen, en die bestaat niet onder /opdrachten. Zelfde afleiding als
+  // `toContext()` in lib/dossiers/actief.ts.
+  const SECTIE: Record<string, InkoopfactuurRij['dossier_sectie']> = {
+    aanvraag: 'aanvragen', offerte: 'offertes', opdracht: 'opdrachten',
+  }
   const dossierIds = [...new Set(rijen.map(r => r.dossier_id).filter((v): v is string => !!v))]
-  const dossierSectie = new Map<string, 'opdracht' | 'servicedesk'>()
+  const dossierSectie = new Map<string, InkoopfactuurRij['dossier_sectie']>()
   for (let i = 0; i < dossierIds.length; i += 500) {
     const { data } = await supabase
       .from('dossiers')
-      .select('id, bouw7_projectstatus_naam, bouw7_categorie_naam')
+      .select('id, hoofdstatus, servicedesk_substatus')
       .in('id', dossierIds.slice(i, i + 500))
-    for (const d of (data ?? []) as { id: string; bouw7_projectstatus_naam: string | null; bouw7_categorie_naam: string | null }[]) {
-      dossierSectie.set(d.id, isServicedeskDossier(d) ? 'servicedesk' : 'opdracht')
+    for (const d of (data ?? []) as { id: string; hoofdstatus: string | null; servicedesk_substatus: string | null }[]) {
+      dossierSectie.set(d.id, d.servicedesk_substatus ? 'servicedesk' : (SECTIE[d.hoofdstatus ?? ''] ?? null))
     }
-  }
-
-  const betaalrondeNaam = new Map<string, string>()
-  const rondeIds = [...new Set(rijen.map(r => r.betaalronde_id as string | null).filter((v): v is string => !!v))]
-  if (rondeIds.length > 0) {
-    const { data } = await supabase.from('betaalrondes').select('id, naam').in('id', rondeIds)
-    for (const b of (data ?? []) as { id: string; naam: string }[]) betaalrondeNaam.set(b.id, b.naam)
   }
 
   const vandaag = new Date()
@@ -138,7 +140,6 @@ export async function getInkoopfacturen(opts?: { alles?: boolean }): Promise<Ink
     return {
       ...rij,
       dossier_sectie: rij.dossier_id ? dossierSectie.get(rij.dossier_id) ?? null : null,
-      betaalronde_naam: rij.betaalronde_id ? betaalrondeNaam.get(rij.betaalronde_id) ?? null : null,
       dagen_tot_vervaldatum: dagenTotVervaldatum(rij.vervaldatum, vandaag),
       mijn_beurt: rij.huidige_goedkeurder_id === medewerker.id,
     }
@@ -249,83 +250,21 @@ export async function plaatsInkoopfactuurOpmerking(
   }
 }
 
-// ── Betaalrondes ─────────────────────────────────────────────────────────────
-// Samenstellen is voorbehouden aan `beheren` (directie). Lezen/exporteren mag iedereen met
-// `lezen`, binnen zijn eigen scope — het totaal dat hij ziet kan dus lager zijn dan het
-// werkelijke rondetotaal. De UI zegt dat er expliciet bij.
-
-export async function getBetaalrondes(): Promise<BetaalrondeRij[]> {
-  const { allesZien, medewerker } = await scopeVoorGebruiker('lezen')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-
-  const { data: rondes } = await supabase
-    .from('betaalrondes')
-    .select('id, naam, betaaldatum, status, opmerking')
-    .order('created_at', { ascending: false })
-
-  const lijst = (rondes ?? []) as { id: string; naam: string; betaaldatum: string | null; status: string; opmerking: string | null }[]
-  if (lijst.length === 0) return []
-
-  let q = supabase
-    .from('inkoopfacturen')
-    .select('betaalronde_id, bedrag_incl')
-    .in('betaalronde_id', lijst.map(r => r.id))
-  if (!allesZien) {
-    q = q.or(`bouw7_project_id.not.is.null,huidige_goedkeurder_id.eq.${medewerker.id}`)
-  }
-  const { data: regels } = await q
-
-  const totalen = new Map<string, { n: number; som: number }>()
-  for (const r of (regels ?? []) as { betaalronde_id: string; bedrag_incl: number | null }[]) {
-    const t = totalen.get(r.betaalronde_id) ?? { n: 0, som: 0 }
-    t.n += 1
-    t.som += r.bedrag_incl ?? 0
-    totalen.set(r.betaalronde_id, t)
-  }
-
-  return lijst.map(r => ({
-    ...r,
-    aantal_facturen: totalen.get(r.id)?.n ?? 0,
-    totaal_incl: totalen.get(r.id)?.som ?? 0,
-  }))
-}
-
-export async function maakBetaalronde(naam: string, betaaldatum: string | null): Promise<ActieResultaat> {
-  try {
-    const { medewerker } = await vereisRecht('inkoopfacturen', 'beheren')
-    const schoon = naam.trim()
-    if (!schoon) return { ok: false, error: 'Geef de betaalronde een naam.' }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-    const { error } = await supabase.from('betaalrondes').insert({
-      naam: schoon,
-      betaaldatum: betaaldatum || null,
-      aangemaakt_door: medewerker.id,
-    })
-    if (error) return { ok: false, error: error.message }
-
-    revalidatePath('/inkoop/betaalrondes')
-    return { ok: true }
-  } catch (e: unknown) {
-    if (e instanceof GeenToegangError) return { ok: false, error: e.message }
-    throw e
-  }
-}
+// ── Betalen-markering ────────────────────────────────────────────────────────
+// Bewust minimaal. Directie zet een vinkje; wie de betaling doet filtert daarop en werkt de
+// lijst af in Exact. Geen rondes, geen levenscyclus — dat bleek bij het eerste gebruik meer
+// administratie dan de vraag rechtvaardigde.
 
 /**
- * Zet facturen in een betaalronde, of haal ze eruit (`betaalrondeId = null`).
+ * Markeer facturen als "betalen" (of haal de markering weg).
  *
- * Twee harde regels:
- *  - alleen goedgekeurde, nog niet betaalde facturen mogen erin. Een factuur die nog ter
- *    goedkeuring ligt hoort niet in een betaalronde, hoe graag iemand ook wil betalen;
- *  - een afgeronde ronde is bevroren. Anders verandert achteraf waar de administratie
- *    haar betaalbestand op heeft gebaseerd.
+ * Alleen goedgekeurde, nog niet betaalde facturen kunnen worden aangemerkt: een factuur die nog
+ * ter goedkeuring ligt hoort niet op de betaallijst, hoe graag iemand ook wil betalen.
+ * De markering weghalen mag altijd — anders zit een vergissing muurvast.
  */
-export async function zetBetaalronde(
+export async function markeerBetalen(
   inkoopfactuurIds: string[],
-  betaalrondeId: string | null,
+  aan: boolean,
 ): Promise<ActieResultaat> {
   try {
     const { medewerker } = await vereisRecht('inkoopfacturen', 'beheren')
@@ -334,44 +273,22 @@ export async function zetBetaalronde(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
-    if (betaalrondeId) {
-      const { data: ronde } = await supabase
-        .from('betaalrondes').select('id, status').eq('id', betaalrondeId).maybeSingle()
-      if (!ronde) return { ok: false, error: 'Betaalronde niet gevonden.' }
-      if (ronde.status === 'afgerond') {
-        return { ok: false, error: 'Deze betaalronde is afgerond en kan niet meer worden gewijzigd.' }
-      }
-    }
-
     const { data: facturen } = await supabase
       .from('inkoopfacturen')
-      .select('id, bouw7_status, datum_betaald, betaalronde_id, factuurnummer')
+      .select('id, bouw7_status, datum_betaald, factuurnummer')
       .in('id', inkoopfactuurIds)
 
-    type F = { id: string; bouw7_status: number | null; datum_betaald: string | null; betaalronde_id: string | null; factuurnummer: string | null }
+    type F = { id: string; bouw7_status: number | null; datum_betaald: string | null; factuurnummer: string | null }
     const lijst = (facturen ?? []) as F[]
 
-    if (betaalrondeId) {
+    if (aan) {
       const geweigerd = lijst.filter(f => f.bouw7_status !== INKOOP_STATUS_BETAALBAAR || f.datum_betaald)
       if (geweigerd.length > 0) {
         const namen = geweigerd.slice(0, 3).map(f => f.factuurnummer ?? f.id).join(', ')
         const meer = geweigerd.length > 3 ? ` en ${geweigerd.length - 3} andere` : ''
         return {
           ok: false,
-          error: `Alleen goedgekeurde, nog niet betaalde facturen kunnen in een betaalronde. Geweigerd: ${namen}${meer}.`,
-        }
-      }
-      // Al in een áfgeronde ronde? Dan niet verplaatsen.
-      const bevroren = lijst.filter(f => f.betaalronde_id && f.betaalronde_id !== betaalrondeId)
-      if (bevroren.length > 0) {
-        const { data: rondes } = await supabase
-          .from('betaalrondes').select('id, status')
-          .in('id', [...new Set(bevroren.map(f => f.betaalronde_id))])
-        const afgerond = new Set(
-          ((rondes ?? []) as { id: string; status: string }[]).filter(r => r.status === 'afgerond').map(r => r.id)
-        )
-        if (bevroren.some(f => afgerond.has(f.betaalronde_id!))) {
-          return { ok: false, error: 'Een of meer facturen zitten al in een afgeronde betaalronde.' }
+          error: `Alleen goedgekeurde, nog niet betaalde facturen kunnen op de betaallijst. Overgeslagen: ${namen}${meer}.`,
         }
       }
     }
@@ -380,9 +297,9 @@ export async function zetBetaalronde(
     const { error } = await supabase
       .from('inkoopfacturen')
       .update({
-        betaalronde_id: betaalrondeId,
-        betaalronde_op: betaalrondeId ? new Date().toISOString() : null,
-        betaalronde_door: betaalrondeId ? medewerker.id : null,
+        markering_betalen: aan,
+        betalen_op:   aan ? new Date().toISOString() : null,
+        betalen_door: aan ? medewerker.id : null,
       })
       .in('id', ids)
     if (error) return { ok: false, error: error.message }
@@ -390,54 +307,11 @@ export async function zetBetaalronde(
     await supabase.from('inkoopfactuur_gebeurtenissen').insert(
       ids.map(id => ({
         inkoopfactuur_id: id,
-        actie: betaalrondeId ? 'betaalronde_toegevoegd' : 'betaalronde_verwijderd',
+        actie: aan ? 'betalen_aan' : 'betalen_uit',
         medewerker_id: medewerker.id,
-        detail: { betaalronde_id: betaalrondeId },
       }))
     )
 
-    revalidatePath('/inkoop/facturen')
-    revalidatePath('/inkoop/betaalrondes')
-    return { ok: true }
-  } catch (e: unknown) {
-    if (e instanceof GeenToegangError) return { ok: false, error: e.message }
-    throw e
-  }
-}
-
-/** Bevriest de samenstelling van een ronde: de administratie kan hem nu in Exact klaarzetten. */
-export async function rondBetaalrondeAf(betaalrondeId: string): Promise<ActieResultaat> {
-  try {
-    const { medewerker } = await vereisRecht('inkoopfacturen', 'beheren')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createAdminClient() as any
-
-    const { data: ronde } = await supabase
-      .from('betaalrondes').select('id, status').eq('id', betaalrondeId).maybeSingle()
-    if (!ronde) return { ok: false, error: 'Betaalronde niet gevonden.' }
-    if (ronde.status === 'afgerond') return { ok: false, error: 'Deze betaalronde is al afgerond.' }
-
-    const { error } = await supabase
-      .from('betaalrondes')
-      .update({ status: 'afgerond', vrijgegeven_op: new Date().toISOString(), vrijgegeven_door: medewerker.id })
-      .eq('id', betaalrondeId)
-    if (error) return { ok: false, error: error.message }
-
-    const { data: regels } = await supabase
-      .from('inkoopfacturen').select('id').eq('betaalronde_id', betaalrondeId)
-    const ids = ((regels ?? []) as { id: string }[]).map(r => r.id)
-    if (ids.length > 0) {
-      await supabase.from('inkoopfactuur_gebeurtenissen').insert(
-        ids.map(id => ({
-          inkoopfactuur_id: id,
-          actie: 'betaalronde_afgerond',
-          medewerker_id: medewerker.id,
-          detail: { betaalronde_id: betaalrondeId },
-        }))
-      )
-    }
-
-    revalidatePath('/inkoop/betaalrondes')
     revalidatePath('/inkoop/facturen')
     return { ok: true }
   } catch (e: unknown) {
@@ -476,14 +350,14 @@ export async function ververAlleInkoopfacturen(): Promise<ActieResultaat> {
 
 /** Ongebruikt hier, maar expliciet geëxporteerd zodat pagina's de rechten kunnen uitlezen. */
 export async function getInkoopfacturenRechten(): Promise<{
-  magLezen: boolean; magAccorderen: boolean; magBetaalronde: boolean; allesZien: boolean
+  magLezen: boolean; magAccorderen: boolean; magBetalen: boolean; allesZien: boolean
 }> {
   const medewerker = await getCurrentMedewerker()
   const rechten = await getEffectieveRechten(medewerker ?? undefined)
   return {
     magLezen:      heeftModuleToegang(rechten, 'inkoopfacturen', 'lezen'),
     magAccorderen: heeftModuleToegang(rechten, 'inkoopfacturen', 'schrijven'),
-    magBetaalronde: heeftModuleToegang(rechten, 'inkoopfacturen', 'beheren'),
+    magBetalen: heeftModuleToegang(rechten, 'inkoopfacturen', 'beheren'),
     allesZien:     heeftModuleToegang(rechten, 'inkoopfacturen_alle', 'lezen'),
   }
 }

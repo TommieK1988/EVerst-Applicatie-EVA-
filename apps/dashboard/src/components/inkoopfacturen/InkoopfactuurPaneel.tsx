@@ -9,7 +9,7 @@ import {
   type InkoopfactuurDetail,
 } from '@/lib/inkoopfacturen/actions'
 import { inkoopStatusLabel, approvalStatusLabel, BOUW7_APPROVAL_STATUS } from '@/lib/bouw7/inkoop-status'
-import type { InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
+import { dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
 
 function euro(n: number | null): string {
   if (n == null) return '—'
@@ -37,10 +37,12 @@ function Regel({ label, waarde }: { label: string; waarde: React.ReactNode }) {
 type Props = {
   rij: InkoopfactuurRij | null
   magAccorderen: boolean
+  /** Opent het factuurdocument in een venster i.p.v. een nieuw tabblad. */
+  onFactuurOpenen: (rij: InkoopfactuurRij) => void
   onClose: () => void
 }
 
-export default function InkoopfactuurPaneel({ rij, magAccorderen, onClose }: Props) {
+export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpenen, onClose }: Props) {
   const [detail, setDetail] = useState<InkoopfactuurDetail | null>(null)
   const [laden, setLaden] = useState(false)
   const [nieuweOpmerking, setNieuweOpmerking] = useState('')
@@ -115,10 +117,16 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onClose }: Pro
                   waarde={
                     rij.bouw7_project_id == null
                       ? <em style={{ color: 'var(--fg-soft)' }}>geen project (overhead)</em>
-                      : rij.dossier_id
-                        ? <a href={`/dossiers/${rij.dossier_id}`}>{[rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}</a>
+                      : dossierHref(rij)
+                        ? <a href={dossierHref(rij)!}>{[rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}</a>
                         : [rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ') || '—'
                   }
+                />
+                <Regel
+                  label="Bewakingscode"
+                  waarde={rij.bewakingscode
+                    ? `${rij.bewakingscode}${rij.bewakingscode_naam ? ` · ${rij.bewakingscode_naam}` : ''}`
+                    : '—'}
                 />
                 {(rij.bon_nummer || rij.ordernummer) && (
                   <Regel label="Bon / order" waarde={rij.bon_nummer ?? rij.ordernummer} />
@@ -126,8 +134,8 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onClose }: Pro
                 {rij.bouw7_opmerking && (
                   <Regel label="Omschrijving" waarde={rij.bouw7_opmerking} />
                 )}
-                {rij.betaalronde_naam && (
-                  <Regel label="Betaalronde" waarde={rij.betaalronde_naam} />
+                {rij.markering_betalen && (
+                  <Regel label="Betalen" waarde={<strong style={{ color: '#0f766e' }}>Aangemerkt om te betalen</strong>} />
                 )}
               </section>
 
@@ -230,14 +238,11 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onClose }: Pro
             </DrawerBody>
 
             <DrawerFooter>
-              <a
-                href={`/api/inkoopfacturen/${rij.id}/document`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ marginRight: 'auto' }}
-              >
-                <Button variant="secondary" size="sm">Factuur (PDF)</Button>
-              </a>
+              <div style={{ marginRight: 'auto' }}>
+                <Button variant="secondary" size="sm" onClick={() => onFactuurOpenen(rij)}>
+                  Factuur bekijken
+                </Button>
+              </div>
               <Button variant="ghost" size="sm" disabled={bezig} onClick={ververs}>Verversen</Button>
               <Button variant="secondary" size="sm" onClick={onClose}>Sluiten</Button>
             </DrawerFooter>

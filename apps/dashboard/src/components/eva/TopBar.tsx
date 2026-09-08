@@ -156,7 +156,7 @@ const SLUG_LABELS: Record<string, string> = {
   'aanvragen': 'Aanvragen', 'offertes': 'Offertes', 'opdrachten': 'Opdrachten',
   'servicedesk': 'Servicedesk', 'afgesloten': 'Afgesloten', 'facturen': 'Facturen',
   'uren': 'Uren',
-  'inkoop': 'Inkoop', 'betaalrondes': 'Betaalrondes',
+  'inkoop': 'Inkoop',
   // Planning
   'planning': 'Planning', 'project': 'Projectplanning', 'medewerker': 'Medewerkerplanning',
   'bedrijfsagenda': 'Bedrijfsagenda', 'mijn-werkbonnen': 'Mijn werkbonnen', 'werkbon': 'Werkbon',

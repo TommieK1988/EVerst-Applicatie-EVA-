@@ -29,6 +29,26 @@ import type {
   Bouw7PurchaseInvoiceDetail,
 } from './client'
 
+/**
+ * Bewakingscode per factuur uit de Apollo-zoekindex.
+ *
+ * De Heimdall-lijst heeft dit veld niet — daar zit `deliveryTicket` zonder `securityLink`.
+ * Apollo `/search/purchase-invoices` heeft het wel, en accepteert `datePaid IS NULL` als filter,
+ * wat exact dezelfde 559 facturen oplevert als onze eigen selectie. Eén call voor de hele set.
+ */
+type ApolloInkoopRij = {
+  id: number
+  deliveryTicket?: {
+    securityLink?: {
+      code?: {
+        code?: string | null
+        name?: string | null
+        chapter?: { name?: string | null } | null
+      } | null
+    } | null
+  } | null
+}
+
 /** Hoeveel approval-detailcalls één run maximaal doet. */
 const MAX_DETAILS_STANDAARD = 250
 /** Gelijktijdige detailcalls. Bewust laag: Bouw7 is de gedeelde bron van de hele cron. */
@@ -72,6 +92,7 @@ function bouwBronRij(
   koppel: {
     dossierByProject: Map<string, { id: string }>
     relatieByBouw7: Map<string, string>
+    codePerFactuur: Map<string, { code: string | null; naam: string | null; hoofdstuk: string | null }>
   },
   nu: string
 ): { invoiceId: string; bron: BronRij } {
@@ -79,6 +100,7 @@ function bouwBronRij(
   const projectId = inv.project?.id != null ? String(inv.project.id) : null
   const dossier = projectId ? koppel.dossierByProject.get(projectId) : undefined
   const relatieId = inv.supplier?.id != null ? koppel.relatieByBouw7.get(String(inv.supplier.id)) ?? null : null
+  const code = koppel.codePerFactuur.get(invoiceId) ?? null
 
   // Alleen velden die de EVA-rij bepalen. `updatedAt` vangt wijzigingen die we niet los volgen
   // (bv. een gewijzigde goedkeurder) zonder dat we per factuur het detail hoeven te lezen.
@@ -93,6 +115,7 @@ function bouwBronRij(
     bet:  toDate(inv.datePaid),
     appr: inv.currentApprover ?? null,
     upd:  inv.updatedAt ?? null,
+    code: code?.code ?? null,
   })
 
   return {
@@ -131,6 +154,10 @@ function bouwBronRij(
       ordernummer:             inv.orderNumber || null,
       bon_nummer:              inv.deliveryTicket?.number ?? null,
       bon_omschrijving:        bouw7RichTextNaarTekst(inv.deliveryTicket?.description ?? '') || null,
+
+      bewakingscode:           code?.code ?? null,
+      bewakingscode_naam:      code?.naam ?? null,
+      bewakingscode_hoofdstuk: code?.hoofdstuk ?? null,
 
       is_muteerbaar:           inv.isMutable ?? null,
       is_geboekt_in_exact:     inv.isBookedInExact ?? null,
@@ -239,6 +266,27 @@ export async function syncInkoopfacturen(
     const resp = await bouw7.get<Bouw7PurchaseInvoiceListResponse>('/list/purchase-invoices')
     const facturen = (resp.items ?? []).filter(inv => !inv.datePaid)
 
+    // Bewakingscodes in één klap uit Apollo. Fail-soft: valt deze bron weg, dan blijft de kolom
+    // leeg maar loopt de rest van de sync gewoon door — een ontbrekende code is geen reden om
+    // 559 facturen niet bij te werken.
+    const codePerFactuur = new Map<string, { code: string | null; naam: string | null; hoofdstuk: string | null }>()
+    try {
+      const apollo = await bouw7.getApolloAll<ApolloInkoopRij>(
+        '/search/purchase-invoices', 'datePaid IS NULL', 1000,
+      )
+      for (const rij of apollo) {
+        const code = rij.deliveryTicket?.securityLink?.code
+        if (!code?.code) continue
+        codePerFactuur.set(String(rij.id), {
+          code: code.code ?? null,
+          naam: code.name ?? null,
+          hoofdstuk: code.chapter?.name ?? null,
+        })
+      }
+    } catch {
+      // stil — zie hierboven
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
 
@@ -285,7 +333,7 @@ export async function syncInkoopfacturen(
 
     const openInvoiceIds = new Set<string>()
     const allRows = facturen.map(inv => {
-      const rij = bouwBronRij(inv, { dossierByProject, relatieByBouw7 }, nu)
+      const rij = bouwBronRij(inv, { dossierByProject, relatieByBouw7, codePerFactuur }, nu)
       openInvoiceIds.add(rij.invoiceId)
       return rij
     })

@@ -23,8 +23,12 @@ export type InkoopfactuurRij = {
   project_naam: string | null
   project_nummer: string | null
   dossier_id: string | null
-  /** Afgeleid uit het dossier; bepaalt of de factuur bij een opdracht of de servicedesk hoort. */
-  dossier_sectie: 'opdracht' | 'servicedesk' | null
+  /**
+   * Route-segment van het dossier: aanvragen | offertes | opdrachten | servicedesk.
+   * Er bestaat géén /dossiers/[id]-route — een dossier woont onder zijn eigen sectie.
+   * Null als de factuur geen EVA-dossier heeft; dan is er ook niets om naartoe te linken.
+   */
+  dossier_sectie: 'aanvragen' | 'offertes' | 'opdrachten' | 'servicedesk' | null
 
   divisie_naam: string | null
   divisie_exact_id: string | null
@@ -42,6 +46,9 @@ export type InkoopfactuurRij = {
   ordernummer: string | null
   bon_nummer: string | null
 
+  bewakingscode: string | null
+  bewakingscode_naam: string | null
+
   is_geboekt_in_exact: boolean | null
   keten_verloopt_op: string | null
 
@@ -49,8 +56,9 @@ export type InkoopfactuurRij = {
   huidige_goedkeurder_id: string | null
   bouw7_approval_id: string | null
 
-  betaalronde_id: string | null
-  betaalronde_naam: string | null
+  /** Aangemerkt door de directie om mee te gaan in de eerstvolgende betaling. */
+  markering_betalen: boolean
+  betalen_op: string | null
 
   /** At-read berekend, niet opgeslagen — verandert elke dag. */
   dagen_tot_vervaldatum: number | null
@@ -58,15 +66,6 @@ export type InkoopfactuurRij = {
   mijn_beurt: boolean
 }
 
-export type BetaalrondeRij = {
-  id: string
-  naam: string
-  betaaldatum: string | null
-  status: string
-  opmerking: string | null
-  aantal_facturen: number
-  totaal_incl: number
-}
 
 /**
  * Dagen tot de vervaldatum. Negatief = verlopen. Rekent in hele dagen op de lokale kalender,
@@ -89,4 +88,15 @@ export function vervalKleur(dagen: number | null): VervalKleur {
   if (dagen < 0) return 'verlopen'
   if (dagen < 7) return 'bijna'
   return 'ok'
+}
+
+/**
+ * Link naar het dossier van deze factuur, of `null` als er geen dossier aan hangt.
+ *
+ * `/dossiers/<id>` bestaat niet — dat gaf een 404. Een dossier woont onder zijn sectie:
+ * /aanvragen, /offertes, /opdrachten of /servicedesk.
+ */
+export function dossierHref(rij: Pick<InkoopfactuurRij, 'dossier_id' | 'dossier_sectie'>): string | null {
+  if (!rij.dossier_id || !rij.dossier_sectie) return null
+  return `/${rij.dossier_sectie}/${rij.dossier_id}`
 }
