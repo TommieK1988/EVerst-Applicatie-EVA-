@@ -2,17 +2,21 @@
 
 import React, { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, CheckCircle2, RotateCcw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Flag, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
 } from '@/components/ui'
-import { formatDatumMetDag } from '@/lib/wagenpark/utils'
+import { formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 import { minutenLabel, urenLabel, SOORT_LABEL } from '@/lib/wagenpark/werktijd'
 import {
   handelWerktijdSignaalAf,
   heropenWerktijdSignaal,
 } from '@/app/(platform)/wagenpark/actions/werktijd-afhandeling'
+import {
+  laadRittenBijBevinding,
+  type DagRit,
+} from '@/app/(platform)/wagenpark/actions/werktijd-ritten'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 
 /**
@@ -31,11 +35,33 @@ export default function DagPaneel({
 }) {
   const [toelichting, setToelichting] = useState('')
   const [bezig, startTransition] = useTransition()
+  const [ritten, setRitten] = useState<DagRit[] | null>(null)
+  const [rittenFout, setRittenFout] = useState<string | null>(null)
 
   // Wissel je van regel, dan mag de toelichting van de vorige niet blijven
   // staan — die zou zo aan de verkeerde dag worden vastgelegd.
   useEffect(() => {
     setToelichting('')
+  }, [rij?.id])
+
+  // De ritten komen pas als het paneel opengaat; zie werktijd-ritten.ts.
+  // `afgebroken` vangt het snel doorklikken naar een volgende dag af: zonder
+  // die vlag kan het antwoord van de vórige dag over het nieuwe heen vallen.
+  useEffect(() => {
+    const id = rij?.id
+    setRitten(null)
+    setRittenFout(null)
+    if (!id) return
+
+    let afgebroken = false
+    laadRittenBijBevinding(id).then((res) => {
+      if (afgebroken) return
+      if (res.ok) setRitten(res.ritten)
+      else setRittenFout(res.error)
+    })
+    return () => {
+      afgebroken = true
+    }
   }, [rij?.id])
 
   function afhandelen(uitkomst: 'verklaard' | 'bespreken') {
@@ -140,16 +166,22 @@ export default function DagPaneel({
                 )}
               </section>
 
-              {rij.trip_id && (
-                <section>
-                  <Link
-                    href="/wagenpark/ritten"
-                    className="text-sm text-green-700 hover:underline"
-                  >
-                    Bekijk de ritten van deze dag →
-                  </Link>
-                </section>
-              )}
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                  Ritten van deze dag
+                </h3>
+                <RittenLijst
+                  ritten={ritten}
+                  fout={rittenFout}
+                  soort={rij.soort}
+                />
+                <Link
+                  href="/wagenpark/ritten"
+                  className="mt-2 inline-block text-sm text-green-700 hover:underline"
+                >
+                  Open de rittenlijst →
+                </Link>
+              </section>
 
               <section className="border-t border-slate-200 pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
@@ -216,5 +248,87 @@ export default function DagPaneel({
         )}
       </DrawerContent>
     </Drawer>
+  )
+}
+
+/** "23 min" / "1 u 12" — duur van een rit. */
+function duurLabel(seconden: number | null): string {
+  if (seconden == null) return '—'
+  const min = Math.round(seconden / 60)
+  if (min < 60) return `${min} min`
+  return `${Math.floor(min / 60)} u ${String(min % 60).padStart(2, '0')}`
+}
+
+const RIT_TYPE_STIJL: Record<string, string> = {
+  zakelijk: 'bg-slate-100 text-slate-600',
+  prive: 'bg-blue-100 text-blue-700',
+  woon_werk: 'bg-slate-100 text-slate-600',
+}
+
+/**
+ * De ritten van de dag, met de bepalende ritketen eruit gelicht.
+ *
+ * Waarom álle ritten en niet alleen de keten: het gesprek gaat juist over wat
+ * er omheen gebeurde. Een privérit om kwart voor acht verklaart een late
+ * aankomst; een tussenstop bij de groothandel laat zien dat er al gewerkt werd.
+ * De keten is groen gemarkeerd zodat wél duidelijk blijft waar het getal
+ * vandaan komt.
+ */
+function RittenLijst({
+  ritten,
+  fout,
+  soort,
+}: {
+  ritten: DagRit[] | null
+  fout: string | null
+  soort: WerktijdRij['soort']
+}) {
+  if (fout) {
+    return <p className="text-sm text-slate-500">De ritten konden niet worden opgehaald ({fout}).</p>
+  }
+  if (ritten === null) {
+    return <p className="text-sm text-slate-400">Ritten laden…</p>
+  }
+  if (ritten.length === 0) {
+    return <p className="text-sm text-slate-500">Geen ritten gevonden op deze dag.</p>
+  }
+
+  return (
+    <ol className="space-y-1.5">
+      {ritten.map((r) => (
+        <li
+          key={r.id}
+          className={`rounded-md border px-3 py-2 ${
+            r.in_keten ? 'border-green-300 bg-green-50/60' : 'border-slate-200 bg-white'
+          }`}
+        >
+          <div className="flex items-baseline gap-2 text-sm">
+            <span className="font-medium tabular-nums text-slate-900">
+              {r.start_tijd?.slice(0, 5) ?? '—'}–{r.stop_tijd?.slice(0, 5) ?? '—'}
+            </span>
+            <span className="text-xs text-slate-500">{duurLabel(r.duur_seconden)}</span>
+            <span className="text-xs text-slate-500">{formatKm(r.afstand_km, 1)}</span>
+            {r.rit_type !== 'zakelijk' && (
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  RIT_TYPE_STIJL[r.rit_type] ?? 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {r.rit_type === 'prive' ? 'privé' : r.rit_type.replace('_', '-')}
+              </span>
+            )}
+            {r.is_anker && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-green-700">
+                <Flag className="w-3 h-3" />
+                {soort === 'te_laat' ? 'bepaalt de aankomst' : 'bepaalt het vertrek'}
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500 truncate" title={`${r.adres_start ?? '—'} → ${r.adres_stop ?? '—'}`}>
+            {r.adres_start ?? '—'} → {r.adres_stop ?? '—'}
+          </p>
+        </li>
+      ))}
+    </ol>
   )
 }
