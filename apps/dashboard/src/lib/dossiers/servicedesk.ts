@@ -10,8 +10,8 @@ import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
-  bedragUitOpslag, bedragUitTarief, nieuweHandmatigeSleutel, soortVan, tariefEnOpslag,
-  type Groepering,
+  bedragUitOpslag, bedragUitTarief, isLosseRegel, nieuweHandmatigeSleutel, nieuweLosseSleutel,
+  soortVan, tariefEnOpslag, type Groepering,
 } from './factuurregel-groepen'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
@@ -348,6 +348,13 @@ export type GroepView = {
   aantalBoekingen: number
   /** Handmatig samengevoegd — die regel blijft staan los van de groeperingskeuze. */
   handmatig: boolean
+  /**
+   * Losse regel: een post die niet uit een boeking volgt (opstartkosten, voorrijkosten). Hij bestaat
+   * alleen als opgeslagen rij en is daarom ook als enige te verwijderen.
+   */
+  los: boolean
+  /** Alleen bij losse regels: staat al op een verstuurde factuur en telt niet meer mee. */
+  gefactureerd: boolean
 }
 
 /** Eén bewakingscode met alles wat het scherm nodig heeft om zijn factuurregels samen te stellen. */
@@ -473,7 +480,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     const gegroepeerd = groepeer(eigen, groepering)
     const enkeleRegel = gegroepeerd.length === 1
 
-    const groepen: GroepView[] = gegroepeerd.map(g => {
+    const groepenView: GroepView[] = gegroepeerd.map(g => {
       const opgeslagenGroep = groep.get(`${c.bewakingscode}|${g.groepSleutel}`)
       const eigenOms = (opgeslagenGroep?.omschrijving ?? '').trim() || null
       const override = opgeslagenGroep?.bedrag_excl_btw != null
@@ -496,8 +503,33 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         meefactureren: opgeslagenGroep?.meefactureren ?? true,
         aantalBoekingen: g.boekingen.length,
         handmatig: isHandmatigeGroep(g.groepSleutel),
+        los: false,
+        gefactureerd: false,
       }
     })
+
+    // Losse regels komen er als laatste bij. Ze volgen uit geen enkele boeking, dus `groepeer()`
+    // kent ze niet — ze bestaan puur als opgeslagen rij en dragen hun eigen bedrag.
+    for (const l of groepen) {
+      if (l.bewakingscode !== c.bewakingscode || !isLosseRegel(l.groep_sleutel)) continue
+      const bedrag = l.bedrag_excl_btw != null ? Number(l.bedrag_excl_btw) : 0
+      groepenView.push({
+        groepSleutel: l.groep_sleutel,
+        omschrijving: (l.omschrijving ?? '').trim() || 'Losse regel',
+        eigenOmschrijving: l.omschrijving,
+        berekend: 0,
+        bedragOverride: l.bedrag_excl_btw != null ? bedrag : null,
+        bedrag,
+        aantal: 1,
+        eenheid: 'post',
+        btwTariefBouw7Id: l.btw_tarief_bouw7_id ?? codeBtw,
+        meefactureren: l.meefactureren,
+        aantalBoekingen: 0,
+        handmatig: false,
+        los: true,
+        gefactureerd: l.bouw7_invoice_id != null,
+      })
+    }
 
     const naarView = (r: RegieFactuurRegel, isGefactureerd: boolean): BoekingView => ({
       sleutel: `${r.bronType}:${r.bronBouw7Id}`,
@@ -530,12 +562,12 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       omschrijving: codeOmschrijving,
       inkoop,
       berekend,
-      bedrag: rond(groepen.filter(g => g.meefactureren).reduce((s, g) => s + g.bedrag, 0)),
+      bedrag: rond(groepenView.filter(g => g.meefactureren && !g.gefactureerd).reduce((s, g) => s + g.bedrag, 0)),
       opslagPct: inst?.opslag_pct != null ? Number(inst.opslag_pct) : c.opslagPct,
       groepering,
       btwTariefBouw7Id: codeBtw,
       meefactureren,
-      groepen,
+      groepen: groepenView,
       boekingen: [
         ...eigen.map(r => naarView(r, false)),
         ...uitgeslotenEigen.map(r => naarView(r, false)),
@@ -550,11 +582,14 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       vergrendeld,
     })
 
-    // Geen openstaande boekingen = niets te factureren, ook niet als er een handmatig bedrag staat.
-    // Zonder deze regel zou een vastgezet bedrag bij elke volgende factuur opnieuw meegaan.
-    if (eigen.length === 0 || !meefactureren) continue
+    if (!meefactureren) continue
 
-    for (const g of groepen) {
+    for (const g of groepenView) {
+      // Een afgeleide groep zonder openstaande boekingen heeft niets te factureren; een losse regel
+      // draagt zijn bedrag zelf, maar mag maar één keer mee — daarna is hij afgeboekt op de factuur
+      // waar hij op staat. Zonder die controle zou hij elke volgende keer opnieuw meegaan.
+      if (!g.los && eigen.length === 0) continue
+      if (g.los && g.gefactureerd) continue
       if (!g.meefactureren || g.bedrag === 0) continue
       regels.push({
         sleutel: `${c.bewakingscode}|${g.groepSleutel}`,
@@ -679,6 +714,18 @@ export async function bewaarFactuurGroep(
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
   if (!toegang.ok) return toegang
 
+  // Een losse regel die al op een verstuurde factuur staat ligt net zo vast als een boeking die
+  // is afgeboekt: de omschrijving of het bedrag nu nog wijzigen zou suggereren dat die factuur is
+  // meegewijzigd. De code als geheel is dan meestal nog niet vergrendeld, dus dit moet hier apart.
+  const alGefactureerd = toegang.code?.groepen.find(g => g.groepSleutel === groepSleutel)?.gefactureerd
+  if (alGefactureerd) {
+    return {
+      ok: false,
+      error: 'Deze regel staat al op een factuur en kan niet meer worden gewijzigd. '
+        + 'Corrigeren gaat via een creditnota in Bouw7.',
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const { data: bestaand } = await supabase
@@ -704,6 +751,67 @@ export async function bewaarFactuurGroep(
   const { error } = await supabase
     .from('factuur_regelgroepen')
     .upsert(rij, { onConflict: 'dossier_id,bewakingscode,groep_sleutel' })
+  if (error) return { ok: false, error: error.message }
+
+  herlaadFacturatie(dossierId)
+  return { ok: true }
+}
+
+/**
+ * Voegt een losse factuurregel toe: een post die niet uit een boeking volgt, zoals opstartkosten of
+ * voorrijkosten. Hij hangt aan een bewakingscode omdat de factuur per code wordt opgebouwd, maar
+ * heeft verder niets onder zich — het bedrag is wat er staat.
+ *
+ * De sleutel wordt hier bepaald en niet in het scherm: twee mensen die tegelijk een regel toevoegen
+ * mogen elkaars regel niet overschrijven.
+ */
+export async function voegLosseRegelToe(
+  dossierId: string,
+  bewakingscode: string,
+  regel: { omschrijving: string; bedragExclBtw: number | null },
+): Promise<{ ok: true; groepSleutel: string } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  const omschrijving = regel.omschrijving.trim()
+  if (!omschrijving) return { ok: false, error: 'Geef de regel een omschrijving; die komt zo op de factuur.' }
+
+  const sleutel = nieuweLosseSleutel()
+  const r = await bewaarFactuurGroep(dossierId, bewakingscode, sleutel, {
+    omschrijving,
+    bedrag_excl_btw: regel.bedragExclBtw,
+  })
+  if (!r.ok) return r
+  return { ok: true, groepSleutel: sleutel }
+}
+
+/**
+ * Verwijdert een losse factuurregel. Alleen die: een afgeleide groep verwijderen heeft geen
+ * betekenis — hij wordt bij de volgende opbouw gewoon opnieuw uit de boekingen afgeleid, en de rij
+ * wissen zou alleen de instellingen weggooien. Een regel die al op een factuur staat blijft staan.
+ */
+export async function verwijderLosseRegel(
+  dossierId: string,
+  bewakingscode: string,
+  groepSleutel: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  if (!isLosseRegel(groepSleutel)) {
+    return { ok: false, error: 'Alleen een zelf toegevoegde regel kan worden verwijderd.' }
+  }
+  const bestaand = toegang.code?.groepen.find(g => g.groepSleutel === groepSleutel)
+  if (bestaand?.gefactureerd) {
+    return { ok: false, error: 'Deze regel staat al op een factuur en kan niet meer worden verwijderd.' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { error } = await supabase
+    .from('factuur_regelgroepen')
+    .delete()
+    .eq('dossier_id', dossierId)
+    .eq('bewakingscode', bewakingscode)
+    .eq('groep_sleutel', groepSleutel)
   if (error) return { ok: false, error: error.message }
 
   herlaadFacturatie(dossierId)
@@ -937,6 +1045,26 @@ export async function maakRegieFactuurInBouw7(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
+
+  // Losse regels hebben geen boeking om af te boeken; ze onthouden zelf op welke factuur ze staan.
+  // Zonder dit zouden opstart- of voorrijkosten bij elke volgende factuur opnieuw meegaan.
+  for (const c of voorstel.codes) {
+    for (const g of c.groepen) {
+      if (!g.los || g.gefactureerd) continue
+      if (!opFactuur.has(`${c.bewakingscode}|${g.groepSleutel}`)) continue
+      await supabase
+        .from('factuur_regelgroepen')
+        .update({
+          bouw7_invoice_id: String(res.invoiceId),
+          gefactureerd_op: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('dossier_id', dossierId)
+        .eq('bewakingscode', c.bewakingscode)
+        .eq('groep_sleutel', g.groepSleutel)
+    }
+  }
+
   for (const { boeking, bewakingscode } of mee) {
     await supabase.from('regie_factuurregels').upsert({
       dossier_id: dossierId,

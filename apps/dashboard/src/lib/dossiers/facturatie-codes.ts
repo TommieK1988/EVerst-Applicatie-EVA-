@@ -150,6 +150,8 @@ export type RegelGroep = {
   btw_tarief_bouw7_id: number | null
   meefactureren: boolean
   volgorde: number
+  /** Alleen bij losse regels: de factuur waar hij op terecht is gekomen. Gevuld = klaar. */
+  bouw7_invoice_id: string | null
 }
 
 export async function getRegelGroepen(dossierId: string): Promise<RegelGroep[]> {
@@ -157,7 +159,7 @@ export async function getRegelGroepen(dossierId: string): Promise<RegelGroep[]> 
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('factuur_regelgroepen')
-    .select('bewakingscode, groep_sleutel, omschrijving, bedrag_excl_btw, btw_tarief_bouw7_id, meefactureren, volgorde')
+    .select('bewakingscode, groep_sleutel, omschrijving, bedrag_excl_btw, btw_tarief_bouw7_id, meefactureren, volgorde, bouw7_invoice_id')
     .eq('dossier_id', dossierId)
     .order('volgorde')
   return (data ?? []) as RegelGroep[]

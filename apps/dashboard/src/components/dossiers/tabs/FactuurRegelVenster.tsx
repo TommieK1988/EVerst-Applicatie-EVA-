@@ -28,13 +28,14 @@
 
 import React, { useEffect, useId, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, ArrowLeft, ArrowRight, Plus } from 'lucide-react'
+import { Lock, ArrowLeft, ArrowRight, Plus, Trash2 } from 'lucide-react'
 import {
   Button, Input, Checkbox, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui'
 import {
   bewaarCodeInstelling, bewaarFactuurGroep, bewaarBoekingen, zetBoekingGroep,
+  voegLosseRegelToe, verwijderLosseRegel,
   type CodeRegelView, type BoekingView, type GroepView,
 } from '@/lib/dossiers/servicedesk'
 import { GROEPERINGEN, type Groepering } from '@/lib/dossiers/factuurregel-groepen'
@@ -295,6 +296,36 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
     })
   }
 
+  /** Een post die nergens geboekt staat: opstartkosten, voorrijkosten, een afgesproken toeslag. */
+  async function losseRegel() {
+    const naam = await vraagTekst({
+      titel: 'Losse regel toevoegen',
+      omschrijving: 'Een regel die niet uit een boeking volgt. Het bedrag vul je zo in de tabel in.',
+      label: 'Omschrijving op de factuur',
+      placeholder: 'bijv. Voorrijkosten',
+      verplicht: true,
+      bevestigLabel: 'Toevoegen',
+    })
+    if (naam == null) return
+    start(async () => {
+      const r = await voegLosseRegelToe(dossierId, post.bewakingscode, { omschrijving: naam, bedragExclBtw: null })
+      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
+      setDoel(r.groepSleutel)
+      onBewaard()
+    })
+  }
+
+  async function verwijderRegel(g: GroepView) {
+    const ja = await bevestig({
+      titel: `"${g.omschrijving}" verwijderen?`,
+      omschrijving: 'De regel verdwijnt van de factuur. Er gaat geen geboekt werk verloren.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })
+    if (!ja) return
+    doe(() => verwijderLosseRegel(dossierId, post.bewakingscode, g.groepSleutel))
+  }
+
   async function anderGroeperen(nieuw: Groepering) {
     const handmatig = post.boekingen.filter(b => b.handmatigToegewezen).length
     if (handmatig > 0) {
@@ -326,11 +357,14 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
   const uitRegelBedrag = uitRegels.reduce((s, g) => s + g.bedrag, 0)
   const uitBoekingen = code.boekingen.filter(b => b.uitgesloten && !b.gefactureerd)
   const uitBoekingBedrag = uitBoekingen.reduce((s, b) => s + b.verkoopBedrag, 0)
+  const zonderBedrag = code.groepen.filter(g => g.los && !g.gefactureerd && g.meefactureren && g.bedrag === 0)
   const uitleg = [
     uitRegels.length > 0
       && `${uitRegels.length} regel${uitRegels.length === 1 ? '' : 's'} staat uit — ${fmt(uitRegelBedrag)} blijft van de factuur af`,
     uitBoekingen.length > 0
       && `${uitBoekingen.length} boeking${uitBoekingen.length === 1 ? '' : 'en'} uitgevinkt — ${fmt(uitBoekingBedrag)}`,
+    zonderBedrag.length > 0
+      && `${zonderBedrag.length} losse regel${zonderBedrag.length === 1 ? '' : 's'} heeft nog geen bedrag en gaat zo niet mee`,
     !code.meefactureren && 'De hele post staat uit; er komt niets van op de eerstvolgende factuur.',
   ].filter(Boolean) as string[]
 
@@ -605,9 +639,15 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
               {doelNummer != null && (
                 <span className="text-[11.5px] font-normal text-neutral-500">regel {doelNummer} gekozen</span>
               )}
+              {!opslot && (
+                <Button variant="outline" size="sm" disabled={bezig} onClick={losseRegel}
+                        title="Een regel die niet uit een boeking volgt, zoals voorrijkosten">
+                  <Plus className="h-3.5 w-3.5" /> Losse regel
+                </Button>
+              )}
             </div>
             <div className={scrollBak}>
-              <table className="w-full min-w-[500px] table-fixed border-collapse">
+              <table className="w-full min-w-[530px] table-fixed border-collapse">
                 <colgroup>
                   <col style={{ width: 34 }} />
                   <col style={{ width: 30 }} />
@@ -615,6 +655,7 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                   <col style={{ width: 68 }} />
                   <col style={{ width: 112 }} />
                   <col style={{ width: 116 }} />
+                  <col style={{ width: 30 }} />
                 </colgroup>
                 <thead>
                   <tr className="text-left">
@@ -624,18 +665,23 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                     <th className={`${kop} text-right`}>Aantal</th>
                     <th className={`${kop} text-right`}>Bedrag</th>
                     <th className={kop}>Btw</th>
+                    <th className={kop} />
                   </tr>
                 </thead>
                 <tbody>
                   {code.groepen.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-neutral-500">
-                        Er staan geen boekingen op de factuur, dus er valt niets te factureren.
+                      <td colSpan={7} className="px-3 py-6 text-center text-[13px] text-neutral-500">
+                        Er staat nog niets op de factuur. Vink links boekingen aan, of voeg een losse
+                        regel toe.
                       </td>
                     </tr>
                   )}
                   {code.groepen.map((g: GroepView, i) => {
                     const isDoel = actiefDoel === g.groepSleutel
+                    // Een losse regel die al op een factuur staat ligt vast, net als een afgeboekte
+                    // boeking links.
+                    const regelVast = opslot || bezig || g.gefactureerd
                     return (
                       <tr
                         key={g.groepSleutel}
@@ -643,13 +689,13 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                         className={`cursor-pointer border-b border-neutral-100 align-middle last:border-0 ${
                           isDoel ? 'bg-brand-50 ring-1 ring-inset ring-brand-300' : 'hover:bg-neutral-50'
                         }`}
-                        style={{ opacity: g.meefactureren ? 1 : 0.55 }}
+                        style={{ opacity: g.meefactureren && !g.gefactureerd ? 1 : 0.55 }}
                       >
                         <td className="px-1.5 py-2"><Nummer n={i + 1} actief={isDoel} /></td>
                         <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
                           <Checkbox
                             checked={g.meefactureren}
-                            disabled={opslot || bezig}
+                            disabled={regelVast}
                             aria-label="Deze regel meenemen op de factuur"
                             title="Deze regel meenemen op de factuur"
                             onCheckedChange={v => groepPatch(g.groepSleutel, { meefactureren: v === true })}
@@ -659,9 +705,11 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                           <BewaarVeld
                             waarde={g.eigenOmschrijving ?? ''}
                             placeholder={g.omschrijving}
-                            titel={`${g.aantalBoekingen} boeking${g.aantalBoekingen === 1 ? '' : 'en'}`
-                              + `${g.handmatig ? ' · handmatig samengevoegd' : ''}`}
-                            disabled={opslot || bezig}
+                            titel={g.los
+                              ? (g.gefactureerd ? 'Losse regel — staat al op een factuur' : 'Losse regel, niet uit een boeking')
+                              : `${g.aantalBoekingen} boeking${g.aantalBoekingen === 1 ? '' : 'en'}`
+                                + `${g.handmatig ? ' · handmatig samengevoegd' : ''}`}
+                            disabled={regelVast}
                             opslaan={t => groepPatch(g.groepSleutel, { omschrijving: t })}
                           />
                         </td>
@@ -675,8 +723,10 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             uitlijnen="rechts"
                             eenheid="€"
                             eenheidVoor
-                            titel={`Vast bedrag; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
-                            disabled={opslot || bezig}
+                            titel={g.los
+                              ? 'Bedrag van deze losse regel'
+                              : `Vast bedrag; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
+                            disabled={regelVast}
                             opslaan={t => groepPatch(g.groepSleutel, { bedrag_excl_btw: getal(t) })}
                           />
                         </td>
@@ -684,9 +734,26 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                           <BtwKeuze
                             waarde={g.btwTariefBouw7Id}
                             tarieven={tarieven}
-                            disabled={opslot || bezig}
+                            disabled={regelVast}
                             opslaan={v => groepPatch(g.groepSleutel, { btw_tarief_bouw7_id: v })}
                           />
+                        </td>
+                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                          {/* Alleen een losse regel is te verwijderen. Een afgeleide groep wissen
+                              heeft geen betekenis: die wordt bij het volgende laden gewoon opnieuw
+                              uit de boekingen afgeleid. */}
+                          {g.los && !g.gefactureerd && !opslot && (
+                            <button
+                              type="button" onClick={() => verwijderRegel(g)} disabled={bezig}
+                              title="Deze losse regel verwijderen" aria-label="Regel verwijderen"
+                              className="grid h-6 w-6 place-items-center rounded text-neutral-400 transition-colors hover:bg-error-50 hover:text-error-700 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {g.gefactureerd && (
+                            <Lock className="h-3.5 w-3.5 text-neutral-400" aria-label="Staat op een verstuurde factuur" />
+                          )}
                         </td>
                       </tr>
                     )
@@ -698,13 +765,13 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                       <th colSpan={3} className={`${voet} text-left`}>Samen excl. btw</th>
                       <td className={voet} />
                       <td className={`${voet} text-right tabular-nums`}>{fmt(code.bedrag)}</td>
-                      <td className={voet} />
+                      <td className={voet} colSpan={2} />
                     </tr>
                     {uitleg.length > 0 && (
                       <tr>
                         {/* Zonder deze regel staat er een kale € 0,00 naast regels van honderden
                             euro's, en is nergens te zien waarom ze niet meetellen. */}
-                        <td colSpan={6}
+                        <td colSpan={7}
                             className="sticky bottom-0 z-[1] border-t border-warning-300 bg-warning-50 px-3 py-2 text-[12px] leading-relaxed text-warning-900">
                           {uitleg.join(' · ')}
                         </td>

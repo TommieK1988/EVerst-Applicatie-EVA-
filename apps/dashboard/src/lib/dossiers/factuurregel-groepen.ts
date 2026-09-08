@@ -70,6 +70,18 @@ export function isHandmatigeGroep(sleutel: string): boolean {
 }
 
 /**
+ * Sleutel voor een losse factuurregel: een post die niet uit een boeking volgt, zoals opstart- of
+ * voorrijkosten. Die bestaat alleen als opgeslagen rij — er is geen boeking die hem oproept.
+ */
+export function nieuweLosseSleutel(): string {
+  return 'los:' + Math.random().toString(36).slice(2, 10)
+}
+
+export function isLosseRegel(sleutel: string): boolean {
+  return sleutel.startsWith('los:')
+}
+
+/**
  * Tekst die op de factuur komt als er geen eigen omschrijving is ingevuld.
  *
  * De naam van de bewakingscode blijft leidend — dat is wat de klant herkent — met de soort erachter
