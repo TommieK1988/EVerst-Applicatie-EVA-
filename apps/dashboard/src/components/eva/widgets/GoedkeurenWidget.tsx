@@ -3,6 +3,7 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { WidgetShell } from './index'
+import { syncTijdLabel } from '@/components/eva/SyncKnop'
 import { getUrenTeFiatterenAantal } from '@/lib/goedkeuren/widget'
 import type { GoedkeurenData, GoedkeurenItem, GoedkeurenSoort } from '@/lib/goedkeuren/widget'
 
@@ -144,6 +145,17 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
       {uren?.fout && (
         <div style={{ fontSize: 11, color: 'var(--fg-muted)', paddingTop: 6 }}>
           Uren konden niet worden opgehaald ({uren.fout}).
+        </div>
+      )}
+
+      {/*
+        Peiltijd, geen sierlijkheid. De inkoopstand komt uit de Bouw7-sync van twee keer per dag;
+        zonder dit regeltje zou de teller stil verouderen en zou je niet weten of je op
+        Synchroniseer moet drukken.
+      */}
+      {data.inkoopSyncOp && aantallen.inkoopfactuur > 0 && (
+        <div style={{ fontSize: 10.5, color: 'var(--fg-muted)', paddingTop: 6 }}>
+          Inkoopstand uit Bouw7 van {syncTijdLabel(data.inkoopSyncOp).toLowerCase()}
         </div>
       )}
 

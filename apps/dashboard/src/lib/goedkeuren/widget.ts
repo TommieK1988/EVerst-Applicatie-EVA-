@@ -17,6 +17,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 import { INKOOP_STATUS_WORKFLOW_LOOPT } from '@/lib/bouw7/inkoop-status'
+import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 
 export type GoedkeurenSoort = 'inkoopfactuur' | 'offerte' | 'werkbegroting'
 
@@ -36,11 +37,21 @@ export type GoedkeurenData = {
   ligtBijJou: GoedkeurenItem[]
   afgehandeld: GoedkeurenItem[]
   aantallen: { inkoopfactuur: number; offerte: number; werkbegroting: number }
+  /**
+   * Wanneer de inkoopfacturen voor het laatst uit Bouw7 zijn gehaald.
+   *
+   * Dit staat er expliciet in omdat de teller anders stil kan liegen: de Bouw7-sync draait
+   * twee keer per dag, dus wie 's ochtends in Bouw7 tien facturen fiatteert ziet ze hier tot de
+   * middagrun nog staan. Bewust geen extra sync erbij — wel zichtbaar maken waar de stand
+   * vandaan komt, zodat je weet of je op de knop Synchroniseer moet drukken.
+   */
+  inkoopSyncOp: string | null
 }
 
 const LEEG: GoedkeurenData = {
   ligtBijJou: [], afgehandeld: [],
   aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0 },
+  inkoopSyncOp: null,
 }
 
 /** Hoe ver terug het "afgehandeld voor jou"-blok kijkt. */
@@ -72,7 +83,7 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
 
   const sinds = new Date(Date.now() - AFGEHANDELD_DAGEN * 86_400_000).toISOString()
 
-  const [inkoopRes, openRes, afgehandeldRes] = await Promise.all([
+  const [inkoopRes, openRes, afgehandeldRes, inkoopSyncOp] = await Promise.all([
     // Inkoopfacturen waar ik de huidige fiatteur ben. Gebonden aan het inkooprecht: zonder dat
     // recht hoort iemand deze regels niet te zien, ook niet als teller op zijn startpagina.
     magInkoop
@@ -106,6 +117,8 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
       .gte('beoordeeld_op', sinds)
       .order('beoordeeld_op', { ascending: false })
       .limit(20),
+
+    magInkoop ? getLaatsteSyncTijd('inkoopfacturen') : Promise.resolve(null),
   ])
 
   type DossierRef = {
@@ -177,6 +190,7 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
   return {
     ligtBijJou,
     afgehandeld,
+    inkoopSyncOp,
     aantallen: {
       inkoopfactuur: ligtBijJou.filter(i => i.soort === 'inkoopfactuur').length,
       offerte:       ligtBijJou.filter(i => i.soort === 'offerte').length,

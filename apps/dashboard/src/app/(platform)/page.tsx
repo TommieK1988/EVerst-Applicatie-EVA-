@@ -44,7 +44,7 @@ export default async function HomePage() {
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
     // Fail-soft: een lege goedkeurwidget is beter dan een startpagina die niet laadt.
     getGoedkeurenWidget().catch(() => ({
-      ligtBijJou: [], afgehandeld: [],
+      ligtBijJou: [], afgehandeld: [], inkoopSyncOp: null,
       aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0 },
     })),
   ])
