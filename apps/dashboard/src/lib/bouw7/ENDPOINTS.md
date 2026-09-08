@@ -367,8 +367,15 @@ totaal-velden). Live opgehaald, géén opslag — defensief met `.catch` per bro
 | **Verkoopfacturen** | `GET /list/invoices` | `project.id = {id}` | `invoiceNumber`, `status` (int), `isCredit`, `date`, `dueDate`, `datePaid` (gevuld = betaald), `total`, `note` (interne notitie, rich text) |
 | **Verkoopfactuur-document** | `GET /invoice/{id}` | — (id in het pad) | Het volledige `InvoiceDocument`: `chapters[].lines[]`, `organization`, `contact`, plus `internalNote` — hetzelfde veld dat op de lijst `note` heet. Nodig als read-kant van de note-write (zie WRITE-ENDPOINTS §7a) |
 | **Onderaannemerscontracten** | `GET /list/subcontractor-contracts` | `project.id = {id}` | `subcontractor{name}`, `statusName`, `name`, `price` (contractbedrag), `outstandingCosts`, `projectSecurityLink{code}` |
-| **Inkoopfactuur-detail** | `GET /purchase-invoicing/purchase-invoice/{id}` | — (id in het pad) | **`lines[]`** (de échte factuurregels: `description`, `quantity`, `unitPrice`, `subTotal`, `vatTariffPercentage`, `deliveryTicket{ticketNumber, projectSecurityLink{code,name}}`) + **`file{uri, name, extension}`** (de factuur-PDF) |
+| **Inkoopfactuur-detail** | `GET /purchase-invoicing/purchase-invoice/{id}` | — (id in het pad) | **`lines[]`** (de échte factuurregels: `description`, `quantity`, `unitPrice`, `subTotal`, `vatTariffPercentage`, `deliveryTicket{ticketNumber, projectSecurityLink{code,name}}`) + **`file{uri, name, extension}`** (de factuur-PDF)  + **`approval{}`** (de goedkeuringsketen: `id`, `currentApprover.employee.id`, `approvers[].approvalStatus/comment`) + `exactPaymentCondition`, `exactFinancialPeriod`, `canBookToExact` |
 
+> **De goedkeuringsketen zit hier ook — en nergens anders.** De lijst geeft alleen
+> `currentApprover` als naam-**string**; `/list/approvals` en varianten geven 404. Match dus nooit
+> op naam maar op `approval.currentApprover.employee.id` → `medewerkers.bouw7_id`.
+> `approvalStatus`: 0 open · 1 afgekeurd/bezwaar · 2 goedgekeurd. Factuurstatus: 0 concept ·
+> 1 ter goedkeuring · 2 goedgekeurd/te betalen · 4 betaald · 5 afgekeurd (gemeten over 3040
+> facturen, sep 2026 — er is geen officiële enum). Schrijven: zie WRITE-ENDPOINTS §7c.
+>
 > **De factuurregels van een inkoopfactuur zitten ALLEEN hier** (geverifieerd jul 2026, gevonden door
 > het verzoek van Bouw7's eigen UI af te lezen). De `/purchase-invoicing/`-prefix is de sleutel:
 > `/purchase-invoice/{id}`, `/list/purchase-invoice-lines`, `/list/delivery-ticket-lines` en de

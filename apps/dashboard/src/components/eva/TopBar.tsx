@@ -156,6 +156,7 @@ const SLUG_LABELS: Record<string, string> = {
   'aanvragen': 'Aanvragen', 'offertes': 'Offertes', 'opdrachten': 'Opdrachten',
   'servicedesk': 'Servicedesk', 'afgesloten': 'Afgesloten', 'facturen': 'Facturen',
   'uren': 'Uren',
+  'inkoop': 'Inkoop', 'betaalrondes': 'Betaalrondes',
   // Planning
   'planning': 'Planning', 'project': 'Projectplanning', 'medewerker': 'Medewerkerplanning',
   'bedrijfsagenda': 'Bedrijfsagenda', 'mijn-werkbonnen': 'Mijn werkbonnen', 'werkbon': 'Werkbon',
@@ -200,6 +201,7 @@ const BREADCRUMB_BY_ROOT: Record<string, string> = {
   'planning': 'Planning',
   'relaties': 'Beheer', 'medewerkers': 'Beheer', 'wagenpark': 'Beheer', 'kam': 'Beheer',
   'facturen': 'Financieel', 'management': 'Financieel', 'uren': 'Financieel',
+  'inkoop': 'Financieel',
   'materieelbeheer': 'Apps',
   'instellingen': 'Platform', 'account': 'Account', 'mijn-taken': 'Persoonlijk',
 }

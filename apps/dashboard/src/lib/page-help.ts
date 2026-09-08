@@ -335,6 +335,30 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Financieel: Inkoopfacturen ─────────────────────────────────────────
+  [/^\/inkoop\/facturen$/, {
+    title: 'Inkoopfacturen',
+    description: 'Alle inkoopfacturen uit Bouw7 op één plek: van wie ze komen, bij welk project ze horen, wie ze moet goedkeuren en wat er nog openstaat. Bouw7 blijft de administratie — EVA laat zien wat er ligt en bij wie.',
+    sections: [
+      { title: 'Te accorderen door mij', body: 'Het eerste tabblad toont alleen de facturen waarbij jij aan zet bent, met een teller ernaast. Dat is bewust de plek waar je je werk ophaalt: je krijgt geen melding per factuur, want inkoopfacturen komen in bulk binnen.' },
+      { title: 'Statussen', body: 'Concept (nog niet ingediend), Ter goedkeuring (wacht op een goedkeurder), Goedgekeurd (mag betaald worden), Betaald, en Afgekeurd (bezwaar, met de reden erbij). De status komt uit Bouw7; EVA verandert hem niet zelf.' },
+      { title: 'Wie ziet wat', body: 'Met het recht "Inkoopfacturen: alle" zie je álle facturen. Zonder dat recht zie je de facturen die aan een project hangen — opdrachten én servicedesk — plus de facturen waarvan jij zelf de goedkeurder bent. Facturen zonder project (abonnementen, leasing, verzekeringen) blijven dan verborgen.' },
+      { title: 'Goedkeuringsketen', body: 'Klik een factuur aan en je ziet in het zijpaneel wie er in welke volgorde moet goedkeuren, wie al akkoord gaf en welke toelichting daarbij hoort. Die keten komt rechtstreeks uit Bouw7.' },
+      { title: 'Notities', body: 'Een notitie die je in EVA plaatst blijft in EVA. Dat is expres: in Bouw7 is er per goedkeurder maar één opmerkingveld, en dat is gereserveerd voor de reden van akkoord of bezwaar.' },
+      { title: 'Betaalronde', body: 'Directie kan goedgekeurde facturen selecteren en aan een betaalronde toevoegen. Nog niet goedgekeurde facturen kunnen daar niet in.' },
+    ],
+  }],
+
+  [/^\/inkoop\/betaalrondes$/, {
+    title: 'Betaalrondes',
+    description: 'Bundels goedgekeurde inkoopfacturen die mee mogen in de eerstvolgende betaling. EVA betaalt niets: een ronde is een lijst waarmee de administratie de betaling in Exact Online klaarzet.',
+    sections: [
+      { title: 'Ronde vullen', body: 'Facturen voeg je toe vanaf het scherm Inkoopfacturen: selecteer ze daar en kies de ronde. Alleen goedgekeurde, nog niet betaalde facturen kunnen mee.' },
+      { title: 'Afronden', body: 'Na afronden staat de samenstelling vast en kunnen er geen facturen meer bij of af. Zo lopen het betaalbestand en de lijst in EVA niet uit elkaar.' },
+      { title: 'Exporteren', body: 'Vanuit het factuuroverzicht exporteer je de ronde naar Excel, inclusief leverancier, factuurnummer, betalingskenmerk, boekstuknummer, bedrag en administratie — de gegevens die de administratie in Exact nodig heeft.' },
+    ],
+  }],
+
   // ── Beheer: Management ─────────────────────────────────────────────────
   [/^\/management$/, {
     title: 'Management',

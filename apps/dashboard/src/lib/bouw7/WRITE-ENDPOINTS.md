@@ -986,6 +986,86 @@ nuttig om te bewijzen dát planning schrijfbaar is; voor EVA is `POST /plan-item
 
 ---
 
+## 7c. Inkoopfactuur accorderen — route bevestigd, body nog onbekend (sep 2026)
+
+**Status: half.** Het endpoint bestaat en zit op Heimdall (dus bereikbaar met onze app-key), maar
+de body-vorm is nog niet gecaptured. Er is dus nog **niets geschreven**.
+
+### Waarom dit géén inbreuk is op §2c
+
+§2c sluit `POST /purchase-invoice` en `PUT /purchase-invoice/{id}/update-status/{status}` bewust
+uit: bedrag, BTW, factuurnummer en boekstuk zijn fiscaal en blijven van Bouw7. Dat besluit staat
+en verandert hier niet. De **vote raakt geen van die velden**: hij zet een `approvalStatus` +
+`comment` op een apart `approval`-object naast de factuur. Zelfde categorie als het
+to-do-terugschrijven (§5a) en de bewakingscode op de leverbon (§2b), beide al live. EVA zet de
+factuurstatus **nooit zelf** op 2 (goedgekeurd) — die overgang is Bouw7's eigen gevolg van een
+afgeronde workflow.
+
+### De leeskant (LIVE, in gebruik door `sync-inkoopfacturen.ts`)
+
+Het `approval`-object zit **alleen** op `GET /purchase-invoicing/purchase-invoice/{id}`. De lijst
+`/list/purchase-invoices` geeft enkel `currentApprover` als **naam-string** — niet als object en
+zonder id. Match daar dus nooit op; gebruik `approval.currentApprover.employee.id`, dat is het
+Bouw7-medewerker-id en mapt op `medewerkers.bouw7_id`.
+
+```jsonc
+"approval": {
+  "id": 5495517,            // ← dit id hoort in de vote-URL, niet het factuur-id
+  "currentIndex": 1,
+  "workflowId": null,
+  "currentApprover": { "id": 8345870, "index": 1,
+                       "employee": { "id": 194082, "firstName": "Robert", "lastName": "Hoogenbosch" },
+                       "approvalStatus": 0, "approvalDate": null, "comment": null },
+  "lastActionDate": null,
+  "isApproved": false,
+  "canApprove": false,      // ← voor ONZE sleutel altijd false: die is geen medewerker
+  "approvers": [ /* zelfde vorm, één per stap */ ]
+}
+```
+
+`approvalStatus`: **0** = open · **1** = afgekeurd/bezwaar (mét `comment` als reden) · **2** =
+goedgekeurd. Gemeten over alle 3040 facturen op 8 sep 2026. Factuurstatus:
+**0** concept · **1** ter goedkeuring · **2** goedgekeurd/te betalen · **4** betaald ·
+**5** afgekeurd/bezwaar. Status 3 komt niet voor.
+
+`GET /approval-template/default-settings` (200) geeft de actieve standaardworkflow —
+"Inkoopfacturen goedkeuren", één goedkeurstap. Alle 144 openstaande ketens hebben er inderdaad
+precies één; `workflowId` op de factuur zelf is `null` (de goedkeurder wordt handmatig gezet).
+
+### De schrijfkant — wat we weten en wat niet
+
+Met het **Allow-orakel** (§5a) vastgesteld op approval 5495517:
+
+```
+GET /approval/{approvalId}/vote-on-purchase-invoice
+  → 403 "Method Not Allowed (Allow: POST)"      ← route bestaat, accepteert POST
+GET /approval/{approvalId}/vote-on-contract
+  → 403 (Allow: POST)
+GET /approval/{approvalId}   → 404 entity_not_found
+GET /approval                → 404 entity_not_found
+GET /list/approvals          → 404   (idem /list/approval-templates, /list/purchase-invoice-approvals)
+```
+
+Belangrijk: de route zit op **`heimdall.bouw7.nl`**, niet op `start.bouw7.nl`. Onze app-key kan er
+dus bij — dat was de grootste twijfel. Er is géén OpenAPI-spec om de body uit af te leiden
+(`/doc`, `/doc.json`, `/api/doc`, `/swagger(.json)`, `/openapi.json` → allemaal 404).
+
+**Wat nog ontbreekt:** de body. De openstaande vraag is of die een expliciete
+`approverId`/`employeeId`/`index` bevat, of dat Bouw7 de stemmer uit de sessie afleidt — in dat
+tweede geval kan onze servicesleutel niet namens een medewerker stemmen en valt de hele
+schrijfkant om. `canApprove: false` op élke onderzochte factuur wijst die kant op, maar bewijst
+het niet: die vlag gaat over de aanroeper, en een expliciete `approverId` in de body zou hem
+irrelevant maken.
+
+**Volgende stap = UI-capture.** Iemand die in Bouw7 goedkeurder is opent een openstaande factuur,
+drukt op Akkoord/Bezwaar mét opmerking, en legt in DevTools → Network de volledige request vast
+(URL + host + body + response). Daarna één replay met de servicesleutel op een afgesproken
+testfactuur, met een terugleescontrole dat de stem op de **juiste medewerker** landt inclusief de
+opmerking. Landt hij op de servicesleutel of zonder opmerking → **niet bouwen**: een audit trail
+die liegt over wie accordeerde is erger dan geen write.
+
+---
+
 ## 7b. Verkooptermijnen & conceptfacturen — schema vastgesteld (sep 2026, nog niet geschreven)
 
 Het onderzoek dat aan deze sectie voorafging is read-only gedaan met

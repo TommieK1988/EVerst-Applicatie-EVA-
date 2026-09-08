@@ -17,6 +17,13 @@ export const AFGEDWONGEN_MODULES: RechtenModule[] = [
   // die er toegang toe had, dus niemand raakt iets kwijt. Wie bepaalt wat een
   // opdrachtgever te zien krijgt, is een bewuste keuze — geen standaardrecht.
   'klantportaal',
+  // Inkoopfacturen is nieuw en meteen afgedwongen, om dezelfde reden als het klantportaal:
+  // niemand raakt iets kwijt dat hij vandaag al had. De afdelingsrechten zijn geseed
+  // (20260908i), dus Directie, Projectbureau en Ondersteunend houden hun menu-item; wie het
+  // recht niet heeft ziet het menu niet in plaats van erop te klikken en een fout te krijgen.
+  // `inkoopfacturen_alle` staat hier bewust NIET in — dat is een scope-schakelaar zonder
+  // menu-item, net als `alle_taken`.
+  'inkoopfacturen',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */

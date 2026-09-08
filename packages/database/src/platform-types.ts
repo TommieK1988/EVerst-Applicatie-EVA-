@@ -806,6 +806,17 @@ export const RECHTEN_MODULES = [
   // acties van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
   { key: 'alle_taken',     label: 'Alle acties' },
   { key: 'financieel',     label: 'Financieel' },
+  // Inkoopfacturen (crediteuren uit Bouw7):
+  //  - lezen     → het overzicht en je eigen werkvoorraad "Te accorderen door mij"
+  //  - schrijven → accorderen/afkeuren en opmerkingen plaatsen
+  //  - beheren   → betaalrondes samenstellen, vrijgeven en afronden (directie)
+  { key: 'inkoopfacturen', label: 'Inkoopfacturen' },
+  // Geen menu-item maar een schakelaar bovenop 'inkoopfacturen', zoals 'alle_taken'.
+  // Zonder dit recht zie je alleen facturen die aan een project hangen (opdrachten en
+  // servicedesk) plus de facturen waarvan jij zelf de goedkeurder bent. Mét dit recht
+  // zie je óók de facturen zonder project: overhead, abonnementen, leasing, juridisch.
+  // Vanaf 'lezen'; de niveaus erboven doen hier niets extra's.
+  { key: 'inkoopfacturen_alle', label: 'Inkoopfacturen: alle' },
   // Klantportaal: wie mag zien wat er met een opdrachtgever gedeeld is.
   //  - lezen    → de Portaal-tab en de klantchat inzien
   //  - schrijven → onderdelen en bestanden vrijgeven, terugschrijven in de chat

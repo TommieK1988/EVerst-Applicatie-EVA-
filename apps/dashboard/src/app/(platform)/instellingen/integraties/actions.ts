@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, syncMeerwerk, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
+import { syncInkoopfacturen } from '@/lib/bouw7/sync-inkoopfacturen'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 import { vergeetBouw7Config } from '@/lib/bouw7/config'
 import { zorgVoorStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
@@ -101,7 +102,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult; stelpostCodes: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; inkoopfacturen: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult; stelpostCodes: SyncResult }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -121,6 +122,10 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     const projects = await syncProjects({ mode })
     const planning = await syncAllPlanning({ mode })
     const debiteuren = await syncDebiteuren({ mode })
+    // Inkoopfacturen koppelen op project → dossier en op de Bouw7-medewerker van de goedkeurder,
+    // dus ná syncProjects en syncEmployees. De approval-detailcalls zijn begrensd (maxDetails),
+    // zodat een achterstand de cron niet over zijn tijdslimiet duwt.
+    const inkoopfacturen = await syncInkoopfacturen({ mode })
     // Bouw7-aantekeningen op het dossier (koppelen op bouw7_id → ná syncProjects).
     // Herinneringen + to-do's zijn goedkope bulk; notities alleen bij full-sync (detail-call per dossier).
     const herinneringen = await syncOfferteHerinneringen({ mode })
@@ -132,8 +137,8 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     // geboekt worden en is hij achteraf niet af te rekenen.
     const stelpostCodes = await zorgVoorStelpostBewakingscodes()
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + inkoopfacturen.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + inkoopfacturen.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -145,7 +150,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, herinneringen, todos, notities, meerwerk, stelpostCodes }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, inkoopfacturen, herinneringen, todos, notities, meerwerk, stelpostCodes }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }

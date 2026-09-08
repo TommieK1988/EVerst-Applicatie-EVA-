@@ -983,6 +983,52 @@ export type Bouw7PurchaseInvoiceListItem = {
   isMutable?: boolean
   supplier?: { id?: number; name?: string; type?: string; typeId?: number } | null
   deliveryTicket?: { id?: number; number?: string; description?: string; purchaseTypeName?: string; price?: string | number } | null
+
+  // ── Velden die pas bij de crediteuren-module zijn opgemeten (sep 2026) ──────
+  // De dossier-Inkooptab gebruikt ze niet; `sync-inkoopfacturen.ts` wel. Allemaal optioneel,
+  // zodat bestaande aanroepers ongemoeid blijven.
+
+  /** Betalingskenmerk van de leverancier. */
+  paymentReference?: string | null
+  /** Boekstuknummer binnen het inkoopdagboek. */
+  entryNumber?: number
+  /** Administratie. `exactDivisionId` is de brug naar Exact Online (nu alleen opgeslagen). */
+  division?: {
+    id?: number
+    description?: string | null
+    exactDivisionId?: string | null
+    glAccountCode?: string | null
+    glAccountCodePurchase?: string | null
+    journalCode?: string | null
+    journalCodePurchase?: string | null
+  } | null
+  branch?: { id?: number; name?: string | null } | null
+  /**
+   * Naam van de goedkeurder die aan zet is, als **string** — geen object en geen id.
+   * Alleen voor weergave; koppel via `approval.currentApprover.employee.id` uit het detail.
+   */
+  currentApprover?: string | null
+  orderNumber?: string | null
+  /** `null` bij overheadfacturen (abonnementen, leasing) — die dragen de rechten-scope. */
+  project?: {
+    id?: number
+    number?: string | null
+    name?: string | null
+    status?: string | null
+    statusId?: number
+    branchId?: number
+    categoryId?: number
+    divisionId?: number
+  } | null
+  isBookedInExact?: boolean
+  isBookedInTwinfield?: boolean
+  isOriginatingFromBasecone?: boolean
+  /** Vervaldatum van het ketenaansprakelijkheidsdocument van de leverancier. */
+  chainLiabilityDocumentExpirationDate?: string | null
+  createdBy?: { id?: number; username?: string | null } | null
+  createdAt?: string | null
+  updatedBy?: { id?: number; username?: string | null } | null
+  updatedAt?: string | null
 }
 
 export type Bouw7PurchaseInvoiceListResponse = {
@@ -1053,6 +1099,57 @@ export type Bouw7PurchaseInvoiceDetail = {
     secureHash?: string | null
   } | null
   fromBasecone?: boolean
+  /**
+   * De goedkeuringsworkflow. **Alleen hier te vinden** — de lijst geeft enkel `currentApprover`
+   * als naam-string, en `/list/approvals` bestaat niet (404, net als alle andere raad-varianten).
+   * Geverifieerd op de live API, sep 2026.
+   */
+  approval?: Bouw7PurchaseInvoiceApproval | null
+  /** Betaaltermijn in dagen, als string ("30"). Uit Exact overgenomen door Bouw7. */
+  exactPaymentCondition?: string | null
+  exactFinancialPeriod?: {
+    id?: number
+    financialPeriod?: number
+    financialYear?: number
+    startDate?: string | null
+    endDate?: string | null
+  } | null
+  canBookToExact?: boolean
+}
+
+/**
+ * Eén stap in de goedkeuringsketen van een inkoopfactuur.
+ *
+ * `employee.id` is het Bouw7-medewerker-id en mapt op `medewerkers.bouw7_id` — dát is de
+ * betrouwbare koppeling naar een EVA-gebruiker. De naam-string op de lijst is dat niet.
+ */
+export type Bouw7PurchaseInvoiceApprover = {
+  /** Id van deze goedkeurstap (niet van de medewerker en niet van de approval). */
+  id: number
+  /** Volgorde in de keten (1-gebaseerd). */
+  index?: number
+  employee?: { id?: number; firstName?: string | null; lastName?: string | null } | null
+  /** 0 = open · 1 = afgekeurd/bezwaar · 2 = goedgekeurd. Zie `BOUW7_APPROVAL_STATUS`. */
+  approvalStatus?: number
+  approvalDate?: string | null
+  /** Rich text (`<p>…</p>`) — de toelichting van de goedkeurder. */
+  comment?: string | null
+}
+
+export type Bouw7PurchaseInvoiceApproval = {
+  /** Het id dat in `POST /approval/{id}/vote-on-purchase-invoice` hoort. */
+  id: number
+  currentIndex?: number
+  workflowId?: number | null
+  currentApprover?: Bouw7PurchaseInvoiceApprover | null
+  lastActionDate?: string | null
+  isApproved?: boolean
+  /**
+   * Of de **aanroeper** mag stemmen. Voor de EVA-servicesleutel altijd `false` (die is geen
+   * medewerker) — dus niet bruikbaar om te bepalen of de ingelogde gebruiker aan zet is.
+   */
+  canApprove?: boolean
+  approvers?: Bouw7PurchaseInvoiceApprover[]
 }
 
 /**
