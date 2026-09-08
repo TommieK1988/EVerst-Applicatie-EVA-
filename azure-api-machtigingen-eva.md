@@ -126,3 +126,53 @@ Niet nodig (de app raakt dit nergens aan): agenda/Calendars, gebruikerslijst
 (`/users` wordt alleen als afzender voor `sendMail` gebruikt, niet om gebruikers
 op te vragen), Teams, tenant-brede bestandstoegang (`Files.ReadWrite.All` is met
 `Sites.Selected` niet nodig).
+
+
+---
+
+## Mailintake — een tweede app-registratie
+
+De mailintake (`/mailintake`) leest drie gedeelde postbussen: offerteaanvragen,
+opdrachten en servicedeskbonnen. Dat vraagt **`Mail.ReadWrite`** als
+*Application*-machtiging — lezen om de post op te halen, schrijven om een
+afgehandelde mail te categoriseren en naar de map "Verwerkt door EVA" te
+verplaatsen. (`Mail.ReadWrite` omvat `Mail.Read`; het geeft géén recht om te
+versturen, dat is `Mail.Send`.)
+
+### Waarom niet op de bestaande registratie
+
+Een Exchange `ApplicationAccessPolicy` werkt **per app, niet per machtiging**.
+De bestaande EVA-registratie heeft al `Mail.Send` (Application), afgebakend tot
+de portaalpostbus. Zouden we de drie intakepostbussen aan diezelfde groep
+toevoegen, dan mag EVA vanaf dat moment ook *namens* die postbussen mailen —
+een recht dat niemand heeft gevraagd en dat lastig terug te draaien is.
+
+Daarom een aparte registratie:
+
+| Onderdeel | Waarde |
+|---|---|
+| Naam | EVA Mailintake |
+| Machtiging | `Mail.ReadWrite` — type **Application** — mét beheerderstoestemming |
+| Afbakening | `New-ApplicationAccessPolicy` op precies de drie intakepostbussen |
+| Env-variabelen | `O365_INTAKE_CLIENT_ID`, `O365_INTAKE_CLIENT_SECRET` |
+
+`O365_TENANT_ID` wordt gedeeld met de hoofdregistratie en moet ook hier de echte
+tenant-GUID zijn, niet `common`.
+
+### Wat er in de mailbox verandert
+
+EVA verplaatst afgehandelde en door een mens genegeerde mail naar de submap
+**Verwerkt door EVA** onder Postvak IN (die maakt hij zelf aan) en zet er een
+categorie op. Mail die EVA zelf als "geen aanvraag" beoordeelt blijft
+**ongelezen in Postvak IN** staan — dat oordeel heeft immers niemand gezien.
+
+Dat is zichtbaar voor iedereen die in die mailboxen kijkt, dus stem het af vóór
+livegang. De schakelaar staat in EVA onder Instellingen → Mailintake en begint
+op *Alleen categorie*: dan wordt er niets verplaatst.
+
+### Controleren
+
+Instellingen → Mailintake → **Verbinding controleren** leest één bericht per
+postbus en schrijft niets. Een **403** betekent vrijwel altijd dat
+`Mail.ReadWrite` ontbreekt, dat de beheerderstoestemming niet is verleend, of
+dat de ApplicationAccessPolicy deze postbus juist uitsluit.

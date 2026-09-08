@@ -6,7 +6,7 @@
  *  - appGraph* : app-only (client credentials), voor gedeelde resources
  */
 
-import { getValidAccessToken, getAppAccessToken } from './tokens'
+import { getValidAccessToken, getAppAccessToken, getIntakeAccessToken } from './tokens'
 
 import { fetchMetDeadline } from '@/lib/net/deadline'
 
@@ -101,6 +101,35 @@ export async function appGraphGet<T>(path: string): Promise<T> {
 
 export async function appGraphGetRaw(path: string): Promise<Buffer> {
   const res = await appGraphFetch(path)
+  if (!res.ok) throw await toError(res, path)
+  return Buffer.from(await res.arrayBuffer())
+}
+
+// ─── Mailintake (eigen app-registratie, alleen de intakepostbussen) ────────────
+
+/**
+ * Graph-call met het mailintake-token. Gescheiden van appGraphFetch omdat die
+ * op een andere app-registratie draait; zie getIntakeAccessToken voor het waarom.
+ */
+export async function intakeGraphFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getIntakeAccessToken()
+  return fetchMetDeadline(buildUrl(path), {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init.headers ?? {}),
+    },
+  }, { dienst: 'Microsoft Graph (mailintake)', timeoutMs: GRAPH_TIMEOUT_MS })
+}
+
+export async function intakeGraphGet<T>(path: string): Promise<T> {
+  const res = await intakeGraphFetch(path)
+  if (!res.ok) throw await toError(res, path)
+  return (await res.json()) as T
+}
+
+export async function intakeGraphGetRaw(path: string): Promise<Buffer> {
+  const res = await intakeGraphFetch(path)
   if (!res.ok) throw await toError(res, path)
   return Buffer.from(await res.arrayBuffer())
 }

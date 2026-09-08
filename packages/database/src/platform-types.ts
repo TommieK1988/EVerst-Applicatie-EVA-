@@ -917,6 +917,11 @@ export const RECHTEN_MODULES = [
   //  - schrijven → teksten en zichtbaarheid bewerken
   //  - beheren   → publiceren, bijlagen verwijderen, hoofdstukken archiveren
   { key: 'medewerkershandboek', label: 'Medewerkershandboek' },
+  // Mailintake: de post uit de drie gedeelde intakepostbussen.
+  //  - lezen     -> het postvak en de behandelschermen inzien
+  //  - schrijven -> berichten behandelen: dossier aanmaken, koppelen, negeren
+  //  - beheren   -> postbussen instellen, automatisch aanmaken aanzetten, aliassen beheren
+  { key: 'mailintake',     label: 'Mailintake' },
   { key: 'instellingen',   label: 'Instellingen' },
 ] as const
 

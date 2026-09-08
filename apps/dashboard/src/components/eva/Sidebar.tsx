@@ -6,6 +6,7 @@ import {
   IconMore, IconBase,
   IconRelaties, IconMedewerkers, IconInstellingen,
   IconAanvragen, IconOffertes, IconOpdrachten, IconManagement, IconServicedesk, IconAfgesloten,
+  IconMailintake,
   IconProjectplanning, IconCrewplanning, IconAgenda,
   IconFacturen, IconInkoop, IconUren,
   IconKam,
@@ -54,6 +55,8 @@ const NAV: NavEntry[] = [
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
   { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
   { href: '/afgesloten',   label: 'Afgesloten',  Icon: IconAfgesloten, module: 'dossiers' },
+  // De postbus als werkbak: hier komt binnen wat nog geen dossier is.
+  { href: '/mailintake',  label: 'Postvak',     Icon: IconMailintake, module: 'mailintake' },
 ]
 
 const BEHEER: NavEntry[] = [

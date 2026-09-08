@@ -29,6 +29,8 @@ export const AFGEDWONGEN_MODULES: RechtenModule[] = [
   // controleren dit recht bewust niet, want dan zou geen enkele monteur het
   // handboek nog kunnen openen. Zie lib/handboek/auth.ts.
   'medewerkershandboek',
+  // Mailintake is nieuw: niemand had er toegang toe, dus niemand raakt iets kwijt.
+  'mailintake',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */

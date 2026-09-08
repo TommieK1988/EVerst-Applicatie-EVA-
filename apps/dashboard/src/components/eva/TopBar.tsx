@@ -30,6 +30,12 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   // Overzicht
   [/^\/$/, { title: 'Overzicht' }],
 
+  // Mailintake — specifieke regel eerst, anders wint de detailroute nooit.
+  [/^\/mailintake\/kwaliteit$/, { title: 'Kwaliteit mailintake', breadcrumb: 'Postvak' }],
+  [/^\/mailintake\/[^/]+$/, { title: 'Bericht behandelen', breadcrumb: 'Postvak' }],
+  [/^\/mailintake$/, { title: 'Postvak' }],
+  [/^\/instellingen\/mailintake$/, { title: 'Mailintake', breadcrumb: 'Instellingen' }],
+
   // EVA
   [/^\/wat-is-nieuw$/, { title: 'Wat is nieuw', breadcrumb: 'EVA' }],
   [/^\/vraag-eva$/, { title: 'Vraag EVA', breadcrumb: 'EVA' }],

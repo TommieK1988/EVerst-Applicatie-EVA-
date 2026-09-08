@@ -11,6 +11,38 @@ export type PageHelp = {
 
 const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
+  // -- Mailintake -----------------------------------------------------------
+  // Specifieke routes eerst: de eerste match wint.
+  [/^\/instellingen\/mailintake$/, {
+    title: 'Mailintake instellen',
+    description: 'Hier stel je de drie intakepostbussen in en bepaal je hoeveel EVA zelfstandig doet.',
+    sections: [
+      { title: 'Postbussen', body: 'Per postbus leg je het adres vast, wie er een melding krijgt, en welke werkmaatschappij en categorie standaard gelden. Met "Verbinding controleren" leest EVA één bericht; dat schrijft niets en is de snelste manier om te zien of de machtiging klopt.' },
+      { title: 'Automatisch aanmaken', body: 'Staat standaard uit. Zet je hem aan, dan maakt EVA zelf een dossier aan als de afzender een bekende klant is en alle gegevens compleet zijn. Bij elke twijfel legt EVA het alsnog voor. Begin bij de servicedeskbonnen: die zijn het meest eenvormig.' },
+      { title: 'Nabehandeling in Outlook', body: 'Bepaalt wat er met een mail gebeurt zodra hij is afgehandeld. Bij "Aan" krijgt de mail een categorie en gaat hij naar de map Verwerkt door EVA. Mail die EVA als "geen aanvraag" beoordeelt blijft altijd ongelezen in Postvak IN staan — dat oordeel heeft immers niemand gezien.' },
+      { title: 'Herkende adressen', body: 'Elke keer dat je zelf een opdrachtgever kiest, onthoudt EVA dat adres. Daardoor wordt de herkenning vanzelf beter. Klopt een koppeling niet meer, verwijder hem dan hier.' },
+    ],
+  }],
+  [/^\/mailintake\/[^/]+$/, {
+    title: 'Bericht behandelen',
+    description: 'Links de mail zoals hij binnenkwam, in het midden het voorstel van EVA, rechts waarop dat voorstel is gebaseerd.',
+    sections: [
+      { title: 'Het voorstel controleren', body: 'De percentages achter een veld geven aan hoe zeker EVA is. Alles onder de 80% is het nakijken waard. Een adres met 100% is door de adresservice bevestigd.' },
+      { title: 'Mogelijke duplicaten', body: 'EVA zoekt altijd of deze klus al is ingeschreven — op adres, referentie, bijlage en gespreksgeschiedenis. Staat er een kandidaat, bekijk dan eerst dat dossier voordat je iets nieuws aanmaakt.' },
+      { title: 'Koppelen of aanmaken', body: 'Hoort de mail bij iets dat al loopt, kies dan Koppelen. Alleen als het echt nieuw werk is, maak je een dossier aan. Dat laatste maakt ook meteen een project in Bouw7.' },
+      { title: 'Geen aanvraag of negeren', body: 'Is het geen werk, zet het dan op "Geen aanvraag". Klik je Negeren, dan is dat jouw besluit en verdwijnt de mail uit Postvak IN — daarom vraagt EVA om een reden.' },
+    ],
+  }],
+  [/^\/mailintake$/, {
+    title: 'Postvak',
+    description: 'De post uit de gedeelde intakepostbussen. EVA leest elke mail, beoordeelt of het werk is, en zet een voorstel klaar. Aanmaken doe jij.',
+    sections: [
+      { title: 'Te behandelen', body: 'Alles wat op jou wacht. EVA legt bewust veel voor: bij twijfel over de klant, de gegevens of een mogelijk duplicaat gaat een bericht altijd naar een mens.' },
+      { title: 'Geen aanvraag', body: 'Wat EVA beoordeelde als nieuwsbrief, factuur of ander niet-werk. Loop dit af en toe na: een gemiste aanvraag is de enige fout die verder nergens opvalt. Met één klik zet je een bericht alsnog terug op de lijst.' },
+      { title: 'Kolommen', body: 'De kolom Vertrouwen laat zien hoe zeker EVA over het voorstel is. Een rode of oranje badge in Duplicaat betekent dat er een lopend dossier is dat hier sterk op lijkt.' },
+    ],
+  }],
+
   // ── Overzicht ──────────────────────────────────────────────────────────
   [/^\/$/, {
     title: 'Overzicht',

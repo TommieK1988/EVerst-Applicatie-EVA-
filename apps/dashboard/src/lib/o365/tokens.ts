@@ -190,3 +190,68 @@ export async function getAppAccessToken(): Promise<string> {
   }
   return data.access_token
 }
+
+// ─── Mailintake-token (eigen app-registratie) ──────────────────────────────────
+
+let intakeTokenCache: AppTokenCache | null = null
+
+/**
+ * Geeft een app-only access-token voor de mailintake.
+ *
+ * WAAROM DIT NAAST getAppAccessToken BESTAAT
+ * Het lezen van de drie intakepostbussen vraagt Mail.ReadWrite als
+ * applicatiepermissie. Die permissie geven aan de bestaande EVA-registratie zou
+ * te ver gaan: een Exchange ApplicationAccessPolicy werkt per app, niet per
+ * permissie. De postbussen toevoegen aan de groep die nu de portaalafzender
+ * afbakent, zou EVA dus meteen ook het recht geven om namens die postbussen te
+ * mailen (Mail.Send heeft die registratie al).
+ *
+ * Vandaar een tweede registratie "EVA Mailintake" met alleen Mail.ReadWrite en
+ * een eigen policy op precies de drie intakepostbussen. Die registratie heeft
+ * geen Mail.Send en kan dus niets versturen.
+ *
+ * Valt terug op de gewone O365-credentials als de intake-variant niet is
+ * ingesteld — handig bij lokaal proberen, maar dan gelden wél de machtigingen
+ * van de hoofdregistratie.
+ */
+export async function getIntakeAccessToken(): Promise<string> {
+  if (intakeTokenCache && intakeTokenCache.expiresAt > Date.now() + EXPIRY_BUFFER_MS) {
+    return intakeTokenCache.token
+  }
+
+  const clientId = process.env.O365_INTAKE_CLIENT_ID || process.env.O365_CLIENT_ID
+  const clientSecret = process.env.O365_INTAKE_CLIENT_SECRET || process.env.O365_CLIENT_SECRET
+  const tenant = process.env.O365_TENANT_ID
+  if (!clientId || !clientSecret || !tenant) {
+    throw new O365TokenError(
+      'refresh_mislukt',
+      'Mailintake-config ontbreekt (O365_INTAKE_CLIENT_ID/SECRET of O365_TENANT_ID).',
+    )
+  }
+
+  const res = await fetchMetDeadline(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials',
+      scope: 'https://graph.microsoft.com/.default',
+    }),
+  }, { dienst: 'Microsoft (mailintake-token)', timeoutMs: TOKEN_TIMEOUT_MS })
+
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const j = (await res.json()) as { error?: string; error_description?: string }
+      detail = j.error_description?.split('\n')[0] || j.error || ''
+    } catch {
+      /* geen JSON-body */
+    }
+    throw new O365TokenError('refresh_mislukt', `Mailintake-token ophalen mislukt: HTTP ${res.status} — ${detail}`)
+  }
+
+  const data = (await res.json()) as { access_token: string; expires_in: number }
+  intakeTokenCache = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }
+  return data.access_token
+}
