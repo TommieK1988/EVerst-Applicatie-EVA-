@@ -315,6 +315,9 @@ export const CATEGORIE_DETAILS: Partial<Record<MaterieelCategorie, DetailVeld[]>
   meetapparatuur: [
     { key: 'kalibratie_interval', label: 'Kalibratie-interval (maanden)', type: 'nummer' },
   ],
+  steigeronderdeel: [
+    { key: 'aantal', label: 'Aantal stuks', type: 'nummer' },
+  ],
   ladder: [
     { key: 'sporten', label: 'Aantal sporten of treden', type: 'nummer' },
     { key: 'lengte_m', label: 'Lengte (m)', type: 'tekst' },
