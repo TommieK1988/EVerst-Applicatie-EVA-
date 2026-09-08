@@ -59,6 +59,31 @@ export function ritTypeEffectiefSql(alias = 't'): string {
  * call-sites hem zo aanroepen; de betekenis is verbreed naar "privacygevoelige
  * wagenpark-data".
  */
+/**
+ * Hoe ver een gebruiker zónder `wagenpark_prive` terug mag kijken in de ritten.
+ *
+ * Het projectbureau heeft de recente ritten nodig om te plannen en kosten door
+ * te belasten — waar staat de bus, hoeveel kilometer op dit project. Daar is een
+ * maand ruim voldoende voor. Een jaar aan ritten van een met naam genoemde
+ * collega is iets anders: dan reconstrueer je iemands doen en laten, en dat is
+ * niet wat dit recht bedoelt te geven.
+ */
+export const RITTEN_HORIZON_DAGEN = 31
+
+/**
+ * Eerste dag die zichtbaar is, of `null` bij onbeperkte historie.
+ *
+ * Geef de uitkomst door aan de query als parameter en filter in SQL, niet in de
+ * UI: `pgQuery` gaat buiten RLS om, dus wat je niet in de `where` zet komt echt
+ * mee naar de browser.
+ */
+export function ritHorizonVanaf(magPrive: boolean): string | null {
+  if (magPrive) return null
+  const d = new Date()
+  d.setDate(d.getDate() - RITTEN_HORIZON_DAGEN)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Amsterdam' })
+}
+
 export async function magPriveRittenZien(): Promise<boolean> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return false

@@ -19,7 +19,9 @@ import { pgQuery } from '@/lib/wagenpark/db'
 import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { laadRitDekking, VOLLEDIGE_DEKKING } from '@/lib/wagenpark/rit-dekking'
-import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import {
+  magPriveRittenZien, ritTypeEffectiefSql, ritHorizonVanaf, RITTEN_HORIZON_DAGEN,
+} from '@/lib/wagenpark/privacy'
 import { signaalSoort } from '@/lib/wagenpark/signalen'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
 
@@ -154,6 +156,9 @@ export default async function BestuurderDetailPage(
   // Zonder privé-recht: nooit privé tonen — forceer naar zakelijk.
   const typeFilter = !magPrive && gevraagdType !== 'zakelijk' ? 'zakelijk' : gevraagdType
   const eff = ritTypeEffectiefSql('t')
+  // Zonder privé-recht is de rittenhistorie van een met naam genoemde collega
+  // beperkt tot de laatste maand; zie lib/wagenpark/privacy.ts.
+  const vanaf = ritHorizonVanaf(magPrive)
   // Periode voor het werktijden-blok onderaan. Staat in de URL, zodat je hem
   // kunt bewaren of doorsturen en de server meteen de juiste dagen ophaalt.
   const periode = bepaalPeriode(searchParams)
@@ -191,9 +196,10 @@ export default async function BestuurderDetailPage(
       where t.user_id_ulu = $1
         and ($2 = 'alle' or (${eff})::text = $2)
         and ($3::boolean or (${eff})::text = 'zakelijk')
+        and ($4::date is null or t.start_datum >= $4::date)
       order by t.start_datum desc, t.start_tijd desc
       limit 100`,
-    [userId, typeFilter, magPrive],
+    [userId, typeFilter, magPrive, vanaf],
   )
 
   // Bevindingen voor deze bestuurder (via trip OF via data->>user_id_ulu).
@@ -367,6 +373,13 @@ export default async function BestuurderDetailPage(
         }
       />
 
+      {/* Alles hieronder wat over de persoon gaat in plaats van over de auto —
+          kilometerprognose, bijtelling, uitzonderingen en signalen — zit achter
+          het privé-recht. Wat overblijft voor bijvoorbeeld het projectbureau is
+          de koppeling bestuurder ↔ voertuig en de ritten van de laatste maand:
+          genoeg om te plannen en door te belasten, zonder iemands jaar aan
+          gedrag erbij. */}
+      {magPrive && (
       <div className="mb-6">
         <KmPrognose
           km_zakelijk={tot.km_zakelijk}
@@ -380,8 +393,10 @@ export default async function BestuurderDetailPage(
           verbergPrive={!magPrive}
         />
       </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {magPrive && (
         <section className="bg-white rounded-lg border p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">Instellingen</h2>
           <div className="flex items-center gap-3 mb-4">
@@ -420,6 +435,7 @@ export default async function BestuurderDetailPage(
             fout={koppelingFout}
           />
         </section>
+        )}
 
         <section className="bg-white rounded-lg border p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">Voertuig-koppelingen (historie)</h2>
@@ -454,6 +470,7 @@ export default async function BestuurderDetailPage(
         </section>
 
         {/* Allowances */}
+        {magPrive && (
         <section className="bg-white rounded-lg border p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">
             Persistente allowances ({allowances.length})
@@ -464,6 +481,7 @@ export default async function BestuurderDetailPage(
           </p>
           <AllowancesPaneel allowances={allowances} />
         </section>
+        )}
 
         {/* Werktijden — het gesprek over te laat komen en te vroeg weggaan.
             Klikken op een dag opent het zijpaneel met de ritten van die dag en
@@ -497,7 +515,12 @@ export default async function BestuurderDetailPage(
           </section>
         )}
 
-        {/* Signalen — per soort, want ze vragen om verschillende actie */}
+        {/* Signalen — per soort, want ze vragen om verschillende actie.
+            De omschrijvingen bevatten een naam en een tijdstip ("… om 08:12 op
+            het werk aangekomen"), dus ze horen achter hetzelfde recht als de
+            werktijden. */}
+        {magPrive && (
+        <>
         <BevindingenBlok
           titel="Privé-kilometers & rijgedrag"
           toelichting="Signalen over een hele periode: privé-km ten opzichte van de limiet en het rijgedrag per week. Ze horen bij deze bestuurder, niet bij één rit."
@@ -526,11 +549,18 @@ export default async function BestuurderDetailPage(
           bevindingen={bevRitten}
           leegTekst="Geen openstaande signalen op losse ritten."
         />
+        </>
+        )}
 
         <section className="bg-white rounded-lg border lg:col-span-2">
           <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-sm font-semibold text-slate-700">
               Ritten ({ritten.length}{ritten.length === 100 ? ' van 100+' : ''})
+              {!magPrive && (
+                <span className="ml-2 font-normal text-xs text-slate-500">
+                  laatste {RITTEN_HORIZON_DAGEN} dagen
+                </span>
+              )}
             </h2>
             <div className="flex gap-2 text-xs">
               <a

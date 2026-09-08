@@ -7,7 +7,9 @@ import RittenTabel, { type RitRij } from '@/components/wagenpark/ritten/RittenTa
 import type { RegelOptie } from '@/components/wagenpark/ritten/RitPaneel'
 import RunComplianceButton from '@/components/wagenpark/bevindingen/RunComplianceButton'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import {
+  magPriveRittenZien, ritTypeEffectiefSql, ritHorizonVanaf, RITTEN_HORIZON_DAGEN,
+} from '@/lib/wagenpark/privacy'
 import { RIT_REGELS_SQL } from '@/lib/wagenpark/signalen'
 import { laadLayouts } from '@/app/actions/layouts'
 
@@ -22,6 +24,10 @@ const RITTEN_LIMIT = 25000
 
 export default async function RittenPage() {
   const magPrive = await magPriveRittenZien()
+  // Zonder privé-recht: alleen de laatste maand. Het filter staat in de SQL en
+  // niet in de UI — pgQuery gaat buiten RLS om, dus alles wat hier niet wordt
+  // weggelaten komt echt in de browser terecht.
+  const vanaf = ritHorizonVanaf(magPrive)
   const eff = ritTypeEffectiefSql('t')
 
   let user_id: string | null = null
@@ -85,18 +91,20 @@ export default async function RittenPage() {
              and b.regel_code ${RIT_REGELS_SQL}
         ) bev on true
        where ($1::boolean or (${eff})::text = 'zakelijk')
+         and ($2::date is null or t.start_datum >= $2::date)
        order by t.start_datum desc, t.start_tijd desc
        limit ${RITTEN_LIMIT}
       `,
-      [magPrive],
+      [magPrive, vanaf],
     ),
     pgQuery<{ aantal: number }>(
       `
       select count(*)::int as aantal
         from public.ulu_trips t
        where ($1::boolean or (${eff})::text = 'zakelijk')
+         and ($2::date is null or t.start_datum >= $2::date)
       `,
-      [magPrive],
+      [magPrive, vanaf],
     ),
     user_id ? laadLayouts(user_id, 'wagenpark-ritten') : Promise.resolve([]),
     // Regels voor de handmatige toekenning. Ook de uitgeschakelde regels: dat de
@@ -115,7 +123,7 @@ export default async function RittenPage() {
         titel="Ritten"
         omschrijving={
           `${totaalAantal.toLocaleString('nl-NL')} ritten` +
-          (magPrive ? '' : ' (alleen zakelijk)') +
+          (magPrive ? '' : ` (alleen zakelijk, laatste ${RITTEN_HORIZON_DAGEN} dagen)`) +
           (gekapt ? ` — nieuwste ${RITTEN_LIMIT.toLocaleString('nl-NL')} geladen` : '') +
           '.'
         }

@@ -5,6 +5,7 @@ import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import BestuurderBijtellingToggle from '@/components/wagenpark/bestuurders/BestuurderBijtellingToggle'
 import BestuurderActiefToggle from '@/components/wagenpark/bestuurders/BestuurderActiefToggle'
 import { pgQuery } from '@/lib/wagenpark/db'
+import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
 import { formatKm } from '@/lib/wagenpark/utils'
 import { RIT_REGELS_SQL, NIET_RIT_REGELS_SQL } from '@/lib/wagenpark/signalen'
 
@@ -38,6 +39,7 @@ export default async function BestuurdersPage(
 ) {
   const searchParams = await props.searchParams;
   const toonGearchiveerd = searchParams.toonGearchiveerd === '1'
+  const magPrive = await magPriveRittenZien()
   const jaar = new Date().getFullYear()
   const startYear = `${jaar}-01-01`
 
@@ -153,16 +155,22 @@ export default async function BestuurdersPage(
           <table className="data-table">
             <thead>
               <tr>
+                {/* De koppeling bestuurder ↔ auto mag iedereen met wagenpark-toegang
+                    zien; die heb je nodig om te plannen. Bijtelling, kilometer-
+                    totalen en signalen gaan over de persoon en zitten achter het
+                    privé-recht. */}
                 <th>Naam</th>
                 <th>Status</th>
                 <th>Huidige auto</th>
-                <th>Bijtelling</th>
-                <th className="text-right">Zakelijk YTD</th>
-                <th className="text-right">Prognose zak.</th>
-                <th className="text-right">Privé YTD</th>
-                <th className="text-right">Prognose privé</th>
-                <th className="text-right" title="Privé-km en rijgedrag — horen bij de bestuurder">Persoonlijk</th>
-                <th className="text-right" title="Signalen op losse ritten — staan in de signaal-kolom bij Ritten">Rit-signalen</th>
+                {magPrive && <>
+                  <th>Bijtelling</th>
+                  <th className="text-right">Zakelijk YTD</th>
+                  <th className="text-right">Prognose zak.</th>
+                  <th className="text-right">Privé YTD</th>
+                  <th className="text-right">Prognose privé</th>
+                  <th className="text-right" title="Privé-km en rijgedrag — horen bij de bestuurder">Persoonlijk</th>
+                  <th className="text-right" title="Signalen op losse ritten — staan in de signaal-kolom bij Ritten">Rit-signalen</th>
+                </>}
                 <th></th>
               </tr>
             </thead>
@@ -195,6 +203,7 @@ export default async function BestuurdersPage(
                       />
                     </td>
                     <td className=" text-slate-600">{b.laatste_kenteken ?? '—'}</td>
+                    {magPrive && <>
                     <td>
                       <BestuurderBijtellingToggle
                         userId={b.user_id}
@@ -249,6 +258,7 @@ export default async function BestuurdersPage(
                         <span className="text-slate-400">0</span>
                       )}
                     </td>
+                    </>}
                     <td className="text-right">
                       <Link href={`/wagenpark/bestuurders/${b.user_id}`} className="text-sm text-green-700 hover:underline">
                         Details

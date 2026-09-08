@@ -5,6 +5,7 @@ import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import { createClient } from '@/lib/wagenpark/supabase/server'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { formatDatum, formatDatumMetDag, formatKm } from '@/lib/wagenpark/utils'
+import { magPriveRittenZien, ritHorizonVanaf } from '@/lib/wagenpark/privacy'
 import VoertuigEditForm from '@/components/wagenpark/voertuigen/VoertuigEditForm'
 import VoertuigBestuurderKoppeling from '@/components/wagenpark/voertuigen/VoertuigBestuurderKoppeling'
 import RefreshRdwButton from '@/components/wagenpark/voertuigen/RefreshRdwButton'
@@ -18,6 +19,18 @@ export default async function VoertuigDetailPage(
 ) {
   const params = await props.params;
   const supabase = await createClient()
+  // Ook via de auto is de rittenhistorie van een collega te lezen: zonder
+  // privé-recht dus alleen zakelijk en alleen de laatste maand, net als op de
+  // ritten- en bestuurderspagina. Zie lib/wagenpark/privacy.ts.
+  const magPrive = await magPriveRittenZien()
+  const vanaf = ritHorizonVanaf(magPrive)
+
+  let rittenQuery = supabase
+    .from('ulu_trips')
+    .select('id, start_datum, start_tijd, afstand_km, rit_type_berekend, score, adres_stop, bestuurder_naam_raw')
+    .eq('voertuig_id', params.id)
+  if (!magPrive) rittenQuery = rittenQuery.eq('rit_type_berekend', 'zakelijk')
+  if (vanaf) rittenQuery = rittenQuery.gte('start_datum', vanaf)
 
   const [voertuigRes, rdwRes, leaseRes, ritten30Res] = await Promise.all([
     supabase.from('voertuigen').select('*').eq('id', params.id).single(),
@@ -28,10 +41,7 @@ export default async function VoertuigDetailPage(
       .eq('voertuig_id', params.id)
       .eq('actief', true)
       .order('start_datum', { ascending: false }),
-    supabase
-      .from('ulu_trips')
-      .select('id, start_datum, start_tijd, afstand_km, rit_type_berekend, score, adres_stop, bestuurder_naam_raw')
-      .eq('voertuig_id', params.id)
+    rittenQuery
       .order('start_datum', { ascending: false })
       .order('start_tijd', { ascending: false })
       .limit(30),

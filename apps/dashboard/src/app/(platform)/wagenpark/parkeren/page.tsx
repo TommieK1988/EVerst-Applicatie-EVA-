@@ -3,7 +3,9 @@ import { ParkingCircle, Upload, LayoutGrid } from 'lucide-react'
 import PageHeader from '@/components/wagenpark/shared/PageHeader'
 import EmptyState from '@/components/wagenpark/shared/EmptyState'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import {
+  magPriveRittenZien, ritTypeEffectiefSql, ritHorizonVanaf, RITTEN_HORIZON_DAGEN,
+} from '@/lib/wagenpark/privacy'
 import { formatDatum } from '@/lib/wagenpark/utils'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +31,9 @@ export default async function ParkerenPage(
   const filterKenteken = searchParams.kenteken?.trim() ?? ''
   const magPrive = await magPriveRittenZien()
   const eff = ritTypeEffectiefSql('t')
+  // Een parkeertransactie zegt waar iemand stond en hoe lang; zelfde horizon als
+  // de ritten. Zie lib/wagenpark/privacy.ts.
+  const vanaf = ritHorizonVanaf(magPrive)
 
   // Haal per parkeer-record ook de bijbehorende bestuurder op (via trip op zelfde dag/kenteken).
   // Zonder privé-recht matchen we alleen op effectief-zakelijke ritten, zodat we geen
@@ -51,19 +56,23 @@ export default async function ParkerenPage(
       -- Open R8-signalen op dít parkeer-record (hoge kosten, extreem lang parkeren).
       -- Het maandtotaal per bestuurder heeft geen parking_id en staat op de
       -- bestuurderspagina onder Parkeren.
+      -- De omschrijving van een R8-signaal noemt de bestuurder bij naam, dus
+      -- zonder privé-recht komen de signalen er niet bij.
       (select coalesce(
                 json_agg(json_build_object('ernst', b.ernst::text, 'omschrijving', b.omschrijving)),
                 '[]'::json)
          from public.compliance_bevindingen b
         where b.regel_code = 'R8'
           and b.status = 'open'
+          and $2::boolean
           and b.data->>'parking_id' = p.id::text)            as signalen
     from public.ulu_parking p
     where ($1 = '' or p.kenteken ilike '%' || $1 || '%')
+      and ($3::date is null or p.parkeer_starttijd >= $3::date)
     order by p.parkeer_starttijd desc
     limit 200
     `,
-    [filterKenteken, magPrive],
+    [filterKenteken, magPrive, vanaf],
   )
 
   const totalen = await pgQuery<{
@@ -79,7 +88,9 @@ export default async function ParkerenPage(
       count(*) filter (where duur_seconden > 3600)::int as lang,
       coalesce(max(parkeerkosten), 0)::float           as dag_duurste
     from public.ulu_parking
+    where ($1::date is null or parkeer_starttijd >= $1::date)
     `,
+    [vanaf],
   )
   const stat = totalen[0]
 
@@ -87,7 +98,7 @@ export default async function ParkerenPage(
     <>
       <PageHeader
         titel="Parkeren"
-        omschrijving={`${stat?.totaal ?? 0} parkeer-records • totale kosten €${(stat?.totaal_kosten ?? 0).toFixed(2)} • ${stat?.lang ?? 0} langer dan 1 uur.`}
+        omschrijving={`${stat?.totaal ?? 0} parkeer-records • totale kosten €${(stat?.totaal_kosten ?? 0).toFixed(2)} • ${stat?.lang ?? 0} langer dan 1 uur${magPrive ? '' : ` (laatste ${RITTEN_HORIZON_DAGEN} dagen)`}.`}
         actions={
           <div className="flex gap-2">
             <Link

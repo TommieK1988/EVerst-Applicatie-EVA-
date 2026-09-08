@@ -10,7 +10,8 @@ import PeriodeKiezer from '@/components/wagenpark/werktijden/PeriodeKiezer'
 import { createClient } from '@/lib/wagenpark/supabase/server'
 import { createClient as createServerClient } from '@everts/database/server'
 import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
-import { bepaalPeriode, datumKort } from '@/lib/wagenpark/periode'
+import { bepaalPeriode, datumKort, vandaagNL } from '@/lib/wagenpark/periode'
+import { RITTEN_HORIZON_DAGEN, ritHorizonVanaf } from '@/lib/wagenpark/privacy'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { laadRitDekking } from '@/lib/wagenpark/rit-dekking'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
@@ -41,7 +42,14 @@ export default async function DashboardPage({
 
   // Eén periode voor de hele pagina. Alleen "Actieve voertuigen" staat er
   // buiten: dat is een momentopname van het wagenpark, geen periodecijfer.
-  const periode = bepaalPeriode(await searchParams)
+  const gevraagd = bepaalPeriode(await searchParams)
+  // Zonder privé-recht is de periode niet vrij te kiezen: de kilometers worden
+  // over de laatste maand geteld, hoe de URL er ook uitziet.
+  const horizon = ritHorizonVanaf(magPrive)
+  const periode = horizon
+    ? { ...gevraagd, preset: 'aangepast' as const, van: horizon, tot: vandaagNL(),
+        label: `Laatste ${RITTEN_HORIZON_DAGEN} dagen` }
+    : gevraagd
 
   let user_id: string | null = null
   try {
@@ -159,7 +167,16 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <PeriodeKiezer periode={periode} pad="/wagenpark/dashboard" />
+      {/* De periodekiezer is er alleen voor wie ook echt terug mag kijken.
+          Zonder privé-recht staat de pagina vast op de laatste maand; zie
+          lib/wagenpark/privacy.ts. */}
+      {magPrive
+        ? <PeriodeKiezer periode={periode} pad="/wagenpark/dashboard" />
+        : (
+          <p className="mb-4 text-xs text-slate-500">
+            Cijfers over de laatste {RITTEN_HORIZON_DAGEN} dagen.
+          </p>
+        )}
 
       <RitDekkingWaarschuwing dekking={dekking} />
 
@@ -171,13 +188,17 @@ export default async function DashboardPage({
           kleur="blauw"
           subtekst="nu in het wagenpark"
         />
-        <StatCard
-          label="Open bevindingen"
-          waarde={aantalBevindingen}
-          icon={AlertTriangle}
-          kleur={aantalBevindingen > 0 ? 'oranje' : 'groen'}
-          subtekst="uit deze periode"
-        />
+        {/* Compliance-signalen gaan altijd over het rijgedrag van een met naam
+            genoemde collega — ook het aantal zegt al iets. Achter het privé-recht. */}
+        {magPrive && (
+          <StatCard
+            label="Open bevindingen"
+            waarde={aantalBevindingen}
+            icon={AlertTriangle}
+            kleur={aantalBevindingen > 0 ? 'oranje' : 'groen'}
+            subtekst="uit deze periode"
+          />
+        )}
         <StatCard
           label="Zakelijk"
           waarde={`${Math.round(kmZakelijk).toLocaleString('nl-NL')} km`}
@@ -256,9 +277,15 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {/* Rijscore ranking */}
-      <RijscoreRanking />
+      {/* Rijscore-ranking: een ranglijst van collega's op rijgedrag, met naam en
+          gesplitst naar zakelijk en privé. Dat is een beoordeling van een persoon
+          en hoort achter hetzelfde recht als de werktijden. */}
+      {magPrive && <RijscoreRanking />}
 
+      {/* De omschrijving van een bevinding bevat een naam en meestal een tijdstip
+          ("Jan de Vries: … om 08:12 op het werk aangekomen"). Diezelfde gegevens
+          zitten elders achter het privé-recht; hier mogen ze dus ook niet los. */}
+      {magPrive && (
       <div className="bg-white rounded-lg border">
         <div className="px-5 py-3 border-b">
           <h2 className="text-sm font-medium text-slate-700">
@@ -295,6 +322,7 @@ export default async function DashboardPage({
           </ul>
         )}
       </div>
+      )}
     </>
   )
 }
