@@ -141,12 +141,12 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
 
               <section style={{ marginBottom: 20 }}>
                 <h4 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '0 0 8px' }}>
-                  Goedkeuring
+                  Fiattering
                 </h4>
                 {laden && <p style={{ fontSize: 13, color: 'var(--fg-soft)' }}>Laden…</p>}
                 {!laden && (detail?.goedkeurders.length ?? 0) === 0 && (
                   <p style={{ fontSize: 13, color: 'var(--fg-soft)', margin: 0 }}>
-                    Voor deze factuur loopt geen goedkeuringsworkflow in Bouw7.
+                    Voor deze factuur loopt geen fiatteringsworkflow in Bouw7.
                   </p>
                 )}
                 {detail?.goedkeurders.map(stap => (

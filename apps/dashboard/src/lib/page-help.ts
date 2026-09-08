@@ -338,12 +338,12 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Financieel: Inkoopfacturen ─────────────────────────────────────────
   [/^\/inkoop\/facturen$/, {
     title: 'Inkoopfacturen',
-    description: 'Alle inkoopfacturen uit Bouw7 op één plek: van wie ze komen, bij welk project ze horen, wie ze moet goedkeuren en wat er nog openstaat. Bouw7 blijft de administratie — EVA laat zien wat er ligt en bij wie.',
+    description: 'Alle inkoopfacturen uit Bouw7 op één plek: van wie ze komen, bij welk project ze horen, wie ze moet fiatteren en wat er nog openstaat. Bouw7 blijft de administratie — EVA laat zien wat er ligt en bij wie.',
     sections: [
       { title: 'Te accorderen door mij', body: 'Het eerste tabblad toont alleen de facturen waarbij jij aan zet bent, met een teller ernaast. Dat is bewust de plek waar je je werk ophaalt: je krijgt geen melding per factuur, want inkoopfacturen komen in bulk binnen.' },
-      { title: 'Statussen', body: 'Concept (nog niet ingediend), Ter goedkeuring (wacht op een goedkeurder), Goedgekeurd (mag betaald worden), Betaald, en Afgekeurd (bezwaar, met de reden erbij). De status komt uit Bouw7; EVA verandert hem niet zelf.' },
+      { title: 'Statussen', body: 'Concept (nog niet ingediend), Ter goedkeuring (wacht op de huidige fiatteur), Goedgekeurd (mag betaald worden), Betaald, en Afgekeurd (bezwaar, met de reden erbij). De status komt uit Bouw7; EVA verandert hem niet zelf.' },
       { title: 'Wie ziet wat', body: 'Met het recht "Inkoopfacturen: alle" zie je álle facturen. Zonder dat recht zie je de facturen die aan een project hangen — opdrachten én servicedesk — plus de facturen waarvan jij zelf de goedkeurder bent. Facturen zonder project (abonnementen, leasing, verzekeringen) blijven dan verborgen.' },
-      { title: 'Goedkeuringsketen', body: 'Klik een factuur aan en je ziet in het zijpaneel wie er in welke volgorde moet goedkeuren, wie al akkoord gaf en welke toelichting daarbij hoort. Die keten komt rechtstreeks uit Bouw7.' },
+      { title: 'Fiattering', body: 'Klik een factuur aan en je ziet in het zijpaneel wie er in welke volgorde moet fiatteren, wie al akkoord gaf en welke toelichting daarbij hoort. Die keten komt rechtstreeks uit Bouw7.' },
       { title: 'Notities', body: 'Een notitie die je in EVA plaatst blijft in EVA. Dat is expres: in Bouw7 is er per goedkeurder maar één opmerkingveld, en dat is gereserveerd voor de reden van akkoord of bezwaar.' },
       { title: 'Betalen', body: 'Directie vinkt bij een goedgekeurde factuur aan dat hij betaald mag worden. Op het tabblad Betalen staat vervolgens de lijst voor wie de betaling uitvoert. Facturen die nog ter goedkeuring liggen kunnen niet worden aangevinkt.' },
     ],
