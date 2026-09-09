@@ -36,8 +36,30 @@ export function bepaalScheidingsteken(tekst: string): ';' | ',' | '\t' {
   return ','
 }
 
+/**
+ * ULU laat elke datarij met spaties beginnen:
+ *
+ *     Parkeerlocatie,Naam voertuig,Kenteken,...
+ *       "7106 Burggravenlaan, Leiden",Peugeot 3008,P-355-JG,...
+ *
+ * Een CSV-lezer beschouwt een aanhalingsteken alleen als veldbegrenzing wanneer
+ * het direct achter het scheidingsteken staat. Door die twee spaties telt de
+ * quote niet, wordt de komma bínnen de locatie als scheiding gelezen, en schuift
+ * de hele rij een kolom op: het kenteken wordt dan de voertuignaam. Alle 35
+ * rijen van de eerste echte export sneuvelden hierop.
+ *
+ * Vandaar dat we per regel de leidende witruimte weghalen. Alleen aan het begin
+ * van de regel — spaties binnen een veld ("Mazda ") blijven staan.
+ */
+function haalLeidendeWitruimteWeg(tekst: string): string {
+  return tekst
+    .split(/\r?\n/)
+    .map((regel) => regel.replace(/^[ \t]+/, ''))
+    .join('\n')
+}
+
 export function parseUluParkingCsv(tekst: string): ParsedUluParkingResult {
-  const schoon = tekst.replace(/^﻿/, '') // BOM van een Excel-export
+  const schoon = haalLeidendeWitruimteWeg(tekst.replace(/^﻿/, '')) // BOM van een Excel-export
   if (!schoon.trim()) {
     return { rows: [], errors: [{ row: 1, error: 'Leeg bestand.' }], periode: { start: null, eind: null } }
   }

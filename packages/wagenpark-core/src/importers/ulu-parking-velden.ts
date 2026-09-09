@@ -120,11 +120,26 @@ export function parseParkeerTijdstip(value: unknown): string | null {
   return parseTijdstipTekst(String(value).trim())
 }
 
-/** "08-09-2026 14:03", "8/9/2026 14:03:12" of "2026-09-08T14:03:00" → ISO. */
+/**
+ * "08-09-2026 14:03", "8/9/2026 14:03:12", "2026-09-08T14:03:00" of
+ * "2026-09-08 13:41:14 UTC" → ISO.
+ *
+ * Dat laatste is wat ULU in de dagelijkse CSV-export zet: de tijd staat er in
+ * UTC, mét die aanduiding erachter. Wordt het achtervoegsel niet herkend, dan
+ * leest de parser hem als Nederlandse wandklok en staat elke parkeerkost er in
+ * de zomer twee uur naast — genoeg om hem aan de verkeerde rit (en dus het
+ * verkeerde project) te koppelen.
+ */
 export function parseTijdstipTekst(tekst: string): string | null {
   if (!tekst) return null
 
-  // Draagt de tekst zelf een zone (Z of ±hh:mm), dan is het al eenduidig.
+  // Draagt de tekst zelf een zone (Z, ±hh:mm of een expliciete UTC/GMT), dan is
+  // het al eenduidig en hoeft er niets omgerekend te worden.
+  const utcAchtervoegsel = /\s+(?:UTC|GMT)$/i
+  if (utcAchtervoegsel.test(tekst)) {
+    const d = new Date(tekst.replace(utcAchtervoegsel, '').replace(' ', 'T') + 'Z')
+    return Number.isNaN(d.getTime()) ? null : d.toISOString()
+  }
   if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(tekst)) {
     const d = new Date(tekst)
     return Number.isNaN(d.getTime()) ? null : d.toISOString()
