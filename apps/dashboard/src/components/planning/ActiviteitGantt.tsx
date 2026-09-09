@@ -1649,6 +1649,20 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         rightSlot={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <KleurweergaveToggle waarde={kleurweergave} onChange={setKleurweergave} />
+            {/* De uitdraai toont altijd de héle planning, niet de periode die nu in beeld
+                staat — daarom hoeft er geen view of peildatum mee en volstaat een link. */}
+            {activiteiten.length > 0 && (
+              <a
+                className="eva-btn-ghost"
+                style={{ fontSize: 12, padding: '5px 12px', textDecoration: 'none' }}
+                href={`/api/dossiers/${dossier_id}/detailplanning/pdf`}
+                target="_blank"
+                rel="noopener"
+                title="De hele planning als PDF op liggend A3 — afdrukken of opslaan"
+              >
+                Afdrukken (A3)
+              </a>
+            )}
             <button className="eva-btn-primary" style={{ fontSize: 12, padding: '5px 14px' }} onClick={() => { setNieuweStart(''); setToonNieuw(true) }}>+ Nieuwe activiteit</button>
             <button className="eva-btn-ghost"   style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => setToonNwFase(true)}>+ Fase</button>
           </div>
