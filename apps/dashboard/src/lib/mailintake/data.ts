@@ -144,7 +144,8 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
              postbus:mailintake_postbussen(*),
              relatie:relaties(id, naam),
              contactpersoon:contactpersonen(id, voornaam, achternaam, email),
-             dossier:dossiers(id, dossiernummer, titel)`)
+             dossier:dossiers(id, dossiernummer, titel),
+             object:vastgoed_objecten(id, naam, objectnummer, adres_straat, adres_plaats)`)
     .eq('id', id)
     .maybeSingle()
 

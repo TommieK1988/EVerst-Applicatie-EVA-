@@ -51,7 +51,7 @@ export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; u
  */
 export async function maakDossierVanBericht(
   berichtId: string,
-  velden: GekeurdeVelden & { relatieId: string; contactpersoonId: string | null },
+  velden: GekeurdeVelden & { relatieId: string; contactpersoonId: string | null; objectId?: string | null },
 ): Promise<{ ok: boolean; dossierId?: string; dossiernummer?: string | null; bouw7Ok?: boolean; bouw7Fout?: string; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
   const supabase = createAdminClient() as any
@@ -66,6 +66,7 @@ export async function maakDossierVanBericht(
     relatieId: velden.relatieId,
     contactpersoonId: velden.contactpersoonId,
     velden,
+    objectId: velden.objectId ?? null,
     automatisch: false,
     medewerkerId: medewerker.id,
   })

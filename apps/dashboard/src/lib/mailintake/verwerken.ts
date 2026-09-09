@@ -19,6 +19,8 @@ import { extraheer, keurEnKalibreer, kernVertrouwen, type BijlageVoorAI, type Wi
 import { herkenAfzender, hulplijstRelaties } from './afzender'
 import { zoekDuplicaten } from './duplicaten'
 import { beslis, samenvattendeReden } from './beslis'
+import { zoekObjectBijAdres } from './objecten'
+import { controleerBouw7Gereed } from './bouw7-gereed'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
@@ -241,6 +243,31 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     const brontekst = `${geclaimd.onderwerp ?? ''}\n${geclaimd.body_tekst ?? ''}`
     const velden = await keurEnKalibreer(ex.data, lijsten, brontekst, postbus.standaard_werkmaatschappij_id)
 
+    // ── Object bij het werkadres ────────────────────────────────────────────
+    // Een aanvraag hoort bij een complex of pand dat we vaak al kennen. Koppelen
+    // scheelt niet alleen typwerk: het dossier verschijnt daardoor ook onder het
+    // object, en de standaard-opdrachtgever van dat object is een extra controle
+    // op de klant die we uit de mail hebben gehaald.
+    log.stap('object zoeken')
+    const objectTreffer = await zoekObjectBijAdres({
+      straat: velden.werkadresStraat,
+      huisnummer: velden.werkadresHuisnummer,
+      postcode: velden.werkadresPostcode,
+      stad: velden.werkadresStad,
+      vveCode: velden.vveCode,
+      relatieId: afz.relatieId,
+    })
+
+    // ── Kan Bouw7 hier een net project van maken? ───────────────────────────
+    log.stap('bouw7-gereedheid')
+    const bouw7 = await controleerBouw7Gereed({
+      titel: velden.omschrijving,
+      relatieId: afz.relatieId,
+      contactpersoonId: afz.contactpersoonId,
+      werkmaatschappijId: velden.werkmaatschappijId,
+      bouw7CategorieId: velden.bouw7CategorieId,
+    })
+
     // ── Duplicaten ──────────────────────────────────────────────────────────
     log.stap('duplicaten zoeken')
     const { data: hashes } = await supabase
@@ -292,6 +319,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       meerdereWerkadressen: velden.meerdereWerkadressen,
       ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.length > 0,
       dagbudgetOp: budgetOp,
+      bouw7Gereed: bouw7.gereed,
+      bouw7Ontbreekt: bouw7.ontbreekt,
     })
 
     uit.reden = samenvattendeReden(besluit)
@@ -305,6 +334,11 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       herkend_via: afz.via,
       herkenning_score: afz.score,
       duplicaat_topscore: topscore,
+      object_id: objectTreffer.objectId,
+      object_score: objectTreffer.score || null,
+      object_via: objectTreffer.via,
+      bouw7_gereed: bouw7.gereed,
+      bouw7_ontbreekt: bouw7.ontbreekt,
       pogingen,
       laatste_fout: null,
       status: besluit.automatisch ? 'bezig' : besluit.status,
@@ -316,6 +350,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         soort: ex.data.soort, soort_vertrouwen: ex.data.soort_vertrouwen,
         afzender_score: afz.score, herkend_via: afz.via,
         duplicaat_topscore: topscore, redenen: besluit.redenen,
+        object_id: objectTreffer.objectId, object_via: objectTreffer.via,
+        bouw7_gereed: bouw7.gereed, bouw7_ontbreekt: bouw7.ontbreekt,
         kosten_cent: ex.kostenCent,
       },
     })
@@ -328,6 +364,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         relatieId: afz.relatieId,
         contactpersoonId: afz.contactpersoonId,
         velden,
+        objectId: objectTreffer.objectId,
         automatisch: true,
         medewerkerId: null,
       })

@@ -5,6 +5,7 @@ import { cronLogboek } from '@/lib/cron/logboek'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { herstelVastgelopenClaims } from '@/lib/mailintake/verwerken'
 import { voerNabehandelingUit, MAX_OUTLOOK_POGINGEN } from '@/lib/mailintake/nabehandeling'
+import { zetBijlagenInSharePoint } from '@/lib/mailintake/aanmaken'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -152,31 +153,69 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // ── 5. Bijlagen opruimen ───────────────────────────────────────────────
+    // ── 5. Bijlagen die niet in SharePoint landden ─────────────────────────
+    // Een stille faalmodus: het dossier bestaat, de opdrachtbon niet. Zonder deze
+    // herkansing merkt niemand dat, want in EVA ziet het dossier er compleet uit.
+    log.stap('bijlagen naar sharepoint')
+    const { data: achtergebleven } = await supabase
+      .from('mailintake_bijlagen')
+      .select('bericht_id, bericht:mailintake_berichten!inner(dossier_id)')
+      .is('naar_sharepoint_op', null)
+      .not('opslag_pad', 'is', null)
+      .not('bericht.dossier_id', 'is', null)
+      .limit(200)
+
+    const perBericht = new Map<string, string>()
+    for (const b of achtergebleven ?? []) {
+      const did = (b as any).bericht?.dossier_id
+      if (did) perBericht.set(b.bericht_id, did)
+    }
+
+    let bijlagenGeplaatst = 0
+    for (const [berichtId, dossierId] of perBericht) {
+      const res = await zetBijlagenInSharePoint(berichtId, dossierId)
+      bijlagenGeplaatst += res.geuploaded
+    }
+    rapport.bijlagenAlsnogGeplaatst = bijlagenGeplaatst
+    rapport.berichtenMetOpenBijlagen = perBericht.size
+
+    // ── 6. Bijlagen opruimen ───────────────────────────────────────────────
     // De bucket groeit hard (25 MB per bijlage). Wat is afgehandeld en oud is,
     // hoeft hier niet te blijven staan; het dossier is de bewaarplaats.
     log.stap('bijlagen opruimen')
     const oudGrens = new Date(Date.now() - BEWAARTERMIJN_DAGEN * 24 * 3600 * 1000).toISOString()
     const { data: teOud } = await supabase
       .from('mailintake_bijlagen')
-      .select('id, opslag_pad, bericht:mailintake_berichten!inner(status, behandeld_op)')
+      .select('id, opslag_pad, naar_sharepoint_op, bericht:mailintake_berichten!inner(status, behandeld_op, dossier_id)')
       .not('opslag_pad', 'is', null)
       .in('bericht.status', ['verwerkt', 'genegeerd', 'geen_aanvraag'])
       .lt('bericht.behandeld_op', oudGrens)
       .limit(200)
 
+    // Deze voorwaarde staat bewust hier en niet in de query: een `.or()` die naar
+    // een ingesloten tabel verwijst is in PostgREST net anders dan hij eruitziet,
+    // en dit is te belangrijk om op een subtiliteit te laten stukgaan.
+    //
+    // Weggooien mag alleen als de bijlage ergens anders bewaard is (SharePoint) of
+    // als er nooit een dossier kwam (genegeerd, geen aanvraag). Hangt er wél een
+    // dossier aan maar staat het bestand nog niet in SharePoint, dan is dit de
+    // enige kopie die er nog is.
+    const mag = (b: any) => Boolean(b.naar_sharepoint_op) || !b.bericht?.dossier_id
+    const opruimbaar = (teOud ?? []).filter(mag)
+
     let opgeruimd = 0
-    const paden = (teOud ?? []).map((b: any) => b.opslag_pad).filter(Boolean)
+    const paden = opruimbaar.map((b: any) => b.opslag_pad).filter(Boolean)
     if (paden.length) {
       const { error } = await supabase.storage.from('mail-intake').remove(paden)
       if (!error) {
         await supabase.from('mailintake_bijlagen')
           .update({ opslag_pad: null })
-          .in('id', (teOud ?? []).map((b: any) => b.id))
+          .in('id', opruimbaar.map((b: any) => b.id))
         opgeruimd = paden.length
       }
     }
     rapport.bijlagenOpgeruimd = opgeruimd
+    rapport.bijlagenBewaardVoorSharePoint = (teOud ?? []).length - opruimbaar.length
 
     log.klaar(rapport)
     return NextResponse.json({ ok: true, ...rapport, duurMs: log.duurMs() })

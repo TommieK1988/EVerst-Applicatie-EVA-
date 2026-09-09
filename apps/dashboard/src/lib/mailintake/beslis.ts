@@ -37,6 +37,10 @@ export interface BeslisInvoer {
   /** Er zat een bijlage bij die niet gelezen kon worden. */
   ongelezenBijlage: boolean
   dagbudgetOp: boolean
+  /** Heeft Bouw7 alles wat het nodig heeft? Zie bouw7-gereed.ts. */
+  bouw7Gereed: boolean
+  /** Wat er aan de Bouw7-kant mist; de eerste regel wordt de reden. */
+  bouw7Ontbreekt: string[]
 }
 
 export interface Besluit {
@@ -161,13 +165,22 @@ export function beslis(inv: BeslisInvoer): Besluit {
     }
   }
 
-  // ── 6. Bestaat dit al? ────────────────────────────────────────────────────
+  // ── 6. Kan Bouw7 hier iets mee? ───────────────────────────────────────────
+  // Zonder deze controle maakt Bouw7 het project gewoon aan, maar zonder klant of
+  // met een projectnummer uit de verkeerde reeks. Dat gaat niet stuk, het gaat
+  // stil fout — en dat is erger.
+  if (!inv.bouw7Gereed) {
+    redenen.unshift(inv.bouw7Ontbreekt[0] ?? 'Het Bouw7-project kan nog niet correct worden aangemaakt.')
+    return { status: 'wacht_op_mens', automatisch: false, redenen }
+  }
+
+  // ── 7. Bestaat dit al? ────────────────────────────────────────────────────
   if (inv.duplicaatTopscore >= DUPLICAAT_TWIJFEL) {
     redenen.unshift('Dit lijkt op iets dat al is ingeschreven.')
     return { status: 'wacht_op_mens', automatisch: false, redenen }
   }
 
-  // ── 7. Randvoorwaarden ────────────────────────────────────────────────────
+  // ── 8. Randvoorwaarden ────────────────────────────────────────────────────
   if (inv.dagbudgetOp) {
     redenen.unshift('Het dagbudget voor automatische verwerking is bereikt.')
     return { status: 'wacht_op_mens', automatisch: false, redenen }

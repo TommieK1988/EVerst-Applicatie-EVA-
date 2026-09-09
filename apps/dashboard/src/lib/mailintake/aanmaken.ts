@@ -15,6 +15,7 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
 import { maakNotificatie } from '@/lib/notificaties/maak'
+import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 import type { GekeurdeVelden } from './extractie'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -24,6 +25,8 @@ export interface AanmaakInvoer {
   relatieId: string
   contactpersoonId: string | null
   velden: GekeurdeVelden
+  /** Het vastgoedobject bij dit werkadres; alleen gevuld bij een eenduidige treffer. */
+  objectId?: string | null
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -41,6 +44,114 @@ export function bouwTitel(v: GekeurdeVelden): string {
   const omschrijving = (v.omschrijving ?? '').trim()
   if (kop && omschrijving) return `${kop} - ${omschrijving}`
   return omschrijving || kop || 'Aanvraag uit e-mail'
+}
+
+/**
+ * Zet de bijlagen van een bericht in de SharePoint-dossiermap.
+ *
+ * Loopt via `uploadBuffersNaarDossierMap` uit lib/o365/dossier-map: dat is
+ * app-only Graph en vraagt dus géén ingelogde medewerker. Daardoor werkt dit
+ * zowel vanuit het behandelscherm als vanuit de cron — anders dan
+ * `uploadDossierBestandenNaarSharePoint`, dat een sessie eist.
+ *
+ * Twee dingen die bewust zo zijn:
+ *
+ * - **De ontvangstdatum komt voor de bestandsnaam.** Een upload naar SharePoint
+ *   is een PUT: een tweede "opdrachtbon.pdf" zou de eerste zonder waarschuwing
+ *   overschrijven. Met "2026-09-09 opdrachtbon.pdf" blijven ze naast elkaar
+ *   staan en zie je meteen bij welke mail iets hoort.
+ * - **In stukken van ~20 MB.** Alle bijlagen tegelijk in het geheugen laden gaat
+ *   bij een paar grote PDF's mis op Vercel.
+ *
+ * Gooit nooit. Wat niet lukt houdt `naar_sharepoint_op` leeg en wordt door de
+ * bewakingscron opnieuw geprobeerd — het dossier bestaat dan al, en dat mag hier
+ * niet op sneuvelen.
+ */
+export async function zetBijlagenInSharePoint(
+  berichtId: string,
+  dossierId: string,
+): Promise<{ geuploaded: number; mislukt: number; fout: string | null }> {
+  const supabase = createAdminClient() as any
+
+  const { data: bericht } = await supabase
+    .from('mailintake_berichten').select('ontvangen_op').eq('id', berichtId).maybeSingle()
+  const datum = (bericht?.ontvangen_op ?? new Date().toISOString()).slice(0, 10)
+
+  const { data: rijen } = await supabase
+    .from('mailintake_bijlagen')
+    .select('id, bestandsnaam, content_type, opslag_pad, grootte_bytes')
+    .eq('bericht_id', berichtId)
+    .eq('is_inline', false)
+    .not('opslag_pad', 'is', null)
+    .is('naar_sharepoint_op', null)
+    .limit(50)
+
+  if (!rijen?.length) return { geuploaded: 0, mislukt: 0, fout: null }
+
+  const RUIMTE = 20 * 1024 * 1024
+  let geuploaded = 0
+  let mislukt = 0
+  const fouten: string[] = []
+
+  let stapel: { rij: any; naam: string; contentType: string; bytes: Uint8Array }[] = []
+  let stapelBytes = 0
+
+  const legStapelWeg = async () => {
+    if (!stapel.length) return
+    const res = await uploadBuffersNaarDossierMap(
+      dossierId,
+      stapel.map(b => ({ naam: b.naam, contentType: b.contentType, bytes: b.bytes })),
+    )
+    // `bestanden` bevat alleen de geslaagde uploads; wat er niet in staat is mislukt
+    // en blijft dus openstaan voor de bewakingscron.
+    const perNaam = new Map((res.bestanden ?? []).map(x => [x.naam, x]))
+    for (const b of stapel) {
+      const geplaatst = perNaam.get(b.naam)
+      if (geplaatst) {
+        await supabase.from('mailintake_bijlagen').update({
+          naar_sharepoint_op: new Date().toISOString(),
+          sharepoint_item_id: geplaatst.itemId,
+        }).eq('id', b.rij.id)
+        geuploaded++
+      } else {
+        mislukt++
+      }
+    }
+    if (res.fout) fouten.push(res.fout)
+    stapel = []
+    stapelBytes = 0
+  }
+
+  for (const r of rijen) {
+    try {
+      const { data: blob, error } = await supabase.storage.from('mail-intake').download(r.opslag_pad)
+      if (error || !blob) { mislukt++; continue }
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+
+      if (stapelBytes + bytes.length > RUIMTE) await legStapelWeg()
+
+      stapel.push({
+        rij: r,
+        naam: `${datum} ${r.bestandsnaam}`,
+        contentType: r.content_type ?? 'application/octet-stream',
+        bytes,
+      })
+      stapelBytes += bytes.length
+    } catch (e) {
+      mislukt++
+      fouten.push(`${r.bestandsnaam}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  await legStapelWeg()
+
+  if (geuploaded || mislukt) {
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: berichtId, actor: 'systeem', actie: 'bijlagen_naar_sharepoint',
+      details: { dossier_id: dossierId, geuploaded, mislukt, fouten: fouten.slice(0, 5) },
+    })
+  }
+
+  return { geuploaded, mislukt, fout: fouten.length ? fouten.join('; ').slice(0, 500) : null }
 }
 
 /**
@@ -71,6 +182,9 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     werkadres_huisnummer: v.werkadresHuisnummer,
     werkadres_postcode: v.werkadresPostcode,
     werkadres_stad: v.werkadresStad,
+    // Koppelt het dossier meteen onder het juiste complex/pand, zoals de
+    // aanvraagmodal dat doet via de objectkiezer.
+    object_id: inv.objectId ?? null,
   })
 
   if (!res.ok) return { ok: false, error: res.error }
@@ -105,6 +219,10 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
       automatisch: inv.automatisch,
     },
   })
+
+  // De bijlagen horen bij het dossier, niet bij de mailbox. Best-effort: mislukt
+  // dit, dan blijft het dossier gewoon staan en probeert de bewakingscron opnieuw.
+  await zetBijlagenInSharePoint(inv.berichtId, dossierId).catch(() => {})
 
   // Bij een automatisch dossier hoort altijd een mens die er nog naar kijkt.
   if (inv.automatisch) {
@@ -150,6 +268,10 @@ export async function koppelAanDossier(
     bericht_id: berichtId, actor: medewerkerId ? 'medewerker' : 'systeem',
     medewerker_id: medewerkerId, actie: 'gekoppeld', details: { dossier_id: dossierId, besluit },
   })
+
+  // Ook bij koppelen: de opdrachtbon hoort in het dossier terecht te komen, niet
+  // alleen in de mailbox. Dat is juist bij deze route de reden dat iemand koppelt.
+  await zetBijlagenInSharePoint(berichtId, dossierId).catch(() => {})
 
   await planNabehandeling(berichtId)
   await voerNabehandelingUit(berichtId).catch(() => {})

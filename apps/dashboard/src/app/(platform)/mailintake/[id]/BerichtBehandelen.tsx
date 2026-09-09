@@ -81,10 +81,20 @@ type Detail = {
   log: any[]
 }
 
+type ObjectTreffer = {
+  objectId: string | null
+  naam: string | null
+  score: number
+  via: string | null
+  kandidaten: { id: string; naam: string; adres: string; score: number; via: string }[]
+  toelichting: string
+} | null
+
 export default function BerichtBehandelen({
-  detail, werkmaatschappijen, categorieen, magSchrijven,
+  detail, objectTreffer, werkmaatschappijen, categorieen, magSchrijven,
 }: {
   detail: Detail
+  objectTreffer: ObjectTreffer
   werkmaatschappijen: { id: string; naam: string }[]
   categorieen: { id: number; name: string }[]
   magSchrijven: boolean
@@ -119,6 +129,11 @@ export default function BerichtBehandelen({
   const [postcode, setPostcode] = useState(velden.werkadres_postcode ?? '')
   const [stad, setStad] = useState(velden.werkadres_stad ?? '')
   const [adresBevestigd, setAdresBevestigd] = useState(false)
+
+  // Voorkeur: wat er al aan het bericht hangt; anders de verse treffer.
+  const [objectId, setObjectId] = useState<string | null>(
+    b.object?.id ?? objectTreffer?.objectId ?? null,
+  )
 
   const [bezig, setBezig] = useState(false)
 
@@ -209,6 +224,7 @@ export default function BerichtBehandelen({
       const res = await maakDossierVanBericht(b.id, {
         relatieId: klantId,
         contactpersoonId,
+        objectId,
         omschrijving: omschrijving.trim(),
         klantNaam,
         contactpersoonNaam: null,
@@ -365,6 +381,21 @@ export default function BerichtBehandelen({
           <strong>Voorgelegd omdat:</strong> {redenVoorleggen}
         </div>
       )}
+      {/* Wat Bouw7 nog mist. Dit is geen detail: zonder klant of vestiging wordt het
+          project daar wél aangemaakt, maar leeg — en dat valt pas weken later op. */}
+      {!afgehandeld && (b.bouw7_ontbreekt?.length ?? 0) > 0 && (
+        <div style={{
+          padding: '10px 12px', borderRadius: 8, fontSize: 13,
+          background: 'var(--da-50, #fef2f2)', border: '1px solid var(--da-200, #fecaca)',
+          color: 'var(--da-900, #7f1d1d)',
+        }}>
+          <strong>Bouw7 kan hier nog geen net project van maken:</strong>
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+            {(b.bouw7_ontbreekt as string[]).map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
+
       {afgehandeld && (
         <div style={{
           padding: '10px 12px', borderRadius: 8, fontSize: 13,
@@ -586,6 +617,47 @@ export default function BerichtBehandelen({
               <p style={{ ...zacht, color: 'var(--wa-800, #92400e)' }}>
                 De afzender is niet herkend als bestaande klant. Kies zelf de opdrachtgever, of maak er een nieuwe aan
                 via Relaties.
+              </p>
+            )}
+          </Card>
+
+          <Card style={{ padding: 14 }}>
+            <div style={kop}>Object</div>
+            {objectTreffer?.kandidaten?.length ? (
+              <>
+                <p style={{ ...zacht, marginBottom: 8 }}>{objectTreffer.toelichting}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {objectTreffer.kandidaten.map(k => (
+                    <label key={k.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                      <input
+                        type="radio"
+                        name="object"
+                        checked={objectId === k.id}
+                        disabled={!bewerkbaar}
+                        onChange={() => setObjectId(k.id)}
+                        style={{ marginTop: 3 }}
+                      />
+                      <span>
+                        <span style={{ fontWeight: objectId === k.id ? 600 : 400 }}>{k.naam}</span>
+                        <span style={klein}> · {Math.round(k.score * 100)}%</span>
+                        <br />
+                        <span style={klein}>{k.adres}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <input
+                      type="radio" name="object" checked={objectId === null}
+                      disabled={!bewerkbaar} onChange={() => setObjectId(null)}
+                    />
+                    <span style={klein}>Geen object koppelen</span>
+                  </label>
+                </div>
+              </>
+            ) : (
+              <p style={klein}>
+                Geen object gevonden op dit adres. Het dossier wordt dan zonder objectkoppeling
+                aangemaakt; dat kan later alsnog vanuit het dossier.
               </p>
             )}
           </Card>

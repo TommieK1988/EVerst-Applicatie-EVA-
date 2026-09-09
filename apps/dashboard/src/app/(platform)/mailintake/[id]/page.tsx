@@ -5,6 +5,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { getAanvraagCategorieen } from '@/lib/dossiers/actions'
 import { getBerichtDetail } from '@/lib/mailintake/data'
+import { zoekObjectBijAdres } from '@/lib/mailintake/objecten'
 
 import BerichtBehandelen from './BerichtBehandelen'
 
@@ -25,9 +26,23 @@ export default async function BerichtPage({ params }: { params: Promise<{ id: st
     getAanvraagCategorieen(),
   ])
 
+  // De objectkandidaten worden niet opgeslagen maar hier opnieuw bepaald: de
+  // gebruiker kan het adres in het formulier nog wijzigen, en dan zou een
+  // bevroren lijst juist de verkeerde alternatieven tonen.
+  const v = (detail.extractie?.velden ?? {}) as Record<string, string | null>
+  const objectTreffer = await zoekObjectBijAdres({
+    straat: v.werkadres_straat ?? null,
+    huisnummer: v.werkadres_huisnummer ?? null,
+    postcode: v.werkadres_postcode ?? null,
+    stad: v.werkadres_stad ?? null,
+    vveCode: v.vve_code ?? null,
+    relatieId: (detail.bericht as any).relatie?.id ?? null,
+  }).catch(() => null)
+
   return (
     <BerichtBehandelen
       detail={JSON.parse(JSON.stringify(detail))}
+      objectTreffer={objectTreffer ? JSON.parse(JSON.stringify(objectTreffer)) : null}
       werkmaatschappijen={werkmaatschappijen ?? []}
       categorieen={categorieen}
       magSchrijven={rechten.mailintake === 'schrijven' || rechten.mailintake === 'beheren'}
