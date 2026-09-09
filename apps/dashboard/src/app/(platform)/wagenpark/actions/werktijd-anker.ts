@@ -176,3 +176,66 @@ export async function herstelWerktijdAnker(bevinding_id: string): Promise<AnkerR
     }
   }
 }
+
+/**
+ * Een rit op zakelijk of privé zetten vanuit het werktijden-zijpaneel, en de dag
+ * meteen opnieuw laten doorrekenen.
+ *
+ * Dit is niet hetzelfde als de toggle op de rittenlijst. Daar verandert alleen
+ * de rit; hier verandert de rit én alles wat eruit volgt. De werkdag-regels
+ * kijken uitsluitend naar zakelijke ritten, dus een vergeten privémarkering
+ * trekt de eerste keten naar voren en levert een aankomst van kwart voor zeven
+ * op. Zet je die rit hier op privé zonder te herrekenen, dan blijft het paneel
+ * de oude aankomsttijd tonen naast een rit die inmiddels privé heet — precies
+ * het soort tegenspraak waar niemand meer uitkomt.
+ *
+ * Beide regels worden herbouwd: één rit kan zowel de heenreis als de terugreis
+ * van kleur laten verschieten.
+ *
+ * `null` zet de rit terug op de automatische classificatie.
+ */
+export async function zetRitTypeVoorWerkdag(
+  user_id_ulu: string,
+  datum: string,
+  trip_id: string,
+  nieuwType: 'zakelijk' | 'prive' | null,
+): Promise<AnkerResultaat> {
+  await vereisRecht('wagenpark', 'schrijven')
+  if (!(await magPriveRittenZien())) {
+    return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
+  }
+
+  // De rit moet echt van deze bestuurder op deze dag zijn. Zonder die controle
+  // zou een id uit een ander dossier hier de classificatie kunnen omzetten.
+  const eigen = await pgQuery<{ aantal: number }>(
+    `select count(*)::int as aantal
+       from public.ulu_trips t
+      where t.id = $1::uuid and t.user_id_ulu::text = $2 and t.start_datum = $3::date`,
+    [trip_id, user_id_ulu, datum],
+  )
+  if ((eigen[0]?.aantal ?? 0) === 0) {
+    return { ok: false, error: 'Die rit hoort niet bij deze bestuurder op deze dag.' }
+  }
+
+  await pgQuery(
+    `update public.ulu_trips
+        set rit_type_override  = $1::rit_type_berekend,
+            rit_type_handmatig = $1 is not null
+      where id = $2::uuid`,
+    [nieuwType, trip_id],
+  )
+
+  try {
+    // Beide regels opnieuw, en R9 als laatste zodat het paneel op de aankomst
+    // verder kan als die er nog is.
+    const vertrek = await herbouwWerktijdDag(user_id_ulu, datum, 'R10')
+    const aankomst = await herbouwWerktijdDag(user_id_ulu, datum, 'R9')
+    ververs()
+    return { ok: true, bevinding_id: aankomst.ankerBevindingId ?? vertrek.ankerBevindingId }
+  } catch (e: unknown) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'De dag kon niet worden herberekend.',
+    }
+  }
+}

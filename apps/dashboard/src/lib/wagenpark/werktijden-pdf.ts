@@ -15,13 +15,17 @@ import jsPDF from 'jspdf'
 import { datumKort, MAAND_LABEL, maandenInPeriode, type Periode } from '@/lib/wagenpark/periode'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
 import {
-  minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG, SOORT_LABEL,
+  minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
   dagSaldoUren, saldoLabel,
 } from '@/lib/wagenpark/werktijd'
-import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import {
+  heeftSignaal, dagVerklaard, dagStatus,
+  type WerktijdAfwijking, type WerktijdRij,
+} from '@/lib/wagenpark/werktijd-dag'
 
 /** Zelfde woorden als op het scherm; zie WerktijdenTabel. */
 const STATUS_LABEL: Record<string, string> = {
+  geen_signaal: '—',
   open: 'Te controleren',
   geaccepteerd_uitzondering: 'Verklaard',
   afgewezen: 'Bespreken',
@@ -109,7 +113,8 @@ export function bouwWerktijdenPdf({
   // ── Totalen ────────────────────────────────────────────────────────
   const totaalMinuten = totalen?.totaalMinuten ?? 0
   const om = omrekening(totaalMinuten)
-  const meetellend = rijen.filter((r) => teltMee(r.status)).length
+  const signalen = rijen.filter(heeftSignaal)
+  const meetellend = signalen.filter((r) => !dagVerklaard(r)).length
   const saldoTotaal = totalen?.saldo ?? null
   const getal = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
 
@@ -137,6 +142,13 @@ export function bouwWerktijdenPdf({
         ? `${getal(saldoTotaal.aanwezigUren)} aanwezig · ${getal(saldoTotaal.arbeidsuren)} arbeidsuren · ${saldoTotaal.dagen} dagen`
         : 'geen dag met ritvenster én arbeidsuren',
     ],
+    [
+      'Tijd voor tijd',
+      saldoTotaal && saldoTotaal.tvtDagen > 0 ? winAnsi(`${saldoLabel(saldoTotaal.tvtUren)} u`) : '—',
+      saldoTotaal && saldoTotaal.tvtDagen > 0
+        ? `gereserveerd over ${saldoTotaal.tvtDagen} dagen · niet in Bouw7 geboekt`
+        : 'niets gereserveerd',
+    ],
   ]
 
   const blokBreedte = (margeR - margeL) / cijfers.length
@@ -158,7 +170,7 @@ export function bouwWerktijdenPdf({
 
   doc.setFontSize(8); doc.setTextColor(120, 128, 134)
   doc.text(
-    `${meetellend} van ${rijen.length} gemarkeerde dagen telt mee. ` +
+    `${rijen.length} werkdagen, waarvan ${signalen.length} met een afwijking; ${meetellend} daarvan telt mee. ` +
       `Werkdagen omgerekend bij ${UREN_PER_WERKDAG} uur per dag.`,
     margeL, y,
   )
@@ -186,16 +198,16 @@ export function bouwWerktijdenPdf({
   // zijn hier maatgevend, niet de getallen — "ARBEIDSUREN" is breder dan elk
   // urenbedrag dat eronder komt te staan.
   const kolDatum = margeL
-  const kolSoort = margeL + 26
-  const kolRooster = margeL + 42
-  const kolWerkelijk = margeL + 59
-  const kolAfwijking = margeL + 78
-  const kolAanwezig = margeL + 96
-  const kolVenster = margeL + 114
-  const kolArbeid = margeL + 131
-  const kolSaldo = margeL + 154
-  const kolGeboekt = margeL + 168
-  const kolUursoort = margeL + 185
+  const kolRooster = margeL + 24
+  const kolTeLaat = margeL + 47
+  const kolTeVroeg = margeL + 61
+  const kolAanwezig = margeL + 78
+  const kolVenster = margeL + 96
+  const kolArbeid = margeL + 113
+  const kolSaldo = margeL + 136
+  const kolTvt = margeL + 150
+  const kolGeboekt = margeL + 174
+  const kolUursoort = margeL + 191
   // De status staat rechts uitgelijnd tegen de marge: dan kan een lange
   // uursoorten-omschrijving er nooit overheen lopen. De 22 mm die hier wordt
   // vrijgehouden is de breedte van het langste label ("Te controleren").
@@ -205,14 +217,14 @@ export function bouwWerktijdenPdf({
   function tekenTabelkop() {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(120, 128, 134)
     doc.text('DATUM', kolDatum, y)
-    doc.text('SOORT', kolSoort, y)
     doc.text('ROOSTER', kolRooster, y)
-    doc.text('WERKELIJK', kolWerkelijk, y)
-    doc.text('AFWIJKING', kolAfwijking, y)
+    doc.text('TE LAAT', kolTeLaat, y)
+    doc.text('TE VROEG', kolTeVroeg, y)
     doc.text('AANWEZIG', kolAanwezig, y)
     doc.text('VENSTER', kolVenster, y)
     doc.text('ARBEIDSUREN', kolArbeid, y)
     doc.text('SALDO', kolSaldo, y)
+    doc.text('TIJD VOOR TIJD', kolTvt, y)
     doc.text('GEBOEKT', kolGeboekt, y)
     doc.text('UURSOORTEN', kolUursoort, y)
     doc.text('STATUS', margeR, y, { align: 'right' })
@@ -228,6 +240,24 @@ export function bouwWerktijdenPdf({
     while (kort.length > 1 && doc.getTextWidth(kort + '...') > breedte) kort = kort.slice(0, -1)
     return kort.trimEnd() + '...'
   }
+  /**
+   * Eén afwijkingscel: de minuten, vet als de dag nog openstaat.
+   *
+   * De werkelijke tijd staat er bewust niet bij — die is af te leiden uit de
+   * roostertijd plus de afwijking, en er is op papier geen plek voor twee
+   * tijden per afwijking.
+   */
+  function afwijkingCel(a: WerktijdAfwijking | null, x: number): void {
+    if (!a) {
+      doc.text('—', x, y)
+      return
+    }
+    const weg = !teltMee(a.status)
+    doc.setFont('helvetica', weg ? 'normal' : 'bold')
+    doc.text(minutenLabel(a.minuten), x, y)
+    doc.setFont('helvetica', 'normal')
+  }
+
   tekenTabelkop()
 
   for (const r of rijen) {
@@ -235,20 +265,26 @@ export function bouwWerktijdenPdf({
       doc.addPage(); y = 16; tekenTabelkop()
     }
     // Verklaarde dagen staan er grijs bij: zichtbaar, maar duidelijk anders dan
-    // de regels waar het gesprek over gaat.
-    const verklaard = !teltMee(r.status)
+    // de regels waar het gesprek over gaat. Een dag zonder afwijking ook — die
+    // hoort in de lijst voor het saldo, maar is niet het gespreksonderwerp.
+    const signaal = heeftSignaal(r)
+    const verklaard = dagVerklaard(r)
+    const gedempt = verklaard || !signaal
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-    if (verklaard) doc.setTextColor(150, 156, 161)
+    if (gedempt) doc.setTextColor(150, 156, 161)
     else doc.setTextColor(22, 27, 32)
 
     doc.text(datumMetDag(r.datum), kolDatum, y)
-    doc.text(SOORT_LABEL[r.soort], kolSoort, y)
-    doc.text(tijd(r.verwacht) + (r.benadering ? ' ~' : ''), kolRooster, y)
-    doc.text(tijd(r.werkelijk), kolWerkelijk, y)
+    const benadering = r.teLaat?.benadering || r.teVroeg?.benadering
+    doc.text(
+      r.roosterStart || r.roosterEind
+        ? `${tijd(r.roosterStart)}-${tijd(r.roosterEind)}${benadering ? ' ~' : ''}`
+        : '—',
+      kolRooster, y,
+    )
 
-    doc.setFont('helvetica', verklaard ? 'normal' : 'bold')
-    doc.text(minutenLabel(r.minuten), kolAfwijking, y)
-    doc.setFont('helvetica', 'normal')
+    afwijkingCel(r.teLaat, kolTeLaat)
+    afwijkingCel(r.teVroeg, kolTeVroeg)
 
     // Aanwezig volgens de auto. Een streepje betekent dat de dag geen bruikbaar
     // venster opleverde (bijvoorbeeld maar één ritketen) — niet dat er nul uur
@@ -263,6 +299,7 @@ export function bouwWerktijdenPdf({
     doc.text(saldo == null ? '—' : winAnsi(`${saldoLabel(saldo)} u`), kolSaldo, y)
     doc.setFont('helvetica', 'normal')
 
+    doc.text(r.tvtUren == null ? '—' : winAnsi(`${saldoLabel(r.tvtUren)} u`), kolTvt, y)
     doc.text(r.geboekt == null ? '—' : `${urenLabel(r.geboekt)} u`, kolGeboekt, y)
 
     // Twee toelichtende cellen, allebei klein en grijs: het venster waar de
@@ -279,7 +316,8 @@ export function bouwWerktijdenPdf({
     doc.text(pasIn(r.uursoorten ?? '—', uursoortBreedte), kolUursoort, y)
 
     doc.setFontSize(7.5)
-    doc.text(STATUS_LABEL[r.status] ?? r.status, margeR, y, { align: 'right' })
+    const st = dagStatus(r)
+    doc.text(STATUS_LABEL[st] ?? st, margeR, y, { align: 'right' })
 
     y += rijH
     doc.setDrawColor(240, 242, 244); doc.line(margeL, y - 2, margeR, y - 2)
@@ -301,6 +339,7 @@ export function bouwWerktijdenPdf({
     'Ritten die bij elkaar horen tellen als een aankomst of vertrek. "Geboekt" zijn alle uren die die dag in Bouw7 zijn geschreven; een streepje betekent dat ze niet opgehaald konden worden.',
     '"Venster" is de tijd tussen de aankomst op het werk en het vertrek naar huis; "Aanwezig" is dat venster min de pauzes uit het rooster. "Arbeidsuren" zijn alleen de geschreven uren die als werk gelden — vakantie, ziek, feestdag, verlof en opgenomen tijd voor tijd tellen daar niet in mee. "Saldo" is aanwezig min arbeidsuren.',
     'Een streepje bij Aanwezig of Saldo betekent dat de dag niet te meten was, niet dat er niet gewerkt is: dat gebeurt als er maar één ritketen bekend is, of als de medewerker die dag niet met de bedrijfsauto reed (meegereden, op de fiets, of de hele dag op één adres). Zulke dagen tellen niet mee in het saldo hierboven.',
+    'De kolom "Tijd voor tijd" is het saldo van die dag dat als tijd voor tijd is vastgelegd. Dat is een afspraak in EVA en geen urenboeking: er is niets in Bouw7 gewijzigd. Zulke dagen tellen niet meer mee in het saldo hierboven.',
     'Een saldo is geen oordeel. Zowel een plus als een min kan een goede verklaring hebben; het getal is bedoeld als begin van een gesprek, niet als uitkomst ervan.',
     'Regels met status "Verklaard" staan er ter informatie bij en tellen niet mee in de afwijkingstotalen.',
   ]

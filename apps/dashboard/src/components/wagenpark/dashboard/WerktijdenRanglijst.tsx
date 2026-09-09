@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import type { Periode } from '@/lib/wagenpark/periode'
 import SamenvattingTabel from '@/components/wagenpark/werktijden/SamenvattingTabel'
-import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import type { WerktijdRij } from '@/lib/wagenpark/werktijd-dag'
 
 /**
  * Werktijden per medewerker op het wagenpark-dashboard: wie springt eruit in de

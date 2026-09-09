@@ -6,86 +6,27 @@ import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
-  SOORT_LABEL, dagSaldoUren, saldoLabel, type WerktijdSoort,
+  SOORT_LABEL, dagSaldoUren, saldoLabel,
 } from '@/lib/wagenpark/werktijd'
 import { telSaldo } from '@/lib/wagenpark/werktijd-samenvatting'
+
 import DagPaneel from '@/components/wagenpark/werktijden/DagPaneel'
 
-/**
- * Eén regel = één medewerker, één dag, één soort afwijking. Een dag kan dus twee
- * regels opleveren (te laat begonnen én te vroeg weg). De pagina levert alleen
- * anker-bevindingen aan, zodat een opgesplitste ritketen niet dubbel telt.
- */
-export type WerktijdRij = {
-  id: string
-  datum: string
-  soort: WerktijdSoort
-  minuten: number
-  /** Roostertijd waartegen gemeten is. */
-  verwacht: string | null
-  /** Werkelijke aankomst (te laat) of vertrek (te vroeg). */
-  werkelijk: string | null
-  /** De roostertijd komt uit een rooster dat op die datum formeel nog niet gold. */
-  benadering: boolean
-  ernst: 'info' | 'waarschuwing' | 'overtreding'
-  status: string
-  regel_code: string
-  trip_id: string | null
-  user_id_ulu: string
-  bestuurder: string
-  /** ISO-week als "2026-W29"; komt uit Postgres, niet uit de browser. */
-  week: string
-  /** Maandag van die week (YYYY-MM-DD). */
-  week_start: string
-  /**
-   * Uren die deze medewerker die dag in Bouw7 schreef, om het signaal mee te
-   * controleren. `null` = niet op te halen (Bouw7 onbereikbaar of medewerker
-   * zonder Bouw7-koppeling); `0` = wél gekeken, niets geboekt. Dat onderscheid
-   * moet zichtbaar blijven: een storing mag er niet uitzien als een lege dag.
-   */
-  geboekt: number | null
-  /**
-   * Alleen de ARBEIDSUREN van die dag: uursoorten met categorie `werk`. Verlof,
-   * ziek, feestdag en opgenomen tijd voor tijd tellen niet mee — die uren zijn
-   * geen aanwezigheid en zouden het saldo hieronder onbruikbaar maken. `null` =
-   * niet te bepalen (Bouw7 onbereikbaar, of geen enkele geboekte uursoort is
-   * ingedeeld).
-   */
-  arbeidsuren: number | null
-  /** "6,0 normaal · 2,0 verlof", of null als er niets geboekt is. */
-  uursoorten: string | null
-  /** Bouw7-medewerkersnummer; de server koppelt hiermee de urenboekingen. */
-  bouw7_id: string | null
+import {
+  GEEN_SIGNAAL,
+  afwijkingenVanDag,
+  dagAfgedaan,
+  dagStatus,
+  dagVerklaard,
+  heeftSignaal,
+  type WerktijdAfwijking,
+  type WerktijdBevindingRij,
+  type WerktijdRij,
+} from '@/lib/wagenpark/werktijd-dag'
 
-  /* ── Aanwezigheid volgens de auto (zie lib/wagenpark/werktijd-aanwezigheid.ts) ── */
-
-  /** Aankomst op het werk, "07:32"; null als die dag niet te bepalen is. */
-  aankomst: string | null
-  /** Vertrek van het werk, "16:04"; null als dat niet te bepalen is. */
-  vertrek: string | null
-  /** Netto aanwezig in minuten: vertrek − aankomst − pauze. Null = niet te bepalen. */
-  aanwezigMinuten: number | null
-  /** Afgetrokken pauzeminuten uit het rooster. */
-  pauzeMinuten: number
-  /** Staat er überhaupt een pauze in het rooster? Bij false is er niets afgetrokken. */
-  pauzeInRooster: boolean
-  /** Waarom er geen aanwezigheid is, in gewone taal. Null als die er wel is. */
-  aanwezigReden: string | null
-}
-
-/** De rij zoals hij uit de database komt, nog zonder de uren en de aanwezigheid. */
-export type WerktijdBevindingRij = Omit<
-  WerktijdRij,
-  | 'geboekt'
-  | 'arbeidsuren'
-  | 'uursoorten'
-  | 'aankomst'
-  | 'vertrek'
-  | 'aanwezigMinuten'
-  | 'pauzeMinuten'
-  | 'pauzeInRooster'
-  | 'aanwezigReden'
->
+// Doorgeven voor de bestaande importeurs; de definities staan in werktijd-dag.ts.
+export type { WerktijdAfwijking, WerktijdBevindingRij, WerktijdRij }
+export { GEEN_SIGNAAL, afwijkingenVanDag, dagAfgedaan, dagStatus, dagVerklaard, heeftSignaal }
 
 /**
  * Statuslabels in de taal van dit scherm.
@@ -95,6 +36,7 @@ export type WerktijdBevindingRij = Omit<
  * app/(platform)/wagenpark/actions/werktijd-afhandeling.ts.
  */
 const STATUS_LABEL: Record<string, string> = {
+  [GEEN_SIGNAAL]: 'Geen afwijking',
   open: 'Te controleren',
   geaccepteerd_uitzondering: 'Verklaard',
   afgewezen: 'Bespreken',
@@ -102,6 +44,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const STATUS_STIJL: Record<string, string> = {
+  [GEEN_SIGNAAL]: 'bg-slate-50 text-slate-400',
   open: 'bg-slate-100 text-slate-600',
   geaccepteerd_uitzondering: 'bg-green-100 text-green-700',
   afgewezen: 'bg-red-100 text-red-700',
@@ -110,6 +53,45 @@ const STATUS_STIJL: Record<string, string> = {
 
 function tijd(t: string | null): string {
   return t ? t.slice(0, 5) : '—'
+}
+
+const statusLabel = (r: WerktijdRij) => STATUS_LABEL[dagStatus(r)] ?? dagStatus(r)
+
+/**
+ * Eén afwijkingscel: de minuten, met de tijden erachter als tooltip.
+ *
+ * Een verklaarde afwijking blijft staan maar wordt doorgestreept — je moet
+ * kunnen zien wat er is weggestreept, en meteen dat het nergens meetelt.
+ */
+function AfwijkingCel({ afwijking }: { afwijking: WerktijdAfwijking | null }) {
+  if (!afwijking) return <span className="text-slate-300">—</span>
+  const uitleg = `Rooster ${tijd(afwijking.verwacht)}, werkelijk ${tijd(afwijking.werkelijk)}`
+  if (!teltMee(afwijking.status)) {
+    return (
+      <span className="text-slate-400 line-through" title={`${uitleg} · verklaard, telt niet mee`}>
+        {minutenLabel(afwijking.minuten)}
+      </span>
+    )
+  }
+  return (
+    <span
+      className={`font-medium ${
+        afwijking.ernst === 'overtreding'
+          ? 'text-red-700'
+          : afwijking.ernst === 'info'
+            ? 'text-slate-500'
+            : 'text-orange-700'
+      }`}
+      // Nul minuten komt alleen voor als de bepalende rit handmatig is
+      // aangewezen en de afwijking daarmee wegvalt. De dag blijft in de lijst
+      // staan zodat die keuze zichtbaar en omkeerbaar blijft.
+      title={
+        afwijking.minuten === 0 ? `${uitleg} · geen afwijking meer na handmatige correctie` : uitleg
+      }
+    >
+      {minutenLabel(afwijking.minuten)}
+    </span>
+  )
 }
 
 /**
@@ -184,78 +166,51 @@ export default function WerktijdenTabel({
         render: (r) => <span className="text-slate-500">{r.week}</span>,
       },
       {
-        key: 'soort',
-        label: 'Soort',
-        breedte: 110,
-        filterType: 'select',
-        filterOpties: [SOORT_LABEL.te_laat, SOORT_LABEL.te_vroeg],
-        sorteerWaarde: (r) => SOORT_LABEL[r.soort],
-        render: (r) => (
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              r.soort === 'te_laat'
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-violet-100 text-violet-700'
-            }`}
-          >
-            {SOORT_LABEL[r.soort]}
-          </span>
-        ),
+        // Twee aparte kolommen in plaats van één "soort" + "afwijking": een dag
+        // kan allebei zijn, en dan is de vraag niet wélke van de twee maar hoe
+        // groot elk van beide was. Sorteren op "te vroeg weg" is bovendien een
+        // andere vraag dan sorteren op "te laat gekomen".
+        key: 'telaat',
+        label: 'Te laat',
+        breedte: 120,
+        sorteerWaarde: (r) => r.teLaat?.minuten ?? -1,
+        render: (r) => <AfwijkingCel afwijking={r.teLaat} />,
       },
       {
-        key: 'verwacht',
+        key: 'tevroeg',
+        label: 'Te vroeg',
+        breedte: 120,
+        sorteerWaarde: (r) => r.teVroeg?.minuten ?? -1,
+        render: (r) => <AfwijkingCel afwijking={r.teVroeg} />,
+      },
+      {
+        // De roostertijden waar tegenaan gemeten is. Standaard uit: ze zijn
+        // voor iedereen bijna altijd hetzelfde, en de afwijking zelf staat er
+        // al. Aan te zetten als je een specifieke dag natrekt.
+        key: 'roostertijd',
         label: 'Roostertijd',
-        breedte: 110,
-        sorteerWaarde: (r) => r.verwacht ?? '',
-        render: (r) => (
-          <span className={r.benadering ? 'text-slate-400' : ''} title={
-            r.benadering
-              ? 'Benadering: op deze datum gold nog geen rooster, het dichtstbijzijnde is gebruikt.'
-              : undefined
-          }>
-            {tijd(r.verwacht)}
-            {r.benadering && <span className="ml-1 text-[10px]">≈</span>}
-          </span>
-        ),
-      },
-      {
-        key: 'werkelijk',
-        label: 'Werkelijk',
-        breedte: 110,
-        sorteerWaarde: (r) => r.werkelijk ?? '',
-        render: (r) => tijd(r.werkelijk),
-      },
-      {
-        key: 'minuten',
-        label: 'Afwijking (min)',
-        breedte: 140,
-        // Getal, geen tekst: sorteert op omvang én komt als rekenbare cel in de
-        // Excel-export terecht, zodat je er in Excel een SOM overheen kunt zetten.
-        sorteerWaarde: (r) => r.minuten,
-        // Een verklaarde afwijking wordt doorgestreept getoond: hij blijft
-        // zichtbaar, maar je ziet meteen dat hij nergens in meetelt.
-        render: (r) =>
-          teltMee(r.status) ? (
+        breedte: 130,
+        standaard_zichtbaar: false,
+        sorteerWaarde: (r) => r.roosterStart ?? '',
+        render: (r) => {
+          const start = r.roosterStart
+          const eind = r.roosterEind
+          if (!start && !eind) return <span className="text-slate-300">—</span>
+          const benadering = r.teLaat?.benadering || r.teVroeg?.benadering
+          return (
             <span
-              className={`font-medium ${
-                r.ernst === 'overtreding'
-                  ? 'text-red-700'
-                  : r.ernst === 'info'
-                    ? 'text-slate-500'
-                    : 'text-orange-700'
-              }`}
-              // Nul minuten komt alleen voor als de bepalende rit handmatig is
-              // aangewezen en de afwijking daarmee wegvalt. De dag blijft in de
-              // lijst staan zodat die keuze zichtbaar en omkeerbaar blijft.
-              title={r.minuten === 0 ? 'Geen afwijking meer na handmatige correctie' : undefined}
+              className={benadering ? 'text-slate-400' : ''}
+              title={
+                benadering
+                  ? 'Benadering: op deze datum gold nog geen rooster, het dichtstbijzijnde is gebruikt.'
+                  : undefined
+              }
             >
-              {minutenLabel(r.minuten)}
+              {tijd(start ?? null)}–{tijd(eind ?? null)}
+              {benadering && <span className="ml-1 text-[10px]">≈</span>}
             </span>
-          ) : (
-            <span className="text-slate-400 line-through" title="Verklaard — telt niet mee">
-              {minutenLabel(r.minuten)}
-            </span>
-          ),
+          )
+        },
       },
       {
         // Het venster waarin de auto op het werk stond. Zonder de tijden erbij
@@ -322,6 +277,23 @@ export default function WerktijdenTabel({
               </span>
             )
           }
+          // Een afgedane dag — verklaard of als tijd voor tijd gereserveerd —
+          // telt niet mee in het totaal en wordt daarom doorgestreept getoond:
+          // zichtbaar, maar duidelijk buiten de som.
+          if (dagAfgedaan(r)) {
+            return (
+              <span
+                className="tabular-nums text-slate-400 line-through"
+                title={
+                  r.tvtUren != null
+                    ? 'Gereserveerd als tijd voor tijd — telt niet mee in het saldo'
+                    : 'Verklaard — telt niet mee in het saldo'
+                }
+              >
+                {saldoLabel(saldo)} u
+              </span>
+            )
+          }
           const kleur =
             saldo <= -0.5 ? 'text-red-700' : saldo >= 0.5 ? 'text-emerald-700' : 'text-slate-500'
           return (
@@ -339,6 +311,27 @@ export default function WerktijdenTabel({
             </span>
           )
         },
+      },
+      {
+        key: 'tvt',
+        label: 'Tijd voor tijd',
+        breedte: 130,
+        sorteerWaarde: (r) => r.tvtUren ?? 0,
+        render: (r) =>
+          r.tvtUren == null ? (
+            <span className="text-slate-300">—</span>
+          ) : (
+            <span
+              className="tabular-nums font-medium text-sky-700"
+              title={
+                r.tvtToelichting
+                  ? `${r.tvtToelichting} — gereserveerd, telt niet meer in het saldo`
+                  : 'Gereserveerd als tijd voor tijd; telt niet meer in het saldo'
+              }
+            >
+              {saldoLabel(r.tvtUren)} u
+            </span>
+          ),
       },
       {
         // Controlekolom: schreef deze medewerker die dag genoeg uren? Getal, dus
@@ -380,17 +373,29 @@ export default function WerktijdenTabel({
         label: 'Status',
         breedte: 130,
         filterType: 'select',
-        filterOpties: [...new Set(data.map((r) => STATUS_LABEL[r.status] ?? r.status))],
-        sorteerWaarde: (r) => STATUS_LABEL[r.status] ?? r.status,
-        render: (r) => (
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full ${
-              STATUS_STIJL[r.status] ?? 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {STATUS_LABEL[r.status] ?? r.status}
-          </span>
-        ),
+        filterOpties: [...new Set(data.map((r) => statusLabel(r)))],
+        sorteerWaarde: (r) => statusLabel(r),
+        render: (r) => {
+          const st = dagStatus(r)
+          return (
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${
+                STATUS_STIJL[st] ?? 'bg-slate-100 text-slate-600'
+              }`}
+              // Twee afwijkingen kunnen elk hun eigen status hebben; de kolom
+              // toont de dag, de tooltip de onderdelen.
+              title={
+                afwijkingenVanDag(r).length > 1
+                  ? afwijkingenVanDag(r)
+                      .map((a) => `${SOORT_LABEL[a.soort]}: ${STATUS_LABEL[a.status] ?? a.status}`)
+                      .join(' · ')
+                  : undefined
+              }
+            >
+              {STATUS_LABEL[st] ?? st}
+            </span>
+          )
+        },
       },
     ],
     [bestuurderOpties, data],
@@ -403,14 +408,24 @@ export default function WerktijdenTabel({
     let vroeg = 0
     let verklaard = 0
     let verklaardDagen = 0
+    let zonderAfwijking = 0
     for (const r of gefilterd) {
-      if (!teltMee(r.status)) {
-        verklaard += r.minuten
-        verklaardDagen += 1
+      if (!heeftSignaal(r)) {
+        zonderAfwijking += 1
         continue
       }
-      if (r.soort === 'te_laat') laat += r.minuten
-      else vroeg += r.minuten
+      if (dagVerklaard(r)) verklaardDagen += 1
+      for (const a of afwijkingenVanDag(r)) {
+        // Per afwijking, niet per dag: een dag kan een verklaarde late aankomst
+        // en een openstaand vroeg vertrek hebben, en die horen elk in hun eigen
+        // kolom van dit blok.
+        if (!teltMee(a.status)) {
+          verklaard += a.minuten
+          continue
+        }
+        if (a.soort === 'te_laat') laat += a.minuten
+        else vroeg += a.minuten
+      }
     }
     const totaal = laat + vroeg
     const om = omrekening(totaal)
@@ -423,10 +438,13 @@ export default function WerktijdenTabel({
       [`Totaal (werkdagen bij ${UREN_PER_WERKDAG} uur per dag)`, om.dagen],
       ['', ''],
       [`Verklaard, telt niet mee (minuten) — ${verklaardDagen} dagen`, verklaard],
+      ['Dagen zonder afwijking', zonderAfwijking],
       ['', ''],
       [`Aanwezig netto (uren) — ${saldo.dagen} dagen met een bruikbaar venster`, saldo.aanwezigUren],
       ['Geboekte arbeidsuren over diezelfde dagen', saldo.arbeidsuren],
       ['Saldo (uren)', saldo.saldoUren],
+      [`Gereserveerd als tijd voor tijd (uren) — ${saldo.tvtDagen} dagen`, saldo.tvtUren],
+      [`Buiten het saldo: verklaard (${saldo.verklaard} dagen) en niet te meten (${saldo.overgeslagen} dagen)`, ''],
     ]
   }, [])
 

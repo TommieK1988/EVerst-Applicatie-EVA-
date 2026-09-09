@@ -4,13 +4,13 @@ import React, { useMemo } from 'react'
 import { FileDown } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import {
-  minutenLabel, teltMee, omrekening, urenLabel, saldoLabel, UREN_PER_WERKDAG,
+  minutenLabel, omrekening, urenLabel, saldoLabel, UREN_PER_WERKDAG,
 } from '@/lib/wagenpark/werktijd'
+import { heeftSignaal, dagVerklaard } from '@/lib/wagenpark/werktijd-dag'
 import { MAAND_LABEL, maandenInPeriode, type Periode } from '@/lib/wagenpark/periode'
 import { bouwSamenvatting, telSaldo } from '@/lib/wagenpark/werktijd-samenvatting'
-import WerktijdenTabel, {
-  type WerktijdRij,
-} from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import WerktijdenTabel from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import type { WerktijdRij } from '@/lib/wagenpark/werktijd-dag'
 
 /**
  * Alle gemarkeerde dagen van één bestuurder: te laat aangekomen, te vroeg weg.
@@ -41,7 +41,13 @@ export default function WerktijdenBlok({
   const samenvatting = useMemo(() => bouwSamenvatting(data)[0] ?? null, [data])
   const saldo = useMemo(() => telSaldo(data), [data])
   const maanden = useMemo(() => maandenInPeriode(periode), [periode])
-  const meetellendeDagen = useMemo(() => data.filter((r) => teltMee(r.status)).length, [data])
+  // Alleen de regels die echt een signaal dragen; de werkdagen zonder afwijking
+  // staan er nu ook bij en zouden dit getal anders opblazen.
+  const signalen = useMemo(() => data.filter(heeftSignaal), [data])
+  const meetellendeDagen = useMemo(
+    () => signalen.filter((r) => !dagVerklaard(r)).length,
+    [signalen],
+  )
 
   const totaalMinuten = samenvatting?.totaalMinuten ?? 0
   const om = omrekening(totaalMinuten)
@@ -50,7 +56,7 @@ export default function WerktijdenBlok({
   if (data.length === 0) {
     return (
       <p className="text-sm text-slate-500">
-        Geen te late aankomsten of vroege vertrekken in deze periode.
+        Geen werkdagen in deze periode — controleer of er een rooster is ingesteld.
       </p>
     )
   }
@@ -89,7 +95,7 @@ export default function WerktijdenBlok({
         <Cijfer
           label="Dagen die meetellen"
           waarde={String(meetellendeDagen)}
-          sub={`van ${data.length} gemarkeerde ${data.length === 1 ? 'dag' : 'dagen'}`}
+          sub={`van ${signalen.length} gemarkeerde ${signalen.length === 1 ? 'dag' : 'dagen'}`}
         />
         {/* Aanwezig tegenover verantwoord. Staat naast de afwijkingen en niet in
             plaats daarvan: een dag kan keurig binnen de roostertijden vallen en
@@ -102,6 +108,18 @@ export default function WerktijdenBlok({
             saldo.dagen > 0
               ? `${urenLabel(saldo.aanwezigUren)} aanwezig tegenover ${urenLabel(saldo.arbeidsuren)} arbeidsuren, over ${saldo.dagen} ${saldo.dagen === 1 ? 'dag' : 'dagen'}`
               : 'geen dag met zowel een ritvenster als arbeidsuren'
+          }
+        />
+        {/* Wat er van het saldo al belegd is. Staat naast het openstaande saldo
+            en niet erin: die dagen zijn afgesproken, maar het bedrag mag daarmee
+            niet uit beeld verdwijnen. */}
+        <Cijfer
+          label="Tijd voor tijd"
+          waarde={saldo.tvtDagen > 0 ? `${saldoLabel(saldo.tvtUren)} u` : '—'}
+          sub={
+            saldo.tvtDagen > 0
+              ? `gereserveerd over ${saldo.tvtDagen} ${saldo.tvtDagen === 1 ? 'dag' : 'dagen'} · niet in Bouw7 geboekt`
+              : 'niets gereserveerd'
           }
         />
 
@@ -117,11 +135,24 @@ export default function WerktijdenBlok({
       {/* Wat er buiten het saldo viel. Zonder deze regel leest een saldo over
           drie dagen hetzelfde als een saldo over dertig, en dat is precies het
           verschil tussen een signaal en een toevalstreffer. */}
-      {saldo.overgeslagen > 0 && (
+      {(saldo.overgeslagen > 0 || saldo.verklaard > 0 || saldo.tvtDagen > 0) && (
         <p className="mb-4 -mt-2 text-xs text-slate-500">
-          {saldo.overgeslagen} van deze dagen {saldo.overgeslagen === 1 ? 'telt' : 'tellen'} niet
-          mee in het saldo: daar is de aanwezigheid niet uit de ritten af te leiden (maar één
-          ritketen, of geen zakelijke ritten) of zijn de arbeidsuren niet op te halen.
+          Buiten het saldo gelaten:
+          {saldo.tvtDagen > 0 && (
+            <> {saldo.tvtDagen} {saldo.tvtDagen === 1 ? 'dag' : 'dagen'} gereserveerd als tijd voor
+            tijd,</>
+          )}
+          {saldo.verklaard > 0 && (
+            <> {saldo.verklaard} {saldo.verklaard === 1 ? 'dag' : 'dagen'} met een verklaarde
+            afwijking</>
+          )}
+          {saldo.verklaard > 0 && saldo.overgeslagen > 0 && ','}
+          {saldo.overgeslagen > 0 && (
+            <> {saldo.overgeslagen} {saldo.overgeslagen === 1 ? 'dag' : 'dagen'} waarvan de
+            aanwezigheid of de arbeidsuren niet te bepalen zijn (maar één ritketen, geen zakelijke
+            ritten, of geen uren opgehaald)</>
+          )}
+          .
         </p>
       )}
 

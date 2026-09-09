@@ -6,7 +6,7 @@ import type { GebruikerLayout } from '@everts/database/platform-types'
 import { minutenLabel, omrekening, urenLabel, saldoLabel, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
 import { bouwSamenvatting, type SamenvattingRij } from '@/lib/wagenpark/werktijd-samenvatting'
 import { MAAND_LABEL, type Periode, maandenInPeriode } from '@/lib/wagenpark/periode'
-import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
+import type { WerktijdRij } from '@/lib/wagenpark/werktijd-dag'
 
 export type { SamenvattingRij }
 
@@ -170,6 +170,32 @@ export default function SamenvattingTabel({
           ),
       },
       {
+        key: 'tvt',
+        label: 'Tijd voor tijd',
+        breedte: 130,
+        sorteerWaarde: (r) => r.saldo.tvtUren,
+        render: (r) =>
+          r.saldo.tvtDagen === 0 ? (
+            <span className="text-slate-300">—</span>
+          ) : (
+            <span
+              className="tabular-nums font-medium text-sky-700"
+              title={`Gereserveerd over ${r.saldo.tvtDagen} ${r.saldo.tvtDagen === 1 ? 'dag' : 'dagen'}; niet in Bouw7 geboekt`}
+            >
+              {saldoLabel(r.saldo.tvtUren)} u
+              <span className="ml-1 text-xs text-slate-400">({r.saldo.tvtDagen})</span>
+            </span>
+          ),
+      },
+      {
+        key: 'werkdagen',
+        label: 'Werkdagen',
+        breedte: 100,
+        standaard_zichtbaar: false,
+        sorteerWaarde: (r) => r.werkdagen,
+        render: (r) => <span className="tabular-nums text-slate-600">{r.werkdagen}</span>,
+      },
+      {
         key: 'saldo',
         label: 'Saldo',
         breedte: 130,
@@ -215,6 +241,8 @@ export default function SamenvattingTabel({
     let aanwezig = 0
     let arbeidsuren = 0
     let saldoDagen = 0
+    let tvtUren = 0
+    let tvtDagen = 0
     for (const r of gefilterd) {
       laat += r.minutenLaat
       vroeg += r.minutenVroeg
@@ -224,6 +252,8 @@ export default function SamenvattingTabel({
       aanwezig += r.saldo.aanwezigUren
       arbeidsuren += r.saldo.arbeidsuren
       saldoDagen += r.saldo.dagen
+      tvtUren += r.saldo.tvtUren
+      tvtDagen += r.saldo.tvtDagen
     }
     const totaal = laat + vroeg
     const om = omrekening(totaal)
@@ -240,6 +270,7 @@ export default function SamenvattingTabel({
       [`Aanwezig netto (uren) — over ${saldoDagen} medewerkerdagen`, rond(aanwezig)],
       ['Geboekte arbeidsuren over diezelfde dagen', rond(arbeidsuren)],
       ['Saldo (uren)', rond(aanwezig - arbeidsuren)],
+      [`Gereserveerd als tijd voor tijd (uren) — ${tvtDagen} dagen`, rond(tvtUren)],
     ]
   }, [])
 

@@ -15,7 +15,8 @@ import { RITTEN_HORIZON_DAGEN, ritHorizonVanaf } from '@/lib/wagenpark/privacy'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { laadRitDekking } from '@/lib/wagenpark/rit-dekking'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
-import { minutenLabel, teltMee } from '@/lib/wagenpark/werktijd'
+import { minutenLabel } from '@/lib/wagenpark/werktijd'
+import { heeftSignaal, dagVerklaard } from '@/lib/wagenpark/werktijd-dag'
 import { laadLayouts } from '@/app/actions/layouts'
 
 export const dynamic = 'force-dynamic'
@@ -132,7 +133,9 @@ export default async function DashboardPage({
     }),
     { minutenLaat: 0, dagenLaat: 0, minutenVroeg: 0, dagenVroeg: 0 },
   )
-  const werktijdDagen = werktijdRijen.filter((r) => teltMee(r.status)).length
+  // Dagen met een afwijking die nog meetelt; de lijst bevat inmiddels ook
+  // werkdagen zonder signaal, en die horen niet in dit getal.
+  const werktijdDagen = werktijdRijen.filter((r) => heeftSignaal(r) && !dagVerklaard(r)).length
 
   const topBevindingen: BevindingRij[] = (topBevindingenRes.data ?? []) as BevindingRij[]
 
