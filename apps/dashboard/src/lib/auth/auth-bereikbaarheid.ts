@@ -28,14 +28,25 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 /** Maximale duur van één losse fetch naar de auth-server. */
-const AUTH_FETCH_TIMEOUT_MS = 4000
+const AUTH_FETCH_TIMEOUT_MS = 8000
 
 /**
  * Maximale duur van de hele auth-controle, herpogingen inbegrepen. Ruim onder
  * de 25 seconden die Vercel de middleware geeft, en ruim boven de ~150 ms die
  * een gezonde `getUser()` kost.
+ *
+ * Op 9 september 2026 bleek 4 s / 6 s te krap. De auth-server werd gedurende de
+ * ochtend geleidelijk trager — p95 op `/auth/v1/user` liep op naar 2,5 s met
+ * uitschieters tot 13,9 s — en 429 keer kreeg iemand de storingspagina terwijl
+ * er niets stuk was: het antwoord kwam gewoon net te laat. De database stond er
+ * die hele tijd stil bij, dus de traagheid zat in de auth-dienst zelf.
+ *
+ * Wachten is hier het minste kwaad: een pagina die drie tellen later verschijnt
+ * is vervelend, een pagina die zegt dat EVA plat ligt houdt iemand tegen. De
+ * grenzen blijven ver onder de 25 s van Vercel, zodat het vangnet nog steeds
+ * eerder toeslaat dan de harde afkap.
  */
-const AUTH_DEADLINE_MS = 6000
+const AUTH_DEADLINE_MS = 12000
 
 /**
  * Is dit "de server is onbereikbaar" of "het token deugt niet"? Alleen het
