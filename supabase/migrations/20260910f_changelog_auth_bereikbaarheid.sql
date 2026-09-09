@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-09','opgelost','Platform','"EVA is even niet bereikbaar" verschijnt niet meer bij het minste oponthoud',
+   'Dinsdag en woensdagochtend kreeg een aantal collega''s regelmatig de melding dat EVA niet bereikbaar was, terwijl er niets stuk was: de inlogdienst van onze leverancier antwoordde af en toe een paar seconden te traag, en EVA gaf het net iets te snel op. EVA wacht nu langer voordat hij die melding toont. Daarnaast vraagt EVA nog maar zelden aan die dienst wie je bent -- hij controleert je sessie voortaan zelf -- waardoor pagina''s ook merkbaar sneller openen.');
