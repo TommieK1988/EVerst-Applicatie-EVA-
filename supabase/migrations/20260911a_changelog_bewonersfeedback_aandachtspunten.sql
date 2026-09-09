@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-09','opgelost','Oplevering','Aandachtspunten uit de bewonersfeedback komen weer op het dossier',
+   'Meldde een bewoner via de feedbacklink iets wat nog niet in orde was, dan bleef dat antwoord in de ingevulde vragenlijst staan en verscheen het niet op de opleverlijst van het dossier. De vragenlijst is aangepast, zodat elk gemeld punt voortaan automatisch bij de projectleider terechtkomt om te beoordelen. Bestaande feedbacklinks en verstuurde bewonersbrieven blijven gewoon werken. De melding die eerder was blijven liggen, is alsnog op het betreffende dossier gezet.');

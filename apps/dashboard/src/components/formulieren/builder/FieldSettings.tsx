@@ -906,6 +906,22 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
       {/* Sub-fields editor for repeatable */}
       {isRepeatable && (
         <div style={{ marginBottom: 16 }}>
+          {/*
+            Antwoorden uit een herhalende sectie blijven alleen in de inzending staan; pas het
+            veldtype "Aandachtspunt(en)" wordt na indienen op de opleverlijst van het dossier gezet.
+            Aan het formulier zelf is dat verschil niet te zien, waardoor gemelde bewonerspunten
+            twee keer onopgemerkt zijn blijven liggen. Vandaar de hint bij de bron.
+          */}
+          <div style={{
+            marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+            background: 'var(--surface-2, #f9fafb)', border: '1px solid var(--border)',
+            fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
+          }}>
+            Verzamel je hier punten die daarna opgepakt moeten worden? Gebruik dan het veldtype{' '}
+            <strong style={{ color: 'var(--text)' }}>Aandachtspunt(en)</strong>. Antwoorden uit een
+            herhalende sectie blijven alleen in de inzending staan en komen niet op de opleverlijst
+            van het dossier terecht.
+          </div>
           <SubFieldsEditor
             subvelden={field.children ?? []}
             onChange={children => update({ children })}
