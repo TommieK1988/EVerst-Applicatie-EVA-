@@ -11,6 +11,7 @@
     "build": "turbo run build --filter=eva",
     "lint": "turbo run lint --filter=eva",
     "type-check": "turbo run type-check --filter=eva",
+    "test": "turbo run test --filter=eva",
     "dev:eva": "turbo run dev --filter=eva"
   },
   "devDependencies": {

@@ -58,6 +58,11 @@ jobs:
         # bewaakt de groei; deze stap vangt nieuwe fouten.
         run: npm run lint
 
+      - name: Tests
+        # Dekt de rekenkern: berekenCalculatieregel, de BTW-groepering en de formatters.
+        # Bewezen dat hij vangt: een `+ 0.01` in calculations.ts maakt deze stap rood.
+        run: npm test
+
       - name: Technische schuld
         # Faalt zodra as any-casts, ongegate service-role-actions of te grote bestanden
         # toenemen ten opzichte van scripts/schuld-budget.json.
