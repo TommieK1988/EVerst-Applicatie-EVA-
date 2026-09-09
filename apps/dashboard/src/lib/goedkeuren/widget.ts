@@ -24,6 +24,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 import { INKOOP_STATUS_WORKFLOW_LOOPT } from '@/lib/bouw7/inkoop-status'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
+import { dossierSegment, offerteHref } from '@/lib/dossiers/href'
 import { periodeBereik } from '@/lib/uren/types'
 
 export type GoedkeurenSoort = 'inkoopfactuur' | 'offerte' | 'werkbegroting'
@@ -90,15 +91,6 @@ const LEEG: GoedkeurenData = {
 /** Hoe ver terug het "afgehandeld voor jou"-blok kijkt. */
 const AFGEHANDELD_DAGEN = 14
 
-/** Route-segment van een dossier — er bestaat geen /dossiers/[id]. */
-function sectie(hoofdstatus: string | null, servicedeskSubstatus: string | null): string | null {
-  if (servicedeskSubstatus) return 'servicedesk'
-  if (hoofdstatus === 'aanvraag') return 'aanvragen'
-  if (hoofdstatus === 'offerte') return 'offertes'
-  if (hoofdstatus === 'opdracht') return 'opdrachten'
-  return null
-}
-
 export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return LEEG
@@ -157,6 +149,40 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
     deadline?: string | null
   } | null
 
+  // Welke van deze offertes bestaan nog? Een verwijderde offerte laat zijn goedkeurverzoek
+  // achter -- `goedkeuringen.object_id` is polymorf en heeft dus geen referentiesleutel die hem
+  // opruimt. Zo'n wees bleef in deze lijst staan als werk dat op jou wacht, en klikte je erop dan
+  // kwam je op een 404. De migratie 20260909d trekt ze voortaan in; deze controle is de tweede
+  // grendel, voor rijen die langs een ander pad alsnog los raken.
+  type GoedkeuringRij = {
+    id: string; object_type: string; object_id: string; dossier_id: string | null
+    aangevraagd_op?: string; status?: string; beoordeeld_op?: string | null
+    beoordelaar?: { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null } | null
+    dossiers: DossierRef
+  }
+
+  const alleRijen = [
+    ...((openRes.data ?? []) as GoedkeuringRij[]),
+    ...((afgehandeldRes.data ?? []) as GoedkeuringRij[]),
+  ]
+  const offerteIds = [...new Set(alleRijen.filter(g => g.object_type === 'offerte').map(g => g.object_id))]
+  const bestaandeOffertes = new Set<string>()
+  if (offerteIds.length > 0) {
+    const { data } = await supabase.from('quotes').select('id').in('id', offerteIds)
+    for (const q of (data ?? []) as { id: string }[]) bestaandeOffertes.add(q.id)
+  }
+  const bestaatNog = (g: { object_type: string; object_id: string }) =>
+    g.object_type !== 'offerte' || bestaandeOffertes.has(g.object_id)
+
+  /** Wat `offerteHref` nodig heeft om de Calculatie-tab van het juiste dossier te vinden. */
+  const dossierRef = (g: GoedkeuringRij) => g.dossier_id
+    ? {
+        id: g.dossier_id,
+        hoofdstatus: g.dossiers?.hoofdstatus ?? null,
+        servicedeskSubstatus: g.dossiers?.servicedesk_substatus ?? null,
+      }
+    : null
+
   const inkoopRijen = (inkoopRes.data ?? []) as {
     id: string; bedrag_incl: number | null; vervaldatum: string | null
   }[]
@@ -168,13 +194,11 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
 
   const ligtBijJou: GoedkeurenItem[] = []
 
-  for (const g of (openRes.data ?? []) as {
-    id: string; object_type: string; object_id: string; dossier_id: string | null
-    aangevraagd_op: string; dossiers: DossierRef
-  }[]) {
+  for (const g of (openRes.data ?? []) as GoedkeuringRij[]) {
+    if (!bestaatNog(g)) continue
     const d = g.dossiers
     const isWb = g.object_type === 'werkbegroting'
-    const seg = d ? sectie(d.hoofdstatus, d.servicedesk_substatus) : null
+    const seg = d ? dossierSegment(d.hoofdstatus, d.servicedesk_substatus) : null
     ligtBijJou.push({
       id: g.id,
       soort: isWb ? 'werkbegroting' : 'offerte',
@@ -182,8 +206,8 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
       subtitel: isWb ? 'Werkbegroting' : 'Offerte',
       href: isWb
         ? (g.dossier_id && seg ? `/${seg}/${g.dossier_id}/werkbegroting` : null)
-        : `/everts-calc/quotes/${g.object_id}/preview`,
-      datum: g.aangevraagd_op,
+        : offerteHref(g.object_id, dossierRef(g)),
+      datum: g.aangevraagd_op ?? null,
       deadline: d?.deadline ?? null,
     })
   }
@@ -200,15 +224,12 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
     return (a.datum ?? '') < (b.datum ?? '') ? -1 : 1
   })
 
-  const afgehandeld: GoedkeurenItem[] = ((afgehandeldRes.data ?? []) as {
-    id: string; object_type: string; object_id: string; dossier_id: string | null
-    status: string; beoordeeld_op: string | null
-    beoordelaar: { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null } | null
-    dossiers: DossierRef
-  }[]).map(g => {
+  const afgehandeld: GoedkeurenItem[] = ((afgehandeldRes.data ?? []) as GoedkeuringRij[])
+    .filter(bestaatNog)
+    .map(g => {
     const d = g.dossiers
     const isWb = g.object_type === 'werkbegroting'
-    const seg = d ? sectie(d.hoofdstatus, d.servicedesk_substatus) : null
+    const seg = d ? dossierSegment(d.hoofdstatus, d.servicedesk_substatus) : null
     const door = g.beoordelaar
       ? [g.beoordelaar.voornaam, g.beoordelaar.tussenvoegsel, g.beoordelaar.achternaam].filter(Boolean).join(' ')
       : null
@@ -220,8 +241,8 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
       subtitel: `${isWb ? 'Werkbegroting' : 'Offerte'} ${akkoord ? 'goedgekeurd' : 'teruggestuurd'}${door ? ` door ${door}` : ''}`,
       href: isWb
         ? (g.dossier_id && seg ? `/${seg}/${g.dossier_id}/werkbegroting` : null)
-        : `/everts-calc/quotes/${g.object_id}/preview`,
-      datum: g.beoordeeld_op,
+        : offerteHref(g.object_id, dossierRef(g)),
+      datum: g.beoordeeld_op ?? null,
       akkoord,
     }
   })

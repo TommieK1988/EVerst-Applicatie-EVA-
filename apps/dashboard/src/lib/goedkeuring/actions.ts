@@ -6,6 +6,7 @@ import { bepaalBeoordeelContext } from './autorisatie'
 import { bepaalBeoordelingsRoute, haalBeoordelaar, magBeoordelaarZijn } from './beoordelaars'
 import { maakBeoordeelTaak, sluitBeoordeelTaken, type BeoordeelTaakResultaat } from './taken'
 import { berekenWerkbegrotingStatus } from './werkbegroting-status'
+import { offerteHref } from '@/lib/dossiers/href'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import {
   AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL, naarRegelSnapshot,
@@ -296,17 +297,29 @@ async function notificeerBeoordelaar(opts: {
   const db = admin()
 
   let dossierTitel: string | null = null
+  let hoofdstatus: string | null = null
+  let servicedeskSubstatus: string | null = null
   if (opts.dossierId) {
-    const { data: dossier } = await db.from('dossiers').select('titel, dossiernummer').eq('id', opts.dossierId).maybeSingle()
+    const { data: dossier } = await db
+      .from('dossiers')
+      .select('titel, dossiernummer, hoofdstatus, servicedesk_substatus')
+      .eq('id', opts.dossierId)
+      .maybeSingle()
     dossierTitel = dossier ? [dossier.dossiernummer, dossier.titel].filter(Boolean).join(' — ') : null
+    hoofdstatus = dossier?.hoofdstatus ?? null
+    servicedeskSubstatus = dossier?.servicedesk_substatus ?? null
   }
 
   const isWb = opts.objectType === 'werkbegroting'
   const onderwerp = isWb ? 'de werkbegroting' : 'de offerte'
-  // De beoordelaar landt op het scherm waar de accordeerknop staat.
+  // De beoordelaar landt op het scherm waar de accordeerknop staat: de Calculatie-tab van het
+  // dossier, die de offerte inline opent. Niet meer op de losse preview onder /everts-calc --
+  // die geeft een 404 zodra de offerte er niet meer is.
   const url = isWb
     ? (opts.dossierId ? `/opdrachten/${opts.dossierId}/werkbegroting` : null)
-    : `/everts-calc/quotes/${opts.objectId}/preview`
+    : offerteHref(opts.objectId, opts.dossierId
+        ? { id: opts.dossierId, hoofdstatus, servicedeskSubstatus }
+        : null)
 
   await maakNotificatie({
     user_id:      beoordelaar.authUserId,
