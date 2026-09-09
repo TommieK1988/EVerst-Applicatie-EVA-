@@ -22,10 +22,31 @@
  * verlopen, de auth-server is alleen even weg — iedereen uitloggen maakt de
  * storing erger dan hij is, en na afloop staat half het bedrijf onnodig
  * opnieuw op het inlogscherm.
+ *
+ * Sinds 9 september 2026 belt de middleware de auth-server niet meer bij elke
+ * request. `getClaims()` controleert de handtekening van het sessietoken lokaal
+ * tegen de publieke sleutel van het project (ES256, opgehaald van
+ * `/.well-known/jwks.json` en tien minuten gedeeld gecachet over alle clients in
+ * hetzelfde proces). Dat is hetzelfde bewijs dat de auth-server zelf zou
+ * leveren, alleen zonder de reis erheen.
+ *
+ * De aanleiding: die ochtend werd de auth-server trager en kregen zeven
+ * collega's samen 429 keer de storingspagina. EVA vroeg toen bij élke request
+ * opnieuw wie je was — ook bij de tien à twintig prefetches die de zijbalk
+ * vooruit inlaadt zodra iemand het startscherm opent. Dat maakte ons niet
+ * alleen slachtoffer van de traagheid maar ook veroorzaker: ~2000 auth-calls
+ * per uur voor een handvol gebruikers.
+ *
+ * Wat we hiermee opgeven: `getUser()` vroeg de server ook of de sessie nóg
+ * geldig is, en ving zo een ingetrokken sessie of een verwijderde gebruiker
+ * meteen af. Lokale verificatie merkt dat pas als het token verloopt. Dat is
+ * hier te verdedigen omdat de middleware alleen routeert — ingelogd of niet.
+ * Elke pagina die daadwerkelijk gegevens toont gaat door `getCurrentMedewerker()`
+ * heen, en die vraagt het de auth-server nog steeds.
  */
 
 import { NextResponse } from 'next/server'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /** Maximale duur van één losse fetch naar de auth-server. */
 const AUTH_FETCH_TIMEOUT_MS = 8000
@@ -58,8 +79,15 @@ const AUTH_DEADLINE_MS = 12000
  */
 function isNetwerkstoring(fout: unknown): boolean {
   if (!fout || typeof fout !== 'object') return false
-  const e = fout as { name?: string; status?: number }
+  const e = fout as { name?: string; status?: number; message?: string }
   if (e.name === 'AuthRetryableFetchError') return true
+  // Onze eigen begrenzing sloeg toe, of de verbinding kwam niet tot stand. Dit
+  // dekt ook het ophalen van de publieke sleutel: lukt dát niet, dan kunnen we
+  // geen enkel token verifiëren, en is de storingspagina het juiste antwoord.
+  // Iedereen naar /login sturen zou een halve dag aan sessies weggooien om een
+  // hapering van tien seconden.
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') return true
+  if (e.name === 'TypeError' && /fetch/i.test(e.message ?? '')) return true
   // 0 = verbinding brak af; 5xx = gateway/Cloudflare (502, 503, 504, 520-524, 530).
   return typeof e.status === 'number' && (e.status === 0 || e.status >= 500)
 }
@@ -76,13 +104,22 @@ export const begrensdeFetch: typeof fetch = (input, init) => {
 }
 
 export type AuthUitkomst =
-  /** Auth-server antwoordde: ingelogd (`user`) of niet (`null`). */
-  | { soort: 'ok'; user: User | null }
-  /** Auth-server gaf binnen de deadline geen bruikbaar antwoord. */
+  /** Sessie beoordeeld: er is een geldig token (`true`) of niet (`false`). */
+  | { soort: 'ok'; ingelogd: boolean }
+  /** Geen bruikbaar oordeel binnen de deadline. */
   | { soort: 'onbereikbaar' }
 
-/** `getUser()` met een deadline, zodat de middleware nooit blijft hangen. */
-export async function haalGebruikerBegrensd(supabase: SupabaseClient): Promise<AuthUitkomst> {
+/**
+ * Sessiecontrole met een deadline, zodat de middleware nooit blijft hangen.
+ *
+ * `getClaims()` leest het token uit de cookies, ververst het als het verlopen
+ * is, en controleert daarna de handtekening lokaal. Alleen dat verversen kost
+ * nog een netwerkcall — grofweg eens per uur per sessie in plaats van bij elke
+ * request. Draait het project onverhoopt nog op een symmetrische sleutel, dan
+ * valt supabase-js vanzelf terug op `getUser()` over het netwerk: dan is dit
+ * precies zo traag als voorheen, maar niet stuk.
+ */
+export async function controleerSessieBegrensd(supabase: SupabaseClient): Promise<AuthUitkomst> {
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const deadline = new Promise<AuthUitkomst>((resolve) => {
@@ -90,16 +127,21 @@ export async function haalGebruikerBegrensd(supabase: SupabaseClient): Promise<A
   })
 
   const call = supabase.auth
-    .getUser()
-    .then(({ data, error }): AuthUitkomst =>
-      error && isNetwerkstoring(error)
-        ? { soort: 'onbereikbaar' }
-        : { soort: 'ok', user: data.user ?? null },
-    )
+    .getClaims()
+    .then(({ data, error }): AuthUitkomst => {
+      if (error) {
+        // Een échte auth-fout (verlopen of ongeldig token) telt als "niet
+        // ingelogd" — precies wat de middleware hiervoor ook deed.
+        return isNetwerkstoring(error)
+          ? { soort: 'onbereikbaar' }
+          : { soort: 'ok', ingelogd: false }
+      }
+      // Zonder sessie geeft getClaims() `data: null` zónder fout. Dat is een
+      // uitgelogde bezoeker en geen storing — die hoort naar /login.
+      return { soort: 'ok', ingelogd: !!data?.claims?.sub }
+    })
     .catch((fout): AuthUitkomst =>
-      // Een échte auth-fout (verlopen of ongeldig token) telt als "niet
-      // ingelogd" — precies wat de middleware hiervoor ook deed.
-      isNetwerkstoring(fout) ? { soort: 'onbereikbaar' } : { soort: 'ok', user: null },
+      isNetwerkstoring(fout) ? { soort: 'onbereikbaar' } : { soort: 'ok', ingelogd: false },
     )
 
   try {

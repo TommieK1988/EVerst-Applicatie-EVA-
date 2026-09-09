@@ -9,7 +9,7 @@ import {
 } from '@/lib/sessie'
 import { nextParameter, veiligNextPad, veiligPortaalPad } from '@/lib/auth/next-pad'
 import {
-  begrensdeFetch, haalGebruikerBegrensd, authOnbereikbaarResponse,
+  begrensdeFetch, controleerSessieBegrensd, authOnbereikbaarResponse,
 } from '@/lib/auth/auth-bereikbaarheid'
 
 export async function middleware(request: NextRequest) {
@@ -74,12 +74,18 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = pathname.startsWith('/auth/')
   const isApiRoute = pathname.startsWith('/api/')
 
-  // Auth-controle met een deadline. Is de auth-server onbereikbaar, dan tonen we
-  // meteen een storingspagina in plaats van te blijven hangen tot Vercel de
-  // request na 25 seconden afkapt. Zie lib/auth/auth-bereikbaarheid.ts.
-  const uitkomst = await haalGebruikerBegrensd(supabase)
+  // Sessiecontrole met een deadline. De handtekening van het token wordt lokaal
+  // geverifieerd, dus dit kost normaal geen netwerkcall; alleen een verlopen
+  // token wordt nog bij de auth-server ververst. Lukt zelfs dat niet, dan tonen
+  // we een storingspagina in plaats van te blijven hangen tot Vercel de request
+  // na 25 seconden afkapt. Zie lib/auth/auth-bereikbaarheid.ts.
+  //
+  // `ingelogd` zegt alleen dát er een geldige sessie is, niet van wie: verderop
+  // wordt de identiteit nergens gebruikt, en elke pagina bepaalt hem zelf
+  // opnieuw via getCurrentMedewerker().
+  const uitkomst = await controleerSessieBegrensd(supabase)
   if (uitkomst.soort === 'onbereikbaar') return authOnbereikbaarResponse(isApiRoute)
-  const user = uitkomst.user
+  const ingelogd = uitkomst.ingelogd
   // Cron-endpoints beveiligen zichzelf met CRON_SECRET (Bearer) en hebben géén sessiecookie —
   // de cookie-auth mag ze daarom niet naar /login redirecten (anders draait de Vercel-cron nooit).
   const isCronRoute = pathname.startsWith('/api/cron/')
@@ -107,12 +113,12 @@ export async function middleware(request: NextRequest) {
   // Niet ingelogd → doorsturen naar login (behalve login-pagina, auth-callbacks, cron- en portaalroutes).
   // Een bezoeker van het klantportaal hoort op het klant-inlogscherm te landen,
   // niet op dat van EVA: daar kan hij toch niet inloggen.
-  if (!user && !isLoginPage && !isAuthRoute && !isCronRoute && !isPubliekPortaal && !isPortaalAuth) {
+  if (!ingelogd && !isLoginPage && !isAuthRoute && !isCronRoute && !isPubliekPortaal && !isPortaalAuth) {
     const naar = isPortaal ? '/portaal/login' : '/login'
     return NextResponse.redirect(new URL(`${naar}${bestemming}`, request.url))
   }
 
-  if (user) {
+  if (ingelogd) {
     // Eén keer per dag uitloggen (server-side handhaving). De vervalcookie wordt
     // bij de eerste request van een sessie gezet en daarna alléén gelézen — verder
     // gebruik schuift het moment dus niet op.

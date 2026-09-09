@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@everts/database/server'
 import type { ModuleRechten, RechtenModule, RechtenSet } from '@everts/database/platform-types'
@@ -20,8 +21,22 @@ export type CurrentMedewerker = {
   rechten_override: RechtenSet
 }
 
-/** Haal het medewerker-record van de ingelogde gebruiker op (of null). */
-export async function getCurrentMedewerker(): Promise<CurrentMedewerker | null> {
+/**
+ * Haal het medewerker-record van de ingelogde gebruiker op (of null).
+ *
+ * Gecachet voor de duur van één request. Een gemiddelde pagina vraagt dit
+ * meerdere keren: eerst indirect via `vereisModuleToegang`, daarna nog eens
+ * rechtstreeks, en de layout eromheen ook. Elke keer was dat een netwerkcall
+ * naar de auth-server plus twee database-reads, met steeds hetzelfde antwoord.
+ * Op 9 september 2026 liep de auth-server daarop vast; zie
+ * lib/auth/auth-bereikbaarheid.ts voor het hele verhaal.
+ *
+ * Bewust nog steeds `getUser()` en niet de lokale tokencontrole die de
+ * middleware gebruikt: hier hangt gegevenstoegang aan, en dan willen we van de
+ * auth-server horen dat de sessie op dit moment nog geldig is — niet alleen dat
+ * het token ooit goed ondertekend is.
+ */
+export const getCurrentMedewerker = cache(async (): Promise<CurrentMedewerker | null> => {
   // Sessie-client alleen voor de geverifieerde gebruiker (auth-API, niet RLS-afhankelijk).
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -40,16 +55,20 @@ export async function getCurrentMedewerker(): Promise<CurrentMedewerker | null> 
     .maybeSingle()
 
   return (data as CurrentMedewerker | null) ?? null
-}
+})
 
 /**
  * Effectieve rechten = afdeling-standaard (`standaard_rechten`, gematcht op naam)
  * met de gebruiker-specifieke `rechten_override` eroverheen (override wint).
  * Geef `medewerker` mee om een dubbele fetch te voorkomen.
+ *
+ * Ook gecachet per request. Dat werkt hier omdat `getCurrentMedewerker()` binnen
+ * één request altijd hetzélfde object teruggeeft: aanroepen die dat object
+ * doorgeven vallen daardoor op dezelfde cache-sleutel als elkaar.
  */
-export async function getEffectieveRechten(
+export const getEffectieveRechten = cache(async (
   medewerker?: CurrentMedewerker | null,
-): Promise<RechtenSet> {
+): Promise<RechtenSet> => {
   const mw = medewerker !== undefined ? medewerker : await getCurrentMedewerker()
   if (!mw) return {}
 
@@ -71,7 +90,7 @@ export async function getEffectieveRechten(
     if (v !== undefined) (effectief as Record<string, unknown>)[k] = v
   }
   return effectief
-}
+})
 
 /** Server-guard: redirect naar de startpagina als de gebruiker onvoldoende recht heeft. */
 export async function vereisModuleToegang(
