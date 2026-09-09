@@ -11,6 +11,17 @@ import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 import { getOngelezenNotificaties } from '@/app/(platform)/notificaties/actions'
 import { telOngelezenUpdates, getOngelezenUpdates } from '@/app/(platform)/wat-is-nieuw/actions'
 
+/* Niets onder /(platform) is statisch: deze layout leest de sessiecookie en vrijwel elke
+   pagina eronder haalt live data uit Supabase. Zonder deze regel probeert `next build` die
+   pagina's tóch te prerenderen. Pagina's die met de cookie-client beginnen vallen meteen
+   terug op dynamisch, maar pagina's die alleen `createAdminClient()` gebruiken (CAO,
+   dossier-categorieen, dossier-toggles, formulieren-pdf, functies-afdelingen, de twee
+   planningsschermen) doen dan een echte database-call tijdens de build. Duurt die langer dan
+   60 seconden — een hikkende Supabase, of gewoon een zware query zoals de offerte- en
+   planningsoverzichten — dan kapt Next af en faalt de deployment. Zo sneuvelden op
+   8 september 2026 drie deployments op rij. Een build hoort niet van de database af te hangen. */
+export const dynamic = 'force-dynamic'
+
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

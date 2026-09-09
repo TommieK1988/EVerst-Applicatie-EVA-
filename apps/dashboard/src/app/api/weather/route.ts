@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { fetchMetDeadline } from '@/lib/net/deadline'
 
-export const revalidate = 1800
+/* Niet prerenderen tijdens de build: deze route zoekt eerst de bedrijfslocatie op in
+   Supabase, en een build hoort niet op de database te wachten (zie (platform)/layout.tsx).
+   Het dure deel — de Open-Meteo-calls — blijft gecachet via `next: { revalidate }`. */
+export const dynamic = 'force-dynamic'
 
 // WMO weather interpretation codes → emoji
 function wmoEmoji(code: number): string {
@@ -79,7 +82,7 @@ export async function GET() {
     url.searchParams.set('longitude', String(lon))
     url.searchParams.set('current', 'temperature_2m,weathercode,windspeed_10m,apparent_temperature,winddirection_10m')
     url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,weathercode')
-    // 18 uur als buffer: de route wordt 30 min gecachet en de widget filtert client-side op >= nu
+    // 18 uur als buffer: de Open-Meteo-respons wordt 30 min gecachet en de widget filtert client-side op >= nu
     url.searchParams.set('hourly', 'temperature_2m,weathercode')
     url.searchParams.set('forecast_hours', '18')
     url.searchParams.set('forecast_days', '7')
