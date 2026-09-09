@@ -52,7 +52,7 @@ export async function vraagInloglink(email: string): Promise<InlogResultaat> {
     }
 
     const voornaam = await haalVoornaam(gebruiker)
-    const mail = bouwInloglinkMail(voornaam)
+    const mail = await bouwInloglinkMail(voornaam)
 
     await verstuurPortaalMailDirect({
       email: gebruiker.email,

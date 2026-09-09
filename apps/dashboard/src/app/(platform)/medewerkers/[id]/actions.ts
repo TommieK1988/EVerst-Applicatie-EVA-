@@ -594,7 +594,7 @@ export async function verstuurUitnodiging(
     }
   }
 
-  const mail = bouwUitnodigingsMail({
+  const mail = await bouwUitnodigingsMail({
     voornaam: med.voornaam ?? null,
     gebruikerType,
     actieLink,

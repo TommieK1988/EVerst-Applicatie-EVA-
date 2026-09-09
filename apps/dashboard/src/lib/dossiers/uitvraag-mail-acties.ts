@@ -19,38 +19,9 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from './guards'
-import { vulMailTekst, netteRegel, naarPlatteTekst } from '@/lib/mail/sjabloontekst'
+import { vulMailTekst, netteRegel } from '@/lib/mail/sjabloontekst'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { bouwUitvraagMailHtml, type UitvraagMailRegel } from '@/lib/mail/uitvraag-mail'
-
-/** Documentsoorten waaronder de mailteksten beheerd worden (Instellingen → Documentsjablonen). */
-const SOORT_UITVRAAG = 'uitvraag'
-const SOORT_RAPPEL   = 'uitvraag_rappel'
-
-/**
- * Terugvalteksten, zodat de functie op dag één werkt zonder dat er eerst een sjabloon is aangemaakt.
- * Bewust in de wij-vorm en met het woord "prijsopgave": een onderaannemer mag een uitvraag nooit als
- * een verstrekte opdracht lezen.
- */
-const STANDAARD_TEKST: Record<'uitvraag' | 'rappel', { onderwerp: string; tekst: string }> = {
-  uitvraag: {
-    onderwerp: 'Prijsopgave gevraagd — {dossier.nummer} {dossier.titel}',
-    tekst:
-      'Goedemiddag,\n\n' +
-      'Voor onderstaand project vragen wij u een prijsopgave voor {discipline}.\n\n' +
-      'Wilt u ons laten weten of u hierop kunt offreren? Aan deze aanvraag kunnen geen rechten worden ' +
-      'ontleend; het betreft nog geen opdracht.\n\n' +
-      'Met vriendelijke groet,',
-  },
-  rappel: {
-    onderwerp: 'Herinnering: openstaande prijsopgave(n)',
-    tekst:
-      'Goedemiddag,\n\n' +
-      'Eerder vroegen wij u om een prijsopgave voor onderstaand werk. Wij hebben die nog niet ontvangen.\n\n' +
-      'Kunt u laten weten wanneer wij uw offerte kunnen verwachten, of dat u ervan afziet? Dan houden ' +
-      'wij daar rekening mee in onze planning.\n\n' +
-      'Met vriendelijke groet,',
-  },
-}
 
 /** dd-mm-jjjj uit een ISO-datum. */
 function nlDatum(iso?: string | null): string {
@@ -74,29 +45,6 @@ function werkadresVan(d: {
     [d.werkadres_straat, d.werkadres_huisnummer].filter(Boolean).join(' '),
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
-}
-
-/**
- * Onderwerp en tekst uit het actieve documentsjabloon, met terugval op de constante hierboven.
- * Bewust NIET filteren op een aanwezige Word-template zoals de inkoopsjablonen doen: aan een uitvraag
- * hangt geen bijlage, dus een mail-only sjabloon is hier juist het normale geval.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function sjabloonTekst(db: any, soort: 'uitvraag' | 'rappel'): Promise<{ onderwerp: string; tekst: string }> {
-  const { data } = await db
-    .from('document_sjablonen')
-    .select('mail_onderwerp, mail_body_html')
-    .eq('documentsoort', soort === 'rappel' ? SOORT_RAPPEL : SOORT_UITVRAAG)
-    .eq('actief', true)
-    .order('volgorde', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  const terugval = STANDAARD_TEKST[soort]
-  return {
-    onderwerp: (data?.mail_onderwerp ?? '').trim() || terugval.onderwerp,
-    tekst: naarPlatteTekst(data?.mail_body_html ?? '') || terugval.tekst,
-  }
 }
 
 /** Omleiding voor testen; leeg in productie. */
@@ -160,7 +108,7 @@ export async function getUitvraagMailConcept(uitvraagId: string): Promise<Uitvra
 
   // Al eerder gemaild → dit wordt een rappel, met de tekst en het adres van die vorige keer.
   const soort: 'uitvraag' | 'rappel' = uv.aangevraagd_op ? 'rappel' : 'uitvraag'
-  const bron = await sjabloonTekst(db, soort)
+  const bron = await getMailSjabloonTekst(soort === 'rappel' ? 'uitvraag_rappel' : 'uitvraag')
 
   const vars: Record<string, string> = {
     'partij.naam': uv.partij_naam ?? '',

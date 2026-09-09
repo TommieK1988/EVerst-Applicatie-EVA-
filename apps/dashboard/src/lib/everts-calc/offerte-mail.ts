@@ -1,38 +1,36 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
+import { getMailSjabloonTekstOfNiets } from '@/lib/mail/sjabloon-bron'
+import { MAIL_SOORT_INFO } from '@/lib/mail/sjablonen'
 import type { RenderContext } from './quote-renderer'
 
 /**
- * Beheer + rendering van het standaard e-mailsjabloon waarmee een goedgekeurde
- * offerte naar de opdrachtgever wordt gemaild. Opgeslagen als singleton in
- * bedrijfsinstellingen.overige (offerte_mail_onderwerp / offerte_mail_tekst),
- * net als de goedkeuring-drempel.
+ * Rendering van het e-mailsjabloon waarmee een goedgekeurde offerte naar de opdrachtgever wordt
+ * gemaild. De tekst zelf wordt beheerd in Instellingen -> E-mailsjablonen en staat in de tabel
+ * `mail_sjablonen` (soort 'offerte'); dit bestand is alleen nog de offertekant ervan.
+ *
+ * Stond eerder als singleton in bedrijfsinstellingen.overige. Die twee sleutels blijven staan als
+ * terugval voor het geval de migratie niet gedraaid is, maar er wordt niet meer naartoe geschreven.
  */
 
 export interface OfferteMailSjabloon {
   onderwerp: string
-  tekst: string // HTML
+  tekst: string
 }
 
-export const STANDAARD_MAIL_SJABLOON: OfferteMailSjabloon = {
-  onderwerp: 'Offerte {offerte.nummer} — {offerte.titel}',
-  tekst: [
-    'Geachte {dossier.contactpersoon},',
-    '',
-    'Hierbij ontvangt u onze offerte {offerte.nummer} voor {offerte.titel}.',
-    'De offerte is geldig tot {offerte.geldig_tot}. Onze algemene voorwaarden zijn als bijlage toegevoegd.',
-    '',
-    'Heeft u vragen? Neem gerust contact met ons op.',
-    '',
-    'Met vriendelijke groet,',
-    '{bedrijf.naam}',
-  ].join('\n'),
-}
+export const STANDAARD_MAIL_SJABLOON: OfferteMailSjabloon = MAIL_SOORT_INFO.offerte.standaard
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
 export async function getOfferteMailSjabloon(): Promise<OfferteMailSjabloon> {
+  const uitBeheer = await getMailSjabloonTekstOfNiets('offerte')
+  if (uitBeheer) return uitBeheer
+
+  // Terugval voor een omgeving waar de mailsjabloon-migratie nog niet gedraaid is: daar staat de
+  // aangepaste tekst nog in bedrijfsinstellingen.overige. Alleen kijken wanneer er écht geen beheerd
+  // sjabloon is — niet wanneer de beheerde tekst toevallig gelijk is aan de standaard, want dan zou
+  // een teruggezette tekst stilletijd door de oude worden overruled.
   const { data } = await db().from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
   const overige = (data?.overige as Record<string, unknown> | null) ?? {}
   const onderwerp = typeof overige.offerte_mail_onderwerp === 'string' && overige.offerte_mail_onderwerp
@@ -40,14 +38,6 @@ export async function getOfferteMailSjabloon(): Promise<OfferteMailSjabloon> {
   const tekst = typeof overige.offerte_mail_tekst === 'string' && overige.offerte_mail_tekst
     ? (overige.offerte_mail_tekst as string) : STANDAARD_MAIL_SJABLOON.tekst
   return { onderwerp, tekst }
-}
-
-export async function setOfferteMailSjabloon(sjabloon: OfferteMailSjabloon): Promise<void> {
-  const { data } = await db().from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
-  const overige = (data?.overige as Record<string, unknown> | null) ?? {}
-  await db().from('bedrijfsinstellingen').update({
-    overige: { ...overige, offerte_mail_onderwerp: sjabloon.onderwerp, offerte_mail_tekst: sjabloon.tekst },
-  }).eq('id', 1)
 }
 
 /**

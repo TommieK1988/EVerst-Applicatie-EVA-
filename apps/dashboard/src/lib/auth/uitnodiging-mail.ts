@@ -1,5 +1,7 @@
 import 'server-only'
 import type { GebruikerType } from '@everts/database/platform-types'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
+import { mailTekstNaarHtml, mailOnderwerp } from '@/lib/mail/opmaak'
 
 /**
  * uitnodiging-mail.ts
@@ -74,57 +76,39 @@ export type UitnodigingMailInput = {
 }
 
 /**
- * Bouwt onderwerp + HTML van de uitnodiging. De inhoud verschilt per
- * gebruikerstype: platformgebruikers loggen op de desktop met Microsoft in,
- * app-gebruikers hebben juist een wachtwoord nodig voor de mobiele app.
+ * Bouwt onderwerp + HTML van de uitnodiging. De tekst komt uit Instellingen -> E-mailsjablonen;
+ * er zijn twee sjablonen omdat de twee gebruikerstypen langs verschillende wegen binnenkomen.
+ * De knop wordt hier gebouwd: de activatielink van een app-gebruiker is eenmalig en persoonlijk en
+ * hoort niet in een beheerd tekstveld thuis.
  */
-export function bouwUitnodigingsMail(input: UitnodigingMailInput): { onderwerp: string; bodyHtml: string } {
+export async function bouwUitnodigingsMail(
+  input: UitnodigingMailInput,
+): Promise<{ onderwerp: string; bodyHtml: string }> {
   const { voornaam, gebruikerType, actieLink, afzenderNaam, herhaling } = input
-  const aanhef = voornaam ? `Hallo ${esc(voornaam)},` : 'Hallo,'
   const app = appBaseUrl()
-  const groet = afzenderNaam
-    ? `<p style="font-size:13px;line-height:1.6;margin-top:18px">Met vriendelijke groet,<br>${esc(afzenderNaam)}</p>`
-    : ''
-
   const platform = gebruikerType === 'platform_gebruiker'
+  const titel = herhaling ? 'Je toegang tot EVA' : 'Welkom bij EVA'
 
-  const inhoud = platform
-    ? `
-  <p style="font-size:13px;line-height:1.6">${aanhef}</p>
-  <p style="font-size:13px;line-height:1.6">
-    Je hebt toegang gekregen tot <strong>EVA</strong>, het platform van Everts. Daarin vind je onder andere
-    de dossiers, planning, calculaties, offertes en je eigen acties — alles op één plek.
-  </p>
-  <p style="font-size:13px;line-height:1.6">
-    Inloggen doe je met je Microsoft-account, hetzelfde account als je mail. Je hoeft dus niets te activeren
-    en geen wachtwoord aan te maken: klik op de knop en kies <em>Inloggen met Microsoft</em>.
-  </p>
-  ${knop(app, 'Ga naar EVA')}
-  <p style="font-size:12.5px;line-height:1.6;color:#4a545b">
-    Op je telefoon werkt het net zo: open <a href="${esc(app)}/m" style="color:#009439;font-weight:600">${esc(app)}/m</a>
-    en log ook daar in met Microsoft. Zet die pagina via het deelmenu van je browser op je beginscherm,
-    dan opent EVA voortaan als een gewone app.
-  </p>`
-    : `
-  <p style="font-size:13px;line-height:1.6">${aanhef}</p>
-  <p style="font-size:13px;line-height:1.6">
-    Je hebt toegang gekregen tot de <strong>EVA-app</strong> van Everts. Daarin zie je je taken en werkbonnen,
-    en registreer je je uren, foto's en formulieren op locatie.
-  </p>
-  <p style="font-size:13px;line-height:1.6">
-    Kies eerst een wachtwoord. Daarna log je in met je e-mailadres en dat wachtwoord.
-  </p>
-  ${knop(actieLink ?? app, 'Wachtwoord instellen')}
-  <p style="font-size:12.5px;line-height:1.6;color:#4a545b">
-    Open de app daarna op je telefoon via <a href="${esc(app)}/m" style="color:#009439;font-weight:600">${esc(app)}/m</a>.
-    Zet hem via het deelmenu van je browser op je beginscherm, dan opent EVA voortaan als een gewone app.
-  </p>
-  <p style="font-size:12px;line-height:1.6;color:#8a938f">
-    De link is beperkte tijd geldig. Is hij verlopen, vraag dan een nieuwe uitnodiging aan.
-  </p>`
-
-  return {
-    onderwerp: herhaling ? 'Je toegang tot EVA — Everts' : 'Welkom bij EVA — Everts',
-    bodyHtml: wikkel(herhaling ? 'Je toegang tot EVA' : 'Welkom bij EVA', inhoud + groet),
+  const vars: Record<string, string> = {
+    aanhef: voornaam ? `Hallo ${voornaam},` : 'Hallo,',
+    voornaam: voornaam ?? '',
+    'eva.url': app,
+    'eva.mobiel_url': `${app}/m`,
+    titel,
+    'afzender.naam': afzenderNaam ?? '',
   }
+
+  const sjabloon = await getMailSjabloonTekst(
+    platform ? 'gebruiker_uitnodiging_platform' : 'gebruiker_uitnodiging_app',
+  )
+  const bodyHtml = mailTekstNaarHtml(sjabloon.tekst, {
+    vars,
+    blokken: {
+      knop: platform
+        ? knop(app, 'Ga naar EVA')
+        : knop(actieLink ?? app, 'Wachtwoord instellen'),
+    },
+  })
+
+  return { onderwerp: mailOnderwerp(sjabloon.onderwerp, vars), bodyHtml: wikkel(titel, bodyHtml) }
 }

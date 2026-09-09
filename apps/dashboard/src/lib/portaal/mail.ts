@@ -2,6 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { verstuurMailViaGedeeldePostbus } from '@/lib/o365/mail'
 import { appBaseUrl } from '@/lib/app-url'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
+import { mailTekstNaarHtml, mailOnderwerp } from '@/lib/mail/opmaak'
 import type { PortaalMailSoort } from '@everts/database/platform-types'
 
 /**
@@ -52,70 +54,60 @@ function wikkel(titel: string, inhoud: string): string {
  */
 export const LINK_PLAATSHOUDER = '{{PORTAAL_LINK}}'
 
-export function bouwInloglinkMail(voornaam: string | null): { onderwerp: string; bodyHtml: string } {
-  const aanhef = voornaam ? `Beste ${esc(voornaam)},` : 'Beste heer/mevrouw,'
+/**
+ * De drie portaalmails komen uit Instellingen -> E-mailsjablonen. De knop wordt hier gebouwd en als
+ * {knop}-blok in de tekst gezet: de link zelf is een plaatshouder die de cron vlak voor verzending
+ * vervangt, dus die mag nooit uit een beheerd tekstveld komen.
+ */
+async function portaalMail(
+  soort: 'portaal_uitnodiging' | 'portaal_inloglink' | 'portaal_bericht',
+  titel: string,
+  knopTekst: string,
+  vars: Record<string, string>,
+): Promise<{ onderwerp: string; bodyHtml: string }> {
+  const sjabloon = await getMailSjabloonTekst(soort)
+  const alle = { ...vars, 'portaal.url': `${appBaseUrl()}/portaal` }
   return {
-    onderwerp: 'Uw inloglink voor het klantportaal — Everts',
-    bodyHtml: wikkel('Inloggen op uw projectomgeving', `
-  <p style="font-size:13px;line-height:1.6">${aanhef}</p>
-  <p style="font-size:13px;line-height:1.6">
-    U kunt met onderstaande knop inloggen op uw projectomgeving. Daar vindt u de stand van zaken,
-    documenten en foto's van uw project, en kunt u ons rechtstreeks een bericht sturen.
-  </p>
-  ${knop(LINK_PLAATSHOUDER, 'Inloggen')}
-  <p style="font-size:12px;line-height:1.6;color:#8a938f">
-    De link is één uur geldig en werkt één keer. Is hij verlopen? Vraag op de inlogpagina gewoon een nieuwe aan.
-    Heeft u deze mail niet zelf aangevraagd, dan kunt u hem negeren.
-  </p>`),
+    onderwerp: mailOnderwerp(sjabloon.onderwerp, alle),
+    bodyHtml: wikkel(titel, mailTekstNaarHtml(sjabloon.tekst, {
+      vars: alle,
+      blokken: { knop: knop(LINK_PLAATSHOUDER, knopTekst) },
+    })),
   }
 }
 
-export function bouwUitnodigingMail(
+/** "Beste Jan," of, zonder bekende voornaam, de neutrale variant. */
+function portaalAanhef(voornaam: string | null): string {
+  return voornaam ? `Beste ${voornaam},` : 'Beste heer/mevrouw,'
+}
+
+export async function bouwInloglinkMail(voornaam: string | null): Promise<{ onderwerp: string; bodyHtml: string }> {
+  return portaalMail('portaal_inloglink', 'Inloggen op uw projectomgeving', 'Inloggen', {
+    aanhef: portaalAanhef(voornaam),
+    voornaam: voornaam ?? '',
+  })
+}
+
+export async function bouwUitnodigingMail(
   voornaam: string | null,
   afzenderNaam: string | null,
-): { onderwerp: string; bodyHtml: string } {
-  const aanhef = voornaam ? `Beste ${esc(voornaam)},` : 'Beste heer/mevrouw,'
-  const groet = afzenderNaam
-    ? `<p style="font-size:13px;line-height:1.6;margin-top:18px">Met vriendelijke groet,<br>${esc(afzenderNaam)}</p>`
-    : ''
-  return {
-    onderwerp: 'Uw projectomgeving bij Everts',
-    bodyHtml: wikkel('Welkom in uw projectomgeving', `
-  <p style="font-size:13px;line-height:1.6">${aanhef}</p>
-  <p style="font-size:13px;line-height:1.6">
-    Wij hebben een persoonlijke projectomgeving voor u klaargezet. Daarin volgt u de voortgang van uw
-    project, vindt u de documenten en foto's die wij met u delen, en kunt u ons rechtstreeks een bericht sturen.
-  </p>
-  <p style="font-size:13px;line-height:1.6">
-    U hoeft geen wachtwoord te kiezen: u vult uw e-mailadres in en krijgt een inloglink toegestuurd.
-  </p>
-  ${knop(LINK_PLAATSHOUDER, 'Naar uw projectomgeving')}
-  <p style="font-size:12px;line-height:1.6;color:#8a938f">
-    Bewaar deze mail niet als toegangsmiddel — de link is kort geldig. Ga voortaan naar
-    <a href="${esc(appBaseUrl())}/portaal" style="color:#009439;font-weight:600">${esc(appBaseUrl())}/portaal</a>
-    en vraag daar een nieuwe inloglink aan.
-  </p>${groet}`),
-  }
+): Promise<{ onderwerp: string; bodyHtml: string }> {
+  return portaalMail('portaal_uitnodiging', 'Welkom in uw projectomgeving', 'Naar uw projectomgeving', {
+    aanhef: portaalAanhef(voornaam),
+    voornaam: voornaam ?? '',
+    'afzender.naam': afzenderNaam ?? '',
+  })
 }
 
-export function bouwNieuwBerichtMail(
+export async function bouwNieuwBerichtMail(
   voornaam: string | null,
   projectTitel: string,
-): { onderwerp: string; bodyHtml: string } {
-  const aanhef = voornaam ? `Beste ${esc(voornaam)},` : 'Beste heer/mevrouw,'
-  return {
-    onderwerp: `Nieuw bericht over ${projectTitel} — Everts`,
-    bodyHtml: wikkel('Er staat een bericht voor u klaar', `
-  <p style="font-size:13px;line-height:1.6">${aanhef}</p>
-  <p style="font-size:13px;line-height:1.6">
-    Wij hebben u een bericht gestuurd over <strong>${esc(projectTitel)}</strong>. U leest en beantwoordt
-    het in uw projectomgeving.
-  </p>
-  ${knop(LINK_PLAATSHOUDER, 'Bericht lezen')}
-  <p style="font-size:12px;line-height:1.6;color:#8a938f">
-    Reageren op deze mail kan ook — dan komt uw antwoord bij ons op kantoor binnen in plaats van in het portaal.
-  </p>`),
-  }
+): Promise<{ onderwerp: string; bodyHtml: string }> {
+  return portaalMail('portaal_bericht', 'Er staat een bericht voor u klaar', 'Bericht lezen', {
+    aanhef: portaalAanhef(voornaam),
+    voornaam: voornaam ?? '',
+    'dossier.titel': projectTitel,
+  })
 }
 
 /**

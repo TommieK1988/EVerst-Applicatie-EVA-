@@ -7,6 +7,8 @@ import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { verstuurMailNamensMedewerker, type MailBijlage } from '@/lib/o365/mail'
 import { getOplevermomentRapport } from './oplevering'
 import { genereerOpleverRapportPdf, opleverRapportBestandsnaam } from './oplever-rapport-pdf'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
+import { mailTekstNaarHtml, mailOnderwerp } from '@/lib/mail/opmaak'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -68,6 +70,11 @@ function wikkel(titel: string, inhoud: string): string {
 </div>`
 }
 
+/** De groene knop die de sjablonen als {knop} plaatsen. */
+function knop(href: string, tekst: string): string {
+  return `<p style="margin:18px 0"><a href="${esc(href)}" style="background:#009439;color:#fff;text-decoration:none;border-radius:6px;padding:10px 18px;font-size:14px;font-weight:600;display:inline-block">${esc(tekst)}</a></p>`
+}
+
 /* ─────────────────────────── Rapportage-mail ─────────────────────────────── */
 
 /**
@@ -88,27 +95,43 @@ export async function bouwRapportageMailHtml(momentId: string): Promise<{ onderw
     </tr>`).join('')
 
   const open = punten.filter(p => p.status !== 'geaccepteerd').length
-  const inhoud = `
+
+  // Enkelvoud/meervoud blijft in de code: een beheerder moet een mailtekst kunnen herschrijven
+  // zonder daarbij de grammatica van een telling te hoeven regelen.
+  const samenvatting =
+    `Er ${punten.length === 1 ? 'is 1 opleverpunt' : `zijn ${punten.length} opleverpunten`} vastgelegd, ` +
+    `waarvan ${punten.length - open} geaccepteerd${open > 0 ? ` en ${open} nog openstaand` : ''}.`
+
+  const blokken: Record<string, string> = {
+    gegevens: `
   <table style="border-collapse:collapse;margin-bottom:16px;font-size:13px">
     <tr><td style="color:#8a938f;padding-right:14px">Project</td><td>${esc(dossier.titel ?? '—')}</td></tr>
     <tr><td style="color:#8a938f;padding-right:14px">Projectnummer</td><td>${esc(dossier.nummer ?? '—')}</td></tr>
     <tr><td style="color:#8a938f;padding-right:14px">Werkadres</td><td>${esc(dossier.werkadres ?? '—')}</td></tr>
     <tr><td style="color:#8a938f;padding-right:14px">Oplevering</td><td>${esc(moment.titel)}</td></tr>
-  </table>
-  <p style="font-size:13px;line-height:1.6">
-    Hierbij de opleverrapportage van bovengenoemd project. Er ${punten.length === 1 ? 'is 1 opleverpunt' : `zijn ${punten.length} opleverpunten`} vastgelegd,
-    waarvan ${punten.length - open} geaccepteerd${open > 0 ? ` en ${open} nog openstaand` : ''}.
-  </p>
-  ${punten.length ? `<table style="border-collapse:collapse;width:100%;margin-top:8px">${rijen}</table>` : '<p style="font-size:13px;color:#6b757c">Geen opleverpunten geregistreerd.</p>'}
-  ${handtekeningen.length ? `<p style="font-size:12.5px;color:#4a545b;margin-top:16px">Ondertekend door: ${handtekeningen.map(h => esc(h.naam ?? h.rol)).join(', ')}.</p>` : ''}
-  <p style="font-size:12.5px;color:#4a545b;margin-top:16px">
-    De volledige rapportage - inclusief foto's en ondertekening - vindt u in de bijgevoegde PDF.
-  </p>
-  <p style="font-size:12.5px;color:#6b757c;margin-top:12px">Heeft u vragen over deze oplevering? Neem gerust contact met ons op.</p>`
+  </table>`,
+    punten: punten.length
+      ? `<table style="border-collapse:collapse;width:100%;margin:8px 0 14px 0">${rijen}</table>`
+      : '<p style="margin:0 0 14px 0;font-size:13px;color:#6b757c">Geen opleverpunten geregistreerd.</p>',
+    ondertekening: handtekeningen.length
+      ? `<p style="margin:0 0 14px 0;font-size:12.5px;color:#4a545b">Ondertekend door: ${handtekeningen.map(h => esc(h.naam ?? h.rol)).join(', ')}.</p>`
+      : '',
+  }
 
+  const vars: Record<string, string> = {
+    'dossier.nummer': dossier.nummer ?? '',
+    'dossier.titel': dossier.titel ?? '',
+    'dossier.werkadres': dossier.werkadres ?? '',
+    'moment.titel': moment.titel,
+    'punten.samenvatting': samenvatting,
+    'punten.aantal': String(punten.length),
+    'punten.open': String(open),
+  }
+
+  const sjabloon = await getMailSjabloonTekst('oplever_rapportage')
   return {
-    onderwerp: `Opleverrapportage ${dossier.nummer ?? ''} — ${moment.titel}`.trim(),
-    bodyHtml: wikkel('Opleverrapportage', inhoud),
+    onderwerp: mailOnderwerp(sjabloon.onderwerp, vars),
+    bodyHtml: wikkel('Opleverrapportage', mailTekstNaarHtml(sjabloon.tekst, { vars, blokken })),
   }
 }
 
@@ -309,20 +332,27 @@ export async function bouwHerinneringMail(
   aantalOpen: number,
   afmeldUrl: string,
 ): Promise<{ onderwerp: string; bodyHtml: string }> {
-  const inhoud = `
-  <p style="font-size:13px;line-height:1.6">Beste ${esc(naam)},</p>
-  <p style="font-size:13px;line-height:1.6">
-    Voor het project <strong>${esc(projectnaam)}</strong> ${aantalOpen === 1 ? 'staat nog 1 opleverpunt' : `staan nog ${aantalOpen} opleverpunten`}
-    open die aan u ${aantalOpen === 1 ? 'is' : 'zijn'} toegewezen. Wilt u ${aantalOpen === 1 ? 'dit punt' : 'deze punten'} afmelden zodra ${aantalOpen === 1 ? 'het' : 'ze'} ${aantalOpen === 1 ? 'is' : 'zijn'} opgelost?
-  </p>
-  <p style="font-size:13px;line-height:1.6">
-    Via onderstaande link ziet u uw eigen punten en kunt u ze afmelden met een foto en toelichting. Inloggen is niet nodig.
-  </p>
-  <p style="margin:18px 0">
-    <a href="${esc(afmeldUrl)}" style="background:#009439;color:#fff;text-decoration:none;border-radius:6px;padding:10px 18px;font-size:14px;font-weight:600;display:inline-block">Mijn opleverpunten afmelden</a>
-  </p>
-  <p style="font-size:11.5px;color:#8a938f">Deze link is persoonlijk voor u aangemaakt; deel hem niet met derden.</p>`
-  return { onderwerp: `Openstaande opleverpunten — ${projectnaam}`, bodyHtml: wikkel('Openstaande opleverpunten', inhoud) }
+  const een = aantalOpen === 1
+  const vars: Record<string, string> = {
+    'relatie.naam': naam,
+    'dossier.titel': projectnaam,
+    'punten.open': String(aantalOpen),
+    'punten.zin': een
+      ? 'staat nog 1 opleverpunt open dat aan u is toegewezen'
+      : `staan nog ${aantalOpen} opleverpunten open die aan u zijn toegewezen`,
+    'punten.afmelden': een
+      ? 'dit punt afmelden zodra het is opgelost'
+      : 'deze punten afmelden zodra ze zijn opgelost',
+  }
+
+  const sjabloon = await getMailSjabloonTekst('oplever_herinnering')
+  return {
+    onderwerp: mailOnderwerp(sjabloon.onderwerp, vars),
+    bodyHtml: wikkel('Openstaande opleverpunten', mailTekstNaarHtml(sjabloon.tekst, {
+      vars,
+      blokken: { knop: knop(afmeldUrl, 'Mijn opleverpunten afmelden') },
+    })),
+  }
 }
 
 /** Uitnodiging aan bewoners/gebruikers om de feedbackvragenlijst in te vullen. */
@@ -330,15 +360,13 @@ export async function bouwFeedbackUitnodigingMail(
   projectnaam: string,
   feedbackUrl: string,
 ): Promise<{ onderwerp: string; bodyHtml: string }> {
-  const inhoud = `
-  <p style="font-size:13px;line-height:1.6">Goedendag,</p>
-  <p style="font-size:13px;line-height:1.6">
-    De werkzaamheden bij <strong>${esc(projectnaam)}</strong> zijn afgerond. We horen graag hoe u het heeft ervaren —
-    het invullen kost ongeveer een minuut en helpt ons om ons werk te verbeteren.
-  </p>
-  <p style="margin:18px 0">
-    <a href="${esc(feedbackUrl)}" style="background:#009439;color:#fff;text-decoration:none;border-radius:6px;padding:10px 18px;font-size:14px;font-weight:600;display:inline-block">Vragenlijst invullen</a>
-  </p>
-  <p style="font-size:12.5px;color:#6b757c">Alvast hartelijk dank voor uw tijd.</p>`
-  return { onderwerp: `Hoe heeft u onze werkzaamheden ervaren? — ${projectnaam}`, bodyHtml: wikkel('Uw mening telt', inhoud) }
+  const vars: Record<string, string> = { 'dossier.titel': projectnaam }
+  const sjabloon = await getMailSjabloonTekst('oplever_feedback')
+  return {
+    onderwerp: mailOnderwerp(sjabloon.onderwerp, vars),
+    bodyHtml: wikkel('Uw mening telt', mailTekstNaarHtml(sjabloon.tekst, {
+      vars,
+      blokken: { knop: knop(feedbackUrl, 'Vragenlijst invullen') },
+    })),
+  }
 }

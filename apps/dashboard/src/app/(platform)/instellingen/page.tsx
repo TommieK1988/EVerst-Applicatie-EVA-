@@ -203,12 +203,12 @@ const calcOfferteItems: SettingsItem[] = [
     module: 'instellingen',
   },
   {
-    href: '/instellingen/offerte-mail',
-    title: 'Offerte-e-mail',
-    description: 'Standaard onderwerp en tekst (met variabelen) voor het mailen van offertes.',
+    href: '/instellingen/mailsjablonen',
+    title: 'E-mailsjablonen',
+    description: 'Onderwerp en tekst van elke e-mail die EVA verstuurt: offerte, uitvraag, oplevering, klantportaal en gebruikersuitnodigingen.',
     ready: true,
-    kicker: 'Offerte',
-    module: 'dossiers',
+    kicker: 'Bedrijf',
+    module: 'instellingen',
   },
 ]
 

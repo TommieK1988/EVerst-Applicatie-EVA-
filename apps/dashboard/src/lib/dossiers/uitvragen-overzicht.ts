@@ -12,6 +12,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { vereisSessie } from '@/lib/auth/rechten'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { isDossierAfgesloten } from '@/components/dossiers/types'
 import type { DossierSectie } from '@/components/dossiers/types'
 
@@ -176,25 +177,6 @@ export async function getOpenstaandeUitvragen(): Promise<OpenstaandOverzicht> {
 /** Standaardtekst voor het bulk-rappelvenster; leest hetzelfde sjabloon als de losse rappelmail. */
 export async function getRappelTekst(): Promise<{ onderwerp: string; bericht: string }> {
   await vereisSessie()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createAdminClient() as any
-  const { data } = await db
-    .from('document_sjablonen')
-    .select('mail_onderwerp, mail_body_html')
-    .eq('documentsoort', 'uitvraag_rappel')
-    .eq('actief', true)
-    .order('volgorde', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  const { naarPlatteTekst } = await import('@/lib/mail/sjabloontekst')
-  return {
-    onderwerp: (data?.mail_onderwerp ?? '').trim() || 'Herinnering: openstaande prijsopgave(n)',
-    bericht: naarPlatteTekst(data?.mail_body_html ?? '') ||
-      'Goedemiddag,\n\n' +
-      'Eerder vroegen wij u om een prijsopgave voor onderstaand werk. Wij hebben die nog niet ontvangen.\n\n' +
-      'Kunt u laten weten wanneer wij uw offerte kunnen verwachten, of dat u ervan afziet? Dan houden ' +
-      'wij daar rekening mee in onze planning.\n\n' +
-      'Met vriendelijke groet,',
-  }
+  const bron = await getMailSjabloonTekst('uitvraag_rappel')
+  return { onderwerp: bron.onderwerp, bericht: bron.tekst }
 }

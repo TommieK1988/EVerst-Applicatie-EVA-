@@ -342,7 +342,7 @@ export async function nodigPortaalGebruikerUit(input: {
     const voornaam = await haalVoornaam(input.contactpersoonId, input.particulierId)
     const afzender = [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam]
       .filter(Boolean).join(' ')
-    const mail = bouwUitnodigingMail(voornaam, afzender || null)
+    const mail = await bouwUitnodigingMail(voornaam, afzender || null)
 
     await verstuurPortaalMailDirect({ email, onderwerp: mail.onderwerp, bodyHtml: mail.bodyHtml })
 

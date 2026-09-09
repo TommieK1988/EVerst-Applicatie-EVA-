@@ -1188,6 +1188,18 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/mailsjablonen$/, {
+    title: 'Instellingen \u2014 E-mailsjablonen',
+    description: 'Het onderwerp en de tekst van elke e-mail die EVA zelf verstuurt, op \u00e9\u00e9n plek.',
+    sections: [
+      { title: 'Standaard of aangepast', body: 'Elke regel is \u00e9\u00e9n moment waarop EVA mailt. Staat er "standaard", dan gaat de tekst mee die in EVA zelf zit \u2014 je hoeft niets te doen. Klik je op "Tekst aanpassen", dan maak je een eigen versie die vanaf dat moment wordt gebruikt. Met "Terug naar standaard" gooi je je eigen versie weg en neemt EVA het weer over.' },
+      { title: 'Variabelen', body: 'Tussen accolades staan variabelen, bijvoorbeeld {offerte.nummer} of {dossier.titel}. Die worden bij het versturen vervangen door de echte gegevens. Onder elk sjabloon staat welke variabelen daar mogen; een variabele die daar niet bij staat blijft leeg.' },
+      { title: 'Blokken en opmaak', body: 'Sommige mails bevatten een stuk dat EVA zelf opmaakt \u2014 een knop, of een tabel met opleverpunten. Dat zet je met een blok als {knop} of {punten} op een eigen regel. Verder: een lege regel begint een nieuwe alinea, **vet** maakt tekst vet, [tekst](https://\u2026) maakt een link, en een alinea die met [klein] begint komt in kleine grijze letters.' },
+      { title: 'Mails bij een documentsjabloon', body: 'Onderaan staan de mails die bij een Word-sjabloon horen \u2014 de inkooporder, de opdracht aan een onderaannemer, een bewonersbrief. Die tekst hoort bij het sjabloon zelf, omdat de bijlage en de begeleidende mail bij elkaar horen. Je bewerkt hem hier of bij Documentsjablonen; het is dezelfde tekst.' },
+      { title: 'Wie mag dit', body: 'Alleen beheerders. Een mailtekst gaat rechtstreeks naar klanten, bewoners en leveranciers.' },
+    ],
+  }],
+
   [/^\/instellingen\/offerte-mail$/, {
     title: 'Instellingen — Offerte-e-mail',
     description: 'Het standaard e-mailsjabloon (onderwerp + tekst met variabelen) waarmee een goedgekeurde offerte naar de opdrachtgever wordt gemaild.',
