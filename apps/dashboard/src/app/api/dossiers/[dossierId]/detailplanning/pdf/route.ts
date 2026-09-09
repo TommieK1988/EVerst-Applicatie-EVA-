@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { createAdminClient } from '@everts/database/server'
-import { urlNaarBase64 } from '@/components/formulieren/pdf-schema'
 import { laadDetailplanning } from '@/lib/planning/detailplanning-gegevens'
+import { laadPdfLogo } from '@/lib/planning/detailplanning-logo'
 import { bouwDetailplanningPdf, detailplanningBestandsnaam } from '@/lib/planning/detailplanning-pdf'
 
 export const maxDuration = 60
@@ -34,23 +33,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ doss
     return new NextResponse('Dit dossier heeft nog geen planning', { status: 404 })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  const { data: bedrijf } = await supabase
-    .from('bedrijfsgegevens')
-    .select('naam, logo_primair_url, logo_url')
-    .limit(1)
-    .maybeSingle()
-
-  const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
-  const logo = logoUrl ? await urlNaarBase64(logoUrl).catch(() => null) : null
+  const logo = await laadPdfLogo(gegevens.bedrijf.logoUrl)
 
   const pdf = bouwDetailplanningPdf({
     kop: gegevens.kop,
+    bedrijf: gegevens.bedrijf,
     fasen: gegevens.fasen,
     activiteiten: gegevens.activiteiten,
     uursoorten: gegevens.uursoorten,
-    bedrijfsnaam: bedrijf?.naam ?? null,
     logo,
   })
 

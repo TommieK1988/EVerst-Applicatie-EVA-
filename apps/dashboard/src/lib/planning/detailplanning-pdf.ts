@@ -10,6 +10,9 @@
  * in "eenheden per dag" zonder te weten welke eenheid dat is; het scherm geeft
  * pixels mee, wij millimeters. Zo kunnen papier en beeldscherm niet uiteenlopen.
  *
+ * HUISSTIJL (huisstijlgids 2024): alle tekst in Montserrat, de drie groenen uit
+ * de gids, en het logo ruim boven de ondergrens van 25 mm breed.
+ *
  * WAT ER NIET OP KOMT: medewerkers, onderaannemers en leveranciers. De uitdraai
  * toont het werk en wanneer het staat, niet wie het doet of bij wie het is
  * ingekocht. `detailplanning-gegevens.ts` haalt die gegevens daarom niet eens op.
@@ -23,20 +26,35 @@ import { nl } from 'date-fns/locale'
 import type { PlanningActiviteit, PlanningFase, PlanningUursoort } from '@everts/database/platform-types'
 import { buildGridUnits, buildHeader, dagOffset, type View } from '@/components/planning/layout/tijdas'
 import { veilig } from '@/lib/pdf/tekst'
-import type { DetailplanningKop } from './detailplanning-gegevens'
+import { registreerMontserrat } from '@/lib/pdf/montserrat'
+import type { DetailplanningBedrijf, DetailplanningKop } from './detailplanning-gegevens'
 
 // ─── Maatvoering (mm, liggende A3) ────────────────────────────────────────────
 
 const PAGINA = { breedte: 420, hoogte: 297 }
-const MARGE = 10
-/** Kopzone: dossiernummer, titel, opdrachtgever, projectleider, logo. */
-const KOP_H = 20
+const MARGE = 12
+/** Kopzone: titelblok links, veldjes eronder, logo rechts. */
+const KOP_H = 30
 /** Tijdas-header: spanrij (maanden/jaren) boven de kolomrij (dagen/weken/maanden). */
-const TIJDAS_H = 11
+const TIJDAS_H = 12
+const SPAN_H = 5.5
 /** Voetzone: legenda links, bladnummering rechts. */
 const VOET_H = 9
-/** Linkerkolom met volgnummer, activiteitnaam en duur. */
-const LABEL_W = 72
+/** Linkerkolom: nr, activiteit, start, eind, dagen. */
+const LABEL_W = 104
+
+/**
+ * Kolomindeling binnen de labelkolom, als offset vanaf de linkermarge. De
+ * dagen-kolom eindigt op 100 en niet op 104: op de 104 staat de scheidingslijn
+ * met de tijdas, en een rechts uitgelijnd getal loopt daar anders dwars doorheen.
+ */
+const KOL = {
+  nr:    { x: 2,    w: 6  },
+  titel: { x: 9.5,  w: 58 },
+  start: { x: 69,   w: 12 },
+  eind:  { x: 82,   w: 12 },
+  dagen: { x: 94,   w: 6  },
+}
 
 const TIJDAS_W = PAGINA.breedte - MARGE * 2 - LABEL_W
 const RIJZONE_Y = MARGE + KOP_H + TIJDAS_H
@@ -48,8 +66,8 @@ const RIJZONE_H = PAGINA.hoogte - RIJZONE_Y - VOET_H - MARGE
  * waar zo'n vel voor hangt.
  */
 const RIJHOOGTES = [7.5, 7.0, 6.5, 6.0, 5.5, 5.0]
-/** Een fase-rij is lager dan een activiteitrij — zelfde verhouding als op het scherm (36 vs 48 px). */
-const FASE_FACTOR = 0.75
+/** Een fase-rij is iets lager dan een activiteitrij, maar moet wel opvallen. */
+const FASE_FACTOR = 0.85
 /** Balken smaller dan dit verdwijnen van het vel; bij maandkorrel is één dag 0,33 mm. */
 const MIN_BALK_W = 1.2
 
@@ -68,19 +86,34 @@ const GROFSTE = KORRELS[KORRELS.length - 1]
 
 // ─── Huisstijl ────────────────────────────────────────────────────────────────
 
-const BRAND = '#009439'
+/** De drie groenen uit de huisstijlgids 2024 (p. 6). */
+const GROEN_DONKER = '#154e2f'
+const GROEN = '#0a7a35'
+
 const FG = '#161b20'
-const FG_SOFT = '#364048'
-const FG_MUTED = '#6b757c'
-const BORDER = '#e3e8ea'
-const BORDER_ZACHT = '#f1f4f5'
-const WEEKEND = '#f1f4f5'
-const FASE_BALK = '#c4cad2'
+const FG_SOFT = '#49535b'
+const FG_MUTED = '#7a848c'
+const BORDER = '#d9dfe3'
+const BORDER_ZACHT = '#eceff1'
+const ZEBRA = '#f7f9fa'
+const WEEKEND = '#eef1f3'
+const FASE_BALK = '#e6ebee'
 const BALK_FALLBACK = '#4a7c9e'
+
+/**
+ * Kleuren voor de balken wanneer een dossier geen uursoorten gebruikt — dan
+ * kleuren we per fase. Zonder dat is het hele vel één kleur, en dat leest op een
+ * A3 als een blok in plaats van als een planning. De meeste dossiers hebben
+ * namelijk geen uursoort op hun activiteiten staan.
+ */
+const FASE_PALET = [
+  '#1f7a8c', '#c46a1f', '#5c7a3f', '#8650c4',
+  '#b03a48', '#2b6cb0', '#7a6a1f', '#3f7d6a',
+]
 
 type Rgb = [number, number, number]
 
-/** '#009439' → [0, 148, 57]. Korte vorm (#abc) wordt ook geaccepteerd. */
+/** '#0a7a35' → [10, 122, 53]. Korte vorm (#abc) wordt ook geaccepteerd. */
 function rgb(hex: string): Rgb {
   const h = (hex || '').replace('#', '').trim()
   const vol = h.length === 3 ? h.split('').map(c => c + c).join('') : h
@@ -101,6 +134,8 @@ export type Rij =
   | { soort: 'fase'; naam: string; start: string | null; eind: string | null }
   | { soort: 'activiteit'; nr: number; titel: string; start: string | null; eind: string | null; kleur: string }
 
+export type Legenda = { label: string; kleur: string }[]
+
 /**
  * Activiteitbalk: `gewenste_start` en `deadline` van de activiteit zelf — niet de
  * planitems eronder. Zo tekent het scherm hem ook (ActiviteitGantt, `ActiviteitBalk`),
@@ -118,27 +153,43 @@ function activiteitBereik(a: PlanningActiviteit): { start: string | null; eind: 
 /**
  * De rijen in schermvolgorde: eerst de activiteiten zonder fase, daarna elke fase
  * met de activiteiten die eronder hangen. Het volgnummer loopt door over het geheel.
+ *
+ * Kleurbron: de uursoort als het dossier die gebruikt, anders de fase.
  */
 export function bouwRijen(
   fasen: PlanningFase[],
   activiteiten: PlanningActiviteit[],
-  uursoortKleuren: Record<string, string>,
-): Rij[] {
+  uursoorten: Pick<PlanningUursoort, 'id' | 'naam' | 'kleur'>[],
+): { rijen: Rij[]; legenda: Legenda } {
   const gesorteerd = [...activiteiten].sort((a, b) => a.volgorde - b.volgorde)
   const fSorted = [...fasen].sort((a, b) => a.volgorde - b.volgorde)
+
+  const uursoortKleur: Record<string, string> = {}
+  for (const u of uursoorten) if (u.kleur) uursoortKleur[u.id] = u.kleur
+
+  // Kleuren op uursoort heeft alleen zin als die kleuren ook uit elkaar te houden
+  // zijn. In de praktijk staan uursoorten geregeld allemaal op hetzelfde groen —
+  // dan zegt de kleur niets en kleuren we liever per fase, want dat geeft het vel
+  // wél structuur.
+  const gebruikteKleuren = new Set(
+    gesorteerd.map(a => (a.uursoort_id ? uursoortKleur[a.uursoort_id] : null)).filter(Boolean),
+  )
+  const opUursoort = gebruikteKleuren.size >= 2
+
+  const faseKleur: Record<string, string> = {}
+  fSorted.forEach((f, i) => { faseKleur[f.id] = FASE_PALET[i % FASE_PALET.length] })
+
+  const kleurVan = (a: PlanningActiviteit): string => {
+    if (opUursoort) return (a.uursoort_id && uursoortKleur[a.uursoort_id]) || BALK_FALLBACK
+    return (a.fase_id && faseKleur[a.fase_id]) || BALK_FALLBACK
+  }
+
   const rijen: Rij[] = []
   let nr = 0
 
   const voegToe = (a: PlanningActiviteit) => {
     const { start, eind } = activiteitBereik(a)
-    rijen.push({
-      soort: 'activiteit',
-      nr: ++nr,
-      titel: a.titel ?? '',
-      start,
-      eind,
-      kleur: (a.uursoort_id && uursoortKleuren[a.uursoort_id]) || BALK_FALLBACK,
-    })
+    rijen.push({ soort: 'activiteit', nr: ++nr, titel: a.titel ?? '', start, eind, kleur: kleurVan(a) })
   }
 
   for (const a of gesorteerd.filter(a => !a.fase_id)) voegToe(a)
@@ -156,7 +207,22 @@ export function bouwRijen(
     rijen.push({ soort: 'fase', naam: f.naam ?? '', start, eind })
     for (const a of eigen) voegToe(a)
   }
-  return rijen
+
+  const legenda: Legenda = opUursoort
+    ? uursoorten.filter(u => u.kleur && gebruikteKleuren.has(u.kleur))
+        .map(u => ({ label: u.naam ?? '', kleur: u.kleur }))
+    : fSorted
+        .filter(f => gesorteerd.some(a => a.fase_id === f.id))
+        .map(f => ({ label: f.naam ?? '', kleur: faseKleur[f.id] }))
+
+  // Activiteiten die buiten elke fase vallen krijgen de terugvalkleur. Die staat
+  // dan wél op het vel, dus hoort hij ook in de legenda verklaard te worden.
+  const heeftLosse = gesorteerd.some(a => !a.fase_id)
+  if (heeftLosse && (!opUursoort || gesorteerd.some(a => !a.uursoort_id || !uursoortKleur[a.uursoort_id]))) {
+    legenda.push({ label: 'Overig', kleur: BALK_FALLBACK })
+  }
+
+  return { rijen, legenda }
 }
 
 const rijHoogte = (r: Rij, h: number) => (r.soort === 'fase' ? h * FASE_FACTOR : h)
@@ -240,7 +306,7 @@ const dagenIn = (vs: Date, ve: Date) => differenceInCalendarDays(startOfDay(ve),
 
 /**
  * Periodeblokken: normaal één, maar een planning die langer loopt dan de grofste
- * korrel aankan (± 2,7 jaar) wordt over meerdere vellen naast elkaar verdeeld.
+ * korrel aankan (± 2,5 jaar) wordt over meerdere vellen naast elkaar verdeeld.
  * De snede ligt op een maandgrens, zodat geen enkele maandkop halverwege breekt.
  */
 function verdeelPeriode(vs: Date, ve: Date): { vs: Date; ve: Date }[] {
@@ -278,31 +344,46 @@ type Tijdas = ReturnType<typeof maakTijdas>
 
 // ─── Tekenen ──────────────────────────────────────────────────────────────────
 
+export type DetailplanningLogo = {
+  dataUrl: string
+  /** jsPDF-formaatnaam, dus 'PNG' of 'JPEG' — SVG kan hij niet plaatsen. */
+  format: string
+  breedte: number
+  hoogte: number
+}
+
 export type DetailplanningPdfInvoer = {
   kop: DetailplanningKop
+  bedrijf: DetailplanningBedrijf
   fasen: PlanningFase[]
   activiteiten: PlanningActiviteit[]
   uursoorten: Pick<PlanningUursoort, 'id' | 'naam' | 'kleur'>[]
-  bedrijfsnaam: string | null
-  /** Logo als data-URI + formaat, of null. */
-  logo: { dataUrl: string; format: string } | null
+  logo: DetailplanningLogo | null
 }
 
 const datumLang = (d: Date) => format(d, 'd MMMM yyyy', { locale: nl })
 const datumKort = (d: Date) => format(d, 'd MMM yyyy', { locale: nl })
+const datumCel = (iso: string) => format(alsDatum(iso), 'd MMM', { locale: nl })
+
+/** Doorlooptijd in hele weken, voor het kopveld. */
+function doorlooptijd(vs: Date, ve: Date): string {
+  const dagen = dagenIn(vs, ve)
+  const weken = Math.round(dagen / 7)
+  return weken >= 2 ? `${weken} weken` : `${dagen} dagen`
+}
 
 export function bouwDetailplanningPdf(invoer: DetailplanningPdfInvoer): ArrayBuffer {
-  const { kop, fasen, activiteiten, uursoorten, bedrijfsnaam, logo } = invoer
+  const { kop, bedrijf, fasen, activiteiten, uursoorten, logo } = invoer
 
-  const kleuren: Record<string, string> = {}
-  for (const u of uursoorten) if (u.kleur) kleuren[u.id] = u.kleur
-
-  const rijen = bouwRijen(fasen, activiteiten, kleuren)
+  const accent = bedrijf.kleurPrimair || GROEN
+  const { rijen, legenda } = bouwRijen(fasen, activiteiten, uursoorten)
   const { hoogte, blokken } = kiesRijhoogte(rijen)
   const bereik = bepaalBereik(rijen)
   const periodes = verdeelPeriode(bereik.vs, bereik.ve)
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
+  registreerMontserrat(doc)
+
   const totaalBladen = periodes.length * blokken.length
   const uitgedraaid = datumLang(new Date())
 
@@ -313,108 +394,169 @@ export function bouwDetailplanningPdf(invoer: DetailplanningPdfInvoer): ArrayBuf
       if (blad > 0) doc.addPage()
       blad++
       // Het raster stopt onder de laatste regel. Bij een korte planning zou een
-      // rijzone op volle hoogte een half vel grijze weekendbanen opleveren.
+      // rijzone op volle hoogte een half vel lege weekendbanen opleveren.
       const inhoudH = Math.min(RIJZONE_H, rijBlok.reduce((s, r) => s + rijHoogte(r, hoogte), 0))
-      tekenKop(doc, kop, as, bedrijfsnaam, logo)
-      tekenTijdas(doc, as, inhoudH)
+      tekenKop(doc, kop, bedrijf, bereik, logo, accent)
+      tekenTijdas(doc, as, inhoudH, accent)
       tekenAchtergrond(doc, as, inhoudH)
-      tekenRijen(doc, rijBlok, as, hoogte, inhoudH)
+      tekenRijen(doc, rijBlok, as, hoogte, inhoudH, accent)
       // Ná de rijen: de fase-balken zijn gevulde vlakken en zouden de vlag anders overtekenen.
-      tekenVandaag(doc, as, inhoudH)
-      tekenVoet(doc, uursoorten, blad, totaalBladen, rijBlok, as, uitgedraaid)
+      const toonVandaag = tekenVandaag(doc, as, inhoudH, accent)
+      tekenVoet(doc, legenda, blad, totaalBladen, rijBlok, as, uitgedraaid, accent, toonVandaag)
     }
   }
 
   return doc.output('arraybuffer')
 }
 
+/** Label in kleine kapitalen met de waarde eronder — het kopveld-patroon. */
+function veldje(doc: jsPDF, x: number, y: number, label: string, waarde: string, maxW: number) {
+  doc.setFont('Montserrat', 'semibold')
+  doc.setFontSize(5.4)
+  doc.setTextColor(...rgb(FG_MUTED))
+  doc.text(veilig(label.toUpperCase()), x, y, { charSpace: 0.12 })
+
+  doc.setFont('Montserrat', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(...rgb(FG))
+  const regels = doc.splitTextToSize(veilig(waarde), maxW) as string[]
+  doc.text(regels[0] ?? '', x, y + 3.9)
+}
+
 function tekenKop(
   doc: jsPDF,
   kop: DetailplanningKop,
-  as: Tijdas,
-  bedrijfsnaam: string | null,
-  logo: { dataUrl: string; format: string } | null,
+  bedrijf: DetailplanningBedrijf,
+  bereik: { vs: Date; ve: Date },
+  logo: DetailplanningLogo | null,
+  accent: string,
 ) {
   const y = MARGE
   const rechts = PAGINA.breedte - MARGE
 
+  // Logo rechtsboven. De huisstijlgids houdt 25 mm aan als ondergrens voor de
+  // breedte en vraagt gelijke witruimte rondom; 34 mm zit daar comfortabel boven.
+  let logoGeplaatst = false
   if (logo) {
+    const w = 34
+    const h = (logo.hoogte / logo.breedte) * w
     try {
-      doc.addImage(logo.dataUrl, logo.format, rechts - 34, y, 34, 12, undefined, 'FAST')
+      doc.addImage(logo.dataUrl, logo.format, rechts - w, y + 1, w, h, undefined, 'FAST')
+      logoGeplaatst = true
     } catch {
       /* logo optioneel */
     }
-  } else if (bedrijfsnaam) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(14)
-    doc.setTextColor(...rgb(BRAND))
-    doc.text(veilig(bedrijfsnaam), rechts, y + 6, { align: 'right' })
+  }
+  if (!logoGeplaatst && bedrijf.naam) {
+    doc.setFont('Montserrat', 'bold')
+    doc.setFontSize(13)
+    doc.setTextColor(...rgb(accent))
+    doc.text(veilig(bedrijf.naam), rechts, y + 7, { align: 'right' })
   }
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(15)
-  doc.setTextColor(...rgb(FG))
-  doc.text(veilig([kop.dossiernummer, kop.titel].filter(Boolean).join('  ')), MARGE, y + 6, { maxWidth: 300 })
+  // Dossiernummer klein boven de titel: het nummer is een etiket, niet de kop.
+  const titelBreedte = PAGINA.breedte - MARGE * 2 - 44
+  if (kop.dossiernummer) {
+    doc.setFont('Montserrat', 'semibold')
+    doc.setFontSize(7.2)
+    doc.setTextColor(...rgb(accent))
+    doc.text(veilig(kop.dossiernummer), MARGE, y + 4.2, { charSpace: 0.18 })
+  }
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
+  doc.setFont('Montserrat', 'bold')
+  doc.setFontSize(14)
+  doc.setTextColor(...rgb(GROEN_DONKER))
+  const titelRegels = doc.splitTextToSize(veilig(kop.titel), titelBreedte) as string[]
+  doc.text(titelRegels[0] ?? '', MARGE, y + 11)
+
+  doc.setFont('Montserrat', 'normal')
+  doc.setFontSize(7.4)
   doc.setTextColor(...rgb(FG_MUTED))
-  const regel = [
-    'Detailplanning',
-    kop.opdrachtgever ? `Opdrachtgever: ${kop.opdrachtgever}` : null,
-    kop.projectleider ? `Projectleider: ${kop.projectleider}` : null,
-    `${datumLang(as.vs)} t/m ${datumLang(as.ve)}`,
-  ].filter(Boolean).join('   ·   ')
-  doc.text(veilig(regel), MARGE, y + 12, { maxWidth: 340 })
+  doc.text('Detailplanning', MARGE, y + 15.4, { charSpace: 0.06 })
 
-  doc.setDrawColor(...rgb(BRAND))
-  doc.setLineWidth(0.6)
-  doc.line(MARGE, y + KOP_H - 3, rechts, y + KOP_H - 3)
+  // Veldjes op één lijn: label boven, waarde eronder.
+  const velden: { label: string; waarde: string }[] = [
+    { label: 'Opdrachtgever', waarde: kop.opdrachtgever ?? '—' },
+    { label: 'Projectleider', waarde: kop.projectleider ?? '—' },
+  ]
+  if (kop.werkmaatschappij) velden.push({ label: 'Werkmaatschappij', waarde: kop.werkmaatschappij })
+  velden.push({
+    label: 'Doorlooptijd',
+    waarde: `${datumKort(bereik.vs)} – ${datumKort(bereik.ve)}  (${doorlooptijd(bereik.vs, bereik.ve)})`,
+  })
+
+  const veldY = y + 21
+  const veldW = 70
+  velden.forEach((v, i) => {
+    const x = MARGE + i * (veldW + 8)
+    if (x + veldW > rechts) return
+    veldje(doc, x, veldY, v.label, v.waarde, veldW)
+  })
+
+  doc.setDrawColor(...rgb(accent))
+  doc.setLineWidth(0.7)
+  doc.line(MARGE, y + KOP_H - 2, rechts, y + KOP_H - 2)
   doc.setLineWidth(0.2)
 }
 
-function tekenTijdas(doc: jsPDF, as: Tijdas, inhoudH: number) {
+function tekenTijdas(doc: jsPDF, as: Tijdas, inhoudH: number, accent: string) {
   const x0 = MARGE + LABEL_W
   const y0 = MARGE + KOP_H
-  const spanH = 5
-  const colH = TIJDAS_H - spanH
+  const colH = TIJDAS_H - SPAN_H
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(7)
+  // Afwisselende tint per maand (of jaar): op een tijdas van maanden lang is dit
+  // het enige dat het oog houvast geeft bij het aflezen van een balk.
+  as.spans.forEach((s, i) => {
+    if (i % 2 === 1) return
+    doc.setFillColor(...rgb(BORDER_ZACHT))
+    doc.rect(x0 + s.left, y0, s.width, TIJDAS_H, 'F')
+  })
+
+  // Kolomkoppen boven de labelkolom.
+  doc.setFont('Montserrat', 'semibold')
+  doc.setFontSize(5.4)
   doc.setTextColor(...rgb(FG_MUTED))
-  doc.text('ACTIVITEIT', MARGE + 1.5, y0 + TIJDAS_H - 2)
-  doc.text('DAGEN', MARGE + LABEL_W - 1.5, y0 + TIJDAS_H - 2, { align: 'right' })
+  const basis = y0 + TIJDAS_H - 2.4
+  doc.text('NR', MARGE + KOL.nr.x + KOL.nr.w, basis, { align: 'right', charSpace: 0.1 })
+  doc.text('ACTIVITEIT', MARGE + KOL.titel.x, basis, { charSpace: 0.1 })
+  doc.text('START', MARGE + KOL.start.x, basis, { charSpace: 0.1 })
+  doc.text('EIND', MARGE + KOL.eind.x, basis, { charSpace: 0.1 })
+  doc.text('DGN', MARGE + KOL.dagen.x + KOL.dagen.w, basis, { align: 'right', charSpace: 0.1 })
 
   // Spanrij: maanden (of jaren bij de grofste korrel).
+  doc.setFontSize(6.4)
   for (const s of as.spans) {
-    if (s.width < 6) continue
+    if (s.width < 7) continue
     doc.setDrawColor(...rgb(BORDER))
-    doc.line(x0 + s.left, y0, x0 + s.left, y0 + spanH)
-    doc.setTextColor(...rgb(FG_MUTED))
-    doc.text(veilig(s.label.toUpperCase()), x0 + s.left + 1.2, y0 + spanH - 1.4, { maxWidth: Math.max(1, s.width - 2) })
+    doc.line(x0 + s.left, y0, x0 + s.left, y0 + TIJDAS_H)
+    doc.setTextColor(...rgb(GROEN_DONKER))
+    doc.text(veilig(s.label.toUpperCase()), x0 + s.left + 1.4, y0 + SPAN_H - 1.6, {
+      maxWidth: Math.max(1, s.width - 2.4), charSpace: 0.1,
+    })
   }
 
   // Kolomrij: dagen, weken of maanden.
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(6)
   for (const c of as.cols) {
     if (c.width < 1.8) continue
     const midden = x0 + c.left + c.width / 2
-    doc.setTextColor(...rgb(c.isToday ? BRAND : c.isWeekend ? FG_MUTED : FG_SOFT))
-    if (c.isToday) doc.setFont('helvetica', 'bold')
-    doc.text(veilig(c.label), midden, y0 + spanH + colH - 3.6, { align: 'center' })
-    if (c.isToday) doc.setFont('helvetica', 'normal')
+    doc.setFont('Montserrat', c.isToday ? 'semibold' : 'normal')
+    doc.setFontSize(6)
+    doc.setTextColor(...rgb(c.isToday ? accent : c.isWeekend ? FG_MUTED : FG_SOFT))
+    doc.text(veilig(c.label), midden, y0 + SPAN_H + colH - 3.4, { align: 'center' })
     if (c.subLabel && c.width >= 3.2) {
-      doc.setFontSize(4.6)
+      doc.setFont('Montserrat', 'normal')
+      doc.setFontSize(4.4)
       doc.setTextColor(...rgb(FG_MUTED))
-      doc.text(veilig(c.subLabel), midden, y0 + spanH + colH - 1, { align: 'center' })
-      doc.setFontSize(6)
+      doc.text(veilig(c.subLabel), midden, y0 + SPAN_H + colH - 0.9, { align: 'center' })
     }
   }
 
-  doc.setDrawColor(...rgb(BORDER))
+  doc.setDrawColor(...rgb(FG_SOFT))
+  doc.setLineWidth(0.3)
   doc.line(MARGE, y0 + TIJDAS_H, PAGINA.breedte - MARGE, y0 + TIJDAS_H)
-  doc.line(MARGE + LABEL_W, y0, MARGE + LABEL_W, RIJZONE_Y + inhoudH)
+  doc.setLineWidth(0.2)
+  doc.setDrawColor(...rgb(BORDER))
+  doc.line(x0, y0, x0, RIJZONE_Y + inhoudH)
 }
 
 function tekenAchtergrond(doc: jsPDF, as: Tijdas, inhoudH: number) {
@@ -440,85 +582,114 @@ function tekenAchtergrond(doc: jsPDF, as: Tijdas, inhoudH: number) {
 }
 
 /**
- * Vandaaglijn met vlag, zoals op het scherm. Wordt ná de rijen getekend: de
- * fase-balken zijn gevulde vlakken over de volle breedte en zouden de vlag
- * anders onder zich begraven.
+ * Vandaaglijn met vlag. Wordt ná de rijen getekend: de fase-balken zijn gevulde
+ * vlakken over de volle breedte en zouden de vlag anders onder zich begraven.
  */
-function tekenVandaag(doc: jsPDF, as: Tijdas, inhoudH: number) {
+function tekenVandaag(doc: jsPDF, as: Tijdas, inhoudH: number, accent: string): boolean {
   const vandaag = startOfDay(new Date())
-  if (vandaag < startOfDay(as.vs) || vandaag > startOfDay(as.ve)) return
+  if (vandaag < startOfDay(as.vs) || vandaag > startOfDay(as.ve)) return false
 
+  // Alleen een lijn, geen vlag met "VANDAAG" erop: waar je zo'n vlag ook zet, hij
+  // drukt altijd een dag-, week- of maandkop weg. De lijn wordt in de legenda
+  // onderaan verklaard, en dat kost geen enkel label.
   const x = MARGE + LABEL_W + (differenceInCalendarDays(vandaag, startOfDay(as.vs)) + 0.5) * as.mmPerDag
-  doc.setDrawColor(...rgb(BRAND))
-  doc.setLineWidth(0.4)
-  doc.line(x, RIJZONE_Y, x, RIJZONE_Y + inhoudH)
+  doc.setDrawColor(...rgb(accent))
+  doc.setLineWidth(0.5)
+  doc.line(x, MARGE + KOP_H, x, RIJZONE_Y + inhoudH)
   doc.setLineWidth(0.2)
-  doc.setFillColor(...rgb(BRAND))
-  doc.roundedRect(x - 7, RIJZONE_Y - 3.6, 14, 3.6, 0.6, 0.6, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(5)
-  doc.setTextColor(255, 255, 255)
-  doc.text('VANDAAG', x, RIJZONE_Y - 1.2, { align: 'center' })
+  return true
 }
 
-function tekenRijen(doc: jsPDF, rijen: Rij[], as: Tijdas, hoogte: number, inhoudH: number) {
+function tekenRijen(doc: jsPDF, rijen: Rij[], as: Tijdas, hoogte: number, inhoudH: number, accent: string) {
   const x0 = MARGE + LABEL_W
-  const tekstPt = 6.5 + ((hoogte - 5.0) / 2.5) * 2.0
+  const tekstPt = 6.6 + ((hoogte - 5.0) / 2.5) * 1.9
   const basislijn = tekstPt * 0.13
   let y = RIJZONE_Y
+  let zebra = false
 
   for (const r of rijen) {
     const h = rijHoogte(r, hoogte)
+    const midden = y + h / 2 + basislijn
 
     if (r.soort === 'fase') {
-      doc.setFillColor(...rgb(BORDER_ZACHT))
+      zebra = false
+      doc.setFillColor(...rgb(FASE_BALK))
       doc.rect(MARGE, y, PAGINA.breedte - MARGE * 2, h, 'F')
-      doc.setFont('helvetica', 'bold')
+      // Accentstreepje links maakt de sectiekop herkenbaar zonder een zwaar vlak.
+      doc.setFillColor(...rgb(accent))
+      doc.rect(MARGE, y, 1.8, h, 'F')
+
+      doc.setFont('Montserrat', 'semibold')
       doc.setFontSize(tekstPt)
-      doc.setTextColor(...rgb(FG))
-      doc.text(veilig(r.naam.toUpperCase()), MARGE + 1.5, y + h / 2 + basislijn, { maxWidth: LABEL_W - 3 })
+      doc.setTextColor(...rgb(GROEN_DONKER))
+      doc.text(veilig(r.naam.toUpperCase()), MARGE + KOL.titel.x, midden, {
+        maxWidth: KOL.start.x - KOL.titel.x - 2, charSpace: 0.08,
+      })
+
+      doc.setFont('Montserrat', 'normal')
+      doc.setFontSize(tekstPt - 1.3)
+      doc.setTextColor(...rgb(FG_MUTED))
+      if (r.start) doc.text(datumCel(r.start), MARGE + KOL.start.x, midden)
+      if (r.eind) doc.text(datumCel(r.eind), MARGE + KOL.eind.x, midden)
+      // De doorlooptijd van de fase zelf — onder een kolom die "DGN" heet hoort
+      // een aantal dagen te staan, niet het aantal activiteiten eronder.
+      const faseDagen = duurInDagen(r.start, r.eind)
+      if (faseDagen != null) {
+        doc.text(String(faseDagen), MARGE + KOL.dagen.x + KOL.dagen.w, midden, { align: 'right' })
+      }
 
       const balk = balkGeometrie(r.start, r.eind, as)
       if (balk) {
-        doc.setFillColor(...rgb(FASE_BALK))
-        doc.rect(x0 + balk.left, y + h * 0.32, balk.breedte, h * 0.36, 'F')
+        doc.setFillColor(...rgb(FG_MUTED))
+        doc.rect(x0 + balk.left, y + h * 0.44, balk.breedte, Math.max(0.9, h * 0.14), 'F')
       }
     } else {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(tekstPt)
+      if (zebra) {
+        doc.setFillColor(...rgb(ZEBRA))
+        doc.rect(MARGE, y, PAGINA.breedte - MARGE * 2, h, 'F')
+      }
+      zebra = !zebra
+
+      doc.setFont('Montserrat', 'normal')
+      doc.setFontSize(tekstPt - 0.8)
       doc.setTextColor(...rgb(FG_MUTED))
-      doc.text(String(r.nr), MARGE + 1.5, y + h / 2 + basislijn)
+      doc.text(String(r.nr), MARGE + KOL.nr.x + KOL.nr.w, midden, { align: 'right' })
 
       // splitTextToSize is de jsPDF-tegenhanger van `wikkel` uit lib/pdf/tekst:
       // het rekent met de actieve font en grootte, dus geen eigen breedtemeting.
+      doc.setFontSize(tekstPt)
       doc.setTextColor(...rgb(FG))
-      const regels = doc.splitTextToSize(veilig(r.titel), LABEL_W - 19) as string[]
+      const regels = doc.splitTextToSize(veilig(r.titel), KOL.titel.w) as string[]
       const tonen = regels.slice(0, h >= 6.5 ? 2 : 1)
       if (regels.length > tonen.length) {
         tonen[tonen.length - 1] = `${tonen[tonen.length - 1].replace(/\s+\S*$/, '')}…`
       }
       const regelH = tekstPt * 0.36
       const startY = y + h / 2 - ((tonen.length - 1) * regelH) / 2 + basislijn
-      tonen.forEach((t, i) => doc.text(t, MARGE + 7, startY + i * regelH))
+      tonen.forEach((t, i) => doc.text(t, MARGE + KOL.titel.x, startY + i * regelH))
 
+      doc.setFontSize(tekstPt - 0.9)
+      doc.setTextColor(...rgb(FG_SOFT))
+      if (r.start) doc.text(datumCel(r.start), MARGE + KOL.start.x, midden)
+      if (r.eind) doc.text(datumCel(r.eind), MARGE + KOL.eind.x, midden)
       const dagen = duurInDagen(r.start, r.eind)
       if (dagen != null) {
         doc.setTextColor(...rgb(FG_MUTED))
-        doc.text(String(dagen), MARGE + LABEL_W - 1.5, y + h / 2 + basislijn, { align: 'right' })
+        doc.text(String(dagen), MARGE + KOL.dagen.x + KOL.dagen.w, midden, { align: 'right' })
       }
 
       const balk = balkGeometrie(r.start, r.eind, as)
       if (balk) {
-        const bh = h * 0.56
+        const bh = Math.min(h * 0.56, 4.4)
         const by = y + (h - bh) / 2
         doc.setFillColor(...rgb(r.kleur))
-        doc.roundedRect(x0 + balk.left, by, balk.breedte, bh, 0.5, 0.5, 'F')
+        doc.roundedRect(x0 + balk.left, by, balk.breedte, bh, 0.6, 0.6, 'F')
         // Het volgnummer in de balk, zolang hij breed genoeg is om het te dragen.
-        if (balk.breedte >= 5 && bh >= 3) {
-          doc.setFont('helvetica', 'bold')
-          doc.setFontSize(Math.min(tekstPt - 1.2, bh * 1.9))
+        if (balk.breedte >= 5.5 && bh >= 2.8) {
+          doc.setFont('Montserrat', 'semibold')
+          doc.setFontSize(Math.min(tekstPt - 1.6, bh * 1.5))
           doc.setTextColor(...leesbaarOp(r.kleur))
-          doc.text(String(r.nr), x0 + balk.left + balk.breedte / 2, by + bh / 2 + bh * 0.28, { align: 'center' })
+          doc.text(String(r.nr), x0 + balk.left + balk.breedte / 2, by + bh / 2 + bh * 0.26, { align: 'center' })
         }
       }
     }
@@ -553,29 +724,37 @@ function duurInDagen(start: string | null, eind: string | null): number | null {
 
 function tekenVoet(
   doc: jsPDF,
-  uursoorten: Pick<PlanningUursoort, 'id' | 'naam' | 'kleur'>[],
+  legenda: Legenda,
   blad: number,
   totaal: number,
   rijBlok: Rij[],
   as: Tijdas,
   uitgedraaid: string,
+  accent: string,
+  toonVandaag: boolean,
 ) {
-  const y = PAGINA.hoogte - MARGE - VOET_H + 4.5
+  const y = PAGINA.hoogte - MARGE - VOET_H + 5.5
   const rechts = PAGINA.breedte - MARGE
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(6.5)
+  doc.setDrawColor(...rgb(BORDER))
+  doc.line(MARGE, y - 5, rechts, y - 5)
+  // Accentstreepje linksonder — dezelfde afsluiting als de lijn onder de kop.
+  doc.setFillColor(...rgb(accent))
+  doc.rect(MARGE, y - 5.35, 16, 0.7, 'F')
+
+  doc.setFont('Montserrat', 'normal')
+  doc.setFontSize(6)
 
   // De volgnummers die op dit blad staan — dat is wat de lezer in de linkerkolom
   // ziet. Rijen tellen zou de fase-koppen meerekenen en dus niet kloppen.
   const nrs = rijBlok.filter(r => r.soort === 'activiteit').map(r => (r as Extract<Rij, { soort: 'activiteit' }>).nr)
-  const bereik = nrs.length
+  const nrBereik = nrs.length
     ? nrs.length === 1 ? `activiteit ${nrs[0]}` : `activiteiten ${nrs[0]}–${nrs[nrs.length - 1]}`
     : null
 
   const rechterRegel = [
     totaal > 1 ? `Blad ${blad} van ${totaal}` : null,
-    bereik,
+    nrBereik,
     `${datumKort(as.vs)} – ${datumKort(as.ve)}`,
     `uitgedraaid ${uitgedraaid}`,
   ].filter(Boolean).join('   ·   ')
@@ -583,16 +762,26 @@ function tekenVoet(
 
   // Legenda van links, tot waar de bladregel rechts begint.
   let x = MARGE
-  for (const u of uursoorten) {
-    const label = veilig(u.naam ?? '')
+  for (const l of legenda) {
+    const label = veilig(l.label)
     if (!label) continue
-    const breedte = doc.getTextWidth(label) + 8
-    if (x + breedte > rechts - rechterBreedte - 8) break
-    doc.setFillColor(...rgb(u.kleur || BALK_FALLBACK))
-    doc.roundedRect(x, y - 2.4, 3, 3, 0.4, 0.4, 'F')
-    doc.setTextColor(...rgb(FG_MUTED))
-    doc.text(label, x + 4.2, y)
+    const breedte = doc.getTextWidth(label) + 9
+    if (x + breedte > rechts - rechterBreedte - 10) break
+    doc.setFillColor(...rgb(l.kleur || BALK_FALLBACK))
+    doc.roundedRect(x, y - 2.3, 3.2, 3.2, 0.5, 0.5, 'F')
+    doc.setTextColor(...rgb(FG_SOFT))
+    doc.text(label, x + 4.8, y)
     x += breedte
+  }
+
+  // Verklaart de groene verticale lijn in het raster.
+  if (toonVandaag && x + 22 < rechts - rechterBreedte - 10) {
+    doc.setDrawColor(...rgb(accent))
+    doc.setLineWidth(0.5)
+    doc.line(x + 1.6, y - 2.4, x + 1.6, y + 0.6)
+    doc.setLineWidth(0.2)
+    doc.setTextColor(...rgb(FG_SOFT))
+    doc.text('vandaag', x + 4.8, y)
   }
 
   doc.setTextColor(...rgb(FG_MUTED))

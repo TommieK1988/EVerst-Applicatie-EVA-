@@ -27,10 +27,21 @@ export type DetailplanningKop = {
   titel: string
   opdrachtgever: string | null
   projectleider: string | null
+  /** Alleen gevuld als het dossier aan een werkmaatschappij hangt; de meeste doen dat niet. */
+  werkmaatschappij: string | null
+}
+
+export type DetailplanningBedrijf = {
+  /** De moederorganisatie — de afzender van het vel, niet de werkmaatschappij van het dossier. */
+  naam: string | null
+  /** Huisstijlgroen uit `bedrijfsgegevens.kleur_primair`; null → de PDF houdt zijn eigen groen aan. */
+  kleurPrimair: string | null
+  logoUrl: string | null
 }
 
 export type DetailplanningGegevens = {
   kop: DetailplanningKop
+  bedrijf: DetailplanningBedrijf
   fasen: PlanningFase[]
   activiteiten: PlanningActiviteit[]
   /** Alleen de uursoorten die op dit dossier daadwerkelijk voorkomen — dat is de legenda. */
@@ -55,13 +66,13 @@ export async function laadDetailplanning(dossierId: string): Promise<Detailplann
 
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('dossiernummer, titel, klant_id, project_manager_id')
+    .select('dossiernummer, titel, klant_id, project_manager_id, werkmaatschappij_id')
     .eq('id', dossierId)
     .maybeSingle()
 
   if (!dossier) return null
 
-  const [activiteitenRes, fasenRes, klantRes, plRes] = await Promise.all([
+  const [activiteitenRes, fasenRes, klantRes, plRes, organisatieRes, wmRes] = await Promise.all([
     supabase
       .from('planning_activiteiten')
       .select('id, dossier_id, fase_id, uursoort_id, titel, gewenste_start, deadline, volgorde')
@@ -82,6 +93,21 @@ export async function laadDetailplanning(dossierId: string): Promise<Detailplann
           .eq('id', dossier.project_manager_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    // `bedrijfsgegevens` bevat de moederorganisatie én de werkmaatschappijen.
+    // Filter dus expliciet op de organisatie (parent_id is null): een kale
+    // `.limit(1)` pakt er een willekeurige, en dan staat er "Dakdekkersbedrijf
+    // Dakplan" boven het vel van een schildersdossier. Dat is precies wat er
+    // gebeurde. Alleen de organisatie heeft ook een logo en huisstijlkleuren.
+    supabase
+      .from('bedrijfsgegevens')
+      .select('naam, kleur_primair, logo_primair_url, logo_url')
+      .is('parent_id', null)
+      .order('naam')
+      .limit(1)
+      .maybeSingle(),
+    dossier.werkmaatschappij_id
+      ? supabase.from('bedrijfsgegevens').select('naam').eq('id', dossier.werkmaatschappij_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   const activiteiten = (activiteitenRes.data ?? []) as PlanningActiviteit[]
@@ -93,12 +119,22 @@ export async function laadDetailplanning(dossierId: string): Promise<Detailplann
     ? await supabase.from('planning_uursoorten').select('id, naam, kleur').in('id', uursoortIds)
     : { data: [] }
 
+  const org = organisatieRes.data as
+    | { naam: string | null; kleur_primair: string | null; logo_primair_url: string | null; logo_url: string | null }
+    | null
+
   return {
     kop: {
       dossiernummer: dossier.dossiernummer ?? null,
       titel: dossier.titel ?? '',
       opdrachtgever: (klantRes.data as { naam?: string } | null)?.naam ?? null,
       projectleider: volledigeNaam(plRes.data as Parameters<typeof volledigeNaam>[0]),
+      werkmaatschappij: (wmRes.data as { naam?: string } | null)?.naam ?? null,
+    },
+    bedrijf: {
+      naam: org?.naam ?? null,
+      kleurPrimair: org?.kleur_primair ?? null,
+      logoUrl: org?.logo_primair_url ?? org?.logo_url ?? null,
     },
     fasen: (fasenRes.data ?? []) as PlanningFase[],
     activiteiten,
