@@ -23,12 +23,13 @@ import type { ComplianceBevindingInput, UluTrip } from '../../types'
 import type { RuleModule, UluUserInfo } from '../types'
 import {
   DAG_NAMEN,
+  ankerKeuzeSleutel,
+  bepaalKeten,
   bouwKetens,
   duurLabel,
   afwezigheidOpDag,
   isHeleDagAfwezig,
   isoWeekdag,
-  ketenAankomst,
   vandaagNL,
   verwachteTijden,
   zakelijkeRittenPerDag,
@@ -36,7 +37,7 @@ import {
 
 export const R9: RuleModule = {
   code: 'R9',
-  runner: ({ trips, uluUsers, regels, roosters, afwezigheid }) => {
+  runner: ({ trips, uluUsers, regels, roosters, afwezigheid, ankerKeuzes }) => {
     const cfg = (regels.get('R9')?.drempel_config ?? {}) as Record<string, number>
     const margeMin = cfg.marge_minuten ?? 0
     const pauzeMin = cfg.keten_pauze_min ?? 5
@@ -68,23 +69,33 @@ export const R9: RuleModule = {
       const ketens = bouwKetens(dagRitten, pauzeMin)
       if (ketens.length === 0) continue
 
-      const eerste = ketens[0]
-      const { trip: ankerTrip, minuten: aankomst } = ketenAankomst(eerste)
+      const bepaald = bepaalKeten(
+        ketens,
+        'aankomst',
+        ankerKeuzes?.get(ankerKeuzeSleutel(userId, datum, 'R9')),
+      )
+      if (!bepaald) continue
+      const { keten, anker: ankerTrip, minuten: aankomst, handmatig } = bepaald
       if (aankomst == null) continue
 
       const verschil = aankomst - (start + margeMin)
-      if (verschil <= 0) continue
+      // Automatisch geldt: geen afwijking, geen signaal. Wees iemand de rit zélf
+      // aan, dan blijft de dag wél staan — juist als de afwijking daarmee
+      // wegvalt. Anders verdwijnt de dag uit de lijst op het moment dat je hem
+      // corrigeert, en is de keuze nergens meer terug te draaien.
+      if (verschil <= 0 && !handmatig) continue
 
-      out.push(...bouwBevindingen(eerste, ankerTrip, {
+      out.push(...bouwBevindingen(keten, ankerTrip, {
         user,
         datum,
-        verschil,
+        verschil: Math.max(0, verschil),
         aankomst,
         startLabel,
         benadering,
         margeMin,
         pauzeMin,
         overtredingVanaf,
+        handmatig,
       }))
     }
 
@@ -102,6 +113,8 @@ type Context = {
   margeMin: number
   pauzeMin: number
   overtredingVanaf: number
+  /** De bepalende rit is door een mens aangewezen. */
+  handmatig: boolean
 }
 
 function hm(minuten: number): string {
@@ -123,6 +136,8 @@ function bouwBevindingen(
   const gedeeldeData = {
     user_id_ulu: user.id,
     soort: 'te_laat',
+    anker_handmatig: ctx.handmatig,
+    anker_trip_id: anker.id,
     datum,
     dag,
     verwacht_start: ctx.startLabel,
@@ -139,13 +154,19 @@ function bouwBevindingen(
       'een tankstop of een opgesplitste registratie niet voor een aankomst wordt aangezien. ' +
       'Elke stop die geen tussenstop is telt als werkplek — ook de groothandel of het depot. ' +
       'De grens is de dagstart uit het werkrooster. Verlof onderdrukt het signaal. ' +
-      `Tot en met ${ctx.overtredingVanaf} minuten te laat is een waarschuwing, daarboven een overtreding.`,
+      `Tot en met ${ctx.overtredingVanaf} minuten te laat is een waarschuwing, daarboven een overtreding.` +
+      (ctx.handmatig
+        ? ' De bepalende rit is hier handmatig aangewezen; de ketenregel is dus overruled.'
+        : ''),
   }
 
   // Tot en met de drempel een waarschuwing, daarboven een overtreding. Alle
   // ritten van de keten krijgen dezelfde ernst: het gaat om één te late
-  // aankomst, alleen verdeeld over meerdere geregistreerde ritten.
-  const ernst = verschil > ctx.overtredingVanaf ? 'overtreding' : 'waarschuwing'
+  // aankomst, alleen verdeeld over meerdere geregistreerde ritten. Nul minuten
+  // kan alleen bij een handmatig aangewezen rit: dan is er niets aan de hand en
+  // blijft de dag alleen staan om de keuze te kunnen terugdraaien.
+  const ernst =
+    verschil <= 0 ? 'info' : verschil > ctx.overtredingVanaf ? 'overtreding' : 'waarschuwing'
 
   return keten.map((trip) => {
     const isAnker = trip.id === anker.id
@@ -158,9 +179,13 @@ function bouwBevindingen(
       periode_eind: datum,
       ernst,
       omschrijving: isAnker
-        ? `${naam}: op ${dag} ${datum} om ${hm(ctx.aankomst)} op het werk aangekomen — ` +
-          `${duurLabel(verschil)} na de roostertijd (${ctx.startLabel}).` +
-          (keten.length > 1 ? ` De heenreis bestaat uit ${keten.length} ritten.` : '')
+        ? verschil <= 0
+          ? `${naam}: op ${dag} ${datum} om ${hm(ctx.aankomst)} op het werk aangekomen — ` +
+            `op tijd volgens de handmatig aangewezen rit (roostertijd ${ctx.startLabel}).`
+          : `${naam}: op ${dag} ${datum} om ${hm(ctx.aankomst)} op het werk aangekomen — ` +
+            `${duurLabel(verschil)} na de roostertijd (${ctx.startLabel}).` +
+            (keten.length > 1 ? ` De heenreis bestaat uit ${keten.length} ritten.` : '') +
+            (ctx.handmatig ? ' Bepalende rit handmatig aangewezen.' : '')
         : `${naam}: deel van de heenreis op ${dag} ${datum}, die om ${hm(ctx.aankomst)} eindigde — ` +
           `${duurLabel(verschil)} na de roostertijd (${ctx.startLabel}).`,
       data: { ...gedeeldeData, keten_rol: isAnker ? 'anker' : 'deel' },

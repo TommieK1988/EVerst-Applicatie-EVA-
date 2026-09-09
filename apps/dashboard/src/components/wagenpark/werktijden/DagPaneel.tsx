@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, CheckCircle2, Flag, RotateCcw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Flag, MapPin, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
@@ -17,6 +17,10 @@ import {
   laadRittenBijBevinding,
   type DagRit,
 } from '@/app/(platform)/wagenpark/actions/werktijd-ritten'
+import {
+  kiesWerktijdAnker,
+  herstelWerktijdAnker,
+} from '@/app/(platform)/wagenpark/actions/werktijd-anker'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 
 /**
@@ -29,14 +33,21 @@ import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTa
 export default function DagPaneel({
   rij,
   onClose,
+  onVervangen,
 }: {
   rij: WerktijdRij | null
   onClose: () => void
+  /**
+   * De dag is herrekend en zit nu in een andere bevinding-rij. Het paneel blijft
+   * open op die nieuwe rij; `null` betekent dat er geen signaal meer over is.
+   */
+  onVervangen: (bevinding_id: string | null) => void
 }) {
   const [toelichting, setToelichting] = useState('')
   const [bezig, startTransition] = useTransition()
   const [ritten, setRitten] = useState<DagRit[] | null>(null)
   const [rittenFout, setRittenFout] = useState<string | null>(null)
+  const [handmatigAnker, setHandmatigAnker] = useState(false)
 
   // Wissel je van regel, dan mag de toelichting van de vorige niet blijven
   // staan — die zou zo aan de verkeerde dag worden vastgelegd.
@@ -51,13 +62,16 @@ export default function DagPaneel({
     const id = rij?.id
     setRitten(null)
     setRittenFout(null)
+    setHandmatigAnker(false)
     if (!id) return
 
     let afgebroken = false
     laadRittenBijBevinding(id).then((res) => {
       if (afgebroken) return
-      if (res.ok) setRitten(res.ritten)
-      else setRittenFout(res.error)
+      if (res.ok) {
+        setRitten(res.ritten)
+        setHandmatigAnker(res.handmatigAnker)
+      } else setRittenFout(res.error)
     })
     return () => {
       afgebroken = true
@@ -77,6 +91,34 @@ export default function DagPaneel({
     })
   }
 
+  /**
+   * De bepalende rit verzetten, of de handmatige keuze weer intrekken.
+   *
+   * Beide leveren een herrekende dag op, en die kan in een ándere bevinding-rij
+   * zijn beland (de minuten en de ernst bepalen mee welke rij het is). Daarom
+   * schuift het paneel mee naar het id dat terugkomt in plaats van dicht te gaan.
+   */
+  function verzetAnker(trip_id: string | null) {
+    if (!rij) return
+    startTransition(async () => {
+      const res = trip_id
+        ? await kiesWerktijdAnker(rij.id, trip_id)
+        : await herstelWerktijdAnker(rij.id)
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      toast.success(
+        trip_id
+          ? soortWoord === 'aankomst'
+            ? 'Aankomst opnieuw bepaald'
+            : 'Vertrek opnieuw bepaald'
+          : 'Terug naar de automatische bepaling',
+      )
+      onVervangen(res.bevinding_id)
+    })
+  }
+
   function heropenen() {
     if (!rij) return
     startTransition(async () => {
@@ -91,6 +133,7 @@ export default function DagPaneel({
   }
 
   const open = rij?.status === 'open'
+  const soortWoord = rij?.soort === 'te_laat' ? 'aankomst' : 'vertrek'
 
   return (
     <Drawer open={!!rij} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -125,14 +168,32 @@ export default function DagPaneel({
                   <dt className="text-slate-500">
                     {rij.soort === 'te_laat' ? 'Aangekomen' : 'Vertrokken'}
                   </dt>
-                  <dd className="text-slate-800">{rij.werkelijk?.slice(0, 5) ?? '—'}</dd>
+                  <dd className="text-slate-800">
+                    {rij.werkelijk?.slice(0, 5) ?? '—'}
+                    {handmatigAnker && (
+                      <span
+                        className="ml-1 text-xs text-slate-400"
+                        title="De bepalende rit is handmatig aangewezen; zie de ritten hieronder."
+                      >
+                        (handmatig bepaald)
+                      </span>
+                    )}
+                  </dd>
                   <dt className="text-slate-500">Afwijking</dt>
                   <dd
                     className={`font-medium ${
-                      rij.ernst === 'overtreding' ? 'text-red-700' : 'text-orange-700'
+                      rij.ernst === 'overtreding'
+                        ? 'text-red-700'
+                        : rij.ernst === 'info'
+                          ? 'text-slate-600'
+                          : 'text-orange-700'
                     }`}
                   >
-                    {minutenLabel(rij.minuten)} {rij.soort === 'te_laat' ? 'te laat' : 'te vroeg'}
+                    {rij.minuten === 0
+                      ? 'geen — op tijd volgens de aangewezen rit'
+                      : `${minutenLabel(rij.minuten)} ${
+                          rij.soort === 'te_laat' ? 'te laat' : 'te vroeg'
+                        }`}
                   </dd>
                 </dl>
                 <p className="mt-2 text-xs text-slate-500">
@@ -174,7 +235,27 @@ export default function DagPaneel({
                   ritten={ritten}
                   fout={rittenFout}
                   soort={rij.soort}
+                  bezig={bezig}
+                  onKies={(trip_id) => verzetAnker(trip_id)}
                 />
+                {handmatigAnker ? (
+                  <p className="mt-2 text-xs text-slate-600">
+                    De bepalende rit is hier handmatig aangewezen.{' '}
+                    <button
+                      type="button"
+                      disabled={bezig}
+                      onClick={() => verzetAnker(null)}
+                      className="underline text-green-700 hover:text-green-800 disabled:opacity-50"
+                    >
+                      Terug naar de automatische bepaling
+                    </button>
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Klopt de gemarkeerde rit niet? Wijs met &ldquo;bepaalt de {soortWoord}&rdquo;
+                    de rit aan die het wél was; de afwijking wordt daarop herrekend.
+                  </p>
+                )}
                 <Link
                   href="/wagenpark/ritten"
                   className="mt-2 inline-block text-sm text-green-700 hover:underline"
@@ -273,15 +354,25 @@ const RIT_TYPE_STIJL: Record<string, string> = {
  * aankomst; een tussenstop bij de groothandel laat zien dat er al gewerkt werd.
  * De keten is groen gemarkeerd zodat wél duidelijk blijft waar het getal
  * vandaan komt.
+ *
+ * Elke zakelijke rit kan de bepalende worden. De ketenregel raadt goed maar niet
+ * altijd: wie weet dat het depotbezoek van kwart voor vier gewoon werk was, wijst
+ * die rit hier aan en de afwijking wordt erop herrekend. Privéritten krijgen die
+ * knop niet — de werkdag-regels kijken alleen naar zakelijke ritten, dus een
+ * keuze daarop zou stilletjes niets doen.
  */
 function RittenLijst({
   ritten,
   fout,
   soort,
+  bezig,
+  onKies,
 }: {
   ritten: DagRit[] | null
   fout: string | null
   soort: WerktijdRij['soort']
+  bezig: boolean
+  onKies: (trip_id: string) => void
 }) {
   if (fout) {
     return <p className="text-sm text-slate-500">De ritten konden niet worden opgehaald ({fout}).</p>
@@ -292,6 +383,8 @@ function RittenLijst({
   if (ritten.length === 0) {
     return <p className="text-sm text-slate-500">Geen ritten gevonden op deze dag.</p>
   }
+
+  const ankerWoord = soort === 'te_laat' ? 'de aankomst' : 'het vertrek'
 
   return (
     <ol className="space-y-1.5">
@@ -317,18 +410,61 @@ function RittenLijst({
                 {r.rit_type === 'prive' ? 'privé' : r.rit_type.replace('_', '-')}
               </span>
             )}
-            {r.is_anker && (
+            {r.is_anker ? (
               <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-green-700">
                 <Flag className="w-3 h-3" />
-                {soort === 'te_laat' ? 'bepaalt de aankomst' : 'bepaalt het vertrek'}
+                bepaalt {ankerWoord}
+              </span>
+            ) : r.rit_type === 'zakelijk' ? (
+              <button
+                type="button"
+                disabled={bezig}
+                onClick={() => onKies(r.id)}
+                title={`Deze rit bepaalt ${ankerWoord}; de afwijking wordt erop herrekend.`}
+                className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-white hover:text-green-700 hover:ring-1 hover:ring-green-300 disabled:opacity-50"
+              >
+                <Flag className="w-3 h-3" />
+                bepaalt {ankerWoord}
+              </button>
+            ) : (
+              <span
+                className="ml-auto text-[11px] text-slate-400"
+                title="Alleen zakelijke ritten tellen mee in de werkdag."
+              >
+                telt niet mee
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500 truncate" title={`${r.adres_start ?? '—'} → ${r.adres_stop ?? '—'}`}>
-            {r.adres_start ?? '—'} → {r.adres_stop ?? '—'}
+          <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1 min-w-0">
+            <AdresLink adres={r.adres_start} />
+            <span className="text-slate-400">→</span>
+            <AdresLink adres={r.adres_stop} />
           </p>
         </li>
       ))}
     </ol>
+  )
+}
+
+/**
+ * Eén adres uit een rit, met een doorklik naar Google Maps.
+ *
+ * De ritregistratie levert een straat en plaats, geen coördinaat — daarom een
+ * zoekopdracht en geen kaartpin. Bij "de bouw in Zwolle" of "het depot" zegt de
+ * tekst je meestal niets; de kaart wel.
+ */
+function AdresLink({ adres }: { adres: string | null }) {
+  if (!adres) return <span className="text-slate-400">—</span>
+  return (
+    <a
+      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adres)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${adres} — opzoeken in Google Maps`}
+      className="group inline-flex items-center gap-0.5 min-w-0 hover:text-green-700"
+    >
+      <MapPin className="w-3 h-3 shrink-0 text-slate-300 group-hover:text-green-600" />
+      <span className="truncate group-hover:underline">{adres}</span>
+    </a>
   )
 }

@@ -4,7 +4,7 @@ import type {
   UluTrip,
   Voertuig,
 } from '../types'
-import type { AfwezigInfo, RoosterInfo } from './rules/werkdag'
+import type { AfwezigInfo, AnkerKeuzes, RoosterInfo } from './rules/werkdag'
 
 /** Beperkte shape van ulu_users — alleen wat regels nodig hebben. */
 export type UluUserInfo = {
@@ -46,6 +46,12 @@ export type ComplianceContext = {
   roosters?: Map<string, RoosterInfo[]>
   /** Verlof en ander verzuim per medewerker_id — onderdrukt R9/R10 die dag. */
   afwezigheid?: Map<string, AfwezigInfo[]>
+  /**
+   * Handmatig aangewezen bepalende ritten voor R9/R10, uit
+   * `werktijd_anker_keuzes`. Sleutel via `ankerKeuzeSleutel`. Ontbreekt de map,
+   * dan bepalen de regels de aankomst en het vertrek volledig zelf.
+   */
+  ankerKeuzes?: AnkerKeuzes
   /** Actieve regels uit de DB. */
   regels: Map<string, HandboekRegel>
 }

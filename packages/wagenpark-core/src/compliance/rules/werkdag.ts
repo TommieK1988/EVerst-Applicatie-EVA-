@@ -198,6 +198,88 @@ export function ketenVertrek(keten: UluTrip[]): { trip: UluTrip; minuten: number
   return { trip, minuten: parseHM(trip.start_tijd) }
 }
 
+/**
+ * Handmatig aangewezen bepalende ritten, uit `werktijd_anker_keuzes`.
+ *
+ * Sleutel: zie `ankerKeuzeSleutel`. Waarde: het trip-id dat de tijd bepaalt.
+ */
+export type AnkerKeuzes = Map<string, string>
+
+/**
+ * De sleutel waarop een handmatige keuze wordt opgezocht.
+ *
+ * `userId` gaat er ONGEWIJZIGD in: `user_id_ulu` is een bigint en
+ * node-postgres levert die als string, terwijl het type een number belooft.
+ * Zowel de ritten als de keuzes komen uit dezelfde pool en dragen dus dezelfde
+ * ruwe waarde; een `Number(...)` aan één kant laat elke lookup stil mislukken.
+ */
+export function ankerKeuzeSleutel(
+  userId: UluTrip['user_id_ulu'],
+  datum: string,
+  regelCode: string,
+): string {
+  return `${userId}|${datum}|${regelCode}`
+}
+
+/** Welke rit bepaalt de tijd, en welke ritten horen bij die verplaatsing. */
+export type BepalendeKeten = {
+  /** De ritten van de bepalende verplaatsing, in tijdsvolgorde. */
+  keten: UluTrip[]
+  /** De rit die de tijd zelf bepaalt. */
+  anker: UluTrip
+  /** Minuten sinds middernacht, of null als de rit geen bruikbare tijd heeft. */
+  minuten: number | null
+  /** De rit is door een mens aangewezen, niet door de ketenregel gevonden. */
+  handmatig: boolean
+}
+
+/**
+ * De bepalende keten van een dag: automatisch, of de rit die een mens aanwees.
+ *
+ * Automatisch is het de eerste keten (aankomst) of de laatste (vertrek), met het
+ * einde respectievelijk het begin ervan als tijd — precies wat R9 en R10 altijd
+ * al deden.
+ *
+ * Wijst iemand zelf een rit aan, dan telt die rit, en wordt de keten eromheen
+ * gesnoeid tot de reis waar hij bij hoort: bij een aankomst alles tot en met de
+ * aangewezen rit, bij een vertrek alles vanaf die rit. Zonder die snoei zouden
+ * ritten die na de aankomst of voor het vertrek liggen een signaal krijgen voor
+ * een verplaatsing waar ze geen deel van uitmaken.
+ *
+ * Wijst de keuze naar een rit die er niet (meer) is — verwijderd, of inmiddels
+ * als prive gemarkeerd en daarmee buiten beeld — dan valt de dag stil terug op
+ * de automatische bepaling. Dat is beter dan geen signaal: de keuze is dan
+ * simpelweg niet meer toepasbaar.
+ */
+export function bepaalKeten(
+  ketens: UluTrip[][],
+  soort: 'aankomst' | 'vertrek',
+  gekozenTripId?: string,
+): BepalendeKeten | null {
+  if (ketens.length === 0) return null
+
+  if (gekozenTripId) {
+    const keten = ketens.find((k) => k.some((t) => t.id === gekozenTripId))
+    if (keten) {
+      const index = keten.findIndex((t) => t.id === gekozenTripId)
+      const anker = keten[index]
+      return {
+        keten: soort === 'aankomst' ? keten.slice(0, index + 1) : keten.slice(index),
+        anker,
+        minuten:
+          soort === 'aankomst'
+            ? parseHM(anker.stop_tijd ?? anker.start_tijd)
+            : parseHM(anker.start_tijd),
+        handmatig: true,
+      }
+    }
+  }
+
+  const keten = soort === 'aankomst' ? ketens[0] : ketens[ketens.length - 1]
+  const { trip, minuten } = soort === 'aankomst' ? ketenAankomst(keten) : ketenVertrek(keten)
+  return { keten, anker: trip, minuten, handmatig: false }
+}
+
 /** "1u05" / "18 min" — voor in de omschrijving van een bevinding. */
 export function duurLabel(minuten: number): string {
   const u = Math.floor(minuten / 60)

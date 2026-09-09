@@ -20,11 +20,12 @@ import type { ComplianceBevindingInput, UluTrip } from '../../types'
 import type { RuleModule, UluUserInfo } from '../types'
 import {
   DAG_NAMEN,
+  ankerKeuzeSleutel,
+  bepaalKeten,
   bouwKetens,
   duurLabel,
   afwezigheidOpDag,
   isoWeekdag,
-  ketenVertrek,
   vandaagNL,
   verwachteTijden,
   zakelijkeRittenPerDag,
@@ -32,7 +33,7 @@ import {
 
 export const R10: RuleModule = {
   code: 'R10',
-  runner: ({ trips, uluUsers, regels, roosters, afwezigheid }) => {
+  runner: ({ trips, uluUsers, regels, roosters, afwezigheid, ankerKeuzes }) => {
     const cfg = (regels.get('R10')?.drempel_config ?? {}) as Record<string, number>
     const margeMin = cfg.marge_minuten ?? 0
     const pauzeMin = cfg.keten_pauze_min ?? 5
@@ -61,26 +62,37 @@ export const R10: RuleModule = {
       }
 
       const ketens = bouwKetens(dagRitten, pauzeMin)
-      // Eén keten = alleen de heenreis bekend; daar is geen vertrek uit af te leiden.
-      if (ketens.length < 2) continue
+      const bepaald = bepaalKeten(
+        ketens,
+        'vertrek',
+        ankerKeuzes?.get(ankerKeuzeSleutel(userId, datum, 'R10')),
+      )
+      if (!bepaald) continue
+      const { keten, anker: ankerTrip, minuten: vertrek, handmatig } = bepaald
 
-      const laatste = ketens[ketens.length - 1]
-      const { trip: ankerTrip, minuten: vertrek } = ketenVertrek(laatste)
+      // Eén keten = alleen de heenreis bekend; daar is geen vertrek uit af te
+      // leiden. Heeft iemand de bepalende rit zélf aangewezen, dan weet hij het
+      // beter dan die vuistregel en telt zijn keuze.
+      if (ketens.length < 2 && !handmatig) continue
       if (vertrek == null) continue
 
       const verschil = eind - margeMin - vertrek
-      if (verschil <= 0) continue
+      // Zie R9: zonder afwijking geen signaal, tenzij de rit handmatig is
+      // aangewezen — dan blijft de dag staan zodat de keuze zichtbaar en
+      // omkeerbaar blijft.
+      if (verschil <= 0 && !handmatig) continue
 
-      out.push(...bouwBevindingen(laatste, ankerTrip, {
+      out.push(...bouwBevindingen(keten, ankerTrip, {
         user,
         datum,
-        verschil,
+        verschil: Math.max(0, verschil),
         vertrek,
         eindLabel,
         benadering,
         margeMin,
         pauzeMin,
         overtredingVanaf,
+        handmatig,
       }))
     }
 
@@ -98,6 +110,8 @@ type Context = {
   margeMin: number
   pauzeMin: number
   overtredingVanaf: number
+  /** De bepalende rit is door een mens aangewezen. */
+  handmatig: boolean
 }
 
 function hm(minuten: number): string {
@@ -118,6 +132,8 @@ function bouwBevindingen(
   const gedeeldeData = {
     user_id_ulu: user.id,
     soort: 'te_vroeg',
+    anker_handmatig: ctx.handmatig,
+    anker_trip_id: anker.id,
     datum,
     dag,
     verwacht_eind: ctx.eindLabel,
@@ -134,12 +150,18 @@ function bouwBevindingen(
       'tankstop onderweg naar huis het vertrekmoment niet verschuift. De grens is het dageind ' +
       'uit het werkrooster. Verlof onderdrukt het signaal, en een dag met maar één ritketen ' +
       `wordt overgeslagen. Tot en met ${ctx.overtredingVanaf} minuten te vroeg is een ` +
-      'waarschuwing, daarboven een overtreding.',
+      'waarschuwing, daarboven een overtreding.' +
+      (ctx.handmatig
+        ? ' De bepalende rit is hier handmatig aangewezen; de ketenregel is dus overruled.'
+        : ''),
   }
 
   // Alle ritten van de keten krijgen dezelfde ernst: het gaat om één te vroeg
-  // vertrek, alleen verdeeld over meerdere geregistreerde ritten.
-  const ernst = verschil > ctx.overtredingVanaf ? 'overtreding' : 'waarschuwing'
+  // vertrek, alleen verdeeld over meerdere geregistreerde ritten. Nul minuten
+  // kan alleen bij een handmatig aangewezen rit: dan is er niets aan de hand en
+  // blijft de dag alleen staan om de keuze te kunnen terugdraaien.
+  const ernst =
+    verschil <= 0 ? 'info' : verschil > ctx.overtredingVanaf ? 'overtreding' : 'waarschuwing'
 
   return keten.map((trip) => {
     const isAnker = trip.id === anker.id
@@ -152,9 +174,13 @@ function bouwBevindingen(
       periode_eind: datum,
       ernst,
       omschrijving: isAnker
-        ? `${naam}: op ${dag} ${datum} om ${hm(ctx.vertrek)} van het werk vertrokken — ` +
-          `${duurLabel(verschil)} voor de roostertijd (${ctx.eindLabel}).` +
-          (keten.length > 1 ? ` De thuisreis bestaat uit ${keten.length} ritten.` : '')
+        ? verschil <= 0
+          ? `${naam}: op ${dag} ${datum} om ${hm(ctx.vertrek)} van het werk vertrokken — ` +
+            `op tijd volgens de handmatig aangewezen rit (roostertijd ${ctx.eindLabel}).`
+          : `${naam}: op ${dag} ${datum} om ${hm(ctx.vertrek)} van het werk vertrokken — ` +
+            `${duurLabel(verschil)} voor de roostertijd (${ctx.eindLabel}).` +
+            (keten.length > 1 ? ` De thuisreis bestaat uit ${keten.length} ritten.` : '') +
+            (ctx.handmatig ? ' Bepalende rit handmatig aangewezen.' : '')
         : `${naam}: deel van de thuisreis op ${dag} ${datum}, die om ${hm(ctx.vertrek)} begon — ` +
           `${duurLabel(verschil)} voor de roostertijd (${ctx.eindLabel}).`,
       data: { ...gedeeldeData, keten_rol: isAnker ? 'anker' : 'deel' },

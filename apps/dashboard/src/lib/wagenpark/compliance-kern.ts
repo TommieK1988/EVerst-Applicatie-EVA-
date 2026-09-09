@@ -47,8 +47,15 @@ export async function voerComplianceUit(): Promise<{
   // `tripsRes.data ?? []` en negeerde `tripsRes.error`), waarna de hele run
   // "geslaagd" meldde met nul bevindingen. Numerieke kolommen worden expliciet
   // naar float gecast, want node-postgres levert `numeric` als string.
-  const [trips, voertuigenRes, regelsRes, uluUsersRaw, roostersRaw, afwezigheidRaw] =
-    await Promise.all([
+  const [
+    trips,
+    voertuigenRes,
+    regelsRes,
+    uluUsersRaw,
+    roostersRaw,
+    afwezigheidRaw,
+    ankerKeuzesRaw,
+  ] = await Promise.all([
       pgQuery<UluTrip & {
         rit_type_override?: 'zakelijk' | 'prive' | null
         rit_type_effectief?: 'zakelijk' | 'prive' | null
@@ -93,6 +100,14 @@ export async function voerComplianceUit(): Promise<{
           where eind_datum >= $1::date and start_datum <= $2::date`,
         [periodeStart, periodeEind],
       ),
+      // Handmatig aangewezen bepalende ritten. Zonder deze rijen bepalen R9/R10
+      // de aankomst en het vertrek volledig zelf; mét een rij wint de mens.
+      pgQuery<{ user_id_ulu: string; datum: string; regel_code: string; trip_id: string }>(
+        `select k.user_id_ulu, k.datum::text as datum, k.regel_code, k.trip_id::text as trip_id
+           from public.werktijd_anker_keuzes k
+          where k.datum between $1::date and $2::date`,
+        [periodeStart, periodeEind],
+      ),
     ])
 
   // Fouten hier niet inslikken: een mislukte laadstap zou anders een lege lijst
@@ -130,6 +145,20 @@ export async function voerComplianceUit(): Promise<{
     afwezigheid.set(a.medewerker_id, lijst)
   }
 
+  // De sleutel gaat via `ankerKeuzeSleutel`, met de ruwe `user_id_ulu` erin.
+  // Beide kanten komen uit dezelfde pool en zijn dus allebei een string (bigint);
+  // een conversie aan één kant zou elke lookup stil laten mislukken.
+  const ankerKeuzes = new Map<string, string>(
+    ankerKeuzesRaw.map((k) => [
+      Compliance.ankerKeuzeSleutel(
+        k.user_id_ulu as unknown as UluTrip['user_id_ulu'],
+        k.datum,
+        k.regel_code,
+      ),
+      k.trip_id,
+    ]),
+  )
+
   const ctx = {
     trips: tripsEffectief,
     voertuigen,
@@ -139,6 +168,7 @@ export async function voerComplianceUit(): Promise<{
     uluUsers,
     roosters,
     afwezigheid,
+    ankerKeuzes,
   }
   const result = Compliance.runComplianceEngine(ctx)
 

@@ -35,7 +35,17 @@ export type DagRit = {
 }
 
 export type RittenBijBevinding =
-  | { ok: true; ritten: DagRit[] }
+  | {
+      ok: true
+      ritten: DagRit[]
+      /**
+       * De bepalende rit is door een mens aangewezen in plaats van door de
+       * ketenregel gevonden. Bepaalt of het paneel een "terug naar automatisch"
+       * aanbiedt; komt uit `werktijd_anker_keuzes` en niet uit de bevinding, want
+       * de keuze is de bron en de bevinding slechts de uitkomst ervan.
+       */
+      handmatigAnker: boolean
+    }
   | { ok: false; error: string }
 
 export async function laadRittenBijBevinding(
@@ -78,7 +88,18 @@ export async function laadRittenBijBevinding(
       `,
       [bevinding_id],
     )
-    return { ok: true, ritten }
+    const keuzes = await pgQuery<{ aantal: number }>(
+      `select count(*)::int as aantal
+         from public.compliance_bevindingen b
+         join public.werktijd_anker_keuzes k
+           on k.user_id_ulu::text = (b.data->>'user_id_ulu')
+          and k.datum = b.periode_start
+          and k.regel_code = b.regel_code
+        where b.id = $1::uuid`,
+      [bevinding_id],
+    )
+
+    return { ok: true, ritten, handmatigAnker: (keuzes[0]?.aantal ?? 0) > 0 }
   } catch (e: unknown) {
     // Fail-soft: het paneel blijft bruikbaar om af te vinken, ook als de ritten
     // er even niet bij komen.

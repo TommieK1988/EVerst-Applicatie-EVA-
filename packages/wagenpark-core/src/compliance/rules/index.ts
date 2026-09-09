@@ -12,4 +12,11 @@ export const ALLE_REGELS: RuleModule[] = [R1, R2a, R2b, R3, R6, R7, R9, R10]
 
 export { R1, R2a, R2b, R3, R6, R7, R9, R10 }
 export { runParkingRule, type ParkingConfig, type ParkingRow } from './R8-parkeren'
-export { bouwKetens, type AfwezigInfo, type RoosterInfo } from './werkdag'
+export {
+  bouwKetens,
+  ankerKeuzeSleutel,
+  bepaalKeten,
+  type AfwezigInfo,
+  type AnkerKeuzes,
+  type RoosterInfo,
+} from './werkdag'

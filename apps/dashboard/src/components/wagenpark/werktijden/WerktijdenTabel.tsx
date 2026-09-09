@@ -185,8 +185,16 @@ export default function WerktijdenTabel({
           teltMee(r.status) ? (
             <span
               className={`font-medium ${
-                r.ernst === 'overtreding' ? 'text-red-700' : 'text-orange-700'
+                r.ernst === 'overtreding'
+                  ? 'text-red-700'
+                  : r.ernst === 'info'
+                    ? 'text-slate-500'
+                    : 'text-orange-700'
               }`}
+              // Nul minuten komt alleen voor als de bepalende rit handmatig is
+              // aangewezen en de afwijking daarmee wegvalt. De dag blijft in de
+              // lijst staan zodat die keuze zichtbaar en omkeerbaar blijft.
+              title={r.minuten === 0 ? 'Geen afwijking meer na handmatige correctie' : undefined}
             >
               {minutenLabel(r.minuten)}
             </span>
@@ -294,7 +302,14 @@ export default function WerktijdenTabel({
         onRijKlik={(r) => setGeopendId(r.id)}
       />
 
-      <DagPaneel rij={geopend} onClose={() => setGeopendId(null)} />
+      <DagPaneel
+        rij={geopend}
+        onClose={() => setGeopendId(null)}
+        // Wordt de bepalende rit verzet, dan is de dag herrekend en zit hij in
+        // een andere bevinding-rij. Het paneel schuift mee; is er geen signaal
+        // meer over, dan gaat het dicht.
+        onVervangen={(id) => setGeopendId(id)}
+      />
     </>
   )
 }
