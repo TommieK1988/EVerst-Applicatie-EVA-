@@ -61,9 +61,10 @@ export default async function HomePage() {
     })
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
 
-  // De widget toont er vijf; de teller in de kop moet het volledige aantal noemen.
+  // De widget toont er zeven, net als de andere lijstwidgets; de teller in de kop
+  // moet het volledige aantal noemen.
   const agendaItems: AgendaWidgetItem[] = agendaRelevant
-    .slice(0, 5)
+    .slice(0, 7)
     .map(r => ({
       id:          r.id,
       titel:       r.titel,

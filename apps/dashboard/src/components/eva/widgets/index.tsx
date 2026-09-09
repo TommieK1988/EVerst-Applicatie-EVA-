@@ -17,11 +17,16 @@ import {
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
 
 /* ── Weergave-limieten ───────────────────────────────────────
-   Widgets zijn 460px hoog zonder interne scroll; deze aantallen
-   passen binnen de beschikbare contenthoogte (±373px). */
-const MAX_TAKEN         = 6;
-const MAX_DOSSIERS      = 7;
-const MAX_NIEUWS        = 4;
+   Widgets zijn 460px hoog zonder interne scroll; er past ±368px
+   aan regels in. Elke lijstwidget toont er ZEVEN, zodat de tegels
+   naast elkaar even vol staan -- eerder toonde de ene er vier en
+   de andere zeven, en dan lijkt de kortste leeg terwijl hij het
+   niet is. Zeven regels van ±45px passen; meer niet. Verander je
+   de regelhoogte, reken dit dan na. */
+export const MAX_WIDGET_RIJEN = 7;
+const MAX_TAKEN         = MAX_WIDGET_RIJEN;
+const MAX_DOSSIERS      = MAX_WIDGET_RIJEN;
+const MAX_NIEUWS        = MAX_WIDGET_RIJEN;
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -167,6 +172,77 @@ export function WidgetShell({
       </div>
     </section>
   );
+}
+
+/* ── WidgetRij ───────────────────────────────────────────────
+   De regel die elke lijstwidget gebruikt: stip, titel met een
+   ondertitel eronder, en rechts een kort label in kapitalen. Hij
+   staat hier als component en niet als losse styling per widget,
+   omdat de tegels naast elkaar staan: wijkt er een af in
+   regelhoogte of lettergrootte, dan zie je dat meteen. */
+export function WidgetRij({
+  stip, titel, sub, rechts, rechtsKleur, laatste, href, onKlik,
+}: {
+  /** Kleur van de stip links; die codeert waar de regel over gaat. */
+  stip: string;
+  titel: string;
+  sub?: string | null;
+  /** Kort label rechts (deadline, substatus). In kapitalen, net als in de andere widgets. */
+  rechts?: string | null;
+  rechtsKleur?: string;
+  /** Onderste regel krijgt geen scheidslijn. */
+  laatste?: boolean;
+  /** Link (opent in een nieuw tabblad, zoals overal in de dossierwidgets). */
+  href?: string | null;
+  /** Alternatief voor `href` als de regel binnen de app navigeert. */
+  onKlik?: () => void;
+}) {
+  const inhoud = (
+    <>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: stip, flexShrink: 0 }}/>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{titel}</div>
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{sub ?? '—'}</div>
+      </div>
+      {rechts && (
+        <span style={{
+          flexShrink: 0,
+          fontFamily: 'var(--font-ui)', fontSize: 9, fontWeight: 700,
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+          color: rechtsKleur ?? 'var(--fg-muted)',
+        }}>{rechts}</span>
+      )}
+    </>
+  );
+
+  const stijl: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '6px 2px',
+    borderBottom: laatste ? 'none' : '1px solid var(--border)',
+    textDecoration: 'none', color: 'inherit',
+  };
+
+  if (href) {
+    return <a href={href} {...NAAR_NIEUW_TABBLAD} style={stijl}>{inhoud}</a>;
+  }
+  if (onKlik) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onKlik}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onKlik(); } }}
+        style={{ ...stijl, cursor: 'pointer' }}
+      >{inhoud}</div>
+    );
+  }
+  return <div style={stijl}>{inhoud}</div>;
 }
 
 /* ── PriDot ─────────────────────────────────────────────── */
@@ -342,38 +418,18 @@ function DossierLijstWidget({ title, dossiers, totaal, sectie, Icon, dotKleur, m
             {emptyText}
           </div>
         )}
-        {displayed.map((d, i) => {
-          const sub = toonLabel(d);
-          return (
-            <a
-              key={d.id}
-              href={`/${sectie}/${d.id}`}
-              {...NAAR_NIEUW_TABBLAD}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '6px 2px',
-                borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
-                textDecoration: 'none', color: 'inherit',
-              }}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotKleur, flexShrink: 0 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {d.titel}
-                </div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--fg-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {d.klant_naam ?? '—'}
-                </div>
-              </div>
-              <span style={{
-                flexShrink: 0,
-                fontFamily: 'var(--font-ui)', fontSize: 9, fontWeight: 700,
-                letterSpacing: '0.04em', textTransform: 'uppercase',
-                color: subKleur?.(d) ?? dotKleur,
-              }}>{sub}</span>
-            </a>
-          );
-        })}
+        {displayed.map((d, i) => (
+          <WidgetRij
+            key={d.id}
+            stip={dotKleur}
+            titel={d.titel}
+            sub={d.klant_naam ?? '—'}
+            rechts={toonLabel(d)}
+            rechtsKleur={subKleur?.(d) ?? dotKleur}
+            laatste={i === displayed.length - 1}
+            href={`/${sectie}/${d.id}`}
+          />
+        ))}
       </div>
     </WidgetShell>
   );
@@ -454,12 +510,12 @@ export function NewsWidget() {
   return (
     <WidgetShell title="Nieuws uit de sector" subtitle="NU.nl Economie · Installatie.nl · NU.nl Wonen" action="Kanalen" Icon={IconSparkle}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {loading && [0,1,2,3].map(i => (
-          <div key={i} style={{ padding: '10px 2px', borderBottom: i < MAX_NIEUWS - 1 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 7, background: 'var(--bg-active)', flexShrink: 0 }}/>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-              <div style={{ height: 12, borderRadius: 4, background: 'var(--bg-active)', width: '80%' }}/>
-              <div style={{ height: 10, borderRadius: 4, background: 'var(--bg-active)', width: '40%' }}/>
+        {loading && Array.from({ length: MAX_NIEUWS }, (_, i) => i).map(i => (
+          <div key={i} style={{ padding: '6px 2px', borderBottom: i < MAX_NIEUWS - 1 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 7, background: 'var(--bg-active)', flexShrink: 0 }}/>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5, justifyContent: 'center' }}>
+              <div style={{ height: 11, borderRadius: 4, background: 'var(--bg-active)', width: '80%' }}/>
+              <div style={{ height: 9, borderRadius: 4, background: 'var(--bg-active)', width: '40%' }}/>
             </div>
           </div>
         ))}
@@ -468,26 +524,32 @@ export function NewsWidget() {
             Nieuws niet beschikbaar.
           </div>
         )}
+        {/* Kop op een regel, net als de titels in de andere widgets: met twee regels
+            passen er maar vier berichten in de tegel en oogt de kolom halfleeg. */}
         {displayed?.map((n, i) => (
           <a key={i} href={n.link} target="_blank" rel="noopener noreferrer" style={{
-            display: 'flex', gap: 12, padding: '10px 2px',
+            display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px',
             borderBottom: i < displayed.length - 1 ? '1px solid var(--border)' : 'none',
             textDecoration: 'none', color: 'inherit',
           }}>
             <div style={{
-              width: 40, height: 40, borderRadius: 7, flexShrink: 0,
+              width: 30, height: 30, borderRadius: 7, flexShrink: 0,
               background: `linear-gradient(135deg, oklch(0.6 0.08 ${140 + i * 30}), oklch(0.4 0.10 ${120 + i * 30}))`,
               display: 'grid', placeItems: 'center',
-              fontFamily: 'var(--font-ui)', fontSize: 8, fontWeight: 700,
+              fontFamily: 'var(--font-ui)', fontSize: 7, fontWeight: 700,
               color: 'white', textAlign: 'center', letterSpacing: '0.03em', textTransform: 'uppercase',
-              lineHeight: 1.2, padding: 4,
+              lineHeight: 1.15, padding: 3,
             }}>{n.source}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 500, color: 'var(--fg)', lineHeight: 1.35,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              <div title={n.title} style={{
+                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>{n.title}</div>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', marginTop: 3, letterSpacing: '0.04em' }}>
+              <div style={{
+                fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)',
+                marginTop: 1, letterSpacing: '0.04em',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
                 {n.source} · {relativeNewsTime(n.pubDate)} · <span style={{ color: 'var(--accent)' }}>{n.tag}</span>
               </div>
             </div>
@@ -649,7 +711,9 @@ export function AgendaWidget({ items = [], totaal }: { items?: AgendaWidgetItem[
       Icon={IconAgenda}
       compact
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+      {/* Iets strakker dan de andere widgets omdat elk item hier een kaartje is met
+          een eigen rand: met gap 6 en 7px padding passen er zes in de tegel, niet zeven. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>
         {items.length === 0 && (
           <div style={{ padding: '8px 0', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
             Geen aankomende items.
@@ -661,7 +725,7 @@ export function AgendaWidget({ items = [], totaal }: { items?: AgendaWidgetItem[
           return (
             <div key={item.id} style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              padding: '7px 10px',
+              padding: '5px 10px',
               background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
             }}>
               <div style={{
@@ -672,7 +736,7 @@ export function AgendaWidget({ items = [], totaal }: { items?: AgendaWidgetItem[
               <div style={{ width: 3, alignSelf: 'stretch', background: item.kleur, borderRadius: 2, flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
+                  fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600,
                   color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{item.titel}</div>
                 <div style={{
