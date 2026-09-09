@@ -4,12 +4,19 @@
  * Los van de route zodat de opmaak zonder database en zonder inlogsessie te
  * bekijken is — een PDF met over elkaar heen vallende kolommen valt in geen
  * enkele type-check op, alleen op papier.
+ *
+ * LIGGEND, en dat is geen smaakkwestie. Staand paste de tabel precies tot en met
+ * de uursoorten; met de aanwezigheid, de arbeidsuren en het saldo erbij komen er
+ * drie kolommen bij die er staand alleen in passen door de uursoorten weg te
+ * knijpen — en juist díe kolom verklaart een saldo ("5,0 verlof · 3,0 gewerkt").
+ * Liggend past alles zonder dat er ergens iets wordt afgekapt.
  */
 import jsPDF from 'jspdf'
 import { datumKort, MAAND_LABEL, maandenInPeriode, type Periode } from '@/lib/wagenpark/periode'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
 import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG, SOORT_LABEL,
+  dagSaldoUren, saldoLabel,
 } from '@/lib/wagenpark/werktijd'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
 
@@ -22,6 +29,20 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const tijd = (t: string | null) => (t ? t.slice(0, 5) : '—')
+
+/**
+ * Tekst geschikt maken voor de ingebouwde Helvetica van jsPDF.
+ *
+ * Die font gebruikt WinAnsi, en daar zit het echte minteken (U+2212) NIET in.
+ * jsPDF valt er stil op terug met een verkeerde glyph: "−0,4 u" kwam als
+ * teken-voor-teken uit elkaar getrokken `" 0 , 4 u` op papier. Op het scherm is
+ * U+2212 juist het goede teken — het lijnt uit met de cijfers waar een
+ * koppelteken dat niet doet — dus we ruilen hem pas hier om, niet in
+ * `saldoLabel` zelf. Het gewone koppelteken staat wel in WinAnsi.
+ *
+ * En- en em-streepjes (– —) en de punt (·) zitten er wel in en blijven dus staan.
+ */
+const winAnsi = (t: string) => t.replace(/−/g, '-')
 
 const WEEKDAG = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za']
 
@@ -55,7 +76,7 @@ export function bouwWerktijdenPdf({
   const rijen = [...ongesorteerd].sort((a, b) => a.datum.localeCompare(b.datum))
   const totalen = bouwSamenvatting(rijen)[0] ?? null
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
   const margeL = 16
@@ -89,6 +110,7 @@ export function bouwWerktijdenPdf({
   const totaalMinuten = totalen?.totaalMinuten ?? 0
   const om = omrekening(totaalMinuten)
   const meetellend = rijen.filter((r) => teltMee(r.status)).length
+  const saldoTotaal = totalen?.saldo ?? null
   const getal = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
 
   const cijfers: [string, string, string][] = [
@@ -106,6 +128,15 @@ export function bouwWerktijdenPdf({
         ? `${totalen.verklaardDagen} dagen · telt niet mee`
         : 'niets weggestreept',
     ],
+    // Het aantal dagen hoort onlosmakelijk bij dit getal: −8 uur over vier dagen
+    // is iets heel anders dan −8 uur over een heel kwartaal.
+    [
+      'Saldo aanwezig - geboekt',
+      saldoTotaal && saldoTotaal.dagen > 0 ? winAnsi(`${saldoLabel(saldoTotaal.saldoUren)} u`) : '—',
+      saldoTotaal && saldoTotaal.dagen > 0
+        ? `${getal(saldoTotaal.aanwezigUren)} aanwezig · ${getal(saldoTotaal.arbeidsuren)} arbeidsuren · ${saldoTotaal.dagen} dagen`
+        : 'geen dag met ritvenster én arbeidsuren',
+    ],
   ]
 
   const blokBreedte = (margeR - margeL) / cijfers.length
@@ -116,9 +147,14 @@ export function bouwWerktijdenPdf({
     doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(22, 27, 32)
     doc.text(waarde, x, y + 7)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120, 128, 134)
-    doc.text(sub, x, y + 11.5)
+    // De subregel afbreken op de blokbreedte in plaats van hem te laten
+    // doorlopen: de saldo-toelichting ("8.498,1 aanwezig - 8.268,5 arbeidsuren
+    // - 1116 dagen") is breder dan een blok en liep anders dwars over zijn buur
+    // heen. Twee regels is genoeg; langer wordt het niet.
+    const subRegels = (doc.splitTextToSize(sub, blokBreedte - 3) as string[]).slice(0, 2)
+    subRegels.forEach((regel, j) => doc.text(regel, x, y + 11.5 + j * 3.6))
   })
-  y += 18
+  y += 21
 
   doc.setFontSize(8); doc.setTextColor(120, 128, 134)
   doc.text(
@@ -145,13 +181,21 @@ export function bouwWerktijdenPdf({
   y += 6
 
   // ── Tabel ──────────────────────────────────────────────────────────
+  // De offsets zijn opgemeten, niet geschat: elke kolom heeft minstens 3 mm
+  // speling ten opzichte van zijn eigen kop en zijn breedste waarde. De koppen
+  // zijn hier maatgevend, niet de getallen — "ARBEIDSUREN" is breder dan elk
+  // urenbedrag dat eronder komt te staan.
   const kolDatum = margeL
-  const kolSoort = margeL + 30
-  const kolRooster = margeL + 46
-  const kolWerkelijk = margeL + 61
-  const kolAfwijking = margeL + 79
-  const kolGeboekt = margeL + 95
-  const kolUursoort = margeL + 110
+  const kolSoort = margeL + 26
+  const kolRooster = margeL + 42
+  const kolWerkelijk = margeL + 59
+  const kolAfwijking = margeL + 78
+  const kolAanwezig = margeL + 96
+  const kolVenster = margeL + 114
+  const kolArbeid = margeL + 131
+  const kolSaldo = margeL + 154
+  const kolGeboekt = margeL + 168
+  const kolUursoort = margeL + 185
   // De status staat rechts uitgelijnd tegen de marge: dan kan een lange
   // uursoorten-omschrijving er nooit overheen lopen. De 22 mm die hier wordt
   // vrijgehouden is de breedte van het langste label ("Te controleren").
@@ -165,6 +209,10 @@ export function bouwWerktijdenPdf({
     doc.text('ROOSTER', kolRooster, y)
     doc.text('WERKELIJK', kolWerkelijk, y)
     doc.text('AFWIJKING', kolAfwijking, y)
+    doc.text('AANWEZIG', kolAanwezig, y)
+    doc.text('VENSTER', kolVenster, y)
+    doc.text('ARBEIDSUREN', kolArbeid, y)
+    doc.text('SALDO', kolSaldo, y)
     doc.text('GEBOEKT', kolGeboekt, y)
     doc.text('UURSOORTEN', kolUursoort, y)
     doc.text('STATUS', margeR, y, { align: 'right' })
@@ -202,13 +250,32 @@ export function bouwWerktijdenPdf({
     doc.text(minutenLabel(r.minuten), kolAfwijking, y)
     doc.setFont('helvetica', 'normal')
 
+    // Aanwezig volgens de auto. Een streepje betekent dat de dag geen bruikbaar
+    // venster opleverde (bijvoorbeeld maar één ritketen) — niet dat er nul uur
+    // gewerkt is; de voetnoot onder de tabel zegt dat er expliciet bij.
+    doc.text(r.aanwezigMinuten == null ? '—' : minutenLabel(r.aanwezigMinuten), kolAanwezig, y)
+    doc.text(r.arbeidsuren == null ? '—' : `${urenLabel(r.arbeidsuren)} u`, kolArbeid, y)
+
+    const saldo = dagSaldoUren(r.aanwezigMinuten, r.arbeidsuren)
+    // Een saldo van een half uur of meer krijgt vet: dat zijn de regels waar het
+    // gesprek over gaat. Geen kleur — de uitdraai gaat vaak zwart-wit mee.
+    doc.setFont('helvetica', !verklaard && saldo != null && Math.abs(saldo) >= 0.5 ? 'bold' : 'normal')
+    doc.text(saldo == null ? '—' : winAnsi(`${saldoLabel(saldo)} u`), kolSaldo, y)
+    doc.setFont('helvetica', 'normal')
+
     doc.text(r.geboekt == null ? '—' : `${urenLabel(r.geboekt)} u`, kolGeboekt, y)
 
+    // Twee toelichtende cellen, allebei klein en grijs: het venster waar de
+    // aanwezigheid uit volgt, en de uursoorten waar de arbeidsuren uit volgen.
+    // Samen getekend zodat de lettergrootte maar één keer heen en weer gaat.
+    doc.setFontSize(7); doc.setTextColor(120, 128, 134)
+    // Je moet kunnen navertellen waar "7u41" vandaan komt, maar het venster is
+    // niet het getal zelf — vandaar kleiner dan de kolom ernaast.
+    doc.text(r.aankomst && r.vertrek ? `${r.aankomst}–${r.vertrek}` : '—', kolVenster, y)
     // De uursoorten verklaren de geboekte uren ("6,0 normaal · 2,0 verlof"): dat
     // is precies wat een signaal verklaart of juist niet. Te lang voor de
     // kolombreedte wordt hij afgekapt; de volledige tekst staat op het scherm en
     // in de Excel-export.
-    doc.setFontSize(7); doc.setTextColor(120, 128, 134)
     doc.text(pasIn(r.uursoorten ?? '—', uursoortBreedte), kolUursoort, y)
 
     doc.setFontSize(7.5)
@@ -231,9 +298,17 @@ export function bouwWerktijdenPdf({
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(140, 146, 151)
   const voetnoten = [
     'Gemeten aan de hand van de zakelijke ritten van de bedrijfsauto, afgezet tegen het geldende rooster. Een tilde (~) bij de roostertijd betekent dat op die datum nog geen rooster gold en het dichtstbijzijnde is gebruikt.',
-    'Ritten die bij elkaar horen tellen als een aankomst of vertrek. "Geboekt" zijn de uren die die dag in Bouw7 zijn geschreven; een streepje betekent dat ze niet opgehaald konden worden.',
-    'Regels met status "Verklaard" staan er ter informatie bij en tellen niet mee in de totalen.',
+    'Ritten die bij elkaar horen tellen als een aankomst of vertrek. "Geboekt" zijn alle uren die die dag in Bouw7 zijn geschreven; een streepje betekent dat ze niet opgehaald konden worden.',
+    '"Venster" is de tijd tussen de aankomst op het werk en het vertrek naar huis; "Aanwezig" is dat venster min de pauzes uit het rooster. "Arbeidsuren" zijn alleen de geschreven uren die als werk gelden — vakantie, ziek, feestdag, verlof en opgenomen tijd voor tijd tellen daar niet in mee. "Saldo" is aanwezig min arbeidsuren.',
+    'Een streepje bij Aanwezig of Saldo betekent dat de dag niet te meten was, niet dat er niet gewerkt is: dat gebeurt als er maar één ritketen bekend is, of als de medewerker die dag niet met de bedrijfsauto reed (meegereden, op de fiets, of de hele dag op één adres). Zulke dagen tellen niet mee in het saldo hierboven.',
+    'Een saldo is geen oordeel. Zowel een plus als een min kan een goede verklaring hebben; het getal is bedoeld als begin van een gesprek, niet als uitkomst ervan.',
+    'Regels met status "Verklaard" staan er ter informatie bij en tellen niet mee in de afwijkingstotalen.',
   ]
+  if (saldoTotaal && saldoTotaal.overgeslagen > 0) {
+    voetnoten.push(
+      `${saldoTotaal.overgeslagen} van de dagen hierboven tellen niet mee in het saldo omdat de aanwezigheid of de arbeidsuren van die dag ontbreken.`,
+    )
+  }
   if (handmatigAantal > 0) {
     voetnoten.push(
       `${handmatigAantal} handmatig toegekende signalen in deze periode hebben geen tijd en staan hier niet bij.`,

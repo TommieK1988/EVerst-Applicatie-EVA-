@@ -13,6 +13,12 @@
 import 'server-only'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { getUrenPerDag, uursoortLabel, type UrenPerDag } from '@/lib/wagenpark/werktijd-uren'
+import {
+  getAanwezigheidPerDag,
+  aanwezigheidSleutel,
+  REDEN_TEKST,
+  type AanwezigheidPerDag,
+} from '@/lib/wagenpark/werktijd-aanwezigheid'
 import type {
   WerktijdRij,
   WerktijdBevindingRij,
@@ -78,14 +84,43 @@ export type WerktijdGegevens = {
   urenFout: string | null
 }
 
-/** Hangt de geboekte Bouw7-uren aan de bevindingen. */
-function metUren(bevindingen: WerktijdBevindingRij[], uren: UrenPerDag): WerktijdRij[] {
+/**
+ * Hangt de geboekte Bouw7-uren en de aanwezigheid volgens de auto aan de
+ * bevindingen.
+ *
+ * LET OP BIJ OPTELLEN: een dag met zowel een te late aankomst als een vroeg
+ * vertrek levert twee rijen op, en die dragen allebei dezelfde aanwezigheid en
+ * dezelfde geboekte uren — het is één dag. Wie deze kolommen sommeert moet dus
+ * eerst op (bestuurder, datum) ontdubbelen; zie `bouwSamenvatting` en de
+ * exporttotalen, die dat allebei doen.
+ */
+function verrijk(
+  bevindingen: WerktijdBevindingRij[],
+  uren: UrenPerDag,
+  aanwezigheid: AanwezigheidPerDag,
+): WerktijdRij[] {
   return bevindingen.map((r) => {
     // Zonder Bouw7-koppeling of zonder bruikbare uren blijft `geboekt` null —
     // een streepje in de tabel, geen misleidende 0,0.
-    if (uren.fout || !r.bouw7_id) return { ...r, geboekt: null, uursoorten: null }
-    const dag = uren.perDag.get(`${r.bouw7_id}|${r.datum}`)
-    return { ...r, geboekt: dag?.totaal ?? 0, uursoorten: uursoortLabel(dag) }
+    const dag = uren.fout || !r.bouw7_id ? undefined : uren.perDag.get(`${r.bouw7_id}|${r.datum}`)
+    const heeftUren = !uren.fout && !!r.bouw7_id
+    const a = aanwezigheid.get(aanwezigheidSleutel(r.user_id_ulu, r.datum))
+    return {
+      ...r,
+      geboekt: heeftUren ? dag?.totaal ?? 0 : null,
+      // Let op het onderscheid: géén dagregel = niets geboekt = 0 arbeidsuren,
+      // maar een dagregel met `werk: null` betekent "wel geboekt, alleen op een
+      // uursoort die nog niet is ingedeeld". Die null moet blijven staan; een
+      // `?? 0` erachter zou dat als "niets gewerkt" wegschrijven.
+      arbeidsuren: heeftUren ? (dag ? dag.werk : 0) : null,
+      uursoorten: uursoortLabel(dag),
+      aankomst: a?.aankomst ?? null,
+      vertrek: a?.vertrek ?? null,
+      aanwezigMinuten: a?.nettoMinuten ?? null,
+      pauzeMinuten: a?.pauzeMinuten ?? 0,
+      pauzeInRooster: a?.pauzeInRooster ?? false,
+      aanwezigReden: a?.reden ? REDEN_TEKST[a.reden] : a ? null : REDEN_TEKST.geen_ritten,
+    }
   })
 }
 
@@ -93,21 +128,25 @@ function metUren(bevindingen: WerktijdBevindingRij[], uren: UrenPerDag): Werktij
  * Alle werktijd-afwijkingen in een periode, optioneel van één bestuurder.
  *
  * De uren komen in één Bouw7-call voor de hele periode; faalt die, dan tonen de
- * urenkolommen een streepje en blijft de rest gewoon werken.
+ * urenkolommen een streepje en blijft de rest gewoon werken. Hetzelfde geldt
+ * voor de aanwezigheid: die komt uit de ritten van dezelfde periode en is
+ * fail-soft, want de lijst met afwijkingen moet ook zonder bruikbaar
+ * aanwezigheidsvenster te lezen zijn.
  */
 export async function laadWerktijdGegevens(
   van: string,
   tot: string,
   userIdUlu: string | null = null,
 ): Promise<WerktijdGegevens> {
-  const [bevindingen, handmatig, uren] = await Promise.all([
+  const [bevindingen, handmatig, uren, aanwezigheid] = await Promise.all([
     pgQuery<WerktijdBevindingRij>(BEVINDINGEN_SQL, [van, tot, userIdUlu]),
     pgQuery<{ aantal: number }>(HANDMATIG_SQL, [van, tot, userIdUlu]),
     getUrenPerDag(van, tot),
+    getAanwezigheidPerDag(van, tot, userIdUlu),
   ])
 
   return {
-    rijen: metUren(bevindingen, uren),
+    rijen: verrijk(bevindingen, uren, aanwezigheid),
     handmatigAantal: handmatig[0]?.aantal ?? 0,
     urenFout: uren.fout,
   }

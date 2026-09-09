@@ -6,8 +6,9 @@ import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
-  SOORT_LABEL, type WerktijdSoort,
+  SOORT_LABEL, dagSaldoUren, saldoLabel, type WerktijdSoort,
 } from '@/lib/wagenpark/werktijd'
+import { telSaldo } from '@/lib/wagenpark/werktijd-samenvatting'
 import DagPaneel from '@/components/wagenpark/werktijden/DagPaneel'
 
 /**
@@ -43,14 +44,48 @@ export type WerktijdRij = {
    * moet zichtbaar blijven: een storing mag er niet uitzien als een lege dag.
    */
   geboekt: number | null
+  /**
+   * Alleen de ARBEIDSUREN van die dag: uursoorten met categorie `werk`. Verlof,
+   * ziek, feestdag en opgenomen tijd voor tijd tellen niet mee — die uren zijn
+   * geen aanwezigheid en zouden het saldo hieronder onbruikbaar maken. `null` =
+   * niet te bepalen (Bouw7 onbereikbaar, of geen enkele geboekte uursoort is
+   * ingedeeld).
+   */
+  arbeidsuren: number | null
   /** "6,0 normaal · 2,0 verlof", of null als er niets geboekt is. */
   uursoorten: string | null
   /** Bouw7-medewerkersnummer; de server koppelt hiermee de urenboekingen. */
   bouw7_id: string | null
+
+  /* ── Aanwezigheid volgens de auto (zie lib/wagenpark/werktijd-aanwezigheid.ts) ── */
+
+  /** Aankomst op het werk, "07:32"; null als die dag niet te bepalen is. */
+  aankomst: string | null
+  /** Vertrek van het werk, "16:04"; null als dat niet te bepalen is. */
+  vertrek: string | null
+  /** Netto aanwezig in minuten: vertrek − aankomst − pauze. Null = niet te bepalen. */
+  aanwezigMinuten: number | null
+  /** Afgetrokken pauzeminuten uit het rooster. */
+  pauzeMinuten: number
+  /** Staat er überhaupt een pauze in het rooster? Bij false is er niets afgetrokken. */
+  pauzeInRooster: boolean
+  /** Waarom er geen aanwezigheid is, in gewone taal. Null als die er wel is. */
+  aanwezigReden: string | null
 }
 
-/** De rij zoals hij uit de database komt, nog zonder de uren uit Bouw7. */
-export type WerktijdBevindingRij = Omit<WerktijdRij, 'geboekt' | 'uursoorten'>
+/** De rij zoals hij uit de database komt, nog zonder de uren en de aanwezigheid. */
+export type WerktijdBevindingRij = Omit<
+  WerktijdRij,
+  | 'geboekt'
+  | 'arbeidsuren'
+  | 'uursoorten'
+  | 'aankomst'
+  | 'vertrek'
+  | 'aanwezigMinuten'
+  | 'pauzeMinuten'
+  | 'pauzeInRooster'
+  | 'aanwezigReden'
+>
 
 /**
  * Statuslabels in de taal van dit scherm.
@@ -75,6 +110,24 @@ const STATUS_STIJL: Record<string, string> = {
 
 function tijd(t: string | null): string {
   return t ? t.slice(0, 5) : '—'
+}
+
+/**
+ * De rekensom achter de netto aanwezigheid, als tooltip.
+ *
+ * Staat er geen pauze in het rooster, dan is er niets afgetrokken en moet dat
+ * er expliciet bij: anders leest een bruto dag als een netto dag en lijkt
+ * iedereen zonder pauze in zijn rooster een half uur langer te werken.
+ */
+function aanwezigUitleg(r: WerktijdRij): string {
+  const bruto = (r.aanwezigMinuten ?? 0) + r.pauzeMinuten
+  const basis = `${r.aankomst}–${r.vertrek} = ${minutenLabel(bruto)} bruto`
+  if (r.pauzeMinuten > 0) {
+    return `${basis}, min ${minutenLabel(r.pauzeMinuten)} pauze uit het rooster.`
+  }
+  return r.pauzeInRooster
+    ? `${basis}. De roosterpauze valt buiten dit venster, dus er is niets afgetrokken.`
+    : `${basis}. Er staat geen pauze in het rooster van deze medewerker, dus er is niets afgetrokken.`
 }
 
 export default function WerktijdenTabel({
@@ -205,12 +258,98 @@ export default function WerktijdenTabel({
           ),
       },
       {
+        // Het venster waarin de auto op het werk stond. Zonder de tijden erbij
+        // is "8u12" niet na te rekenen, dus die staan in dezelfde cel.
+        key: 'aanwezig',
+        label: 'Aanwezig (netto)',
+        breedte: 150,
+        sorteerWaarde: (r) => r.aanwezigMinuten ?? -1,
+        render: (r) =>
+          r.aanwezigMinuten == null ? (
+            <span className="text-slate-300" title={r.aanwezigReden ?? 'Niet te bepalen'}>
+              —
+            </span>
+          ) : (
+            <span className="tabular-nums" title={aanwezigUitleg(r)}>
+              <span className="font-medium text-slate-700">
+                {minutenLabel(r.aanwezigMinuten)}
+              </span>
+              <span className="ml-1.5 text-xs text-slate-400">
+                {r.aankomst}–{r.vertrek}
+              </span>
+            </span>
+          ),
+      },
+      {
+        // Alleen de arbeidskant van de urenstaat. Verlof en ziek horen hier niet
+        // in: die uren zijn geen aanwezigheid en zouden het saldo hiernaast
+        // stilletjes goedpraten.
+        key: 'arbeidsuren',
+        label: 'Arbeidsuren',
+        breedte: 120,
+        sorteerWaarde: (r) => r.arbeidsuren ?? -1,
+        render: (r) =>
+          r.arbeidsuren == null ? (
+            <span
+              className="text-slate-300"
+              title="Geen arbeidsuren te bepalen: Bouw7 niet bereikbaar, geen koppeling met een medewerker, of de geboekte uursoort is nog niet ingedeeld in Stamgegevens → Uren."
+            >
+              —
+            </span>
+          ) : (
+            <span
+              className={`tabular-nums ${r.arbeidsuren === 0 ? 'text-slate-400' : 'text-slate-700'}`}
+              title={r.uursoorten ?? undefined}
+            >
+              {urenLabel(r.arbeidsuren)} u
+            </span>
+          ),
+      },
+      {
+        // Waar het om draait: aanwezig min verantwoord. Kleur alleen bij een
+        // afwijking van meer dan een half uur — kleinere verschillen zitten
+        // binnen de meetfout van een rittenregistratie.
+        key: 'saldo',
+        label: 'Saldo',
+        breedte: 110,
+        sorteerWaarde: (r) => dagSaldoUren(r.aanwezigMinuten, r.arbeidsuren) ?? 0,
+        render: (r) => {
+          const saldo = dagSaldoUren(r.aanwezigMinuten, r.arbeidsuren)
+          if (saldo == null) {
+            return (
+              <span className="text-slate-300" title="Aanwezigheid of arbeidsuren onbekend">
+                —
+              </span>
+            )
+          }
+          const kleur =
+            saldo <= -0.5 ? 'text-red-700' : saldo >= 0.5 ? 'text-emerald-700' : 'text-slate-500'
+          return (
+            <span
+              className={`tabular-nums font-medium ${kleur}`}
+              title={
+                saldo < 0
+                  ? 'Meer arbeidsuren geschreven dan de auto op het werk stond.'
+                  : saldo > 0
+                    ? 'Langer aanwezig dan er arbeidsuren geschreven zijn.'
+                    : 'Aanwezigheid en geschreven arbeidsuren lopen gelijk.'
+              }
+            >
+              {saldoLabel(saldo)} u
+            </span>
+          )
+        },
+      },
+      {
         // Controlekolom: schreef deze medewerker die dag genoeg uren? Getal, dus
         // sorteerbaar op "veel afwijking maar toch volle dag geboekt" — precies
         // de regels die je wilt bekijken.
         key: 'geboekt',
-        label: 'Geboekt',
-        breedte: 100,
+        label: 'Geboekt (totaal)',
+        breedte: 130,
+        // Het totaal inclusief verlof staat naast de arbeidsuren en is daarmee
+        // een dubbeling; standaard uit, aan te zetten via kolombeheer.
+        standaard_zichtbaar: false,
         sorteerWaarde: (r) => r.geboekt ?? -1,
         render: (r) =>
           r.geboekt == null ? (
@@ -275,6 +414,7 @@ export default function WerktijdenTabel({
     }
     const totaal = laat + vroeg
     const om = omrekening(totaal)
+    const saldo = telSaldo(gefilterd)
     return [
       ['Totaal te laat (minuten)', laat],
       ['Totaal te vroeg (minuten)', vroeg],
@@ -283,6 +423,10 @@ export default function WerktijdenTabel({
       [`Totaal (werkdagen bij ${UREN_PER_WERKDAG} uur per dag)`, om.dagen],
       ['', ''],
       [`Verklaard, telt niet mee (minuten) — ${verklaardDagen} dagen`, verklaard],
+      ['', ''],
+      [`Aanwezig netto (uren) — ${saldo.dagen} dagen met een bruikbaar venster`, saldo.aanwezigUren],
+      ['Geboekte arbeidsuren over diezelfde dagen', saldo.arbeidsuren],
+      ['Saldo (uren)', saldo.saldoUren],
     ]
   }, [])
 

@@ -104,6 +104,45 @@ export function minutenLabel(minuten: number): string {
   return u > 0 ? `${u}u${String(m).padStart(2, '0')}` : `${m} min`
 }
 
+/* ── Aanwezigheid tegenover geboekte arbeidsuren ─────────────────────── */
+
+/** Minuten naar uren, op twee decimalen — de eenheid waarin uren geboekt zijn. */
+export function minutenNaarUren(minuten: number): number {
+  return Math.round((minuten / 60) * 100) / 100
+}
+
+/**
+ * Het dagsaldo: hoe lang de auto op het werk stond min de geboekte arbeidsuren.
+ *
+ * Positief = langer aanwezig dan verantwoord, negatief = meer uren geschreven
+ * dan de auto op het werk stond. Bewust géén oordeel: allebei kan een goede
+ * verklaring hebben (meerijden met een collega, een dag op kantoor, een klus
+ * zonder auto). Het getal is het begin van een gesprek, niet de uitkomst.
+ *
+ * `null` zodra één van de twee kanten ontbreekt — een saldo tegen een onbekende
+ * waarde is geen nul maar geen saldo.
+ */
+export function dagSaldoUren(
+  aanwezigMinuten: number | null,
+  arbeidsuren: number | null,
+): number | null {
+  if (aanwezigMinuten == null || arbeidsuren == null) return null
+  return Math.round((minutenNaarUren(aanwezigMinuten) - arbeidsuren) * 100) / 100
+}
+
+/**
+ * "+0,7" / "−1,2" / "0,0" — met een echt minteken, niet een koppelstreepje.
+ *
+ * Het teken volgt uit het AFGERONDE getal, niet uit de ruwe waarde: −0,03 uur
+ * wordt op één decimaal 0,0, en "−0,0" op het scherm laat een verschil zien dat
+ * er niet is.
+ */
+export function saldoLabel(uren: number): string {
+  const afgerond = Math.round(uren * 10) / 10
+  const teken = afgerond > 0 ? '+' : afgerond < 0 ? '−' : ''
+  return `${teken}${urenLabel(Math.abs(afgerond))}`
+}
+
 /** De werktijd-data van een bevinding, of null als het er geen is. */
 export function werktijdData(b: BevindingAchtig): WerktijdData | null {
   if (!(WERKTIJD_REGELS as readonly string[]).includes(b.regel_code)) return null

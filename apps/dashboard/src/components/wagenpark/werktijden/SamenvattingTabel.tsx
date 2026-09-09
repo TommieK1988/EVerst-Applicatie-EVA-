@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo } from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database/platform-types'
-import { minutenLabel, omrekening, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
+import { minutenLabel, omrekening, urenLabel, saldoLabel, UREN_PER_WERKDAG } from '@/lib/wagenpark/werktijd'
 import { bouwSamenvatting, type SamenvattingRij } from '@/lib/wagenpark/werktijd-samenvatting'
 import { MAAND_LABEL, type Periode, maandenInPeriode } from '@/lib/wagenpark/periode'
 import type { WerktijdRij } from '@/components/wagenpark/werktijden/WerktijdenTabel'
@@ -141,6 +141,67 @@ export default function SamenvattingTabel({
           <span className="font-semibold tabular-nums">{minutenLabel(r.totaalMinuten)}</span>
         ),
       },
+      // Aanwezig tegenover verantwoord, over de hele periode. Los van de
+      // afwijkingskolommen hiervoor: iemand kan elke dag netjes binnen zijn
+      // roostertijden vallen en toch structureel meer of minder schrijven dan
+      // de auto op het werk stond.
+      {
+        key: 'aanwezig',
+        label: 'Aanwezig',
+        breedte: 110,
+        sorteerWaarde: (r) => r.saldo.aanwezigUren,
+        render: (r) =>
+          r.saldo.dagen > 0 ? (
+            <span className="tabular-nums text-slate-600">{urenLabel(r.saldo.aanwezigUren)} u</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        key: 'arbeidsuren',
+        label: 'Arbeidsuren',
+        breedte: 120,
+        sorteerWaarde: (r) => r.saldo.arbeidsuren,
+        render: (r) =>
+          r.saldo.dagen > 0 ? (
+            <span className="tabular-nums text-slate-600">{urenLabel(r.saldo.arbeidsuren)} u</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        key: 'saldo',
+        label: 'Saldo',
+        breedte: 130,
+        sorteerWaarde: (r) => r.saldo.saldoUren,
+        render: (r) => {
+          if (r.saldo.dagen === 0) {
+            return (
+              <span className="text-slate-300" title="Geen dag met zowel een ritvenster als arbeidsuren">
+                —
+              </span>
+            )
+          }
+          const s = r.saldo.saldoUren
+          const kleur = s <= -2 ? 'text-red-700' : s >= 2 ? 'text-emerald-700' : 'text-slate-500'
+          return (
+            <span
+              className={`tabular-nums font-medium ${kleur}`}
+              // Het aantal dagen hoort bij het getal: −8 uur over vier dagen is
+              // iets heel anders dan −8 uur over een heel kwartaal.
+              title={
+                `Over ${r.saldo.dagen} ${r.saldo.dagen === 1 ? 'dag' : 'dagen'}`
+                + (r.saldo.overgeslagen > 0
+                  ? `; ${r.saldo.overgeslagen} dagen tellen niet mee (geen bruikbaar ritvenster of geen arbeidsuren).`
+                  : '.')
+              }
+            >
+              {saldoLabel(s)} u
+              <span className="ml-1 text-xs text-slate-400">({r.saldo.dagen})</span>
+            </span>
+          )
+        },
+      },
     ]
   }, [bestuurderOpties, zichtbareMaanden])
 
@@ -151,14 +212,22 @@ export default function SamenvattingTabel({
     let vroeg = 0
     let verklaard = 0
     let verklaardDagen = 0
+    let aanwezig = 0
+    let arbeidsuren = 0
+    let saldoDagen = 0
     for (const r of gefilterd) {
       laat += r.minutenLaat
       vroeg += r.minutenVroeg
       verklaard += r.verklaardMinuten
       verklaardDagen += r.verklaardDagen
+      // Per medewerker al ontdubbeld, dus hier mag gewoon opgeteld worden.
+      aanwezig += r.saldo.aanwezigUren
+      arbeidsuren += r.saldo.arbeidsuren
+      saldoDagen += r.saldo.dagen
     }
     const totaal = laat + vroeg
     const om = omrekening(totaal)
+    const rond = (n: number) => Math.round(n * 100) / 100
     return [
       ['Totaal te laat (minuten)', laat],
       ['Totaal te vroeg (minuten)', vroeg],
@@ -167,6 +236,10 @@ export default function SamenvattingTabel({
       [`Totaal (werkdagen bij ${UREN_PER_WERKDAG} uur per dag)`, om.dagen],
       ['', ''],
       [`Verklaard, telt niet mee (minuten) — ${verklaardDagen} dagen`, verklaard],
+      ['', ''],
+      [`Aanwezig netto (uren) — over ${saldoDagen} medewerkerdagen`, rond(aanwezig)],
+      ['Geboekte arbeidsuren over diezelfde dagen', rond(arbeidsuren)],
+      ['Saldo (uren)', rond(aanwezig - arbeidsuren)],
     ]
   }, [])
 

@@ -16,6 +16,9 @@ export {
   bouwKetens,
   ankerKeuzeSleutel,
   bepaalKeten,
+  // Wie de ketenregel buiten de engine om gebruikt, moet "12:30" op dezelfde
+  // manier naar minuten kunnen omrekenen als de regels zelf doen.
+  parseHM,
   type AfwezigInfo,
   type AnkerKeuzes,
   type RoosterInfo,

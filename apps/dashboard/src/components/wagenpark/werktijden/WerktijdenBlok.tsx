@@ -4,10 +4,10 @@ import React, { useMemo } from 'react'
 import { FileDown } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import {
-  minutenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
+  minutenLabel, teltMee, omrekening, urenLabel, saldoLabel, UREN_PER_WERKDAG,
 } from '@/lib/wagenpark/werktijd'
 import { MAAND_LABEL, maandenInPeriode, type Periode } from '@/lib/wagenpark/periode'
-import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
+import { bouwSamenvatting, telSaldo } from '@/lib/wagenpark/werktijd-samenvatting'
 import WerktijdenTabel, {
   type WerktijdRij,
 } from '@/components/wagenpark/werktijden/WerktijdenTabel'
@@ -39,6 +39,7 @@ export default function WerktijdenBlok({
   pdfUrl: string
 }) {
   const samenvatting = useMemo(() => bouwSamenvatting(data)[0] ?? null, [data])
+  const saldo = useMemo(() => telSaldo(data), [data])
   const maanden = useMemo(() => maandenInPeriode(periode), [periode])
   const meetellendeDagen = useMemo(() => data.filter((r) => teltMee(r.status)).length, [data])
 
@@ -90,6 +91,19 @@ export default function WerktijdenBlok({
           waarde={String(meetellendeDagen)}
           sub={`van ${data.length} gemarkeerde ${data.length === 1 ? 'dag' : 'dagen'}`}
         />
+        {/* Aanwezig tegenover verantwoord. Staat naast de afwijkingen en niet in
+            plaats daarvan: een dag kan keurig binnen de roostertijden vallen en
+            toch een saldo hebben, en andersom. Het aantal dagen staat er altijd
+            bij — een saldo zonder noemer zegt niets. */}
+        <Cijfer
+          label="Saldo aanwezig − geboekt"
+          waarde={saldo.dagen > 0 ? `${saldoLabel(saldo.saldoUren)} u` : '—'}
+          sub={
+            saldo.dagen > 0
+              ? `${urenLabel(saldo.aanwezigUren)} aanwezig tegenover ${urenLabel(saldo.arbeidsuren)} arbeidsuren, over ${saldo.dagen} ${saldo.dagen === 1 ? 'dag' : 'dagen'}`
+              : 'geen dag met zowel een ritvenster als arbeidsuren'
+          }
+        />
 
         <a
           href={pdfUrl}
@@ -99,6 +113,17 @@ export default function WerktijdenBlok({
           Uitdraai (PDF)
         </a>
       </div>
+
+      {/* Wat er buiten het saldo viel. Zonder deze regel leest een saldo over
+          drie dagen hetzelfde als een saldo over dertig, en dat is precies het
+          verschil tussen een signaal en een toevalstreffer. */}
+      {saldo.overgeslagen > 0 && (
+        <p className="mb-4 -mt-2 text-xs text-slate-500">
+          {saldo.overgeslagen} van deze dagen {saldo.overgeslagen === 1 ? 'telt' : 'tellen'} niet
+          mee in het saldo: daar is de aanwezigheid niet uit de ritten af te leiden (maar één
+          ritketen, of geen zakelijke ritten) of zijn de arbeidsuren niet op te halen.
+        </p>
+      )}
 
       {/* Verloop over de periode: waar zit de afwijking, en wordt het beter of
           slechter? Eén regel, want meer dan twaalf maanden komt hier nooit voorbij. */}
