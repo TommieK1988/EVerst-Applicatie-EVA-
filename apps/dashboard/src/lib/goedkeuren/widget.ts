@@ -9,6 +9,12 @@
  * een stortvloed aan meldingen. Eén lijst met een teller is de juiste vorm: je haalt je werk
  * op, in plaats van dat het jou achterna komt.
  *
+ * TELLEN OF OPSOMMEN — dat verschilt per bron, en dat is bewust. Inkoopfacturen en uren zijn
+ * stapelwerk: je keurt ze in hun eigen scherm in één sessie af, dus staan ze hier als één regel
+ * met een aantal. Offertes en werkbegrotingen zijn stuk voor stuk een beslissing over een
+ * bepaald dossier, met een eigen deadline — die hoor je bij naam te zien, anders weet je niet
+ * waar je aan begint en waarom het haast heeft.
+ *
  * **Uren zitten hier bewust NIET in.** Die telling vereist een live Bouw7-call over een
  * periode van weken, en de afspraak in dit project is dat een schermbezoek nooit een
  * Bouw7-call doet. De widget laadt dat aantal apart na met `getUrenTeFiatterenAantal()`.
@@ -18,6 +24,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
 import { INKOOP_STATUS_WORKFLOW_LOOPT } from '@/lib/bouw7/inkoop-status'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
+import { periodeBereik } from '@/lib/uren/types'
 
 export type GoedkeurenSoort = 'inkoopfactuur' | 'offerte' | 'werkbegroting'
 
@@ -29,12 +36,36 @@ export type GoedkeurenItem = {
   href: string | null
   /** Sinds wanneer het bij je ligt (of, in het afgehandeld-blok: wanneer het besloten is). */
   datum: string | null
+  /**
+   * De deadline van het dossier: de datum waarop de offerte verzonden had moeten zijn. Stuurt de
+   * volgorde van de lijst; `null` (geen deadline afgesproken) zakt naar onderen.
+   */
+  deadline?: string | null
   /** Alleen in het afgehandeld-blok: is het goedgekeurd of teruggestuurd? */
   akkoord?: boolean
 }
 
+/**
+ * De inkoopfacturen als een enkele regel.
+ *
+ * Ze stonden hier eerst per stuk, en dat maakte de widget een lijst inkoopfacturen met wat
+ * offertes eronder: een drukke week bij de crediteuren duwde het werk waar je echt over moet
+ * BESLISSEN uit beeld. Een factuur fiatteren doe je bovendien toch in het inkoopscherm, waar ze
+ * op tabblad "Te accorderen door mij" al bij elkaar staan -- dus is een regel met een teller
+ * precies genoeg om je die kant op te sturen.
+ */
+export type GoedkeurenInkoop = {
+  aantal: number
+  /** Totaal incl. btw van wat er op jouw fiattering wacht. */
+  bedrag: number
+  /** Vroegste vervaldatum in de stapel -- de reden om er vandaag naar te kijken. */
+  eersteVervaldatum: string | null
+}
+
 export type GoedkeurenData = {
+  /** Offertes en werkbegrotingen, op deadline. Inkoop en uren staan apart: dat zijn tellers. */
   ligtBijJou: GoedkeurenItem[]
+  inkoop: GoedkeurenInkoop
   afgehandeld: GoedkeurenItem[]
   aantallen: { inkoopfactuur: number; offerte: number; werkbegroting: number }
   /**
@@ -48,19 +79,16 @@ export type GoedkeurenData = {
   inkoopSyncOp: string | null
 }
 
+const GEEN_INKOOP: GoedkeurenInkoop = { aantal: 0, bedrag: 0, eersteVervaldatum: null }
+
 const LEEG: GoedkeurenData = {
-  ligtBijJou: [], afgehandeld: [],
+  ligtBijJou: [], inkoop: GEEN_INKOOP, afgehandeld: [],
   aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0 },
   inkoopSyncOp: null,
 }
 
 /** Hoe ver terug het "afgehandeld voor jou"-blok kijkt. */
 const AFGEHANDELD_DAGEN = 14
-
-function euro(n: number | null): string | null {
-  if (n == null) return null
-  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
-}
 
 /** Route-segment van een dossier — er bestaat geen /dossiers/[id]. */
 function sectie(hoofdstatus: string | null, servicedeskSubstatus: string | null): string | null {
@@ -86,22 +114,24 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
   const [inkoopRes, openRes, afgehandeldRes, inkoopSyncOp] = await Promise.all([
     // Inkoopfacturen waar ik de huidige fiatteur ben. Gebonden aan het inkooprecht: zonder dat
     // recht hoort iemand deze regels niet te zien, ook niet als teller op zijn startpagina.
+    // `count: 'exact'` naast de rijen: de teller moet kloppen ook als de stapel groter is dan wat
+    // we ophalen. De rijen zelf zijn er alleen voor het totaalbedrag en de vroegste vervaldatum.
     magInkoop
       ? supabase
           .from('inkoopfacturen')
-          .select('id, factuurnummer, leverancier_naam, bedrag_incl, vervaldatum, factuurdatum')
+          .select('id, bedrag_incl, vervaldatum', { count: 'exact' })
           .eq('status', 'open')
           .eq('huidige_goedkeurder_id', medewerker.id)
           .in('bouw7_status', INKOOP_STATUS_WORKFLOW_LOOPT)
           .order('vervaldatum', { ascending: true, nullsFirst: false })
-          .limit(50)
-      : Promise.resolve({ data: [] }),
+          .limit(500)
+      : Promise.resolve({ data: [], count: 0 }),
 
     // Offertes en werkbegrotingen die op mijn oordeel wachten. `gedelegeerd_aan` telt mee:
     // wie het overgedragen kreeg is degene die moet handelen.
     supabase
       .from('goedkeuringen')
-      .select('id, object_type, object_id, dossier_id, aangevraagd_op, aangevraagd_door, dossiers:dossier_id (titel, dossiernummer, hoofdstatus, servicedesk_substatus)')
+      .select('id, object_type, object_id, dossier_id, aangevraagd_op, aangevraagd_door, dossiers:dossier_id (titel, dossiernummer, hoofdstatus, servicedesk_substatus, deadline)')
       .eq('status', 'aangevraagd')
       .or(`beoordelaar_id.eq.${medewerker.id},gedelegeerd_aan.eq.${medewerker.id}`)
       .order('aangevraagd_op', { ascending: true })
@@ -124,23 +154,19 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
   type DossierRef = {
     titel: string | null; dossiernummer: string | null
     hoofdstatus: string | null; servicedesk_substatus: string | null
+    deadline?: string | null
   } | null
 
-  const ligtBijJou: GoedkeurenItem[] = []
-
-  for (const f of (inkoopRes.data ?? []) as {
-    id: string; factuurnummer: string | null; leverancier_naam: string | null
-    bedrag_incl: number | null; vervaldatum: string | null; factuurdatum: string | null
-  }[]) {
-    ligtBijJou.push({
-      id: f.id,
-      soort: 'inkoopfactuur',
-      titel: f.leverancier_naam ?? f.factuurnummer ?? 'Inkoopfactuur',
-      subtitel: [euro(f.bedrag_incl), f.factuurnummer].filter(Boolean).join(' · ') || null,
-      href: `/inkoop/facturen?factuur=${f.id}`,
-      datum: f.vervaldatum ?? f.factuurdatum,
-    })
+  const inkoopRijen = (inkoopRes.data ?? []) as {
+    id: string; bedrag_incl: number | null; vervaldatum: string | null
+  }[]
+  const inkoop: GoedkeurenInkoop = {
+    aantal: inkoopRes.count ?? inkoopRijen.length,
+    bedrag: inkoopRijen.reduce((s, f) => s + (f.bedrag_incl ?? 0), 0),
+    eersteVervaldatum: inkoopRijen.find(f => f.vervaldatum)?.vervaldatum ?? null,
   }
+
+  const ligtBijJou: GoedkeurenItem[] = []
 
   for (const g of (openRes.data ?? []) as {
     id: string; object_type: string; object_id: string; dossier_id: string | null
@@ -158,8 +184,21 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
         ? (g.dossier_id && seg ? `/${seg}/${g.dossier_id}/werkbegroting` : null)
         : `/everts-calc/quotes/${g.object_id}/preview`,
       datum: g.aangevraagd_op,
+      deadline: d?.deadline ?? null,
     })
   }
+
+  // Op deadline, want dat is de datum waar iemand op wacht -- niet de datum waarop het bij jou op
+  // de stapel kwam. Zonder deadline naar onderen: dat is geen "later" maar "niet afgesproken", en
+  // dat hoort niet boven werk met een harde datum te staan. Gelijke deadline: langst wachtend eerst.
+  ligtBijJou.sort((a, b) => {
+    if ((a.deadline ?? '') !== (b.deadline ?? '')) {
+      if (!a.deadline) return 1
+      if (!b.deadline) return -1
+      return a.deadline < b.deadline ? -1 : 1
+    }
+    return (a.datum ?? '') < (b.datum ?? '') ? -1 : 1
+  })
 
   const afgehandeld: GoedkeurenItem[] = ((afgehandeldRes.data ?? []) as {
     id: string; object_type: string; object_id: string; dossier_id: string | null
@@ -189,10 +228,11 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
 
   return {
     ligtBijJou,
+    inkoop,
     afgehandeld,
     inkoopSyncOp,
     aantallen: {
-      inkoopfactuur: ligtBijJou.filter(i => i.soort === 'inkoopfactuur').length,
+      inkoopfactuur: inkoop.aantal,
       offerte:       ligtBijJou.filter(i => i.soort === 'offerte').length,
       werkbegroting: ligtBijJou.filter(i => i.soort === 'werkbegroting').length,
     },
@@ -202,20 +242,21 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
 /**
  * Aantal uurregels dat op jouw fiattering wacht.
  *
- * Apart van `getGoedkeurenWidget` omdat dit wél Bouw7 aanroept: een gepagineerde ophaal over
- * het lopende kwartaal. De widget haalt dit ná het renderen op, zodat de startpagina niet op
- * Bouw7 staat te wachten en gewoon werkt als Bouw7 er even uit ligt.
+ * Apart van `getGoedkeurenWidget` omdat dit wél Bouw7 aanroept: een gepagineerde ophaal. De
+ * widget haalt dit ná het renderen op, zodat de startpagina niet op Bouw7 staat te wachten en
+ * gewoon werkt als Bouw7 er even uit ligt.
+ *
+ * Hetzelfde bereik als `/uren?periode=te_keuren`, waar de regel je heen brengt. Dat mag geen
+ * eigen keuze zijn: telde de widget een kwartaal en het scherm een jaar, dan klik je op "8 te
+ * fiatteren" en zie je er twaalf staan — of erger, andersom. De ophaal kost hier niets extra,
+ * want Bouw7 pagineert over de níet-goedgekeurde regels, niet over de periode.
  */
 export async function getUrenTeFiatterenAantal(): Promise<{ aantal: number; fout: string | null }> {
   try {
-    const nu = new Date()
-    // Lopend kwartaal plus het vorige: verder terug is geen werkvoorraad meer maar archief.
-    const van = new Date(nu.getFullYear(), Math.floor(nu.getMonth() / 3) * 3 - 3, 1)
-    const dag = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const { van, tot } = periodeBereik('te_keuren')
 
     const { getMijnTeKeurenUren } = await import('@/lib/uren/bouw7-goedkeuring')
-    const res = await getMijnTeKeurenUren(dag(van), dag(nu))
+    const res = await getMijnTeKeurenUren(van, tot)
     if (res.fout) return { aantal: 0, fout: res.fout }
     return { aantal: res.alsTeamleider.length + res.alsProjectleider.length, fout: null }
   } catch (e) {

@@ -51,9 +51,10 @@ type DossierRef = {
  * Projecten zonder EVA-dossier vallen terug op het Bouw7-projectnummer + de projectnaam.
  */
 export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtData> {
-  const { van, tot } = periodeBereik(periode)
+  const gevraagd = periodeBereik(periode)
   const leeg: UrenOverzichtData = {
-    beschikbaar: false, regels: [], totalen: { uren: 0, bedrag: 0 }, van, tot, fout: null,
+    beschikbaar: false, regels: [], totalen: { uren: 0, bedrag: 0 },
+    van: gevraagd.van, tot: gevraagd.tot, fout: null,
   }
 
   // Uit het bewaarde urenvenster; dat beslaat het lopende jaar (en minimaal dertien weken) en
@@ -63,6 +64,13 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
   if (!venster) {
     return { ...leeg, fout: 'De urenstand is nog niet opgehaald uit Bouw7.' }
   }
+
+  // `te_keuren` vraagt niet om een periode maar om de hele stapel: neem het venster zoals het is.
+  // De grenzen zelf uitrekenen zou hier misgaan -- `urenVenster()` rekent in UTC en deze functie
+  // in lokale tijd, en één dag verschil zou de melding hieronder ten onrechte laten afgaan.
+  const van = periode === 'te_keuren' ? venster.van : gevraagd.van
+  const tot = periode === 'te_keuren' ? venster.tot : gevraagd.tot
+
   // Valt de gevraagde periode (deels) vóór het venster, dan zou filteren een te laag totaal geven.
   // Dat eerlijk melden is beter dan een onvolledig overzicht dat er compleet uitziet.
   if (van < venster.van) {
@@ -73,7 +81,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     const d = h.logDate ? h.logDate.slice(0, 10) : null
     return d != null && d >= van && d <= tot
   })
-  if (items.length === 0) return { ...leeg, beschikbaar: true }
+  if (items.length === 0) return { ...leeg, van, tot, beschikbaar: true }
 
   // Dossierkoppeling in één query: alleen de projecten die in deze periode voorkomen.
   const projectIds = [...new Set(items.map((h) => h.project?.id).filter((id): id is number => id != null))]

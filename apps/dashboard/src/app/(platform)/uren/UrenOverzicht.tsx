@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database'
@@ -205,7 +205,11 @@ export default function UrenOverzicht({
     [medewerkerId],
   )
   const teKeuren = useMemo(() => data.regels.filter(magIkKeuren), [data.regels, magIkKeuren])
-  const [alleenMijn, setAlleenMijn] = useState(!magAlles)
+  const [alleenMijn, setAlleenMijn] = useState(!magAlles || periode === 'te_keuren')
+  // De stand `te_keuren` komt uit de widget Goedkeuren en betekent: laat mijn hele stapel zien.
+  // Het scherm blijft staan bij een periodewissel (dezelfde client-component), dus de knop moet
+  // hier aangezet worden en niet alleen in de beginwaarde hierboven.
+  useEffect(() => { if (periode === 'te_keuren') setAlleenMijn(true) }, [periode])
   const [keurBezig, setKeurBezig] = useState(false)
   const [keurId, setKeurId] = useState<string | null>(null)
   const [bewerken, setBewerken] = useState<TeBewerkenRegel | null>(null)
