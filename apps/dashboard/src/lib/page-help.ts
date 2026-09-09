@@ -1400,8 +1400,8 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // inhoud. De tab zit als laatste segment in de URL, dus resolven we de hulp op
 // (sectie, tab) i.p.v. één generieke tekst voor de hele detailpagina. Welke tabs
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
-//   aanvragen & offertes → informatie · bestanden · calculatie · acties
-//   opdrachten           → + werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
+//   aanvragen & offertes → informatie · bestanden · calculatie · uitvraag · acties
+//   opdrachten           → + uitvraag · werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
 //   servicedesk          → informatie · bestanden · calculatie · planning · financieel · kam
 // De KAM/VGM-tab heeft zelf drie onderdelen (?deel=kwaliteit|oplevering|formulieren);
 // die krijgen elk hun eigen hulp, want het zijn drie losse werkschermen.
@@ -1483,6 +1483,17 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
           { title: 'Calculatie opbouwen', body: 'Werk met de vier kostensoorten — eigen arbeid, ingehuurde arbeid, onderaanneming en materiaal — aangevuld met overige kosten en opslagen. De meetstaat is de snelste route voor schilderwerk.' },
           { title: 'Naar offerte', body: 'De goedgekeurde calculatie is de basis voor de offerte. Vanuit hier genereer je de offerte-PDF en zet je het dossier door naar de offertefase.' },
           ...(isServicedesk ? [{ title: 'Servicedesk', body: 'Bij een serviceklus verschijnt dit tabblad pas zodra er via "Offerte maken" een calculatie/offerte is gekoppeld — een storing loopt vaak op regie (nacalculatie) en dan is er geen calculatie vooraf.' }] : []),
+        ])
+
+    case 'uitvraag':
+      return T('Uitvraag',
+        'Bij wie heb je voor dit werk een prijs opgevraagd, en wat staat er nog open? Leg per onderdeel vast welke onderaannemer of leverancier je hebt benaderd, verstuur de aanvraag direct vanuit EVA, en zie in één oogopslag waar je nog op wacht.',
+        [
+          { title: 'Een uitvraag toevoegen', body: 'Vul het onderdeel in (bijvoorbeeld Dak of Gevel — vrije tekst, met suggesties van wat collega’s eerder gebruikten), kies of het om een onderaannemer of een leverancier gaat, en zoek de partij in het adresboek. Zet er eventueel een datum bij waarop je uiterlijk antwoord wilt; die datum kleurt rood zodra hij verstreken is.' },
+          { title: 'Mailen vanuit EVA', body: 'Met het envelop-icoon stel je de aanvraag op. De ontvangerkiezer toont meteen de contactpersonen van díé partij, dus je hoeft geen adressen op te zoeken. De mail gaat vanaf jouw eigen Outlook, met het project en het gevraagde onderdeel als tabel eronder. Zodra de mail weg is, vult EVA zelf de datum "aangevraagd" in. Is er al eerder gemaild, dan wordt het automatisch een herinnering — naar hetzelfde adres als de vorige keer.' },
+          { title: 'De status bijhouden', body: 'Open = ligt bij de partij, nog geen antwoord. Offerte ontvangen = de prijs is binnen (vul de datum in, dan gaat de status vanzelf mee). Gegund = deze partij doet het werk. Afgevallen = het wordt iemand anders. Ingetrokken = de uitvraag ging niet door, maar je wilt wel zien dat hij er is geweest. Een uitvraag waarover al gemaild is, kun je niet verwijderen; die zet je op Ingetrokken zodat het spoor bewaard blijft.' },
+          { title: 'Alles wat openstaat', body: 'Op de Aanvragen-pagina staat de knop "Openstaand extern". Daar zie je over alle dossiers heen wat er nog bij externe partijen ligt, gegroepeerd per partij. Je selecteert partijen en stuurt ze in één keer een herinnering: één mail per partij, met al hun openstaande aanvragen in één lijst.' },
+          { title: 'De teksten aanpassen', body: 'De standaardteksten van de aanvraag- en herinneringsmail beheer je bij Instellingen → Documentsjablonen onder "Uitvraag" en "Uitvraag — herinnering". Daar hoort geen Word-bestand bij; alleen het onderwerp en de tekst.' },
         ])
 
     case 'werkbegroting':

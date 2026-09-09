@@ -46,6 +46,10 @@ export type {
   MeerwerkTermijnWijze,
   MeerwerkBron,
   MeerwerkRegel,
+  // Uitvragen-module
+  UitvraagStatus,
+  UitvraagSoort,
+  DossierUitvraag,
   // Opdracht-onderdelen-module
   OpdrachtOnderdeelSoort,
   OpdrachtOnderdeelStatus,
@@ -102,6 +106,10 @@ export {
   offerteSubstatusLabels,
   opdrachtSubstatusLabels,
   meerwerkStatusLabels,
+  uitvraagStatusLabels,
+  uitvraagStatusTone,
+  uitvraagSoortLabels,
+  UITVRAAG_TRANSITIES,
   opleverMomentTypeLabels,
   opleverMomentStatusLabels,
   opleverPuntStatusLabels,

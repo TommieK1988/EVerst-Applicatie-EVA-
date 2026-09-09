@@ -460,6 +460,86 @@ export type MeerwerkRegel = {
   besluit_opmerking: string | null
 }
 
+/* ── Uitvragen bij onderaannemers en leveranciers ─────────────────── */
+
+/**
+ * Waar de uitvraag staat. `open` betekent "bij de partij neergelegd, nog geen antwoord" — samen met
+ * een gevulde `aangevraagd_op` is dat de definitie van extern openstaand, en dus wat het
+ * openstaande-overzicht toont en waarover gerappelleerd wordt.
+ *
+ * `ingetrokken` is het alternatief voor verwijderen: de uitvraag ging niet door, maar de historie
+ * (en wat er gemaild is) blijft leesbaar.
+ */
+export type UitvraagStatus =
+  | 'open'
+  | 'ontvangen'
+  | 'gegund'
+  | 'afgevallen'
+  | 'ingetrokken'
+
+export const uitvraagStatusLabels: Record<UitvraagStatus, string> = {
+  open:        'Open',
+  ontvangen:   'Offerte ontvangen',
+  gegund:      'Gegund',
+  afgevallen:  'Afgevallen',
+  ingetrokken: 'Ingetrokken',
+}
+
+export const uitvraagStatusTone: Record<UitvraagStatus, 'neutral' | 'info' | 'success' | 'error' | 'brand'> = {
+  open:        'info',
+  ontvangen:   'brand',
+  gegund:      'success',
+  afgevallen:  'error',
+  ingetrokken: 'neutral',
+}
+
+/**
+ * Toegestane statusovergangen. Hier en niet in de server-actie, zodat de dropdown in de tab exact
+ * dezelfde regels hanteert: anders biedt de UI een stap aan die de server vervolgens weigert.
+ *
+ * `gegund → ontvangen` en `afgevallen → open` bestaan om een vergissing terug te draaien; zonder die
+ * paden zou één verkeerde klik de regel voorgoed vastzetten.
+ */
+export const UITVRAAG_TRANSITIES: Record<UitvraagStatus, UitvraagStatus[]> = {
+  open:        ['ontvangen', 'afgevallen', 'ingetrokken'],
+  ontvangen:   ['gegund', 'afgevallen', 'open'],
+  gegund:      ['ontvangen'],
+  afgevallen:  ['open', 'ontvangen'],
+  ingetrokken: ['open'],
+}
+
+/** In welke hoedanigheid is uitgevraagd. Stuurt het filter van de partijkiezer. */
+export type UitvraagSoort = 'onderaannemer' | 'leverancier'
+
+export const uitvraagSoortLabels: Record<UitvraagSoort, string> = {
+  onderaannemer: 'Onderaannemer',
+  leverancier:   'Leverancier',
+}
+
+export type DossierUitvraag = {
+  id: string
+  dossier_id: string
+  volgnummer: number
+  /** Vrije tekst: "Dak", "Gevel", "Steiger". Zie de kolomtoelichting in de migratie. */
+  discipline: string
+  soort: UitvraagSoort
+  relatie_id: string | null
+  /** Naam bij het vastleggen; blijft staan als de relatie verdwijnt of wordt hernoemd. */
+  partij_naam: string
+  status: UitvraagStatus
+  aangevraagd_op: string | null
+  ontvangen_op: string | null
+  reactie_uiterlijk: string | null
+  laatst_gerappelleerd_op: string | null
+  rappels: number
+  /** Adressen van de laatste verzending; prefill voor een volgende rappel. */
+  laatst_gemaild_naar: string[] | null
+  opmerking: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
 /* ── Opdracht-onderdelen (samenstelling van een opdracht) ─────────── */
 
 export type OpdrachtOnderdeelSoort = 'basis' | 'stelpost' | 'optie'

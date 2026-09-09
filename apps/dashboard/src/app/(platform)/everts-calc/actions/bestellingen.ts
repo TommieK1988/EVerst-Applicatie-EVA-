@@ -41,6 +41,7 @@ import {
   syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase,
   previewWerkbegrotingBestelregelsBouw7, type WerkbegrotingPayload,
 } from './werkbegroting'
+import { vulMailTekst, netteRegel, naarPlatteTekst } from '@/lib/mail/sjabloontekst'
 
 /** Componenttype → documentsoort. `arbeid` ontbreekt bewust: eigen uren worden niet ingekocht. */
 const SOORT_PER_TYPE: Record<'onderaanneming' | 'materieel', ContractSoort> = {
@@ -1088,41 +1089,6 @@ const STANDAARD_MAILTEKST: Record<'inkooporder' | 'oa_contract', { onderwerp: st
     onderwerp: 'Opdracht {bestelling.nummer}',
     tekst: 'Goedemiddag,\n\nIn de bijlage vindt u onze opdracht voor het project {project.naam}.\n\nWij verzoeken u het opdrachtnummer te vermelden op uw factuur en deze te mailen naar inkoop@everts.chat.\n\nMet vriendelijke groet,',
   },
-}
-
-/**
- * Vult {sleutel}-plaatshouders. Onbekende sleutels worden leeggemaakt, zodat er nooit
- * een letterlijke accolade-tekst bij de leverancier belandt.
- */
-function vulMailTekst(tekst: string, vars: Record<string, string>): string {
-  return (tekst ?? '').replace(/\{([a-z0-9_.]+)\}/gi, (_, sleutel: string) => vars[sleutel] ?? '')
-}
-
-/**
- * Een leeggebleven variabele laat zijn scheidingsteken achter: "Inkooporder 123 — ".
- * Voor het onderwerp (één regel) halen we die rommel weg.
- */
-function netteRegel(tekst: string): string {
-  return tekst
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\s*[—–|-]\s*$/, '')
-    .replace(/^\s*[—–|-]\s*/, '')
-    .trim()
-}
-
-/**
- * De mailtekst van een sjabloon is platte tekst met regeleinden — `bouwBestellingMailHtml`
- * maakt er Outlook-proof HTML van. Oudere sjablonen kunnen er HTML in hebben staan; die
- * wordt hier teruggebracht tot tekst zodat de alinea-indeling blijft kloppen.
- */
-function naarPlatteTekst(ruw: string): string {
-  return (ruw ?? '')
-    .replace(/<\s*br\s*\/?>/gi, '\n')
-    .replace(/<\/\s*p\s*>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 /**

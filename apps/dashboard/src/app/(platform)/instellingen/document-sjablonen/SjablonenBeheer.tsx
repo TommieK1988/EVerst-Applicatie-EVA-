@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button, Input, Badge, EmptyState, useDialogen } from '@/components/ui'
 import { maakSjabloon, kopieerSjabloon, verwijderSjabloon } from './actions'
-import { DOCUMENTSOORTEN, documentsoortLabels, heeftTemplate, type DocumentSjabloon, type Documentsoort } from '@/lib/documenten/types'
+import { DOCUMENTSOORTEN, documentsoortLabels, heeftTemplate, MAIL_ONLY_SOORTEN, type DocumentSjabloon, type Documentsoort } from '@/lib/documenten/types'
 
 export default function SjablonenBeheer({ initial }: { initial: DocumentSjabloon[] }) {
   const router = useRouter()
@@ -103,7 +103,9 @@ export default function SjablonenBeheer({ initial }: { initial: DocumentSjabloon
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {sjablonen.map(s => {
-            const compleet = heeftTemplate(s)
+            // Bij een mail-only soort (uitvraag) hoort geen Word-document; dan is een ontbrekende
+            // template geen gebrek maar het normale geval.
+            const compleet = MAIL_ONLY_SOORTEN.includes(s.documentsoort) || heeftTemplate(s)
             return (
               <div key={s.id} style={{
                 padding: '14px 16px', background: 'var(--bg)', border: '1px solid var(--border)',

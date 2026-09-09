@@ -12,7 +12,8 @@
 /** Soorten documenten; stuurt de standaard-bestandsnaam en de filtering in de UI. */
 export const DOCUMENTSOORTEN = [
   'opdrachtbevestiging', 'bewonersbrief', 'garantiecertificaat', 'informatiebrief',
-  'houtrot_rapportage', 'kwaliteitsrapport', 'bezoekrapport', 'inkooporder', 'oa_contract', 'overig',
+  'houtrot_rapportage', 'kwaliteitsrapport', 'bezoekrapport', 'inkooporder', 'oa_contract',
+  'uitvraag', 'uitvraag_rappel', 'overig',
 ] as const
 export type Documentsoort = (typeof DOCUMENTSOORTEN)[number]
 
@@ -26,6 +27,8 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
   bezoekrapport:      'Bezoekrapport',
   inkooporder:        'Inkooporder',
   oa_contract:        'Onderaannemerscontract',
+  uitvraag:           'Uitvraag (prijsopgave vragen)',
+  uitvraag_rappel:    'Uitvraag — herinnering',
   overig:             'Overig',
 }
 
@@ -45,6 +48,12 @@ export const BEZOEK_DOCUMENTSOORT = 'bezoekrapport'
 export function isBezoekSoort(s: string | null | undefined): boolean {
   return s === BEZOEK_DOCUMENTSOORT
 }
+
+/**
+ * Soorten waarbij alleen de mailtekst wordt beheerd; er hoort geen Word-document bij. Het
+ * sjabloonbeheer mag daar dus niet over een ontbrekende template klagen.
+ */
+export const MAIL_ONLY_SOORTEN: readonly string[] = ['uitvraag', 'uitvraag_rappel']
 
 export const INKOOP_DOCUMENTSOORTEN = ['inkooporder', 'oa_contract'] as const
 export type InkoopDocumentsoort = (typeof INKOOP_DOCUMENTSOORTEN)[number]

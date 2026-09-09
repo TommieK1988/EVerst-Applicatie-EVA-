@@ -25,6 +25,7 @@ import { InkoopTab } from './tabs/InkoopTab'
 import { VerkoopTab } from './tabs/VerkoopTab'
 import { UrenTab } from './tabs/UrenTab'
 import MeerwerkTab from './tabs/MeerwerkTab'
+import UitvraagTab from './tabs/UitvraagTab'
 import BestandenTab from './tabs/BestandenTab'
 import KamTab, { KAM_DELEN, standaardKamDeel, type KamDeel } from './tabs/KamTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
@@ -46,6 +47,7 @@ const TAB_LABELS: Record<string, string> = {
   verkoop:       'Verkoop',
   uren:          'Uren',
   meerwerk:      'Meerwerk',
+  uitvraag:      'Uitvraag',
   financieel:    'Financieel',
 }
 
@@ -343,6 +345,18 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
             clientNaam={dossier?.klant_naam ?? ''}
           />
         </Suspense>
+      </>
+    )
+  }
+
+  // Uitvragen bij onderaannemers/leveranciers. Op de aanvraag (waar je uitvraagt), en daarna op de
+  // offerte en de opdracht: een dossier houdt bij een statuswissel hetzelfde id, dus wat in de
+  // aanvraagfase is vastgelegd blijft hier gewoon zichtbaar.
+  if (tab === 'uitvraag' && sectie !== 'servicedesk') {
+    return (
+      <>
+        {titleInjector}
+        <UitvraagTab dossierId={id} />
       </>
     )
   }

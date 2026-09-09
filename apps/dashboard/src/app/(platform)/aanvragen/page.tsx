@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
 import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
+import OpenstaandeUitvragenKnop from '@/components/dossiers/OpenstaandeUitvragenKnop'
 import { AANVRAAG_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersVoorAanvragen, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
@@ -54,7 +55,10 @@ export default async function AanvragenPage({
         kanNieuwAanmaken
         toonSoortSlicer
         werkmaatschappijen={werkmaatschappijen}
-        extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />}
+        extraActies={<>
+          <BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />
+          <OpenstaandeUitvragenKnop key="uitvragen-open" />
+        </>}
       />
     </>
   )
