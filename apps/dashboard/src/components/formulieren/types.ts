@@ -58,6 +58,10 @@ export type AandachtspuntWaarde = {
   omschrijving: string
   ruimte?: string | null
   fotos?: string[]
+  /** Streefdatum (yyyy-mm-dd); landt op `oplever_punten.deadline`. */
+  deadline?: string | null
+  /** Vinkje "dit is meerwerk"; landt op `oplever_punten.is_extra_werk`. */
+  isExtraWerk?: boolean
 }
 
 /** Instellingen van een aandachtspunt-veld; de invuller ziet hiervan alleen het effect. */
@@ -68,6 +72,19 @@ export interface AandachtspuntConfig {
   toonFotos?: boolean
   maxFotosPerPunt?: number
   toevoegLabel?: string
+  /** Streefdatum per punt uitvragen. Standaard uit: een bewoner weet die niet. */
+  toonDeadline?: boolean
+  /** "Is dit meerwerk?" per punt uitvragen. Standaard uit; alleen zinnig bij een interne opname. */
+  toonMeerwerk?: boolean
+  /**
+   * Id van het veld waarin de invuller zijn naam zet, als bron voor `melder_naam`.
+   *
+   * Nodig omdat een inzending via de publieke bewonerslink geen `ingediend_door` heeft: zonder dit
+   * staat elke bewonersmelding als "Anoniem" op de opleverlijst, ook al vraagt het formulier
+   * gewoon naar de naam. Bewust een expliciete verwijzing en geen slimmigheid op veldnaam —
+   * raden welk veld "de naam" is breekt stil zodra iemand een label hernoemt.
+   */
+  melderVeldId?: string
 }
 
 export type ConditionOperator =

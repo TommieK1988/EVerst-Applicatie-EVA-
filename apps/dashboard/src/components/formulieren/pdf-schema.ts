@@ -214,6 +214,12 @@ export async function buildBlokken(
             if (field.aandachtspunt?.toonRuimte !== false) {
               rij.push({ label: 'Ruimte', waarde: p.ruimte?.trim() || '—' })
             }
+            if (field.aandachtspunt?.toonDeadline) {
+              rij.push({ label: 'Streefdatum', waarde: p.deadline || '—' })
+            }
+            if (field.aandachtspunt?.toonMeerwerk) {
+              rij.push({ label: 'Meerwerk', waarde: p.isExtraWerk ? 'Ja' : 'Nee' })
+            }
             // Alleen het aantal: de foto's staan als https-URL in de opslag en het afbeeldingsblok
             // verwerkt uitsluitend data-URL's. Ze ophalen zou elke export N netwerkrondjes kosten.
             if (p.fotos?.length) {

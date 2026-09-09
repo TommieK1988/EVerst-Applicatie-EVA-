@@ -958,6 +958,16 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
               onChange={v => updateAandachtspunt({ toonFotos: v })}
               label="Foto's toestaan"
             />
+            <Toggle
+              checked={field.aandachtspunt?.toonDeadline === true}
+              onChange={v => updateAandachtspunt({ toonDeadline: v })}
+              label="Vraag naar een streefdatum"
+            />
+            <Toggle
+              checked={field.aandachtspunt?.toonMeerwerk === true}
+              onChange={v => updateAandachtspunt({ toonMeerwerk: v })}
+              label='Vraag "is dit meerwerk?"'
+            />
           </div>
 
           <InputRow label="Max. aantal punten">
@@ -989,6 +999,26 @@ export default function FieldSettings({ field, allFields, templateId, onChange }
               onChange={e => updateAandachtspunt({ toevoegLabel: e.target.value })}
               placeholder="Punt toevoegen"
             />
+          </InputRow>
+
+          <InputRow label="Naam van de melder">
+            <select
+              value={field.aandachtspunt?.melderVeldId ?? ''}
+              onChange={e => updateAandachtspunt({ melderVeldId: e.target.value || undefined })}
+              style={selectStyle}
+            >
+              <option value="">— niet overnemen —</option>
+              {otherFields
+                .filter(f => f.type === 'text' || f.type === 'textarea')
+                .map(f => (
+                  <option key={f.id} value={f.id}>{f.label || '(geen label)'}</option>
+                ))}
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+              Kies het veld waarin de invuller zijn naam zet. Zonder deze keuze staat een melding uit
+              het bewonersportaal als "Anoniem" op de opleverlijst, ook als het formulier wél naar de
+              naam vraagt.
+            </p>
           </InputRow>
 
           <p style={{

@@ -683,6 +683,9 @@ function opleverFotoBasisUrl(supabase: any): string {
  * niets meer — ook niet als de antwoorden intussen zijn gewijzigd. Anders zou een her-indiening de
  * triage-beslissingen van de projectleider overschrijven.
  */
+/** Postgres slikt geen rommel in een date-kolom, en de waarde komt van een publieke route. */
+const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/
+
 export async function materialiseerAandachtspunten(
   inzendingId: string,
 ): Promise<{ ok: true; aangemaakt: number } | { ok: false; error: string }> {
@@ -732,13 +735,21 @@ export async function materialiseerAandachtspunten(
     }
     if (teMaken.length === 0) return { ok: true, aangemaakt: 0 }
 
-    // Melder: een collega kennen we bij naam, een bewoner via de publieke link niet.
+    // Melder: een collega kennen we via `ingediend_door`. Een bewoner via de publieke link niet —
+    // daar komt de naam uit het veld dat het sjabloon daarvoor aanwijst (`melderVeldId`). Zonder die
+    // aanwijzing blijft het null en toont de opleverlijst "Anoniem".
     let melderNaam: string | null = null
     if (inzending.ingediend_door) {
       const { data: mw } = await supabase
         .from('medewerkers').select('voornaam, tussenvoegsel, achternaam')
         .eq('id', inzending.ingediend_door).maybeSingle()
       if (mw) melderNaam = [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ') || null
+    }
+    if (!melderNaam) {
+      const melderVeldId = velden.map(v => v.aandachtspunt?.melderVeldId).find(Boolean)
+      const ruw = melderVeldId ? waarden[melderVeldId] : undefined
+      // Begrensd: dit komt van een publieke route en gaat rechtstreeks het dossier op.
+      if (typeof ruw === 'string' && ruw.trim() !== '') melderNaam = ruw.trim().slice(0, 120)
     }
 
     // Losse punten hebben een eigen nummerreeks per dossier (weergave "AP-xx").
@@ -758,6 +769,12 @@ export async function materialiseerAandachtspunten(
       volgnummer: volgnummer++,
       omschrijving: r.punt.omschrijving.trim(),
       ruimte: typeof r.punt.ruimte === 'string' && r.punt.ruimte.trim() !== '' ? r.punt.ruimte.trim() : null,
+      // Alleen overnemen als het sjabloon er ook naar vraagt: anders zou een geprepareerde payload
+      // op de publieke route een deadline of meerwerk-vlag op het dossier kunnen zetten.
+      deadline: r.veld.aandachtspunt?.toonDeadline && ISO_DATUM.test(r.punt.deadline ?? '')
+        ? r.punt.deadline
+        : null,
+      is_extra_werk: r.veld.aandachtspunt?.toonMeerwerk === true && r.punt.isExtraWerk === true,
       status: 'nieuw',
       soort: r.veld.aandachtspunt?.soort ?? 'oplever',
       bron: 'formulier',

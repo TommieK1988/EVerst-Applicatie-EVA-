@@ -652,6 +652,30 @@ export default function FieldRenderer({ field, value, error, onChange, mobiel = 
                 />
               )}
 
+              {cfg.toonDeadline && (
+                <input
+                  type="date"
+                  value={punt?.deadline ?? ''}
+                  onChange={e => wijzig(i, { deadline: e.target.value || null })}
+                  style={{ ...inputStyle, marginTop: 8 }}
+                />
+              )}
+
+              {cfg.toonMeerwerk && (
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginTop: 8,
+                  fontSize: optieFont, color: 'var(--text)', cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={punt?.isExtraWerk === true}
+                    onChange={e => wijzig(i, { isExtraWerk: e.target.checked })}
+                    style={{ width: 16, height: 16, accentColor: accent }}
+                  />
+                  Dit is meerwerk
+                </label>
+              )}
+
               {cfg.toonFotos !== false && (
                 <AandachtspuntFotos
                   fotos={punt?.fotos ?? []}

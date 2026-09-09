@@ -88,6 +88,8 @@ export function formatVeldwaardeTekst(field: FormField, value: unknown): string 
         .map((p, i) => {
           const staart = [
             p.ruimte ? `(${p.ruimte})` : null,
+            p.deadline ? `— streefdatum ${p.deadline}` : null,
+            p.isExtraWerk ? '— meerwerk' : null,
             p.fotos?.length ? `— ${p.fotos.length} foto${p.fotos.length === 1 ? '' : "'s"}` : null,
           ].filter(Boolean).join(' ')
           return `${i + 1}. ${p.omschrijving.trim()}${staart ? ` ${staart}` : ''}`
