@@ -1,0 +1,73 @@
+# Controlepoort voor EVA.
+#
+# WAAROM: er draaide tot nu toe niets automatisch. Geen lint (er stond maandenlang geen
+# eslint-configuratie, dus `next lint` viel elke keer stil), geen tests, geen controle op
+# groeiende technische schuld. Fouten kwamen pas boven bij de Vercel-build of, erger, in
+# productie.
+#
+# WAT DIT WEL EN NIET IS: de Vercel-build type-checkt al (`strict: true`, geen
+# `ignoreBuildErrors`), dus een typefout blokkeert vandaag ook al de uitrol. Deze workflow
+# geeft dus vooral *eerdere* terugkoppeling. Wat hij echt toevoegt is lint en de schuldteller.
+#
+# BEWUST GEEN BRANCH PROTECTION (nog niet). Er werken meerdere sessies tegelijk in deze
+# repo die rechtstreeks naar `main` pushen. Verplichte PR's aanzetten zou dat per direct
+# breken, en de eerste randvoorwaarde van dit traject is dat er niets stilvalt. Eerst laten
+# meelopen en zien dat hij betrouwbaar groen is; daarna pas afdwingen.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Een nieuwe push op dezelfde branch maakt de vorige run overbodig.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # De schuldteller vergelijkt met het vastgelegde budget in de repo, niet met
+          # een vorige commit -- één commit is dus genoeg.
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22 is wat Vercel draait. Lokaal staat hier node 26; die afwijking hoort in CI
+          # zichtbaar te worden en niet stil mee te reizen naar productie.
+          node-version: 22
+          cache: npm
+
+      - name: Afhankelijkheden installeren
+        run: npm ci
+
+      - name: Types controleren
+        run: npm run type-check
+
+      - name: Lint
+        # Staat vandaag op 507 waarschuwingen en 0 fouten, dus dit is groen. Bewust géén
+        # --max-warnings=0: dat zou de poort meteen rood zetten op bestaande schuld, en een
+        # poort die vanaf dag één rood staat leert niemand iets. De schuldteller hieronder
+        # bewaakt de groei; deze stap vangt nieuwe fouten.
+        run: npm run lint
+
+      - name: Technische schuld
+        # Faalt zodra as any-casts, ongegate service-role-actions of te grote bestanden
+        # toenemen ten opzichte van scripts/schuld-budget.json.
+        run: node scripts/schuld-teller.mjs
+
+      - name: Build
+        # Vangt `'use server'`-fouten die tsc mist: een synchrone export uit een
+        # 'use server'-module komt door de type-check heen en breekt pas hier.
+        #
+        # Draait bewust zonder environment-variabelen. Nagemeten in een verse worktree
+        # zonder .env-bestand: de build komt er schoon doorheen. Zou dat veranderen, dan
+        # is dat een echte regressie -- de build hoort niet van sleutels af te hangen.
+        run: npm run build
