@@ -517,15 +517,38 @@ POST /contracts/purchase-order/approve-contract-terms     (inkooporder)
 
 Dus: aanmaken in concept (0) → `PUT /contracts/{soort}/{id}/update-status/1` → afroepen.
 
-> ### ⚠️ Roep PER TERMIJN af — nooit alle termijnen in één call
-> Geverifieerd (aug 2026, wegwerpcontract met 3 regels):
+> ### ✅ Roep ALLE termijnen in één call af — één verplichting per opdracht (herzien sept 2026)
 > - **Alle termijnen in één `approve-contract-terms`-call** → **één gebundelde leverbon** voor het
->   hele contractbedrag (`…B001` van €1.500). Een inkoopfactuur voor één regel matcht dan tegen het
->   volle bedrag; Bouw7 ziet het contract als volledig ontvangen en de afboeking klopt niet.
-> - **Eén call per termijn** → **één leverbon per contractregel** (`…B001`, `…B002`, `…B003`, elk
->   het regelbedrag). Een factuur per regel boekt dan schoon af op zijn eigen bon. **Dit is wat je
->   wilt.** `roepBouw7ContractAf` loopt dus over de termijnen en doet een aparte call per stuk
->   (al afgeroepen — `approved: true` — termijnen overslaan, zodat een herstelpad geen duplicaten maakt).
+>   hele contractbedrag. Alle regels worden afgeroepen; er ontstaat één verplichting. **Dit is wat
+>   je wilt.** `roepBouw7ContractAf` doet dus één call met alle nog niet afgeroepen termijnen.
+> - **Eén call per termijn** → **één leverbon per contractregel** (`…B001`, `…B002`, …). Zo deed
+>   EVA het tot sept 2026, met als argument dat een deelfactuur dan schoner afboekt. Dat argument
+>   houdt geen stand: een opdracht met negen regels leverde negen verplichtingen, en **Bouw7
+>   splitst een gebundelde bon zelf** zodra er een deelfactuur op geboekt wordt — het geboekte
+>   deel blijft op `…B001`, de rest schuift door naar `…B001-1` (waargenomen op 20261.00293OA001).
+>
+> **De gebundelde bon hangt onder élke termijn die eraan meedeed.** Wie de bonnen van een contract
+> uitleest met een platte `flatMap` over `contractTerms[].deliveryTickets` telt hem dus N keer, en
+> loopt bij het opruimen op een 404 bij de tweede DELETE van dezelfde bon. Ontdubbel op `id`
+> (`bonnenVan()` in `contracten.ts`).
+>
+> ### ⛔ Afroepen is onomkeerbaar — een `approved` termijn komt niet meer vrij
+> Geverifieerd (sept 2026, wegwerpcontracten op project 4202130):
+> - de bon verwijderen zet de termijn **niet** terug: `approved` blijft `true`, zonder bon;
+> - opnieuw afroepen weigert dan met *"Contract term with ID #… has already been approved and
+>   called off completely"*;
+> - de termijn bijwerken weigert met *"The contract term cannot be updated because it is approved"*.
+>
+> **De enige herstelroute** is de termijn weggooien en opnieuw aanmaken:
+> 1. `DELETE /project/delivery-ticket` — de bon (kan niet zodra `processed: true`);
+> 2. `DELETE /contracts/{soort}/contract-term` — de termijn; de gekoppelde bestelregel komt daarbij
+>    vanzelf weer vrij (`status: 0`, contract `null`);
+> 3. contract-upsert met de termijn opnieuw in `contractTerms[]`, inclusief zijn
+>    `contractOrderLines: [{ id }]` — de regel wordt dan weer gekoppeld (`status: 1`);
+> 4. één `approve-contract-terms` met alle nieuwe termijnen → één gebundelde bon.
+>
+> Zo zijn in sept 2026 de twee opdrachten die nog per regel waren afgeroepen samengevoegd tot één
+> verplichting (`scripts/herstel-verplichtingen.mjs`).
 
 **Bewezen resultaat** (project 3869371, beide soorten, testobjecten weer verwijderd):
 - termijn krijgt `approved: true`, `amountReceived`/`costReceived` gevuld, `costToReceive: 0`;
@@ -540,8 +563,8 @@ Dus: aanmaken in concept (0) → `PUT /contracts/{soort}/{id}/update-status/1` �
 2. **Versturen** (`verstuurBestelling`) — EVA maakt een order-PDF (`lib/bouw7/bestelling-pdf.ts`,
    pdf-lib + briefpapier), mailt die via Outlook (`verstuurMailNamensMedewerker`, namens de
    ingelogde medewerker, `recipient` in Bouw7 blijft dus `null`), en pas ná een geslaagde mail:
-   status → 1 + **per-regel afroepen** (leverbonnen). Zo klopt de volgorde met Bouw7 — je roept pas
-   af als de order echt de deur uit is.
+   status → 1 + **afroepen in één call** (één leverbon = één verplichting). Zo klopt de volgorde met
+   Bouw7 — je roept pas af als de order echt de deur uit is.
 
 **Uitzondering: een reservering** (`is_reservering`, alle componenten van de bestelling).
 Dat is een budgetpot bij een leverancier (de oude "winkel") of bij een onderaannemer waar géén
@@ -555,7 +578,8 @@ Opruimen (`trekBestellingIn`) in omgekeerde volgorde: **alle** bonnen
 bestelregels blijven staan.
 
 **Implementatie:** `lib/bouw7/contracten.ts` (`getAfroepStatusId`, `zetBouw7ContractStatus`,
-`roepBouw7ContractAf` (per termijn), `verwijderBouw7ContractLeverbonnen`, `leesBouw7Contract`) ·
+`roepBouw7ContractAf` (één call, alle termijnen), `bonnenVan`, `verwijderBouw7ContractLeverbonnen`,
+`leesBouw7Contract`) ·
 `lib/bouw7/bestelling-pdf.ts` (order-PDF) · `everts-calc/actions/bestellingen.ts`
 (`maakBestellingInBouw7` = alleen concept, `verstuurBestelling` = mail + afroep, `voerAfroepUit`,
 `getBestellingMailConcept`) · migraties `20260722a_leverbon_winkel.sql` (`bouw7_leverbon_id`,

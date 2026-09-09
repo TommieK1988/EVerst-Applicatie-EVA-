@@ -1334,7 +1334,7 @@ export async function verstuurBestelling(
     if (archief.documentId) await markeerGemaild(db, archief.documentId, ontvangers)
   } catch { /* stil */ }
 
-  // De afroep heeft leverbonnen laten ontstaan; die tellen mee in de verplichtingen op het Inkoop-tab.
+  // De afroep heeft de leverbon laten ontstaan; die telt mee in de verplichtingen op het Inkoop-tab.
   await ververSnapshotsNaSchrijven(
     dossierId,
     ['inkooporders', 'oa_contracten'],

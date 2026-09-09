@@ -480,7 +480,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
         if (res.bonWaarschuwing) {
           toast.error(`Verstuurd, maar de leverbon niet aangemaakt: ${res.bonWaarschuwing}`, { duration: 8000 })
         } else {
-          toast.success(`Verstuurd naar de leverancier — ${res.bonAantal} leverbon(nen) aangemaakt`)
+          toast.success(res.bonnummer
+            ? `Verstuurd naar de leverancier — verplichting ${res.bonnummer} aangemaakt`
+            : 'Verstuurd naar de leverancier')
         }
         setVerstuurB(null)
         setTick(t => t + 1)

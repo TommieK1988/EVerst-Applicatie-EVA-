@@ -264,15 +264,17 @@ type Bouw7ContractTermijn = Record<string, unknown> & {
 }
 
 /**
- * Roep de termijnen van een contract volledig af, zodat Bouw7 de leverbon(nen) aanmaakt.
+ * Roep de termijnen van een contract volledig af, zodat Bouw7 de leverbon aanmaakt.
  *
- * ⚠️ **Per termijn een aparte call — nooit alle termijnen in één keer.** Geverifieerd op Bouw7
- * (aug 2026, wegwerpcontract): één `approve-contract-terms` met álle termijnen levert **één
- * gebundelde leverbon** voor het hele contractbedrag; een aparte call per termijn levert **één
- * leverbon per contractregel** (`…B001`, `…B002`, …). Dat laatste is wat je wilt: een inkoopfactuur
- * voor één regel boekt dan schoon af op díé regel-bon. Met één gebundelde bon matcht een deelfactuur
- * tegen het volle contractbedrag en klopt de afboeking niet — Bouw7 ziet het contract dan als
- * volledig ontvangen.
+ * **Één call met álle termijnen — dus één verplichting per opdracht/inkooporder.** Alle regels
+ * worden afgeroepen, maar ze belanden samen op één leverbon (`…B001`). Zo staat een order in de
+ * projectbewaking als één verplichting, niet als een stapel losse posten.
+ *
+ * Tot sept 2026 riep EVA per termijn apart af, omdat één bon per regel een deelfactuur schoner
+ * leek af te boeken. Dat argument houdt geen stand: Bouw7 **splitst een gebundelde bon zelf**
+ * zodra er een deelfactuur op wordt geboekt — het geboekte deel blijft op `…B001` staan en de
+ * rest schuift door naar `…B001-1` (waargenomen op 20261.00293OA001). De afboeking klopt dus ook
+ * met één bon, terwijl een opdracht met negen regels niet langer negen verplichtingen oplevert.
  *
  * `items` bevat het **complete** termijn-object uit `GET /contracts/{soort}/{id}` (de UI stuurt het
  * ook onverkort terug), met `partiallyAmountReceived`/`partiallyCostReceived` op het volledige
@@ -298,9 +300,13 @@ export async function roepBouw7ContractAf(
 
     // Al afgeroepen termijnen (approved) overslaan, zodat een herstelpad geen duplicaat-bonnen maakt.
     const nogAfTeRoepen = termijnen.filter(t => (t as { approved?: boolean }).approved !== true)
-    for (const t of nogAfTeRoepen) {
+    if (nogAfTeRoepen.length > 0) {
       await client.post(`${PAD[soort]}/approve-contract-terms`, {
-        items: [{ ...t, partiallyAmountReceived: t.amount ?? null, partiallyCostReceived: t.subTotal ?? null }],
+        items: nogAfTeRoepen.map(t => ({
+          ...t,
+          partiallyAmountReceived: t.amount ?? null,
+          partiallyCostReceived: t.subTotal ?? null,
+        })),
         createDeliveryTickets: true,
         createPdf: false,
         signee,
@@ -311,16 +317,44 @@ export async function roepBouw7ContractAf(
       })
     }
 
-    // De bonnen komen niet in de response (204). Teruglezen levert ze via de termijnen.
-    const na = await client.get<{ contractTerms?: { deliveryTickets?: { id?: number; ticketNumber?: string }[] }[] }>(
+    // De bonnen komen niet in de response (204). Teruglezen levert ze via de termijnen —
+    // ontdubbeld, want de gebundelde bon hangt onder elke termijn die eraan meedeed.
+    const na = await client.get<{ contractTerms?: { deliveryTickets?: Bouw7Leverbon[] }[] }>(
       `${PAD[soort]}/${contractId}`,
     )
-    const bonnen = (na.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])
+    const bonnen = bonnenVan(na.contractTerms)
     const eerste = bonnen[0]
     return { ok: true, bonId: eerste?.id ?? null, bonnummer: eerste?.ticketNumber ?? null, bonAantal: bonnen.length }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout' }
   }
+}
+
+/** Leverbon zoals hij onder een contracttermijn hangt. */
+type Bouw7Leverbon = {
+  id?: number
+  ticketNumber?: string
+  ticketDate?: string
+  processed?: boolean
+}
+
+/**
+ * Alle leverbonnen van een contract, elk één keer.
+ *
+ * Ontdubbelen is niet optioneel: sinds de afroep gebundeld gaat, hangt één bon onder **elke**
+ * termijn die eraan meedeed. Een platte `flatMap` telt hem dan meerdere keren — dat gaf een
+ * te hoog bonaantal en, bij het opruimen, een 404 op de tweede DELETE van dezelfde bon.
+ */
+function bonnenVan(
+  contractTerms: { deliveryTickets?: Bouw7Leverbon[] }[] | undefined,
+): Bouw7Leverbon[] {
+  const uit = new Map<number, Bouw7Leverbon>()
+  for (const t of contractTerms ?? []) {
+    for (const b of t.deliveryTickets ?? []) {
+      if (b.id != null && !uit.has(b.id)) uit.set(b.id, b)
+    }
+  }
+  return [...uit.values()]
 }
 
 export type VerwijderResultaat = { ok: true } | { ok: false; error: string }
@@ -349,9 +383,10 @@ export async function verwijderBouw7Leverbon(
 }
 
 /**
- * Verwijder **alle** leverbonnen van een contract. Nodig omdat het afroepen per regel gebeurt en
- * er dus meerdere bonnen (`…B001`, `…B002`, …) kunnen hangen. Weigert zodra er op één bon een
- * inkoopfactuur zit (`processed`) — dan moet het in Bouw7 worden afgehandeld.
+ * Verwijder **alle** leverbonnen van een contract. Een gebundelde afroep levert er één, maar
+ * oudere contracten (afgeroepen per regel) en door Bouw7 gesplitste bonnen (`…B001-1` na een
+ * deelfactuur) hebben er meerdere. Weigert zodra er op één bon een inkoopfactuur zit
+ * (`processed`) — dan moet het in Bouw7 worden afgehandeld.
  */
 export async function verwijderBouw7ContractLeverbonnen(
   soort: ContractSoort,
@@ -359,10 +394,10 @@ export async function verwijderBouw7ContractLeverbonnen(
 ): Promise<VerwijderResultaat> {
   try {
     const client = await getBouw7Client()
-    const detail = await client.get<{
-      contractTerms?: { deliveryTickets?: { id?: number; ticketNumber?: string; ticketDate?: string; processed?: boolean }[] }[]
-    }>(`${PAD[soort]}/${contractId}`)
-    const bonnen = (detail.contractTerms ?? []).flatMap(t => t.deliveryTickets ?? [])
+    const detail = await client.get<{ contractTerms?: { deliveryTickets?: Bouw7Leverbon[] }[] }>(
+      `${PAD[soort]}/${contractId}`,
+    )
+    const bonnen = bonnenVan(detail.contractTerms)
     const geboekt = bonnen.find(b => b.processed)
     if (geboekt) {
       return { ok: false, error: `Op leverbon ${geboekt.ticketNumber} zit al een inkoopfactuur — handel dit in Bouw7 af.` }
