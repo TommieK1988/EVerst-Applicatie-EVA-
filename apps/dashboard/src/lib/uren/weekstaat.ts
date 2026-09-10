@@ -322,6 +322,13 @@ const ROL_KOLOMMEN = [
 ] as const
 
 /**
+ * De opdracht-substatussen waarop uren geschreven mogen worden: een opdracht die loopt.
+ * Alles ervoor (nieuwe opdracht) en erna (financieel gereed/afgesloten) valt af -- daar horen
+ * geen nieuwe uren meer op te landen, en ze vullen de keuzelijst alleen maar.
+ */
+const LOPENDE_OPDRACHT_STATUSSEN = ['werkvoorbereiding', 'onderhanden', 'uitvoering_gereed'] as const
+
+/**
  * Hoe ver de planning en de eerdere uren meetellen als koppeling: een halfjaar terug en een
  * halfjaar vooruit, gerekend vanaf de dag die geboekt wordt. Het venster is er om de query
  * begrensd te houden (zie de paginatie-regel in CLAUDE.md), niet om streng te zijn.
@@ -329,8 +336,8 @@ const ROL_KOLOMMEN = [
 const KOPPELING_DAGEN = 180
 
 /**
- * Dossiers om uit te kiezen bij werk-uren: eerst de opdrachten waaraan deze medewerker gekoppeld
- * is, daarna alle overige lopende opdrachten.
+ * Dossiers om uit te kiezen bij werk-uren: eerst de lopende opdrachten waaraan deze medewerker
+ * gekoppeld is, daarna alle overige lopende opdrachten.
  *
  * Eerder stond hier alleen wie op díé dag was ingepland. Dat bleek in de praktijk vrijwel altijd
  * leeg -- de planning wordt niet per dag bijgehouden, en een meerdaags planitem viel er sowieso
@@ -403,28 +410,24 @@ export async function getDossierOpties(datum: string): Promise<Array<{
     if (r.dossier_id) gekoppeld.add(r.dossier_id)
   }
 
-  // De koppelingen los ophalen: een dossier waaraan hij gekoppeld is hoeft geen lopende opdracht
-  // te zijn (een opname staat nog op `aanvraag`), maar moet wel in Bouw7 bestaan -- daar landen
-  // de uren uiteindelijk.
-  const idLijst = [...gekoppeld]
-  const { data: mijne } = idLijst.length
-    ? await supabase
-        .from('dossiers')
-        .select('id, dossiernummer, titel')
-        .in('id', idLijst)
-        .eq('gearchiveerd', false)
-        .not('bouw7_id', 'is', null)
-        .order('dossiernummer', { ascending: false })
-    : { data: [] }
-
-  const { data: opdrachten } = await supabase
+  // Koppeling bepaalt de volgorde, niet of een dossier mag. Beide groepen worden op dezelfde
+  // manier ingeperkt tot lopende opdrachten: gekoppeld zijn aan een afgerond of nog niet
+  // voorbereid project maakt het geen plek om uren op te schrijven.
+  const lopendeOpdrachten = () => supabase
     .from('dossiers')
     .select('id, dossiernummer, titel')
     .eq('hoofdstatus', 'opdracht')
+    .in('opdracht_substatus', LOPENDE_OPDRACHT_STATUSSEN)
     .eq('gearchiveerd', false)
     .not('bouw7_id', 'is', null)
     .order('dossiernummer', { ascending: false })
-    .limit(500)
+
+  const idLijst = [...gekoppeld]
+  const { data: mijne } = idLijst.length
+    ? await lopendeOpdrachten().in('id', idLijst)
+    : { data: [] }
+
+  const { data: opdrachten } = await lopendeOpdrachten().limit(500)
 
   type Rij = { id: string; dossiernummer: string; titel: string }
   const label = (d: Rij) => `${d.dossiernummer} · ${d.titel}`
