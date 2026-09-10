@@ -325,7 +325,19 @@ export function herstelSnapshot(
 // ─── Componentregels (nieuwe structuur) ───────────────────────────────────────
 
 export function getComponentregels(calculatieregel_id?: string): Componentregel[] {
-  const alle = lees<Componentregel>(KEYS.componentregels, [])
+  let alle = lees<Componentregel>(KEYS.componentregels, [])
+  // Terugval hier en niet alleen bij het opslaan: dan klopt ook een bestaande
+  // calculatie meteen bij het openen, en zien het rekenblad, de groepstotalen,
+  // de werkbegroting en de offerte gegarandeerd hetzelfde tarief. Het resultaat gaat
+  // meteen terug het werkgeheugen in: anders zou elke render dezelfde regels opnieuw
+  // aanvullen, en dat is per lege arbeidsregel een zoektocht naar zijn calculatie.
+  if (alle.some(c => c.type === 'arbeid' && !c.tarief)) {
+    const aangevuld = alle.map(metStandaardUurtarief)
+    if (aangevuld.some((c, i) => c !== alle[i])) {
+      sla(KEYS.componentregels, aangevuld)
+      alle = aangevuld
+    }
+  }
   return calculatieregel_id ? alle.filter(c => c.calculatieregel_id === calculatieregel_id) : alle
 }
 
@@ -334,9 +346,56 @@ export function getComponentregelsVoorScenario(scenario_id: string): Componentre
   return getComponentregels().filter(c => regelIds.has(c.calculatieregel_id))
 }
 
-export function slaComponentregelOp(comp: Componentregel): void {
-  const lijst = getComponentregels().filter(c => c.id !== comp.id)
-  sla(KEYS.componentregels, [...lijst, comp])
+/**
+ * Het globale standaard uurtarief: het met ★ gemarkeerde tarief uit
+ * Stamgegevens → Uursoorten & uurtarieven (bedrijfsinstellingen). Geen ★ gezet?
+ * Dan het eerste tarief uit die lijst. Leeg = 0 (er valt niets terug te vallen).
+ */
+export function globaalUurtarief(): number {
+  const lijst = getInstellingen().uurtarieven ?? []
+  const favoriet = lijst.find(t => t.is_favoriet) ?? lijst[0]
+  const t = favoriet?.tarief
+  return typeof t === 'number' && t > 0 ? t : 0
+}
+
+/**
+ * Het uurtarief waarop een arbeidsregel terugvalt zolang er zelf geen tarief op
+ * staat: het standaard uurtarief van de calculatie (totalenbalk) en anders het
+ * globale tarief uit de bedrijfsinstellingen. Zo staat er altijd een tarief op de
+ * regel — uren zonder prijs leverden stilzwijgend € 0 arbeid op.
+ */
+export function standaardUurtarief(calculatieregel_id?: string): number {
+  if (calculatieregel_id) {
+    const regel = getCalculatieregels().find(r => r.id === calculatieregel_id)
+    const groep = regel && getGroepen().find(g => g.id === regel.groep_id)
+    const scenario = groep && getScenario(groep.scenario_id)
+    // Bevroren calculatie: de bedragen horen bij een verzonden offerte en mogen
+    // niet alsnog van een tarief worden voorzien.
+    if (scenario?.bevroren_op) return 0
+    const eigen = scenario?.standaard_uurtarief
+    if (typeof eigen === 'number' && eigen > 0) return eigen
+  }
+  return globaalUurtarief()
+}
+
+/**
+ * Vult een leeg arbeidstarief aan met het standaardtarief. Andere componenttypen
+ * en een al ingevuld tarief (ook een negatief, bij minderwerk) blijven ongemoeid.
+ */
+export function metStandaardUurtarief(comp: Componentregel): Componentregel {
+  if (comp.type !== 'arbeid') return comp
+  if (typeof comp.tarief === 'number' && comp.tarief !== 0 && !isNaN(comp.tarief)) return comp
+  const tarief = standaardUurtarief(comp.calculatieregel_id)
+  return tarief > 0 ? { ...comp, tarief } : comp
+}
+
+/** Slaat een componentregel op. Retourneert wat er daadwerkelijk is opgeslagen —
+ *  bij arbeid kan dat het aangevulde standaardtarief bevatten. */
+export function slaComponentregelOp(comp: Componentregel): Componentregel {
+  const genormaliseerd = metStandaardUurtarief(comp)
+  const lijst = getComponentregels().filter(c => c.id !== genormaliseerd.id)
+  sla(KEYS.componentregels, [...lijst, genormaliseerd])
+  return genormaliseerd
 }
 
 export function upsertComponentregel(
@@ -344,7 +403,7 @@ export function upsertComponentregel(
   type: Componentregel['type'],
   norm_hoeveelheid: number,
   tarief: number
-): void {
+): Componentregel {
   const bestaand = getComponentregels(calculatieregel_id).find(c => c.type === type)
   // Patchen, niet opnieuw opbouwen: de snelinvoerkolommen in het rekenblad kennen alleen
   // norm en tarief. Bouwde je het component hier van nul op, dan wiste één tik in de
@@ -358,7 +417,7 @@ export function upsertComponentregel(
     norm_hoeveelheid,
     tarief,
   }
-  slaComponentregelOp(comp)
+  return slaComponentregelOp(comp)
 }
 
 export function verwijderComponentregel(id: string): void {
@@ -370,8 +429,7 @@ export function voegComponentregelToe(
   type: Componentregel['type']
 ): Componentregel {
   const comp: Componentregel = { id: nieuweId(), calculatieregel_id, type, norm_hoeveelheid: type === 'arbeid' ? 0 : 1, tarief: 0 }
-  slaComponentregelOp(comp)
-  return comp
+  return slaComponentregelOp(comp)
 }
 
 // ─── Kostprijs berekening nieuwe structuur ────────────────────────────────────

@@ -3,13 +3,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef, cloneElement, forwardRef, useImperativeHandle, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus, Percent, Receipt } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Search, MessageSquare, Undo2, Move, CopyPlus, X, PaintBucket, BookmarkPlus, Loader2, ImagePlus, Percent, Receipt, TriangleAlert } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import {
   getGroepen, getCalculatieregels, getComponentregels,
-  slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel,
+  slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel, standaardUurtarief,
   verwijderGroep, verwijderCalculatieregel, verwijderComponentregel, voegComponentregelToe,
   getMeetregelAggregaten, slaMeetregelAggregaatOp,
   herstelSnapshot,
@@ -74,6 +74,12 @@ export interface CalculatieGridHandle {
    * totalenbalk. Daarna kan elke regel gewoon weer een eigen percentage krijgen.
    */
   wisRegelOpslagen: () => void
+  /**
+   * Zet het uurtarief van álle arbeidsregels in deze calculatie. Gebruikt door het
+   * uurtariefveld in de totalenbalk: dat veld is het tarief van de calculatie, dus
+   * een wijziging hoort overal door te werken en niet alleen op nieuwe regels.
+   */
+  zetArbeidTarieven: (tarief: number) => void
 }
 
 type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
@@ -577,7 +583,12 @@ function ComponentRegelRij({
         </td>
       )
       case 'tarief_ab': return (
-        <td key={id} className={tdBase} style={tdSt}>
+        <td
+          key={id}
+          className={tdBase}
+          style={comp.type === 'arbeid' && normEdit !== 0 && !tariefEdit ? { ...tdSt, backgroundColor: '#fef3c7' } : tdSt}
+          title={comp.type === 'arbeid' && normEdit !== 0 && !tariefEdit ? 'Uren zonder uurtarief — deze detailregel telt voor € 0 mee.' : undefined}
+        >
           {comp.type === 'arbeid' && niComp(
             tariefEdit,
             v => { setTariefEdit(v); deb('tarief', () => onWijzig({ tarief: v })) },
@@ -1004,15 +1015,17 @@ function CalculatieregelRij({
 
   const [abUren,   setAbUren]   = useState(ab?.norm_hoeveelheid ?? 0)
   const [abMin,    setAbMin]    = useState((ab?.norm_hoeveelheid ?? 0) * 60)
-  const [abTarief, setAbTarief] = useState(ab?.tarief ?? 0)
+  // Zonder eigen tarief toont (en rekent) de arbeidskolom met het standaardtarief uit
+  // Stamgegevens → Uursoorten & uurtarieven; typ je hier uren, dan gaat dat tarief mee.
+  const [abTarief, setAbTarief] = useState(ab?.tarief || standaardUurtarief(regel.id))
   const [mtPrijs,  setMtPrijs]  = useState(mt?.tarief ?? 0)
   const [oaPrijs,  setOaPrijs]  = useState(oa?.tarief ?? 0)
 
   useEffect(() => {
     setAbUren(ab?.norm_hoeveelheid ?? 0)
     setAbMin((ab?.norm_hoeveelheid ?? 0) * 60)
-    setAbTarief(ab?.tarief ?? 0)
-  }, [ab?.norm_hoeveelheid, ab?.tarief])
+    setAbTarief(ab?.tarief || standaardUurtarief(regel.id))
+  }, [ab?.norm_hoeveelheid, ab?.tarief, regel.id])
   useEffect(() => { setMtPrijs(mt?.tarief ?? 0) }, [mt?.tarief])
   useEffect(() => { setOaPrijs(oa?.tarief ?? 0) }, [oa?.tarief])
   const compOpslagHash = regelComps.map(c => `${c.id}:${c.opslag_pct}`).join(',')
@@ -1108,6 +1121,13 @@ function CalculatieregelRij({
   const [receptModalOpen, setReceptModalOpen] = useState(false)
   const [miniMeetstaat, setMiniMeetstaat]     = useState(false)
 
+  // Uren zonder uurtarief: zo'n regel telt voor € 0 arbeid mee. Sinds de terugval op
+  // het standaardtarief kan dat alleen nog als er nergens een tarief is ingesteld, of
+  // bij een bevroren calculatie — maar dan wil je het wel zien.
+  const geenUurtarief = multiAb
+    ? allAb.some(c => c.norm_hoeveelheid !== 0 && !c.tarief)
+    : abUren !== 0 && !abTarief
+
   const indent = 4
   const isSP   = regel.is_stelpost ?? false
   const isVRR  = regel.is_verrekenbaar ?? false
@@ -1180,6 +1200,14 @@ function CalculatieregelRij({
                 className="flex-shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 leading-none"
                 title="Afkomstig uit meetstaat"
               >MS</span>
+            )}
+            {geenUurtarief && (
+              <span
+                className="flex-shrink-0 text-amber-500"
+                title="Uren zonder uurtarief — deze regel telt voor € 0 arbeid mee. Vul een tarief in, of stel er een in bij Stamgegevens → Uursoorten & uurtarieven."
+              >
+                <TriangleAlert className="w-3 h-3" />
+              </span>
             )}
             <OmschrijvingVeld
               waarde={regel.omschrijving}
@@ -1363,7 +1391,12 @@ function CalculatieregelRij({
         </td>
       )
       case 'tarief_ab': return (
-        <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
+        <td
+          key={id}
+          className={`px-1 py-1 ${base}`}
+          style={geenUurtarief ? { ...tdSt, backgroundColor: '#fef3c7' } : tdSt}
+          title={geenUurtarief ? 'Uren zonder uurtarief — deze regel telt voor € 0 arbeid mee.' : undefined}
+        >
           {multiAb
             ? <span className="text-xs  text-slate-300 block text-right px-1">—</span>
             : ni(abTarief, onTariefAb, 2)}
@@ -2442,17 +2475,25 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     })
     const nieuweComponenten = componenten.map(c => {
       if (c.opslag_pct === undefined) return c
-      const bijgewerkt = { ...c, opslag_pct: undefined }
-      slaComponentregelOp(bijgewerkt)
-      return bijgewerkt
+      return slaComponentregelOp({ ...c, opslag_pct: undefined })
     })
     setRegels(nieuweRegels)
     setComponenten(nieuweComponenten)
     onWijziging()
   }, [readOnly, regels, componenten, onWijziging])
 
-  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen }),
-    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen])
+  /** Alle arbeidscomponenten op één uurtarief zetten (uurtariefveld in de totalenbalk). */
+  const zetArbeidTarieven = useCallback((tarief: number) => {
+    if (readOnly) return
+    const bijgewerkt = componenten.map(c =>
+      c.type === 'arbeid' && c.tarief !== tarief ? slaComponentregelOp({ ...c, tarief }) : c
+    )
+    setComponenten(bijgewerkt)
+    onWijziging()
+  }, [readOnly, componenten, onWijziging])
+
+  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen, zetArbeidTarieven }),
+    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {
@@ -2885,21 +2926,17 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const handleWijzigComponentExtra = useCallback((compId: string, patch: Partial<Componentregel>) => {
     const comp = componenten.find(c => c.id === compId)
     if (!comp) return
-    const bijgewerkt = { ...comp, ...patch }
-    slaComponentregelOp(bijgewerkt)
+    const bijgewerkt = slaComponentregelOp({ ...comp, ...patch })
     setComponenten(prev => prev.map(c => c.id === compId ? bijgewerkt : c))
   }, [componenten])
 
   const handleVoegComponentToe = useCallback((regelId: string, type: Componentregel['type']) => {
+    // Het standaard uurtarief van de calculatie (of anders dat uit de
+    // bedrijfsinstellingen) wordt in de store zelf op het component gezet.
     const nieuw = voegComponentregelToe(regelId, type)
-    // Vul standaard uurtarief in bij arbeid als het is ingesteld
-    if (type === 'arbeid' && scenario.standaard_uurtarief && scenario.standaard_uurtarief > 0) {
-      nieuw.tarief = scenario.standaard_uurtarief
-      slaComponentregelOp(nieuw)
-    }
     setComponenten(prev => [...prev, nieuw])
     onWijziging()
-  }, [onWijziging, scenario.standaard_uurtarief])
+  }, [onWijziging])
 
   const handleVerwijderComponent = useCallback((compId: string) => {
     verwijderComponentregel(compId)

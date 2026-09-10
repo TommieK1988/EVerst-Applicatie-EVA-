@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { berekenBtwBreakdown, formatEuro, formatGetal, formatPct, scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
+import { TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 
@@ -13,9 +15,10 @@ interface Props {
   verkoopprijs_live: number
   regels?: Calculatieregel[]
   componenten?: Componentregel[]
-  onScenarioWijzig: (patch: Partial<Scenario>) => void
   /** Zet de standaard-opslag én wist het eigen opslag% van alle regels. */
   onOpslagToepassen: (pct: number) => void
+  /** Zet het uurtarief van de calculatie én van alle arbeidsregels erin. */
+  onUurtariefToepassen: (tarief: number) => void
   /** Aantal regels dat nu een eigen opslag% heeft; die raken hun percentage kwijt. */
   aantalEigenOpslag?: number
   /** Bevroren of afgesloten calculatie: alles in deze balk alleen-lezen. */
@@ -24,10 +27,20 @@ interface Props {
 
 
 export default function TotalsBar({
-  scenario, kostprijs_live, verkoopprijs_live, regels, componenten, onScenarioWijzig,
-  onOpslagToepassen, aantalEigenOpslag = 0, readOnly = false,
+  scenario, kostprijs_live, verkoopprijs_live, regels, componenten,
+  onOpslagToepassen, onUurtariefToepassen, aantalEigenOpslag = 0, readOnly = false,
 }: Props) {
   const defaultOpslag = scenarioDefaultOpslag(scenario)
+
+  // Het tarief waarop arbeidsregels zonder eigen tarief terugvallen: het ★-tarief uit
+  // Stamgegevens → Uursoorten & uurtarieven. Laat het hier zien, zodat zichtbaar is
+  // welk tarief er gerekend wordt als dit veld leeg blijft.
+  const uurtarieven = useInstellingen().uurtarieven ?? []
+  const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
+
+  // Arbeidsregels: hoeveel er zijn, hoeveel er zonder tarief staan (uren voor € 0).
+  const arbeidComps      = (componenten ?? []).filter(c => c.type === 'arbeid')
+  const zonderUurtarief  = arbeidComps.filter(c => c.norm_hoeveelheid !== 0 && !c.tarief).length
   const btwDefault = scenario.btw_pct_default ?? 0
 
   // Tarieven uit de stamgegevens, zodat een verlegd tarief hier als "21% verlegd" leest
@@ -64,6 +77,33 @@ export default function TotalsBar({
   // Vrij typen zonder dat de invoer onder je handen terugspringt. De waarde gaat pas
   // door bij verlaten van het veld of Enter, en alleen na bevestiging: hij zet álle
   // regels om. Annuleren → het veld valt terug op de opgeslagen opslag.
+  // Uurtarief: net als de opslag pas doorvoeren bij verlaten van het veld of Enter, en
+  // alleen na bevestiging — het zet álle arbeidsregels om.
+  const [tariefEdit,  setTariefEdit]  = useState(scenario.standaard_uurtarief != null ? String(scenario.standaard_uurtarief) : '')
+  const [tariefFocus, setTariefFocus] = useState(false)
+  const [tariefTeBevestigen, setTariefTeBevestigen] = useState<number | null>(null)
+  useEffect(() => {
+    if (!tariefFocus && tariefTeBevestigen === null) {
+      setTariefEdit(scenario.standaard_uurtarief != null ? String(scenario.standaard_uurtarief) : '')
+    }
+  }, [scenario, tariefFocus, tariefTeBevestigen])
+
+  /** Verlaten van het veld of Enter: bevestiging vragen als het tarief echt wijzigt. */
+  const commitTarief = () => {
+    setTariefFocus(false)
+    const v = parseFloat(tariefEdit.replace(',', '.'))
+    if (isNaN(v) || v <= 0) {
+      setTariefEdit(scenario.standaard_uurtarief != null ? String(scenario.standaard_uurtarief) : '')
+      return
+    }
+    if (scenario.standaard_uurtarief != null && Math.abs(v - scenario.standaard_uurtarief) < 0.005) return
+    setTariefTeBevestigen(v)
+  }
+
+  const afwijkendTarief = tariefTeBevestigen === null
+    ? 0
+    : arbeidComps.filter(c => c.tarief !== tariefTeBevestigen).length
+
   const [opslagEdit, setOpslagEdit] = useState(String(scenarioDefaultOpslag(scenario)))
   const [opslagFocus, setOpslagFocus] = useState(false)
   const [teBevestigen, setTeBevestigen] = useState<number | null>(null)
@@ -100,16 +140,29 @@ export default function TotalsBar({
             <span className="text-white/50 text-xs">€</span>
             <input
               type="number" step="0.50" min="0"
-              value={scenario.standaard_uurtarief ?? ''}
-              placeholder="—"
+              value={tariefEdit}
+              placeholder={globaalTarief > 0 ? formatGetal(globaalTarief, 2) : '—'}
               disabled={readOnly}
-              onChange={e => {
-                const v = parseFloat(e.target.value)
-                onScenarioWijzig({ standaard_uurtarief: isNaN(v) ? undefined : v })
-              }}
-              className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30"
+              onFocus={() => setTariefFocus(true)}
+              onBlur={commitTarief}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              title={globaalTarief > 0
+                ? `Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
+                : 'Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Er is nog geen standaardtarief ingesteld bij Stamgegevens → Uursoorten & uurtarieven.'}
+              onChange={e => setTariefEdit(e.target.value)}
+              className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
             />
             <span className="text-white/50 text-xs">/u</span>
+            {zonderUurtarief > 0 && (
+              <span
+                className="ml-1 flex items-center gap-1 rounded px-1 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                style={{ background: 'rgba(255,184,102,0.18)', color: '#ffb866' }}
+                title="Deze arbeidsregels hebben wel uren maar geen tarief en tellen voor € 0 mee."
+              >
+                <TriangleAlert style={{ width: 11, height: 11 }} />
+                {zonderUurtarief} zonder tarief
+              </span>
+            )}
           </div>
         </div>
 
@@ -189,6 +242,22 @@ export default function TotalsBar({
         </div>
 
       </div>
+
+      <ConfirmDialog
+        open={tariefTeBevestigen !== null}
+        onOpenChange={open => { if (!open) setTariefTeBevestigen(null) }}
+        title={`Uurtarief op € ${formatGetal(tariefTeBevestigen ?? 0, 2)} per uur zetten?`}
+        description={
+          afwijkendTarief > 0
+            ? `${afwijkendTarief} arbeidsregel${afwijkendTarief === 1 ? '' : 's'} in deze calculatie ${afwijkendTarief === 1 ? 'staat' : 'staan'} nu op een ander tarief; ${afwijkendTarief === 1 ? 'dat wordt' : 'die worden'} overschreven. Nieuwe arbeidsregels krijgen dit tarief ook.`
+            : 'Alle arbeidsregels in deze calculatie krijgen dit tarief, en nieuwe regels ook.'
+        }
+        confirmLabel="Toepassen"
+        onConfirm={() => {
+          if (tariefTeBevestigen !== null) onUurtariefToepassen(tariefTeBevestigen)
+          setTariefTeBevestigen(null)
+        }}
+      />
 
       <ConfirmDialog
         open={teBevestigen !== null}

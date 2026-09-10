@@ -331,6 +331,18 @@ export default function CalculatieHoofdscherm({
     handleWijziging()
   }
 
+  /** Uurtariefveld in de totalenbalk: zet het tarief van de calculatie én van alle
+   *  arbeidsregels erin. Het veld is het tarief van deze calculatie, dus een wijziging
+   *  hoort overal door te werken en niet alleen op nieuwe regels. Ctrl+Z zet de regels
+   *  terug; de waarde in de balk blijft staan. */
+  const handleUurtariefToepassen = (tarief: number) => {
+    if (readOnly) return
+    gridRef.current?.duwSnapshot()
+    handleScenarioWijzig({ standaard_uurtarief: tarief })
+    gridRef.current?.zetArbeidTarieven(tarief)
+    handleWijziging()
+  }
+
   /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
    *  betalingsconditie én algemene voorwaarden op de calculatie; anders opent
    *  eerst het instellingen-dialoog (verplicht-modus). */
@@ -674,8 +686,8 @@ export default function CalculatieHoofdscherm({
         verkoopprijs_live={verkoopprijs}
         regels={regelsVoorBtw}
         componenten={componentenVoorBtw}
-        onScenarioWijzig={handleScenarioWijzig}
         onOpslagToepassen={handleOpslagToepassen}
+        onUurtariefToepassen={handleUurtariefToepassen}
         aantalEigenOpslag={aantalEigenOpslag}
         readOnly={readOnly}
       />
