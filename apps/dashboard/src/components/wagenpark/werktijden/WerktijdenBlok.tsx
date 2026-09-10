@@ -103,7 +103,7 @@ export default function WerktijdenBlok({
             bij — een saldo zonder noemer zegt niets. */}
         <Cijfer
           label="Saldo aanwezig − geboekt"
-          waarde={saldo.dagen > 0 ? `${saldoLabel(saldo.saldoUren)} u` : '—'}
+          waarde={saldo.dagen > 0 ? saldoLabel(saldo.saldoUren) : '—'}
           sub={
             saldo.dagen > 0
               ? `${urenLabel(saldo.aanwezigUren)} aanwezig tegenover ${urenLabel(saldo.arbeidsuren)} arbeidsuren, over ${saldo.dagen} ${saldo.dagen === 1 ? 'dag' : 'dagen'}`
@@ -115,7 +115,7 @@ export default function WerktijdenBlok({
             niet uit beeld verdwijnen. */}
         <Cijfer
           label="Tijd voor tijd"
-          waarde={saldo.tvtDagen > 0 ? `${saldoLabel(saldo.tvtUren)} u` : '—'}
+          waarde={saldo.tvtDagen > 0 ? saldoLabel(saldo.tvtUren) : '—'}
           sub={
             saldo.tvtDagen > 0
               ? `gereserveerd over ${saldo.tvtDagen} ${saldo.tvtDagen === 1 ? 'dag' : 'dagen'} · niet in Bouw7 geboekt`

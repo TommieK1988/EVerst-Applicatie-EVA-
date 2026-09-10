@@ -131,16 +131,25 @@ export function dagSaldoUren(
 }
 
 /**
- * "+0,7" / "−1,2" / "0,0" — met een echt minteken, niet een koppelstreepje.
+ * "+2u30" / "−18 min" / "0 min" — een saldo in dezelfde notatie als een
+ * afwijking.
  *
- * Het teken volgt uit het AFGERONDE getal, niet uit de ruwe waarde: −0,03 uur
- * wordt op één decimaal 0,0, en "−0,0" op het scherm laat een verschil zien dat
- * er niet is.
+ * Bewust géén decimale uren. Een saldo staat op het scherm naast "23 min te
+ * laat" en "1u12 te vroeg", en die twee moet je met elkaar kunnen vergelijken:
+ * met "−0,4 u" ernaast reken je in je hoofd van eenheid naar eenheid. Dezelfde
+ * eenheid als de rest van de rij scheelt dat.
+ *
+ * Het teken volgt uit het AFGERONDE aantal minuten, niet uit de ruwe waarde:
+ * anders krijgt een saldo van twintig seconden een min- of plusteken voor een
+ * verschil dat op de minuut afgerond nul is.
+ *
+ * De onderliggende getallen blijven uren — dat is wat er geboekt wordt en wat
+ * er in de Excel-export terechtkomt. Alleen de weergave is hier anders.
  */
 export function saldoLabel(uren: number): string {
-  const afgerond = Math.round(uren * 10) / 10
-  const teken = afgerond > 0 ? '+' : afgerond < 0 ? '−' : ''
-  return `${teken}${urenLabel(Math.abs(afgerond))}`
+  const minuten = Math.round(uren * 60)
+  const teken = minuten > 0 ? '+' : minuten < 0 ? '−' : ''
+  return `${teken}${minutenLabel(Math.abs(minuten))}`
 }
 
 /** De werktijd-data van een bevinding, of null als het er geen is. */

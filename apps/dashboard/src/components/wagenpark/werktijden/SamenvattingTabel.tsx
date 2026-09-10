@@ -182,7 +182,7 @@ export default function SamenvattingTabel({
               className="tabular-nums font-medium text-sky-700"
               title={`Gereserveerd over ${r.saldo.tvtDagen} ${r.saldo.tvtDagen === 1 ? 'dag' : 'dagen'}; niet in Bouw7 geboekt`}
             >
-              {saldoLabel(r.saldo.tvtUren)} u
+              {saldoLabel(r.saldo.tvtUren)}
               <span className="ml-1 text-xs text-slate-400">({r.saldo.tvtDagen})</span>
             </span>
           ),
@@ -222,7 +222,7 @@ export default function SamenvattingTabel({
                   : '.')
               }
             >
-              {saldoLabel(s)} u
+              {saldoLabel(s)}
               <span className="ml-1 text-xs text-slate-400">({r.saldo.dagen})</span>
             </span>
           )

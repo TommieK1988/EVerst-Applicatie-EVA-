@@ -320,7 +320,7 @@ export default function DagPaneel({
                             : 'text-slate-600'
                       }`}
                     >
-                      {saldoLabel(saldo)} u
+                      {saldoLabel(saldo)}
                     </span>
                   </p>
                 )}
@@ -490,7 +490,7 @@ function TvtBlok({
     return (
       <>
         <p className="text-sm text-slate-700">
-          <span className="font-semibold tabular-nums">{saldoLabel(gereserveerd)} uur</span>{' '}
+          <span className="font-semibold tabular-nums">{saldoLabel(gereserveerd)}</span>{' '}
           gereserveerd als tijd voor tijd. Deze dag telt niet meer mee in het saldo.
         </p>
         {bestaandeToelichting && (
@@ -550,9 +550,9 @@ function TvtBlok({
         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600"
       />
       <p className="mt-2 text-xs text-slate-500">
-        Voorgevuld met het saldo van deze dag ({saldoLabel(saldo)} u); pas het aan als er iets
-        anders is afgesproken. Er wordt niets in Bouw7 geboekt — de reservering staat alleen in
-        EVA en haalt deze dag uit het openstaande saldo.
+        Voorgevuld met het saldo van deze dag: {saldoLabel(saldo)}, dus {urenLabel(saldo)} uur.
+        Pas het aan als er iets anders is afgesproken. Er wordt niets in Bouw7 geboekt — de
+        reservering staat alleen in EVA en haalt deze dag uit het openstaande saldo.
       </p>
     </>
   )

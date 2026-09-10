@@ -290,7 +290,7 @@ export default function WerktijdenTabel({
                     : 'Verklaard — telt niet mee in het saldo'
                 }
               >
-                {saldoLabel(saldo)} u
+                {saldoLabel(saldo)}
               </span>
             )
           }
@@ -307,7 +307,7 @@ export default function WerktijdenTabel({
                     : 'Aanwezigheid en geschreven arbeidsuren lopen gelijk.'
               }
             >
-              {saldoLabel(saldo)} u
+              {saldoLabel(saldo)}
             </span>
           )
         },
@@ -329,7 +329,7 @@ export default function WerktijdenTabel({
                   : 'Gereserveerd als tijd voor tijd; telt niet meer in het saldo'
               }
             >
-              {saldoLabel(r.tvtUren)} u
+              {saldoLabel(r.tvtUren)}
             </span>
           ),
       },

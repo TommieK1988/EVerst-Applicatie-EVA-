@@ -137,14 +137,14 @@ export function bouwWerktijdenPdf({
     // is iets heel anders dan −8 uur over een heel kwartaal.
     [
       'Saldo aanwezig - geboekt',
-      saldoTotaal && saldoTotaal.dagen > 0 ? winAnsi(`${saldoLabel(saldoTotaal.saldoUren)} u`) : '—',
+      saldoTotaal && saldoTotaal.dagen > 0 ? winAnsi(saldoLabel(saldoTotaal.saldoUren)) : '—',
       saldoTotaal && saldoTotaal.dagen > 0
         ? `${getal(saldoTotaal.aanwezigUren)} aanwezig · ${getal(saldoTotaal.arbeidsuren)} arbeidsuren · ${saldoTotaal.dagen} dagen`
         : 'geen dag met ritvenster én arbeidsuren',
     ],
     [
       'Tijd voor tijd',
-      saldoTotaal && saldoTotaal.tvtDagen > 0 ? winAnsi(`${saldoLabel(saldoTotaal.tvtUren)} u`) : '—',
+      saldoTotaal && saldoTotaal.tvtDagen > 0 ? winAnsi(saldoLabel(saldoTotaal.tvtUren)) : '—',
       saldoTotaal && saldoTotaal.tvtDagen > 0
         ? `gereserveerd over ${saldoTotaal.tvtDagen} dagen · niet in Bouw7 geboekt`
         : 'niets gereserveerd',
@@ -296,10 +296,10 @@ export function bouwWerktijdenPdf({
     // Een saldo van een half uur of meer krijgt vet: dat zijn de regels waar het
     // gesprek over gaat. Geen kleur — de uitdraai gaat vaak zwart-wit mee.
     doc.setFont('helvetica', !verklaard && saldo != null && Math.abs(saldo) >= 0.5 ? 'bold' : 'normal')
-    doc.text(saldo == null ? '—' : winAnsi(`${saldoLabel(saldo)} u`), kolSaldo, y)
+    doc.text(saldo == null ? '—' : winAnsi(saldoLabel(saldo)), kolSaldo, y)
     doc.setFont('helvetica', 'normal')
 
-    doc.text(r.tvtUren == null ? '—' : winAnsi(`${saldoLabel(r.tvtUren)} u`), kolTvt, y)
+    doc.text(r.tvtUren == null ? '—' : winAnsi(saldoLabel(r.tvtUren)), kolTvt, y)
     doc.text(r.geboekt == null ? '—' : `${urenLabel(r.geboekt)} u`, kolGeboekt, y)
 
     // Twee toelichtende cellen, allebei klein en grijs: het venster waar de
