@@ -1,0 +1,5 @@
+-- Aanvulling op het item uit 20260911d: de projectkeuze toont alleen nog lopende opdrachten.
+-- Bewust een update en geen tweede item: het is dezelfde wijziging, een paar uur later af.
+update public.changelog
+   set omschrijving = 'Als je werk-uren invult, staat bovenaan de projectkeuze voortaan een lijst met jouw projecten: de opdrachten waar je op ingepland staat, waar je een rol op hebt, of waar je eerder uren op hebt geschreven. Eerder keek EVA alleen naar wie er op die ene dag stond ingepland. Dat lukte in de praktijk bijna nooit, waardoor je toch door alle lopende opdrachten moest scrollen. Het project waar je die dag staat ingepland komt in je eigen lijst bovenaan, en meerdaagse klussen tellen nu ook mee op de dagen tussen begin en eind. De lijst laat alleen opdrachten zien die lopen — die op Werkvoorbereiding, Onderhanden of Uitvoering gereed staan — zodat je niet meer langs afgeronde projecten hoeft te scrollen.'
+ where titel = 'Bij het invullen van uren zie je nu je eigen projecten';
