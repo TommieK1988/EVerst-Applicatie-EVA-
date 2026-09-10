@@ -1,6 +1,5 @@
 import 'server-only'
 import { haalOp } from '@/lib/net/deadline'
-import type { DetailplanningLogo } from './detailplanning-pdf'
 
 /**
  * Het bedrijfslogo klaarmaken voor jsPDF.
@@ -14,8 +13,21 @@ import type { DetailplanningLogo } from './detailplanning-pdf'
  * Best-effort: kan het logo niet worden opgehaald of omgezet, dan geeft dit
  * `null` terug en zet de PDF het woordmerk als tekst. Een uitdraai die faalt
  * omdat een plaatje niet laadt, zou een slechte ruil zijn.
+ *
+ * `breedte`/`hoogte` zijn de pixelmaten van de omgezette PNG. Reken de hoogte
+ * op papier daaruit uit in plaats van er een vaste te kiezen: het woordmerk is
+ * ± 1,6 : 1, dus een vast blokje van 34 × 12 mm perst het plat. Wie het logo
+ * ooit vervangt hoeft dan niets na te meten.
  */
-export async function laadPdfLogo(url: string | null): Promise<DetailplanningLogo | null> {
+export type PdfLogo = {
+  dataUrl: string
+  /** jsPDF-formaatnaam, dus 'PNG' of 'JPEG' — SVG kan hij niet plaatsen. */
+  format: string
+  breedte: number
+  hoogte: number
+}
+
+export async function laadPdfLogo(url: string | null): Promise<PdfLogo | null> {
   if (!url) return null
 
   try {

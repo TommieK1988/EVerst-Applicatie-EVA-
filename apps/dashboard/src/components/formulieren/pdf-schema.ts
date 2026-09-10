@@ -3,6 +3,7 @@ import type { AandachtspuntWaarde, CalloutVariant, FormPdfConfig, VeldOpmaak, Fo
 import { CALLOUT_VARIANTEN } from './types'
 import { formatVeldwaardeTekst } from './format'
 import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import type { PdfLogo } from '@/lib/pdf/logo'
 
 // ── Per-sjabloon PDF-config over de globale singleton leggen ───────────
 
@@ -244,15 +245,20 @@ type Layout = { pageW: number; pageH: number; marge: Marge; accentRgb?: Rgb | nu
 
 export function tekenKop(
   doc: jsPDF,
-  opts: Layout & { titel: string; subtitel?: string; metaDelen?: string[]; logo?: Afbeelding | null; briefpapier?: boolean },
+  opts: Layout & { titel: string; subtitel?: string; metaDelen?: string[]; logo?: PdfLogo | null; briefpapier?: boolean },
 ): number {
   const { pageW, marge, titel, subtitel, metaDelen, logo, briefpapier } = opts
   const accent = opts.accentRgb ?? KLEUR_ACCENT_STD
   const contentW = pageW - marge.links - marge.rechts
   let y = marge.boven
 
+  // Breedte vastzetten, hoogte uit de beeldverhouding halen. Stond hier eerst
+  // op een vaste 36 × 12 mm (3 : 1), terwijl het woordmerk ± 1,6 : 1 is — dat
+  // perste het plat. Wie het logo vervangt hoeft nu niets na te meten.
   if (logo && !briefpapier) {
-    try { doc.addImage(logo.dataUrl, logo.format, marge.links, y, 36, 12); y += 15 } catch { /* logo niet bruikbaar */ }
+    const w = 36
+    const h = (logo.hoogte / logo.breedte) * w
+    try { doc.addImage(logo.dataUrl, logo.format, marge.links, y, w, h); y += h + 3 } catch { /* logo niet bruikbaar */ }
   }
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...KLEUR_WAARDE)

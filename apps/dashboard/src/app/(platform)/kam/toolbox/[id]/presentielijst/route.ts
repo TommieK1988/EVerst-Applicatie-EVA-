@@ -3,6 +3,8 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import jsPDF from 'jspdf'
 import { urlNaarBase64 } from '@/components/formulieren/pdf-schema'
+import { laadPdfAfzender } from '@/lib/pdf/afzender'
+import { laadPdfLogo } from '@/lib/pdf/logo'
 import { getRapportage } from '../../actions'
 
 export async function GET(
@@ -28,12 +30,10 @@ export async function GET(
     .maybeSingle()
   if (!toolbox) return NextResponse.json({ error: 'Niet gevonden' }, { status: 404 })
 
-  const [deelnemers, bedrijfResult] = await Promise.all([
+  const [deelnemers, bedrijf] = await Promise.all([
     getRapportage(id),
-    supabase.from('bedrijfsgegevens').select('naam, logo_primair_url, logo_url').limit(1).maybeSingle(),
+    laadPdfAfzender(),
   ])
-
-  const bedrijf = bedrijfResult.data as { naam: string | null; logo_primair_url: string | null; logo_url: string | null } | null
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -42,11 +42,14 @@ export async function GET(
   const margeR = pageW - 16
 
   // ── Kop ────────────────────────────────────────────────────────────
-  const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
-  const logo = logoUrl ? await urlNaarBase64(logoUrl).catch(() => null) : null
+  const logo = await laadPdfLogo(bedrijf.logoUrl)
   let y = 16
   if (logo) {
-    try { doc.addImage(logo.dataUrl, logo.format, margeR - 34, y, 34, 12, undefined, 'FAST') } catch { /* logo optioneel */ }
+    // Breedte vast, hoogte uit de beeldverhouding. Een vaste 34 × 12 mm
+    // perste het woordmerk (± 1,6 : 1) plat.
+    const logoB = 34
+    const logoH = (logo.hoogte / logo.breedte) * logoB
+    try { doc.addImage(logo.dataUrl, logo.format, margeR - logoB, y, logoB, logoH, undefined, 'FAST') } catch { /* logo optioneel */ }
   }
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(22, 27, 32)
@@ -122,7 +125,7 @@ export async function GET(
 
   // Voettekst
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 156, 161)
-  doc.text(bedrijf?.naam ?? '', margeL, pageH - 10)
+  doc.text(bedrijf.naam ?? '', margeL, pageH - 10)
 
   const veiligNaam = toolbox.titel.replace(/[^a-z0-9]/gi, '-').toLowerCase()
   const pdfBytes = doc.output('arraybuffer')

@@ -26,6 +26,7 @@ import { nl } from 'date-fns/locale'
 import type { PlanningActiviteit, PlanningFase, PlanningUursoort } from '@everts/database/platform-types'
 import { buildGridUnits, buildHeader, dagOffset, type View } from '@/components/planning/layout/tijdas'
 import { veilig } from '@/lib/pdf/tekst'
+import type { PdfLogo } from '@/lib/pdf/logo'
 import { registreerMontserrat } from '@/lib/pdf/montserrat'
 import type { DetailplanningBedrijf, DetailplanningKop } from './detailplanning-gegevens'
 
@@ -344,21 +345,13 @@ type Tijdas = ReturnType<typeof maakTijdas>
 
 // ─── Tekenen ──────────────────────────────────────────────────────────────────
 
-export type DetailplanningLogo = {
-  dataUrl: string
-  /** jsPDF-formaatnaam, dus 'PNG' of 'JPEG' — SVG kan hij niet plaatsen. */
-  format: string
-  breedte: number
-  hoogte: number
-}
-
 export type DetailplanningPdfInvoer = {
   kop: DetailplanningKop
   bedrijf: DetailplanningBedrijf
   fasen: PlanningFase[]
   activiteiten: PlanningActiviteit[]
   uursoorten: Pick<PlanningUursoort, 'id' | 'naam' | 'kleur'>[]
-  logo: DetailplanningLogo | null
+  logo: PdfLogo | null
 }
 
 const datumLang = (d: Date) => format(d, 'd MMMM yyyy', { locale: nl })
@@ -428,7 +421,7 @@ function tekenKop(
   kop: DetailplanningKop,
   bedrijf: DetailplanningBedrijf,
   bereik: { vs: Date; ve: Date },
-  logo: DetailplanningLogo | null,
+  logo: PdfLogo | null,
   accent: string,
 ) {
   const y = MARGE

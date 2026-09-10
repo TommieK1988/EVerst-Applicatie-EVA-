@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { laadDetailplanning } from '@/lib/planning/detailplanning-gegevens'
-import { laadPdfLogo } from '@/lib/planning/detailplanning-logo'
+import { laadPdfLogo } from '@/lib/pdf/logo'
 import { bouwDetailplanningPdf, detailplanningBestandsnaam } from '@/lib/planning/detailplanning-pdf'
 
 export const maxDuration = 60

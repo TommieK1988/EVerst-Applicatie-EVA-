@@ -14,6 +14,7 @@
 import jsPDF from 'jspdf'
 import { datumKort, MAAND_LABEL, maandenInPeriode, type Periode } from '@/lib/wagenpark/periode'
 import { bouwSamenvatting } from '@/lib/wagenpark/werktijd-samenvatting'
+import type { PdfLogo } from '@/lib/pdf/logo'
 import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
   dagSaldoUren, saldoLabel,
@@ -64,8 +65,8 @@ export type WerktijdenPdfInvoer = {
   /** Handmatige signalen zonder minuten; alleen om te vermelden. */
   handmatigAantal: number
   bedrijfsnaam: string | null
-  /** Logo als data-URI + formaat, of null. */
-  logo: { dataUrl: string; format: string } | null
+  /** Logo als PNG-data-URI met zijn pixelmaten, of null. Zie `lib/pdf/logo.ts`. */
+  logo: PdfLogo | null
 }
 
 export function bouwWerktijdenPdf({
@@ -89,7 +90,11 @@ export function bouwWerktijdenPdf({
   // ── Kop ────────────────────────────────────────────────────────────
   let y = 16
   if (logo) {
-    try { doc.addImage(logo.dataUrl, logo.format, margeR - 34, y, 34, 12, undefined, 'FAST') } catch { /* logo optioneel */ }
+    // Breedte vast, hoogte uit de beeldverhouding. Een vaste 34 × 12 mm
+    // perste het woordmerk (± 1,6 : 1) plat.
+    const logoB = 34
+    const logoH = (logo.hoogte / logo.breedte) * logoB
+    try { doc.addImage(logo.dataUrl, logo.format, margeR - logoB, y, logoB, logoH, undefined, 'FAST') } catch { /* logo optioneel */ }
   }
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(22, 27, 32)

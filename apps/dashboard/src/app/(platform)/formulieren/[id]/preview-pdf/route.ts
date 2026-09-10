@@ -3,10 +3,12 @@ import { createAdminClient } from '@everts/database/server'
 import jsPDF from 'jspdf'
 import type { FormField, FormInstellingen } from '@/components/formulieren/types'
 import {
-  mergePdfConfig, hexNaarRgb, urlNaarBase64, dummyWaarde, buildBlokken,
+  mergePdfConfig, hexNaarRgb, dummyWaarde, buildBlokken,
   tekenKop, renderReport, tekenPaginavoettekst, pasBriefpapierToe,
   type GlobalePdfConfig, type Marge,
 } from '@/components/formulieren/pdf-schema'
+import { laadPdfAfzender } from '@/lib/pdf/afzender'
+import { laadPdfLogo } from '@/lib/pdf/logo'
 
 export async function GET(
   _req: Request,
@@ -15,11 +17,11 @@ export async function GET(
   const { id } = await params
   const supabase = createAdminClient()
 
-  const [templateResult, versieResult, pdfConfigResult, bedrijfResult] = await Promise.all([
+  const [templateResult, versieResult, pdfConfigResult, bedrijf] = await Promise.all([
     supabase.from('form_templates').select('naam').eq('id', id).maybeSingle(),
     supabase.from('form_versies').select('*').eq('template_id', id).order('versienummer', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('formulier_pdf_config').select('*').limit(1).maybeSingle(),
-    supabase.from('bedrijfsgegevens').select('naam, logo_primair_url, logo_url').limit(1).maybeSingle(),
+    laadPdfAfzender(),
   ])
 
   if (!templateResult.data || !versieResult.data) {
@@ -32,9 +34,6 @@ export async function GET(
   const instellingen = versie.schema.instellingen
   const pdfConfig = mergePdfConfig(pdfConfigResult.data as GlobalePdfConfig, instellingen?.pdf)
   const accentRgb = hexNaarRgb(instellingen?.accentkleur)
-  const bedrijf   = bedrijfResult.data as {
-    naam: string | null; logo_primair_url: string | null; logo_url: string | null
-  } | null
 
   const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -53,8 +52,7 @@ export async function GET(
   }
   watermerk(doc)
 
-  const logoUrl = bedrijf?.logo_primair_url ?? bedrijf?.logo_url ?? null
-  const logo = pdfConfig.toonLogo && !briefpapier && logoUrl ? await urlNaarBase64(logoUrl) : null
+  const logo = pdfConfig.toonLogo && !briefpapier ? await laadPdfLogo(bedrijf.logoUrl) : null
 
   const metaDelen: string[] = []
   if (pdfConfig.koptekst) metaDelen.push(pdfConfig.koptekst)
@@ -75,7 +73,7 @@ export async function GET(
   await renderReport(doc, blokken, { startY, pageW, pageH, marge, accentRgb, opNieuwePagina: watermerk })
 
   tekenPaginavoettekst(doc, {
-    voettekst: pdfConfig.voettekst ?? bedrijf?.naam ?? '',
+    voettekst: pdfConfig.voettekst ?? bedrijf.naam ?? '',
     briefpapier, pageW, pageH, marge,
   })
 
