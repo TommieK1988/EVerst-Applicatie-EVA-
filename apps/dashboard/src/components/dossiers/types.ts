@@ -156,6 +156,19 @@ export const OPDRACHT_ACTIEF_STATUSSEN: StatusDef<OpdrachtSubstatus>[] =
 export const OPDRACHT_KANBAN_STATUSSEN: StatusDef<OpdrachtSubstatus>[] =
   OPDRACHT_STATUSSEN.filter(s => s.key !== 'financieel_afgesloten')
 
+/**
+ * Wat de gebruiker leest bij `dossiers.facturatiemethode`.
+ *
+ * De opgeslagen waarde blijft `termijnen`: die staat in de database, in de Bouw7-snapshots en in
+ * de code die de methode automatisch omzet bij een offerte op akkoord. Alleen het woord op het
+ * scherm verandert — het bedrijf noemt dit werk "aangenomen", tegenover werk op regie. Zelfde
+ * aanpak als bij Taken/Acties: label los van sleutel.
+ */
+export const FACTURATIE_LABELS: Record<'regie' | 'termijnen', string> = {
+  regie:     'Regie',
+  termijnen: 'Aangenomen',
+}
+
 export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'                         },
   { key: 'mandaat_verhoging',   label: 'Mandaat verhoging aangevraagd' },

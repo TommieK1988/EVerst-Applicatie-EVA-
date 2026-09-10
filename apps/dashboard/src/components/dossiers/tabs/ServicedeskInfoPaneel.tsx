@@ -9,7 +9,7 @@ import {
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
-import { SERVICEDESK_STATUSSEN } from '../types'
+import { FACTURATIE_LABELS, SERVICEDESK_STATUSSEN } from '../types'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -61,7 +61,7 @@ export default function ServicedeskInfoPaneel({
   async function kiesMethode(m: 'regie' | 'termijnen') {
     setMethode(m)
     await updateServicedeskInstellingen(dossierId, { facturatiemethode: m })
-    toast.success(m === 'regie' ? 'Facturatie op regie' : 'Facturatie op termijnen')
+    toast.success(`Facturatie op ${FACTURATIE_LABELS[m].toLowerCase()}`)
   }
 
   async function offerteMaken() {
@@ -80,7 +80,7 @@ export default function ServicedeskInfoPaneel({
     const r = await offerteAkkoordServicedesk(dossierId)
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Offerte op akkoord — overgezet op termijnen')
+    toast.success('Offerte op akkoord — overgezet op aangenomen')
     router.refresh()
   }
 
@@ -110,13 +110,13 @@ export default function ServicedeskInfoPaneel({
                 <button
                   key={m}
                   onClick={() => kiesMethode(m)}
-                  className="px-3.5 py-1.5 text-[12px] font-semibold capitalize transition-colors"
+                  className="px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
                   style={{
                     background: methode === m ? 'var(--accent)' : 'transparent',
                     color: methode === m ? '#fff' : 'var(--fg-muted)',
                   }}
                 >
-                  {m}
+                  {FACTURATIE_LABELS[m]}
                 </button>
               ))}
             </div>

@@ -3,7 +3,7 @@ import React from 'react'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
-import { getDossierSubstatus } from './types'
+import { FACTURATIE_LABELS, getDossierSubstatus } from './types'
 import { isVerlopen } from './kaart-indicatoren'
 import { berekenKaartBedrag } from './kaart-bedrag'
 import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
@@ -128,6 +128,12 @@ function Tekst({ waarde, kleur = 'var(--neutral-600)', gewicht = 400 }: { waarde
       {waarde || '—'}
     </span>
   )
+}
+
+/** Facturatiemethode zoals de gebruiker hem leest; `termijnen` heet in de interface Aangenomen. */
+function facturatieLabel(methode: string | null | undefined): string | null {
+  if (methode === 'regie' || methode === 'termijnen') return FACTURATIE_LABELS[methode]
+  return null
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -564,11 +570,10 @@ export function DossierLijst({
       breedte: 120,
       standaard_zichtbaar: false,
       filterType: 'select',
-      filterOpties: ['Regie', 'Termijnen'],
+      filterOpties: [FACTURATIE_LABELS.regie, FACTURATIE_LABELS.termijnen],
       sorteerWaarde: d => d.facturatiemethode ?? '',
-      filterWaarde: d => d.facturatiemethode === 'termijnen' ? 'Termijnen'
-        : d.facturatiemethode === 'regie' ? 'Regie' : '',
-      render: d => <Tekst waarde={d.facturatiemethode === 'termijnen' ? 'Termijnen' : d.facturatiemethode === 'regie' ? 'Regie' : null} />,
+      filterWaarde: d => facturatieLabel(d.facturatiemethode) ?? '',
+      render: d => <Tekst waarde={facturatieLabel(d.facturatiemethode)} />,
     },
 
     // ── Datums (standaard verborgen) ────────────────────────────────────────
