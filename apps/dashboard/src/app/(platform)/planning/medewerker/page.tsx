@@ -10,9 +10,9 @@ import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
 
-/** Niet-uitvoerende afdelingen die buiten de medewerkerplanning blijven.
- *  Pas deze lijst aan als de afdelingsindeling wijzigt. */
-const KANTOOR_AFDELINGEN = ['Projectbureau', 'Administratie', 'Directie']
+/** De medewerkerplanning gaat over de buitendienst: alleen de afdeling Uitvoering.
+ *  Pas deze waarde aan als de afdelingsindeling wijzigt. */
+const PLANBARE_AFDELING = 'Uitvoering'
 
 /** Dossierregel zoals dit scherm hem nodig heeft: alleen titel + projectleider voor de balken. */
 type DossierRegel = {
@@ -65,10 +65,9 @@ export default async function MedewerkerplanningPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const p of ((ploegenRes.data ?? []) as any[])) ploegNamen[p.id] = p.naam
 
-  // Alleen uitvoerend personeel: kantoor-afdelingen weglaten (medewerkers zonder
-  // afdeling blijven wél staan).
+  // Alleen uitvoerend personeel: kantoor en ondersteuning horen niet op dit bord.
   const medewerkers = ((medewerkerRes.data ?? []) as Medewerker[])
-    .filter(m => !m.afdeling || !KANTOOR_AFDELINGEN.includes(m.afdeling))
+    .filter(m => m.afdeling === PLANBARE_AFDELING)
   const roosters    = (roostersRes.data ?? []) as MedewerkerRooster[]
   const afwezigheid = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
   const uursoorten  = (uursoortRes.data ?? []) as PlanningUursoort[]

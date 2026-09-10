@@ -28,7 +28,8 @@ import {
 import {
   kopieerPlanningItem, maakSnelPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
 } from '@/app/(platform)/planning/actions'
-import { resolveBewakingscodes, type BewakingscodeRef } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { haalPlanningBewakingscodes } from '@/app/(platform)/planning/actions'
+import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
 import {
   KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
   usePlanningController, verschuifTs, type PlanningLayout,
@@ -412,7 +413,7 @@ function NieuwPlanItemDialog({
     uren:          '8',
   })
 
-  const [codes, setCodes]           = useState<BewakingscodeRef[] | null>(null)
+  const [codes, setCodes]           = useState<PlanningBewakingscode[] | null>(null)
   const [codesLaden, setCodesLaden] = useState(false)
   const [codesFout, setCodesFout]   = useState<string | null>(null)
   const [overschrijding, setOverschrijding] = useState<string | null>(null)
@@ -424,7 +425,7 @@ function NieuwPlanItemDialog({
     setCodesLaden(true)
     setCodes(null)
     setCodesFout(null)
-    resolveBewakingscodes(form.dossier_id).then(res => {
+    haalPlanningBewakingscodes(form.dossier_id).then(res => {
       if (!actief) return
       setCodesLaden(false)
       if (res.ok) setCodes([...res.codes].sort((a, b) => a.code.localeCompare(b.code, 'nl')))
@@ -454,6 +455,9 @@ function NieuwPlanItemDialog({
         medewerker_id:      form.medewerker_id,
         bewakingscode:      form.bewakingscode,
         bewakingscode_naam: geselecteerdeCode?.naam ?? null,
+        // Zonder dit id kan de write-back het planitem in Bouw7 niet aan de code hangen —
+        // het landt dan wél, maar ongecodeerd.
+        bouw7_security_code_id: geselecteerdeCode?.bouw7_security_code_id ?? null,
         titel:              form.titel.trim() || undefined,
         uursoort_id:        form.uursoort_id || null,
         start_dt:           new Date(`${form.start_datum}T${form.start_tijd}`).toISOString(),
@@ -1101,7 +1105,6 @@ export default function MedewerkerTimeline({
   const [conflictInfo,  setConflictInfo]  = useState<{ medewerker: Medewerker; conflicten: ConflictDetail[] } | null>(null)
   const [oplosConflict, setOplosConflict] = useState<{ medewerkerId: string; conflict: ConflictDetail } | null>(null)
 
-  const [selAfdelingen, setSelAfdelingen] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortKey>('voornaam')
 
   useEffect(() => { setEntries(initialEntries) }, [initialEntries])
@@ -1137,15 +1140,8 @@ export default function MedewerkerTimeline({
     [medewerkers, alleenGeplandeMedewerkers, geplandeIds],
   )
 
-  // Afdelingchips volgen de zichtbare lijst: een chip die geen enkele regel oplevert is ruis.
-  const afdelingOpties = useMemo(
-    () => [...new Set(basisMedewerkers.map(m => m.afdeling).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'nl')),
-    [basisMedewerkers],
-  )
-
   const zichtbareMedewerkers = useMemo(() => {
-    let list = basisMedewerkers
-    if (selAfdelingen.length > 0) list = list.filter(m => m.afdeling && selAfdelingen.includes(m.afdeling))
+    const list = basisMedewerkers
     const cmp = (a: string | null, b: string | null) => (a ?? '').localeCompare(b ?? '', 'nl')
     // Lege sorteerwaarde (geen afdeling/functie/ploeg) onderaan, dan op voornaam.
     const opWaarde = (a: Medewerker, b: Medewerker, get: (m: Medewerker) => string) => {
@@ -1162,7 +1158,7 @@ export default function MedewerkerTimeline({
       if (sortBy === 'ploeg')    return opWaarde(a, b, m => ploegNamen[m.ploeg_id ?? ''] ?? '')
       return cmp(a.voornaam, b.voornaam) || cmp(a.achternaam, b.achternaam)
     })
-  }, [basisMedewerkers, selAfdelingen, sortBy, ploegNamen])
+  }, [basisMedewerkers, sortBy, ploegNamen])
 
   const medewerkerKleuren = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m.kleur])), [medewerkers])
 
@@ -1572,49 +1568,17 @@ export default function MedewerkerTimeline({
       fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)',
       borderBottom: `1px solid ${KLEUR.border}`,
     }}>
-      {selAfdelingen.length > 0
-        ? 'Geen ingeplande medewerkers in de gekozen afdeling(en).'
-        : 'Nog niemand ingepland op dit dossier — wijs medewerkers toe via de Activiteiten-weergave.'}
+      Nog niemand ingepland op dit dossier — wijs medewerkers toe via de Activiteiten-weergave.
     </div>
   ) : null
 
   // Filters staan in de rightSlot van de PeriodeNav: scheelt een hele rij hoogte,
   // zodat er meer medewerkers in beeld passen.
   const filterControls = (
-    <>
-      {afdelingOpties.length >= 2 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Afdeling</span>
-          {afdelingOpties.map(afd => {
-            const actief = selAfdelingen.includes(afd)
-            return (
-              <button key={afd} onClick={() => setSelAfdelingen(prev =>
-                actief ? prev.filter(a => a !== afd) : [...prev, afd]
-              )} style={{
-                padding: '3px 10px', borderRadius: 20, border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
-                background: actief ? 'var(--accent)' : 'transparent',
-                color: actief ? 'white' : 'var(--fg-muted)',
-                fontSize: 10, fontWeight: 600, cursor: 'pointer',
-              }}>
-                {afd}
-              </button>
-            )
-          })}
-          {selAfdelingen.length > 0 && (
-            <button onClick={() => setSelAfdelingen([])} style={{
-              padding: '3px 8px', borderRadius: 20, border: '1px solid var(--border)',
-              background: 'transparent', color: 'var(--fg-muted)', fontSize: 10, cursor: 'pointer',
-            }}>
-              × wis
-            </button>
-          )}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sorteer</span>
-        {sortControl}
-      </div>
-    </>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sorteer</span>
+      {sortControl}
+    </div>
   )
 
   return (
