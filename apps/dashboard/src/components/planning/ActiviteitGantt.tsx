@@ -92,6 +92,11 @@ function volledigeNaam(m: Medewerker) {
   return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
 }
 
+/** Uren in Nederlandse opmaak: 7,5 — en zonder ",0" als het een heel getal is. */
+function fmtUren(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('nl-NL', { maximumFractionDigits: 1 })
+}
+
 /**
  * Medewerkers als combobox-opties. Een zoekveld in plaats van een <select>: de lijst bevat
  * iedereen die actief is, en dat scrolt in een dialoog van 340px nergens naartoe.
@@ -112,6 +117,36 @@ const COMBO_BOVEN_MODAL = 'z-[300]'
 
 // ─── ItemEditDialog ───────────────────────────────────────────────────────────
 
+/**
+ * Het geldende rooster van een medewerker: het meest recente, ook als het blok ervóór ligt —
+ * dezelfde regel als `berekenPlanUren`, anders toont de dialoog andere uren dan de balk.
+ */
+function geldendRooster(medewerker_id: string, roosters: MedewerkerRooster[]): MedewerkerRooster | null {
+  return roosters
+    .filter(r => r.medewerker_id === medewerker_id)
+    .sort((a, b) => b.geldig_vanaf.localeCompare(a.geldig_vanaf))[0] ?? null
+}
+
+/** Werktijden uit het rooster als `HH:mm`; zonder rooster de gangbare 07:00–16:00. */
+function roosterTijden(medewerker_id: string, roosters: MedewerkerRooster[]): { start: string; eind: string } {
+  const r = geldendRooster(medewerker_id, roosters)
+  return {
+    start: (r?.dagstart ?? '07:00').slice(0, 5),
+    eind:  (r?.dageind  ?? '16:00').slice(0, 5),
+  }
+}
+
+/** Lokale datum (`yyyy-MM-dd`) en tijd (`HH:mm`) van een opgeslagen tijdstip. */
+function splitsMoment(iso: string): { datum: string; tijd: string } {
+  const d = parseISO(iso)
+  return { datum: format(d, 'yyyy-MM-dd'), tijd: format(d, 'HH:mm') }
+}
+
+/** Datum + tijd uit de velden terug naar één tijdstip: lokale tijd in, UTC uit. */
+function samenMoment(datum: string, tijd: string): string {
+  return new Date(`${datum}T${tijd.length === 5 ? `${tijd}:00` : tijd}`).toISOString()
+}
+
 function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDelete, onCopy, onSplit, onClose }: {
   item: PlanningItemVerrijkt; medewerkers: Medewerker[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
@@ -122,12 +157,38 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
   onClose: () => void
 }) {
   const [medId, setMedId] = useState(item.medewerker_id)
-  const [start, setStart] = useState(item.start_dt.slice(0, 10))
-  const [eind,  setEind]  = useState(item.eind_dt.slice(0, 10))
+
+  // Middernacht is geen werktijd maar een leeg veld uit Bouw7 (het gros van de gesyncte
+  // planitems staat op 00:00). Dan vult het rooster de tijd — de werkdag zoals hij bij deze
+  // medewerker begint — en de planner kan hem gewoon overtypen.
+  const startTijden = roosterTijden(item.medewerker_id, roosters)
+  const s0 = splitsMoment(item.start_dt)
+  const e0 = splitsMoment(item.eind_dt)
+  const [start,     setStart]     = useState(s0.datum)
+  const [eind,      setEind]      = useState(e0.datum)
+  const [startTijd, setStartTijd] = useState(s0.tijd === '00:00' ? startTijden.start : s0.tijd)
+  const [eindTijd,  setEindTijd]  = useState(e0.tijd === '00:00' ? startTijden.eind  : e0.tijd)
+  const [tijdAangeraakt, setTijdAangeraakt] = useState(false)
   const [uren,  setUren]  = useState(item.uren)
   const [busy,  setBusy]  = useState(false)
-  const ts = item.start_dt.slice(11, 19) || '08:00:00'
-  const te = item.eind_dt.slice(11, 19)  || '17:00:00'
+
+  const rooster = geldendRooster(medId, roosters)
+  const roosterLabel = rooster
+    ? `${(rooster.dagstart ?? '').slice(0, 5)}–${(rooster.dageind ?? '').slice(0, 5)}`
+    : null
+
+  // Andere medewerker = ander rooster, dus andere werktijden — tenzij de planner de tijd zelf
+  // al heeft gezet; die keuze mag een medewerkerwissel niet stil overschrijven. De eerste ronde
+  // (bij openen) slaat dit over: daar staat de opgeslagen tijd van het planitem, en die is
+  // leidend — anders zou een bewust afwijkende tijd bij elk openen teruggezet worden.
+  const vorigeMed = useRef(item.medewerker_id)
+  useEffect(() => {
+    if (medId === vorigeMed.current) return
+    vorigeMed.current = medId
+    if (tijdAangeraakt) return
+    const t = roosterTijden(medId, roosters)
+    setStartTijd(t.start); setEindTijd(t.eind)
+  }, [medId])
 
   useEffect(() => {
     if (!medId || !start || !eind) return
@@ -135,44 +196,85 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
     if (berekend > 0) setUren(berekend)
   }, [medId, start, eind])
 
+  const werkdagenLijst = (rooster?.werkdagen as number[] | undefined) ?? []
+  const dagUren = rooster && werkdagenLijst.length > 0
+    ? Number(rooster.contracturen_per_week) / werkdagenLijst.length
+    : 8
+  const werkdagen = dagUren > 0 ? Math.round(uren / dagUren) : 0
+
+  const tijdVeld = (waarde: string, zet: (v: string) => void) => (
+    <input className="eva-input" type="time" value={waarde} step={300}
+      onChange={e => { setTijdAangeraakt(true); zet(e.target.value) }} />
+  )
+
   return (
     <div style={S.backdrop}>
-      <div className="eva-card" style={{ padding: '20px 24px', width: 340, maxWidth: '95vw' }}>
+      <div className="eva-card" style={{ padding: '22px 26px', width: 400, maxWidth: '95vw' }}>
         <h3 style={S.dlgTitle}>Planitem bewerken</h3>
-        <p style={S.dlgSub}>{medNaam(item)}</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p style={S.dlgSub}>{item.planning_activiteiten?.titel ?? medNaam(item)}</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={S.lbl}>Medewerker</label>
             <Combobox options={medewerkerOpties(medewerkers)} value={medId} onChange={setMedId}
               placeholder="Kies medewerker…" searchPlaceholder="Naam typen…"
               emptyText="Geen medewerkers gevonden." contentClassName={COMBO_BOVEN_MODAL} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => setStart(e.target.value)} /></div>
-            <div><label style={S.lbl}>Eind</label><input className="eva-input" type="date" value={eind} onChange={e => setEind(e.target.value)} /></div>
-          </div>
+
           <div>
-            <label style={S.lbl}>Geplande uren</label>
-            <div className="eva-input" style={{ background: 'var(--surface-muted,#f5f5f5)', color: 'var(--text-secondary,#666)', cursor: 'default' }}>{uren} uur</div>
-            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Werkdagen in de periode × contracturen per dag</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 106px', gap: 8, rowGap: 8 }}>
+              <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => setStart(e.target.value)} /></div>
+              <div><label style={S.lbl}>Vanaf</label>{tijdVeld(startTijd, setStartTijd)}</div>
+              <div><label style={S.lbl}>Eind</label><input className="eva-input" type="date" value={eind} onChange={e => setEind(e.target.value)} /></div>
+              <div><label style={S.lbl}>Tot</label>{tijdVeld(eindTijd, setEindTijd)}</div>
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+              {roosterLabel
+                ? `Werkdag volgens rooster: ${roosterLabel} — aanpassen mag.`
+                : 'Geen rooster bekend; standaard werkdag 07:00–16:00.'}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '9px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <div>
+              <div style={S.lbl}>Geplande uren</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                {werkdagen > 0
+                  ? `${werkdagen} werkdag${werkdagen === 1 ? '' : 'en'} × ${fmtUren(dagUren)} u`
+                  : 'Werkdagen in de periode × contracturen per dag'}
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {fmtUren(uren)} u
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="eva-btn-ghost" style={{ color: '#c0392b', fontSize: 13 }} disabled={busy}
-              onClick={async () => { setBusy(true); await onDelete(); setBusy(false); onClose() }}>Verwijderen</button>
-            <button className="eva-btn-ghost" disabled={busy}
-              onClick={async () => { setBusy(true); await onCopy(); setBusy(false); onClose() }}>Kopiëren</button>
-            <button className="eva-btn-ghost" disabled={busy}
-              onClick={async () => { setBusy(true); await onSplit(); setBusy(false); onClose() }}>Splitsen</button>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
-            <button className="eva-btn-primary" disabled={busy}
-              onClick={async () => { setBusy(true); await onSave({ medewerker_id: medId, start_dt: `${start}T${ts}`, eind_dt: `${eind}T${te}`, uren }); setBusy(false); onClose() }}>
-              {busy ? '…' : 'Opslaan'}
-            </button>
-          </div>
+
+        {/* Acties op het planitem zelf — los van opslaan/annuleren van dit formulier. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <button className="eva-btn-ghost" style={S.kleineKnop} disabled={busy}
+            onClick={async () => { setBusy(true); await onCopy(); setBusy(false); onClose() }}>Kopiëren</button>
+          <button className="eva-btn-ghost" style={S.kleineKnop} disabled={busy}
+            onClick={async () => { setBusy(true); await onSplit(); setBusy(false); onClose() }}>Splitsen</button>
+          <button className="eva-btn-ghost" style={{ ...S.kleineKnop, color: '#c0392b', marginLeft: 'auto' }} disabled={busy}
+            onClick={async () => { setBusy(true); await onDelete(); setBusy(false); onClose() }}>Verwijderen</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+          <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
+          <button className="eva-btn-primary" disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              await onSave({
+                medewerker_id: medId,
+                start_dt: samenMoment(start, startTijd),
+                eind_dt:  samenMoment(eind,  eindTijd),
+                uren,
+              })
+              setBusy(false); onClose()
+            }}>
+            {busy ? '…' : 'Opslaan'}
+          </button>
         </div>
       </div>
     </div>
@@ -207,7 +309,10 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   async function opslaan() {
     if (!medId) return
     setBusy(true)
-    const result = await maakPlanningItem({ activiteit_id: activiteit.id, medewerker_id: medId, start_dt: `${start}T08:00:00`, eind_dt: `${eind}T17:00:00`, uren: parseFloat(uren) || 8, dossier_id, uursoort_id: activiteit.uursoort_id ?? null })
+    // Werktijden uit het rooster van de gekozen medewerker; in het planitem-venster is de tijd
+    // daarna gewoon aan te passen.
+    const t = roosterTijden(medId, roosters)
+    const result = await maakPlanningItem({ activiteit_id: activiteit.id, medewerker_id: medId, start_dt: samenMoment(start, t.start), eind_dt: samenMoment(eind, t.eind), uren: parseFloat(uren) || 8, dossier_id, uursoort_id: activiteit.uursoort_id ?? null })
     setBusy(false)
     if (!result.ok) { toast.error(result.error); return }
     onCreated(result.data as PlanningItemVerrijkt)
@@ -231,10 +336,16 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
             <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => { setStart(e.target.value); herbereken(medId, e.target.value, eind) }} /></div>
             <div><label style={S.lbl}>Eind</label><input className="eva-input" type="date" value={eind} onChange={e => { setEind(e.target.value); herbereken(medId, start, e.target.value) }} /></div>
           </div>
-          <div>
-            <label style={S.lbl}>Geplande uren</label>
-            <div className="eva-input" style={{ background: 'var(--surface-muted,#f5f5f5)', color: 'var(--text-secondary,#666)', cursor: 'default' }}>{uren} uur</div>
-            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-tertiary,#999)' }}>Werkdagen in de periode × contracturen per dag</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '9px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <div>
+              <div style={S.lbl}>Geplande uren</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                {medId ? `Werkdag ${roosterTijden(medId, roosters).start}–${roosterTijden(medId, roosters).eind}` : 'Werkdagen in de periode × contracturen per dag'}
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {fmtUren(parseFloat(uren) || 0)} u
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
@@ -2121,5 +2232,6 @@ const S = {
   colHdr: { fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' } as React.CSSProperties,
   iconBtn: { width: 26, height: 26, border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', color: 'var(--fg-muted)', fontSize: 13, cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0 } as React.CSSProperties,
   dlgTitle: { fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, margin: '0 0 4px', color: 'var(--fg)' } as React.CSSProperties,
+  kleineKnop: { fontSize: 12, padding: '4px 11px' } as React.CSSProperties,
   dlgSub: { fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: '0 0 14px' } as React.CSSProperties,
 }
