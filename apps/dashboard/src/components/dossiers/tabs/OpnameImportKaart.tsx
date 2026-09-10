@@ -133,7 +133,8 @@ export default function OpnameImportKaart({
         opnamenummer: opname.opnamenummer,
         scenarioId: scenario.id,
         bestaandeGroepId: opname.calculatie_groep_id,
-        adres: opname.adres_vrij,
+        datum: opname.datum,
+        aanvullend: payload.aanvullend,
         regels: payload.regels,
         volgordeBasis: bestaandeHoofdgroepen.length + 1,
         btwPctDefault: getScenario(scenario.id)?.btw_pct_default,
@@ -183,7 +184,7 @@ export default function OpnameImportKaart({
         payload.fotos.beschikbaar === 0
           ? ''
           : payload.fotos.meegenomen === payload.fotos.beschikbaar
-            ? ` ${payload.fotos.meegenomen} foto's meegenomen.`
+            ? ` ${payload.fotos.meegenomen} foto${payload.fotos.meegenomen !== 1 ? "'s" : ''} meegenomen.`
             : ` ${payload.fotos.meegenomen} van de ${payload.fotos.beschikbaar} foto's meegenomen` +
               ' (de rest paste niet binnen de fotolimiet, maar blijft op deze tab staan).'
       const verwijderdDeel =

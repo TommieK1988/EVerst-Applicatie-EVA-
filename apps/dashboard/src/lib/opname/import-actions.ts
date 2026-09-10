@@ -13,8 +13,9 @@
  * `Calculatieregel.werkomschrijving_afbeeldingen` is een array base64 data-URL's. Dat hele
  * calculatiemodel gaat bij ÉLKE autosave (debounce 1,5 s) als één JSONB-blob naar
  * `calculatie_snapshots`. Veertig regels met drie onverkleinde telefoonfoto's is tien megabyte die
- * dan elke anderhalve seconde heen en weer reist. Vandaar: alleen de hoofdfoto, fors verkleind, en
- * een plafond op het totaal — met een teller die eerlijk zegt hoeveel foto's het niet haalden.
+ * dan elke anderhalve seconde heen en weer reist. Vandaar: elke foto gaat mee, maar het formaat
+ * krimpt mee met het aantal, met een plafond op het totaal en een teller die eerlijk zegt hoeveel
+ * foto's het onverhoopt niet haalden.
  */
 
 import { createAdminClient } from '@everts/database/server'
@@ -28,9 +29,22 @@ import { haalOp } from '@/lib/net/deadline'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-/** Ingesloten fotobreedte. Groter dan het houtrotrapport (380px), want dit kan op A4 in de offerte. */
-const FOTO_PX = 800
-const FOTO_JPEG_KWALITEIT = 65
+/**
+ * Formaten waarin een foto de calculatie in kan, van ruim naar zuinig.
+ *
+ * Alle foto's van een regel gaan mee, niet alleen de hoofdfoto — twee foto's van dezelfde schade
+ * vertellen samen het verhaal, en de tweede kwijtraken zonder melding is precies wat er misging.
+ * De prijs daarvoor is dat een foto kleiner wordt naarmate er meer zijn: liever elke foto op de
+ * offerte in een wat lagere resolutie dan een volledige foto en een lege plek.
+ *
+ * Het ruimste formaat is groter dan het houtrotrapport (380px), want dit kan op A4 in de offerte.
+ */
+const FOTO_PROFIELEN = [
+  { px: 800, kwaliteit: 65 },
+  { px: 640, kwaliteit: 60 },
+  { px: 480, kwaliteit: 55 },
+  { px: 360, kwaliteit: 50 },
+] as const
 /** Bronfoto's boven deze grens slaan we over: die zijn niet verkleind vóór het uploaden. */
 const MAX_BRON_BYTES = 20 * 1024 * 1024
 /** Plafond op het totaal aan base64 dat de snapshot in gaat. */
@@ -40,12 +54,35 @@ const FOTO_PARALLEL = 6
 
 export type ImportPayload = {
   opname: Opname
+  /** Niet de eerste opname op dit dossier — stuurt de kop van de bovengroep. */
+  aanvullend: boolean
   regels: ImportRegel[]
   /** Hoeveel regelfoto's er bestaan en hoeveel er daadwerkelijk meegingen. */
   fotos: { beschikbaar: number; meegenomen: number; bytes: number }
 }
 
-async function fotoNaarDataUrl(url: string): Promise<{ dataUrl: string; bytes: number }> {
+/**
+ * Hoeveel foto's er zijn bepaalt hoe groot ze mogen zijn.
+ *
+ * Een opname met drie foto's mag ze ruim houden; een mutatiewoning met tachtig foto's kan dat
+ * niet. Zo blijft het totaal onder het plafond zonder dat er iets hoeft af te vallen.
+ *
+ * De grenzen zijn gemeten aan echte opnamefoto's: een telefoonfoto (1200×1600, 400 kB) komt op
+ * 800px uit rond de 35 kB base64, op 640px rond 23 kB en op 360px rond 9 kB. Ze staan ruim, want
+ * een foto die zijn aandeel toch overschrijdt verkleint zichzelf alsnog een stap verder.
+ */
+function profielVoorAantal(aantal: number): number {
+  if (aantal <= 25) return 0
+  if (aantal <= 50) return 1
+  if (aantal <= 90) return 2
+  return 3
+}
+
+async function fotoNaarDataUrl(
+  url: string,
+  vanafProfiel: number,
+  ruimte: number,
+): Promise<{ dataUrl: string; bytes: number }> {
   try {
     const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
     if (!res.ok) return { dataUrl: '', bytes: 0 }
@@ -55,14 +92,23 @@ async function fotoNaarDataUrl(url: string): Promise<{ dataUrl: string; bytes: n
     // Sharp doet drie dingen die geen van alle optioneel zijn: verkleinen, EXIF-rotatie toepassen
     // (telefoonfoto's staan anders op hun kant) en transparantie op wit zetten.
     const sharp = (await import('sharp')).default
-    const jpeg = await sharp(buf)
-      .rotate()
-      .resize({ width: FOTO_PX, height: FOTO_PX, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: FOTO_JPEG_KWALITEIT, mozjpeg: true })
-      .toBuffer()
-    const base64 = `data:image/jpeg;base64,${jpeg.toString('base64')}`
-    return { dataUrl: base64, bytes: base64.length }
+    let laatste = { dataUrl: '', bytes: 0 }
+
+    // Past de foto niet binnen zijn aandeel, dan volgt een poging in een kleiner formaat in plaats
+    // van hem te laten vallen. Eén panoramafoto van 4000px hoort de rest niet te verdringen.
+    for (let i = vanafProfiel; i < FOTO_PROFIELEN.length; i++) {
+      const { px, kwaliteit } = FOTO_PROFIELEN[i]
+      const jpeg = await sharp(buf)
+        .rotate()
+        .resize({ width: px, height: px, fit: 'inside', withoutEnlargement: true })
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality: kwaliteit, mozjpeg: true })
+        .toBuffer()
+      const base64 = `data:image/jpeg;base64,${jpeg.toString('base64')}`
+      laatste = { dataUrl: base64, bytes: base64.length }
+      if (laatste.bytes <= ruimte) return laatste
+    }
+    return laatste
   } catch {
     // Onleesbaar of niet-ondersteund formaat (bv. HEIC zonder libheif) → geen foto. De regel gaat
     // gewoon mee; alleen het plaatje ontbreekt.
@@ -73,8 +119,9 @@ async function fotoNaarDataUrl(url: string): Promise<{ dataUrl: string; bytes: n
 /**
  * Leest een opname en zet hem klaar voor de client-side import.
  *
- * Alleen de hoofdfoto per regel gaat mee. De overige foto's blijven in `opname_fotos` en zijn
- * zichtbaar op de dossier-tab en straks in het opnamerapport.
+ * Alle foto's van een regel gaan mee, verkleind naar een formaat dat past bij hoeveel het er in
+ * totaal zijn. Het origineel blijft in `opname_fotos` staan voor de dossier-tab en het
+ * opnamerapport; wat hier meegaat is de offertekopie.
  */
 export async function laadOpnameVoorImport(
   opnameId: string,
@@ -108,37 +155,58 @@ export async function laadOpnameVoorImport(
     else perRegel.set(f.regel_id, [f])
   }
 
-  // Per regel één foto: de hoofdfoto, anders de eerste.
+  // Alle foto's van een regel, hoofdfoto voorop zodat die bij krapte als eerste binnen is.
   const opdrachten: { regelId: string; url: string }[] = []
   for (const regel of alleRegels) {
     const lijst = perRegel.get(regel.id)
     if (!lijst?.length) continue
-    const gekozen = lijst.find(f => f.is_hoofdfoto) ?? lijst[0]
-    opdrachten.push({ regelId: regel.id, url: gekozen.url })
+    const geordend = [...lijst].sort((a, b) => Number(b.is_hoofdfoto) - Number(a.is_hoofdfoto))
+    for (const foto of geordend) opdrachten.push({ regelId: regel.id, url: foto.url })
   }
 
-  const dataUrls = new Map<string, string>()
+  // Het formaat volgt uit het aantal foto's, en elke foto krijgt een gelijk aandeel van het
+  // plafond als bovengrens. Zo passen ze in de praktijk allemaal.
+  const profiel = profielVoorAantal(opdrachten.length)
+  const aandeel = opdrachten.length > 0 ? Math.floor(MAX_TOTAAL_BASE64 / opdrachten.length) : 0
+
+  const dataUrls = new Map<string, string[]>()
   let totaal = 0
   let meegenomen = 0
   for (let i = 0; i < opdrachten.length; i += FOTO_PARALLEL) {
     // Al over het plafond: de rest niet meer ophalen. Scheelt netwerk én sharp-werk.
     if (totaal >= MAX_TOTAAL_BASE64) break
     const blok = opdrachten.slice(i, i + FOTO_PARALLEL)
-    const uitkomsten = await Promise.all(blok.map(o => fotoNaarDataUrl(o.url)))
+    const uitkomsten = await Promise.all(
+      blok.map(o => fotoNaarDataUrl(o.url, profiel, aandeel)),
+    )
     uitkomsten.forEach((uit, j) => {
       if (!uit.dataUrl) return
       if (totaal + uit.bytes > MAX_TOTAAL_BASE64) return
-      dataUrls.set(blok[j].regelId, uit.dataUrl)
+      const regelId = blok[j].regelId
+      const bestaand = dataUrls.get(regelId)
+      if (bestaand) bestaand.push(uit.dataUrl)
+      else dataUrls.set(regelId, [uit.dataUrl])
       totaal += uit.bytes
       meegenomen += 1
     })
   }
 
+  // Is dit de eerste opname op dit dossier, of een aanvullende? Bepaalt de kop van de bovengroep
+  // in de calculatie. Geteld op aanmaakmoment: de volgorde waarin ze gemaakt zijn is de volgorde
+  // die de calculator herkent, ook als twee opnames dezelfde datum dragen.
+  const { count: eerdere } = await supabase
+    .from('opnames')
+    .select('id', { count: 'exact', head: true })
+    .eq('dossier_id', opname.dossier_id)
+    .neq('status', 'geannuleerd')
+    .lt('created_at', opname.created_at)
+
   const payload: ImportPayload = {
     opname: opname as Opname,
+    aanvullend: (eerdere ?? 0) > 0,
     regels: alleRegels.map(r => {
-      const foto = dataUrls.get(r.id)
-      return foto ? { ...r, afbeeldingen: [foto] } : r
+      const fotos = dataUrls.get(r.id)
+      return fotos?.length ? { ...r, afbeeldingen: fotos } : r
     }),
     fotos: { beschikbaar: opdrachten.length, meegenomen, bytes: totaal },
   }

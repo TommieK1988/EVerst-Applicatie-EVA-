@@ -40,8 +40,10 @@ export type ImportInvoer = {
   scenarioId: string
   /** Bovengroep uit een eerdere import; leeg = nu bepalen en daarna opslaan. */
   bestaandeGroepId: string | null
-  /** Kop van de bovengroep, bijvoorbeeld het werkadres. */
-  adres: string | null
+  /** Opnamedatum (ISO `jjjj-mm-dd`); vormt samen met `aanvullend` de kop van de bovengroep. */
+  datum: string | null
+  /** Niet de eerste opname op dit dossier — dan heet de bovengroep "Aanvullende opname". */
+  aanvullend: boolean
   regels: ImportRegel[]
   /** Volgnummer van de bovengroep binnen het scenario. */
   volgordeBasis: number
@@ -99,6 +101,23 @@ function herkomstNotitie(
 }
 
 /**
+ * Kop van de bovengroep, zoals de opdrachtgever hem op de offerte ziet.
+ *
+ * Bewust de DATUM en niet het opnamenummer: `OPN-2026-006` zegt een corporatie niets, de dag van
+ * de opname wel. Het nummer blijft in `opmerking` staan — dat is intern, komt niet op de offerte,
+ * en de herimport herkent daaraan welke regels bij welke opname horen.
+ *
+ * Het adres staat er niet meer bij: dat staat al in de kop van de offerte zelf.
+ */
+export function opnameGroepNaam(datum: string | null, aanvullend: boolean): string {
+  const woord = aanvullend ? 'Aanvullende opname' : 'Opname'
+  // De datumkolom komt als `jjjj-mm-dd` binnen. Geen `new Date()`: die schuift op een
+  // avondlijke opname een dag terug zodra de tijdzone meedoet.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(datum ?? '')
+  return m ? `${woord} ${m[3]}-${m[2]}-${m[1]}` : woord
+}
+
+/**
  * Bouwt de complete boom voor één opname.
  *
  * Structuur: niveau 1 = de opname, niveau 2 = de ruimte. Ruimtes komen in de volgorde waarin ze in
@@ -113,7 +132,7 @@ export function bouwImport(invoer: ImportInvoer): ImportResultaat {
       id: hoofdgroepId,
       scenario_id: invoer.scenarioId,
       parent_id: null,
-      naam: [invoer.opnamenummer, invoer.adres].filter(Boolean).join(' · '),
+      naam: opnameGroepNaam(invoer.datum, invoer.aanvullend),
       niveau: 1,
       volgorde: invoer.volgordeBasis,
     },

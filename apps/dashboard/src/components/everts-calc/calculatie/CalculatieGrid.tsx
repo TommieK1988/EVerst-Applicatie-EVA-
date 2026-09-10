@@ -1230,7 +1230,9 @@ function CalculatieregelRij({
               tabIndex={0}
               onClick={() => setWerkUitgeklapt(v => !v)}
               className={`flex-shrink-0 p-0.5 rounded transition-colors cursor-pointer ${
-                werkUitgeklapt || regel.werkomschrijving
+                // Ook groen als er alléén een foto onder hangt: anders lijkt de regel leeg
+                // terwijl er wel degelijk iets in staat dat op de offerte komt.
+                werkUitgeklapt || regel.werkomschrijving || regel.werkomschrijving_afbeeldingen?.length
                   ? 'text-everts bg-everts-50'
                   : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
               }`}
