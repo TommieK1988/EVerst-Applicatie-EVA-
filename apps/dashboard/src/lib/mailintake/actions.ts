@@ -22,6 +22,7 @@ import { toetsPostbus } from '@/lib/o365/inbox'
 import { maakDossierUitBericht, koppelAanDossier, onthoudAlias } from './aanmaken'
 import { haalPostbusOp } from './ophalen'
 import { verwerkBericht } from './verwerken'
+import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { voerNabehandelingUit, planNabehandeling } from './nabehandeling'
 import type { GekeurdeVelden } from './extractie'
 
@@ -51,7 +52,12 @@ export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; u
  */
 export async function maakDossierVanBericht(
   berichtId: string,
-  velden: GekeurdeVelden & { relatieId: string; contactpersoonId: string | null; objectId?: string | null },
+  velden: GekeurdeVelden & {
+    relatieId: string
+    contactpersoonId: string | null
+    objectId?: string | null
+    gevraagdeWerkzaamheden?: string | null
+  },
 ): Promise<{ ok: boolean; dossierId?: string; dossiernummer?: string | null; bouw7Ok?: boolean; bouw7Fout?: string; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
   const supabase = createAdminClient() as any
@@ -67,6 +73,7 @@ export async function maakDossierVanBericht(
     contactpersoonId: velden.contactpersoonId,
     velden,
     objectId: velden.objectId ?? null,
+    gevraagdeWerkzaamheden: velden.gevraagdeWerkzaamheden ?? null,
     automatisch: false,
     medewerkerId: medewerker.id,
   })
@@ -206,6 +213,43 @@ export async function leesOpnieuw(berichtId: string): Promise<{ ok: boolean; err
   const res = await verwerkBericht(berichtId)
   revalidatePath('/mailintake')
   return res.fout ? { ok: false, error: res.fout } : { ok: true }
+}
+
+/**
+ * Stelt de scope-samenvatting opnieuw op uit de mail en de bijlagen.
+ *
+ * Overschrijft wat er stond — dit is een bewuste klik, geen automatiek. Wat de
+ * behandelaar zelf had bijgeschaafd raakt daarmee kwijt; daarom vraagt het scherm
+ * eerst om bevestiging als er al tekst stond.
+ */
+export async function hervatSamenvatting(
+  berichtId: string,
+): Promise<{ ok: boolean; tekst?: string | null; error?: string }> {
+  await vereisRecht('mailintake', 'schrijven')
+  const res = await maakWerkzaamhedenSamenvatting(berichtId)
+  revalidatePath(`/mailintake/${berichtId}`)
+  return res.ok ? { ok: true, tekst: res.tekst } : { ok: false, error: res.fout ?? 'Samenvatten mislukt.' }
+}
+
+/** Slaat de door een mens bijgeschaafde samenvatting op bij het bericht. */
+export async function bewaarSamenvatting(
+  berichtId: string,
+  tekst: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { medewerker } = await vereisRecht('mailintake', 'schrijven')
+  const supabase = createAdminClient() as any
+
+  const { error } = await supabase.from('mailintake_berichten').update({
+    gevraagde_werkzaamheden: tekst.trim() || null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', berichtId)
+  if (error) return { ok: false, error: error.message }
+
+  await supabase.from('mailintake_besluiten').insert({
+    bericht_id: berichtId, actor: 'medewerker', medewerker_id: medewerker.id,
+    actie: 'samenvatting_aangepast', details: { lengte: tekst.trim().length },
+  })
+  return { ok: true }
 }
 
 // ─── Beheer ───────────────────────────────────────────────────────────────────

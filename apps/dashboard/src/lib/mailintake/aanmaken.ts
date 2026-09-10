@@ -27,6 +27,8 @@ export interface AanmaakInvoer {
   velden: GekeurdeVelden
   /** Het vastgoedobject bij dit werkadres; alleen gevuld bij een eenduidige treffer. */
   objectId?: string | null
+  /** De (eventueel bijgeschaafde) scope-samenvatting uit het behandelscherm. */
+  gevraagdeWerkzaamheden?: string | null
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -191,6 +193,11 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
 
   const dossierId = res.data.id
 
+  // De scope-samenvatting hoort bij het dossier, niet bij het bericht: dit is wat
+  // een calculator als eerste leest. Valt terug op wat er bij de intake is
+  // opgesteld als de behandelaar hem niet heeft aangepast.
+  await zetWerkzaamhedenOpDossier(dossierId, inv.berichtId, inv.gevraagdeWerkzaamheden ?? null).catch(() => {})
+
   // Herkomst vastleggen. Dit is wat de nacontroles later leesbaar maakt:
   // "welke dossiers komen uit mail, en hoeveel daarvan zijn achteraf vervallen?"
   await supabase.from('dossiers').update({ mailintake_bericht_id: inv.berichtId }).eq('id', dossierId)
@@ -348,4 +355,40 @@ async function meldAutomatischAangemaakt(
       dossier_naam: d.titel,
     })
   }
+}
+
+/**
+ * Zet de scope-samenvatting op het dossier, met een leesbare herkomstregel.
+ *
+ * `tekst` is wat er in het behandelscherm stond op het moment van aanmaken —
+ * inclusief eventuele aanscherpingen van de behandelaar. Is die leeg, dan valt
+ * hij terug op wat EVA bij de intake opstelde.
+ */
+async function zetWerkzaamhedenOpDossier(
+  dossierId: string,
+  berichtId: string,
+  tekst: string | null,
+): Promise<void> {
+  const supabase = createAdminClient() as any
+
+  const { data: b } = await supabase
+    .from('mailintake_berichten')
+    .select('gevraagde_werkzaamheden, gevraagde_werkzaamheden_bronnen, gevraagde_werkzaamheden_gemist')
+    .eq('id', berichtId)
+    .maybeSingle()
+
+  const definitief = (tekst ?? '').trim() || (b?.gevraagde_werkzaamheden ?? '').trim()
+  if (!definitief) return
+
+  const { herkomstregel } = await import('./werkzaamheden')
+  const bronnen: string[] = b?.gevraagde_werkzaamheden_bronnen ?? []
+  const gemist: string[] = b?.gevraagde_werkzaamheden_gemist ?? []
+  const herkomst = herkomstregel(bronnen, 'mail') +
+    (gemist.length ? ` Niet meegelezen: ${gemist.join(', ')}.` : '')
+
+  await supabase.from('dossiers').update({
+    gevraagde_werkzaamheden: definitief,
+    gevraagde_werkzaamheden_bron: herkomst,
+    gevraagde_werkzaamheden_op: new Date().toISOString(),
+  }).eq('id', dossierId)
 }

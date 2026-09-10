@@ -46,6 +46,7 @@ import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/l
 import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
 import TaakDetailPanel from '@/components/taken/TaakDetailPanel'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
+import GevraagdeWerkzaamhedenBlok from './GevraagdeWerkzaamhedenBlok'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
 import {
@@ -1937,6 +1938,20 @@ export function InformatieTab({
               en verbergt zich als er geen klantportaal-recht is. */}
           <PortaalChatBlok dossierId={dossier.id} />
         </div>
+
+        {/* Gevraagde werkzaamheden — de scope-samenvatting uit de aanvraagmail en de
+            bijlagen. Staat bewust hier, pal onder Projectinformatie: dit is wat een
+            calculator als eerste wil lezen. Verbergt zichzelf als er niets is en er
+            niets bewerkt mag worden. */}
+        {(dossier.gevraagde_werkzaamheden || !readOnly) && (
+          <GevraagdeWerkzaamhedenBlok
+            dossierId={dossier.id}
+            tekst={dossier.gevraagde_werkzaamheden ?? null}
+            herkomst={dossier.gevraagde_werkzaamheden_bron ?? null}
+            bijgewerktOp={dossier.gevraagde_werkzaamheden_op ?? null}
+            bewerkbaar={!readOnly}
+          />
+        )}
 
         {/* Datums — eigen blok, direct onder Projectinformatie. Zat eerder als lijstje
             onderin Projectinformatie, tussen velden waar het niets mee te maken heeft. */}

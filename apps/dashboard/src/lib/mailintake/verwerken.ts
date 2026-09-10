@@ -21,6 +21,7 @@ import { zoekDuplicaten } from './duplicaten'
 import { beslis, samenvattendeReden } from './beslis'
 import { zoekObjectBijAdres } from './objecten'
 import { controleerBouw7Gereed } from './bouw7-gereed'
+import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
@@ -199,10 +200,12 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
 
     const { data: laatste } = await supabase
       .from('mailintake_extracties').select('versie')
-      .eq('bericht_id', berichtId).order('versie', { ascending: false }).limit(1).maybeSingle()
+      .eq('bericht_id', berichtId).eq('ronde', 'velden')
+      .order('versie', { ascending: false }).limit(1).maybeSingle()
     const volgende = ((laatste?.versie ?? 0) as number) + 1
     await supabase.from('mailintake_extracties').insert({
       bericht_id: berichtId,
+      ronde: 'velden',
       versie: volgende,
       model: ex.model,
       prompt_versie: ex.promptVersie,
@@ -355,6 +358,18 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         kosten_cent: ex.kostenCent,
       },
     })
+
+    // ── Scope-samenvatting ──────────────────────────────────────────────────
+    // Alleen bij een offerteaanvraag: daar bespaart een scope de meeste tijd, en
+    // bij een opdrachtbon of servicedeskbon is hij meestal één regel en de tweede
+    // AI-ronde de kosten niet waard. Voor die soorten staat de knop er wel.
+    // Faalt de samenvatting, dan gaat het bericht gewoon door — een scope is nooit
+    // belangrijk genoeg om een aanvraag op te laten sneuvelen.
+    if (ex.data.soort === 'offerteaanvraag') {
+      log.stap('werkzaamheden samenvatten')
+      const wz = await maakWerkzaamhedenSamenvatting(berichtId).catch(() => null)
+      if (wz) uit.kostenCent += wz.kostenCent
+    }
 
     // ── Uitvoeren ───────────────────────────────────────────────────────────
     if (besluit.automatisch && afz.relatieId) {

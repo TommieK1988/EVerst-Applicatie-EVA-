@@ -692,6 +692,16 @@ export type Dossier = {
   object_id: string | null
   object_gekoppeld_op: string | null
   object_koppel_bron: 'aanmaak' | 'handmatig' | 'bouw7' | 'backfill' | null
+  /**
+   * Scope-samenvatting: wat er in deze aanvraag aan werk gevraagd wordt, opgesteld
+   * uit de aanvraagmail en alle bijlagen. Een EVA-eigen veld -- bewust niet
+   * `opmerkingen`, want dat gaat naar Bouw7 als `information` en komt via de
+   * lees-sync terug als dossiernotitie, waardoor de tekst dubbel zou staan.
+   */
+  gevraagde_werkzaamheden: string | null
+  /** Leesbare herkomst, bv. "Opgesteld uit de aanvraagmail en 3 bijlagen: bestek.pdf, ...". */
+  gevraagde_werkzaamheden_bron: string | null
+  gevraagde_werkzaamheden_op: string | null
   /** Datum van de aanvraag. Leeg = het dossier is aangemaakt op `created_at`. */
   aanvraagdatum: string | null
   /** Deadline: de datum waarop de offerte verzonden had moeten zijn (optioneel). */

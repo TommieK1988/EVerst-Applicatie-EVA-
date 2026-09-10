@@ -13,13 +13,14 @@ import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-import { Button, Badge, Card, useDialogen } from '@/components/ui'
+import { Button, Badge, Card, BulletTextarea, useDialogen } from '@/components/ui'
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres } from '@/lib/adres/pdok'
 import {
   maakDossierVanBericht, koppelBerichtAanDossier, negeerBericht,
   markeerGeenAanvraag, leesOpnieuw, getBijlageUrl, heropenBericht,
+  hervatSamenvatting, bewaarSamenvatting,
 } from '@/lib/mailintake/actions'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL,
@@ -130,6 +131,9 @@ export default function BerichtBehandelen({
   const [stad, setStad] = useState(velden.werkadres_stad ?? '')
   const [adresBevestigd, setAdresBevestigd] = useState(false)
 
+  const [werkzaamheden, setWerkzaamheden] = useState<string>(b.gevraagde_werkzaamheden ?? '')
+  const [samenvatBezig, setSamenvatBezig] = useState(false)
+
   // Voorkeur: wat er al aan het bericht hangt; anders de verse treffer.
   const [objectId, setObjectId] = useState<string | null>(
     b.object?.id ?? objectTreffer?.objectId ?? null,
@@ -225,6 +229,7 @@ export default function BerichtBehandelen({
         relatieId: klantId,
         contactpersoonId,
         objectId,
+        gevraagdeWerkzaamheden: werkzaamheden.trim() || null,
         omschrijving: omschrijving.trim(),
         klantNaam,
         contactpersoonNaam: null,
@@ -353,6 +358,34 @@ export default function BerichtBehandelen({
     } finally {
       setBezig(false)
     }
+  }
+
+  /** Laat EVA de mail en de bijlagen opnieuw lezen voor de scope-samenvatting. */
+  async function opnieuwSamenvatten() {
+    // Stond er al tekst, dan is die mogelijk met de hand aangescherpt. Niet zomaar weg.
+    if (werkzaamheden.trim()) {
+      const ok = await bevestig({
+        titel: 'Samenvatting opnieuw opstellen?',
+        omschrijving: 'De huidige tekst wordt vervangen door een nieuwe samenvatting uit de mail en de bijlagen.',
+        bevestigLabel: 'Opnieuw samenvatten',
+      })
+      if (!ok) return
+    }
+    setSamenvatBezig(true)
+    try {
+      const res = await hervatSamenvatting(b.id)
+      if (!res.ok) { toast.error(res.error ?? 'Samenvatten mislukt'); return }
+      setWerkzaamheden(res.tekst ?? '')
+      toast.success('Samenvatting bijgewerkt')
+    } finally {
+      setSamenvatBezig(false)
+    }
+  }
+
+  /** Bewaart een handmatige aanscherping alvast bij het bericht. */
+  async function bewaarWerkzaamhedenTekst() {
+    if ((b.gevraagde_werkzaamheden ?? '') === werkzaamheden) return
+    await bewaarSamenvatting(b.id, werkzaamheden).catch(() => {})
   }
 
   async function openBijlage(id: string) {
@@ -520,6 +553,41 @@ export default function BerichtBehandelen({
               </select>
             </Veld>
           )}
+
+          {/* Scope-samenvatting: wát wordt er gevraagd. Staat boven de losse velden,
+              want dit is waar een calculator als eerste naar kijkt. De tekst is een
+              voorstel — wie hem bijschaaft, slaat dát op bij het aanmaken. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={klein}>Gevraagde werkzaamheden</span>
+              {bewerkbaar && (
+                <Button variant="ghost" onClick={opnieuwSamenvatten} disabled={samenvatBezig}>
+                  {samenvatBezig ? 'Bezig…' : 'Opnieuw samenvatten'}
+                </Button>
+              )}
+            </div>
+            <BulletTextarea
+              value={werkzaamheden}
+              onChange={setWerkzaamheden}
+              onBlur={bewaarWerkzaamhedenTekst}
+              minRows={4}
+              maxRows={14}
+              toonKnop={bewerkbaar}
+              disabled={!bewerkbaar}
+              placeholder="Nog geen samenvatting opgesteld."
+            />
+            {(b.gevraagde_werkzaamheden_bronnen?.length ?? 0) > 0 && (
+              <span style={klein}>
+                Uit de mail en {b.gevraagde_werkzaamheden_bronnen.length}{' '}
+                {b.gevraagde_werkzaamheden_bronnen.length === 1 ? 'bijlage' : 'bijlagen'}.
+              </span>
+            )}
+            {(b.gevraagde_werkzaamheden_gemist?.length ?? 0) > 0 && (
+              <span style={{ ...klein, color: 'var(--wa-800, #92400e)' }}>
+                Niet meegelezen: {(b.gevraagde_werkzaamheden_gemist as string[]).join(', ')}.
+              </span>
+            )}
+          </div>
 
           <Veld label="Omschrijving van het werk" score={zekerheid.omschrijving}>
             <input style={veldStijl} value={omschrijving} onChange={e => setOmschrijving(e.target.value)} disabled={!bewerkbaar} />
