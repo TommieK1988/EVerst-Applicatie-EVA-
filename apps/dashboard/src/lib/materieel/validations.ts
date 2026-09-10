@@ -51,12 +51,23 @@ export const materieelObjectSchema = z.object({
 export type MaterieelObjectInput = z.infer<typeof materieelObjectSchema>
 
 /**
- * Aanmaak-schema: bij het registreren kun je het object meteen op naam van een
- * medewerker zetten. Leeg laten = algemeen gebruik. Bewerken van de toewijzing
- * loopt via de Toewijzen-actie op het paspoort (die houdt historie bij).
+ * Aanmaak-schema: bij het registreren kun je het object meteen toewijzen — aan
+ * een collega, of aan een team (een servicebus of de werkplaats). Beide leeg
+ * laten = algemeen gebruik.
+ *
+ * Een team is hier net zo gewoon als een persoon: gereedschap dat op de
+ * werkplaats blijft liggen hoort niet op iemands naam te staan, want dan lijkt
+ * het uitgegeven. Bewerken van de toewijzing loopt daarna via de Toewijzen-actie
+ * op het paspoort (die houdt historie bij).
  */
-export const nieuwMaterieelSchema = materieelObjectSchema.extend({
-  toegewezen_medewerker_id: optioneleTekst,
-})
+export const nieuwMaterieelSchema = materieelObjectSchema
+  .extend({
+    toegewezen_medewerker_id: optioneleTekst,
+    toegewezen_team_id: optioneleTekst,
+  })
+  .refine(
+    (v) => !(v.toegewezen_medewerker_id && v.toegewezen_team_id),
+    'Kies een collega óf een team, niet allebei',
+  )
 
 export type NieuwMaterieelInput = z.infer<typeof nieuwMaterieelSchema>

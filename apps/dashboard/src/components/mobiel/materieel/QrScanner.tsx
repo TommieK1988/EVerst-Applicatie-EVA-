@@ -2,6 +2,7 @@
 
 import React from 'react'
 import jsQR from 'jsqr'
+import { herstelUitleg, kanStatusLezen, laatLos, leesStatus, pakCamera } from '@/lib/materieel/camera'
 import { GRIJS, RAND, ROOD, secundaireKnop } from './stijl'
 
 /**
@@ -18,6 +19,11 @@ import { GRIJS, RAND, ROOD, secundaireKnop } from './stijl'
  * De camera loopt in een `requestAnimationFrame`-lus, niet op een timer: die
  * lus pauzeert vanzelf als het scherm op de achtergrond gaat, zodat een telefoon
  * in iemands zak niet leegloopt.
+ *
+ * De stream zelf komt uit `lib/materieel/camera.ts` en is gedeeld: dit component
+ * vraagt hem op en laat hem weer los, maar zet hem niet uit. Dat is bewust —
+ * tijdens een stickerronde wordt de scanner voortdurend afgebroken en opnieuw
+ * opgebouwd, en elke eigen `getUserMedia` was een nieuwe toestemmingsvraag.
  *
  * Bewust géén onderdeel van dit component: wat er met de code moet gebeuren.
  * Opzoeken en doorsturen doet het scherm eromheen.
@@ -43,11 +49,11 @@ export default function QrScanner({
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
-  const gestopt = React.useRef(false)
   /** Voorkomt dat één sticker tijdens het richten tien keer wordt gemeld. */
   const laatsteCode = React.useRef<string>('')
 
   const [fout, setFout] = React.useState<string | null>(null)
+  const [geweigerd, setGeweigerd] = React.useState(false)
   const [lampAan, setLampAan] = React.useState(false)
   const [heeftLamp, setHeeftLamp] = React.useState(false)
 
@@ -58,8 +64,15 @@ export default function QrScanner({
   bezigRef.current = bezig
 
   React.useEffect(() => {
-    gestopt.current = false
+    // Bewust lokale vlaggen en geen ref: React draait dit effect in
+    // ontwikkelmodus meteen twee keer (mount → opruimen → mount). Met een
+    // gedeelde ref zag de eerste doorloop de vlag van de tweede en gaf hij zijn
+    // camera nooit terug — de teller in `camera.ts` kwam dan nooit meer op nul
+    // en de camera bleef branden.
+    let af = false
     let frame = 0
+    /** Precies één keer teruggeven, hoe de doorloop ook eindigt. */
+    let vrijgeven: (() => void) | null = null
     let detector: BarcodeDetectorAchtig | null = null
 
     async function start() {
@@ -68,13 +81,10 @@ export default function QrScanner({
         return
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          // `ideal` en niet `exact`: op een laptop of een toestel zonder
-          // achtercamera zou `exact` de hele scanner laten falen.
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        })
-        if (gestopt.current) { stream.getTracks().forEach((t) => t.stop()); return }
+        const stream = await pakCamera()
+        let teruggegeven = false
+        vrijgeven = () => { if (!teruggegeven) { teruggegeven = true; laatLos() } }
+        if (af) { vrijgeven(); return }
         streamRef.current = stream
 
         const video = videoRef.current
@@ -96,16 +106,17 @@ export default function QrScanner({
         frame = requestAnimationFrame(lees)
       } catch (e) {
         const naam = (e as { name?: string }).name
-        setFout(
-          naam === 'NotAllowedError'
-            ? 'Geen toegang tot de camera. Sta camera toe voor EVA in de instellingen van je telefoon.'
-            : 'De camera start niet. Typ de code van de sticker over.',
-        )
+        if (naam === 'NotAllowedError') {
+          setGeweigerd(true)
+          setFout(herstelUitleg())
+        } else {
+          setFout('De camera start niet. Typ de code van de sticker over.')
+        }
       }
     }
 
     async function lees() {
-      if (gestopt.current) return
+      if (af) return
       const video = videoRef.current
       const canvas = canvasRef.current
 
@@ -142,18 +153,33 @@ export default function QrScanner({
           }
         }
       }
-      if (!gestopt.current) frame = requestAnimationFrame(lees)
+      if (!af) frame = requestAnimationFrame(lees)
     }
 
     start()
 
     return () => {
-      gestopt.current = true
+      af = true
       cancelAnimationFrame(frame)
-      streamRef.current?.getTracks().forEach((t) => t.stop())
+      // Alleen loslaten, niet stoppen: een ander scherm binnen de scanflow pakt
+      // dezelfde stream zo weer op zonder nieuwe toestemmingsvraag.
+      vrijgeven?.()
       streamRef.current = null
     }
   }, [])
+
+  // Toestemming die buiten EVA om alsnog wordt gegeven (site-instellingen) —
+  // dan hoeft de gebruiker niet te raden dat hij moet herladen.
+  React.useEffect(() => {
+    // Alleen zin als de browser de stand kán teruggeven; op iOS Safari zou dit
+    // anders eindeloos blijven pollen zonder ooit iets te merken.
+    if (!geweigerd || !kanStatusLezen()) return
+    let af = false
+    const timer = setInterval(async () => {
+      if (await leesStatus() === 'toegestaan' && !af) window.location.reload()
+    }, 2000)
+    return () => { af = true; clearInterval(timer) }
+  }, [geweigerd])
 
   async function wisselLamp() {
     const track = streamRef.current?.getVideoTracks()[0]

@@ -4,9 +4,9 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 import { koppelSticker, zoekTeStickeren } from '@/app/m/materieel/actions'
 import { codeLabel } from '@/lib/materieel/qr'
-import { CATEGORIE_LABELS } from '@/lib/materieel/types'
-import type { MaterieelKort } from '@/lib/materieel/zoeken'
-import { GRIJS, kaart, RAND, ROOD, secundaireKnop, veld } from './stijl'
+import type { MaterieelTreffer } from '@/lib/materieel/zoeken'
+import MaterieelRegel from './MaterieelRegel'
+import { GRIJS, kaart, ROOD, secundaireKnop, veld } from './stijl'
 
 /**
  * "Deze sticker hoort bij…" — kies uit het materieel dat nog geen sticker heeft.
@@ -17,7 +17,12 @@ import { GRIJS, kaart, RAND, ROOD, secundaireKnop, veld } from './stijl'
  * opzoeken, dan scannen) kan ook, via de knop op het paspoort.
  *
  * De lijst komt van de server, ook bij zoeken: bij een verse inventaris staan er
- * honderden objecten open en die stuur je niet allemaal naar een telefoon.
+ * honderden objecten open en die stuur je niet allemaal naar een telefoon. Er
+ * wordt gezocht over alle velden die op de regel staan — merk, type, soort,
+ * status, serienummer, keurings- of inventarisnummer en op wiens naam het staat.
+ * Dat laatste is in de praktijk de snelste ingang: je hebt een bus of een kist
+ * van één collega voor je, en dan filter je op zijn naam in plaats van door
+ * vierhonderd regels te scrollen.
  */
 export default function KoppelLijst({
   code, start, totaal,
@@ -25,7 +30,7 @@ export default function KoppelLijst({
   /** De ruwe payload van de gescande sticker. */
   code: string
   /** Eerste pagina van de lijst, al op de server geladen. */
-  start: MaterieelKort[]
+  start: MaterieelTreffer[]
   /** Hoeveel objecten er in totaal nog op een sticker wachten. */
   totaal: number
 }) {
@@ -51,7 +56,7 @@ export default function KoppelLijst({
     return () => { afgebroken = true; clearTimeout(timer) }
   }, [term])
 
-  async function koppel(object: MaterieelKort) {
+  async function koppel(object: MaterieelTreffer) {
     setBezig(object.id)
     setFout(null)
     const res = await koppelSticker(object.id, code)
@@ -75,7 +80,8 @@ export default function KoppelLijst({
       <input
         value={term}
         onChange={(e) => setTerm(e.target.value)}
-        placeholder="Zoek op omschrijving, merk of nummer"
+        placeholder="Zoek op naam, merk, nummer of wie het heeft"
+        type="search"
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
@@ -95,31 +101,14 @@ export default function KoppelLijst({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {lijst.map((o) => (
-            <button
+            <MaterieelRegel
               key={o.id}
-              type="button"
-              disabled={bezig !== null}
+              object={o}
+              fotoUrl={o.foto_url}
               onClick={() => koppel(o)}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '12px 14px', borderRadius: 12,
-                background: 'var(--bg-elev)', border: `1px solid ${RAND}`,
-                color: 'var(--fg)', font: 'inherit', cursor: 'pointer',
-                opacity: bezig !== null && bezig !== o.id ? 0.5 : 1,
-                WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>
-                {o.omschrijving}
-              </span>
-              <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 2 }}>
-                {[CATEGORIE_LABELS[o.categorie], o.merk, o.type, o.serienummer && `sn ${o.serienummer}`,
-                  o.inventarisnummer && `nr ${o.inventarisnummer}`].filter(Boolean).join(' · ')}
-              </span>
-              {bezig === o.id && (
-                <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 4 }}>Koppelen…</span>
-              )}
-            </button>
+              gedimd={bezig !== null && bezig !== o.id}
+              aanvulling={bezig === o.id ? 'Koppelen…' : undefined}
+            />
           ))}
         </div>
       )}

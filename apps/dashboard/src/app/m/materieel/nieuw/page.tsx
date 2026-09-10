@@ -1,5 +1,5 @@
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
-import { getMedewerkerOpties } from '@/lib/materieel/data'
+import { getMedewerkerOpties, getTeamOpties } from '@/lib/materieel/data'
 import AppHeader from '@/components/mobiel/AppHeader'
 import NieuwMaterieelForm from '@/components/mobiel/materieel/NieuwMaterieelForm'
 
@@ -16,7 +16,9 @@ export default async function NieuwMaterieelPage({
   searchParams: Promise<{ code?: string }>
 }) {
   const medewerker = await vereisMaterieelToegang('schrijven', '/m')
-  const [{ code }, medewerkers] = await Promise.all([searchParams, getMedewerkerOpties()])
+  const [{ code }, medewerkers, teams] = await Promise.all([
+    searchParams, getMedewerkerOpties(), getTeamOpties(),
+  ])
 
   const naam = [medewerker.voornaam, medewerker.achternaam].filter(Boolean).join(' ')
 
@@ -32,6 +34,7 @@ export default async function NieuwMaterieelPage({
         mijnId={medewerker.id}
         mijnNaam={naam}
         medewerkers={medewerkers}
+        teams={teams}
       />
     </>
   )

@@ -11,6 +11,7 @@ import {
 } from '@/lib/materieel/types'
 import { codeLabel } from '@/lib/materieel/qr'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
+import OptieKiezer from './OptieKiezer'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld, label as labelStijl } from './stijl'
 
 /**
@@ -26,15 +27,22 @@ import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld, label as 
  * Mislukt alleen de foto, dan is het materieel er wél — dat melden we, in plaats
  * van de hele registratie weg te gooien.
  *
- * "Op naam van" is een keuzelijst en geen vinkje: wie een partij gereedschap
+ * "Waar hoort het?" is een keuzelijst en geen vinkje: wie een partij gereedschap
  * invoert, doet dat vaak namens een collega die op dat moment niet meekijkt.
  * Jezelf staat bovenaan, want dat blijft het meest voorkomende geval.
+ *
+ * In diezelfde lijst staan ook algemeen gebruik en de teams — de werkplaats en
+ * de servicebussen. Het meeste dat je tijdens een stickerronde tegenkomt hoort
+ * namelijk niemand persoonlijk toe: het ligt in de werkplaats. Stond dat er niet
+ * bij, dan werd het op de naam van degene die stond te stickeren gezet en klopte
+ * "wie heeft wat" binnen een week niet meer.
  */
 export default function NieuwMaterieelForm({
   code,
   mijnId,
   mijnNaam,
   medewerkers,
+  teams,
 }: {
   /** Stickercode uit de scan; leeg als er zonder sticker wordt toegevoegd. */
   code: string | null
@@ -43,6 +51,8 @@ export default function NieuwMaterieelForm({
   mijnNaam: string
   /** Actieve collega's om het materieel aan uit te geven. */
   medewerkers: Optie[]
+  /** Servicebussen en werkplaatsen — materieel kan ook daaraan hangen. */
+  teams: Optie[]
 }) {
   const router = useRouter()
   const cameraRef = React.useRef<HTMLInputElement>(null)
@@ -54,8 +64,13 @@ export default function NieuwMaterieelForm({
   const [type, setType] = React.useState('')
   const [serienummer, setSerienummer] = React.useState('')
   const [opmerkingen, setOpmerkingen] = React.useState('')
-  /** Leeg = algemeen gebruik; anders het id van de collega die het krijgt. */
-  const [opNaamVan, setOpNaamVan] = React.useState('')
+  /**
+   * Waar het materieel aan hangt, als één waarde: `algemeen`, `m:<id>` voor een
+   * collega of `t:<id>` voor een team. Eén lijst omdat het één vraag is — waar
+   * ligt dit ding — en de gebruiker niet eerst hoeft te kiezen wát voor soort
+   * antwoord hij gaat geven.
+   */
+  const [hoortBij, setHoortBij] = React.useState('algemeen')
   const [foto, setFoto] = React.useState<File | null>(null)
   const [fotoUrl, setFotoUrl] = React.useState<string | null>(null)
 
@@ -75,6 +90,8 @@ export default function NieuwMaterieelForm({
     setBezig(true)
     setFout(null)
 
+    const [soort, doelId = ''] = hoortBij.split(':')
+
     const res = await maakMaterieelObject({
       omschrijving,
       categorie,
@@ -84,7 +101,8 @@ export default function NieuwMaterieelForm({
       type,
       serienummer,
       opmerkingen,
-      toegewezen_medewerker_id: opNaamVan,
+      toegewezen_medewerker_id: soort === 'm' ? doelId : '',
+      toegewezen_team_id: soort === 't' ? doelId : '',
     })
 
     if (!res.ok) { setFout(res.error); setBezig(false); return }
@@ -204,19 +222,27 @@ export default function NieuwMaterieelForm({
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="opNaamVan">Op naam van</label>
-          <select
-            id="opNaamVan"
-            value={opNaamVan}
-            onChange={(e) => setOpNaamVan(e.target.value)}
-            style={veld}
-          >
-            <option value="">Niemand — algemeen gebruik</option>
-            <option value={mijnId}>Mijzelf ({mijnNaam})</option>
-            {medewerkers
-              .filter((m) => m.id !== mijnId)
-              .map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
-          </select>
+          <label style={labelStijl} htmlFor="hoortBij">Waar hoort het?</label>
+          <OptieKiezer
+            id="hoortBij"
+            waarde={hoortBij}
+            onKies={setHoortBij}
+            vaste={{ id: 'algemeen', naam: 'Algemeen gebruik' }}
+            groepen={[
+              ...(teams.length > 0 ? [{
+                label: 'Werkplaats en bussen',
+                opties: teams.map((t) => ({ id: `t:${t.id}`, naam: t.naam })),
+              }] : []),
+              {
+                label: "Collega's",
+                opties: [
+                  { id: `m:${mijnId}`, naam: `Mijzelf (${mijnNaam})` },
+                  ...medewerkers.filter((m) => m.id !== mijnId).map((m) => ({ id: `m:${m.id}`, naam: m.naam })),
+                ],
+              },
+            ]}
+            zoekPlaatshouder="Typ een naam of werkplaats"
+          />
         </div>
 
         <div style={{ marginBottom: 12 }}>

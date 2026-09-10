@@ -57,19 +57,27 @@ export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<
   const parsed = nieuwMaterieelSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldige invoer' }
 
-  // De medewerker-keuze is geen kolom-waarde maar een toewijzing: apart afhandelen.
-  const { toegewezen_medewerker_id: medewerkerId, ...velden } = parsed.data
+  // De toewijzing is geen kolom-waarde maar een gebeurtenis: apart afhandelen.
+  const {
+    toegewezen_medewerker_id: medewerkerId,
+    toegewezen_team_id: teamId,
+    ...velden
+  } = parsed.data
   const client = db()
+
+  // Niets gekozen → algemeen gebruik. Een team telt hier net zo goed als een
+  // persoon: gereedschap dat op de werkplaats of in een bus ligt, staat daarop.
+  const niveau = medewerkerId ? 'persoonlijk' : teamId ? 'team' : 'algemeen'
 
   const { data, error } = await client
     .from('materieel_objecten')
     .insert({
       ...velden,
       created_by: g.medewerker.id,
-      // Geen medewerker gekozen → algemeen gebruik.
-      toewijzing_niveau: medewerkerId ? 'persoonlijk' : 'algemeen',
+      toewijzing_niveau: niveau,
       toegewezen_medewerker_id: medewerkerId ?? null,
-      status: medewerkerId ? 'in_gebruik' : velden.status,
+      toegewezen_team_id: teamId ?? null,
+      status: niveau === 'algemeen' ? velden.status : 'in_gebruik',
     })
     .select('id').single()
 
@@ -77,9 +85,11 @@ export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<
   const id = data.id as string
 
   // Historie vastleggen zodat de uitgifte later herleidbaar is.
-  if (medewerkerId) {
+  if (niveau !== 'algemeen') {
     await client.from('materieel_toewijzingen').insert({
-      object_id: id, niveau: 'persoonlijk', medewerker_id: medewerkerId,
+      object_id: id, niveau,
+      medewerker_id: medewerkerId ?? null,
+      team_id: teamId ?? null,
       door: g.medewerker.id, opmerking: 'Toegewezen bij registratie',
     })
   }

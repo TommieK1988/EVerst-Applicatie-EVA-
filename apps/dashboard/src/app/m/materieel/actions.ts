@@ -5,7 +5,7 @@ import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import type { ScanBestemming } from '@/lib/materieel/qr'
-import { getZonderSticker, zoekOpCode, type MaterieelKort } from '@/lib/materieel/zoeken'
+import { getZonderSticker, zoekMaterieel, zoekOpCode, type MaterieelTreffer } from '@/lib/materieel/zoeken'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -56,9 +56,24 @@ export async function zoekScan(payload: string): Promise<Uitkomst<ScanBestemming
  * verse inventaris staan er honderden objecten te wachten, en dat wil je niet
  * allemaal over een bouwverbinding trekken.
  */
-export async function zoekTeStickeren(term: string): Promise<Uitkomst<MaterieelKort[]>> {
+export async function zoekTeStickeren(term: string): Promise<Uitkomst<MaterieelTreffer[]>> {
   const g = await gate(); if (!g.ok) return g
   return { ok: true, data: await getZonderSticker(term, 50) }
+}
+
+/**
+ * Vrij zoeken in al het materieel, voor het zoekveld op het beginscherm.
+ *
+ * Alleen lezen: kijken wat er is en van wie het is mag iedereen met toegang tot
+ * de module. Zoekt over alle velden die op het scherm staan — omschrijving,
+ * merk, type, soort, status, serienummer, keurings-/inventarisnummer en de naam
+ * waar het op staat.
+ */
+export async function zoekAlMaterieel(term: string): Promise<Uitkomst<MaterieelTreffer[]>> {
+  const g = await gate('lezen'); if (!g.ok) return g
+  const schoon = term.trim()
+  if (schoon.length < 2) return { ok: true, data: [] }
+  return { ok: true, data: await zoekMaterieel(schoon, { limiet: 50 }) }
 }
 
 /**

@@ -9,14 +9,18 @@ import {
 } from '@/lib/materieel/zoeken'
 import { CATEGORIE_LABELS, STATUS_META } from '@/lib/materieel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
+import MaterieelZoek from '@/components/mobiel/materieel/MaterieelZoek'
 
 export const metadata = { title: 'Materieel' }
 export const dynamic = 'force-dynamic'
 
 /**
  * Startscherm van materieel op de telefoon: scannen staat vooraan, want dat is
- * wat je in de bus of het magazijn doet. Daaronder je eigen spullen, zodat je
- * zonder te scannen kunt kijken wat er op jouw naam staat.
+ * wat je in de bus of het magazijn doet. Daaronder een zoekveld over al het
+ * materieel — niet alles heeft een leesbare sticker, en dan zoek je op wat er
+ * wél op staat: merk, serienummer of het nummer van de keuringssticker. Onderaan
+ * je eigen spullen, zodat je zonder te scannen of te zoeken kunt kijken wat er op
+ * jouw naam staat.
  */
 export default async function MobielMaterieelPage() {
   const medewerker = await vereisMaterieelToegang('lezen', '/m')
@@ -67,22 +71,24 @@ export default async function MobielMaterieelPage() {
           </Link>
         )}
 
-        {teStickerenTotaal > 0 && (
-          <Lijst
-            /* Werkvoorraad bij het stickeren van een bestaande inventaris: kantoor
-               voert in, de bus plakt. Open je zo'n object, dan zit de knop
-               "Sticker koppelen" op het paspoort. */
-            titel={`Nog geen sticker (${teStickerenTotaal})`}
-            items={teStickeren}
-            fotos={fotos}
-            leeg=""
-          />
-        )}
+        <MaterieelZoek>
+          {teStickerenTotaal > 0 && (
+            <Lijst
+              /* Werkvoorraad bij het stickeren van een bestaande inventaris: kantoor
+                 voert in, de bus plakt. Open je zo'n object, dan zit de knop
+                 "Sticker koppelen" op het paspoort. */
+              titel={`Nog geen sticker (${teStickerenTotaal})`}
+              items={teStickeren}
+              fotos={fotos}
+              leeg=""
+            />
+          )}
 
-        <Lijst titel="Op mijn naam" items={mijn} fotos={fotos} leeg="Er staat nog niets op jouw naam." />
-        {overig.length > 0 && (
-          <Lijst titel="Recent door mij toegevoegd" items={overig} fotos={fotos} leeg="" />
-        )}
+          <Lijst titel="Op mijn naam" items={mijn} fotos={fotos} leeg="Er staat nog niets op jouw naam." />
+          {overig.length > 0 && (
+            <Lijst titel="Recent door mij toegevoegd" items={overig} fotos={fotos} leeg="" />
+          )}
+        </MaterieelZoek>
       </div>
     </>
   )

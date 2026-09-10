@@ -10,6 +10,7 @@ import {
   CATEGORIE_LABELS, STATUS_META,
   type MaterieelCategorie, type MaterieelStatus, type Optie,
 } from '@/lib/materieel/types'
+import OptieKiezer from './OptieKiezer'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './stijl'
 
 /**
@@ -67,8 +68,12 @@ export default function PaspoortMobiel({
   const [melding, setMelding] = React.useState<string | null>(null)
   const [storingOpen, setStoringOpen] = React.useState(false)
   const [storingTekst, setStoringTekst] = React.useState('')
-  // Waarde van de uitgifte-keuzelijst: 'm:<id>' of 't:<id>' — één lijst met
-  // collega's én bussen/werkplaatsen, want dat is dezelfde vraag: waar ligt het.
+  // Waarde van de uitgifte-keuzelijst: 'algemeen', 'm:<id>' of 't:<id>' — één
+  // lijst met collega's én bussen/werkplaatsen, want dat is dezelfde vraag: waar
+  // ligt het. "Algemeen gebruik" hoort daar ook in: veel gereedschap ligt gewoon
+  // in de werkplaats en hoort niemand toe, en zonder die keuze was de enige
+  // manier om dat vast te leggen het eerst op je eigen naam zetten en daarna
+  // weer inleveren.
   const [uitgifte, setUitgifte] = React.useState('')
 
   // Scan éénmalig vastleggen. Zonder deze markering vuurt het in
@@ -164,34 +169,35 @@ export default function PaspoortMobiel({
           {magBeheren && (medewerkers.length > 0 || teams.length > 0) && (
             <div style={kaart}>
               <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600, marginBottom: 6 }}>
-                Uitgeven aan
+                Waar hoort het?
               </div>
-              <select
-                value={uitgifte}
-                onChange={(e) => setUitgifte(e.target.value)}
-                style={{ ...veld, marginBottom: 8 }}
-              >
-                <option value="">Kies een collega of team…</option>
-                {medewerkers.length > 0 && (
-                  <optgroup label="Collega's">
-                    {medewerkers.map((m) => (
-                      <option key={m.id} value={`m:${m.id}`}>{m.naam}</option>
-                    ))}
-                  </optgroup>
-                )}
-                {teams.length > 0 && (
-                  <optgroup label="Bussen en werkplaatsen">
-                    {teams.map((t) => (
-                      <option key={t.id} value={`t:${t.id}`}>{t.naam}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
+              <div style={{ marginBottom: 8 }}>
+                <OptieKiezer
+                  waarde={uitgifte}
+                  onKies={setUitgifte}
+                  vaste={{ id: 'algemeen', naam: 'Algemeen gebruik' }}
+                  groepen={[
+                    ...(teams.length > 0 ? [{
+                      label: 'Werkplaats en bussen',
+                      opties: teams.map((t) => ({ id: `t:${t.id}`, naam: t.naam })),
+                    }] : []),
+                    ...(medewerkers.length > 0 ? [{
+                      label: "Collega's",
+                      opties: medewerkers.map((m) => ({ id: `m:${m.id}`, naam: m.naam })),
+                    }] : []),
+                  ]}
+                  plaatshouder="Kies een collega, werkplaats of bus…"
+                  zoekPlaatshouder="Typ een naam of werkplaats"
+                />
+              </div>
               <button
                 type="button"
                 disabled={bezig || uitgifte === ''}
                 onClick={() => {
                   const [soort, id] = uitgifte.split(':')
+                  // Algemeen gebruik is geen toewijzing maar het ontbreken ervan;
+                  // `neemTerug` sluit de lopende uitgifte netjes af.
+                  if (soort === 'algemeen') return doe(() => neemTerug(object.id), 'Op algemeen gebruik gezet')
                   return doe(
                     () => wijsToe(object.id, soort === 't'
                       ? { niveau: 'team', team_id: id }
