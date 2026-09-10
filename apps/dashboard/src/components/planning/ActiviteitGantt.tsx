@@ -21,6 +21,7 @@ import {
   maakPlanningFase, updatePlanningFase, verschuifPlanningFase, verwijderPlanningFase,
   maakAfhankelijkheid, verwijderAfhankelijkheid,
 } from '@/app/(platform)/planning/actions'
+import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
 import {
   PeriodeNav, PeriodeScrubber, usePlanningController,
   dagOffset, verschuifTs, verschuifDatum,
@@ -245,11 +246,74 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   )
 }
 
+// ─── Bewakingscode ────────────────────────────────────────────────────────────
+//
+// Een planitem wordt via zijn activiteit op een bewakingscode geboekt. Zonder code vallen de
+// geplande uren buiten de bewaking (ze verdwijnen uit de kolom "Gepland" bovenin), dus kiest
+// elke activiteit er één. De fase kan de keuze voorzeggen: haar code erft naar alles eronder.
+
+/** Codes zijn niet uniek op nummer — hetzelfde nummer kan in twee hoofdstukken staan met een
+ *  eigen omschrijving. De keuzelijst identificeert een regel daarom op nummer + omschrijving. */
+function codeSleutel(c: PlanningBewakingscode): string {
+  return `${c.code}␟${c.naam ?? ''}`
+}
+
+/** De eerste code met dit nummer — voor het terugvinden van een eerder gemaakte keuze. */
+function zoekCode(codes: PlanningBewakingscode[], code: string | null): PlanningBewakingscode | null {
+  if (!code) return null
+  return codes.find(c => c.code === code) ?? null
+}
+
+function codeLabel(c: PlanningBewakingscode): string {
+  return c.naam ? `${c.code} — ${c.naam}` : c.code
+}
+
+function BewakingscodeSelect({ codes, waarde, onKies, disabled, legeTekst, style }: {
+  codes: PlanningBewakingscode[]
+  /** De gekozen code (het kale nummer), of null. */
+  waarde: string | null
+  onKies: (code: PlanningBewakingscode | null) => void
+  disabled?: boolean
+  legeTekst?: string
+  style?: React.CSSProperties
+}) {
+  const gekozen = zoekCode(codes, waarde)
+  const groepen = useMemo(() => {
+    const m = new Map<string, PlanningBewakingscode[]>()
+    for (const c of codes) {
+      const k = c.hoofdstuk ?? 'Overig'
+      const lijst = m.get(k) ?? []
+      lijst.push(c); m.set(k, lijst)
+    }
+    return [...m.entries()]
+  }, [codes])
+
+  return (
+    <select
+      className="eva-input"
+      disabled={disabled}
+      style={style}
+      value={gekozen ? codeSleutel(gekozen) : ''}
+      onChange={e => onKies(codes.find(c => codeSleutel(c) === e.target.value) ?? null)}
+    >
+      <option value="">{legeTekst ?? '— kies bewakingscode —'}</option>
+      {groepen.length === 1
+        ? groepen[0][1].map(c => <option key={codeSleutel(c)} value={codeSleutel(c)}>{codeLabel(c)}</option>)
+        : groepen.map(([hoofdstuk, lijst]) => (
+            <optgroup key={hoofdstuk} label={hoofdstuk}>
+              {lijst.map(c => <option key={codeSleutel(c)} value={codeSleutel(c)}>{codeLabel(c)}</option>)}
+            </optgroup>
+          ))}
+    </select>
+  )
+}
+
 // ─── ActiviteitEditModal ──────────────────────────────────────────────────────
 
-function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerkers, fasen, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onVerwijder, onClose }: {
+function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerkers, fasen, bewakingscodes, roosters, afwezigheid, alleActiviteiten, afhankelijkheden, werkbegrotingUursoortIds, dossier_id, uursoortLabel, onSave, onItemCreated, onItemVerwijderd, onAfhankelijkheidChanged, onVerwijder, onClose }: {
   activiteit: PlanningActiviteit; items: PlanningItemVerrijkt[]; uursoorten: PlanningUursoort[]
   partijen: Partij[]; medewerkers: Medewerker[]; fasen: PlanningFase[]
+  bewakingscodes: PlanningBewakingscode[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
   alleActiviteiten: PlanningActiviteit[]; afhankelijkheden: PlanningAfhankelijkheid[]
   werkbegrotingUursoortIds: string[]; dossier_id: string
@@ -264,6 +328,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   const [titel,        setTitel]        = useState(activiteit.titel)
   const [uursoortId,   setUursoortId]   = useState(activiteit.uursoort_id ?? '')
   const [faseId,       setFaseId]       = useState(activiteit.fase_id ?? '')
+  const [code,         setCode]         = useState<PlanningBewakingscode | null>(() => zoekCode(bewakingscodes, activiteit.bewakingscode))
   const [partijId,     setPartijId]     = useState(activiteit.onderaannemer_id ?? '')
   const [start,        setStart]        = useState(activiteit.gewenste_start ?? '')
   const [deadline,     setDeadline]     = useState(activiteit.deadline ?? '')
@@ -292,10 +357,23 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   const opvolgers   = afhankelijkheden.filter(a => a.van_activiteit_id  === activiteit.id)
   const andereActiviteiten = alleActiviteiten.filter(a => a.id !== activiteit.id)
 
+  // Uit Bouw7 gesyncte activiteiten dragen de code van hun plan-item daar; die hier wijzigen
+  // zou de volgende sync stil terugdraaien, dus is het veld dan alleen-lezen.
+  const uitBouw7 = activiteit.bron === 'bouw7'
+  const codeVerplicht = bewakingscodes.length > 0 && !uitBouw7
+  const faseStandaard = fasen.find(f => f.id === faseId)?.bewakingscode ?? null
+
   async function opslaan() {
     if (!titel.trim()) return
+    // Niets gekozen maar de fase draagt een code? Dan is die de keuze — dat is wat de kiezer
+    // ook toont ("— van de fase: 410.A —").
+    const effectief = code ?? zoekCode(bewakingscodes, faseStandaard)
+    if (codeVerplicht && !effectief) { toast.error('Kies een bewakingscode — daar komen de geplande uren op terecht.'); return }
     setBusy(true)
-    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: partijId || null, gewenste_start: start || null, deadline: deadline || null, geschatte_uren: uren ? parseFloat(uren) : null, omschrijving: omschrijving || null })
+    const codePatch = uitBouw7
+      ? {}
+      : { bewakingscode: effectief?.code ?? null, bouw7_security_code_id: effectief?.bouw7_security_code_id ?? null }
+    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: partijId || null, gewenste_start: start || null, deadline: deadline || null, geschatte_uren: uren ? parseFloat(uren) : null, omschrijving: omschrijving || null, ...codePatch })
     setBusy(false); onClose()
   }
 
@@ -350,6 +428,24 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
                 {fasen.map(f => <option key={f.id} value={f.id}>{f.naam}</option>)}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label style={S.lbl}>Bewakingscode{codeVerplicht ? ' *' : ''}</label>
+            <BewakingscodeSelect
+              codes={bewakingscodes}
+              waarde={code?.code ?? null}
+              onKies={setCode}
+              disabled={uitBouw7}
+              legeTekst={faseStandaard ? `— van de fase: ${faseStandaard} —` : '— kies bewakingscode —'}
+            />
+            <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+              {uitBouw7
+                ? 'Deze activiteit komt uit Bouw7; de bewakingscode volgt de planning daar.'
+                : bewakingscodes.length === 0
+                  ? 'Dit dossier kent nog geen bewakingscodes in Bouw7.'
+                  : 'Hierop worden de geplande uren van deze activiteit geboekt.'}
+            </p>
           </div>
 
           <div>
@@ -777,6 +873,82 @@ function AfhankelijkheidSVG({ afhankelijkheden, activiteitMap, activiteitRowY, v
   )
 }
 
+// ─── FaseEditModal ────────────────────────────────────────────────────────────
+
+/**
+ * Naam + bewakingscode van een fase. De code is de standaard voor alles wat eronder hangt:
+ * bij opslaan zakt hij door naar de activiteiten in deze fase. Activiteiten met een bewust
+ * afwijkende code blijven staan tenzij de planner daar expliciet ja op zegt.
+ */
+function FaseEditModal({ fase, bewakingscodes, activiteitenInFase, onOpslaan, onClose }: {
+  fase: PlanningFase
+  bewakingscodes: PlanningBewakingscode[]
+  activiteitenInFase: PlanningActiviteit[]
+  onOpslaan: (v: { naam: string; code: PlanningBewakingscode | null; overschrijfAfwijkend: boolean }) => Promise<void>
+  onClose: () => void
+}) {
+  const [naam, setNaam] = useState(fase.naam)
+  const [code, setCode] = useState<PlanningBewakingscode | null>(() => zoekCode(bewakingscodes, fase.bewakingscode))
+  const [busy, setBusy] = useState(false)
+  const { bevestig } = useDialogen()
+
+  const eigen = activiteitenInFase.filter(a => a.bron === 'eva')
+  const zonderCode = eigen.filter(a => !a.bewakingscode).length
+  const afwijkend  = code ? eigen.filter(a => a.bewakingscode && a.bewakingscode !== code.code).length : 0
+
+  async function opslaan() {
+    if (!naam.trim()) return
+    let overschrijfAfwijkend = false
+    if (afwijkend > 0) {
+      overschrijfAfwijkend = await bevestig({
+        titel: 'Ook de afwijkende activiteiten overzetten?',
+        omschrijving: `${afwijkend} activiteit${afwijkend === 1 ? '' : 'en'} in deze fase staat op een andere bewakingscode. `
+          + `Overzetten naar ${code!.code}, of die keuze laten staan?`,
+        bevestigLabel: `Overzetten naar ${code!.code}`,
+        annuleerLabel: 'Laten staan',
+      })
+    }
+    setBusy(true)
+    await onOpslaan({ naam: naam.trim(), code, overschrijfAfwijkend })
+    setBusy(false)
+  }
+
+  return (
+    <div style={S.backdrop}>
+      <div className="eva-card" style={{ padding: '24px 28px', width: 460, maxWidth: '95vw' }}>
+        <h3 style={S.dlgTitle}>Fase bewerken</h3>
+        <p style={S.dlgSub}>De bewakingscode van een fase geldt voor de activiteiten eronder.</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={S.lbl}>Naam</label>
+            <input className="eva-input" value={naam} autoFocus onChange={e => setNaam(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') opslaan() }} />
+          </div>
+          <div>
+            <label style={S.lbl}>Bewakingscode</label>
+            <BewakingscodeSelect codes={bewakingscodes} waarde={code?.code ?? null} onKies={setCode}
+              legeTekst="— geen; per activiteit kiezen —" />
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+              {bewakingscodes.length === 0
+                ? 'Dit dossier kent nog geen bewakingscodes in Bouw7.'
+                : code
+                  ? `Nieuwe activiteiten in deze fase krijgen ${code.code}.`
+                    + (zonderCode > 0 ? ` ${zonderCode} activiteit${zonderCode === 1 ? '' : 'en'} zonder code krijgt hem nu ook.` : '')
+                  : 'Zonder code op de fase kiest elke activiteit er zelf één.'}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
+          <button className="eva-btn-primary" onClick={opslaan} disabled={busy || !naam.trim()}>{busy ? '…' : 'Opslaan'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── FaseRij ──────────────────────────────────────────────────────────────────
 
 function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onVerwijder, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
@@ -836,8 +1008,14 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
           style={{ width: 20, height: 20, flexShrink: 0, display: 'grid', placeItems: 'center', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--fg-muted)', fontSize: 11 }}>
           {ingeklapt ? '▶' : '▼'}
         </button>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--fg-muted)', flex: 1, paddingLeft: 2 }}>{fase.naam}</span>
-        <button title="Naam wijzigen" onClick={onEdit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>✎</button>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--fg-muted)', flex: 1, paddingLeft: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fase.naam}</span>
+        {fase.bewakingscode && (
+          <span title={`Bewakingscode van deze fase — activiteiten eronder erven hem`}
+            style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent)18', padding: '1px 5px', borderRadius: 3, flexShrink: 0, letterSpacing: '0.03em' }}>
+            {fase.bewakingscode}
+          </span>
+        )}
+        <button title="Fase bewerken (naam + bewakingscode)" onClick={onEdit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>✎</button>
         <button title="Activiteit toevoegen" onClick={onNieuweActiviteit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 14, color: 'var(--accent)' }}>+</button>
         <button title="Fase verwijderen" onClick={onVerwijder} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>🗑</button>
       </div>
@@ -1004,8 +1182,13 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activiteit.titel}</span>
               {partijStijl && <span title={partijStijl.label} style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: partijStijl.kleur, background: `${partijStijl.kleur}16`, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>{partijStijl.kort}</span>}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 1 }}>
-              {isExtern && partij ? partij.naam : uursoort?.naam ?? ''}
+            <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              {activiteit.bewakingscode
+                ? <span title="Bewakingscode — hierop worden de geplande uren geboekt" style={{ fontWeight: 700, color: 'var(--fg-soft)', flexShrink: 0 }}>{activiteit.bewakingscode}</span>
+                : <span title="Zonder bewakingscode vallen de geplande uren buiten de bewaking" style={{ fontWeight: 700, color: '#e67e22', flexShrink: 0 }}>geen code</span>}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {isExtern && partij ? partij.naam : uursoort?.naam ?? ''}
+              </span>
             </div>
           </div>
           <div style={{ width: 36, flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--fg-muted)', marginRight: 8 }}>{duurDagen != null ? `${duurDagen}d` : ''}</div>
@@ -1142,13 +1325,15 @@ type Props = {
   medewerkers: Medewerker[]; uursoorten: PlanningUursoort[]
   partijen: Partij[]; werkbegrotingUursoortIds: string[]
   fasen: PlanningFase[]; afhankelijkheden: PlanningAfhankelijkheid[]
+  /** Keuzelijst voor de verplichte bewakingscode per activiteit (leeg = dossier kent er geen). */
+  bewakingscodes?: PlanningBewakingscode[]
   roosters?: MedewerkerRooster[]
   afwezigheid?: MedewerkerAfwezigheid[]
   uurtarieven?: Uurtarief[]
   taken?: TaakMarker[]
 }
 
-export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, partijen, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
+export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, partijen, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, bewakingscodes = [], roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
   const router     = useRouter()
   const [, startT] = useTransition()
   const rowsRef    = useRef<HTMLDivElement>(null)
@@ -1164,7 +1349,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [items,        setItems]        = useState(initI)
   const [fasen,        setFasen]        = useState(initF)
   const [afhankelijkheden, setAfhankelijkheden] = useState(initAfh)
-  const { vraagTekst, bevestig } = useDialogen()
+  const { bevestig } = useDialogen()
 
   // Sync vanuit server-props na router.refresh()
   useEffect(() => { setActiviteiten(initA) }, [initA])
@@ -1202,9 +1387,18 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [nieuweFId,     setNieuweFId]     = useState('')
   const [nieuweStart,   setNieuweStart]   = useState('')
   const [savingN,       setSavingN]       = useState(false)
+  const [nieuweCode,    setNieuweCode]    = useState<PlanningBewakingscode | null>(null)
   const [toonNwFase,    setToonNwFase]    = useState(false)
   const [nwFaseNaam,    setNwFaseNaam]    = useState('')
+  const [nwFaseCode,    setNwFaseCode]    = useState<PlanningBewakingscode | null>(null)
   const [savingF,       setSavingF]       = useState(false)
+  const [editFase,      setEditFase]      = useState<PlanningFase | null>(null)
+
+  // Een code is verplicht zodra dit dossier er kent; kent het er geen, dan valt er niets te kiezen.
+  const codeVerplicht = bewakingscodes.length > 0
+  /** De code die een nieuwe activiteit krijgt als de planner zelf niets kiest: die van de fase. */
+  const nieuweFaseCode = zoekCode(bewakingscodes, fasen.find(f => f.id === nieuweFId)?.bewakingscode ?? null)
+  const nieuweEffectieveCode = nieuweCode ?? nieuweFaseCode
 
   // Layout (vaste dagbreedte + horizontale scroll) komt uit de gedeelde controller.
   const { vs, ve, ppd, totalDays, totalW, spans, cols, gridUnits } = layout
@@ -1395,35 +1589,71 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
 
   async function handleNieuweActiviteit(faseId?: string) {
     if (!nieuweNaam.trim()) return
+    // De code van de fase telt als keuze; alleen als ook die er niet is, houden we het tegen.
+    const doelFase = faseId ?? (nieuweFId || null)
+    const code = nieuweCode ?? zoekCode(bewakingscodes, fasen.find(f => f.id === doelFase)?.bewakingscode ?? null)
+    if (codeVerplicht && !code) {
+      toast.error('Kies een bewakingscode — daar komen de geplande uren van deze activiteit op terecht.')
+      return
+    }
     setSavingN(true)
     const result = await maakPlanningActiviteit({
       dossier_id, titel: nieuweNaam.trim(),
       uursoort_id: nieuweUid || null,
-      fase_id: faseId ?? (nieuweFId || null),
+      fase_id: doelFase,
+      bewakingscode: code?.code ?? null,
+      bouw7_security_code_id: code?.bouw7_security_code_id ?? null,
       gewenste_start: nieuweStart || null,
       status: 'backlog', volgorde: activiteiten.length + 1,
     })
     setSavingN(false)
     if (!result.ok) { toast.error(result.error); return }
     setActiviteiten(prev => [...prev, result.data])
-    setNieuweNaam(''); setNieuweUid(''); setNieuweFId(''); setNieuweStart(''); setToonNieuw(false)
+    setNieuweNaam(''); setNieuweUid(''); setNieuweFId(''); setNieuweStart(''); setNieuweCode(null); setToonNieuw(false)
   }
 
   function handleTimelineClick(clickDate: string, faseId: string | null) {
     setNieuweStart(clickDate)
     setNieuweFId(faseId ?? '')
+    setNieuweCode(null)
     setToonNieuw(true)
   }
 
   async function handleNieuweFase() {
     if (!nwFaseNaam.trim()) return
     setSavingF(true)
-    const result = await maakPlanningFase(dossier_id, nwFaseNaam.trim())
+    const result = await maakPlanningFase(dossier_id, nwFaseNaam.trim(), {
+      bewakingscode: nwFaseCode?.code ?? null,
+      bouw7_security_code_id: nwFaseCode?.bouw7_security_code_id ?? null,
+    })
     setSavingF(false)
     if (!result.ok) { toast.error(result.error); return }
     setFasen(prev => [...prev, result.data])
-    setNwFaseNaam(''); setToonNwFase(false)
+    setNwFaseNaam(''); setNwFaseCode(null); setToonNwFase(false)
     toast.success('Fase aangemaakt')
+  }
+
+  /** Naam + bewakingscode van een fase opslaan; de code zakt door naar de activiteiten eronder. */
+  async function handleFaseOpslaan(
+    fase: PlanningFase,
+    v: { naam: string; code: PlanningBewakingscode | null; overschrijfAfwijkend: boolean },
+  ) {
+    const result = await updatePlanningFase(fase.id, {
+      naam: v.naam,
+      bewakingscode: v.code?.code ?? null,
+      bouw7_security_code_id: v.code?.bouw7_security_code_id ?? null,
+      overschrijf_afwijkend: v.overschrijfAfwijkend,
+    })
+    if (!result.ok) { toast.error(result.error); return }
+    setFasen(prev => prev.map(f => f.id === fase.id
+      ? { ...f, naam: v.naam, bewakingscode: v.code?.code ?? null, bouw7_security_code_id: v.code?.bouw7_security_code_id ?? null }
+      : f))
+    setEditFase(null)
+    const n = result.activiteiten_bijgewerkt ?? 0
+    toast.success(n > 0
+      ? `Fase opgeslagen — ${n} activiteit${n === 1 ? '' : 'en'} op ${v.code!.code} gezet`
+      : 'Fase opgeslagen')
+    startT(() => router.refresh())
   }
 
   async function handleFaseShift(faseId: string, deltaDagen: number) {
@@ -1675,8 +1905,12 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
       {toonNwFase && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, padding: '8px 12px', background: 'var(--bg-elev)', borderRadius: 8, border: '1px solid var(--border)', alignItems: 'center' }}>
           <input className="eva-input" autoFocus placeholder="Naam van de fase" value={nwFaseNaam} onChange={e => setNwFaseNaam(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleNieuweFase(); if (e.key === 'Escape') setToonNwFase(false) }} style={{ flex: 1, fontSize: 13 }} />
+          {bewakingscodes.length > 0 && (
+            <BewakingscodeSelect codes={bewakingscodes} waarde={nwFaseCode?.code ?? null} onKies={setNwFaseCode}
+              legeTekst="— bewakingscode (optioneel) —" style={{ width: 260, fontSize: 13 }} />
+          )}
           <button className="eva-btn-primary" style={{ fontSize: 13 }} onClick={handleNieuweFase} disabled={savingF || !nwFaseNaam.trim()}>{savingF ? '…' : 'Aanmaken'}</button>
-          <button className="eva-btn-ghost" style={{ fontSize: 13 }} onClick={() => setToonNwFase(false)}>✕</button>
+          <button className="eva-btn-ghost" style={{ fontSize: 13 }} onClick={() => { setToonNwFase(false); setNwFaseCode(null) }}>✕</button>
         </div>
       )}
 
@@ -1733,20 +1967,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                     vs={vs} ppd={ppd} totalDays={totalDays}
                     faseStart={faseBereik[row.fase.id]?.start ?? null}
                     faseEind={faseBereik[row.fase.id]?.eind ?? null}
-                    onEdit={async () => {
-                      const naam = await vraagTekst({
-                        titel: 'Fase hernoemen',
-                        label: 'Naam van de fase',
-                        standaard: row.fase.naam,
-                        verplicht: true,
-                        bevestigLabel: 'Opslaan',
-                      })
-                      if (naam && naam.trim() && naam.trim() !== row.fase.naam) {
-                        const r = await updatePlanningFase(row.fase.id, { naam: naam.trim() })
-                        if (!r.ok) toast.error(r.error)
-                        else { setFasen(prev => prev.map(f => f.id === row.fase.id ? { ...f, naam: naam.trim() } : f)); startT(() => router.refresh()) }
-                      }
-                    }}
+                    onEdit={() => setEditFase(row.fase)}
                     onNieuweActiviteit={() => { setNieuweFId(row.fase.id); setNieuweStart(''); setToonNieuw(true) }}
                     onVerwijder={() => handleVerwijderFase(row.fase)}
                     onShift={(d) => handleFaseShift(row.fase.id, d)}
@@ -1823,13 +2044,18 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                 {uursoortOpties.zB.length > 0 && <optgroup label="Overig">{uursoortOpties.zB.map(u => <option key={u.id} value={u.id}>{uursoortLabel(u)}</option>)}</optgroup>}
               </select>
               {fasen.length > 0 && (
-                <select className="eva-input" value={nieuweFId} onChange={e => setNieuweFId(e.target.value)} style={{ width: 140, fontSize: 13 }}>
+                <select className="eva-input" value={nieuweFId} onChange={e => { setNieuweFId(e.target.value); setNieuweCode(null) }} style={{ width: 140, fontSize: 13 }}>
                   <option value="">— geen fase —</option>
                   {fasen.map(f => <option key={f.id} value={f.id}>{f.naam}</option>)}
                 </select>
               )}
-              <button className="eva-btn-primary" style={{ fontSize: 13 }} onClick={() => handleNieuweActiviteit(nieuweFId || undefined)} disabled={savingN || !nieuweNaam.trim()}>{savingN ? '…' : 'Opslaan'}</button>
-              <button className="eva-btn-ghost" style={{ fontSize: 13 }} onClick={() => { setToonNieuw(false); setNieuweFId(''); setNieuweStart('') }}>✕</button>
+              {bewakingscodes.length > 0 && (
+                <BewakingscodeSelect codes={bewakingscodes} waarde={nieuweEffectieveCode?.code ?? null} onKies={setNieuweCode}
+                  legeTekst={nieuweFaseCode ? `— van de fase: ${nieuweFaseCode.code} —` : '— bewakingscode * —'}
+                  style={{ width: 240, fontSize: 13 }} />
+              )}
+              <button className="eva-btn-primary" style={{ fontSize: 13 }} onClick={() => handleNieuweActiviteit(nieuweFId || undefined)} disabled={savingN || !nieuweNaam.trim() || (codeVerplicht && !nieuweEffectieveCode)} title={codeVerplicht && !nieuweEffectieveCode ? 'Kies eerst een bewakingscode' : undefined}>{savingN ? '…' : 'Opslaan'}</button>
+              <button className="eva-btn-ghost" style={{ fontSize: 13 }} onClick={() => { setToonNieuw(false); setNieuweFId(''); setNieuweStart(''); setNieuweCode(null) }}>✕</button>
             </div>
           )}
         </div>
@@ -1847,6 +2073,17 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         </div>
       )}
 
+      {/* Fase bewerken */}
+      {editFase && (
+        <FaseEditModal
+          fase={editFase}
+          bewakingscodes={bewakingscodes}
+          activiteitenInFase={activiteiten.filter(a => a.fase_id === editFase.id)}
+          onOpslaan={v => handleFaseOpslaan(editFase, v)}
+          onClose={() => setEditFase(null)}
+        />
+      )}
+
       {/* Edit modal */}
       {editActiviteit && (
         <ActiviteitEditModal
@@ -1854,6 +2091,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
           items={itemsPerActiviteit[editActiviteit.id] ?? []}
           uursoorten={uursoorten} partijen={partijen}
           medewerkers={medewerkers} fasen={fasen}
+          bewakingscodes={bewakingscodes}
           roosters={roosters} afwezigheid={afwezigheid}
           alleActiviteiten={activiteiten}
           afhankelijkheden={afhankelijkheden.filter(a => a.van_activiteit_id === editActiviteit.id || a.naar_activiteit_id === editActiviteit.id)}

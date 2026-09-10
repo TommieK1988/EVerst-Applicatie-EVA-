@@ -283,6 +283,15 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
     }
 
     const linkId = await zoekPlanningLink(client, ctx.projectId, ctx.securityCodeId)
+    // Wel een code, geen link: dan staat er in Bouw7 nog geen enkel plan-item op die code en
+    // is de link (een eigen entiteit, alleen zichtbaar op bestaande plan-items) niet af te
+    // leiden. Het item landt dan ongecodeerd — dat hoort in het log te staan, niet stil te gaan.
+    if (ctx.securityCodeId && !linkId) {
+      console.warn(
+        `[plan-item-write] geen securityPlanningLink voor code ${ctx.securityCodeId} in project `
+        + `${ctx.projectId}; planitem ${ctx.itemId} gaat ongecodeerd naar Bouw7.`,
+      )
+    }
     const kleur  = kiesKleur(await haalKleuren(client), ctx.projectleider)
 
     const body: Record<string, unknown> = {

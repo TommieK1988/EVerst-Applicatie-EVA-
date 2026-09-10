@@ -14,6 +14,7 @@ import MedewerkerTimeline from './MedewerkerTimeline'
 import PlanningTabSwitcher from './PlanningTabSwitcher'
 import { getBedrijfsinstellingen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 import { berekenPlanUren } from '@/lib/planning/werkuren'
+import { getPlanningBewakingscodes } from '@/lib/planning/bewakingscodes'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -28,7 +29,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const [
     medewerkerRes, activiteitenRes, roostersRes,
     afwezigheidRes, werkbegrotingRes, uursoortRes, dossierRes, partijenRes,
-    fasenRes,
+    fasenRes, bewakingscodes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
     supabase.from('planning_activiteiten').select('*').eq('dossier_id', dossier_id).order('volgorde'),
@@ -44,6 +45,8 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
     // is een array (een relatie kan zowel leverancier als onderaannemer zijn).
     supabase.from('relaties').select('id, naam, types').overlaps('types', ['onderaannemer', 'leverancier']).eq('actief', true).order('naam'),
     supabase.from('planning_fasen').select('*').eq('dossier_id', dossier_id).order('volgorde'),
+    // Keuzelijst voor de verplichte bewakingscode per activiteit; komt uit de snapshot, niet live.
+    getPlanningBewakingscodes(dossier_id),
   ])
 
   // Taken (uit task_lists gekoppeld aan dit dossier als 'project'-entity)
@@ -170,6 +173,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
             partijen={partijen}
             werkbegrotingUursoortIds={budgetRegels.map(r => r.uursoort_id)}
             fasen={fasen}
+            bewakingscodes={bewakingscodes}
             afhankelijkheden={afhankelijkheden}
             roosters={roosters}
             afwezigheid={afwezigheid}

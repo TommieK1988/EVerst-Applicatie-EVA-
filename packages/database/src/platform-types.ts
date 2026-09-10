@@ -1193,6 +1193,10 @@ export type PlanningFase = {
   dossier_id: string
   naam: string
   volgorde: number
+  /** Standaard-bewakingscode voor de activiteiten in deze fase; zij erven hem bij aanmaken. */
+  bewakingscode: string | null
+  /** Bouw7 securityCode.id behorend bij `bewakingscode` */
+  bouw7_security_code_id: number | null
   /** 'eva' = in EVA gemaakt, 'bouw7' = uit Bouw7 gesynct */
   bron: PlanningBron
   /** Externe sleutel bij bron='bouw7' (chapter:{id} of chapter:algemeen) */

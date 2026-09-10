@@ -9,6 +9,7 @@ import type {
   PlanningWerkbegrotingRegelMetUursoort,
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType,
 } from '@everts/database/platform-types'
+import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 
@@ -111,6 +112,8 @@ const activiteitSchema = z.object({
   uursoort_id:       z.string().uuid().nullable().optional(),
   onderaannemer_id:  z.string().uuid().nullable().optional(),
   fase_id:           z.string().uuid().nullable().optional(),
+  bewakingscode:     z.string().nullable().optional(),
+  bouw7_security_code_id: z.number().int().nullable().optional(),
   titel:             z.string().min(1).max(200),
   omschrijving:      z.string().nullable().optional(),
   geschatte_uren:    z.number().min(0).optional(),
@@ -122,6 +125,52 @@ const activiteitSchema = z.object({
   volgorde:          z.number().int().optional(),
 })
 
+/** De fase van een activiteit, met haar standaard-bewakingscode. */
+async function faseCode(
+  fase_id: string | null | undefined,
+): Promise<{ bewakingscode: string | null; bouw7_security_code_id: number | null } | null> {
+  if (!fase_id) return null
+  const { data } = await db()
+    .from('planning_fasen')
+    .select('bewakingscode, bouw7_security_code_id')
+    .eq('id', fase_id)
+    .maybeSingle()
+  if (!data?.bewakingscode) return null
+  return { bewakingscode: data.bewakingscode, bouw7_security_code_id: data.bouw7_security_code_id ?? null }
+}
+
+/**
+ * Kent dit dossier bewakingscodes om uit te kiezen? Zo ja, dan is een code verplicht: elk
+ * planitem hangt via zijn activiteit aan een code en zonder code vallen de geplande uren
+ * buiten de bewaking. Kent het dossier er geen (niet aan Bouw7 gekoppeld, of de snapshot is
+ * nog nooit opgehaald), dan valt er niets te kiezen en houden we niemand tegen.
+ */
+async function bewakingscodeVerplicht(dossier_id: string): Promise<boolean> {
+  const { getPlanningBewakingscodes } = await import('@/lib/planning/bewakingscodes')
+  const codes = await getPlanningBewakingscodes(dossier_id)
+  return codes.length > 0
+}
+
+/**
+ * De bewakingscodes waaruit een planner bij dit dossier kan kiezen — voor client-schermen
+ * (Medewerkerplanning). Draagt óók de Bouw7 `securityCode.id`, zodat een planitem dat hier
+ * ontstaat in Bouw7 aan de code gekoppeld kan worden en niet ongecodeerd blijft hangen.
+ */
+export async function haalPlanningBewakingscodes(
+  dossier_id: string,
+): Promise<{ ok: true; codes: PlanningBewakingscode[] } | { ok: false; error: string }> {
+  try {
+    const { getPlanningBewakingscodes } = await import('@/lib/planning/bewakingscodes')
+    return { ok: true, codes: await getPlanningBewakingscodes(dossier_id) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen bewakingscodes mislukt.' }
+  }
+}
+
+const GEEN_CODE =
+  'Kies een bewakingscode. Geplande uren worden via de activiteit op een bewakingscode geboekt; '
+  + 'zonder code vallen ze buiten de bewaking. Tip: zet de code op de fase, dan erven de activiteiten eronder hem.'
+
 export async function maakPlanningActiviteit(
   input: z.infer<typeof activiteitSchema>,
 ): Promise<{ ok: true; data: PlanningActiviteit } | { ok: false; error: string }> {
@@ -129,9 +178,26 @@ export async function maakPlanningActiviteit(
   if (!parsed.success) return { ok: false, error: parsed.error.message }
   await assertDossierBewerkbaar(input.dossier_id)
 
+  // Bewakingscode: eigen keuze wint, anders die van de fase. Blijft hij leeg terwijl het
+  // dossier codes kent, dan gaat de activiteit niet door — dat is precies het gat dat we dichten.
+  const eigenCode = parsed.data.bewakingscode?.trim() || null
+  const erfCode = eigenCode ? null : await faseCode(parsed.data.fase_id)
+  const bewakingscode = eigenCode ?? erfCode?.bewakingscode ?? null
+  const securityCodeId = eigenCode
+    ? (parsed.data.bouw7_security_code_id ?? null)
+    : (erfCode?.bouw7_security_code_id ?? null)
+  if (!bewakingscode && await bewakingscodeVerplicht(input.dossier_id)) {
+    return { ok: false, error: GEEN_CODE }
+  }
+
   const { data, error } = await db()
     .from('planning_activiteiten')
-    .insert({ ...parsed.data, status: parsed.data.status ?? 'backlog' })
+    .insert({
+      ...parsed.data,
+      bewakingscode,
+      bouw7_security_code_id: securityCodeId,
+      status: parsed.data.status ?? 'backlog',
+    })
     .select('*')
     .single()
 
@@ -178,9 +244,32 @@ export async function updatePlanningActiviteit(
   const huidigeDeadline = huidig?.deadline ?? null
   const isBouw7 = huidig.bron === 'bouw7'
 
+  // Bewakingscode mag niet leeggemaakt worden — dan zouden de geplande uren van deze
+  // activiteit alsnog buiten de bewaking vallen.
+  const patch: Record<string, unknown> = { ...input }
+  if ('bewakingscode' in patch) {
+    const nieuweCode = typeof patch.bewakingscode === 'string' ? patch.bewakingscode.trim() : null
+    if (!nieuweCode && await bewakingscodeVerplicht(huidig.dossier_id)) {
+      return { ok: false, error: GEEN_CODE }
+    }
+    patch.bewakingscode = nieuweCode
+  }
+
+  // Verplaatst naar een fase met een eigen code en zelf nog geen code? Dan erft de activiteit
+  // die van de fase — zo hoeft slepen tussen fasen niet gevolgd te worden door een handmatige keuze.
+  const faseGewijzigd = input.fase_id !== undefined && input.fase_id !== (huidig.fase_id ?? null)
+  const codeNaPatch = 'bewakingscode' in patch ? (patch.bewakingscode as string | null) : (huidig.bewakingscode ?? null)
+  if (faseGewijzigd && !codeNaPatch && huidig.bron === 'eva') {
+    const erf = await faseCode(input.fase_id)
+    if (erf) {
+      patch.bewakingscode = erf.bewakingscode
+      patch.bouw7_security_code_id = erf.bouw7_security_code_id
+    }
+  }
+
   const { error } = await supabase
     .from('planning_activiteiten')
-    .update(input)
+    .update(patch)
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
@@ -705,8 +794,9 @@ export async function syncWerkbegrotingVanEvertsCalc(
 export async function maakPlanningFase(
   dossier_id: string,
   naam: string,
-  volgorde?: number,
+  opties?: { volgorde?: number; bewakingscode?: string | null; bouw7_security_code_id?: number | null },
 ): Promise<{ ok: true; data: PlanningFase } | { ok: false; error: string }> {
+  const volgorde = opties?.volgorde
   await assertDossierBewerkbaar(dossier_id)
   const supabase = db()
 
@@ -724,7 +814,13 @@ export async function maakPlanningFase(
 
   const { data, error } = await supabase
     .from('planning_fasen')
-    .insert({ dossier_id, naam: naam.trim(), volgorde: vol })
+    .insert({
+      dossier_id,
+      naam: naam.trim(),
+      volgorde: vol,
+      bewakingscode: opties?.bewakingscode?.trim() || null,
+      bouw7_security_code_id: opties?.bouw7_security_code_id ?? null,
+    })
     .select('*')
     .single()
 
@@ -733,14 +829,64 @@ export async function maakPlanningFase(
   return { ok: true, data: data as PlanningFase }
 }
 
+/**
+ * Werkt een fase bij. Krijgt de fase een bewakingscode, dan zakt die door naar de activiteiten
+ * eronder: dat is wat "de code van de fase geldt voor alles daaronder" in de praktijk betekent —
+ * de code blijft op de activiteit staan, want dat is wat de urenbewaking en de Bouw7-write lezen.
+ *
+ * Activiteiten zonder code krijgen hem altijd. Activiteiten met een àndere code zijn een bewuste
+ * afwijking en blijven staan, tenzij `overschrijf_afwijkend` meekomt (de kiezer vraagt dat na).
+ * Bouw7-activiteiten blijven buiten schot: hun code komt uit Bouw7 en zou bij de volgende sync
+ * toch weer overschreven worden.
+ */
 export async function updatePlanningFase(
   id: string,
-  input: { naam?: string; volgorde?: number },
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { error } = await db().from('planning_fasen').update(input).eq('id', id)
+  input: {
+    naam?: string
+    volgorde?: number
+    bewakingscode?: string | null
+    bouw7_security_code_id?: number | null
+    overschrijf_afwijkend?: boolean
+  },
+): Promise<{ ok: true; activiteiten_bijgewerkt?: number } | { ok: false; error: string }> {
+  const supabase = db()
+  const { overschrijf_afwijkend, ...velden } = input
+  const patch: Record<string, unknown> = { ...velden }
+  if ('bewakingscode' in patch) patch.bewakingscode = (patch.bewakingscode as string | null)?.trim() || null
+
+  const { error } = await supabase.from('planning_fasen').update(patch).eq('id', id)
   if (error) return { ok: false, error: error.message }
+
+  let bijgewerkt = 0
+  const code = patch.bewakingscode as string | null | undefined
+  if (code) {
+    const doorzetten = supabase
+      .from('planning_activiteiten')
+      .update({ bewakingscode: code, bouw7_security_code_id: input.bouw7_security_code_id ?? null })
+      .eq('fase_id', id)
+      .eq('bron', 'eva')
+    const { data: geraakt, error: aErr } = overschrijf_afwijkend
+      ? await doorzetten.neq('bewakingscode', code).select('id')
+      : await doorzetten.is('bewakingscode', null).select('id')
+    if (aErr) return { ok: false, error: aErr.message }
+    bijgewerkt = (geraakt ?? []).length
+
+    // `.neq()` laat rijen met NULL buiten beschouwing (NULL <> waarde is onbekend), dus die
+    // krijgen bij overschrijven een eigen ronde.
+    if (overschrijf_afwijkend) {
+      const { data: leeg } = await supabase
+        .from('planning_activiteiten')
+        .update({ bewakingscode: code, bouw7_security_code_id: input.bouw7_security_code_id ?? null })
+        .eq('fase_id', id)
+        .eq('bron', 'eva')
+        .is('bewakingscode', null)
+        .select('id')
+      bijgewerkt += (leeg ?? []).length
+    }
+  }
+
   await naPlanningWijziging()
-  return { ok: true }
+  return { ok: true, activiteiten_bijgewerkt: bijgewerkt }
 }
 
 export async function verschuifPlanningFase(
