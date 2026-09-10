@@ -14,7 +14,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
-import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen } from './rooster'
+import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
 import { getUrenInstellingen, getIndirectDossierId } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
@@ -315,29 +315,107 @@ export async function getUursoortOpties(): Promise<UursoortOptie[]> {
   return lijst.sort((a, b) => rang(a) - rang(b) || a.naam.localeCompare(b.naam))
 }
 
+/** Rolkolommen op `dossiers` die iemand aan een opdracht koppelen. */
+const ROL_KOLOMMEN = [
+  'project_manager_id', 'teamleider_id', 'werkvoorbereider_id',
+  'calculator_id', 'uitvoerder_id', 'controller_id',
+] as const
+
 /**
- * Dossiers om uit te kiezen bij werk-uren: eerst waar deze medewerker die dag ingepland staat
- * (dat is bijna altijd het goede antwoord), daarna zijn overige lopende opdrachten.
+ * Hoe ver de planning en de eerdere uren meetellen als koppeling: een halfjaar terug en een
+ * halfjaar vooruit, gerekend vanaf de dag die geboekt wordt. Het venster is er om de query
+ * begrensd te houden (zie de paginatie-regel in CLAUDE.md), niet om streng te zijn.
+ */
+const KOPPELING_DAGEN = 180
+
+/**
+ * Dossiers om uit te kiezen bij werk-uren: eerst de opdrachten waaraan deze medewerker gekoppeld
+ * is, daarna alle overige lopende opdrachten.
+ *
+ * Eerder stond hier alleen wie op díé dag was ingepland. Dat bleek in de praktijk vrijwel altijd
+ * leeg -- de planning wordt niet per dag bijgehouden, en een meerdaags planitem viel er sowieso
+ * buiten omdat er alleen op `start_dt` werd gefilterd. De monteur zag dus een kop "Je stond hier
+ * ingepland" zonder projecten en moest alsnog door de hele lijst van alle opdrachten scrollen.
+ *
+ * Gekoppeld is nu breder en robuuster: ingepland op het dossier (ergens in het venster, ook
+ * meerdaags), rolhouder op het dossier, of er eerder uren op geschreven. Binnen die groep komt
+ * bovenaan waarop hij deze dag staat ingepland; dat blijft het beste eerste antwoord, maar het is
+ * geen voorwaarde meer.
  */
 export async function getDossierOpties(datum: string): Promise<Array<{
-  id: string; label: string; uitPlanning: boolean
+  id: string; label: string; gekoppeld: boolean
 }>> {
   const medewerker = await vereisSessie()
   const supabase = db()
 
-  const { data: items } = await supabase
-    .from('planning_items')
-    .select('planning_activiteiten(dossier_id, dossiers(id, dossiernummer, titel))')
-    .eq('medewerker_id', medewerker.id)
-    .gte('start_dt', `${datum}T00:00:00`)
-    .lte('start_dt', `${datum}T23:59:59`)
+  const verschoven = (dagen: number) => {
+    const d = new Date(`${datum}T12:00:00`)
+    d.setDate(d.getDate() + dagen)
+    return datumSleutel(d)
+  }
+  const van = verschoven(-KOPPELING_DAGEN)
+  const tot = verschoven(KOPPELING_DAGEN)
 
-  const gepland = new Map<string, string>()
+  const [{ data: items }, { data: rolDossiers }, { data: eerder }] = await Promise.all([
+    supabase
+      .from('planning_items')
+      .select('start_dt, eind_dt, planning_activiteiten(dossier_id)')
+      .eq('medewerker_id', medewerker.id)
+      .gte('start_dt', `${van}T00:00:00`)
+      .lte('start_dt', `${tot}T23:59:59`)
+      .order('start_dt')
+      .limit(1000),
+    supabase
+      .from('dossiers')
+      .select('id')
+      .or(ROL_KOLOMMEN.map(k => `${k}.eq.${medewerker.id}`).join(','))
+      .eq('gearchiveerd', false)
+      .limit(500),
+    supabase
+      .from('uren_regels')
+      .select('dossier_id')
+      .eq('medewerker_id', medewerker.id)
+      .gte('datum', van)
+      .lte('datum', tot)
+      .limit(1000),
+  ])
+
+  // Ingepland op deze dag = het planitem overlapt de dag. Een item van maandag t/m vrijdag telt
+  // dus ook op woensdag mee; dat deed de oude vergelijking op start_dt niet. De momenten uit de
+  // database worden eerst teruggerekend naar de Nederlandse kalenderdag -- op Vercel draait Node
+  // in UTC, en dan schuift een planitem van 's ochtends een dag op.
+  const kalenderdag = (dt: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date(dt))
+
+  const gekoppeld = new Set<string>()
+  const vandaagGepland = new Set<string>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const it of (items ?? []) as any[]) {
-    const d = it.planning_activiteiten?.dossiers
-    if (d?.id) gepland.set(d.id, `${d.dossiernummer} · ${d.titel}`)
+    const dossierId = it.planning_activiteiten?.dossier_id
+    if (!dossierId) continue
+    gekoppeld.add(dossierId)
+    const start = kalenderdag(it.start_dt)
+    const eind = it.eind_dt ? kalenderdag(it.eind_dt) : start
+    if (start <= datum && eind >= datum) vandaagGepland.add(dossierId)
   }
+  for (const d of (rolDossiers ?? []) as Array<{ id: string }>) gekoppeld.add(d.id)
+  for (const r of (eerder ?? []) as Array<{ dossier_id: string | null }>) {
+    if (r.dossier_id) gekoppeld.add(r.dossier_id)
+  }
+
+  // De koppelingen los ophalen: een dossier waaraan hij gekoppeld is hoeft geen lopende opdracht
+  // te zijn (een opname staat nog op `aanvraag`), maar moet wel in Bouw7 bestaan -- daar landen
+  // de uren uiteindelijk.
+  const idLijst = [...gekoppeld]
+  const { data: mijne } = idLijst.length
+    ? await supabase
+        .from('dossiers')
+        .select('id, dossiernummer, titel')
+        .in('id', idLijst)
+        .eq('gearchiveerd', false)
+        .not('bouw7_id', 'is', null)
+        .order('dossiernummer', { ascending: false })
+    : { data: [] }
 
   const { data: opdrachten } = await supabase
     .from('dossiers')
@@ -346,16 +424,22 @@ export async function getDossierOpties(datum: string): Promise<Array<{
     .eq('gearchiveerd', false)
     .not('bouw7_id', 'is', null)
     .order('dossiernummer', { ascending: false })
-    .limit(200)
+    .limit(500)
 
-  const rest = ((opdrachten ?? []) as Array<{ id: string; dossiernummer: string; titel: string }>)
-    .filter(d => !gepland.has(d.id))
-    .map(d => ({ id: d.id, label: `${d.dossiernummer} · ${d.titel}`, uitPlanning: false }))
+  type Rij = { id: string; dossiernummer: string; titel: string }
+  const label = (d: Rij) => `${d.dossiernummer} · ${d.titel}`
 
-  return [
-    ...[...gepland].map(([id, label]) => ({ id, label, uitPlanning: true })),
-    ...rest,
-  ]
+  const eigen = ((mijne ?? []) as Rij[])
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: true }))
+    // Waar hij deze dag staat ingepland bovenaan; de rest op dossiernummer aflopend.
+    .sort((a, b) => Number(vandaagGepland.has(b.id)) - Number(vandaagGepland.has(a.id)))
+
+  const eigenIds = new Set(eigen.map(d => d.id))
+  const rest = ((opdrachten ?? []) as Rij[])
+    .filter(d => !eigenIds.has(d.id))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: false }))
+
+  return [...eigen, ...rest]
 }
 
 /* ── Muteren ──────────────────────────────────────────────────────── */

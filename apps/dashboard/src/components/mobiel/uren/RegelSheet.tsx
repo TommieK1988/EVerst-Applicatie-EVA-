@@ -49,14 +49,14 @@ export default function RegelSheet({
   const [opmerking, setOpmerking] = useState(regel?.opmerking ?? '')
   const [bezig, setBezig] = useState(false)
 
-  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; uitPlanning: boolean }>>([])
+  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean }>>([])
   const [codes, setCodes] = useState<BewakingscodeOptie[]>([])
   const [codesLaden, setCodesLaden] = useState(false)
 
   const soort = uursoorten.find(u => u.id === uursoortId)
   const isWerk = soort?.categorie === 'werk'
 
-  // Projecten waar deze medewerker die dag stond staan bovenaan; dat is bijna altijd het antwoord.
+  // De opdrachten waaraan deze medewerker gekoppeld is staan bovenaan; de rest blijft kiesbaar.
   useEffect(() => {
     if (!isWerk) return
     let levend = true
@@ -139,15 +139,15 @@ export default function RegelSheet({
                 <label style={labelStijl}>Project</label>
                 <select value={dossierId} onChange={e => { setDossierId(e.target.value); setCode('') }} style={veld}>
                   <option value="">— kies een project —</option>
-                  {dossiers.some(d => d.uitPlanning) && (
-                    <optgroup label="Je stond hier ingepland">
-                      {dossiers.filter(d => d.uitPlanning).map(d => (
+                  {dossiers.some(d => d.gekoppeld) && (
+                    <optgroup label="Jouw projecten">
+                      {dossiers.filter(d => d.gekoppeld).map(d => (
                         <option key={d.id} value={d.id}>{d.label}</option>
                       ))}
                     </optgroup>
                   )}
                   <optgroup label="Overige opdrachten">
-                    {dossiers.filter(d => !d.uitPlanning).map(d => (
+                    {dossiers.filter(d => !d.gekoppeld).map(d => (
                       <option key={d.id} value={d.id}>{d.label}</option>
                     ))}
                   </optgroup>
