@@ -245,8 +245,9 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
 
   if (tab === 'opname') {
     // Alleen wanneer de toggle `mutatie_opname` aanstaat; anders valt de render door naar de
-    // generieke "niet beschikbaar"-weergave hieronder. Zowel op de aanvraag (de opname vóór de
-    // offerte) als op de opdracht (naopname, tweede mutatieronde).
+    // generieke "niet beschikbaar"-weergave hieronder. In elke sectie: op de aanvraag (de opname
+    // vóór de offerte), op de opdracht (naopname, tweede mutatieronde) en op de servicedesk, waar
+    // het mutatiewerk van corporaties binnenkomt.
     const toggles = await getDossierToggles(id)
     const opnameAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.opname && t.aan)
     if (opnameAan) {

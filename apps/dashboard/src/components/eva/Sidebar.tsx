@@ -240,6 +240,10 @@ const OPDRACHT_TABS: DossierTab[] = [
 const SERVICEDESK_TABS: DossierTab[] = [
   { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+  // Ook op de servicedesk, en juist daar: mutatiewerk van corporaties komt via die ingang binnen.
+  // Alleen zichtbaar met de dossier-toggle `mutatie_opname` (TAB_TOGGLE_GATES), die vanzelf
+  // aangaat bij categorie Mutatie. Vóór Calculatie, want de opname voedt die calculatie.
+  { slug: 'opname',     label: 'Opname',     d: OPNAME_ICOON },
   { slug: 'calculatie', label: 'Calculatie', d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
   { slug: 'planning',   label: 'Planning',   d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
   // Servicedesk heeft geen oplevering; hier blijft de tab dus wel aan de VCA-toggle hangen.
