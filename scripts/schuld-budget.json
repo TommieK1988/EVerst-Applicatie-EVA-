@@ -1,7 +1,7 @@
 {
   "budget": {
     "as_any": 751,
-    "ongegate_service_role_actions": 539,
+    "ongegate_service_role_actions": 515,
     "bestanden_boven_800_regels": 33
   },
   "per_bestand": {
@@ -104,7 +104,6 @@
       "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 22,
       "apps/dashboard/src/app/(platform)/taken/actions/taken.ts": 7,
       "apps/dashboard/src/app/(platform)/uren/page.tsx": 1,
-      "apps/dashboard/src/app/(platform)/wagenpark/bestuurders/[id]/werktijden/pdf/route.ts": 1,
       "apps/dashboard/src/app/(portaal)/portaal/actions.ts": 1,
       "apps/dashboard/src/app/(portaal)/portaal/auth/callback/route.ts": 1,
       "apps/dashboard/src/app/(portaal)/portaal/login/actions.ts": 1,
@@ -249,6 +248,7 @@
       "apps/dashboard/src/lib/opname/import-actions.ts": 1,
       "apps/dashboard/src/lib/opname/import-excel.ts": 1,
       "apps/dashboard/src/lib/opname/opnames.ts": 1,
+      "apps/dashboard/src/lib/pdf/afzender.ts": 1,
       "apps/dashboard/src/lib/pdf/montserrat.ts": 1,
       "apps/dashboard/src/lib/planning/detailplanning-gegevens.ts": 1,
       "apps/dashboard/src/lib/planning/werkbegroting.ts": 1,
@@ -306,9 +306,6 @@
       "apps/dashboard/src/app/(platform)/kam/actions.ts": 4,
       "apps/dashboard/src/app/(platform)/management/actions.ts": 2,
       "apps/dashboard/src/app/(platform)/management/instellingen/actions.ts": 6,
-      "apps/dashboard/src/app/(platform)/materieelbeheer/actions.ts": 12,
-      "apps/dashboard/src/app/(platform)/materieelbeheer/beheer-actions.ts": 4,
-      "apps/dashboard/src/app/(platform)/materieelbeheer/bestand-actions.ts": 3,
       "apps/dashboard/src/app/(platform)/medewerkers/medewerkersActions.ts": 1,
       "apps/dashboard/src/app/(platform)/notificaties/actions.ts": 5,
       "apps/dashboard/src/app/(platform)/planning/actions.ts": 17,
@@ -324,7 +321,6 @@
       "apps/dashboard/src/app/(public)/p/actions.ts": 8,
       "apps/dashboard/src/app/actions/layouts.ts": 4,
       "apps/dashboard/src/app/actions/werkstand.ts": 2,
-      "apps/dashboard/src/app/m/materieel/actions.ts": 5,
       "apps/dashboard/src/lib/bouw7/plan-item-write.ts": 7,
       "apps/dashboard/src/lib/bouw7/property-assets.ts": 2,
       "apps/dashboard/src/lib/bouw7/sync-inkoopfacturen.ts": 2,
@@ -369,7 +365,7 @@
       "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 1143,
       "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 2124,
       "apps/dashboard/src/app/(platform)/instellingen/offerte-layout/[id]/LayoutEditorClient.tsx": 1019,
-      "apps/dashboard/src/app/(platform)/planning/actions.ts": 937,
+      "apps/dashboard/src/app/(platform)/planning/actions.ts": 1090,
       "apps/dashboard/src/app/(platform)/relaties/[id]/RelatieDetailView.tsx": 1419,
       "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 990,
       "apps/dashboard/src/components/dossiers/tabs/FactuurRegelVenster.tsx": 812,
@@ -377,14 +373,14 @@
       "apps/dashboard/src/components/dossiers/tabs/OpleveringTab.tsx": 1200,
       "apps/dashboard/src/components/everts-calc/bibliotheek/BiblioteekBeheer.tsx": 1273,
       "apps/dashboard/src/components/everts-calc/bibliotheek/SchilderwerkBibliotheek.tsx": 1241,
-      "apps/dashboard/src/components/everts-calc/calculatie/CalculatieGrid.tsx": 3493,
+      "apps/dashboard/src/components/everts-calc/calculatie/CalculatieGrid.tsx": 3530,
       "apps/dashboard/src/components/everts-calc/werkbegroting/BestellingenPaneel.tsx": 1072,
       "apps/dashboard/src/components/everts-calc/werkbegroting/WerkbegrotingGrid.tsx": 1770,
       "apps/dashboard/src/components/formulieren/builder/FieldSettings.tsx": 1203,
       "apps/dashboard/src/components/formulieren/filler/FieldRenderer.tsx": 1115,
       "apps/dashboard/src/components/overzicht/OverzichtTabel.tsx": 1499,
-      "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 1888,
-      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1804,
+      "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 2238,
+      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1768,
       "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 865,
       "apps/dashboard/src/lib/bouw7/client.ts": 1420,
       "apps/dashboard/src/lib/bouw7/sync.ts": 2635,
@@ -392,12 +388,12 @@
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 975,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 1332,
       "apps/dashboard/src/lib/dossiers/servicedesk.ts": 1118,
-      "apps/dashboard/src/lib/everts-calc/local-store.ts": 834,
+      "apps/dashboard/src/lib/everts-calc/local-store.ts": 892,
       "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 876,
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 844,
       "apps/dashboard/src/lib/page-help.ts": 1613,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1050,
-      "packages/database/src/platform-types.ts": 1840
+      "packages/database/src/platform-types.ts": 1844
     }
   }
 }

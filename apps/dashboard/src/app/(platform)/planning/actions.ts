@@ -10,6 +10,7 @@ import type {
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType,
 } from '@everts/database/platform-types'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
+import { vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 
@@ -155,11 +156,17 @@ async function bewakingscodeVerplicht(dossier_id: string): Promise<boolean> {
  * De bewakingscodes waaruit een planner bij dit dossier kan kiezen — voor client-schermen
  * (Medewerkerplanning). Draagt óók de Bouw7 `securityCode.id`, zodat een planitem dat hier
  * ontstaat in Bouw7 aan de code gekoppeld kan worden en niet ongecodeerd blijft hangen.
+ *
+ * `vereisSessie` staat er omdat dit een client-action is die de admin-client gebruikt: die
+ * bypast RLS, dus zonder gate leest een kale RPC de bewakingscodes van elk willekeurig
+ * dossier uit. Lezen mag iedere ingelogde medewerker — de codes staan ook gewoon op het
+ * planningsscherm — vandaar de sessiecontrole en geen zwaarder recht.
  */
 export async function haalPlanningBewakingscodes(
   dossier_id: string,
 ): Promise<{ ok: true; codes: PlanningBewakingscode[] } | { ok: false; error: string }> {
   try {
+    await vereisSessie()
     const { getPlanningBewakingscodes } = await import('@/lib/planning/bewakingscodes')
     return { ok: true, codes: await getPlanningBewakingscodes(dossier_id) }
   } catch (e) {

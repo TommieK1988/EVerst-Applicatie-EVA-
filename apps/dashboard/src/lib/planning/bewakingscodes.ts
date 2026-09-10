@@ -1,8 +1,7 @@
 import { leesDossierBron } from '@/lib/bouw7/snapshot'
 import { createAdminClient } from '@everts/database/server'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
+const db = () => createAdminClient()
 
 /** Eén keuzemogelijkheid in de bewakingscode-kiezer van de detailplanning. */
 export type PlanningBewakingscode = {

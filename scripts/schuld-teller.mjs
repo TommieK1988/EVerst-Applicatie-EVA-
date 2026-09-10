@@ -49,8 +49,24 @@ const BRONMAPPEN = ['apps/dashboard/src', 'packages/database/src', 'packages/wag
  */
 const GENEGEERD = [/database\.types\.ts$/, /\.d\.ts$/, /node_modules/, /[\\/]\.next/]
 
-/** De gates die als rechtencontrole gelden. Volgorde doet er niet toe. */
-const GATES = ['vereisRecht', 'vereisSessie', 'vereisBeheerder', 'vereisModuleToegang']
+/**
+ * De gates die als rechtencontrole gelden. Volgorde doet er niet toe.
+ *
+ * De `vereisMaterieel*`-drieling staat er bij omdat het dúnne omhulsels van `vereisRecht`
+ * zijn (`lib/materieel/auth.ts`): ze gooien onvoorwaardelijk als het recht ontbreekt, plus
+ * een controle op de feature-flag. Zonder deze namen telde `app/m/materieel/actions.ts`
+ * als zes ongegate actions terwijl elke action zijn gate wel degelijk aanroept — en dan
+ * kost elke nieuwe, correct gegate action een budgetverhoging. Een teller die de juiste
+ * schrijfwijze beboet leert precies het verkeerde af.
+ *
+ * De regel voor uitbreiden: alleen een helper die zélf onvoorwaardelijk een gate uit deze
+ * lijst aanroept en gooit bij onvoldoende recht. Een helper die de gate achter een `if`
+ * zet hoort hier niet in.
+ */
+const GATES = [
+  'vereisRecht', 'vereisSessie', 'vereisBeheerder', 'vereisModuleToegang',
+  'vereisMaterieelToegang', 'vereisMaterieelMutatie', 'vereisMaterieelBeheer',
+]
 
 const REGELLIMIET = 800
 
