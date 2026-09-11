@@ -12,7 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'EVA — Everts Platform',
     short_name: 'EVA',
-    description: 'EVA — het centrale platform van Everts Groep',
+    description: 'EVA — het centrale platform van Everts Onderhoud & Renovatie',
     start_url: '/m',
     scope: '/',
     display: 'standalone',

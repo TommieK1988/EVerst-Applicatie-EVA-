@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: '%s | EVA',
     default: 'EVA — Everts Platform',
   },
-  description: 'EVA — het centrale platform van Everts Groep',
+  description: 'EVA — het centrale platform van Everts Onderhoud & Renovatie',
   applicationName: 'EVA',
   appleWebApp: {
     capable: true,

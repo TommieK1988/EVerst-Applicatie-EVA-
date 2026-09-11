@@ -78,7 +78,7 @@ export default function DesktopLogin({ fout, next }: { fout?: string; next?: str
           <div style={{
             marginTop: 16, fontSize: 12, color: 'rgba(255,255,255,0.6)',
             fontWeight: 500,
-          }}>Everts Groep · Enschede</div>
+          }}>Everts Onderhoud &amp; Renovatie · Leidschendam</div>
         </div>
       </div>
 

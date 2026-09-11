@@ -87,12 +87,12 @@ export default function Instellingen() {
 
       {/* Over */}
       <div className="bg-everts-dark rounded-xl p-5 text-center">
-        <img src="/logo-wit.svg" alt="Everts Groep" className="h-8 mx-auto mb-3" />
+        <img src="/logo-wit.svg" alt="Everts Onderhoud & Renovatie" className="h-8 mx-auto mb-3" />
         <div className="text-white/60 text-xs">
           EvertsCalc v1.0 · Calculatiesoftware voor vastgoedonderhoud
         </div>
         <div className="text-white/40 text-xs mt-1">
-          © 2024 Everts Groep
+          © 2024 Everts Onderhoud &amp; Renovatie
         </div>
       </div>
     </div>

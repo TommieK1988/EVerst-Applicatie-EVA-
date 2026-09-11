@@ -863,13 +863,13 @@ export const STANDAARD_LAYOUT: LayoutContext = {
 }
 
 export const BEDRIJF_FALLBACK: BedrijfContext = {
-  naam: 'Everts Groep B.V.',
-  adres: 'Voorbeeldstraat 1',
-  postcode_plaats: '1234 AB Amstelveen',
-  telefoon: '020-1234567',
-  email: 'info@evertsgroep.nl',
-  website: 'www.evertsgroep.nl',
-  kvk: '12345678',
-  btw: 'NL123456789B01',
-  iban: 'NL00 BANK 0000 0000 00',
+  naam: 'Everts Onderhoud & Renovatie',
+  adres: 'De Star 3',
+  postcode_plaats: '2266 NA Leidschendam',
+  telefoon: '070-3012580',
+  email: 'info@everts.chat',
+  website: 'www.wijzijneverts.nl',
+  kvk: '',
+  btw: '',
+  iban: '',
 }
