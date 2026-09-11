@@ -11,7 +11,7 @@
  *
  * De waarde is één JSON-tekst (zie `lib/documenten/bezoek-opties.ts`), zodat er geen kolommen
  * bij hoeven en "Opnieuw opstellen" de keuzes vanzelf herstelt. Zelfde opzet als
- * `KwaliteitOptiesVeld` en `HoutrotOptiesVeld`.
+ * `KwaliteitOptiesVeld`.
  */
 
 import { useEffect, useMemo, useState } from 'react'

@@ -17,8 +17,6 @@ import {
   getFeedbackLinks, getFeedbackFormulieren, maakFeedbackLink,
 } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
-import HoutrotOptiesVeld from './HoutrotOptiesVeld'
-import { HOUTROT_OPTIES_SLEUTEL } from '@/lib/documenten/houtrot-opties'
 import KwaliteitOptiesVeld from './KwaliteitOptiesVeld'
 import BezoekOptiesVeld from './BezoekOptiesVeld'
 import { useDialogen } from '@/components/ui/dialogen'
@@ -37,9 +35,12 @@ interface Props {
 export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer, onSluit, onKlaar }: Props) {
   const velden = veldenVanSjabloon(sjabloon)
 
+  // Let op: initialiseren uit *alle* sjabloonvelden, niet alleen de zichtbare — de
+  // houtrot-instellingen komen als standaardwaarde van het sjabloon en moeten mee
+  // naar de renderer, ook nu ze niet meer als keuze in beeld staan.
   const [invoer, setInvoer] = useState<Record<string, string>>(() => {
     const start: Record<string, string> = {}
-    for (const v of velden) {
+    for (const v of sjabloon.velden ?? []) {
       const eerder = beginInvoer?.[v.sleutel]
       start[v.sleutel] = eerder != null ? String(eerder) : (v.standaard ?? '')
     }
@@ -334,10 +335,6 @@ function VeldInvoer({ veld, dossierId, waarde, onChange, onBlur }: {
       </label>
       {veld.type === 'feedback_link' ? (
         <FeedbackLinkVeld dossierId={dossierId} waarde={waarde} onChange={v => { onChange(v); onBlur() }} />
-      ) : veld.type === 'houtrot_opties' ? (
-        // Bewust géén onBlur: elke verversing rendert hier een volledig rapport met
-        // foto's. De gebruiker ververst zelf met de knop boven de preview.
-        <HoutrotOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
       ) : veld.type === 'kwaliteit_opties' ? (
         // Ook hier bewust géén onBlur: elke verversing rendert een volledig rapport met foto's.
         <KwaliteitOptiesVeld dossierId={dossierId} waarde={waarde} onChange={onChange} />
@@ -484,27 +481,15 @@ function triggerDownload(blob: Blob, naam: string) {
 }
 
 /**
- * De invoervelden van een sjabloon, met één uitzondering: bij documentsoort
- * `houtrot_rapportage` hoort er altijd een keuzeveld te staan — daar kies je onder
- * meer of de rapportage mét of zónder prijzen naar de klant gaat.
+ * De invoervelden die de opsteller te zien krijgt.
  *
- * Ontbreekt het in de sjabloonrij (niet ingericht, of een sjabloon van vóór dit
- * veld), dan voegen we het hier toe in plaats van de opsteller zonder keuze te
- * laten zitten. Zonder deze terugval viel de rapportage stil terug op "mét
- * prijzen", en dat is precies de kant die je niet per ongeluk op wilt.
+ * Een houtrot-rapportage kiest zijn vorm via het **sjabloon**, niet via vinkjes in
+ * dit venster: er is er één mét prijzen en één zonder. Wie hier zou kunnen kiezen
+ * om de prijzen uit te zetten op het sjabloon dát prijskolommen heeft, stuurt de
+ * opdrachtgever een rapport met lege kolommen en een lege btw-opstelling. De
+ * instellingen blijven bestaan als standaardwaarde óp het sjabloon (zichtbaar in
+ * het sjabloonscherm); ze worden alleen niet meer per document gevraagd.
  */
 function veldenVanSjabloon(sjabloon: DocumentSjabloon): DocumentVeld[] {
-  const velden = sjabloon.velden ?? []
-  if (sjabloon.documentsoort !== 'houtrot_rapportage') return velden
-  if (velden.some(v => v.sleutel === HOUTROT_OPTIES_SLEUTEL)) return velden
-  return [
-    ...velden,
-    {
-      sleutel: HOUTROT_OPTIES_SLEUTEL,
-      label: 'Wat komt er in de rapportage',
-      type: 'houtrot_opties',
-      verplicht: false,
-      standaard: '',
-    } as DocumentVeld,
-  ]
+  return (sjabloon.velden ?? []).filter(v => v.type !== 'houtrot_opties')
 }

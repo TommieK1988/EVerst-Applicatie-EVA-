@@ -6,7 +6,7 @@
  *
  * De waarde is één JSON-tekst (zie `lib/documenten/kwaliteit-opties.ts`), zodat er geen kolommen
  * bij hoeven en "Opnieuw opstellen" de keuzes vanzelf herstelt. Zelfde opzet als
- * `HoutrotOptiesVeld`.
+ * `BezoekOptiesVeld`.
  *
  * Alleen **definitieve** inspecties zijn te kiezen: een concept is nog niet af en hoort niet bij de
  * opdrachtgever terecht te komen.

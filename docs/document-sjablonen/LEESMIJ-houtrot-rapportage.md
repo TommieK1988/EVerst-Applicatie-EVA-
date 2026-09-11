@@ -24,19 +24,18 @@ Richt ze allebei in; bij het opstellen kies je welke je pakt (zie hieronder).
    - **Documentsoort**: **Houtrot-rapportage** ← dit is bepalend; alleen bij deze soort
      haalt EVA de registraties, foto's en locatie-indeling op.
 3. Koppel bij **Word-template** het bestand `Houtrot-rapportage-met-prijzen.docx`.
-4. Voeg onderaan bij **Invoervelden** één veld toe:
+4. Voeg onderaan bij **Invoervelden** één veld toe — dit is de **instelling van het
+   sjabloon**, geen vraag aan de opsteller:
    - **Sleutel**: `houtrot`  ← moet exact zo heten
-   - **Label**: bv. "Wat komt er in de rapportage"
+   - **Label**: bv. "Instellingen rapportage"
    - **Type**: **Houtrot-rapportage (filters)**
    - **Verplicht**: nee
    - **Standaardwaarde**: `{"per_pagina":3,"niveau":0,"toon_prijzen":true}`
-     — en `"toon_prijzen":false` bij het sjabloon zonder prijzen. Dít is de knop die
-     de bedragen leegmaakt; de kolommen weglaten uit het Word-bestand is alleen de
-     opmaak.
+     — en `"toon_prijzen":false` bij het sjabloon zonder prijzen.
 
-   Vergeet je dit veld, dan verschijnt het bij het opstellen alsnog met de standaarden —
-   je staat dus nooit zonder keuze. Maar zonder `"toon_prijzen":false` staat het sjabloon
-   zonder prijzen wél op "mét prijzen", en dan blijven bedragen achter de schermen bestaan.
+   `toon_prijzen` moet passen bij het Word-bestand. Zet je hem op `false` bij een
+   bestand dát prijskolommen heeft, dan krijgt de opdrachtgever een rapport met lege
+   kolommen en een lege btw-opstelling. Vandaar twee sjablonen in plaats van een vinkje.
 5. (Optioneel) koppel **briefpapier**. Let op: het briefpapier komt onder *élke* pagina,
    dus ook onder de fotopagina's. Wil je dat niet, laat het dan leeg.
 6. Opslaan.
@@ -49,17 +48,12 @@ Het sjabloon verschijnt alleen bij dossiers waar de toggle **Houtrot registreren
 
 ## Gebruiken (in een dossier)
 
-Dossier → **Opdracht → Houtrot** → knop **Rapportage**. Staan er twee sjablonen, dan
-kies je eerst **met of zonder prijzen**. Daarna kies je:
+Dossier → **Opdracht → Houtrot** → knop **Rapportage**. Je kiest één ding: **welk
+sjabloon** — met of zonder prijzen. Verder valt er niets in te stellen; wat er in de
+rapportage komt (aantal per pagina, groepering, statusfilter) staat vast op het sjabloon.
 
-- **welke registraties** (statusfilter, en eventueel één tak van de locatie-indeling);
-- **waarop het totaalblad groepeert** (bijv. per gevelzijde);
-- **hoeveel registraties per pagina** — moet overeenkomen met het sjabloon;
-- **of verkoopprijzen mee mogen**.
-
-Onderin zie je live hoeveel registraties en pagina's dat oplevert. Daarna **PDF**,
-**Bewerken in Word** of **Mailen**, precies als bij de andere documenten. Met
-"Opslaan in de SharePoint-dossiermap" komt de rapportage in het dossierarchief.
+Daarna **PDF**, **Bewerken in Word** of **Mailen**, precies als bij de andere documenten.
+Met "Opslaan in de SharePoint-dossiermap" komt de rapportage in het dossierarchief.
 
 Is er maar één rapportagesjabloon, dan slaat de knop de keuzelijst over.
 
@@ -166,9 +160,10 @@ werkzaamheden te zien die er daadwerkelijk geregistreerd zijn.
 
 - **Fototags moeten alléén in hun eigen alinea staan** (`{%foto_voor}` in een lege
   tabelcel). Staat er tekst naast, dan mislukt het renderen.
-- **Prijzen weglaten doe je met de vinkbox, niet door tags te vergeten.** Staat
-  "Verkoopprijzen tonen" uit, dan zijn alle bedragvelden leeg — ook `{bedragen.verkoop}`
-  buiten een `{#toon_prijzen}`-blok. Er kan dus niets lekken.
+- **Prijzen weglaten doe je met een eigen sjabloon.** Staat `toon_prijzen` op `false`,
+  dan zijn álle bedragvelden leeg — ook `{bedragen.verkoop}` buiten een
+  `{#toon_prijzen}`-blok, dus er kan niets lekken. Haal in dat sjabloon ook de
+  prijskolommen en de btw-opstelling weg, anders staan er lege kolommen op papier.
 - **Ontbrekende foto's zijn geen probleem**: die cel blijft leeg, de registratie blijft staan.
 - **Grenzen**: maximaal 150 registraties per rapportage, en samen maximaal ±35 MB aan
   foto's. Daarboven krijg je een melding met het advies je filter aan te scherpen; boven
