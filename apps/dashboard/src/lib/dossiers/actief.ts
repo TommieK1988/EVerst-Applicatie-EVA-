@@ -9,7 +9,7 @@
  */
 import { createAdminClient } from '@everts/database/server'
 import {
-  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
+  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
 } from '@/components/dossiers/types'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
@@ -99,7 +99,7 @@ function toContext(row: any): DossierContext {
 
   let substatus_label: string | null = null
   if (isServicedesk) {
-    substatus_label = label(SERVICEDESK_STATUSSEN, row.servicedesk_substatus)
+    substatus_label = label(SERVICEDESK_ALLE_STATUSSEN, row.servicedesk_substatus)
   } else if (row.hoofdstatus === 'aanvraag') {
     substatus_label = label(AANVRAAG_STATUSSEN, row.aanvraag_substatus)
   } else if (row.hoofdstatus === 'offerte') {

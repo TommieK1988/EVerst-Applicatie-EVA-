@@ -12,7 +12,7 @@ import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
 import type { DossierRij } from '@/components/dossiers/types';
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier';
 import {
-  getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
+  getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, servicedeskLadder,
 } from '@/components/dossiers/types';
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
 
@@ -56,7 +56,7 @@ function substatusLabel(dossier: DossierRij): string {
 
 function servicedeskSubstatusLabel(dossier: DossierRij): string {
   const sub = dossier.servicedesk_substatus;
-  return SERVICEDESK_STATUSSEN.find(s => s.key === sub)?.label ?? sub ?? '—';
+  return servicedeskLadder(dossier).find(s => s.key === sub)?.label ?? sub ?? '—';
 }
 
 function relativeNewsTime(pubDate: string): string {

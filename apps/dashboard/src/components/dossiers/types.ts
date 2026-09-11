@@ -169,6 +169,36 @@ export const FACTURATIE_LABELS: Record<'regie' | 'termijnen', string> = {
   termijnen: 'Aangenomen',
 }
 
+/**
+ * Servicedesk kent twee trajecten die los van elkaar lopen, en dus twee kolomreeksen:
+ *
+ *  * **Dagelijks onderhoud** — bon binnen, mandaat toetsen, uitzetten bij eigen mensen of een
+ *    onderaannemer, kosten verzamelen, factureren. Werk op regie.
+ *  * **Mutatie** — opname ter plaatse, offerte, werkvoorbereiding, uitvoering. Lijkt op een gewone
+ *    opdracht en gaat aangenomen.
+ *
+ * Beide ladders schrijven op dezelfde kolom `dossiers.servicedesk_substatus`; alleen de getoonde
+ * reeks verschilt. Gedeelde sleutels houden daardoor hun historie en hun Bouw7-koppeling — een
+ * dossier dat van categorie wisselt springt niet van plek.
+ */
+export type ServicedeskLadder = 'onderhoud' | 'mutatie'
+
+/**
+ * Cookie waarin staat welke kant van het servicedeskbord de gebruiker het laatst koos.
+ *
+ * Een cookie en geen localStorage: de serverpagina moet de keuze al bij de eerste render kennen,
+ * anders flitst er bij elke paginaload eerst een frame Dagelijks onderhoud voorbij. Deze constante
+ * staat bewust hier en niet in ServicedeskBord — dat bestand heeft 'use client', en dan levert een
+ * import vanuit een Server Component een client-referentie op in plaats van de string zelf.
+ */
+export const SERVICEDESK_LADDER_COOKIE = 'servicedesk_ladder'
+
+/** Leest de cookiewaarde uit; alles wat geen geldige keuze is, valt terug op Dagelijks onderhoud. */
+export function ladderUitCookie(waarde: string | null | undefined): ServicedeskLadder {
+  return waarde === 'mutatie' ? 'mutatie' : 'onderhoud'
+}
+
+/** De ladder voor Dagelijks onderhoud (en voor elk servicedeskdossier dat geen mutatie is). */
 export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'                         },
   { key: 'mandaat_verhoging',   label: 'Mandaat verhoging aangevraagd' },
@@ -180,6 +210,63 @@ export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'kosten_compleet',     label: 'Kosten compleet'               },
   { key: 'financieel_gereed',   label: 'Financieel gereed'             },
 ]
+
+/**
+ * De ladder voor mutatiewerk.
+ *
+ * Drie sleutels dragen hier bewust een ander label dan op het onderhoudsbord: `offerte_uitgebracht`
+ * heet "Offerte verstuurd", `loopt` heet "Onderhanden" en `uitgevoerd` heet "Uitvoering gereed".
+ * Dat is per dossier eenduidig — de categorie bepaalt welke ladder je ziet — en het houdt de
+ * bestaande Bouw7-mapping intact: die statussen komen 1-op-1 uit `04. Onderhanden` en
+ * `05. Uitvoering gereed`. Alleen `opgenomen` en `in_voorbereiding` zijn nieuw.
+ */
+export const SERVICEDESK_MUTATIE_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
+  { key: 'nieuw',               label: 'Nieuw'             },
+  { key: 'opgenomen',           label: 'Opgenomen'         },
+  { key: 'offerte_uitgebracht', label: 'Offerte verstuurd' },
+  { key: 'in_voorbereiding',    label: 'In voorbereiding'  },
+  { key: 'loopt',               label: 'Onderhanden'       },
+  { key: 'uitgevoerd',          label: 'Uitvoering gereed' },
+  { key: 'kosten_compleet',     label: 'Kosten compleet'   },
+  { key: 'financieel_gereed',   label: 'Financieel gereed' },
+]
+
+/**
+ * Alle servicedesk-substatussen samen, voor plekken die alleen een label bij een sleutel zoeken en
+ * de categorie van het dossier niet kennen (widgets, mobiele lijst, actieve-dossiers-view). Bij een
+ * sleutel die in beide ladders zit wint het onderhoudslabel: dat is verreweg de grootste groep.
+ * Ken je het dossier wél, gebruik dan `servicedeskLadder(dossier)`.
+ */
+export const SERVICEDESK_ALLE_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
+  ...SERVICEDESK_STATUSSEN,
+  ...SERVICEDESK_MUTATIE_STATUSSEN.filter(
+    m => !SERVICEDESK_STATUSSEN.some(o => o.key === m.key),
+  ),
+]
+
+/**
+ * True als dit dossier mutatiewerk is. Case-ongevoelig en getrimd: de waarde komt uit Bouw7 en daar
+ * is de schrijfwijze niet gegarandeerd. `categorie` (de EVA-spiegel) is de terugval voor dossiers
+ * die nog nooit door de sync zijn gegaan.
+ */
+export function isMutatieDossier(dossier: {
+  bouw7_categorie_naam?: string | null
+  categorie?: string | null
+}): boolean {
+  const cat = (dossier.bouw7_categorie_naam ?? dossier.categorie ?? '').trim().toLowerCase()
+  return cat === 'mutatie'
+}
+
+/**
+ * De kolomreeks die bij dít dossier hoort. Alles wat servicedesk is en geen mutatie, valt onder
+ * Dagelijks onderhoud — inclusief de LB.-bonnen met een afwijkende categorie.
+ */
+export function servicedeskLadder(dossier: {
+  bouw7_categorie_naam?: string | null
+  categorie?: string | null
+}): StatusDef<ServicedeskSubstatus>[] {
+  return isMutatieDossier(dossier) ? SERVICEDESK_MUTATIE_STATUSSEN : SERVICEDESK_STATUSSEN
+}
 
 /**
  * Substatussen die de Bouw7-sync zelf zet/overschrijft (zie `mapBouw7NaarEvaStatus` +
@@ -198,7 +285,7 @@ export const BOUW7_EIGEN_SUBSTATUSSEN: Record<DossierSectie, string[]> = {
   aanvraag:    [],
   offerte:     [],
   opdracht:    ['nieuwe_opdracht', 'werkvoorbereiding', 'onderhanden', 'uitvoering_gereed', 'financieel_gereed', 'financieel_afgesloten'],
-  servicedesk: ['nieuw', 'offerte_uitgebracht', 'loopt', 'uitgevoerd', 'financieel_gereed'],
+  servicedesk: ['nieuw', 'offerte_uitgebracht', 'in_voorbereiding', 'loopt', 'uitgevoerd', 'financieel_gereed'],
 }
 
 /**

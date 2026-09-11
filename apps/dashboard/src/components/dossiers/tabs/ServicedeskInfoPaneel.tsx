@@ -9,7 +9,7 @@ import {
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
-import { FACTURATIE_LABELS, SERVICEDESK_STATUSSEN } from '../types'
+import { FACTURATIE_LABELS, SERVICEDESK_ALLE_STATUSSEN } from '../types'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -18,7 +18,7 @@ const fmt = (v: number) =>
 const DRUK_ORANJE = 14
 const DRUK_ROOD   = 30
 
-const faseLabel = (k: string) => SERVICEDESK_STATUSSEN.find(s => s.key === k)?.label ?? k
+const faseLabel = (k: string) => SERVICEDESK_ALLE_STATUSSEN.find(s => s.key === k)?.label ?? k
 
 type Props = {
   dossierId: string
@@ -26,11 +26,13 @@ type Props = {
   createdAt: string | null
   initieelMandaat: number | null
   initieleFacturatiemethode: 'regie' | 'termijnen'
+  /** Mutatiewerk gaat aangenomen; dan staat de methode standaard op Aangenomen (wel aanpasbaar). */
+  isMutatie?: boolean
   heeftCalculatie: boolean
 }
 
 export default function ServicedeskInfoPaneel({
-  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, heeftCalculatie,
+  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie, heeftCalculatie,
 }: Props) {
   const router = useRouter()
   const [mandaat, setMandaat]       = useState<string>(initieelMandaat != null ? String(initieelMandaat) : '')
@@ -120,6 +122,11 @@ export default function ServicedeskInfoPaneel({
                 </button>
               ))}
             </div>
+            {isMutatie && (
+              <div className="mt-1.5 max-w-[190px] text-[11px] leading-snug text-neutral-400">
+                Mutatiewerk staat standaard op Aangenomen.
+              </div>
+            )}
           </div>
 
           {/* Mandaat */}

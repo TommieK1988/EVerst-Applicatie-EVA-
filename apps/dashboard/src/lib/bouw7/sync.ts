@@ -1021,6 +1021,19 @@ const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
   'LB. Lopende bonnen':    'loopt',
 }
 
+/**
+ * Zelfde mapping voor mutatiewerk, dat een eigen kolomreeks heeft (zie
+ * SERVICEDESK_MUTATIE_STATUSSEN in components/dossiers/types.ts). Alleen "03. Werkvoorbereiding"
+ * wijkt af: dagelijks onderhoud kent geen voorbereidingsfase en laat die bon op Nieuw staan, een
+ * mutatie krijgt er een eigen kolom voor. De overige statussen landen op dezelfde sleutels, die op
+ * het mutatiebord alleen een ander label dragen (loopt = "Onderhanden",
+ * uitgevoerd = "Uitvoering gereed", offerte_uitgebracht = "Offerte verstuurd").
+ */
+const BOUW7_NAAR_MUTATIE_SUBSTATUS: Record<string, string> = {
+  ...BOUW7_NAAR_SERVICEDESK_SUBSTATUS,
+  '03. Werkvoorbereiding': 'in_voorbereiding',
+}
+
 /** Hoort deze Bouw7-projectstatus bij de opdracht-fase (02.–07.)? */
 function isOpdrachtStatus(naam: string): boolean {
   return Object.keys(OPDRACHT_PREFIX_NAAR_SUBSTATUS).some((prefix) => naam.startsWith(prefix))
@@ -1059,12 +1072,13 @@ function mapBouw7NaarEvaStatus(
 
   // Servicedesk: LB of categorie Dagelijks onderhoud/Mutatie (categorie wint over projectstatus)
   if (naam.toUpperCase().startsWith('LB.') || cat === 'Dagelijks onderhoud' || cat === 'Mutatie') {
+    const ladder = cat === 'Mutatie' ? BOUW7_NAAR_MUTATIE_SUBSTATUS : BOUW7_NAAR_SERVICEDESK_SUBSTATUS
     return {
       hoofdstatus:           'aanvraag',
       aanvraag_substatus:    'nieuw',
       offerte_substatus:     null,
       opdracht_substatus:    null,
-      servicedesk_substatus: BOUW7_NAAR_SERVICEDESK_SUBSTATUS[naam] ?? 'nieuw',
+      servicedesk_substatus: ladder[naam] ?? 'nieuw',
     }
   }
 

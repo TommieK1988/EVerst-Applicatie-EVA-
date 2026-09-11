@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import {
-  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_STATUSSEN,
-  getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus,
+  AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
+  getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
   type DossierSectie, type DossierRij,
 } from '../types'
 import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden, stuurAanneemsomNaarBouw7 } from '@/lib/dossiers/actions'
@@ -60,7 +60,7 @@ import {
 } from '@/components/ui'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
-const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_STATUSSEN]
+const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_ALLE_STATUSSEN]
 const statusLabel = (s: string) => alleStatussen.find(x => x.key === s)?.label ?? s
 const statusKleur = (s: string) =>
   ['verloren', 'vervallen', 'afgewezen'].includes(s) ? '#d9534f' :
@@ -1181,10 +1181,15 @@ export function InformatieTab({
   /** Gezet zodra er een afsluitende status gekozen is; de dialoog bevestigt of annuleert. */
   const [afsluitBevestiging, setAfsluitBevestiging] = React.useState<string | null>(null)
 
+  // Servicedesk kent twee kolomreeksen; welke dit dossier ziet, hangt aan zijn categorie.
   const beschikbareStatussen =
     sectie === 'aanvraag'    ? AANVRAAG_STATUSSEN :
     sectie === 'offerte'     ? OFFERTE_STATUSSEN  :
-    sectie === 'servicedesk' ? SERVICEDESK_STATUSSEN : OPDRACHT_STATUSSEN
+    sectie === 'servicedesk' ? servicedeskLadder(dossier) : OPDRACHT_STATUSSEN
+
+  /** Label van de huidige substatus; op servicedesk dat van de ladder van dit dossier. */
+  const huidigStatusLabel =
+    beschikbareStatussen.find(s => s.key === substatus)?.label ?? statusLabel(substatus)
 
   // Velden die uit Bouw7 komen zijn niet bewerkbaar in EVA (geen terugschrijven naar Bouw7).
   // Geldt alleen voor dossiers die daadwerkelijk uit Bouw7 komen.
@@ -1611,7 +1616,7 @@ export function InformatieTab({
                 }}
               >
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusKleur(substatus) }} />
-                {statusLabel(substatus)}
+                {huidigStatusLabel}
               </span>
             ) : (
             <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
@@ -1625,7 +1630,7 @@ export function InformatieTab({
                   }}
                 >
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusKleur(substatus) }} />
-                  {statusLabel(substatus)}
+                  {huidigStatusLabel}
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="ml-0.5">
                     <path d="M2 4l3 3 3-3" />
                   </svg>
@@ -1826,6 +1831,7 @@ export function InformatieTab({
             createdAt={dossier.bouw7_aanmaakdatum ?? dossier.created_at ?? null}
             initieelMandaat={dossier.mandaat_bedrag ?? null}
             initieleFacturatiemethode={(dossier.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'}
+            isMutatie={isMutatieDossier(dossier)}
             heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
           />
         )}
@@ -1849,7 +1855,7 @@ export function InformatieTab({
               />
               {/* De fase wijzig je via de statuskeuze in de kop: die bewaakt de
                   bevestiging bij afsluiten en de controle bij financieel gereed. */}
-              <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
+              <InfoVeld label="Fase"           waarde={huidigStatusLabel} />
               <KeuzeVeld
                 label="Categorie"
                 waarde={form.categorie}

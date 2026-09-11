@@ -67,6 +67,30 @@ export function DossierKanban<K extends string>({
   React.useEffect(() => { setDossiers(initieel) }, [initieel])
 
   /**
+   * De kolomsleutel per dossier.
+   *
+   * Op servicedesk wordt hij begrensd tot de getoonde ladder. Dagelijks onderhoud en mutatie delen
+   * één kolom in de database maar tonen een eigen reeks; een dossier waarvan de substatus niet in de
+   * actieve reeks voorkomt (bv. `uitgezet` nadat de categorie op Mutatie is gezet) zou anders van het
+   * bord verdwijnen — `filter(d => resolveKey(d) === s.key)` matcht dan nergens. Het valt in plaats
+   * daarvan terug op de eerste kolom; de eerstvolgende Bouw7-sync herschrijft de substatus volgens
+   * de nieuwe categorie.
+   *
+   * Bewust niet generiek: op het opdrachtenbord ontbreekt `financieel_afgesloten` met opzet, en die
+   * dossiers horen niet alsnog in "Nieuwe opdracht" op te duiken.
+   */
+  const resolveKey = React.useMemo(() => {
+    const basis = resolveKolomKeyFn(kolomKeyModus)
+    if (kolomKeyModus !== 'servicedesk_substatus') return basis
+    const geldig = new Set<string>(statussen.map(s => s.key))
+    const eerste = statussen[0]?.key ?? ''
+    return (d: DossierRij) => {
+      const k = basis(d)
+      return geldig.has(k) ? k : eerste
+    }
+  }, [kolomKeyModus, statussen])
+
+  /**
    * Openen van een kaart. Eén stabiele callback voor het hele bord in plaats van een
    * closure per kaart: DossierKaart is gememoïseerd, en een prop die elke render van
    * identiteit wisselt zou die memo waardeloos maken.
@@ -259,7 +283,6 @@ export function DossierKanban<K extends string>({
         {/* Kanban */}
         <div style={{ display: 'flex', flex: 1, overflowX: 'hidden', overflowY: 'hidden' }}>
           {statussen.map((s, idx) => {
-            const resolveKey = resolveKolomKeyFn(kolomKeyModus)
             const kolom = gefilterd.filter(d => resolveKey(d) === s.key)
             const isDragOver = dragOverCol === s.key
 

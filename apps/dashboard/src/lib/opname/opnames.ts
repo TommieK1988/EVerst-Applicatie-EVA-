@@ -31,6 +31,7 @@ import type {
 } from '@everts/database/opname-types'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar, heeftProjectrol } from '@/lib/dossiers/guards'
+import { isMutatieDossier } from '@/components/dossiers/types'
 import { bevriesNormen, getActievePrijslijst } from './bibliotheek'
 import { bepaalRegelPrijs } from './prijs'
 
@@ -605,8 +606,46 @@ export async function rondOpnameAf(
     await updateTaakStatus(toegang.opname.task_id, 'gereed').catch(() => {})
   }
 
+  await schuifMutatieNaarOpgenomen(toegang.opname.dossier_id).catch(() => {})
+
   revalidate(toegang.opname.dossier_id, opnameId)
   return { ok: true }
+}
+
+/**
+ * Een afgeronde opname schuift het mutatiedossier op het servicedeskbord naar de kolom "Opgenomen".
+ *
+ * Alleen vanuit `nieuw`: een aanvullende opname op een dossier dat al Onderhanden is, mag de kaart
+ * niet terugtrekken. En alleen bij mutatiewerk — dagelijks onderhoud heeft die kolom niet.
+ *
+ * `updateServicedeskSubstatus` doet de rest: markeert het veld als handmatig gezet zodat de
+ * Bouw7-leessync de verplaatsing laat staan tot Bouw7 de projectstatus écht wijzigt, schrijft de
+ * historie weg en verwerkt de actielijst-triggers.
+ *
+ * Fail-soft aangeroepen: een haperende dossierupdate mag het afronden van de opname niet blokkeren —
+ * de opnemer staat op dat moment nog op locatie.
+ */
+async function schuifMutatieNaarOpgenomen(dossierId: string): Promise<void> {
+  const { data } = await db()
+    .from('dossiers')
+    .select('servicedesk_substatus, bouw7_categorie_naam, categorie')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!data) return
+
+  const dossier = data as {
+    servicedesk_substatus: string | null
+    bouw7_categorie_naam: string | null
+    categorie: string | null
+  }
+  if (dossier.servicedesk_substatus !== 'nieuw') return
+
+  if (!isMutatieDossier(dossier)) return
+
+  // Dynamisch: lib/dossiers/actions trekt de halve dossierlaag mee en importeert zelf weer
+  // opname-code. Statisch zou dat een kringloop zijn.
+  const { updateServicedeskSubstatus } = await import('@/lib/dossiers/actions')
+  await updateServicedeskSubstatus(dossierId, 'opgenomen')
 }
 
 /** Terug naar concept, bijvoorbeeld omdat de opnemer iets vergat. */
