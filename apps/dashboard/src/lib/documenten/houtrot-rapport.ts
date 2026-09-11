@@ -26,7 +26,7 @@ import {
   REGISTRATIE_STATUSSEN, CONTROL_STATUSSEN, SCHADE_SEVERITY,
   type LocatieBoom, type RepairRegistration, type RepairPhoto,
 } from '@/lib/houtrotherstel/types'
-import { bepaalBtw, btwOpstelling, naarKaart, type BtwUitkomst } from '@/lib/houtrotherstel/btw'
+import { bepaalBtw, btwOpstelling, type BtwUitkomst } from '@/lib/houtrotherstel/btw'
 import { losseTabel, tekst, tekstOfNull, type Rij } from '@/lib/supabase/losse-tabel'
 import { telWerkzaamheden, type WerkzaamheidTotaal } from '@/lib/houtrotherstel/werkzaamheden-totaal'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
@@ -196,7 +196,7 @@ export async function bouwHoutrotBlok(
   const receptIds = [...new Set(
     rijen.flatMap(x => gesorteerdeRegels(x.r).map(l => l.recept_id).filter((v): v is string => !!v)),
   )]
-  const btwVan = await bouwBtwWijzer(dossierId, receptIds)
+  const btwVan = await bouwBtwWijzer(receptIds)
   const geteld = telWerkzaamheden(rijen.map(x => x.r), btwVan, keuze.toon_prijzen)
   const opstelling = btwOpstelling(geteld.btwRegels)
 
@@ -285,46 +285,23 @@ async function laadMedewerkerNamen(ids: (string | null)[]): Promise<Map<string, 
 type BtwWijzer = (receptId: string | null | undefined) => BtwUitkomst
 
 /**
- * Bouwt de btw-wijzer voor één dossier: stamtarieven, de afwijkingen van het
- * dossier en die van de opdrachtgever, plus de code uit de eenheidsprijs.
- * Faalt stil terug op "alles 21%" — een rapportage mag niet klappen omdat de
- * stamgegevens even niet bereikbaar zijn.
+ * Bouwt de btw-wijzer: de stamtarieven plus de code uit de eenheidsprijs van elk
+ * gebruikt recept. Faalt stil terug op "alles 21%" — een rapportage mag niet
+ * klappen omdat de stamgegevens even niet bereikbaar zijn.
  */
-async function bouwBtwWijzer(dossierId: string, receptIds: string[]): Promise<BtwWijzer> {
+async function bouwBtwWijzer(receptIds: string[]): Promise<BtwWijzer> {
   try {
-    const supabase = losseTabel()
     const tarieven = await laadBtwTarieven()
+    if (receptIds.length === 0) return () => bepaalBtw({ basisCode: null, tarieven })
 
-    const { data: dossier } = await supabase
-      .from('dossiers').select('klant_id').eq('id', dossierId).maybeSingle()
-    const klantId = tekstOfNull(dossier, 'klant_id')
-
-    const [{ data: basis }, { data: opDossier }, { data: opKlant }] = await Promise.all([
-      receptIds.length > 0
-        ? supabase.from('paint_items').select('id, btw_tarief').in('id', receptIds)
-        : Promise.resolve({ data: [] }),
-      supabase.from('houtrot_btw_tarieven')
-        .select('recept_id, btw_tarief_id').eq('dossier_id', dossierId),
-      klantId
-        ? supabase.from('houtrot_btw_tarieven')
-            .select('recept_id, btw_tarief_id').eq('relatie_id', klantId)
-        : Promise.resolve({ data: [] }),
-    ])
-
+    const { data } = await losseTabel()
+      .from('paint_items').select('id, btw_tarief').in('id', receptIds)
     const codes = new Map<string, string | null>(
-      (basis ?? []).map((b: Rij) => [tekst(b, 'id'), tekstOfNull(b, 'btw_tarief')]),
+      (data ?? []).map((b: Rij) => [tekst(b, 'id'), tekstOfNull(b, 'btw_tarief')]),
     )
-    const afwijking = (rijen: Rij[]) => naarKaart(
-      rijen.map(r => ({ recept_id: tekst(r, 'recept_id'), btw_tarief_id: tekst(r, 'btw_tarief_id') })),
-    )
-    const dossierKaart = afwijking(opDossier ?? [])
-    const klantKaart = afwijking(opKlant ?? [])
 
     return receptId => bepaalBtw({
-      receptId,
       basisCode: receptId ? codes.get(receptId) ?? null : null,
-      dossier: dossierKaart,
-      opdrachtgever: klantKaart,
       tarieven,
     })
   } catch {

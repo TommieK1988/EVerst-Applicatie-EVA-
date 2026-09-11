@@ -1,15 +1,13 @@
 /**
  * btw.ts — welk btw-tarief hoort bij een houtrot-werkzaamheid?
  *
- * Pure helpers (geen server-imports), zodat de dossier-UI, de opdrachtgever-UI én
- * de rapportagebouwer dezelfde regels gebruiken. Zouden die hun eigen keuze maken,
- * dan staat er vroeg of laat een ander percentage op het scherm dan op papier.
+ * Pure helpers (geen server-imports), zodat de rapportagebouwer en alles wat er
+ * later op leunt dezelfde regels gebruiken.
  *
- * Voorrang — de meest specifieke afwijking wint:
- *   1. afwijking op het dossier
- *   2. afwijking bij de opdrachtgever
- *   3. de code in de eenheidsprijs (`paint_items.btw_tarief`)
- *   4. Hoog 21%
+ * Het tarief komt uit de eenheidsprijs: `paint_items.btw_tarief` is een tekstcode
+ * ('hoog' | 'laag' | 'vrijgesteld') uit de calculatiebibliotheek. Die code wordt
+ * hier opgezocht in de stamtabel `btw_tarieven`, zodat de rapportage het tarief
+ * bij zijn naam kan noemen en verlegde tarieven apart kan optellen.
  *
  * Het gerekende percentage komt uit `heffingsPercentage()` in de stamgegevens —
  * inclusief de bedrijfskeuze dat een verlegd tarief hier zijn nominale percentage
@@ -17,14 +15,8 @@
  */
 import { heffingsPercentage, type BtwTariefKeuze } from '@/lib/stamdata/btw'
 
-/** Afwijking zoals hij in `public.houtrot_btw_tarieven` staat. */
-export interface BtwAfwijking {
-  recept_id: string
-  btw_tarief_id: string
-}
-
-/** Waar een tarief vandaan komt — de UI laat zien wat een afwijking overrulet. */
-export type BtwHerkomst = 'dossier' | 'opdrachtgever' | 'eenheidsprijs' | 'terugval'
+/** Waar een tarief vandaan komt. */
+export type BtwHerkomst = 'eenheidsprijs' | 'terugval'
 
 export interface BtwUitkomst {
   tarief: BtwTariefKeuze | null
@@ -35,8 +27,8 @@ export interface BtwUitkomst {
 
 /**
  * De tekstcode uit de calculatiebibliotheek naar een nominaal percentage. De
- * bibliotheek kent alleen deze drie; verlegde tarieven bestaan daar niet en komen
- * dus altijd van een afwijking.
+ * bibliotheek kent alleen deze drie; verlegde tarieven bestaan daar niet, dus op
+ * een houtrotrapportage komen ze ook niet voor.
  */
 const CODE_PCT: Record<string, number> = { hoog: 21, laag: 9, vrijgesteld: 0 }
 
@@ -45,31 +37,15 @@ function tariefOpPercentage(tarieven: BtwTariefKeuze[], pct: number): BtwTariefK
   return tarieven.find(t => !t.verlegd && Number(t.percentage) === pct)
 }
 
-/**
- * Bepaalt het tarief van één werkzaamheid. `receptId` mag leeg zijn (een regel van
- * vóór de receptenkoppeling); dan is er niets om een afwijking aan te hangen en
- * geldt de eenheidsprijs-code.
- */
+/** Bepaalt het tarief van één werkzaamheid uit de code in de eenheidsprijs. */
 export function bepaalBtw(
   opties: {
-    receptId: string | null | undefined
     /** `paint_items.btw_tarief` van dit recept ('hoog' | 'laag' | …). */
     basisCode: string | null | undefined
-    dossier: Map<string, string>
-    opdrachtgever: Map<string, string>
     tarieven: BtwTariefKeuze[]
   },
 ): BtwUitkomst {
-  const { receptId, basisCode, dossier, opdrachtgever, tarieven } = opties
-  const opId = (id: string | undefined) => (id ? tarieven.find(t => t.id === id) : undefined)
-
-  if (receptId) {
-    const uitDossier = opId(dossier.get(receptId))
-    if (uitDossier) return { tarief: uitDossier, herkomst: 'dossier', pct: heffingsPercentage(uitDossier) }
-    const uitKlant = opId(opdrachtgever.get(receptId))
-    if (uitKlant) return { tarief: uitKlant, herkomst: 'opdrachtgever', pct: heffingsPercentage(uitKlant) }
-  }
-
+  const { basisCode, tarieven } = opties
   const code = (basisCode ?? 'hoog').toLowerCase()
   const pct = CODE_PCT[code]
   if (pct !== undefined) {
@@ -83,11 +59,6 @@ export function bepaalBtw(
   return hoog
     ? { tarief: hoog, herkomst: 'terugval', pct: heffingsPercentage(hoog) }
     : { tarief: null, herkomst: 'terugval', pct: 21 }
-}
-
-/** Afwijkingenlijst → opzoekkaart recept_id → btw_tarief_id. */
-export function naarKaart(rijen: BtwAfwijking[]): Map<string, string> {
-  return new Map(rijen.map(r => [r.recept_id, r.btw_tarief_id]))
 }
 
 /** "21%" / "21% verlegd" — hoe het percentage in de rapportage komt te staan. */

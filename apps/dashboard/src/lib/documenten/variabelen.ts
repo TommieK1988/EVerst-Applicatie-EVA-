@@ -371,8 +371,8 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     uitleg: 'Het totaalblad telt de werkzaamheden van álle registraties bij elkaar: één regel per soort werk, ' +
       'met het totale aantal, de eenheidsprijs, het btw-percentage en het regeltotaal. Daaronder komt de ' +
       'btw-opstelling: per tarief een regel, en als slot het bedrag inclusief btw. Het btw-percentage van een ' +
-      'werkzaamheid komt uit de eenheidsprijs en kan per opdrachtgever en per dossier worden aangepast ' +
-      '(dossier → Houtrot → Btw-tarieven). Zonder prijzen blijven alle bedragvelden én de btw-loop leeg.',
+      'werkzaamheid komt uit de eenheidsprijs (Calculatie → Bibliotheek, kolom Btw). ' +
+      'Zonder prijzen blijven alle bedragvelden én de btw-loop leeg.',
     items: [
       { v: '{#houtrot.werkzaamheden}…{/houtrot.werkzaamheden}', label: 'Loop: één regel per werkzaamheid, opgeteld over alle registraties' },
       { v: '{naam}',           label: 'Werkzaamheid — naam' },

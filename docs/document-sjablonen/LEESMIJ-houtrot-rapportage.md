@@ -128,9 +128,8 @@ TARIEF      BEDRAG EXCL.  BTW      BEDRAG INCL.
 {#houtrot.btw}{label}  {excl}  {btw}  {incl}{/houtrot.btw}
 Totaal exclusief btw   {houtrot.totaal.excl}  {houtrot.totaal.btw}  {houtrot.totaal.incl}
 ```
-Het btw-percentage van een werkzaamheid komt uit de **eenheidsprijs** en is per
-**opdrachtgever** en per **dossier** aan te passen — zie hieronder. Verlegde tarieven
-krijgen een eigen regel, ook als het percentage gelijk is.
+Het btw-percentage van een werkzaamheid komt uit de **eenheidsprijs** — zie hieronder.
+Verlegde tarieven krijgen een eigen regel, ook als het percentage gelijk is.
 
 ### Totaalblad — gegroepeerd per locatie (alternatief)
 De oude opzet werkt nog steeds, mocht je hem ergens willen gebruiken:
@@ -144,17 +143,9 @@ De oude opzet werkt nog steeds, mocht je hem ergens willen gebruiken:
 
 ## Btw per werkzaamheid
 
-De standaard staat in de **eenheidsprijs** (Calculatie → Bibliotheek, kolom Btw). Daar
-bovenop kun je afwijken:
-
-- **per opdrachtgever** — Relaties → de opdrachtgever → blok *Btw-tarieven*. Geldt voor al
-  zijn dossiers.
-- **per dossier** — Dossier → Houtrot → blok *Btw-tarieven*. Geldt alleen daar en gaat vóór
-  de instelling bij de opdrachtgever.
-
-"Standaard" in de keuzelijst haalt de afwijking weer weg. Achter elke regel zie je welk
-percentage nu geldt en waar het vandaan komt. In een dossier krijg je standaard alleen de
-werkzaamheden te zien die er daadwerkelijk geregistreerd zijn.
+Het btw-percentage komt uit de **eenheidsprijs**: Calculatie → Bibliotheek, kolom Btw
+(hoog 21% of laag 9%). Wijzig je het daar, dan werkt dat door in elke rapportage. Er is
+geen aparte btw-instelling per dossier of per opdrachtgever.
 
 ## Aandachtspunten
 
