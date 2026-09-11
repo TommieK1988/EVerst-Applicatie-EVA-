@@ -82,16 +82,17 @@ export async function getRegistraties(
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  return metMedewerkerNaam(supabase, (data || []) as RepairRegistration[])
+  return metNamen(supabase, (data || []) as RepairRegistration[])
 }
 
 /**
- * Vult `medewerker_naam` aan. De registrant staat sinds de cutover in
- * `public.medewerkers`, maar deze client is op het `houtrotherstel`-schema gescoped
- * en kan daar niet naartoe embedden. De view `registraties_met_details` joint wél
- * over de schema's heen, dus halen we de naam daar op. Faalt stil (naam blijft null).
+ * Vult `medewerker_naam` (de maker) en `bijgewerkt_door_naam` (de laatste bewerker)
+ * aan. Beide staan sinds de cutover in `public.medewerkers`, maar deze client is op
+ * het `houtrotherstel`-schema gescoped en kan daar niet naartoe embedden. De view
+ * `registraties_met_details` joint wél over de schema's heen, dus halen we de namen
+ * daar op. Faalt stil (namen blijven null).
  */
-async function metMedewerkerNaam(
+async function metNamen(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   rijen: RepairRegistration[]
@@ -100,12 +101,18 @@ async function metMedewerkerNaam(
 
   const { data } = await supabase
     .from('registraties_met_details')
-    .select('id, medewerker_naam')
+    .select('id, medewerker_naam, bijgewerkt_door_naam')
     .in('id', rijen.map(r => r.id))
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const namen = new Map<string, string | null>((data ?? []).map((d: any) => [d.id, d.medewerker_naam]))
-  return rijen.map(r => ({ ...r, medewerker_naam: namen.get(r.id) ?? null }))
+  const namen = new Map<string, { maker: string | null; bewerker: string | null }>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (data ?? []).map((d: any) => [d.id, { maker: d.medewerker_naam, bewerker: d.bijgewerkt_door_naam }]),
+  )
+  return rijen.map(r => ({
+    ...r,
+    medewerker_naam: namen.get(r.id)?.maker ?? null,
+    bijgewerkt_door_naam: namen.get(r.id)?.bewerker ?? null,
+  }))
 }
 
 export async function getRegistratie(id: string): Promise<RepairRegistration | null> {
@@ -123,7 +130,7 @@ export async function getRegistratie(id: string): Promise<RepairRegistration | n
     .single()
 
   if (error) return null
-  const [rij] = await metMedewerkerNaam(supabase, [data as RepairRegistration])
+  const [rij] = await metNamen(supabase, [data as RepairRegistration])
   return rij ?? (data as RepairRegistration)
 }
 
@@ -282,6 +289,8 @@ export async function updateRegistratie(
     .update({
       registration_date: form.registration_date,
       locatie: form.locatie ?? [],
+      // `updated_at` komt van een trigger; wie de wijziging deed leggen we hier vast.
+      bijgewerkt_door: userId,
       notes: form.notes || null,
       status: form.status,
       status_handmatig: form.status_handmatig ?? false,

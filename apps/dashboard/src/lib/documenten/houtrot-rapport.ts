@@ -26,6 +26,10 @@ import {
   REGISTRATIE_STATUSSEN, CONTROL_STATUSSEN, SCHADE_SEVERITY,
   type LocatieBoom, type RepairRegistration, type RepairPhoto,
 } from '@/lib/houtrotherstel/types'
+import { bepaalBtw, btwOpstelling, naarKaart, type BtwUitkomst } from '@/lib/houtrotherstel/btw'
+import { losseTabel, tekst, tekstOfNull, type Rij } from '@/lib/supabase/losse-tabel'
+import { telWerkzaamheden, type WerkzaamheidTotaal } from '@/lib/houtrotherstel/werkzaamheden-totaal'
+import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import { FOTO_GRENZEN, mapMetLimiet, haalRapportFoto, pasFotoBudgetToe } from './rapport-fotos'
 import { knipInPaginas } from './rapport-paginas'
 import { datumNL, datumISO, euroNL, getalNL, afkappen, volledigeNaam } from './format'
@@ -46,6 +50,7 @@ interface WerkzaamheidCtx { [k: string]: unknown }
 interface RegistratieCtx { [k: string]: unknown }
 interface PaginaCtx { [k: string]: unknown }
 interface GroepCtx { [k: string]: unknown }
+interface BtwRegelCtx { [k: string]: unknown }
 
 export interface HoutrotBlok {
   heeft: boolean
@@ -59,6 +64,14 @@ export interface HoutrotBlok {
   paginas: PaginaCtx[]
   groepen: GroepCtx[]
   /**
+   * Het totaalblad: één regel per werkzaamheid, opgeteld over alle registraties.
+   * Vervangt de oude opsomming per registratie — die staan met foto's al op de
+   * pagina's ervoor, en een optelling per soort werk is wat er nagerekend wordt.
+   */
+  werkzaamheden: WerkzaamheidTotaal[]
+  /** De btw-opstelling onderaan: per tarief een regel, plus de eindtotalen. */
+  btw: BtwRegelCtx[]
+  /**
    * Vlakke lijst van alle registraties. Bewust NIET `registraties`: pagina- en
    * groepobjecten hebben dat veld ook, en de dotted parser lost een tag in de
    * binnenste passende scope op. Gelijke namen zouden stil het verkeerde blok pakken.
@@ -69,8 +82,11 @@ export interface HoutrotBlok {
 export const LEEG_HOUTROT_BLOK: HoutrotBlok = {
   heeft: false, aantal: 0, aantal_paginas: 0, per_pagina: 0, niveau_label: '',
   filter_omschrijving: '', is_voorbeeld: false,
-  totaal: { verkoop: '', kostprijs: '', uren: '', arbeid: '', materiaal: '' },
-  paginas: [], groepen: [], alle_registraties: [],
+  totaal: {
+    verkoop: '', kostprijs: '', uren: '', arbeid: '', materiaal: '',
+    excl: '', btw: '', incl: '',
+  },
+  paginas: [], groepen: [], werkzaamheden: [], btw: [], alle_registraties: [],
 }
 
 // ── Hulpjes ───────────────────────────────────────────────────────────────
@@ -176,7 +192,30 @@ export async function bouwHoutrotBlok(
   // ── Pagina's ──────────────────────────────────────────────────────────
   const paginas = bouwPaginas(registraties, groepen, keuze)
 
+  // ── Totaalblad: werkzaamheden opgeteld + btw-opstelling ───────────────
+  const receptIds = [...new Set(
+    rijen.flatMap(x => gesorteerdeRegels(x.r).map(l => l.recept_id).filter((v): v is string => !!v)),
+  )]
+  const btwVan = await bouwBtwWijzer(dossierId, receptIds)
+  const geteld = telWerkzaamheden(rijen.map(x => x.r), btwVan, keuze.toon_prijzen)
+  const opstelling = btwOpstelling(geteld.btwRegels)
+
   const totalen = totaalVan(rijen.map(x => x.r), keuze.toon_prijzen)
+  const bedrag = (n: number) => (keuze.toon_prijzen ? euroNL(n) : '')
+  totalen.excl = bedrag(opstelling.excl)
+  totalen.btw = bedrag(opstelling.btw)
+  totalen.incl = bedrag(opstelling.incl)
+
+  const btwCtx: BtwRegelCtx[] = keuze.toon_prijzen
+    ? opstelling.groepen.map(g => ({
+        label: g.label,
+        pct: g.pct,
+        verlegd: g.verlegd,
+        excl: euroNL(g.excl),
+        btw: euroNL(g.btw),
+        incl: euroNL(g.incl),
+      }))
+    : []
 
   return {
     heeft: true,
@@ -189,6 +228,8 @@ export async function bouwHoutrotBlok(
     totaal: totalen,
     paginas,
     groepen,
+    werkzaamheden: geteld.regels,
+    btw: btwCtx,
     alle_registraties: registraties,
   }
 }
@@ -235,6 +276,59 @@ async function laadMedewerkerNamen(ids: (string | null)[]): Promise<Map<string, 
     return new Map((data ?? []).map((m: any) => [m.id as string, volledigeNaam(m)]))
   } catch {
     return new Map()
+  }
+}
+
+// ── Btw ───────────────────────────────────────────────────────────────────
+
+/** Bepaalt per recept het geldende tarief; zie `lib/houtrotherstel/btw.ts`. */
+type BtwWijzer = (receptId: string | null | undefined) => BtwUitkomst
+
+/**
+ * Bouwt de btw-wijzer voor één dossier: stamtarieven, de afwijkingen van het
+ * dossier en die van de opdrachtgever, plus de code uit de eenheidsprijs.
+ * Faalt stil terug op "alles 21%" — een rapportage mag niet klappen omdat de
+ * stamgegevens even niet bereikbaar zijn.
+ */
+async function bouwBtwWijzer(dossierId: string, receptIds: string[]): Promise<BtwWijzer> {
+  try {
+    const supabase = losseTabel()
+    const tarieven = await laadBtwTarieven()
+
+    const { data: dossier } = await supabase
+      .from('dossiers').select('klant_id').eq('id', dossierId).maybeSingle()
+    const klantId = tekstOfNull(dossier, 'klant_id')
+
+    const [{ data: basis }, { data: opDossier }, { data: opKlant }] = await Promise.all([
+      receptIds.length > 0
+        ? supabase.from('paint_items').select('id, btw_tarief').in('id', receptIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from('houtrot_btw_tarieven')
+        .select('recept_id, btw_tarief_id').eq('dossier_id', dossierId),
+      klantId
+        ? supabase.from('houtrot_btw_tarieven')
+            .select('recept_id, btw_tarief_id').eq('relatie_id', klantId)
+        : Promise.resolve({ data: [] }),
+    ])
+
+    const codes = new Map<string, string | null>(
+      (basis ?? []).map((b: Rij) => [tekst(b, 'id'), tekstOfNull(b, 'btw_tarief')]),
+    )
+    const afwijking = (rijen: Rij[]) => naarKaart(
+      rijen.map(r => ({ recept_id: tekst(r, 'recept_id'), btw_tarief_id: tekst(r, 'btw_tarief_id') })),
+    )
+    const dossierKaart = afwijking(opDossier ?? [])
+    const klantKaart = afwijking(opKlant ?? [])
+
+    return receptId => bepaalBtw({
+      receptId,
+      basisCode: receptId ? codes.get(receptId) ?? null : null,
+      dossier: dossierKaart,
+      opdrachtgever: klantKaart,
+      tarieven,
+    })
+  } catch {
+    return () => ({ tarief: null, herkomst: 'terugval', pct: 21 })
   }
 }
 
@@ -318,7 +412,10 @@ function bouwRegistratie(
     werkzaamheden,
     heeft_werkzaamheden: werkzaamheden.length > 0,
     werkzaamheden_tekst: tekst,
-    werkzaamheden_kort: afkappen(tekst, 160),
+    // 250 tekens ≈ 3 regels in de vaste indeling (cel 9072 twips, 10pt). De rij in
+    // het sjabloon is daar met een exacte hoogte van 780 twips op gemaakt; kap je
+    // hier minder af, dan valt de laatste regel weg achter die exacte hoogte.
+    werkzaamheden_kort: afkappen(tekst, 250),
 
     bedragen: {
       verkoop: bedrag(verkoop),

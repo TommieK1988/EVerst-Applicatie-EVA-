@@ -1,12 +1,20 @@
-# Startsjabloon — Houtrot-rapportage
+# Startsjablonen — Houtrot-rapportage
 
-Het bestand **`Houtrot-rapportage.docx`** is een kant-en-klaar Word-sjabloon: voorblad met
-dossiergegevens, drie registraties per pagina met de foto's voor/tijdens/na naast elkaar,
-en een totaalblad gegroepeerd per niveau van de locatie-indeling.
+Er zijn **twee** kant-en-klare Word-sjablonen, die alleen verschillen in wat de klant te
+zien krijgt:
 
-Je maakt er zoveel **versies** van als je wilt — bijvoorbeeld één mét en één zónder
-verkoopprijzen. Elke versie is gewoon een eigen sjabloonrij met een eigen Word-bestand;
-daar komt geen programmeerwerk bij kijken.
+| Bestand | Voor wie |
+|---|---|
+| `Houtrot-rapportage-met-prijzen.docx` | intern en richting opdrachtgever mét prijsafspraak |
+| `Houtrot-rapportage-zonder-prijzen.docx` | richting bewoners, VvE-leden of een opdrachtgever die alleen het werk wil zien |
+
+Allebei hebben ze: een voorblad met dossiergegevens, drie registraties per pagina met de
+foto's voor/tijdens/na naast elkaar, en een totaalblad. Op dat totaalblad staat **één regel
+per werkzaamheid**, opgeteld over alle registraties. In de versie mét prijzen staan daar de
+eenheidsprijs, het btw-percentage en het regeltotaal bij, met daaronder een **btw-opstelling
+per tarief** en het bedrag **inclusief btw**.
+
+Richt ze allebei in; bij het opstellen kies je welke je pakt (zie hieronder).
 
 ## Eenmalig instellen (Instellingen → Document-sjablonen)
 
@@ -15,27 +23,34 @@ daar komt geen programmeerwerk bij kijken.
    - **Naam**: bv. "Houtrot-rapportage (met prijzen)"
    - **Documentsoort**: **Houtrot-rapportage** ← dit is bepalend; alleen bij deze soort
      haalt EVA de registraties, foto's en locatie-indeling op.
-3. Koppel bij **Word-template** het bestand `Houtrot-rapportage.docx`.
+3. Koppel bij **Word-template** het bestand `Houtrot-rapportage-met-prijzen.docx`.
 4. Voeg onderaan bij **Invoervelden** één veld toe:
    - **Sleutel**: `houtrot`  ← moet exact zo heten
    - **Label**: bv. "Wat komt er in de rapportage"
    - **Type**: **Houtrot-rapportage (filters)**
    - **Verplicht**: nee
    - **Standaardwaarde**: `{"per_pagina":3,"niveau":0,"toon_prijzen":true}`
-     (of laat leeg; dan geldt precies dezelfde standaard)
+     — en `"toon_prijzen":false` bij het sjabloon zonder prijzen. Dít is de knop die
+     de bedragen leegmaakt; de kolommen weglaten uit het Word-bestand is alleen de
+     opmaak.
+
+   Vergeet je dit veld, dan verschijnt het bij het opstellen alsnog met de standaarden —
+   je staat dus nooit zonder keuze. Maar zonder `"toon_prijzen":false` staat het sjabloon
+   zonder prijzen wél op "mét prijzen", en dan blijven bedragen achter de schermen bestaan.
 5. (Optioneel) koppel **briefpapier**. Let op: het briefpapier komt onder *élke* pagina,
    dus ook onder de fotopagina's. Wil je dat niet, laat het dan leeg.
 6. Opslaan.
 
-Voor een versie **zonder prijzen** herhaal je dit met een kopie van het Word-bestand
-waarin je de bedragen weghaalt, en zet je de standaardwaarde op
+Herhaal dit voor de tweede versie: naam "Houtrot-rapportage (zonder prijzen)",
+bestand `Houtrot-rapportage-zonder-prijzen.docx`, standaardwaarde
 `{"per_pagina":3,"niveau":0,"toon_prijzen":false}`.
 
 Het sjabloon verschijnt alleen bij dossiers waar de toggle **Houtrot registreren** aanstaat.
 
 ## Gebruiken (in een dossier)
 
-Dossier → **Opdracht → Houtrot** → knop **Rapportage**. Bij het opstellen kies je:
+Dossier → **Opdracht → Houtrot** → knop **Rapportage**. Staan er twee sjablonen, dan
+kies je eerst **met of zonder prijzen**. Daarna kies je:
 
 - **welke registraties** (statusfilter, en eventueel één tak van de locatie-indeling);
 - **waarop het totaalblad groepeert** (bijv. per gevelzijde);
@@ -67,6 +82,11 @@ pagina. Gebruik in de vaste indeling `{werkzaamheden_kort}` en `{schade_kort}` �
 worden afgekapt en houden de hoogte voorspelbaar. `{werkzaamheden_tekst}` en `{schade}`
 zijn volledig en kunnen dus over meerdere regels lopen.
 
+**De werkzaamheden-rij is 0,78 cm hoog (exact), goed voor drie regels tekst.** Dat hoort bij
+de afkapping van `{werkzaamheden_kort}` op 250 tekens. Verklein je die rij, dan valt de
+laatste regel weg; vergroot je hem, dan passen er bij drie registraties per pagina nog
+ongeveer 0,8 cm per blok bij voordat de derde registratie van de pagina valt.
+
 ## De tags in het Word-bestand
 
 Het volledige overzicht staat in het sjabloonscherm onder **Variabelen**. De kern:
@@ -95,16 +115,52 @@ Verder per registratie: `{datum}`, `{loc1}` `{loc2}` `{loc3}` (los per niveau),
 `{bedragen.uren}`, `{bedragen.kostprijs}`, en de regels apart met
 `{#werkzaamheden}{aantal}× {code} {naam} ({eenheid}) — {totaal}{/werkzaamheden}`.
 
-### Totaalblad
+### Totaalblad — werkzaamheden opgeteld
+Eén regel per soort werk, over álle registraties bij elkaar. Zet de open- en sluittag in
+**dezelfde tabelrij** (eerste en laatste cel), dan herhaalt Word die rij.
+```
+WERKZAAMHEID          AANTAL  EENHEID  EENHEIDSPRIJS  BTW        TOTAAL
+{#houtrot.werkzaamheden}{naam}  {aantal}  {eenheid}  {prijs_per_stuk}  {btw_pct}  {totaal}{/houtrot.werkzaamheden}
+```
+Ook beschikbaar per regel: `{code}` en `{uren}`.
+
+Regels worden gegroepeerd op werkzaamheid **én** eenheidsprijs. Is dezelfde werkzaamheid
+tussentijds duurder geworden, dan krijg je twee regels — anders zou `aantal × eenheidsprijs`
+niet meer op het regeltotaal uitkomen.
+
+### Totaalblad — btw-opstelling
+```
+TARIEF      BEDRAG EXCL.  BTW      BEDRAG INCL.
+{#houtrot.btw}{label}  {excl}  {btw}  {incl}{/houtrot.btw}
+Totaal exclusief btw   {houtrot.totaal.excl}  {houtrot.totaal.btw}  {houtrot.totaal.incl}
+```
+Het btw-percentage van een werkzaamheid komt uit de **eenheidsprijs** en is per
+**opdrachtgever** en per **dossier** aan te passen — zie hieronder. Verlegde tarieven
+krijgen een eigen regel, ook als het percentage gelijk is.
+
+### Totaalblad — gegroepeerd per locatie (alternatief)
+De oude opzet werkt nog steeds, mocht je hem ergens willen gebruiken:
 ```
 {#houtrot.groepen}
    {naam} ({niveau_label}) — {aantal} registraties — {totaal.verkoop}
    {#registraties}{nummer} | {locatie_pad} | {werkzaamheden_kort} | {bedragen.verkoop}{/registraties}
 {/houtrot.groepen}
-Totaal: {houtrot.totaal.verkoop} · {houtrot.totaal.uren} uur
 ```
-
 `{#houtrot.alle_registraties}…{/houtrot.alle_registraties}` geeft één ongegroepeerde lijst.
+
+## Btw per werkzaamheid
+
+De standaard staat in de **eenheidsprijs** (Calculatie → Bibliotheek, kolom Btw). Daar
+bovenop kun je afwijken:
+
+- **per opdrachtgever** — Relaties → de opdrachtgever → blok *Btw-tarieven*. Geldt voor al
+  zijn dossiers.
+- **per dossier** — Dossier → Houtrot → blok *Btw-tarieven*. Geldt alleen daar en gaat vóór
+  de instelling bij de opdrachtgever.
+
+"Standaard" in de keuzelijst haalt de afwijking weer weg. Achter elke regel zie je welk
+percentage nu geldt en waar het vandaan komt. In een dossier krijg je standaard alleen de
+werkzaamheden te zien die er daadwerkelijk geregistreerd zijn.
 
 ## Aandachtspunten
 

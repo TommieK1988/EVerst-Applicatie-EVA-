@@ -12,6 +12,7 @@ import {
 } from '@/lib/houtrotherstel/bedragen'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
 import LocatieBoomEditor from './LocatieBoomEditor'
+import HoutrotBtwEditor from './HoutrotBtwEditor'
 import HoutrotRegistratieModal from './HoutrotRegistratieModal'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import HoutrotRapportageKnop from '@/components/documenten/HoutrotRapportageKnop'
@@ -94,6 +95,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <LocatieBoomEditor dossierId={dossierId} />
+      <HoutrotBtwEditor dossierId={dossierId} />
       <Card>
         <CardHeader>
           <div>

@@ -18,6 +18,7 @@ import {
 } from '@/app/(platform)/documenten/actions'
 import { documentsoortLabels, type DocumentSjabloon, type DocumentVeld } from '@/lib/documenten/types'
 import HoutrotOptiesVeld from './HoutrotOptiesVeld'
+import { HOUTROT_OPTIES_SLEUTEL } from '@/lib/documenten/houtrot-opties'
 import KwaliteitOptiesVeld from './KwaliteitOptiesVeld'
 import BezoekOptiesVeld from './BezoekOptiesVeld'
 import { useDialogen } from '@/components/ui/dialogen'
@@ -34,9 +35,11 @@ interface Props {
 }
 
 export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer, onSluit, onKlaar }: Props) {
+  const velden = veldenVanSjabloon(sjabloon)
+
   const [invoer, setInvoer] = useState<Record<string, string>>(() => {
     const start: Record<string, string> = {}
-    for (const v of sjabloon.velden ?? []) {
+    for (const v of velden) {
       const eerder = beginInvoer?.[v.sleutel]
       start[v.sleutel] = eerder != null ? String(eerder) : (v.standaard ?? '')
     }
@@ -72,7 +75,7 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
       .catch(() => { /* voorstel is een gemak, geen vereiste */ })
   }, [mailOpen, dossierId, sjabloon.id])
 
-  const ontbreekt = (sjabloon.velden ?? []).filter(v => v.verplicht && !String(invoer[v.sleutel] ?? '').trim())
+  const ontbreekt = velden.filter(v => v.verplicht && !String(invoer[v.sleutel] ?? '').trim())
 
   function ververs() {
     setPreviewInvoer(invoer)
@@ -192,13 +195,13 @@ export default function DocumentGenereerModal({ dossierId, sjabloon, beginInvoer
         <div className="flex flex-1 overflow-hidden">
           {/* Invoer */}
           <div className="w-[340px] flex-shrink-0 overflow-y-auto border-r border-neutral-200 p-4">
-            {(sjabloon.velden ?? []).length === 0 ? (
+            {velden.length === 0 ? (
               <p className="text-[12.5px] text-neutral-500">
                 Dit sjabloon heeft geen invoervelden — alles komt uit het dossier.
               </p>
             ) : (
               <div className="space-y-3">
-                {(sjabloon.velden ?? []).map(veld => (
+                {velden.map(veld => (
                   <VeldInvoer
                     key={veld.sleutel}
                     veld={veld}
@@ -478,4 +481,30 @@ function triggerDownload(blob: Blob, naam: string) {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * De invoervelden van een sjabloon, met één uitzondering: bij documentsoort
+ * `houtrot_rapportage` hoort er altijd een keuzeveld te staan — daar kies je onder
+ * meer of de rapportage mét of zónder prijzen naar de klant gaat.
+ *
+ * Ontbreekt het in de sjabloonrij (niet ingericht, of een sjabloon van vóór dit
+ * veld), dan voegen we het hier toe in plaats van de opsteller zonder keuze te
+ * laten zitten. Zonder deze terugval viel de rapportage stil terug op "mét
+ * prijzen", en dat is precies de kant die je niet per ongeluk op wilt.
+ */
+function veldenVanSjabloon(sjabloon: DocumentSjabloon): DocumentVeld[] {
+  const velden = sjabloon.velden ?? []
+  if (sjabloon.documentsoort !== 'houtrot_rapportage') return velden
+  if (velden.some(v => v.sleutel === HOUTROT_OPTIES_SLEUTEL)) return velden
+  return [
+    ...velden,
+    {
+      sleutel: HOUTROT_OPTIES_SLEUTEL,
+      label: 'Wat komt er in de rapportage',
+      type: 'houtrot_opties',
+      verplicht: false,
+      standaard: '',
+    } as DocumentVeld,
+  ]
 }

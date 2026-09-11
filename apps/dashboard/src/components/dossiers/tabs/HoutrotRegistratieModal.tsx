@@ -8,7 +8,7 @@ import {
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import type { Recept } from '@/services/houtrotherstel/recepten'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
-import { formatCurrency } from '@/lib/houtrotherstel/utils'
+import { formatCurrency, formatDateTime } from '@/lib/houtrotherstel/utils'
 import {
   cascadeRijen, bouwLocatiePad, selectieVanLocatie, locatieKeuzeCompleet,
 } from '@/lib/houtrotherstel/locatie-boom'
@@ -406,6 +406,21 @@ export default function HoutrotRegistratieModal({
               </div>
             </div>
           </section>
+
+          {/* Onderaan, want het is bijvangst: wie deze registratie maakte en wie er
+              het laatst aan werkte. In het veld wordt er aangemaakt, op kantoor
+              vaak nog bijgesteld — dan wil je kunnen zien door wie. */}
+          {bestaand && (
+            <div className="text-xs leading-relaxed text-slate-400">
+              <div>
+                Aangemaakt door {bestaand.medewerker_naam || 'onbekend'} · {formatDateTime(bestaand.created_at)}
+              </div>
+              <div>
+                Laatst bewerkt door {bestaand.bijgewerkt_door_naam || bestaand.medewerker_naam || 'onbekend'}
+                {' · '}{formatDateTime(bestaand.updated_at)}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">

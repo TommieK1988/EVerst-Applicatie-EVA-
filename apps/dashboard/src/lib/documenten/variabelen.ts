@@ -302,6 +302,9 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{houtrot.totaal.uren}',         label: 'Totaal arbeidsuren' },
       { v: '{houtrot.totaal.arbeid}',       label: 'Totaal arbeidskosten' },
       { v: '{houtrot.totaal.materiaal}',    label: 'Totaal materiaalkosten' },
+      { v: '{houtrot.totaal.excl}',         label: 'Totaal exclusief btw' },
+      { v: '{houtrot.totaal.btw}',          label: 'Totaal btw-bedrag' },
+      { v: '{houtrot.totaal.incl}',         label: 'Totaal inclusief btw' },
       { v: '{#toon_prijzen}…{/toon_prijzen}', label: 'Alleen tonen als de opsteller prijzen heeft aangezet' },
       { v: '{#houtrot.heeft}…{/houtrot.heeft}', label: 'Alleen tonen als er registraties zijn' },
       { v: '{#houtrot.is_voorbeeld}…{/houtrot.is_voorbeeld}', label: 'Alleen in de preview (beperkt aantal registraties)' },
@@ -362,6 +365,35 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{#houtrot.alle_registraties}…{/houtrot.alle_registraties}', label: 'Alternatief: alle registraties zonder groepering' },
     ],
     binnenLoop: ['totaal.verkoop', 'totaal.kostprijs', 'totaal.uren', 'totaal.arbeid', 'totaal.materiaal'],
+  },
+  {
+    groep: 'Houtrot-rapportage — werkzaamheden en btw',
+    uitleg: 'Het totaalblad telt de werkzaamheden van álle registraties bij elkaar: één regel per soort werk, ' +
+      'met het totale aantal, de eenheidsprijs, het btw-percentage en het regeltotaal. Daaronder komt de ' +
+      'btw-opstelling: per tarief een regel, en als slot het bedrag inclusief btw. Het btw-percentage van een ' +
+      'werkzaamheid komt uit de eenheidsprijs en kan per opdrachtgever en per dossier worden aangepast ' +
+      '(dossier → Houtrot → Btw-tarieven). Zonder prijzen blijven alle bedragvelden én de btw-loop leeg.',
+    items: [
+      { v: '{#houtrot.werkzaamheden}…{/houtrot.werkzaamheden}', label: 'Loop: één regel per werkzaamheid, opgeteld over alle registraties' },
+      { v: '{naam}',           label: 'Werkzaamheid — naam' },
+      { v: '{code}',           label: 'Werkzaamheid — code' },
+      { v: '{aantal}',         label: 'Werkzaamheid — totaal aantal over alle registraties' },
+      { v: '{eenheid}',        label: 'Werkzaamheid — eenheid (st, m, m²)' },
+      { v: '{prijs_per_stuk}', label: 'Werkzaamheid — eenheidsprijs' },
+      { v: '{btw_pct}',        label: 'Werkzaamheid — btw-percentage ("21%" of "21% verlegd")' },
+      { v: '{totaal}',         label: 'Werkzaamheid — regeltotaal exclusief btw' },
+      { v: '{uren}',           label: 'Werkzaamheid — totaal arbeidsuren' },
+      { v: '{#houtrot.btw}…{/houtrot.btw}', label: 'Loop: btw-opstelling, één regel per tarief' },
+      { v: '{label}',          label: 'Btw-regel — tarief ("9%", "21% verlegd")' },
+      { v: '{excl}',           label: 'Btw-regel — bedrag exclusief btw met dit tarief' },
+      { v: '{btw}',            label: 'Btw-regel — btw-bedrag' },
+      { v: '{incl}',           label: 'Btw-regel — bedrag inclusief btw' },
+    ],
+    binnenLoop: [
+      'naam', 'code', 'aantal', 'aantal_num', 'eenheid', 'prijs_per_stuk',
+      'btw_pct', 'btw_pct_num', 'totaal', 'totaal_num', 'uren',
+      'label', 'pct', 'verlegd', 'excl', 'btw', 'incl',
+    ],
   },
   {
     groep: 'Bezoekrapport - kop en samenvatting',

@@ -14,10 +14,28 @@ export const MAX_DIEPTE = 3
 /** Maximaal aantal knopen dat een reeks-/lijstgeneratie in één keer mag maken. */
 export const MAX_GENEREER = 500
 
+/**
+ * Standaardnamen van de drie niveaus. Dit is hoe het werk in de praktijk wordt
+ * aangeduid, dus begint elk dossier ermee; de projectleider kan ze gewoon
+ * overschrijven. Bewust alleen een *invulling* van lege labels — een dossier dat
+ * al eigen namen heeft, houdt die.
+ */
+export const STANDAARD_LABELS = ['Straat', 'Gevel', 'Huisnummer'] as const
+
+/** Vult lege niveaunamen aan met de standaard; bestaande namen blijven staan. */
+export function metStandaardLabels(labels: string[]): string[] {
+  return Array.from({ length: MAX_DIEPTE }, (_, i) =>
+    (labels[i] ?? '').trim() || STANDAARD_LABELS[i] || `Niveau ${i + 1}`,
+  )
+}
+
 const nieuweId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `n_${Math.abs(Math.round(Math.sin(Date.now()) * 1e9)).toString(36)}_${Math.round(performance?.now?.() ?? 0)}`
+
+/** Staat deze knoop aan? Ontbrekende vlag (oude data) telt als actief. */
+export const isActief = (n: LocatieNode): boolean => n.actief !== false
 
 /** Directe kinderen van een knoop (of de wortels bij parentId = null), op volgorde. */
 export function kinderen(nodes: LocatieNode[], parentId: string | null): LocatieNode[] {
@@ -83,7 +101,7 @@ export function magKindToevoegen(nodes: LocatieNode[], parentId: string | null):
 export function voegKnoopToe(nodes: LocatieNode[], parentId: string | null, naam: string): LocatieNode[] {
   if (!magKindToevoegen(nodes, parentId)) return nodes
   const volgorde = kinderen(nodes, parentId).length + 1
-  return [...nodes, { id: nieuweId(), parent_id: parentId, naam: naam.trim() || 'Naamloos', volgorde }]
+  return [...nodes, { id: nieuweId(), parent_id: parentId, naam: naam.trim() || 'Naamloos', volgorde, actief: true }]
 }
 
 /** Voegt meerdere knopen (namen) in één keer toe onder `parentId`. */
@@ -94,7 +112,7 @@ export function voegMeerdereToe(nodes: LocatieNode[], parentId: string | null, n
     .map(n => n.trim())
     .filter(Boolean)
     .slice(0, MAX_GENEREER)
-    .map(naam => ({ id: nieuweId(), parent_id: parentId, naam, volgorde: ++volgorde }))
+    .map(naam => ({ id: nieuweId(), parent_id: parentId, naam, volgorde: ++volgorde, actief: true }))
   return [...nodes, ...nieuw]
 }
 
@@ -109,6 +127,25 @@ export function verwijderKnoop(nodes: LocatieNode[], id: string): LocatieNode[] 
 /** Wijzigt de naam van één knoop. */
 export function hernoem(nodes: LocatieNode[], id: string, naam: string): LocatieNode[] {
   return nodes.map(n => (n.id === id ? { ...n, naam } : n))
+}
+
+/**
+ * Zet één knoop aan of uit. Bewust niet doorwerkend op de nakomelingen: die zijn
+ * via de cascade toch niet bereikbaar zolang hun ouder niet gekozen kan worden,
+ * en zo staat de oude indeling er nog precies zo als je de knoop weer aanzet.
+ */
+export function zetActief(nodes: LocatieNode[], id: string, actief: boolean): LocatieNode[] {
+  return nodes.map(n => (n.id === id ? { ...n, actief } : n))
+}
+
+/** Zet alle directe kinderen van één ouder in één keer aan of uit. */
+export function zetActiefVoorKinderen(
+  nodes: LocatieNode[],
+  parentId: string | null,
+  actief: boolean,
+): LocatieNode[] {
+  const ids = new Set(kinderen(nodes, parentId).map(n => n.id))
+  return nodes.map(n => (ids.has(n.id) ? { ...n, actief } : n))
 }
 
 /** Verschuift een knoop één plek omhoog/omlaag tussen zijn broers/zussen. */
@@ -159,18 +196,45 @@ export function genereerReeks(opties: {
 
 // ── Consumptie in de app (afhankelijke keuzelijsten) ─────────────────────────
 
+/** Opties op één niveau van de cascade. */
+export interface CascadeOpties {
+  /** Toon ook op inactief gezette knopen (rapportage kiest juist afgeronde takken). */
+  inclusiefInactief?: boolean
+}
+
+/**
+ * De keuzelijst-opties onder één ouder: de actieve knopen, plus de knoop die al
+ * gekozen ís. Die laatste uitzondering is nodig omdat een registratie kan hangen
+ * aan een huisnummer dat de projectleider inmiddels op inactief zette; zonder de
+ * uitzondering staat de keuzelijst bij het openen leeg en wist opslaan de locatie.
+ */
+function opties(
+  nodes: LocatieNode[],
+  parentId: string | null,
+  gekozenIds: string[],
+  o?: CascadeOpties,
+): LocatieNode[] {
+  const alle = kinderen(nodes, parentId)
+  if (o?.inclusiefInactief) return alle
+  return alle.filter(n => isActief(n) || gekozenIds.includes(n.id))
+}
+
 /**
  * De zichtbare keuzelijst-rijen voor de cascade: rij 0 = wortels; elke volgende
  * rij = de kinderen van de daarboven gekozen knoop. Stopt zodra een niveau nog
- * niet gekozen is of de gekozen knoop geen kinderen heeft.
+ * niet gekozen is of de gekozen knoop geen (zichtbare) kinderen heeft.
  */
-export function cascadeRijen(nodes: LocatieNode[], gekozenIds: string[]): { diepte: number; opties: LocatieNode[] }[] {
+export function cascadeRijen(
+  nodes: LocatieNode[],
+  gekozenIds: string[],
+  o?: CascadeOpties,
+): { diepte: number; opties: LocatieNode[] }[] {
   const rijen: { diepte: number; opties: LocatieNode[] }[] = []
   let parentId: string | null = null
   for (let d = 0; d < MAX_DIEPTE; d++) {
-    const opties = kinderen(nodes, parentId)
-    if (opties.length === 0) break
-    rijen.push({ diepte: d, opties })
+    const rij = opties(nodes, parentId, gekozenIds, o)
+    if (rij.length === 0) break
+    rijen.push({ diepte: d, opties: rij })
     const gekozenId = gekozenIds[d]
     if (!gekozenId) break
     parentId = gekozenId
@@ -233,9 +297,14 @@ export function genereerLijst(tekst: string): string[] {
 export function saneerBoom(ruw: unknown): LocatieBoom {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const obj = (ruw ?? {}) as any
-  const labels: string[] = Array.isArray(obj.labels)
-    ? obj.labels.slice(0, MAX_DIEPTE).map((l: unknown) => String(l ?? '').trim())
-    : []
+  // Lege niveaunamen krijgen de standaard (Straat / Gevel / Huisnummer). Zo staat
+  // er altijd een bruikbare kop boven de keuzelijst in de app, ook bij dossiers
+  // van vóór deze standaard.
+  const labels: string[] = metStandaardLabels(
+    Array.isArray(obj.labels)
+      ? obj.labels.slice(0, MAX_DIEPTE).map((l: unknown) => String(l ?? '').trim())
+      : [],
+  )
 
   const ruweNodes: LocatieNode[] = Array.isArray(obj.nodes)
     ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,6 +313,8 @@ export function saneerBoom(ruw: unknown): LocatieBoom {
         parent_id: n?.parent_id ? String(n.parent_id) : null,
         naam: String(n?.naam ?? '').trim(),
         volgorde: Number(n?.volgorde) || 0,
+        // Ontbrekende vlag (boom van vóór actief/inactief) telt als actief.
+        actief: n?.actief !== false,
       }))
     : []
 

@@ -73,7 +73,9 @@ export default function HoutrotOptiesVeld({ dossierId, waarde, onChange }: {
   const paginas = telling == null ? null : Math.ceil(telling / Math.max(1, opties.per_pagina))
   // De gekozen tak als pad van knoop-ids, zodat de cascade de juiste rijen toont.
   const gekozenTak = opties.tak_node_id ? padNaarWortel(boom, opties.tak_node_id) : []
-  const cascade = cascadeRijen(boom.nodes, gekozenTak)
+  // Rapportage kiest juist vaak een afgeronde (inactieve) tak, dus die horen hier wél
+  // in de lijst — anders is werk dat net klaar is niet meer te rapporteren.
+  const cascade = cascadeRijen(boom.nodes, gekozenTak, { inclusiefInactief: true })
 
   return (
     <div className="space-y-3 rounded border border-neutral-200 bg-neutral-50/60 p-3">

@@ -5,6 +5,7 @@ import { getLocatieBoom, setLocatieBoom } from '@/services/houtrotherstel/locati
 import {
   MAX_DIEPTE, kinderen, magKindToevoegen, voegKnoopToe, voegMeerdereToe,
   verwijderKnoop, hernoem, verplaatsBinnenBroers, genereerReeks, genereerLijst,
+  isActief, zetActief, zetActiefVoorKinderen, STANDAARD_LABELS,
 } from '@/lib/houtrotherstel/locatie-boom'
 import type { LocatieBoom, LocatieNode } from '@/lib/houtrotherstel/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
@@ -82,6 +83,8 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
     const heeftKind = kind.length > 0
     const dicht = ingeklapt.has(node.id)
     const kanKind = magKindToevoegen(nodes, node.id)
+    const aan = isActief(node)
+    const actieveKinderen = kind.filter(isActief).length
 
     return (
       <div key={node.id}>
@@ -90,16 +93,39 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
             className="flex h-6 w-5 items-center justify-center text-slate-400" aria-label="In-/uitklappen">
             {heeftKind ? (dicht ? '▸' : '▾') : ''}
           </button>
+          {/* Altijd zichtbaar, want het is een stand en geen actie: uit = weg uit de app. */}
+          <input
+            type="checkbox"
+            checked={aan}
+            disabled={readOnly}
+            onChange={e => muteer(n => zetActief(n, node.id, e.target.checked))}
+            title={aan ? 'Actief — zichtbaar in de app' : 'Inactief — niet te kiezen in de app'}
+            className="h-3.5 w-3.5 shrink-0 accent-everts"
+          />
           <input
             value={node.naam}
             disabled={readOnly}
             onChange={e => muteer(n => hernoem(n, node.id, e.target.value))}
-            className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-sm hover:border-slate-300 focus:border-everts focus:outline-none focus:ring-1 focus:ring-everts/20"
+            className={`min-w-0 flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-sm hover:border-slate-300 focus:border-everts focus:outline-none focus:ring-1 focus:ring-everts/20 ${
+              aan ? '' : 'text-slate-400 line-through decoration-slate-300'
+            }`}
           />
+          {heeftKind && (
+            <span className="shrink-0 text-[11px] tabular-nums text-slate-400">
+              {actieveKinderen}/{kind.length}
+            </span>
+          )}
           {!readOnly && (
             <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <IconBtn title="Omhoog" disabled={idx <= 0} onClick={() => muteer(n => verplaatsBinnenBroers(n, node.id, 'omhoog'))}>↑</IconBtn>
               <IconBtn title="Omlaag" disabled={idx >= broers.length - 1} onClick={() => muteer(n => verplaatsBinnenBroers(n, node.id, 'omlaag'))}>↓</IconBtn>
+              {heeftKind && (
+                <IconBtn
+                  title={actieveKinderen > 0 ? 'Alles hieronder uitzetten' : 'Alles hieronder aanzetten'}
+                  onClick={() => muteer(n => zetActiefVoorKinderen(n, node.id, actieveKinderen === 0))}>
+                  {actieveKinderen > 0 ? '◉' : '○'}
+                </IconBtn>
+              )}
               {kanKind && (
                 <>
                   <IconBtn title="Subniveau toevoegen" onClick={() => muteer(n => voegKnoopToe(n, node.id, ''))}>＋</IconBtn>
@@ -126,6 +152,7 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
   }
 
   const wortels = kinderen(nodes, null)
+  const actieveKnopen = nodes.filter(isActief).length
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white">
@@ -134,8 +161,8 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
           <div className="text-sm font-semibold text-slate-800">Locatie-instellingen</div>
           <div className="text-xs text-slate-500">
             {wortels.length > 0
-              ? `${nodes.length} knoop${nodes.length !== 1 ? 'en' : ''} · ${wortels.map(w => w.naam || '—').join(', ')}`
-              : 'Nog geen locatieboom — de vakman krijgt één vrij locatieveld.'}
+              ? `${actieveKnopen} van ${nodes.length} actief · ${wortels.map(w => w.naam || '—').join(', ')}`
+              : 'Nog geen locaties — in de app kan nog niet geregistreerd worden.'}
           </div>
         </div>
         <span className="text-slate-400">{open ? '▲' : '▼'}</span>
@@ -148,8 +175,16 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
           ) : (
             <>
               <p className="mb-3 text-xs text-slate-500">
-                Bouw de locatie als boom, bv. <strong>Gevelzijde → Etage → Huisnummer</strong> (max {MAX_DIEPTE} lagen).
+                Bouw de locatie als boom: standaard <strong>Straat → Gevel → Huisnummer</strong> (max {MAX_DIEPTE} lagen);
+                de namen hiernaast pas je aan wanneer een project er anders in zit.
                 De vakman kiest in de app per laag; laag 2 toont alleen wat onder de gekozen laag 1 hangt.
+                Zelf typen kan in de app niet: <strong>zolang hier niets staat, kan er in het veld niet
+                geregistreerd worden.</strong>
+              </p>
+              <p className="mb-3 text-xs text-slate-500">
+                Met het vinkje zet je een locatie <strong>uit</strong>: hij verdwijnt uit de keuzelijst in
+                de app, maar blijft bewaard — registraties die eraan hangen en de rapportage houden hem.
+                Zo blijft een lange huisnummerlijst behapbaar: zet alleen aan waar nu gewerkt wordt.
               </p>
 
               {/* Optionele niveaulabels — kop boven de keuzelijst in de app. */}
@@ -161,7 +196,7 @@ export default function LocatieBoomEditor({ dossierId }: { dossierId: string }) 
                       value={labels[i] ?? ''}
                       disabled={readOnly}
                       onChange={e => zetLabel(i, e.target.value)}
-                      placeholder={['bijv. Gevelzijde', 'bijv. Etage', 'bijv. Huisnummer'][i]}
+                      placeholder={STANDAARD_LABELS[i] ?? `Niveau ${i + 1}`}
                       className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:border-everts focus:outline-none focus:ring-2 focus:ring-everts/20"
                     />
                   </div>

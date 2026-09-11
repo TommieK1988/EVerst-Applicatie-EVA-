@@ -44,6 +44,7 @@ import { dossierHref } from '@/lib/dossiers/href'
 import type { RelatieObject } from '@/lib/objecten/types'
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import OpnamePrijslijstBeheer from '@/components/relaties/OpnamePrijslijstBeheer'
+import HoutrotBtwEditor from '@/components/dossiers/tabs/HoutrotBtwEditor'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
 
@@ -1375,6 +1376,12 @@ export default function RelatieDetailView({
                     Hoort hier omdat het een afspraak met deze opdrachtgever is, geen stamdata. */}
                 <div style={{ gridColumn: '1 / -1' }}>
                   <OpnamePrijslijstBeheer relatieId={relatie.id} />
+                </div>
+                {/* Btw per houtrot-werkzaamheid: een afspraak met déze opdrachtgever
+                    (bv. alles verlegd), die in al zijn dossiers geldt tenzij het
+                    dossier zelf iets anders zegt. */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <HoutrotBtwEditor relatieId={relatie.id} />
                 </div>
                 <PlaceholderBlok titel="Gekoppelde dossiers" />
                 <OmzetBlok omzet={omzet} />

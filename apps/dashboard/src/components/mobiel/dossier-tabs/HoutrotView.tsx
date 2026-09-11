@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
-  regelVanRecept, zetArchief, deleteRegistratie,
+  regelVanRecept,
 } from '@/services/houtrotherstel/registraties'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
@@ -14,11 +14,12 @@ import {
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
   type RepairRegistration, type RepairPhoto, type RegistratieForm,
-  type LocatieBoom, type LocatieWaarde,
+  type LocatieBoom, type LocatieWaarde, type FotoType,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
-import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
-import { useDialogen } from '@/components/ui/dialogen'
+import { fotoPubliekeUrl, FOTO_VOLGORDE, FOTO_LABELS } from '@/lib/houtrotherstel/fotos'
+import { registratieUren } from '@/lib/houtrotherstel/bedragen'
+import { formatDateTime } from '@/lib/houtrotherstel/utils'
 
 /** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
 type Werkzaamheid = { recept: Recept; aantal: number }
@@ -71,6 +72,61 @@ const label: React.CSSProperties = {
   fontSize: 12, fontWeight: 600, color: '#6b757c', marginBottom: 5, display: 'block',
 }
 
+const GEEN_BOOM =
+  'De projectleider heeft voor dit dossier nog geen locaties ingesteld. ' +
+  'Zodra dat gebeurd is, kun je hier registreren.'
+
+/** Uitleg waarom er (nog) niet geregistreerd kan worden. */
+function GeenBoomMelding() {
+  return (
+    <div style={{
+      background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a5b00',
+      borderRadius: 12, padding: '11px 13px', fontSize: 13, lineHeight: 1.5,
+    }}>
+      {GEEN_BOOM}
+    </div>
+  )
+}
+
+/**
+ * Eén vierkante fototegel op een overzichtskaart. Voor en na staan altijd naast
+ * elkaar, ook als er nog geen na-foto is — anders schuift de na-foto op de plek
+ * van de voor-foto en zie je in één oogopslag niet meer wat wat is.
+ */
+function FotoTegel({ foto, soort }: { foto?: RepairPhoto; soort: FotoType }) {
+  const etiket = FOTO_LABELS[soort]
+  return (
+    <div style={{
+      position: 'relative', aspectRatio: '1 / 1', borderRadius: 10, overflow: 'hidden',
+      border: foto ? '1px solid var(--border)' : '1px dashed var(--border)',
+      background: foto ? '#0e1114' : 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {foto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={fotoUrl(foto.storage_path)} alt={etiket}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <span style={{ fontSize: 11.5, color: '#9aa4ab' }}>Geen {etiket.toLowerCase()}-foto</span>
+      )}
+      <span style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, padding: '3px 0',
+        background: foto ? 'rgba(0,0,0,0.55)' : 'transparent',
+        color: foto ? '#fff' : '#9aa4ab',
+        fontSize: 10, fontWeight: 700, textAlign: 'center',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+      }}>
+        {etiket}
+      </span>
+    </div>
+  )
+}
+
+/** "1,75 uur" — het opgetelde tijdnorm-totaal van een registratie. */
+function urenTekst(uren: number): string {
+  return `${uren.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`
+}
+
 function Blok({ titel, children }: { titel: string; children: React.ReactNode }) {
   return (
     <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 }}>
@@ -90,12 +146,16 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [bewerkId, setBewerkId] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
-  const { bevestig } = useDialogen()
 
-  // Cascade-keuze: gekozen knoop-id per diepte. Terugval = vrij tekstveld (lege boom).
+  // Cascade-keuze: gekozen knoop-id per diepte. Zonder locatieboom kan er in de app
+  // niet geregistreerd worden — de projectleider richt de locaties eerst in.
   const [gekozen, setGekozen] = useState<string[]>([])
   const [zelfGekozen, setZelfGekozen] = useState(false)
-  const [vrijeLocatie, setVrijeLocatie] = useState('')
+  /** Herkomst van de geopende registratie: wie maakte hem, wie bewerkte hem het laatst. */
+  const [herkomst, setHerkomst] = useState<{
+    maker: string | null; gemaaktOp: string
+    bewerker: string | null; bewerktOp: string
+  } | null>(null)
   /**
    * De opgeslagen locatie van de registratie die wordt bewerkt. Bewust de ruwe waarde
    * bewaren en de hint eruit bérekenen: de boom komt uit een server action en kan later
@@ -134,12 +194,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const boomLaadt = boom === null
   const heeftBoom = !!boom && boom.nodes.length > 0
 
-  // Hint + volledigheid als berekening, niet als state — zie `bewerkLocatie`.
-  const vorigeLocatie = bewerkLocatie.map(l => l.waarde).filter(Boolean).join(' · ')
-  const oudNietOpBoom = heeftBoom && !!bewerkId && selectieVanLocatie(boom.nodes, bewerkLocatie).length === 0
-  const locatieCompleet = heeftBoom
-    ? locatieKeuzeCompleet(boom.nodes, gekozen)
-    : !!vrijeLocatie.trim()
+  // Afgeleid, niet als state — zie `bewerkLocatie`.
+  const gekozenLocatie = bewerkLocatie.map(l => l.waarde).filter(Boolean).join(' · ')
+  /**
+   * Staat de locatie al vast? Bij een bestaande registratie met een locatie is die
+   * keuze klaar: hij wordt als tekstregel getoond en bij opslaan ongemoeid gelaten.
+   * Corrigeren gebeurt in EVA op de desktop — in het veld is dat geen taak, en zo
+   * kan een verkeerde tik de locatie ook niet stilletjes verzetten.
+   */
+  const locatieVast = !!bewerkId && !!gekozenLocatie
+  // Bestaande registratie zónder locatie (van vóór de locatieboom): die moet nog wél.
+  const oudNietOpBoom = heeftBoom && !!bewerkId && !locatieVast
+  const locatieCompleet = locatieVast || (heeftBoom && locatieKeuzeCompleet(boom.nodes, gekozen))
 
   // De boom kan ná het openen van het formulier binnenkomen; dan de cascade opnieuw
   // vullen uit de opgeslagen locatie, tenzij de gebruiker zelf al gekozen heeft.
@@ -158,8 +224,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const receptenInGroep = recepten.filter(r => r.groep === keuzeGroep)
 
   function leegmaken() {
-    setBewerkId(null)
-    setGekozen([]); setZelfGekozen(false); setVrijeLocatie(''); setBewerkLocatie([])
+    setBewerkId(null); setHerkomst(null)
+    setGekozen([]); setZelfGekozen(false); setBewerkLocatie([])
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setAfgerond(false)
@@ -167,6 +233,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   }
 
   function nieuwe() {
+    if (!heeftBoom) return
     leegmaken(); setFout(null); setInvoeren(true)
   }
 
@@ -179,7 +246,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setBewerkLocatie(opgeslagen)
     setZelfGekozen(false)
     setGekozen(boom ? selectieVanLocatie(boom.nodes, opgeslagen) : [])
-    setVrijeLocatie(opgeslagen[0]?.waarde ?? '')
+    setHerkomst({
+      maker: r.medewerker_naam ?? null, gemaaktOp: r.created_at,
+      bewerker: r.bijgewerkt_door_naam ?? null, bewerktOp: r.updated_at,
+    })
     setRegDatum(r.registration_date)
     setWerkzaamheden(
       (r.lines ?? [])
@@ -234,17 +304,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       // Zolang de boom niet binnen is, weten we niet of er een locatie-indeling is;
       // opslaan zou de bestaande locatie met een leeg pad overschrijven.
       if (boomLaadt) throw new Error('De locatie wordt nog geladen. Probeer het over een moment opnieuw.')
-      if (!locatieCompleet) {
-        throw new Error(heeftBoom ? 'Kies eerst de volledige locatie.' : 'Vul eerst een locatie in.')
-      }
+      if (!locatieCompleet) throw new Error('Kies eerst de volledige locatie.')
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
 
-      const locatie: LocatieWaarde[] =
-        heeftBoom && boom
-          ? bouwLocatiePad(boom, gekozen)
-          : [{ naam: 'Locatie', waarde: vrijeLocatie.trim() }]
+      // Een vastgezette locatie gaat er letterlijk weer in — niet opnieuw uit de boom
+      // opbouwen, anders verliest een registratie zijn plek zodra de projectleider de
+      // boom verbouwt of de knoop op inactief zet.
+      let locatie: LocatieWaarde[]
+      if (locatieVast) locatie = bewerkLocatie
+      else if (heeftBoom && boom) locatie = bouwLocatiePad(boom, gekozen)
+      else throw new Error(GEEN_BOOM)
 
       const teVerwijderen = new Set(verwijderdeFotos)
       if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
@@ -292,52 +363,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     laad()
   }
 
-  /**
-   * Archiveren: uit de lijst en uit rapportages, maar niets gaat verloren.
-   * Terugzetten kan alleen in EVA op de desktop — in het veld is dat geen taak.
-   */
-  async function archiveren() {
-    if (!bewerkId) return
-    if (!await bevestig({
-      titel: 'Deze registratie archiveren?',
-      omschrijving: 'Hij verdwijnt uit de lijst en uit rapportages, maar blijft bewaard.',
-      bevestigLabel: 'Archiveren',
-    })) return
-    setBezig(true)
-    setFout(null)
-    try {
-      const medewerker = await getHuidigeMedewerker()
-      if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
-      await zetArchief(bewerkId, true, medewerker.id)
-      terugNaarLijst()
-    } catch (e) {
-      setFout(e instanceof Error ? e.message : 'Archiveren mislukt')
-    } finally {
-      setBezig(false)
-    }
-  }
-
-  async function verwijderen() {
-    if (!bewerkId) return
-    if (!await bevestig({
-      titel: 'Deze registratie definitief verwijderen?',
-      omschrijving: 'Werkzaamheden en foto’s gaan mee. Dit kan niet ongedaan worden gemaakt.',
-      bevestigLabel: 'Verwijderen',
-      destructief: true,
-    })) return
-    setBezig(true)
-    setFout(null)
-    try {
-      const medewerker = await getHuidigeMedewerker()
-      await deleteRegistratie(bewerkId, medewerker?.id)
-      terugNaarLijst()
-    } catch (e) {
-      setFout(e instanceof Error ? e.message : 'Verwijderen mislukt')
-    } finally {
-      setBezig(false)
-    }
-  }
-
   // ── Invoerstand ────────────────────────────────────────────────────────────
   if (invoeren) {
     return (
@@ -349,6 +374,67 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             </div>
           )}
 
+          {locatieVast && (
+            <div style={{
+              background: 'var(--bg-elev)', border: '1px solid var(--border)',
+              borderRadius: 14, padding: '11px 14px',
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: '#6b757c', textTransform: 'uppercase',
+                letterSpacing: '0.08em', marginBottom: 3,
+              }}>
+                Locatie
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>{gekozenLocatie}</div>
+            </div>
+          )}
+
+          <Blok titel="Foto's">
+            {/* Groot en over de volle breedte: in het veld wil je de schade zien, niet
+                een duimnagel. `contain` in plaats van `cover` zodat er niets wegvalt. */}
+            {zichtbareFotos.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {zichtbareFotos.map(p => (
+                  <div key={p.id} style={{ position: 'relative' }}>
+                    <a href={fotoUrl(p.storage_path)} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'block' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={fotoUrl(p.storage_path)} alt={FOTO_LABELS[p.photo_type] ?? p.photo_type}
+                        style={{
+                          display: 'block', width: '100%', maxHeight: '50vh', objectFit: 'contain',
+                          background: '#0e1114', borderRadius: 12, border: '1px solid var(--border)',
+                        }} />
+                    </a>
+                    <span style={{
+                      position: 'absolute', top: 8, left: 8, padding: '3px 9px', borderRadius: 999,
+                      background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                      {FOTO_LABELS[p.photo_type] ?? p.photo_type}
+                    </span>
+                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label="Foto verwijderen"
+                      style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, border: 'none', background: 'rgba(180,35,24,0.92)', color: '#fff', fontSize: 15, lineHeight: 1, cursor: 'pointer' }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div>
+              <label style={label} htmlFor="hr-voor">Voor{heeftVoorBestaand && !voorFoto ? ' (vervangen)' : ''}</label>
+              <input id="hr-voor" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
+                onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
+            </div>
+            <div>
+              <label style={label} htmlFor="hr-na">Na{heeftNaBestaand && !naFoto ? ' (vervangen)' : ''}</label>
+              <input id="hr-na" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
+                onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
+            </div>
+          </Blok>
+
+          {/* Alleen te kiezen zolang de locatie nog niet vaststaat; anders staat hij
+              als tekstregel bovenaan. */}
+          {!locatieVast && (
           <Blok titel="Locatie">
             {boom === null ? (
               <div style={{ fontSize: 13, color: '#6b757c' }}>Laden…</div>
@@ -356,9 +442,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               <>
               {oudNietOpBoom && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a5b00', borderRadius: 10, padding: '9px 11px', fontSize: 12.5 }}>
-                  {vorigeLocatie
-                    ? <>Nog niet op de boom geplaatst. Vorige locatie: <strong>{vorigeLocatie}</strong>. Kies hieronder de juiste plek.</>
-                    : 'Nog geen locatie. Kies hieronder de juiste plek op de boom.'}
+                  Deze registratie heeft nog geen locatie. Kies hieronder de juiste plek.
                 </div>
               )}
               {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
@@ -380,13 +464,10 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               )}
               </>
             ) : (
-              <div>
-                <label style={label} htmlFor="hr-loc">Locatie</label>
-                <input id="hr-loc" style={veld} value={vrijeLocatie}
-                  onChange={e => setVrijeLocatie(e.target.value)} placeholder="bijv. Voorgevel, 2e etage" />
-              </div>
+              <GeenBoomMelding />
             )}
           </Blok>
+          )}
 
           <Blok titel="Werkzaamheden">
             {werkzaamheden.length > 0 && (
@@ -469,37 +550,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             </div>
           </Blok>
 
-          <Blok titel="Foto's">
-            {zichtbareFotos.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {zichtbareFotos.map(p => (
-                  <div key={p.id} style={{ position: 'relative' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={fotoUrl(p.storage_path)} alt={p.photo_type}
-                      style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)' }} />
-                    <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 9, fontWeight: 700, textAlign: 'center', textTransform: 'uppercase', borderBottomLeftRadius: 10, borderBottomRightRadius: 10 }}>
-                      {p.photo_type}
-                    </span>
-                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label="Foto verwijderen"
-                      style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, border: 'none', background: '#b42318', color: '#fff', fontSize: 13, lineHeight: 1, cursor: 'pointer' }}>
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div>
-              <label style={label} htmlFor="hr-voor">Voor{heeftVoorBestaand && !voorFoto ? ' (vervangen)' : ''}</label>
-              <input id="hr-voor" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
-                onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
-            </div>
-            <div>
-              <label style={label} htmlFor="hr-na">Na{heeftNaBestaand && !naFoto ? ' (vervangen)' : ''}</label>
-              <input id="hr-na" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
-                onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
-            </div>
-          </Blok>
-
           <Blok titel="Status">
             {/* Eenvoudige tweestand: oranje = Geregistreerd, groen = Afgerond. */}
             <div style={{ display: 'flex', gap: 8 }}>
@@ -527,39 +577,17 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             </div>
           </Blok>
 
-          {bewerkId && (
-            <Blok titel="Deze registratie">
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={archiveren}
-                  disabled={bezig}
-                  style={{
-                    flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                    border: '1px solid var(--border)', background: 'var(--bg-elev)', color: '#6b757c',
-                    cursor: bezig ? 'default' : 'pointer',
-                  }}
-                >
-                  Archiveren
-                </button>
-                <button
-                  type="button"
-                  onClick={verwijderen}
-                  disabled={bezig}
-                  style={{
-                    flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                    border: '1px solid #f0c8c2', background: 'var(--bg-elev)', color: '#b42318',
-                    cursor: bezig ? 'default' : 'pointer',
-                  }}
-                >
-                  Verwijderen
-                </button>
+          {/* Helemaal onderaan, want het is bijvangst: wie deze registratie maakte
+              en wie er het laatst aan werkte. Archiveren en verwijderen kan alleen
+              in EVA op de desktop — in het veld is dat geen taak. */}
+          {herkomst && (
+            <div style={{ fontSize: 11.5, color: '#8b949a', lineHeight: 1.6, padding: '2px 2px 4px' }}>
+              <div>Aangemaakt door {herkomst.maker || 'onbekend'} · {formatDateTime(herkomst.gemaaktOp)}</div>
+              <div>
+                Laatst bewerkt door {herkomst.bewerker || herkomst.maker || 'onbekend'}
+                {' · '}{formatDateTime(herkomst.bewerktOp)}
               </div>
-              <div style={{ fontSize: 11.5, color: '#6b757c' }}>
-                Archiveren haalt de registratie uit de lijst en uit rapportages, maar bewaart hem.
-                Verwijderen is definitief.
-              </div>
-            </Blok>
+            </div>
           )}
         </div>
 
@@ -578,11 +606,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           <button
             type="button"
             onClick={opslaan}
-            disabled={bezig || boomLaadt}
+            disabled={bezig || boomLaadt || !locatieCompleet}
             style={{
               flex: 1, padding: '14px 16px', borderRadius: 12, border: 'none',
-              background: bezig || boomLaadt ? '#9aa4ab' : '#009439', color: '#fff',
-              fontSize: 16, fontWeight: 700, cursor: bezig || boomLaadt ? 'default' : 'pointer',
+              background: bezig || boomLaadt || !locatieCompleet ? '#9aa4ab' : '#009439', color: '#fff',
+              fontSize: 16, fontWeight: 700,
+              cursor: bezig || boomLaadt || !locatieCompleet ? 'default' : 'pointer',
             }}
           >
             {bezig ? 'Opslaan…' : 'Opslaan'}
@@ -602,16 +631,22 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         {!fout && registraties === null && (
           <div style={{ color: '#6b757c', fontSize: 14, textAlign: 'center', padding: 24 }}>Laden…</div>
         )}
-        {!fout && registraties?.length === 0 && (
+        {!fout && !boomLaadt && !heeftBoom && <GeenBoomMelding />}
+        {!fout && registraties?.length === 0 && heeftBoom && (
           <div style={{ color: '#6b757c', fontSize: 14, textAlign: 'center', padding: 32 }}>
             Nog geen houtrotregistraties voor dit dossier.
           </div>
         )}
         {registraties?.map(r => {
           const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
-          const fotos = (r.photos ?? []).slice().sort(
-            (a, b) => (a.photo_type === 'voor' ? 0 : 1) - (b.photo_type === 'voor' ? 0 : 1))
+          const fotos = r.photos ?? []
+          const voor = fotos.find(p => p.photo_type === 'voor')
+          const na = fotos.find(p => p.photo_type === 'na')
+          const overig = fotos
+            .filter(p => p.photo_type !== 'voor' && p.photo_type !== 'na')
+            .sort((a, b) => (FOTO_VOLGORDE[a.photo_type] ?? 9) - (FOTO_VOLGORDE[b.photo_type] ?? 9))
           const afg = r.status === 'afgerond'
+          const uren = registratieUren(r)
           return (
             <button
               key={r.id}
@@ -638,15 +673,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 {r.registration_date}
                 {r.repair_name_snapshot ? ` · ${r.repair_name_snapshot}` : ''}
               </div>
-              {fotos.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  {fotos.map(p => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={p.id} src={fotoUrl(p.storage_path)} alt={p.photo_type}
-                      style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
-                  ))}
+              {uren > 0 && (
+                <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>
+                  Tijdnorm <strong style={{ color: 'var(--fg)', fontWeight: 600 }}>{urenTekst(uren)}</strong>
                 </div>
               )}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10,
+              }}>
+                <FotoTegel foto={voor} soort="voor" />
+                <FotoTegel foto={na} soort="na" />
+                {overig.map(p => <FotoTegel key={p.id} foto={p} soort={p.photo_type} />)}
+              </div>
             </button>
           )
         })}
@@ -656,13 +694,14 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         <button
           type="button"
           onClick={nieuwe}
+          disabled={!heeftBoom}
           style={{
             width: '100%', padding: '14px 16px', borderRadius: 12, border: 'none',
-            background: '#009439', color: '#fff', fontSize: 16, fontWeight: 700,
-            cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            background: heeftBoom ? '#009439' : '#c8ced2', color: '#fff', fontSize: 16, fontWeight: 700,
+            cursor: heeftBoom ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent',
           }}
         >
-          Nieuwe registratie
+          {boomLaadt ? 'Laden…' : heeftBoom ? 'Nieuwe registratie' : 'Wacht op locaties'}
         </button>
       </MobielStickyFooter>
     </div>

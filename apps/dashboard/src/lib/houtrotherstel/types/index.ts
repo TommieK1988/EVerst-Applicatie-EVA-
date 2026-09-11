@@ -51,6 +51,13 @@ export interface LocatieNode {
   parent_id: string | null
   naam: string
   volgorde: number
+  /**
+   * Op inactief gezette knopen verdwijnen uit de keuzelijsten in de app, maar
+   * blijven in de boom staan: bestaande registraties hangen eraan en de
+   * rapportage moet ze nog kunnen kiezen. Ontbreekt de vlag (oude data), dan
+   * telt de knoop als actief — gebruik altijd `isActief()`.
+   */
+  actief?: boolean
 }
 
 /** Per-dossier locatieboom: optionele niveaulabels + de platte knooplijst. */
@@ -278,6 +285,8 @@ export interface RepairRegistration {
   actual_sale_price: number | null
   created_at: string
   updated_at: string
+  /** Medewerker die de registratie het laatst bewerkte. Leeg = nooit bewerkt. */
+  bijgewerkt_door: string | null
   // Relaties
   project?: Project
   standard_repair?: StandardRepair
@@ -290,6 +299,8 @@ export interface RepairRegistration {
    * schema is niet embedbaar vanuit de houtrot-client.
    */
   medewerker_naam?: string | null
+  /** Naam van de laatste bewerker; komt uit dezelfde view als `medewerker_naam`. */
+  bijgewerkt_door_naam?: string | null
 }
 
 /**
