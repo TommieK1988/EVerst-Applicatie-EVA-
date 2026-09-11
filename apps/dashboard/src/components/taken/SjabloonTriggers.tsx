@@ -18,8 +18,7 @@ import {
   type ActielijstTrigger, type TriggerConditie,
 } from '@/app/(platform)/taken/actions/sjablonen'
 import { getToggleDefinities, type ToggleDefinitie } from '@/app/(platform)/instellingen/dossier-toggles/actions'
-import { getDossierCategorieen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
-import { zoekRelaties, getUniekeBouw7Categorieen } from '@/lib/dossiers/actions'
+import { zoekRelaties, getCategorieOpties } from '@/lib/dossiers/actions'
 
 // ─── Statische keuzelijsten ───────────────────────────────────────────────────
 
@@ -89,18 +88,30 @@ const ROL_OPTIES = [
   { value: 'controller_id',      label: 'Controller' },
 ]
 
+/**
+ * Er is één categorie: de Bouw7-categorie, die in EVA in de kolom `categorie` staat. De oude
+ * `bouw7_categorie_naam` (de spiegelkolom) blijft server-side gewoon evalueren, zodat triggers van
+ * vóór die samenvoeging blijven werken — hij is alleen niet meer opnieuw te kiezen.
+ */
+const LEGACY_CATEGORIE_VELD = 'bouw7_categorie_naam'
+
 const VELD_OPTIES = [
   { value: 'categorie',            label: 'Categorie' },
-  { value: 'bouw7_categorie_naam', label: 'Bouw7-categorie' },
 ]
 
 const CONDITIE_VELDEN = [
   { value: 'categorie',            label: 'Categorie' },
-  { value: 'bouw7_categorie_naam', label: 'Bouw7-categorie' },
   { value: 'bedrag_excl_btw',      label: 'Bedrag (excl. btw)' },
   { value: 'hoofdstatus',          label: 'Fase' },
   { value: 'actieve_substatus',    label: 'Substatus' },
 ]
+
+/** Veldlijst plus de oude Bouw7-categorie, maar alleen als die trigger hem nog gebruikt. */
+function veldOpties(gekozen: string | undefined, basis: { value: string; label: string }[]) {
+  return gekozen === LEGACY_CATEGORIE_VELD
+    ? [...basis, { value: LEGACY_CATEGORIE_VELD, label: 'Bouw7-categorie (oud)' }]
+    : basis
+}
 
 const OP_OPTIES = [
   { value: 'eq', label: '=' }, { value: 'neq', label: '≠' },
@@ -159,7 +170,6 @@ export default function SjabloonTriggers({
   const [refDataGeladen, setRefDataGeladen] = useState(false)
   const [triggers, setTriggers] = useState<DraftTrigger[]>([])
   const [categorieen, setCategorieen] = useState<string[]>([])
-  const [bouw7Categorieen, setBouw7Categorieen] = useState<string[]>([])
   const [toggles, setToggles] = useState<ToggleDefinitie[]>([])
   const [medewerkerRef, setMedewerkerRef] = useState<MedewerkerRefData>({ functies: [], afdelingen: [], attributen: [] })
   const [, startT] = useTransition()
@@ -183,8 +193,7 @@ export default function SjabloonTriggers({
       getMedewerkerTriggerRefData().then(setMedewerkerRef).catch(() => {})
       return
     }
-    getDossierCategorieen().then(setCategorieen).catch(() => {})
-    getUniekeBouw7Categorieen().then(setBouw7Categorieen).catch(() => {})
+    getCategorieOpties().then(setCategorieen).catch(() => {})
     getToggleDefinities().then(d => setToggles(d.filter(t => t.actief))).catch(() => {})
   }, [open, refDataGeladen, isMedewerker])
 
@@ -277,7 +286,6 @@ export default function SjabloonTriggers({
                   isMedewerker={isMedewerker}
                   medewerkerRef={medewerkerRef}
                   categorieen={categorieen}
-                  bouw7Categorieen={bouw7Categorieen}
                   toggles={toggles}
                   onPatch={(c) => patch(t.localKey, c)}
                   onBewaar={() => bewaar(t)}
@@ -300,14 +308,13 @@ export default function SjabloonTriggers({
 
 function TriggerKaart({
   trigger, eventTypes, isMedewerker, medewerkerRef,
-  categorieen, bouw7Categorieen, toggles, onPatch, onBewaar, onVerwijder,
+  categorieen, toggles, onPatch, onBewaar, onVerwijder,
 }: {
   trigger: DraftTrigger
   eventTypes: { value: string; label: string }[]
   isMedewerker: boolean
   medewerkerRef: MedewerkerRefData
   categorieen: string[]
-  bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
   onPatch: (c: Partial<DraftTrigger>) => void
   onBewaar: () => void
@@ -370,19 +377,12 @@ function TriggerKaart({
         <div className="grid grid-cols-2 gap-2">
           <select value={(cfg.veld as string) ?? ''} onChange={e => setCfg({ veld: e.target.value, waarde: '' })} className={sel}>
             <option value="">— Veld —</option>
-            {VELD_OPTIES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+            {veldOpties(cfg.veld as string | undefined, VELD_OPTIES).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
-          {cfg.veld === 'bouw7_categorie_naam' ? (
-            <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} className={sel}>
-              <option value="">— Waarde —</option>
-              {bouw7Categorieen.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          ) : (
-            <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} disabled={!cfg.veld} className={sel}>
-              <option value="">— Waarde —</option>
-              {categorieen.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          )}
+          <select value={(cfg.waarde as string) ?? ''} onChange={e => setCfg({ ...cfg, waarde: e.target.value })} disabled={!cfg.veld} className={sel}>
+            <option value="">— Waarde —</option>
+            {categorieen.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
       )}
 
@@ -441,7 +441,6 @@ function TriggerKaart({
         isMedewerker={isMedewerker}
         medewerkerRef={medewerkerRef}
         categorieen={categorieen}
-        bouw7Categorieen={bouw7Categorieen}
         toggles={toggles}
         onChange={(c) => onPatch({ condities: c })}
         onLogicaChange={(l) => onPatch({ conditie_logica: l })}
@@ -464,14 +463,13 @@ function TriggerKaart({
 
 function CondititesEditor({
   condities, logica, isMedewerker, medewerkerRef,
-  categorieen, bouw7Categorieen, toggles, onChange, onLogicaChange,
+  categorieen, toggles, onChange, onLogicaChange,
 }: {
   condities: TriggerConditie[]
   logica: 'en' | 'of'
   isMedewerker: boolean
   medewerkerRef: MedewerkerRefData
   categorieen: string[]
-  bouw7Categorieen: string[]
   toggles: ToggleDefinitie[]
   onChange: (c: TriggerConditie[]) => void
   onLogicaChange: (l: 'en' | 'of') => void
@@ -575,7 +573,7 @@ function CondititesEditor({
                 onChange={e => set(i, { soort: 'veld', veld: e.target.value, op: 'eq', waarde: '' })}
                 className={sel}
               >
-                {CONDITIE_VELDEN.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                {veldOpties(c.veld, CONDITIE_VELDEN).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
               </select>
               <div className="flex gap-1">
                 <select value={c.op ?? 'eq'} onChange={e => set(i, { ...c, op: e.target.value as TriggerConditie['op'] })} className={sel} style={{ width: 56 }}>
@@ -583,16 +581,10 @@ function CondititesEditor({
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-                {c.veld === 'categorie' && (
+                {(c.veld === 'categorie' || c.veld === LEGACY_CATEGORIE_VELD) && (
                   <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
                     <option value="">— Waarde —</option>
                     {categorieen.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                )}
-                {c.veld === 'bouw7_categorie_naam' && (
-                  <select value={String(c.waarde ?? '')} onChange={e => set(i, { ...c, waarde: e.target.value })} className={sel}>
-                    <option value="">— Waarde —</option>
-                    {bouw7Categorieen.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 )}
                 {c.veld === 'hoofdstatus' && (

@@ -113,8 +113,6 @@ type FormValues = {
 /** De vijf rolvelden op dit tabblad; `projectleider_id` heet in de database `project_manager_id`. */
 type RolVeldNaam = 'projectleider_id' | 'calculator_id' | 'uitvoerder_id' | 'teamleider_id' | 'controller_id'
 
-const DEFAULT_CATEGORIEEN = ['Schilderwerk', 'Houtrotherstel', 'Stukadoorwerk', 'Gevelrenovatie', 'Binnenwerk', 'Overig']
-
 /* ─── read-only veld ──────────────────────────────────────────────── */
 function InfoVeld({
   label, waarde, mono, numeric, urgentie, href, hrefTitel, className,
@@ -1264,7 +1262,9 @@ export function InformatieTab({
   const [form, setForm] = React.useState<FormValues>({
     calculator_id:           (dossier as any).calculator_id      ?? '',
     titel:                   dossier.titel                        ?? '',
-    categorie:               (dossier as any).categorie           ?? '',
+    // `categorie` is de EVA-kolom die de sync uit Bouw7 vult; bij dossiers van vóór die sync staat
+    // alleen de spiegelkolom gevuld. Eén veld dus, met de spiegel als terugval.
+    categorie:               (dossier as any).categorie ?? (dossier as any).bouw7_categorie_naam ?? '',
     referentie:              dossier.referentie           ?? '',
     opmerkingen:             (dossier as any).opmerkingen          ?? '',
     contactpersoon_id:       (dossier as any).contactpersoon_id  ?? '',
@@ -1577,7 +1577,10 @@ export function InformatieTab({
 
   const medewerkersOpties  = medewerkers.map(m => ({ value: m.id, label: m.naam }))
   const werkmaatschappijOpties = werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))
-  const categorieOpties    = (categorieen?.length ? categorieen : DEFAULT_CATEGORIEEN).map(c => ({ value: c, label: c }))
+  // De categorielijst komt uit Bouw7. Staat de huidige waarde er niet (meer) tussen, dan hoort hij
+  // er toch bij: anders lijkt het veld leeg terwijl het dossier wel een categorie heeft.
+  const categorieNamen     = [...new Set([...(categorieen ?? []), ...(form.categorie ? [form.categorie] : [])])].sort()
+  const categorieOpties    = categorieNamen.map(c => ({ value: c, label: c }))
   const factuuradresOpties = factuuradressen.map(fa => ({
     value: fa.id,
     label: `${fa.label}${fa.plaats ? ` — ${fa.plaats}` : ''}`,
@@ -1847,12 +1850,11 @@ export function InformatieTab({
               {/* De fase wijzig je via de statuskeuze in de kop: die bewaakt de
                   bevestiging bij afsluiten en de controle bij financieel gereed. */}
               <InfoVeld label="Fase"           waarde={statusLabel(substatus)} />
-              <InfoVeld label="Categorie (Bouw7)" waarde={(dossier as any).bouw7_categorie_naam ?? null} />
               <KeuzeVeld
                 label="Categorie"
                 waarde={form.categorie}
                 opties={categorieOpties}
-                placeholder="bijv. Schilderwerk"
+                placeholder="— Kies categorie —"
                 readOnly={!magBouw7Veld}
                 onBewaar={v => bewaarInfo({ categorie: v })}
               />

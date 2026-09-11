@@ -155,12 +155,17 @@ export async function schrijfBouw7Projectvelden(
       }
     }
 
+    // De categorie is één veld: EVA kiest uit de Bouw7-lijst, dus de naam matcht altijd. Na een
+    // geslaagde POST spiegelen we id + naam ook in EVA (zie onder) — anders zou de rest van EVA,
+    // die op `bouw7_categorie_naam` filtert (servicedesk, planning, triggers), tot de eerstvolgende
+    // sync nog de oude categorie zien.
+    let nieuweCategorie: { id: number; name: string } | null = null
     if (wil('categorie')) {
       const naam = String(d.categorie ?? '').trim().toLowerCase()
       if (!naam) overgeslagen.push('categorie (leeg)')
       else {
         const cat = (await getBouw7Categorieen()).find(c => c.name.trim().toLowerCase() === naam)
-        if (cat) { body.category = { id: cat.id }; geschreven.push('categorie') }
+        if (cat) { body.category = { id: cat.id }; nieuweCategorie = cat; geschreven.push('categorie') }
         else overgeslagen.push(`categorie "${d.categorie}" bestaat niet in Bouw7`)
       }
     }
@@ -189,6 +194,14 @@ export async function schrijfBouw7Projectvelden(
 
     if (Object.keys(body).length > 2) {
       await client.post('/project', body)
+    }
+
+    // Bouw7 heeft de categorie aangenomen → de spiegelkolommen in EVA meteen gelijktrekken.
+    if (nieuweCategorie) {
+      await supabase
+        .from('dossiers')
+        .update({ bouw7_categorie_id: nieuweCategorie.id, bouw7_categorie_naam: nieuweCategorie.name })
+        .eq('id', dossierId)
     }
 
     // De interne notitie heeft een eigen endpoint; de sync leest hem terug als `opmerkingen`.

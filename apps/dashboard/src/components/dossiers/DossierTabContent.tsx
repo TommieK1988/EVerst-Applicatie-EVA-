@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { getDossierById, getMedewerkers, getFactuuradressen, getUniekeBouw7Categorieen, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
+import { getDossierById, getMedewerkers, getFactuuradressen, getCategorieOpties, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
 import { LEGE_DOSSIER_DATUMS } from '@/lib/dossiers/datum-regels'
@@ -101,7 +101,7 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
     dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
     getSjablonen('dossier'),
     getUrgenteTakenVoorDossier(id),
-    getUniekeBouw7Categorieen(),
+    getCategorieOpties(),
     // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
     getGoedgekeurdMeerwerk(id).catch(() => ({ excl: 0, aantal: 0 })),
     getDossierNotities(id).catch(() => []),

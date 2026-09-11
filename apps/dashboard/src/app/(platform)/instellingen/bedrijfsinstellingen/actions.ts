@@ -124,19 +124,3 @@ export async function setEenheden(
   return { ok: true }
 }
 
-export async function getDossierCategorieen(): Promise<string[]> {
-  const inst = await getBedrijfsinstellingen()
-  const cats = (inst.overige as any)?.dossier_categorieen
-  return Array.isArray(cats) ? cats : []
-}
-
-export async function setDossierCategorieen(
-  categorieen: string[],
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const inst = await getBedrijfsinstellingen()
-  const result = await updateBedrijfsinstellingen({
-    overige: { ...(inst.overige as any), dossier_categorieen: categorieen },
-  })
-  if (result.ok) revalidatePath('/instellingen/dossier-categorieen')
-  return result
-}

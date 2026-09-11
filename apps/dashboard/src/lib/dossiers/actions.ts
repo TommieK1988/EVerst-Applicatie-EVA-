@@ -631,6 +631,27 @@ export const getUniekeBouw7Categorieen = unstable_cache(
   { revalidate: 3600 },
 )
 
+/**
+ * De categoriekeuze voor een dossier. Er is één categorie en die staat in Bouw7: de lijst komt
+ * uit `/organization/project-categories`, zodat elke keuze bij het opslaan ook door Bouw7 wordt
+ * geaccepteerd (`schrijfBouw7Projectvelden` matcht op naam). Is Bouw7 even onbereikbaar, dan val
+ * je terug op de categorieën die al op dossiers staan — dan kun je nog kiezen wat in gebruik is.
+ */
+export const getCategorieOpties = unstable_cache(
+  async (): Promise<string[]> => {
+    try {
+      const { getBouw7Categorieen } = await import('@/lib/bouw7/create-project')
+      const lijst = await getBouw7Categorieen()
+      if (lijst.length > 0) return lijst.map(c => c.name)
+    } catch {
+      // Bouw7 onbereikbaar — hieronder de terugval.
+    }
+    return getUniekeBouw7Categorieen()
+  },
+  ['dossier-categorie-opties'],
+  { revalidate: 3600 },
+)
+
 /** Rol-kolommen waarop een dossier aan een medewerker gekoppeld kan zijn. */
 const DOSSIER_ROL_KOLOMMEN = [
   'project_manager_id',

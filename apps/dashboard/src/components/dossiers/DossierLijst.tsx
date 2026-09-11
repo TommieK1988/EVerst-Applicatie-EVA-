@@ -646,15 +646,6 @@ export function DossierLijst({
       render: d => <Tekst waarde={d.bouw7_projectstatus_naam} />,
     },
     {
-      key: 'bouw7_categorie',
-      label: 'Bouw7-categorie',
-      breedte: 160,
-      standaard_zichtbaar: false,
-      filterType: 'tekst',
-      sorteerWaarde: d => d.bouw7_categorie_naam ?? '',
-      render: d => <Tekst waarde={d.bouw7_categorie_naam} />,
-    },
-    {
       key: 'bouw7_offertestatus',
       label: 'Bouw7-offertestatus',
       breedte: 170,
