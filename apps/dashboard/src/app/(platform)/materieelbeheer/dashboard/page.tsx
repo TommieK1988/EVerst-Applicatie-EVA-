@@ -19,7 +19,7 @@ function euro(v: number): string {
 
 type ObjRow = {
   id: string; omschrijving: string; status: MaterieelStatus; categorie: MaterieelCategorie
-  aanschafwaarde: number | null; boekwaarde: number | null; garantie_tot: string | null
+  vervangingswaarde: number | null; garantie_tot: string | null
   toegewezen_medewerker_id: string | null; toegewezen_team_id: string | null
   laatst_gescand_door: string | null; laatst_gescand_at: string | null
 }
@@ -31,7 +31,7 @@ export default async function MaterieelDashboardPage() {
   const supabase = createAdminClient() as any
 
   const [objRes, keurRes, ondRes, medewerkerOpties, instellingen] = await Promise.all([
-    supabase.from('materieel_objecten').select('id, omschrijving, status, categorie, aanschafwaarde, boekwaarde, garantie_tot, toegewezen_medewerker_id, toegewezen_team_id, laatst_gescand_door, laatst_gescand_at').eq('actief', true),
+    supabase.from('materieel_objecten').select('id, omschrijving, status, categorie, vervangingswaarde, garantie_tot, toegewezen_medewerker_id, toegewezen_team_id, laatst_gescand_door, laatst_gescand_at').eq('actief', true),
     supabase.from('materieel_keuringen').select('object_id, soort, geldig_tot'),
     supabase.from('materieel_onderhoud').select('object_id, kosten'),
     getMedewerkerOpties(),
@@ -44,8 +44,11 @@ export default async function MaterieelDashboardPage() {
   const objMap = new Map(objecten.map((o) => [o.id, o]))
   const medewerkerNaam = new Map(medewerkerOpties.map((m) => [m.id, m.naam]))
 
-  const totaalWaarde = objecten.reduce((s, o) => s + (o.aanschafwaarde ?? 0), 0)
-  const boekwaarde = objecten.reduce((s, o) => s + (o.boekwaarde ?? 0), 0)
+  // Vervangingswaarde, niet aanschafwaarde: wat kost het om de voorraad vandaag
+  // opnieuw te kopen. Objecten zonder bedrag tellen als 0 — daarom erbij hoeveel
+  // er nog geen bedrag hebben, anders leest het totaal te laag zonder dat je ziet waarom.
+  const vervangingswaarde = objecten.reduce((s, o) => s + (o.vervangingswaarde ?? 0), 0)
+  const zonderBedrag = objecten.filter((o) => o.vervangingswaarde === null).length
   const onderhoudskosten = onderhoud.reduce((s, o) => s + (o.kosten ?? 0), 0)
 
   const perStatus = MATERIEEL_STATUSSEN.map((s) => ({ status: s, aantal: objecten.filter((o) => o.status === s).length }))
@@ -91,7 +94,11 @@ export default async function MaterieelDashboardPage() {
 
       {/* KPI-kaarten */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginTop: 12 }}>
-        <Kpi label="Materieelwaarde" waarde={euro(totaalWaarde)} sub={`boekwaarde ${euro(boekwaarde)}`} />
+        <Kpi
+          label="Vervangingswaarde"
+          waarde={euro(vervangingswaarde)}
+          sub={zonderBedrag > 0 ? `${zonderBedrag} ${zonderBedrag === 1 ? 'object' : 'objecten'} zonder bedrag` : undefined}
+        />
         <Kpi label="Aantal objecten" waarde={String(objecten.length)} />
         <Kpi label="Vermist" waarde={String(aantalVermist)} accent={aantalVermist > 0 ? '#dc2626' : undefined} />
         <Kpi label="Defect" waarde={String(aantalDefect)} accent={aantalDefect > 0 ? '#f97316' : undefined} />
