@@ -1,0 +1,10 @@
+-- Changelog-items: mutatie-opname naar de offerte, plus twee kleinere verbeteringen daaromheen.
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-11','opgelost','Opname','Alle foto''s van een opname komen nu op de offerte',
+   'Maakte je twee foto''s bij dezelfde regel, dan kwam alleen de eerste in de calculatie terecht — zonder dat je dat ergens zag. Nu gaan ze allemaal mee. Ze worden automatisch kleiner naarmate je er meer maakt, zodat je calculatie werkbaar blijft; bij een opname tot ongeveer vijfentwintig foto''s merk je daar niets van. De melding na het overzetten telt voortaan echte foto''s, dus je ziet meteen hoeveel er meegingen.'),
+  ('2026-09-11','verbeterd','Opname','Opnamedatum boven het blok, en de tab ook bij servicedesk',
+   'Het blok dat na het overzetten in de calculatie verschijnt heette "OPN-2026-006" met het adres erachter. Dat is nu "Opname 10-09-2026" — de datum waarop je de opname deed. Een tweede opname op hetzelfde dossier heet "Aanvullende opname" met zijn eigen datum. Het adres staat al in de kop van de offerte, dus dat is eruit. Verder verscheen de tab Opname wel bij aanvragen en opdrachten, maar niet bij servicedesk, terwijl juist daar het mutatiewerk binnenkomt. Die staat er nu ook, zodra de dossier-toggle Mutatie-opname aanstaat.'),
+  ('2026-09-11','verbeterd','Calculatie','Je ziet nu aan de regel dat er een foto bij zit',
+   'Het streepjes-icoontje achter een calculatieregel kleurde alleen groen als er tekst in de uitgebreide werkomschrijving stond. Hing er alleen een foto onder, dan leek de regel leeg terwijl die foto wel op de offerte kwam. Nu kleurt het icoontje ook groen bij alleen een foto. Dit geldt in elke calculatie.'),
+  ('2026-09-11','verbeterd','Servicedesk','Facturatie heet nu Regie of Aangenomen',
+   'De keuze op het servicedesk-dossier stond op "Regie / Termijnen". Termijnen zegt iets over hoe je factureert, niet over het soort opdracht, en dat haalde twee dingen door elkaar. Er staat nu "Regie / Aangenomen" — ook in de kolom Facturatie in de dossierlijst. Aan de werking verandert niets.');
