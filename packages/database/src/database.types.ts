@@ -17339,7 +17339,7 @@ export type Database = {
         | "gereedschap"
         | "machine"
         | "aanhanger"
-        | "keet"
+        | "bouwplaatsvoorziening"
         | "steigeronderdeel"
         | "meetapparatuur"
         | "pbm"
@@ -17595,7 +17595,7 @@ export const Constants = {
         "gereedschap",
         "machine",
         "aanhanger",
-        "keet",
+        "bouwplaatsvoorziening",
         "steigeronderdeel",
         "meetapparatuur",
         "pbm",

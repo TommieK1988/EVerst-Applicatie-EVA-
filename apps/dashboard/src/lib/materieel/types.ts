@@ -9,20 +9,20 @@
 /* ── Enums (spiegelen de Postgres-enums uit 20260715_materieelbeheer.sql) ── */
 
 export const MATERIEEL_CATEGORIEEN = [
-  'gereedschap', 'machine', 'aanhanger', 'keet',
+  'gereedschap', 'machine', 'aanhanger', 'bouwplaatsvoorziening',
   'steigeronderdeel', 'ladder', 'meetapparatuur', 'pbm',
 ] as const
 export type MaterieelCategorie = typeof MATERIEEL_CATEGORIEEN[number]
 
 export const CATEGORIE_LABELS: Record<MaterieelCategorie, string> = {
-  gereedschap:      'Gereedschap',
-  machine:          'Machine',
-  aanhanger:        'Aanhanger',
-  keet:             'Keet',
-  steigeronderdeel: 'Steigeronderdeel',
-  ladder:           'Ladder of trap',
-  meetapparatuur:   'Meetapparatuur',
-  pbm:              'PBM',
+  gereedschap:           'Gereedschap',
+  machine:               'Machine',
+  aanhanger:             'Aanhanger',
+  bouwplaatsvoorziening: 'Bouwplaatsvoorzieningen',
+  steigeronderdeel:      'Steigeronderdeel',
+  ladder:                'Ladder of trap',
+  meetapparatuur:        'Meetapparatuur',
+  pbm:                   'PBM',
 }
 
 export const MATERIEEL_STATUSSEN = [
@@ -301,7 +301,7 @@ export const CATEGORIE_DETAILS: Partial<Record<MaterieelCategorie, DetailVeld[]>
     { key: 'slot', label: 'Slot aanwezig', type: 'ja_nee' },
     { key: 'verzekering', label: 'Verzekering', type: 'tekst' },
   ],
-  keet: [
+  bouwplaatsvoorziening: [
     { key: 'kenteken', label: 'Kenteken', type: 'tekst' },
     { key: 'sleutels', label: 'Aantal sleutels', type: 'nummer' },
     { key: 'brandblusser', label: 'Brandblusser aanwezig', type: 'ja_nee' },

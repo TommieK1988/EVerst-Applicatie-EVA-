@@ -124,7 +124,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
   [/^\/materieelbeheer\/nieuw$/, {
     title: 'Nieuw materieel',
-    description: 'Registreer een nieuw stuk materieel — gereedschap, machine, aanhanger, keet, steiger, meetapparatuur of PBM. Na opslaan krijgt het object automatisch een QR-code die je op een sticker kunt printen.',
+    description: 'Registreer een nieuw stuk materieel — gereedschap, machine, aanhanger, bouwplaatsvoorziening, steiger, meetapparatuur of PBM. Na opslaan krijgt het object automatisch een QR-code die je op een sticker kunt printen.',
     sections: [
       { title: 'Verplicht', body: 'Alleen een omschrijving en categorie zijn verplicht. Alle andere velden kun je later aanvullen vanaf het paspoort.' },
       { title: 'QR-code', body: 'De QR-code wordt automatisch gegenereerd en verwijst naar het digitale paspoort. Scannen opent direct de gegevens, status en toewijzing.' },
@@ -143,7 +143,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
   [/^\/materieelbeheer$/, {
     title: 'Materieel',
-    description: 'De centrale materieeldatabase. Elk stuk gereedschap, elke machine, aanhanger en keet heeft een eigen digitaal paspoort met QR-code, status en toewijzing. Doel: minder zoekgeraakt gereedschap, minder onnodige aankopen en aantoonbaar veilig materieel.',
+    description: 'De centrale materieeldatabase. Elk stuk gereedschap, elke machine, aanhanger en bouwplaatsvoorziening heeft een eigen digitaal paspoort met QR-code, status en toewijzing. Doel: minder zoekgeraakt gereedschap, minder onnodige aankopen en aantoonbaar veilig materieel.',
     sections: [
       { title: 'Overzicht', body: 'De tabel toont al het actieve materieel. Klik op een rij om het paspoort te openen. Kolommen zijn aan/uit te zetten en te sorteren via het kolommenmenu.' },
       { title: 'Nieuw toevoegen', body: 'Via "Nieuw materieel" registreer je een object in seconden. De QR-code wordt automatisch aangemaakt.' },
