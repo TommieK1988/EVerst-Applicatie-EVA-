@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { createAdminClient } from '@everts/database/server'
 import { PageHeader } from '@/components/ui'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { getMedewerkerOpties, getInstellingen } from '@/lib/materieel/data'
 import StatusBadge from '@/components/materieel/StatusBadge'
 import {
@@ -30,17 +31,27 @@ export default async function MaterieelDashboardPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const [objRes, keurRes, ondRes, medewerkerOpties, instellingen] = await Promise.all([
-    supabase.from('materieel_objecten').select('id, omschrijving, status, categorie, vervangingswaarde, garantie_tot, toegewezen_medewerker_id, toegewezen_team_id, laatst_gescand_door, laatst_gescand_at').eq('actief', true),
-    supabase.from('materieel_keuringen').select('object_id, soort, geldig_tot'),
-    supabase.from('materieel_onderhoud').select('object_id, kosten'),
+  // Gepagineerd, alle drie: dit scherm telt en sommeert over de hele inventaris,
+  // en PostgREST kapt een kale select stil af op 1000 rijen. Zonder paginering
+  // zouden de KPI's op een half resultaat gebaseerd zijn zodra de tabel groeit —
+  // geen foutmelding, alleen te lage cijfers. Keuringen en onderhoud hebben
+  // meerdere rijen per object, dus die lopen daar nog eerder tegenaan.
+  const [objecten, keuringen, onderhoud, medewerkerOpties, instellingen] = await Promise.all([
+    haalAlleRijen<ObjRow>((van, tot) =>
+      supabase
+        .from('materieel_objecten')
+        .select('id, omschrijving, status, categorie, vervangingswaarde, garantie_tot, toegewezen_medewerker_id, toegewezen_team_id, laatst_gescand_door, laatst_gescand_at')
+        .eq('actief', true)
+        .order('id')
+        .range(van, tot)),
+    haalAlleRijen<KeuringRow>((van, tot) =>
+      supabase.from('materieel_keuringen').select('object_id, soort, geldig_tot').order('id').range(van, tot)),
+    haalAlleRijen<OnderhoudRow>((van, tot) =>
+      supabase.from('materieel_onderhoud').select('object_id, kosten').order('id').range(van, tot)),
     getMedewerkerOpties(),
     getInstellingen(),
   ])
 
-  const objecten = (objRes.data ?? []) as ObjRow[]
-  const keuringen = (keurRes.data ?? []) as KeuringRow[]
-  const onderhoud = (ondRes.data ?? []) as OnderhoudRow[]
   const objMap = new Map(objecten.map((o) => [o.id, o]))
   const medewerkerNaam = new Map(medewerkerOpties.map((m) => [m.id, m.naam]))
 
