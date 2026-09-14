@@ -10565,6 +10565,210 @@ export type Database = {
         }
         Relationships: []
       }
+      personeelshandboek_bijlagen: {
+        Row: {
+          aangemaakt_op: string
+          bestandsnaam: string
+          geupload_door: string | null
+          grootte: number | null
+          id: string
+          mimetype: string
+          omschrijving: string | null
+          sectie_id: string | null
+          status: string
+          storage_path: string
+          titel: string
+          verborgen_voor: string[]
+          volgorde: number
+          zichtbaar_voor: string[]
+        }
+        Insert: {
+          aangemaakt_op?: string
+          bestandsnaam: string
+          geupload_door?: string | null
+          grootte?: number | null
+          id?: string
+          mimetype: string
+          omschrijving?: string | null
+          sectie_id?: string | null
+          status?: string
+          storage_path: string
+          titel: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Update: {
+          aangemaakt_op?: string
+          bestandsnaam?: string
+          geupload_door?: string | null
+          grootte?: number | null
+          id?: string
+          mimetype?: string
+          omschrijving?: string | null
+          sectie_id?: string | null
+          status?: string
+          storage_path?: string
+          titel?: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Relationships: []
+      }
+      personeelshandboek_blokken: {
+        Row: {
+          bijgewerkt_op: string
+          id: string
+          inhoud: Json
+          sectie_id: string
+          status: string
+          type: string
+          verborgen_voor: string[]
+          volgorde: number
+          zichtbaar_voor: string[]
+          zoektekst: string
+        }
+        Insert: {
+          bijgewerkt_op?: string
+          id?: string
+          inhoud?: Json
+          sectie_id: string
+          status?: string
+          type: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+          zoektekst?: string
+        }
+        Update: {
+          bijgewerkt_op?: string
+          id?: string
+          inhoud?: Json
+          sectie_id?: string
+          status?: string
+          type?: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+          zoektekst?: string
+        }
+        Relationships: []
+      }
+      personeelshandboek_contacten: {
+        Row: {
+          aangemaakt_op: string
+          bijgewerkt_op: string
+          id: string
+          medewerker_id: string | null
+          rol: string
+          telefoon_override: string | null
+          verborgen_voor: string[]
+          volgorde: number
+          zichtbaar_voor: string[]
+        }
+        Insert: {
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          id?: string
+          medewerker_id?: string | null
+          rol: string
+          telefoon_override?: string | null
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Update: {
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          id?: string
+          medewerker_id?: string | null
+          rol?: string
+          telefoon_override?: string | null
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Relationships: []
+      }
+      personeelshandboek_secties: {
+        Row: {
+          aangemaakt_door: string | null
+          aangemaakt_op: string
+          bijgewerkt_op: string
+          icoon: string | null
+          id: string
+          parent_id: string | null
+          samenvatting: string | null
+          slug: string
+          soort: string
+          status: string
+          titel: string
+          verborgen_voor: string[]
+          volgorde: number
+          zichtbaar_voor: string[]
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          icoon?: string | null
+          id?: string
+          parent_id?: string | null
+          samenvatting?: string | null
+          slug: string
+          soort?: string
+          status?: string
+          titel: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          icoon?: string | null
+          id?: string
+          parent_id?: string | null
+          samenvatting?: string | null
+          slug?: string
+          soort?: string
+          status?: string
+          titel?: string
+          verborgen_voor?: string[]
+          volgorde?: number
+          zichtbaar_voor?: string[]
+        }
+        Relationships: []
+      }
+      personeelshandboek_versies: {
+        Row: {
+          gepubliceerd_door: string | null
+          gepubliceerd_op: string
+          id: string
+          inhoud: Json
+          toelichting: string | null
+          versienummer: number
+        }
+        Insert: {
+          gepubliceerd_door?: string | null
+          gepubliceerd_op?: string
+          id?: string
+          inhoud: Json
+          toelichting?: string | null
+          versienummer: number
+        }
+        Update: {
+          gepubliceerd_door?: string | null
+          gepubliceerd_op?: string
+          id?: string
+          inhoud?: Json
+          toelichting?: string | null
+          versienummer?: number
+        }
+        Relationships: []
+      }
       planning_activiteit_afhankelijkheden: {
         Row: {
           created_at: string
@@ -14842,9 +15046,12 @@ export type Database = {
           id: boolean
           indien_deadline_dag: number
           indien_deadline_tijd: string
+          km_vergoeding_auto: number
+          km_vergoeding_bromfiets: number
           terugval_goedkeurder_id: string | null
           tolerantie_uren: number
           updated_at: string
+          verlof_routes: Json
         }
         Insert: {
           created_at?: string
@@ -14854,9 +15061,12 @@ export type Database = {
           id?: boolean
           indien_deadline_dag?: number
           indien_deadline_tijd?: string
+          km_vergoeding_auto?: number
+          km_vergoeding_bromfiets?: number
           terugval_goedkeurder_id?: string | null
           tolerantie_uren?: number
           updated_at?: string
+          verlof_routes?: Json
         }
         Update: {
           created_at?: string
@@ -14866,9 +15076,12 @@ export type Database = {
           id?: boolean
           indien_deadline_dag?: number
           indien_deadline_tijd?: string
+          km_vergoeding_auto?: number
+          km_vergoeding_bromfiets?: number
           terugval_goedkeurder_id?: string | null
           tolerantie_uren?: number
           updated_at?: string
+          verlof_routes?: Json
         }
         Relationships: [
           {
@@ -14897,7 +15110,7 @@ export type Database = {
       uren_onkosten: {
         Row: {
           bedrag: number
-          bon_url: string | null
+          bon_pad: string | null
           created_at: string
           datum: string
           dossier_id: string | null
@@ -14907,11 +15120,12 @@ export type Database = {
           omschrijving: string | null
           soort: string
           updated_at: string
+          vervoermiddel: string | null
           week_id: string
         }
         Insert: {
           bedrag: number
-          bon_url?: string | null
+          bon_pad?: string | null
           created_at?: string
           datum: string
           dossier_id?: string | null
@@ -14921,11 +15135,12 @@ export type Database = {
           omschrijving?: string | null
           soort: string
           updated_at?: string
+          vervoermiddel?: string | null
           week_id: string
         }
         Update: {
           bedrag?: number
-          bon_url?: string | null
+          bon_pad?: string | null
           created_at?: string
           datum?: string
           dossier_id?: string | null
@@ -14935,6 +15150,7 @@ export type Database = {
           omschrijving?: string | null
           soort?: string
           updated_at?: string
+          vervoermiddel?: string | null
           week_id?: string
         }
         Relationships: [
@@ -15794,6 +16010,7 @@ export type Database = {
           afwijzing_reden: string | null
           beoordeeld_door: string | null
           beoordeeld_op: string | null
+          beoordelende_afdeling: string | null
           bouw7_day_off_id: string | null
           bouw7_fout: string | null
           bouw7_status: string
@@ -15817,6 +16034,7 @@ export type Database = {
           afwijzing_reden?: string | null
           beoordeeld_door?: string | null
           beoordeeld_op?: string | null
+          beoordelende_afdeling?: string | null
           bouw7_day_off_id?: string | null
           bouw7_fout?: string | null
           bouw7_status?: string
@@ -15840,6 +16058,7 @@ export type Database = {
           afwijzing_reden?: string | null
           beoordeeld_door?: string | null
           beoordeeld_op?: string | null
+          beoordelende_afdeling?: string | null
           bouw7_day_off_id?: string | null
           bouw7_fout?: string | null
           bouw7_status?: string
@@ -17244,6 +17463,7 @@ export type Database = {
         Args: { p_dossier_id: string }
         Returns: undefined
       }
+      handboek_kenmerken: { Args: never; Returns: string[] }
       is_platform_gebruiker: { Args: never; Returns: boolean }
       log_fout: {
         Args: {

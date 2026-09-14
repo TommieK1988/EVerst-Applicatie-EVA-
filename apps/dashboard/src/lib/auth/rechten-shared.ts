@@ -24,6 +24,11 @@ export const AFGEDWONGEN_MODULES: RechtenModule[] = [
   // `inkoopfacturen_alle` staat hier bewust NIET in — dat is een scope-schakelaar zonder
   // menu-item, net als `alle_taken`.
   'inkoopfacturen',
+  // Het medewerkershandboek is nieuw en meteen afgedwongen: niemand raakt iets
+  // kwijt. LET OP dat dit alleen over het BEHEER gaat — de mobiele leesschermen
+  // controleren dit recht bewust niet, want dan zou geen enkele monteur het
+  // handboek nog kunnen openen. Zie lib/handboek/auth.ts.
+  'medewerkershandboek',
 ]
 
 /** Een 'instellingen = beheren'-gebruiker is beheerder en ziet/opent alles. */

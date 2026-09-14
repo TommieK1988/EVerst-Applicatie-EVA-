@@ -913,6 +913,14 @@ export const RECHTEN_MODULES = [
   //  - schrijven → onderdelen en bestanden vrijgeven, terugschrijven in de chat
   //  - beheren  → contactpersonen uitnodigen, hun scope zetten, toegang intrekken
   { key: 'klantportaal',   label: 'Klantportaal' },
+  // Medewerkershandboek: dit recht gaat over het BEHEER van het handboek, niet
+  // over het lezen ervan. Lezen op /m hangt aan een account, niet aan een recht
+  // — elke medewerker hoort zijn eigen handboek te kunnen openen, en wát hij
+  // ziet bepalen de zichtbaarheidskenmerken.
+  //  - lezen     → beheerschermen en "Bekijk als" inzien
+  //  - schrijven → teksten en zichtbaarheid bewerken
+  //  - beheren   → publiceren, bijlagen verwijderen, hoofdstukken archiveren
+  { key: 'medewerkershandboek', label: 'Medewerkershandboek' },
   { key: 'instellingen',   label: 'Instellingen' },
 ] as const
 

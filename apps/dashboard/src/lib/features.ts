@@ -14,6 +14,8 @@
 export const FEATURES = {
   /** Materieelbeheer (in ontwikkeling — verborgen tot go-live). */
   materieelbeheer: process.env.NEXT_PUBLIC_FEATURE_MATERIEEL === '1',
+  /** Medewerkershandboek (in ontwikkeling — verborgen tot go-live). */
+  handboek: process.env.NEXT_PUBLIC_FEATURE_HANDBOEK === '1',
 } as const
 
 export type FeatureKey = keyof typeof FEATURES
