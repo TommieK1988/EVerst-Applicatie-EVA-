@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { nieuweSeed } from './shuffle'
+import { maakNotificatie } from '@/lib/notificaties/maak'
 
 /**
  * Zet een toolboxversie klaar bij een set medewerkers: per medewerker één
@@ -11,6 +12,11 @@ import { nieuweSeed } from './shuffle'
  *
  * Alleen medewerkers met een gekoppeld auth-account (login) krijgen een taak —
  * zonder login kunnen ze de toolbox op hun telefoon toch niet doorlopen.
+ *
+ * Elke medewerker krijgt ook een melding. Die is bewust níét de algemene
+ * "actie voor jou"-melding uit `lib/taken/meldingen.ts`: een toolbox doorloop je
+ * op je telefoon op een eigen scherm, en de melding hoort daar rechtstreeks heen
+ * te brengen in plaats van naar een taakregel die alleen maar zegt dat het bestaat.
  */
 export async function zetToolboxKlaar(opts: {
   toolboxId: string
@@ -75,22 +81,37 @@ export async function zetToolboxKlaar(opts: {
     })
 
     // 2) Toewijzing met eigen seed + taak-koppeling.
-    const { error: toewErr } = await admin.from('toolbox_toewijzingen').insert({
-      toolbox_id: toolboxId,
-      versie_id: versieId,
-      medewerker_id: mw.id,
-      moment_id: momentId,
-      task_id: taak.id,
-      shuffle_seed: nieuweSeed(),
-      status: 'open',
-      toegewezen_door: toegewezenDoor,
-    })
-    if (toewErr) {
+    const { data: toewijzing, error: toewErr } = await admin
+      .from('toolbox_toewijzingen')
+      .insert({
+        toolbox_id: toolboxId,
+        versie_id: versieId,
+        medewerker_id: mw.id,
+        moment_id: momentId,
+        task_id: taak.id,
+        shuffle_seed: nieuweSeed(),
+        status: 'open',
+        toegewezen_door: toegewezenDoor,
+      })
+      .select('id')
+      .single()
+    if (toewErr || !toewijzing) {
       // Rol de zojuist gemaakte taak terug zodat er geen weestaak blijft staan.
       await admin.from('tasks').delete().eq('id', taak.id)
       overgeslagen++
       continue
     }
+
+    // Rechtstreeks naar de doorloop. Dit pad bestaat alleen op mobiel — de toolbox
+    // is nergens anders te doen — dus hier géén desktop-pad dat `naarMobielPad`
+    // nog moet vertalen.
+    await maakNotificatie({
+      user_id: mw.auth_user_id,
+      type: 'toolbox',
+      titel: 'Toolbox staat voor je klaar',
+      body: titel,
+      url: `/m/toolbox/${toewijzing.id}`,
+    })
 
     aangemaakt++
   }

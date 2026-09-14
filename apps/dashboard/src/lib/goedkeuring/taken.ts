@@ -1,6 +1,7 @@
 import 'server-only'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
+import { meldTaakToegewezen } from '@/lib/taken/meldingen'
 
 export interface BeoordeelTaakResultaat {
   /** Naam van de medewerker aan wie de taak is toegewezen (null als niemand gevonden). */
@@ -99,6 +100,10 @@ export async function maakBeoordeelTaak(
       user_id: authUserId,
       rol:     'verantwoordelijke',
     })
+    // Deze taak is urgent (prioriteit hoog, deadline morgen) en ontstaat doordat
+    // iemand anders zijn werk terugstuurt; juist die hoort niet te wachten tot de
+    // ontvanger toevallig in Mijn taken kijkt.
+    await meldTaakToegewezen(taak.id, [authUserId])
   }
 
   revalidatePath('/opdrachten')

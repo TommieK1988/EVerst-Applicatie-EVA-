@@ -7,6 +7,7 @@ import {
   markeerAlleAlsGelezen,
   type Notificatie,
 } from '@/app/(platform)/notificaties/actions'
+import { naarMobielPad } from '@/lib/notificaties/paden'
 
 /**
  * Meldingenlijst voor EVA Mobiel.
@@ -20,8 +21,14 @@ import {
 const TYPE_ICOON: Record<string, string> = {
   formulier_taak:      '📋',
   formulier_ingediend: '✅',
-  algemeen:            '🔔',
+  taak:                '☑️',
+  toolbox:             '🦺',
+  planning:            '📅',
+  uren:                '⏱️',
+  verlof:              '🌴',
+  portaal_meerwerk:    '🤝',
   debiteur:            '💶',
+  algemeen:            '🔔',
 }
 
 function datumTijd(iso: string): string {
@@ -44,7 +51,10 @@ export default function MobielNotificatieLijst({ initieel }: { initieel: Notific
     if (!n.gelezen) setItems(prev => prev.map(x => (x.id === n.id ? { ...x, gelezen: true } : x)))
     startTransition(async () => {
       if (!n.gelezen) await markeerAlsGelezen(n.id)
-      if (n.url) router.push(n.url)
+      // Meldingen dragen het desktop-pad; de middleware zou een telefoon daarvandaan
+      // terugsturen naar `/m` en dan land je op het startscherm in plaats van bij de
+      // melding. Dezelfde vertaling die de pushmelding per apparaat al krijgt.
+      if (n.url) router.push(naarMobielPad(n.url))
       else router.refresh()
     })
   }

@@ -33,6 +33,10 @@
       "schedule": "30 6,7 * * 1-5"
     },
     {
+      "path": "/api/cron/dagsignalen",
+      "schedule": "0 5,6,13,14 * * 1-5"
+    },
+    {
       "path": "/api/cron/wagenpark-weeksamenvatting",
       "schedule": "0 9 * * 1"
     },

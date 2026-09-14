@@ -3,6 +3,7 @@ import webpush from 'web-push'
 import { createAdminClient } from '@everts/database/server'
 import { logFout } from '@/lib/fouten/log'
 import { isMobileUA } from '@/lib/isMobileUA'
+import { naarMobielPad } from './paden'
 
 /**
  * Pushmeldingen (Web Push / VAPID).
@@ -19,6 +20,8 @@ import { isMobileUA } from '@/lib/isMobileUA'
  *   * Deze module gooit NOOIT. Hij hangt achter acties die er niet op mogen stuklopen:
  *     een goedgekeurde begroting, een afgeronde sync, een cron-run.
  */
+
+export { naarMobielPad }
 
 export type PushPayload = {
   titel: string
@@ -38,36 +41,6 @@ type Abonnement = {
   auth: string
   user_agent: string | null
   mobiel: boolean | null
-}
-
-/** Dossier-secties op de desktop; op mobiel is er één dossierscherm. */
-const DOSSIER_SECTIES = ['aanvragen', 'offertes', 'opdrachten', 'servicedesk']
-
-/**
- * Vertaalt een desktop-pad naar het mobiele equivalent.
- *
- * Nodig omdat de middleware een telefoon vanaf elke desktop-route naar `/m` stuurt.
- * Zonder deze vertaling landt élke aangetikte pushmelding op het startscherm in
- * plaats van bij de melding — de melding zegt dan wel wát er is, maar brengt je er
- * niet heen. De user-agent staat per abonnement vast, dus dit kan per apparaat.
- *
- * Alleen paden waarvan een mobiel scherm bestaat worden omgezet; de rest gaat naar
- * het meldingenscherm, want daar staat de melding in elk geval nog een keer.
- */
-export function naarMobielPad(pad: string): string {
-  if (!pad || pad.startsWith('/m/') || pad === '/m') return pad || '/m'
-
-  const [zonderQuery] = pad.split(/[?#]/)
-  const delen = zonderQuery.split('/').filter(Boolean)
-
-  if (delen.length >= 2 && DOSSIER_SECTIES.includes(delen[0])) {
-    return `/m/dossiers/${delen[1]}`
-  }
-  if (delen[0] === 'taken') return '/m/taken'
-  if (delen[0] === 'uren') return '/m/uren'
-  if (delen[0] === 'planning') return '/m/planning'
-
-  return '/m/notificaties'
 }
 
 /**

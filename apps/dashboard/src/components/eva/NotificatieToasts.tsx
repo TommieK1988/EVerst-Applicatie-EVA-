@@ -7,8 +7,14 @@ import { markeerAlsGelezen, type Notificatie } from '@/app/(platform)/notificati
 const TYPE_ICOON: Record<string, string> = {
   formulier_taak:      '📋',
   formulier_ingediend: '✅',
-  algemeen:            '🔔',
+  taak:                '☑️',
+  toolbox:             '🦺',
+  planning:            '📅',
+  uren:                '⏱️',
+  verlof:              '🌴',
+  portaal_meerwerk:    '🤝',
   debiteur:            '💶',
+  algemeen:            '🔔',
 }
 
 const MAX_ZICHTBAAR = 4

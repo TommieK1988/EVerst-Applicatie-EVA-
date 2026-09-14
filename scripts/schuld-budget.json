@@ -1,6 +1,6 @@
 {
   "budget": {
-    "as_any": 750,
+    "as_any": 753,
     "ongegate_service_role_actions": 513,
     "bestanden_boven_800_regels": 33
   },
@@ -241,6 +241,8 @@
       "apps/dashboard/src/lib/materieel/historie.ts": 1,
       "apps/dashboard/src/lib/materieel/types.ts": 1,
       "apps/dashboard/src/lib/materieel/zoeken.ts": 1,
+      "apps/dashboard/src/lib/notificaties/dagsignalen.ts": 1,
+      "apps/dashboard/src/lib/notificaties/signalen.ts": 1,
       "apps/dashboard/src/lib/o365/dossier-map.ts": 1,
       "apps/dashboard/src/lib/o365/tokens.ts": 1,
       "apps/dashboard/src/lib/objecten/data.ts": 11,
@@ -270,6 +272,7 @@
       "apps/dashboard/src/lib/search/global.ts": 3,
       "apps/dashboard/src/lib/stamdata/btw-actions.ts": 1,
       "apps/dashboard/src/lib/stamdata/uurtarief.ts": 1,
+      "apps/dashboard/src/lib/taken/meldingen.ts": 1,
       "apps/dashboard/src/lib/taken/services/taken.ts": 26,
       "apps/dashboard/src/lib/toolbox/klaarzetten.ts": 2,
       "apps/dashboard/src/lib/uren/actions.ts": 1,

@@ -8,6 +8,7 @@ import { spiegelTaakstatusNaarBouw7 } from '@/lib/bouw7/todo-write'
 import { activeerSjabloon } from './sjablonen'
 import { getTaak } from '@/lib/taken/services/taken'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { meldTaakToegewezen } from '@/lib/taken/meldingen'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
@@ -188,6 +189,7 @@ export async function maakTaak(data: {
       }))
     )
     if (aError) throw new Error(`Fout bij toewijzen taak: ${aError.message}`)
+    await meldTaakToegewezen(taak.id, data.assignees.map(a => a.user_id), { doorUserId: user.id })
   }
 
   // Audit log
@@ -518,11 +520,23 @@ export async function voegAssigneeToe(
   rol: TaskAssigneeRol = 'verantwoordelijke'
 ): Promise<void> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Vóór de upsert kijken of hij er al op stond: een upsert op een bestaande rij
+  // (alleen de rol wijzigt) is geen nieuwe toewijzing en hoort niet te melden.
+  const { data: bestond } = await supabase
+    .from('task_assignees')
+    .select('user_id')
+    .eq('task_id', taskId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
   const { error } = await supabase
     .from('task_assignees')
     .upsert({ task_id: taskId, user_id: userId, rol })
 
   if (error) throw new Error(`Fout bij toewijzen: ${error.message}`)
+  if (!bestond) await meldTaakToegewezen(taskId, [userId], { doorUserId: user?.id ?? null })
   revalidatePath('/taken')
 }
 
@@ -543,6 +557,17 @@ export async function zetAssignees(
   assignees: { user_id: string; rol: TaskAssigneeRol }[]
 ): Promise<void> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // De hele set wordt weggegooid en opnieuw gezet, ook als er maar één naam bij
+  // komt. Zonder deze vergelijking vooraf krijgt iedereen die er al op stond bij
+  // élke bewerking van de actie opnieuw "er is een actie aan je toegewezen".
+  const { data: vorige } = await supabase
+    .from('task_assignees')
+    .select('user_id')
+    .eq('task_id', taskId)
+  const stonden = new Set(((vorige ?? []) as { user_id: string }[]).map(a => a.user_id))
+
   const { error: delErr } = await supabase
     .from('task_assignees').delete().eq('task_id', taskId)
   if (delErr) throw new Error(`Fout bij verwijderen toewijzingen: ${delErr.message}`)
@@ -552,6 +577,9 @@ export async function zetAssignees(
       .from('task_assignees')
       .insert(assignees.map(a => ({ task_id: taskId, user_id: a.user_id, rol: a.rol })))
     if (insErr) throw new Error(`Fout bij vastleggen toewijzingen: ${insErr.message}`)
+
+    const nieuwe = assignees.map(a => a.user_id).filter(uid => !stonden.has(uid))
+    await meldTaakToegewezen(taskId, nieuwe, { doorUserId: user?.id ?? null })
   }
 
   revalidatePath('/taken')

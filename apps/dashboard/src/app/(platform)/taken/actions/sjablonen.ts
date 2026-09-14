@@ -36,6 +36,14 @@ export async function activeerSjabloon(input: {
 }): Promise<{ lijst_id: string }> {
   const supabase = createAdminClient()
 
+  // Wie activeert? Alleen om te voorkomen dat hij meldingen krijgt over taken die
+  // hij zelf zojuist heeft klaargezet. Zacht opgevraagd: dit loopt óók vanuit een
+  // trigger-drain zonder sessie, en dan is `null` het juiste antwoord.
+  const activeerder = await createClient()
+    .then(c => c.auth.getUser())
+    .then(r => r.data.user?.id ?? null)
+    .catch(() => null)
+
   if (!input.dossier_id && !input.medewerker_id) throw new Error('Geen dossier of medewerker opgegeven')
 
   // Haal sjabloon op
@@ -177,6 +185,7 @@ export async function activeerSjabloon(input: {
       { dossier: dossier ?? undefined, medewerker: medewerker ?? undefined },
       taak,
       nieuweTaak.id,
+      { doorUserId: activeerder },
     )
     await kopieerCompletionActies(supabase, taak, nieuweTaak.id)
   }
