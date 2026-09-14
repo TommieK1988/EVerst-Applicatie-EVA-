@@ -2,6 +2,7 @@ import { PageHeader, Card, CardBody } from '@/components/ui'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
 import { getOverzicht, type MailSjablonenOverzicht } from './actions'
 import MailSjablonenBeheer from './MailSjablonenBeheer'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'E-mailsjablonen' }
 export const dynamic = 'force-dynamic'
@@ -20,6 +21,7 @@ export default async function Page() {
 
   return (
     <div className="eva-page">
+      <TerugNaarInstellingen />
       <PageHeader eyebrow="Bedrijf" title="E-mailsjablonen" />
       <p className="eva-page-desc -mt-[14px] mb-[22px]">
         Het onderwerp en de tekst van elke e-mail die EVA verstuurt — van de offertemail tot de

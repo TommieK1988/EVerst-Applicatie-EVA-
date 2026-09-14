@@ -1,346 +1,39 @@
-import React from 'react'
-import Link from 'next/link'
-import { PageHeader, Badge } from '@/components/ui'
-import type { RechtenModule } from '@everts/database/platform-types'
+import { PageHeader } from '@/components/ui'
 import { getEffectieveRechten, magOnderdeelZien } from '@/lib/auth/rechten'
-import { isBeheerder } from '@/lib/auth/rechten-shared'
+import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
+import { FEATURES } from '@/lib/features'
+import { INSTELLINGEN_SECTIES, type InstellingTegel } from '@/lib/instellingen/catalogus'
+import InstellingenHub from '@/components/instellingen/InstellingenHub'
 
 export const metadata = { title: 'Instellingen' }
 
-type SettingsItem = {
-  href: string
-  title: string
-  description: string
-  ready: boolean
-  kicker: string
-  /** Onderdeel waarvan dit een beheer-scherm is; vereist 'beheren' om te tonen. */
-  module: RechtenModule
-  /**
-   * Scherm dat alléén voor beheerders is, ook als de module zelf nog niet wordt
-   * afgedwongen. Nodig omdat `magOnderdeelZien` alles buiten AFGEDWONGEN_MODULES
-   * doorlaat — zonder deze vlag zag iedere platformgebruiker de rechtenoverzichten.
-   */
-  alleenBeheerder?: boolean
-}
-
-const platformItems: SettingsItem[] = [
-  {
-    href: '/instellingen/klantportaal',
-    title: 'Klantportaal',
-    description: 'Wie van onze opdrachtgevers toegang heeft tot zijn projectomgeving, en wanneer zij voor het laatst inlogden.',
-    ready: true,
-    kicker: 'Klantportaal',
-    module: 'klantportaal',
-  },
-  {
-    href: '/instellingen/functies-afdelingen',
-    title: 'Functies & Afdelingen',
-    description: 'Beheer de beschikbare functies en afdelingen die als keuze verschijnen bij medewerkerprofielen.',
-    ready: true,
-    kicker: 'Medewerkers',
-    module: 'medewerkers',
-  },
-  {
-    href: '/instellingen/cao',
-    title: 'CAO beheer',
-    description: 'Upload een CAO-document als PDF. EVA leest de loonschalen en treden automatisch in via AI.',
-    ready: true,
-    kicker: 'Medewerkers',
-    module: 'medewerkers',
-  },
-  {
-    href: '/instellingen/bedrijfsgegevens',
-    title: 'Organisatiegegevens',
-    description: 'Organisatie en werkmaatschappijen — naam, KvK, BTW-nummer, adres.',
-    ready: true,
-    kicker: 'Bedrijf',
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen/bedrijfsgegevens/huisstijl',
-    title: 'Huisstijl',
-    description: "Logo's in meerdere formaten, kleurenpalet, typografie en huisstijlregels.",
-    ready: true,
-    kicker: 'Ontwerp',
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen/gebruikers',
-    title: 'Gebruikers & rechten',
-    description: 'Wie heeft toegang tot het platform, welk type gebruiker ze zijn en rechten per afdeling.',
-    ready: true,
-    kicker: 'Team',
-    alleenBeheerder: true,
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen/integraties',
-    title: 'Integraties',
-    description: 'Exact Bouw7 API-key, sync en overige koppelingen.',
-    ready: true,
-    kicker: 'Systeem',
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen/foutenlog',
-    title: 'Foutenlog',
-    description: 'Wat er misging in EVA — wat de melding was, wanneer, hoe vaak en wie het raakte.',
-    ready: true,
-    kicker: 'Systeem',
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen',
-    title: 'Systeem',
-    description: 'Feature flags, cache, logs en backups.',
-    ready: false,
-    kicker: 'Geavanceerd',
-    module: 'instellingen',
-  },
-]
-
-// Gedeelde stamgegevens — data die door meerdere modules wordt gebruikt
-// (calculatie, offerte, verkoop, uren, planning). BTW-tarieven en uursoorten zijn
-// read-only afgeleid uit Bouw7 zodat ze niet kunnen afwijken bij terugschrijven.
-const stamgegevensItems: SettingsItem[] = [
-  {
-    href: '/instellingen/btw-tarieven',
-    title: 'BTW-tarieven',
-    description: 'Read-only uit Bouw7. Gebruikt door calculatie, offertes, verkoop en facturen.',
-    ready: true,
-    kicker: 'Bouw7',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/uursoorten-tarieven',
-    title: 'Uursoorten & uurtarieven',
-    description: 'Uursoorten (uit Bouw7) en de uurtarief-hiërarchie. Gebruikt door planning, uren en calculatie.',
-    ready: true,
-    kicker: 'Bouw7',
-    module: 'planning',
-  },
-  {
-    href: '/instellingen/uren',
-    title: 'Urenverantwoording',
-    description: 'Deadlines, terugvalgoedkeurder, het dossier voor indirecte uren en hoe elke uursoort meetelt in de weekstaat.',
-    ready: true,
-    kicker: 'Uren',
-    module: 'planning',
-  },
-  {
-    href: '/instellingen/kostensoorten',
-    title: 'Kostensoorten',
-    description: 'De vaste Bouw7-kostensoorten (arbeid, inkoop, onderaanneming, …). Read-only.',
-    ready: true,
-    kicker: 'Bouw7',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/betalingscondities',
-    title: 'Betalingscondities',
-    description: 'Termijnschema\'s voor de aanneemsom — welk percentage wanneer verschuldigd is.',
-    ready: true,
-    kicker: 'Offerte',
-    module: 'dossiers',
-  },
-]
-
-const calcOfferteItems: SettingsItem[] = [
-  {
-    href: '/instellingen/dossier-categorieen',
-    title: 'Dossier categorieën',
-    description: 'Beschikbare categorieën voor aanvragen, offertes en opdrachten.',
-    ready: true,
-    kicker: 'Dossiers',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/dossier-toggles',
-    title: 'Dossier toggles',
-    description: 'Aan/uit-schakelaars per dossier; bruikbaar als trigger of conditie voor actielijsten.',
-    ready: true,
-    kicker: 'Dossiers',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/facturatie',
-    title: 'Facturatie',
-    description: 'Opslag op geboekte kosten bij regiewerk en bij het verrekenen van stelposten.',
-    ready: true,
-    kicker: 'Financieel',
-    module: 'financieel',
-  },
-  {
-    href: '/instellingen/debiteur-redencodes',
-    title: 'Debiteuren — redencodes',
-    description: 'Beheer de redenen "niet betaald" die op het Facturen-scherm gekozen kunnen worden.',
-    ready: true,
-    kicker: 'Financieel',
-    module: 'financieel',
-  },
-  {
-    href: '/instellingen/algemene-voorwaarden',
-    title: 'Algemene Voorwaarden',
-    description: 'Upload en beheer PDF-documenten met algemene voorwaarden voor offertes.',
-    ready: true,
-    kicker: 'Offerte',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/offerte-layout',
-    title: 'Offerte layout',
-    description: 'Word-sjablonen met huisstijl, kleuren en papierindeling voor offertes.',
-    ready: true,
-    kicker: 'Offerte',
-    module: 'dossiers',
-  },
-  {
-    href: '/instellingen/document-sjablonen',
-    title: 'Documentsjablonen',
-    description: 'Word-sjablonen voor bewonersbrieven, garantiecertificaten en informatiebrieven.',
-    ready: true,
-    kicker: 'Documenten',
-    module: 'instellingen',
-  },
-  {
-    href: '/instellingen/mailsjablonen',
-    title: 'E-mailsjablonen',
-    description: 'Onderwerp en tekst van elke e-mail die EVA verstuurt: offerte, uitvraag, oplevering, klantportaal en gebruikersuitnodigingen.',
-    ready: true,
-    kicker: 'Bedrijf',
-    module: 'instellingen',
-  },
-]
-
-const appItems: SettingsItem[] = [
-  {
-    href: '/everts-calc/instellingen',
-    title: 'EvertsCalc',
-    description: 'Rekenregels, prijslijsten en standaard calculatie-instellingen.',
-    ready: true,
-    kicker: 'Calculatie',
-    module: 'everts_calc',
-  },
-  {
-    href: '/everts-calc/bibliotheek/recepten',
-    title: 'Recepten',
-    description: 'Codes, uren, materialen en marge per recept. Ook de houtrotreparaties die je bij een registratie kiest.',
-    ready: true,
-    kicker: 'Calculatie',
-    module: 'everts_calc',
-  },
-  {
-    href: '/wagenpark/instellingen',
-    title: 'Wagenpark',
-    description: 'Voertuigcategorieën, brandstofnormen en koppeling met cartracker.',
-    ready: true,
-    kicker: 'Wagenpark',
-    module: 'wagenpark',
-  },
-  {
-    href: '/taken/instellingen',
-    title: 'Actielijsten',
-    description: 'Standaard rollen en doorlooptijden voor actielijsten.',
-    ready: false,
-    kicker: 'Acties',
-    module: 'taken',
-  },
-]
-
-function SettingsCard({ item }: { item: SettingsItem }) {
-  const inner = (
-    <>
-      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-        {item.kicker}
-      </div>
-      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: item.ready ? 'var(--fg)' : 'var(--fg-muted)', marginBottom: 5 }}>
-        {item.title}
-      </div>
-      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
-        {item.description}
-      </div>
-      {!item.ready && (
-        <div style={{ marginTop: 10 }}>
-          <Badge variant="outline" tone="neutral" size="sm" className="font-bold uppercase tracking-[0.08em]" style={{  }}>
-            binnenkort
-          </Badge>
-        </div>
-      )}
-    </>
-  )
-  const cardStyle = {
-    display: 'block',
-    padding: '18px 20px',
-    background: 'var(--bg-elev)',
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    textDecoration: 'none',
-    opacity: item.ready ? 1 : 0.6,
-    transition: 'background 0.15s',
-  } as React.CSSProperties
-
-  return item.ready ? (
-    <Link href={item.href} style={cardStyle}>{inner}</Link>
-  ) : (
-    <div style={cardStyle}>{inner}</div>
-  )
-}
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--fg-muted)',
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  marginBottom: 10,
-}
-
-const grid: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-  gap: 10,
-}
-
 export default async function Page() {
   const rechten = await getEffectieveRechten()
-  // Een beheer-scherm tonen we alleen als het onderdeel wordt afgedwongen én de
-  // gebruiker geen 'beheren'-recht heeft (nu enkel Management; rest is altijd zichtbaar).
   const beheerder = isBeheerder(rechten)
-  const zichtbaar = (item: SettingsItem) =>
-    (!item.alleenBeheerder || beheerder) && magOnderdeelZien(rechten, item.module, 'beheren')
+
+  const zichtbaar = (tegel: InstellingTegel) => {
+    if (tegel.feature && !FEATURES[tegel.feature]) return false
+    if (tegel.alleenBeheerder && !beheerder) return false
+    // Zachte filter: bestaat dit onderdeel voor deze gebruiker?
+    if (!magOnderdeelZien(rechten, tegel.module, 'beheren')) return false
+    // Harde filter: de pagina erachter heeft een vereisModuleToegang() met deze eis. Zonder
+    // deze check zou de tegel zichtbaar zijn en bij klikken naar de startpagina redirecten.
+    if (tegel.guard && !heeftModuleToegang(rechten, tegel.guard.module, tegel.guard.niveau)) return false
+    return true
+  }
+
+  const secties = INSTELLINGEN_SECTIES
+    .map(sectie => ({ ...sectie, tegels: sectie.tegels.filter(zichtbaar) }))
+    .filter(sectie => sectie.tegels.length > 0)
 
   return (
     <div className="eva-page">
       <PageHeader eyebrow="Platform" title="Bedrijfsinstellingen" />
-      <p className="eva-page-desc">Algemene instellingen — bedrijfsgegevens, gebruikers, apps en systeemconfiguratie.</p>
+      <p className="eva-page-desc">
+        Alles wat je in EVA instelt, gegroepeerd zoals het menu links. Weet je niet waar iets staat? Zoek hieronder.
+      </p>
 
-      <div style={{ marginBottom: 6 }}>
-        <div style={sectionLabel}>Algemeen</div>
-        <div style={grid}>
-          {platformItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <div style={sectionLabel}>Stamgegevens</div>
-        <div style={grid}>
-          {stamgegevensItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <div style={sectionLabel}>Calculatie &amp; Offertes</div>
-        <div style={grid}>
-          {calcOfferteItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <div style={sectionLabel}>Apps</div>
-        <div style={grid}>
-          {appItems.filter(zichtbaar).map(item => <SettingsCard key={item.title} item={item} />)}
-        </div>
-      </div>
+      <InstellingenHub secties={secties} />
     </div>
   )
 }

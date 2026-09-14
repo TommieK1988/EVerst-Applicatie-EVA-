@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getPdfConfig } from './actions'
 import { PdfInstellingenClient } from './PdfInstellingenClient'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata: Metadata = { title: 'Instellingen › Formulier PDF-opmaak' }
 
@@ -10,6 +11,7 @@ export default async function FormulierenPdfPage() {
   if (!result.ok) {
     return (
       <div style={{ padding: 32 }}>
+        <TerugNaarInstellingen />
         <p style={{ color: '#dc2626', fontSize: 14 }}>
           Fout bij laden: {result.error}. Controleer of de database-migratie is uitgevoerd.
         </p>

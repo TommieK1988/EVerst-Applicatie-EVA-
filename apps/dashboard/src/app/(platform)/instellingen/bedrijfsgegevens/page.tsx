@@ -3,6 +3,7 @@ import { loadBedrijfsgegevens, createWerkmaatschappij } from './actions'
 import { BedrijfsgegevensForm } from './BedrijfsgegevensForm'
 import { PageHeader, Alert, Card, Input, Button } from '@/components/ui'
 import type { Bedrijfsgegevens } from '@everts/database'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'Organisatiegegevens' }
 export const dynamic = 'force-dynamic'
@@ -12,12 +13,7 @@ export default async function Page() {
 
   return (
     <div className="eva-page">
-      <Link href="/instellingen" className="eva-back-link">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M13 4l-6 6 6 6"/>
-        </svg>
-        Instellingen
-      </Link>
+      <TerugNaarInstellingen />
 
       <PageHeader eyebrow="Instellingen · Bedrijf" title="Organisatiegegevens" />
       <p className="eva-page-desc" style={{ marginTop: -10, marginBottom: 4 }}>Beheer de organisatie en werkmaatschappijen. Elke werkmaatschappij kan eigen bedrijfsgegevens en huisstijl hebben.</p>

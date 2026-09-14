@@ -4,14 +4,14 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 /**
- * Sub-navigatie binnen één dossier-tab, als `?deel=`-links in plaats van client-state.
+ * Sub-navigatie binnen één scherm, als `?deel=`-links in plaats van client-state.
  *
- * Bewust links: de onderdelen achter deze knoppen zijn deels server components (KAM) en
- * deels zware client-eilanden (Oplevering, 1200 regels). Met client-state zouden ze
- * allemaal tegelijk in de bundel moeten zitten en tegelijk hun data ophalen; met een
- * navigatie rendert de server alleen het gekozen deel.
+ * Bewust links en geen client-state: de onderdelen achter deze knoppen zijn vaak zware
+ * server- of client-eilanden. Met client-state zouden ze allemaal tegelijk in de bundel
+ * zitten en tegelijk hun data ophalen; met een navigatie rendert de server alleen het
+ * gekozen deel.
  */
-export default function DossierSubTabs({
+export function SubTabs({
   delen,
 }: {
   delen: Array<{ deel: string; label: string; actief: boolean }>

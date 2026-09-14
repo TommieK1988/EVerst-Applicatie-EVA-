@@ -249,7 +249,7 @@ export async function maakRedencode(label: string): Promise<RedencodeResult> {
   const volgorde = (maxRow?.volgorde ?? 0) + 1
   const { error } = await supabase.from('debiteur_redencodes').insert({ code: `${slugify(label)}_${volgorde}`, label: label.trim(), volgorde })
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/debiteur-redencodes')
+  revalidatePath('/instellingen/facturatie')
   revalidatePath('/facturen')
   return { ok: true }
 }
@@ -263,7 +263,7 @@ export async function updateRedencode(id: string, data: { label?: string; actief
   if (data.volgorde !== undefined) payload.volgorde = data.volgorde
   const { error } = await supabase.from('debiteur_redencodes').update(payload).eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/debiteur-redencodes')
+  revalidatePath('/instellingen/facturatie')
   revalidatePath('/facturen')
   return { ok: true }
 }

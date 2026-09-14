@@ -104,8 +104,8 @@ export default function AfdelingRechtenBeheer({ afdelingen }: { afdelingen: Mede
           description={
             <>
               Maak eerst afdelingen aan via{' '}
-              <a href="/instellingen/functies-afdelingen" style={{ color: 'var(--accent)' }}>
-                Instellingen → Functies & Afdelingen
+              <a href="/instellingen/medewerkers?deel=functies" style={{ color: 'var(--accent)' }}>
+                Instellingen → Medewerkers
               </a>.
             </>
           }

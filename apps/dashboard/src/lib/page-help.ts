@@ -391,12 +391,16 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Platform instellingen ──────────────────────────────────────────────
   [/^\/instellingen$/, {
     title: 'Instellingen',
-    description: 'Centrale instellingen­hub van EVA. Navigeer hier naar alle configuratie­opties: organisatie­gegevens, functies en afdelingen, CAO-beheer, huisstijl, gebruikers en rechten, integraties, planning en app-instellingen.',
+    description: 'Alles wat je in EVA instelt, gegroepeerd in dezelfde volgorde als het menu links. Weet je niet waar iets staat? Typ een woord in het zoekveld bovenaan — dat zoekt ook op synoniemen, dus "logo" vindt de Huisstijl en "wachtwoord" de Gebruikers & rechten.',
     sections: [
-      { title: 'Platform­instellingen', body: 'Functies & Afdelingen, CAO-beheer, Organisatie­gegevens en Huisstijl raken de hele organisatie. Wijzigingen hier zijn direct zichtbaar voor alle gebruikers.' },
-      { title: 'Gebruikers & Rechten', body: 'Beheer wie toegang heeft tot welke modules. Stel rechten in per afdeling als standaard en overschrijf ze per medewerker indien nodig.' },
-      { title: 'Integraties', body: 'Koppel externe systemen zoals Bouw7. Toekomstige integraties (Exact Online, iDEAL) worden hier ook geconfigureerd zodra ze beschikbaar zijn.' },
-      { title: 'App-instellingen', body: 'Elke sub-app (EvertsCalc, Houtrotherstel, Wagenpark, Actielijsten) heeft eigen instellingen die via de kaarten op deze pagina bereikbaar zijn.' },
+      { title: 'Dossiers', body: 'De categorieën die je op een dossier kunt kiezen, en de schakelaars die bepalen welke tabbladen verschijnen.' },
+      { title: 'Offertes & communicatie', body: 'Alles wat de klant onder ogen krijgt: de opmaak en voorwaarden van de offerte, de Word-sjablonen voor brieven en certificaten, en de tekst van elke e-mail die EVA verstuurt.' },
+      { title: 'Planning & uren', body: 'Hoe de weekstaat rekent — deadlines, goedkeurders, het dossier voor indirecte uren — plus de uursoorten en uurtarieven uit Bouw7.' },
+      { title: 'Beheer', body: 'De mensen en hun toegang: het medewerkerprofiel (functies, afdelingen, ploegen, CAO, eigen velden), gebruikers en rechten, en het klantportaal. Wagenpark en Materieel hebben hun eigen instellingenscherm.' },
+      { title: 'Financieel', body: 'Opslag bij regiewerk en stelposten, de redencodes voor onbetaalde facturen, de BTW-tarieven en kostensoorten uit Bouw7, en de doelstellingen voor het managementdashboard.' },
+      { title: 'Apps, Organisatie & Systeem', body: 'De instellingen van EvertsCalc en de formulieren-PDF; de bedrijfsgegevens en huisstijl van de werkmaatschappijen; en tot slot de Bouw7-koppeling en het foutenlog.' },
+      { title: 'Een scherm met tabbladen', body: 'Dossiers, Offertes, Uren, Medewerkers en Facturatie bundelen elk meerdere oude schermen. Staat iets niet waar je het zoekt, kijk dan op de tabbladen bovenin — of typ het woord in het zoekveld.' },
+      { title: 'Zie je een scherm niet?', body: 'Dan heb je er geen recht op. De hub toont alleen wat je daadwerkelijk mag openen — een tegel die je ziet, brengt je ook echt naar dat scherm.' },
     ],
   }],
 
@@ -411,10 +415,51 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/instellingen\/uren$/, {
-    title: 'Instellingen — Urenverantwoording',
-    description: 'Bepaalt hoe de weekstaat rekent en waar de uren terechtkomen. Medewerkers vullen hun uren per dag in op hun telefoon en dienen ze per week in; daarna accordeert eerst de teamleider de hele week en daarna elke projectleider de uren op zijn eigen dossiers. Pas een volledig goedgekeurde week gaat door naar Bouw7.',
+  [/^\/instellingen\/dossiers$/, {
+    title: 'Instellingen — Dossiers',
+    description: 'De twee keuzelijsten achter elk dossier: de categorie en de tabblad-schakelaars.',
     sections: [
+      { title: 'Categorieën', body: 'Een dossier heeft één categorie en die staat in Bouw7. De lijst hier is een spiegel: nieuwe categorieën maak je in Bouw7 aan, ze verschijnen hier vanzelf. Wijzig je de categorie van een dossier in EVA, dan gaat dat meteen mee terug naar Bouw7.' },
+      { title: 'Tabbladen', body: 'Aan/uit-schakelaars die je per dossier zet, bijvoorbeeld Spoed of Houtrot registreren. Ze bepalen welke tabbladen op het dossier verschijnen en zijn daarnaast bruikbaar als trigger of als voorwaarde bij een actielijst-sjabloon.' },
+    ],
+  }],
+
+  [/^\/instellingen\/offertes$/, {
+    title: 'Instellingen — Offertes',
+    description: 'Alles wat bij een offerte hoort, verdeeld over vier tabbladen: de opmaak, de algemene voorwaarden, het termijnschema en de goedkeuringsdrempel.',
+    sections: [
+      { title: 'Opmaak', body: 'De Word-sjablonen met huisstijl, kleuren en papierindeling. Klik een sjabloon aan om het in de editor te openen; daar bepaal je welke blokken erin staan en hoe ze eruitzien.' },
+      { title: 'Algemene voorwaarden', body: 'De PDF-documenten die als bijlage met een offerte meegaan. Je kunt er meerdere hebben, bijvoorbeeld eigen voorwaarden naast de UAV.' },
+      { title: 'Betalingscondities', body: 'Termijnschema’s voor de aanneemsom: welk percentage op welk moment verschuldigd is. De betalingstermijn in dagen is iets anders — die stel je per relatie in.' },
+      { title: 'Goedkeuring', body: 'Vanaf welk bedrag een offerte langs een tweede paar ogen moet voordat hij verzonden mag worden. Onder de drempel verstuurt de calculator zelf.' },
+    ],
+  }],
+
+  [/^\/instellingen\/medewerkers$/, {
+    title: 'Instellingen — Medewerkers',
+    description: 'Wat er op een medewerkerprofiel te kiezen valt, verdeeld over drie tabbladen.',
+    sections: [
+      { title: 'Functies, afdelingen & ploegen', body: 'De keuzelijsten op het profiel. De afdeling bepaalt ook de standaardrechten, en de ploeg bepaalt wie de weekstaat van die medewerker goedkeurt.' },
+      { title: 'CAO', body: 'Upload een CAO als PDF; EVA leest de loonschalen en treden er automatisch uit. Daarna zijn die schalen selecteerbaar op het profiel.' },
+      { title: 'Eigen velden', body: 'Extra velden die je zelf bijhoudt op een profiel, bijvoorbeeld certificaten. Hier voeg je ze toe, bewerk je ze of zet je ze uit; uitzetten laat bestaande waarden staan.' },
+    ],
+  }],
+
+  [/^\/instellingen\/btw-kostensoorten$/, {
+    title: 'Instellingen — BTW-tarieven & kostensoorten',
+    description: 'Twee vaste lijsten uit Bouw7 die je hier alleen kunt lezen. Ze zijn de bron voor calculatie, offertes, verkoop, facturen en inkoop.',
+    sections: [
+      { title: 'BTW-tarieven', body: 'Precies deze tarieven staan ook in de keuzelijst van het rekenblad. Een calculatieregel kiest een tarief, geen los percentage — zo kan het nooit uit de pas lopen met Bouw7.' },
+      { title: 'Kostensoorten', body: 'De vaste indeling arbeid, inkoop, onderaanneming, materieel, materiaal en afval. Ze sturen de projectbewaking, de inkoop en de calculatie.' },
+      { title: 'Waarom read-only', body: 'Bouw7 is hier leidend. Zou je deze lijsten in EVA kunnen wijzigen, dan zouden bedragen die EVA terugschrijft niet meer aansluiten op wat Bouw7 verwacht.' },
+    ],
+  }],
+
+  [/^\/instellingen\/uren$/, {
+    title: 'Instellingen — Uren',
+    description: 'Bepaalt hoe de weekstaat rekent en waar de uren terechtkomen, met daarnaast de uursoorten en uurtarieven. Medewerkers vullen hun uren per dag in op hun telefoon en dienen ze per week in; daarna accordeert eerst de teamleider de hele week en daarna elke projectleider de uren op zijn eigen dossiers. Pas een volledig goedgekeurde week gaat door naar Bouw7.',
+    sections: [
+      { title: 'Uursoorten en uurtarieven', body: 'Twee eigen tabbladen. De uursoorten komen uit Bouw7 en zijn daar leidend; de uurtarieven volgen de hiërarchie medewerker → uursoort → globaal en worden ook door planning en calculatie gebruikt.' },
       { title: 'Deadlines', body: 'De indien-deadline geldt voor de week zelf (standaard vrijdag 17:00), de goedkeur-deadline voor de week erna (standaard maandag 12:00). Wie er overheen gaat krijgt een herinnering; de deadline blokkeert niets, hij maakt alleen zichtbaar wie achterloopt.' },
       { title: 'Terugvalgoedkeurder', body: 'Normaal beoordeelt de teamleider van de ploeg. Zit iemand in geen enkele ploeg, dan gaat zijn week naar de terugvalgoedkeurder. Laat je dit leeg, dan kunnen die medewerkers hun week nergens heen sturen — vul het dus in, of zorg dat iedereen een ploeg heeft.' },
       { title: 'Speling op de contracturen', body: 'Een week is pas in te dienen als het totaal minstens gelijk is aan de contracturen. Meer mag altijd — dat wordt tijd voor tijd. Met speling accepteer je een klein tekort, bijvoorbeeld een kwartier. Nul betekent: de contracturen moeten helemaal rond zijn.' },
@@ -467,25 +512,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/instellingen\/functies-afdelingen$/, {
-    title: 'Instellingen — Functies & Afdelingen',
-    description: 'Beheer de functies en afdelingen die beschikbaar zijn in medewerker­profielen en de planning. Functies en afdelingen zijn de basis voor rechten­beheer en planning­capaciteit.',
-    sections: [
-      { title: 'Functies', body: 'Maak functies aan zoals Schilder, Timmerman, Calculator of Uitvoerder. Aan functies koppel je later rechten in het gebruikersbeheer. De volgorde bepaalt de weergave in dropdown-menu\'s.' },
-      { title: 'Afdelingen', body: 'Maak afdelingen aan zoals Binnendienst, Uitvoering of Financiën. Afdelingen zijn de basis voor planning­capaciteit en standaard­rechten per groep medewerkers.' },
-      { title: 'Volgorde aanpassen', body: 'Sleep functies of afdelingen in de gewenste volgorde. De bovenste items verschijnen als eerste in keuzelijsten in medewerker­profielen en plannings­formulieren.' },
-    ],
-  }],
 
-  [/^\/instellingen\/cao$/, {
-    title: 'Instellingen — CAO-beheer',
-    description: 'Upload en beheer CAO-documenten voor je werkmaatschappijen. EVA leest automatisch de loonschalen uit het CAO-PDF en maakt ze beschikbaar in medewerker­profielen.',
-    sections: [
-      { title: 'CAO uploaden', body: 'Klik op "CAO toevoegen" en upload het PDF-bestand. EVA analyseert de inhoud automatisch en extraheert de loonschalen (periodieken, schalen, niveaus). Dit kan enkele minuten duren.' },
-      { title: 'Loonschalen controleren', body: 'Na verwerking zie je de geëxtraheerde loonschalen in een tabel. Controleer of de schalen correct zijn overgenomen. Bij fouten kun je waarden handmatig corrigeren.' },
-      { title: 'Koppelen aan werkmaatschappij', body: 'Wijs het CAO-document toe aan een of meerdere werkmaatschappijen. In medewerker­profielen van die werkmaatschappij wordt dit CAO als keuzelijst aangeboden bij de veldgroep "Beloning".' },
-    ],
-  }],
 
   [/^\/instellingen\/gebruikers$/, {
     title: 'Instellingen — Gebruikers & Rechten',
@@ -508,25 +535,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/instellingen\/planning$/, {
-    title: 'Instellingen — Planning',
-    description: 'Configureer de planningsmodule: uurtarieven en uursoorten. Uurtarieven bepalen de verkoopprijs van uren in calculaties. Uursoorten bepalen hoe uren worden gecategoriseerd in urenregistraties.',
-    sections: [
-      { title: 'Uurtarieven', body: 'Stel het standaard verkooptarief en kostprijstarief in per discipline. Deze tarieven worden gebruikt als standaard bij het aanmaken van calculatie­regels in offertes. Individuele medewerkers kunnen een afwijkend tarief hebben op hun profiel.' },
-      { title: 'Uursoorten', body: 'Maak uursoorten aan zoals Productieve uren, Ziekteverzuim, Opleiding, Verlof en Overwerk. Uursoorten bepalen hoe uren worden geclassificeerd in de uren­registratie en de doorbelasting aan projecten.' },
-      { title: 'Volgorde', body: 'De volgorde van uursoorten bepaalt de weergave in de urenregistratie­interface. Zet de meest gebruikte uursoorten bovenaan voor een efficiënter werkproces.' },
-    ],
-  }],
 
-  [/^\/instellingen\/medewerker-attributen$/, {
-    title: 'Instellingen — Medewerker­attributen',
-    description: 'Definieer extra velden voor medewerker­profielen die niet standaard beschikbaar zijn. Handig voor bedrijfsspecifieke gegevens zoals paspoort­nummer, VOG-datum, gecertificeerde apparatuur of interne codes.',
-    sections: [
-      { title: 'Attribuut aanmaken', body: 'Klik op "Nieuw attribuut" en kies een type: tekst, getal, datum, ja/nee of keuzelijst. Stel een standaardwaarde in en geef aan of het veld verplicht is.' },
-      { title: 'Volgorde en zichtbaarheid', body: 'Attributen verschijnen in medewerker­profielen in de volgorde die je hier instelt. Deactiveer attributen die je tijdelijk niet nodig hebt zonder ze te verwijderen.' },
-      { title: 'Gebruik in filters', body: 'Actieve attributen zijn beschikbaar als filteroptie in het medewerkers­overzicht. Zo kun je filteren op bijv. "VCA gecertificeerd = ja" of "Afdeling rijbewijs = C/CE".' },
-    ],
-  }],
 
   // ── Actielijsten ──────────────────────────────────────────────────────────
   [/^\/taken\/lijsten\/[^/]+$/, {
@@ -1095,84 +1104,20 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   }],
 
   // ── Instellingen: Algemene voorwaarden ─────────────────────────────────
-  [/^\/instellingen\/algemene-voorwaarden$/, {
-    title: 'Instellingen — Algemene voorwaarden',
-    description: 'Beheer de PDF-documenten met algemene voorwaarden die je als bijlage aan offertes meestuurt. Upload nieuwe versies en stel de standaard in.',
-    sections: [
-      { title: 'Document uploaden', body: 'Klik op "+ PDF uploaden", kies het bestand en geef een naam en optioneel een versienummer. Het bestand wordt veilig opgeslagen; speciale tekens in de bestandsnaam worden automatisch opgeschoond.' },
-      { title: 'Standaard instellen', body: 'Markeer één document als standaard — dat wordt automatisch voorgesteld bij nieuwe offertes. Oude versies kun je bewaren voor traceerbaarheid of definitief verwijderen.' },
-    ],
-  }],
 
   // ── Instellingen: Betalingscondities ───────────────────────────────────
-  [/^\/instellingen\/betalingscondities$/, {
-    title: 'Instellingen — Betalingscondities',
-    description: 'Definieer termijnschema\'s die je op offertes en opdrachten kunt toepassen, zoals "50% aanbetaling, 50% bij oplevering". Elke conditie bestaat uit één of meer termijnen met een percentage.',
-    sections: [
-      { title: 'Conditie aanmaken', body: 'Klik op "Nieuwe betalingsconditie", geef een naam en voeg met "+ Termijn toevoegen" regels toe met omschrijving en percentage. De percentages moeten samen 100% zijn — bij afwijking krijg je een waarschuwing.' },
-      { title: 'Standaard vs. betaaltermijn', body: 'Je kunt één conditie als standaard markeren. Let op: het aantal dagen tot betaling (de betaaltermijn) stel je per relatie in, niet hier — hier gaat het puur over de verdeling in termijnen.' },
-    ],
-  }],
 
   // ── Instellingen: BTW-tarieven ─────────────────────────────────────────
-  [/^\/instellingen\/btw-tarieven$/, {
-    title: 'Instellingen — BTW-tarieven',
-    description: 'Inzage in de actieve BTW-tarieven. Deze worden automatisch afgeleid uit Bouw7 en zijn in EVA alleen-lezen.',
-    sections: [
-      { title: 'Alleen-lezen', body: 'De tarieven (percentage, label en of het om verlegde BTW gaat) komen rechtstreeks uit Bouw7 en worden bij elke synchronisatie bijgewerkt. Wijzigen kan alleen in Bouw7.' },
-      { title: 'Legacy-waarschuwing', body: 'Bevat een oude, handmatig ingestelde configuratie percentages die niet meer in Bouw7 voorkomen, dan toont EVA een waarschuwing zodat je de mismatch kunt opschonen.' },
-    ],
-  }],
 
   // ── Instellingen: Debiteuren — redencodes ──────────────────────────────
-  [/^\/instellingen\/debiteur-redencodes$/, {
-    title: 'Instellingen — Debiteuren-redencodes',
-    description: 'Beheer de keuzelijst met redenen "waarom nog niet betaald" die projectleiders gebruiken op het Facturen-scherm (debiteurenbeheer).',
-    sections: [
-      { title: 'Reden toevoegen', body: 'Typ een omschrijving en klik op "Toevoegen". De reden verschijnt daarna in de keuzelijst bij het vastleggen van factuuropvolging.' },
-      { title: 'Activeren / deactiveren', body: 'Redenen verwijder je nooit echt: met deactiveren haal je een reden uit de keuzelijst terwijl de historie behouden blijft. Heractiveren kan altijd.' },
-    ],
-  }],
 
   // ── Instellingen: Dossiercategorieën ───────────────────────────────────
-  [/^\/instellingen\/dossier-categorieen$/, {
-    title: 'Instellingen — Dossiercategorieën',
-    description: 'Beheer de categorieën die je aan aanvragen, offertes en opdrachten kunt toekennen (bijv. Dakrenovatie, Schilderwerk, Mutatie). Categorieën sturen ook de goedkeuringsdrempel voor offertes.',
-    sections: [
-      { title: 'Categorieën', body: 'Voeg categorieën toe met "+ Toevoegen" en verwijder ze via het kruisje op de tag. Klik op "Opslaan" om de wijzigingen te bewaren. De volgorde bepaalt de weergave in keuzelijsten.' },
-      { title: 'Goedkeuring offertes', body: 'Stel een drempelbedrag in waaronder offertes in de categorieën "Dagelijks onderhoud" en "Mutatie" zonder goedkeuring de deur uit mogen. Alle overige categorieën vereisen altijd goedkeuring vóór verzending.' },
-    ],
-  }],
 
   // ── Instellingen: Dossier-tabbladen (toggles) ──────────────────────────
-  [/^\/instellingen\/dossier-toggles$/, {
-    title: 'Instellingen — Dossier-tabbladen',
-    description: 'Beheer de aan/uit-schakelaars (toggles) die per dossier gezet kunnen worden, zoals "Spoed" of "Onder garantie". Toggles sturen welke tabbladen zichtbaar zijn en dienen als voorwaarde voor het automatisch koppelen van actielijst-sjablonen.',
-    sections: [
-      { title: 'Toggle aanmaken', body: 'Voeg een toggle toe met "+ Toevoegen" en geef een label. Elke toggle krijgt een technische sleutel die je gebruikt in trigger-regels van actielijst-sjablonen. Met de "Actief"-schakelaar zet je een toggle beschikbaar of verberg je hem.' },
-      { title: 'Gebruik', body: 'Op een dossier bepaalt een aangezette toggle of gerelateerde tabbladen verschijnen en of gekoppelde sjablonen automatisch worden geactiveerd. Wijzig de sleutel niet meer nadat je hem in triggers hebt gebruikt.' },
-    ],
-  }],
 
   // ── Instellingen: Kostensoorten ────────────────────────────────────────
-  [/^\/instellingen\/kostensoorten$/, {
-    title: 'Instellingen — Kostensoorten',
-    description: 'Inzage in de zes vaste kostensoorten uit Bouw7 die worden gebruikt in projectbewaking, inkoop en calculatie. Dit scherm is informatief en alleen-lezen.',
-    sections: [
-      { title: 'De zes kostensoorten', body: 'De lijst toont per kostensoort (1 t/m 6) de naam en een toelichting, bijvoorbeeld "Eigen en ingehuurde arbeid (uren × tarief)". Ze bepalen hoe kosten in de financiële overzichten worden gegroepeerd.' },
-      { title: 'Alleen-lezen', body: 'De kostensoorten komen volautomatisch uit Bouw7 en kunnen niet in EVA worden gewijzigd — aanpassen kan alleen in Bouw7.' },
-    ],
-  }],
 
   // ── Instellingen: Uursoorten & tarieven ────────────────────────────────
-  [/^\/instellingen\/uursoorten-tarieven$/, {
-    title: 'Instellingen — Uursoorten & tarieven',
-    description: 'Beheer de uurtarieven en bekijk de uursoorten die gebruikt worden in planning, urenregistratie en calculatie.',
-    sections: [
-      { title: 'Uurtarieven', body: 'Stel de globale standaard-uurtarieven in. Deze vormen de basis in een hiërarchie: een specifiek tarief op een medewerker of uursoort gaat vóór het globale standaardtarief.' },
-      { title: 'Uursoorten (alleen-lezen)', body: 'De uursoorten worden afgeleid uit Bouw7 en zijn leidend — je kunt ze niet lokaal wijzigen. De volgorde bepaalt de weergave in urenregistratie- en planningsformulieren.' },
-    ],
-  }],
 
   // ── Instellingen: Offerte-opmaak (layouts) ─────────────────────────────
   [/^\/instellingen\/offerte-layout\/[^/]+$/, {
@@ -1209,14 +1154,6 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
-  [/^\/instellingen\/offerte-layout$/, {
-    title: 'Instellingen — Offerte-opmaak',
-    description: 'Beheer de Word-sjablonen (lay-outs) voor offertes: huisstijl, kleuren en papierindeling. Gebruik meerdere lay-outs voor verschillende klanttypen of werksoorten.',
-    sections: [
-      { title: 'Lay-outs beheren', body: 'Klik op "+ Layout aanmaken" voor een nieuwe lay-out, "Bewerk" om de editor te openen, "Kopieer" om een bestaande te dupliceren en "Verwijderen" om er een te wissen.' },
-      { title: 'Standaard', body: 'Stel één lay-out in als standaard — die wordt automatisch geselecteerd bij nieuwe offertes.' },
-    ],
-  }],
 
   // ── Instellingen: Documentsjablonen ────────────────────────────────────
   [/^\/instellingen\/document-sjablonen\/[^/]+$/, {
@@ -1337,6 +1274,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Inplannen', body: 'Klik op een lege cel om snel een planning-item toe te voegen (bewakingscode verplicht). Sleep een balk om te verschuiven; met Ctrl+slepen of rechtsklik+slepen kopieer je een item. Dubbelklik op een balk opent het dossier.' },
       { title: 'Afwezigheid & conflicten', body: 'Roosters staan als grijze achtergrond; verlof is licht rood, ziek donkerrood, training en overige eigen kleuren, feestdagen worden automatisch berekend. Hover toont conflictwaarschuwingen bij overlap of werk binnen een verlof-/ziek-/feestdagblok.' },
       { title: 'Filteren', body: 'Filter op voornaam, afdeling, functie of ploeg. Kantoorafdelingen (Projectbureau, Administratie, Directie) worden weggelaten — alleen uitvoerend personeel verschijnt.' },
+      { title: 'Verlofaanvragen', body: 'De knop rechtsboven kleurt fel rood zodra er verlof op beoordeling wacht. Een hele afdeling beoordeelt: verlof van Uitvoering gaat naar Projectbureau, al het overige naar Directie (in te stellen op Instellingen → Uren). Iedereen van die afdeling kan goed- of afkeuren; wie het eerst klikt handelt de aanvraag af. Bij goedkeuren verschijnt het verlof meteen als afwezigheid op deze tijdlijn en gaat het naar Bouw7; de aanvrager krijgt een melding met jouw naam erin.' },
     ],
   }],
 

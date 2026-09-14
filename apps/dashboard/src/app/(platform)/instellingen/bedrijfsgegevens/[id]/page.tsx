@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Alert, Button } from '@/components/ui'
 import { loadBedrijfById } from '../actions'
 import { BedrijfsgegevensForm } from '../BedrijfsgegevensForm'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,12 +18,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="eva-page">
-      <Link href="/instellingen/bedrijfsgegevens" className="eva-back-link">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M13 4l-6 6 6 6"/>
-        </svg>
-        Organisatiegegevens
-      </Link>
+      <TerugNaarInstellingen href="/instellingen/bedrijfsgegevens" label="Organisatiegegevens" />
 
       {!result.ok ? (
         <Alert tone="error">{result.error}</Alert>

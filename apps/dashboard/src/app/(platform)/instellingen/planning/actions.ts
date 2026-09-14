@@ -18,10 +18,9 @@ const uursoortSchema = z.object({
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
-/** Revalideer beide plekken waar uursoorten getoond worden (oude planning-route + Stamgegevens). */
+/** Uursoorten staan als tabblad op het Uren-scherm. */
 function revalideerUursoorten() {
-  revalidatePath('/instellingen/planning')
-  revalidatePath('/instellingen/uursoorten-tarieven')
+  revalidatePath('/instellingen/uren')
 }
 
 export async function laadUursoorten(): Promise<{ ok: true; data: PlanningUursoort[] } | { ok: false; error: string }> {

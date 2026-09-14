@@ -31,7 +31,7 @@ export async function updateBedrijfsinstellingen(
 
   if (error) return { ok: false, error: error.message }
   revalidatePath('/instellingen/bedrijfsinstellingen')
-  revalidatePath('/instellingen/planning')
+  revalidatePath('/instellingen/uren')
   return { ok: true }
 }
 

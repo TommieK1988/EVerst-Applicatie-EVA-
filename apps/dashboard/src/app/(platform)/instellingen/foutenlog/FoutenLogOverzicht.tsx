@@ -9,6 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
 } from '@/components/ui'
 import { markeerOpgelost, heropen } from './actions'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 /* ─── types ───────────────────────────────────────────────────────── */
 
@@ -355,6 +356,7 @@ export default function FoutenLogOverzicht({
 
   return (
     <div className="eva-page">
+      <TerugNaarInstellingen />
       <PageHeader
         eyebrow="Systeem"
         title="Foutenlog"

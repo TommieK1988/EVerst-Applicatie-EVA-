@@ -1,5 +1,5 @@
 import React from 'react'
-import DossierSubTabs from '../DossierSubTabs'
+import { SubTabs } from '@/components/ui'
 import KwaliteitDeel from './kam/KwaliteitDeel'
 import FormulierenDeel from './kam/FormulierenDeel'
 import OpleveringTab from './OpleveringTab'
@@ -48,7 +48,7 @@ export default async function KamTab({
   return (
     <>
       <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
-        <DossierSubTabs
+        <SubTabs
           delen={beschikbaar.map(d => ({ deel: d, label: LABELS[d], actief: d === actief }))}
         />
       </div>

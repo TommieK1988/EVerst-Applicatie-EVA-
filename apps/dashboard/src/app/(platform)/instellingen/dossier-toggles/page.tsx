@@ -1,25 +1,10 @@
-import { getToggleDefinities } from './actions'
-import { PageHeader, Card, CardBody } from '@/components/ui'
-import DossierTogglesBeheer from './DossierTogglesBeheer'
+import { redirect } from 'next/navigation'
 
-export const metadata = { title: 'Dossier toggles' }
-
-export default async function Page() {
-  const definities = await getToggleDefinities()
-
-  return (
-    <div className="eva-page">
-      <PageHeader eyebrow="Dossiers" title="Dossier toggles" />
-      <p className="eva-page-desc">
-        Beheer aan/uit-schakelaars die per dossier gezet kunnen worden (bijv. Spoed, Onder garantie).
-        Toggles zijn bruikbaar als trigger of als conditie bij actielijst-sjablonen.
-      </p>
-
-      <Card style={{ maxWidth: 560 }}>
-        <CardBody>
-          <DossierTogglesBeheer initial={definities} />
-        </CardBody>
-      </Card>
-    </div>
-  )
+/**
+ * De tabblad-schakelaars staan sinds september 2026 samen met de dossiercategorieen op een scherm.
+ * Deze route blijft bestaan omdat hij in bladwijzers en oudere links staat.
+ * DossierTogglesBeheer en actions blijven hier staan; /instellingen/dossiers importeert ze.
+ */
+export default function DossierTogglesPagina() {
+  redirect('/instellingen/dossiers')
 }

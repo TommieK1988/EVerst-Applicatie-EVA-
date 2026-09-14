@@ -3,6 +3,7 @@ import SjablonenBeheer from './SjablonenBeheer'
 import { PageHeader, Card, CardBody } from '@/components/ui'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
 import type { DocumentSjabloon } from '@/lib/documenten/types'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'Documentsjablonen' }
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ export default async function Page() {
 
   return (
     <div className="eva-page">
+      <TerugNaarInstellingen />
       <PageHeader eyebrow="Documenten" title="Documentsjablonen" />
       <p className="eva-page-desc -mt-[14px] mb-[22px]">
         Word-sjablonen voor bewonersbrieven, garantiecertificaten en informatiebrieven.

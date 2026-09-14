@@ -237,7 +237,7 @@ export default function OfferteAanmakenModal({
           {/* Betalingscondities waarschuwing */}
           {!heeftBetalingscondities && !fetchingData && (
             <Alert tone="warning" title="Geen betalingscondities ingesteld.">
-              <a href="/instellingen/betalingscondities" className="underline hover:opacity-80">
+              <a href="/instellingen/offertes?deel=condities" className="underline hover:opacity-80">
                 Ga naar Instellingen
               </a>{' '}
               om dit in te stellen.

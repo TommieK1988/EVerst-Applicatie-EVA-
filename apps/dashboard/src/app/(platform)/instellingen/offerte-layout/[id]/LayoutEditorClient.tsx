@@ -469,7 +469,7 @@ export default function LayoutEditorClient({ layout, voorbeeldQuoteId, sjabloont
       {/* Toolbar */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-3 flex-wrap">
         <Link
-          href="/instellingen/offerte-layout"
+          href="/instellingen/offertes?deel=opmaak"
           className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

@@ -234,7 +234,7 @@ function CaoSelectie({
           <label style={labelStyle}>CAO</label>
           <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>
             Geen CAO-documenten beschikbaar. Upload een CAO via{' '}
-            <a href="/instellingen/cao" style={{ color: 'var(--accent)' }}>Instellingen → CAO beheer</a>.
+            <a href="/instellingen/medewerkers?deel=cao" style={{ color: 'var(--accent)' }}>Instellingen → Medewerkers → CAO</a>.
           </p>
         </div>
       ) : (

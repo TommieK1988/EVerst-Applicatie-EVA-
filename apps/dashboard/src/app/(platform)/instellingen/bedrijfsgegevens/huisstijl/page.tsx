@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import { loadHuisstijl } from './actions'
 import { HuisstijlForm } from './HuisstijlForm'
 import { PageHeader, Alert } from '@/components/ui'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'Huisstijl' }
 export const dynamic = 'force-dynamic'
@@ -13,12 +13,7 @@ export default async function Page(props: { searchParams: Promise<{ bedrijf?: st
 
   return (
     <div className="eva-page-wide">
-      <Link href="/instellingen" className="eva-back-link">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M13 4l-6 6 6 6"/>
-        </svg>
-        Instellingen
-      </Link>
+      <TerugNaarInstellingen />
 
       <PageHeader
         eyebrow={`Huisstijlboek${result.ok && result.data?.type === 'werkmaatschappij' ? ' · Werkmaatschappij' : ''}`}

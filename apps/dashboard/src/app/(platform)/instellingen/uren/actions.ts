@@ -13,7 +13,7 @@ export type UrenCategorie = 'werk' | 'afwezig' | 'tijd_voor_tijd' | 'feestdag'
 
 const CATEGORIEEN: UrenCategorie[] = ['werk', 'afwezig', 'tijd_voor_tijd', 'feestdag']
 
-/** Deadlines en de terugvalgoedkeurder opslaan. */
+/** Deadlines, de terugvalgoedkeurder en de kilometervergoedingen opslaan. */
 export async function setUrenInstellingen(input: {
   terugval_goedkeurder_id: string | null
   tolerantie_uren: number
@@ -22,6 +22,8 @@ export async function setUrenInstellingen(input: {
   goedkeur_deadline_dag: number
   goedkeur_deadline_tijd: string
   goedkeuring_modus: 'eva' | 'bouw7'
+  km_vergoeding_auto: number
+  km_vergoeding_bromfiets: number
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   await vereisBeheerder()
 
@@ -39,6 +41,12 @@ export async function setUrenInstellingen(input: {
   if (!['eva', 'bouw7'].includes(input.goedkeuring_modus)) {
     return { ok: false, error: 'Onbekende goedkeuringsroute.' }
   }
+  // Dezelfde grenzen als de check-constraint op de tabel; een tarief van tientjes per kilometer
+  // is altijd een typefout.
+  const tariefGeldig = (n: number) => Number.isFinite(n) && n >= 0 && n < 10
+  if (!tariefGeldig(input.km_vergoeding_auto) || !tariefGeldig(input.km_vergoeding_bromfiets)) {
+    return { ok: false, error: 'Een kilometervergoeding moet tussen 0 en 10 euro liggen.' }
+  }
 
   const { error } = await db().from('uren_instellingen').update({
     terugval_goedkeurder_id: input.terugval_goedkeurder_id || null,
@@ -48,8 +56,49 @@ export async function setUrenInstellingen(input: {
     goedkeur_deadline_dag: input.goedkeur_deadline_dag,
     goedkeur_deadline_tijd: input.goedkeur_deadline_tijd,
     goedkeuring_modus: input.goedkeuring_modus,
+    km_vergoeding_auto: input.km_vergoeding_auto,
+    km_vergoeding_bromfiets: input.km_vergoeding_bromfiets,
   }).eq('id', true)
 
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/uren')
+  return { ok: true }
+}
+
+/**
+ * Wie beoordeelt het verlof van welke afdeling. Standaard: Uitvoering -> Projectbureau, de rest ->
+ * Directie. Iedereen van de beoordelende afdeling mag goed- of afkeuren, zodat een aanvraag niet
+ * stilligt als één persoon op vakantie is.
+ *
+ * Beide kanten moeten een bestaande, actieve afdeling zijn: een route naar een afdeling die niet
+ * meer bestaat betekent dat verlof bij niemand terechtkomt.
+ */
+export async function setVerlofRoutes(
+  routes: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisBeheerder()
+
+  const { data: afdelingen } = await db()
+    .from('medewerker_afdelingen').select('naam').eq('actief', true).limit(200)
+  const geldig = new Map<string, string>(
+    ((afdelingen ?? []) as Array<{ naam: string }>).map(a => [a.naam.trim().toLowerCase(), a.naam]),
+  )
+
+  const schoon: Record<string, string> = {}
+  for (const [van, naar] of Object.entries(routes ?? {})) {
+    const vanNaam = geldig.get((van ?? '').trim().toLowerCase())
+    if (!vanNaam) return { ok: false, error: `Onbekende afdeling: ${van}.` }
+    const naarNaam = (naar ?? '').trim()
+      ? geldig.get(naar.trim().toLowerCase())
+      : null
+    if (naar?.trim() && !naarNaam) {
+      return { ok: false, error: `Onbekende beoordelende afdeling: ${naar}.` }
+    }
+    if (naarNaam) schoon[vanNaam] = naarNaam
+  }
+
+  const { error } = await db()
+    .from('uren_instellingen').update({ verlof_routes: schoon }).eq('id', true)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/instellingen/uren')
   return { ok: true }

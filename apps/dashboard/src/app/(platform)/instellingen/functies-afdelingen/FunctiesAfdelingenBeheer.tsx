@@ -5,8 +5,20 @@ import toast from 'react-hot-toast'
 import type { MedewerkerFunctie, MedewerkerAfdeling, Ploeg, StandaardRooster } from '@everts/database/platform-types'
 import { upsertFunctie, verwijderFunctie, upsertAfdeling, verwijderAfdeling, upsertPloeg, verwijderPloeg } from './actions'
 import { Button, Card, CardBody, EmptyState, Input } from '@/components/ui'
+import UrenGoedkeurderBeheer from './UrenGoedkeurderBeheer'
 
-export type MedewerkerOptie = { id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }
+export type MedewerkerOptie = {
+  id: string
+  voornaam: string
+  tussenvoegsel: string | null
+  achternaam: string
+  /** Vrij tekstveld op de medewerker; bepaalt onder welk kopje hij bij Uren goedkeuren staat. */
+  afdeling: string | null
+  /** Vaste goedkeurder van zijn uren; leeg = via de teamleider/projectleider van het dossier. */
+  uren_goedkeurder_id: string | null
+  /** Zonder account kan iemand niet goedkeuren, en staat hij dus niet in de keuzelijst. */
+  auth_user_id: string | null
+}
 
 function medewerkerNaam(m: MedewerkerOptie): string {
   return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
@@ -657,15 +669,23 @@ export default function FunctiesAfdelingenBeheer({
   medewerkers: MedewerkerOptie[]
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, alignItems: 'start' }}>
-      <FunctieLijstBeheer functies={functies} afdelingen={afdelingen} />
-      <LijstBeheer
-        titel="Afdelingen"
-        items={afdelingen}
-        onUpsert={(raw, id) => upsertAfdeling(raw, id)}
-        onVerwijder={verwijderAfdeling}
-      />
-      <PloegLijstBeheer ploegen={ploegen} medewerkers={medewerkers} />
-    </div>
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 32, alignItems: 'start' }}>
+        <FunctieLijstBeheer functies={functies} afdelingen={afdelingen} />
+        <LijstBeheer
+          titel="Afdelingen"
+          items={afdelingen}
+          onUpsert={(raw, id) => upsertAfdeling(raw, id)}
+          onVerwijder={verwijderAfdeling}
+        />
+        <PloegLijstBeheer ploegen={ploegen} medewerkers={medewerkers} />
+      </div>
+
+      {/* Volle breedte en niet in de kolom Afdelingen: dit is een lijst per medewerker, en die
+          wordt in een derde kolom onleesbaar smal. */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 32, paddingTop: 24 }}>
+        <UrenGoedkeurderBeheer medewerkers={medewerkers} afdelingen={afdelingen} />
+      </div>
+    </>
   )
 }

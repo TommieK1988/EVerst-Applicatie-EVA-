@@ -9,6 +9,7 @@ import {
   setUursoortCategorie,
   setIndirectDossier,
   setPloegModus,
+  setVerlofRoutes,
   herlaadUursoorten,
   type UrenCategorie,
 } from '@/app/(platform)/instellingen/uren/actions'
@@ -21,6 +22,9 @@ type Instellingen = {
   goedkeur_deadline_dag: number
   goedkeur_deadline_tijd: string
   goedkeuring_modus: 'eva' | 'bouw7'
+  verlof_routes: Record<string, string> | null
+  km_vergoeding_auto: number | string | null
+  km_vergoeding_bromfiets: number | string | null
 } | null
 
 type Uursoort = {
@@ -69,7 +73,7 @@ function volledigeNaam(m: Medewerker) {
 }
 
 export default function UrenInstellingenBeheer({
-  instellingen, uursoorten, werkmaatschappijen, medewerkers, indirectDossiers, ploegen,
+  instellingen, uursoorten, werkmaatschappijen, medewerkers, indirectDossiers, ploegen, afdelingen,
 }: {
   instellingen: Instellingen
   uursoorten: Uursoort[]
@@ -77,6 +81,7 @@ export default function UrenInstellingenBeheer({
   medewerkers: Medewerker[]
   indirectDossiers: Dossier[]
   ploegen: Ploeg[]
+  afdelingen: string[]
 }) {
   const router = useRouter()
   const [, startT] = useTransition()
@@ -90,9 +95,13 @@ export default function UrenInstellingenBeheer({
     goedkeur_deadline_dag: instellingen?.goedkeur_deadline_dag ?? 1,
     goedkeur_deadline_tijd: (instellingen?.goedkeur_deadline_tijd ?? '12:00').slice(0, 5),
     goedkeuring_modus: instellingen?.goedkeuring_modus ?? 'bouw7',
+    km_vergoeding_auto: Number(instellingen?.km_vergoeding_auto ?? 0.3),
+    km_vergoeding_bromfiets: Number(instellingen?.km_vergoeding_bromfiets ?? 0.11),
   })
   const [busy, setBusy] = useState(false)
   const [herladen, setHerladen] = useState(false)
+  const [routes, setRoutes] = useState<Record<string, string>>(instellingen?.verlof_routes ?? {})
+  const [routesBusy, setRoutesBusy] = useState(false)
 
   async function bewaarInstellingen() {
     setBusy(true)
@@ -104,6 +113,8 @@ export default function UrenInstellingenBeheer({
       goedkeur_deadline_dag: form.goedkeur_deadline_dag,
       goedkeur_deadline_tijd: `${form.goedkeur_deadline_tijd}:00`,
       goedkeuring_modus: form.goedkeuring_modus,
+      km_vergoeding_auto: form.km_vergoeding_auto,
+      km_vergoeding_bromfiets: form.km_vergoeding_bromfiets,
     })
     setBusy(false)
     if (!r.ok) { toast.error(r.error); return }
@@ -126,6 +137,15 @@ export default function UrenInstellingenBeheer({
 
   async function wijzigIndirect(wmId: string, dossierId: string) {
     const r = await setIndirectDossier(wmId, dossierId || null)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Opgeslagen')
+    ververs()
+  }
+
+  async function bewaarRoutes() {
+    setRoutesBusy(true)
+    const r = await setVerlofRoutes(routes)
+    setRoutesBusy(false)
     if (!r.ok) { toast.error(r.error); return }
     toast.success('Opgeslagen')
     ververs()
@@ -201,6 +221,47 @@ export default function UrenInstellingenBeheer({
         </CardBody>
       </Card>
 
+      {/* ── Wie beoordeelt verlof ────────────────────────────────── */}
+      <Card>
+        <CardBody>
+          <h2 style={kopStijl}>Wie beoordeelt verlof?</h2>
+          <p style={uitlegStijl}>
+            Verlofaanvragen gaan naar een hele afdeling, niet naar één persoon: iedereen daarvan
+            ziet ze op de Medewerkerplanning en mag ze goed- of afkeuren. Zo blijft het niet liggen
+            als er iemand weg is. Een afdeling zonder keuze komt bij Directie uit. Een wijziging
+            geldt voor nieuwe aanvragen — wat al is ingediend blijft bij de afdeling waar het lag.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {afdelingen.map(afd => (
+              <div key={afd} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1, color: 'var(--fg)' }}>
+                  Verlof van {afd}
+                </span>
+                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
+                  wordt beoordeeld door
+                </span>
+                <select
+                  value={routes[afd] ?? ''}
+                  style={{ ...veldStijl, minWidth: 220 }}
+                  onChange={e => setRoutes(r => ({ ...r, [afd]: e.target.value }))}
+                >
+                  <option value="">Directie (standaard)</option>
+                  {afdelingen.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', marginTop: 16 }}>
+            <Button variant="primary" size="sm" onClick={bewaarRoutes} loading={routesBusy}
+              disabled={routesBusy} style={{ marginLeft: 'auto' }}>
+              Opslaan
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
       {/* ── Deadlines ────────────────────────────────────────────── */}
       <Card>
         <CardBody>
@@ -249,6 +310,36 @@ export default function UrenInstellingenBeheer({
                   suffix={<span style={{ fontSize: 10 }}>uur</span>} />
               </div>
             </label>
+          </div>
+
+          <div style={{ marginTop: 18, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+                Kilometervergoeding auto
+              </span>
+              <div style={{ width: 130 }}>
+                <Input type="number" min="0" step="0.01" value={form.km_vergoeding_auto}
+                  onChange={e => setForm(f => ({ ...f, km_vergoeding_auto: parseFloat(e.target.value) || 0 }))}
+                  suffix={<span style={{ fontSize: 10 }}>&euro; / km</span>} />
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+                Kilometervergoeding bromfiets
+              </span>
+              <div style={{ width: 130 }}>
+                <Input type="number" min="0" step="0.01" value={form.km_vergoeding_bromfiets}
+                  onChange={e => setForm(f => ({ ...f, km_vergoeding_bromfiets: parseFloat(e.target.value) || 0 }))}
+                  suffix={<span style={{ fontSize: 10 }}>&euro; / km</span>} />
+              </div>
+            </label>
+
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)', maxWidth: 380, lineHeight: 1.5, paddingBottom: 8 }}>
+              Wat een medewerker per kilometer krijgt als hij bij reiskosten auto of bromfiets kiest.
+              EVA rekent het bedrag uit de opgegeven kilometers; hij vult het zelf niet in. Bij OV
+              hoort een foto van het kaartje in plaats van een tarief.
+            </span>
           </div>
 
           <div style={{ marginTop: 18 }}>

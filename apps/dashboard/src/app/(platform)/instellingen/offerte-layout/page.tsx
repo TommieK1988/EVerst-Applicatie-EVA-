@@ -1,32 +1,10 @@
-import { getLayouts } from './actions'
-import LayoutsBeheer from './LayoutsBeheer'
-import { PageHeader, Card, CardBody } from '@/components/ui'
+import { redirect } from 'next/navigation'
 
-export const metadata = { title: 'Offerte layout' }
-export const dynamic = 'force-dynamic'
-
-export default async function Page() {
-  let layouts = []
-  try {
-    layouts = await getLayouts()
-  } catch {
-    // Tabel bestaat nog niet
-  }
-
-  return (
-    <div className="eva-page">
-      <PageHeader
-        eyebrow="Calculatie & Offertes"
-        title="Offerte layout"
-      />
-      <p className="eva-page-desc -mt-[14px] mb-[22px]">
-        Word-sjablonen met huisstijl, kleuren en papierindeling voor offertes.
-      </p>
-      <Card>
-        <CardBody>
-          <LayoutsBeheer initial={layouts} />
-        </CardBody>
-      </Card>
-    </div>
-  )
+/**
+ * De offerte-opmaak is sinds september 2026 een tabblad van het Offertes-scherm. Let op: de editor onder /offerte-layout/[id] bestaat nog wel, LayoutsBeheer linkt daarheen.
+ * Deze route blijft bestaan omdat hij in bladwijzers en oudere links staat.
+ * LayoutsBeheer, actions en de editor onder [id] blijven hier staan; /instellingen/offertes importeert ze.
+ */
+export default function OfferteLayoutPagina() {
+  redirect('/instellingen/offertes?deel=opmaak')
 }

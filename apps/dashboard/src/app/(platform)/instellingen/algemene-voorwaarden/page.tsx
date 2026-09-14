@@ -1,27 +1,10 @@
-import { getAlgemeneVoorwaarden, type AlgemeneVoorwaarden } from './actions'
-import AlgemeneVoorwaardenBeheer from './AlgemeneVoorwaardenBeheer'
+import { redirect } from 'next/navigation'
 
-export const metadata = { title: 'Algemene Voorwaarden' }
-export const dynamic = 'force-dynamic'
-
-export default async function Page() {
-  let items: AlgemeneVoorwaarden[] = []
-  try {
-    items = await getAlgemeneVoorwaarden()
-  } catch {
-    // Tabel bestaat nog niet
-  }
-
-  return (
-    <div className="eva-page">
-      <div className="eva-page-header">
-        <p className="eva-page-kicker">Calculatie &amp; Offertes</p>
-        <h1 className="eva-page-title">Algemene Voorwaarden</h1>
-        <p className="eva-page-desc">Upload en beheer PDF-documenten met algemene voorwaarden voor offertes.</p>
-      </div>
-      <div className="eva-card" style={{ padding: '24px 28px' }}>
-        <AlgemeneVoorwaardenBeheer initial={items} />
-      </div>
-    </div>
-  )
+/**
+ * De algemene voorwaarden zijn sinds september 2026 een tabblad van het Offertes-scherm.
+ * Deze route blijft bestaan omdat hij in bladwijzers en oudere links staat.
+ * AlgemeneVoorwaardenBeheer en actions blijven hier staan; /instellingen/offertes importeert ze.
+ */
+export default function AlgemeneVoorwaardenPagina() {
+  redirect('/instellingen/offertes?deel=voorwaarden')
 }

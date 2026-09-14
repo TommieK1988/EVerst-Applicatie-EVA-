@@ -54,7 +54,7 @@ export default function CustomAttributenBeheer({
         </h3>
         <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)' }}>
           Geen attribuutdefinities geconfigureerd.{' '}
-          <a href="/instellingen/medewerker-attributen" style={{ color: 'var(--accent)' }}>Configureer ze hier.</a>
+          <a href="/instellingen/medewerkers?deel=attributen" style={{ color: 'var(--accent)' }}>Configureer ze hier.</a>
         </p>
       </div>
     )

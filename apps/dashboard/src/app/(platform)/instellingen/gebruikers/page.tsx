@@ -4,6 +4,7 @@ import { PageHeader, Card, Badge, EmptyState } from '@/components/ui'
 import AfdelingRechtenBeheer from './AfdelingRechtenBeheer'
 import Link from 'next/link'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'Gebruikers & rechten' }
 
@@ -60,6 +61,7 @@ export default async function GebruikersPage() {
 
   return (
     <div className="eva-page">
+      <TerugNaarInstellingen />
       <PageHeader eyebrow="Instellingen" title="Gebruikers & rechten" />
       <p className="-mt-3 mb-[22px] text-[13.5px] text-neutral-500">
         Overzicht van medewerkers met platformtoegang. Standaard rechten worden ingesteld per afdeling en kunnen per gebruiker worden aangepast.

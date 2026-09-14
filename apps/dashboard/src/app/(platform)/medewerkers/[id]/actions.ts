@@ -436,7 +436,7 @@ export async function upsertAttribuutDefinitie(raw: unknown, existing_id?: strin
     : await db().from('medewerker_attribuut_definities').insert(parsed.data)
 
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/medewerker-attributen')
+  revalidatePath('/instellingen/medewerkers')
   return { ok: true }
 }
 
@@ -447,7 +447,7 @@ export async function verwijderAttribuutDefinitie(id: string): Promise<ActionRes
     .update({ actief: false })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/medewerker-attributen')
+  revalidatePath('/instellingen/medewerkers')
   return { ok: true }
 }
 

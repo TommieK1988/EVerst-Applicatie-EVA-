@@ -64,7 +64,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
   [/^\/instellingen\/bedrijfsgegevens\/[^/]+$/, { title: 'Instellingen › Bedrijfsgegevens › Detail', breadcrumb: 'Platform' }],
   [/^\/instellingen\/bedrijfsgegevens$/, { title: 'Instellingen › Bedrijfsgegevens', breadcrumb: 'Platform' }],
   [/^\/instellingen\/integraties$/, { title: 'Instellingen › Integraties', breadcrumb: 'Platform' }],
-  [/^\/instellingen\/uren$/, { title: 'Instellingen › Urenverantwoording', breadcrumb: 'Platform' }],
+  [/^\/instellingen\/uren$/, { title: 'Instellingen › Uren', breadcrumb: 'Platform' }],
   [/^\/instellingen\/formulieren-pdf$/, { title: 'Instellingen › Formulier PDF-opmaak', breadcrumb: 'Platform' }],
   [/^\/instellingen$/, { title: 'Instellingen', breadcrumb: 'Platform' }],
   [/^\/account$/, { title: 'Mijn account', breadcrumb: 'Account' }],
@@ -145,7 +145,7 @@ const ROUTE_LABELS: Array<[RegExp, { title: string; breadcrumb?: string; withTab
 
 /* ── Fallback-logica ──────────────────────────────────────────────────────
    Routes zonder expliciete ROUTE_LABELS-regel kregen voorheen het rauwe pad
-   als titel (bijv. "/instellingen/btw-tarieven"). Onderstaande maps leiden
+   als titel (bijv. "/instellingen/btw-kostensoorten"). Onderstaande maps leiden
    voor élke route een nette, consistent opgemaakte titel af uit de URL, zodat
    de topbar nooit meer leeg of onopgemaakt is.
 
@@ -181,7 +181,9 @@ const SLUG_LABELS: Record<string, string> = {
   'btw-tarieven': 'BTW-tarieven', 'debiteur-redencodes': 'Debiteuren — redencodes',
   'dossier-categorieen': 'Dossiercategorieën', 'dossier-toggles': 'Dossier-tabbladen',
   'kostensoorten': 'Kostensoorten', 'uursoorten-tarieven': 'Uursoorten & tarieven',
-  'offerte-layout': 'Offerte-opmaak', 'functies-afdelingen': 'Functies & afdelingen',
+  'offerte-layout': 'Offerte-opmaak', 'functies-afdelingen': 'Functies, afdelingen & ploegen',
+  'facturatie': 'Facturatie', 'klantportaal': 'Klantportaal', 'document-sjablonen': 'Documentsjablonen',
+  'btw-kostensoorten': 'BTW-tarieven & kostensoorten',
   'gebruikers': 'Gebruikers & rechten', 'medewerker-attributen': 'Medewerker-attributen',
   'integraties': 'Integraties', 'cao': 'CAO-beheer', 'formulieren-pdf': 'Formulier PDF-opmaak',
   'foutenlog': 'Foutenlog', 'offerte-mail': 'Offerte-e-mail', 'mailsjablonen': 'E-mailsjablonen',

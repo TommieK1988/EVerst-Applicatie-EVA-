@@ -182,8 +182,8 @@ function CalculatieTab() {
         <p className="font-semibold mb-1">Uurtarieven</p>
         <p>
           Uurtarieven worden centraal beheerd via{' '}
-          <Link href="/instellingen/planning" className="underline hover:text-blue-900">
-            Bedrijfsinstellingen → Planning
+          <Link href="/instellingen/uren?deel=tarieven" className="underline hover:text-blue-900">
+            Bedrijfsinstellingen → Uren → Uurtarieven
           </Link>
           . Ze worden automatisch gesynchroniseerd met EvertsCalc.
         </p>
@@ -409,10 +409,10 @@ function CalculatieTab() {
 
 function OfferteTab() {
   const secties = [
-    { href: '/instellingen/offerte-layout',        label: 'Offerte layout',       sub: 'Word-sjablonen met huisstijl voor offertes' },
-    { href: '/instellingen/betalingscondities',    label: 'Betalingscondities',   sub: 'Termijnschema\'s voor de aanneemsom' },
-    { href: '/instellingen/algemene-voorwaarden',  label: 'Algemene Voorwaarden', sub: 'PDF-documenten met algemene voorwaarden' },
-    { href: '/instellingen/btw-tarieven',          label: 'BTW tarieven',         sub: 'Beschikbare BTW-percentages' },
+    { href: '/instellingen/offertes?deel=opmaak',       label: 'Offerte-opmaak',       sub: 'Word-sjablonen met huisstijl voor offertes' },
+    { href: '/instellingen/offertes?deel=condities',    label: 'Betalingscondities',   sub: 'Termijnschema\'s voor de aanneemsom' },
+    { href: '/instellingen/offertes?deel=voorwaarden',  label: 'Algemene voorwaarden', sub: 'PDF-documenten met algemene voorwaarden' },
+    { href: '/instellingen/btw-kostensoorten',          label: 'BTW-tarieven',         sub: 'Beschikbare BTW-percentages' },
   ]
 
   return (

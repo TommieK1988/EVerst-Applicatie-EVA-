@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-const PAD = '/instellingen/betalingscondities'
+const PAD = '/instellingen/offertes'
 
 export interface Termijn {
   omschrijving: string

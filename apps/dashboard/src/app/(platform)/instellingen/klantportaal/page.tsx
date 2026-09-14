@@ -2,6 +2,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisModuleToegang } from '@/lib/auth/rechten'
 import { PageHeader, Card, CardHeader, CardBody, Badge } from '@/components/ui'
 import { datumKort } from '@/lib/portaal/format'
+import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
 export const metadata = { title: 'Klantportaal' }
 export const dynamic = 'force-dynamic'
@@ -52,6 +53,7 @@ export default async function KlantportaalInstellingen() {
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
+      <TerugNaarInstellingen />
       <PageHeader eyebrow="Instellingen" title="Klantportaal" />
       <p className="-mt-3 mb-5 text-[13px] text-neutral-500">
         Alle opdrachtgevers met toegang tot hun eigen projectomgeving. Uitnodigen doe je per

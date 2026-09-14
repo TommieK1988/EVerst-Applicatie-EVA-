@@ -46,7 +46,7 @@ export async function maakToggleDefinitie(label: string): Promise<{ ok: true } |
     if (error.code === '23505') return { ok: false, error: 'Er bestaat al een toggle met deze naam' }
     return { ok: false, error: error.message }
   }
-  revalidatePath('/instellingen/dossier-toggles')
+  revalidatePath('/instellingen/dossiers')
   return { ok: true }
 }
 
@@ -55,7 +55,7 @@ export async function setToggleDefinitieActief(id: string, actief: boolean): Pro
   const supabase = createAdminClient() as any
   const { error } = await supabase.from('dossier_toggle_definities').update({ actief }).eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/dossier-toggles')
+  revalidatePath('/instellingen/dossiers')
   return { ok: true }
 }
 
@@ -64,6 +64,6 @@ export async function verwijderToggleDefinitie(id: string): Promise<{ ok: true }
   const supabase = createAdminClient() as any
   const { error } = await supabase.from('dossier_toggle_definities').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/instellingen/dossier-toggles')
+  revalidatePath('/instellingen/dossiers')
   return { ok: true }
 }
