@@ -37,10 +37,15 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
   const [fout, setFout]           = useState<string | null>(null)
   // Inline geopende offerte (master-detail); ook via ?offerte={id} na aanmaken.
   const [offerteId, setOfferteId] = useState<string | null>(null)
+  // Volgt de URL in beide richtingen: verdwijnt ?offerte (bijv. omdat je in de
+  // zijbalk opnieuw op Calculatie klikt terwijl een offerte openstaat), dan sluit
+  // het detail ook. Zonder dat bleef de oude offerte in beeld — het pad verandert
+  // niet, dus de component blijft gemonteerd. Deps bewust op de losse parameter:
+  // een offerte die vanuit de tabel is geopend (zonder URL-parameter) blijft staan.
+  const offerteParam = searchParams.get('offerte')
   useEffect(() => {
-    const q = searchParams.get('offerte')
-    if (q) setOfferteId(q)
-  }, [searchParams])
+    setOfferteId(offerteParam)
+  }, [offerteParam])
 
   // De koppeling dossier ⇄ calculatieproject komt uit de database
   // (dossiers.everts_calc_project_id) en nergens anders vandaan.
@@ -73,18 +78,20 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     return () => { actief = false }
   }, [projectId])
 
-  // Lokale scenario's lezen — na hydratie en na lokale wijzigingen (reviseren e.d.).
+  // Lokale scenario's lezen — na hydratie en na lokale wijzigingen (reviseren e.d.),
+  // en in hetzelfde effect beslissen of de calculatie-omgeving direct open moet.
+  //
+  // Die twee horen bewust bij elkaar: stonden ze in twee effecten, dan las het tweede
+  // effect nog de `scenarios`-state van dézelfde render (leeg, de setState uit het
+  // eerste effect is dan nog niet verwerkt) en sprong een dossier mét versies alsnog
+  // de editor in — op de standaard-/eerste calculatie. Een verse aanvraag (0 versies)
+  // gaat wel meteen de editor in; zodra er ≥1 versie is landt de tab op de versie-kiezer.
   useEffect(() => {
     if (!projectId || !gehydrateerd) { setScenarios([]); return }
-    setScenarios(getScenarios(projectId))
+    const lijst = getScenarios(projectId)
+    setScenarios(lijst)
+    if (lijst.length === 0) setToonCalculatie(true)
   }, [projectId, gehydrateerd, calcTick])
-
-  // Verse aanvraag zonder calculatie → meteen de calculatie-omgeving in om de
-  // begroting te bouwen (geen lege versie-kiezer). Zodra er ≥1 versie is landt de
-  // tab op de versie-kiezer.
-  useEffect(() => {
-    if (projectId && gehydrateerd && scenarios.length === 0) setToonCalculatie(true)
-  }, [projectId, gehydrateerd, scenarios.length])
 
   const handleScenariosGewijzigd = (nieuwId?: string) => {
     setCalcTick(t => t + 1)

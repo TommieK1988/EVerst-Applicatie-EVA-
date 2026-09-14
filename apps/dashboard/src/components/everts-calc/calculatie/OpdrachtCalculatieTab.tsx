@@ -37,10 +37,15 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   const [toonCalculatie, setToonCalculatie] = useState(false)
   // Inline geopende offerte (master-detail); ook via ?offerte={id} na aanmaken.
   const [offerteId, setOfferteId] = useState<string | null>(null)
+  // Volgt de URL in beide richtingen: verdwijnt ?offerte (bijv. omdat je in de
+  // zijbalk opnieuw op Calculatie klikt terwijl een offerte openstaat), dan sluit
+  // het detail ook. Zonder dat bleef de oude offerte in beeld — het pad verandert
+  // niet, dus de component blijft gemonteerd. Deps bewust op de losse parameter:
+  // een offerte die vanuit de tabel is geopend (zonder URL-parameter) blijft staan.
+  const offerteParam = searchParams.get('offerte')
   useEffect(() => {
-    const q = searchParams.get('offerte')
-    if (q) setOfferteId(q)
-  }, [searchParams])
+    setOfferteId(offerteParam)
+  }, [offerteParam])
   const [bezig, setBezig] = useState(false)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   const { bevestig } = useDialogen()
