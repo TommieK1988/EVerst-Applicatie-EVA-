@@ -487,9 +487,15 @@ export async function trekGoedkeuringIn(
     .from('planning_uursoorten').select('uren_categorie')
     .eq('bouw7_id', String(log.type?.id)).maybeSingle()
   const nietGewerkt = ['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(soort?.uren_categorie ?? '')
-  const viaVasteGoedkeurder = nietGewerkt && medewerker?.uren_goedkeurder_id != null
+  // Zelfde terugval als bij het keuren: heeft de medewerker niets staan, dan is de standaard uit
+  // de uren-instellingen degene die dit akkoord gaf -- en dus ook de enige die het kan intrekken.
+  const { getUrenInstellingen } = await import('./instellingen')
+  const goedkeurderId = nietGewerkt
+    ? (medewerker?.uren_goedkeurder_id ?? (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id ?? null)
+    : null
+  const viaVasteGoedkeurder = goedkeurderId != null
   if (viaVasteGoedkeurder) {
-    if (medewerker.uren_goedkeurder_id !== ik.id) {
+    if (goedkeurderId !== ik.id) {
       return {
         ok: false,
         error: 'Dit zijn niet-gewerkte uren; alleen de goedkeurder van deze medewerker kan dat akkoord intrekken.',

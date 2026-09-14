@@ -90,6 +90,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     ploegenRes,
     uursoortenRes,
     collegasRes,
+    urenInstellingenRes,
     afwezigheidRes,
     vrijeDagenRes,
     saldoRes,
@@ -148,15 +149,18 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     supabase.from('cao_loonschalen').select('*').order('volgorde'),
     supabase.from('ploegen').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('planning_uursoorten').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
-    // Kandidaten om de uren van deze medewerker goed te keuren: actief en mét account —
-    // zonder login komt iemand nooit op een keurscherm.
+    // Kandidaten om de niet-gewerkte uren van deze medewerker af te tekenen: actief en mét
+    // account — zonder login komt iemand nooit op een keurscherm. Hijzelf zit er ook bij, want
+    // de standaardgoedkeurder moet met naam te tonen zijn ook als dat deze medewerker is; het
+    // formulier laat hem niet als keuze zien.
     supabase
       .from('medewerkers')
       .select('id, voornaam, tussenvoegsel, achternaam')
       .eq('actief', true)
       .not('auth_user_id', 'is', null)
-      .neq('id', params.id)
       .order('voornaam'),
+    // Waar niet-gewerkte uren heen gaan als hier niets gekozen is.
+    supabase.from('uren_instellingen').select('niet_gewerkt_goedkeurder_id').eq('id', true).maybeSingle(),
     supabase
       .from('medewerker_afwezigheid')
       .select('*')
@@ -319,6 +323,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
                 ploegen={ploegen}
                 uursoorten={uursoorten}
                 collegas={collegas}
+                standaardGoedkeurderId={urenInstellingenRes.data?.niet_gewerkt_goedkeurder_id ?? null}
                 caoDocumenten={caoDocumenten}
                 caoSchalen={caoSchalen}
               />

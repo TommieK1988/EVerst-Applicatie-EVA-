@@ -16,6 +16,7 @@ import {
 
 type Instellingen = {
   terugval_goedkeurder_id: string | null
+  niet_gewerkt_goedkeurder_id: string | null
   tolerantie_uren: number | string
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -89,6 +90,7 @@ export default function UrenInstellingenBeheer({
 
   const [form, setForm] = useState({
     terugval_goedkeurder_id: instellingen?.terugval_goedkeurder_id ?? '',
+    niet_gewerkt_goedkeurder_id: instellingen?.niet_gewerkt_goedkeurder_id ?? '',
     tolerantie_uren: Number(instellingen?.tolerantie_uren ?? 0),
     indien_deadline_dag: instellingen?.indien_deadline_dag ?? 5,
     indien_deadline_tijd: (instellingen?.indien_deadline_tijd ?? '17:00').slice(0, 5),
@@ -107,6 +109,7 @@ export default function UrenInstellingenBeheer({
     setBusy(true)
     const r = await setUrenInstellingen({
       terugval_goedkeurder_id: form.terugval_goedkeurder_id || null,
+      niet_gewerkt_goedkeurder_id: form.niet_gewerkt_goedkeurder_id || null,
       tolerantie_uren: form.tolerantie_uren,
       indien_deadline_dag: form.indien_deadline_dag,
       indien_deadline_tijd: `${form.indien_deadline_tijd}:00`,
@@ -355,6 +358,27 @@ export default function UrenInstellingenBeheer({
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
                 Beoordeelt de weken van medewerkers die geen ploeg — en dus geen teamleider — hebben.
                 Zonder terugval kan zo iemand zijn week nergens heen sturen.
+              </span>
+            </label>
+          </div>
+
+          {/* Niet-gewerkte uren volgen niet het dossier maar de persoon; zonder deze terugval
+              belandt iemands vakantie bij de projectleider van het project waarop die dag
+              toevallig geboekt staat. */}
+          <div style={{ marginTop: 18 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 420 }}>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+                Goedkeurder verlof &amp; ziekte
+              </span>
+              <select value={form.niet_gewerkt_goedkeurder_id} style={veldStijl}
+                onChange={e => setForm(f => ({ ...f, niet_gewerkt_goedkeurder_id: e.target.value }))}>
+                <option value="">— via het dossier —</option>
+                {medewerkers.map(m => <option key={m.id} value={m.id}>{volledigeNaam(m)}</option>)}
+              </select>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
+                Keurt de niet-gewerkte uren (verlof, ziek, vakantie, feestdag, tijd-voor-tijd) van
+                iedereen die op zijn eigen profiel geen goedkeurder heeft staan. Gewerkte uren gaan
+                altijd naar de teamleider en projectleider van het dossier.
               </span>
             </label>
           </div>

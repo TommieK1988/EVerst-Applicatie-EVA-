@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import { getUrenInstellingen } from './instellingen'
 import type { Bouw7Client, Bouw7EmployeeHourLog, Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
 
 /**
@@ -65,9 +66,9 @@ export type OpenUurRegel = {
   nietGewerkt: boolean
 
   /**
-   * De vaste goedkeurder van deze medewerker, MAAR alleen ingevuld als hij op deze regel van
-   * toepassing is: bij niet-gewerkte uren. Dan vervangt hij de dossierroute en is hij in zijn
-   * eentje eindstation.
+   * De goedkeurder van deze regel als het niet-gewerkte uren zijn: die van het medewerkerprofiel,
+   * en anders de standaard uit `uren_instellingen.niet_gewerkt_goedkeurder_id`. Hij vervangt dan
+   * de dossierroute en is in zijn eentje eindstation.
    *
    * Gewerkte uren laten dit veld leeg, ook als de medewerker een goedkeurder heeft: die uren
    * horen bij het project waarop ze geboekt zijn en dus bij de teamleider/projectleider van
@@ -152,13 +153,20 @@ export async function haalOpenstaandeUren(
     supabase.from('planning_uursoorten').select('bouw7_id, uren_categorie').not('bouw7_id', 'is', null),
   ])
 
+  // Niet-gewerkte uren van iemand zonder eigen goedkeurder gaan naar één vaste persoon. Zonder
+  // die terugval zou verlof alsnog bij de projectleider van het project belanden waarop het
+  // toevallig geboekt staat -- precies wat deze routering moet voorkomen.
+  const standaardGoedkeurderId = (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id
+
   type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
   const medRijen = (medewerkers ?? []) as MedewerkerRij[]
   const medMap = new Map<string, MedewerkerRij>(medRijen.map(m => [m.bouw7_id, m]))
 
   // Namen van de vaste goedkeurders. Begrensd door de `.in()`: hooguit zoveel rijen als er
   // verschillende goedkeurders zijn.
-  const goedkeurderIds = [...new Set(medRijen.map(m => m.uren_goedkeurder_id).filter((v): v is string => !!v))]
+  const goedkeurderIds = [...new Set(
+    [...medRijen.map(m => m.uren_goedkeurder_id), standaardGoedkeurderId].filter((v): v is string => !!v),
+  )]
   const goedkeurderNaam = new Map<string, string>()
   if (goedkeurderIds.length) {
     const { data } = await supabase
@@ -193,7 +201,9 @@ export async function haalOpenstaandeUren(
     // De uursoort bepaalt welke route geldt; de goedkeurder van de medewerker telt alleen mee
     // bij niet-gewerkte uren.
     const nietGewerkt = isNietGewerkt(l.type?.id)
-    const vasteGoedkeurderId = nietGewerkt ? (medewerker?.uren_goedkeurder_id ?? null) : null
+    const vasteGoedkeurderId = nietGewerkt
+      ? (medewerker?.uren_goedkeurder_id ?? standaardGoedkeurderId ?? null)
+      : null
     const b = beoMap.get(l.id)
     const uren = num(l.hours)
     const tarief = l.hourlyRate != null ? num(l.hourlyRate) : null

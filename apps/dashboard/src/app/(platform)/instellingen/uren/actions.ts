@@ -16,6 +16,7 @@ const CATEGORIEEN: UrenCategorie[] = ['werk', 'afwezig', 'tijd_voor_tijd', 'fees
 /** Deadlines, de terugvalgoedkeurder en de kilometervergoedingen opslaan. */
 export async function setUrenInstellingen(input: {
   terugval_goedkeurder_id: string | null
+  niet_gewerkt_goedkeurder_id: string | null
   tolerantie_uren: number
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -50,6 +51,7 @@ export async function setUrenInstellingen(input: {
 
   const { error } = await db().from('uren_instellingen').update({
     terugval_goedkeurder_id: input.terugval_goedkeurder_id || null,
+    niet_gewerkt_goedkeurder_id: input.niet_gewerkt_goedkeurder_id || null,
     tolerantie_uren: input.tolerantie_uren,
     indien_deadline_dag: input.indien_deadline_dag,
     indien_deadline_tijd: input.indien_deadline_tijd,

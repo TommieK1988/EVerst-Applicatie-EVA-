@@ -293,6 +293,7 @@ export default function MedewerkerGegevensForm({
   ploegen,
   uursoorten,
   collegas,
+  standaardGoedkeurderId,
   caoDocumenten,
   caoSchalen,
 }: {
@@ -309,6 +310,12 @@ export default function MedewerkerGegevensForm({
    * uren staan zonder dat iemand ziet waarom.
    */
   collegas: { id: string; naam: string }[]
+  /**
+   * Wie de niet-gewerkte uren keurt van medewerkers zonder eigen keuze
+   * (`uren_instellingen.niet_gewerkt_goedkeurder_id`). Staat hier zodat het veld kan zeggen waar
+   * "leeg" op uitkomt in plaats van dat de gebruiker dat moet raden.
+   */
+  standaardGoedkeurderId: string | null
   caoDocumenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   caoSchalen: CaoLoonschaal[]
 }) {
@@ -356,6 +363,10 @@ export default function MedewerkerGegevensForm({
 
   const functieopties = functies.filter(f => f.actief).sort((a, b) => a.volgorde - b.volgorde).map(f => f.naam)
   const afdelingopties = afdelingen.filter(a => a.actief).sort((a, b) => a.volgorde - b.volgorde).map(a => a.naam)
+  // Waar "geen keuze" op uitkomt. Zonder ingestelde standaard valt de regel terug op het dossier.
+  const standaardNaam = standaardGoedkeurderId
+    ? (collegas.find(c => c.id === standaardGoedkeurderId)?.naam ?? 'de standaardgoedkeurder')
+    : 'de teamleider en projectleider van het dossier'
 
   // In view-modus tonen we de opgeslagen medewerker-waarden; in edit-modus de formulier-state.
   const m = medewerker
@@ -457,7 +468,7 @@ export default function MedewerkerGegevensForm({
                     value={state.uren_goedkeurder_id}
                     onChange={e => set('uren_goedkeurder_id', e.target.value)}
                   >
-                    <option value="">— Via het dossier —</option>
+                    <option value="">{`— Standaard: ${standaardNaam} —`}</option>
                     {/* De ingestelde goedkeurder kan uit dienst zijn of geen account meer
                         hebben. Zonder deze regel valt de keuzelijst stilzwijgend terug op
                         "via het dossier" terwijl de uren bij iemand liggen die ze niet meer
@@ -468,12 +479,14 @@ export default function MedewerkerGegevensForm({
                         ⚠ Kan niet meer goedkeuren — kies iemand anders
                       </option>
                     )}
-                    {collegas.map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
+                    {/* Zichzelf kan niet: dan keurt hij zijn eigen verlof. De server weigert het
+                        ook, maar een optie aanbieden die daarna een fout geeft is onzin. */}
+                    {collegas.filter(c => c.id !== m.id).map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
                   </select>
                   <span style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginTop: 4 }}>
                     Geldt voor niet-gewerkte uren: verlof, ziek, vakantie, feestdag en
-                    tijd-voor-tijd. Gewerkte uren blijven altijd naar de teamleider en
-                    projectleider van het dossier gaan. Leeg = ook verlof loopt via het dossier.
+                    tijd-voor-tijd. Gewerkte uren gaan altijd naar de teamleider en projectleider
+                    van het dossier. Kies je niets, dan gaat het naar {standaardNaam}.
                   </span>
                 </div>
               ) : (
@@ -481,7 +494,7 @@ export default function MedewerkerGegevensForm({
                   m.uren_goedkeurder_id
                     ? (collegas.find(c => c.id === m.uren_goedkeurder_id)?.naam
                         ?? 'Ingesteld, maar deze persoon kan niet meer goedkeuren')
-                    : null
+                    : `${standaardNaam} (standaard)`
                 } />
               )}
             </Veld>
