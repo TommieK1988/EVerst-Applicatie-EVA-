@@ -65,6 +65,13 @@ const GENEGEERD = [/database\.types\.ts$/, /\.d\.ts$/, /node_modules/, /[\\/]\.n
  * hetzelfde bestand hem nog zag; toen de kosten een eigen module kregen moest de guard mee
  * naar een gedeeld bestand en telde elke correct gegate action ineens als ongegate.
  *
+ * De `vereisHandboek*`-drieling (`lib/handboek/auth.ts`) hoort er om exact dezelfde reden
+ * bij als de materieel-variant: `vereisHandboekMutatie` en `vereisHandboekBeheerPagina`
+ * roepen onvoorwaardelijk `vereisRecht('medewerkershandboek', …)` aan, `vereisHandboekLezer`
+ * roept `vereisSessie()` aan, en alle drie gooien eerst als de feature-flag uit staat.
+ * Zonder deze namen telden de acht correct gegate acties in
+ * `(platform)/instellingen/handboek/actions.ts` als ongegate.
+ *
  * De regel voor uitbreiden: alleen een helper die zélf onvoorwaardelijk een gate uit deze
  * lijst aanroept en gooit bij onvoldoende recht. Een helper die de gate achter een `if`
  * zet hoort hier niet in.
@@ -72,6 +79,7 @@ const GENEGEERD = [/database\.types\.ts$/, /\.d\.ts$/, /node_modules/, /[\\/]\.n
 const GATES = [
   'vereisRecht', 'vereisSessie', 'vereisBeheerder', 'vereisModuleToegang',
   'vereisMaterieelToegang', 'vereisMaterieelMutatie', 'vereisMaterieelBeheer',
+  'vereisHandboekLezer', 'vereisHandboekBeheerPagina', 'vereisHandboekMutatie',
   'eigenWeek',
 ]
 
