@@ -38,6 +38,7 @@ type FormState = {
   kleur: string
   ploeg_id: string
   standaard_uursoort_id: string
+  uren_goedkeurder_id: string
 }
 
 function toForm(m: Medewerker): FormState {
@@ -69,6 +70,7 @@ function toForm(m: Medewerker): FormState {
     kleur:               m.kleur ?? '',
     ploeg_id:            m.ploeg_id ?? '',
     standaard_uursoort_id: m.standaard_uursoort_id ?? '',
+    uren_goedkeurder_id: m.uren_goedkeurder_id ?? '',
   }
 }
 
@@ -290,6 +292,7 @@ export default function MedewerkerGegevensForm({
   afdelingen,
   ploegen,
   uursoorten,
+  collegas,
   caoDocumenten,
   caoSchalen,
 }: {
@@ -300,6 +303,12 @@ export default function MedewerkerGegevensForm({
   afdelingen: MedewerkerAfdeling[]
   ploegen: Pick<Ploeg, 'id' | 'naam'>[]
   uursoorten: Pick<PlanningUursoort, 'id' | 'naam'>[]
+  /**
+   * Collega's die de uren van deze medewerker kunnen goedkeuren: actief, mét account en
+   * niet hijzelf. Zonder account komt iemand nooit op een keurscherm, en dan blijven de
+   * uren staan zonder dat iemand ziet waarom.
+   */
+  collegas: { id: string; naam: string }[]
   caoDocumenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   caoSchalen: CaoLoonschaal[]
 }) {
@@ -337,6 +346,7 @@ export default function MedewerkerGegevensForm({
         kleur:               state.kleur || null,
         ploeg_id:            state.ploeg_id || null,
         standaard_uursoort_id: state.standaard_uursoort_id || null,
+        uren_goedkeurder_id: state.uren_goedkeurder_id || null,
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Gegevens opgeslagen')
@@ -346,6 +356,8 @@ export default function MedewerkerGegevensForm({
 
   const functieopties = functies.filter(f => f.actief).sort((a, b) => a.volgorde - b.volgorde).map(f => f.naam)
   const afdelingopties = afdelingen.filter(a => a.actief).sort((a, b) => a.volgorde - b.volgorde).map(a => a.naam)
+  // Uitvoering loopt altijd via het dossier; die keuze bieden we daar niet aan.
+  const isUitvoering = (editing ? state.afdeling : (medewerker.afdeling ?? '')).trim().toLowerCase() === 'uitvoering'
 
   // In view-modus tonen we de opgeslagen medewerker-waarden; in edit-modus de formulier-state.
   const m = medewerker
@@ -434,6 +446,49 @@ export default function MedewerkerGegevensForm({
                   {uursoorten.map(u => <option key={u.id} value={u.id}>{u.naam}</option>)}
                 </select>
               ) : <Waarde value={uursoorten.find(u => u.id === m.standaard_uursoort_id)?.naam} />}
+            </Veld>
+            {/* Wie de uren van deze medewerker goedkeurt. Alleen buiten Uitvoering: daar hoort
+                de teamleider van het dossier als eerste te kijken, en die stap hier kunnen
+                doorbreken zou hem stilzwijgend uitschakelen. */}
+            <Veld label="Uren goedkeuren" span>
+              {isUitvoering ? (
+                <span style={mutedStyle}>
+                  Via het dossier — de teamleider, daarna de projectleider.
+                </span>
+              ) : editing ? (
+                <div style={{ width: '100%' }}>
+                  <select
+                    className="eva-input"
+                    style={{ width: '100%' }}
+                    value={state.uren_goedkeurder_id}
+                    onChange={e => set('uren_goedkeurder_id', e.target.value)}
+                  >
+                    <option value="">— Via het dossier —</option>
+                    {/* De ingestelde goedkeurder kan uit dienst zijn of geen account meer
+                        hebben. Zonder deze regel valt de keuzelijst stilzwijgend terug op
+                        "via het dossier" terwijl de uren bij iemand liggen die ze niet meer
+                        kan keuren. */}
+                    {state.uren_goedkeurder_id
+                      && !collegas.some(c => c.id === state.uren_goedkeurder_id) && (
+                      <option value={state.uren_goedkeurder_id}>
+                        ⚠ Kan niet meer goedkeuren — kies iemand anders
+                      </option>
+                    )}
+                    {collegas.map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
+                  </select>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginTop: 4 }}>
+                    Wie je hier kiest keurt álle uren van deze medewerker, ongeacht het project.
+                    Leeg = de teamleider en projectleider van het dossier.
+                  </span>
+                </div>
+              ) : (
+                <Waarde value={
+                  m.uren_goedkeurder_id
+                    ? (collegas.find(c => c.id === m.uren_goedkeurder_id)?.naam
+                        ?? 'Ingesteld, maar deze persoon kan niet meer goedkeuren')
+                    : null
+                } />
+              )}
             </Veld>
             <Veld label="In dienst vanaf">
               {editing ? <Input type="date" style={{ width: '100%' }} value={state.in_dienst_vanaf} onChange={e => set('in_dienst_vanaf', e.target.value)} /> : <Waarde value={m.in_dienst_vanaf} />}

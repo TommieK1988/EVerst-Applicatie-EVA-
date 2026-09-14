@@ -56,11 +56,7 @@ async function Functies() {
     supabase.from('medewerker_functies').select('*').order('volgorde').order('naam'),
     supabase.from('medewerker_afdelingen').select('*').order('volgorde').order('naam'),
     supabase.from('ploegen').select('*').order('volgorde').order('naam'),
-    supabase
-      .from('medewerkers')
-      .select('id, voornaam, tussenvoegsel, achternaam, afdeling, uren_goedkeurder_id, auth_user_id')
-      .eq('actief', true)
-      .order('voornaam'),
+    supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').eq('actief', true).order('voornaam'),
   ])
 
   return (

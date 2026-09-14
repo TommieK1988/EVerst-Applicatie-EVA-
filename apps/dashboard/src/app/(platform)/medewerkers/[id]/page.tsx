@@ -89,6 +89,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     caoSchalenRes,
     ploegenRes,
     uursoortenRes,
+    collegasRes,
     afwezigheidRes,
     vrijeDagenRes,
     saldoRes,
@@ -147,6 +148,15 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     supabase.from('cao_loonschalen').select('*').order('volgorde'),
     supabase.from('ploegen').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('planning_uursoorten').select('id, naam').eq('actief', true).order('volgorde').order('naam'),
+    // Kandidaten om de uren van deze medewerker goed te keuren: actief en mét account —
+    // zonder login komt iemand nooit op een keurscherm.
+    supabase
+      .from('medewerkers')
+      .select('id, voornaam, tussenvoegsel, achternaam')
+      .eq('actief', true)
+      .not('auth_user_id', 'is', null)
+      .neq('id', params.id)
+      .order('voornaam'),
     supabase
       .from('medewerker_afwezigheid')
       .select('*')
@@ -202,6 +212,12 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   const caoSchalen = (caoSchalenRes.data ?? []) as CaoLoonschaal[]
   const ploegen = (ploegenRes.data ?? []) as Pick<Ploeg, 'id' | 'naam'>[]
   const uursoorten = (uursoortenRes.data ?? []) as Pick<PlanningUursoort, 'id' | 'naam'>[]
+  const collegas = ((collegasRes.data ?? []) as Array<{
+    id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string
+  }>).map(c => ({
+    id: c.id,
+    naam: [c.voornaam, c.tussenvoegsel, c.achternaam].filter(Boolean).join(' '),
+  })).sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
   const bedrijfsmiddelen = (bedrijfsmiddelenRes.data ?? []) as MedewerkerBedrijfsmiddel[]
   const attribuutDefinities = (attribuutDefRes.data ?? []) as MedewerkerAttribuutDefinitie[]
   const attribuutWaarden = (attribuutWaardenRes.data ?? []) as MedewerkerAttribuutWaarde[]
@@ -302,6 +318,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
                 afdelingen={afdelingen}
                 ploegen={ploegen}
                 uursoorten={uursoorten}
+                collegas={collegas}
                 caoDocumenten={caoDocumenten}
                 caoSchalen={caoSchalen}
               />

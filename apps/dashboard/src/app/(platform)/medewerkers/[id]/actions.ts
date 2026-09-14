@@ -221,6 +221,12 @@ const gegevensSchema = z.object({
   kleur:              z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().or(z.literal('')).transform(v => v || null),
   ploeg_id:           z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
   standaard_uursoort_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
+  /**
+   * Vaste goedkeurder van de uren van deze medewerker. Is hij gevuld, dan vervangt hij de
+   * dossierroute (teamleider -> projectleider) voor álle uren van deze medewerker; zie
+   * lib/uren/bouw7-goedkeuring.ts. Leeg = via het dossier.
+   */
+  uren_goedkeurder_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
 })
 
 export async function updateMedewerkerGegevens(
@@ -230,6 +236,11 @@ export async function updateMedewerkerGegevens(
   const nope = await eisMedewerkers('schrijven'); if (nope) return nope
   const parsed = gegevensSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
+
+  // Jezelf als goedkeurder van je eigen uren aanwijzen is geen controle meer.
+  if (parsed.data.uren_goedkeurder_id === id) {
+    return { ok: false, error: 'Iemand kan niet zijn eigen uren goedkeuren.' }
+  }
 
   const supabase = db()
 
