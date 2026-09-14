@@ -1,0 +1,204 @@
+import 'server-only'
+import { createAdminClient } from '@everts/database/server'
+import { getMijnTeKeurenUren } from '@/lib/uren/bouw7-goedkeuring'
+import { periodeBereik } from '@/lib/uren/types'
+
+/**
+ * Datalaag van het mobiele fiatteerscherm (`/m/uren/keuren`).
+ *
+ * Dit is het enige scherm onder `/m` dat wél een Bouw7-call doet, en dat mag:
+ * je opent het met de bedoeling uren te beoordelen. Het startscherm doet die call
+ * bewust niet (zie `lib/mobiel/home.ts`).
+ *
+ * De autorisatie zit NIET hier maar in `getMijnTeKeurenUren` en `keurUrenGoed`:
+ * die bepalen uit de projectrollen op het dossier wat jij mag. Dit bestand maakt
+ * er alleen een vorm van die op een telefoon te lezen is.
+ */
+
+/** Eén te beoordelen uurregel, uitgekleed tot wat op een telefoon past. */
+export type KeurRegel = {
+  /** Bouw7 hour-log-id; dit gaat terug naar `keurUrenGoed`. */
+  id: number
+  datum: string
+  uren: number
+  uursoort: string | null
+  opmerking: string | null
+  medewerkerNaam: string
+  bewakingscode: string | null
+  /**
+   * In welke rol jij deze regel beoordeelt. Er is er altijd maar één aan zet: een
+   * regel die nog op de teamleider wacht komt niet bij de projectleider in beeld.
+   * Ben je op hetzelfde dossier allebei, dan sta je hier als teamleider en handelt
+   * `keurUrenGoed` beide stappen in één keer af.
+   */
+  rol: 'projectleider' | 'teamleider'
+  /**
+   * Jouw akkoord is niet het laatste woord: als teamleider met een (andere)
+   * projectleider op het dossier gaat de vlag in Bouw7 pas om als hij ook gekeken
+   * heeft. Dat hoort op het scherm te staan, anders denk je dat je klaar bent.
+   */
+  wachtDaarnaOpProjectleider: boolean
+  /**
+   * Mag ik deze regel op mijn telefoon nog aanpassen?
+   *
+   * Alleen de teamleider, en alleen vóór zijn akkoord. Dat is de hele bedoeling van
+   * de teamleiderstap: de uren kloppend maken vóórdat ze doorschuiven. Zodra hij
+   * akkoord geeft verdwijnt de regel uit zijn lijst en is bewerken op mobiel voorbij
+   * — corrigeren daarna hoort bij de projectleider, op de computer.
+   */
+  magBewerken: boolean
+  /**
+   * Deze regel ligt nog bij de teamleider; jij bent de projectleider.
+   *
+   * Hij staat er bewust wél tussen. De volgorde is teamleider-eerst, maar een teamleider gaat
+   * ook met verlof — en dan mogen de uren van zijn ploeg niet wekenlang blijven hangen. De
+   * projectleider ziet ze dus, en kan er met een bevestiging overheen.
+   */
+  wachtOpTeamleider: boolean
+  /** Wie er nog naar moet kijken; komt terug in de bevestigingsvraag. */
+  teamleiderNaam: string | null
+  /** Nodig om de bewakingscodes van dit dossier op te halen in het bewerkvenster. */
+  dossierId: string | null
+}
+
+/** Alle regels van één dossier bij elkaar — zo denk je erover: per project. */
+export type KeurGroep = {
+  /** Bouw7-project-id, of 'onbekend' als de regel geen project heeft. */
+  sleutel: string
+  projectNummer: string | null
+  projectNaam: string | null
+  /** EVA-dossier, als het gekoppeld is; maakt de kop een link. */
+  dossierId: string | null
+  regels: KeurRegel[]
+  totaalUren: number
+}
+
+export type KeurData = {
+  groepen: KeurGroep[]
+  totaalRegels: number
+  totaalUren: number
+  /**
+   * Hoeveel van de getoonde regels nog bij de teamleider liggen. Ze staan gewoon in de
+   * lijst — de projectleider moet er tijdens diens verlof bij kunnen — maar fiatteren
+   * vraagt een bevestiging.
+   */
+  wachtOpTeamleider: number
+  /** Bouw7 was niet bereikbaar; dan tonen we dat in plaats van "niets te doen". */
+  fout: string | null
+}
+
+const rondUren = (n: number) => Math.round(n * 100) / 100
+
+export async function haalTeKeuren(): Promise<KeurData> {
+  const { van, tot } = periodeBereik('te_keuren')
+  const res = await getMijnTeKeurenUren(van, tot)
+  if (res.fout) {
+    return { groepen: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0, fout: res.fout }
+  }
+
+  // Drie bronnen, oplopend in zeggenschap: eerst wat nog bij de teamleider ligt, dan wat op
+  // mijn projectleider-akkoord staat, en als laatste mijn eigen teamleider-werk. Later
+  // toegevoegd wint, zodat een regel waarop ik meerdere petten heb bij de sterkste belandt.
+  const perId = new Map<number, KeurRegel>()
+
+  for (const r of res.wachtNogOpTeamleider) {
+    perId.set(r.id, maakRegel(r, 'projectleider', true))
+  }
+  for (const r of res.alsProjectleider) {
+    perId.set(r.id, maakRegel(r, 'projectleider'))
+  }
+  for (const r of res.alsTeamleider) {
+    perId.set(r.id, maakRegel(r, 'teamleider'))
+  }
+
+  // Groeperen op project. De sleutel komt van Bouw7 en niet van het EVA-dossier:
+  // niet elke Bouw7-regel is aan een dossier gekoppeld, en die regels zouden dan
+  // allemaal op één hoop belanden.
+  const groepen = new Map<string, KeurGroep>()
+  const bron = new Map<number, (typeof res.alsProjectleider)[number]>()
+  for (const r of [...res.wachtNogOpTeamleider, ...res.alsProjectleider, ...res.alsTeamleider]) {
+    bron.set(r.id, r)
+  }
+
+  for (const regel of perId.values()) {
+    const r = bron.get(regel.id)
+    const sleutel = r?.bouw7ProjectId != null ? String(r.bouw7ProjectId) : 'onbekend'
+    const groep = groepen.get(sleutel) ?? {
+      sleutel,
+      projectNummer: r?.projectNummer ?? null,
+      projectNaam: r?.projectNaam ?? null,
+      dossierId: r?.dossierId ?? null,
+      regels: [],
+      totaalUren: 0,
+    }
+    groep.regels.push(regel)
+    groep.totaalUren = rondUren(groep.totaalUren + regel.uren)
+    groepen.set(sleutel, groep)
+  }
+
+  // Binnen een groep op datum, dan op naam: zo lees je het als een weekstaat en
+  // niet als de willekeurige volgorde waarin Bouw7 ze teruggaf.
+  for (const groep of groepen.values()) {
+    groep.regels.sort((a, b) =>
+      a.datum !== b.datum
+        ? a.datum.localeCompare(b.datum)
+        : a.medewerkerNaam.localeCompare(b.medewerkerNaam, 'nl'))
+  }
+
+  // De grootste stapel bovenaan — daar zit het meeste werk dat je in één keer
+  // kunt wegwerken.
+  const lijst = [...groepen.values()].sort((a, b) => b.regels.length - a.regels.length)
+
+  const alles = [...perId.values()]
+  return {
+    groepen: lijst,
+    totaalRegels: alles.length,
+    totaalUren: rondUren(alles.reduce((s, r) => s + r.uren, 0)),
+    wachtOpTeamleider: alles.filter(r => r.wachtOpTeamleider).length,
+    fout: null,
+  }
+}
+
+type BronRegel = Awaited<ReturnType<typeof getMijnTeKeurenUren>>['alsProjectleider'][number]
+
+function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = false): KeurRegel {
+  // Ben ik zelf ook de projectleider, dan schuift er niets door en handelt
+  // `keurUrenGoed` beide stappen in één keer af — dan hoort het badge er niet.
+  const eigenProjectleider = r.projectleiderId != null && r.projectleiderId === r.teamleiderId
+
+  return {
+    id: r.id,
+    datum: r.datum,
+    uren: r.uren,
+    uursoort: r.uursoort,
+    opmerking: r.opmerking,
+    medewerkerNaam: r.medewerkerNaam,
+    bewakingscode: r.bewakingscode,
+    rol,
+    wachtDaarnaOpProjectleider:
+      rol === 'teamleider' && Boolean(r.projectleiderId) && !eigenProjectleider,
+    // Bewerken hoort bij de teamleiderstap, en alleen vóór zijn akkoord. Slaat de
+    // projectleider die stap over, dan corrigeert hij op de computer — niet hier.
+    magBewerken: rol === 'teamleider',
+    wachtOpTeamleider,
+    teamleiderNaam: r.teamleiderNaam,
+    dossierId: r.dossierId,
+  }
+}
+
+/**
+ * Sta ik op minstens één dossier als teamleider of projectleider?
+ *
+ * Dit is géén afscherming — `getMijnTeKeurenUren` en `keurUrenGoed` bepalen zelf wat
+ * jij mag — maar een goedkope voorvraag uit de eigen database. Hij bepaalt of het zin
+ * heeft om de dúre telling te doen: die kost een gepagineerde Bouw7-ophaal, en voor de
+ * meeste medewerkers is het antwoord altijd nul. Zonder deze vraag zou elke telefoon
+ * die `/m` opent Bouw7 aanroepen voor niets.
+ */
+export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
+  const { count, error } = await createAdminClient()
+    .from('dossiers')
+    .select('id', { count: 'exact', head: true })
+    .or(`teamleider_id.eq.${medewerkerId},project_manager_id.eq.${medewerkerId}`)
+  return !error && (count ?? 0) > 0
+}

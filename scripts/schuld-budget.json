@@ -1,6 +1,6 @@
 {
   "budget": {
-    "as_any": 749,
+    "as_any": 750,
     "ongegate_service_role_actions": 513,
     "bestanden_boven_800_regels": 33
   },
@@ -273,10 +273,11 @@
       "apps/dashboard/src/lib/taken/services/taken.ts": 26,
       "apps/dashboard/src/lib/toolbox/klaarzetten.ts": 2,
       "apps/dashboard/src/lib/uren/actions.ts": 1,
-      "apps/dashboard/src/lib/uren/bouw7-goedkeuring.ts": 3,
+      "apps/dashboard/src/lib/uren/bouw7-goedkeuring.ts": 1,
       "apps/dashboard/src/lib/uren/bouw7.ts": 6,
       "apps/dashboard/src/lib/uren/goedkeuring.ts": 1,
       "apps/dashboard/src/lib/uren/instellingen.ts": 1,
+      "apps/dashboard/src/lib/uren/openstaande-uren.ts": 3,
       "apps/dashboard/src/lib/uren/rooster.ts": 1,
       "apps/dashboard/src/lib/uren/verlof.ts": 2,
       "apps/dashboard/src/lib/uren/weekstaat.ts": 4,
@@ -369,7 +370,7 @@
       "apps/dashboard/src/app/(platform)/relaties/[id]/RelatieDetailView.tsx": 1419,
       "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 990,
       "apps/dashboard/src/components/dossiers/tabs/FactuurRegelVenster.tsx": 812,
-      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2383,
+      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2389,
       "apps/dashboard/src/components/dossiers/tabs/OpleveringTab.tsx": 1200,
       "apps/dashboard/src/components/everts-calc/bibliotheek/BiblioteekBeheer.tsx": 1273,
       "apps/dashboard/src/components/everts-calc/bibliotheek/SchilderwerkBibliotheek.tsx": 1241,
@@ -383,7 +384,7 @@
       "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1768,
       "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 865,
       "apps/dashboard/src/lib/bouw7/client.ts": 1420,
-      "apps/dashboard/src/lib/bouw7/sync.ts": 2635,
+      "apps/dashboard/src/lib/bouw7/sync.ts": 2649,
       "apps/dashboard/src/lib/dossiers/actions.ts": 3812,
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 975,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 1332,
@@ -393,7 +394,7 @@
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 844,
       "apps/dashboard/src/lib/page-help.ts": 1613,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1050,
-      "packages/database/src/platform-types.ts": 1844
+      "packages/database/src/platform-types.ts": 1855
     }
   }
 }

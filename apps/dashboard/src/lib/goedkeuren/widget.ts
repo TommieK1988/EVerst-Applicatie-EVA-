@@ -271,6 +271,12 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
  * eigen keuze zijn: telde de widget een kwartaal en het scherm een jaar, dan klik je op "8 te
  * fiatteren" en zie je er twaalf staan — of erger, andersom. De ophaal kost hier niets extra,
  * want Bouw7 pagineert over de níet-goedgekeurde regels, niet over de periode.
+ *
+ * WAT HIER BEWUST NIET IN ZIT: regels die nog bij de teamleider liggen. Als projectleider zíé je
+ * die wel op het fiatteerscherm (en je kunt er met een bevestiging overheen als hij met verlof
+ * is), maar ze zijn nog niet van jou. Zou de teller ze meenemen, dan staat er elke week een
+ * getal dat grotendeels andermans werk is — en dat nodigt uit tot overslaan, precies wat de
+ * volgorde moet voorkomen. Het scherm zelf meldt hoeveel er bij de teamleider liggen.
  */
 export async function getUrenTeFiatterenAantal(): Promise<{ aantal: number; fout: string | null }> {
   try {

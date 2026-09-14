@@ -9,6 +9,11 @@ import Link from 'next/link'
  * header mag niet meer wegnemen dan nodig. De top-padding houdt rekening met de
  * statusbalk (`env(safe-area-inset-top)`), met een ondergrens voor toestellen
  * die die waarde niet leveren.
+ *
+ * LET OP — deze padding is niet cosmetisch. De geïnstalleerde app draait met
+ * `black-translucent` (zie `app/layout.tsx`), dus de webview loopt door tot achter
+ * de klok en de accu-iconen. Haal je `env(safe-area-inset-top)` hier weg, dan
+ * schuift de titel eronder.
  */
 export default function AppHeader({
   title, sub, backHref, ongelezenMeldingen,
@@ -44,6 +49,21 @@ export default function AppHeader({
         style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
           background: 'linear-gradient(160deg,rgba(0,0,0,.18) 0%,rgba(1,42,21,.55) 100%)',
+        }}
+      />
+      {/* Extra verdonkering over precies de statusbalk. De app draait als PWA met
+          `apple-mobile-web-app-status-bar-style: black-translucent`, dus de klok en
+          de accu-iconen staan in wit ÓP deze header. De lichtste hoeken van de
+          polygon-achtergrond geven daar te weinig contrast voor; deze band lost dat
+          op zonder de hele header donkerder te maken. Hoogte 0 als het toestel geen
+          safe-area meldt (Android, of de gewone browser) — dan staat er ook niets
+          van het systeem overheen. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'none',
+          height: 'env(safe-area-inset-top, 0px)',
+          background: 'linear-gradient(180deg,rgba(1,42,21,.55) 0%,rgba(1,42,21,.15) 100%)',
         }}
       />
       {/* Titel links, terugknop rechts: met de telefoon in één hand is de

@@ -1,27 +1,47 @@
 import React from 'react'
-import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench } from 'lucide-react'
+import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench, BookOpen } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
+import VandaagWidget from './VandaagWidget'
+import HomeSignalen from './HomeSignalen'
 import AppBadge from '@/components/eva/AppBadge'
+import type { AgendaItem } from '@/lib/agenda/agenda-model'
+import type { HomeSignalen as Signalen } from '@/lib/mobiel/home'
 
 /**
- * Mobiel grid-startscherm (OS-launcher). Grote tegels naar de buitendienst-
- * onderdelen; géén onderbalk (bewuste keuze — ze passen niet netjes in een
- * bottom-nav). Elk sub-scherm heeft een terug-link naar `/m` via `AppHeader`.
+ * Mobiel startscherm. Van boven naar beneden: wat er vandaag gepland staat, wat
+ * er van je verwacht wordt, en daaronder de tegels naar de onderdelen. Géén
+ * onderbalk (bewuste keuze — de onderdelen passen er niet netjes in); elk
+ * sub-scherm heeft een terug-link naar `/m` via `AppHeader`.
+ *
+ * De tegels staan op drie kolommen. Op twee kolommen paste de rij onderdelen niet
+ * meer op één scherm en moest je scrollen om bij "Mijn gegevens" te komen; met
+ * drie past alles, inclusief de twee blokken erboven. Zie `MobielTegel` voor de
+ * maatvoering die daarbij hoort.
  *
  * Tegels die op een recht staan (Materieel) krijgen dat als vlag mee vanaf de
  * pagina: dit is een servercomponent-boom, dus de rechten zijn daar al bekend en
  * hoeven niet nog eens per tegel opgehaald te worden.
  */
 export default function MobielHome({
-  naam, openTaken, ongelezenMeldingen = 0, magMaterieel = false,
+  naam, openTaken, ongelezenMeldingen = 0, magMaterieel = false, magHandboek = false,
+  vandaag, signalen,
 }: {
   naam?: string | null
   openTaken?: number
   ongelezenMeldingen?: number
   /** Materieelbeheer aan in deze omgeving én minimaal 'lezen' op het recht. */
   magMaterieel?: boolean
+  /**
+   * Handboek aan in deze omgeving. Anders dan bij Materieel hoort hier géén
+   * rechtencontrole bij: iedereen met een account mag zijn eigen handboek
+   * lezen. Alleen de feature-flag bepaalt of de tegel er is.
+   */
+  magHandboek?: boolean
+  /** Agenda-items van vandaag; `null` als er geen medewerker-koppeling is. */
+  vandaag?: { dag: string; items: AgendaItem[] } | null
+  signalen?: Signalen | null
 }) {
   return (
     <>
@@ -34,12 +54,19 @@ export default function MobielHome({
           de teller is op dit scherm toch al opgehaald, en je komt er bij elke
           navigatie langs. Tussendoor houdt de service worker hem bij. */}
       <AppBadge aantal={ongelezenMeldingen} />
+
+      {signalen && (
+        <HomeSignalen uren={signalen.uren} magFiatteren={signalen.magFiatteren} />
+      )}
+
+      {vandaag && <VandaagWidget dag={vandaag.dag} items={vandaag.items} />}
+
       <div
         style={{
           padding: 16,
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 10,
         }}
       >
         <MobielTegel href="/m/taken" label="Acties" Icon={ListChecks} badge={openTaken} />
@@ -48,6 +75,7 @@ export default function MobielHome({
         <MobielTegel href="/m/planning" label="Planning" Icon={CalendarDays} />
         <MobielTegel href="/m/verlof" label="Verlof" Icon={Palmtree} />
         {magMaterieel && <MobielTegel href="/m/materieel" label="Materieel" Icon={Wrench} />}
+        {magHandboek && <MobielTegel href="/m/handboek" label="Handboek" Icon={BookOpen} />}
         {/* Houtrot heeft bewust géén eigen tegel: registraties horen bij een dossier
             en verschijnen als tab zodra de toggle `houtrot_registreren` aanstaat. */}
         <MobielTegel href="/m/profiel" label="Mijn gegevens" Icon={User} />

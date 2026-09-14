@@ -3,6 +3,7 @@ import SessieVerloop from '@/components/eva/SessieVerloop'
 import PushHersteller from '@/components/eva/PushHersteller'
 import GeenMobieleToegang from '@/components/auth/GeenMobieleToegang'
 import DesktopRedirect from '@/components/mobiel/DesktopRedirect'
+import MobielToasts from '@/components/mobiel/MobielToasts'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 
 /**
@@ -53,6 +54,9 @@ export default async function MobielLayout({ children }: { children: React.React
       <DesktopRedirect />
       {/* Pushabonnement stil herstellen als het buiten EVA om is weggevallen. */}
       <PushHersteller />
+      {/* Toast-uitgang. Stond alleen in de platform-layout, waardoor elke
+          `toast.*` onder /m stilletjes verdween — zie MobielToasts. */}
+      <MobielToasts />
       <div data-m-scroll style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>

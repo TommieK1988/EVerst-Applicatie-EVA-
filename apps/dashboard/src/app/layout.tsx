@@ -25,7 +25,17 @@ export const metadata: Metadata = {
   applicationName: 'EVA',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    // 'black-translucent' i.p.v. 'default': daarmee loopt de webview door tot
+    // achter de statusbalk, zodat de groene AppHeader tot de bovenrand van het
+    // scherm doorloopt zoals in een native app. Met 'default' hield iOS een
+    // ondoorzichtige witte balk boven de pagina, en begon het groen daaronder.
+    //
+    // Dit kan alleen omdat elk scherm dat in de geïnstalleerde app kan verschijnen
+    // `env(safe-area-inset-top)` in zijn bovenpadding verwerkt: AppHeader (alles
+    // onder /m), MobielLogin en wachtwoord-instellen. Zet je een nieuw
+    // volledig-scherm zonder AppHeader neer, doe dat dan ook — anders schuift de
+    // eerste regel tekst onder de klok.
+    statusBarStyle: 'black-translucent',
     title: 'EVA',
   },
   // Alle iconen zijn gerenderd uit /logo-beeldmerk.svg (het echte Everts-

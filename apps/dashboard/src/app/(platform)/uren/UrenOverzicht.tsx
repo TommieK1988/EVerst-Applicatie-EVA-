@@ -12,6 +12,7 @@ import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
 import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
+import { useDialogen } from '@/components/ui/dialogen'
 
 /* ─── Opmaak ────────────────────────────────────────────────────────────────── */
 
@@ -193,6 +194,7 @@ export default function UrenOverzicht({
   medewerkerId: string
 }) {
   const router = useRouter()
+  const { bevestig } = useDialogen()
   const [bezig, start] = useTransition()
   const [groep, setGroep] = useState<GroepKey>('geen')
 
@@ -235,24 +237,52 @@ export default function UrenOverzicht({
    * als teamleider pas wanneer er geen projectleider is. Dat verschil melden we terug, anders denkt
    * iemand dat het klaar is terwijl er nog iemand moet kijken.
    */
-  const keur = useCallback(async (ids: number[]) => {
+  const keur = useCallback(async (ids: number[], zonderTeamleider = false) => {
     if (!ids.length) return
     // Meteen omzetten naar een vinkje; blijkt het toch mis te gaan, dan draaien we het terug.
     setNetGoedgekeurd(prev => new Set([...prev, ...ids]))
     setKeurBezig(true)
-    const r = await keurUrenGoed(ids)
+    const r = await keurUrenGoed(ids, { zonderTeamleider })
     setKeurBezig(false)
     setKeurId(null)
-    if (!r.ok) {
+
+    const draaiTerug = () =>
       setNetGoedgekeurd(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+
+    // De teamleider is nog niet langs geweest. Dit scherm toont die regels wél — anders blijven
+    // de uren van een ploeg hangen zodra hun teamleider met verlof is — maar erover heen gaan
+    // vraagt een bewuste bevestiging. De server houdt dat tegen en verwerkt nog niets, dus na
+    // een "ja" gaat dezelfde selectie er alsnog in één keer doorheen.
+    if (!r.ok && 'bevestigingNodig' in r) {
+      draaiTerug()
+      const namen = r.teamleiders.length ? r.teamleiders.join(' en ') : 'de teamleider'
+      const alles = r.aantalZonderTeamleider === r.totaal
+      const ja = await bevestig({
+        titel: 'Teamleider overslaan?',
+        omschrijving: alles
+          ? `${namen} heeft ${r.totaal === 1 ? 'deze urenregel' : `deze ${r.totaal} urenregels`} nog niet nagekeken. Keur je nu zelf goed, dan slaat die stap over — bedoeld voor als de teamleider er niet is.`
+          : `${r.aantalZonderTeamleider} van de ${r.totaal} regels zijn nog niet door ${namen} nagekeken. Doorgaan slaat die stap voor die regels over.`,
+        bevestigLabel: 'Toch goedkeuren',
+      })
+      if (ja) await keur(ids, true)
+      return
+    }
+
+    if (!r.ok) {
+      draaiTerug()
       toast.error(r.error)
       return
     }
     // Alleen fouten melden. Een geslaagde goedkeuring zie je aan het vinkje zelf; een melding
-    // rechtsboven voegt daar niets aan toe en zit in de weg als je er tientallen wegwerkt.
+    // rechtsboven voegt daar niets aan toe en zit in de weg als je er tientallen wegwerkt. De
+    // overgeslagen teamleiderstap is de uitzondering: dat heb je zojuist bevestigd en wil je
+    // bevestigd zien.
     if (r.mislukt > 0) toast.error(`${r.mislukt} niet gelukt: ${r.fouten[0] ?? ''}`)
+    else if (r.overgeslagen > 0) {
+      toast.success(`${r.overgeslagen} regel${r.overgeslagen === 1 ? '' : 's'} goedgekeurd zonder de teamleider.`)
+    }
     start(() => router.refresh())
-  }, [router])
+  }, [router, bevestig])
 
   const kolommen = useMemo(
     () => maakKolommen(

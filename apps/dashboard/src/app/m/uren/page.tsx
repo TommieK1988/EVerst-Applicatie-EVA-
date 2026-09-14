@@ -5,6 +5,7 @@ import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import WeekstaatClient from '@/components/mobiel/uren/WeekstaatClient'
 import { getWeekstaat, getUursoortOpties } from '@/lib/uren/weekstaat'
 import { datumSleutel, weekStartVan } from '@/lib/uren/rooster'
+import { isFiatteerder } from '@/lib/mobiel/keuren'
 
 export const metadata = { title: 'Uren · EVA Mobiel' }
 export const dynamic = 'force-dynamic'
@@ -35,9 +36,14 @@ export default async function MobielUrenPage({
   const { week } = await searchParams
   const gekozen = week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : undefined
 
-  const [staat, uursoorten] = await Promise.all([
+  // De vaste ingang naar het fiatteerscherm. Het startscherm noemt het alleen als
+  // er iets kláárligt; hier hoort het altijd te staan, zodat een teamleider er ook
+  // heen kan als hij gewoon wil kijken. Bewust alleen de goedkope rolvraag — de
+  // telling zelf kost een Bouw7-call en hoort niet bij het openen van je weekstaat.
+  const [staat, uursoorten, magFiatteren] = await Promise.all([
     getWeekstaat(gekozen),
     getUursoortOpties(),
+    isFiatteerder(medewerker.id).catch(() => false),
   ])
 
   const vandaag = datumSleutel(new Date())
@@ -71,6 +77,22 @@ export default async function MobielUrenPage({
         </div>
         <Link href={`/m/uren?week=${verschuif(7)}`} style={navKnop} aria-label="Volgende week">→</Link>
       </div>
+
+      {magFiatteren && (
+        <Link
+          href="/m/uren/keuren"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, padding: '11px 16px', flexShrink: 0,
+            borderBottom: '1px solid var(--border)', background: 'var(--bg-elev)',
+            color: '#009439', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <span>Uren fiatteren</span>
+          <span aria-hidden style={{ fontSize: 15 }}>›</span>
+        </Link>
+      )}
 
       <WeekstaatClient staat={staat} uursoorten={uursoorten} vandaag={vandaag} />
     </>

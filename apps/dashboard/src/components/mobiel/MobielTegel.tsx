@@ -3,10 +3,17 @@ import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 
 /**
- * Eén tegel op het mobiele grid-startscherm (`MobielHome`). Groot touch-doel
- * (vierkant), wit vlak met icoon-in-cirkel + label. Optioneel een teller-badge
- * (bijv. open acties) rechtsboven. `external` rendert een `<a target=_blank>`
- * i.p.v. een client-side `<Link>` (voor bijv. een losse deployment).
+ * Eén tegel op het mobiele grid-startscherm (`MobielHome`). Wit vlak met
+ * icoon-in-cirkel + label, optioneel een teller-badge (bijv. open acties)
+ * rechtsboven. `external` rendert een `<a target=_blank>` i.p.v. een client-side
+ * `<Link>` (voor bijv. een losse deployment).
+ *
+ * MAATVOERING — het grid staat op drie kolommen, dus een tegel is ongeveer een
+ * derde van de schermbreedte (~108px op een iPhone). Bewust géén `aspectRatio: 1`
+ * meer: vierkant zou de tegel even veel korter maken als hij smaller werd, en dan
+ * krijgt een label van twee woorden het niet meer droog. Een vaste minimumhoogte
+ * houdt de rij rustig én houdt het trefgebied ruim boven de 44px die Apple als
+ * ondergrens aanhoudt.
  */
 export default function MobielTegel({
   href, label, Icon, badge, external,
@@ -23,8 +30,9 @@ export default function MobielTegel({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    aspectRatio: '1 / 1',
+    gap: 8,
+    minHeight: 96,
+    padding: '14px 6px 12px',
     background: 'var(--neutral-0, #fff)',
     border: '1px solid var(--border)',
     borderRadius: 16,
@@ -39,10 +47,10 @@ export default function MobielTegel({
       {badge != null && badge > 0 && (
         <span
           style={{
-            position: 'absolute', top: 10, right: 10,
-            minWidth: 20, height: 20, padding: '0 6px',
+            position: 'absolute', top: 7, right: 7,
+            minWidth: 19, height: 19, padding: '0 5px',
             borderRadius: 999, background: '#009439', color: '#fff',
-            fontSize: 11, fontWeight: 700, lineHeight: '20px', textAlign: 'center',
+            fontSize: 11, fontWeight: 700, lineHeight: '19px', textAlign: 'center',
           }}
         >
           {badge > 99 ? '99+' : badge}
@@ -51,14 +59,18 @@ export default function MobielTegel({
       <span
         aria-hidden
         style={{
-          width: 52, height: 52, borderRadius: '50%',
+          width: 42, height: 42, borderRadius: '50%',
           background: 'rgba(0,148,57,.10)', color: '#009439',
-          display: 'grid', placeItems: 'center',
+          display: 'grid', placeItems: 'center', flexShrink: 0,
         }}
       >
-        <Icon size={26} strokeWidth={1.9} />
+        <Icon size={21} strokeWidth={1.9} />
       </span>
-      <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', textAlign: 'center' }}>
+      {/* Breekt bij een lang label netjes over twee regels i.p.v. de tegel op te rekken. */}
+      <span style={{
+        fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em', textAlign: 'center',
+        lineHeight: 1.25, hyphens: 'auto',
+      }}>
         {label}
       </span>
     </>
