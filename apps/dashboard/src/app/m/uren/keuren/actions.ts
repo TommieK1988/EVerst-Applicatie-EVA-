@@ -82,6 +82,10 @@ export async function fiatteerUren(
  * De toets is simpel en volgt de keten: staat de regel in `alsTeamleider`, dan wacht
  * hij nog op mijn akkoord. Zodra ik akkoord ben verhuist hij naar `alsProjectleider`
  * en valt hij hier vanzelf buiten.
+ *
+ * Dezelfde redenering geldt voor een vaste goedkeurder (kantoorpersoneel): hij is de enige
+ * beoordelaar, dus als hij hier niet mag bijstellen doet niemand het meer. Ook bij hem is het
+ * na zijn akkoord voorbij -- de regel verlaat dan zijn lijst.
  */
 export async function corrigeerUurregelMobiel(
   hourLogId: number,
@@ -93,7 +97,9 @@ export async function corrigeerUurregelMobiel(
   const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`, [hourLogId])
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
-  if (!mijn.alsTeamleider.some(r => r.id === hourLogId)) {
+  const magBijstellen = [...mijn.alsTeamleider, ...mijn.alsVasteGoedkeurder]
+    .some(r => r.id === hourLogId)
+  if (!magBijstellen) {
     return {
       ok: false,
       error: 'Deze uren kun je hier niet meer aanpassen. Ze staan al bij de projectleider.',

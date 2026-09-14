@@ -13,6 +13,13 @@
 // en `dossiers.project_manager_id`. Dus niet uit de ploeg van de medewerker: wie de uren kan
 // beoordelen hangt af van het werk, niet van waar iemand organisatorisch hangt.
 //
+// EEN VASTE GOEDKEURDER GAAT HIER VOOR. Heeft de MEDEWERKER een vaste goedkeurder staan
+// (`medewerkers.uren_goedkeurder_id`, in te stellen bij Instellingen > Medewerkers), dan vervangt
+// die de hele route hieronder: niet de teamleider en de projectleider van het dossier keuren zijn
+// uren, maar die ene persoon, en die is meteen eindstation. Dat is er voor kantoor -- een
+// calculator boekt op van alles, en zijn uren horen bij zijn eigen leidinggevende en niet bij de
+// projectleider van het dossier waaraan hij die middag rekende. Zonder zo'n goedkeurder:
+//
 //   dossier heeft een teamleider    -> eerst hij, DAARNA pas de projectleider
 //   dossier heeft geen teamleider   -> meteen naar de projectleider, zonder tussenstop
 //   teamleider akkoord + geen projectleider -> approved = true (hij is dan eindstation)
@@ -105,6 +112,12 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
   alsTeamleider: OpenUurRegel[]
   alsProjectleider: OpenUurRegel[]
   /**
+   * Uren van medewerkers die MIJ als vaste goedkeurder hebben. Die route vervangt het dossier,
+   * dus deze regels staan bij niemand anders -- ook niet bij de projectleider van het project
+   * waarop ze geboekt zijn. Ik ben in mijn eentje eindstation.
+   */
+  alsVasteGoedkeurder: OpenUurRegel[]
+  /**
    * Regels waarop ik projectleider ben, maar die nog bij de teamleider liggen. Ze staan
    * NIET op mijn akkoord — ze zitten hier zodat een scherm kan uitleggen waaróm een regel
    * niet te keuren is, in plaats van hem stilletjes weg te laten of een vage fout te geven.
@@ -117,17 +130,25 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
   const res = await getOpenstaandeUren(van, tot, ids)
   if (res.fout) {
     return {
-      alsTeamleider: [], alsProjectleider: [], wachtNogOpTeamleider: [],
+      alsTeamleider: [], alsProjectleider: [], alsVasteGoedkeurder: [], wachtNogOpTeamleider: [],
       nietToeTeWijzen: [], fout: res.fout,
     }
   }
 
   const alsTeamleider: OpenUurRegel[] = []
   const alsProjectleider: OpenUurRegel[] = []
+  const alsVasteGoedkeurder: OpenUurRegel[] = []
   const wachtNogOpTeamleider: OpenUurRegel[] = []
   const nietToeTeWijzen: OpenUurRegel[] = []
 
   for (const r of res.regels) {
+    // Een vaste goedkeurder vervangt het dossier. Is het niet mijn medewerker, dan gaat de regel
+    // mij niets aan -- ook niet als ik toevallig de projectleider van dat dossier ben.
+    if (r.status === 'wacht_op_vaste_goedkeurder') {
+      if (r.vasteGoedkeurderId === ik.id) alsVasteGoedkeurder.push(r)
+      continue
+    }
+
     if (r.status === 'niet_toe_te_wijzen') { nietToeTeWijzen.push(r); continue }
 
     // Precies één rol tegelijk aan zet. Een regel die nog op de teamleider wacht mag NIET
@@ -141,7 +162,10 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
 
     if (r.projectleiderId === ik.id && !r.plAkkoord) alsProjectleider.push(r)
   }
-  return { alsTeamleider, alsProjectleider, wachtNogOpTeamleider, nietToeTeWijzen, fout: null }
+  return {
+    alsTeamleider, alsProjectleider, alsVasteGoedkeurder, wachtNogOpTeamleider,
+    nietToeTeWijzen, fout: null,
+  }
 }
 
 /* ── Schrijven ────────────────────────────────────────────────────── */
@@ -275,6 +299,7 @@ export type KeurResultaat =
  * Bewust geen rolkeuze in de interface: welke pet je op hebt volgt uit het dossier, niet uit iets
  * wat de gebruiker moet aanvinken. Per regel:
  *
+ *   ik ben vaste goedkeurder van deze medewerker -> akkoord en naar Bouw7 (ik ben eindstation)
  *   ik ben teamleider, er is een projectleider -> akkoord; de regel schuift door naar hem
  *   ik ben teamleider, er is geen projectleider -> akkoord en naar Bouw7 (ik ben eindstation)
  *   ik ben teamleider én projectleider          -> beide stempels tegelijk, en naar Bouw7
@@ -307,8 +332,10 @@ export async function keurUrenGoed(
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
   const gevraagd = new Set(hourLogIds)
+  // De vaste goedkeurder is eindstation, net als de projectleider, en gaat door dezelfde molen.
+  const alsVg = mijn.alsVasteGoedkeurder.filter(r => gevraagd.has(r.id))
   const alsPl = mijn.alsProjectleider.filter(r => gevraagd.has(r.id))
-  const plIds = new Set(alsPl.map(r => r.id))
+  const plIds = new Set([...alsPl, ...alsVg].map(r => r.id))
   // De lijsten sluiten elkaar uit (één rol tegelijk aan zet), maar het filter blijft staan:
   // een regel twee keer verwerken zou twee Bouw7-schrijfacties opleveren.
   const alsTl = mijn.alsTeamleider.filter(r => gevraagd.has(r.id) && !plIds.has(r.id))
@@ -329,7 +356,7 @@ export async function keurUrenGoed(
 
   const overslaan = opties?.zonderTeamleider ? zonderTl : []
 
-  if (!alsPl.length && !alsTl.length && !overslaan.length) {
+  if (!alsPl.length && !alsVg.length && !alsTl.length && !overslaan.length) {
     return { ok: false, error: 'Geen van deze uren staat op jouw akkoord.' }
   }
 
@@ -350,8 +377,10 @@ export async function keurUrenGoed(
   }
 
   // De projectleider is eindstation, of hij nu op zijn beurt wachtte of de teamleiderstap
-  // oversloeg. Het verschil zit alleen in wat we erbij vastleggen.
-  for (const r of [...alsPl, ...overslaan]) {
+  // oversloeg. Het verschil zit alleen in wat we erbij vastleggen. Een vaste goedkeurder loopt
+  // hier ook doorheen: hij is de enige stap, en zijn akkoord krijgt hetzelfde eindstempel
+  // (`pl_akkoord_*`) -- wie het was staat in `pl_akkoord_door`.
+  for (const r of [...alsPl, ...alsVg, ...overslaan]) {
     const overgeslagen = overslaan.includes(r)
     const gelukt = await stuur(r)
     await bewaarBeoordeling(r.id, r, gelukt ? {
@@ -400,7 +429,7 @@ export async function keurUrenGoed(
 
   return {
     ok: true,
-    verwerkt: alsPl.length + alsTl.length + overslaan.length,
+    verwerkt: alsPl.length + alsVg.length + alsTl.length + overslaan.length,
     naarBouw7,
     wachtOpProjectleider,
     overgeslagen: overslaan.length,
@@ -412,6 +441,9 @@ export async function keurUrenGoed(
 /**
  * De projectleider trekt een goedkeuring in. Ook een akkoord van de teamleider vervalt daarmee --
  * de projectleider overruled in beide richtingen.
+ *
+ * Heeft de medewerker een vaste goedkeurder, dan is dat de enige die kan intrekken: hij keurde de
+ * regel ook als enige goed, en de projectleider van het dossier staat in die route buitenspel.
  */
 export async function trekGoedkeuringIn(
   hourLogId: number, reden: string,
@@ -430,7 +462,16 @@ export async function trekGoedkeuringIn(
   const supabase = db()
   const { data: dossier } = await supabase
     .from('dossiers').select('id, project_manager_id').eq('bouw7_id', String(log.project?.id)).maybeSingle()
-  if (!dossier || dossier.project_manager_id !== ik.id) {
+  const { data: medewerker } = await supabase
+    .from('medewerkers').select('id, auth_user_id, uren_goedkeurder_id')
+    .eq('bouw7_id', String(log.employee?.id)).maybeSingle()
+
+  const viaVasteGoedkeurder = medewerker?.uren_goedkeurder_id != null
+  if (viaVasteGoedkeurder) {
+    if (medewerker.uren_goedkeurder_id !== ik.id) {
+      return { ok: false, error: 'Alleen de vaste goedkeurder van deze medewerker kan dit akkoord intrekken.' }
+    }
+  } else if (!dossier || dossier.project_manager_id !== ik.id) {
     return { ok: false, error: 'Alleen de projectleider van dit project kan een goedkeuring intrekken.' }
   }
 
@@ -439,12 +480,12 @@ export async function trekGoedkeuringIn(
   }))
   if (!schrijf.ok) return { ok: false, error: schrijf.error }
 
-  const { data: mw } = await supabase
-    .from('medewerkers').select('id, auth_user_id').eq('bouw7_id', String(log.employee?.id)).maybeSingle()
+  const mw = medewerker
 
   await bewaarBeoordeling(hourLogId, {
     medewerkerId: mw?.id ?? null,
-    dossierId: dossier.id,
+    // Via de vaste goedkeurder kan de regel op een project staan dat EVA niet als dossier kent.
+    dossierId: dossier?.id ?? null,
     datum: log.logDate?.slice(0, 10) ?? '',
   }, {
     tl_akkoord_op: null, tl_akkoord_door: null,
@@ -493,7 +534,8 @@ export async function corrigeerUurregel(
   const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`, [hourLogId])
   if (mijn.fout) return { ok: false, error: mijn.fout }
 
-  const regel = [...mijn.alsTeamleider, ...mijn.alsProjectleider].find(r => r.id === hourLogId)
+  const regel = [...mijn.alsTeamleider, ...mijn.alsProjectleider, ...mijn.alsVasteGoedkeurder]
+    .find(r => r.id === hourLogId)
   if (!regel) return { ok: false, error: 'Deze uurregel staat niet op jouw akkoord.' }
   if (wijziging.uren !== undefined && !(wijziging.uren > 0 && wijziging.uren <= 24)) {
     return { ok: false, error: 'Vul een aantal uren tussen 0 en 24 in.' }

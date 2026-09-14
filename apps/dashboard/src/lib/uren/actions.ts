@@ -86,16 +86,35 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
   // Dossierkoppeling in één query: alleen de projecten die in deze periode voorkomen.
   const projectIds = [...new Set(items.map((h) => h.project?.id).filter((id): id is number => id != null))]
   const dossierPerProject = new Map<number, DossierRef>()
-  if (projectIds.length > 0) {
+  // Wie de uren van een medewerker keurt kan ook los van het dossier vastliggen: een vaste
+  // goedkeurder vervangt dan de projectrollen. Zie lib/uren/bouw7-goedkeuring.ts.
+  const employeeIds = [...new Set(items.map((h) => h.employee?.id).filter((id): id is number => id != null))]
+  const goedkeurderPerEmployee = new Map<number, string>()
+  if (projectIds.length > 0 || employeeIds.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
-    const { data } = await supabase
-      .from('dossiers')
-      .select('id, bouw7_id, dossiernummer, titel, hoofdstatus, project_manager_id, teamleider_id')
-      .in('bouw7_id', projectIds.map(String))
+    const [{ data }, { data: mws }] = await Promise.all([
+      projectIds.length
+        ? supabase
+            .from('dossiers')
+            .select('id, bouw7_id, dossiernummer, titel, hoofdstatus, project_manager_id, teamleider_id')
+            .in('bouw7_id', projectIds.map(String))
+        : Promise.resolve({ data: [] }),
+      employeeIds.length
+        ? supabase
+            .from('medewerkers')
+            .select('bouw7_id, uren_goedkeurder_id')
+            .not('uren_goedkeurder_id', 'is', null)
+            .in('bouw7_id', employeeIds.map(String))
+        : Promise.resolve({ data: [] }),
+    ])
     for (const d of (data ?? []) as (DossierRef & { bouw7_id: string })[]) {
       const pid = Number(d.bouw7_id)
       if (!Number.isNaN(pid)) dossierPerProject.set(pid, d)
+    }
+    for (const m of (mws ?? []) as { bouw7_id: string; uren_goedkeurder_id: string }[]) {
+      const eid = Number(m.bouw7_id)
+      if (!Number.isNaN(eid)) goedkeurderPerEmployee.set(eid, m.uren_goedkeurder_id)
     }
   }
 
@@ -131,6 +150,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       projectleider: h.project?.projectLeaderName ?? null,
       teamleiderId: dossier?.teamleider_id ?? null,
       projectleiderId: dossier?.project_manager_id ?? null,
+      vasteGoedkeurderId: h.employee?.id != null ? (goedkeurderPerEmployee.get(h.employee.id) ?? null) : null,
       geaccordeerd: h.isApproved === true,
       geaccordeerdDoor: h.approvedBy?.username ?? null,
       geaccordeerdOp: h.approvedAt ? h.approvedAt.slice(0, 10) : null,

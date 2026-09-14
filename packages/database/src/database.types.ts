@@ -8153,6 +8153,7 @@ export type Database = {
           tussenvoegsel: string | null
           uit_dienst_per: string | null
           updated_at: string
+          uren_goedkeurder_id: string | null
           uurtarief_kostprijs: number | null
           uurtarief_verkoop: number | null
           voorkeuren: Json
@@ -8206,6 +8207,7 @@ export type Database = {
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
           updated_at?: string
+          uren_goedkeurder_id?: string | null
           uurtarief_kostprijs?: number | null
           uurtarief_verkoop?: number | null
           voorkeuren?: Json
@@ -8259,6 +8261,7 @@ export type Database = {
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
           updated_at?: string
+          uren_goedkeurder_id?: string | null
           uurtarief_kostprijs?: number | null
           uurtarief_verkoop?: number | null
           voorkeuren?: Json
@@ -8292,6 +8295,13 @@ export type Database = {
             columns: ["standaard_uursoort_id"]
             isOneToOne: false
             referencedRelation: "planning_uursoorten"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medewerkers_uren_goedkeurder_id_fkey"
+            columns: ["uren_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
             referencedColumns: ["id"]
           },
           {

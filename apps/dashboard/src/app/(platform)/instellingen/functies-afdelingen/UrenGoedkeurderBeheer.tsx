@@ -147,6 +147,15 @@ export default function UrenGoedkeurderBeheer({
                         onChange={e => kies(m.id, e.target.value)}
                       >
                         <option value="">— Via het dossier —</option>
+                        {/* De ingestelde goedkeurder kan uit dienst zijn of geen account meer
+                            hebben. Zonder deze regel valt de keuzelijst stilzwijgend terug op
+                            "via het dossier" terwijl de uren in werkelijkheid bij iemand liggen
+                            die ze niet meer kan keuren. */}
+                        {m.uren_goedkeurder_id && !kandidaten.some(k => k.id === m.uren_goedkeurder_id) && (
+                          <option value={m.uren_goedkeurder_id}>
+                            ⚠ Kan niet meer goedkeuren — kies iemand anders
+                          </option>
+                        )}
                         {kandidaten.filter(k => k.id !== m.id).map(k => (
                           <option key={k.id} value={k.id}>{medewerkerNaam(k)}</option>
                         ))}

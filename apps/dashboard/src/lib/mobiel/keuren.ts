@@ -32,8 +32,11 @@ export type KeurRegel = {
    * regel die nog op de teamleider wacht komt niet bij de projectleider in beeld.
    * Ben je op hetzelfde dossier allebei, dan sta je hier als teamleider en handelt
    * `keurUrenGoed` beide stappen in één keer af.
+   *
+   * `goedkeurder` is de kantoorroute: jij bent de vaste goedkeurder van deze medewerker, en
+   * dan is het dossier niet in beeld -- jij bent de enige stap.
    */
-  rol: 'projectleider' | 'teamleider'
+  rol: 'projectleider' | 'teamleider' | 'goedkeurder'
   /**
    * Jouw akkoord is niet het laatste woord: als teamleider met een (andere)
    * projectleider op het dossier gaat de vlag in Bouw7 pas om als hij ook gekeken
@@ -137,13 +140,21 @@ export async function haalTeKeuren(): Promise<KeurData> {
   for (const r of res.alsTeamleider) {
     perId.set(r.id, maakRegel(r, 'teamleider'))
   }
+  // De vaste goedkeurder staat los van de dossierroute: deze regels kunnen bij niemand anders
+  // liggen, dus de volgorde hierboven raakt ze niet.
+  for (const r of res.alsVasteGoedkeurder) {
+    perId.set(r.id, maakRegel(r, 'goedkeurder'))
+  }
 
   // Groeperen op project. De sleutel komt van Bouw7 en niet van het EVA-dossier:
   // niet elke Bouw7-regel is aan een dossier gekoppeld, en die regels zouden dan
   // allemaal op één hoop belanden.
   const groepen = new Map<string, KeurGroep>()
   const bron = new Map<number, (typeof res.alsProjectleider)[number]>()
-  for (const r of [...res.wachtNogOpTeamleider, ...res.alsProjectleider, ...res.alsTeamleider]) {
+  for (const r of [
+    ...res.wachtNogOpTeamleider, ...res.alsProjectleider, ...res.alsTeamleider,
+    ...res.alsVasteGoedkeurder,
+  ]) {
     bron.set(r.id, r)
   }
 
@@ -197,6 +208,19 @@ export async function haalTeKeuren(): Promise<KeurData> {
  * De query is begrensd door de medewerkerslijst en het datumbereik en blijft daarmee ruim
  * onder de PostgREST-grens van 1000 rijen.
  */
+/** De kolommen die `haalOnkosten` opvraagt; los benoemd zodat er geen any aan te pas komt. */
+type OnkostenRij = {
+  id: string
+  datum: string
+  medewerker_id: string
+  soort: string
+  vervoermiddel: string | null
+  km: number | string | null
+  bedrag: number | string
+  omschrijving: string | null
+  bon_pad: string | null
+}
+
 async function haalOnkosten(
   regels: { medewerkerId: string | null; medewerkerNaam: string }[],
   van: string,
@@ -231,19 +255,6 @@ async function haalOnkosten(
   }))
 }
 
-/** De kolommen die `haalOnkosten` opvraagt; los benoemd zodat er geen any aan te pas komt. */
-type OnkostenRij = {
-  id: string
-  datum: string
-  medewerker_id: string
-  soort: string
-  vervoermiddel: string | null
-  km: number | string | null
-  bedrag: number | string
-  omschrijving: string | null
-  bon_pad: string | null
-}
-
 type BronRegel = Awaited<ReturnType<typeof getMijnTeKeurenUren>>['alsProjectleider'][number]
 
 function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = false): KeurRegel {
@@ -260,11 +271,13 @@ function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = fals
     medewerkerNaam: r.medewerkerNaam,
     bewakingscode: r.bewakingscode,
     rol,
+    // Een vaste goedkeurder is eindstation: na zijn akkoord gaat de vlag in Bouw7 meteen om.
     wachtDaarnaOpProjectleider:
       rol === 'teamleider' && Boolean(r.projectleiderId) && !eigenProjectleider,
-    // Bewerken hoort bij de teamleiderstap, en alleen vóór zijn akkoord. Slaat de
-    // projectleider die stap over, dan corrigeert hij op de computer — niet hier.
-    magBewerken: rol === 'teamleider',
+    // Bewerken hoort bij de laatste stap vóór goedkeuring: de teamleider, of — buiten de
+    // dossierroute om — de vaste goedkeurder. Slaat de projectleider de teamleiderstap over,
+    // dan corrigeert hij op de computer, niet hier.
+    magBewerken: rol === 'teamleider' || rol === 'goedkeurder',
     wachtOpTeamleider,
     teamleiderNaam: r.teamleiderNaam,
     dossierId: r.dossierId,
@@ -281,9 +294,18 @@ function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = fals
  * die `/m` opent Bouw7 aanroepen voor niets.
  */
 export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
-  const { count, error } = await createAdminClient()
+  const supabase = createAdminClient()
+  const { count, error } = await supabase
     .from('dossiers')
     .select('id', { count: 'exact', head: true })
     .or(`teamleider_id.eq.${medewerkerId},project_manager_id.eq.${medewerkerId}`)
-  return !error && (count ?? 0) > 0
+  if (!error && (count ?? 0) > 0) return true
+
+  // Of er staan medewerkers die mij als vaste goedkeurder hebben; die route loopt niet via
+  // een dossier, dus zonder deze vraag zou hun goedkeurder nooit een lijst te zien krijgen.
+  const { count: eigen, error: fout } = await supabase
+    .from('medewerkers')
+    .select('id', { count: 'exact', head: true })
+    .eq('uren_goedkeurder_id', medewerkerId)
+  return !fout && (eigen ?? 0) > 0
 }

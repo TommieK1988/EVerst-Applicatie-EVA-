@@ -285,7 +285,10 @@ export async function getUrenTeFiatterenAantal(): Promise<{ aantal: number; fout
     const { getMijnTeKeurenUren } = await import('@/lib/uren/bouw7-goedkeuring')
     const res = await getMijnTeKeurenUren(van, tot)
     if (res.fout) return { aantal: 0, fout: res.fout }
-    return { aantal: res.alsTeamleider.length + res.alsProjectleider.length, fout: null }
+    return {
+      aantal: res.alsTeamleider.length + res.alsProjectleider.length + res.alsVasteGoedkeurder.length,
+      fout: null,
+    }
   } catch (e) {
     return { aantal: 0, fout: e instanceof Error ? e.message : 'Uren konden niet worden opgehaald' }
   }

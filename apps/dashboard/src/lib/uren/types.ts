@@ -87,6 +87,11 @@ export type UrenExtraVelden = {
    */
   teamleiderId: string | null
   projectleiderId: string | null
+  /**
+   * Vaste goedkeurder van de MEDEWERKER (`medewerkers.uren_goedkeurder_id`). Is hij gevuld, dan
+   * vervangt hij de twee rollen hierboven: alleen deze persoon keurt de uren van die medewerker.
+   */
+  vasteGoedkeurderId: string | null
   geaccordeerd: boolean
   geaccordeerdDoor: string | null
   geaccordeerdOp: string | null

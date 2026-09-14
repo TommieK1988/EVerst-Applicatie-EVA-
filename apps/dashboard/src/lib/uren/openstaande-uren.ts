@@ -57,12 +57,27 @@ export type OpenUurRegel = {
   bewakingscode: string | null
   bouw7PslId: number | null
 
+  /**
+   * Vaste goedkeurder van deze medewerker (`medewerkers.uren_goedkeurder_id`).
+   *
+   * Is hij gevuld, dan VERVANGT hij de dossierroute: de teamleider en de projectleider van
+   * het dossier komen er niet meer aan te pas, hoe die velden hierboven ook staan. Bedoeld
+   * voor kantoor, waar de uren bij de eigen leidinggevende horen en niet bij de projectleider
+   * van het dossier waaraan iemand die middag toevallig rekende.
+   */
+  vasteGoedkeurderId: string | null
+  vasteGoedkeurderNaam: string | null
+
   /** Wat er in EVA al mee gebeurd is. */
   tlAkkoord: boolean
   plAkkoord: boolean
   gecorrigeerd: boolean
   /** Wachtwoord voor de UI: waar deze regel op wacht. */
-  status: 'wacht_op_teamleider' | 'wacht_op_projectleider' | 'niet_toe_te_wijzen'
+  status:
+    | 'wacht_op_vaste_goedkeurder'
+    | 'wacht_op_teamleider'
+    | 'wacht_op_projectleider'
+    | 'niet_toe_te_wijzen'
 }
 
 export type OpenUrenResultaat = {
@@ -112,7 +127,10 @@ export async function haalOpenstaandeUren(
   const projectIds = [...new Set(logs.map(l => l.project?.id).filter(Boolean))].map(String)
 
   const [{ data: medewerkers }, { data: dossiers }, { data: beoordelingen }] = await Promise.all([
-    supabase.from('medewerkers').select('id, bouw7_id').in('bouw7_id', employeeIds),
+    // De vaste goedkeurder komt hier mee: die bepaalt de route en hoort bij de medewerker,
+    // niet bij het dossier. Zijn naam volgt in een tweede query -- medewerkers naar zichzelf
+    // is een self-join, en die kan PostgREST alleen embedden met de naam van de foreign key.
+    supabase.from('medewerkers').select('id, bouw7_id, uren_goedkeurder_id').in('bouw7_id', employeeIds),
     supabase
       .from('dossiers')
       .select('id, bouw7_id, dossiernummer, titel, project_manager_id, teamleider_id, projectleider:medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam), teamleider:medewerkers!dossiers_teamleider_id_fkey(voornaam, tussenvoegsel, achternaam)')
@@ -123,9 +141,21 @@ export async function haalOpenstaandeUren(
       .in('bouw7_hour_log_id', logs.map(l => l.id)),
   ])
 
-  const medMap = new Map<string, string>(
-    ((medewerkers ?? []) as Array<{ id: string; bouw7_id: string }>).map(m => [m.bouw7_id, m.id]),
-  )
+  type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
+  const medRijen = (medewerkers ?? []) as MedewerkerRij[]
+  const medMap = new Map<string, MedewerkerRij>(medRijen.map(m => [m.bouw7_id, m]))
+
+  // Namen van de vaste goedkeurders. Begrensd door de `.in()`: hooguit zoveel rijen als er
+  // verschillende goedkeurders zijn.
+  const goedkeurderIds = [...new Set(medRijen.map(m => m.uren_goedkeurder_id).filter((v): v is string => !!v))]
+  const goedkeurderNaam = new Map<string, string>()
+  if (goedkeurderIds.length) {
+    const { data } = await supabase
+      .from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', goedkeurderIds)
+    for (const g of (data ?? []) as Array<{ id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }>) {
+      goedkeurderNaam.set(g.id, [g.voornaam, g.tussenvoegsel, g.achternaam].filter(Boolean).join(' '))
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dosMap = new Map<string, any>(((dossiers ?? []) as any[]).map(d => [String(d.bouw7_id), d]))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,7 +163,9 @@ export async function haalOpenstaandeUren(
 
   const regels: OpenUurRegel[] = logs.map(l => {
     const dossier = l.project?.id != null ? dosMap.get(String(l.project.id)) : undefined
-    const medewerkerId = l.employee?.id != null ? (medMap.get(String(l.employee.id)) ?? null) : null
+    const medewerker = l.employee?.id != null ? (medMap.get(String(l.employee.id)) ?? null) : null
+    const medewerkerId = medewerker?.id ?? null
+    const vasteGoedkeurderId = medewerker?.uren_goedkeurder_id ?? null
     const b = beoMap.get(l.id)
     const uren = num(l.hours)
     const tarief = l.hourlyRate != null ? num(l.hourlyRate) : null
@@ -144,11 +176,13 @@ export async function haalOpenstaandeUren(
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
-    // Staat er niemand op het dossier, dan kan EVA de regel nergens heen sturen. Die verdwijnt niet
-    // stilletijk maar komt apart in beeld, zodat iemand de rollen kan invullen of hem alsnog in
-    // Bouw7 kan afhandelen.
+    // Een vaste goedkeurder gaat vóór alles: hij vervángt de dossierroute en is in zijn eentje
+    // eindstation. Staat hij er niet, dan geldt de gewone volgorde. Staat er dan niemand op het
+    // dossier, dan kan EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt
+    // apart in beeld, zodat iemand de rollen kan invullen of hem alsnog in Bouw7 kan afhandelen.
     const status: OpenUurRegel['status'] =
-      !teamleiderId && !projectleiderId ? 'niet_toe_te_wijzen'
+      vasteGoedkeurderId ? 'wacht_op_vaste_goedkeurder'
+      : !teamleiderId && !projectleiderId ? 'niet_toe_te_wijzen'
       : teamleiderId && !tlAkkoord ? 'wacht_op_teamleider'
       : 'wacht_op_projectleider'
 
@@ -176,6 +210,8 @@ export async function haalOpenstaandeUren(
         : (l.project?.projectLeaderName ?? null),
       bewakingscode: l.projectSecurityLink?.code ?? null,
       bouw7PslId: l.projectSecurityLink?.id ?? null,
+      vasteGoedkeurderId,
+      vasteGoedkeurderNaam: vasteGoedkeurderId ? (goedkeurderNaam.get(vasteGoedkeurderId) ?? null) : null,
       tlAkkoord,
       plAkkoord,
       gecorrigeerd: !!b?.gecorrigeerd_op,

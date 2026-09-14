@@ -970,6 +970,12 @@ export type Medewerker = {
   ploeg_id: string | null
   /** Uitvoerende discipline (uursoort) — bepaalt de capaciteitsgroep in Werkvoorraad. */
   standaard_uursoort_id: string | null
+  /**
+   * Vaste goedkeurder van de uren van deze medewerker (kantoor). Is hij gevuld, dan vervangt
+   * hij de hele dossierroute: niet de teamleider en projectleider van het dossier keuren de
+   * uren, maar deze persoon. Leeg = via het dossier.
+   */
+  uren_goedkeurder_id: string | null
   // Persoonlijke accountinstellingen
   notificatie_voorkeuren: NotificatieVoorkeuren
   voorkeuren: GebruikerVoorkeuren

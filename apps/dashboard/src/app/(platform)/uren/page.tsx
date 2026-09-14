@@ -39,8 +39,10 @@ async function UrenInhoud({ periode, magAlles, medewerkerId }: {
   // Zonder financieel-recht gaat alleen je eigen goed te keuren werk naar de browser. Dit hoort
   // hier en niet in het scherm: een filter aan de clientkant is geen afscherming.
   const data = magAlles ? alle : (() => {
-    const eigen = alle.regels.filter(
-      r => r.teamleiderId === medewerkerId || r.projectleiderId === medewerkerId,
+    const eigen = alle.regels.filter(r =>
+      r.vasteGoedkeurderId != null
+        ? r.vasteGoedkeurderId === medewerkerId
+        : (r.teamleiderId === medewerkerId || r.projectleiderId === medewerkerId),
     )
     return {
       ...alle,

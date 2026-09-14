@@ -209,9 +209,17 @@ export default function UrenOverzicht({
   // Uren die op mijn akkoord wachten: ik ben teamleider of projectleider op het dossier waarop ze
   // staan, en ze zijn nog niet goedgekeurd. Zonder financieel-recht is dat sowieso alles wat je
   // krijgt, dus staat de knop dan meteen aan.
+  //
+  // Heeft de medewerker een vaste goedkeurder, dan is die de enige: die route vervangt het
+  // dossier, dus de projectleider hoort er hier niet meer bij te kunnen. `keurUrenGoed` weigert
+  // het sowieso — dit voorkomt dat het scherm een knop aanbiedt die daarna een fout geeft.
   const magIkKeuren = useCallback(
     (r: UrenOverzichtRegel) =>
-      !r.geaccordeerd && (r.teamleiderId === medewerkerId || r.projectleiderId === medewerkerId),
+      !r.geaccordeerd && (
+        r.vasteGoedkeurderId != null
+          ? r.vasteGoedkeurderId === medewerkerId
+          : (r.teamleiderId === medewerkerId || r.projectleiderId === medewerkerId)
+      ),
     [medewerkerId],
   )
   const teKeuren = useMemo(() => data.regels.filter(magIkKeuren), [data.regels, magIkKeuren])
@@ -470,7 +478,7 @@ export default function UrenOverzicht({
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
-              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier.'
+              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier — of uit de vaste goedkeurder van de medewerker, als die is ingesteld.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>
