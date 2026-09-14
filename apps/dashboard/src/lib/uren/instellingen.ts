@@ -1,5 +1,5 @@
-// Bedrijfsbrede instellingen voor de urenverantwoording: deadlines, de terugvalgoedkeurder en
-// het dossier waar niet-projectgebonden uren op landen.
+// Bedrijfsbrede instellingen voor de urenverantwoording: deadlines, de terugvalgoedkeurder, wie
+// welk verlof beoordeelt, en het dossier waar niet-projectgebonden uren op landen.
 
 import { createAdminClient } from '@everts/database/server'
 import { isoWeekdag, weekDagen } from './rooster'
@@ -9,6 +9,16 @@ const db = () => createAdminClient() as any
 
 export type UrenInstellingen = {
   terugval_goedkeurder_id: string | null
+  /**
+   * Wie de niet-gewerkte uren (verlof, ziek, vakantie, feestdag, tijd-voor-tijd) beoordeelt van
+   * medewerkers die zelf geen goedkeurder op hun profiel hebben staan.
+   *
+   * Bewust iets ANDERS dan `terugval_goedkeurder_id` hierboven: die hoort bij de EVA-weekstaat en
+   * bij verlofaanvragen zonder pool. Deze gaat alleen over de urenregels uit Bouw7, en voorkomt
+   * dat iemands vakantie bij de projectleider belandt van het project waarop die dag toevallig
+   * geboekt staat.
+   */
+  niet_gewerkt_goedkeurder_id: string | null
   tolerantie_uren: number
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -20,6 +30,11 @@ export type UrenInstellingen = {
    */
   goedkeuring_modus: 'eva' | 'bouw7'
   /**
+   * Welke afdeling het verlof van welke afdeling beoordeelt: {"Uitvoering":"Projectbureau", ...}.
+   * Een afdeling die hier niet in staat komt bij Directie uit, zie `bepaalBeoordelendeAfdeling`.
+   */
+  verlof_routes: Record<string, string>
+  /**
    * Kilometervergoeding bij reiskosten op eigen gelegenheid, in euro per kilometer. Een
    * bedrijfsafspraak en geen wetgeving, dus instelbaar: een tariefwijziging hoort geen release
    * te vragen. Hier staat alleen het getal; het rekenen zit in `lib/uren/onkosten.ts`.
@@ -30,12 +45,14 @@ export type UrenInstellingen = {
 
 const STANDAARD: UrenInstellingen = {
   terugval_goedkeurder_id: null,
+  niet_gewerkt_goedkeurder_id: null,
   tolerantie_uren: 0,
   indien_deadline_dag: 5,
   indien_deadline_tijd: '17:00:00',
   goedkeur_deadline_dag: 1,
   goedkeur_deadline_tijd: '12:00:00',
   goedkeuring_modus: 'bouw7',
+  verlof_routes: {},
   km_vergoeding_auto: 0.3,
   km_vergoeding_bromfiets: 0.11,
 }
@@ -45,13 +62,14 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
   const supabase = db()
   const { data } = await supabase
     .from('uren_instellingen')
-    .select('terugval_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, km_vergoeding_auto, km_vergoeding_bromfiets')
+    .select('terugval_goedkeurder_id, niet_gewerkt_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, verlof_routes, km_vergoeding_auto, km_vergoeding_bromfiets')
     .eq('id', true)
     .maybeSingle()
   if (!data) return STANDAARD
   return {
     ...data,
     tolerantie_uren: Number(data.tolerantie_uren ?? 0),
+    verlof_routes: (data.verlof_routes ?? {}) as Record<string, string>,
     km_vergoeding_auto: Number(data.km_vergoeding_auto ?? STANDAARD.km_vergoeding_auto),
     km_vergoeding_bromfiets: Number(data.km_vergoeding_bromfiets ?? STANDAARD.km_vergoeding_bromfiets),
   }

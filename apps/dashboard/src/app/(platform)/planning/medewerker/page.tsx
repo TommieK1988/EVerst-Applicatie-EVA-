@@ -6,6 +6,7 @@ import { haalPlanningItemsMetExpansie } from '../bedrijfsagenda/actions'
 import { berekenFeestdagen } from '@/lib/agenda/feestdagen'
 import { PageHeader } from '@/components/ui'
 import VerlofGoedkeurenKnop from '@/components/planning/VerlofGoedkeurenKnop'
+import { getVerlofBeoordeelStand } from '@/lib/uren/verlof'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
@@ -32,6 +33,9 @@ export default async function MedewerkerplanningPage() {
   const jaar     = new Date().getFullYear()
 
   const feestdagen = berekenFeestdagen(jaar)
+
+  // Alleen een telling, geen lijst: zo staat de knop meteen op rood als er iets ligt.
+  const verlofStand = await getVerlofBeoordeelStand().catch(() => ({ aantal: 0 }))
 
   const [medewerkerRes, entries, roostersRes, afwezigheidRes, dossiers, uursoortRes, ploegenRes, agendaItems] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
@@ -97,7 +101,7 @@ export default async function MedewerkerplanningPage() {
         <PageHeader eyebrow="Planning" title="Medewerkerplanning" className="mb-3" />
         {/* Verlof beoordelen hoort hier: je ziet meteen wie er die week al vrij is en wat er staat. */}
         <div style={{ marginLeft: 'auto', paddingTop: 6 }}>
-          <VerlofGoedkeurenKnop />
+          <VerlofGoedkeurenKnop initieelAantal={verlofStand.aantal} />
         </div>
       </div>
 

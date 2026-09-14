@@ -570,6 +570,16 @@
 .eva-btn-ghost:hover:not(:disabled) { background: var(--bg-active); border-color: var(--neutral-300); }
 .eva-btn-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Knop in alarmstand (nu: openstaande verlofaanvragen op de medewerkerplanning). In lichte modus
+   doet de destructive-variant het werk; in donkere modus is --error-500 juist een lichte rood
+   waar wit niet op leest, vandaar de diepere -300-tint als vlak. */
+[data-theme="dark"] .eva-verlof-alarm {
+  background: var(--error-300); border-color: var(--error-300); color: #fff;
+}
+[data-theme="dark"] .eva-verlof-alarm:hover:not(:disabled) {
+  background: var(--error-500); border-color: var(--error-500);
+}
+
 .eva-card {
   background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-2xl);
   padding: 20px 24px;

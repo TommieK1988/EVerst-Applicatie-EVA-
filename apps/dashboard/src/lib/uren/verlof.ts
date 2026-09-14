@@ -2,10 +2,16 @@
 
 // Verlof aanvragen en goedkeuren.
 //
-// De keten: de medewerker vraagt aan -> zijn goedkeurder (dezelfde als bij de weekstaat: de
-// teamleider, anders de terugvalgoedkeurder) keurt goed -> er ontstaat een rij in
-// `medewerker_afwezigheid`, waardoor de planning en de werkvoorraad meteen kloppen -> en het
-// verlof gaat als day-off naar Bouw7. Daarna vult de weekstaat die dagen vanzelf voor.
+// De keten: de medewerker vraagt aan -> iemand van de beoordelende AFDELING (standaard Uitvoering
+// -> Projectbureau, al het overige -> Directie; instelbaar op Instellingen > Uren) keurt goed ->
+// er ontstaat een rij in `medewerker_afwezigheid`, waardoor de planning en de werkvoorraad meteen
+// kloppen -> en het verlof gaat als day-off naar Bouw7. Daarna vult de weekstaat die dagen vanzelf
+// voor.
+//
+// WAAROM EEN AFDELING EN NIET EEN PERSOON. Het ging eerst naar een aangewezen goedkeurder; was die
+// op vakantie, dan lag elke aanvraag stil en kon niemand anders erbij. De afdeling wordt bij
+// aanvraag bevroren op de rij (`beoordelende_afdeling`): zowel de instelling als iemands afdeling
+// kan later wijzigen, en een lopende aanvraag hoort niet stilletjes van groep te wisselen.
 //
 // WAAROM OOK IN `medewerker_afwezigheid`. Die tabel wordt al gelezen door de planning, de
 // werkvoorraad en de wagenpark-controles. Alleen een `verlof_aanvragen`-rij wegschrijven zou
@@ -22,7 +28,11 @@ import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import { getRooster, isoWeekdag, datumSleutel } from './rooster'
-import { bepaalTeamleider } from './goedkeuring'
+import { getUrenInstellingen } from './instellingen'
+import {
+  bepaalBeoordelendeAfdeling, haalPoolLeden, magVerlofBeoordelen,
+  STANDAARD_BEOORDELENDE_AFDELING, type PoolLid,
+} from './verlof-pool'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -40,6 +50,7 @@ export type VerlofAanvraag = {
   urenTotaal: number
   toelichting: string | null
   status: VerlofStatus
+  beoordelaarNaam: string | null
   afwijzingReden: string | null
   bouw7Status: string
   aangevraagdOp: string
@@ -149,11 +160,23 @@ export async function vraagVerlofAan(invoer: {
     }
   }
 
-  const goedkeurder = await bepaalTeamleider(medewerker.id)
-  if (!goedkeurder) {
-    return {
-      ok: false,
-      error: 'Er is niemand die je aanvraag kan goedkeuren. Vraag de beheerder om een teamleider of terugvalgoedkeurder in te stellen.',
+  // De pool bepalen vóór de insert: we bevriezen alleen een afdeling waar ook echt iemand in zit.
+  const inst = await getUrenInstellingen()
+  let afdeling: string | null = bepaalBeoordelendeAfdeling(medewerker.afdeling, inst.verlof_routes)
+  let pool = await haalPoolLeden(afdeling)
+  if (!pool.length && afdeling !== STANDAARD_BEOORDELENDE_AFDELING) {
+    afdeling = STANDAARD_BEOORDELENDE_AFDELING
+    pool = await haalPoolLeden(afdeling)
+  }
+  // Laatste redmiddel als geen enkele afdeling bemenst is: de terugvalgoedkeurder als persoon.
+  const terugval = pool.length ? null : (inst.terugval_goedkeurder_id ?? null)
+  if (!pool.length) {
+    afdeling = null
+    if (!terugval) {
+      return {
+        ok: false,
+        error: 'Er is niemand die je aanvraag kan goedkeuren. Vraag de beheerder om de beoordelende afdeling of een terugvalgoedkeurder in te stellen.',
+      }
     }
   }
 
@@ -167,12 +190,14 @@ export async function vraagVerlofAan(invoer: {
     eind_tijd: invoer.heleDagen ? null : (invoer.eindTijd ?? null),
     uren_totaal: uren,
     toelichting: invoer.toelichting?.trim() || null,
-    goedkeurder_id: goedkeurder,
+    beoordelende_afdeling: afdeling,
+    goedkeurder_id: terugval,
   }).select('id').single()
   if (error) return { ok: false, error: error.message }
 
-  await meld(goedkeurder, 'Verlofaanvraag',
-    `${medewerker.voornaam ?? 'Een collega'} vraagt ${uren.toLocaleString('nl-NL')} uur ${soort.naam.toLowerCase()} aan.`,
+  const ontvangers = pool.length ? pool : await poolLidVan(terugval)
+  await meldAllen(ontvangers, 'Verlofaanvraag',
+    `${medewerker.voornaam ?? 'Een collega'} vraagt ${uren.toLocaleString('nl-NL')} uur ${soort.naam.toLowerCase()} aan (${periodeTekst(invoer.startDatum, invoer.eindDatum)}).`,
     '/planning/medewerker')
 
   revalidatePath('/m/verlof')
@@ -207,31 +232,59 @@ export async function getMijnVerlof(): Promise<VerlofAanvraag[]> {
   return leesAanvragen({ medewerkerId: medewerker.id })
 }
 
+/** De open aanvragen die de ingelogde medewerker mag beoordelen: die van zijn afdeling. */
 export async function getTeBeoordelenVerlof(): Promise<VerlofAanvraag[]> {
   const medewerker = await vereisSessie()
-  return leesAanvragen({ goedkeurderId: medewerker.id, alleenOpen: true })
+  return leesAanvragen({
+    poolAfdeling: medewerker.afdeling ?? null, kijkerId: medewerker.id, alleenOpen: true,
+  })
+}
+
+/**
+ * Alleen het aantal open aanvragen voor de kijker — de knop op de Medewerkerplanning heeft niet
+ * meer nodig dan dat, en zo staat hij bij de eerste weergave al goed zonder de hele lijst te laden.
+ */
+export async function getVerlofBeoordeelStand(): Promise<{ aantal: number }> {
+  const medewerker = await vereisSessie()
+  const q = db().from('verlof_aanvragen')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'aangevraagd')
+  const { count } = await poolFilter(q, medewerker.afdeling ?? null, medewerker.id)
+  return { aantal: count ?? 0 }
+}
+
+/**
+ * Beperkt een query tot wat deze kijker mag beoordelen: alles van zijn eigen afdeling, plus de
+ * aanvragen waar hij persoonlijk als goedkeurder op staat (de uitzonderingsroute).
+ * `.ilike` zonder % = exact maar hoofdletterongevoelig; `afdeling` is een vrij tekstveld.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function poolFilter(q: any, afdeling: string | null, kijkerId: string): any {
+  const naam = (afdeling ?? '').trim()
+  return naam
+    ? q.or(`beoordelende_afdeling.ilike.${naam},goedkeurder_id.eq.${kijkerId}`)
+    : q.eq('goedkeurder_id', kijkerId)
 }
 
 async function leesAanvragen(filter: {
-  medewerkerId?: string; goedkeurderId?: string; alleenOpen?: boolean
+  medewerkerId?: string; poolAfdeling?: string | null; kijkerId?: string; alleenOpen?: boolean
 }): Promise<VerlofAanvraag[]> {
   const supabase = db()
   let q = supabase
     .from('verlof_aanvragen')
-    .select('id, uursoort_id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam)')
+    .select('id, uursoort_id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam), aanvrager:medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam), beoordelaar:medewerkers!verlof_aanvragen_beoordeeld_door_fkey(voornaam, tussenvoegsel, achternaam)')
     .order('start_datum', { ascending: false })
     .limit(100)
 
   if (filter.medewerkerId) q = q.eq('medewerker_id', filter.medewerkerId)
-  if (filter.goedkeurderId) q = q.eq('goedkeurder_id', filter.goedkeurderId)
   if (filter.alleenOpen) q = q.eq('status', 'aangevraagd')
+  if (filter.kijkerId) q = poolFilter(q, filter.poolAfdeling ?? null, filter.kijkerId)
 
   const { data } = await q
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return ((data ?? []) as any[]).map(a => ({
     id: a.id,
-    medewerkerNaam: [a.medewerkers?.voornaam, a.medewerkers?.tussenvoegsel, a.medewerkers?.achternaam]
-      .filter(Boolean).join(' '),
+    medewerkerNaam: naamVan(a.aanvrager),
     uursoortId: a.uursoort_id,
     uursoortNaam: a.planning_uursoorten?.naam ?? '—',
     startDatum: a.start_datum,
@@ -240,6 +293,7 @@ async function leesAanvragen(filter: {
     urenTotaal: Number(a.uren_totaal),
     toelichting: a.toelichting,
     status: a.status as VerlofStatus,
+    beoordelaarNaam: naamVan(a.beoordelaar) || null,
     afwijzingReden: a.afwijzing_reden,
     bouw7Status: a.bouw7_status,
     aangevraagdOp: a.created_at,
@@ -272,12 +326,24 @@ export async function keurVerlofGoed(
     .eq('id', aanvraagId)
     .maybeSingle()
   if (!a) return { ok: false, error: 'Aanvraag niet gevonden.' }
-  if (a.goedkeurder_id !== medewerker.id) {
-    return { ok: false, error: 'Je bent niet de goedkeurder van deze aanvraag.' }
+  if (!magVerlofBeoordelen(medewerker, a)) {
+    return { ok: false, error: 'Je mag deze verlofaanvraag niet beoordelen.' }
   }
   if (a.status !== 'aangevraagd') return { ok: false, error: 'Deze aanvraag is al beoordeeld.' }
 
-  // De afwezigheidsrij eerst: die voedt de planning en de werkvoorraad, en moet er staan ook als
+  // Eerst de status claimen, en alleen als hij nog op 'aangevraagd' staat. Een hele afdeling kan
+  // meekijken, dus twee collega's kunnen tegelijk op Goedkeuren drukken; zonder deze voorwaarde
+  // levert dat twee afwezigheidsrijen en twee day-offs in Bouw7 op.
+  const { data: geclaimd } = await supabase.from('verlof_aanvragen').update({
+    status: 'goedgekeurd',
+    beoordeeld_op: new Date().toISOString(),
+    beoordeeld_door: medewerker.id,
+  }).eq('id', aanvraagId).eq('status', 'aangevraagd').select('id')
+  if (!geclaimd?.length) {
+    return { ok: false, error: 'Een collega heeft deze aanvraag net beoordeeld.' }
+  }
+
+  // Dan pas de afwezigheidsrij: die voedt de planning en de werkvoorraad, en moet er staan ook als
   // Bouw7 straks hapert.
   const { data: afwezigheid } = await supabase.from('medewerker_afwezigheid').insert({
     medewerker_id: a.medewerker_id,
@@ -288,12 +354,9 @@ export async function keurVerlofGoed(
     bron: 'eva',
   }).select('id').single()
 
-  await supabase.from('verlof_aanvragen').update({
-    status: 'goedgekeurd',
-    beoordeeld_op: new Date().toISOString(),
-    beoordeeld_door: medewerker.id,
-    afwezigheid_id: afwezigheid?.id ?? null,
-  }).eq('id', aanvraagId)
+  await supabase.from('verlof_aanvragen')
+    .update({ afwezigheid_id: afwezigheid?.id ?? null })
+    .eq('id', aanvraagId)
 
   const bouw7 = await schrijfVerlofNaarBouw7(aanvraagId)
 
@@ -302,7 +365,8 @@ export async function keurVerlofGoed(
       user_id: a.medewerkers.auth_user_id,
       type: 'verlof',
       titel: 'Verlof goedgekeurd',
-      body: `Je ${(a.planning_uursoorten?.naam ?? 'verlof').toLowerCase()} van ${a.start_datum} tot en met ${a.eind_datum} is goedgekeurd.`,
+      // Met een hele afdeling als beoordelaar moet de aanvrager kunnen zien wie het was.
+      body: `${naamVan(medewerker)} heeft je ${(a.planning_uursoorten?.naam ?? 'verlof').toLowerCase()} van ${periodeTekst(a.start_datum, a.eind_datum)} goedgekeurd.`,
       url: '/m/verlof',
     }).catch(() => { /* melding is bijzaak */ })
   }
@@ -321,29 +385,33 @@ export async function wijsVerlofAf(
 
   const { data: a } = await supabase
     .from('verlof_aanvragen')
-    .select('id, goedkeurder_id, status, start_datum, eind_datum, medewerkers!verlof_aanvragen_medewerker_id_fkey(auth_user_id)')
+    .select('id, goedkeurder_id, beoordelende_afdeling, status, start_datum, eind_datum, medewerkers!verlof_aanvragen_medewerker_id_fkey(auth_user_id)')
     .eq('id', aanvraagId)
     .maybeSingle()
   if (!a) return { ok: false, error: 'Aanvraag niet gevonden.' }
-  if (a.goedkeurder_id !== medewerker.id) {
-    return { ok: false, error: 'Je bent niet de goedkeurder van deze aanvraag.' }
+  if (!magVerlofBeoordelen(medewerker, a)) {
+    return { ok: false, error: 'Je mag deze verlofaanvraag niet beoordelen.' }
   }
   if (a.status !== 'aangevraagd') return { ok: false, error: 'Deze aanvraag is al beoordeeld.' }
 
-  const { error } = await supabase.from('verlof_aanvragen').update({
+  // Zelfde claim als bij goedkeuren: wie het eerst klikt, beoordeelt.
+  const { data: geclaimd, error } = await supabase.from('verlof_aanvragen').update({
     status: 'afgewezen',
     afwijzing_reden: reden.trim(),
     beoordeeld_op: new Date().toISOString(),
     beoordeeld_door: medewerker.id,
-  }).eq('id', aanvraagId)
+  }).eq('id', aanvraagId).eq('status', 'aangevraagd').select('id')
   if (error) return { ok: false, error: error.message }
+  if (!geclaimd?.length) {
+    return { ok: false, error: 'Een collega heeft deze aanvraag net beoordeeld.' }
+  }
 
   if (a.medewerkers?.auth_user_id) {
     await maakNotificatie({
       user_id: a.medewerkers.auth_user_id,
       type: 'verlof',
       titel: 'Verlofaanvraag afgewezen',
-      body: reden.trim(),
+      body: `${naamVan(medewerker)} wees je aanvraag van ${periodeTekst(a.start_datum, a.eind_datum)} af: ${reden.trim()}`,
       url: '/m/verlof',
     }).catch(() => { /* melding is bijzaak */ })
   }
@@ -419,13 +487,37 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
 
 /* ── Intern ───────────────────────────────────────────────────────── */
 
-async function meld(medewerkerId: string, titel: string, body: string, url: string) {
-  try {
-    const { data } = await db()
-      .from('medewerkers').select('auth_user_id').eq('id', medewerkerId).maybeSingle()
-    if (!data?.auth_user_id) return
-    await maakNotificatie({ user_id: data.auth_user_id, type: 'verlof', titel, body, url })
-  } catch {
-    /* melding is bijzaak */
+/** "Jan de Vries" uit los voornaam/tussenvoegsel/achternaam; leeg als er niets is. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function naamVan(m: any): string {
+  return [m?.voornaam, m?.tussenvoegsel, m?.achternaam].filter(Boolean).join(' ')
+}
+
+/** "3 t/m 7 aug" — leesbaarder dan de kale datums in een melding. */
+function periodeTekst(start: string, eind: string): string {
+  const f = (d: string) => new Date(`${d}T12:00:00`)
+    .toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+  return start === eind ? f(start) : `${f(start)} t/m ${f(eind)}`
+}
+
+/** De hele beoordelende afdeling een melding geven; één per ontvanger, zoals bij het wagenpark. */
+async function meldAllen(ontvangers: PoolLid[], titel: string, body: string, url: string) {
+  for (const lid of ontvangers) {
+    if (!lid.authUserId) continue
+    await maakNotificatie({ user_id: lid.authUserId, type: 'verlof', titel, body, url })
+      .catch(() => { /* melding is bijzaak */ })
   }
+}
+
+/** De terugvalgoedkeurder als eenmanspool, voor het geval geen enkele afdeling bemenst is. */
+async function poolLidVan(medewerkerId: string | null): Promise<PoolLid[]> {
+  if (!medewerkerId) return []
+  const { data } = await db()
+    .from('medewerkers')
+    .select('id, voornaam, tussenvoegsel, achternaam, auth_user_id')
+    .eq('id', medewerkerId)
+    .maybeSingle()
+  return data?.auth_user_id
+    ? [{ id: data.id, naam: naamVan(data), authUserId: data.auth_user_id }]
+    : []
 }

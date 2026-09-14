@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui'
@@ -16,7 +16,12 @@ import {
  * gepland staat, en dat staat op dit scherm. Goedgekeurd verlof verschijnt er ook meteen als
  * afwezigheid in, want de goedkeuring schrijft een `medewerker_afwezigheid`-rij weg.
  *
- * De lijst wordt pas geladen als het paneel opengaat -- de planning zelf is al zwaar genoeg.
+ * Beoordelen mag iedereen van de beoordelende afdeling (standaard: Uitvoering -> Projectbureau,
+ * de rest -> Directie). Twee collega's kunnen dus tegelijk kijken; wie het eerst klikt beoordeelt,
+ * de ander krijgt dat te horen.
+ *
+ * Het aantal komt als prop van de server mee, zodat de knop meteen bij de eerste weergave rood
+ * staat. De lijst zelf wordt pas geladen als het paneel opengaat -- de planning is al zwaar genoeg.
  */
 
 function periode(start: string, eind: string) {
@@ -27,14 +32,14 @@ function periode(start: string, eind: string) {
 
 const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
 
-export default function VerlofGoedkeurenKnop() {
+export default function VerlofGoedkeurenKnop({ initieelAantal = 0 }: { initieelAantal?: number }) {
   const router = useRouter()
   const [, startT] = useTransition()
   const { vraagTekst } = useDialogen()
 
   const [open, setOpen] = useState(false)
   const [aanvragen, setAanvragen] = useState<VerlofAanvraag[] | null>(null)
-  const [aantal, setAantal] = useState<number | null>(null)
+  const [aantal, setAantal] = useState(initieelAantal)
   const [bezig, setBezig] = useState(false)
 
   const laad = useCallback(async () => {
@@ -43,8 +48,10 @@ export default function VerlofGoedkeurenKnop() {
     setAantal(r.length)
   }, [])
 
-  // Bij het openen van de pagina alleen tellen, zodat de knop meteen laat zien of er iets ligt.
-  useEffect(() => { laad() }, [laad])
+  function openPaneel() {
+    setOpen(true)
+    if (aanvragen === null) laad()
+  }
 
   async function goedkeuren(a: VerlofAanvraag) {
     setBezig(true)
@@ -79,7 +86,16 @@ export default function VerlofGoedkeurenKnop() {
 
   return (
     <>
-      <Button variant={aantal ? 'primary' : 'ghost'} size="sm" onClick={() => setOpen(true)}>
+      {/* Fel rood zodra er iets ligt: deze knop moest opvallen tussen de planbalken. De
+          hulpklasse zet in donkere modus een diepere rode tint neer -- daar is --error-500 juist
+          een lichte rood waar wit niet op leest. */}
+      <Button
+        variant={aantal ? 'destructive' : 'ghost'}
+        className={aantal ? 'eva-verlof-alarm' : undefined}
+        size="sm"
+        onClick={openPaneel}
+        title={aantal ? `${aantal} openstaande verlofaanvraag${aantal === 1 ? '' : 'en'}` : undefined}
+      >
         Verlofaanvragen{aantal ? ` (${aantal})` : ''}
       </Button>
 
@@ -104,7 +120,7 @@ export default function VerlofGoedkeurenKnop() {
                 Verlofaanvragen
               </h2>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
-                waarvan jij de goedkeurder bent
+                die jouw afdeling beoordeelt
               </span>
               <button type="button" onClick={() => setOpen(false)}
                 style={{
@@ -116,7 +132,7 @@ export default function VerlofGoedkeurenKnop() {
             {aanvragen === null ? (
               <p style={leeg}>Bezig met ophalen…</p>
             ) : aanvragen.length === 0 ? (
-              <p style={leeg}>Er staan geen verlofaanvragen op jouw akkoord te wachten.</p>
+              <p style={leeg}>Er staan geen verlofaanvragen voor jouw afdeling open.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {aanvragen.map(a => (

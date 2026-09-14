@@ -137,6 +137,13 @@ export default function VerlofClient({
                   <strong>Reden:</strong> {a.afwijzingReden}
                 </div>
               )}
+              {/* Een hele afdeling kan beoordelen, dus de naam erbij: anders weet de aanvrager
+                  niet bij wie hij moet zijn als hij er iets over wil vragen. */}
+              {a.beoordelaarNaam && (a.status === 'goedgekeurd' || a.status === 'afgewezen') && (
+                <div style={{ fontSize: 11, color: '#8a949a', marginTop: 6 }}>
+                  {a.status === 'goedgekeurd' ? 'Goedgekeurd' : 'Afgewezen'} door {a.beoordelaarNaam}
+                </div>
+              )}
               {a.status === 'goedgekeurd' && a.bouw7Status === 'fout' && (
                 <div style={{ fontSize: 11, color: '#a15c00', marginTop: 6 }}>
                   Je verlof staat vast, maar is nog niet in Bouw7 verwerkt. De administratie ziet dit.
