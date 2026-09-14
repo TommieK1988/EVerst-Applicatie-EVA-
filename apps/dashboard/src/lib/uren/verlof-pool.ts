@@ -59,8 +59,14 @@ export async function haalPoolLeden(afdeling: string): Promise<PoolLid[]> {
     .not('auth_user_id', 'is', null)
     .order('achternaam', { ascending: true })
     .limit(200)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[]).map(m => ({
+  type PoolRij = {
+    id: string
+    voornaam: string
+    tussenvoegsel: string | null
+    achternaam: string
+    auth_user_id: string | null
+  }
+  return ((data ?? []) as PoolRij[]).map(m => ({
     id: m.id,
     naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
     authUserId: m.auth_user_id ?? null,
