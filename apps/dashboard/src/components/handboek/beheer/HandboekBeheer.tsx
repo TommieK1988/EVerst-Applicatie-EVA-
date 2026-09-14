@@ -387,17 +387,27 @@ function BijlageZichtbaarheid({
 
   return (
     <div>
-      <ZichtbaarheidKiezer
-        compact
-        waarde={waarde}
-        werkmaatschappijen={werkmaatschappijen}
-        populatie={populatie}
-        totaal={totaal}
-        onWijzig={setWaarde}
-      />
+      {/* Ingeklapt, net als bij de blokken: zeven kenmerken maal twee rijen maakt
+          een lijst van drie bijlagen anders schermvullend. */}
+      <details>
+        <summary className="cursor-pointer text-[12px] text-neutral-500">
+          Wie ziet deze bijlage? — {omschrijfZichtbaarheid(bijlage)}
+        </summary>
+        <div className="mt-1.5">
+          <ZichtbaarheidKiezer
+            compact
+            waarde={waarde}
+            werkmaatschappijen={werkmaatschappijen}
+            populatie={populatie}
+            totaal={totaal}
+            onWijzig={setWaarde}
+          />
+        </div>
+      </details>
       <div className="mt-1.5 flex items-center gap-2">
         <select
-          className="eva-input h-7 text-[12px]"
+          className="eva-input"
+          style={{ width: 190, padding: '5px 10px', fontSize: 12 }}
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >

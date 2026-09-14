@@ -10,7 +10,7 @@ import { leegBlok, soortenVoor } from '@/lib/handboek/blokken'
 import { sectiePad } from '@/lib/handboek/paden'
 import type { BeheerSectie } from '@/lib/handboek/beheer'
 import type { BlokType } from '@/lib/handboek/types'
-import type { Zichtbaarheid } from '@/lib/handboek/kenmerken'
+import { omschrijfZichtbaarheid, type Zichtbaarheid } from '@/lib/handboek/kenmerken'
 import { bewaarBlokken, bewaarSectie } from '@/app/(platform)/instellingen/handboek/actions'
 import ZichtbaarheidKiezer from './ZichtbaarheidKiezer'
 
@@ -171,7 +171,8 @@ export default function SectieEditor({
         <div className="mt-3 flex items-center gap-2">
           <label className="text-[12px] font-semibold text-neutral-600">Status</label>
           <select
-            className="eva-input h-7 w-[190px] text-[12px]"
+            className="eva-input"
+            style={{ width: 240, padding: '5px 10px', fontSize: 12 }}
             value={status}
             onChange={(e) => setStatus(e.target.value as 'concept' | 'gepubliceerd')}
           >
@@ -191,6 +192,16 @@ export default function SectieEditor({
               </Badge>
               {blok.status === 'concept' && (
                 <Badge tone="warning" size="sm">Concept</Badge>
+              )}
+              {/* Alleen tonen als de alinea NIET voor iedereen is. Juist in een
+                  hoofdstuk als Kleding wil je bij het doorscrollen meteen zien
+                  welke regels alleen voor eigen personeel of alleen voor flex
+                  gelden — anders moet je elke alinea openklappen om dat te
+                  weten. Een rustige alinea houdt geen badge. */}
+              {(blok.zichtbaar_voor.length > 0 || blok.verborgen_voor.length > 0) && (
+                <Badge tone="brand" variant="outline" size="sm">
+                  {omschrijfZichtbaarheid(blok)}
+                </Badge>
               )}
               <div className="ml-auto flex items-center gap-0.5">
                 <Button
@@ -218,7 +229,7 @@ export default function SectieEditor({
 
             <details className="mt-2">
               <summary className="cursor-pointer text-[12px] text-neutral-500">
-                Wie ziet deze alinea?
+                Wie ziet deze alinea? — {omschrijfZichtbaarheid(blok)}
               </summary>
               <div className="mt-1.5">
                 <ZichtbaarheidKiezer
@@ -289,7 +300,8 @@ function BlokVeld({
       <div>
         <div className="mb-1.5 flex items-center gap-2">
           <select
-            className="eva-input h-7 w-[130px] text-[12px]"
+            className="eva-input"
+            style={{ width: 150, padding: '5px 10px', fontSize: 12 }}
             value={i.stijl ?? 'bullet'}
             onChange={(e) => onWijzig({ ...i, stijl: e.target.value })}
           >
