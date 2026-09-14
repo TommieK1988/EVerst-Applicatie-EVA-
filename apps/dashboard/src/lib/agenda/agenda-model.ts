@@ -195,3 +195,31 @@ export function dedupeItems(items: AgendaItem[]): AgendaItem[] {
 export function isFeestdag(items: AgendaItem[]): boolean {
   return items.some(i => i.typeLabel === 'Feestdag')
 }
+
+/**
+ * Stabiele vingerafdruk van een set agenda-items: dezelfde gegevens leveren
+ * dezelfde string op, ongeacht de volgorde waarin de queries ze teruggaven.
+ *
+ * Bestaat omdat het mobiele scherm moet weten of een nieuwe server-render ook
+ * echt nieuwe gegevens bracht. Een tijdstempel kan dat niet: die verandert bij
+ * élke render, en een server action die een cookie schrijft (de Supabase-sessie
+ * doet dat) laat Next de pagina opnieuw renderen. Met een tijdstempel gooide de
+ * agenda dan de zojuist bijgeladen maand weg, haalde hem opnieuw op, en dat
+ * hield elkaar in stand — het scherm bleef knipperen op elke maand buiten het
+ * servervenster.
+ */
+export function vingerafdruk(items: AgendaItem[]): string {
+  const regels = items
+    .map(i => `${i.id}|${i.startDag}|${i.eindDag}|${i.startTijd ?? ''}|${i.eindTijd ?? ''}|${i.titel}`)
+    .sort()
+
+  // FNV-1a: klein, snel en hier ruim voldoende — we vergelijken alleen op gelijkheid.
+  let hash = 0x811c9dc5
+  for (const regel of regels) {
+    for (let i = 0; i < regel.length; i++) {
+      hash ^= regel.charCodeAt(i)
+      hash = Math.imul(hash, 0x01000193)
+    }
+  }
+  return `${regels.length}-${(hash >>> 0).toString(36)}`
+}

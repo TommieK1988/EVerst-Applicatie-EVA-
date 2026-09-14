@@ -1,6 +1,6 @@
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { haalAgendaVenster, haalMijnTaakItems } from '@/lib/agenda/mijn-agenda'
-import { dagSleutel, maandSleutel, startVenster } from '@/lib/agenda/agenda-model'
+import { dagSleutel, maandSleutel, startVenster, vingerafdruk } from '@/lib/agenda/agenda-model'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import AgendaClient from '@/components/mobiel/planning/AgendaClient'
@@ -46,16 +46,17 @@ export default async function MobielPlanningPage(
     haalAgendaVenster(medewerker, van, tot),
     haalMijnTaakItems(medewerker.auth_user_id),
   ])
+  const items = [...vensterItems, ...taakItems]
 
   return (
     <>
       <AppHeader title="Agenda" sub="Mijn planning" backHref="/m" />
       <MobielPullToRefresh />
       <AgendaClient
-        items={[...vensterItems, ...taakItems]}
+        items={items}
         peilMaand={maandSleutel(peil)}
         startDag={geldigeDag ?? dagSleutel(new Date())}
-        opgehaaldOp={new Date().toISOString()}
+        dataSleutel={vingerafdruk(items)}
       />
     </>
   )

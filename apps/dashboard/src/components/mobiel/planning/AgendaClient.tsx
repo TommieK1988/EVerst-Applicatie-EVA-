@@ -19,13 +19,17 @@ import ItemSheet from './ItemSheet'
  * maandtik de geselecteerde dag en de scrollpositie weggooien, `MobielPullToRefresh`
  * remounten, en een swipe kun je niet aan een routewissel hangen.
  */
-export default function AgendaClient({ items, peilMaand, startDag, opgehaaldOp }: {
+export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }: {
   items: AgendaItem[]
   /** 'yyyy-MM' van het venster dat de server meegaf. */
   peilMaand: string
   startDag: string
-  /** Wisselt bij elke server-render; het sein om bijgeladen maanden te vergeten. */
-  opgehaaldOp: string
+  /**
+   * Vingerafdruk van `items` — wisselt alleen als de server écht andere gegevens
+   * stuurt, en dan pas vergeten we de bijgeladen maanden. Bewust géén tijdstempel:
+   * zie `vingerafdruk()` voor de knipperlus die dat opleverde.
+   */
+  dataSleutel: string
 }) {
   const [peil, setPeil] = useState(() => maandUitSleutel(peilMaand))
   const [geselecteerd, setGeselecteerd] = useState(startDag)
@@ -40,16 +44,16 @@ export default function AgendaClient({ items, peilMaand, startDag, opgehaaldOp }
 
   const geladenRef = useRef<Set<string>>(new Set(initieleMaanden))
   const lopendRef = useRef<Set<string>>(new Set())
-  const vorigeOphaalRef = useRef(opgehaaldOp)
+  const vorigeSleutelRef = useRef(dataSleutel)
 
   // Na een pull-to-refresh zijn de server-items vers, maar de bijgeladen maanden oud.
   // Die vergeten we; de effect hieronder haalt de zichtbare maand meteen opnieuw op.
   useEffect(() => {
-    if (vorigeOphaalRef.current === opgehaaldOp) return
-    vorigeOphaalRef.current = opgehaaldOp
+    if (vorigeSleutelRef.current === dataSleutel) return
+    vorigeSleutelRef.current = dataSleutel
     setExtra(new Map())
     geladenRef.current = new Set(initieleMaanden)
-  }, [opgehaaldOp, initieleMaanden])
+  }, [dataSleutel, initieleMaanden])
 
   const laadMaand = useCallback((sleutel: string, zichtbaar: boolean) => {
     if (geladenRef.current.has(sleutel) || lopendRef.current.has(sleutel)) return

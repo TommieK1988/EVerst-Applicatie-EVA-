@@ -18,6 +18,11 @@ export default function MobielPullToRefresh() {
   const router = useRouter()
   const rootRef = React.useRef<HTMLDivElement>(null)
   const [pull, setPull] = React.useState(0)
+  // De touch-listeners hangen aan de scroller en zien `pull` als stale closure;
+  // daarom houden we de stand ook in een ref bij, zodat `onEnd` hem gewoon kan
+  // lezen zonder zijn beslissing in een state-updater te moeten verstoppen.
+  const pullRef = React.useRef(0)
+  const zetPull = React.useCallback((v: number) => { pullRef.current = v; setPull(v) }, [])
   const [isPending, startTransition] = React.useTransition()
   const [laatst, setLaatst] = React.useState<Date | null>(null)
 
@@ -33,10 +38,10 @@ export default function MobielPullToRefresh() {
   React.useEffect(() => {
     if (wasPending.current && !isPending) {
       setLaatst(new Date())
-      setPull(0)
+      zetPull(0)
     }
     wasPending.current = isPending
-  }, [isPending])
+  }, [isPending, zetPull])
 
   React.useEffect(() => {
     const scroller = rootRef.current?.closest('[data-m-scroll]') as HTMLElement | null
@@ -51,17 +56,19 @@ export default function MobielPullToRefresh() {
     const onMove = (e: TouchEvent) => {
       if (!actief.current || startY.current === null) return
       const delta = e.touches[0].clientY - startY.current
-      if (delta <= 0 || scroller.scrollTop > 0) { setPull(0); return }
-      setPull(Math.min(delta * 0.5, MAX_PULL))
+      if (delta <= 0 || scroller.scrollTop > 0) { zetPull(0); return }
+      zetPull(Math.min(delta * 0.5, MAX_PULL))
     }
     const onEnd = () => {
       if (!actief.current) return
       actief.current = false
       startY.current = null
-      setPull(prev => {
-        if (prev >= DREMPEL && !isPending) startTransition(() => router.refresh())
-        return prev >= DREMPEL ? DREMPEL / 2 : 0
-      })
+      // Bewust buiten de state-updater: React mag zo'n updater meer dan eens
+      // aanroepen (en doet dat met `reactStrictMode` gegarandeerd), waardoor één
+      // trekbeweging meerdere `router.refresh()`-aanroepen afvuurde.
+      const moetVerversen = pullRef.current >= DREMPEL && !isPending
+      zetPull(moetVerversen ? DREMPEL / 2 : 0)
+      if (moetVerversen) startTransition(() => router.refresh())
     }
 
     scroller.addEventListener('touchstart', onStart, { passive: true })
@@ -74,7 +81,7 @@ export default function MobielPullToRefresh() {
       scroller.removeEventListener('touchend', onEnd)
       scroller.removeEventListener('touchcancel', onEnd)
     }
-  }, [isPending, router])
+  }, [isPending, router, zetPull])
 
   const verversen = isPending
   const hoogte = verversen ? 40 : pull
