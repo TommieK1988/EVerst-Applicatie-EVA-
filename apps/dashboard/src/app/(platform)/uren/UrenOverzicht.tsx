@@ -23,6 +23,12 @@ const euro = (n: number) =>
 const uur = (n: number) =>
   `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(n)} u`
 const datum = (d: string | null) => (d ? new Date(d).toLocaleDateString('nl-NL') : '—')
+const datumMetDag = (d: string | null) => {
+  if (!d) return '—'
+  const dt = new Date(d)
+  const dag = dt.toLocaleDateString('nl-NL', { weekday: 'short' }).replace('.', '')
+  return `${dag} ${dt.toLocaleDateString('nl-NL')}`
+}
 
 function isoWeek(d: string | null): string {
   if (!d) return '—'
@@ -98,9 +104,9 @@ function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtReg
       : tekst(dossierLabel(r))),
   },
   {
-    key: 'datum', label: 'Datum', breedte: 100,
+    key: 'datum', label: 'Datum', breedte: 125,
     sorteerWaarde: (r) => r.datum ?? '',
-    render: (r) => <span style={{ fontSize: 12.5, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datum(r.datum)}</span>,
+    render: (r) => <span style={{ fontSize: 12.5, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datumMetDag(r.datum)}</span>,
   },
   {
     key: 'week', label: 'Week', breedte: 70, filterType: 'tekst',
@@ -535,9 +541,9 @@ const ONKOSTEN_KOLOMMEN: KolomDefinitie<OnkostenRegel>[] = [
     render: (r) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{r.medewerker}</span>,
   },
   {
-    key: 'datum', label: 'Datum', breedte: 100,
+    key: 'datum', label: 'Datum', breedte: 125,
     sorteerWaarde: (r) => r.datum,
-    render: (r) => <span style={{ fontSize: 12.5, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datum(r.datum)}</span>,
+    render: (r) => <span style={{ fontSize: 12.5, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datumMetDag(r.datum)}</span>,
   },
   {
     key: 'week', label: 'Week', breedte: 70, filterType: 'tekst',
