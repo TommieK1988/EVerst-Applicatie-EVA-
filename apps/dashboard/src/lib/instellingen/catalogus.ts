@@ -157,6 +157,19 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
         feature: 'materieelbeheer',
         synoniemen: ['gereedschap', 'ladder', 'keuring', 'sticker', 'qr'],
       },
+      {
+        href: '/instellingen/handboek',
+        titel: 'Medewerkershandboek',
+        omschrijving:
+          'De hoofdstukken, de “Wat te doen bij…”-kaarten en de bijlagen die medewerkers op hun telefoon lezen — en voor wie elk stuk zichtbaar is.',
+        module: 'medewerkershandboek',
+        guard: { module: 'medewerkershandboek', niveau: 'lezen' },
+        feature: 'handboek',
+        synoniemen: [
+          'personeelshandboek', 'huisregels', 'arbeidsvoorwaarden', 'flexkracht',
+          'wat te doen bij', 'verlof', 'kleding', 'pbm', 'auto van de zaak',
+        ],
+      },
     ],
   },
   {

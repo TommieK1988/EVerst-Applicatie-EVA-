@@ -388,6 +388,33 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Medewerkershandboek ────────────────────────────────────────────────
+  // Specifiek vóór generiek: getPageHelp neemt de eerste match, dus de
+  // hoofdstukpagina moet boven het overzicht staan.
+  [/^\/instellingen\/handboek\/[^/]+$/, {
+    title: 'Handboek — onderdeel bewerken',
+    description: 'Eén hoofdstuk of één "Wat te doen bij…"-kaart. Alles op dit scherm bewaar je met de knop onderaan; lege onderdelen slaat EVA over.',
+    sections: [
+      { title: 'Waarom per alinea', body: 'Het handboek is één bron voor eigen personeel én flexkrachten. Bij Kleding, Verlof, Ziekte en Salaris staat er voor die twee groepen andere tekst. Door de zichtbaarheid per alinea te zetten, hoef je zo’n hoofdstuk niet te dupliceren — en kunnen de twee versies dus ook niet meer uit elkaar groeien.' },
+      { title: 'Zichtbaar voor / Behalve', body: 'De bovenste rij is een "of": vink je niets aan, dan ziet iedereen het. De onderste rij wint altijd. Een "en" maak je dus door de andere groep uit te sluiten — "Auto of bus" staat op zichtbaar {heeft auto, kantoor} plus behalve {flexkrachten}.' },
+      { title: 'Het getal onder de regel', body: 'Daar staat voor hoeveel actieve medewerkers dit onderdeel zichtbaar is. Staat er 0, dan heb je twee kenmerken gekozen die elkaar uitsluiten — een fout die je anders pas merkt als iemand belt dat hij iets mist.' },
+      { title: 'Concept of gepubliceerd', body: 'Een onderdeel op concept bestaat niet voor de telefoon. Zo kun je rustig schrijven en pas publiceren als het af is. Een bestaande, gepubliceerde tekst wijzigen is wél meteen live — een typefout hoort geen publicatieritueel te vragen.' },
+      { title: 'Tabellen', body: 'Op een telefoon past geen brede tabel. EVA maakt er een kaartje per rij van, met de eerste kolom als kopje. Houd de eerste kolom dus kort en herkenbaar.' },
+    ],
+  }],
+
+  [/^\/instellingen\/handboek$/, {
+    title: 'Instellingen — Medewerkershandboek',
+    description: 'Het personeelshandboek zoals medewerkers het op hun telefoon lezen: hoofdstukken, "Wat te doen bij…"-kaarten en de bijlagen. Hier bepaal je de inhoud, de volgorde en voor wie elk stuk zichtbaar is.',
+    sections: [
+      { title: 'Eén bron, twee versies', body: 'Vroeger waren het twee Word-bestanden: een interne versie en een voor flexkrachten. Die liepen uit elkaar. Nu is het één handboek waarin per hoofdstuk én per alinea staat wie het ziet, zodat een wijziging maar op één plek hoeft.' },
+      { title: 'Wat te doen bij…', body: 'De kaarten die iemand opent op het moment dat er iets misgaat: een ongeval, een onveilige situatie, schade. Korte genummerde stappen en onderaan een belknop. Het nummer komt uit de medewerkersgegevens, dus zet geen telefoonnummers in de tekst.' },
+      { title: 'Bijlagen', body: 'Pdf’s zoals het VCA-handboek en het verzuimprotocol. Die worden als bestand geopend; de tekst erin doet niet mee in het zoeken op de telefoon.' },
+      { title: 'Papieren versie', body: 'Met de knop rechtsboven haal je het handboek als pdf op, per profiel. Dat is bewust geen “alles in één”: een flexkracht hoort de flexversie mee te krijgen, niet het hele boek.' },
+      { title: 'Archiveren in plaats van weggooien', body: 'Een hoofdstuk verwijderen zou de enige kopie van die tekst meenemen. Archiveren haalt het uit beeld en houdt het terugvindbaar.' },
+    ],
+  }],
+
   // ── Platform instellingen ──────────────────────────────────────────────
   [/^\/instellingen$/, {
     title: 'Instellingen',

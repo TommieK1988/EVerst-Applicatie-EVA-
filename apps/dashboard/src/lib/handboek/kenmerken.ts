@@ -75,6 +75,25 @@ export function isZichtbaar(item: Zichtbaarheid, kenmerken: ReadonlySet<string>)
   return item.zichtbaar_voor.length === 0 || item.zichtbaar_voor.some((k) => kenmerken.has(k))
 }
 
+/**
+ * Voor hoeveel actieve medewerkers is dit item zichtbaar?
+ *
+ * `groepen` komt uit `haalPopulatie()`: één regel per voorkomende
+ * kenmerkencombinatie met het aantal medewerkers erbij. Het getal staat onder
+ * elke regel in het beheer, want een zichtbaarheidsfout is per definitie
+ * onzichtbaar voor degene die hem maakt — "0 van de 46" verraadt meteen dat er
+ * twee elkaar uitsluitende kenmerken zijn aangevinkt.
+ */
+export function telZichtbaarVoor(
+  item: Zichtbaarheid,
+  groepen: { kenmerken: string[]; aantal: number }[],
+): number {
+  return groepen.reduce(
+    (som, g) => (isZichtbaar(item, new Set(g.kenmerken)) ? som + g.aantal : som),
+    0,
+  )
+}
+
 /** Leesbare omschrijving van een zichtbaarheidsregel, voor badges in het beheer. */
 export function omschrijfZichtbaarheid(
   item: Zichtbaarheid,
