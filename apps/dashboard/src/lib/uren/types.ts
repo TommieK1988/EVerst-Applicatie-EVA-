@@ -88,10 +88,20 @@ export type UrenExtraVelden = {
   teamleiderId: string | null
   projectleiderId: string | null
   /**
-   * Vaste goedkeurder van de MEDEWERKER (`medewerkers.uren_goedkeurder_id`). Is hij gevuld, dan
-   * vervangt hij de twee rollen hierboven: alleen deze persoon keurt de uren van die medewerker.
+   * Goedkeurder van de niet-gewerkte uren van deze medewerker — alleen gevuld als hij op DEZE
+   * regel van toepassing is (verlof, ziek, vakantie, feestdag, tijd-voor-tijd). Dan vervangt hij
+   * de twee rollen hierboven. Bij gewerkte uren blijft dit leeg, ook als de medewerker een
+   * goedkeurder heeft: die uren horen bij het project.
    */
   vasteGoedkeurderId: string | null
+  /** Verlof, ziek, vakantie, feestdag of tijd-voor-tijd — afgeleid uit de uursoort. */
+  nietGewerkt: boolean
+  /**
+   * Wie er nu aan zet is, uitgeschreven voor het scherm: naam + in welke rol. Null als de regel
+   * al geaccordeerd is, of als er niemand aan te wijzen valt. Dit is puur uitleg — wie werkelijk
+   * mag keuren beslist `keurUrenGoed` op de server.
+   */
+  wachtOp: { naam: string; rol: 'teamleider' | 'projectleider' | 'goedkeurder' } | null
   geaccordeerd: boolean
   geaccordeerdDoor: string | null
   geaccordeerdOp: string | null

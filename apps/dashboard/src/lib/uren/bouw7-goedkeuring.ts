@@ -13,12 +13,23 @@
 // en `dossiers.project_manager_id`. Dus niet uit de ploeg van de medewerker: wie de uren kan
 // beoordelen hangt af van het werk, niet van waar iemand organisatorisch hangt.
 //
-// EEN VASTE GOEDKEURDER GAAT HIER VOOR. Heeft de MEDEWERKER een vaste goedkeurder staan
-// (`medewerkers.uren_goedkeurder_id`, in te stellen bij Instellingen > Medewerkers), dan vervangt
-// die de hele route hieronder: niet de teamleider en de projectleider van het dossier keuren zijn
-// uren, maar die ene persoon, en die is meteen eindstation. Dat is er voor kantoor -- een
-// calculator boekt op van alles, en zijn uren horen bij zijn eigen leidinggevende en niet bij de
-// projectleider van het dossier waaraan hij die middag rekende. Zonder zo'n goedkeurder:
+// DE UURSOORT BEPAALT WELKE ROUTE GELDT. Een regel is óf gewerkte tijd op een project, óf niet
+// gewerkte tijd (verlof, ziek, vakantie, feestdag, tijd-voor-tijd -- `uren_categorie != 'werk'`
+// in `planning_uursoorten`). Dat onderscheid staat in de regel zelf en niet in het project: verlof
+// wordt net zo goed op een gewoon project geboekt als op het indirecte-urenproject.
+//
+//   gewerkte uren      -> altijd via het dossier, de volgorde hieronder
+//   niet-gewerkte uren -> naar de vaste goedkeurder van de medewerker
+//                         (`medewerkers.uren_goedkeurder_id`, in te stellen op zijn profiel),
+//                         die dan in zijn eentje eindstation is
+//   niet-gewerkte uren zonder goedkeurder -> alsnog via het dossier
+//
+// Waarom zo: over iemands vakantie heeft de projectleider van het project waarop die dag
+// toevallig geboekt staat niets te zeggen, en over gewerkte uren op zijn project juist wel --
+// dat is zijn budget. Een uursoort die EVA niet kent telt als gewerkt: dan verandert er niets
+// aan het gedrag van vóór deze routering.
+//
+// Voor gewerkte uren geldt onverkort:
 //
 //   dossier heeft een teamleider    -> eerst hij, DAARNA pas de projectleider
 //   dossier heeft geen teamleider   -> meteen naar de projectleider, zonder tussenstop
@@ -112,9 +123,11 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
   alsTeamleider: OpenUurRegel[]
   alsProjectleider: OpenUurRegel[]
   /**
-   * Uren van medewerkers die MIJ als vaste goedkeurder hebben. Die route vervangt het dossier,
-   * dus deze regels staan bij niemand anders -- ook niet bij de projectleider van het project
-   * waarop ze geboekt zijn. Ik ben in mijn eentje eindstation.
+   * Niet-gewerkte uren (verlof, ziek, vakantie, feestdag, tijd-voor-tijd) van medewerkers die
+   * MIJ als goedkeurder hebben. Die route vervangt het dossier, dus deze regels staan bij
+   * niemand anders -- ook niet bij de projectleider van het project waarop ze geboekt zijn.
+   * Ik ben in mijn eentje eindstation. Hun gewérkte uren zitten hier niet in: die lopen gewoon
+   * via het dossier.
    */
   alsVasteGoedkeurder: OpenUurRegel[]
   /**
@@ -142,8 +155,9 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
   const nietToeTeWijzen: OpenUurRegel[] = []
 
   for (const r of res.regels) {
-    // Een vaste goedkeurder vervangt het dossier. Is het niet mijn medewerker, dan gaat de regel
-    // mij niets aan -- ook niet als ik toevallig de projectleider van dat dossier ben.
+    // Niet-gewerkte uren met een goedkeurder: die vervangt het dossier. Is het niet mijn
+    // medewerker, dan gaat de regel mij niets aan -- ook niet als ik toevallig de projectleider
+    // van dat dossier ben.
     if (r.status === 'wacht_op_vaste_goedkeurder') {
       if (r.vasteGoedkeurderId === ik.id) alsVasteGoedkeurder.push(r)
       continue
@@ -299,7 +313,7 @@ export type KeurResultaat =
  * Bewust geen rolkeuze in de interface: welke pet je op hebt volgt uit het dossier, niet uit iets
  * wat de gebruiker moet aanvinken. Per regel:
  *
- *   ik ben vaste goedkeurder van deze medewerker -> akkoord en naar Bouw7 (ik ben eindstation)
+ *   niet-gewerkte uren van iemand die mij als goedkeurder heeft -> akkoord en naar Bouw7
  *   ik ben teamleider, er is een projectleider -> akkoord; de regel schuift door naar hem
  *   ik ben teamleider, er is geen projectleider -> akkoord en naar Bouw7 (ik ben eindstation)
  *   ik ben teamleider én projectleider          -> beide stempels tegelijk, en naar Bouw7
@@ -377,9 +391,9 @@ export async function keurUrenGoed(
   }
 
   // De projectleider is eindstation, of hij nu op zijn beurt wachtte of de teamleiderstap
-  // oversloeg. Het verschil zit alleen in wat we erbij vastleggen. Een vaste goedkeurder loopt
-  // hier ook doorheen: hij is de enige stap, en zijn akkoord krijgt hetzelfde eindstempel
-  // (`pl_akkoord_*`) -- wie het was staat in `pl_akkoord_door`.
+  // oversloeg. Het verschil zit alleen in wat we erbij vastleggen. De goedkeurder van iemands
+  // niet-gewerkte uren loopt hier ook doorheen: hij is de enige stap, en zijn akkoord krijgt
+  // hetzelfde eindstempel (`pl_akkoord_*`) -- wie het was staat in `pl_akkoord_door`.
   for (const r of [...alsPl, ...alsVg, ...overslaan]) {
     const overgeslagen = overslaan.includes(r)
     const gelukt = await stuur(r)
@@ -442,8 +456,9 @@ export async function keurUrenGoed(
  * De projectleider trekt een goedkeuring in. Ook een akkoord van de teamleider vervalt daarmee --
  * de projectleider overruled in beide richtingen.
  *
- * Heeft de medewerker een vaste goedkeurder, dan is dat de enige die kan intrekken: hij keurde de
- * regel ook als enige goed, en de projectleider van het dossier staat in die route buitenspel.
+ * Gaat het om niet-gewerkte uren van iemand met een eigen goedkeurder, dan is dat de enige die kan
+ * intrekken: hij keurde de regel ook als enige goed, en de projectleider van het dossier staat in
+ * die route buitenspel.
  */
 export async function trekGoedkeuringIn(
   hourLogId: number, reden: string,
@@ -466,10 +481,19 @@ export async function trekGoedkeuringIn(
     .from('medewerkers').select('id, auth_user_id, uren_goedkeurder_id')
     .eq('bouw7_id', String(log.employee?.id)).maybeSingle()
 
-  const viaVasteGoedkeurder = medewerker?.uren_goedkeurder_id != null
+  // Welke route gold voor deze regel? Dat hangt aan de uursoort, niet aan de medewerker alleen:
+  // zijn gewerkte uren lopen via het dossier en die trekt de projectleider in.
+  const { data: soort } = await supabase
+    .from('planning_uursoorten').select('uren_categorie')
+    .eq('bouw7_id', String(log.type?.id)).maybeSingle()
+  const nietGewerkt = ['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(soort?.uren_categorie ?? '')
+  const viaVasteGoedkeurder = nietGewerkt && medewerker?.uren_goedkeurder_id != null
   if (viaVasteGoedkeurder) {
     if (medewerker.uren_goedkeurder_id !== ik.id) {
-      return { ok: false, error: 'Alleen de vaste goedkeurder van deze medewerker kan dit akkoord intrekken.' }
+      return {
+        ok: false,
+        error: 'Dit zijn niet-gewerkte uren; alleen de goedkeurder van deze medewerker kan dat akkoord intrekken.',
+      }
     }
   } else if (!dossier || dossier.project_manager_id !== ik.id) {
     return { ok: false, error: 'Alleen de projectleider van dit project kan een goedkeuring intrekken.' }

@@ -40,11 +40,17 @@ const num = (v: unknown): number => {
   return Number.isNaN(n) ? 0 : n
 }
 
+type MedewerkerNaam = { voornaam: string; tussenvoegsel: string | null; achternaam: string }
+
 type DossierRef = {
   id: string; dossiernummer: string | null; titel: string | null; hoofdstatus: string | null
   /** Projectrollen; bepalen wie de uren op dit dossier mag goedkeuren. */
   project_manager_id: string | null; teamleider_id: string | null
+  projectleider: MedewerkerNaam | null; teamleider: MedewerkerNaam | null
 }
+
+const volledigeNaam = (m: MedewerkerNaam | null | undefined) =>
+  m ? [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ') : null
 
 /**
  * Alle urenboekingen binnen een periode, verrijkt met het EVA-dossier achter het Bouw7-project.
@@ -89,15 +95,20 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
   // Wie de uren van een medewerker keurt kan ook los van het dossier vastliggen: een vaste
   // goedkeurder vervangt dan de projectrollen. Zie lib/uren/bouw7-goedkeuring.ts.
   const employeeIds = [...new Set(items.map((h) => h.employee?.id).filter((id): id is number => id != null))]
-  const goedkeurderPerEmployee = new Map<number, string>()
+  const goedkeurderPerEmployee = new Map<number, { id: string; naam: string | null }>()
+  // Welke uursoorten geen gewerkte tijd zijn; dat bepaalt of de persoonlijke goedkeurder geldt.
+  const nietGewerkteHourTypes = new Set<number>()
+  // Tussenstand van de goedkeuring, zodat "wacht op" klopt: een regel waar de teamleider al
+  // akkoord op gaf ligt bij de projectleider en niet meer bij hem.
+  const tlAkkoordOp = new Set<number>()
   if (projectIds.length > 0 || employeeIds.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createAdminClient() as any
-    const [{ data }, { data: mws }] = await Promise.all([
+    const [{ data }, { data: mws }, { data: soorten }, { data: beoordelingen }] = await Promise.all([
       projectIds.length
         ? supabase
             .from('dossiers')
-            .select('id, bouw7_id, dossiernummer, titel, hoofdstatus, project_manager_id, teamleider_id')
+            .select('id, bouw7_id, dossiernummer, titel, hoofdstatus, project_manager_id, teamleider_id, projectleider:medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam), teamleider:medewerkers!dossiers_teamleider_id_fkey(voornaam, tussenvoegsel, achternaam)')
             .in('bouw7_id', projectIds.map(String))
         : Promise.resolve({ data: [] }),
       employeeIds.length
@@ -107,6 +118,9 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
             .not('uren_goedkeurder_id', 'is', null)
             .in('bouw7_id', employeeIds.map(String))
         : Promise.resolve({ data: [] }),
+      supabase.from('planning_uursoorten').select('bouw7_id, uren_categorie').not('bouw7_id', 'is', null),
+      // De hele tabel: hierin staan alleen regels waar in EVA iets mee gebeurd is (tientallen).
+      supabase.from('uren_bouw7_beoordeling').select('bouw7_hour_log_id, tl_akkoord_op').not('tl_akkoord_op', 'is', null),
     ])
     for (const d of (data ?? []) as (DossierRef & { bouw7_id: string })[]) {
       const pid = Number(d.bouw7_id)
@@ -114,7 +128,28 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     }
     for (const m of (mws ?? []) as { bouw7_id: string; uren_goedkeurder_id: string }[]) {
       const eid = Number(m.bouw7_id)
-      if (!Number.isNaN(eid)) goedkeurderPerEmployee.set(eid, m.uren_goedkeurder_id)
+      if (!Number.isNaN(eid)) goedkeurderPerEmployee.set(eid, { id: m.uren_goedkeurder_id, naam: null })
+    }
+    for (const u of (soorten ?? []) as { bouw7_id: string; uren_categorie: string | null }[]) {
+      const id = Number(u.bouw7_id)
+      if (!Number.isNaN(id) && ['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(u.uren_categorie ?? '')) {
+        nietGewerkteHourTypes.add(id)
+      }
+    }
+    for (const b of (beoordelingen ?? []) as { bouw7_hour_log_id: number }[]) {
+      tlAkkoordOp.add(Number(b.bouw7_hour_log_id))
+    }
+
+    // Namen van de goedkeurders erbij. Medewerkers naar zichzelf is een self-join, en die embedt
+    // PostgREST alleen met de naam van de foreign key -- dus in een tweede vraag.
+    const ids = [...new Set([...goedkeurderPerEmployee.values()].map(g => g.id))]
+    if (ids.length) {
+      const { data: namen } = await supabase
+        .from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', ids)
+      const perId = new Map<string, string | null>(
+        ((namen ?? []) as (MedewerkerNaam & { id: string })[]).map(n => [n.id, volledigeNaam(n)]),
+      )
+      for (const g of goedkeurderPerEmployee.values()) g.naam = perId.get(g.id) ?? null
     }
   }
 
@@ -126,6 +161,22 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       : uren * (tarief ?? 0)
     const medewerker = [h.employee?.firstName, h.employee?.lastName].filter(Boolean).join(' ') || null
     const dossier = h.project?.id != null ? dossierPerProject.get(h.project.id) : undefined
+
+    // De uursoort kiest de route: niet-gewerkte tijd gaat naar de eigen goedkeurder van de
+    // medewerker, gewerkte tijd hoort bij het project. Zie lib/uren/bouw7-goedkeuring.ts.
+    const nietGewerkt = h.type?.id != null && nietGewerkteHourTypes.has(h.type.id)
+    const goedkeurder = nietGewerkt && h.employee?.id != null
+      ? (goedkeurderPerEmployee.get(h.employee.id) ?? null)
+      : null
+    const geaccordeerd = h.isApproved === true
+    const wachtOp: UrenExtraVelden['wachtOp'] =
+      geaccordeerd ? null
+      : goedkeurder ? { naam: goedkeurder.naam ?? 'de goedkeurder', rol: 'goedkeurder' as const }
+      : dossier?.teamleider_id && !tlAkkoordOp.has(h.id)
+        ? { naam: volledigeNaam(dossier.teamleider) ?? 'de teamleider', rol: 'teamleider' as const }
+      : dossier?.project_manager_id
+        ? { naam: volledigeNaam(dossier.projectleider) ?? 'de projectleider', rol: 'projectleider' as const }
+      : null
 
     return {
       id: String(h.id),
@@ -150,8 +201,10 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       projectleider: h.project?.projectLeaderName ?? null,
       teamleiderId: dossier?.teamleider_id ?? null,
       projectleiderId: dossier?.project_manager_id ?? null,
-      vasteGoedkeurderId: h.employee?.id != null ? (goedkeurderPerEmployee.get(h.employee.id) ?? null) : null,
-      geaccordeerd: h.isApproved === true,
+      vasteGoedkeurderId: goedkeurder?.id ?? null,
+      nietGewerkt,
+      wachtOp,
+      geaccordeerd,
       geaccordeerdDoor: h.approvedBy?.username ?? null,
       geaccordeerdOp: h.approvedAt ? h.approvedAt.slice(0, 10) : null,
       extern: h.isExternal === true,

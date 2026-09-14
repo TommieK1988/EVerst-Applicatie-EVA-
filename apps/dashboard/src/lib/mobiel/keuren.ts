@@ -33,8 +33,9 @@ export type KeurRegel = {
    * Ben je op hetzelfde dossier allebei, dan sta je hier als teamleider en handelt
    * `keurUrenGoed` beide stappen in één keer af.
    *
-   * `goedkeurder` is de kantoorroute: jij bent de vaste goedkeurder van deze medewerker, en
-   * dan is het dossier niet in beeld -- jij bent de enige stap.
+   * `goedkeurder` is de verlofroute: dit zijn niet-gewerkte uren (verlof, ziek, vakantie,
+   * feestdag, tijd-voor-tijd) van iemand die jou als goedkeurder heeft. Dan is het dossier
+   * niet in beeld -- jij bent de enige stap.
    */
   rol: 'projectleider' | 'teamleider' | 'goedkeurder'
   /**
@@ -140,8 +141,8 @@ export async function haalTeKeuren(): Promise<KeurData> {
   for (const r of res.alsTeamleider) {
     perId.set(r.id, maakRegel(r, 'teamleider'))
   }
-  // De vaste goedkeurder staat los van de dossierroute: deze regels kunnen bij niemand anders
-  // liggen, dus de volgorde hierboven raakt ze niet.
+  // Niet-gewerkte uren met een eigen goedkeurder staan los van de dossierroute: deze regels
+  // kunnen bij niemand anders liggen, dus de volgorde hierboven raakt ze niet.
   for (const r of res.alsVasteGoedkeurder) {
     perId.set(r.id, maakRegel(r, 'goedkeurder'))
   }
@@ -271,12 +272,13 @@ function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = fals
     medewerkerNaam: r.medewerkerNaam,
     bewakingscode: r.bewakingscode,
     rol,
-    // Een vaste goedkeurder is eindstation: na zijn akkoord gaat de vlag in Bouw7 meteen om.
+    // De goedkeurder van niet-gewerkte uren is eindstation: na zijn akkoord gaat de vlag in
+    // Bouw7 meteen om.
     wachtDaarnaOpProjectleider:
       rol === 'teamleider' && Boolean(r.projectleiderId) && !eigenProjectleider,
-    // Bewerken hoort bij de laatste stap vóór goedkeuring: de teamleider, of — buiten de
-    // dossierroute om — de vaste goedkeurder. Slaat de projectleider de teamleiderstap over,
-    // dan corrigeert hij op de computer, niet hier.
+    // Bewerken hoort bij de laatste stap vóór goedkeuring: de teamleider, of -- bij verlof en
+    // ziekte -- de goedkeurder van die medewerker. Slaat de projectleider de teamleiderstap
+    // over, dan corrigeert hij op de computer, niet hier.
     magBewerken: rol === 'teamleider' || rol === 'goedkeurder',
     wachtOpTeamleider,
     teamleiderNaam: r.teamleiderNaam,
@@ -301,8 +303,8 @@ export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
     .or(`teamleider_id.eq.${medewerkerId},project_manager_id.eq.${medewerkerId}`)
   if (!error && (count ?? 0) > 0) return true
 
-  // Of er staan medewerkers die mij als vaste goedkeurder hebben; die route loopt niet via
-  // een dossier, dus zonder deze vraag zou hun goedkeurder nooit een lijst te zien krijgen.
+  // Of er staan medewerkers die mij als goedkeurder van hun verlof en ziekte hebben; die route
+  // loopt niet via een dossier, dus zonder deze vraag zou hij nooit een lijst te zien krijgen.
   const { count: eigen, error: fout } = await supabase
     .from('medewerkers')
     .select('id', { count: 'exact', head: true })

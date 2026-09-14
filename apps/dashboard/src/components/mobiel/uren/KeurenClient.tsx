@@ -19,6 +19,13 @@ const GRIJS = '#6b757c'
 const ZACHT = '#9aa4ab'
 const ORANJE = '#b85a00'
 
+/** Waarom deze regels op jouw lijst staan, in gewone taal in plaats van de rolnaam uit de code. */
+const ROL_TEKST: Record<'projectleider' | 'teamleider' | 'goedkeurder', string> = {
+  projectleider: 'als projectleider',
+  teamleider: 'als teamleider',
+  goedkeurder: 'verlof & ziekte',
+}
+
 const uur = (n: number) => `${n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`
 const euro = (n: number) =>
   `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -402,7 +409,7 @@ function Groep({ groep, gekozen, onWissel, onWisselGroep, onBewerk }: {
           </span>
           <span style={{ display: 'block', fontSize: 11, color: GRIJS, marginTop: 2 }}>
             {groep.regels.length} regel{groep.regels.length === 1 ? '' : 's'} · {uur(groep.totaalUren)}
-            {rol && ` · als ${rol}`}
+            {rol && ` · ${ROL_TEKST[rol]}`}
           </span>
           {groepWachtOpPl && (
             <span style={{ ...badgeStijl, marginTop: 5 }}>Daarna nog projectleider</span>

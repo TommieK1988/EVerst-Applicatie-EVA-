@@ -356,8 +356,6 @@ export default function MedewerkerGegevensForm({
 
   const functieopties = functies.filter(f => f.actief).sort((a, b) => a.volgorde - b.volgorde).map(f => f.naam)
   const afdelingopties = afdelingen.filter(a => a.actief).sort((a, b) => a.volgorde - b.volgorde).map(a => a.naam)
-  // Uitvoering loopt altijd via het dossier; die keuze bieden we daar niet aan.
-  const isUitvoering = (editing ? state.afdeling : (medewerker.afdeling ?? '')).trim().toLowerCase() === 'uitvoering'
 
   // In view-modus tonen we de opgeslagen medewerker-waarden; in edit-modus de formulier-state.
   const m = medewerker
@@ -447,15 +445,11 @@ export default function MedewerkerGegevensForm({
                 </select>
               ) : <Waarde value={uursoorten.find(u => u.id === m.standaard_uursoort_id)?.naam} />}
             </Veld>
-            {/* Wie de uren van deze medewerker goedkeurt. Alleen buiten Uitvoering: daar hoort
-                de teamleider van het dossier als eerste te kijken, en die stap hier kunnen
-                doorbreken zou hem stilzwijgend uitschakelen. */}
-            <Veld label="Uren goedkeuren" span>
-              {isUitvoering ? (
-                <span style={mutedStyle}>
-                  Via het dossier — de teamleider, daarna de projectleider.
-                </span>
-              ) : editing ? (
+            {/* Wie het verlof, de ziekte- en vakantie-uren van deze medewerker aftekent. Gewerkte
+                uren staan hier bewust buiten: die horen bij het project waarop ze geboekt zijn,
+                en dus bij de teamleider en projectleider van dat dossier. */}
+            <Veld label="Verlof & ziekte goedkeuren" span>
+              {editing ? (
                 <div style={{ width: '100%' }}>
                   <select
                     className="eva-input"
@@ -477,8 +471,9 @@ export default function MedewerkerGegevensForm({
                     {collegas.map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
                   </select>
                   <span style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginTop: 4 }}>
-                    Wie je hier kiest keurt álle uren van deze medewerker, ongeacht het project.
-                    Leeg = de teamleider en projectleider van het dossier.
+                    Geldt voor niet-gewerkte uren: verlof, ziek, vakantie, feestdag en
+                    tijd-voor-tijd. Gewerkte uren blijven altijd naar de teamleider en
+                    projectleider van het dossier gaan. Leeg = ook verlof loopt via het dossier.
                   </span>
                 </div>
               ) : (

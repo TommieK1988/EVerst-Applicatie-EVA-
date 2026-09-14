@@ -44,7 +44,14 @@ const dossierLabel = (r: UrenOverzichtRegel) =>
 
 /* ─── Groeperen ─────────────────────────────────────────────────────────────── */
 
-type GroepKey = 'geen' | 'medewerker' | 'dossier' | 'uursoort' | 'week' | 'dienstverband' | 'geaccordeerd' | 'projectleider'
+/** Hoe de rol in de kolom "Wacht op" heet; `goedkeurder` is de route voor niet-gewerkte uren. */
+const ROL_LABEL: Record<'teamleider' | 'projectleider' | 'goedkeurder', string> = {
+  teamleider: 'teamleider',
+  projectleider: 'projectleider',
+  goedkeurder: 'verlof & ziekte',
+}
+
+type GroepKey = 'geen' | 'medewerker' | 'dossier' | 'uursoort' | 'week' | 'dienstverband' | 'geaccordeerd' | 'projectleider' | 'wachtOp'
 
 const GROEPEN: { key: GroepKey; label: string; sleutel: (r: UrenOverzichtRegel) => string }[] = [
   { key: 'geen',          label: 'Niet groeperen',   sleutel: () => '' },
@@ -55,6 +62,7 @@ const GROEPEN: { key: GroepKey; label: string; sleutel: (r: UrenOverzichtRegel) 
   { key: 'dienstverband', label: 'Intern / extern',  sleutel: (r) => (r.extern ? 'Extern' : 'Intern') },
   { key: 'geaccordeerd',  label: 'Geaccordeerd',     sleutel: (r) => (r.geaccordeerd ? 'Geaccordeerd' : 'Nog niet geaccordeerd') },
   { key: 'projectleider', label: 'Projectleider',    sleutel: (r) => r.projectleider ?? '— geen —' },
+  { key: 'wachtOp',       label: 'Wacht op',         sleutel: (r) => r.wachtOp?.naam ?? '— niemand —' },
 ]
 
 /** Groepsbalk: naam van de groep met het subtotaal erachter. */
@@ -133,6 +141,22 @@ function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtReg
         {r.geaccordeerd ? 'Ja' : 'Nee'}
       </span>
     ),
+  },
+  {
+    // Zonder deze kolom is het scherm stil: je ziet een regel die je niet kunt keuren en er staat
+    // nergens waarom. Dit is uitleg, geen afscherming -- de server beslist wie mag.
+    key: 'wachtOp', label: 'Wacht op', breedte: 230, filterType: 'tekst',
+    sorteerWaarde: (r) => r.wachtOp?.naam ?? '',
+    render: (r) => (r.wachtOp
+      ? (
+        <span style={{ fontSize: 12.5, color: 'var(--fg)' }}>
+          {r.wachtOp.naam}
+          <span style={{ color: 'var(--fg-muted)', fontSize: 11 }}>
+            {' · '}{ROL_LABEL[r.wachtOp.rol]}
+          </span>
+        </span>
+      )
+      : tekst(null)),
   },
   {
     key: 'dienstverband', label: 'Dienstverband', breedte: 120, filterType: 'select',
@@ -484,7 +508,7 @@ export default function UrenOverzicht({
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
-              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Wie mag beoordelen volgt uit de teamleider en de projectleider op het dossier — of uit de vaste goedkeurder van de medewerker, als die is ingesteld.'
+              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Gewerkte uren beoordeelt de teamleider en daarna de projectleider van het dossier; verlof, ziekte en vakantie gaan naar de goedkeurder die op het medewerkerprofiel staat. De kolom Wacht op zegt per regel wie aan zet is.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>

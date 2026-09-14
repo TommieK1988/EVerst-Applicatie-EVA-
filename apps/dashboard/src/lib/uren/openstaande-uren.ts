@@ -58,12 +58,21 @@ export type OpenUurRegel = {
   bouw7PslId: number | null
 
   /**
-   * Vaste goedkeurder van deze medewerker (`medewerkers.uren_goedkeurder_id`).
+   * Niet-gewerkte uren: verlof, ziek, vakantie, feestdag, tijd-voor-tijd. Afgeleid uit de
+   * uursoort (`planning_uursoorten.uren_categorie` != 'werk'), niet uit het project waarop
+   * de regel staat -- verlof wordt net zo goed op een gewoon project geboekt.
+   */
+  nietGewerkt: boolean
+
+  /**
+   * De vaste goedkeurder van deze medewerker, MAAR alleen ingevuld als hij op deze regel van
+   * toepassing is: bij niet-gewerkte uren. Dan vervangt hij de dossierroute en is hij in zijn
+   * eentje eindstation.
    *
-   * Is hij gevuld, dan VERVANGT hij de dossierroute: de teamleider en de projectleider van
-   * het dossier komen er niet meer aan te pas, hoe die velden hierboven ook staan. Bedoeld
-   * voor kantoor, waar de uren bij de eigen leidinggevende horen en niet bij de projectleider
-   * van het dossier waaraan iemand die middag toevallig rekende.
+   * Gewerkte uren laten dit veld leeg, ook als de medewerker een goedkeurder heeft: die uren
+   * horen bij het project waarop ze geboekt zijn en dus bij de teamleider/projectleider van
+   * dat dossier. Zo is aan de regel zelf te zien wie er aan zet is -- de uursoort staat op
+   * het scherm.
    */
   vasteGoedkeurderId: string | null
   vasteGoedkeurderNaam: string | null
@@ -126,7 +135,7 @@ export async function haalOpenstaandeUren(
   const employeeIds = [...new Set(logs.map(l => l.employee?.id).filter(Boolean))].map(String)
   const projectIds = [...new Set(logs.map(l => l.project?.id).filter(Boolean))].map(String)
 
-  const [{ data: medewerkers }, { data: dossiers }, { data: beoordelingen }] = await Promise.all([
+  const [{ data: medewerkers }, { data: dossiers }, { data: beoordelingen }, { data: uursoorten }] = await Promise.all([
     // De vaste goedkeurder komt hier mee: die bepaalt de route en hoort bij de medewerker,
     // niet bij het dossier. Zijn naam volgt in een tweede query -- medewerkers naar zichzelf
     // is een self-join, en die kan PostgREST alleen embedden met de naam van de foreign key.
@@ -139,6 +148,8 @@ export async function haalOpenstaandeUren(
       .from('uren_bouw7_beoordeling')
       .select('bouw7_hour_log_id, tl_akkoord_op, pl_akkoord_op, gecorrigeerd_op')
       .in('bouw7_hour_log_id', logs.map(l => l.id)),
+    // De hele stamlijst: een handvol rijen, en hij bepaalt per regel welke route geldt.
+    supabase.from('planning_uursoorten').select('bouw7_id, uren_categorie').not('bouw7_id', 'is', null),
   ])
 
   type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
@@ -161,11 +172,28 @@ export async function haalOpenstaandeUren(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const beoMap = new Map<number, any>(((beoordelingen ?? []) as any[]).map(b => [Number(b.bouw7_hour_log_id), b]))
 
+  // Bouw7 hourType-id -> categorie. Een uursoort die EVA niet kent telt als gewerkte uren: dan
+  // blijft de regel bij het dossier, en dat is het gedrag van vóór deze routering. Een onbekende
+  // soort stilletjes naar iemands persoonlijke goedkeurder sturen zou veel erger zijn.
+  const categoriePerHourType = new Map<number, string | null>()
+  for (const u of (uursoorten ?? []) as Array<{ bouw7_id: string; uren_categorie: string | null }>) {
+    const id = Number(u.bouw7_id)
+    if (!Number.isNaN(id)) categoriePerHourType.set(id, u.uren_categorie)
+  }
+  const isNietGewerkt = (hourTypeId: number | null | undefined) => {
+    if (hourTypeId == null) return false
+    const cat = categoriePerHourType.get(hourTypeId)
+    return cat === 'afwezig' || cat === 'feestdag' || cat === 'tijd_voor_tijd'
+  }
+
   const regels: OpenUurRegel[] = logs.map(l => {
     const dossier = l.project?.id != null ? dosMap.get(String(l.project.id)) : undefined
     const medewerker = l.employee?.id != null ? (medMap.get(String(l.employee.id)) ?? null) : null
     const medewerkerId = medewerker?.id ?? null
-    const vasteGoedkeurderId = medewerker?.uren_goedkeurder_id ?? null
+    // De uursoort bepaalt welke route geldt; de goedkeurder van de medewerker telt alleen mee
+    // bij niet-gewerkte uren.
+    const nietGewerkt = isNietGewerkt(l.type?.id)
+    const vasteGoedkeurderId = nietGewerkt ? (medewerker?.uren_goedkeurder_id ?? null) : null
     const b = beoMap.get(l.id)
     const uren = num(l.hours)
     const tarief = l.hourlyRate != null ? num(l.hourlyRate) : null
@@ -176,9 +204,10 @@ export async function haalOpenstaandeUren(
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
-    // Een vaste goedkeurder gaat vóór alles: hij vervángt de dossierroute en is in zijn eentje
-    // eindstation. Staat hij er niet, dan geldt de gewone volgorde. Staat er dan niemand op het
-    // dossier, dan kan EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt
+    // Niet-gewerkte uren met een vaste goedkeurder gaan naar hem, en naar niemand anders: over
+    // iemands verlof heeft de projectleider van het project waarop het toevallig geboekt staat
+    // niets te zeggen. Alle andere regels volgen de gewone dossiervolgorde. Staat daar niemand
+    // op, dan kan EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt
     // apart in beeld, zodat iemand de rollen kan invullen of hem alsnog in Bouw7 kan afhandelen.
     const status: OpenUurRegel['status'] =
       vasteGoedkeurderId ? 'wacht_op_vaste_goedkeurder'
@@ -210,6 +239,7 @@ export async function haalOpenstaandeUren(
         : (l.project?.projectLeaderName ?? null),
       bewakingscode: l.projectSecurityLink?.code ?? null,
       bouw7PslId: l.projectSecurityLink?.id ?? null,
+      nietGewerkt,
       vasteGoedkeurderId,
       vasteGoedkeurderNaam: vasteGoedkeurderId ? (goedkeurderNaam.get(vasteGoedkeurderId) ?? null) : null,
       tlAkkoord,
