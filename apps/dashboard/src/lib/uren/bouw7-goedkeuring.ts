@@ -159,6 +159,8 @@ async function schrijfHourLog(
     approved?: boolean
     logHours?: string
     hourTypeId?: number
+    /** Bouw7-project waar de regel naartoe moet. Weglaten = laten staan waar hij staat. */
+    projectId?: number
     pslId?: number | null
     comments?: string
   },
@@ -173,21 +175,51 @@ async function schrijfHourLog(
     return { ok: false, error: 'De uurregel in Bouw7 mist gegevens die nodig zijn om hem bij te werken.' }
   }
 
-  const pslId = wijziging.pslId !== undefined ? wijziging.pslId : (voor.projectSecurityLink?.id ?? null)
+  const projectId = wijziging.projectId ?? voor.project.id
+  const hourTypeId = wijziging.hourTypeId ?? voor.type.id
+  const naarAnderProject = projectId !== voor.project.id
+  const andereUursoort = hourTypeId !== voor.type.id
+
+  // Een bewakingscode hoort bij één project. Verhuist de regel, dan mag de oude code niet mee:
+  // wie een code op het nieuwe dossier wil, stuurt die expliciet mee.
+  const pslId = wijziging.pslId !== undefined ? wijziging.pslId
+    : naarAnderProject ? null
+    : (voor.projectSecurityLink?.id ?? null)
   const opmerking = wijziging.comments !== undefined ? wijziging.comments : (voor.comment ?? '')
 
   await client.post('/project/hour-log', {
     id: hourLogId,
-    project: { id: voor.project.id },
+    project: { id: projectId },
     employee: { id: voor.employee.id },
-    hourType: { id: wijziging.hourTypeId ?? voor.type.id },
+    hourType: { id: hourTypeId },
     logDate: voor.logDate.slice(0, 10),
     logHours: wijziging.logHours ?? String(voor.hours ?? '0'),
     ...(pslId ? { projectSecurityLink: { id: pslId } } : {}),
     ...(opmerking ? { comments: opmerking } : {}),
-    ...(voor.hourlyRate != null ? { hourlyRate: String(voor.hourlyRate) } : {}),
+    // Het uurtarief hoort bij de combinatie project × uursoort. Verandert een van die twee, dan
+    // laten we Bouw7 het opnieuw bepalen in plaats van het oude bedrag mee te slepen -- dat is
+    // dezelfde route als de weekstaat, die nooit zelf een tarief meestuurt.
+    ...(voor.hourlyRate != null && !naarAnderProject && !andereUursoort
+      ? { hourlyRate: String(voor.hourlyRate) }
+      : {}),
     approved: wijziging.approved ?? voor.isApproved === true,
   })
+
+  // Verhuizen en van uursoort wisselen lezen we terug. Een upsert die zo'n veld stilzwijgend
+  // negeert zou anders als geslaagd gemeld worden terwijl de uren op het oude project blijven --
+  // en dan is er niets te zien behalve een tevreden melding.
+  if (naarAnderProject || andereUursoort) {
+    const na = (await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
+      q: `id = ${hourLogId} LIMIT 1`,
+    }))?.items?.[0]
+    if (!na) return { ok: false, error: 'Bouw7 gaf de bijgewerkte uurregel niet terug.' }
+    if (naarAnderProject && na.project?.id !== projectId) {
+      return { ok: false, error: 'Bouw7 heeft de uren niet naar het andere dossier verplaatst.' }
+    }
+    if (andereUursoort && na.type?.id !== hourTypeId) {
+      return { ok: false, error: 'Bouw7 heeft de uursoort niet aangepast.' }
+    }
+  }
   return { ok: true, voor }
 }
 
@@ -445,7 +477,15 @@ export async function trekGoedkeuringIn(
  */
 export async function corrigeerUurregel(
   hourLogId: number,
-  wijziging: { uren?: number; bewakingscodePslId?: number | null; opmerking?: string },
+  wijziging: {
+    uren?: number
+    bewakingscodePslId?: number | null
+    opmerking?: string
+    /** Bouw7 hourType-id van de nieuwe uursoort; moet in `planning_uursoorten` staan. */
+    uursoortHourTypeId?: number
+    /** EVA-dossier waar de uren naartoe moeten. Moet aan een Bouw7-project gekoppeld zijn. */
+    naarDossierId?: string
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ik = await vereisSessie()
   const jaar = new Date().getFullYear()
@@ -459,34 +499,87 @@ export async function corrigeerUurregel(
     return { ok: false, error: 'Vul een aantal uren tussen 0 en 24 in.' }
   }
 
+  const supabase = db()
+
+  // De uursoort komt als Bouw7-id binnen. Toetsen aan de stamlijst: een meegestuurd id uit de
+  // browser mag geen willekeurige uursoort in Bouw7 kunnen aanwijzen.
+  let uursoortNaam: string | null = null
+  if (wijziging.uursoortHourTypeId !== undefined) {
+    const { data: soort } = await supabase
+      .from('planning_uursoorten').select('naam')
+      .eq('bouw7_id', String(wijziging.uursoortHourTypeId)).maybeSingle()
+    if (!soort) return { ok: false, error: 'Deze uursoort bestaat niet in EVA.' }
+    uursoortNaam = soort.naam as string
+  }
+
+  // Verhuizen kan alleen naar een dossier dat Bouw7 kent -- daar moet de urenregel landen. Het
+  // doeldossier hoeft NIET van mij te zijn: ik corrigeer een regel die op mijn project staat, en
+  // waar hij thuishoort bepaalt het werk, niet mijn rollenlijst.
+  let naarProjectId: number | undefined
+  let naarDossierLabel: string | null = null
+  const verhuist = wijziging.naarDossierId !== undefined && wijziging.naarDossierId !== regel.dossierId
+  if (verhuist) {
+    const { data: doel } = await supabase
+      .from('dossiers').select('id, bouw7_id, dossiernummer, titel')
+      .eq('id', wijziging.naarDossierId).maybeSingle()
+    if (!doel) return { ok: false, error: 'Het gekozen dossier bestaat niet.' }
+    const pid = Number(doel.bouw7_id)
+    if (!doel.bouw7_id || Number.isNaN(pid)) {
+      return { ok: false, error: 'Dit dossier is niet aan Bouw7 gekoppeld; daar kunnen geen uren op.' }
+    }
+    naarProjectId = pid
+    naarDossierLabel = [doel.dossiernummer, doel.titel].filter(Boolean).join(' · ') || null
+  }
+
   const client = await getBouw7Client()
   const res = await schrijfHourLog(client, hourLogId, {
     ...(wijziging.uren !== undefined ? { logHours: String(wijziging.uren) } : {}),
     ...(wijziging.bewakingscodePslId !== undefined ? { pslId: wijziging.bewakingscodePslId } : {}),
     ...(wijziging.opmerking !== undefined ? { comments: wijziging.opmerking } : {}),
+    ...(wijziging.uursoortHourTypeId !== undefined ? { hourTypeId: wijziging.uursoortHourTypeId } : {}),
+    ...(naarProjectId !== undefined ? { projectId: naarProjectId } : {}),
   }).catch(e => ({ ok: false as const, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }))
   if (!res.ok) return { ok: false, error: res.error }
 
-  await bewaarBeoordeling(hourLogId, regel, {
-    gecorrigeerd_op: new Date().toISOString(),
-    gecorrigeerd_door: ik.id,
-    oorspronkelijke_waarden: {
-      uren: num(res.voor.hours),
-      bewakingscode: res.voor.projectSecurityLink?.code ?? null,
-      opmerking: res.voor.comment ?? null,
+  await bewaarBeoordeling(
+    hourLogId,
+    // Na een verhuizing hoort de tussenstand bij het nieuwe dossier; anders blijft de regel in de
+    // werkvoorraad van het oude project hangen.
+    verhuist ? { ...regel, dossierId: wijziging.naarDossierId ?? null } : regel,
+    {
+      gecorrigeerd_op: new Date().toISOString(),
+      gecorrigeerd_door: ik.id,
+      oorspronkelijke_waarden: {
+        uren: num(res.voor.hours),
+        bewakingscode: res.voor.projectSecurityLink?.code ?? null,
+        opmerking: res.voor.comment ?? null,
+        uursoort: res.voor.type?.name ?? null,
+        dossier: [regel.projectNummer, regel.projectNaam].filter(Boolean).join(' · ') || null,
+      },
+      // Een verhuisde regel begint de keten opnieuw: het nieuwe dossier heeft zijn eigen
+      // teamleider en projectleider, en die hebben er nog niet naar gekeken.
+      ...(verhuist ? {
+        tl_akkoord_op: null, tl_akkoord_door: null,
+        pl_akkoord_op: null, pl_akkoord_door: null,
+        tl_overgeslagen_op: null, tl_overgeslagen_door: null,
+      } : {}),
+      bouw7_status: 'verzonden', bouw7_fout: null,
     },
-    bouw7_status: 'verzonden', bouw7_fout: null,
-  })
+  )
 
   if (regel.medewerkerId) {
-    const { data: mw } = await db()
+    const { data: mw } = await supabase
       .from('medewerkers').select('auth_user_id').eq('id', regel.medewerkerId).maybeSingle()
     if (mw?.auth_user_id) {
       const wat: string[] = []
       if (wijziging.uren !== undefined && wijziging.uren !== num(res.voor.hours)) {
         wat.push(`uren ${num(res.voor.hours)} → ${wijziging.uren}`)
       }
-      if (wijziging.bewakingscodePslId !== undefined) wat.push('bewakingscode aangepast')
+      if (uursoortNaam && uursoortNaam !== (res.voor.type?.name ?? null)) {
+        wat.push(`uursoort → ${uursoortNaam}`)
+      }
+      if (naarDossierLabel) wat.push(`verplaatst naar ${naarDossierLabel}`)
+      if (wijziging.bewakingscodePslId !== undefined && !naarDossierLabel) wat.push('bewakingscode aangepast')
       if (wijziging.opmerking !== undefined) wat.push('opmerking aangepast')
       await maakNotificatie({
         user_id: mw.auth_user_id,
@@ -498,5 +591,77 @@ export async function corrigeerUurregel(
     }
   }
 
+  revalidatePath('/uren')
+  // /uren leest niet live uit Bouw7 maar uit het bewaarde urenvenster; zonder deze verversing
+  // toont het scherm na een correctie nog de oude waarde. Op de achtergrond, want de goedkeurder
+  // hoeft daar niet op te wachten -- zelfde route als `keurUrenGoed`.
+  try {
+    const { after } = await import('next/server')
+    after(async () => {
+      const { ververseGlobaleBron } = await import('@/lib/bouw7/snapshot')
+      await ververseGlobaleBron('uren_venster').catch(() => {})
+    })
+  } catch { /* buiten een request-context bestaat `after` niet */ }
+
   return { ok: true }
+}
+
+/* ── Keuzelijsten voor het correctievenster ───────────────── */
+
+export type UursoortOptie = {
+  /** Bouw7 hourType-id -- dat is wat de urenregel bewaart. */
+  hourTypeId: number
+  naam: string
+  /** 'werk' | 'afwezig' | 'tijd_voor_tijd' | 'feestdag' | null; groepeert de keuzelijst. */
+  categorie: string | null
+}
+
+/**
+ * De uursoorten waar een geboekt uur naartoe kan. Alleen soorten die aan Bouw7 gekoppeld zijn:
+ * een EVA-eigen soort zonder `bouw7_id` kan daar niet op een urenregel staan.
+ */
+export async function getUursoortenVoorCorrectie(): Promise<UursoortOptie[]> {
+  await vereisSessie()
+  const { data } = await db()
+    .from('planning_uursoorten')
+    .select('naam, bouw7_id, uren_categorie, volgorde')
+    .not('bouw7_id', 'is', null)
+    .eq('actief', true)
+    .order('volgorde')
+  const lijst: UursoortOptie[] = []
+  for (const r of (data ?? []) as { naam: string; bouw7_id: string; uren_categorie: string | null }[]) {
+    const id = Number(r.bouw7_id)
+    if (!Number.isNaN(id)) lijst.push({ hourTypeId: id, naam: r.naam, categorie: r.uren_categorie })
+  }
+  return lijst
+}
+
+export type DossierTreffer = {
+  id: string
+  nummer: string | null
+  titel: string | null
+  hoofdstatus: string | null
+}
+
+/**
+ * Dossiers zoeken om uren naartoe te verplaatsen, op nummer of titel.
+ *
+ * Alleen dossiers met een Bouw7-koppeling: op een dossier dat daar niet bestaat kan geen urenregel
+ * landen, en zo'n dossier in de lijst laten zou alleen een mislukte verhuizing opleveren.
+ */
+export async function zoekDossierVoorUren(term: string): Promise<DossierTreffer[]> {
+  await vereisSessie()
+  // Komma's, haakjes en sterretjes zijn scheidingstekens in de PostgREST-`or`-syntaxis. Eruit
+  // halen in plaats van escapen: als zoekterm voegen ze hier niets toe.
+  const schoon = term.trim().replace(/[,()*]/g, ' ').trim()
+  if (schoon.length < 2) return []
+  const { data } = await db()
+    .from('dossiers')
+    .select('id, dossiernummer, titel, hoofdstatus')
+    .not('bouw7_id', 'is', null)
+    .or(`dossiernummer.ilike.%${schoon}%,titel.ilike.%${schoon}%`)
+    .order('updated_at', { ascending: false })
+    .limit(15)
+  return ((data ?? []) as { id: string; dossiernummer: string | null; titel: string | null; hoofdstatus: string | null }[])
+    .map(d => ({ id: d.id, nummer: d.dossiernummer, titel: d.titel, hoofdstatus: d.hoofdstatus }))
 }

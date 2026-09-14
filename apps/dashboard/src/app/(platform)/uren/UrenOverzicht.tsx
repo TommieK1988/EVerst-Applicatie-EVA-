@@ -409,6 +409,7 @@ export default function UrenOverzicht({
                 datum: r.datum ?? '',
                 uren: r.uren,
                 uursoort: r.uursoort,
+                hourTypeId: r.hourTypeId,
                 dossierId: r.dossierId,
                 dossierLabel: r.dossierNummer ? `${r.dossierNummer} · ${r.dossierTitel ?? ''}` : null,
                 bewakingscode: r.code,
