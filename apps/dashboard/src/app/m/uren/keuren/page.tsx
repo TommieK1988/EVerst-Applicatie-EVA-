@@ -30,10 +30,10 @@ export default async function MobielKeurenPage() {
     )
   }
 
-  // Wie op geen enkel dossier teamleider of projectleider is, krijgt hier gewoon een
-  // lege lijst: `getMijnTeKeurenUren` deelt de regels uit op de projectrollen, dus
-  // een extra poort hier zou dezelfde toets nog eens overdoen.
-  const data = await haalTeKeuren()
+  // Wie nergens teamleider, ploegteamleider of projectleider is, krijgt hier gewoon een
+  // lege lijst: `verdeelNaarRol` deelt de regels uit op de routering, dus een extra poort
+  // hier zou dezelfde toets nog eens overdoen.
+  const data = await haalTeKeuren(medewerker.id)
 
   return (
     <>

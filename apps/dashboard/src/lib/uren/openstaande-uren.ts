@@ -50,9 +50,19 @@ export type OpenUurRegel = {
   bouw7ProjectId: number | null
   /** Null als EVA dit Bouw7-project niet kent. */
   dossierId: string | null
-  /** Projectrol op het dossier -- niet de teamleider van de ploeg van de medewerker. */
+  /**
+   * Wie de eerste stap zet. Bij voorkeur de teamleider van de ópdracht
+   * (`dossiers.teamleider_id`); staat die er niet, dan de teamleider van de ploeg waar de
+   * medewerker in zit. Zie `teamleiderBron` voor welke van de twee het werd.
+   */
   teamleiderId: string | null
   teamleiderNaam: string | null
+  /**
+   * Waar de teamleider vandaan komt. Dit hoort op het scherm: "via je ploeg" is iets anders
+   * dan "jij staat op dit dossier", en wie zich afvraagt waarom bepaalde uren bij hem liggen
+   * moet dat kunnen zien zonder de code te lezen.
+   */
+  teamleiderBron: 'dossier' | 'ploeg' | null
   projectleiderId: string | null
   projectleiderNaam: string | null
   bewakingscode: string | null
@@ -140,7 +150,14 @@ export async function haalOpenstaandeUren(
     // De vaste goedkeurder komt hier mee: die bepaalt de route en hoort bij de medewerker,
     // niet bij het dossier. Zijn naam volgt in een tweede query -- medewerkers naar zichzelf
     // is een self-join, en die kan PostgREST alleen embedden met de naam van de foreign key.
-    supabase.from('medewerkers').select('id, bouw7_id, uren_goedkeurder_id').in('bouw7_id', employeeIds),
+    // De ploeg komt mee omdat hij de terugval van de teamleiderstap is: staat er geen
+    // teamleider op het dossier, dan beoordeelt de teamleider van de ploeg waar de medewerker
+    // in zit. Zonder die terugval zou vrijwel alles meteen bij de projectleider belanden --
+    // `dossiers.teamleider_id` is in de praktijk nauwelijks ingevuld.
+    supabase
+      .from('medewerkers')
+      .select('id, bouw7_id, uren_goedkeurder_id, ploeg_id, ploegen!medewerkers_ploeg_id_fkey(teamleider_id)')
+      .in('bouw7_id', employeeIds),
     supabase
       .from('dossiers')
       .select('id, bouw7_id, dossiernummer, titel, project_manager_id, teamleider_id, projectleider:medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam), teamleider:medewerkers!dossiers_teamleider_id_fkey(voornaam, tussenvoegsel, achternaam)')
@@ -158,19 +175,27 @@ export async function haalOpenstaandeUren(
   // toevallig geboekt staat -- precies wat deze routering moet voorkomen.
   const standaardGoedkeurderId = (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id
 
-  type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
+  type MedewerkerRij = {
+    id: string; bouw7_id: string; uren_goedkeurder_id: string | null
+    ploeg_id: string | null
+    ploegen: { teamleider_id: string | null } | null
+  }
   const medRijen = (medewerkers ?? []) as MedewerkerRij[]
   const medMap = new Map<string, MedewerkerRij>(medRijen.map(m => [m.bouw7_id, m]))
 
-  // Namen van de vaste goedkeurders. Begrensd door de `.in()`: hooguit zoveel rijen als er
-  // verschillende goedkeurders zijn.
-  const goedkeurderIds = [...new Set(
-    [...medRijen.map(m => m.uren_goedkeurder_id), standaardGoedkeurderId].filter((v): v is string => !!v),
+  // Namen van de vaste goedkeurders én van de ploegteamleiders. Begrensd door de `.in()`:
+  // hooguit zoveel rijen als er verschillende goedkeurders en ploegen zijn.
+  const naamIds = [...new Set(
+    [
+      ...medRijen.map(m => m.uren_goedkeurder_id),
+      ...medRijen.map(m => m.ploegen?.teamleider_id ?? null),
+      standaardGoedkeurderId,
+    ].filter((v): v is string => !!v),
   )]
   const goedkeurderNaam = new Map<string, string>()
-  if (goedkeurderIds.length) {
+  if (naamIds.length) {
     const { data } = await supabase
-      .from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', goedkeurderIds)
+      .from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', naamIds)
     for (const g of (data ?? []) as Array<{ id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }>) {
       goedkeurderNaam.set(g.id, [g.voornaam, g.tussenvoegsel, g.achternaam].filter(Boolean).join(' '))
     }
@@ -209,16 +234,29 @@ export async function haalOpenstaandeUren(
     const tarief = l.hourlyRate != null ? num(l.hourlyRate) : null
     const pl = dossier?.projectleider
     const tl = dossier?.teamleider
-    const teamleiderId = dossier?.teamleider_id ?? null
     const projectleiderId = dossier?.project_manager_id ?? null
+
+    // De teamleiderstap in drie tredes: de teamleider van de opdracht, anders die van de ploeg
+    // waar de medewerker in zit, anders geen tussenstop en meteen door naar de projectleider.
+    //
+    // Je eigen uren beoordeel je niet -- een teamleider die zelf in zijn ploeg zit valt dus door
+    // naar de projectleider. Dat de ploegteamleider toevallig ook de projectleider is hoeft hier
+    // niet afgevangen te worden: `keurUrenGoed` ziet dat en handelt beide stappen in één keer af.
+    const ploegTeamleiderId = medewerker?.ploegen?.teamleider_id ?? null
+    const teamleiderId =
+      dossier?.teamleider_id
+      ?? (ploegTeamleiderId && ploegTeamleiderId !== medewerkerId ? ploegTeamleiderId : null)
+    const teamleiderBron: OpenUurRegel['teamleiderBron'] =
+      !teamleiderId ? null : dossier?.teamleider_id ? 'dossier' : 'ploeg'
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
     // Niet-gewerkte uren met een vaste goedkeurder gaan naar hem, en naar niemand anders: over
     // iemands verlof heeft de projectleider van het project waarop het toevallig geboekt staat
-    // niets te zeggen. Alle andere regels volgen de gewone dossiervolgorde. Staat daar niemand
-    // op, dan kan EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt
-    // apart in beeld, zodat iemand de rollen kan invullen of hem alsnog in Bouw7 kan afhandelen.
+    // niets te zeggen. Alle andere regels volgen de gewone volgorde: eerst de teamleider (van
+    // het dossier, anders van de ploeg), daarna de projectleider. Is er geen van beide, dan kan
+    // EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt apart in beeld,
+    // zodat iemand de rollen kan invullen of hem alsnog in Bouw7 kan afhandelen.
     const status: OpenUurRegel['status'] =
       vasteGoedkeurderId ? 'wacht_op_vaste_goedkeurder'
       : !teamleiderId && !projectleiderId ? 'niet_toe_te_wijzen'
@@ -242,7 +280,11 @@ export async function haalOpenstaandeUren(
       bouw7ProjectId: l.project?.id ?? null,
       dossierId: dossier?.id ?? null,
       teamleiderId,
-      teamleiderNaam: tl ? [tl.voornaam, tl.tussenvoegsel, tl.achternaam].filter(Boolean).join(' ') : null,
+      teamleiderNaam:
+        teamleiderBron === 'dossier' && tl
+          ? [tl.voornaam, tl.tussenvoegsel, tl.achternaam].filter(Boolean).join(' ')
+          : teamleiderId ? (goedkeurderNaam.get(teamleiderId) ?? null) : null,
+      teamleiderBron,
       projectleiderId,
       projectleiderNaam: pl
         ? [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ')
@@ -264,6 +306,58 @@ export async function haalOpenstaandeUren(
     totaalUren: Math.round(regels.reduce((s, r) => s + r.uren, 0) * 100) / 100,
     van, tot, fout: null,
   }
+}
+
+/**
+ * Wie van deze regels aan zet is, gezien vanuit één medewerker.
+ *
+ * Staat hier en niet in `bouw7-goedkeuring.ts` omdat twee schermen hem nodig hebben: de
+ * server action `getMijnTeKeurenUren` (desktop, en de goedkeur-acties) en de weekweergave van
+ * het mobiele fiatteerscherm, die daarnaast nog de regels van collega's in dezelfde week wil
+ * tonen. Zou elk van die twee de regels zelf verdelen, dan lopen ze op termijn uit elkaar --
+ * en dat is precies het soort verschil waarbij het ene scherm uren toont die het andere al
+ * heeft weggewerkt.
+ *
+ * Puur: geen sessie, geen database. De aanroeper levert `ikId` en is verantwoordelijk voor de
+ * afscherming.
+ */
+export function verdeelNaarRol(regels: OpenUurRegel[], ikId: string): {
+  alsTeamleider: OpenUurRegel[]
+  alsProjectleider: OpenUurRegel[]
+  alsVasteGoedkeurder: OpenUurRegel[]
+  wachtNogOpTeamleider: OpenUurRegel[]
+  nietToeTeWijzen: OpenUurRegel[]
+} {
+  const alsTeamleider: OpenUurRegel[] = []
+  const alsProjectleider: OpenUurRegel[] = []
+  const alsVasteGoedkeurder: OpenUurRegel[] = []
+  const wachtNogOpTeamleider: OpenUurRegel[] = []
+  const nietToeTeWijzen: OpenUurRegel[] = []
+
+  for (const r of regels) {
+    // Niet-gewerkte uren met een goedkeurder: die vervangt het dossier. Is het niet mijn
+    // medewerker, dan gaat de regel mij niets aan -- ook niet als ik toevallig de projectleider
+    // van dat dossier ben.
+    if (r.status === 'wacht_op_vaste_goedkeurder') {
+      if (r.vasteGoedkeurderId === ikId) alsVasteGoedkeurder.push(r)
+      continue
+    }
+
+    if (r.status === 'niet_toe_te_wijzen') { nietToeTeWijzen.push(r); continue }
+
+    // Precies één rol tegelijk aan zet. Een regel die nog op de teamleider wacht mag NIET
+    // ook bij de projectleider verschijnen -- anders keurt die hem goed voordat de teamleider
+    // de kans had de uren bij te stellen.
+    if (r.status === 'wacht_op_teamleider') {
+      if (r.teamleiderId === ikId) alsTeamleider.push(r)
+      else if (r.projectleiderId === ikId) wachtNogOpTeamleider.push(r)
+      continue
+    }
+
+    if (r.projectleiderId === ikId && !r.plAkkoord) alsProjectleider.push(r)
+  }
+
+  return { alsTeamleider, alsProjectleider, alsVasteGoedkeurder, wachtNogOpTeamleider, nietToeTeWijzen }
 }
 
 /** Pagineert met OFFSET; PAGE bestaat niet op dit endpoint. */

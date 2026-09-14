@@ -6,18 +6,19 @@ import { useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { Check, ChevronRight, Pencil, Stamp } from 'lucide-react'
+import { AlertTriangle, Check, Pencil, Stamp } from 'lucide-react'
 import { useDialogen } from '@/components/ui/dialogen'
 import { fiatteerUren } from '@/app/m/uren/keuren/actions'
-import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import KeurRegelSheet from './KeurRegelSheet'
-import type { KeurData, KeurGroep, KeurOnkosten, KeurRegel } from '@/lib/mobiel/keuren'
+import BlokCodeSheet from './BlokCodeSheet'
+import type { KeurCodeBlok, KeurData, KeurOnkosten, KeurRegel, KeurWeek } from '@/lib/mobiel/keuren'
 import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
 
 const GROEN = '#009439'
 const GRIJS = '#6b757c'
 const ZACHT = '#9aa4ab'
 const ORANJE = '#b85a00'
+const GEEL_VLAK = 'rgba(184,90,0,.08)'
 
 /** Waarom deze regels op jouw lijst staan, in gewone taal in plaats van de rolnaam uit de code. */
 const ROL_TEKST: Record<'projectleider' | 'teamleider' | 'goedkeurder', string> = {
@@ -27,91 +28,103 @@ const ROL_TEKST: Record<'projectleider' | 'teamleider' | 'goedkeurder', string> 
 }
 
 const uur = (n: number) => `${n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`
+const uurKort = (n: number) => n.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 2 })
 const euro = (n: number) =>
   `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-/** De regels die de teamleider nog niet gezien heeft, in één zin. */
-const wachtZin = (n: number) =>
-  n === 1
-    ? 'Bij 1 regel is de teamleider nog niet langs geweest.'
-    : `Bij ${n} regels is de teamleider nog niet langs geweest.`
-
 const datumKort = (iso: string) => {
   try { return format(parseISO(iso), 'EEE d MMM', { locale: nl }) } catch { return iso }
+}
+/** "ma 8" — de dagkolom van de weekstaat; kort genoeg om links smal te blijven. */
+const dagKort = (iso: string) => {
+  try { return format(parseISO(iso), 'EEEEEE d', { locale: nl }) } catch { return iso }
+}
+const weekLabel = (week: KeurWeek) => {
+  try {
+    const start = parseISO(week.weekStart)
+    const eind = new Date(start)
+    eind.setDate(eind.getDate() + 4)
+    return `${format(start, 'd', { locale: nl })}–${format(eind, 'd MMM', { locale: nl })}`
+  } catch { return week.weekStart }
 }
 
 /**
  * Mobiel fiatteren van uren (`/m/uren/keuren`).
  *
- * Een werkvoorraad, geen tabel: per project een blok, daaronder de regels die op
- * jouw akkoord wachten. Je vinkt aan wat klopt en fiatteert de selectie in één keer.
+ * JE KEURT EEN WEEK, NIET EEN REGEL. Per medewerker per week één kaart met de dagen eronder;
+ * de knop onderin de kaart fiatteert die week in één keer. De vinkjes rechts zijn er voor de
+ * uitzondering — een dag die je er nog even uit wilt houden — en staan daarom standaard áán.
+ * Zo is de normale weg één tik en blijft afwijken mogelijk.
  *
- * DE TEAMLEIDER IS HIER DE HOOFDGEBRUIKER, en die werkt altijd op zijn telefoon.
- * Daarom kan hij hier ook bijstellen: een regel met een potloodje opent
- * `KeurRegelSheet` en daar zet hij de uren, de bewakingscode of de opmerking recht
- * vóór hij akkoord geeft. Dat is de hele reden dat de teamleiderstap bestaat.
+ * DE BEWAKINGSCODE STAAT IN DE KOP. Een week heeft meestal één code voor alle vijf de dagen;
+ * die per rij herhalen maakt juist de afwijkende dag onzichtbaar. De kop toont dus de
+ * dossier+code-verdeling met de uren erachter, en tikken op een blok verplaatst álle uren van
+ * dat blok in één handeling. Pas als een week meer dan één blok heeft dragen de dagrijen de
+ * code ook zelf (`toonCodePerRegel`).
  *
- * Ná zijn akkoord kan dat niet meer: de regel schuift door naar de projectleider en
- * verdwijnt uit deze lijst. Regels waarop jij de projectleider bent hebben daarom
- * géén potlood — corrigeren in die fase hoort op de computer, bij `/uren`. Dat
- * scherm kan sowieso meer: intrekken, filteren op periode, alle uren van het bedrijf.
+ * GEWERKTE UREN ZONDER CODE BLOKKEREN. Die regels kleuren oranje en hun vinkje staat uit; de
+ * knop vertelt hoeveel er nog gecodeerd moet worden. Je kunt er wel omheen door de regel uit
+ * te vinken — dan keur je de rest van de week goed en blijft die ene staan. Verlof en ATV
+ * horen geen code te hebben en worden nooit gemarkeerd.
  *
- * DE NOODUITGANG. Ben je projectleider, dan staan de regels die nog bij de teamleider
- * liggen hier óók — herkenbaar aan "wacht op teamleider". Zonder dat zou het werk van
- * een ploeg blijven hangen zodra de teamleider met verlof is. Fiatteren daarvan vraagt
- * eerst een bevestiging, en die vraag komt van de server terug (`bevestigingNodig`),
- * niet uit een controle in dit component: zo kan de knop de stap niet per ongeluk
- * overslaan.
+ * DE TEAMLEIDER IS HIER DE HOOFDGEBRUIKER, en die werkt altijd op zijn telefoon. Daarom kan hij
+ * hier ook bijstellen: het potloodje opent `KeurRegelSheet`. Ná zijn akkoord kan dat niet meer —
+ * de regel schuift door naar de projectleider en verdwijnt uit deze lijst. Regels waarop jij de
+ * projectleider bent hebben daarom géén potlood; corrigeren hoort dan op de computer thuis.
  *
- * WIE WAT MAG bepaalt de server. `keurUrenGoed` haalt de meegestuurde regels opnieuw
- * op en toetst ze aan de projectrollen op het dossier; een lijst id's uit dit scherm
- * zegt daar niets over. Dit component mag dus optimistisch zijn zonder dat dat een
- * gat in de afscherming is.
+ * CONTEXTREGELS. Uren uit dezelfde week die bij iemand anders liggen staan er grijs bij, met
+ * "bij <naam>". Zonder die rijen zou een week van 38,5 uur als 24 uur op het scherm staan en
+ * zou je een halve week goedkeuren in de veronderstelling dat het de hele was.
  *
- * Het fiatteren loopt via `fiatteerUren` en niet rechtstreeks via `keurUrenGoed` —
- * zie de toelichting in `app/m/uren/keuren/actions.ts`; rechtstreeks importeren
- * breekt de productiebuild.
+ * WIE WAT MAG bepaalt de server. `keurUrenGoed` haalt de meegestuurde regels opnieuw op en
+ * toetst ze aan de routering; een lijst id's uit dit scherm zegt daar niets over. Dit component
+ * mag dus optimistisch zijn zonder dat dat een gat in de afscherming is.
+ *
+ * Het fiatteren loopt via `fiatteerUren` en niet rechtstreeks via `keurUrenGoed` — zie de
+ * toelichting in `app/m/uren/keuren/actions.ts`; rechtstreeks importeren breekt de
+ * productiebuild.
  */
 export default function KeurenClient({ data }: { data: KeurData }) {
   const router = useRouter()
   const { bevestig } = useDialogen()
-  const [gekozen, setGekozen] = React.useState<Set<number>>(new Set())
   const [afgehandeld, setAfgehandeld] = React.useState<Set<number>>(new Set())
-  const [bezig, setBezig] = React.useState(false)
+  // Uitgevinkt: alles staat standaard aan, dus we houden bij wat je er JUIST uit haalde.
+  // Andersom zou elke nieuwe week leeg beginnen en is de normale weg ineens vijf tikken.
+  const [uit, setUit] = React.useState<Set<number>>(new Set())
+  const [bezigWeek, setBezigWeek] = React.useState<string | null>(null)
   const [bewerken, setBewerken] = React.useState<KeurRegel | null>(null)
+  const [hercoderen, setHercoderen] = React.useState<KeurCodeBlok | null>(null)
   const [, startTransition] = React.useTransition()
 
-  // Wat er nog op het scherm hoort te staan: gefiatteerde regels verdwijnen meteen,
-  // zodat de stapel zichtbaar slinkt terwijl je hem wegwerkt.
-  const groepen = React.useMemo(
-    () => data.groepen
-      .map(g => ({ ...g, regels: g.regels.filter(r => !afgehandeld.has(r.id)) }))
-      .filter(g => g.regels.length > 0),
-    [data.groepen, afgehandeld],
+  // Wat er nog op het scherm hoort te staan: gefiatteerde regels verdwijnen meteen, zodat de
+  // stapel zichtbaar slinkt terwijl je hem wegwerkt. Een week waarvan alleen nog contextregels
+  // over zijn valt weg — daar is voor mij niets meer te doen.
+  const weken = React.useMemo(
+    () => data.weken
+      .map(w => {
+        const regels = w.regels.filter(r => !afgehandeld.has(r.id))
+        const mijn = regels.filter(r => r.magKeuren)
+        return {
+          ...w,
+          regels,
+          mijnRegels: mijn.length,
+          mijnUren: rond(mijn.reduce((s, r) => s + r.uren, 0)),
+          totaalUren: rond(regels.reduce((s, r) => s + r.uren, 0)),
+          ontbrekendeCodes: mijn.filter(r => r.codeOntbreekt).length,
+        }
+      })
+      .filter(w => w.mijnRegels > 0),
+    [data.weken, afgehandeld],
   )
 
-  const zichtbareIds = React.useMemo(
-    () => new Set(groepen.flatMap(g => g.regels.map(r => r.id))),
-    [groepen],
+  /** De regels van één week die nu daadwerkelijk gefiatteerd zouden worden. */
+  const selectieVan = React.useCallback(
+    (week: KeurWeek) => week.regels.filter(r => r.magKeuren && !uit.has(r.id)),
+    [uit],
   )
-
-  // De selectie mag nooit een regel bevatten die niet meer op het scherm staat —
-  // anders telt de knop uren mee die je al gefiatteerd hebt.
-  const selectie = React.useMemo(
-    () => [...gekozen].filter(id => zichtbareIds.has(id)),
-    [gekozen, zichtbareIds],
-  )
-
-  const gekozenUren = React.useMemo(() => {
-    const set = new Set(selectie)
-    return groepen
-      .flatMap(g => g.regels)
-      .filter(r => set.has(r.id))
-      .reduce((s, r) => s + r.uren, 0)
-  }, [groepen, selectie])
 
   const wissel = React.useCallback((id: number) => {
-    setGekozen(prev => {
+    setUit(prev => {
       const n = new Set(prev)
       if (n.has(id)) n.delete(id)
       else n.add(id)
@@ -119,32 +132,20 @@ export default function KeurenClient({ data }: { data: KeurData }) {
     })
   }, [])
 
-  const wisselGroep = React.useCallback((groep: KeurGroep) => {
-    setGekozen(prev => {
-      const n = new Set(prev)
-      const allesAan = groep.regels.every(r => n.has(r.id))
-      for (const r of groep.regels) {
-        if (allesAan) n.delete(r.id)
-        else n.add(r.id)
-      }
-      return n
-    })
-  }, [])
+  const fiatteerWeek = React.useCallback(async (week: KeurWeek, zonderTeamleider = false) => {
+    const selectie = selectieVan(week).map(r => r.id)
+    if (!selectie.length || bezigWeek) return
 
-  async function fiatteer(zonderTeamleider = false) {
-    if (!selectie.length || bezig) return
-    setBezig(true)
+    setBezigWeek(week.sleutel)
     const r = await fiatteerUren(selectie, zonderTeamleider).catch(() => null)
-    setBezig(false)
+    setBezigWeek(null)
 
     if (!r) { toast.error('Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
 
     // De server houdt de teamleiderstap tegen en vraagt om bevestiging. Zegt de gebruiker ja,
     // dan gaat dezelfde selectie er in één keer doorheen — er is nog niets verwerkt.
     if (!r.ok && 'bevestigingNodig' in r) {
-      const namen = r.teamleiders.length
-        ? r.teamleiders.join(' en ')
-        : 'de teamleider'
+      const namen = r.teamleiders.length ? r.teamleiders.join(' en ') : 'de teamleider'
       const alles = r.aantalZonderTeamleider === r.totaal
       const ja = await bevestig({
         titel: 'Teamleider overslaan?',
@@ -153,36 +154,36 @@ export default function KeurenClient({ data }: { data: KeurData }) {
           : `${r.aantalZonderTeamleider} van de ${r.totaal} regels zijn nog niet door ${namen} nagekeken. Doorgaan slaat die stap voor die regels over.`,
         bevestigLabel: 'Toch goedkeuren',
       })
-      if (ja) await fiatteer(true)
+      if (ja) await fiatteerWeek(week, true)
       return
     }
 
     if (!r.ok) { toast.error(r.error); return }
 
-    // Alleen wat écht gelukt is verdwijnt. Bij een deelfout halen we de lijst
-    // opnieuw op in plaats van te gokken welke regels het wel haalden — anders zou
-    // het scherm melden dat je klaar bent terwijl er uren onaangeraakt bleven.
+    // Alleen wat écht gelukt is verdwijnt. Bij een deelfout halen we de lijst opnieuw op in
+    // plaats van te gokken welke regels het wel haalden — anders zou het scherm melden dat je
+    // klaar bent terwijl er uren onaangeraakt bleven.
     if (r.mislukt > 0) {
       toast.error(`${r.mislukt} niet gelukt: ${r.eersteFout ?? 'onbekende fout'}`)
       startTransition(() => router.refresh())
-    } else {
-      setAfgehandeld(prev => new Set([...prev, ...selectie]))
-      toast.success(
-        r.wachtOpProjectleider > 0
-          ? `${r.verwerkt} geaccordeerd — ${r.wachtOpProjectleider} wacht nog op de projectleider.`
-          : r.overgeslagen > 0
-            ? `${r.verwerkt} geaccordeerd, waarvan ${r.overgeslagen} zonder de teamleider.`
-            : `${r.verwerkt} regel${r.verwerkt === 1 ? '' : 's'} geaccordeerd.`,
-      )
+      return
     }
-    setGekozen(new Set())
-  }
+
+    setAfgehandeld(prev => new Set([...prev, ...selectie]))
+    toast.success(
+      r.wachtOpProjectleider > 0
+        ? `Week ${week.weekNr} akkoord — wacht nog op de projectleider.`
+        : r.overgeslagen > 0
+          ? `Week ${week.weekNr} akkoord, waarvan ${r.overgeslagen} zonder de teamleider.`
+          : `Week ${week.weekNr} van ${week.medewerkerNaam} is akkoord.`,
+    )
+  }, [bevestig, bezigWeek, router, selectieVan])
 
   if (data.fout) {
     return <Melding titel="Uren niet opgehaald" tekst={`Bouw7 gaf geen antwoord: ${data.fout}`} />
   }
 
-  if (groepen.length === 0) {
+  if (weken.length === 0) {
     return (
       <>
         <Melding
@@ -196,8 +197,8 @@ export default function KeurenClient({ data }: { data: KeurData }) {
     )
   }
 
-  const totaalRegels = groepen.reduce((s, g) => s + g.regels.length, 0)
-  const totaalUren = groepen.reduce((s, g) => s + g.regels.reduce((t, r) => t + r.uren, 0), 0)
+  const openUren = rond(weken.reduce((s, w) => s + w.mijnUren, 0))
+  const ontbreekt = weken.reduce((s, w) => s + w.ontbrekendeCodes, 0)
 
   return (
     <>
@@ -208,48 +209,33 @@ export default function KeurenClient({ data }: { data: KeurData }) {
         background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
         fontSize: 13, color: GRIJS,
       }}>
-        {totaalRegels} regel{totaalRegels === 1 ? '' : 's'} · {uur(totaalUren)} op jouw akkoord
-        {data.wachtOpTeamleider > 0 && (
-          <div style={{ marginTop: 3, color: ZACHT }}>{wachtZin(data.wachtOpTeamleider)}</div>
+        {weken.length} {weken.length === 1 ? 'week' : 'weken'} · {uur(openUren)} op jouw akkoord
+        {ontbreekt > 0 && (
+          <div style={{ marginTop: 3, color: ORANJE, fontWeight: 600 }}>
+            {ontbreekt === 1
+              ? '1 regel mist nog een bewakingscode.'
+              : `${ontbreekt} regels missen nog een bewakingscode.`}
+          </div>
         )}
       </div>
 
       <div style={{ padding: '12px 12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {groepen.map(groep => (
-          <Groep
-            key={groep.sleutel}
-            groep={groep}
-            gekozen={gekozen}
+        {weken.map(week => (
+          <Week
+            key={week.sleutel}
+            week={week}
+            selectie={selectieVan(week)}
+            bezig={bezigWeek === week.sleutel}
+            geblokkeerd={bezigWeek !== null}
             onWissel={wissel}
-            onWisselGroep={wisselGroep}
             onBewerk={setBewerken}
+            onHercodeer={setHercoderen}
+            onFiatteer={() => fiatteerWeek(week)}
           />
         ))}
 
         <KostenBlok onkosten={data.onkosten} />
       </div>
-
-      <MobielStickyFooter>
-        <button
-          type="button"
-          onClick={() => fiatteer()}
-          disabled={selectie.length === 0 || bezig}
-          style={{
-            flex: 1, minHeight: 48, borderRadius: 12, border: 'none',
-            background: selectie.length === 0 || bezig ? '#c9d2d6' : GROEN,
-            color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          <Stamp size={18} strokeWidth={2.2} />
-          {bezig
-            ? 'Bezig…'
-            : selectie.length === 0
-              ? 'Kies wat je wilt fiatteren'
-              : `Fiatteer ${selectie.length} regel${selectie.length === 1 ? '' : 's'} · ${uur(gekozenUren)}`}
-        </button>
-      </MobielStickyFooter>
 
       {bewerken && (
         <KeurRegelSheet
@@ -260,11 +246,325 @@ export default function KeurenClient({ data }: { data: KeurData }) {
           onKlaar={() => startTransition(() => router.refresh())}
         />
       )}
+
+      {hercoderen && (
+        <BlokCodeSheet
+          blok={hercoderen}
+          onSluit={() => setHercoderen(null)}
+          onKlaar={() => startTransition(() => router.refresh())}
+        />
+      )}
     </>
   )
 }
 
+const rond = (n: number) => Math.round(n * 100) / 100
+
 /* ── Onderdelen ───────────────────────────────────────────────────── */
+
+/**
+ * Eén medewerker, één week: de kop met de codeverdeling, de dagen eronder, en de knop die
+ * de week afhandelt.
+ */
+function Week({ week, selectie, bezig, geblokkeerd, onWissel, onBewerk, onHercodeer, onFiatteer }: {
+  week: KeurWeek
+  selectie: KeurRegel[]
+  bezig: boolean
+  /** Er loopt al een andere week; dan blijven de knoppen hier uit tot die klaar is. */
+  geblokkeerd: boolean
+  onWissel: (id: number) => void
+  onBewerk: (regel: KeurRegel) => void
+  onHercodeer: (blok: KeurCodeBlok) => void
+  onFiatteer: () => void
+}) {
+  const gekozen = new Set(selectie.map(r => r.id))
+  const urenInSelectie = rond(selectie.reduce((s, r) => s + r.uren, 0))
+  // Blokkeren op de SELECTIE en niet op de week: vink je de ongecodeerde regel uit, dan keur je
+  // de rest gewoon goed en blijft die ene staan. Dat is vaak precies wat je wilt.
+  const ongecodeerd = selectie.filter(r => r.codeOntbreekt).length
+  const deelVanWeek = week.mijnRegels < week.regels.length
+
+  // Bijna altijd dezelfde pet voor de hele week; is hij gemengd, dan laten we het label weg —
+  // een tekst die voor de helft van de regels niet klopt is erger dan geen tekst.
+  const mijn = week.regels.filter(r => r.magKeuren)
+  const rol = mijn.every(r => r.rol === mijn[0].rol) ? mijn[0].rol : null
+
+  return (
+    <section style={{
+      background: 'var(--bg-elev)', border: '1px solid var(--border)',
+      borderRadius: 14, overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '11px 12px', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'baseline', gap: 8,
+      }}>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span style={{
+            display: 'block', fontSize: 14, fontWeight: 700, color: 'var(--fg)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {week.medewerkerNaam}
+          </span>
+          <span style={{ display: 'block', fontSize: 11.5, color: GRIJS, marginTop: 2 }}>
+            week {week.weekNr} · {weekLabel(week)}
+            {rol && ` · ${ROL_TEKST[rol]}`}
+          </span>
+        </span>
+        <span style={{ flexShrink: 0, fontSize: 15, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+          {uurKort(week.totaalUren)} u
+        </span>
+      </div>
+
+      {week.blokken.length > 0 && (
+        <div style={{ padding: '9px 12px 10px', background: 'rgba(0,0,0,.015)', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: ZACHT, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Geboekt op
+          </div>
+          {week.blokken.map(blok => (
+            <CodeBlok key={blok.sleutel} blok={blok} onHercodeer={onHercodeer} />
+          ))}
+        </div>
+      )}
+
+      {week.regels.map(regel => (
+        <DagRij
+          key={regel.id}
+          regel={regel}
+          aan={gekozen.has(regel.id)}
+          toonCode={week.toonCodePerRegel}
+          onWissel={onWissel}
+          onBewerk={onBewerk}
+        />
+      ))}
+
+      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)' }}>
+        <button
+          type="button"
+          onClick={onFiatteer}
+          disabled={bezig || geblokkeerd || selectie.length === 0 || ongecodeerd > 0}
+          style={{
+            width: '100%', minHeight: 46, borderRadius: 11, border: 'none',
+            background: bezig || selectie.length === 0 || ongecodeerd > 0 ? '#c9d2d6' : GROEN,
+            color: '#fff', fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <Stamp size={17} strokeWidth={2.2} />
+          {bezig
+            ? 'Bezig…'
+            : selectie.length === 0
+              ? 'Niets aangevinkt'
+              : selectie.length === week.mijnRegels
+                ? `${deelVanWeek ? 'Mijn deel' : 'Week'} akkoord · ${uurKort(urenInSelectie)} u`
+                : `${selectie.length} van ${week.mijnRegels} dagen · ${uurKort(urenInSelectie)} u`}
+        </button>
+
+        {ongecodeerd > 0 && (
+          <div style={{ marginTop: 7, fontSize: 12, color: ORANJE, textAlign: 'center', lineHeight: 1.45 }}>
+            {ongecodeerd === 1
+              ? 'Eerst 1 regel coderen — of vink hem uit.'
+              : `Eerst ${ongecodeerd} regels coderen — of vink ze uit.`}
+          </div>
+        )}
+        {deelVanWeek && ongecodeerd === 0 && (
+          <div style={{ marginTop: 7, fontSize: 11.5, color: ZACHT, textAlign: 'center', lineHeight: 1.45 }}>
+            De grijze regels liggen bij iemand anders; ze staan erbij zodat de week klopt.
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Eén dossier+code-regel in de kop. Tikken opent het hercodeervenster voor álle uren van dit
+ * blok — dat is de reden dat de kop bestaat: een week staat meestal vijf dagen op dezelfde
+ * code, dus een verkeerde code is één fout en hoort één handeling te zijn.
+ */
+function CodeBlok({ blok, onHercodeer }: {
+  blok: KeurCodeBlok
+  onHercodeer: (blok: KeurCodeBlok) => void
+}) {
+  const magHercoderen = blok.regelIds.length > 0 && !!blok.dossierId
+  const titel = [blok.projectNummer, blok.projectNaam].filter(Boolean).join(' ') || 'Zonder project'
+
+  const inhoud = (
+    <>
+      <span style={{
+        flexShrink: 0, padding: '2px 7px', borderRadius: 6,
+        fontSize: 11.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+        background: blok.ontbreekt ? GEEL_VLAK : 'rgba(0,148,57,.10)',
+        color: blok.ontbreekt ? ORANJE : GROEN,
+      }}>
+        {blok.code ?? 'geen code'}
+      </span>
+      <span style={{
+        minWidth: 0, flex: 1, fontSize: 12.5, color: 'var(--fg)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {titel}
+      </span>
+      <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: GRIJS, fontVariantNumeric: 'tabular-nums' }}>
+        {uurKort(blok.uren)} u
+      </span>
+      {magHercoderen && <Pencil size={14} strokeWidth={2} style={{ flexShrink: 0, color: ZACHT }} />}
+    </>
+  )
+
+  if (!magHercoderen) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>{inhoud}</div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onHercodeer(blok)}
+      aria-label={`Bewakingscode van ${uur(blok.uren)} aanpassen`}
+      style={{
+        width: '100%', border: 'none', background: 'transparent', fontFamily: 'inherit',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', textAlign: 'left',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {inhoud}
+    </button>
+  )
+}
+
+/**
+ * Eén dag uit de weekstaat. Twee trefgebieden naast elkaar: het grootste deel vinkt aan of uit,
+ * het potlood rechts opent het bewerkvenster. Bewust geen genest `<button>` in de selectieknop —
+ * dat is ongeldige HTML en de binnenste klik zou ook de buitenste afvuren, waardoor je bij elke
+ * correctie ongemerkt de selectie omzet.
+ */
+function DagRij({ regel, aan, toonCode, onWissel, onBewerk }: {
+  regel: KeurRegel
+  aan: boolean
+  /** De week heeft meer dan één code; dan draagt de rij hem ook. */
+  toonCode: boolean
+  onWissel: (id: number) => void
+  onBewerk: (regel: KeurRegel) => void
+}) {
+  const grond = !regel.magKeuren ? 'rgba(0,0,0,.02)'
+    : regel.codeOntbreekt ? GEEL_VLAK
+    : aan ? 'rgba(0,148,57,.05)'
+    : 'transparent'
+
+  const tweedeRegel = [
+    toonCode ? [regel.projectNummer, regel.bewakingscode ?? 'geen code'].filter(Boolean).join(' · ') : null,
+    regel.uursoort,
+  ].filter(Boolean).join(' · ')
+
+  const inhoud = (
+    <>
+      <span style={{
+        width: 42, flexShrink: 0, fontSize: 12, color: regel.codeOntbreekt ? ORANJE : GRIJS,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {dagKort(regel.datum)}
+      </span>
+
+      {/* minWidth 0 maakt de ellipsis pas mogelijk binnen een flexregel. */}
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{
+          display: 'block', fontSize: 13, color: regel.magKeuren ? 'var(--fg)' : GRIJS,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {tweedeRegel || regel.uursoort || 'Uren'}
+        </span>
+        {regel.codeOntbreekt && (
+          <span style={{ display: 'block', fontSize: 11, color: ORANJE, marginTop: 1 }}>
+            geen bewakingscode
+          </span>
+        )}
+        {!regel.magKeuren && (
+          <span style={{ display: 'block', fontSize: 11, color: ZACHT, marginTop: 1 }}>
+            bij {regel.ligtBij}
+          </span>
+        )}
+        {regel.wachtDaarnaOpProjectleider && (
+          <span style={{ display: 'block', fontSize: 11, color: ORANJE, marginTop: 1 }}>
+            daarna nog de projectleider
+          </span>
+        )}
+        {regel.wachtOpTeamleider && (
+          <span style={{ display: 'block', fontSize: 11, color: ORANJE, marginTop: 1 }}>
+            wacht op {regel.teamleiderNaam ?? 'de teamleider'}
+          </span>
+        )}
+        {regel.opmerking && (
+          <span style={{
+            display: 'block', fontSize: 11.5, color: ZACHT, marginTop: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {regel.opmerking}
+          </span>
+        )}
+      </span>
+
+      <span style={{
+        flexShrink: 0, fontSize: 14, fontWeight: 700,
+        color: regel.magKeuren ? 'var(--fg)' : GRIJS, fontVariantNumeric: 'tabular-nums',
+      }}>
+        {uurKort(regel.uren)}
+      </span>
+    </>
+  )
+
+  return (
+    <div style={{
+      background: grond, display: 'flex', alignItems: 'stretch',
+      borderTop: '1px solid var(--border)',
+    }}>
+      {regel.magKeuren ? (
+        <button
+          type="button"
+          onClick={() => onWissel(regel.id)}
+          style={{
+            flex: 1, minWidth: 0, textAlign: 'left', border: 'none', fontFamily: 'inherit',
+            background: 'transparent', padding: '10px 12px',
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {inhoud}
+          <span style={{ flexShrink: 0 }}>
+            {regel.codeOntbreekt && !aan
+              ? <Waarschuwing />
+              : <Vinkje aan={aan} />}
+          </span>
+        </button>
+      ) : (
+        <div style={{
+          flex: 1, minWidth: 0, padding: '10px 12px',
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+        }}>
+          {inhoud}
+          <span style={{ width: 22, flexShrink: 0 }} />
+        </div>
+      )}
+
+      {regel.magBewerken && (
+        <button
+          type="button"
+          onClick={() => onBewerk(regel)}
+          aria-label={`Uren van ${datumKort(regel.datum)} bijstellen`}
+          style={{
+            width: 46, flexShrink: 0, border: 'none', background: 'transparent',
+            borderLeft: '1px solid var(--border)',
+            color: GRIJS, display: 'grid', placeItems: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <Pencil size={16} strokeWidth={2} />
+        </button>
+      )}
+    </div>
+  )
+}
 
 /**
  * De kosten die je mensen deze periode indienden: parkeren, reiskosten, overig.
@@ -332,13 +632,6 @@ function KostenBlok({ onkosten }: { onkosten: KeurOnkosten[] }) {
   )
 }
 
-/** "Daarna nog projectleider" — jouw akkoord is hier niet het laatste woord. */
-const badgeStijl: React.CSSProperties = {
-  display: 'inline-block', padding: '2px 7px', borderRadius: 6,
-  background: 'rgba(184,90,0,.10)', color: ORANJE,
-  fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em',
-}
-
 function Melding({ titel, tekst }: { titel: string; tekst: string }) {
   return (
     <div style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -359,193 +652,6 @@ function Melding({ titel, tekst }: { titel: string; tekst: string }) {
   )
 }
 
-function Groep({ groep, gekozen, onWissel, onWisselGroep, onBewerk }: {
-  groep: KeurGroep
-  gekozen: Set<number>
-  onWissel: (id: number) => void
-  onWisselGroep: (groep: KeurGroep) => void
-  onBewerk: (regel: KeurRegel) => void
-}) {
-  const allesAan = groep.regels.every(r => gekozen.has(r.id))
-  const titel = [groep.projectNummer, groep.projectNaam].filter(Boolean).join(' · ') || 'Zonder project'
-
-  // In welke pet je hier zit. Bijna altijd dezelfde voor het hele project; is hij
-  // gemengd (jij bent teamleider én van een deel al akkoord) dan laten we het weg —
-  // een label dat voor de helft van de regels niet klopt is erger dan geen label.
-  const rol = groep.regels.every(r => r.rol === groep.regels[0].rol) ? groep.regels[0].rol : null
-
-  // "Daarna nog projectleider" geldt vrijwel altijd voor het hele project — de
-  // projectleider staat op het dossier, niet op de regel. Eén badge in de kop dus, in
-  // plaats van dezelfde zin onder elke naam; alleen in het gemengde geval zakt hij
-  // terug naar de regels zelf. Zelfde afweging voor "wacht op teamleider".
-  const groepWachtOpPl = groep.regels.every(r => r.wachtDaarnaOpProjectleider)
-  const groepWachtOpTl = groep.regels.every(r => r.wachtOpTeamleider)
-
-  return (
-    <section style={{
-      background: 'var(--bg-elev)', border: '1px solid var(--border)',
-      borderRadius: 14, overflow: 'hidden',
-    }}>
-      {/* De kop is de "alles aan/uit"-knop. Dat is op een telefoon de belangrijkste
-          handeling: een projectleider keurt meestal een heel project in één keer. */}
-      <button
-        type="button"
-        onClick={() => onWisselGroep(groep)}
-        style={{
-          width: '100%', textAlign: 'left', border: 'none', fontFamily: 'inherit',
-          background: allesAan ? 'rgba(0,148,57,.06)' : 'transparent',
-          padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 10,
-          borderBottom: '1px solid var(--border)',
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      >
-        <Vinkje aan={allesAan} />
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{
-            display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--fg)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {titel}
-          </span>
-          <span style={{ display: 'block', fontSize: 11, color: GRIJS, marginTop: 2 }}>
-            {groep.regels.length} regel{groep.regels.length === 1 ? '' : 's'} · {uur(groep.totaalUren)}
-            {rol && ` · ${ROL_TEKST[rol]}`}
-          </span>
-          {groepWachtOpPl && (
-            <span style={{ ...badgeStijl, marginTop: 5 }}>Daarna nog projectleider</span>
-          )}
-          {groepWachtOpTl && (
-            <span style={{ ...badgeStijl, marginTop: 5 }}>
-              Wacht op {groep.regels[0].teamleiderNaam ?? 'de teamleider'}
-            </span>
-          )}
-        </span>
-      </button>
-
-      {groep.regels.map(regel => (
-        <Regel
-          key={regel.id}
-          regel={regel}
-          aan={gekozen.has(regel.id)}
-          onWissel={onWissel}
-          onBewerk={onBewerk}
-          toonWachtBadge={!groepWachtOpPl}
-          toonTeamleiderBadge={!groepWachtOpTl}
-        />
-      ))}
-
-      {groep.dossierId && (
-        <Link
-          href={`/m/dossiers/${groep.dossierId}`}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: 8, padding: '10px 12px', borderTop: '1px solid var(--border)',
-            color: GROEN, fontSize: 12, fontWeight: 600, textDecoration: 'none',
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          <span>Naar het dossier</span>
-          <ChevronRight size={15} strokeWidth={2.4} />
-        </Link>
-      )}
-    </section>
-  )
-}
-
-/**
- * Eén regel. Twee trefgebieden naast elkaar: het grootste deel selecteert, het
- * potlood rechts opent het bewerkvenster. Bewust geen genest `<button>` in de
- * selectieknop — dat is ongeldige HTML en de binnenste klik zou ook de buitenste
- * afvuren, waardoor je bij elke correctie ongemerkt de selectie omzet.
- */
-function Regel({ regel, aan, onWissel, onBewerk, toonWachtBadge, toonTeamleiderBadge }: {
-  regel: KeurRegel
-  aan: boolean
-  onWissel: (id: number) => void
-  onBewerk: (regel: KeurRegel) => void
-  /** False als de groepskop de badge al draagt; dan zou hij hier alleen ruis zijn. */
-  toonWachtBadge: boolean
-  toonTeamleiderBadge: boolean
-}) {
-  return (
-    <div
-      style={{
-        background: aan ? 'rgba(0,148,57,.05)' : 'transparent',
-        display: 'flex', alignItems: 'stretch',
-        borderTop: '1px solid var(--border)',
-      }}
-    >
-    <button
-      type="button"
-      onClick={() => onWissel(regel.id)}
-      style={{
-        flex: 1, minWidth: 0, textAlign: 'left', border: 'none', fontFamily: 'inherit',
-        background: 'transparent',
-        padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10,
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <span style={{ marginTop: 2 }}><Vinkje aan={aan} /></span>
-
-      {/* minWidth 0 maakt de ellipsis pas mogelijk binnen een flexregel. */}
-      <span style={{ minWidth: 0, flex: 1 }}>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{
-            minWidth: 0, flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--fg)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {regel.medewerkerNaam}
-          </span>
-          <span style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
-            {uur(regel.uren)}
-          </span>
-        </span>
-
-        <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 2 }}>
-          {datumKort(regel.datum)}
-          {regel.uursoort && ` · ${regel.uursoort}`}
-          {regel.bewakingscode && ` · ${regel.bewakingscode}`}
-        </span>
-
-        {regel.opmerking && (
-          <span style={{
-            display: 'block', fontSize: 12, color: ZACHT, marginTop: 2,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {regel.opmerking}
-          </span>
-        )}
-
-        {toonWachtBadge && regel.wachtDaarnaOpProjectleider && (
-          <span style={{ ...badgeStijl, marginTop: 5 }}>Daarna nog projectleider</span>
-        )}
-        {toonTeamleiderBadge && regel.wachtOpTeamleider && (
-          <span style={{ ...badgeStijl, marginTop: 5 }}>
-            Wacht op {regel.teamleiderNaam ?? 'de teamleider'}
-          </span>
-        )}
-      </span>
-    </button>
-
-    {regel.magBewerken && (
-      <button
-        type="button"
-        onClick={() => onBewerk(regel)}
-        aria-label={`Uren van ${regel.medewerkerNaam} bijstellen`}
-        style={{
-          width: 48, flexShrink: 0, border: 'none', background: 'transparent',
-          borderLeft: '1px solid var(--border)',
-          color: GRIJS, display: 'grid', placeItems: 'center',
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      >
-        <Pencil size={16} strokeWidth={2} />
-      </button>
-    )}
-    </div>
-  )
-}
-
 function Vinkje({ aan }: { aan: boolean }) {
   return (
     <span
@@ -558,6 +664,22 @@ function Vinkje({ aan }: { aan: boolean }) {
       }}
     >
       {aan && <Check size={14} strokeWidth={3} />}
+    </span>
+  )
+}
+
+/** Een regel die niet aan kán: er ontbreekt een bewakingscode. */
+function Waarschuwing() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 22, height: 22, flexShrink: 0, borderRadius: 6,
+        border: `2px solid ${ORANJE}`, color: ORANJE,
+        display: 'grid', placeItems: 'center',
+      }}
+    >
+      <AlertTriangle size={13} strokeWidth={2.6} />
     </span>
   )
 }

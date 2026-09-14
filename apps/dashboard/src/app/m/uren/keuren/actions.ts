@@ -108,3 +108,42 @@ export async function corrigeerUurregelMobiel(
 
   return corrigeerUurregel(hourLogId, wijziging)
 }
+
+/**
+ * Alle uren van één dossier+code-blok in één keer op een andere bewakingscode zetten.
+ *
+ * Dit is de hoofdhandeling van de codecontrole. Een week staat meestal vijf dagen op dezelfde
+ * code, dus een verkeerde of ontbrekende code is één fout — niet vijf. Hem vijf keer los
+ * moeten rechtzetten op een telefoon is precies waarom het er anders niet van komt.
+ *
+ * Geen eigen autorisatie: elke regel loopt door `corrigeerUurregelMobiel` en wordt daar
+ * afzonderlijk getoetst. Een meegestuurde lijst id's zegt niets over wie ze mag aanpassen.
+ *
+ * Eén voor één, niet parallel: het zijn per regel twee Bouw7-calls (lezen, dan volledig
+ * terugschrijven), en tien tegelijk afvuren op een verbinding langs de weg levert alleen maar
+ * halve mislukkingen op. Wat niet lukte komt terug als aantal, zodat het scherm eerlijk kan
+ * melden dat er nog iets openstaat.
+ */
+export async function hercodeerBlokMobiel(
+  hourLogIds: number[],
+  bewakingscodePslId: number | null,
+): Promise<{ ok: true; gelukt: number; mislukt: number; eersteFout: string | null } | { ok: false; error: string }> {
+  if (!hourLogIds.length) return { ok: false, error: 'Geen uren om te hercoderen.' }
+
+  let gelukt = 0
+  let mislukt = 0
+  let eersteFout: string | null = null
+
+  for (const id of hourLogIds) {
+    const r = await corrigeerUurregelMobiel(id, { bewakingscodePslId }).catch(() => ({
+      ok: false as const, error: 'Bouw7 is niet bereikbaar.',
+    }))
+    if (r.ok) gelukt++
+    else {
+      mislukt++
+      eersteFout ??= r.error
+    }
+  }
+
+  return { ok: true, gelukt, mislukt, eersteFout }
+}

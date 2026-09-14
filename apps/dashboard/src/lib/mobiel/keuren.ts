@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { getMijnTeKeurenUren } from '@/lib/uren/bouw7-goedkeuring'
+import { haalOpenstaandeUren, verdeelNaarRol, type OpenUurRegel } from '@/lib/uren/openstaande-uren'
+import { isoWeek, weekStartVan } from '@/lib/uren/rooster'
 import { periodeBereik } from '@/lib/uren/types'
 import { signBonnen } from '@/lib/uren/bonnen'
 import type { OnkostenSoort, Vervoermiddel } from '@/lib/uren/onkosten'
@@ -12,9 +13,21 @@ import type { OnkostenSoort, Vervoermiddel } from '@/lib/uren/onkosten'
  * je opent het met de bedoeling uren te beoordelen. Het startscherm doet die call
  * bewust niet (zie `lib/mobiel/home.ts`).
  *
- * De autorisatie zit NIET hier maar in `getMijnTeKeurenUren` en `keurUrenGoed`:
- * die bepalen uit de projectrollen op het dossier wat jij mag. Dit bestand maakt
- * er alleen een vorm van die op een telefoon te lezen is.
+ * JE KEURT EEN WEEK, NIET EEN REGEL. Dat is de vorm waarin een teamleider erover denkt --
+ * "heeft Jan zijn week goed geschreven" -- en het is ook de korrel waarin uren ontstaan. De
+ * lijst is daarom gegroepeerd per medewerker per week, met daarbinnen een rij per dag.
+ * Gemeten over 552 medewerker-weken (juni-sep 2026) is dat mediaan vijf rijen: een week past
+ * op één telefoonscherm.
+ *
+ * DE BEWAKINGSCODE STAAT IN DE KOP, NIET IN DE TABEL. In tweederde van de weken is er maar
+ * één code voor de hele week; die vijf keer herhalen maakt de afwijkende dag juist onzichtbaar.
+ * De kop toont dus per dossier+code hoeveel uur er op staat -- dat is de codecontrole -- en de
+ * dagrijen dragen de code alleen als de week er meer dan één heeft.
+ *
+ * De autorisatie zit NIET hier maar in `verdeelNaarRol` en `keurUrenGoed`: die bepalen uit de
+ * routering wat jij mag. Dit bestand maakt er alleen een vorm van die op een telefoon te lezen
+ * is. Regels die niet van jou zijn komen wél mee (zie `magKeuren`), maar uitsluitend voor weken
+ * die je toch al beoordeelt en zonder tarief of bedrag.
  */
 
 /** Eén te beoordelen uurregel, uitgekleed tot wat op een telefoon past. */
@@ -65,19 +78,86 @@ export type KeurRegel = {
   teamleiderNaam: string | null
   /** Nodig om de bewakingscodes van dit dossier op te halen in het bewerkvenster. */
   dossierId: string | null
+
+  /** Het project; de dagrij toont het nummer als de week over meer dan één dossier loopt. */
+  projectNummer: string | null
+  projectNaam: string | null
+
+  /**
+   * Verlof, ziek, vakantie, feestdag, tijd-voor-tijd. Zulke uren horen geen bewakingscode te
+   * hebben: ze krijgen er dus geen blok in de kop en worden nooit als "code ontbreekt"
+   * gemarkeerd.
+   */
+  nietGewerkt: boolean
+
+  /**
+   * Mag ik deze regel afvinken?
+   *
+   * Vrijwel altijd waar. Onwaar voor de regels die alleen als CONTEXT meekomen: uren uit
+   * dezelfde week van dezelfde medewerker die bij iemand anders liggen. Die staan erbij omdat
+   * een week die 24 van de 38,5 uur toont een kloppend beeld suggereert dat er niet is -- je
+   * zou een halve week goedkeuren in de veronderstelling dat het de hele was.
+   */
+  magKeuren: boolean
+  /** Bij wie de regel dan wél ligt, in gewone taal. Alleen gevuld als `magKeuren` onwaar is. */
+  ligtBij: string | null
+
+  /**
+   * Gewerkte uren zonder bewakingscode. Dat is de fout die deze stap moet vangen: 27% van alle
+   * gewerkte regels (3.902 uur sinds juni 2026) heeft er geen, en zonder code zakt het uur
+   * ongemerkt de projectadministratie in. Verlof en ATV horen er geen te hebben en worden
+   * daarom nooit gemarkeerd.
+   */
+  codeOntbreekt: boolean
 }
 
-/** Alle regels van één dossier bij elkaar — zo denk je erover: per project. */
-export type KeurGroep = {
-  /** Bouw7-project-id, of 'onbekend' als de regel geen project heeft. */
+/**
+ * Eén dossier+code-combinatie binnen een week, met het aantal uren dat erop staat.
+ *
+ * Dit is de kop van de weekstaat en tegelijk de plek waar je hercodeert: tik je hem aan, dan
+ * verplaats je alle uren van dat blok in één handeling. Acht uur zonder code is zo één keuze
+ * in plaats van vijf losse correcties.
+ */
+export type KeurCodeBlok = {
   sleutel: string
   projectNummer: string | null
   projectNaam: string | null
-  /** EVA-dossier, als het gekoppeld is; maakt de kop een link. */
   dossierId: string | null
-  regels: KeurRegel[]
-  totaalUren: number
+  code: string | null
+  uren: number
+  /** De regels in dit blok die ik mag bijstellen; leeg maakt het blok alleen-lezen. */
+  regelIds: number[]
+  /** Gewerkte uren zonder code — het blok dat om aandacht vraagt. */
+  ontbreekt: boolean
 }
+
+/** Alle uren van één medewerker in één week: de eenheid waarin je op mobiel goedkeurt. */
+export type KeurWeek = {
+  /** medewerker + maandag van de week; stabiel genoeg als React-sleutel. */
+  sleutel: string
+  medewerkerNaam: string
+  weekNr: number
+  jaar: number
+  /** Maandag van de week, als 'YYYY-MM-DD'. */
+  weekStart: string
+  /** De dossier+code-verdeling; in tweederde van de weken één regel. */
+  blokken: KeurCodeBlok[]
+  /** Dagrijen, op datum. Inclusief de contextregels (`magKeuren` onwaar). */
+  regels: KeurRegel[]
+  /** Wat ik mag afvinken. */
+  mijnRegels: number
+  mijnUren: number
+  /** Alles wat er in deze week open staat, dus inclusief context. */
+  totaalUren: number
+  /**
+   * Meer dan één code in de week: dan pas dragen de dagrijen hem ook. Bij één code staat hij
+   * al in de kop en zou herhalen alleen ruis zijn.
+   */
+  toonCodePerRegel: boolean
+  /** Gewerkte regels zonder code; zolang dit boven nul staat is de week niet af te vinken. */
+  ontbrekendeCodes: number
+}
+
 
 /**
  * Een ingediende kostenpost van iemand wiens uren jij beoordeelt.
@@ -100,7 +180,7 @@ export type KeurOnkosten = {
 }
 
 export type KeurData = {
-  groepen: KeurGroep[]
+  weken: KeurWeek[]
   totaalRegels: number
   totaalUren: number
   /**
@@ -109,6 +189,8 @@ export type KeurData = {
    * vraagt een bevestiging.
    */
   wachtOpTeamleider: number
+  /** Gewerkte regels zonder bewakingscode, over alle weken heen. Stuurt de kop van het scherm. */
+  ontbrekendeCodes: number
   /** Parkeer- en reiskosten van dezelfde mensen over dezelfde periode. Alleen-lezen. */
   onkosten: KeurOnkosten[]
   /** Bouw7 was niet bereikbaar; dan tonen we dat in plaats van "niets te doen". */
@@ -117,86 +199,145 @@ export type KeurData = {
 
 const rondUren = (n: number) => Math.round(n * 100) / 100
 
-export async function haalTeKeuren(): Promise<KeurData> {
+export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
   const { van, tot } = periodeBereik('te_keuren')
-  const res = await getMijnTeKeurenUren(van, tot)
+  const res = await haalOpenstaandeUren(van, tot)
   if (res.fout) {
     return {
-      groepen: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0, onkosten: [],
-      fout: res.fout,
+      weken: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0,
+      ontbrekendeCodes: 0, onkosten: [], fout: res.fout,
     }
   }
+
+  const rol = verdeelNaarRol(res.regels, medewerkerId)
 
   // Drie bronnen, oplopend in zeggenschap: eerst wat nog bij de teamleider ligt, dan wat op
   // mijn projectleider-akkoord staat, en als laatste mijn eigen teamleider-werk. Later
   // toegevoegd wint, zodat een regel waarop ik meerdere petten heb bij de sterkste belandt.
-  const perId = new Map<number, KeurRegel>()
-
-  for (const r of res.wachtNogOpTeamleider) {
-    perId.set(r.id, maakRegel(r, 'projectleider', true))
-  }
-  for (const r of res.alsProjectleider) {
-    perId.set(r.id, maakRegel(r, 'projectleider'))
-  }
-  for (const r of res.alsTeamleider) {
-    perId.set(r.id, maakRegel(r, 'teamleider'))
-  }
+  const mijn = new Map<number, KeurRegel>()
+  for (const r of rol.wachtNogOpTeamleider) mijn.set(r.id, maakRegel(r, 'projectleider', true))
+  for (const r of rol.alsProjectleider) mijn.set(r.id, maakRegel(r, 'projectleider'))
+  for (const r of rol.alsTeamleider) mijn.set(r.id, maakRegel(r, 'teamleider'))
   // Niet-gewerkte uren met een eigen goedkeurder staan los van de dossierroute: deze regels
   // kunnen bij niemand anders liggen, dus de volgorde hierboven raakt ze niet.
-  for (const r of res.alsVasteGoedkeurder) {
-    perId.set(r.id, maakRegel(r, 'goedkeurder'))
+  for (const r of rol.alsVasteGoedkeurder) mijn.set(r.id, maakRegel(r, 'goedkeurder'))
+
+  const bron = new Map<number, OpenUurRegel>(res.regels.map(r => [r.id, r]))
+
+  // Alleen de weken waarin ík iets te doen heb. De contextregels hieronder zijn uren van
+  // collega's; ze horen alleen in beeld te komen voor een week die je toch al beoordeelt.
+  const mijnWeken = new Set<string>()
+  for (const id of mijn.keys()) {
+    const b = bron.get(id)
+    if (b?.datum) mijnWeken.add(weekSleutel(b))
   }
 
-  // Groeperen op project. De sleutel komt van Bouw7 en niet van het EVA-dossier:
-  // niet elke Bouw7-regel is aan een dossier gekoppeld, en die regels zouden dan
-  // allemaal op één hoop belanden.
-  const groepen = new Map<string, KeurGroep>()
-  const bron = new Map<number, (typeof res.alsProjectleider)[number]>()
-  for (const r of [
-    ...res.wachtNogOpTeamleider, ...res.alsProjectleider, ...res.alsTeamleider,
-    ...res.alsVasteGoedkeurder,
-  ]) {
-    bron.set(r.id, r)
+  const perWeek = new Map<string, KeurRegel[]>()
+  for (const r of res.regels) {
+    if (!r.datum) continue
+    const sleutel = weekSleutel(r)
+    if (!mijnWeken.has(sleutel)) continue
+    const rij = perWeek.get(sleutel) ?? []
+    rij.push(mijn.get(r.id) ?? maakContextRegel(r))
+    perWeek.set(sleutel, rij)
   }
 
-  for (const regel of perId.values()) {
-    const r = bron.get(regel.id)
-    const sleutel = r?.bouw7ProjectId != null ? String(r.bouw7ProjectId) : 'onbekend'
-    const groep = groepen.get(sleutel) ?? {
-      sleutel,
-      projectNummer: r?.projectNummer ?? null,
-      projectNaam: r?.projectNaam ?? null,
-      dossierId: r?.dossierId ?? null,
-      regels: [],
-      totaalUren: 0,
-    }
-    groep.regels.push(regel)
-    groep.totaalUren = rondUren(groep.totaalUren + regel.uren)
-    groepen.set(sleutel, groep)
-  }
-
-  // Binnen een groep op datum, dan op naam: zo lees je het als een weekstaat en
-  // niet als de willekeurige volgorde waarin Bouw7 ze teruggaf.
-  for (const groep of groepen.values()) {
-    groep.regels.sort((a, b) =>
+  const weken: KeurWeek[] = []
+  for (const [sleutel, regels] of perWeek) {
+    // Op datum, dan op uursoort: zo lees je het als een weekstaat en niet als de willekeurige
+    // volgorde waarin Bouw7 ze teruggaf.
+    regels.sort((a, b) =>
       a.datum !== b.datum
         ? a.datum.localeCompare(b.datum)
-        : a.medewerkerNaam.localeCompare(b.medewerkerNaam, 'nl'))
+        : (a.uursoort ?? '').localeCompare(b.uursoort ?? '', 'nl'))
+
+    const eerste = regels[0]
+    const { jaar, week } = isoWeek(eerste.datum)
+    const mijnRegels = regels.filter(r => r.magKeuren)
+    const blokken = maakBlokken(regels)
+
+    weken.push({
+      sleutel,
+      medewerkerNaam: eerste.medewerkerNaam,
+      weekNr: week,
+      jaar,
+      weekStart: weekStartVan(eerste.datum),
+      blokken,
+      regels,
+      mijnRegels: mijnRegels.length,
+      mijnUren: rondUren(mijnRegels.reduce((s, r) => s + r.uren, 0)),
+      totaalUren: rondUren(regels.reduce((s, r) => s + r.uren, 0)),
+      // Eén blok betekent: één dossier met één code voor de hele week. Dan staat de code al
+      // in de kop en zou hij op elke dagrij herhalen alleen ruis zijn.
+      toonCodePerRegel: blokken.length > 1,
+      // Alleen wat ík kan rechtzetten telt als blokkade. Een contextregel zonder code is het
+      // probleem van een andere beoordelaar en mag mijn week niet tegenhouden.
+      ontbrekendeCodes: mijnRegels.filter(r => r.codeOntbreekt).length,
+    })
   }
 
-  // De grootste stapel bovenaan — daar zit het meeste werk dat je in één keer
-  // kunt wegwerken.
-  const lijst = [...groepen.values()].sort((a, b) => b.regels.length - a.regels.length)
+  // Oudste week bovenaan: wat het langst wacht hoort het eerst weggewerkt te worden.
+  weken.sort((a, b) =>
+    a.weekStart !== b.weekStart
+      ? a.weekStart.localeCompare(b.weekStart)
+      : a.medewerkerNaam.localeCompare(b.medewerkerNaam, 'nl'))
 
-  const alles = [...perId.values()]
+  const alles = [...mijn.values()]
   return {
-    groepen: lijst,
+    weken,
     totaalRegels: alles.length,
     totaalUren: rondUren(alles.reduce((s, r) => s + r.uren, 0)),
     wachtOpTeamleider: alles.filter(r => r.wachtOpTeamleider).length,
-    onkosten: await haalOnkosten([...bron.values()], van, tot),
+    ontbrekendeCodes: alles.filter(r => r.codeOntbreekt).length,
+    onkosten: await haalOnkosten(
+      [...mijn.keys()].map(id => bron.get(id)).filter((r): r is OpenUurRegel => !!r),
+      van, tot,
+    ),
     fout: null,
   }
+}
+
+/**
+ * Medewerker + maandag van de week. Valt terug op de naam als Bouw7 een medewerker teruggeeft
+ * die EVA niet kent: die uren horen dan nog steeds bij één persoon, en zonder terugval zouden
+ * ze allemaal op één hoop belanden.
+ */
+function weekSleutel(r: OpenUurRegel): string {
+  return `${r.medewerkerId ?? r.medewerkerNaam}|${weekStartVan(r.datum)}`
+}
+
+/**
+ * De dossier+code-verdeling van een week — de kop van de weekstaat.
+ *
+ * Verlof en ziekte krijgen geen blok: die horen geen bewakingscode te hebben, en een blok
+ * "— geen code —" voor acht uur vakantie zou een probleem suggereren dat er niet is.
+ */
+function maakBlokken(regels: KeurRegel[]): KeurCodeBlok[] {
+  const blokken = new Map<string, KeurCodeBlok>()
+
+  for (const r of regels) {
+    if (r.nietGewerkt) continue
+    const sleutel = `${r.dossierId ?? r.projectNummer ?? 'geen'}|${r.bewakingscode ?? ''}`
+    const blok = blokken.get(sleutel) ?? {
+      sleutel,
+      projectNummer: r.projectNummer,
+      projectNaam: r.projectNaam,
+      dossierId: r.dossierId,
+      code: r.bewakingscode,
+      uren: 0,
+      regelIds: [],
+      ontbreekt: r.codeOntbreekt,
+    }
+    blok.uren = rondUren(blok.uren + r.uren)
+    // Alleen regels die ik zelf mag bijstellen; anders zou hercoderen op het blok stil de
+    // helft overslaan en een ander deel wél verplaatsen.
+    if (r.magBewerken) blok.regelIds.push(r.id)
+    blokken.set(sleutel, blok)
+  }
+
+  // Wat een code mist bovenaan: dat is waar deze stap voor bestaat. Daarna op omvang.
+  return [...blokken.values()].sort((a, b) =>
+    a.ontbreekt !== b.ontbreekt ? (a.ontbreekt ? -1 : 1) : b.uren - a.uren)
 }
 
 /**
@@ -256,7 +397,10 @@ async function haalOnkosten(
   }))
 }
 
-type BronRegel = Awaited<ReturnType<typeof getMijnTeKeurenUren>>['alsProjectleider'][number]
+type BronRegel = OpenUurRegel
+
+/** Gewerkte uren zonder bewakingscode — verlof en ATV horen er geen te hebben. */
+const mistCode = (r: BronRegel) => !r.nietGewerkt && !r.bewakingscode
 
 function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = false): KeurRegel {
   // Ben ik zelf ook de projectleider, dan schuift er niets door en handelt
@@ -283,6 +427,51 @@ function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = fals
     wachtOpTeamleider,
     teamleiderNaam: r.teamleiderNaam,
     dossierId: r.dossierId,
+    projectNummer: r.projectNummer,
+    projectNaam: r.projectNaam,
+    nietGewerkt: r.nietGewerkt,
+    magKeuren: true,
+    ligtBij: null,
+    codeOntbreekt: mistCode(r),
+  }
+}
+
+/**
+ * Een regel die NIET van mij is, maar wel in een week staat die ik beoordeel.
+ *
+ * Alleen-lezen en zonder tarief: het is context, geen werkvoorraad. Zonder deze rijen zou een
+ * week van 38,5 uur als 24 uur op het scherm staan en zou je een halve week goedkeuren in de
+ * veronderstelling dat het de hele was.
+ */
+function maakContextRegel(r: BronRegel): KeurRegel {
+  const ligtBij =
+    r.status === 'wacht_op_vaste_goedkeurder' ? r.vasteGoedkeurderNaam
+    : r.status === 'wacht_op_teamleider' ? r.teamleiderNaam
+    : r.status === 'niet_toe_te_wijzen' ? null
+    : r.projectleiderNaam
+
+  return {
+    id: r.id,
+    datum: r.datum,
+    uren: r.uren,
+    uursoort: r.uursoort,
+    opmerking: r.opmerking,
+    medewerkerNaam: r.medewerkerNaam,
+    bewakingscode: r.bewakingscode,
+    // De rol slaat op wie er aan zet is; voor een contextregel is dat per definitie niet ik.
+    // 'projectleider' is hier alleen de rustigste weergave — het scherm kijkt naar `magKeuren`.
+    rol: 'projectleider',
+    wachtDaarnaOpProjectleider: false,
+    magBewerken: false,
+    wachtOpTeamleider: false,
+    teamleiderNaam: r.teamleiderNaam,
+    dossierId: r.dossierId,
+    projectNummer: r.projectNummer,
+    projectNaam: r.projectNaam,
+    nietGewerkt: r.nietGewerkt,
+    magKeuren: false,
+    ligtBij: ligtBij ?? 'niemand — rollen ontbreken',
+    codeOntbreekt: mistCode(r),
   }
 }
 
@@ -302,6 +491,15 @@ export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
     .select('id', { count: 'exact', head: true })
     .or(`teamleider_id.eq.${medewerkerId},project_manager_id.eq.${medewerkerId}`)
   if (!error && (count ?? 0) > 0) return true
+
+  // Of ik ben teamleider van een ploeg. Dat is de terugval van de teamleiderstap en in de
+  // praktijk de hoofdroute: `dossiers.teamleider_id` is nagenoeg nergens ingevuld, dus zonder
+  // deze vraag zou juist de groep voor wie dit scherm bedoeld is de tegel nooit zien.
+  const { count: ploegen, error: ploegFout } = await supabase
+    .from('ploegen')
+    .select('id', { count: 'exact', head: true })
+    .eq('teamleider_id', medewerkerId)
+  if (!ploegFout && (ploegen ?? 0) > 0) return true
 
   // Of er staan medewerkers die mij als goedkeurder van hun verlof en ziekte hebben; die route
   // loopt niet via een dossier, dus zonder deze vraag zou hij nooit een lijst te zien krijgen.

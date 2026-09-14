@@ -9,9 +9,10 @@
 // WIE MAG WAT. Bouw7 legt niet vast wie moet goedkeuren -- het kent alleen de vlag `isApproved`, en
 // achteraf wie hem omzette. Er zijn ook geen goedkeuring-endpoints voor uren (/list/approvals geeft
 // 404; die bestaan alleen voor contracten en inkoopfacturen). EVA bepaalt de routering dus zelf,
-// en wel uit de PROJECTROLLEN OP HET DOSSIER waarop de uren geboekt zijn -- `dossiers.teamleider_id`
-// en `dossiers.project_manager_id`. Dus niet uit de ploeg van de medewerker: wie de uren kan
-// beoordelen hangt af van het werk, niet van waar iemand organisatorisch hangt.
+// en wel in de eerste plaats uit de PROJECTROLLEN OP HET DOSSIER waarop de uren geboekt zijn --
+// `dossiers.teamleider_id` en `dossiers.project_manager_id`. Wie de uren beoordeelt hangt dus af
+// van het werk, niet van waar iemand organisatorisch hangt. Alleen als het dossier geen teamleider
+// heeft valt de eerste stap terug op de ploeg; zie verderop.
 //
 // DE UURSOORT BEPAALT WELKE ROUTE GELDT. Een regel is óf gewerkte tijd op een project, óf niet
 // gewerkte tijd (verlof, ziek, vakantie, feestdag, tijd-voor-tijd -- `uren_categorie != 'werk'`
@@ -54,9 +55,16 @@
 // Terug omlaag mag ook nog: trekt de projectleider een goedkeuring in, dan vervalt alles en begint
 // de keten opnieuw.
 //
-// Er is bewust GEEN terugval op een ploegteamleider of op Directie: staat er niemand op het
-// dossier, dan is het de projectleider, en staat ook die er niet dan hoort de regel bij "niet toe
-// te wijzen" in plaats van op het bureau van iemand die er niets mee te maken heeft.
+// DE TEAMLEIDERSTAP HEEFT ÉÉN TERUGVAL: de ploeg. Staat er geen teamleider op het dossier, dan
+// beoordeelt de teamleider van de ploeg waar de medewerker in zit (`ploegen.teamleider_id`).
+// Zonder die terugval bestond de eerste stap in de praktijk niet -- `dossiers.teamleider_id` is
+// nagenoeg nergens ingevuld, dus liep alles rechtstreeks naar de projectleider. De opdracht gaat
+// wel vóór de ploeg: wie op het dossier staat heeft het werk gezien.
+//
+// Verder is er geen terugval. Is er ook geen ploegteamleider, dan is het de projectleider, en
+// staat ook die er niet dan hoort de regel bij "niet toe te wijzen" in plaats van op het bureau
+// van iemand die er niets mee te maken heeft. Je eigen uren beoordeel je nooit: een teamleider
+// die zelf in zijn ploeg zit valt door naar de projectleider.
 //
 // VOLLEDIGE BODY BIJ ELKE SCHRIJFACTIE. `POST /project/hour-log` is een upsert, en het is niet
 // gedocumenteerd of niet-meegestuurde velden blijven staan of leeggemaakt worden. De bestaande
@@ -70,7 +78,7 @@ import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
-import { haalOpenstaandeUren, type OpenUurRegel, type OpenUrenResultaat } from './openstaande-uren'
+import { haalOpenstaandeUren, verdeelNaarRol, type OpenUurRegel, type OpenUrenResultaat } from './openstaande-uren'
 import type { Bouw7Client, Bouw7EmployeeHourLog, Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
 
 // De leeslaag woont in `openstaande-uren.ts` en niet hier; zie de kop van dat
@@ -148,38 +156,9 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
     }
   }
 
-  const alsTeamleider: OpenUurRegel[] = []
-  const alsProjectleider: OpenUurRegel[] = []
-  const alsVasteGoedkeurder: OpenUurRegel[] = []
-  const wachtNogOpTeamleider: OpenUurRegel[] = []
-  const nietToeTeWijzen: OpenUurRegel[] = []
-
-  for (const r of res.regels) {
-    // Niet-gewerkte uren met een goedkeurder: die vervangt het dossier. Is het niet mijn
-    // medewerker, dan gaat de regel mij niets aan -- ook niet als ik toevallig de projectleider
-    // van dat dossier ben.
-    if (r.status === 'wacht_op_vaste_goedkeurder') {
-      if (r.vasteGoedkeurderId === ik.id) alsVasteGoedkeurder.push(r)
-      continue
-    }
-
-    if (r.status === 'niet_toe_te_wijzen') { nietToeTeWijzen.push(r); continue }
-
-    // Precies één rol tegelijk aan zet. Een regel die nog op de teamleider wacht mag NIET
-    // ook bij de projectleider verschijnen -- anders keurt die hem goed voordat de teamleider
-    // de kans had de uren bij te stellen.
-    if (r.status === 'wacht_op_teamleider') {
-      if (r.teamleiderId === ik.id) alsTeamleider.push(r)
-      else if (r.projectleiderId === ik.id) wachtNogOpTeamleider.push(r)
-      continue
-    }
-
-    if (r.projectleiderId === ik.id && !r.plAkkoord) alsProjectleider.push(r)
-  }
-  return {
-    alsTeamleider, alsProjectleider, alsVasteGoedkeurder, wachtNogOpTeamleider,
-    nietToeTeWijzen, fout: null,
-  }
+  // De verdeelregels staan in de leeslaag, zodat het mobiele weekscherm ze deelt in plaats
+  // van na te bouwen -- zie de toelichting bij `verdeelNaarRol`.
+  return { ...verdeelNaarRol(res.regels, ik.id), fout: null }
 }
 
 /* ── Schrijven ────────────────────────────────────────────────────── */
