@@ -70,14 +70,21 @@ type RoosterState = {
   pauzes:       { pauze_start: string; pauze_eind: string }[]
 }
 
+// Tijden op HH:MM afkappen: een opgeslagen "07:30:00" toont een
+// <input type="time"> wél als 07:30, maar geeft de seconden weer mee terug bij
+// het opslaan — en daar liep de validatie op stuk.
+const hhmm = (t: string) => t.slice(0, 5)
+
 function roosterFromFunctie(r: StandaardRooster): RoosterState {
   return {
     enabled:      !!r,
     werkdagen:    r?.werkdagen    ?? [1, 2, 3, 4, 5],
-    dagstart:     r?.dagstart     ?? '07:30',
-    dageind:      r?.dageind      ?? '17:00',
+    dagstart:     hhmm(r?.dagstart ?? '07:30'),
+    dageind:      hhmm(r?.dageind  ?? '17:00'),
     contracturen: String(r?.contracturen_per_week ?? 40),
-    pauzes:       r?.pauzes?.length ? r.pauzes : [{ pauze_start: '12:00', pauze_eind: '12:30' }],
+    pauzes:       r?.pauzes?.length
+      ? r.pauzes.map(p => ({ pauze_start: hhmm(p.pauze_start), pauze_eind: hhmm(p.pauze_eind) }))
+      : [{ pauze_start: '12:00', pauze_eind: '12:30' }],
   }
 }
 

@@ -10,15 +10,29 @@ const db = () => createAdminClient() as any
 
 const naamSchema = z.object({ naam: z.string().min(1), volgorde: z.coerce.number().default(0) })
 
+/**
+ * Accepteert zowel "07:30" als "07:30:00" en geeft altijd "HH:MM" terug.
+ *
+ * Een tijd uit de database (een `time`-kolom, of een standaardrooster dat ooit
+ * met seconden is weggeschreven) komt terug als "07:30:00". Een `<input
+ * type="time">` toont dat keurig als 07:30 maar houdt de seconden in zijn
+ * waarde, en een kale `/^\d{2}:\d{2}$/` wees dat af — dan strandt elke
+ * bewerking van een bestaand rooster op "Tijd verplicht".
+ */
+const tijdVeld = (bericht: string) =>
+  z.string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, bericht)
+    .transform((t) => t.slice(0, 5))
+
 const pauzeItemSchema = z.object({
-  pauze_start: z.string().regex(/^\d{2}:\d{2}$/),
-  pauze_eind:  z.string().regex(/^\d{2}:\d{2}$/),
+  pauze_start: tijdVeld('Pauzetijd verplicht (HH:MM)'),
+  pauze_eind:  tijdVeld('Pauzetijd verplicht (HH:MM)'),
 })
 
 const roosterTemplateSchema = z.object({
   werkdagen:             z.array(z.number().int().min(1).max(7)).min(1, 'Minimaal 1 werkdag'),
-  dagstart:              z.string().regex(/^\d{2}:\d{2}$/, 'Tijd verplicht'),
-  dageind:               z.string().regex(/^\d{2}:\d{2}$/, 'Tijd verplicht'),
+  dagstart:              tijdVeld('Tijd verplicht (HH:MM)'),
+  dageind:               tijdVeld('Tijd verplicht (HH:MM)'),
   contracturen_per_week: z.coerce.number().min(0).max(80),
   pauzes:                z.array(pauzeItemSchema).default([]),
 })

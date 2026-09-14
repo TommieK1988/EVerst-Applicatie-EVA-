@@ -49,17 +49,35 @@ async function eisBeheer(): Promise<{ ok: false; error: string } | null> {
 
 // ── Roosters ──────────────────────────────────────────────────────────
 
+/**
+ * Een tijdveld dat zowel "07:30" als "07:30:00" accepteert en altijd "HH:MM"
+ * teruggeeft.
+ *
+ * Postgres levert een `time`-kolom als "07:30:00". Dat is precies wat het
+ * bewerkformulier terugkrijgt als het een bestaand rooster inlaadt, en een kale
+ * `/^\d{2}:\d{2}$/` wees dat af: elke poging om een bestaand rooster op te slaan
+ * strandde op "Tijd verplicht (HH:MM)", ook als je alleen de begindatum wilde
+ * verzetten. Zonder die normalisatie klopt bovendien de vergelijking niet — de
+ * pauzegrens hieronder vergelijkt tijden als tekst, en dan is "08:00" kleiner
+ * dan "08:00:00" en valt een pauze die om precies de dagstart begint ten
+ * onrechte buiten de werktijden.
+ */
+const tijdVeld = (bericht: string) =>
+  z.string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, bericht)
+    .transform((t) => t.slice(0, 5))
+
 const pauzeSchema = z.object({
-  pauze_start: z.string().regex(/^\d{2}:\d{2}$/),
-  pauze_eind:  z.string().regex(/^\d{2}:\d{2}$/),
+  pauze_start: tijdVeld('Pauzetijd verplicht (HH:MM)'),
+  pauze_eind:  tijdVeld('Pauzetijd verplicht (HH:MM)'),
 })
 
 const roosterSchema = z.object({
   geldig_vanaf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum verplicht (JJJJ-MM-DD)'),
   geldig_tot:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   werkdagen:    z.array(z.number().int().min(1).max(7)).min(1, 'Minimaal 1 werkdag'),
-  dagstart:     z.string().regex(/^\d{2}:\d{2}$/, 'Tijd verplicht (HH:MM)'),
-  dageind:      z.string().regex(/^\d{2}:\d{2}$/, 'Tijd verplicht (HH:MM)'),
+  dagstart:     tijdVeld('Tijd verplicht (HH:MM)'),
+  dageind:      tijdVeld('Tijd verplicht (HH:MM)'),
   contracturen_per_week: z.coerce.number().min(0).max(80),
   pauzes: z.array(pauzeSchema).default([]),
 })

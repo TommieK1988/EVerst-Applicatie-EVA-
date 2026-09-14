@@ -321,8 +321,13 @@ export default function RoosterBeheer({
                     geldig_vanaf: r.geldig_vanaf,
                     geldig_tot: r.geldig_tot,
                     werkdagen: r.werkdagen,
-                    dagstart: r.dagstart,
-                    dageind: r.dageind,
+                    // Op HH:MM afkappen, net als bij de pauzes hieronder:
+                    // Postgres levert een `time` als "07:30:00" en dat is niet
+                    // wat een <input type="time"> teruggeeft. Zonder deze snede
+                    // ging elke bewerking van een bestaand rooster onderuit op
+                    // "Tijd verplicht (HH:MM)".
+                    dagstart: r.dagstart.slice(0, 5),
+                    dageind: r.dageind.slice(0, 5),
                     contracturen_per_week: r.contracturen_per_week,
                     pauzes: (r.pauzes ?? []).map(p => ({ pauze_start: p.pauze_start.slice(0, 5), pauze_eind: p.pauze_eind.slice(0, 5) })),
                   }}
