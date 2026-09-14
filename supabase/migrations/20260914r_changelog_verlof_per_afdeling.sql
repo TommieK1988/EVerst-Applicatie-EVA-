@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-14','verbeterd','Uren','Verlofaanvragen gaan naar een afdeling in plaats van naar één persoon',
+   'Een verlofaanvraag kwam bij één aangewezen goedkeurder terecht en bleef liggen als die op vakantie was. Voortaan beoordeelt een hele afdeling: verlof van Uitvoering gaat naar Projectbureau, al het overige naar Directie. Iedereen van die afdeling ziet de aanvragen op de Medewerkerplanning — de knop daar kleurt rood zodra er iets openstaat — en wie het eerst goed- of afkeurt handelt hem af. De aanvrager krijgt een melding waarin staat wie de beslissing nam, en bij een afwijzing ook waarom. Welke afdeling welk verlof beoordeelt, stel je in op Instellingen, Uren.');
